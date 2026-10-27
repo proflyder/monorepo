@@ -272,3 +272,11 @@
   замена PK/KEK на AMI-прошивке рискованна, только с физдоступом.
 - Ресурсы (`pulsar`, `apkg`, `yaff`, AirPlay) — только на запасной Midi.
 - `yse` — нужен исходник/ссылка.
+
+## Миграция неттопа в Kubernetes и observability
+
+Исследование выполнено 2026-10-27 без изменения сервисов. План, этапы,
+gates и rollback — [PLAN-KUBERNETES-MIGRATION.md](PLAN-KUBERNETES-MIGRATION.md).
+Рекомендуется K3s на текущей Ubuntu; все прикладные процессы, включая Hermes,
+переносятся поэтапно. Prometheus/Loki/Grafana/Alloy и dashboard charts включены
+в план. Установка кластера, реализация chart’ов и live cutover ещё не выполнялись.

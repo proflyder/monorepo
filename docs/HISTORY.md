@@ -835,3 +835,11 @@ TTS output path и зависимость go.work от игнорируемог�
 syntax/security-проверки и агрегаторы находятся в platform/quality.
 Обновлены Makefile, coverage, документация и pre-push audit path.
 Live-устройства в рамках переноса не проверялись и не менялись.
+
+## 2026-10-27 — исследование Kubernetes/observability
+
+Read-only SSH-инвентаризация неттопа: шесть host-network контейнеров, Hermes
+gateway/proxy в user systemd, ресурсы/LVM/swap/сеть и зависимости HA. Подготовлен
+PLAN-KUBERNETES-MIGRATION.md с K3s/containerd, поэтапным cutover/rollback,
+Prometheus/Loki/Grafana/Alloy и проектными dashboard Helm charts. Работающие
+сервисы, сеть и диски не изменялись; кластер не устанавливался.

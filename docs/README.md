@@ -25,6 +25,7 @@
 | Документ | Чем владеет |
 |---|---|
 | `PENDING.md` | открытые задачи/решения |
+| `PLAN-KUBERNETES-MIGRATION.md` | live-исследование неттопа, переход Docker → K3s, Helm/Prometheus/Loki/Grafana |
 | `PLAN-SCHEDULES.md` | план/границы будильников, таймеров, напоминаний, заметок |
 | `HISTORY.md` | хронология; append-only, без текущего статуса |
 
