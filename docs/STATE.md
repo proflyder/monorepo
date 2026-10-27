@@ -7,9 +7,10 @@
 - Proxmox VE `9.2.24` на внутреннем NVMe; hostname `pve`, management
   `vmbr0` на Ethernet `192.0.2.26/24`, root 64 GiB, swap 8 GiB,
   `local-lvm` около 379 GiB. SSH — отдельный ключ; PVE API/TLS проверены.
-- VM `100 haos`: 2 vCPU / 3 GiB / 32 GiB, UEFI, HAOS, `192.0.2.28/24`;
-  VM `101 lab-k3s`: 8 vCPU / 9 GiB / 200 GiB, Ubuntu 24.04.5, K3s,
-  `192.0.2.27/24`. Обе running, guest agent включён, startup order 1/2.
+- VM `100 haos`: 2 vCPU / 3 GiB / 32 GiB, UEFI, HAOS, `192.0.2.28/24`
+  (static in HAOS Supervisor); VM `101 lab-k3s`: 8 vCPU / 9 GiB / 200 GiB,
+  Ubuntu 24.04.5, K3s, `192.0.2.27/24` (static netplan). Обе running,
+  guest agent включён, startup order 1/2.
 - Terraform `projects/home/proxmox/terraform/main.tf` (provider 0.118.1,
   Terraform 1.17.0) создал обе VM; authoritative state — root-only
   `/var/lib/ricardo-terraform/` на PVE, копия — в `secrets/`.
@@ -42,9 +43,9 @@
   вне Git с SHA-256; HAOS partial backup создан. Полный disaster restore
   на запасном железе, power-loss VM/host reboot и длительное наблюдение
   ещё не выполнялись.
-- Открытые инфраструктурные вопросы: DHCP/static reservations для
-  `.27/.28`, переход Proxmox host на Wi-Fi (сейчас Ethernet),
-  offsite backup, host Tailscale emergency access.
+- VM `.27/.28` переведены на static внутри guests; router reservations не
+  требуются для них. Открытые вопросы: переход Proxmox host на Wi-Fi
+  (сейчас Ethernet), offsite backup, host Tailscale emergency access.
 - Команды/пути/восстановление: [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md);
   физическая установка — [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md);
   границы IaC/Operator — [PROXMOX-HAOS-IAC.md](PROXMOX-HAOS-IAC.md).

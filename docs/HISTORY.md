@@ -902,7 +902,8 @@ archives и custom images staged на PVE с повторной проверко
 - HAOS `2026.10.4` восстановлен; HA integration endpoints переведены с
   loopback на K3s `.27`; `internal_url` и trusted proxy `.27`. Alarm media
   URLs исправлены с прежнего `.25:8123` на `.27:8123`; HA restart/check
-  прошли.
+  прошли. VM `.27/.28` переведены на static в guests, чтобы адреса не
+  зависели от DHCP-lease.
 - K3s runtime, MA/Matter/STT/TTS/Hermes, observability и Tailscale Operator
   `1.104.2` развёрнуты. `pl-home` → HAOS, `/grafana` → Grafana; старый host
   Serve route заменён operator proxy `tag:k8s`.

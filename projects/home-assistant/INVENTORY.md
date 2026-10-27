@@ -31,8 +31,8 @@ private copy вне Git. [Эксплуатация](../../docs/KUBERNETES-OPERAT
 | Узел | Интерфейс | IP | Примечание |
 |---|---|---|---|
 | Proxmox host | `vmbr0` / Ethernet | `192.0.2.26/24` | management |
-| HAOS VM 100 | `enp6s18` | `192.0.2.28/24` | DHCP, нужен reservation |
-| K3s VM 101 | `eth0` | `192.0.2.27/24` | DHCP, нужен reservation |
+| HAOS VM 100 | `enp6s18` | `192.0.2.28/24` | static (Supervisor) |
+| K3s VM 101 | `eth0` | `192.0.2.27/24` | static (netplan) |
 | HA compatibility | K3s hostNetwork | `192.0.2.27:8123` | HAProxy → HAOS |
 
 Wi-Fi RTL8821CE на Proxmox host сейчас DOWN; PCI mapping создан, но VM не

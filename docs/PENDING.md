@@ -32,8 +32,9 @@
 - ✅ K3s runtime, MA/Matter/STT/TTS/Hermes, observability и Tailscale Operator
   `1.104.2`; `pl-home` → HAOS, `/grafana` → Grafana; HAOS proxy `.27:8123`
   сохраняет локальные callbacks.
-- ⏳ DHCP/static reservations для Proxmox/VM `.26/.27/.28`; сейчас адреса
-  выданы DHCP и не закреплены в обоих роутерах.
+- ✅ VM `.27/.28` переведены на static в guests (netplan/HAOS Supervisor);
+  Proxmox host `.26` static с установки. Router reservations для них не нужны;
+  проверить, что адреса вне DHCP-пула, при следующей смене роутера.
 - ⏳ Wi-Fi: Ethernet обязателен; `home-wifi` PCI mapping создан, но Wi-Fi
   не передан VM. Нужен отдельный routed/NAT или внешний Wi-Fi bridge design;
   не отключать Ethernet до приёмки.
