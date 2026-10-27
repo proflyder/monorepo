@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//proto:def.bzl", "go_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "alarms_proto",
+    srcs = ["alarms.proto"],
+)
+
+go_proto_library(
+    name = "alarms_go_proto",
+    compilers = [
+        "@rules_go//proto:go_proto",
+        "@rules_go//proto:go_grpc_v2",
+    ],
+    importpath = "ricardo.local/monorepo/packages/proto/ricardo/v1",
+    proto = ":alarms_proto",
+)
+
+go_library(
+    name = "ricardo",
+    embed = [":alarms_go_proto"],
+    importpath = "ricardo.local/monorepo/packages/proto/ricardo/v1",
+)

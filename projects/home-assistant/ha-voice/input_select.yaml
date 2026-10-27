@@ -1,0 +1,27 @@
+music_route:
+  name: "Режим музыки"
+  options:
+    - "Music Assistant"
+    - "Spotify Connect"
+  initial: "Spotify Connect"
+  icon: mdi:music
+
+alarm_repeat:
+  name: "Повтор будильника"
+  options:
+    - "Однократно"
+    - "Каждый день"
+    - "По будням"
+    - "По выходным"
+  initial: "Однократно"
+  icon: mdi:repeat
+
+alarm_form_repeat:
+  name: "Новый будильник: повтор"
+  options:
+    - "Однократно"
+    - "Каждый день"
+    - "По будням"
+    - "По выходным"
+  initial: "По будням"
+  icon: mdi:repeat

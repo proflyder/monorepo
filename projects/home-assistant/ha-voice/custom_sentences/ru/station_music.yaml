@@ -1,0 +1,58 @@
+language: ru
+lists:
+  query:
+    wildcard: true
+  media_type:
+    values:
+      - in: "песню"
+        out: "track"
+      - in: "песня"
+        out: "track"
+      - in: "трек"
+        out: "track"
+      - in: "композицию"
+        out: "track"
+      - in: "альбом"
+        out: "album"
+      - in: "плейлист"
+        out: "playlist"
+      - in: "группу"
+        out: "artist"
+      - in: "группа"
+        out: "artist"
+      - in: "исполнителя"
+        out: "artist"
+      - in: "артиста"
+        out: "artist"
+  index:
+    values:
+      - in: "первый"
+        out: "1"
+      - in: "второй"
+        out: "2"
+      - in: "третий"
+        out: "3"
+intents:
+  StationMusicPlayQuery:
+    data:
+      - sentences:
+          - "включи {media_type} {query}"
+          - "поставь {media_type} {query}"
+          - "вруби {media_type} {query}"
+          - "найди и включи {media_type} {query}"
+          - "включи {media_type} под названием {query}"
+  StationMusicPlayCandidate:
+    data:
+      - sentences:
+          - "{index}"
+          - "{index} вариант"
+          - "включи {index}"
+          - "включи {index} вариант"
+  StationMusicStatus:
+    data:
+      - sentences:
+          - "что играет"
+          - "что сейчас играет"
+          - "какая музыка играет"
+          - "что за музыка"
+          - "какой трек играет"

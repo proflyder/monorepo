@@ -1,0 +1,555 @@
+StationWorkMode:
+  speech:
+    text: "Включаю всё освещение в спальне."
+  action:
+    - service: script.work_mode
+StationBlackout:
+  speech:
+    text: "Выключаю всё освещение в спальне."
+  action:
+    - service: script.blackout
+StationLightOn:
+  speech:
+    text: >-
+      {% set labels = {
+        'light.yeelink_cn_827036414_bslamp2_s_2_light': 'лампу',
+        'light.yeelink_cn_919937191_lamp22_s_2': 'светильник',
+        'light.spalnia_lenta': 'ленту'
+      } %}
+      Включаю {{ labels.get(target_entity, 'свет') }}
+  action:
+    - variables:
+        requested: >-
+          {{ (light_target | default(name | default(area | default(''))) | string | lower) }}
+        target_entity: >-
+          {% if 'лент' in requested or 'лет' in requested or 'полос' in requested %}
+            light.spalnia_lenta
+          {% elif 'светильник' in requested or 'монитор' in requested %}
+            light.yeelink_cn_919937191_lamp22_s_2
+          {% elif 'ламп' in requested or 'ночник' in requested or 'кроват' in requested or 'бра' in requested %}
+            light.yeelink_cn_827036414_bslamp2_s_2_light
+          {% elif requested in ['', 'свет', 'света', 'освещение', 'все'] %}
+            light.spalnia_lenta, light.yeelink_cn_827036414_bslamp2_s_2_light, light.yeelink_cn_919937191_lamp22_s_2
+          {% else %}
+            light.spalnia_lenta
+          {% endif %}
+    - service: light.turn_on
+      target:
+        entity_id: "{{ target_entity }}"
+StationLightOff:
+  speech:
+    text: >-
+      {% set labels = {
+        'light.yeelink_cn_827036414_bslamp2_s_2_light': 'лампу',
+        'light.yeelink_cn_919937191_lamp22_s_2': 'светильник',
+        'light.spalnia_lenta': 'ленту'
+      } %}
+      Выключаю {{ labels.get(target_entity, 'свет') }}
+  action:
+    - variables:
+        requested: >-
+          {{ (light_target | default(name | default(area | default(''))) | string | lower) }}
+        target_entity: >-
+          {% if 'лент' in requested or 'лет' in requested or 'полос' in requested %}
+            light.spalnia_lenta
+          {% elif 'светильник' in requested or 'монитор' in requested %}
+            light.yeelink_cn_919937191_lamp22_s_2
+          {% elif 'ламп' in requested or 'ночник' in requested or 'кроват' in requested or 'бра' in requested %}
+            light.yeelink_cn_827036414_bslamp2_s_2_light
+          {% elif requested in ['', 'свет', 'света', 'освещение', 'все'] %}
+            light.spalnia_lenta, light.yeelink_cn_827036414_bslamp2_s_2_light, light.yeelink_cn_919937191_lamp22_s_2
+          {% else %}
+            light.spalnia_lenta
+          {% endif %}
+    - service: light.turn_off
+      target:
+        entity_id: "{{ target_entity }}"
+StationBluetoothOn:
+  speech:
+    text: "Включаю Bluetooth"
+  action:
+    - service: rest_command.station_bluetooth_on
+StationBluetoothOff:
+  speech:
+    text: "Выключаю Bluetooth"
+  action:
+    - service: rest_command.station_bluetooth_off
+StationGatewayOn:
+  speech:
+    text: "Открываю окно настройки"
+  action:
+    - service: rest_command.station_gateway_on
+StationGatewayOff:
+  speech:
+    text: "Закрываю окно настройки"
+  action:
+    - service: rest_command.station_gateway_off
+StationVolumeUp:
+  speech:
+    text: "Громче"
+  action:
+    - variables:
+        current_pct: "{{ (state_attr('media_player.iandeks_stantsiia_midi', 'volume_level') | float(0.3) * 100) | int }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ states('input_select.music_route') == 'Spotify Connect' or (state_attr('media_player.iandeks_stantsiia_midi', 'source') or '').startswith('Spotify Connect') }}"
+          sequence:
+            - service: script.spotify_connect_set_volume
+              data:
+                volume_percent: "{{ [current_pct + 10, 100] | min }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ true }}"
+          sequence:
+            - service: media_player.volume_set
+              target:
+                entity_id: media_player.iandeks_stantsiia_midi
+              data:
+                volume_level: "{{ [current_pct + 10, 100] | min / 100 }}"
+StationVolumeDown:
+  speech:
+    text: "Тише"
+  action:
+    - variables:
+        current_pct: "{{ (state_attr('media_player.iandeks_stantsiia_midi', 'volume_level') | float(0.3) * 100) | int }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ states('input_select.music_route') == 'Spotify Connect' or (state_attr('media_player.iandeks_stantsiia_midi', 'source') or '').startswith('Spotify Connect') }}"
+          sequence:
+            - service: script.spotify_connect_set_volume
+              data:
+                volume_percent: "{{ [current_pct - 10, 0] | max }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ true }}"
+          sequence:
+            - service: media_player.volume_set
+              target:
+                entity_id: media_player.iandeks_stantsiia_midi
+              data:
+                volume_level: "{{ [current_pct - 10, 0] | max / 100 }}"
+StationVolumeSet:
+  speech:
+    text: "Громкость {{ level }}"
+  action:
+    - variables:
+        volume_raw: "{{ level | string | lower }}"
+        volume_number: "{{ {'один': 1, 'одна': 1, 'два': 2, 'две': 2, 'три': 3, 'четыре': 4, 'пять': 5, 'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9, 'десять': 10}.get(volume_raw, volume_raw | int(1)) | int(1) }}"
+        volume_level: "{{ ([([volume_number, 1] | max), 10] | min) / 10 }}"
+        spotify_percent: "{{ ([([volume_number, 1] | max), 10] | min) * 10 }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ states('input_select.music_route') == 'Spotify Connect' or (state_attr('media_player.iandeks_stantsiia_midi', 'source') or '').startswith('Spotify Connect') }}"
+          sequence:
+            - service: script.spotify_connect_set_volume
+              data:
+                volume_percent: "{{ spotify_percent }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ true }}"
+          sequence:
+            - service: media_player.volume_set
+              target:
+                entity_id: media_player.iandeks_stantsiia_midi
+              data:
+                volume_level: "{{ volume_level }}"
+StationVolumeThreeAsr:
+  speech:
+    text: "Громкость 3"
+  action:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ states('input_select.music_route') == 'Spotify Connect' or (state_attr('media_player.iandeks_stantsiia_midi', 'source') or '').startswith('Spotify Connect') }}"
+          sequence:
+            - service: script.spotify_connect_set_volume
+              data:
+                volume_percent: 30
+        - conditions:
+            - condition: template
+              value_template: "{{ true }}"
+          sequence:
+            - service: media_player.volume_set
+              target:
+                entity_id: media_player.iandeks_stantsiia_midi
+              data:
+                volume_level: 0.3
+StationMusicPause:
+  speech:
+    text: "Пауза"
+  action:
+    - service: media_player.media_pause
+      target:
+        entity_id: media_player.iandeks_stantsiia_midi
+StationMusicResume:
+  speech:
+    text: "Продолжаю"
+  action:
+    - service: media_player.media_play
+      continue_on_error: true
+      target:
+        entity_id: media_player.iandeks_stantsiia_midi
+StationMusicStop:
+  speech:
+    text: "Останавливаю музыку"
+  action:
+    - service: media_player.media_stop
+      target:
+        entity_id: media_player.iandeks_stantsiia_midi
+StationMusicNext:
+  speech:
+    text: "Следующая"
+  action:
+    - service: media_player.media_next_track
+      continue_on_error: true
+      target:
+        entity_id: media_player.iandeks_stantsiia_midi
+StationMusicPrevious:
+  speech:
+    text: "Предыдущая"
+  action:
+    - service: media_player.media_previous_track
+      continue_on_error: true
+      target:
+        entity_id: media_player.iandeks_stantsiia_midi
+StationCancel:
+  speech:
+    text: "Хорошо."
+  action: []
+StationPlayFavorites:
+  speech:
+    text: >-
+      {% set result = action_response.get('result') if action_response is mapping else 'unknown' %}
+      {% if result == 'connect_ok' %}Включаю любимые треки
+      {% elif result == 'ma_ok' %}Включаю любимые треки
+      {% elif result == 'ma_empty' %}Любимый плейлист пока не синхронизирован. Spotify временно ограничил доступ. Попробуй позже.
+      {% elif result == 'connect_fail' %}Spotify пока не готов. Выбери колонку в Spotify и попробуй снова.
+      {% else %}Не удалось запустить музыку. Попробуй позже.{% endif %}
+  action:
+    - service: script.music_play_favorites
+      response_variable: music_result
+    - stop: "station_play_favorites"
+      response_variable: music_result
+StationMusicPlay:
+  speech:
+    text: >-
+      {% set result = action_response.get('result') if action_response is mapping else 'unknown' %}
+      {% if result == 'connect_ok' %}Включаю музыку
+      {% elif result == 'ma_ok' %}Включаю музыку
+      {% elif result == 'ma_empty' %}Любимый плейлист пока не синхронизирован. Spotify временно ограничил доступ. Попробуй позже.
+      {% elif result == 'connect_fail' %}Spotify Connect пока не готов. Выбери колонку в Spotify и попробуй снова.
+      {% else %}Не удалось запустить музыку. Попробуй позже.{% endif %}
+  action:
+    - service: script.music_play_favorites
+      response_variable: music_result
+    - stop: "station_music_play"
+      response_variable: music_result
+StationMusicRouteConnect:
+  speech:
+    text: "Режим Spotify Connect"
+  action:
+    - service: script.music_route_connect
+StationMusicRouteMA:
+  speech:
+    text: "Режим Music Assistant"
+  action:
+    - service: script.music_route_ma
+
+StationMusicPlayQuery:
+  speech:
+    text: >-
+      {% set response = action_response if action_response is mapping else {} %}
+      {% set status = response.get('status', 'unknown') %}
+      {% set selected = response.get('selected') if response.get('selected') is mapping else {} %}
+      {% if status == 'ok' %}
+        Включаю {{ selected.get('name', '') }}{% if selected.get('artist') %}, {{ selected.get('artist') }}{% endif %}.
+      {% elif status == 'no_results' %}
+        Не нашла «{{ response.get('query', query | default('')) }}». Попробуй сказать иначе.
+      {% elif status == 'rate_limited' %}
+        Spotify временно ограничил поиск. Попробуй через несколько минут.
+      {% elif status == 'auth_error' %}
+        Spotify не авторизован. Нужно обновить токен.
+      {% elif status == 'device_unavailable' %}
+        Колонка не видна в Spotify. Выбери её в приложении и попробуй снова.
+      {% elif status == 'premium_required' %}
+        Для управления Spotify нужен Premium.
+      {% elif status == 'search_error' or status == 'play_error' %}
+        Не удалось включить музыку. Попробуй позже.
+      {% else %}
+        Не удалось включить музыку.
+      {% endif %}
+  action:
+    - service: script.music_play_query
+      data:
+        query: "{{ query }}"
+        media_type: "{{ media_type | default('track') }}"
+        route: ""
+      response_variable: music_result
+    - stop: "station_music_play_query"
+      response_variable: music_result
+
+StationMusicPlayCandidate:
+  speech:
+    text: >-
+      {% set response = action_response if action_response is mapping else {} %}
+      {% set status = response.get('status', 'unknown') %}
+      {% set selected = response.get('selected') if response.get('selected') is mapping else {} %}
+      {% if status == 'ok' %}
+        Включаю {{ selected.get('name', '') }}{% if selected.get('artist') %}, {{ selected.get('artist') }}{% endif %}.
+      {% elif status == 'no_candidates' %}
+        Сначала найди музыку, потом скажи «второй».
+      {% elif status == 'no_candidate' %}
+        Такого варианта нет.
+      {% elif status == 'candidate_corrupt' %}
+        Не удалось прочитать сохранённый вариант. Найди музыку заново.
+      {% else %}
+        Не удалось включить этот вариант.
+      {% endif %}
+  action:
+    - service: script.music_play_candidate
+      data:
+        index: "{{ index | default(1) }}"
+      response_variable: music_result
+    - stop: "station_music_play_candidate"
+      response_variable: music_result
+
+StationMusicStatus:
+  speech:
+    text: >-
+      {% set response = action_response if action_response is mapping else {} %}
+      {% set state = response.get('state', 'unknown') %}
+      {% if state == 'playing' %}
+        Играет {{ response.get('title', 'музыка') }}{% if response.get('artist') %}, {{ response.get('artist') }}{% endif %}. Режим {{ response.get('route', '') }}.
+      {% elif state == 'paused' %}
+        Музыка на паузе{% if response.get('title') %}: {{ response.get('title') }}{% endif %}.
+      {% elif state in ['idle', 'off'] %}
+        Сейчас музыка не играет.
+      {% else %}
+        Состояние музыки: {{ state }}.
+      {% endif %}
+  action:
+    - service: script.music_status
+      response_variable: music_result
+    - stop: "station_music_status"
+      response_variable: music_result
+
+StationAlarmSet:
+  speech:
+    text: "Будильник установлен."
+  action:
+    - service: script.schedule_alarm_create
+      data:
+        hour: "{{ hour | default(7) }}"
+        minute: "{{ minute | default(0) }}"
+        period: "{{ period | default('') }}"
+        day: "{{ day | default('') }}"
+        repeat: "{{ repeat | default('Однократно') }}"
+        name: "{{ name | default('') }}"
+
+StationAlarmRelative:
+  speech:
+    text: "Будильник установлен."
+  action:
+    - service: script.schedule_alarm_create_relative
+      data:
+        hours: "{{ hours | default(0) }}"
+        minutes: "{{ minutes | default(0) }}"
+        name: "{{ name | default('') }}"
+
+StationAlarmStatus:
+  speech:
+    text: "{{ action_response.text if action_response is mapping and action_response.text is defined else 'Не удалось прочитать будильники.' }}"
+  action:
+    - service: script.schedule_alarm_status
+      response_variable: alarm_result
+    - stop: "schedule_alarm_status"
+      response_variable: alarm_result
+
+StationAlarmCancel:
+  speech:
+    text: "Будильники выключены."
+  action:
+    - service: script.schedule_alarm_disable
+      data:
+        all: true
+
+StationAlarmSnooze:
+  speech:
+    text: >-
+      {% if is_state('input_boolean.alarm_ringing', 'on') %}
+        Откладываю будильник на девять минут.
+      {% else %}
+        Будильник не звонит.
+      {% endif %}
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.alarm_ringing
+              state: "on"
+          sequence:
+            - service: script.alarm_snooze
+
+StationAlarmStop:
+  speech:
+    text: "Останавливаю."
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.alarm_ringing
+              state: "on"
+          sequence:
+            - service: script.alarm_stop
+        - conditions:
+            - condition: state
+              entity_id: media_player.iandeks_stantsiia_midi
+              state: "playing"
+          sequence:
+            - service: media_player.media_stop
+              target:
+                entity_id: media_player.iandeks_stantsiia_midi
+
+
+StationAlarmDelete:
+  speech:
+    text: "Все будильники удалены."
+  action:
+    - service: script.schedule_alarm_delete_all
+
+StationTimerStart:
+  speech:
+    text: "Таймер установлен."
+  action:
+    - service: script.schedule_timer_start
+      data:
+        hours: "{{ hours | default(0) }}"
+        minutes: "{{ minutes | default(0) }}"
+        seconds: "{{ seconds | default(0) }}"
+        name: "{{ name | default('') }}"
+
+StationTimerStatus:
+  speech:
+    text: "{{ action_response.text if action_response is mapping and action_response.text is defined else 'Не удалось прочитать таймеры.' }}"
+  action:
+    - service: script.schedule_timer_status
+      response_variable: timer_result
+    - stop: "schedule_timer_status"
+      response_variable: timer_result
+
+StationTimerCancel:
+  speech:
+    text: "Таймер отменён."
+  action:
+    - service: script.schedule_timer_cancel
+      data:
+        name: "{{ name | default('') }}"
+
+StationTimerPause:
+  speech:
+    text: "Таймер на паузе."
+  action:
+    - service: script.schedule_timer_pause
+      data:
+        name: "{{ name | default('') }}"
+
+StationTimerResume:
+  speech:
+    text: "Продолжаю таймер."
+  action:
+    - service: script.schedule_timer_resume
+      data:
+        name: "{{ name | default('') }}"
+
+StationReminderStatus:
+  speech:
+    text: "{{ action_response.text if action_response is mapping and action_response.text is defined else 'Не удалось прочитать напоминания.' }}"
+  action:
+    - service: script.schedule_reminder_status
+      response_variable: reminder_result
+    - stop: "schedule_reminder_status"
+      response_variable: reminder_result
+
+
+
+StationReminderCreate:
+  speech:
+    text: "Напоминание создано."
+  action:
+    - service: script.schedule_reminder_create
+      data:
+        text: "{{ text }}"
+        hour: "{{ hour | default(9) }}"
+        minute: "{{ minute | default(0) }}"
+        period: "{{ period | default('') }}"
+        day: "{{ day | default('') }}"
+
+StationNoteAdd:
+  speech:
+    text: "Записал."
+  action:
+    - service: script.schedule_note_add
+      data:
+        text: "{{ text }}"
+
+StationNoteSearch:
+  speech:
+    text: "{{ action_response.text if action_response is mapping and action_response.text is defined else 'Не удалось прочитать заметки.' }}"
+  action:
+    - service: script.schedule_note_search
+      data:
+        query: "{{ query | default('') }}"
+      response_variable: note_result
+    - stop: "schedule_note_search"
+      response_variable: note_result
+
+StationNoteDelete:
+  speech:
+    text: "Заметка удалена."
+  action:
+    - service: script.schedule_note_delete
+      data:
+        query: "{{ query }}"
+
+
+StationAlarmDeleteOne:
+  speech:
+    text: "Будильник удалён."
+  action:
+    - service: script.schedule_alarm_delete
+      data:
+        query: "{{ alarm_name }}"
+
+StationAlarmDisableOne:
+  speech:
+    text: "Будильник выключен."
+  action:
+    - service: script.schedule_alarm_set_enabled
+      data:
+        query: "{{ alarm_name }}"
+        enabled: false
+
+
+StationAlarmUpdate:
+  speech:
+    text: "Будильник изменён."
+  action:
+    - service: script.schedule_alarm_update
+      data:
+        query: "{{ alarm_name | default('') }}"
+        hour: "{{ hour }}"
+        minute: "{{ minute }}"
+        period: "{{ period | default('') }}"
+        day: "{{ day | default('') }}"
+
+StationAlarmEnableOne:
+  speech:
+    text: "Будильник включён."
+  action:
+    - service: script.schedule_alarm_set_enabled
+      data:
+        query: "{{ alarm_name | default(hour | default('') ~ ':' ~ minute | default('')) }}"
+        enabled: true

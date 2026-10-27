@@ -1,0 +1,4 @@
+# Markdown uses intentional two-space line breaks; patch context must stay intact.
+*.md whitespace=-blank-at-eol
+*.patch -whitespace
+*.tflite -diff -text

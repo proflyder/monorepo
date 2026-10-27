@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "Конфиг стенда. Порядок работы:",
+    "1) capture=true, rewrite=[] — первый запуск: смотрим ЛЕГИТНЫЙ конфиг колонки в captures/,",
+    "   и заодно проверяем, приняла ли колонка наш серт (в mitm.log: TLS-ошибки vs нормальные GET).",
+    "2) В captures/*.json ищем поля adb/debug/develop/quasar_activate — туда пишем правила rewrite.",
+    "3) sync_info_mode:",
+    "   'rewrite'    — ответ бэкенда Яндекса правится правилами ниже (по умолчанию, безопасно),",
+    "   'static'     — на /get_sync_info отдаём файл sync_info.json как есть (полный оффлайн/airgap),",
+    "   'passthrough'- не трогаем (чистый захват).",
+    "4) check_updates_mode:",
+    "   'block'      — OTA-ЩИТ: на /check_updates колонке всегда отдаётся {\"hasUpdate\":false},",
+    "                 даже если Яндекс предлагает фикс-прошивку (легит — в captures/).",
+    "                 НЮАНС: updatesd может ходить по прямым IP (fallbackIp) МИМО прокси —",
+    "                 этот щит только для трафика ЧЕРЕЗ нас; главный слой — no-op (--ota-off).",
+    "   'passthrough'- ответы /check_updates пробрасываются как есть (штатно).",
+    "Правила: {\"op\":\"set\",\"path\":\"a.b.c\",\"value\":...} и {\"op\":\"merge\",\"path\":\"a.b\",\"value\":{...}}.",
+    "Подразумевается: локальная DNS-запись ТОЛЬКО для quasar.yandex.net (syncd); uniproxy/alice оставляем настоящими,",
+    "иначе голос/проверки уйдут к нам и сломаются (сервер-сайд проверка uniproxy у Яндекса есть)."
+  ],
+  "capture": true,
+  "capture_dir": "captures",
+  "sync_info_mode": "rewrite",
+  "check_updates_mode": "block",
+  "rewrite": [
+    {
+      "op": "set",
+      "path": "config.system_config.adbd.remoteActivation",
+      "value": true
+    },
+    {
+      "op": "set",
+      "path": "config.system_config.adbd.network",
+      "value": true
+    },
+    {
+      "op": "set",
+      "path": "config.system_config.adbd.fullDurationMs",
+      "value": 31536000000
+    },
+    {
+      "op": "set",
+      "path": "config.adbd.remoteActivation",
+      "value": true
+    },
+    {
+      "op": "set",
+      "path": "config.adbd.network",
+      "value": true
+    },
+    {
+      "op": "set",
+      "path": "config.adbd.fullDurationMs",
+      "value": 31536000000
+    },
+    {
+      "op": "set",
+      "path": "config.system_config.setupd.secretMsgList",
+      "value": []
+    },
+    {
+      "op": "set",
+      "path": "config.system_config.aliced.secretMsgList",
+      "value": [
+        {
+          "hash": "f88c0461ac78f4e0582e1ede68e014cb220a81d6",
+          "cmd": "/system/vendor/quasar/activate_adb.sh --sound activate --network"
+        },
+        {
+          "hash": "34a5d105e3cdb68f34a240ce51ec8162e77135e3",
+          "cmd": "/system/vendor/quasar/enter_factory_mode.sh"
+        }
+      ]
+    }
+  ],
+  "upstream": {
+    "host": "quasar.yandex.net",
+    "timeout_connect": 15,
+    "timeout_read": 30
+  }
+}

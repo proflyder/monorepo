@@ -1,0 +1,17 @@
+# Publication example: replace MAC/address/interface for your host before applying.
+network:
+  version: 2
+  ethernets:
+    enp3s0:
+      dhcp4: no
+      dhcp6: no
+      match:
+        macaddress: "02:00:00:00:00:04"
+      set-name: enp3s0
+      addresses: ["192.0.2.26/24"]
+      routes:
+        - to: default
+          via: 192.0.2.1
+          metric: 100
+      nameservers:
+        addresses: ["192.0.2.1"]

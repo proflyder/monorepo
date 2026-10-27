@@ -1,0 +1,2 @@
+f1ba6dca7c380b584d5e4e1d83f9fd2144e09f4ef9a68135e206f7aab5fd96b2  ru_ricardo_mww.tflite
+57767a03d2c440271fd560654e693a26cab7fe3d221e509b3e00cc12d7eccec7  ru_ricardo_mww.json

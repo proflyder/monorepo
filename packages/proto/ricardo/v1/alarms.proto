@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package ricardo.v1;
+
+option go_package = "ricardo.local/monorepo/packages/proto/ricardo/v1;ricardov1";
+
+// Repeat controls how an alarm is rescheduled after it rings.
+enum Repeat {
+  REPEAT_UNSPECIFIED = 0;
+  ONCE = 1;
+  DAILY = 2;
+  WEEKDAYS = 3;
+  WEEKENDS = 4;
+  CUSTOM = 5;
+}
+
+message Alarm {
+  string id = 1;
+  string label = 2;
+  int32 hour = 3;              // local wall-clock hour, 0..23
+  int32 minute = 4;            // local wall-clock minute, 0..59
+  string timezone = 5;         // IANA, e.g. Asia/Almaty
+  Repeat repeat = 6;
+  repeated int32 weekdays = 7; // ISO weekday: 1=Mon .. 7=Sun; only CUSTOM
+  bool enabled = 8;
+  int64 next_run_unix = 9;     // UTC epoch seconds
+  int64 snooze_until_unix = 10; // 0 when not snoozed
+  int64 last_ring_unix = 11;    // 0 until first ring
+}
+
+message CreateAlarmRequest {
+  string label = 1;
+  int32 hour = 2;
+  int32 minute = 3;
+  string timezone = 4;
+  Repeat repeat = 5;
+  repeated int32 weekdays = 6;
+  bool enabled = 7;
+}
+
+message CreateAlarmResponse {
+  Alarm alarm = 1;
+}
+
+message GetAlarmRequest {
+  string id = 1;
+}
+
+message GetAlarmResponse {
+  Alarm alarm = 1;
+}
+
+message ListAlarmsRequest {
+  bool include_disabled = 1;
+}
+
+message ListAlarmsResponse {
+  repeated Alarm alarms = 1;
+}
+
+message UpdateAlarmRequest {
+  Alarm alarm = 1;
+}
+
+message UpdateAlarmResponse {
+  Alarm alarm = 1;
+}
+
+message DeleteAlarmRequest {
+  string id = 1;
+}
+
+message DeleteAlarmResponse {
+  bool deleted = 1;
+}
+
+message SetAlarmEnabledRequest {
+  string id = 1;
+  bool enabled = 2;
+}
+
+message SetAlarmEnabledResponse {
+  Alarm alarm = 1;
+}
+
+message SnoozeAlarmRequest {
+  string id = 1;
+  int32 minutes = 2; // 0 => server default (9)
+}
+
+message SnoozeAlarmResponse {
+  Alarm alarm = 1;
+}
+
+message StopAlarmRequest {
+  string id = 1;
+}
+
+message StopAlarmResponse {
+  Alarm alarm = 1;
+}
+
+service AlarmService {
+  rpc CreateAlarm(CreateAlarmRequest) returns (CreateAlarmResponse);
+  rpc GetAlarm(GetAlarmRequest) returns (GetAlarmResponse);
+  rpc ListAlarms(ListAlarmsRequest) returns (ListAlarmsResponse);
+  rpc UpdateAlarm(UpdateAlarmRequest) returns (UpdateAlarmResponse);
+  rpc DeleteAlarm(DeleteAlarmRequest) returns (DeleteAlarmResponse);
+  rpc SetAlarmEnabled(SetAlarmEnabledRequest) returns (SetAlarmEnabledResponse);
+  rpc SnoozeAlarm(SnoozeAlarmRequest) returns (SnoozeAlarmResponse);
+  rpc StopAlarm(StopAlarmRequest) returns (StopAlarmResponse);
+}

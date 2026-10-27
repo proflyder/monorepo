@@ -1,0 +1,73 @@
+station_gateway_on:
+  url: "http://192.0.2.13:8099/gateway/on"
+  method: POST
+  headers:
+    Authorization: !secret station_control_bearer
+  timeout: 8
+station_gateway_off:
+  url: "http://192.0.2.13:8099/gateway/off"
+  method: POST
+  headers:
+    Authorization: !secret station_control_bearer
+  timeout: 8
+station_bluetooth_on:
+  url: "http://192.0.2.13:8099/bluetooth/on"
+  method: POST
+  headers:
+    Authorization: !secret station_control_bearer
+  timeout: 8
+station_bluetooth_off:
+  url: "http://192.0.2.13:8099/bluetooth/off"
+  method: POST
+  headers:
+    Authorization: !secret station_control_bearer
+  timeout: 8
+spotify_token:
+  url: "https://accounts.spotify.com/api/token"
+  method: POST
+  headers:
+    Content-Type: "application/x-www-form-urlencoded"
+  payload: !secret spotify_token_payload
+  content_type: "application/x-www-form-urlencoded"
+  timeout: 15
+spotify_play_liked:
+  url: !secret spotify_play_url
+  method: PUT
+  headers:
+    Authorization: "Bearer {{ access_token }}"
+    Content-Type: "application/json"
+  payload: !secret spotify_liked_payload
+  content_type: "application/json"
+  timeout: 15
+spotify_volume:
+  url: "https://api.spotify.com/v1/me/player/volume?device_id=a1243d89-b6c1-4c94-a43a-fce355b13572&volume_percent={{ volume_percent }}"
+  method: PUT
+  headers:
+    Authorization: "Bearer {{ access_token }}"
+  timeout: 15
+spotify_search:
+  url: >-
+    https://api.spotify.com/v1/search?q={{ query | urlencode }}&type={{ media_type }}&limit={{ limit | int(5) }}
+  method: GET
+  headers:
+    Authorization: "Bearer {{ access_token }}"
+    Accept: "application/json"
+  timeout: 15
+spotify_play_track:
+  url: !secret spotify_play_url
+  method: PUT
+  headers:
+    Authorization: "Bearer {{ access_token }}"
+    Content-Type: "application/json"
+  payload: '{"uris":["{{ uri }}"]}'
+  content_type: "application/json"
+  timeout: 15
+spotify_play_context:
+  url: !secret spotify_play_url
+  method: PUT
+  headers:
+    Authorization: "Bearer {{ access_token }}"
+    Content-Type: "application/json"
+  payload: '{"context_uri":"{{ uri }}"}'
+  content_type: "application/json"
+  timeout: 15

@@ -1,0 +1,164 @@
+- id: music_route_follow_source
+  alias: Music route follows player source
+  description: Keep the HA music route selector aligned with the MA player source.
+  trigger:
+  - platform: state
+    entity_id: media_player.iandeks_stantsiia_midi
+    attribute: source
+  condition:
+  - condition: template
+    value_template: '{{ trigger.to_state.attributes.source is not none }}'
+  action:
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.to_state.attributes.source.startswith(''Spotify Connect'') }}'
+      sequence:
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.music_route
+        data:
+          option: Spotify Connect
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.to_state.attributes.source == ''Music Assistant Queue'' }}'
+      sequence:
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.music_route
+        data:
+          option: Music Assistant
+- id: alarm_scheduler
+  alias: Alarm scheduler
+  description: 'One alarm slot: regular and snoozed triggers; startup reconciliation.'
+  trigger:
+  - trigger: time
+    at: input_datetime.alarm_next
+    id: regular
+  - trigger: time
+    at: input_datetime.alarm_snooze_until
+    id: snooze
+  - trigger: homeassistant
+    event: start
+    id: startup
+  condition: []
+  action:
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.id == ''startup'' }}'
+      sequence:
+      - service: script.alarm_startup_reconcile
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.id == ''regular'' }}'
+      - condition: state
+        entity_id: input_boolean.alarm_enabled
+        state: 'on'
+      sequence:
+      - service: script.alarm_schedule_next
+        continue_on_error: true
+      - service: script.alarm_start
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.id == ''snooze'' }}'
+      - condition: state
+        entity_id: input_boolean.alarm_enabled
+        state: 'on'
+      - condition: state
+        entity_id: input_boolean.alarm_snooze_active
+        state: 'on'
+      sequence:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.alarm_snooze_active
+      - service: script.alarm_start
+- id: alarm_button_stop
+  alias: 'Alarm: stop with Pulsar action button'
+  description: Short action click stops the alarm while it is ringing.
+  trigger:
+  - platform: state
+    entity_id: event.iandeks_stantsiia_midi_button
+  condition:
+  - condition: template
+    value_template: '{{ trigger.to_state.attributes.event_type == ''action'' }}'
+  - condition: state
+    entity_id: input_boolean.alarm_ringing
+    state: 'on'
+  action:
+  - service: script.alarm_stop
+- id: assist_satellite_responding_watchdog
+  alias: 'Assist satellite: recover stuck responding state'
+  description: HA 2026.10.4 sometimes leaves the Pulsar Assist satellite in "responding" after TTS. Reload the ESPHome config entry only after a generous TTS window and never while the alarm is ringing.
+  trigger:
+  - platform: state
+    entity_id: assist_satellite.iandeks_stantsiia_midi_assist_satellite
+    to: responding
+    for: 00:00:25
+  condition:
+  - condition: state
+    entity_id: assist_satellite.iandeks_stantsiia_midi_assist_satellite
+    state: responding
+  - condition: state
+    entity_id: input_boolean.alarm_ringing
+    state: 'off'
+  action:
+  - service: homeassistant.reload_config_entry
+    data:
+      entry_id: 01M5TAMM4T0CH5RASFJR8MSKT7
+  - delay: 00:00:02
+  mode: single
+- id: schedule_alarm_tick
+  alias: 'Schedules: alarm dispatcher'
+  description: Poll local_todo alarm lists; fire one due alarm, advance missed ones.
+  trigger:
+  - trigger: time_pattern
+    seconds: /30
+  - trigger: homeassistant
+    event: start
+  condition: []
+  action:
+  - service: script.schedule_alarm_tick
+  mode: single
+- id: schedule_reminder_tick
+  alias: 'Schedules: reminder dispatcher'
+  description: Poll local_todo reminders and announce due items.
+  trigger:
+  - trigger: time_pattern
+    seconds: /30
+  - trigger: homeassistant
+    event: start
+  condition: []
+  action:
+  - service: script.schedule_reminder_tick
+  mode: single
+- id: schedule_timer_finished
+  alias: 'Schedules: timer finished'
+  description: Announce a finished timer and notify the phone.
+  trigger:
+  - trigger: event
+    event_type: timer.finished
+  condition:
+  - condition: template
+    value_template: '{{ trigger.event.data.entity_id is defined and trigger.event.data.entity_id.startswith(''timer.taimer_'') }}'
+  action:
+  - variables:
+      timer_id: '{{ trigger.event.data.entity_id }}'
+      timer_num: '{{ timer_id.split(''_'')[-1] }}'
+      label: '{{ states(''input_text.taimer_'' ~ timer_num ~ ''_nazvanie'') }}'
+      display: '{{ label if label not in ['''', ''unknown'', ''unavailable'', ''None''] else ''Таймер '' ~ timer_num }}'
+  - service: script.schedule_announce
+    data:
+      message: '{{ display }} закончился.'
+      chime: true
+  - service: notify.mobile_app_xiaomi_17
+    data:
+      title: Таймер
+      message: '{{ display }} закончился.'
+  - service: input_text.set_value
+    target:
+      entity_id: input_text.taimer_{{ timer_num }}_nazvanie
+    data:
+      value: ''
+  mode: queued
+  max: 8

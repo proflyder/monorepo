@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_binary(
+    name = "alarm",
+    embed = [":alarm_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "alarm_lib",
+    srcs = ["main.go"],
+    importpath = "ricardo.local/monorepo/solutions/alarm/cmd/alarm",
+    visibility = ["//visibility:private"],
+    deps = ["//solutions/alarm/internal/app"],
+)

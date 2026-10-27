@@ -1,0 +1,20 @@
+{
+  "source": "https://huggingface.co/dhammagift/piper-ru-puriso",
+  "revision": "4f826cf39157118a2854f0b825917c1f83a342e7",
+  "voice": "ru_puriso2-medium",
+  "language": "ru",
+  "files": {
+    "ru_puriso2-medium.onnx": {
+      "bytes": 63516051,
+      "sha256": "7297a037d662068bcd23008df83455a6590891f8538a43dbddd6030592b75f95"
+    },
+    "ru_puriso2-medium.onnx.json": {
+      "bytes": 4681,
+      "sha256": "af3c323b8895ba6d982cba44dd63cca4ea603ec2c67587168e8ab3d81d9ac3fd"
+    }
+  },
+  "licenses": [
+    "CC BY-NC-SA 4.0",
+    "OpenRAIL-M"
+  ]
+}

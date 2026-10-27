@@ -1,0 +1,91 @@
+# Bazel output symlinks and local caches
+/bazel-*
+/.bazel-cache/
+
+# Private and historical machine data
+/snapshots/
+/secrets/
+/backups/
+/logs/
+/archive/
+.env
+.env.*
+*.env
+*.env.*
+!*.env.example
+!.env.example
+*.key
+*.p12
+*.pfx
+*.pcap
+*.pcapng
+*.wav
+*.pcm
+*.mp3
+*.flac
+*.onnx
+*.zip
+*.tar
+*.tar.gz
+*.tar.xz
+*.tgz
+*.gz
+*.xz
+*.bin
+*.debug
+*.bak
+*.bak-*
+
+# Third-party checkouts keep their own Git metadata. Active changes: patches/.
+/resources/*
+!/resources/README.md
+
+# Recovery artifacts stay on disk; version compact wake-word assets only.
+/artifacts/*
+!/artifacts/README.md
+!/artifacts/wakeword/
+/artifacts/wakeword/*
+!/artifacts/wakeword/ricardo-v1/
+!/artifacts/wakeword/ricardo-station/
+/artifacts/wakeword/ricardo-station/*
+!/artifacts/wakeword/ricardo-station/*.md
+!/artifacts/wakeword/ricardo-station/*.sh
+!/artifacts/wakeword/ricardo-station/SHA256SUMS
+
+# Build outputs / dependencies / editor and OS metadata
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+.pytest_cache/
+.coverage
+.coverage.*
+*.cover
+reports/pairing-coverage.json
+build/
+dist/
+.DS_Store
+._*
+*.log
+/projects/station/ble-gateway/ble-gateway
+/projects/station/ble-gateway/ble-gateway-armhf*
+/projects/station/ble-gateway/bletest-armhf
+
+# Reproducible generated configuration
+*.generated
+
+# Station upstream checkouts and built binaries
+/projects/station/upstream/
+/projects/station/resources/
+/projects/station/ble-gateway/ble-gateway*
+/projects/station/ble-gateway/bletest*
+
+# Private local compatibility links (targets live under secrets/local/).
+/projects/home-assistant/ha-voice/www/alarm_ringtone.wav
+
+# Ignore directory symlinks as well as real private directories.
+/archive
+/backups
+/logs
+/snapshots

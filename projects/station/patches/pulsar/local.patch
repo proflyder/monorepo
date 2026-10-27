@@ -1,0 +1,4125 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 9cf5297..573c979 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -195,8 +195,9 @@ From `/system/vendor/quasar/libyandex_evil.so`:
+ - Spotter type → VQE output: type 0 = main channel. The wake model (`spotter_models/activation/alisa`)
+   needs `VQE_OMNI_WITH_GAIN` (9); the command model (`spotter_models/command`, single channel)
+   only works with `VQE_OMNI` (6). Measured with `ww_offline`; re-measure when changing it.
+-- The command spotter only runs while something plays, during TTS/announcements/timer ring, or
+-  2.5 s after the wake word (as `maind` does), to avoid false positives from conversation.
++- The command spotter only runs while something plays, during TTS/announcements/timer ring.
++  During a wake-word request or arbitration it is off so the command reaches Home Assistant
++  (for example, "Рикардо, стоп" must stop a ringing alarm and resume music, not just pause it).
+ - `GetOutputChannelData` always returns no error; an absent output type yields `n == 0`.
+ - `YandexVqeC_Config_GetOutputChannelCount` takes `(cfg, type, int *out)`; the other `Config_Get*`
+   getters return the value directly.
+@@ -396,9 +397,10 @@ media playback, LED animations.
+   over claims of the same wake word received up to 500 ms before ours. A claim older than the
+   250 ms window wins outright (its station already decided and answers); otherwise busy (speaking,
+   announcing, ringing) beats idle, then the higher level, then the larger station name. While
+-  arbitrating the ring shows LISTENING, mic audio is buffered and sent after `voice_request_start`,
+-  a command word is held; a losing station blocks voice commands for 2.5 s (cleared by its next
+-  wake word or dialog). Stations without a voice subscriber do not claim (the wake word shows the
++  arbitrating the ring shows LISTENING, mic audio is buffered and sent after `voice_request_start`;
++  the local command spotter is off, so a command goes to Home Assistant; a losing station blocks
++  voice commands for 2.5 s (cleared by its next wake word or dialog). Stations without a voice
++  subscriber do not claim (the wake word shows the
+   usual not-subscribed error). HA's `duplicate_wake_up_detected` error (first phrase per 2 s wins
+   across satellites) is handled silently: no error ring or sound. Not yet verified on stations:
+   level difference near/far (expected ≥ 6 dB at 0.5 m vs 3 m; otherwise switch the level source to
+diff --git a/README.md b/README.md
+index c2dfe4d..c02b1cb 100644
+--- a/README.md
++++ b/README.md
+@@ -94,8 +94,10 @@ ESPHome Dashboard; голосовой конвейер обслуживает п
+ ### Локальные голосовые команды
+ 
+ Распознаются без Home Assistant, пока что-то играет (музыка, ответ ассистента, объявление,
+-звонок таймера) или в течение 2,5 с после «Алиса»: «Алиса, громче». В тишине и без активационной
+-фразы модель команд выключена, чтобы разговор в комнате не давал ложных срабатываний.
++звонок таймера): «Алиса, громче». В тишине и без активационной фразы модель команд выключена,
++чтобы разговор в комнате не давал ложных срабатываний. После активационной фразы локальный
++spotter на время запроса выключен: «Рикардо, стоп» уходит в Home Assistant, чтобы остановить
++будильник и вернуть музыку, а не просто поставить её на паузу.
+ 
+ | Фраза | Действие |
+ |---|---|
+diff --git a/satellite/Makefile b/satellite/Makefile
+index b024650..cf905b2 100644
+--- a/satellite/Makefile
++++ b/satellite/Makefile
+@@ -73,11 +73,12 @@ SS_LIBS  := $(SS_BUILD)/sendspin/libsendspin.a \
+ # for `addr2line -f -e` on the crash report that main.cpp writes to the log.
+ # -Wno-date-time: the build date is reported to Home Assistant as compilation_time.
+ CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -Wno-unused-parameter -Wno-date-time -Isrc -I$(SYSROOT)/include \
+-            -isystem $(SS_SRC)/sendspin-cpp/include -isystem $(SS_SRC)/noise-c/include $(SS_DEFS) -fno-omit-frame-pointer -g1
++            -isystem $(SS_SRC)/sendspin-cpp/include -isystem $(SS_SRC)/noise-c/include $(SS_DEFS) -fno-omit-frame-pointer -g1 -Ithird_party/microfrontend -Ithird_party/microfrontend/kissfft
+ LDFLAGS  := -L$(SYSROOT)/lib -Wl,--start-group $(SS_LIBS) -Wl,--end-group -lasound -ldl -lpthread
+ 
+ SRCS := $(shell find src -name '*.cpp')
+-OBJS := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRCS))
++MWW_SRCS := $(wildcard third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/*.cc)
++OBJS := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRCS)) $(patsubst third_party/%.cc,$(BUILD)/vendor/%.o,$(MWW_SRCS))
+ DEPS := $(OBJS:.o=.d)
+ 
+ # Reported by `pulsar --version` and Home Assistant. Only main.o and controller.o see it;
+@@ -104,6 +105,10 @@ $(BUILD)/%.o: src/%.cpp | $(SS_STAMP) $(SYSROOT_STAMP)
+ 	@mkdir -p $(dir $@)
+ 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+ 
++$(BUILD)/vendor/%.o: third_party/%.cc
++	@mkdir -p $(dir $@)
++	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
++
+ # alsa-lib headers + libasound.so to compile and link against (runtime uses the firmware's copy).
+ $(SYSROOT_STAMP): third_party/sysroot.sh
+ 	env -u MAKEFLAGS -u MFLAGS third_party/sysroot.sh $(SYSROOT) "$(TARGET) $(CPU)" $(HOST) "$(ALSA)"
+diff --git a/satellite/src/audio/frontend.cpp b/satellite/src/audio/frontend.cpp
+index 5f4f581..cf50b20 100644
+--- a/satellite/src/audio/frontend.cpp
++++ b/satellite/src/audio/frontend.cpp
+@@ -11,6 +11,7 @@
+ 
+ #include "audio/spectrum.h"
+ #include "audio/alsa_abi.h"
++#include "audio/microwakeword.h"
+ #include "core/log.h"
+ 
+ // Signatures of libyandex_evil.so (recovered by reverse engineering maind, verified on device):
+@@ -98,6 +99,19 @@ struct AudioFrontend::Engine {
+   P cfg = nullptr, vqe = nullptr;
+   int chunk = 0, frame = 0;
+   Spotter wake{"wake word"}, cmd{"command"};
++  std::unique_ptr<MicroWakeWord> micro;
++  bool set_wake(const std::string &path) {
++    if (path.ends_with(".tflite")) {
++      auto next = std::make_unique<MicroWakeWord>();
++      if (!next->load(path)) return false;
++      free_spotter(wake);
++      micro = std::move(next);
++      return true;
++    }
++    if (!init_spotter(wake, path, VQE_OMNI_WITH_GAIN)) return false;
++    micro.reset();
++    return true;
++  }
+ 
+   template <class F>
+   bool bind(F &f, const char *name) {
+@@ -243,7 +257,7 @@ AudioFrontend::~AudioFrontend() { stop(); }
+ bool AudioFrontend::start(const std::string &model_dir, const std::string &command_model_dir) {
+   eng_ = std::make_unique<Engine>();
+   if (!eng_->load() || !eng_->init_vqe(model_.vqe_preset) ||
+-      !eng_->init_spotter(eng_->wake, model_dir, VQE_OMNI_WITH_GAIN)) {
++      !eng_->set_wake(model_dir)) {
+     eng_.reset();
+     return false;
+   }
+@@ -373,14 +387,19 @@ void AudioFrontend::run() {
+   SpectrumAnalyzer ana(model_.capture_rate, period);
+   if (!ana.ok()) LOGW("music analysis: unsupported capture layout");
+   bool music_was_on = false;
++  bool detection_was_on = detect_.load();
++  std::vector<int16_t> preroll;
++  constexpr size_t kPrerollSamples = 8000;  // 0.5 s, covers detection and an immediate command
++  std::vector<int16_t> clean;
+ 
+   while (running_) {
+     {
+       std::lock_guard<std::mutex> lk(model_mu_);
+       if (!pending_model_.empty()) {
+-        if (!e.init_spotter(e.wake, pending_model_, VQE_OMNI_WITH_GAIN))
++        if (!e.set_wake(pending_model_))
+           LOGE("failed to switch wake word model to %s", pending_model_.c_str());
+         pending_model_.clear();
++        preroll.clear();
+       }
+     }
+     // Take exactly one VQE chunk.
+@@ -419,28 +438,51 @@ void AudioFrontend::run() {
+       }
+     }
+ 
+-    if (stream_.load() && audio_cb_) {
++    const bool detecting = detect_.load();
++    if (detecting != detection_was_on) {
++      preroll.clear();
++      if (e.micro && !e.micro->reset()) LOGE("microWakeWord: reset failed");
++      detection_was_on = detecting;
++    }
++    clean.clear();
++    if (stream_.load() || (e.micro && detecting)) {
+       const float *d = nullptr;
+       size_t n = 0;
+       if (e.vqe_check(e.vqe_out(e.vqe, VQE_OMNI_WITH_GAIN, 0, &d, &n), "VQE output") && n) {
+-        auto chunk = std::make_shared<std::vector<int16_t>>(n);
+-        for (size_t i = 0; i < n; i++) {
++        clean.resize(n);
++        for (size_t i = 0; i < n; ++i) {
+           float v = d[i] * 32768.f;
+-          (*chunk)[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : std::lrint(v));
++          clean[i] = int16_t(std::clamp(std::lrint(v), -32768L, 32767L));
++        }
++        if (stream_.load() && audio_cb_) {
++          auto chunk = std::make_shared<std::vector<int16_t>>(clean);
++          loop_.post([this, chunk] {
++            if (audio_cb_) audio_cb_(chunk->data(), chunk->size());
++          });
+         }
+-        loop_.post([this, chunk] {
+-          if (audio_cb_) audio_cb_(chunk->data(), chunk->size());
+-        });
+       }
+     }
+-
+-    if (detect_.load()) {
+-      auto phrases = e.feed(e.wake);
+-      if (!phrases.empty()) {
++    if (detecting) {
++      if (e.micro) {
++        preroll.insert(preroll.end(), clean.begin(), clean.end());
++        if (preroll.size() > kPrerollSamples)
++          preroll.erase(preroll.begin(), preroll.end() - kPrerollSamples);
++        float score = -1;
++        if (e.micro->feed(clean.data(), clean.size(), score)) {
++          float level = wake_level_db(level_hist);
++          auto audio = std::make_shared<std::vector<int16_t>>(preroll);
++          LOGI("microWakeWord detected: 'Рикардо', probability %.3f", score);
++          loop_.post([this, level, audio] {
++            if (wake_cb_) wake_cb_("Рикардо", level, std::move(*audio));
++          });
++          preroll.clear();
++        }
++      } else {
++        auto phrases = e.feed(e.wake);
+         float level = wake_level_db(level_hist);
+         for (auto &phrase : phrases)
+           loop_.post([this, phrase, level] {
+-            if (wake_cb_) wake_cb_(phrase, level);
++            if (wake_cb_) wake_cb_(phrase, level, {});
+           });
+       }
+     }
+diff --git a/satellite/src/audio/frontend.h b/satellite/src/audio/frontend.h
+index c5434fe..0758e55 100644
+--- a/satellite/src/audio/frontend.h
++++ b/satellite/src/audio/frontend.h
+@@ -26,7 +26,7 @@ class AudioFrontend {
+  public:
+   // level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC), rounded to
+   // 0.1 dB; -100 = no data.
+-  using WakeCb = std::function<void(const std::string &phrase, float level_db)>;
++  using WakeCb = std::function<void(const std::string &phrase, float level_db, std::vector<int16_t> preroll)>;
+   using CommandCb = std::function<void(const std::string &word)>;
+   using AudioCb = std::function<void(const int16_t *pcm, size_t samples)>;  // 16 kHz mono
+   using MusicCb = std::function<void(const MusicFrame &f)>;  // one per VQE chunk (32 ms)
+diff --git a/satellite/src/controller.cpp b/satellite/src/controller.cpp
+index 73ebfa1..732446d 100644
+--- a/satellite/src/controller.cpp
++++ b/satellite/src/controller.cpp
+@@ -150,7 +150,9 @@ Controller::Controller(Loop &loop, const Model &model, const std::string &state_
+ 
+ Controller::~Controller() = default;
+ 
+-std::string Controller::model_dir(const std::string &id) const { return kModels + id; }
++std::string Controller::model_dir(const std::string &id) const {
++  return id == "ricardo" ? "/data/pulsar/wakewords/ru_ricardo_mww.tflite" : kModels + id;
++}
+ 
+ bool Controller::start() {
+   st_.load(state_path_);
+@@ -175,8 +177,8 @@ bool Controller::start() {
+   id.project_version = PULSAR_VERSION;
+ 
+   ApiConfig cfg;
+-  cfg.wake_words = {{"alisa", "Алиса", {"ru"}}, {"yandex", "Яндекс", {"ru"}}};
+-  if (st_.wake_word != "alisa" && st_.wake_word != "yandex") st_.wake_word = "alisa";
++  cfg.wake_words = {{"alisa", "Алиса", {"ru"}}, {"yandex", "Яндекс", {"ru"}}, {"ricardo", "Рикардо", {"ru"}}};
++  if (st_.wake_word != "alisa" && st_.wake_word != "yandex" && st_.wake_word != "ricardo") st_.wake_word = "alisa";
+   cfg.active_wake_words = {st_.wake_word};
+   cfg.light_effects = Leds::effect_names();
+   cfg.music_styles = Leds::music_styles();
+@@ -301,7 +303,9 @@ bool Controller::start() {
+     });
+   }
+ 
+-  mic_.on_wake([this](const std::string &phrase, float level_db) { on_wake(phrase, level_db); });
++  mic_.on_wake([this](const std::string &phrase, float level_db, std::vector<int16_t> preroll) {
++    on_wake(phrase, level_db, std::move(preroll));
++  });
+   mic_.on_command([this](const std::string &word) { on_command(word); });
+   mic_.on_audio([this](const int16_t *pcm, size_t n) {
+     if (phase_ == Phase::LISTENING)
+@@ -402,7 +406,7 @@ void Controller::on_time(uint32_t epoch, const std::string &tz) {
+ 
+ void Controller::update_detection() { mic_.set_detection(!st_.mic_muted && !hw_mic_muted_); }
+ 
+-void Controller::on_wake(const std::string &phrase, float level_db) {
++void Controller::on_wake(const std::string &phrase, float level_db, std::vector<int16_t> preroll) {
+   if (st_.mic_muted || hw_mic_muted_) return;
+   LOGI("wake word '%s', level %.1f dB", phrase.c_str(), level_db);
+   if (timer_ringing_) {  // the wake word works as a stop word while ringing
+@@ -413,13 +417,12 @@ void Controller::on_wake(const std::string &phrase, float level_db) {
+   }
+   if (phase_ == Phase::LISTENING || phase_ == Phase::PROCESSING || arbitrating_) return;
+   // Without the HA pipeline this station could win and stay silent: it does not take part.
+-  if (!arbitration_on() || !api_->voice_subscribed()) return answer_wake(phrase, {});
++  if (!arbitration_on() || !api_->voice_subscribed()) return answer_wake(phrase, std::move(preroll));
+   arbitrating_ = true;
+   commands_blocked_until_ms_ = 0;  // a station that lost the previous wake word may win this one
+   arb_phrase_ = phrase;
+   arb_level_ = level_db;
+-  arb_audio_.clear();
+-  arb_command_.clear();
++  arb_audio_ = std::move(preroll);
+   mic_.set_streaming(true);
+   update_commands();
+   update_ui();
+@@ -437,9 +440,7 @@ void Controller::answer_wake(const std::string &phrase, std::vector<int16_t> pre
+ void Controller::arbitration_done(bool won, const WakeArbiter::Claim &best, size_t peers) {
+   arbitrating_ = false;
+   std::vector<int16_t> audio = std::move(arb_audio_);
+-  std::string command = std::move(arb_command_);
+   arb_audio_.clear();
+-  arb_command_.clear();
+   if (!won) {
+     mic_.set_streaming(false);
+     LOGI("wake word: %s answers (%s%.1f dB, ours %.1f dB)", best.station.c_str(), best.busy ? "busy, " : "",
+@@ -451,12 +452,6 @@ void Controller::arbitration_done(bool won, const WakeArbiter::Claim &best, size
+     return;
+   }
+   LOGI("wake word: this station answers (%zu other station(s) heard it)", peers);
+-  if (!command.empty()) {  // "Алиса, громче": handled locally, as right after the wake word
+-    mic_.set_streaming(false);
+-    update_commands();
+-    update_ui();
+-    return on_command(command);
+-  }
+   // Capture keeps streaming into the new dialog: switching it off here could drop the chunk
+   // between the preroll and live audio.
+   answer_wake(arb_phrase_, std::move(audio));
+@@ -468,7 +463,6 @@ void Controller::cancel_arbitration() {
+   arbiter_.cancel();
+   arbitrating_ = false;
+   arb_audio_.clear();
+-  arb_command_.clear();
+   if (phase_ != Phase::LISTENING) mic_.set_streaming(false);
+ }
+ 
+@@ -569,11 +563,18 @@ void Controller::on_voice_event(VaEvent type, const std::map<std::string, std::s
+         stop_streaming();
+         break;
+       }
++      // An empty STT result after a wake word usually means the user changed their mind or
++      // spoke too softly. Treat it as a silent cancel, not as a station error.
++      if (get("code") == "stt-no-text-recognized") {
++        LOGI("pipeline: no speech recognized, treating as cancel");
++        stop_streaming();
++        break;
++      }
+       LOGW("pipeline error: %s %s", get("code").c_str(), get("message").c_str());
+       stop_streaming();
+       error_shown_ = true;
+       show_ui(UiState::ERROR);
+-      if (get("code") != "stt-no-text-recognized") play_closing_earcon(kSounds + model_.error_sound);
++      play_closing_earcon(kSounds + model_.error_sound);
+       break;
+     case VaEvent::RUN_END:
+       stop_streaming();
+@@ -1309,7 +1310,7 @@ void Controller::on_light(const LightState &l, uint32_t transition_ms) {
+ }
+ 
+ void Controller::on_active_wake_words(const std::vector<std::string> &ids) {
+-  if (ids.empty()) return;
++  if (ids.empty() || (ids[0] != "alisa" && ids[0] != "yandex" && ids[0] != "ricardo")) return;
+   if (ids[0] == st_.wake_word) return;
+   st_.wake_word = ids[0];
+   LOGI("wake word -> %s", st_.wake_word.c_str());
+@@ -1319,13 +1320,17 @@ void Controller::on_active_wake_words(const std::vector<std::string> &ids) {
+ }
+ 
+ // Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше", "назад"):
+-// active without the wake word while something plays, and right after the wake word.
++// active without the wake word while something plays. During a wake-word request (including
++// arbitration) it stays off: "Рикардо, стоп" must reach Home Assistant so that it can stop an
++// alarm and restore the paused music; the local spotter would otherwise pause music and swallow
++// the command. Local barge-in over an answer/announcement and commands without the wake word
++// keep working.
+ void Controller::update_commands() {
+-  bool playing = player_.state(Channel::MUSIC) == PlayState::PLAYING || (sendspin_ && sendspin_->streaming()) ||
+-                 announcing_ || timer_ringing_ || phase_ == Phase::SPEAKING;
+-  bool after_wake =
+-      (phase_ == Phase::LISTENING && Loop::now_ms() - listen_started_ms_ < kCommandAfterWakeMs) || arbitrating_;
+-  mic_.set_commands(!st_.mic_muted && !hw_mic_muted_ && (playing || after_wake));
++  const bool playing = player_.state(Channel::MUSIC) == PlayState::PLAYING ||
++                       (sendspin_ && sendspin_->streaming()) || announcing_ || timer_ringing_ ||
++                       phase_ == Phase::SPEAKING;
++  const bool dialog = phase_ == Phase::LISTENING || phase_ == Phase::PROCESSING || arbitrating_;
++  mic_.set_commands(!st_.mic_muted && !hw_mic_muted_ && playing && !dialog);
+ }
+ 
+ bool Controller::music_pause() {
+@@ -1363,16 +1368,15 @@ void Controller::on_command(const std::string &word) {
+     LOGI("voice command '%s' ignored: another station answers this wake word", word.c_str());
+     return;
+   }
+-  if (arbitrating_) {
+-    arb_command_ = word;
+-    LOGI("voice command '%s' held until the wake arbitration ends", word.c_str());
++  // A wake-word request owns the command. Sending "стоп" to Home Assistant is what lets it
++  // stop a ringing alarm and then restore/resume the music; handling it here would only pause
++  // the music and cancel the pipeline. This also covers a callback queued just before the
++  // command spotter was switched off in update_commands().
++  if (phase_ == Phase::LISTENING || phase_ == Phase::PROCESSING || arbitrating_) {
++    LOGI("voice command '%s' left to Home Assistant during a voice request", word.c_str());
+     return;
+   }
+-  bool after_wake = phase_ == Phase::LISTENING && Loop::now_ms() - listen_started_ms_ < kCommandAfterWakeMs;
+-  LOGI("voice command '%s'%s", word.c_str(), after_wake ? " (after wake word, HA pipeline cancelled)" : "");
+-  if (after_wake) {
+-    finish_interaction();
+-  }
++  LOGI("voice command '%s'", word.c_str());
+   switch (c) {
+     case STOP:
+       if (timer_ringing_) {
+diff --git a/satellite/src/controller.h b/satellite/src/controller.h
+index a038276..aebfa4f 100644
+--- a/satellite/src/controller.h
++++ b/satellite/src/controller.h
+@@ -85,7 +85,7 @@ class Controller : public ApiHooks {
+  private:
+   enum class Phase { IDLE, LISTENING, PROCESSING, SPEAKING };
+ 
+-  void on_wake(const std::string &phrase, float level_db);
++  void on_wake(const std::string &phrase, float level_db, std::vector<int16_t> preroll = {});
+   void answer_wake(const std::string &phrase, std::vector<int16_t> preroll);
+   void arbitration_done(bool won, const WakeArbiter::Claim &best, size_t peers);
+   void cancel_arbitration();
+@@ -146,14 +146,13 @@ class Controller : public ApiHooks {
+   int64_t listen_started_ms_ = 0;  // start of the current LISTENING phase (commands window)
+   bool hw_mic_muted_ = false;
+   bool error_shown_ = false;
+-  // Wake arbitration: the window between our claim and the decision. Microphone audio and a
+-  // command word heard in it are held until the decision.
++  // Wake arbitration: the window between our claim and the decision. Microphone audio heard in
++  // it is held until the decision; commands belong to Home Assistant, so no local word is kept.
+   bool arbiter_ok_ = false;
+   bool arbitrating_ = false;
+   std::string arb_phrase_;
+   float arb_level_ = -100;
+   std::vector<int16_t> arb_audio_;
+-  std::string arb_command_;
+   int64_t commands_blocked_until_ms_ = 0;  // another station answers the wake word just heard
+   uint64_t watchdog_ = 0;  // loop timer ending a LISTENING/PROCESSING phase HA never advances
+   // Pipeline events carry no run id. HA ends a run it replaces (barge-in: our new start cancels
+diff --git a/satellite/src/audio/microwakeword.cpp b/satellite/src/audio/microwakeword.cpp
+new file mode 100644
+index 0000000..cd3a406
+--- /dev/null
++++ b/satellite/src/audio/microwakeword.cpp
+@@ -0,0 +1,182 @@
++#include "audio/microwakeword.h"
++
++#include <dlfcn.h>
++#include <algorithm>
++#include <array>
++#include <cmath>
++#include <cstring>
++
++#include "core/log.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/frontend_util.h"
++
++namespace cs {
++namespace {
++using P = void *;
++struct Quantization { float scale; int32_t zero; };
++constexpr float kCutoff = 0.9f;
++constexpr size_t kWindow = 10;
++}
++
++struct MicroWakeWord::Impl {
++  P lib = nullptr, model = nullptr, interpreter = nullptr, resolver = nullptr;
++  P (*model_create)(const char *) = nullptr;
++  void (*model_delete)(P) = nullptr;
++  P (*options_create)() = nullptr;
++  void (*options_threads)(P, int32_t) = nullptr;
++  void (*options_delete)(P) = nullptr;
++  P (*resolver_create)(const char *) = nullptr;
++  P (*interpreter_create)(P, P, P) = nullptr;
++  void (*interpreter_delete)(P) = nullptr;
++  int (*allocate)(P) = nullptr;
++  P (*input)(P, int32_t) = nullptr;
++  P (*output)(P, int32_t) = nullptr;
++  int32_t (*num_dims)(P) = nullptr;
++  int32_t (*dim)(P, int32_t) = nullptr;
++  int (*type)(P) = nullptr;
++  size_t (*bytes)(P) = nullptr;
++  Quantization (*quant)(P) = nullptr;
++  int (*copy_in)(P, const void *, size_t) = nullptr;
++  int (*copy_out)(P, void *, size_t) = nullptr;
++  int (*invoke)(P) = nullptr;
++  FrontendState fe{};
++  bool fe_ready = false, ready = false;
++  std::array<int8_t, 120> features{};
++  std::array<float, kWindow> probs{};
++  size_t filled = 0, count = 0, pos = 0;
++  int warmup = 100;
++  Quantization iq{}, oq{};
++
++  template<class F> bool bind(F &f, const char *name) {
++    f = reinterpret_cast<F>(dlsym(lib, name));
++    if (!f) LOGE("microWakeWord: missing %s", name);
++    return f != nullptr;
++  }
++  bool open(const std::string &path) {
++    lib = dlopen("/system/vendor/quasar/libs/libtflite.so", RTLD_NOW | RTLD_GLOBAL);
++    if (!lib) { LOGE("microWakeWord: %s", dlerror()); return false; }
++#define B(member, symbol) if (!bind(member, symbol)) return false
++    B(model_create, "TfLiteModelCreateFromFile");
++    B(model_delete, "TfLiteModelDelete");
++    B(options_create, "TfLiteInterpreterOptionsCreate");
++    B(options_threads, "TfLiteInterpreterOptionsSetNumThreads");
++    B(options_delete, "TfLiteInterpreterOptionsDelete");
++    B(resolver_create, "TfLiteCustomOpResolverCreate");
++    B(interpreter_create, "TfLiteInterpreterCreateWithCustomResolver");
++    B(interpreter_delete, "TfLiteInterpreterDelete");
++    B(allocate, "TfLiteInterpreterAllocateTensors");
++    B(input, "TfLiteInterpreterGetInputTensor");
++    B(output, "TfLiteInterpreterGetOutputTensor");
++    B(num_dims, "TfLiteTensorNumDims"); B(dim, "TfLiteTensorDim");
++    B(type, "TfLiteTensorType"); B(bytes, "TfLiteTensorByteSize");
++    B(quant, "TfLiteTensorQuantizationParams");
++    B(copy_in, "TfLiteTensorCopyFromBuffer"); B(copy_out, "TfLiteTensorCopyToBuffer");
++    B(invoke, "TfLiteInterpreterInvoke");
++#undef B
++    model = model_create(path.c_str());
++    // Yandex's default interpreter resolver crashes; its named FULL resolver is required.
++    static P full_resolver = nullptr;
++    if (!full_resolver) full_resolver = resolver_create("FULL");
++    resolver = full_resolver;
++    if (!model || !resolver) { LOGE("microWakeWord: model or FULL resolver unavailable"); return false; }
++    FrontendConfig cfg{};
++    FrontendFillConfigWithDefaults(&cfg);
++    cfg.window.size_ms = 30; cfg.window.step_size_ms = 10;
++    cfg.filterbank.num_channels = 40;
++    cfg.filterbank.lower_band_limit = 125; cfg.filterbank.upper_band_limit = 7500;
++    cfg.noise_reduction.smoothing_bits = 10;
++    cfg.noise_reduction.even_smoothing = 0.025f;
++    cfg.noise_reduction.odd_smoothing = 0.06f;
++    cfg.noise_reduction.min_signal_remaining = 0.05f;
++    cfg.pcan_gain_control.enable_pcan = 1;
++    cfg.pcan_gain_control.strength = 0.95f;
++    cfg.pcan_gain_control.offset = 80; cfg.pcan_gain_control.gain_bits = 21;
++    cfg.log_scale.enable_log = 1; cfg.log_scale.scale_shift = 6;
++    if (!FrontendPopulateState(&cfg, &fe, 16000)) return false;
++    fe_ready = true;
++    if (!reset()) return false;
++    LOGI("microWakeWord: loaded %s (int8 [1,3,40], cutoff=%.2f, window=%zu)",
++         path.c_str(), kCutoff, kWindow);
++    return true;
++  }
++  bool reset() {
++    ready = false;
++    if (interpreter) interpreter_delete(interpreter);
++    interpreter = nullptr;
++    P options = options_create();
++    if (!options) return false;
++    options_threads(options, 1);
++    interpreter = interpreter_create(model, resolver, options);
++    options_delete(options);
++    if (!interpreter || allocate(interpreter) != 0) {
++      LOGE("microWakeWord: interpreter creation/allocation failed"); return false;
++    }
++    P in = input(interpreter, 0), out = output(interpreter, 0);
++    if (!in || !out || num_dims(in) != 3 || dim(in, 0) != 1 || dim(in, 1) != 3 || dim(in, 2) != 40 ||
++        type(in) != 9 || type(out) != 3 || bytes(in) != features.size() || bytes(out) != 1) {
++      LOGE("microWakeWord: expected int8 [1,3,40] -> uint8 [1,1]"); return false;
++    }
++    iq = quant(in); oq = quant(out);
++    if (!(iq.scale > 0) || !(oq.scale > 0)) return false;
++    FrontendReset(&fe);
++    filled = count = pos = 0; warmup = 100;
++    probs.fill(0);
++    ready = true;
++    return true;
++  }
++  ~Impl() {
++    if (interpreter && interpreter_delete) interpreter_delete(interpreter);
++    if (model && model_delete) model_delete(model);
++    if (fe_ready) FrontendFreeStateContents(&fe);
++    // Keep the named resolver and library loaded for the firmware's other users.
++  }
++};
++
++MicroWakeWord::MicroWakeWord() = default;
++MicroWakeWord::~MicroWakeWord() = default;
++bool MicroWakeWord::load(const std::string &path) {
++  impl_ = std::make_unique<Impl>();
++  return impl_->open(path);
++}
++bool MicroWakeWord::ok() const { return impl_ && impl_->ready; }
++bool MicroWakeWord::reset() { return impl_ && impl_->reset(); }
++
++bool MicroWakeWord::feed(const int16_t *pcm, size_t samples, float &score) {
++  score = -1;
++  if (!ok()) return false;
++  auto &e = *impl_;
++  bool hit = false;
++  while (samples) {
++    size_t consumed = 0;
++    auto frame = FrontendProcessSamples(&e.fe, pcm, samples, &consumed);
++    pcm += consumed; samples -= consumed;
++    if (frame.size == 40) {
++      for (size_t i = 0; i < 40; ++i) {
++        // pymicro_features uses the microfrontend's fixed-point output * 0.0390625.
++        long q = std::lrint(frame.values[i] * 0.0390625f / e.iq.scale) + e.iq.zero;
++        e.features[e.filled * 40 + i] = int8_t(std::clamp(q, -128L, 127L));
++      }
++      if (++e.filled == 3) {
++        e.filled = 0;
++        uint8_t result = 0;
++        if (e.copy_in(e.input(e.interpreter, 0), e.features.data(), e.features.size()) != 0 ||
++            e.invoke(e.interpreter) != 0 || e.copy_out(e.output(e.interpreter, 0), &result, 1) != 0) {
++          LOGE("microWakeWord: inference failed"); e.ready = false; return false;
++        }
++        e.probs[e.pos++ % kWindow] = (int(result) - e.oq.zero) * e.oq.scale;
++        e.count = std::min(e.count + 1, kWindow);
++        if (e.warmup > 0) { e.warmup -= 3; continue; }
++        if (e.count == kWindow) {
++          float mean = 0;
++          for (float p : e.probs) mean += p / kWindow;
++          score = std::max(score, mean);
++          hit = hit || mean >= kCutoff;
++        }
++      }
++    }
++    if (!consumed) break;
++  }
++  if (hit) e.reset();  // fresh streaming variables, gain estimates and a 1 s warm-up
++  return hit;
++}
++}  // namespace cs
+diff --git a/satellite/src/audio/microwakeword.h b/satellite/src/audio/microwakeword.h
+new file mode 100644
+index 0000000..7475723
+--- /dev/null
++++ b/satellite/src/audio/microwakeword.h
+@@ -0,0 +1,23 @@
++#pragma once
++
++#include <cstddef>
++#include <cstdint>
++#include <memory>
++#include <string>
++
++namespace cs {
++// Owns the model's streaming state. Use only from the audio processing thread.
++class MicroWakeWord {
++ public:
++  MicroWakeWord();
++  ~MicroWakeWord();
++  bool load(const std::string &path);
++  bool reset();
++  // Returns a detection; score is the highest smoothed probability in this block.
++  bool feed(const int16_t *pcm, size_t samples, float &score);
++  bool ok() const;
++ private:
++  struct Impl;
++  std::unique_ptr<Impl> impl_;
++};
++}  // namespace cs
+diff --git a/satellite/third_party/microfrontend/LICENSE b/satellite/third_party/microfrontend/LICENSE
+new file mode 100644
+index 0000000..261eeb9
+--- /dev/null
++++ b/satellite/third_party/microfrontend/LICENSE
+@@ -0,0 +1,201 @@
++                                 Apache License
++                           Version 2.0, January 2004
++                        http://www.apache.org/licenses/
++
++   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
++
++   1. Definitions.
++
++      "License" shall mean the terms and conditions for use, reproduction,
++      and distribution as defined by Sections 1 through 9 of this document.
++
++      "Licensor" shall mean the copyright owner or entity authorized by
++      the copyright owner that is granting the License.
++
++      "Legal Entity" shall mean the union of the acting entity and all
++      other entities that control, are controlled by, or are under common
++      control with that entity. For the purposes of this definition,
++      "control" means (i) the power, direct or indirect, to cause the
++      direction or management of such entity, whether by contract or
++      otherwise, or (ii) ownership of fifty percent (50%) or more of the
++      outstanding shares, or (iii) beneficial ownership of such entity.
++
++      "You" (or "Your") shall mean an individual or Legal Entity
++      exercising permissions granted by this License.
++
++      "Source" form shall mean the preferred form for making modifications,
++      including but not limited to software source code, documentation
++      source, and configuration files.
++
++      "Object" form shall mean any form resulting from mechanical
++      transformation or translation of a Source form, including but
++      not limited to compiled object code, generated documentation,
++      and conversions to other media types.
++
++      "Work" shall mean the work of authorship, whether in Source or
++      Object form, made available under the License, as indicated by a
++      copyright notice that is included in or attached to the work
++      (an example is provided in the Appendix below).
++
++      "Derivative Works" shall mean any work, whether in Source or Object
++      form, that is based on (or derived from) the Work and for which the
++      editorial revisions, annotations, elaborations, or other modifications
++      represent, as a whole, an original work of authorship. For the purposes
++      of this License, Derivative Works shall not include works that remain
++      separable from, or merely link (or bind by name) to the interfaces of,
++      the Work and Derivative Works thereof.
++
++      "Contribution" shall mean any work of authorship, including
++      the original version of the Work and any modifications or additions
++      to that Work or Derivative Works thereof, that is intentionally
++      submitted to Licensor for inclusion in the Work by the copyright owner
++      or by an individual or Legal Entity authorized to submit on behalf of
++      the copyright owner. For the purposes of this definition, "submitted"
++      means any form of electronic, verbal, or written communication sent
++      to the Licensor or its representatives, including but not limited to
++      communication on electronic mailing lists, source code control systems,
++      and issue tracking systems that are managed by, or on behalf of, the
++      Licensor for the purpose of discussing and improving the Work, but
++      excluding communication that is conspicuously marked or otherwise
++      designated in writing by the copyright owner as "Not a Contribution."
++
++      "Contributor" shall mean Licensor and any individual or Legal Entity
++      on behalf of whom a Contribution has been received by Licensor and
++      subsequently incorporated within the Work.
++
++   2. Grant of Copyright License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      copyright license to reproduce, prepare Derivative Works of,
++      publicly display, publicly perform, sublicense, and distribute the
++      Work and such Derivative Works in Source or Object form.
++
++   3. Grant of Patent License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      (except as stated in this section) patent license to make, have made,
++      use, offer to sell, sell, import, and otherwise transfer the Work,
++      where such license applies only to those patent claims licensable
++      by such Contributor that are necessarily infringed by their
++      Contribution(s) alone or by combination of their Contribution(s)
++      with the Work to which such Contribution(s) was submitted. If You
++      institute patent litigation against any entity (including a
++      cross-claim or counterclaim in a lawsuit) alleging that the Work
++      or a Contribution incorporated within the Work constitutes direct
++      or contributory patent infringement, then any patent licenses
++      granted to You under this License for that Work shall terminate
++      as of the date such litigation is filed.
++
++   4. Redistribution. You may reproduce and distribute copies of the
++      Work or Derivative Works thereof in any medium, with or without
++      modifications, and in Source or Object form, provided that You
++      meet the following conditions:
++
++      (a) You must give any other recipients of the Work or
++          Derivative Works a copy of this License; and
++
++      (b) You must cause any modified files to carry prominent notices
++          stating that You changed the files; and
++
++      (c) You must retain, in the Source form of any Derivative Works
++          that You distribute, all copyright, patent, trademark, and
++          attribution notices from the Source form of the Work,
++          excluding those notices that do not pertain to any part of
++          the Derivative Works; and
++
++      (d) If the Work includes a "NOTICE" text file as part of its
++          distribution, then any Derivative Works that You distribute must
++          include a readable copy of the attribution notices contained
++          within such NOTICE file, excluding those notices that do not
++          pertain to any part of the Derivative Works, in at least one
++          of the following places: within a NOTICE text file distributed
++          as part of the Derivative Works; within the Source form or
++          documentation, if provided along with the Derivative Works; or,
++          within a display generated by the Derivative Works, if and
++          wherever such third-party notices normally appear. The contents
++          of the NOTICE file are for informational purposes only and
++          do not modify the License. You may add Your own attribution
++          notices within Derivative Works that You distribute, alongside
++          or as an addendum to the NOTICE text from the Work, provided
++          that such additional attribution notices cannot be construed
++          as modifying the License.
++
++      You may add Your own copyright statement to Your modifications and
++      may provide additional or different license terms and conditions
++      for use, reproduction, or distribution of Your modifications, or
++      for any such Derivative Works as a whole, provided Your use,
++      reproduction, and distribution of the Work otherwise complies with
++      the conditions stated in this License.
++
++   5. Submission of Contributions. Unless You explicitly state otherwise,
++      any Contribution intentionally submitted for inclusion in the Work
++      by You to the Licensor shall be under the terms and conditions of
++      this License, without any additional terms or conditions.
++      Notwithstanding the above, nothing herein shall supersede or modify
++      the terms of any separate license agreement you may have executed
++      with Licensor regarding such Contributions.
++
++   6. Trademarks. This License does not grant permission to use the trade
++      names, trademarks, service marks, or product names of the Licensor,
++      except as required for reasonable and customary use in describing the
++      origin of the Work and reproducing the content of the NOTICE file.
++
++   7. Disclaimer of Warranty. Unless required by applicable law or
++      agreed to in writing, Licensor provides the Work (and each
++      Contributor provides its Contributions) on an "AS IS" BASIS,
++      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++      implied, including, without limitation, any warranties or conditions
++      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
++      PARTICULAR PURPOSE. You are solely responsible for determining the
++      appropriateness of using or redistributing the Work and assume any
++      risks associated with Your exercise of permissions under this License.
++
++   8. Limitation of Liability. In no event and under no legal theory,
++      whether in tort (including negligence), contract, or otherwise,
++      unless required by applicable law (such as deliberate and grossly
++      negligent acts) or agreed to in writing, shall any Contributor be
++      liable to You for damages, including any direct, indirect, special,
++      incidental, or consequential damages of any character arising as a
++      result of this License or out of the use or inability to use the
++      Work (including but not limited to damages for loss of goodwill,
++      work stoppage, computer failure or malfunction, or any and all
++      other commercial damages or losses), even if such Contributor
++      has been advised of the possibility of such damages.
++
++   9. Accepting Warranty or Additional Liability. While redistributing
++      the Work or Derivative Works thereof, You may choose to offer,
++      and charge a fee for, acceptance of support, warranty, indemnity,
++      or other liability obligations and/or rights consistent with this
++      License. However, in accepting such obligations, You may act only
++      on Your own behalf and on Your sole responsibility, not on behalf
++      of any other Contributor, and only if You agree to indemnify,
++      defend, and hold each Contributor harmless for any liability
++      incurred by, or claims asserted against, such Contributor by reason
++      of your accepting any such warranty or additional liability.
++
++   END OF TERMS AND CONDITIONS
++
++   APPENDIX: How to apply the Apache License to your work.
++
++      To apply the Apache License to your work, attach the following
++      boilerplate notice, with the fields enclosed by brackets "[]"
++      replaced with your own identifying information. (Don't include
++      the brackets!)  The text should be enclosed in the appropriate
++      comment syntax for the file format. We also recommend that a
++      file or class name and description of purpose be included on the
++      same "printed page" as the copyright notice for easier
++      identification within third-party archives.
++
++   Copyright [yyyy] [name of copyright owner]
++
++   Licensed under the Apache License, Version 2.0 (the "License");
++   you may not use this file except in compliance with the License.
++   You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
+diff --git a/satellite/third_party/microfrontend/kissfft/_kiss_fft_guts.h b/satellite/third_party/microfrontend/kissfft/_kiss_fft_guts.h
+new file mode 100644
+index 0000000..92e94e2
+--- /dev/null
++++ b/satellite/third_party/microfrontend/kissfft/_kiss_fft_guts.h
+@@ -0,0 +1,168 @@
++#ifndef _KISS_FFT_GUTS_H
++#define _KISS_FFT_GUTS_H
++/*
++Copyright (c) 2003-2010, Mark Borgerding
++
++All rights reserved.
++
++Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
++
++    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
++    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
++    * Neither the author nor the names of any contributors may be used to endorse or promote products derived from this software without specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++*/
++
++/* kiss_fft.h
++   defines kiss_fft_scalar as either short or a float type
++   and defines
++   typedef struct { kiss_fft_scalar r; kiss_fft_scalar i; }kiss_fft_cpx; */
++#include "kiss_fft.h"
++#include <limits.h>
++
++#define MAXFACTORS 32
++/* e.g. an fft of length 128 has 4 factors 
++ as far as kissfft is concerned
++ 4*4*4*2
++ */
++
++struct kiss_fft_state{
++    int nfft;
++    int inverse;
++    int factors[2*MAXFACTORS];
++    kiss_fft_cpx twiddles[1];
++};
++
++/*
++  Explanation of macros dealing with complex math:
++
++   C_MUL(m,a,b)         : m = a*b
++   C_FIXDIV( c , div )  : if a fixed point impl., c /= div. noop otherwise
++   C_SUB( res, a,b)     : res = a - b
++   C_SUBFROM( res , a)  : res -= a
++   C_ADDTO( res , a)    : res += a
++ * */
++#ifdef FIXED_POINT
++#if (FIXED_POINT==32)
++# define FRACBITS 31
++# define SAMPPROD int64_t
++#define SAMP_MAX 2147483647
++#else
++# define FRACBITS 15
++# define SAMPPROD int32_t 
++#define SAMP_MAX 32767
++#endif
++
++#define SAMP_MIN -SAMP_MAX
++
++#if defined(CHECK_OVERFLOW)
++#  define CHECK_OVERFLOW_OP(a,op,b)  \
++	if ( (SAMPPROD)(a) op (SAMPPROD)(b) > SAMP_MAX || (SAMPPROD)(a) op (SAMPPROD)(b) < SAMP_MIN ) { \
++		fprintf(stderr,"WARNING:overflow @ " __FILE__ "(%d): (%d " #op" %d) = %ld\n",__LINE__,(a),(b),(SAMPPROD)(a) op (SAMPPROD)(b) );  }
++#endif
++
++
++#   define smul(a,b) ( (SAMPPROD)(a)*(b) )
++#   define sround( x )  (kiss_fft_scalar)( ( (x) + (1<<(FRACBITS-1)) ) >> FRACBITS )
++
++#   define S_MUL(a,b) sround( smul(a,b) )
++
++#   define C_MUL(m,a,b) \
++      do{ (m).r = sround( smul((a).r,(b).r) - smul((a).i,(b).i) ); \
++          (m).i = sround( smul((a).r,(b).i) + smul((a).i,(b).r) ); }while(0)
++
++#   define DIVSCALAR(x,k) \
++	(x) = sround( smul(  x, SAMP_MAX/k ) )
++
++#   define C_FIXDIV(c,div) \
++	do {    DIVSCALAR( (c).r , div);  \
++		DIVSCALAR( (c).i  , div); }while (0)
++
++#   define C_MULBYSCALAR( c, s ) \
++    do{ (c).r =  sround( smul( (c).r , s ) ) ;\
++        (c).i =  sround( smul( (c).i , s ) ) ; }while(0)
++
++#else  /* not FIXED_POINT*/
++
++#   define S_MUL(a,b) ( (a)*(b) )
++#define C_MUL(m,a,b) \
++    do{ (m).r = (a).r*(b).r - (a).i*(b).i;\
++        (m).i = (a).r*(b).i + (a).i*(b).r; }while(0)
++#   define C_FIXDIV(c,div) /* NOOP */
++#   define C_MULBYSCALAR( c, s ) \
++    do{ (c).r *= (s);\
++        (c).i *= (s); }while(0)
++#endif
++
++#ifndef CHECK_OVERFLOW_OP
++#  define CHECK_OVERFLOW_OP(a,op,b) /* noop */
++#endif
++
++#define  C_ADD( res, a,b)\
++    do { \
++	    CHECK_OVERFLOW_OP((a).r,+,(b).r)\
++	    CHECK_OVERFLOW_OP((a).i,+,(b).i)\
++	    (res).r=(a).r+(b).r;  (res).i=(a).i+(b).i; \
++    }while(0)
++#define  C_SUB( res, a,b)\
++    do { \
++	    CHECK_OVERFLOW_OP((a).r,-,(b).r)\
++	    CHECK_OVERFLOW_OP((a).i,-,(b).i)\
++	    (res).r=(a).r-(b).r;  (res).i=(a).i-(b).i; \
++    }while(0)
++#define C_ADDTO( res , a)\
++    do { \
++	    CHECK_OVERFLOW_OP((res).r,+,(a).r)\
++	    CHECK_OVERFLOW_OP((res).i,+,(a).i)\
++	    (res).r += (a).r;  (res).i += (a).i;\
++    }while(0)
++
++#define C_SUBFROM( res , a)\
++    do {\
++	    CHECK_OVERFLOW_OP((res).r,-,(a).r)\
++	    CHECK_OVERFLOW_OP((res).i,-,(a).i)\
++	    (res).r -= (a).r;  (res).i -= (a).i; \
++    }while(0)
++
++
++#ifdef FIXED_POINT
++#  define KISS_FFT_COS(phase)  floor(.5+SAMP_MAX * cos (phase))
++#  define KISS_FFT_SIN(phase)  floor(.5+SAMP_MAX * sin (phase))
++#  define HALF_OF(x) ((x)>>1)
++#elif defined(USE_SIMD)
++#  define KISS_FFT_COS(phase) _mm_set1_ps( cos(phase) )
++#  define KISS_FFT_SIN(phase) _mm_set1_ps( sin(phase) )
++#  define HALF_OF(x) ((x)*_mm_set1_ps(.5))
++#else
++#  define KISS_FFT_COS(phase) (kiss_fft_scalar) cos(phase)
++#  define KISS_FFT_SIN(phase) (kiss_fft_scalar) sin(phase)
++#  define HALF_OF(x) ((x)*.5)
++#endif
++
++#define  kf_cexp(x,phase) \
++	do{ \
++		(x)->r = KISS_FFT_COS(phase);\
++		(x)->i = KISS_FFT_SIN(phase);\
++	}while(0)
++
++
++/* a debugging function */
++#define pcpx(c)\
++    fprintf(stderr,"%g + %gi\n",(double)((c)->r),(double)((c)->i) )
++
++
++#ifdef KISS_FFT_USE_ALLOCA
++// define this to allow use of alloca instead of malloc for temporary buffers
++// Temporary buffers are used in two case: 
++// 1. FFT sizes that have "bad" factors. i.e. not 2,3 and 5
++// 2. "in-place" FFTs.  Notice the quotes, since kissfft does not really do an in-place transform.
++#include <alloca.h>
++#define  KISS_FFT_TMP_ALLOC(nbytes) alloca(nbytes)
++#define  KISS_FFT_TMP_FREE(ptr) 
++#else
++#define  KISS_FFT_TMP_ALLOC(nbytes) KISS_FFT_MALLOC(nbytes)
++#define  KISS_FFT_TMP_FREE(ptr) KISS_FFT_FREE(ptr)
++#endif
++
++#endif // _KISS_FFT_GUTS_H
+diff --git a/satellite/third_party/microfrontend/kissfft/kiss_fft.cc b/satellite/third_party/microfrontend/kissfft/kiss_fft.cc
+new file mode 100644
+index 0000000..9133a01
+--- /dev/null
++++ b/satellite/third_party/microfrontend/kissfft/kiss_fft.cc
+@@ -0,0 +1,408 @@
++/*
++Copyright (c) 2003-2010, Mark Borgerding
++
++All rights reserved.
++
++Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
++
++    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
++    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
++    * Neither the author nor the names of any contributors may be used to endorse or promote products derived from this software without specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++*/
++
++
++#include "_kiss_fft_guts.h"
++/* The guts header contains all the multiplication and addition macros that are defined for
++ fixed or floating point complex numbers.  It also delares the kf_ internal functions.
++ */
++
++static void kf_bfly2(
++        kiss_fft_cpx * Fout,
++        const size_t fstride,
++        const kiss_fft_cfg st,
++        int m
++        )
++{
++    kiss_fft_cpx * Fout2;
++    kiss_fft_cpx * tw1 = st->twiddles;
++    kiss_fft_cpx t;
++    Fout2 = Fout + m;
++    do{
++        C_FIXDIV(*Fout,2); C_FIXDIV(*Fout2,2);
++
++        C_MUL (t,  *Fout2 , *tw1);
++        tw1 += fstride;
++        C_SUB( *Fout2 ,  *Fout , t );
++        C_ADDTO( *Fout ,  t );
++        ++Fout2;
++        ++Fout;
++    }while (--m);
++}
++
++static void kf_bfly4(
++        kiss_fft_cpx * Fout,
++        const size_t fstride,
++        const kiss_fft_cfg st,
++        const size_t m
++        )
++{
++    kiss_fft_cpx *tw1,*tw2,*tw3;
++    kiss_fft_cpx scratch[6];
++    size_t k=m;
++    const size_t m2=2*m;
++    const size_t m3=3*m;
++
++
++    tw3 = tw2 = tw1 = st->twiddles;
++
++    do {
++        C_FIXDIV(*Fout,4); C_FIXDIV(Fout[m],4); C_FIXDIV(Fout[m2],4); C_FIXDIV(Fout[m3],4);
++
++        C_MUL(scratch[0],Fout[m] , *tw1 );
++        C_MUL(scratch[1],Fout[m2] , *tw2 );
++        C_MUL(scratch[2],Fout[m3] , *tw3 );
++
++        C_SUB( scratch[5] , *Fout, scratch[1] );
++        C_ADDTO(*Fout, scratch[1]);
++        C_ADD( scratch[3] , scratch[0] , scratch[2] );
++        C_SUB( scratch[4] , scratch[0] , scratch[2] );
++        C_SUB( Fout[m2], *Fout, scratch[3] );
++        tw1 += fstride;
++        tw2 += fstride*2;
++        tw3 += fstride*3;
++        C_ADDTO( *Fout , scratch[3] );
++
++        if(st->inverse) {
++            Fout[m].r = scratch[5].r - scratch[4].i;
++            Fout[m].i = scratch[5].i + scratch[4].r;
++            Fout[m3].r = scratch[5].r + scratch[4].i;
++            Fout[m3].i = scratch[5].i - scratch[4].r;
++        }else{
++            Fout[m].r = scratch[5].r + scratch[4].i;
++            Fout[m].i = scratch[5].i - scratch[4].r;
++            Fout[m3].r = scratch[5].r - scratch[4].i;
++            Fout[m3].i = scratch[5].i + scratch[4].r;
++        }
++        ++Fout;
++    }while(--k);
++}
++
++static void kf_bfly3(
++         kiss_fft_cpx * Fout,
++         const size_t fstride,
++         const kiss_fft_cfg st,
++         size_t m
++         )
++{
++     size_t k=m;
++     const size_t m2 = 2*m;
++     kiss_fft_cpx *tw1,*tw2;
++     kiss_fft_cpx scratch[5];
++     kiss_fft_cpx epi3;
++     epi3 = st->twiddles[fstride*m];
++
++     tw1=tw2=st->twiddles;
++
++     do{
++         C_FIXDIV(*Fout,3); C_FIXDIV(Fout[m],3); C_FIXDIV(Fout[m2],3);
++
++         C_MUL(scratch[1],Fout[m] , *tw1);
++         C_MUL(scratch[2],Fout[m2] , *tw2);
++
++         C_ADD(scratch[3],scratch[1],scratch[2]);
++         C_SUB(scratch[0],scratch[1],scratch[2]);
++         tw1 += fstride;
++         tw2 += fstride*2;
++
++         Fout[m].r = Fout->r - HALF_OF(scratch[3].r);
++         Fout[m].i = Fout->i - HALF_OF(scratch[3].i);
++
++         C_MULBYSCALAR( scratch[0] , epi3.i );
++
++         C_ADDTO(*Fout,scratch[3]);
++
++         Fout[m2].r = Fout[m].r + scratch[0].i;
++         Fout[m2].i = Fout[m].i - scratch[0].r;
++
++         Fout[m].r -= scratch[0].i;
++         Fout[m].i += scratch[0].r;
++
++         ++Fout;
++     }while(--k);
++}
++
++static void kf_bfly5(
++        kiss_fft_cpx * Fout,
++        const size_t fstride,
++        const kiss_fft_cfg st,
++        int m
++        )
++{
++    kiss_fft_cpx *Fout0,*Fout1,*Fout2,*Fout3,*Fout4;
++    int u;
++    kiss_fft_cpx scratch[13];
++    kiss_fft_cpx * twiddles = st->twiddles;
++    kiss_fft_cpx *tw;
++    kiss_fft_cpx ya,yb;
++    ya = twiddles[fstride*m];
++    yb = twiddles[fstride*2*m];
++
++    Fout0=Fout;
++    Fout1=Fout0+m;
++    Fout2=Fout0+2*m;
++    Fout3=Fout0+3*m;
++    Fout4=Fout0+4*m;
++
++    tw=st->twiddles;
++    for ( u=0; u<m; ++u ) {
++        C_FIXDIV( *Fout0,5); C_FIXDIV( *Fout1,5); C_FIXDIV( *Fout2,5); C_FIXDIV( *Fout3,5); C_FIXDIV( *Fout4,5);
++        scratch[0] = *Fout0;
++
++        C_MUL(scratch[1] ,*Fout1, tw[u*fstride]);
++        C_MUL(scratch[2] ,*Fout2, tw[2*u*fstride]);
++        C_MUL(scratch[3] ,*Fout3, tw[3*u*fstride]);
++        C_MUL(scratch[4] ,*Fout4, tw[4*u*fstride]);
++
++        C_ADD( scratch[7],scratch[1],scratch[4]);
++        C_SUB( scratch[10],scratch[1],scratch[4]);
++        C_ADD( scratch[8],scratch[2],scratch[3]);
++        C_SUB( scratch[9],scratch[2],scratch[3]);
++
++        Fout0->r += scratch[7].r + scratch[8].r;
++        Fout0->i += scratch[7].i + scratch[8].i;
++
++        scratch[5].r = scratch[0].r + S_MUL(scratch[7].r,ya.r) + S_MUL(scratch[8].r,yb.r);
++        scratch[5].i = scratch[0].i + S_MUL(scratch[7].i,ya.r) + S_MUL(scratch[8].i,yb.r);
++
++        scratch[6].r =  S_MUL(scratch[10].i,ya.i) + S_MUL(scratch[9].i,yb.i);
++        scratch[6].i = -S_MUL(scratch[10].r,ya.i) - S_MUL(scratch[9].r,yb.i);
++
++        C_SUB(*Fout1,scratch[5],scratch[6]);
++        C_ADD(*Fout4,scratch[5],scratch[6]);
++
++        scratch[11].r = scratch[0].r + S_MUL(scratch[7].r,yb.r) + S_MUL(scratch[8].r,ya.r);
++        scratch[11].i = scratch[0].i + S_MUL(scratch[7].i,yb.r) + S_MUL(scratch[8].i,ya.r);
++        scratch[12].r = - S_MUL(scratch[10].i,yb.i) + S_MUL(scratch[9].i,ya.i);
++        scratch[12].i = S_MUL(scratch[10].r,yb.i) - S_MUL(scratch[9].r,ya.i);
++
++        C_ADD(*Fout2,scratch[11],scratch[12]);
++        C_SUB(*Fout3,scratch[11],scratch[12]);
++
++        ++Fout0;++Fout1;++Fout2;++Fout3;++Fout4;
++    }
++}
++
++/* perform the butterfly for one stage of a mixed radix FFT */
++static void kf_bfly_generic(
++        kiss_fft_cpx * Fout,
++        const size_t fstride,
++        const kiss_fft_cfg st,
++        int m,
++        int p
++        )
++{
++    int u,k,q1,q;
++    kiss_fft_cpx * twiddles = st->twiddles;
++    kiss_fft_cpx t;
++    int Norig = st->nfft;
++
++    kiss_fft_cpx * scratch = (kiss_fft_cpx*)KISS_FFT_TMP_ALLOC(sizeof(kiss_fft_cpx)*p);
++
++    for ( u=0; u<m; ++u ) {
++        k=u;
++        for ( q1=0 ; q1<p ; ++q1 ) {
++            scratch[q1] = Fout[ k  ];
++            C_FIXDIV(scratch[q1],p);
++            k += m;
++        }
++
++        k=u;
++        for ( q1=0 ; q1<p ; ++q1 ) {
++            int twidx=0;
++            Fout[ k ] = scratch[0];
++            for (q=1;q<p;++q ) {
++                twidx += fstride * k;
++                if (twidx>=Norig) twidx-=Norig;
++                C_MUL(t,scratch[q] , twiddles[twidx] );
++                C_ADDTO( Fout[ k ] ,t);
++            }
++            k += m;
++        }
++    }
++    KISS_FFT_TMP_FREE(scratch);
++}
++
++static
++void kf_work(
++        kiss_fft_cpx * Fout,
++        const kiss_fft_cpx * f,
++        const size_t fstride,
++        int in_stride,
++        int * factors,
++        const kiss_fft_cfg st
++        )
++{
++    kiss_fft_cpx * Fout_beg=Fout;
++    const int p=*factors++; /* the radix  */
++    const int m=*factors++; /* stage's fft length/p */
++    const kiss_fft_cpx * Fout_end = Fout + p*m;
++
++#ifdef _OPENMP
++    // use openmp extensions at the 
++    // top-level (not recursive)
++    if (fstride==1 && p<=5)
++    {
++        int k;
++
++        // execute the p different work units in different threads
++#       pragma omp parallel for
++        for (k=0;k<p;++k) 
++            kf_work( Fout +k*m, f+ fstride*in_stride*k,fstride*p,in_stride,factors,st);
++        // all threads have joined by this point
++
++        switch (p) {
++            case 2: kf_bfly2(Fout,fstride,st,m); break;
++            case 3: kf_bfly3(Fout,fstride,st,m); break; 
++            case 4: kf_bfly4(Fout,fstride,st,m); break;
++            case 5: kf_bfly5(Fout,fstride,st,m); break; 
++            default: kf_bfly_generic(Fout,fstride,st,m,p); break;
++        }
++        return;
++    }
++#endif
++
++    if (m==1) {
++        do{
++            *Fout = *f;
++            f += fstride*in_stride;
++        }while(++Fout != Fout_end );
++    }else{
++        do{
++            // recursive call:
++            // DFT of size m*p performed by doing
++            // p instances of smaller DFTs of size m, 
++            // each one takes a decimated version of the input
++            kf_work( Fout , f, fstride*p, in_stride, factors,st);
++            f += fstride*in_stride;
++        }while( (Fout += m) != Fout_end );
++    }
++
++    Fout=Fout_beg;
++
++    // recombine the p smaller DFTs 
++    switch (p) {
++        case 2: kf_bfly2(Fout,fstride,st,m); break;
++        case 3: kf_bfly3(Fout,fstride,st,m); break; 
++        case 4: kf_bfly4(Fout,fstride,st,m); break;
++        case 5: kf_bfly5(Fout,fstride,st,m); break; 
++        default: kf_bfly_generic(Fout,fstride,st,m,p); break;
++    }
++}
++
++/*  facbuf is populated by p1,m1,p2,m2, ...
++    where 
++    p[i] * m[i] = m[i-1]
++    m0 = n                  */
++static 
++void kf_factor(int n,int * facbuf)
++{
++    int p=4;
++    double floor_sqrt;
++    floor_sqrt = floor( sqrt((double)n) );
++
++    /*factor out powers of 4, powers of 2, then any remaining primes */
++    do {
++        while (n % p) {
++            switch (p) {
++                case 4: p = 2; break;
++                case 2: p = 3; break;
++                default: p += 2; break;
++            }
++            if (p > floor_sqrt)
++                p = n;          /* no more factors, skip to end */
++        }
++        n /= p;
++        *facbuf++ = p;
++        *facbuf++ = n;
++    } while (n > 1);
++}
++
++/*
++ *
++ * User-callable function to allocate all necessary storage space for the fft.
++ *
++ * The return value is a contiguous block of memory, allocated with malloc.  As such,
++ * It can be freed with free(), rather than a kiss_fft-specific function.
++ * */
++kiss_fft_cfg kiss_fft_alloc(int nfft,int inverse_fft,void * mem,size_t * lenmem )
++{
++    kiss_fft_cfg st=NULL;
++    size_t memneeded = sizeof(struct kiss_fft_state)
++        + sizeof(kiss_fft_cpx)*(nfft-1); /* twiddle factors*/
++
++    if ( lenmem==NULL ) {
++        st = ( kiss_fft_cfg)KISS_FFT_MALLOC( memneeded );
++    }else{
++        if (mem != NULL && *lenmem >= memneeded)
++            st = (kiss_fft_cfg)mem;
++        *lenmem = memneeded;
++    }
++    if (st) {
++        int i;
++        st->nfft=nfft;
++        st->inverse = inverse_fft;
++
++        for (i=0;i<nfft;++i) {
++            const double pi=3.141592653589793238462643383279502884197169399375105820974944;
++            double phase = -2*pi*i / nfft;
++            if (st->inverse)
++                phase *= -1;
++            kf_cexp(st->twiddles+i, phase );
++        }
++
++        kf_factor(nfft,st->factors);
++    }
++    return st;
++}
++
++
++void kiss_fft_stride(kiss_fft_cfg st,const kiss_fft_cpx *fin,kiss_fft_cpx *fout,int in_stride)
++{
++    if (fin == fout) {
++        //NOTE: this is not really an in-place FFT algorithm.
++        //It just performs an out-of-place FFT into a temp buffer
++        kiss_fft_cpx * tmpbuf = (kiss_fft_cpx*)KISS_FFT_TMP_ALLOC( sizeof(kiss_fft_cpx)*st->nfft);
++        kf_work(tmpbuf,fin,1,in_stride, st->factors,st);
++        /* memcpy(fout,tmpbuf,sizeof(kiss_fft_cpx)*st->nfft); */
++        KISS_FFT_TMP_FREE(tmpbuf);
++    }else{
++        kf_work( fout, fin, 1,in_stride, st->factors,st );
++    }
++}
++
++void kiss_fft(kiss_fft_cfg cfg,const kiss_fft_cpx *fin,kiss_fft_cpx *fout)
++{
++    kiss_fft_stride(cfg,fin,fout,1);
++}
++
++
++void kiss_fft_cleanup(void)
++{
++    // nothing needed any more
++}
++
++int kiss_fft_next_fast_size(int n)
++{
++    while(1) {
++        int m=n;
++        while ( (m%2) == 0 ) m/=2;
++        while ( (m%3) == 0 ) m/=3;
++        while ( (m%5) == 0 ) m/=5;
++        if (m<=1)
++            break; /* n is completely factorable by twos, threes, and fives */
++        n++;
++    }
++    return n;
++}
+diff --git a/satellite/third_party/microfrontend/kissfft/kiss_fft.h b/satellite/third_party/microfrontend/kissfft/kiss_fft.h
+new file mode 100644
+index 0000000..328d0e5
+--- /dev/null
++++ b/satellite/third_party/microfrontend/kissfft/kiss_fft.h
+@@ -0,0 +1,126 @@
++#ifndef KISS_FFT_H
++#define KISS_FFT_H
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <math.h>
++#include <string.h>
++
++#ifdef __cplusplus
++extern "C++" {
++#endif
++
++/*
++ ATTENTION!
++ If you would like a :
++ -- a utility that will handle the caching of fft objects
++ -- real-only (no imaginary time component ) FFT
++ -- a multi-dimensional FFT
++ -- a command-line utility to perform ffts
++ -- a command-line utility to perform fast-convolution filtering
++
++ Then see kfc.h kiss_fftr.h kiss_fftnd.h fftutil.c kiss_fastfir.c
++  in the tools/ directory.
++*/
++
++#ifdef USE_SIMD
++# include <xmmintrin.h>
++# define kiss_fft_scalar __m128
++#define KISS_FFT_MALLOC(nbytes) _mm_malloc(nbytes,16)
++#define KISS_FFT_FREE _mm_free
++#else	
++/* #define KISS_FFT_MALLOC malloc */
++/* #define KISS_FFT_FREE free */
++#define KISS_FFT_MALLOC(X) (void*)(0x0) /* Patched. */
++#define KISS_FFT_FREE(X) /* Patched. */
++#endif	
++
++
++#ifdef FIXED_POINT
++#include <stdint.h> /* Patched. */
++# if (FIXED_POINT == 32)
++#  define kiss_fft_scalar int32_t
++# else	
++#  define kiss_fft_scalar int16_t
++# endif
++#else
++# ifndef kiss_fft_scalar
++/*  default is float */
++#   define kiss_fft_scalar float
++# endif
++#endif
++
++typedef struct {
++    kiss_fft_scalar r;
++    kiss_fft_scalar i;
++}kiss_fft_cpx;
++
++typedef struct kiss_fft_state* kiss_fft_cfg;
++
++/* 
++ *  kiss_fft_alloc
++ *  
++ *  Initialize a FFT (or IFFT) algorithm's cfg/state buffer.
++ *
++ *  typical usage:      kiss_fft_cfg mycfg=kiss_fft_alloc(1024,0,NULL,NULL);
++ *
++ *  The return value from fft_alloc is a cfg buffer used internally
++ *  by the fft routine or NULL.
++ *
++ *  If lenmem is NULL, then kiss_fft_alloc will allocate a cfg buffer using malloc.
++ *  The returned value should be free()d when done to avoid memory leaks.
++ *  
++ *  The state can be placed in a user supplied buffer 'mem':
++ *  If lenmem is not NULL and mem is not NULL and *lenmem is large enough,
++ *      then the function places the cfg in mem and the size used in *lenmem
++ *      and returns mem.
++ *  
++ *  If lenmem is not NULL and ( mem is NULL or *lenmem is not large enough),
++ *      then the function returns NULL and places the minimum cfg 
++ *      buffer size in *lenmem.
++ * */
++
++kiss_fft_cfg kiss_fft_alloc(int nfft,int inverse_fft,void * mem,size_t * lenmem); 
++
++/*
++ * kiss_fft(cfg,in_out_buf)
++ *
++ * Perform an FFT on a complex input buffer.
++ * for a forward FFT,
++ * fin should be  f[0] , f[1] , ... ,f[nfft-1]
++ * fout will be   F[0] , F[1] , ... ,F[nfft-1]
++ * Note that each element is complex and can be accessed like
++    f[k].r and f[k].i
++ * */
++void kiss_fft(kiss_fft_cfg cfg,const kiss_fft_cpx *fin,kiss_fft_cpx *fout);
++
++/*
++ A more generic version of the above function. It reads its input from every Nth sample.
++ * */
++void kiss_fft_stride(kiss_fft_cfg cfg,const kiss_fft_cpx *fin,kiss_fft_cpx *fout,int fin_stride);
++
++/* If kiss_fft_alloc allocated a buffer, it is one contiguous 
++   buffer and can be simply free()d when no longer needed*/
++#define kiss_fft_free free
++
++/*
++ Cleans up some memory that gets managed internally. Not necessary to call, but it might clean up 
++ your compiler output to call this before you exit.
++*/
++void kiss_fft_cleanup(void);
++	
++
++/*
++ * Returns the smallest integer k, such that k>=n and k has only "fast" factors (2,3,5)
++ */
++int kiss_fft_next_fast_size(int n);
++
++/* for real ffts, we need an even size */
++#define kiss_fftr_next_fast_size_real(n) \
++        (kiss_fft_next_fast_size( ((n)+1)>>1)<<1)
++
++#ifdef __cplusplus
++} 
++#endif
++
++#endif
+diff --git a/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.cc b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.cc
+new file mode 100644
+index 0000000..9f1074d
+--- /dev/null
++++ b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.cc
+@@ -0,0 +1,161 @@
++/*
++Copyright (c) 2003-2004, Mark Borgerding
++
++All rights reserved.
++
++Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
++
++    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
++    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
++    * Neither the author nor the names of any contributors may be used to endorse or promote products derived from this software without specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++*/
++
++#include "kiss_fftr.h"
++#include "_kiss_fft_guts.h"
++
++struct kiss_fftr_state{
++    kiss_fft_cfg substate;
++    kiss_fft_cpx * tmpbuf;
++    kiss_fft_cpx * super_twiddles;
++#ifdef USE_SIMD
++    void * pad;
++#endif
++};
++
++kiss_fftr_cfg kiss_fftr_alloc(int nfft,int inverse_fft,void * mem,size_t * lenmem)
++{
++    int i;
++    kiss_fftr_cfg st = NULL;
++    size_t subsize, memneeded;
++
++    if (nfft & 1) {
++        /* fprintf(stderr,"Real FFT optimization must be even.\n"); */
++        return NULL;
++    }
++    nfft >>= 1;
++
++    kiss_fft_alloc (nfft, inverse_fft, NULL, &subsize);
++    memneeded = sizeof(struct kiss_fftr_state) + subsize + sizeof(kiss_fft_cpx) * ( nfft * 3 / 2);
++
++    if (lenmem == NULL) {
++        st = (kiss_fftr_cfg) KISS_FFT_MALLOC (memneeded);
++    } else {
++        if (*lenmem >= memneeded)
++            st = (kiss_fftr_cfg) mem;
++        *lenmem = memneeded;
++    }
++    if (!st)
++        return NULL;
++
++    st->substate = (kiss_fft_cfg) (st + 1); /*just beyond kiss_fftr_state struct */
++    st->tmpbuf = (kiss_fft_cpx *) (((char *) st->substate) + subsize);
++    st->super_twiddles = st->tmpbuf + nfft;
++    kiss_fft_alloc(nfft, inverse_fft, st->substate, &subsize);
++
++    for (i = 0; i < nfft/2; ++i) {
++        double phase =
++            -3.14159265358979323846264338327 * ((double) (i+1) / nfft + .5);
++        if (inverse_fft)
++            phase *= -1;
++        kf_cexp (st->super_twiddles+i,phase);
++    }
++    return st;
++}
++
++void kiss_fftr(kiss_fftr_cfg st,const kiss_fft_scalar *timedata,kiss_fft_cpx *freqdata)
++{
++    /* input buffer timedata is stored row-wise */
++    int k,ncfft;
++    kiss_fft_cpx fpnk,fpk,f1k,f2k,tw,tdc;
++
++    if ( st->substate->inverse) {
++        /* fprintf(stderr,"kiss fft usage error: improper alloc\n"); */
++        /* exit(1); */
++        return;
++    }
++
++    ncfft = st->substate->nfft;
++
++    /*perform the parallel fft of two real signals packed in real,imag*/
++    kiss_fft( st->substate , (const kiss_fft_cpx*)timedata, st->tmpbuf );
++    /* The real part of the DC element of the frequency spectrum in st->tmpbuf
++     * contains the sum of the even-numbered elements of the input time sequence
++     * The imag part is the sum of the odd-numbered elements
++     *
++     * The sum of tdc.r and tdc.i is the sum of the input time sequence. 
++     *      yielding DC of input time sequence
++     * The difference of tdc.r - tdc.i is the sum of the input (dot product) [1,-1,1,-1... 
++     *      yielding Nyquist bin of input time sequence
++     */
++ 
++    tdc.r = st->tmpbuf[0].r;
++    tdc.i = st->tmpbuf[0].i;
++    C_FIXDIV(tdc,2);
++    CHECK_OVERFLOW_OP(tdc.r ,+, tdc.i);
++    CHECK_OVERFLOW_OP(tdc.r ,-, tdc.i);
++    freqdata[0].r = tdc.r + tdc.i;
++    freqdata[ncfft].r = tdc.r - tdc.i;
++#ifdef USE_SIMD    
++    freqdata[ncfft].i = freqdata[0].i = _mm_set1_ps(0);
++#else
++    freqdata[ncfft].i = freqdata[0].i = 0;
++#endif
++
++    for ( k=1;k <= ncfft/2 ; ++k ) {
++        fpk    = st->tmpbuf[k]; 
++        fpnk.r =   st->tmpbuf[ncfft-k].r;
++        fpnk.i = - st->tmpbuf[ncfft-k].i;
++        C_FIXDIV(fpk,2);
++        C_FIXDIV(fpnk,2);
++
++        C_ADD( f1k, fpk , fpnk );
++        C_SUB( f2k, fpk , fpnk );
++        C_MUL( tw , f2k , st->super_twiddles[k-1]);
++
++        freqdata[k].r = HALF_OF(f1k.r + tw.r);
++        freqdata[k].i = HALF_OF(f1k.i + tw.i);
++        freqdata[ncfft-k].r = HALF_OF(f1k.r - tw.r);
++        freqdata[ncfft-k].i = HALF_OF(tw.i - f1k.i);
++    }
++}
++
++void kiss_fftri(kiss_fftr_cfg st,const kiss_fft_cpx *freqdata,kiss_fft_scalar *timedata)
++{
++    /* input buffer timedata is stored row-wise */
++    int k, ncfft;
++
++    if (st->substate->inverse == 0) {
++        /* fprintf (stderr, "kiss fft usage error: improper alloc\n"); */
++        /* exit (1); */
++        return;
++    }
++
++    ncfft = st->substate->nfft;
++
++    st->tmpbuf[0].r = freqdata[0].r + freqdata[ncfft].r;
++    st->tmpbuf[0].i = freqdata[0].r - freqdata[ncfft].r;
++    C_FIXDIV(st->tmpbuf[0],2);
++
++    for (k = 1; k <= ncfft / 2; ++k) {
++        kiss_fft_cpx fk, fnkc, fek, fok, tmp;
++        fk = freqdata[k];
++        fnkc.r = freqdata[ncfft - k].r;
++        fnkc.i = -freqdata[ncfft - k].i;
++        C_FIXDIV( fk , 2 );
++        C_FIXDIV( fnkc , 2 );
++
++        C_ADD (fek, fk, fnkc);
++        C_SUB (tmp, fk, fnkc);
++        C_MUL (fok, tmp, st->super_twiddles[k-1]);
++        C_ADD (st->tmpbuf[k],     fek, fok);
++        C_SUB (st->tmpbuf[ncfft - k], fek, fok);
++#ifdef USE_SIMD        
++        st->tmpbuf[ncfft - k].i *= _mm_set1_ps(-1.0);
++#else
++        st->tmpbuf[ncfft - k].i *= -1;
++#endif
++    }
++    kiss_fft (st->substate, st->tmpbuf, (kiss_fft_cpx *) timedata);
++}
+diff --git a/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.h b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.h
+new file mode 100644
+index 0000000..b888a28
+--- /dev/null
++++ b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.h
+@@ -0,0 +1,46 @@
++#ifndef KISS_FTR_H
++#define KISS_FTR_H
++
++#include "kiss_fft.h"
++#ifdef __cplusplus
++extern "C++" {
++#endif
++
++    
++/* 
++ 
++ Real optimized version can save about 45% cpu time vs. complex fft of a real seq.
++
++ 
++ 
++ */
++
++typedef struct kiss_fftr_state *kiss_fftr_cfg;
++
++
++kiss_fftr_cfg kiss_fftr_alloc(int nfft,int inverse_fft,void * mem, size_t * lenmem);
++/*
++ nfft must be even
++
++ If you don't care to allocate space, use mem = lenmem = NULL 
++*/
++
++
++void kiss_fftr(kiss_fftr_cfg cfg,const kiss_fft_scalar *timedata,kiss_fft_cpx *freqdata);
++/*
++ input timedata has nfft scalar points
++ output freqdata has nfft/2+1 complex points
++*/
++
++void kiss_fftri(kiss_fftr_cfg cfg,const kiss_fft_cpx *freqdata,kiss_fft_scalar *timedata);
++/*
++ input freqdata has  nfft/2+1 complex points
++ output timedata has nfft scalar points
++*/
++
++#define kiss_fftr_free free
++
++#ifdef __cplusplus
++}
++#endif
++#endif
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h
+new file mode 100644
+index 0000000..04b3ba6
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h
+@@ -0,0 +1,102 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_BITS_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_BITS_H_
++
++#ifdef __cplusplus
++#include <cstdint>
++
++extern "C" {
++#endif
++
++static inline int CountLeadingZeros32Slow(uint64_t n) {
++  int zeroes = 28;
++  if (n >> 16) zeroes -= 16, n >>= 16;
++  if (n >> 8) zeroes -= 8, n >>= 8;
++  if (n >> 4) zeroes -= 4, n >>= 4;
++  return "\4\3\2\2\1\1\1\1\0\0\0\0\0\0\0"[n] + zeroes;
++}
++
++static inline int CountLeadingZeros32(uint32_t n) {
++#if defined(_MSC_VER)
++  unsigned long result = 0;  // NOLINT(runtime/int)
++  if (_BitScanReverse(&result, n)) {
++    return 31 - result;
++  }
++  return 32;
++#elif defined(__GNUC__)
++
++  // Handle 0 as a special case because __builtin_clz(0) is undefined.
++  if (n == 0) {
++    return 32;
++  }
++  return __builtin_clz(n);
++#else
++  return CountLeadingZeros32Slow(n);
++#endif
++}
++
++static inline int MostSignificantBit32(uint32_t n) {
++  return 32 - CountLeadingZeros32(n);
++}
++
++static inline int CountLeadingZeros64Slow(uint64_t n) {
++  int zeroes = 60;
++  if (n >> 32) zeroes -= 32, n >>= 32;
++  if (n >> 16) zeroes -= 16, n >>= 16;
++  if (n >> 8) zeroes -= 8, n >>= 8;
++  if (n >> 4) zeroes -= 4, n >>= 4;
++  return "\4\3\2\2\1\1\1\1\0\0\0\0\0\0\0"[n] + zeroes;
++}
++
++static inline int CountLeadingZeros64(uint64_t n) {
++#if defined(_MSC_VER) && defined(_M_X64)
++  // MSVC does not have __builtin_clzll. Use _BitScanReverse64.
++  unsigned long result = 0;  // NOLINT(runtime/int)
++  if (_BitScanReverse64(&result, n)) {
++    return 63 - result;
++  }
++  return 64;
++#elif defined(_MSC_VER)
++  // MSVC does not have __builtin_clzll. Compose two calls to _BitScanReverse
++  unsigned long result = 0;  // NOLINT(runtime/int)
++  if ((n >> 32) && _BitScanReverse(&result, n >> 32)) {
++    return 31 - result;
++  }
++  if (_BitScanReverse(&result, n)) {
++    return 63 - result;
++  }
++  return 64;
++#elif defined(__GNUC__)
++
++  // Handle 0 as a special case because __builtin_clzll(0) is undefined.
++  if (n == 0) {
++    return 64;
++  }
++  return __builtin_clzll(n);
++#else
++  return CountLeadingZeros64Slow(n);
++#endif
++}
++
++static inline int MostSignificantBit64(uint64_t n) {
++  return 64 - CountLeadingZeros64(n);
++}
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_BITS_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc
+new file mode 100644
+index 0000000..bcdd9cc
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc
+@@ -0,0 +1,52 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/fft.h"
++
++#include <string.h>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h"
++
++void FftCompute(struct FftState* state, const int16_t* input,
++                int input_scale_shift) {
++  const size_t input_size = state->input_size;
++  const size_t fft_size = state->fft_size;
++
++  int16_t* fft_input = state->input;
++  // First, scale the input by the given shift.
++  size_t i;
++  for (i = 0; i < input_size; ++i) {
++    fft_input[i] = static_cast<int16_t>(static_cast<uint16_t>(input[i])
++                                        << input_scale_shift);
++  }
++  // Zero out whatever else remains in the top part of the input.
++  for (; i < fft_size; ++i) {
++    fft_input[i] = 0;
++  }
++
++  // Apply the FFT.
++  kissfft_fixed16::kiss_fftr(
++      reinterpret_cast<kissfft_fixed16::kiss_fftr_cfg>(state->scratch),
++      state->input,
++      reinterpret_cast<kissfft_fixed16::kiss_fft_cpx*>(state->output));
++}
++
++void FftInit(struct FftState* state) {
++  // All the initialization is done in FftPopulateState()
++}
++
++void FftReset(struct FftState* state) {
++  memset(state->input, 0, state->fft_size * sizeof(*state->input));
++  memset(state->output, 0, (state->fft_size / 2 + 1) * sizeof(*state->output));
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h
+new file mode 100644
+index 0000000..aaffa69
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h
+@@ -0,0 +1,50 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_H_
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct complex_int16_t {
++  int16_t real;
++  int16_t imag;
++};
++
++struct FftState {
++  int16_t* input;
++  struct complex_int16_t* output;
++  size_t fft_size;
++  size_t input_size;
++  void* scratch;
++  size_t scratch_size;
++};
++
++void FftCompute(struct FftState* state, const int16_t* input,
++                int input_scale_shift);
++
++void FftInit(struct FftState* state);
++
++void FftReset(struct FftState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc
+new file mode 100644
+index 0000000..ed3dc8f
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc
+@@ -0,0 +1,70 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/fft_util.h"
++
++#include <stdio.h>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h"
++
++int FftPopulateState(struct FftState* state, size_t input_size) {
++  state->input_size = input_size;
++  state->fft_size = 1;
++  while (state->fft_size < state->input_size) {
++    state->fft_size <<= 1;
++  }
++
++  state->input = reinterpret_cast<int16_t*>(
++      malloc(state->fft_size * sizeof(*state->input)));
++  if (state->input == nullptr) {
++    fprintf(stderr, "Failed to alloc fft input buffer\n");
++    return 0;
++  }
++
++  state->output = reinterpret_cast<complex_int16_t*>(
++      malloc((state->fft_size / 2 + 1) * sizeof(*state->output) * 2));
++  if (state->output == nullptr) {
++    fprintf(stderr, "Failed to alloc fft output buffer\n");
++    return 0;
++  }
++
++  // Ask kissfft how much memory it wants.
++  size_t scratch_size = 0;
++  kissfft_fixed16::kiss_fftr_cfg kfft_cfg = kissfft_fixed16::kiss_fftr_alloc(
++      state->fft_size, 0, nullptr, &scratch_size);
++  if (kfft_cfg != nullptr) {
++    fprintf(stderr, "Kiss memory sizing failed.\n");
++    return 0;
++  }
++  state->scratch = malloc(scratch_size);
++  if (state->scratch == nullptr) {
++    fprintf(stderr, "Failed to alloc fft scratch buffer\n");
++    return 0;
++  }
++  state->scratch_size = scratch_size;
++  // Let kissfft configure the scratch space we just allocated
++  kfft_cfg = kissfft_fixed16::kiss_fftr_alloc(state->fft_size, 0,
++                                              state->scratch, &scratch_size);
++  if (kfft_cfg != state->scratch) {
++    fprintf(stderr, "Kiss memory preallocation strategy failed.\n");
++    return 0;
++  }
++  return 1;
++}
++
++void FftFreeStateContents(struct FftState* state) {
++  free(state->input);
++  free(state->output);
++  free(state->scratch);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h
+new file mode 100644
+index 0000000..6a47130
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h
+@@ -0,0 +1,34 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
++
++#include "tensorflow/lite/experimental/microfrontend/lib/fft.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++// Prepares and FFT for the given input size.
++int FftPopulateState(struct FftState* state, size_t input_size);
++
++// Frees any allocated buffers.
++void FftFreeStateContents(struct FftState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc
+new file mode 100644
+index 0000000..80f8738
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc
+@@ -0,0 +1,134 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/filterbank.h"
++
++#include <string.h>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/bits.h"
++
++void FilterbankConvertFftComplexToEnergy(struct FilterbankState* state,
++                                         struct complex_int16_t* fft_output,
++                                         int32_t* energy) {
++  const int end_index = state->end_index;
++  int i;
++  energy += state->start_index;
++  fft_output += state->start_index;
++  for (i = state->start_index; i < end_index; ++i) {
++    const int32_t real = fft_output->real;
++    const int32_t imag = fft_output->imag;
++    fft_output++;
++    const uint32_t mag_squared = (real * real) + (imag * imag);
++    *energy++ = mag_squared;
++  }
++}
++
++void FilterbankAccumulateChannels(struct FilterbankState* state,
++                                  const int32_t* energy) {
++  uint64_t* work = state->work;
++  uint64_t weight_accumulator = 0;
++  uint64_t unweight_accumulator = 0;
++
++  const int16_t* channel_frequency_starts = state->channel_frequency_starts;
++  const int16_t* channel_weight_starts = state->channel_weight_starts;
++  const int16_t* channel_widths = state->channel_widths;
++
++  int num_channels_plus_1 = state->num_channels + 1;
++  int i;
++  for (i = 0; i < num_channels_plus_1; ++i) {
++    const int32_t* magnitudes = energy + *channel_frequency_starts++;
++    const int16_t* weights = state->weights + *channel_weight_starts;
++    const int16_t* unweights = state->unweights + *channel_weight_starts++;
++    const int width = *channel_widths++;
++    int j;
++    for (j = 0; j < width; ++j) {
++      weight_accumulator += *weights++ * ((uint64_t)*magnitudes);
++      unweight_accumulator += *unweights++ * ((uint64_t)*magnitudes);
++      ++magnitudes;
++    }
++    *work++ = weight_accumulator;
++    weight_accumulator = unweight_accumulator;
++    unweight_accumulator = 0;
++  }
++}
++
++static uint16_t Sqrt32(uint32_t num) {
++  if (num == 0) {
++    return 0;
++  }
++  uint32_t res = 0;
++  int max_bit_number = 32 - MostSignificantBit32(num);
++  max_bit_number |= 1;
++  uint32_t bit = 1U << (31 - max_bit_number);
++  int iterations = (31 - max_bit_number) / 2 + 1;
++  while (iterations--) {
++    if (num >= res + bit) {
++      num -= res + bit;
++      res = (res >> 1U) + bit;
++    } else {
++      res >>= 1U;
++    }
++    bit >>= 2U;
++  }
++  // Do rounding - if we have the bits.
++  if (num > res && res != 0xFFFF) {
++    ++res;
++  }
++  return res;
++}
++
++static uint32_t Sqrt64(uint64_t num) {
++  // Take a shortcut and just use 32 bit operations if the upper word is all
++  // clear. This will cause a slight off by one issue for numbers close to 2^32,
++  // but it probably isn't going to matter (and gives us a big performance win).
++  if ((num >> 32) == 0) {
++    return Sqrt32((uint32_t)num);
++  }
++  uint64_t res = 0;
++  int max_bit_number = 64 - MostSignificantBit64(num);
++  max_bit_number |= 1;
++  uint64_t bit = 1ULL << (63 - max_bit_number);
++  int iterations = (63 - max_bit_number) / 2 + 1;
++  while (iterations--) {
++    if (num >= res + bit) {
++      num -= res + bit;
++      res = (res >> 1U) + bit;
++    } else {
++      res >>= 1U;
++    }
++    bit >>= 2U;
++  }
++  // Do rounding - if we have the bits.
++  if (num > res && res != 0xFFFFFFFFLL) {
++    ++res;
++  }
++  return res;
++}
++
++uint32_t* FilterbankSqrt(struct FilterbankState* state, int scale_down_shift) {
++  const int num_channels = state->num_channels;
++  const uint64_t* work = state->work + 1;
++  // Reuse the work buffer since we're fine clobbering it at this point to hold
++  // the output.
++  uint32_t* output = (uint32_t*)state->work;
++  int i;
++  for (i = 0; i < num_channels; ++i) {
++    *output++ = Sqrt64(*work++) >> scale_down_shift;
++  }
++  return (uint32_t*)state->work;
++}
++
++void FilterbankReset(struct FilterbankState* state) {
++  memset(state->work, 0, (state->num_channels + 1) * sizeof(*state->work));
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h
+new file mode 100644
+index 0000000..1e6d388
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h
+@@ -0,0 +1,63 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_H_
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/fft.h"
++
++#define kFilterbankBits 12
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct FilterbankState {
++  int num_channels;
++  int start_index;
++  int end_index;
++  int16_t* channel_frequency_starts;
++  int16_t* channel_weight_starts;
++  int16_t* channel_widths;
++  int16_t* weights;
++  int16_t* unweights;
++  uint64_t* work;
++};
++
++// Converts the relevant complex values of an FFT output into energy (the
++// square magnitude).
++void FilterbankConvertFftComplexToEnergy(struct FilterbankState* state,
++                                         struct complex_int16_t* fft_output,
++                                         int32_t* energy);
++
++// Computes the mel-scale filterbank on the given energy array. Output is cached
++// internally - to fetch it, you need to call FilterbankSqrt.
++void FilterbankAccumulateChannels(struct FilterbankState* state,
++                                  const int32_t* energy);
++
++// Applies an integer square root to the 64 bit intermediate values of the
++// filterbank, and returns a pointer to them. Memory will be invalidated the
++// next time FilterbankAccumulateChannels is called.
++uint32_t* FilterbankSqrt(struct FilterbankState* state, int scale_down_shift);
++
++void FilterbankReset(struct FilterbankState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc
+new file mode 100644
+index 0000000..4d4064f
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc
+@@ -0,0 +1,220 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h"
++
++#include <assert.h>
++#include <math.h>
++#include <stdio.h>
++
++#define kFilterbankIndexAlignment 4
++#define kFilterbankChannelBlockSize 4
++
++void FilterbankFillConfigWithDefaults(struct FilterbankConfig* config) {
++  config->num_channels = 32;
++  config->lower_band_limit = 125.0f;
++  config->upper_band_limit = 7500.0f;
++  config->output_scale_shift = 7;
++}
++
++static float FreqToMel(float freq) { return 1127.0f * log1pf(freq / 700.0f); }
++
++static void CalculateCenterFrequencies(const int num_channels,
++                                       const float lower_frequency_limit,
++                                       const float upper_frequency_limit,
++                                       float* center_frequencies) {
++  assert(lower_frequency_limit >= 0.0f);
++  assert(upper_frequency_limit > lower_frequency_limit);
++
++  const float mel_low = FreqToMel(lower_frequency_limit);
++  const float mel_hi = FreqToMel(upper_frequency_limit);
++  const float mel_span = mel_hi - mel_low;
++  const float mel_spacing = mel_span / ((float)num_channels);
++  int i;
++  for (i = 0; i < num_channels; ++i) {
++    center_frequencies[i] = mel_low + (mel_spacing * (i + 1));
++  }
++}
++
++static void QuantizeFilterbankWeights(const float float_weight, int16_t* weight,
++                                      int16_t* unweight) {
++  *weight = floorf(float_weight * (1 << kFilterbankBits) + 0.5f);
++  *unweight = floorf((1.0f - float_weight) * (1 << kFilterbankBits) + 0.5f);
++}
++
++int FilterbankPopulateState(const struct FilterbankConfig* config,
++                            struct FilterbankState* state, int sample_rate,
++                            int spectrum_size) {
++  state->num_channels = config->num_channels;
++  const int num_channels_plus_1 = config->num_channels + 1;
++
++  // How should we align things to index counts given the byte alignment?
++  const int index_alignment =
++      (kFilterbankIndexAlignment < sizeof(int16_t)
++           ? 1
++           : kFilterbankIndexAlignment / sizeof(int16_t));
++
++  state->channel_frequency_starts =
++      (int16_t*)malloc(num_channels_plus_1 * sizeof(*state->channel_frequency_starts));
++  state->channel_weight_starts =
++      (int16_t*)malloc(num_channels_plus_1 * sizeof(*state->channel_weight_starts));
++  state->channel_widths =
++      (int16_t*)malloc(num_channels_plus_1 * sizeof(*state->channel_widths));
++  state->work = (uint64_t*)malloc(num_channels_plus_1 * sizeof(*state->work));
++
++  float* center_mel_freqs =
++      (float*)malloc(num_channels_plus_1 * sizeof(*center_mel_freqs));
++  int16_t* actual_channel_starts =
++      (int16_t*)malloc(num_channels_plus_1 * sizeof(*actual_channel_starts));
++  int16_t* actual_channel_widths =
++      (int16_t*)malloc(num_channels_plus_1 * sizeof(*actual_channel_widths));
++
++  if (state->channel_frequency_starts == NULL ||
++      state->channel_weight_starts == NULL || state->channel_widths == NULL ||
++      center_mel_freqs == NULL || actual_channel_starts == NULL ||
++      actual_channel_widths == NULL) {
++    free(center_mel_freqs);
++    free(actual_channel_starts);
++    free(actual_channel_widths);
++    fprintf(stderr, "Failed to allocate channel buffers\n");
++    return 0;
++  }
++
++  CalculateCenterFrequencies(num_channels_plus_1, config->lower_band_limit,
++                             config->upper_band_limit, center_mel_freqs);
++
++  // Always exclude DC.
++  const float hz_per_sbin = 0.5f * sample_rate / ((float)spectrum_size - 1);
++  state->start_index = 1.5f + config->lower_band_limit / hz_per_sbin;
++  state->end_index = 0;  // Initialized to zero here, but actually set below.
++
++  // For each channel, we need to figure out what frequencies belong to it, and
++  // how much padding we need to add so that we can efficiently multiply the
++  // weights and unweights for accumulation. To simplify the multiplication
++  // logic, all channels will have some multiplication to do (even if there are
++  // no frequencies that accumulate to that channel) - they will be directed to
++  // a set of zero weights.
++  int chan_freq_index_start = state->start_index;
++  int weight_index_start = 0;
++  int needs_zeros = 0;
++
++  int chan;
++  for (chan = 0; chan < num_channels_plus_1; ++chan) {
++    // Keep jumping frequencies until we overshoot the bound on this channel.
++    int freq_index = chan_freq_index_start;
++    while (FreqToMel((freq_index)*hz_per_sbin) <= center_mel_freqs[chan]) {
++      ++freq_index;
++    }
++
++    const int width = freq_index - chan_freq_index_start;
++    actual_channel_starts[chan] = chan_freq_index_start;
++    actual_channel_widths[chan] = width;
++
++    if (width == 0) {
++      // This channel doesn't actually get anything from the frequencies, it's
++      // always zero. We need then to insert some 'zero' weights into the
++      // output, and just redirect this channel to do a single multiplication at
++      // this point. For simplicity, the zeros are placed at the beginning of
++      // the weights arrays, so we have to go and update all the other
++      // weight_starts to reflect this shift (but only once).
++      state->channel_frequency_starts[chan] = 0;
++      state->channel_weight_starts[chan] = 0;
++      state->channel_widths[chan] = kFilterbankChannelBlockSize;
++      if (!needs_zeros) {
++        needs_zeros = 1;
++        int j;
++        for (j = 0; j < chan; ++j) {
++          state->channel_weight_starts[j] += kFilterbankChannelBlockSize;
++        }
++        weight_index_start += kFilterbankChannelBlockSize;
++      }
++    } else {
++      // How far back do we need to go to ensure that we have the proper
++      // alignment?
++      const int aligned_start =
++          (chan_freq_index_start / index_alignment) * index_alignment;
++      const int aligned_width = (chan_freq_index_start - aligned_start + width);
++      const int padded_width =
++          (((aligned_width - 1) / kFilterbankChannelBlockSize) + 1) *
++          kFilterbankChannelBlockSize;
++
++      state->channel_frequency_starts[chan] = aligned_start;
++      state->channel_weight_starts[chan] = weight_index_start;
++      state->channel_widths[chan] = padded_width;
++      weight_index_start += padded_width;
++    }
++    chan_freq_index_start = freq_index;
++  }
++
++  // Allocate the two arrays to store the weights - weight_index_start contains
++  // the index of what would be the next set of weights that we would need to
++  // add, so that's how many weights we need to allocate.
++  state->weights = (int16_t*)calloc(weight_index_start, sizeof(*state->weights));
++  state->unweights = (int16_t*)calloc(weight_index_start, sizeof(*state->unweights));
++
++  // If the alloc failed, we also need to nuke the arrays.
++  if (state->weights == NULL || state->unweights == NULL) {
++    free(center_mel_freqs);
++    free(actual_channel_starts);
++    free(actual_channel_widths);
++    fprintf(stderr, "Failed to allocate weights or unweights\n");
++    return 0;
++  }
++
++  // Next pass, compute all the weights. Since everything has been memset to
++  // zero, we only need to fill in the weights that correspond to some frequency
++  // for a channel.
++  const float mel_low = FreqToMel(config->lower_band_limit);
++  for (chan = 0; chan < num_channels_plus_1; ++chan) {
++    int frequency = actual_channel_starts[chan];
++    const int num_frequencies = actual_channel_widths[chan];
++    const int frequency_offset =
++        frequency - state->channel_frequency_starts[chan];
++    const int weight_start = state->channel_weight_starts[chan];
++    const float denom_val = (chan == 0) ? mel_low : center_mel_freqs[chan - 1];
++
++    int j;
++    for (j = 0; j < num_frequencies; ++j, ++frequency) {
++      const float weight =
++          (center_mel_freqs[chan] - FreqToMel(frequency * hz_per_sbin)) /
++          (center_mel_freqs[chan] - denom_val);
++
++      // Make the float into an integer for the weights (and unweights).
++      const int weight_index = weight_start + frequency_offset + j;
++      QuantizeFilterbankWeights(weight, state->weights + weight_index,
++                                state->unweights + weight_index);
++    }
++    if (frequency > state->end_index) {
++      state->end_index = frequency;
++    }
++  }
++
++  free(center_mel_freqs);
++  free(actual_channel_starts);
++  free(actual_channel_widths);
++  if (state->end_index >= spectrum_size) {
++    fprintf(stderr, "Filterbank end_index is above spectrum size.\n");
++    return 0;
++  }
++  return 1;
++}
++
++void FilterbankFreeStateContents(struct FilterbankState* state) {
++  free(state->channel_frequency_starts);
++  free(state->channel_weight_starts);
++  free(state->channel_widths);
++  free(state->weights);
++  free(state->unweights);
++  free(state->work);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h
+new file mode 100644
+index 0000000..781d102
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h
+@@ -0,0 +1,50 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_UTIL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_UTIL_H_
++
++#include "tensorflow/lite/experimental/microfrontend/lib/filterbank.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct FilterbankConfig {
++  // number of frequency channel buckets for filterbank
++  int num_channels;
++  // maximum frequency to include
++  float upper_band_limit;
++  // minimum frequency to include
++  float lower_band_limit;
++  // unused
++  int output_scale_shift;
++};
++
++// Fills the frontendConfig with "sane" defaults.
++void FilterbankFillConfigWithDefaults(struct FilterbankConfig* config);
++
++// Allocates any buffers.
++int FilterbankPopulateState(const struct FilterbankConfig* config,
++                            struct FilterbankState* state, int sample_rate,
++                            int spectrum_size);
++
++// Frees any allocated buffers.
++void FilterbankFreeStateContents(struct FilterbankState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_UTIL_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc
+new file mode 100644
+index 0000000..9de2a87
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc
+@@ -0,0 +1,72 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
++
++#include "tensorflow/lite/experimental/microfrontend/lib/bits.h"
++
++struct FrontendOutput FrontendProcessSamples(struct FrontendState* state,
++                                             const int16_t* samples,
++                                             size_t num_samples,
++                                             size_t* num_samples_read) {
++  struct FrontendOutput output;
++  output.values = NULL;
++  output.size = 0;
++
++  // Try to apply the window - if it fails, return and wait for more data.
++  if (!WindowProcessSamples(&state->window, samples, num_samples,
++                            num_samples_read)) {
++    return output;
++  }
++
++  // Apply the FFT to the window's output (and scale it so that the fixed point
++  // FFT can have as much resolution as possible).
++  int input_shift =
++      15 - MostSignificantBit32(state->window.max_abs_output_value);
++  FftCompute(&state->fft, state->window.output, input_shift);
++
++  // We can re-ruse the fft's output buffer to hold the energy.
++  int32_t* energy = (int32_t*)state->fft.output;
++
++  FilterbankConvertFftComplexToEnergy(&state->filterbank, state->fft.output,
++                                      energy);
++
++  FilterbankAccumulateChannels(&state->filterbank, energy);
++  uint32_t* scaled_filterbank = FilterbankSqrt(&state->filterbank, input_shift);
++
++  // Apply noise reduction.
++  NoiseReductionApply(&state->noise_reduction, scaled_filterbank);
++
++  if (state->pcan_gain_control.enable_pcan) {
++    PcanGainControlApply(&state->pcan_gain_control, scaled_filterbank);
++  }
++
++  // Apply the log and scale.
++  int correction_bits =
++      MostSignificantBit32(state->fft.fft_size) - 1 - (kFilterbankBits / 2);
++  uint16_t* logged_filterbank =
++      LogScaleApply(&state->log_scale, scaled_filterbank,
++                    state->filterbank.num_channels, correction_bits);
++
++  output.size = state->filterbank.num_channels;
++  output.values = logged_filterbank;
++  return output;
++}
++
++void FrontendReset(struct FrontendState* state) {
++  WindowReset(&state->window);
++  FftReset(&state->fft);
++  FilterbankReset(&state->filterbank);
++  NoiseReductionReset(&state->noise_reduction);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h
+new file mode 100644
+index 0000000..883df5f
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h
+@@ -0,0 +1,64 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_H_
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/fft.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/filterbank.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/log_scale.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/window.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct FrontendState {
++  struct WindowState window;
++  struct FftState fft;
++  struct FilterbankState filterbank;
++  struct NoiseReductionState noise_reduction;
++  struct PcanGainControlState pcan_gain_control;
++  struct LogScaleState log_scale;
++};
++
++struct FrontendOutput {
++  const uint16_t* values;
++  size_t size;
++};
++
++// Main entry point to processing frontend samples. Updates num_samples_read to
++// contain the number of samples that have been consumed from the input array.
++// Returns a struct containing the generated output. If not enough samples were
++// added to generate a feature vector, the returned size will be 0 and the
++// values pointer will be NULL. Note that the output pointer will be invalidated
++// as soon as FrontendProcessSamples is called again, so copy the contents
++// elsewhere if you need to use them later.
++struct FrontendOutput FrontendProcessSamples(struct FrontendState* state,
++                                             const int16_t* samples,
++                                             size_t num_samples,
++                                             size_t* num_samples_read);
++
++void FrontendReset(struct FrontendState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc
+new file mode 100644
+index 0000000..27224f6
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc
+@@ -0,0 +1,85 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/frontend_util.h"
++
++#include <stdio.h>
++#include <string.h>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/bits.h"
++
++void FrontendFillConfigWithDefaults(struct FrontendConfig* config) {
++  WindowFillConfigWithDefaults(&config->window);
++  FilterbankFillConfigWithDefaults(&config->filterbank);
++  NoiseReductionFillConfigWithDefaults(&config->noise_reduction);
++  PcanGainControlFillConfigWithDefaults(&config->pcan_gain_control);
++  LogScaleFillConfigWithDefaults(&config->log_scale);
++}
++
++int FrontendPopulateState(const struct FrontendConfig* config,
++                          struct FrontendState* state, int sample_rate) {
++  memset(state, 0, sizeof(*state));
++
++  if (!WindowPopulateState(&config->window, &state->window, sample_rate)) {
++    fprintf(stderr, "Failed to populate window state\n");
++    return 0;
++  }
++
++  if (!FftPopulateState(&state->fft, state->window.size)) {
++    fprintf(stderr, "Failed to populate fft state\n");
++    return 0;
++  }
++  FftInit(&state->fft);
++
++  if (!FilterbankPopulateState(&config->filterbank, &state->filterbank,
++                               sample_rate, state->fft.fft_size / 2 + 1)) {
++    fprintf(stderr, "Failed to populate filterbank state\n");
++    return 0;
++  }
++
++  if (!NoiseReductionPopulateState(&config->noise_reduction,
++                                   &state->noise_reduction,
++                                   state->filterbank.num_channels)) {
++    fprintf(stderr, "Failed to populate noise reduction state\n");
++    return 0;
++  }
++
++  int input_correction_bits =
++      MostSignificantBit32(state->fft.fft_size) - 1 - (kFilterbankBits / 2);
++  if (!PcanGainControlPopulateState(
++          &config->pcan_gain_control, &state->pcan_gain_control,
++          state->noise_reduction.estimate, state->filterbank.num_channels,
++          state->noise_reduction.smoothing_bits, input_correction_bits)) {
++    fprintf(stderr, "Failed to populate pcan gain control state\n");
++    return 0;
++  }
++
++  if (!LogScalePopulateState(&config->log_scale, &state->log_scale)) {
++    fprintf(stderr, "Failed to populate log scale state\n");
++    return 0;
++  }
++
++  FrontendReset(state);
++
++  // All good, return a true value.
++  return 1;
++}
++
++void FrontendFreeStateContents(struct FrontendState* state) {
++  WindowFreeStateContents(&state->window);
++  FftFreeStateContents(&state->fft);
++  FilterbankFreeStateContents(&state->filterbank);
++  NoiseReductionFreeStateContents(&state->noise_reduction);
++  PcanGainControlFreeStateContents(&state->pcan_gain_control);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h
+new file mode 100644
+index 0000000..895ce6c
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h
+@@ -0,0 +1,52 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_UTIL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_UTIL_H_
++
++#include "tensorflow/lite/experimental/microfrontend/lib/fft_util.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/window_util.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct FrontendConfig {
++  struct WindowConfig window;
++  struct FilterbankConfig filterbank;
++  struct NoiseReductionConfig noise_reduction;
++  struct PcanGainControlConfig pcan_gain_control;
++  struct LogScaleConfig log_scale;
++};
++
++// Fills the frontendConfig with "sane" defaults.
++void FrontendFillConfigWithDefaults(struct FrontendConfig* config);
++
++// Allocates any buffers.
++int FrontendPopulateState(const struct FrontendConfig* config,
++                          struct FrontendState* state, int sample_rate);
++
++// Frees any allocated buffers.
++void FrontendFreeStateContents(struct FrontendState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_UTIL_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h
+new file mode 100644
+index 0000000..33556da
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h
+@@ -0,0 +1,48 @@
++/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_COMMON_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_COMMON_H_
++
++// This header file should be included in all variants of kiss_fft_$type.{h,cc}
++// so that their sub-included source files do not mistakenly wrap libc header
++// files within their kissfft_$type namespaces.
++// E.g, This header avoids kissfft_int16.h containing:
++//   namespace kiss_fft_int16 {
++//     #include "kiss_fft.h"
++//   }
++// where kiss_fft_.h contains:
++//   #include <math.h>
++//
++// TRICK: By including the following header files here, their preprocessor
++// header guards prevent them being re-defined inside of the kiss_fft_$type
++// namespaces declared within the kiss_fft_$type.{h,cc} sources.
++// Note that the original kiss_fft*.h files are untouched since they
++// may be used in libraries that include them directly.
++
++#include <limits.h>
++#include <math.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#ifdef FIXED_POINT
++#include <sys/types.h>
++#endif
++
++#ifdef USE_SIMD
++#include <xmmintrin.h>
++#endif
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_COMMON_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc
+new file mode 100644
+index 0000000..3443f9d
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc
+@@ -0,0 +1,10 @@
++#include <cstdint>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h"
++
++#define FIXED_POINT 16
++namespace kissfft_fixed16 {
++#include "kiss_fft.cc"
++#include "tools/kiss_fftr.cc"
++}  // namespace kissfft_fixed16
++#undef FIXED_POINT
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h
+new file mode 100644
+index 0000000..beee99a
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h
+@@ -0,0 +1,33 @@
++/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_INT16_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_INT16_H_
++
++#include "tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h"
++
++// Wrap 16-bit kiss fft in its own namespace. Enables us to link an application
++// with different kiss fft resultions (16/32 bit interger, float, double)
++// without getting a linker error.
++#define FIXED_POINT 16
++namespace kissfft_fixed16 {
++#include "kiss_fft.h"
++#include "tools/kiss_fftr.h"
++}  // namespace kissfft_fixed16
++#undef FIXED_POINT
++#undef kiss_fft_scalar
++#undef KISS_FFT_H
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_INT16_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc
+new file mode 100644
+index 0000000..f59618e
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc
+@@ -0,0 +1,30 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/log_lut.h"
++const uint16_t kLogLut[]
++#ifndef _MSC_VER
++    __attribute__((aligned(4)))
++#endif  // _MSV_VER
++    = {0,    224,  442,  654,  861,  1063, 1259, 1450, 1636, 1817, 1992, 2163,
++       2329, 2490, 2646, 2797, 2944, 3087, 3224, 3358, 3487, 3611, 3732, 3848,
++       3960, 4068, 4172, 4272, 4368, 4460, 4549, 4633, 4714, 4791, 4864, 4934,
++       5001, 5063, 5123, 5178, 5231, 5280, 5326, 5368, 5408, 5444, 5477, 5507,
++       5533, 5557, 5578, 5595, 5610, 5622, 5631, 5637, 5640, 5641, 5638, 5633,
++       5626, 5615, 5602, 5586, 5568, 5547, 5524, 5498, 5470, 5439, 5406, 5370,
++       5332, 5291, 5249, 5203, 5156, 5106, 5054, 5000, 4944, 4885, 4825, 4762,
++       4697, 4630, 4561, 4490, 4416, 4341, 4264, 4184, 4103, 4020, 3935, 3848,
++       3759, 3668, 3575, 3481, 3384, 3286, 3186, 3084, 2981, 2875, 2768, 2659,
++       2549, 2437, 2323, 2207, 2090, 1971, 1851, 1729, 1605, 1480, 1353, 1224,
++       1094, 963,  830,  695,  559,  421,  282,  142,  0,    0};
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h
+new file mode 100644
+index 0000000..b2448a3
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h
+@@ -0,0 +1,40 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_LUT_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_LUT_H_
++
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++// Number of segments in the log lookup table. The table will be kLogSegments+1
++// in length (with some padding).
++#define kLogSegments 128
++#define kLogSegmentsLog2 7
++
++// Scale used by lookup table.
++#define kLogScale 65536
++#define kLogScaleLog2 16
++#define kLogCoeff 45426
++
++extern const uint16_t kLogLut[];
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_LUT_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc
+new file mode 100644
+index 0000000..c27a50a
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc
+@@ -0,0 +1,83 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/log_scale.h"
++
++#include "tensorflow/lite/experimental/microfrontend/lib/bits.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/log_lut.h"
++
++#define kuint16max 0x0000FFFF
++
++// The following functions implement integer logarithms of various sizes. The
++// approximation is calculated according to method described in
++//       www.inti.gob.ar/electronicaeinformatica/instrumentacion/utic/
++//       publicaciones/SPL2007/Log10-spl07.pdf
++// It first calculates log2 of the input and then converts it to natural
++// logarithm.
++
++static uint32_t Log2FractionPart(const uint32_t x, const uint32_t log2x) {
++  // Part 1
++  int32_t frac = x - (1LL << log2x);
++  if (log2x < kLogScaleLog2) {
++    frac <<= kLogScaleLog2 - log2x;
++  } else {
++    frac >>= log2x - kLogScaleLog2;
++  }
++  // Part 2
++  const uint32_t base_seg = frac >> (kLogScaleLog2 - kLogSegmentsLog2);
++  const uint32_t seg_unit =
++      (((uint32_t)1) << kLogScaleLog2) >> kLogSegmentsLog2;
++
++  const int32_t c0 = kLogLut[base_seg];
++  const int32_t c1 = kLogLut[base_seg + 1];
++  const int32_t seg_base = seg_unit * base_seg;
++  const int32_t rel_pos = ((c1 - c0) * (frac - seg_base)) >> kLogScaleLog2;
++  return frac + c0 + rel_pos;
++}
++
++static uint32_t Log(const uint32_t x, const uint32_t scale_shift) {
++  const uint32_t integer = MostSignificantBit32(x) - 1;
++  const uint32_t fraction = Log2FractionPart(x, integer);
++  const uint32_t log2 = (integer << kLogScaleLog2) + fraction;
++  const uint32_t round = kLogScale / 2;
++  const uint32_t loge = (((uint64_t)kLogCoeff) * log2 + round) >> kLogScaleLog2;
++  // Finally scale to our output scale
++  const uint32_t loge_scaled = ((loge << scale_shift) + round) >> kLogScaleLog2;
++  return loge_scaled;
++}
++
++uint16_t* LogScaleApply(struct LogScaleState* state, uint32_t* signal,
++                        int signal_size, int correction_bits) {
++  const int scale_shift = state->scale_shift;
++  uint16_t* output = (uint16_t*)signal;
++  uint16_t* ret = output;
++  int i;
++  for (i = 0; i < signal_size; ++i) {
++    uint32_t value = *signal++;
++    if (state->enable_log) {
++      if (correction_bits < 0) {
++        value >>= -correction_bits;
++      } else {
++        value <<= correction_bits;
++      }
++      if (value > 1) {
++        value = Log(value, scale_shift);
++      } else {
++        value = 0;
++      }
++    }
++    *output++ = (value < kuint16max) ? value : kuint16max;
++  }
++  return ret;
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h
+new file mode 100644
+index 0000000..a383f32
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h
+@@ -0,0 +1,39 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_H_
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct LogScaleState {
++  int enable_log;
++  int scale_shift;
++};
++
++// Applies a fixed point logarithm to the signal and converts it to 16 bit. Note
++// that the signal array will be modified.
++uint16_t* LogScaleApply(struct LogScaleState* state, uint32_t* signal,
++                        int signal_size, int correction_bits);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc
+new file mode 100644
+index 0000000..0e3dd1d
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc
+@@ -0,0 +1,27 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h"
++
++void LogScaleFillConfigWithDefaults(struct LogScaleConfig* config) {
++  config->enable_log = 1;
++  config->scale_shift = 6;
++}
++
++int LogScalePopulateState(const struct LogScaleConfig* config,
++                          struct LogScaleState* state) {
++  state->enable_log = config->enable_log;
++  state->scale_shift = config->scale_shift;
++  return 1;
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h
+new file mode 100644
+index 0000000..11f7d9e
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h
+@@ -0,0 +1,45 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#include "tensorflow/lite/experimental/microfrontend/lib/log_scale.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct LogScaleConfig {
++  // set to false (0) to disable this module
++  int enable_log;
++  // scale results by 2^(scale_shift)
++  int scale_shift;
++};
++
++// Populates the LogScaleConfig with "sane" default values.
++void LogScaleFillConfigWithDefaults(struct LogScaleConfig* config);
++
++// Allocates any buffers.
++int LogScalePopulateState(const struct LogScaleConfig* config,
++                          struct LogScaleState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc
+new file mode 100644
+index 0000000..16b30e6
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc
+@@ -0,0 +1,51 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h"
++
++#include <string.h>
++
++void NoiseReductionApply(struct NoiseReductionState* state, uint32_t* signal) {
++  int i;
++  for (i = 0; i < state->num_channels; ++i) {
++    const uint32_t smoothing =
++        ((i & 1) == 0) ? state->even_smoothing : state->odd_smoothing;
++    const uint32_t one_minus_smoothing = (1 << kNoiseReductionBits) - smoothing;
++
++    // Update the estimate of the noise.
++    const uint32_t signal_scaled_up = signal[i] << state->smoothing_bits;
++    uint32_t estimate =
++        (((uint64_t)signal_scaled_up * smoothing) +
++         ((uint64_t)state->estimate[i] * one_minus_smoothing)) >>
++        kNoiseReductionBits;
++    state->estimate[i] = estimate;
++
++    // Make sure that we can't get a negative value for the signal - estimate.
++    if (estimate > signal_scaled_up) {
++      estimate = signal_scaled_up;
++    }
++
++    const uint32_t floor =
++        ((uint64_t)signal[i] * state->min_signal_remaining) >>
++        kNoiseReductionBits;
++    const uint32_t subtracted =
++        (signal_scaled_up - estimate) >> state->smoothing_bits;
++    const uint32_t output = subtracted > floor ? subtracted : floor;
++    signal[i] = output;
++  }
++}
++
++void NoiseReductionReset(struct NoiseReductionState* state) {
++  memset(state->estimate, 0, sizeof(*state->estimate) * state->num_channels);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h
+new file mode 100644
+index 0000000..46d3f52
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h
+@@ -0,0 +1,46 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_H_
++
++#define kNoiseReductionBits 14
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct NoiseReductionState {
++  int smoothing_bits;
++  uint16_t even_smoothing;
++  uint16_t odd_smoothing;
++  uint16_t min_signal_remaining;
++  int num_channels;
++  uint32_t* estimate;
++};
++
++// Removes stationary noise from each channel of the signal using a low pass
++// filter.
++void NoiseReductionApply(struct NoiseReductionState* state, uint32_t* signal);
++
++void NoiseReductionReset(struct NoiseReductionState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc
+new file mode 100644
+index 0000000..30da66a
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc
+@@ -0,0 +1,45 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h"
++
++#include <stdio.h>
++
++void NoiseReductionFillConfigWithDefaults(struct NoiseReductionConfig* config) {
++  config->smoothing_bits = 10;
++  config->even_smoothing = 0.025;
++  config->odd_smoothing = 0.06;
++  config->min_signal_remaining = 0.05;
++}
++
++int NoiseReductionPopulateState(const struct NoiseReductionConfig* config,
++                                struct NoiseReductionState* state,
++                                int num_channels) {
++  state->smoothing_bits = config->smoothing_bits;
++  state->odd_smoothing = config->odd_smoothing * (1 << kNoiseReductionBits);
++  state->even_smoothing = config->even_smoothing * (1 << kNoiseReductionBits);
++  state->min_signal_remaining =
++      config->min_signal_remaining * (1 << kNoiseReductionBits);
++  state->num_channels = num_channels;
++  state->estimate = (uint32_t*)calloc(state->num_channels, sizeof(*state->estimate));
++  if (state->estimate == NULL) {
++    fprintf(stderr, "Failed to alloc estimate buffer\n");
++    return 0;
++  }
++  return 1;
++}
++
++void NoiseReductionFreeStateContents(struct NoiseReductionState* state) {
++  free(state->estimate);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h
+new file mode 100644
+index 0000000..fa55539
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h
+@@ -0,0 +1,50 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_UTIL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_UTIL_H_
++
++#include "tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct NoiseReductionConfig {
++  // scale the signal up by 2^(smoothing_bits) before reduction
++  int smoothing_bits;
++  // smoothing coefficient for even-numbered channels
++  float even_smoothing;
++  // smoothing coefficient for odd-numbered channels
++  float odd_smoothing;
++  // fraction of signal to preserve (1.0 disables this module)
++  float min_signal_remaining;
++};
++
++// Populates the NoiseReductionConfig with "sane" default values.
++void NoiseReductionFillConfigWithDefaults(struct NoiseReductionConfig* config);
++
++// Allocates any buffers.
++int NoiseReductionPopulateState(const struct NoiseReductionConfig* config,
++                                struct NoiseReductionState* state,
++                                int num_channels);
++
++// Frees any allocated buffers.
++void NoiseReductionFreeStateContents(struct NoiseReductionState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_UTIL_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc
+new file mode 100644
+index 0000000..22d5876
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc
+@@ -0,0 +1,56 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h"
++
++#include "tensorflow/lite/experimental/microfrontend/lib/bits.h"
++
++int16_t WideDynamicFunction(const uint32_t x, const int16_t* lut) {
++  if (x <= 2) {
++    return lut[x];
++  }
++
++  const int16_t interval = MostSignificantBit32(x);
++  lut += 4 * interval - 6;
++
++  const int16_t frac =
++      ((interval < 11) ? (x << (11 - interval)) : (x >> (interval - 11))) &
++      0x3FF;
++
++  int32_t result = ((int32_t)lut[2] * frac) >> 5;
++  result += (int32_t)((uint32_t)lut[1] << 5);
++  result *= frac;
++  result = (result + (1 << 14)) >> 15;
++  result += lut[0];
++  return (int16_t)result;
++}
++
++uint32_t PcanShrink(const uint32_t x) {
++  if (x < (2 << kPcanSnrBits)) {
++    return (x * x) >> (2 + 2 * kPcanSnrBits - kPcanOutputBits);
++  } else {
++    return (x >> (kPcanSnrBits - kPcanOutputBits)) - (1 << kPcanOutputBits);
++  }
++}
++
++void PcanGainControlApply(struct PcanGainControlState* state,
++                          uint32_t* signal) {
++  int i;
++  for (i = 0; i < state->num_channels; ++i) {
++    const uint32_t gain =
++        WideDynamicFunction(state->noise_estimate[i], state->gain_lut);
++    const uint32_t snr = ((uint64_t)signal[i] * gain) >> state->snr_shift;
++    signal[i] = PcanShrink(snr);
++  }
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h
+new file mode 100644
+index 0000000..3f6222b
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h
+@@ -0,0 +1,47 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_H_
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#define kPcanSnrBits 12
++#define kPcanOutputBits 6
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++// Details at https://research.google/pubs/pub45911.pdf
++struct PcanGainControlState {
++  int enable_pcan;
++  uint32_t* noise_estimate;
++  int num_channels;
++  int16_t* gain_lut;
++  int32_t snr_shift;
++};
++
++int16_t WideDynamicFunction(const uint32_t x, const int16_t* lut);
++
++uint32_t PcanShrink(const uint32_t x);
++
++void PcanGainControlApply(struct PcanGainControlState* state, uint32_t* signal);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc
+new file mode 100644
+index 0000000..dd66676
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc
+@@ -0,0 +1,92 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h"
++
++#include <math.h>
++#include <stdio.h>
++
++#define kint16max 0x00007FFF
++
++void PcanGainControlFillConfigWithDefaults(
++    struct PcanGainControlConfig* config) {
++  config->enable_pcan = 0;
++  config->strength = 0.95;
++  config->offset = 80.0;
++  config->gain_bits = 21;
++}
++
++int16_t PcanGainLookupFunction(const struct PcanGainControlConfig* config,
++                               int32_t input_bits, uint32_t x) {
++  const float x_as_float = ((float)x) / ((uint32_t)1 << input_bits);
++  const float gain_as_float =
++      ((uint32_t)1 << config->gain_bits) *
++      powf(x_as_float + config->offset, -config->strength);
++
++  if (gain_as_float > kint16max) {
++    return kint16max;
++  }
++  return (int16_t)(gain_as_float + 0.5f);
++}
++
++int PcanGainControlPopulateState(const struct PcanGainControlConfig* config,
++                                 struct PcanGainControlState* state,
++                                 uint32_t* noise_estimate,
++                                 const int num_channels,
++                                 const uint16_t smoothing_bits,
++                                 const int32_t input_correction_bits) {
++  state->enable_pcan = config->enable_pcan;
++  if (!state->enable_pcan) {
++    return 1;
++  }
++  state->noise_estimate = noise_estimate;
++  state->num_channels = num_channels;
++  state->gain_lut = (int16_t*)malloc(kWideDynamicFunctionLUTSize * sizeof(int16_t));
++  if (state->gain_lut == NULL) {
++    fprintf(stderr, "Failed to allocate gain LUT\n");
++    return 0;
++  }
++  state->snr_shift = config->gain_bits - input_correction_bits - kPcanSnrBits;
++
++  const int32_t input_bits = smoothing_bits - input_correction_bits;
++  state->gain_lut[0] = PcanGainLookupFunction(config, input_bits, 0);
++  state->gain_lut[1] = PcanGainLookupFunction(config, input_bits, 1);
++  state->gain_lut -= 6;
++  int interval;
++  for (interval = 2; interval <= kWideDynamicFunctionBits; ++interval) {
++    const uint32_t x0 = (uint32_t)1 << (interval - 1);
++    const uint32_t x1 = x0 + (x0 >> 1);
++    const uint32_t x2 =
++        (interval == kWideDynamicFunctionBits) ? x0 + (x0 - 1) : 2 * x0;
++
++    const int16_t y0 = PcanGainLookupFunction(config, input_bits, x0);
++    const int16_t y1 = PcanGainLookupFunction(config, input_bits, x1);
++    const int16_t y2 = PcanGainLookupFunction(config, input_bits, x2);
++
++    const int32_t diff1 = (int32_t)y1 - y0;
++    const int32_t diff2 = (int32_t)y2 - y0;
++    const int32_t a1 = 4 * diff1 - diff2;
++    const int32_t a2 = diff2 - a1;
++
++    state->gain_lut[4 * interval] = y0;
++    state->gain_lut[4 * interval + 1] = (int16_t)a1;
++    state->gain_lut[4 * interval + 2] = (int16_t)a2;
++  }
++  state->gain_lut += 6;
++  return 1;
++}
++
++void PcanGainControlFreeStateContents(struct PcanGainControlState* state) {
++  free(state->gain_lut);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h
+new file mode 100644
+index 0000000..d4bfaa2
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h
+@@ -0,0 +1,57 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_UTIL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_UTIL_H_
++
++#include "tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h"
++
++#define kWideDynamicFunctionBits 32
++#define kWideDynamicFunctionLUTSize (4 * kWideDynamicFunctionBits - 3)
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct PcanGainControlConfig {
++  // set to false (0) to disable this module
++  int enable_pcan;
++  // gain normalization exponent (0.0 disables, 1.0 full strength)
++  float strength;
++  // positive value added in the normalization denominator
++  float offset;
++  // number of fractional bits in the gain
++  int gain_bits;
++};
++
++void PcanGainControlFillConfigWithDefaults(
++    struct PcanGainControlConfig* config);
++
++int16_t PcanGainLookupFunction(const struct PcanGainControlConfig* config,
++                               int32_t input_bits, uint32_t x);
++
++int PcanGainControlPopulateState(const struct PcanGainControlConfig* config,
++                                 struct PcanGainControlState* state,
++                                 uint32_t* noise_estimate,
++                                 const int num_channels,
++                                 const uint16_t smoothing_bits,
++                                 const int32_t input_correction_bits);
++
++void PcanGainControlFreeStateContents(struct PcanGainControlState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_UTIL_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc
+new file mode 100644
+index 0000000..10da676
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc
+@@ -0,0 +1,70 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/window.h"
++
++#include <string.h>
++
++int WindowProcessSamples(struct WindowState* state, const int16_t* samples,
++                         size_t num_samples, size_t* num_samples_read) {
++  const int size = state->size;
++
++  // Copy samples from the samples buffer over to our local input.
++  size_t max_samples_to_copy = state->size - state->input_used;
++  if (max_samples_to_copy > num_samples) {
++    max_samples_to_copy = num_samples;
++  }
++  memcpy(state->input + state->input_used, samples,
++         max_samples_to_copy * sizeof(*samples));
++  *num_samples_read = max_samples_to_copy;
++  state->input_used += max_samples_to_copy;
++
++  if (state->input_used < state->size) {
++    // We don't have enough samples to compute a window.
++    return 0;
++  }
++
++  // Apply the window to the input.
++  const int16_t* coefficients = state->coefficients;
++  const int16_t* input = state->input;
++  int16_t* output = state->output;
++  int i;
++  int16_t max_abs_output_value = 0;
++  for (i = 0; i < size; ++i) {
++    int16_t new_value =
++        (((int32_t)*input++) * *coefficients++) >> kFrontendWindowBits;
++    *output++ = new_value;
++    if (new_value < 0) {
++      new_value = -new_value;
++    }
++    if (new_value > max_abs_output_value) {
++      max_abs_output_value = new_value;
++    }
++  }
++  // Shuffle the input down by the step size, and update how much we have used.
++  memmove(state->input, state->input + state->step,
++          sizeof(*state->input) * (state->size - state->step));
++  state->input_used -= state->step;
++  state->max_abs_output_value = max_abs_output_value;
++
++  // Indicate that the output buffer is valid for the next stage.
++  return 1;
++}
++
++void WindowReset(struct WindowState* state) {
++  memset(state->input, 0, state->size * sizeof(*state->input));
++  memset(state->output, 0, state->size * sizeof(*state->output));
++  state->input_used = 0;
++  state->max_abs_output_value = 0;
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h
+new file mode 100644
+index 0000000..bad8151
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h
+@@ -0,0 +1,49 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_H_
++
++#include <stdint.h>
++#include <stdlib.h>
++
++#define kFrontendWindowBits 12
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct WindowState {
++  size_t size;
++  int16_t* coefficients;
++  size_t step;
++
++  int16_t* input;
++  size_t input_used;
++  int16_t* output;
++  int16_t max_abs_output_value;
++};
++
++// Applies a window to the samples coming in, stepping forward at the given
++// rate.
++int WindowProcessSamples(struct WindowState* state, const int16_t* samples,
++                         size_t num_samples, size_t* num_samples_read);
++
++void WindowReset(struct WindowState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_H_
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc
+new file mode 100644
+index 0000000..e03c28a
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc
+@@ -0,0 +1,73 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#include "tensorflow/lite/experimental/microfrontend/lib/window_util.h"
++
++#include <math.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++// Some platforms don't have M_PI
++#ifndef M_PI
++#define M_PI 3.14159265358979323846
++#endif
++
++void WindowFillConfigWithDefaults(struct WindowConfig* config) {
++  config->size_ms = 25;
++  config->step_size_ms = 10;
++}
++
++int WindowPopulateState(const struct WindowConfig* config,
++                        struct WindowState* state, int sample_rate) {
++  state->size = config->size_ms * sample_rate / 1000;
++  state->step = config->step_size_ms * sample_rate / 1000;
++
++  state->coefficients = (int16_t*)malloc(state->size * sizeof(*state->coefficients));
++  if (state->coefficients == NULL) {
++    fprintf(stderr, "Failed to allocate window coefficients\n");
++    return 0;
++  }
++
++  // Populate the window values.
++  const float arg = (float)M_PI * 2.0f / ((float)state->size);
++  size_t i;
++  for (i = 0; i < state->size; ++i) {
++    float float_value = 0.5f - (0.5f * cosf(arg * (i + 0.5f)));
++    // Scale it to fixed point and round it.
++    state->coefficients[i] =
++        floorf(float_value * (1 << kFrontendWindowBits) + 0.5f);
++  }
++
++  state->input_used = 0;
++  state->input = (int16_t*)malloc(state->size * sizeof(*state->input));
++  if (state->input == NULL) {
++    fprintf(stderr, "Failed to allocate window input\n");
++    return 0;
++  }
++
++  state->output = (int16_t*)malloc(state->size * sizeof(*state->output));
++  if (state->output == NULL) {
++    fprintf(stderr, "Failed to allocate window output\n");
++    return 0;
++  }
++
++  return 1;
++}
++
++void WindowFreeStateContents(struct WindowState* state) {
++  free(state->coefficients);
++  free(state->input);
++  free(state->output);
++}
+diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h
+new file mode 100644
+index 0000000..68e4de9
+--- /dev/null
++++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h
+@@ -0,0 +1,45 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
++#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
++
++#include "tensorflow/lite/experimental/microfrontend/lib/window.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct WindowConfig {
++  // length of window frame in milliseconds
++  size_t size_ms;
++  // length of step for next frame in milliseconds
++  size_t step_size_ms;
++};
++
++// Populates the WindowConfig with "sane" default values.
++void WindowFillConfigWithDefaults(struct WindowConfig* config);
++
++// Allocates any buffers.
++int WindowPopulateState(const struct WindowConfig* config,
++                        struct WindowState* state, int sample_rate);
++
++// Frees any allocated buffers.
++void WindowFreeStateContents(struct WindowState* state);
++
++#ifdef __cplusplus
++}  // extern "C"
++#endif
++
++#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
+diff --git a/satellite/tools/mww_probe.cpp b/satellite/tools/mww_probe.cpp
+new file mode 100644
+index 0000000..8744ef2
+--- /dev/null
++++ b/satellite/tools/mww_probe.cpp
+@@ -0,0 +1,52 @@
++// Offline runtime/frontend check. Does not open microphones or the ESPHome API.
++#include "audio/microwakeword.h"
++#include <algorithm>
++#include <cstdio>
++#include <cstring>
++#include <fstream>
++#include <iterator>
++#include <vector>
++
++static unsigned u16(const unsigned char *p) { return p[0] | unsigned(p[1]) << 8; }
++static unsigned u32(const unsigned char *p) { return u16(p) | u16(p+2) << 16; }
++int main(int argc, char **argv) {
++  if (argc < 2) { std::fprintf(stderr, "usage: mww_probe model.tflite [16k-mono.wav]\n"); return 2; }
++  cs::MicroWakeWord wake;
++  if (!wake.load(argv[1])) return 1;
++  std::vector<int16_t> audio(32000, 0);  // warm up with 2 s of silence
++  float best = -1, score;
++  unsigned hits = 0;
++  auto feed = [&](const std::vector<int16_t> &pcm) {
++    for (size_t i = 0; i < pcm.size(); i += 512) {
++      if (wake.feed(pcm.data()+i, std::min<size_t>(512, pcm.size()-i), score)) ++hits;
++      best = std::max(best, score);
++      if (!wake.ok()) return false;
++    }
++    return true;
++  };
++  if (!feed(audio)) return 1;
++  if (argc > 2) {
++    std::ifstream in(argv[2], std::ios::binary);
++    std::vector<unsigned char> wav{std::istreambuf_iterator<char>(in), {}};
++    if (wav.size() < 12 || std::memcmp(wav.data(), "RIFF", 4) || std::memcmp(wav.data()+8, "WAVE", 4)) return 2;
++    bool format = false, data = false;
++    for (size_t i = 12; i+8 <= wav.size();) {
++      size_t n = u32(wav.data()+i+4);
++      if (n > wav.size()-i-8) return 2;
++      if (!std::memcmp(wav.data()+i, "fmt ", 4) && n >= 16)
++        format = u16(wav.data()+i+8)==1 && u16(wav.data()+i+10)==1 &&
++                 u32(wav.data()+i+12)==16000 && u16(wav.data()+i+22)==16;
++      if (!std::memcmp(wav.data()+i, "data", 4)) {
++        audio.resize(n/2);
++        for (size_t j=0; j<audio.size(); ++j) audio[j]=int16_t(u16(wav.data()+i+8+j*2));
++        data = true;
++      }
++      i += 8+n+(n&1);
++    }
++    if (!format || !data || !feed(audio)) return 2;
++    audio.assign(16000, 0);
++    if (!feed(audio)) return 1;
++  }
++  std::printf("mww_probe OK hits=%u max_probability=%.6f\n", hits, best);
++  return 0;
++}

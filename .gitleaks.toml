@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deliberately synthetic authentication fixture"
+paths = ['''projects/station/ble-gateway/control_test\.go$''']
+regexes = ['''0123456789abcdef0123456789abcdef''']
+regexTarget = "secret"
+
+[[allowlists]]
+description = "Public BLE characteristic UUID, not a credential"
+paths = ['''projects/station/ble-gateway/gatt\.go$''']
+regexes = ['''a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c02''']
+regexTarget = "secret"

@@ -1,0 +1,19 @@
+# Copy to /etc/netplan/50-wifi.yaml, chmod 600.
+# Replace <WIFI_PSK> with the real PSK; do not commit the real file.
+network:
+  version: 2
+  renderer: networkd
+  wifis:
+    wlp4s0:
+      optional: true
+      dhcp4: no
+      addresses: ["192.0.2.25/24"]
+      routes:
+        - to: default
+          via: 192.0.2.1
+          metric: 200
+      nameservers:
+        addresses: ["192.0.2.1"]
+      access-points:
+        "Stanislav1_Wi-Fi5":
+          password: "<WIFI_PSK>"

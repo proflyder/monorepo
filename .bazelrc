@@ -1,0 +1,8 @@
+common --enable_bzlmod
+
+build --announce_rc
+build --color=yes
+test --test_output=errors
+
+# Disk cache is machine-local, outside the checkout; output symlinks are ignored.
+common --disk_cache=~/.cache/bazel-disk

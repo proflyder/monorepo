@@ -1,0 +1,87 @@
+name: nettop
+
+services:
+  homeassistant:
+    image: ${HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.10.4}
+    container_name: homeassistant
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    environment:
+      TZ: ${TZ:-Asia/Almaty}
+    volumes:
+      - ./homeassistant/config:/config
+      - /run/dbus:/run/dbus:ro
+      - /etc/localtime:/etc/localtime:ro
+
+  music-assistant:
+    image: ${MA_IMAGE:-ghcr.io/music-assistant/server:2.10.8}
+    container_name: music-assistant-server
+    restart: unless-stopped
+    # MA must be on the host network for mDNS/uPnP discovery and streaming.
+    network_mode: host
+    environment:
+      TZ: ${TZ:-Asia/Almaty}
+      LOG_LEVEL: ${MA_LOG_LEVEL:-info}
+    volumes:
+      - ./data/music-assistant:/data
+      # Mount local music read-only, or mount an SMB/NFS share on the host first:
+      # - ${MA_MEDIA_DIR:-/mnt/music}:/media:ro
+
+  matter-server:
+    image: ${MATTER_SERVER_IMAGE:-ghcr.io/matter-js/matterjs-server:stable}
+    container_name: matterjs-server
+    restart: unless-stopped
+    # Host network is required for Matter IPv6/mDNS discovery.
+    network_mode: host
+    environment:
+      TZ: ${TZ:-Asia/Almaty}
+      PRIMARY_INTERFACE: ${MATTER_PRIMARY_INTERFACE:-wlp4s0}
+      LISTEN_ADDRESS: ${MATTER_LISTEN_ADDRESS:-127.0.0.1}
+    volumes:
+      - ./data/matter-server:/data
+
+  whisper:
+    image: ${WHISPER_IMAGE:-rhasspy/wyoming-whisper:3.8.1}
+    container_name: wyoming-whisper
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data/whisper:/data
+    command:
+      - --model
+      - ${WHISPER_MODEL:-medium-int8}
+      - --language
+      - ${WHISPER_LANGUAGE:-ru}
+      - --initial-prompt
+      - ${WHISPER_PROMPT:-Громкость 1, громкость 2, громкость 3, громкость 4, громкость 5, громкость 6, громкость 7, громкость 8, громкость 9, громкость 10. Включи любимое, Spotify Connect, Music Assistant, гейтвей, блютуз, пауза, продолжи музыку. Поставь будильник на 7:30, будильник на 8:00, на завтра, по будням, по выходным, каждый день, отмени будильник, отложи будильник, останови будильник. Поставь таймер на 5 минут, таймер на 10 минут. Стоп.}
+
+
+  onnx-stt:
+    image: ${ONNX_STT_IMAGE:-lmo3/wyoming-onnx-stt:latest}
+    container_name: wyoming-onnx-stt
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data/onnx-asr:/data
+    environment:
+      STT_MODEL: ${ONNX_STT_MODEL:-gigaam-v3-ctc}
+      STT_LANGUAGES: ${ONNX_STT_LANGUAGES:-ru}
+      STT_DEFAULT_LANGUAGE: ${ONNX_STT_LANGUAGE:-ru}
+      STT_DEVICE: cpu
+      STT_QUANTIZATION: int8
+      STT_PNC: "false"
+      STT_URI: tcp://0.0.0.0:10305
+      STT_ZEROCONF: wyoming-onnx-stt
+      STT_WARMUP: "true"
+
+  piper:
+    image: ${PIPER_IMAGE:-rhasspy/wyoming-piper:2.5.2}
+    container_name: wyoming-piper
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data/piper:/data
+    command:
+      - --voice
+      - ${PIPER_VOICE:-ru_RU-irina-medium}

@@ -1,0 +1,484 @@
+lists:
+  alarm_hour:
+    values:
+    - in: '0'
+      out: '0'
+    - in: ноль
+      out: '0'
+    - in: '1'
+      out: '1'
+    - in: один
+      out: '1'
+    - in: одна
+      out: '1'
+    - in: '2'
+      out: '2'
+    - in: два
+      out: '2'
+    - in: две
+      out: '2'
+    - in: '3'
+      out: '3'
+    - in: три
+      out: '3'
+    - in: '4'
+      out: '4'
+    - in: четыре
+      out: '4'
+    - in: '5'
+      out: '5'
+    - in: пять
+      out: '5'
+    - in: '6'
+      out: '6'
+    - in: шесть
+      out: '6'
+    - in: '7'
+      out: '7'
+    - in: семь
+      out: '7'
+    - in: '8'
+      out: '8'
+    - in: восемь
+      out: '8'
+    - in: '9'
+      out: '9'
+    - in: девять
+      out: '9'
+    - in: '10'
+      out: '10'
+    - in: десять
+      out: '10'
+    - in: '11'
+      out: '11'
+    - in: одиннадцать
+      out: '11'
+    - in: '12'
+      out: '12'
+    - in: двенадцать
+      out: '12'
+    - in: '13'
+      out: '13'
+    - in: тринадцать
+      out: '13'
+    - in: '14'
+      out: '14'
+    - in: четырнадцать
+      out: '14'
+    - in: '15'
+      out: '15'
+    - in: пятнадцать
+      out: '15'
+    - in: '16'
+      out: '16'
+    - in: шестнадцать
+      out: '16'
+    - in: '17'
+      out: '17'
+    - in: семнадцать
+      out: '17'
+    - in: '18'
+      out: '18'
+    - in: восемнадцать
+      out: '18'
+    - in: '19'
+      out: '19'
+    - in: девятнадцать
+      out: '19'
+    - in: '20'
+      out: '20'
+    - in: двадцать
+      out: '20'
+    - in: '21'
+      out: '21'
+    - in: двадцать один
+      out: '21'
+    - in: '22'
+      out: '22'
+    - in: двадцать два
+      out: '22'
+    - in: '23'
+      out: '23'
+    - in: двадцать три
+      out: '23'
+  alarm_minute:
+    values:
+    - in: '0'
+      out: '0'
+    - in: '00'
+      out: '0'
+    - in: ноль
+      out: '0'
+    - in: '1'
+      out: '1'
+    - in: '01'
+      out: '1'
+    - in: одна
+      out: '1'
+    - in: один
+      out: '1'
+    - in: одну
+      out: '1'
+    - in: '2'
+      out: '2'
+    - in: '02'
+      out: '2'
+    - in: две
+      out: '2'
+    - in: два
+      out: '2'
+    - in: '3'
+      out: '3'
+    - in: '03'
+      out: '3'
+    - in: три
+      out: '3'
+    - in: '4'
+      out: '4'
+    - in: '04'
+      out: '4'
+    - in: четыре
+      out: '4'
+    - in: '5'
+      out: '5'
+    - in: '05'
+      out: '5'
+    - in: пять
+      out: '5'
+    - in: '6'
+      out: '6'
+    - in: '06'
+      out: '6'
+    - in: шесть
+      out: '6'
+    - in: '7'
+      out: '7'
+    - in: '07'
+      out: '7'
+    - in: семь
+      out: '7'
+    - in: '8'
+      out: '8'
+    - in: 08
+      out: '8'
+    - in: восемь
+      out: '8'
+    - in: '9'
+      out: '9'
+    - in: 09
+      out: '9'
+    - in: девять
+      out: '9'
+    - in: '10'
+      out: '10'
+    - in: десять
+      out: '10'
+    - in: '11'
+      out: '11'
+    - in: одиннадцать
+      out: '11'
+    - in: '12'
+      out: '12'
+    - in: двенадцать
+      out: '12'
+    - in: '13'
+      out: '13'
+    - in: тринадцать
+      out: '13'
+    - in: '14'
+      out: '14'
+    - in: четырнадцать
+      out: '14'
+    - in: '15'
+      out: '15'
+    - in: пятнадцать
+      out: '15'
+    - in: '16'
+      out: '16'
+    - in: шестнадцать
+      out: '16'
+    - in: '17'
+      out: '17'
+    - in: семнадцать
+      out: '17'
+    - in: '18'
+      out: '18'
+    - in: восемнадцать
+      out: '18'
+    - in: '19'
+      out: '19'
+    - in: девятнадцать
+      out: '19'
+    - in: '20'
+      out: '20'
+    - in: двадцать
+      out: '20'
+    - in: '21'
+      out: '21'
+    - in: двадцать одна
+      out: '21'
+    - in: '22'
+      out: '22'
+    - in: двадцать две
+      out: '22'
+    - in: '23'
+      out: '23'
+    - in: двадцать три
+      out: '23'
+    - in: '24'
+      out: '24'
+    - in: двадцать четыре
+      out: '24'
+    - in: '25'
+      out: '25'
+    - in: двадцать пять
+      out: '25'
+    - in: '26'
+      out: '26'
+    - in: двадцать шесть
+      out: '26'
+    - in: '27'
+      out: '27'
+    - in: двадцать семь
+      out: '27'
+    - in: '28'
+      out: '28'
+    - in: двадцать восемь
+      out: '28'
+    - in: '29'
+      out: '29'
+    - in: двадцать девять
+      out: '29'
+    - in: '30'
+      out: '30'
+    - in: тридцать
+      out: '30'
+    - in: '31'
+      out: '31'
+    - in: тридцать одна
+      out: '31'
+    - in: '32'
+      out: '32'
+    - in: тридцать две
+      out: '32'
+    - in: '33'
+      out: '33'
+    - in: тридцать три
+      out: '33'
+    - in: '34'
+      out: '34'
+    - in: тридцать четыре
+      out: '34'
+    - in: '35'
+      out: '35'
+    - in: тридцать пять
+      out: '35'
+    - in: '36'
+      out: '36'
+    - in: тридцать шесть
+      out: '36'
+    - in: '37'
+      out: '37'
+    - in: тридцать семь
+      out: '37'
+    - in: '38'
+      out: '38'
+    - in: тридцать восемь
+      out: '38'
+    - in: '39'
+      out: '39'
+    - in: тридцать девять
+      out: '39'
+    - in: '40'
+      out: '40'
+    - in: сорок
+      out: '40'
+    - in: '41'
+      out: '41'
+    - in: сорок одна
+      out: '41'
+    - in: '42'
+      out: '42'
+    - in: сорок две
+      out: '42'
+    - in: '43'
+      out: '43'
+    - in: сорок три
+      out: '43'
+    - in: '44'
+      out: '44'
+    - in: сорок четыре
+      out: '44'
+    - in: '45'
+      out: '45'
+    - in: сорок пять
+      out: '45'
+    - in: '46'
+      out: '46'
+    - in: сорок шесть
+      out: '46'
+    - in: '47'
+      out: '47'
+    - in: сорок семь
+      out: '47'
+    - in: '48'
+      out: '48'
+    - in: сорок восемь
+      out: '48'
+    - in: '49'
+      out: '49'
+    - in: сорок девять
+      out: '49'
+    - in: '50'
+      out: '50'
+    - in: пятьдесят
+      out: '50'
+    - in: '51'
+      out: '51'
+    - in: пятьдесят одна
+      out: '51'
+    - in: '52'
+      out: '52'
+    - in: пятьдесят две
+      out: '52'
+    - in: '53'
+      out: '53'
+    - in: пятьдесят три
+      out: '53'
+    - in: '54'
+      out: '54'
+    - in: пятьдесят четыре
+      out: '54'
+    - in: '55'
+      out: '55'
+    - in: пятьдесят пять
+      out: '55'
+    - in: '56'
+      out: '56'
+    - in: пятьдесят шесть
+      out: '56'
+    - in: '57'
+      out: '57'
+    - in: пятьдесят семь
+      out: '57'
+    - in: '58'
+      out: '58'
+    - in: пятьдесят восемь
+      out: '58'
+    - in: '59'
+      out: '59'
+    - in: пятьдесят девять
+      out: '59'
+  alarm_period:
+    values:
+    - in: утра
+      out: утра
+    - in: дня
+      out: дня
+    - in: вечера
+      out: вечера
+    - in: ночи
+      out: ночи
+  alarm_day:
+    values:
+    - in: сегодня
+      out: сегодня
+    - in: завтра
+      out: завтра
+  alarm_repeat:
+    values:
+    - in: каждый день
+      out: Каждый день
+    - in: ежедневно
+      out: Каждый день
+    - in: по будням
+      out: По будням
+    - in: по рабочим дням
+      out: По будням
+    - in: по выходным
+      out: По выходным
+  alarm_name:
+    wildcard: true
+language: ru
+intents:
+  StationAlarmSet:
+    data:
+    - sentences:
+      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour}.{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour} [часов] [и] {alarm_minute:minute} [минут] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour} [часов] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник в {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - разбуди меня в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
+      - разбуди меня в {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
+      - будильник на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
+      - будильник на {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
+      - поставь будильник {alarm_name:name} на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
+      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} на {alarm_hour:hour} [часов] [и] {alarm_minute:minute} [минут] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} на {alarm_hour:hour} [часов] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+  StationAlarmRelative:
+    data:
+    - sentences:
+      - '[поставь|установи|заведи|включи] будильник через {alarm_minute:minutes} минут[у|ы]'
+      - '[поставь|установи|заведи|включи] будильник через {alarm_hour:hours} час[а|ов]'
+      - '[поставь|установи|заведи|включи] будильник через {alarm_hour:hours} час[а|ов] [и] {alarm_minute:minutes} минут[у|ы]'
+      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} через {alarm_minute:minutes} минут[у|ы]'
+      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} через {alarm_hour:hours} час[а|ов] [и {alarm_minute:minutes} минут[у|ы]]'
+  StationAlarmStatus:
+    data:
+    - sentences:
+      - какой будильник
+      - какой у меня будильник
+      - когда будильник
+      - во сколько будильник
+      - статус будильника
+      - будильник включён
+      - будильник включен
+      - какие будильники
+      - покажи будильники
+      - список будильников
+  StationAlarmCancel:
+    data:
+    - sentences:
+      - отмени будильник
+      - убери будильник
+      - выключи будильник
+      - отмени все будильники
+      - выключи все будильники
+  StationAlarmDelete:
+    data:
+    - sentences:
+      - удали будильник
+      - удали все будильники
+      - удали будильники
+  StationAlarmSnooze:
+    data:
+    - sentences:
+      - отложи будильник
+      - отложи на девять минут
+      - ещё девять минут
+      - еще девять минут
+  StationAlarmStop:
+    data:
+    - sentences:
+      - останови будильник
+      - стоп будильник
+      - хватит будильник
+      - выключи звонок
+      - стоп
+      - остановись
+      - хватит
+  StationAlarmUpdate:
+    data:
+    - sentences:
+      - измени будильник на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}]
+      - перенеси будильник на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}]
+      - измени будильник {alarm_name} на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}]
+  StationAlarmEnableOne:
+    data:
+    - sentences:
+      - включи будильник {alarm_name}
+      - включи будильник на {alarm_hour:hour}:{alarm_minute:minute}

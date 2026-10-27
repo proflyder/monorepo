@@ -1,0 +1,4 @@
+127.0.0.1	localhost
+127.0.1.1	Yandex-Station-Midi
+# YANDEX-BLOCK
+192.0.2.11 quasar.yandex.ru quasar.yandex.net iot.quasar.yandex.net scbh.yandex.net uniproxy.alice.yandex.net uniproxy-quic.alice.yandex.net rpc.alice.yandex.net alice.yandex.ru alice.yandex.net alice-ats.yandex.net alice-ats.yandex.ru music.yandex.ru music.yandex.net api.music.yandex.net ws.api.music.yandex.net passport.yandex.ru passport.yandex.net oauth.yandex.ru login.yandex.ru mobile.yandex.net storage.mds.yandex.net avatars.mds.yandex.net strm.yandex.ru strm.yandex.net push.yandex.ru clck.yandex.net report.appmetrica.yandex.net startup.mobile.yandex.net mobileproxy.passport.yandex.net yandex.ru yandex.net yandex.com ya.ru

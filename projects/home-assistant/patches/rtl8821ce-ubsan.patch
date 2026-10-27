@@ -1,0 +1,72 @@
+--- a/Makefile
++++ b/Makefile
+@@ -1,3 +1,6 @@
++UBSAN_SANITIZE_rtw_wlan_util.o := n
++UBSAN_SANITIZE_ioctl_cfg80211.o := n
++UBSAN_SANITIZE := n
+ ccflags-y += $(USER_EXTRA_CFLAGS)
+ ccflags-y += -O1
+ #ccflags-y += -O3
+--- a/core/rtw_wlan_util.c
++++ b/core/rtw_wlan_util.c
+@@ -1853,11 +1853,13 @@
+ 	if (pIE == NULL)
+ 		return;
+ 
++	u8 *ie_data = (u8 *)pIE->data;
++
+ 	pmlmeinfo->ht_vht_received |= BIT(0);
+ 
+ 	/*copy MCS_SET*/
+ 	for (i = 3; i < 19; i++)
+-		phtpriv->MCS_set_infra_ap[i-3] = (pIE->data[i]);
++		phtpriv->MCS_set_infra_ap[i-3] = (ie_data[i]);
+ 
+ 	/*get number of stream from mcs set*/
+ 	HT_get_ss_from_mcs_set(phtpriv->MCS_set_infra_ap, &phtpriv->Rx_ss_infra_ap);
+@@ -1904,26 +1906,27 @@
+ 		return;
+ 
+ 	pmlmeinfo->HT_caps_enable = 1;
++	u8 *ie_data = (u8 *)pIE->data;
+ 
+ 	for (i = 0; i < (pIE->Length); i++) {
+ 		if (i != 2) {
+ 			/*	Commented by Albert 2010/07/12 */
+ 			/*	Got the endian issue here. */
+-			pmlmeinfo->HT_caps.u.HT_cap[i] &= (pIE->data[i]);
++			pmlmeinfo->HT_caps.u.HT_cap[i] &= (ie_data[i]);
+ 		} else {
+ 			/* AMPDU Parameters field */
+ 
+ 			/* Get MIN of MAX AMPDU Length Exp */
+-			if ((pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x3) > (pIE->data[i] & 0x3))
+-				max_AMPDU_len = (pIE->data[i] & 0x3);
++			if ((pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x3) > (ie_data[i] & 0x3))
++				max_AMPDU_len = (ie_data[i] & 0x3);
+ 			else
+ 				max_AMPDU_len = (pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x3);
+ 
+ 			/* Get MAX of MIN MPDU Start Spacing */
+-			if ((pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x1c) > (pIE->data[i] & 0x1c))
++			if ((pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x1c) > (ie_data[i] & 0x1c))
+ 				min_MPDU_spacing = (pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para & 0x1c);
+ 			else
+-				min_MPDU_spacing = (pIE->data[i] & 0x1c);
++				min_MPDU_spacing = (ie_data[i] & 0x1c);
+ 
+ 			pmlmeinfo->HT_caps.u.HT_cap_element.AMPDU_para = max_AMPDU_len | min_MPDU_spacing;
+ 		}
+--- a/os_dep/linux/ioctl_cfg80211.c
++++ b/os_dep/linux/ioctl_cfg80211.c
+@@ -1586,8 +1586,8 @@
+ 							, FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
+ 						_rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey,  param->u.crypt.key,
+ 							(param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
+-						_rtw_memcpy(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[16]), 8);
+-						_rtw_memcpy(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[24]), 8);
++						_rtw_memcpy(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey, ((u8 *)param->u.crypt.key) + 16, 8);
++						_rtw_memcpy(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey, ((u8 *)param->u.crypt.key) + 24, 8);
+ 						padapter->securitypriv.binstallGrpkey = _TRUE;
+ 						if (param->u.crypt.idx < 4)
+ 							_rtw_memcpy(padapter->securitypriv.iv_seq[param->u.crypt.idx], param->u.crypt.seq, 8);

@@ -1,0 +1,141 @@
+diff --git a/train_mww.py b/train_mww.py
+index a8f4862..7a56a84 100644
+--- a/train_mww.py
++++ b/train_mww.py
+@@ -478,8 +478,18 @@ def extract_features_from_dir(
+     log.info("  Extracting: %d files (%s, augment=%s, noise_aug=%d)",
+              len(wav_files), desc, augment_stride is not None, noise_augments)
+     features, failed = [], 0
+-
+-    for wav_path in tqdm(wav_files, desc=f"[{desc}]", unit="clip"):
++    # Store bounded feature shards: the full positive set can exceed WSL RAM.
++    shard_dir = wav_dir.parent / "feature_shards" / desc
++    shard_dir.mkdir(parents=True, exist_ok=True)
++    shards = []
++    def flush_shard():
++        if features:
++            path = shard_dir / f"shard_{len(shards):05d}.npy"
++            np.save(path, np.asarray(features, dtype=np.float32))
++            shards.append(path)
++            features.clear()
++
++    for file_index, wav_path in enumerate(tqdm(wav_files, desc=f"[{desc}]", unit="clip")):
+         try:
+             sr, audio = wavfile.read(str(wav_path))
+             if audio.ndim > 1:
+@@ -523,11 +533,28 @@ def extract_features_from_dir(
+         except Exception as exc:
+             failed += 1
+             log.debug("  Skip %s: %s", wav_path.name, exc)
++        if (file_index + 1) % 256 == 0:
++            flush_shard()
+ 
+     if failed:
+         log.warning("  %d / %d files failed", failed, len(wav_files))
+-
+-    return np.array(features, dtype=np.float32)
++    flush_shard()
++    if not shards:
++        raise RuntimeError(f"No features extracted from {wav_dir}")
++    total = sum(np.load(path, mmap_mode="r").shape[0] for path in shards)
++    combined = shard_dir / "combined.npy"
++    out = np.lib.format.open_memmap(combined, mode="w+", dtype=np.float32,
++                                    shape=(total, spec_length, N_MEL_BINS))
++    offset = 0
++    for path in shards:
++        chunk = np.load(path, mmap_mode="r")
++        out[offset:offset+len(chunk)] = chunk
++        offset += len(chunk)
++        del chunk
++        path.unlink()
++    out.flush()
++    del out
++    return np.load(combined, mmap_mode="r")
+ 
+ 
+ # ===========================================================================
+@@ -934,15 +961,20 @@ def phase_features(cfg: dict):
+         # introduced them reached 42.6 GB resident and went into swap here.
+         # Preallocate once and drop each source as it is consumed.
+         total = sum(len(a) for a in pos_arrays)
+-        pos_train = np.empty((total, *pos_arrays[0].shape[1:]), dtype=pos_arrays[0].dtype)
++        pos_train = np.lib.format.open_memmap(
++            pos_train_npy.with_suffix(".working.npy"), mode="w+",
++            shape=(total, *pos_arrays[0].shape[1:]), dtype=pos_arrays[0].dtype)
+         offset = 0
+         while pos_arrays:
+             chunk = pos_arrays.pop(0)
+             pos_train[offset:offset + len(chunk)] = chunk
+             offset += len(chunk)
+             del chunk
+-        np.random.shuffle(pos_train)
+-        np.save(str(pos_train_npy), pos_train)
++        # Training already shuffles mmap indices; avoid random disk writes here.
++        pos_train.flush()
++        del pos_train
++        pos_train_npy.with_suffix(".working.npy").replace(pos_train_npy)
++        pos_train = np.load(pos_train_npy, mmap_mode="r")
+         log.info("  positive_train.npy: %s (combined)", pos_train.shape)
+         # Locals live until the function returns, and the negative half of this
+         # phase is the memory-hungry part. Holding 14 GB of positives through it
+@@ -1021,7 +1053,7 @@ def phase_features(cfg: dict):
+         log.info("  Spoken-command negatives: %s", tts_neg.shape)
+ 
+     # 3. HF negatives (speech, no_speech, dinner_party)
+-    hf_neg = _download_hf_negatives(feat_dir, spec_length, max_windows=500_000)
++    hf_neg = _download_hf_negatives(feat_dir, spec_length, max_windows=int(os.environ.get("MWW_HF_MAX_WINDOWS", "100000")))
+     if hf_neg is not None:
+         neg_arrays.append(hf_neg)
+ 
+@@ -1146,6 +1178,12 @@ def phase_train(cfg: dict):
+     log.info("=" * 60)
+ 
+     import tensorflow as tf
++    gpus = tf.config.list_physical_devices("GPU")
++    if os.environ.get("MWW_REQUIRE_GPU") == "1" and not gpus:
++        raise RuntimeError("GPU required, but TensorFlow found none")
++    for gpu in gpus:
++        tf.config.experimental.set_memory_growth(gpu, True)
++    tf.keras.utils.set_random_seed(42)
+ 
+     model_name = cfg["model_name"]
+     base = OUTPUT_DIR / model_name
+@@ -1184,6 +1222,7 @@ def phase_train(cfg: dict):
+     model.summary(print_fn=log.info)
+ 
+     model.compile(
++        jit_compile=False,
+         optimizer=tf.keras.optimizers.Adam(cfg["learning_rate"]),
+         loss="binary_crossentropy",
+         metrics=[
+@@ -1243,7 +1282,13 @@ def phase_train(cfg: dict):
+         .prefetch(tf.data.AUTOTUNE)
+     )
+ 
++    checkpoint_dir = base / "model"
++    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+     callbacks = [
++        tf.keras.callbacks.ModelCheckpoint(
++            str(checkpoint_dir / "best.weights.h5"),
++            monitor="val_loss", save_best_only=True, save_weights_only=True),
++        tf.keras.callbacks.CSVLogger(str(checkpoint_dir / "training-metrics.csv")),
+         tf.keras.callbacks.EarlyStopping(
+             monitor="val_loss",
+             patience=max(5, epochs // 5),
+@@ -1364,14 +1409,14 @@ def phase_export(cfg: dict):
+ 
+     # --- Representative dataset for quantisation ---
+     feat_dir = base / "mww_features"
+-    pos_train = np.load(str(feat_dir / "positive_train.npy"))
++    pos_train = np.load(str(feat_dir / "positive_train.npy"), mmap_mode="r")
+ 
+     # Determine input time dimension for the export model
+     input_shape = export_model.input_shape
+     input_time = input_shape[1] if input_shape[1] is not None else spec_length
+ 
+     def _rep_dataset():
+-        samples = pos_train[:500]
++        samples = np.array(pos_train[:500], copy=True)
+         # Ensure min/max of feature range are represented
+         samples[0][0, 0] = 0.0
+         samples[0][0, 1] = 26.0

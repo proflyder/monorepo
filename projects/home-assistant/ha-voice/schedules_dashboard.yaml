@@ -1,0 +1,118 @@
+title: Помощник
+views:
+  - title: Будильники
+    path: alarms
+    icon: mdi:alarm
+    cards:
+      - type: markdown
+        content: |
+          ## Будильники
+          Список хранится в Home Assistant. Создавайте, редактируйте и удаляйте
+          элементы прямо здесь или голосом: «Рикардо, поставь будильник на 7:30
+          по будням».
+      - type: markdown
+        content: |
+          **Новый будильник.** Задайте только время и повтор — дата
+          «следующего срабатывания» рассчитывается автоматически.
+          В списках ниже поле «Срок выполнения» — это техническая дата
+          следующего звонка, а не дедлайн: после звонка HA переносит её на
+          следующий день/будний день/выходные.
+
+          Если в старом списке есть элемент **без времени** — он не попадёт
+          в расписание. Удалите его и создайте заново через форму выше.
+      - type: entities
+        title: Создать будильник
+        entities:
+          - entity: input_text.alarm_form_name
+          - entity: input_datetime.alarm_form_time
+          - entity: input_select.alarm_form_repeat
+      - type: button
+        name: Создать будильник
+        icon: mdi:alarm-plus
+        tap_action:
+          action: perform-action
+          perform_action: script.alarm_ui_create
+      - type: todo-list
+        entity: todo.alarms_once
+        title: Однократные
+        hide_completed: false
+        item_tap_action: edit
+      - type: todo-list
+        entity: todo.alarms_daily
+        title: Ежедневные
+        hide_completed: false
+        item_tap_action: edit
+      - type: todo-list
+        entity: todo.alarms_weekdays
+        title: По будням
+        hide_completed: false
+        item_tap_action: edit
+      - type: todo-list
+        entity: todo.alarms_weekends
+        title: По выходным
+        hide_completed: false
+        item_tap_action: edit
+
+  - title: Таймеры
+    path: timers
+    icon: mdi:timer-outline
+    cards:
+      - type: markdown
+        content: |
+          ## Таймеры
+          Доступно 8 слотов. Запускайте их здесь или голосом: «Рикардо,
+          поставь таймер пицца на 10 минут». После перезапуска HA активные
+          таймеры восстанавливаются.
+      - type: entities
+        title: Слоты таймеров
+        show_header_toggle: false
+        entities:
+          - entity: timer.taimer_1
+          - entity: timer.taimer_2
+          - entity: timer.taimer_3
+          - entity: timer.taimer_4
+          - entity: timer.taimer_5
+          - entity: timer.taimer_6
+          - entity: timer.taimer_7
+          - entity: timer.taimer_8
+      - type: markdown
+        title: Текущие названия
+        content: >-
+          {% set ns = namespace(rows=[]) %}
+          {% for i in range(1, 9) %}
+            {% set label = states('input_text.taimer_' ~ i ~ '_nazvanie') %}
+            {% if states('timer.taimer_' ~ i) in ['active', 'paused'] and label not in ['', 'unknown', 'unavailable'] %}
+              {% set ns.rows = ns.rows + [label ~ ' — ' ~ states('timer.taimer_' ~ i)] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows | join('  \n') if ns.rows | length else 'Активных таймеров нет.' }}
+
+  - title: Напоминания
+    path: reminders
+    icon: mdi:bell-outline
+    cards:
+      - type: markdown
+        content: |
+          ## Напоминания
+          «Рикардо, напомни завтра в 9:00 проверить духовку». Напоминание
+          озвучивается на станции и приходит на телефон.
+      - type: todo-list
+        entity: todo.reminders
+        title: Список напоминаний
+        hide_completed: false
+        item_tap_action: edit
+
+  - title: Заметки
+    path: notes
+    icon: mdi:note-text-outline
+    cards:
+      - type: markdown
+        content: |
+          ## Заметки
+          «Рикардо, запомни, что надо купить молоко». Поиск: «что я записал
+          про молоко».
+      - type: todo-list
+        entity: todo.notes
+        title: Заметки
+        hide_completed: false
+        item_tap_action: edit

@@ -1,0 +1,10 @@
+archive
+artifacts
+backups
+logs
+secrets
+resources
+projects/station/ble-gateway
+projects/station/upstream
+projects/station/resources
+snapshots

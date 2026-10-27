@@ -1,0 +1,17 @@
+alarm_next:
+  name: "Будильник: следующее срабатывание"
+  has_date: true
+  has_time: true
+  icon: mdi:alarm
+
+alarm_snooze_until:
+  name: "Будильник: отложен до"
+  has_date: true
+  has_time: true
+  icon: mdi:alarm-snooze
+
+alarm_form_time:
+  name: "Новый будильник: время"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-outline

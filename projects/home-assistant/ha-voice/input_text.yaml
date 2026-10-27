@@ -1,0 +1,14 @@
+alarm_previous_source:
+  name: "Источник до будильника"
+  max: 255
+  initial: ""
+
+music_candidates:
+  name: "Последние музыкальные кандидаты"
+  max: 255
+  initial: ""
+
+alarm_form_name:
+  name: "Новый будильник: название"
+  max: 64
+  initial: ""
