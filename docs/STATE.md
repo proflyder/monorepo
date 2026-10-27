@@ -3,7 +3,8 @@
 ## Proxmox / HAOS / K3s — рабочее состояние, 2026-10-28
 
 > LAN-адреса ниже — публичные примеры; реальные значения только в `secrets/`.
-> Приватная карта сети с реальными IP/портами — `secrets/NETWORK.md`.
+> Публичная обезличенная карта сети — `NETWORK.md`; приватная карта с
+> реальными IP/портами — `secrets/NETWORK.md`.
 
 - Proxmox VE `9.2.24` на внутреннем NVMe; hostname `pve`, management
   `vmbr0` на Ethernet `192.0.2.26/24`, root 64 GiB, swap 8 GiB,

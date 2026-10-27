@@ -9,6 +9,7 @@
 | Документ | Чем владеет |
 |---|---|
 | `STATE.md` | канонические текущие факты (станция, Pulsar, HA, сеть, remote) |
+| `NETWORK.md` | публичная обезличенная карта LAN, портов и remote-доступа |
 | `../secrets/NETWORK.md` (private) | реальная LAN-карта: IP, порты, firewall, Tailscale; не публикуется |
 | `REBUILD.md` | **восстановление с нуля**: SSD неттопа, factory reset колонки, потеря Mac/Quasar |
 | `DECISIONS.md` | ключевые решения и «почему это, а не иначе» |
