@@ -2,7 +2,7 @@
 
 Рабочая композиция: один K3s server/worker на существующей Ubuntu, собственный
 containerd, HA/MA/Matter/GigaAM/Whisper/Piper/Hermes и голосовой proxy.
-Pulsar и BLE gateway остаются на станции. Версии зафиксированы в `versions.env`.
+Pulsar и BLE gateway остаются на станции. Версии зафиксированы в `versions.sh`.
 
 - [Исследование и исходный план](../../../docs/PLAN-KUBERNETES-MIGRATION.md).
 - [Эксплуатация и восстановление](../../../docs/KUBERNETES-OPERATIONS.md).

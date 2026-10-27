@@ -11,7 +11,7 @@
   HA/MA/Matter/GigaAM/Whisper/Piper, Hermes gateway+proxy и health exporter.
 - Namespace `monitoring`: Prometheus/Alertmanager/Grafana, Operator,
   kube-state-metrics/node-exporter, Loki и Alloy.
-- Все release versions — `projects/home/kubernetes/versions.env`.
+- Все release versions — `projects/home/kubernetes/versions.sh`.
 - Приложения сохраняют исходные versions/digests и hostNetwork/loopback ports.
   HA privileged/D-Bus сохранены как в предыдущем рабочем Compose.
 - Hermes: исходный revision сохранён, собственный OCI image с API extras,

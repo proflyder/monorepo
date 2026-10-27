@@ -15,7 +15,7 @@ Tracked `values.yaml` пуст: реальные images/digests, host paths и �
 ## Images
 
 Hermes собирается из `git archive` revision, указанного в
-`projects/home/kubernetes/versions.env`, без home/secrets/старого venv.
+`projects/home/kubernetes/versions.sh`, без home/secrets/старого venv.
 Dockerfile находится в `images/hermes/`, лицензия upstream сохранена рядом.
 API server требует messaging extra (aiohttp), дополнительно устанавливаются
 mcp/web. SQLite 3.53.4 собирается по checksum из Dockerfile того же upstream

@@ -13,6 +13,15 @@ OBS = HERE.parent / "observability/chart"
 
 @unittest.skipUnless(shutil.which("helm"), "Helm is required for chart contracts")
 class ChartContracts(unittest.TestCase):
+    def test_public_version_manifest_is_tracked_and_not_ignored(self):
+        root = HERE.parents[2]
+        manifest = root / "projects/home/kubernetes/versions.sh"
+        self.assertTrue(manifest.is_file())
+        result = subprocess.run(["git", "check-ignore", str(manifest)], cwd=root, capture_output=True)
+        self.assertEqual(result.returncode, 1, "Public versions must not match private env ignore rules")
+        tracked = subprocess.check_output(["git", "ls-files", "--error-unmatch", "projects/home/kubernetes/versions.sh"], cwd=root)
+        self.assertTrue(tracked)
+
     def test_runtime_is_single_writer_and_retains_data(self):
         values = {"nodeName": "example-node", "storage": {
             "data": {"size": "1Gi", "path": "/srv/example/data"}},

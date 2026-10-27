@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-source "$ROOT/projects/home/kubernetes/versions.env"
+source "$ROOT/projects/home/kubernetes/versions.sh"
 : "${KUBECONFIG:?Set KUBECONFIG to a private admin kubeconfig}"
 # Bootstrap namespaces, storage and grafana-admin Secret before running this.
 # Real server URL overrides belong in a private values file, never in Git.
