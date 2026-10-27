@@ -1,5 +1,9 @@
 # HA — Home Assistant Container на неттопе
 
+**Текущий HA Container запускается Kubernetes, версия приложения сохранена.**
+Актуальные deploy/backup/restore команды — [Kubernetes runbook](../../docs/KUBERNETES-OPERATIONS.md).
+Docker/Compose команды ниже — legacy recovery; не запускать второй writer на текущем config PV.
+
 **Текущий статус:** onboarding пройден, HA `2026.10.4`, контейнер `homeassistant`
 работает; `http://192.0.2.26:8123` и `http://192.0.2.25:8123` отвечают.
 Music Assistant `2.10.8` с Spotify готов; HA Assist base (Whisper/Piper/pipeline `Рикардо`) развёрнут; Pulsar `v0.4.1-ricardo6` подключён как satellite и Sendspin-плеер.
@@ -8,7 +12,7 @@ Music Assistant `2.10.8` с Spotify готов; HA Assist base (Whisper/Piper/pi
 
 На сервере уже Ubuntu Server, поэтому выбран официальный **HA Container**:
 
-- работает как Docker-контейнер, обновляется вручную;
+- работает как OCI-контейнер под Kubernetes, обновляется через pinned image/Helm;
 - **нет add-ons/Supervisor**;
 - Music Assistant/Whisper/Piper ставятся отдельными контейнерами;
 - если позже понадобятся add-ons — можно перейти на HAOS VM (KVM есть).

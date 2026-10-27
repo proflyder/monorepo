@@ -1,0 +1,33 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ricardo-runtime
+spec:
+  namespaceSelector:
+    matchNames: [home-assistant]
+  selector:
+    matchLabels: {app.kubernetes.io/name: runtime-health-exporter}
+  endpoints:
+    - port: metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ricardo-runtime
+spec:
+  groups:
+    - name: ricardo.runtime
+      rules:
+        - alert: RicardoEndpointDown
+          expr: ricardo_endpoint_up == 0
+          for: 3m
+          labels: {severity: warning}
+          annotations:
+            summary: A Ricardo application TCP endpoint is unavailable
+        - alert: RicardoDiskSpaceLow
+          expr: node_filesystem_avail_bytes{fstype="ext4"} / node_filesystem_size_bytes{fstype="ext4"} < 0.15
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: An ext4 filesystem has less than 15 percent available

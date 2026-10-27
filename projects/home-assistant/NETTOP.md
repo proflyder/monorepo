@@ -1,7 +1,11 @@
 # NETTOP — домашний сервер HA
 
+**Обновление runtime 2026-10-27:** приложения работают в K3s/containerd;
+текущие команды и пути — [Kubernetes runbook](../../docs/KUBERNETES-OPERATIONS.md).
+Сведения о прежнем Docker runtime ниже сохраняются как история установки.
+
 Отдельная папка по мини-ПК **DEXP Jupiter JU01CY**: воспроизводимый сетап
-Ubuntu Server + Docker + Home Assistant Container + Wi-Fi/статические IP.
+Ubuntu Server + K3s + Home Assistant Container + Wi-Fi/статические IP.
 
 **Текущий статус:** HA Container работает; Music Assistant `2.10.8` с Spotify
 готов; HA Assist base (Whisper/Piper/`Рикардо`) и голосовые команды проверены.
@@ -30,7 +34,7 @@ Wi-Fi/Ethernet failover, Secure Boot + MOK; boot без Ethernet ~20 с.
 | HA | `http://192.0.2.26:8123` / `http://192.0.2.25:8123`, версия `2026.10.4` |
 | Music Assistant | `http://192.0.2.26:8095` / `.25:8095`, `2.10.8`, Spotify playback проверен |
 | STT | `wyoming-onnx-stt` `:10305` GigaAM v3 int8 (primary); Whisper `medium-int8` `:10300` fallback |
-| Piper | `wyoming-piper:2.5.2`, `:10200`, `ru_RU-irina-medium` |
+| Piper | `wyoming-piper:2.5.2`, `:10200`, `ru_puriso2-medium` |
 | Assist | pipeline `Рикардо`: local intents → `conversation.hermes_agent`; Pulsar satellite; MA-плеер |
 | Hermes | `v0.22.5`, `~/.hermes`, `hermes-gateway.service`, API `127.0.0.1:8642`, HA MCP |
 | Docker | 29.1.3, Compose 2.40.3 |

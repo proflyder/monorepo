@@ -273,10 +273,21 @@
 - Ресурсы (`pulsar`, `apkg`, `yaff`, AirPlay) — только на запасной Midi.
 - `yse` — нужен исходник/ссылка.
 
-## Миграция неттопа в Kubernetes и observability
+## Kubernetes: дальнейшая эксплуатация
 
-Исследование выполнено 2026-10-27 без изменения сервисов. План, этапы,
-gates и rollback — [PLAN-KUBERNETES-MIGRATION.md](PLAN-KUBERNETES-MIGRATION.md).
-Рекомендуется K3s на текущей Ubuntu; все прикладные процессы, включая Hermes,
-переносятся поэтапно. Prometheus/Loki/Grafana/Alloy и dashboard charts включены
-в план. Установка кластера, реализация chart’ов и live cutover ещё не выполнялись.
+Миграция приложений и observability выполнена 2026-10-27; текущий runbook —
+[KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md). Отдельно остаются:
+
+- длительное наблюдение 48–72 часа и микрофонный retest пользователем;
+- регулярный encrypted/offsite backup с проверкой полного restore на запасном хосте;
+- внешний канал Alertmanager/внешний heartbeat;
+- полная latency instrumentation voice pipeline;
+- private registry/build pipeline для собственных images (сейчас recovery OCI archive);
+- отдельная проверка Ethernet/failover, если будет подключён кабель.
+
+## Proxmox / HAOS / Terraform / Tailscale Operator
+
+Обсуждается следующий слой инфраструктуры; гипервизор не менялся.
+Границы и варианты — [PROXMOX-HAOS-IAC.md](PROXMOX-HAOS-IAC.md).
+Нужен выбор архитектуры; operator также требует отсутствующие сейчас OAuth/WIF
+credentials и tag policy. Не считать подготовленный K3s автоматически Proxmox/HAOS.

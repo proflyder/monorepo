@@ -1,5 +1,10 @@
 # projects/home-assistant
 
+**Deployment перенесён в Kubernetes 2026-10-27.**
+[Runbook](../../docs/KUBERNETES-OPERATIONS.md), [chart](deploy/README.md),
+[дашборды](observability/README.md). Live data paths сохранены через local PV;
+`stack/` — прежний Docker deployment, не текущая точка запуска.
+
 Проект домашнего сервера: HA Container, Music Assistant, STT/TTS, Hermes,
 Tailscale и HA-конфиг. Станция здесь только как внешний ESPHome/Sendspin
 endpoint.

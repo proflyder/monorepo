@@ -1,5 +1,11 @@
 # Hermes Agent — voice fallback
 
+**Deployment update 2026-10-27:** gateway and voice proxy run in one Kubernetes
+Pod; native user units are masked. [Current runbook](../../../docs/KUBERNETES-OPERATIONS.md).
+State is `/srv/k3s/volumes/hermes` on the host (`/opt/data` in the Pod);
+`~/.local/bin/hermes` is a kubectl wrapper. Native Install/Service commands below
+are retained for historical recovery and must not start a second production writer.
+
 Hermes is the **fallback** brain for the Station Midi voice cascade, not the
 fast path.  HA Assist keeps timers, alarms, volume, music transport and simple
 home commands local; Hermes handles unmatched or open-ended requests through

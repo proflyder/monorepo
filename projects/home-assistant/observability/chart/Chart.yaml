@@ -1,0 +1,4 @@
+apiVersion: v2
+name: home-assistant-observability
+version: 0.1.0
+description: Project-owned provisioned Grafana dashboards and alert rules

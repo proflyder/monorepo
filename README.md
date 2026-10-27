@@ -1,5 +1,9 @@
 # Yandex Station Midi — root lab
 
+**Runtime неттопа — Kubernetes/K3s.** Эксплуатация, Grafana и восстановление:
+[docs/KUBERNETES-OPERATIONS.md](docs/KUBERNETES-OPERATIONS.md).
+Дашборды доставляются проектным Helm-чартом; Docker Compose сохранён как legacy source.
+
 
 > Публичная копия: serial/MAC, внешний адрес и tailnet-домен заменены примерами.
 > Реальные значения и исходные локальные документы — только в `secrets/`.

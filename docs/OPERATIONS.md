@@ -1,5 +1,9 @@
 # OPERATIONS — runbook
 
+**Неттоп: текущий runtime Kubernetes.** Команды HA/MA/Hermes, мониторинг и
+восстановление — [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md).
+Docker-команды ниже относятся к прежнему runtime. Команды самой станции не менялись.
+
 Стабильные команды и откаты. Текущие факты — только в `STATE.md`.
 
 ## Доступ

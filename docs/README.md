@@ -25,6 +25,8 @@
 | Документ | Чем владеет |
 |---|---|
 | `PENDING.md` | открытые задачи/решения |
+| `PROXMOX-HAOS-IAC.md` | варианты следующего слоя: VM/HAOS, Terraform и Tailscale Operator; ещё не развёрнуто |
+| `KUBERNETES-OPERATIONS.md` | текущий runtime K3s, Helm, Grafana, данные, backup/restore и ограничения |
 | `PLAN-KUBERNETES-MIGRATION.md` | live-исследование неттопа, переход Docker → K3s, Helm/Prometheus/Loki/Grafana |
 | `PLAN-SCHEDULES.md` | план/границы будильников, таймеров, напоминаний, заметок |
 | `HISTORY.md` | хронология; append-only, без текущего статуса |

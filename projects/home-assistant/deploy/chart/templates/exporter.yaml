@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-health-exporter
+data:
+  health_exporter.py: |-
+{{ .Files.Get "files/health_exporter.py" | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runtime-health-exporter
+  labels: {app.kubernetes.io/name: runtime-health-exporter}
+spec:
+  selector: {app.kubernetes.io/name: runtime-health-exporter}
+  ports:
+    - name: metrics
+      port: 9116
+      targetPort: 9116

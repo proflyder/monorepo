@@ -1,5 +1,10 @@
 # REBUILD — воссоздание стенда с нуля
 
+**При восстановлении текущего неттопа использовать также
+[KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md).** Kubernetes cluster/PV/auth
+восстанавливаются из migration recovery-комплекта; Docker-разделы ниже описывают
+прежний вариант. Не запускать одновременно Kubernetes и native services на одних данных.
+
 **Дата:** 2026-10-27  
 **Статус:** канонический recovery-гайд. Текущие факты — `STATE.md`; команды —
 `OPERATIONS.md`; решения — `DECISIONS.md`; секреты — `SENSITIVE-DATA.md`.  

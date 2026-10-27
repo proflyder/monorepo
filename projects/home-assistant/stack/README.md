@@ -1,5 +1,10 @@
 # NETTOP STACK — единая точка управления
 
+**Legacy Docker deployment.** Production runtime перенесён в Kubernetes.
+[Новая точка управления](../../../docs/KUBERNETES-OPERATIONS.md),
+[chart приложений](../deploy/README.md). Команды ниже относятся к прежнему стеку.
+Рабочие каталоги данных нельзя удалять: Kubernetes использует их через PV.
+
 Это рабочая папка инфраструктуры внутри неттопа `lab-host`:
 
 ```text

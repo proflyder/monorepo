@@ -23,5 +23,6 @@ solutions/assistant-ui    endpoint=home alarm
 - один и тот же alarm/MCP можно направить на другой инстанс;
 - project-specific config не попадает в solutions.
 
-Пока это композиционный манифест; физические пути HA/станции остаются
-историческими до отдельной миграции.
+Рабочая Kubernetes-композиция и pinned Helm releases — [kubernetes/](kubernetes/README.md).
+Физические пути станции не менялись; существующие HA data paths подключены как local PV.
+Alarm/MCP/UI solutions остаются отдельными планируемыми дополнениями.

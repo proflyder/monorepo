@@ -1,5 +1,36 @@
 # STATE — текущее состояние (канонические факты)
 
+## Kubernetes runtime — внедрение 2026-10-27
+
+- Неттоп сохранён на Ubuntu; рабочий runtime — K3s `v1.35.9+k3s1`, node
+  `lab-host`, собственный containerd, namespaces `home-assistant`/`monitoring`.
+- Перенесены HA, MA, Matter, GigaAM, Whisper, Piper, Hermes gateway/proxy;
+  версии приложений/моделей и loopback/LAN endpoints сохранены. Pulsar и BLE
+  gateway на станции не менялись.
+- Выделен LV 150 GiB, `/srv/k3s`; около 224 GiB VG оставлено свободными.
+  Старые application data paths подключены Retain local PV, Hermes state —
+  `/srv/k3s/volumes/hermes` (`/opt/data` в Pod). Эти data paths не являются мусором Docker.
+- Prometheus/Grafana/Alertmanager: `kube-prometheus-stack` chart `92.14.0`;
+  Loki monolithic chart `20.0.2`, Alloy chart `1.14.3`. Четыре project dashboards
+  находятся в Git и доставляются Helm ConfigMap → Grafana sidecar.
+- Grafana: текущий Tailscale HTTPS endpoint HA + `/grafana/`; HA `/` сохранён.
+  Admin credentials и private values — вне Git. Prometheus/Loki не опубликованы.
+- Hermes — тот же revision `bf0203a794a07aac3ff764972ab9087baa4e4f4e` в собственном
+  образе; API extras/tini/SQLite 3.53.4. При переносе обновлены 96 служебных
+  profile references, история/auth сохранены, оставлен backup до изменения.
+- Functional E2E: MA audio → станция, alarm/schedule/stop/resume, Puriso →
+  GigaAM/Whisper, Hermes real chat/SSE/persona и HA/MA MCP — pass. После reboot
+  кластер/приложения/mount восстановились, HA/Hermes и observability E2E повторно pass.
+- Baseline/cold backups, текущие cluster/Hermes snapshots и custom OCI images
+  сохранены на неттопе и Mac, SHA-256 проверены. Полный disaster restore на
+  запасном железе и длительное наблюдение ещё не выполнялись.
+- Host SSH/Tailscale/network/chrony остаются вне кластера; native Hermes units
+  masked. Старый Docker runtime выведен из эксплуатации после приёмки.
+- Команды/пути/восстановление: [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md).
+  Прежние native/Compose описания ниже — история feature deployment; текущие
+  runtime paths и процессы задаются этим разделом и runbook.
+
+
 
 > Публичная копия: serial/MAC, внешний адрес и tailnet-домен заменены примерами.
 > Реальные значения и исходные локальные документы — только в `secrets/`.

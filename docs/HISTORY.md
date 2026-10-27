@@ -843,3 +843,17 @@ gateway/proxy в user systemd, ресурсы/LVM/swap/сеть и зависи�
 PLAN-KUBERNETES-MIGRATION.md с K3s/containerd, поэтапным cutover/rollback,
 Prometheus/Loki/Grafana/Alloy и проектными dashboard Helm charts. Работающие
 сервисы, сеть и диски не изменялись; кластер не устанавливался.
+
+## 2026-10-27 — миграция приложений в K3s и observability
+
+Развёрнут K3s v1.35.9+k3s1 на сохранённой Ubuntu, выделен LV 150 GiB.
+Перенесены шесть Compose services и Hermes gateway/proxy, добавлены Prometheus,
+Grafana, Loki, Alloy, проектные dashboard charts и health exporter.
+Исправлены packaging зависимости Hermes/SQLite и перенос 96 profile references
+с сохранением auth/истории и отдельной копии DB.
+Функциональные HA/audio/alarm/ASR/Hermes/MCP/observability проверки и planned reboot
+пройдены; backup-комплект скопирован на Mac с проверкой SHA-256.
+После приёмки удалены старые контейнеры и host Docker/Compose/containerd/runc
+packages; native Compose/Hermes source/state сохранены в закрытом recovery.
+Pulsar/прошивка станции не менялись. Runbook — KUBERNETES-OPERATIONS.md.
+Proxmox/HAOS/IaC/operator обсуждаются отдельно, их deploy ещё не выполнялся.

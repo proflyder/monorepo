@@ -1,0 +1,4 @@
+# Real deployment values are private. Every application is single-instance.
+nodeName: ""
+storage: {}
+workloads: {}

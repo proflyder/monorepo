@@ -1,5 +1,9 @@
 # INVENTORY — неттоп
 
+**Runtime обновлён 2026-10-27:** K3s `v1.35.9+k3s1`, local LV 150 GiB
+в `/srv/k3s`; Docker/Compose retired. [Эксплуатация](../../docs/KUBERNETES-OPERATIONS.md).
+Старые Compose paths ниже — исходная схема; каталоги данных продолжают работать как PV.
+
 
 > Публичная копия: serial/MAC, внешний адрес и tailnet-домен заменены примерами.
 > Реальные значения и исходные локальные документы — только в `secrets/`.
@@ -41,8 +45,8 @@
 | Пользователь | `labuser`; shell `zsh` + Oh My Zsh; sudo NOPASSWD |
 | Shell | zsh 5.9 + Oh My Zsh; тема `robbyrussell`, плагин `git` |
 | OMZ path | `/home/labuser/.oh-my-zsh` |
-| Docker | 29.1.3 |
-| Compose | 2.40.3 |
+| Docker | retired после перехода на K3s |
+| Compose | retired; текущий deploy — Helm |
 | HA | `ghcr.io/home-assistant/home-assistant:2026.10.4` |
 | HA URL | `http://192.0.2.26:8123`, `http://192.0.2.25:8123` |
 | Music Assistant | `ghcr.io/music-assistant/server:2.10.8`; UI `:8095`, stream `:8097`, Sendspin `:8927` |

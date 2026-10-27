@@ -1,0 +1,4 @@
+apiVersion: v2
+name: home-assistant-runtime
+version: 0.1.0
+description: Single-node HA voice runtime with explicit persistent data ownership

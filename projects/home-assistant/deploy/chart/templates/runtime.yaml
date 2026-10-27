@@ -1,0 +1,70 @@
+{{- range $name, $volume := .Values.storage }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  capacity:
+    storage: {{ $volume.size | quote }}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ricardo-existing
+  local:
+    path: {{ required "existing volume path required" $volume.path | quote }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [{{ required "nodeName required" $.Values.nodeName | quote }}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ricardo-existing
+  volumeName: {{ $.Release.Name }}-{{ $name }}
+  resources:
+    requests:
+      storage: {{ $volume.size | quote }}
+{{- end }}
+{{- range $name, $workload := .Values.workloads }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {app.kubernetes.io/name: {{ $name }}}
+spec:
+  replicas: {{ $workload.replicas | default 0 }}
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}}
+  template:
+    metadata:
+      {{- if eq $name "runtime-health-exporter" }}
+      annotations:
+        checksum/source: {{ $.Files.Get "files/health_exporter.py" | sha256sum }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        ricardo.io/collect-logs: {{ $workload.collectLogs | default "false" | quote }}
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: {{ $.Values.nodeName | quote }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 90
+      {{- with $workload.securityContext }}
+      securityContext: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        {{- toYaml $workload.containers | nindent 8 }}
+      volumes:
+        {{- toYaml $workload.volumes | nindent 8 }}
+{{- end }}
