@@ -54,6 +54,7 @@ class ChartContracts(unittest.TestCase):
                     "enabled": True,
                     "bindAddress": "192.0.2.27",
                     "allowedClient": "192.0.2.28/32",
+                    "matterEnabled": True,
                 },
             },
         }

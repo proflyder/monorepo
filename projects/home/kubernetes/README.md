@@ -1,9 +1,10 @@
 # Домашний Kubernetes
 
 Рабочая композиция: один K3s server/worker в Ubuntu VM `lab-k3s` на Proxmox,
-собственный containerd, MA/Matter/GigaAM/Whisper/Piper/Hermes, observability
-и Tailscale Operator. HA Core вынесен в отдельную HAOS VM. Pulsar и BLE
-gateway остаются на станции. Версии зафиксированы в `versions.sh`.
+собственный containerd, GigaAM/Whisper/Piper/Hermes, observability и
+Tailscale Operator. HA Core, **Music Assistant** и **Matter Server** живут
+в HAOS VM как add-ons; их старые PV сохранены Retain для отката. Pulsar и
+BLE gateway остаются на станции. Версии зафиксированы в `versions.sh`.
 
 - [Исследование и исходный план](../../../docs/PLAN-KUBERNETES-MIGRATION.md).
 - [Эксплуатация и восстановление](../../../docs/KUBERNETES-OPERATIONS.md).
@@ -15,8 +16,9 @@ gateway остаются на станции. Версии зафиксиров�
 `/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
 `/srv/k3s/runtime`. Новые observability PVC используют `local-retain`;
 существующие данные приложений — static local PV с Retain. Это локальное
-хранение, не репликация. VM `lab-k3s` использует Ethernet `192.0.2.27`;
-HAOS — `192.0.2.28`; host Proxmox — `192.0.2.26`.
+хранение, не репликация. VM `lab-k3s` — 8 GiB, Ethernet `192.0.2.27`;
+HAOS — 4 GiB, `192.0.2.28`; host Proxmox — `192.0.2.26`.
+MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`.
 
 ## Обновление
 

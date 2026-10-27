@@ -7,12 +7,12 @@
     attribute: source
   condition:
   - condition: template
-    value_template: '{{ trigger.to_state.attributes.source is not none }}'
+    value_template: "{{ state_attr(trigger.entity_id, 'source') is string }}"
   action:
   - choose:
     - conditions:
       - condition: template
-        value_template: '{{ trigger.to_state.attributes.source.startswith(''Spotify Connect'') }}'
+        value_template: "{{ (state_attr(trigger.entity_id, 'source') or '').startswith('Spotify Connect') }}"
       sequence:
       - service: input_select.select_option
         target:
@@ -21,7 +21,7 @@
           option: Spotify Connect
     - conditions:
       - condition: template
-        value_template: '{{ trigger.to_state.attributes.source == ''Music Assistant Queue'' }}'
+        value_template: "{{ state_attr(trigger.entity_id, 'source') == 'Music Assistant Queue' }}"
       sequence:
       - service: input_select.select_option
         target:

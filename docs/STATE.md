@@ -7,24 +7,31 @@
 - Proxmox VE `9.2.24` на внутреннем NVMe; hostname `pve`, management
   `vmbr0` на Ethernet `192.0.2.26/24`, root 64 GiB, swap 8 GiB,
   `local-lvm` около 379 GiB. SSH — отдельный ключ; PVE API/TLS проверены.
-- VM `100 haos`: 2 vCPU / 3 GiB / 32 GiB, UEFI, HAOS, `192.0.2.28/24`
-  (static in HAOS Supervisor); VM `101 lab-k3s`: 8 vCPU / 9 GiB / 200 GiB,
+- VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, UEFI, HAOS, `192.0.2.28/24`
+  (static in HAOS Supervisor); VM `101 lab-k3s`: 8 vCPU / 8 GiB / 200 GiB,
   Ubuntu 24.04.5, K3s, `192.0.2.27/24` (static netplan). Обе running,
-  guest agent включён, startup order 1/2.
+  guest agent включён, startup order 1/2; после memory apply K3s VM
+  перезагрузилась и кластер/приложения восстановились.
 - Terraform `projects/home/proxmox/terraform/main.tf` (provider 0.118.1,
   Terraform 1.17.0) создал обе VM; authoritative state — root-only
   `/var/lib/ricardo-terraform/` на PVE, копия — в `secrets/`.
   `terraform plan` — **No changes**; startup order задаётся отдельным
   host bootstrap `set-startup-order.sh`.
 - HAOS `2026.10.4`, Supervisor healthy. HA восстановлен из cold copy,
-  `internal_url=http://192.0.2.27:8123`, trusted proxy `192.0.2.27/32`;
-  integration endpoints переведены с loopback на K3s VM. Локальный
-  HA-совместимый endpoint `192.0.2.27:8123` — hostNetwork HAProxy
-  (`haos-proxy`) → HAOS `192.0.2.28:8123`; `/grafana` публикуется отдельно.
+  `internal_url=http://192.0.2.27:8123`, trusted proxy `192.0.2.27/32`.
+  Локальный HA-совместимый endpoint `192.0.2.27:8123` — hostNetwork
+  HAProxy (`haos-proxy`) → HAOS `192.0.2.28:8123`.
+- **HAOS add-ons:** Matter Server `9.2.0` (официальный `core_matter_server`,
+  остановлен до миграции, затем запущен; fabric/nodes проверены) и
+  Music Assistant `2.10.8` (`d5369777_music_assistant`, host network).
+  MA data скопированы из прежнего PV `runtime-music`; HA integration
+  автоматически переключилась на add-on endpoint, player Sendspin
+  зарегистрирован. Matter endpoint для HA — `ws://127.0.0.1:5580/ws`.
 - K3s `v1.35.9+k3s1`, node `lab-host` внутри VM; namespaces
-  `home-assistant`/`monitoring`/`tailscale`. В K3s: MA, Matter, GigaAM,
-  Whisper, Piper, Hermes gateway+proxy, health exporter, HAProxy и
-  observability. HA Core теперь в HAOS VM, не в K3s.
+  `home-assistant`/`monitoring`/`tailscale`. В K3s: GigaAM, Whisper, Piper,
+  Hermes gateway+proxy, health exporter, HAProxy и observability. MA/Matter
+  Deployments удалены; PV `runtime-music`/`runtime-matter` сохранены Retain
+  для отката. K3s kernel после reboot — `7.0.0-38-generic`.
 - Prometheus/Grafana/Alertmanager `kube-prometheus-stack` `92.14.0`;
   Loki `20.0.2`, Alloy `1.14.3`; четыре project dashboards доставляются
   Helm ConfigMap → Grafana sidecar. Prometheus/Loki не опубликованы.
@@ -35,14 +42,16 @@
   только LAN/Ethernet.
 - Hermes — revision `bf0203a794a07aac3ff764972ab9087baa4e4f4e`, собственный
   image, API extras/tini/SQLite 3.53.4; state в `/srv/k3s/volumes/hermes`.
-- Functional E2E после cutover: Kubernetes runtime 5/5, HA read-only 3/3,
-  Hermes read-only 3/3 + real chat 1/1, MCP HA 73 tools / MA 86 tools.
-  Alarm media URLs исправлены с прежнего `.25:8123` на
-  `192.0.2.27:8123`; HA internal URL и trusted proxy обновлены.
+- Functional E2E: Kubernetes runtime 5/5 (6 Deployments, 7 health endpoints),
+  HA read-only 3/3, Hermes read-only 3/3 + real chat 1/1, MCP HA 73 /
+  MA 86 tools. HA integration Music Assistant работает через add-on,
+  Matter add-on подключён; alarm media URLs — `.27:8123`.
 - Cold backup 11 PVC, host recovery, EFI и custom images сохранены на Mac
-  вне Git с SHA-256; HAOS partial backup создан. Полный disaster restore
-  на запасном железе, power-loss VM/host reboot и длительное наблюдение
-  ещё не выполнялись.
+  вне Git с SHA-256; HA full backup до миграции (`pre-ma-matter-addons`),
+  K3s tar `runtime-music`/`runtime-matter` и полный HA backup после
+  миграции с обоими add-ons (`final-ma-matter`) сохранены. Полный
+  disaster restore на запасном железе и длительный power-loss тест ещё
+  не выполнялись.
 - VM `.27/.28` переведены на static внутри guests; router reservations не
   требуются для них. Открытые вопросы: переход Proxmox host на Wi-Fi
   (сейчас Ethernet), offsite backup, host Tailscale emergency access.
@@ -58,8 +67,10 @@
 - K3s data-dir `/srv/k3s/runtime`; application PV — Retain local PV/PVC.
   Старые каталоги `/home/labuser/nettop/...` больше не являются рабочим
   host filesystem; актуальные пути — внутри VM и в private values.
-- HA/MA/Matter/STT/TTS/Hermes endpoints используют LAN `.27`; HAOS —
-  `.28`; старый loopback-address заменён через HAProxy/EndpointSlice.
+- Voice/Hermes endpoints остаются на K3s `.27`; HAOS `.28`. MA — HAOS
+  add-on, HA integration использует add-on endpoint; Matter — HAOS add-on
+  localhost. K3s health exporter проверяет HA `.27:8123` и MA `.28:8095`,
+  voice/Hermes — `.27`; Matter из K3s больше не проверяется.
   Pulsar и BLE gateway на станции не менялись.
 - `helm` releases: `runtime`, `monitoring`, `ha-observability`, `loki`,
   `alloy`, `tailscale-operator`, `home-access`; все применены и проверены.
@@ -76,10 +87,10 @@
 > Только этот файл владеет текущими фактами. Не дублировать их в README/CONTEXT.
 > Команды — `OPERATIONS.md`; задачи — `PENDING.md`; хронология — `HISTORY.md`.
 
-**Снимок:** 2026-10-28 01:20 (+05)  
-**Последний статус:** Proxmox/HAOS/K3s cutover; K3s runtime 5/5,
-HA read-only 3/3, Hermes read-only 3/3 + real chat 1/1 (2026-10-28).
-Ранее: `logs/status-20261027-ricardo6.txt`; persona/music:
+**Снимок:** 2026-10-28 02:35 (+05)  
+**Последний статус:** Proxmox/HAOS/K3s cutover + MA/Matter HAOS add-ons;
+K3s runtime 5/5, HA read-only 3/3, Hermes read-only 3/3 + real chat 1/1
+(2026-10-28). Ранее: `logs/status-20261027-ricardo6.txt`; persona/music:
 `logs/status-20261027-ricardo-persona.txt`; Matter:
 `logs/status-20261027-matter.txt`; Xiaomi:
 `logs/status-20261027-xiaomi-home.txt`; TTS:
@@ -301,8 +312,8 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
 
 - DEXP Jupiter JU01CY: i7-12650H, 16 GiB RAM, NVMe; Proxmox VE `9.2.24`
   на host, kernel `7.0.14-26-pve`; management Ethernet `192.0.2.26`.
-  K3s VM `lab-k3s` — Ubuntu 24.04.5, kernel `6.8.0-147-generic`,
-  `192.0.2.27`; HAOS VM — `192.0.2.28`.
+  K3s VM `lab-k3s` — Ubuntu 24.04.5, kernel `7.0.0-38-generic`,
+  8 GiB, `192.0.2.27`; HAOS VM — 4 GiB, `192.0.2.28`.
 - Wi-Fi RTL8821CE на Proxmox host сейчас DOWN; PCI mapping `home-wifi`
   создан, но не передан VM. Ethernet остаётся обязательным до отдельного
   Wi-Fi/routed-проекта. Старые MOK/DKMS-заметки относятся к прежней
@@ -326,11 +337,10 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
   Дубликат HomeKit Controller `MiBedsideLamp2-F723` удалён; backup
   `~/backups/ha-duplicate-lamp-20261027-114648/`. Для каждой лампы ровно одна
   `light.*`-сущность Xiaomi Home.
-- Matter Server `matterjs-server` (1.5.5, matter.js 0.18) в K3s:
-  host network, `PRIMARY_INTERFACE=eth0`, WebSocket `192.0.2.27:5580`
-  (HAOS access через HAProxy), данные `/srv/k3s/volumes/runtime-matter`.
-  HA integration `Matter` (`01M5Y0758DM9RS34XGESD2EKXG`,
-  `use_addon=false`) подключена к `ws://192.0.2.27:5580/ws`.
+- Matter Server `9.2.0` — HAOS add-on `core_matter_server`, host network,
+  WebSocket `ws://127.0.0.1:5580/ws`. HA integration `Matter`
+  (`01M5Y0758DM9RS34XGESD2EKXG`) подключена; nodes пока 0.
+  Прежний K3s `runtime-matter` PV сохранён Retain для отката.
   Matter-устройства ещё не добавлены; лента Яндекса ожидает pairing.
 - STT primary: `wyoming-onnx-stt` `:10305` (GigaAM v3 CTC int8, CPU, ru);
   Whisper `medium-int8` `:10300` — fallback. HA pipeline `stt.onnx_asr`.
@@ -341,7 +351,7 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
   ChatGPT/Codex OAuth. MCP:
   - HA MCP Server `http://192.0.2.27:8123/api/mcp` — **73 tools**,
     resources и prompts (без `tools.include`), token `HERMES_HA_TOKEN`;
-  - Music Assistant FastMCP plugin `http://192.0.2.27:8095/mcp/v1` — **86
+  - Music Assistant FastMCP plugin `http://192.0.2.28:8095/mcp/v1` — **86
     tools**, token `HERMES_MA_TOKEN`; плагин `fastmcp_server` loaded, все
     permission flags (query/control/edit/delete/debug/config/resources)
     включены, `require_auth=true`, `require_confirmation=false`;
@@ -364,9 +374,9 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
 - Тесты после cutover: Kubernetes runtime 5/5, HA read-only 3/3/Hermes
   read-only 3/3 + real chat 1/1; MCP HA 73 / MA 86 tools; HA config check
   `RC=0`. Полные live audio/microphone тесты остаются отдельными.
-- HAOS `:8123` (и proxy `.27:8123`), MA `.27:8095`/stream `8097`/Sendspin
-  `8927`; Whisper `.27:10300`, Piper `.27:10200`, GigaAM `.27:10305`;
-  HA/MA/Whisper/Piper — healthy.
+- HAOS `:8123` (и proxy `.27:8123`), MA add-on `.28:8095`/stream `8097`/
+  Sendspin `8927`; Whisper `.27:10300`, Piper `.27:10200`, GigaAM
+  `.27:10305`; HA/MA/Whisper/Piper — healthy.
 - **Remote access:** Tailscale Operator `1.104.2` в K3s;
   `https://pl-home.example-tailnet.ts.net/` → HAOS, `/grafana/` → Grafana.
   `pl-home` DNS указывает на operator proxy с `tag:k8s`; старый host Serve

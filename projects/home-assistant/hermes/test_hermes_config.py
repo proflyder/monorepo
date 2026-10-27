@@ -38,7 +38,7 @@ class HermesConfigTests(unittest.TestCase):
 
     def test_music_assistant_mcp_is_configured(self):
         server = self.data["mcp_servers"]["music-assistant"]
-        assert server["url"] == "http://127.0.0.1:8095/mcp/v1"
+        assert server["url"] == "http://192.0.2.28:8095/mcp/v1"
         assert server["headers"]["Authorization"] == "Bearer ${HERMES_MA_TOKEN}"
         assert server["trust"] == "full"
         assert "include" not in server["tools"]

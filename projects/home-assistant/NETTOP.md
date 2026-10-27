@@ -1,8 +1,8 @@
 # NETTOP — домашний сервер HA
 
 **Текущий runtime 2026-10-28:** Proxmox VE; HAOS VM `100` (`.28`) и
-Ubuntu/K3s VM `101` (`.27`). HA Core — в HAOS, MA/Matter/STT/TTS/Hermes —
-в K3s; вход — Tailscale Operator. Ethernet host `.26`; Wi-Fi пока DOWN.
+Ubuntu/K3s VM `101` (`.27`). HA Core, MA и Matter add-ons — в HAOS;
+STT/TTS/Hermes — в K3s; вход — Tailscale Operator. Ethernet host `.26`; Wi-Fi пока DOWN.
 Текущие команды — [Kubernetes runbook](../../docs/KUBERNETES-OPERATIONS.md)
 и [Proxmox runbook](../../docs/INSTALL-PROXMOX.md).
 
@@ -24,9 +24,9 @@ DHCP reservations, power-loss reboot и offsite backup — открыты.
 | Параметр | Значение |
 |---|---|
 | Proxmox host | PVE `9.2.24`, DNS `pve.home.arpa`, management `vmbr0` `.26` |
-| HAOS VM 100 | HAOS `2026.10.4`, 2 vCPU / 3 GiB / 32 GiB, `.28` |
-| K3s VM 101 | Ubuntu 24.04.5, 8 vCPU / 9 GiB / 200 GiB, `.27` |
-| K3s | `v1.35.9+k3s1`, node `lab-host` |
+| HAOS VM 100 | HAOS `2026.10.4`, 2 vCPU / 4 GiB / 32 GiB, `.28`; Matter/MA add-ons |
+| K3s VM 101 | Ubuntu 24.04.5, 8 vCPU / 8 GiB / 200 GiB, `.27` |
+| K3s | `v1.35.9+k3s1`, node `lab-host`; voice/Hermes/observability |
 | HA endpoint | HAOS `.28:8123`; compatibility proxy `.27:8123` |
 | Remote | Tailscale Operator `1.104.2`; `pl-home` → HAOS, `/grafana` |
 | Terraform | provider `bpg/proxmox` 0.118.1; state root-only на PVE |

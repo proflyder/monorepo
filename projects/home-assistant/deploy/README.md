@@ -1,17 +1,19 @@
 # Kubernetes runtime Home Assistant
 
-Chart `chart/` управляет MA, Matter, Piper, Whisper, GigaAM, Hermes
+Chart `chart/` управляет Piper, Whisper, GigaAM, Hermes
 (gateway+proxy в одном Pod), TCP health exporter и hostNetwork HAProxy
-`haos-proxy`. HA Core сейчас работает отдельно в HAOS VM; HA workload в
-чарте оставлен только как legacy-опция. Все приложения используют
-hostNetwork для сохранения loopback и LAN discovery. Каждый Deployment
-имеет Recreate; данные сохраняются в Retain local PV/PVC.
+`haos-proxy`. HA Core, **Music Assistant** и **Matter Server** сейчас
+работают отдельно в HAOS как add-ons; их workload-блоки в чарте оставлены
+только как legacy/rollback-опция. Все приложения используют hostNetwork
+для сохранения loopback и LAN discovery. Каждый Deployment имеет Recreate;
+данные сохраняются в Retain local PV/PVC.
 
 `haProxy.enabled` включает HAProxy `192.0.2.27:8123` → HAOS
 `192.0.2.28:8123`; `haProxy.privateBridge` открывает `.27:8643` (voice proxy)
-и `.27:5580` (Matter) только для HAOS `/32`. Реальные upstream/ACL — в
-private values. HAOS `internal_url` и trusted proxy должны указывать на
-`.27`, а не на старый host loopback.
+для HAOS `/32`. Matter bridge `.27:5580` теперь выключен по умолчанию
+(`matterEnabled=false`), потому что Matter работает внутри HAOS.
+Реальные upstream/ACL — в private values. HAOS `internal_url` и trusted
+proxy должны указывать на `.27`, а не на старый host loopback.
 
 Tracked `values.yaml` пуст: реальные images/digests, host paths и параметры
 развёртывания находятся в приватных values. Ключи Hermes передаются отдельно

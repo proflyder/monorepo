@@ -79,7 +79,7 @@ ss -lntp | grep -E ':(10200|10300|10305|5580)\b'
 Текущие адреса после Proxmox cutover:
 
 - HAOS: `http://192.0.2.28:8123`; compatibility proxy `http://192.0.2.27:8123`
-- MA: `http://192.0.2.27:8095`
+- MA: HAOS add-on `http://192.0.2.28:8095`
 - Whisper/Piper: TCP `192.0.2.27:10300`/`10200`, UI нет
 
 Старые `.26/.25` адреса ниже относятся к прежнему Ubuntu/Container runtime.

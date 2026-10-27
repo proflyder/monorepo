@@ -28,7 +28,7 @@ def kubectl(*args):
 class KubernetesRuntime(unittest.TestCase):
     def test_all_workloads_ready_and_single_instance(self):
         data = kubectl("-n", "home-assistant", "get", "deployments")
-        self.assertEqual(len(data["items"]), 8)
+        self.assertEqual(len(data["items"]), 6)
         for item in data["items"]:
             with self.subTest(workload=item["metadata"]["name"]):
                 self.assertEqual(item["spec"]["replicas"], 1)
@@ -52,12 +52,14 @@ class KubernetesRuntime(unittest.TestCase):
         self.assertTrue({"ricardo-nettop", "ricardo-runtime", "ricardo-cluster", "ricardo-logs"} <= uids)
 
     def test_prometheus_endpoint_checks(self):
-        query = urllib.parse.urlencode({"query": "ricardo_endpoint_up"})
+        query = urllib.parse.urlencode({
+            "query": 'max by (endpoint) (ricardo_endpoint_up{endpoint=~"ha|music_assistant|piper|whisper|gigaam|hermes|voice_proxy"})'
+        })
         data = get(os.environ["PROMETHEUS_URL"].rstrip("/") + "/api/v1/query?" + query)
         values = data["data"]["result"]
-        self.assertEqual(len(values), 8)
+        self.assertEqual(len(values), 7)
         self.assertEqual({v['metric'].get('endpoint') for v in values},
-                         {'ha', 'music_assistant', 'matter', 'piper', 'whisper',
+                         {'ha', 'music_assistant', 'piper', 'whisper',
                           'gigaam', 'hermes', 'voice_proxy'})
         for value in values:
             self.assertEqual(float(value["value"][1]), 1.0, value["metric"].get("endpoint"))

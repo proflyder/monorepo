@@ -9,8 +9,9 @@ K3s runtime восстановлены, Tailscale Operator опубликова�
 
 ```text
 PVE host         192.0.2.26   Ethernet vmbr0; Wi-Fi пока DOWN
-VM 100 haos      192.0.2.28   2 vCPU / 3 GiB / 32 GiB; static
-VM 101 lab-k3s   192.0.2.27   8 vCPU / 9 GiB / 200 GiB; static
+VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB; static
+                 add-ons: Matter 9.2.0, Music Assistant 2.10.8
+VM 101 lab-k3s   192.0.2.27   8 vCPU / 8 GiB / 200 GiB; static
 HA compatibility 192.0.2.27:8123 -> HAOS:8123 (HAProxy hostNetwork)
 ```
 

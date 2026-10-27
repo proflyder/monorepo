@@ -22,13 +22,13 @@ Mac 192.0.2.11 (Quasar/MITM kit; не активен, нужен для factory 
 
 Proxmox host 192.0.2.26 (Ethernet; Wi-Fi .25 DOWN)
   ├── VM 100 HAOS 192.0.2.28 — HA/Supervisor :8123
+  │     ├── Matter Server add-on :5580 (localhost)
+  │     ├── Music Assistant add-on :8095 (stream :8097, Sendspin :8927)
+  │     └── ESPHome integration ← Pulsar :6053
   └── VM 101 lab-k3s 192.0.2.27 — Ubuntu + K3s
       ├── HA compatibility HAProxy .27:8123 → HAOS
-      ├── Music Assistant :8095 (stream :8097, Sendspin :8927)
-      ├── Matter Server :5580 (host network, IPv6/mDNS)
       ├── STT :10305 GigaAM v3, :10300 Whisper fallback
       ├── Piper TTS :10200 (ru_puriso2-medium)
-      ├── ESPHome integration в HAOS ← Pulsar :6053
       ├── Hermes gateway :8642 (loopback) + voice proxy :8643
       └── Tailscale Operator: pl-home → HAOS, /grafana → Grafana
 ```

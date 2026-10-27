@@ -4,7 +4,7 @@ import os
 import socket
 import time
 
-ENDPOINTS = {"ha": 8123, "music_assistant": 8095, "matter": 5580,
+ENDPOINTS = {"ha": 8123, "music_assistant": 8095,
              "piper": 10200, "whisper": 10300, "gigaam": 10305,
              "hermes": 8642, "voice_proxy": 8643}
 

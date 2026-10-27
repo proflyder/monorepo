@@ -5,9 +5,9 @@
 ## Текущее состояние 2026-10-28
 
 PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
-2 vCPU/3 GiB/32 GiB) и VM `101 lab-k3s` (`192.0.2.27`,
-8 vCPU/9 GiB/200 GiB) running, static IP в guests, startup order 1/2.
-Terraform plan — no changes;
+2 vCPU/4 GiB/32 GiB) и VM `101 lab-k3s` (`192.0.2.27`,
+8 vCPU/8 GiB/200 GiB) running, static IP в guests, startup order 1/2.
+HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`. Terraform plan — no changes;
 state root-only на PVE и копия в `secrets/`. HAOS восстановлен, K3s runtime
 и Tailscale Operator приняты read-only E2E. HA-совместимый endpoint
 `192.0.2.27:8123` обслуживает HAProxy chart `haos-proxy`.

@@ -37,7 +37,7 @@ resource "proxmox_virtual_environment_vm" "haos" {
     type  = "host"
   }
   memory {
-    dedicated = 3072
+    dedicated = 4096
   }
   agent {
     enabled = true
@@ -82,7 +82,7 @@ resource "proxmox_virtual_environment_vm" "k3s" {
     cores = 8
     type  = "host"
   }
-  memory { dedicated = 9216 }
+  memory { dedicated = 8192 }
   agent {
     enabled = true
     wait_for_ip { disabled = true }

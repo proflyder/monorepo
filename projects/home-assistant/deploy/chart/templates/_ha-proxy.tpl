@@ -18,11 +18,13 @@ frontend voice_proxy_ingress
   default_backend voice_proxy
 backend voice_proxy
   server local_voice 127.0.0.1:8643 check
+{{- if .Values.haProxy.privateBridge.matterEnabled }}
 frontend matter_api_ingress
   bind {{ .Values.haProxy.privateBridge.bindAddress }}:5580
   tcp-request connection reject if !{ src {{ .Values.haProxy.privateBridge.allowedClient }} }
   default_backend matter_api
 backend matter_api
   server local_matter 127.0.0.1:5580 check
+{{- end }}
 {{- end }}
 {{- end -}}

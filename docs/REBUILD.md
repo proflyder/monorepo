@@ -4,6 +4,8 @@
 [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md) и
 [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md).** С 2026-10-28 runtime — Proxmox +
 HAOS VM + Ubuntu/K3s VM; Terraform state и VM recovery — отдельный слой.
+Music Assistant и Matter Server — HAOS add-ons; Whisper/GigaAM/Piper/Hermes —
+K3s.
 Kubernetes cluster/PV/auth восстанавливаются из migration recovery-комплекта;
 Docker/Ubuntu/HA Container-разделы ниже описывают **прежний** вариант.
 Не запускать одновременно Kubernetes/native services на одних данных.

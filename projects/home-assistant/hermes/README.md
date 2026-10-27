@@ -21,7 +21,7 @@ the full Home Assistant MCP surface and the Music Assistant MCP server.
 | Config | `~/.hermes/config.yaml` |
 | Secrets | `~/.hermes/.env` (mode `600`) |
 | MCP HA | `http://127.0.0.1:8123/api/mcp` (HA MCP Server, streamable HTTP) |
-| MCP MA | `http://127.0.0.1:8095/mcp/v1` (Music Assistant FastMCP plugin) |
+| MCP MA | `http://192.0.2.28:8095/mcp/v1` (Music Assistant FastMCP plugin; HAOS add-on) |
 | API | `http://127.0.0.1:8642/v1` (OpenAI-compatible, loopback only) |
 | Model | ChatGPT/Codex subscription via `openai-codex` |
 

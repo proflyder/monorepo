@@ -9,10 +9,13 @@
 
 - Proxmox VE host `192.0.2.26`; VM `101 lab-k3s` — Ubuntu 24.04.5,
   K3s `v1.35.9+k3s1`, node `lab-host`, `192.0.2.27`.
-- VM `100 haos` — HAOS `2026.10.4`, HA Core/Supervisor, `192.0.2.28`.
+- VM `100 haos` — HAOS `2026.10.4`, 4 GiB, HA Core/Supervisor, `192.0.2.28`;
+  add-ons Matter Server `9.2.0` и Music Assistant `2.10.8`.
   HA больше не Deployment в K3s.
-- Namespace `home-assistant`: MA/Matter/GigaAM/Whisper/Piper, Hermes
-  gateway+proxy, health exporter и `haos-proxy` (hostNetwork HAProxy).
+- VM `101 lab-k3s` — 8 GiB; namespaces `home-assistant`: GigaAM/Whisper/
+  Piper, Hermes gateway+proxy, health exporter и `haos-proxy`
+  (hostNetwork HAProxy). MA/Matter Deployments удалены; их Retain PV
+  `runtime-music`/`runtime-matter` сохранены для отката.
 - Namespace `monitoring`: Prometheus/Alertmanager/Grafana, Operator,
   kube-state-metrics/node-exporter, Loki и Alloy.
 - Namespace `tailscale`: Operator и ingress proxy; `pl-home` → HAOS,
@@ -33,9 +36,10 @@ K3s data-dir, собственный containerd, cluster datastore и local-path
 provisioner. `/srv/k3s/volumes/hermes` — writable Hermes home, в Pod
 `/opt/data`. `/srv/k3s/recovery` — закрытые recovery-файлы внутри VM.
 
-MA/Matter/STT/TTS и Hermes используют Retain local PV/PVC. `runtime-ha`
-PVC сохранён как архив прежнего HA Container, но HAOS сейчас пишет в свой
-Supervisor data path, а не в этот PVC. **Не удалять старые PV и каталоги
+STT/TTS и Hermes используют Retain local PV/PVC. `runtime-music` и
+`runtime-matter` больше не подключены к Pod'ам: это rollback-копии данных
+MA/Matter, перенесённых в HAOS add-ons. `runtime-ha` PVC сохранён как архив
+прежнего HA Container. **Не удалять старые PV и каталоги
 `/srv/k3s/volumes/*` без отдельной проверки.** Все application PV и
 observability StorageClass имеют reclaimPolicy Retain.
 
@@ -120,14 +124,16 @@ Tailscale публикует не host Serve, а Kubernetes Ingress `home`:
 Ethernet host `vmbr0` — единственный uplink. Wi-Fi `wlp4s0` на Proxmox host
 DOWN, PCI mapping создан но не передан VM. Не отключать Ethernet и не менять
 node-ip/flannel-iface без отдельного routed/NAT-проекта и проверки discovery.
-Matter сейчас `PRIMARY_INTERFACE=eth0`; `wlp4s0` в старых private values
-относится к прежнему host.
+Matter теперь HAOS add-on и не использует K3s `PRIMARY_INTERFACE`; старые
+K3s Matter values сохранены только как rollback. MA также HAOS add-on.
+K3s VM — 8 GiB, HAOS VM — 4 GiB.
 
 `ricardo-k3s-firewall.service` ограничивает INPUT на 6443/10250/9100/9116 и
 8472/udp; localhost, pod CIDR и сам node разрешены. С Mac проверено, что
 управляющие/metrics TCP-порты недоступны напрямую в LAN. HAOS/voice endpoints
-сохранены через HAProxy `.27:8123`, `.27:8643`, `.27:5580`. Не включать UFW
-поверх этих правил без проверки.
+сохранены через HAProxy `.27:8123` и `.27:8643`; Matter/MA add-ons
+доступны только в HAOS (`127.0.0.1:5580`/`:8095`), MA — также `.28:8095`.
+Не включать UFW поверх этих правил без проверки.
 
 Swap в K3s VM — `/swap.img` выключен; на Proxmox host swap 8 GiB. K3s
 резервирует по 1 GiB system/kube памяти; CRI log rotation 10Mi × 3.

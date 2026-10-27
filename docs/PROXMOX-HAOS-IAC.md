@@ -71,8 +71,9 @@ Proxmox bare-metal — смена хостовой ОС/ядра/сетевог�
 Свободный VG объём не делает переустановку системного диска неразрушающей.
 
 RAM неттопа — 16 GB (14.85 GiB доступны ОС). Текущее распределение: HAOS
-3 GiB, K3s 9 GiB, остальное Proxmox host; после cutover занято около 13 GiB,
-доступно около 1.9 GiB без swap. Не увеличивать гостей без измерения;
+4 GiB, K3s 8 GiB, остальное Proxmox host; после cutover занято около 13 GiB,
+доступно около 1.9 GiB без swap. MA/Matter перенесены в HAOS как add-ons;
+Whisper/GigaAM/Piper оставлены в K3s. Не увеличивать гостей без измерения;
 power-loss/reboot-тест ещё впереди.
 
 ## Tailscale Operator

@@ -11,3 +11,5 @@ haProxy:
     enabled: false
     bindAddress: ""
     allowedClient: ""
+    # Matter Server is now a HAOS add-on; keep this only for a K3s rollback.
+    matterEnabled: false

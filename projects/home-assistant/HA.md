@@ -1,15 +1,16 @@
 # HA — Home Assistant OS VM на Proxmox
 
 **Текущий HA Core работает в HAOS VM, а не в Kubernetes.** HAOS `2026.10.4`,
-Supervisor healthy; VM `100` — 2 vCPU / 3 GiB / 32 GiB, `192.0.2.28`.
+Supervisor healthy; VM `100` — 2 vCPU / 4 GiB / 32 GiB, `192.0.2.28`.
 HA-совместимый endpoint `192.0.2.27:8123` — HAProxy в K3s, проксирует в HAOS;
 внешний вход — Tailscale Operator. Актуальные операции — [Kubernetes
 runbook](../../docs/KUBERNETES-OPERATIONS.md) и [Proxmox runbook](../../docs/INSTALL-PROXMOX.md).
 
-Music Assistant `2.10.8` с Spotify в K3s; HA Assist base
-(Whisper/Piper/pipeline «Рикардо») развёрнут; Pulsar `v0.4.1-ricardo6`
-подключён как satellite и Sendspin-плеер. Старые Container/Compose команды
-ниже — **legacy recovery**, не запускать второй writer.
+HAOS add-ons: **Matter Server `9.2.0`** и **Music Assistant `2.10.8`**
+(host network, data внутри HAOS). HA Assist base (Whisper/Piper/pipeline
+«Рикардо») остаётся в K3s; Pulsar `v0.4.1-ricardo6` подключён как satellite
+и Sendspin-плеер. Старые Container/Compose команды ниже — **legacy recovery**,
+не запускать второй writer.
 
 ## 1. История: почему раньше был Container
 

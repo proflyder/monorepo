@@ -62,16 +62,16 @@ Wi-Fi RTL8821CE на Proxmox host сейчас DOWN; PCI mapping создан, �
 | Compose | retired; текущий deploy — Helm |
 | HA | HAOS `2026.10.4` VM (was `ghcr.io/home-assistant/home-assistant:2026.10.4` Container) |
 | HA URL | HAOS `http://192.0.2.28:8123`; compatibility `http://192.0.2.27:8123` |
-| Music Assistant | `ghcr.io/music-assistant/server:2.10.8`; UI `:8095`, stream `:8097`, Sendspin `:8927` |
-| Matter Server | `ghcr.io/matter-js/matterjs-server:stable`; `:5580` loopback; HA integration `Matter`; devices pending |
+| Music Assistant | HAOS add-on `2.10.8`; UI `.28:8095`, stream `:8097`, Sendspin `:8927` |
+| Matter Server | HAOS add-on `core_matter_server 9.2.0`; `127.0.0.1:5580`; HA integration `Matter`; devices pending |
 | Xiaomi Home | custom integration `v0.5.0`; HA custom_components; China login/device `MJGJD02YL` pending |
-| MA URL | `http://192.0.2.27:8095`; setup завершён, Spotify playback проверен |
+| MA URL | `http://192.0.2.28:8095`; add-on data перенесены из `runtime-music`, Spotify playback проверен |
 | Stack root | `/home/labuser/nettop` |
 | Stack entry | `/home/labuser/nettop/ctl.sh` |
 | HA config | `/home/labuser/nettop/homeassistant/config` |
 | HA compose | `/home/labuser/nettop/docker-compose.yml` |
-| MA data | `/home/labuser/nettop/data/music-assistant` |
-| Matter data | `/home/labuser/nettop/data/matter-server` |
+| MA data | HAOS `/mnt/data/supervisor/apps/data/d5369777_music_assistant` |
+| Matter data | HAOS `/mnt/data/supervisor/apps/data/core_matter_server` |
 | GigaAM STT | `lmo3/wyoming-onnx-stt:latest`, `:10305`, `gigaam-v3-ctc` int8, CPU, ru |
 | Whisper fallback | `rhasspy/wyoming-whisper:3.8.1`, `:10300`, `medium-int8`, ru |
 | Piper | `rhasspy/wyoming-piper:2.5.2`, `:10200`, `ru_puriso2-medium` (Puriso; Irina сохранена) |

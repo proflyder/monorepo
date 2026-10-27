@@ -912,3 +912,22 @@ archives и custom images staged на PVE с повторной проверко
   HTTP 200. HAOS partial backup создан.
 - Не проверены: полный power-loss restore/reboot, DHCP reservations,
   Wi-Fi/routed-схема, offsite backup, живой микрофон/alarm/Spotify transfer.
+
+## 2026-10-28 — Matter и Music Assistant перенесены в HAOS add-ons
+
+- HAOS VM увеличена до 4 GiB, K3s VM уменьшена до 8 GiB; Terraform plan —
+  только memory update, K3s VM перезагрузилась, кластер и приложения
+  восстановились.
+- Matter Server `9.2.0` запущен как HAOS add-on; HA Matter integration
+  переключена на `ws://127.0.0.1:5580/ws`; K3s Matter Deployment удалён,
+  `runtime-matter` PV сохранён Retain.
+- Music Assistant `2.10.8` установлен как HAOS add-on. K3s MA остановлен,
+  data `runtime-music` (SQLite/settings/Spotify/Sendspin) скопированы в
+  add-on data. HA integration переключилась на add-on, station player
+  зарегистрирован; Hermes MCP переключён на `.28:8095`; K3s MA Deployment
+  удалён, `runtime-music` PV сохранён Retain.
+- Health exporter сокращён до 7 endpoints (без K3s Matter), MA проверяется
+  на HAOS `.28`; monitoring E2E обновлён. HA full backup до миграции и
+  tar-копии MA/Matter сохранены вне Git.
+- Whisper/GigaAM/Piper оставлены в K3s: перенос в HAOS не даёт выигрыша
+  по latency и требует больше RAM/версионной совместимости.

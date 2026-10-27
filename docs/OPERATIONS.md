@@ -1,10 +1,11 @@
 # OPERATIONS — runbook
 
 **Неттоп: текущий runtime — Proxmox + HAOS VM + K3s VM.** Команды
-HA/MA/Hermes, мониторинг и восстановление —
-[KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md); HA Core теперь в
-HAOS, не в K3s. Docker/HA Container-команды ниже относятся к прежнему
-runtime. Команды самой станции не менялись.
+HA/Hermes, мониторинг и восстановление —
+[KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md); HA Core, Music
+Assistant и Matter Server теперь в HAOS (MA/Matter — add-ons), не в K3s.
+Docker/HA Container-команды ниже относятся к прежнему runtime. Команды
+самой станции не менялись.
 
 Стабильные команды и откаты. Текущие факты — только в `STATE.md`.
 
@@ -425,8 +426,9 @@ brightness и color temperature; BLE-пульт отдельно не добав
 
 ## Matter Server (неттоп)
 
-Matter-контроллер — отдельный контейнер `matterjs-server` в
-`/home/labuser/nettop`, host network, WebSocket только на loopback.
+> **С 2026-10-28 Matter Server — HAOS add-on `core_matter_server 9.2.0`,
+> `ws://127.0.0.1:5580/ws`.** Команды ниже относятся к прежнему K3s/native
+> контейнеру и сохранены как legacy/rollback.
 
 ```bash
 cd /home/labuser/nettop
@@ -525,7 +527,7 @@ Pipeline `Рикардо` использует `conversation.hermes_agent` и
 от него. MCP-серверы и настройки — `projects/home-assistant/hermes/config.fragment.yaml`.
 
 MA MCP включён как плагин Music Assistant `MCP Server`
-(`Settings → Providers`): endpoint `http://127.0.0.1:8095/mcp/v1`, все
+(`Settings → Providers`): endpoint `http://192.0.2.28:8095/mcp/v1`, все
 permission flags, token `MCP — Hermes` в `HERMES_MA_TOKEN`. Плагин
 experimental; откат — удалить `mcp_servers.music-assistant` из Hermes и
 выключить плагин. Проверка:
