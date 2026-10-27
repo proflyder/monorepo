@@ -867,3 +867,18 @@ x86-64 ISO 9.2-1, проверен SHA-256. Свежая cold copy 11 PVC, host 
 интерактивный SSH bootstrap и INSTALL-PROXMOX.md. Это recovery-файлы, не образ
 всего диска; полный disaster restore ещё не проверен. Proxmox пока не установлен,
 HAOS/Terraform/Operator не развёрнуты. Следующий шаг требует USB/консоли пользователя.
+
+## 2026-10-27 — Pulsar Rust fork: профиль Ricardo (не установлен)
+
+- Склонирован отдельный форк `proflyder/pulsar` (база v0.5.0) в
+  `projects/station/upstream/pulsar-rust/`; активный C++ `v0.4.1-ricardo6`
+  не менялся и на станцию ничего не устанавливалось.
+- В Rust-версию перенесены on-device «Рикардо», pre-roll 0.5 с, тихая отмена
+  `stt-no-text-recognized`, передача «Рикардо, стоп» в HA во время диалога и
+  локальные команды только во время воспроизведения. Zigbee runtime выключен,
+  `nearest_answers=0`, обновления — только с форка, `auto_update=0`.
+- Detector собран как C++ bridge (`pulsar-audio/ricardo/`) с тем же
+  microfrontend и `libtflite.so`, что и C++-сборка; модель не коммитится.
+- Cross-build aarch64/armhf, clippy обоих targets, 30/30 `pulsar`,
+  20/20 `pulsar-audio`, Go installer tests — pass. HIL/микрофон/ESPHome/
+  Spotify/MA/откат остаются отдельным gate.

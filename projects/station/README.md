@@ -7,6 +7,7 @@ BLE gateway и provisioning. Это **не** HA и не TTS-стек.
 
 ```text
 projects/station/upstream/pulsar/        upstream Pulsar + локальные изменения
+projects/station/upstream/pulsar-rust/   отдельный Rust-форк (не установлен)
 projects/station/patches/pulsar/          snapshots локальных правок
 projects/station/ble-gateway/       BLE provisioning gateway (пока вне Bazel)
 projects/station/scripts/station-*        station-side операции
@@ -14,6 +15,9 @@ docs/OTA-FORTRESS.md
 docs/PROVISIONING.md
 docs/WAKE-WORD.md
 ```
+
+Rust-форк и профиль Ricardo: [`PULSAR-RUST.md`](PULSAR-RUST.md). Он не
+заменяет активный Pulsar и не устанавливается без отдельной HIL-приёмки.
 
 ## Границы
 

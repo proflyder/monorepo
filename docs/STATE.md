@@ -132,6 +132,11 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
 
 - Установка `pulsar-install --no-enable` на `.160`, затем `ctl.sh enable`;
   `ctl.sh disable` возвращает штатный стек, reboot — autostart.
+- Отдельный Rust-форк `proflyder/pulsar` (ветка `feat/ricardo-rust`, база
+  v0.5.0) склонирован в `projects/station/upstream/pulsar-rust/`; профиль
+  Ricardo, cross-build aarch64/armhf и unit-тесты проходят, но на станцию **не
+  установлен**. Активен C++ `v0.4.1-ricardo6`. Границы и HIL-gate —
+  [`projects/station/PULSAR-RUST.md`](../projects/station/PULSAR-RUST.md).
 - Железо: 4 микрофона/VQE, LED/кольцо/логотип, часы, GStreamer, hardware
   mute, кнопки/volume; HA ESPHome — 33 entities, API шифруется.
 - Pipeline `Рикардо`: RU, `stt.onnx_asr` (GigaAM v3 CTC int8; Whisper

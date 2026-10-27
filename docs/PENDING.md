@@ -63,6 +63,18 @@
 - Для дообучения выбрать целевой тембр и пригодные записи/teacher; подготовить корпус и holdout, выбрать compute, провести pilot → ONNX под новым voice ID → A/B с Puriso. Целевой голос пока не указан; обучение не начато.
 - Kokoro исключён; не разворачивать прежний план Silero поверх принятого Puriso. Сохранить Irina для отката, в будущем Puriso — резерв собственного голоса.
 
+## P1 — Pulsar Rust fork (Ricardo profile, not deployed)
+
+- ✅ Отдельный форк `proflyder/pulsar`, ветка `feat/ricardo-rust`; база v0.5.0.
+- ✅ Перенесены «Рикардо»/pre-roll/тихая отмена/стоп-в-HA/локальные команды;
+  Zigbee и auto-update выключены, `nearest_answers=0`.
+- ✅ Cross-build aarch64/armhf, clippy обоих targets, 30/30 `pulsar`,
+  20/20 `pulsar-audio`, installer Go-тесты.
+- ⏳ HIL-приёмка: загрузка `libtflite.so` и модели на Midi, микрофонный wake,
+  ESPHome entities, Spotify/MA, alarm stop/resume, откат. Не ставить на
+  станцию без отдельного backup/подтверждения.
+- Детали: `projects/station/PULSAR-RUST.md`.
+
 ## P0 — Pulsar finalization
 
 - **Spotify на Pulsar:** Connect-плеер играет, pause/next/volume
