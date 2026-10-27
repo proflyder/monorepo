@@ -2,6 +2,19 @@
 
 Физическая установка и этапы восстановления: [runbook](../../../docs/INSTALL-PROXMOX.md).
 
+## Текущее состояние 2026-10-28
+
+PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
+2 vCPU/3 GiB/32 GiB) и VM `101 lab-k3s` (`192.0.2.27`,
+8 vCPU/9 GiB/200 GiB) running, startup order 1/2. Terraform plan — no changes;
+state root-only на PVE и копия в `secrets/`. HAOS восстановлен, K3s runtime
+и Tailscale Operator приняты read-only E2E. HA-совместимый endpoint
+`192.0.2.27:8123` обслуживает HAProxy chart `haos-proxy`.
+
+Wi-Fi RTL8821CE на host DOWN; `bootstrap-wifi-mapping.sh` создаёт PCI mapping,
+но **не передаёт** карту VM и не меняет Ethernet. Это подготовка, не готовая
+Wi-Fi архитектура: до routed/NAT или внешнего Wi-Fi bridge оставлять Ethernet.
+
 `backup-before-install.py --output /private/new-directory` запускается root на
 текущем K3s host. Останавливает writers, копирует PVC/host recovery, восстанавливает
 replica counts, сохраняет cluster metadata и проверяет SQLite. Output содержит
@@ -26,12 +39,17 @@ PVE: добавляет отдельный ключ через ssh-copy-id и п
 snippet загружаются bootstrap-этапом; Terraform использует их storage IDs.
 `cloud-init.yaml` — публичная часть, приватная добавляет SSH public key.
 
-Рабочий Terraform directory/state/plan/token находятся только в
-`secrets/proxmox-install/terraform-state/`. Конфигурация подключается оттуда
-symlink на tracked main.tf; provider lock копируется обратно в source.
+Авторитетный Terraform directory/state находится на PVE в root-only
+`/var/lib/ricardo-terraform/`; после apply state копируется на Mac в
+`secrets/proxmox-install/terraform-state-pve/`. Первый macOS apply не создал
+ресурсов: Go TLS на macOS не использует SSL_CERT_FILE как Linux. Terraform
+запускается на Linux с проверкой CA, системное trust store Mac не меняется.
+Конфигурация синхронизируется из tracked main.tf; lock копируется обратно в source.
 TLS проверяется CA, полученным по проверенному SSH; `insecure=false`.
 Provider endpoint/token берутся из environment, не из публичных tfvars.
 API user имеет read-only audit, VM admin только для 100/101, выделение места
-на local-lvm и использование vmbr0. Bootstrap SSH root — отдельный канал.
+на local и local-lvm и использование vmbr0. Порядок старта задаётся отдельно
+root bootstrap `set-startup-order.sh`: его PVE API требует глобального Sys.Modify,
+которое API user не получает. Terraform игнорирует только startup policy. Bootstrap SSH root — отдельный канал.
 State пока локальный с файловой блокировкой; регулярное шифрованное внешнее
 резервирование ещё нужно настроить. Не запускать параллельный apply.

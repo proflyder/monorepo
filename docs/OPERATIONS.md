@@ -1,8 +1,10 @@
 # OPERATIONS — runbook
 
-**Неттоп: текущий runtime Kubernetes.** Команды HA/MA/Hermes, мониторинг и
-восстановление — [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md).
-Docker-команды ниже относятся к прежнему runtime. Команды самой станции не менялись.
+**Неттоп: текущий runtime — Proxmox + HAOS VM + K3s VM.** Команды
+HA/MA/Hermes, мониторинг и восстановление —
+[KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md); HA Core теперь в
+HAOS, не в K3s. Docker/HA Container-команды ниже относятся к прежнему
+runtime. Команды самой станции не менялись.
 
 Стабильные команды и откаты. Текущие факты — только в `STATE.md`.
 
@@ -453,7 +455,7 @@ docker compose restart matter-server
 
 Всё на `lab-host`, не на станции. Секреты — в `~/.hermes/.env` (600:
 `HERMES_HA_TOKEN`, `HERMES_MA_TOKEN`) и `~/.config/station/hermes-ha-token`
-(600); не печатать. Hermes имеет полный доступ к HA MCP (57 tools) и MA MCP
+(600); не печатать. Hermes имеет полный доступ к HA MCP (73 tools) и MA MCP
 (86 tools); оба сервера проверяются отдельно.
 
 ```bash
@@ -531,7 +533,7 @@ experimental; откат — удалить `mcp_servers.music-assistant` из H
 ```bash
 set -a; . ~/.hermes/.env; set +a
 hermes mcp test music-assistant     # 86 tools, all
-hermes mcp test homeassistant       # 57 tools, all
+hermes mcp test homeassistant       # 73 tools, all
 ```
 
 ```bash

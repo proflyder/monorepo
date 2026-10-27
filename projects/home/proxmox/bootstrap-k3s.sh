@@ -27,6 +27,10 @@ CONFIG
 chmod 600 /etc/rancher/k3s/config.yaml
 curl -fsSL --retry 3 https://get.k3s.io -o /srv/k3s/recovery/install-k3s.sh
 INSTALL_K3S_VERSION="$K3S_VERSION" sh /srv/k3s/recovery/install-k3s.sh
+for attempt in $(seq 1 90); do
+  k3s kubectl get node lab-host >/dev/null 2>&1 && break
+  sleep 2
+done
 k3s kubectl wait node/lab-host --for=condition=Ready --timeout=180s
 k3s kubectl create namespace home-assistant
 k3s kubectl create namespace monitoring

@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import posixpath
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
 import tarfile
@@ -25,6 +26,7 @@ def main(archive, destination, manifest):
             raise ValueError('Expected one snapshot root')
         root = roots.pop()
         volumes = json.load(tar.extractfile(root + '/volumes.json'))
+        interpreter_links = []
         for member in members:
             parts = PurePosixPath(member.name).parts
             if '..' in parts or member.name.startswith('/'):
@@ -34,14 +36,29 @@ def main(archive, destination, manifest):
                 base = posixpath.dirname(member.name) if member.issym() else ''
                 resolved = posixpath.normpath(posixpath.join(base, member.linkname))
                 volume_root = '/'.join(parts[:3]) + '/'
-                if target.is_absolute() or not resolved.startswith(volume_root):
+                if target.is_absolute():
+                    # Native Hermes tool venvs retain absolute Python launchers.
+                    # Restore them against the pinned container interpreter,
+                    # never recreate links into the old user's home.
+                    if (parts[2] == 'runtime-hermes' and member.issym()
+                            and re.fullmatch(r'python(?:3(?:\.\d+)?)?', parts[-1])
+                            and re.fullmatch(r'/(?:home|usr|opt)/[^\n]+/python3(?:\.\d+)?', member.linkname)):
+                        interpreter_links.append(member.name)
+                        continue
+                    raise ValueError('Unsafe volume link')
+                if not resolved.startswith(volume_root):
                     raise ValueError('Unsafe volume link')
     destination.mkdir(parents=True, mode=0o700)
-    subprocess.run(['tar', '-xzf', str(archive), '--same-owner', '--strip-components=2',
+    exclusions = ['--exclude=' + name for name in interpreter_links]
+    subprocess.run(['tar', *exclusions, '-xzf', str(archive), '--same-owner', '--strip-components=2',
                     '-C', str(destination), root + '/volumes'], check=True)
     # Containers keep their source UID/GID/mode; make only the outer directory
     # traversable so non-root containers can reach their own volume directories.
     destination.chmod(0o755)
+    for name in interpreter_links:
+        path = destination.joinpath(*PurePosixPath(name).parts[2:])
+        path.symlink_to('/usr/local/bin/python3')
+    print('Rebased Hermes tool interpreter links:', len(interpreter_links))
     telemetry = []
     for volume in volumes:
         if volume['status']['phase'] != 'Bound':

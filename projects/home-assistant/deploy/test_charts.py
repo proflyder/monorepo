@@ -44,6 +44,44 @@ class ChartContracts(unittest.TestCase):
         self.assertEqual(volume["spec"]["persistentVolumeReclaimPolicy"], "Retain")
         self.assertEqual(volume["spec"]["local"]["path"], "/srv/example/data")
 
+    def test_haos_proxy_and_tailscale_ingress_are_wired(self):
+        runtime_values = {
+            "nodeName": "example-node",
+            "haProxy": {
+                "enabled": True,
+                "upstream": "192.0.2.28:8123",
+                "privateBridge": {
+                    "enabled": True,
+                    "bindAddress": "192.0.2.27",
+                    "allowedClient": "192.0.2.28/32",
+                },
+            },
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
+            yaml.safe_dump(runtime_values, f)
+            f.flush()
+            rendered = subprocess.check_output(["helm", "template", "runtime", str(HERE / "chart"), "-f", f.name])
+        docs = [x for x in yaml.safe_load_all(rendered) if x]
+        config = next(x for x in docs if x["kind"] == "ConfigMap" and x["metadata"]["name"] == "haos-proxy")
+        cfg = config["data"]["haproxy.cfg"]
+        self.assertIn("server haos 192.0.2.28:8123 check", cfg)
+        self.assertIn("bind 192.0.2.27:8643", cfg)
+        self.assertIn("bind 192.0.2.27:5580", cfg)
+        proxy = next(x for x in docs if x["kind"] == "Deployment" and x["metadata"]["name"] == "haos-proxy")
+        self.assertTrue(proxy["spec"]["template"]["spec"]["hostNetwork"])
+
+        tailscale = HERE.parents[1] / "home/kubernetes/tailscale/chart"
+        rendered = subprocess.check_output([
+            "helm", "template", "access", str(tailscale),
+            "--set", "hostname=example-tailnet.test",
+            "--set", "haosAddress=192.0.2.28",
+        ])
+        docs = [x for x in yaml.safe_load_all(rendered) if x]
+        ingress = next(x for x in docs if x["kind"] == "Ingress")
+        self.assertEqual(ingress["spec"]["tls"][0]["hosts"], ["example-tailnet.test"])
+        endpoint = next(x for x in docs if x["kind"] == "EndpointSlice")
+        self.assertEqual(endpoint["endpoints"][0]["addresses"], ["192.0.2.28"])
+
     def test_every_dashboard_is_packaged_once_with_stable_uid(self):
         rendered = subprocess.check_output(["helm", "template", "dashboards", str(OBS), "-n", "monitoring"])
         maps = [x for x in yaml.safe_load_all(rendered) if x and x["kind"] == "ConfigMap"]

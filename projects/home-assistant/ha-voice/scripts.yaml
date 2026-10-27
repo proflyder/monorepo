@@ -340,7 +340,7 @@ alarm_announce:
       target:
         entity_id: media_player.iandeks_stantsiia_midi_media_player
       data:
-        media_content_id: "http://192.0.2.25:8123/local/alarm_chime.wav"
+        media_content_id: "http://192.0.2.27:8123/local/alarm_chime.wav"
         media_content_type: music
       continue_on_error: true
     - delay: "00:00:02"
@@ -373,7 +373,7 @@ alarm_loop:
             target:
               entity_id: media_player.iandeks_stantsiia_midi_media_player
             data:
-              media_content_id: "http://192.0.2.25:8123/local/alarm_ringtone.wav"
+              media_content_id: "http://192.0.2.27:8123/local/alarm_ringtone.wav"
               media_content_type: music
             continue_on_error: true
           # Full track is 294.8 s; keep a small gap between loops.
@@ -1343,7 +1343,7 @@ schedule_announce:
           target:
             entity_id: media_player.iandeks_stantsiia_midi_media_player
           data:
-            media_content_id: "http://192.0.2.25:8123/local/alarm_chime.wav"
+            media_content_id: "http://192.0.2.27:8123/local/alarm_chime.wav"
             media_content_type: music
           continue_on_error: true
         - delay: "00:00:02"

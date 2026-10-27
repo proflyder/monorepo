@@ -1,0 +1,55 @@
+{{- if .Values.haProxy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haos-proxy
+data:
+  haproxy.cfg: |
+{{ include "runtime.haProxyConfig" . | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haos-proxy
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: haos-proxy}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: haos-proxy}
+      annotations:
+        checksum/config: {{ include "runtime.haProxyConfig" . | sha256sum }}
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.nodeName | quote }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      containers:
+        - name: haproxy
+          image: docker.io/library/haproxy:lts-alpine@sha256:2caaf8b1a1ef67f3f1ea9b721f2821675d3ba4500fb518e23884fecb93e8dbaa
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 99
+            runAsGroup: 99
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          ports: [{name: http, containerPort: 8123}]
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+          volumeMounts:
+            - {name: config, mountPath: /usr/local/etc/haproxy, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: haos-proxy}
+{{- end }}

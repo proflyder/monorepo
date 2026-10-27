@@ -1,26 +1,38 @@
 # NETTOP — домашний сервер HA
 
-**Обновление runtime 2026-10-27:** приложения работают в K3s/containerd;
-текущие команды и пути — [Kubernetes runbook](../../docs/KUBERNETES-OPERATIONS.md).
-Сведения о прежнем Docker runtime ниже сохраняются как история установки.
+**Текущий runtime 2026-10-28:** Proxmox VE; HAOS VM `100` (`.28`) и
+Ubuntu/K3s VM `101` (`.27`). HA Core — в HAOS, MA/Matter/STT/TTS/Hermes —
+в K3s; вход — Tailscale Operator. Ethernet host `.26`; Wi-Fi пока DOWN.
+Текущие команды — [Kubernetes runbook](../../docs/KUBERNETES-OPERATIONS.md)
+и [Proxmox runbook](../../docs/INSTALL-PROXMOX.md).
+
+Сведения о прежнем bare-metal Ubuntu/HA Container ниже — **история установки**,
+не текущий writer и не актуальные адреса.
 
 Отдельная папка по мини-ПК **DEXP Jupiter JU01CY**: воспроизводимый сетап
-Ubuntu Server + K3s + Home Assistant Container + Wi-Fi/статические IP.
+Proxmox + HAOS + Ubuntu/K3s + Home Assistant.
 
-**Текущий статус:** HA Container работает; Music Assistant `2.10.8` с Spotify
-готов; HA Assist base (Whisper/Piper/`Рикардо`) и голосовые команды проверены.
-Pulsar `v0.4.1-ricardo6` подключён; HA integration Music Assistant добавлена.
-Spotify 429 снят 2026-10-27; Connect search/play проверены, generic
-«включи музыку» идёт локально. Станция видна в Spotify, volume sync
-app↔Pulsar работает, «громкость 1…10» — голосом. Таймеры Assist уже
-работают; добавлен один будильник (непрерывный рингтон, snooze, resume
-музыки после stop). Добавлен Hermes Agent `v0.22.5` как fallback для
-свободной речи/веб-поиска; HA MCP Server, модель `gpt-5.6-luna`,
-`web_search` через ChatGPT/Codex; личность — Рикардо, личный ассистент.
-Фактический голосовой retest таймера/будильника/«стоп» — открыт.
-Wi-Fi/Ethernet failover, Secure Boot + MOK; boot без Ethernet ~20 с.
+**Текущий статус:** HAOS `2026.10.4` healthy; Music Assistant `2.10.8` с
+Spotify в K3s; HA Assist base (Whisper/Piper/`Рикардо`) и голосовые команды
+сохранены. Pulsar `v0.4.1-ricardo6` подключён; HA integration Music
+Assistant добавлена. Tailscale Operator `1.104.2` публикует `pl-home` →
+HAOS и `/grafana` → Grafana; read-only E2E pass. Wi-Fi/routed-проект,
+DHCP reservations, power-loss reboot и offsite backup — открыты.
 
-## Быстрые факты
+## Быстрые факты (текущий runtime)
+
+| Параметр | Значение |
+|---|---|
+| Proxmox host | PVE `9.2.24`, DNS `pve.home.arpa`, management `vmbr0` `.26` |
+| HAOS VM 100 | HAOS `2026.10.4`, 2 vCPU / 3 GiB / 32 GiB, `.28` |
+| K3s VM 101 | Ubuntu 24.04.5, 8 vCPU / 9 GiB / 200 GiB, `.27` |
+| K3s | `v1.35.9+k3s1`, node `lab-host` |
+| HA endpoint | HAOS `.28:8123`; compatibility proxy `.27:8123` |
+| Remote | Tailscale Operator `1.104.2`; `pl-home` → HAOS, `/grafana` |
+| Terraform | provider `bpg/proxmox` 0.118.1; state root-only на PVE |
+| Wi-Fi | RTL8821CE host DOWN; PCI mapping prepared, not attached |
+
+## Историческая схема (не текущий runtime)
 
 | Параметр | Значение |
 |---|---|
@@ -50,18 +62,19 @@ Wi-Fi/Ethernet failover, Secure Boot + MOK; boot без Ethernet ~20 с.
 - [`ha-voice/README.md`](ha-voice/README.md) — голосовые команды HA для кнопок/громкости.
 - [`hermes/README.md`](hermes/README.md) — Hermes fallback, full HA/MA MCP, web search.
 - [`stack/README.md`](stack/README.md) — **единая точка входа**: HA + MA + Whisper/Piper, `ctl.sh`.
-- [`HA.md`](HA.md) — HA Container: compose, обновление, backup, безопасность.
+- [`HA.md`](HA.md) — HAOS VM, compatibility proxy и legacy Container notes.
 - [`../../docs/REMOTE-ACCESS.md`](../../docs/REMOTE-ACCESS.md) — удалённый доступ к
   HA: исследование, Tailscale/Serve, Link/Cloudflare/VPS, план и rollback.
 - [`../../docs/REBUILD.md`](../../docs/REBUILD.md) — восстановление неттопа/станции
   с нуля (SSD, factory reset, Quasar/Mac).
 - [`../../docs/REMOTE-ACCESS-TAILSCALE-PLAN.md`](../../docs/REMOTE-ACCESS-TAILSCALE-PLAN.md)
-  — **выбранный план на аппрув**: Tailscale на `lab-host` + Serve + MFA.
+  — исторический план Tailscale Serve; текущий runtime — Operator.
 - [`../../docs/REMOTE-ACCESS-STATIC-IP.md`](../../docs/REMOTE-ACCESS-STATIC-IP.md) —
   альтернатива для статического IP: WireGuard на `lab-host`, ONT/AX3 forward,
   Caddy/HTTPS, mini-PC router.
-- [`scripts/verify-remote-access.sh`](scripts/verify-remote-access.sh) —
-  read-only проверка HA/Tailscale/Serve/NTP/портов (запускать на `lab-host`).
+- [`../kubernetes/tailscale/verify-tailnet.sh`](../kubernetes/tailscale/verify-tailnet.sh) —
+  текущая read-only проверка operator route; старый
+  [`scripts/verify-remote-access.sh`](scripts/verify-remote-access.sh) — legacy.
 - [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — h2c/UBSAN, Secure Boot/MOK, IP.
 - [`configs`](configs) — netplan, compose, modprobe/blacklist, wait-online drop-in.
 - [`patches/rtl8821ce-ubsan.patch`](patches/rtl8821ce-ubsan.patch) — патч драйвера.

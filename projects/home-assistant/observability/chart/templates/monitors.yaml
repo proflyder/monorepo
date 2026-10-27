@@ -9,6 +9,7 @@ spec:
     matchLabels: {app.kubernetes.io/name: runtime-health-exporter}
   endpoints:
     - port: metrics
+      honorLabels: true
       interval: 30s
 ---
 apiVersion: monitoring.coreos.com/v1

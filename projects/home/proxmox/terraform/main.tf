@@ -59,12 +59,11 @@ resource "proxmox_virtual_environment_vm" "haos" {
   }
   network_device { bridge = "vmbr0" }
   operating_system { type = "l26" }
-  startup {
-    order      = "1"
-    up_delay   = 30
-    down_delay = 60
+  lifecycle {
+    prevent_destroy = true
+    # Startup order is host bootstrap policy: its API requires global Sys.Modify.
+    ignore_changes = [startup]
   }
-  lifecycle { prevent_destroy = true }
 }
 
 resource "proxmox_virtual_environment_vm" "k3s" {
@@ -111,10 +110,9 @@ resource "proxmox_virtual_environment_vm" "k3s" {
   network_device { bridge = "vmbr0" }
   operating_system { type = "l26" }
   serial_device {}
-  startup {
-    order      = "2"
-    up_delay   = 30
-    down_delay = 90
+  lifecycle {
+    prevent_destroy = true
+    # Startup order is host bootstrap policy: its API requires global Sys.Modify.
+    ignore_changes = [startup]
   }
-  lifecycle { prevent_destroy = true }
 }

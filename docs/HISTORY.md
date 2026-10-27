@@ -892,3 +892,22 @@ local-lvm около 379 GiB. Подключён no-subscription repository, у�
 images с checksum, cloud-init и VM definitions с защитой удаления. Recovery
 archives и custom images staged на PVE с повторной проверкой SHA-256.
 Приложения пока восстанавливаются; текущий статус — STATE.md.
+
+## 2026-10-28 — Proxmox + HAOS + K3s VM cutover
+
+- PVE `9.2.24`; Terraform создал VM `100 haos` (2/3 GiB/32 GiB, `.28`) и
+  VM `101 lab-k3s` (8/9 GiB/200 GiB, `.27`); startup order 1/2; plan — no
+  changes. Host management — Ethernet `.26`; Wi-Fi PCI mapping создан, но
+  VM не передан.
+- HAOS `2026.10.4` восстановлен; HA integration endpoints переведены с
+  loopback на K3s `.27`; `internal_url` и trusted proxy `.27`. Alarm media
+  URLs исправлены с прежнего `.25:8123` на `.27:8123`; HA restart/check
+  прошли.
+- K3s runtime, MA/Matter/STT/TTS/Hermes, observability и Tailscale Operator
+  `1.104.2` развёрнуты. `pl-home` → HAOS, `/grafana` → Grafana; старый host
+  Serve route заменён operator proxy `tag:k8s`.
+- Проверки: Kubernetes runtime 5/5, HA read-only 3/3, Hermes read-only 3/3
+  + real chat 1/1, MCP HA 73 / MA 86 tools, `/` и `/grafana/api/health`
+  HTTP 200. HAOS partial backup создан.
+- Не проверены: полный power-loss restore/reboot, DHCP reservations,
+  Wi-Fi/routed-схема, offsite backup, живой микрофон/alarm/Spotify transfer.

@@ -4,11 +4,12 @@
 
 > **Предыдущий контекст TTS:** начать с [RICARDO-TTS-HANDOFF.md](RICARDO-TTS-HANDOFF.md). Там сохранены выбор пользователя после прослушивания, сэмплы, ограничения проверки и точка продолжения; полный ресерч и план связаны ссылками.
 
-**Дата:** 2026-10-27 14:21 (+05)  
+**Дата:** 2026-10-28 01:20 (+05)  
 **Станция:** Midi `cucumber`, `STATION_SERIAL`, `192.0.2.13`  
-**Сервер:** `lab-host` — `192.0.2.26` Ethernet / `192.0.2.25` Wi-Fi  
-**Стек:** `/home/labuser/nettop` — HA `2026.10.4` + MA `2.10.8` +
-Whisper `3.8.1` + Piper `2.5.2`
+**Сервер:** Proxmox host `192.0.2.26`; HAOS VM `192.0.2.28`;
+Ubuntu/K3s VM `lab-host` `192.0.2.27`  
+**Стек:** HAOS `2026.10.4` + K3s `v1.35.9+k3s1`: MA `2.10.8`,
+Whisper `3.8.1`, Piper `2.5.2`, GigaAM, Matter, Hermes; Tailscale Operator
 
 > Это короткая память, а не второй STATE. Факты — `STATE.md`, задачи —
 > `PENDING.md`, хронология — `HISTORY.md`, команды — `OPERATIONS.md`.
@@ -36,7 +37,7 @@ Whisper `3.8.1` + Piper `2.5.2`
 - «Рикардо, отмена/передумал» отменяет вызов: `StationCancel` отвечает
   «Хорошо.»; пустой STT после wake тоже тихо отменяется, без красной ошибки.
 - **Hermes `v0.22.5`** на неттопе — fallback для свободной речи/веб-поиска;
-  **полный MCP-доступ**: HA MCP 57/57 tools и Music Assistant FastMCP
+  **полный MCP-доступ**: HA MCP 73 tools и Music Assistant FastMCP
   86/86 tools (плагин experimental, все permission flags), токены
   `HERMES_HA_TOKEN`/`HERMES_MA_TOKEN`; модель `gpt-5.6-luna` через
   ChatGPT/Codex OAuth, `web_search` backend `openai-native`. Pipeline

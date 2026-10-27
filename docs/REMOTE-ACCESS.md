@@ -9,15 +9,26 @@
 **Канонические факты:** `STATE.md`/`projects/home-assistant/HA.md`; здесь — снимок для анализа
 со ссылками, а не второй STATE.
 
-> **Обновление 2026-10-26 (реализовано):** Tailscale на `lab-host` +
-> `tailscale serve` работают; HA MFA, external URL
+> **Обновление 2026-10-28 (текущий runtime):** HA Core перенесён в HAOS VM;
+> вход опубликован Tailscale Operator в K3s. `pl-home` → HAOS,
+> `/grafana` → Grafana; `pl-home` DNS указывает на operator proxy
+> `tag:k8s`, а не на host Serve. HA MFA, external URL, trusted proxy
+> `192.0.2.27/32`; HAOS `.28`, K3s `.27`, Proxmox host `.26`.
+> Проверены `/` и `/grafana/api/health` (HTTP 200). Host Tailscale на
+> Proxmox пока не запущен; его аварийный доступ — LAN/Ethernet.
+> Текст ниже про `tailscale serve` на `lab-host` — **исторический план**;
+> актуальный runbook — [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md).
+>
+> **Обновление 2026-10-26 (историческое):** Tailscale на `lab-host` +
+> `tailscale serve` работали; HA MFA, external URL
 > `https://lab-host.example-tailnet.ts.net`, ACL только `tcp:443`; телефон
 > `xiaomi-17` в tailnet; remote с cellular проверен. Публичного HA нет,
 > роутеры/ONT/AX3 не менялись. План/детали:
 > [`REMOTE-ACCESS-TAILSCALE-PLAN.md`](REMOTE-ACCESS-TAILSCALE-PLAN.md).
 > WireGuard на статическом IP — альтернатива, **не выбрана**.
 
-> **TL;DR.** Сейчас дом за **двойным NAT** (Huawei AX3 `192.0.2.1` →
+> **TL;DR (историческая рекомендация; текущий runtime — Operator).**
+> Сейчас дом за **двойным NAT** (Huawei AX3 `192.0.2.1` →
 > Huawei GPON ONT `192.168.1.1`), публичный IPv4 есть, но он **вероятно
 > динамический**, глобального
 > IPv6 нет, admin-доступ к обоим ISP-устройствам не документирован. Поэтому
@@ -896,8 +907,16 @@ closed (Zigbee role Off)
 
 ### F. Read-only проверка
 
+Текущий runtime — Tailscale Operator и HAOS; используйте
+`projects/home/kubernetes/tailscale/verify-tailnet.sh` с `TAILNET_HOST` и
+`KUBECONFIG`. Старый `verify-remote-access.sh` — legacy для host Serve.
+
 ```bash
-# с Mac — выполнить на lab-host, ничего не копируя:
+# на K3s VM, с private kubeconfig и tailscale CLI:
+TAILNET_HOST=pl-home.example-tailnet.ts.net \
+  projects/home/kubernetes/tailscale/verify-tailnet.sh
+
+# legacy host-Serve check (не текущий runtime):
 ssh labuser@192.0.2.25 'bash -s' \
   < ~/Desktop/yandex-station-lab/projects/home-assistant/scripts/verify-remote-access.sh
 

@@ -1,8 +1,22 @@
 # Установка Proxmox на неттоп
 
-Подготовлено 2026-10-27. Обновление 2026-10-28: пользователь установил Proxmox,
-SSH проверен. Эта инструкция сохранена для повторной установки; дальнейшее
-восстановление VM/runtime выполняется, текущие факты — STATE.md.
+Подготовлено 2026-10-27. Обновление 2026-10-28: Proxmox `9.2.24` установлен,
+SSH проверен; VM `100 haos` и `101 lab-k3s` созданы Terraform, HAOS и
+K3s runtime восстановлены, Tailscale Operator опубликован. Эта инструкция
+сохранена для повторной установки; текущие факты — STATE.md.
+
+Текущее состояние после установки (примеры LAN-адресов):
+
+```text
+PVE host         192.0.2.26   Ethernet vmbr0; Wi-Fi пока DOWN
+VM 100 haos      192.0.2.28   2 vCPU / 3 GiB / 32 GiB
+VM 101 lab-k3s   192.0.2.27   8 vCPU / 9 GiB / 200 GiB
+HA compatibility 192.0.2.27:8123 -> HAOS:8123 (HAProxy hostNetwork)
+```
+
+Terraform plan — `No changes`; state остаётся root-only на PVE и копируется
+в `secrets/`. Полный power-loss restore и переход host на Wi-Fi ещё не
+приняты.
 
 ## Что уже сохранено
 

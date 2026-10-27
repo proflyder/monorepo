@@ -1,8 +1,10 @@
 # REMOTE-ACCESS / TAILSCALE — план на аппрув
 
 **Дата:** 2026-10-26  
-**Статус:** **DRAFT FOR APPROVAL**; в системе ничего не менялось.  
-**Решение:** удалённый доступ к HA через **Tailscale на `lab-host`** +
+**Статус:** **исторический план; заменён Tailscale Operator после Proxmox
+cutover 2026-10-28.** Текущая схема — `pl-home` → HAOS, `/grafana` →
+Grafana через operator; см. [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md).
+**Исходное решение:** удалённый доступ к HA через **Tailscale на `lab-host`** +
 `tailscale serve` (HTTPS `:443` → `127.0.0.1:8123`) + **MFA в HA**.  
 **Не выбираем:** публичный HA, port-forward `8123`, WireGuard-ключи вручную,
 Funnel, Cloudflare/Link (остаются альтернативами).

@@ -1,9 +1,9 @@
 # Следующий инфраструктурный слой: Proxmox, HAOS и IaC
 
-Обновление: 2026-10-28. **Proxmox установлен, восстановление выполняется.**
-SSH, Ethernet bridge и storage проверены. Предыдущая Ubuntu/K3s сохранена в
-recovery archives на Mac, но на неттопе уже удалена установщиком. Подготовлены
-Terraform definitions двух VM; HAOS/K3s runtime и Operator пока не приняты.
+Обновление: 2026-10-28. **Proxmox, HAOS VM, K3s VM и Tailscale Operator
+развёрнуты; cutover принят для read-only E2E.** SSH, Ethernet bridge,
+storage, Terraform state и обе VM проверены. Предыдущая Ubuntu/K3s
+сохранена в recovery archives на Mac, но на неттопе удалена установщиком.
 [Порядок установки и восстановления](INSTALL-PROXMOX.md), текущие факты — STATE.md.
 
 ## Что даёт Proxmox
@@ -50,42 +50,52 @@ HAOS поддерживается в VM, включая KVM/Proxmox; сам Prox
 [HA installation](https://www.home-assistant.io/installation),
 [официальные VM инструкции](https://www.home-assistant.io/installation/alternative).
 
-## Почему обсуждалась проводная сеть
+## Сеть: текущее состояние и Wi-Fi
 
-Провод не является требованием для запуска VM. Сейчас Ethernet неттопа DOWN,
-uplink — Wi-Fi с vendor DKMS driver. Типовая схема bridge, где VM — отдельный
-L2 участник LAN, не должна предполагаться рабочей на Wi-Fi client-интерфейсе.
-Это не запрещает VM: NAT/маршрутизация возможны, но discovery/multicast,
-входящие соединения и публикуемые media URLs нужно проектировать и тестировать.
-Выбор гипервизора не устраняет этот сетевой вопрос.
+Сейчас Proxmox host использует Ethernet `vmbr0`; Wi-Fi RTL8821CE на host
+`DOWN`. PCI mapping `home-wifi` создан, но карта **не передана** ни одной VM:
+client Wi-Fi нельзя автоматически считать эквивалентом Ethernet bridge.
+Типовая схема bridge, где VM — отдельный L2 участник LAN, на Wi-Fi
+client-интерфейсе не гарантируется. Это не запрещает VM: NAT/маршрутизация
+возможны, но discovery/multicast, входящие соединения и media URLs нужно
+проектировать и тестировать. Выбор гипервизора не устраняет этот вопрос.
+
+До отдельного routed/NAT-проекта или внешнего Wi-Fi bridge Ethernet остаётся
+обязательным. Не отключать кабель и не передавать Wi-Fi PCI VM без плана
+возврата host-доступа. HAOS/K3s используют LAN `.28/.27`; HA-совместимый
+endpoint `.27:8123` обслуживает HAProxy, а не host loopback.
 
 Proxmox bare-metal — смена хостовой ОС/ядра/сетевого управления, а не установка
 обычного приложения рядом с Ubuntu. На одном физическом узле это отдельное
 окно простоя с проверенной полной recovery-копией и доступом к boot/консоли.
 Свободный VG объём не делает переустановку системного диска неразрушающей.
 
-RAM неттопа — 16 GB (14.85 GiB доступны ОС). При двух VM необходимо заново
-измерить бюджет Proxmox + guest OS + HAOS + K3s; нельзя выделить гостям все
-16 GB и оставить гипервизор без памяти. Текущий успешно протестированный
-bare-metal Kubernetes потреблял около 6–7 GiB вместе с хостом/observability.
+RAM неттопа — 16 GB (14.85 GiB доступны ОС). Текущее распределение: HAOS
+3 GiB, K3s 9 GiB, остальное Proxmox host; после cutover занято около 13 GiB,
+доступно около 1.9 GiB без swap. Не увеличивать гостей без измерения;
+power-loss/reboot-тест ещё впереди.
 
 ## Tailscale Operator
 
-Подходит к текущему K3s и к будущему K3s в VM: может декларативно публиковать
-Kubernetes Services/Ingress в tailnet. Не заменяет host Tailscale для аварийного
-доступа при падении кластера; текущий HA/Grafana Serve остаётся до приёмки нового входа.
+Operator `1.104.2` развёрнут в K3s и публикует `home` Ingress:
+`pl-home` → HAOS, `/grafana` → Grafana. Старый host Serve route заменён;
+OAuth credentials и private values находятся вне Git. Operator не заменяет
+host Tailscale для аварийного доступа при падении кластера: на Proxmox host
+`tailscaled` сейчас не запущен, поэтому его доступ только LAN/Ethernet.
 
-Для установки нужны tag ownership и OAuth credentials с необходимыми scopes
-либо заранее настроенная workload identity federation. В доступных локальных
-credentials Tailscale API/OAuth credentials не обнаружены. Машинный вход
-host tailscaled не заменяет управленческий OAuth client для operator.
+Для повторной установки нужны tag ownership и OAuth credentials с
+необходимыми scopes либо workload identity federation. Машинный вход
+host tailscaled не заменяет управленческий OAuth client.
 [Operator prerequisites](https://tailscale.com/docs/kubernetes-operator/install-operator).
 
-Следующие шаги после выбора архитектуры:
+Сделано:
 
-1. Выбран Proxmox: выполнить физическую установку по INSTALL-PROXMOX.md.
-2. Зафиксировать VM network plan и доступ к восстановлению хоста.
-3. Описать ресурсы в IaC и импортировать существующее управление без recreate.
-4. Подготовить operator OAuth/tags с минимальными scopes, закрытый Secret и pinned chart.
-5. Сначала опубликовать тестовый Service, проверить ACL/TLS, затем Grafana/HA.
-6. Удалять старые Serve routes только после проверки нового доступа.
+1. ✅ Proxmox установлен, SSH/bridge/storage проверены.
+2. ✅ Terraform definitions и state; обе VM созданы, plan — no changes.
+3. ✅ HAOS восстановлен; K3s VM с приложениями и observability.
+4. ✅ Operator OAuth/tags, pinned chart, Secret; тестовые Service/Ingress.
+5. ✅ `pl-home` и `/grafana` проверены через operator proxy.
+6. ✅ Старый host Serve route удалён из DNS-маршрута.
+
+Осталось: Wi-Fi/routed-проект, DHCP/static reservations, host Tailscale
+emergency access, power-loss/reboot тест и offsite backup.

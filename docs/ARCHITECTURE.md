@@ -20,18 +20,21 @@ Mac 192.0.2.11 (Quasar/MITM kit; не активен, нужен для factory 
   └── v3rt3p — `archive/legacy/v3rt3p-stack/` + `repos/` (архив;
       upstream: https://github.com/v3rt3p)
 
-Сервер lab-host
-  ├── Ethernet 192.0.2.26 / Wi-Fi 192.0.2.25
-  ├── HA Container :8123 (network host)
-  ├── Music Assistant :8095 (stream :8097, Sendspin :8927)
-  ├── Matter Server :5580 (loopback WS, IPv6/mDNS host network)
-  ├── STT :10305 GigaAM v3 (primary), :10300 Whisper fallback
-  ├── Piper TTS :10200 (ru_RU-irina-medium)
-  ├── ESPHome integration ← Pulsar :6053
-  ├── HA MCP Server :8123/api/mcp
-  ├── Hermes Agent :8642 (loopback) → MCP → HA
-  └── hermes-voice-proxy :8643 (loopback) → TTS sanitizer
+Proxmox host 192.0.2.26 (Ethernet; Wi-Fi .25 DOWN)
+  ├── VM 100 HAOS 192.0.2.28 — HA/Supervisor :8123
+  └── VM 101 lab-k3s 192.0.2.27 — Ubuntu + K3s
+      ├── HA compatibility HAProxy .27:8123 → HAOS
+      ├── Music Assistant :8095 (stream :8097, Sendspin :8927)
+      ├── Matter Server :5580 (host network, IPv6/mDNS)
+      ├── STT :10305 GigaAM v3, :10300 Whisper fallback
+      ├── Piper TTS :10200 (ru_puriso2-medium)
+      ├── ESPHome integration в HAOS ← Pulsar :6053
+      ├── Hermes gateway :8642 (loopback) + voice proxy :8643
+      └── Tailscale Operator: pl-home → HAOS, /grafana → Grafana
 ```
+
+> Wi-Fi на Proxmox host пока не включён; Ethernet обязателен до отдельного
+> routed/NAT-проекта. HAOS и K3s — отдельные VM, не контейнеры.
 
 ## Роли
 

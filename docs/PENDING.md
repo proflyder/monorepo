@@ -22,11 +22,31 @@
   проверено pipeline. ASR-вариант «блок аут» добавлен после реального
   распознавания GigaAM.
 
+## P1 — Proxmox / HAOS / K3s VM cutover
+
+- ✅ PVE `9.2.24`; VM `100 haos` (2/3 GiB/32 GiB, `.28`) и VM `101 lab-k3s`
+  (8/9 GiB/200 GiB, `.27`) running; startup order 1/2; Terraform plan — no changes.
+- ✅ HAOS `2026.10.4` healthy; HA restored, integration endpoints переведены
+  на `.27`, `internal_url` и trusted proxy обновлены; alarm media URLs
+  исправлены на `.27:8123`.
+- ✅ K3s runtime, MA/Matter/STT/TTS/Hermes, observability и Tailscale Operator
+  `1.104.2`; `pl-home` → HAOS, `/grafana` → Grafana; HAOS proxy `.27:8123`
+  сохраняет локальные callbacks.
+- ⏳ DHCP/static reservations для Proxmox/VM `.26/.27/.28`; сейчас адреса
+  выданы DHCP и не закреплены в обоих роутерах.
+- ⏳ Wi-Fi: Ethernet обязателен; `home-wifi` PCI mapping создан, но Wi-Fi
+  не передан VM. Нужен отдельный routed/NAT или внешний Wi-Fi bridge design;
+  не отключать Ethernet до приёмки.
+- ⏳ Host/VM power-loss reboot, полный disaster restore на запасном железе,
+  offsite backup и host Tailscale emergency access.
+- ⏳ Живая приёмка после cutover: микрофон/wake, alarm/stop/resume,
+  Spotify/MA transfer, локальные HA intents; read-only E2E уже pass.
+
 ## P1 — Matter / Yandex LED strip
 
-- ✅ Matter Server `matterjs-server` поднят на `lab-host` (host network,
-  `127.0.0.1:5580`, fabric в `data/matter-server`); HA integration `Matter`
-  создана и подключена к `ws://127.0.0.1:5580/ws`.
+- ✅ Matter Server `matterjs-server` в K3s (host network, `.27:5580`,
+  fabric в `/srv/k3s/volumes/runtime-matter`); HA integration `Matter`
+  создана и подключена к `ws://192.0.2.27:5580/ws`.
 - ⏳ Добавить светодиодную ленту Яндекса (Matter over Wi-Fi) через HA
   Companion: Matter → Add device → QR/11-значный код. Телефон на 2.4 ГГц,
   Bluetooth и location permission.
@@ -174,9 +194,9 @@
 - После streaming: микрофонный retest обычного вопроса и веб-поиска,
   слуховая проверка пауз/duck/resume; акустический baseline/p50/p95 ещё впереди.
 
-- ✅ Hermes Agent `v0.22.5` на `lab-host`; ChatGPT/Codex OAuth, модель
-  `gpt-5.6-luna`; gateway/API `127.0.0.1:8642`.
-- ✅ MCP full access: HA MCP 57/57 tools; Music Assistant FastMCP 86/86 tools;
+- ✅ Hermes Agent `v0.22.5` в K3s Pod `hermes`; ChatGPT/Codex OAuth, модель
+  `gpt-5.6-luna`; gateway `127.0.0.1:8642`, HA proxy/API `.27:8643`.
+- ✅ MCP full access: HA MCP 73 tools; Music Assistant FastMCP 86/86 tools;
   `platform_toolsets.api_server` = `mcp-homeassistant`, `mcp-music-assistant`,
   `web`. MA plugin experimental; all permission flags enabled. Tokens —
   `HERMES_HA_TOKEN`/`HERMES_MA_TOKEN` in `.env` (600). Проверено `mcp test`
@@ -206,19 +226,20 @@
 
 ## P1 — remote access / HA hardening
 
-- План и исследование: `REMOTE-ACCESS.md`; выбранный план:
-  `REMOTE-ACCESS-TAILSCALE-PLAN.md`.
-- ✅ **Реализовано 2026-10-26:** Tailscale `1.104.2` на `lab-host`;
-  `https://lab-host.example-tailnet.ts.net` → `127.0.0.1:8123` (`tailscale serve`);
-  HA MFA, external URL, trusted proxy; `tag:homeassistant` + ACL только
-  `tcp:443`; `xiaomi-17` в tailnet. Remote через cellular проверен;
-  `verify-remote-access.sh` — 0 FAIL/0 WARN.
+- План и исследование: `REMOTE-ACCESS.md`; старый host Serve заменён
+  Tailscale Operator; манифесты — `projects/home/kubernetes/tailscale/`.
+- ✅ **Реализовано 2026-10-28:** Operator `1.104.2` в K3s;
+  `https://pl-home.example-tailnet.ts.net/` → HAOS, `/grafana/` → Grafana;
+  DNS `pl-home` указывает на operator proxy `tag:k8s`; HA MFA, external URL,
+  trusted proxy `.27`; `xiaomi-17` в tailnet.
+- ✅ Проверено из tailnet: `/` HTTP 200, `/grafana/api/health` HTTP 200;
+  `tailscale/verify-tailnet.sh` PASS; старый host Serve route не используется.
 - Публичного HA нет; `8123/8095/8099/6053/6638` не проброшены; ONT/AX3
   не менялись. Статический IP/WireGuard — альтернатива, не выбрана.
-- Reboot `lab-host` **пройден** 2026-10-26 23:46: HA/контейнеры/Tailscale/
-  Serve/ACL поднялись сами; `verify-remote-access.sh` 0/0; `xiaomi-17`
-  переподключился active/direct. Осталось: ONT WAN `22/443`; offsite backup.
-- Не выставлять `8123/8095/8099/6053/6638` в интернет.
+- ⏳ Host Tailscale emergency access: на Proxmox host `tailscaled` не
+  запущен; при падении K3s VM/operator останется только LAN/Ethernet.
+- ⏳ Проверить power-loss/reboot обеих VM и хоста; ONT WAN `22/443`;
+  offsite backup. Не выставлять сервисные порты в интернет.
 
 ## P1 — API 31116 без авторизации
 

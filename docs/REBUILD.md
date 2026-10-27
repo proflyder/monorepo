@@ -1,9 +1,12 @@
 # REBUILD — воссоздание стенда с нуля
 
 **При восстановлении текущего неттопа использовать также
-[KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md).** Kubernetes cluster/PV/auth
-восстанавливаются из migration recovery-комплекта; Docker-разделы ниже описывают
-прежний вариант. Не запускать одновременно Kubernetes и native services на одних данных.
+[KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md) и
+[INSTALL-PROXMOX.md](INSTALL-PROXMOX.md).** С 2026-10-28 runtime — Proxmox +
+HAOS VM + Ubuntu/K3s VM; Terraform state и VM recovery — отдельный слой.
+Kubernetes cluster/PV/auth восстанавливаются из migration recovery-комплекта;
+Docker/Ubuntu/HA Container-разделы ниже описывают **прежний** вариант.
+Не запускать одновременно Kubernetes/native services на одних данных.
 
 **Дата:** 2026-10-27  
 **Статус:** канонический recovery-гайд. Текущие факты — `STATE.md`; команды —

@@ -1,24 +1,21 @@
-# HA — Home Assistant Container на неттопе
+# HA — Home Assistant OS VM на Proxmox
 
-**Текущий HA Container запускается Kubernetes, версия приложения сохранена.**
-Актуальные deploy/backup/restore команды — [Kubernetes runbook](../../docs/KUBERNETES-OPERATIONS.md).
-Docker/Compose команды ниже — legacy recovery; не запускать второй writer на текущем config PV.
+**Текущий HA Core работает в HAOS VM, а не в Kubernetes.** HAOS `2026.10.4`,
+Supervisor healthy; VM `100` — 2 vCPU / 3 GiB / 32 GiB, `192.0.2.28`.
+HA-совместимый endpoint `192.0.2.27:8123` — HAProxy в K3s, проксирует в HAOS;
+внешний вход — Tailscale Operator. Актуальные операции — [Kubernetes
+runbook](../../docs/KUBERNETES-OPERATIONS.md) и [Proxmox runbook](../../docs/INSTALL-PROXMOX.md).
 
-**Текущий статус:** onboarding пройден, HA `2026.10.4`, контейнер `homeassistant`
-работает; `http://192.0.2.26:8123` и `http://192.0.2.25:8123` отвечают.
-Music Assistant `2.10.8` с Spotify готов; HA Assist base (Whisper/Piper/pipeline `Рикардо`) развёрнут; Pulsar `v0.4.1-ricardo6` подключён как satellite и Sendspin-плеер.
+Music Assistant `2.10.8` с Spotify в K3s; HA Assist base
+(Whisper/Piper/pipeline «Рикардо») развёрнут; Pulsar `v0.4.1-ricardo6`
+подключён как satellite и Sendspin-плеер. Старые Container/Compose команды
+ниже — **legacy recovery**, не запускать второй writer.
 
-## 1. Почему Container, а не HAOS
+## 1. История: почему раньше был Container
 
-На сервере уже Ubuntu Server, поэтому выбран официальный **HA Container**:
-
-- работает как OCI-контейнер под Kubernetes, обновляется через pinned image/Helm;
-- **нет add-ons/Supervisor**;
-- Music Assistant/Whisper/Piper ставятся отдельными контейнерами;
-- если позже понадобятся add-ons — можно перейти на HAOS VM (KVM есть).
-
-Текущий путь не «хуже»: он даёт полный HA Core и нормальную сеть, просто без
-магазина приложений.
+На прежнем bare-metal Ubuntu был выбран HA Container; после перехода на
+Proxmox HA Core перенесён в поддерживаемую HAOS VM. Старые пути и Compose
+описаны ниже только для восстановления/аудита.
 
 ## 2. Файлы и пути
 
@@ -245,11 +242,12 @@ curl -v http://127.0.0.1:8123/
 - [`../../docs/REBUILD.md`](../../docs/REBUILD.md) — восстановление неттопа/станции
   с нуля (SSD, factory reset, Quasar/Mac).
 - [`../../docs/REMOTE-ACCESS-TAILSCALE-PLAN.md`](../../docs/REMOTE-ACCESS-TAILSCALE-PLAN.md)
-  — **выбранный план на аппрув**: Tailscale на `lab-host` + Serve + MFA.
+  — исторический план Tailscale Serve; текущий runtime — Operator.
 - [`../../docs/REMOTE-ACCESS-STATIC-IP.md`](../../docs/REMOTE-ACCESS-STATIC-IP.md) —
   альтернатива для статического IP: WireGuard на `lab-host`, ONT/AX3 forward,
   Caddy/HTTPS, mini-PC router.
 - [`scripts/verify-remote-access.sh`](scripts/verify-remote-access.sh) —
-  read-only проверка.
+  legacy-проверка старого host Serve; текущая —
+  `../kubernetes/tailscale/verify-tailnet.sh`.
 - `../docs/OPERATIONS.md` — общий runbook.
 - `../docs/RESEARCH-OWN-ASSISTANT.md` — Pulsar/Spotify/MCP/wake word.

@@ -179,6 +179,14 @@ class YamlTests(unittest.TestCase):
                 self.assertIsNotNone(load_yaml(path))
 
 
+class MediaUrlTests(unittest.TestCase):
+    def test_alarm_media_uses_the_compatibility_endpoint(self):
+        text = "\n".join(strings(SCRIPTS))
+        self.assertNotIn("192.0.2.25:8123", text)
+        self.assertIn("192.0.2.27:8123/local/alarm_chime.wav", text)
+        self.assertIn("192.0.2.27:8123/local/alarm_ringtone.wav", text)
+
+
 class EntityAndServiceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -56,6 +56,9 @@ class KubernetesRuntime(unittest.TestCase):
         data = get(os.environ["PROMETHEUS_URL"].rstrip("/") + "/api/v1/query?" + query)
         values = data["data"]["result"]
         self.assertEqual(len(values), 8)
+        self.assertEqual({v['metric'].get('endpoint') for v in values},
+                         {'ha', 'music_assistant', 'matter', 'piper', 'whisper',
+                          'gigaam', 'hermes', 'voice_proxy'})
         for value in values:
             self.assertEqual(float(value["value"][1]), 1.0, value["metric"].get("endpoint"))
 

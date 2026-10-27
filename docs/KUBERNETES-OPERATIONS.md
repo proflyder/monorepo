@@ -1,43 +1,50 @@
 # Kubernetes: эксплуатация неттопа и восстановление
 
-Внедрение: 2026-10-27. С 2026-10-28 это baseline до переустановки: Proxmox
-уже установлен, восстановление VM/runtime идёт; текущие факты — STATE.md.
-Исходное исследование —
+Внедрение: 2026-10-27. С 2026-10-28 runtime работает внутри Proxmox VM,
+а не на bare-metal Ubuntu; текущие факты — STATE.md. Исходное исследование —
 [PLAN-KUBERNETES-MIGRATION.md](PLAN-KUBERNETES-MIGRATION.md).
 Адреса и пользователь в публичных примерах обезличены.
 
 ## Состав и владение
 
-- Один K3s `v1.35.9+k3s1`, node `lab-host`, Ubuntu сохранена.
-- Namespace `home-assistant`: восемь Deployments, девять контейнеров:
-  HA/MA/Matter/GigaAM/Whisper/Piper, Hermes gateway+proxy и health exporter.
+- Proxmox VE host `192.0.2.26`; VM `101 lab-k3s` — Ubuntu 24.04.5,
+  K3s `v1.35.9+k3s1`, node `lab-host`, `192.0.2.27`.
+- VM `100 haos` — HAOS `2026.10.4`, HA Core/Supervisor, `192.0.2.28`.
+  HA больше не Deployment в K3s.
+- Namespace `home-assistant`: MA/Matter/GigaAM/Whisper/Piper, Hermes
+  gateway+proxy, health exporter и `haos-proxy` (hostNetwork HAProxy).
 - Namespace `monitoring`: Prometheus/Alertmanager/Grafana, Operator,
   kube-state-metrics/node-exporter, Loki и Alloy.
+- Namespace `tailscale`: Operator и ingress proxy; `pl-home` → HAOS,
+  `/grafana` → Grafana.
 - Все release versions — `projects/home/kubernetes/versions.sh`.
 - Приложения сохраняют исходные versions/digests и hostNetwork/loopback ports.
-  HA privileged/D-Bus сохранены как в предыдущем рабочем Compose.
-- Hermes: исходный revision сохранён, собственный OCI image с API extras,
-  tini и SQLite 3.53.4. Gateway+proxy в одном hostNetwork Pod.
-- SSH, Wi-Fi/netplan, chrony, Tailscale и K3s остаются host services.
-  Это намеренная инфраструктура восстановления, не незавершённая миграция.
+  HAOS использует отдельные Supervisor data; HA Core state больше не в
+  `runtime-ha` PVC (PVC сохранён, но не является текущим writer).
+- Hermes: revision `bf0203a794a07aac3ff764972ab9087baa4e4f4e`, собственный
+  OCI image, tini, SQLite 3.53.4; gateway+proxy в одном hostNetwork Pod.
+- SSH/netplan/chrony/Tailscale/K3s — в K3s VM; Proxmox host management —
+  отдельный SSH/Ethernet. Host Tailscale на PVE сейчас не запущен.
 
 ## Данные и секреты
 
-`/srv/k3s` — ext4 LV `ubuntu-vg/k3s-data`, 150 GiB; около 224 GiB VG оставлено
-нераспределёнными. `/srv/k3s/runtime` — K3s data-dir, собственный containerd,
-cluster datastore и local-path provisioner. `/srv/k3s/volumes/hermes` — новый
-writable Hermes home, в Pod `/opt/data`. `/srv/k3s/recovery` — закрытые backups.
+`/srv/k3s` — путь внутри VM `lab-k3s` на диске 200 GiB. `/srv/k3s/runtime` —
+K3s data-dir, собственный containerd, cluster datastore и local-path
+provisioner. `/srv/k3s/volumes/hermes` — writable Hermes home, в Pod
+`/opt/data`. `/srv/k3s/recovery` — закрытые recovery-файлы внутри VM.
 
-HA/MA/Matter и модели первого переноса используют прежние каталоги в
-`/home/labuser/nettop/homeassistant/config` и `nettop/data` через static local
-PV/PVC. **Эти каталоги активны, их нельзя удалить как «остатки Docker».**
-Все application PV и observability StorageClass имеют reclaimPolicy Retain.
-Размер local PV не является файловой квотой; контролировать реальные FS.
+MA/Matter/STT/TTS и Hermes используют Retain local PV/PVC. `runtime-ha`
+PVC сохранён как архив прежнего HA Container, но HAOS сейчас пишет в свой
+Supervisor data path, а не в этот PVC. **Не удалять старые PV и каталоги
+`/srv/k3s/volumes/*` без отдельной проверки.** Все application PV и
+observability StorageClass имеют reclaimPolicy Retain.
 
 Секреты Hermes — `Secret/hermes-environment`; refreshable auth — в writable
 Hermes home. Grafana credentials — `Secret/grafana-admin`. K3s secrets encryption
 включено, kubeconfig имеет режим 600. Значения не хранятся в tracked values.
-Реальная LAN-конфигурация/пути — только в private values.
+Terraform state — root-only на PVE (`/var/lib/ricardo-terraform/`) и копия
+в `secrets/`; не коммитить. Реальная LAN-конфигурация/пути — только в
+private values.
 
 Локальный Mac, вне Git:
 
@@ -57,37 +64,34 @@ secrets/kubernetes-research/recovery/
 
 ## Доступ и обычные команды
 
-Grafana: существующий HTTPS Tailscale-адрес HA + **`/grafana/`**.
-Главный `/` по-прежнему ведёт в HA. Login `admin`, password — в приватном файле
-выше; в чат/документацию значение не копировать. Loki/Prometheus не опубликованы.
+Grafana: `https://pl-home.<tailnet>.ts.net/grafana/` через Tailscale
+Operator; `/` ведёт в HAOS. Login `admin`, password — в приватном файле;
+в чат/документацию значение не копировать. Loki/Prometheus не опубликованы.
 
-С хоста:
+Внутри K3s VM:
 
 ```bash
-~/nettop/ctl.sh status
-~/nettop/ctl.sh logs ha
-~/nettop/ctl.sh logs hermes gateway
-~/nettop/ctl.sh restart piper
-~/nettop/ctl.sh doctor
 sudo k3s kubectl get pods -A
 sudo k3s kubectl get pvc -A
 sudo k3s kubectl top nodes
 ```
 
-`~/nettop/ctl.sh` теперь Kubernetes wrapper из `projects/home/kubernetes/ctl.sh`.
-Старые Docker `up/down/pull/update/backup` через него не поддерживаются.
-`~/.local/bin/hermes` теперь выполняет CLI в gateway container; можно проверять
-`hermes mcp test homeassistant` и `hermes mcp test music-assistant`.
-Не выполнять native `hermes gateway install/start/update` на хосте: lifecycle
-принадлежит Kubernetes, обновление — через image/chart.
+Старый `~/nettop/ctl.sh` и Docker `up/down/pull/update` больше не являются
+рабочим lifecycle. Hermes CLI запускается в gateway container; lifecycle —
+Helm/Kubernetes, обновление — через image/chart. Не выполнять native
+`hermes gateway install/start/update` в VM.
 
-С Mac для kubectl/Helm нужен SSH tunnel, пока kubeconfig указывает на localhost:
+С Mac для kubectl/Helm нужен SSH tunnel к K3s VM:
 
 ```bash
-ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.25
+ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.27
 export KUBECONFIG=/private/path/kubeconfig
 kubectl get pods -A
 ```
+
+HAOS доступен напрямую `http://192.0.2.28:8123`; для старых клиентов и
+station/MA callbacks сохранён `http://192.0.2.27:8123` (HAProxy).
+
 
 Для диагностики внутри SSH tunnel или на хосте можно сделать port-forward:
 
@@ -100,34 +104,34 @@ kubectl -n monitoring port-forward svc/loki 13100:3100
 Port-forward привязан к конкретному Pod и может потребовать перезапуска после
 rollout/reboot. Он не является постоянным способом публикации сервиса.
 
-Tailscale `/grafana` proxy направлен на Service ClusterIP Grafana с **`/grafana`**
-в upstream path; без этого префикса login попадал бы в redirect loop.
-При удалении/создании самого Service или восстановлении кластера обновить IP:
-
-```bash
-GRAFANA_SERVICE_IP=$(sudo k3s kubectl -n monitoring get svc monitoring-grafana -o jsonpath='{.spec.clusterIP}')
-sudo tailscale serve --bg --yes --https=443 --set-path=/grafana \
-  "http://$GRAFANA_SERVICE_IP:80/grafana"
-```
-
-Не выполнять `tailscale serve reset`: он удалит и HA route. Private Grafana
-`server.root_url` должен совпадать с настоящим Tailscale URL и `/grafana/`.
+Tailscale публикует не host Serve, а Kubernetes Ingress `home`:
+`/` → `home-assistant-external` (EndpointSlice на HAOS `.28:8123`),
+`/grafana` → `monitoring-grafana`. Helm release — `home-access` в namespace
+`monitoring`; chart — `projects/home/kubernetes/tailscale/chart/`.
+При смене HAOS IP обновить private `haosAddress` и применить chart; при
+смене Grafana Service Helm/Kubernetes DNS обновит backend автоматически.
+`pl-home` должен указывать на operator proxy с `tag:k8s`, а не на host Serve;
+проверка — `projects/home/kubernetes/tailscale/check-*.sh` и
+`curl` из tailnet.
 
 ## Сеть и автозапуск
 
-Node IP сейчас закреплён за Wi-Fi `wlp4s0`; Ethernet был DOWN при переносе.
-При переходе на Ethernet согласованно обновить private K3s node-ip/flannel-iface,
-host firewall и Matter PRIMARY_INTERFACE, затем отдельно проверить discovery.
-Автоматический failover между NIC не обещается.
+Сейчас node IP `192.0.2.27` закреплён за Ethernet `eth0` внутри K3s VM;
+Ethernet host `vmbr0` — единственный uplink. Wi-Fi `wlp4s0` на Proxmox host
+DOWN, PCI mapping создан но не передан VM. Не отключать Ethernet и не менять
+node-ip/flannel-iface без отдельного routed/NAT-проекта и проверки discovery.
+Matter сейчас `PRIMARY_INTERFACE=eth0`; `wlp4s0` в старых private values
+относится к прежнему host.
 
 `ricardo-k3s-firewall.service` ограничивает INPUT на 6443/10250/9100/9116 и
 8472/udp; localhost, pod CIDR и сам node разрешены. С Mac проверено, что
-управляющие/metrics TCP-порты недоступны напрямую в LAN. SSH/Tailscale и прежние
-HA/MA/voice endpoints сохранены. Не включать UFW поверх этих правил без проверки.
+управляющие/metrics TCP-порты недоступны напрямую в LAN. HAOS/voice endpoints
+сохранены через HAProxy `.27:8123`, `.27:8643`, `.27:5580`. Не включать UFW
+поверх этих правил без проверки.
 
-Swap `/swap.img` выключен, его fstab entry закомментирован с сохранённым оригиналом.
-K3s резервирует по 1 GiB system/kube памяти; CRI log rotation 10Mi × 3.
-LV монтируется через UUID в fstab. Старые native Hermes user units masked.
+Swap в K3s VM — `/swap.img` выключен; на Proxmox host swap 8 GiB. K3s
+резервирует по 1 GiB system/kube памяти; CRI log rotation 10Mi × 3.
+Диски VM — local-lvm; host root 64 GiB, local-lvm около 379 GiB.
 
 ## Обновление приложений и дашбордов
 

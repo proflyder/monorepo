@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Read-only checks for remote access to Home Assistant on lab-host.
+# LEGACY pre-Proxmox check for Tailscale Serve on the old Ubuntu host.
+# Current runtime uses Tailscale Operator and HAOS:
+#   projects/home/kubernetes/tailscale/verify-tailnet.sh
+# This file remains for the historical host-Serve rollback/audit only.
 #
-# Run on lab-host (recommended):
+# Run on old lab-host:
 #   ssh labuser@192.0.2.25 'bash -s' < projects/home-assistant/scripts/verify-remote-access.sh
-# or copy the file and run it there.
 #
 # It does not change anything, does not start/stop Tailscale, and does not
 # print secrets. Exit code 1 means at least one FAIL.

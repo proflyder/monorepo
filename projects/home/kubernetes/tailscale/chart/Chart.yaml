@@ -1,0 +1,4 @@
+apiVersion: v2
+name: home-tailnet-access
+version: 0.1.0
+description: Private HTTPS entry to HAOS and Git-owned Grafana dashboards

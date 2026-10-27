@@ -1,17 +1,22 @@
 # Домашний Kubernetes
 
-Рабочая композиция: один K3s server/worker на существующей Ubuntu, собственный
-containerd, HA/MA/Matter/GigaAM/Whisper/Piper/Hermes и голосовой proxy.
-Pulsar и BLE gateway остаются на станции. Версии зафиксированы в `versions.sh`.
+Рабочая композиция: один K3s server/worker в Ubuntu VM `lab-k3s` на Proxmox,
+собственный containerd, MA/Matter/GigaAM/Whisper/Piper/Hermes, observability
+и Tailscale Operator. HA Core вынесен в отдельную HAOS VM. Pulsar и BLE
+gateway остаются на станции. Версии зафиксированы в `versions.sh`.
 
 - [Исследование и исходный план](../../../docs/PLAN-KUBERNETES-MIGRATION.md).
 - [Эксплуатация и восстановление](../../../docs/KUBERNETES-OPERATIONS.md).
+- [Proxmox/HAOS/IaC](../../../docs/PROXMOX-HAOS-IAC.md).
 - [Chart приложений](../../home-assistant/deploy/README.md).
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
+- [Tailscale Operator](tailscale/).
 
-`/srv/k3s` — отдельный LV 150 GiB. K3s data-dir: `/srv/k3s/runtime`.
-Новые observability PVC используют `local-retain`; существующие данные
-приложений — static local PV с Retain. Это локальное хранение, не репликация.
+`/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
+`/srv/k3s/runtime`. Новые observability PVC используют `local-retain`;
+существующие данные приложений — static local PV с Retain. Это локальное
+хранение, не репликация. VM `lab-k3s` использует Ethernet `192.0.2.27`;
+HAOS — `192.0.2.28`; host Proxmox — `192.0.2.26`.
 
 ## Обновление
 
@@ -33,5 +38,6 @@ export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml
 Helm операции над одним release.
 
 Администрирование — по SSH или через закрытый tunnel. API/kubelet/node metrics
-закрыты от обычного LAN; Grafana доступна в существующем Tailscale Serve
-по `/grafana/`, HA остаётся по `/`. Реальные URL и credentials — в secrets.
+закрыты от обычного LAN; Grafana доступна через Tailscale Operator по
+`/grafana/`, HAOS — по `/`. Host Tailscale на Proxmox пока не включён;
+аварийный доступ к host — LAN/Ethernet. Реальные URL и credentials — в secrets.

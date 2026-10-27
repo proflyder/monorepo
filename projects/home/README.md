@@ -24,5 +24,6 @@ solutions/assistant-ui    endpoint=home alarm
 - project-specific config не попадает в solutions.
 
 Рабочая Kubernetes-композиция и pinned Helm releases — [kubernetes/](kubernetes/README.md).
-Физические пути станции не менялись; существующие HA data paths подключены как local PV.
-Alarm/MCP/UI solutions остаются отдельными планируемыми дополнениями.
+HA Core перенесён в HAOS VM; K3s VM содержит MA/Matter/STT/TTS/Hermes и
+observability. Старые HA data paths сохранены как архив/PV, но не являются
+текущим writer. Alarm/MCP/UI solutions остаются отдельными дополнениями.

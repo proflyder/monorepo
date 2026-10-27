@@ -1,8 +1,10 @@
 # INVENTORY — неттоп
 
-**Runtime обновлён 2026-10-27:** K3s `v1.35.9+k3s1`, local LV 150 GiB
-в `/srv/k3s`; Docker/Compose retired. [Эксплуатация](../../docs/KUBERNETES-OPERATIONS.md).
-Старые Compose paths ниже — исходная схема; каталоги данных продолжают работать как PV.
+**Runtime обновлён 2026-10-28:** Proxmox VE `9.2.24`; VM `100 haos`
+(HAOS `2026.10.4`, `.28`) и VM `101 lab-k3s` (Ubuntu 24.04.5, K3s
+`v1.35.9+k3s1`, `.27`); Docker/Compose retired. Terraform state — на PVE,
+private copy вне Git. [Эксплуатация](../../docs/KUBERNETES-OPERATIONS.md).
+Старые Compose paths/таблицы ниже — историческая схема, не текущий writer.
 
 
 > Публичная копия: serial/MAC, внешний адрес и tailnet-домен заменены примерами.
@@ -24,14 +26,25 @@
 
 ## Сеть
 
+Текущая схема:
+
+| Узел | Интерфейс | IP | Примечание |
+|---|---|---|---|
+| Proxmox host | `vmbr0` / Ethernet | `192.0.2.26/24` | management |
+| HAOS VM 100 | `enp6s18` | `192.0.2.28/24` | DHCP, нужен reservation |
+| K3s VM 101 | `eth0` | `192.0.2.27/24` | DHCP, нужен reservation |
+| HA compatibility | K3s hostNetwork | `192.0.2.27:8123` | HAProxy → HAOS |
+
+Wi-Fi RTL8821CE на Proxmox host сейчас DOWN; PCI mapping создан, но VM не
+передан. Ethernet обязателен до отдельного Wi-Fi/routed-проекта.
+
+Историческая схема прежнего Ubuntu (не текущий writer):
+
 | Интерфейс | IP | MAC | Metric | Примечание |
 |---|---|---:|---:|---|
 | `enp3s0` | `192.0.2.26/24` | `02:00:00:00:00:04` | 100 | основной |
 | `wlp4s0` | `192.0.2.25/24` | `02:00:00:00:00:03` | 200 | резерв, 5 ГГц |
 | gateway/DNS | `192.0.2.1` | | | |
-
-Адреса **статические** через netplan. На роутере лучше исключить `.25/.26`
-из DHCP-пула или сделать reservations.
 
 ## ОС и сервисы
 
@@ -47,12 +60,12 @@
 | OMZ path | `/home/labuser/.oh-my-zsh` |
 | Docker | retired после перехода на K3s |
 | Compose | retired; текущий deploy — Helm |
-| HA | `ghcr.io/home-assistant/home-assistant:2026.10.4` |
-| HA URL | `http://192.0.2.26:8123`, `http://192.0.2.25:8123` |
+| HA | HAOS `2026.10.4` VM (was `ghcr.io/home-assistant/home-assistant:2026.10.4` Container) |
+| HA URL | HAOS `http://192.0.2.28:8123`; compatibility `http://192.0.2.27:8123` |
 | Music Assistant | `ghcr.io/music-assistant/server:2.10.8`; UI `:8095`, stream `:8097`, Sendspin `:8927` |
 | Matter Server | `ghcr.io/matter-js/matterjs-server:stable`; `:5580` loopback; HA integration `Matter`; devices pending |
 | Xiaomi Home | custom integration `v0.5.0`; HA custom_components; China login/device `MJGJD02YL` pending |
-| MA URL | `http://192.0.2.26:8095`, `http://192.0.2.25:8095`; setup завершён, Spotify playback проверен |
+| MA URL | `http://192.0.2.27:8095`; setup завершён, Spotify playback проверен |
 | Stack root | `/home/labuser/nettop` |
 | Stack entry | `/home/labuser/nettop/ctl.sh` |
 | HA config | `/home/labuser/nettop/homeassistant/config` |
