@@ -10,7 +10,7 @@ PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
 HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`. Terraform plan — no changes;
 state root-only на PVE и копия в `secrets/`. HAOS восстановлен, K3s runtime
 и Tailscale Operator приняты read-only E2E. HA-совместимый endpoint
-`192.0.2.27:8123` обслуживает HAProxy chart `haos-proxy`.
+HAOS доступен напрямую `.28:8123`; compatibility HAProxy удалён.
 
 Wi-Fi RTL8821CE на host DOWN; `bootstrap-wifi-mapping.sh` создаёт PCI mapping,
 но **не передаёт** карту VM и не меняет Ethernet. Это подготовка, не готовая

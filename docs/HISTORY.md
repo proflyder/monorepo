@@ -931,3 +931,18 @@ archives и custom images staged на PVE с повторной проверко
   tar-копии MA/Matter сохранены вне Git.
 - Whisper/GigaAM/Piper оставлены в K3s: перенос в HAOS не даёт выигрыша
   по latency и требует больше RAM/версионной совместимости.
+
+## 2026-10-28 — Удалены HAProxy и остатки MA/Matter из K3s
+
+- HAProxy `haos-proxy` удалён из K3s; HAOS открыт напрямую
+  `192.0.2.28:8123`. HA `internal_url` и alarm media URLs переведены на
+  `.28`; K3s health exporter проверяет HA напрямую.
+- Hermes HA MCP переключён на `.28:8123`. Hermes voice proxy v3
+  (`HERMES_PROXY_BIND=0.0.0.0`) слушает `.27:8643`; nftables-правило
+  разрешает только HAOS `.28`, K3s `.27` и loopback.
+- K3s MA/Matter Deployments были удалены ранее; их PV, PVC и data-каталоги
+  `runtime-music`/`runtime-matter` и их containerd images теперь удалены.
+  Tar-копии и финальный
+  HA backup остаются на Mac. `runtime-ha` — архив прежнего HA Container,
+  не MA, оставлен.
+- E2E обновлён: 5 Deployments, 5 runtime PV, 7 health endpoints.

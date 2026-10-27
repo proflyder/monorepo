@@ -33,7 +33,7 @@ private copy вне Git. [Эксплуатация](../../docs/KUBERNETES-OPERAT
 | Proxmox host | `vmbr0` / Ethernet | `192.0.2.26/24` | management |
 | HAOS VM 100 | `enp6s18` | `192.0.2.28/24` | static (Supervisor) |
 | K3s VM 101 | `eth0` | `192.0.2.27/24` | static (netplan) |
-| HA compatibility | K3s hostNetwork | `192.0.2.27:8123` | HAProxy → HAOS |
+| HA direct | HAOS | `192.0.2.28:8123` | direct; compatibility proxy removed |
 
 Wi-Fi RTL8821CE на Proxmox host сейчас DOWN; PCI mapping создан, но VM не
 передан. Ethernet обязателен до отдельного Wi-Fi/routed-проекта.
@@ -61,7 +61,7 @@ Wi-Fi RTL8821CE на Proxmox host сейчас DOWN; PCI mapping создан, �
 | Docker | retired после перехода на K3s |
 | Compose | retired; текущий deploy — Helm |
 | HA | HAOS `2026.10.4` VM (was `ghcr.io/home-assistant/home-assistant:2026.10.4` Container) |
-| HA URL | HAOS `http://192.0.2.28:8123`; compatibility `http://192.0.2.27:8123` |
+| HA URL | `http://192.0.2.28:8123` |
 | Music Assistant | HAOS add-on `2.10.8`; UI `.28:8095`, stream `:8097`, Sendspin `:8927` |
 | Matter Server | HAOS add-on `core_matter_server 9.2.0`; `127.0.0.1:5580`; HA integration `Matter`; devices pending |
 | Xiaomi Home | custom integration `v0.5.0`; HA custom_components; China login/device `MJGJD02YL` pending |

@@ -76,7 +76,7 @@ make test-e2e      # live HA/BLE gateway, read-only
 владельца). Токен не коммитить и не печатать.
 
 ```bash
-export HA_URL=http://192.0.2.27:8123
+export HA_URL=http://192.0.2.28:8123
 export HA_TOKEN='...'
 export HA_ASSIST_DEVICE_ID='...'   # опционально, для conversation
 make test-e2e

@@ -23,7 +23,7 @@ class HermesConfigTests(unittest.TestCase):
 
     def test_mcp_is_local_and_uses_env_token(self):
         server = self.data["mcp_servers"]["homeassistant"]
-        assert server["url"] == "http://127.0.0.1:8123/api/mcp"
+        assert server["url"] == "http://192.0.2.28:8123/api/mcp"
         assert server["headers"]["Authorization"] == "Bearer ${HERMES_HA_TOKEN}"
         assert server["trust"] == "full"
         assert server["tools"]["resources"] is True

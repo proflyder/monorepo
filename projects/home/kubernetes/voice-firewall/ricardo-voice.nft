@@ -1,0 +1,7 @@
+table inet ricardo_voice {
+  chain input {
+    type filter hook input priority -10; policy accept;
+    # Replace with the private HAOS and K3s VM addresses.
+    tcp dport 8643 ip saddr != { 127.0.0.1, 192.0.2.27, 192.0.2.28 } drop
+  }
+}

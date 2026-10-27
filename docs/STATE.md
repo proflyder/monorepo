@@ -18,9 +18,8 @@
   `terraform plan` — **No changes**; startup order задаётся отдельным
   host bootstrap `set-startup-order.sh`.
 - HAOS `2026.10.4`, Supervisor healthy. HA восстановлен из cold copy,
-  `internal_url=http://192.0.2.27:8123`, trusted proxy `192.0.2.27/32`.
-  Локальный HA-совместимый endpoint `192.0.2.27:8123` — hostNetwork
-  HAProxy (`haos-proxy`) → HAOS `192.0.2.28:8123`.
+  `internal_url=http://192.0.2.28:8123`, trusted proxy `192.0.2.27/32`.
+  HAOS доступен напрямую `192.0.2.28:8123`; K3s HAProxy удалён.
 - **HAOS add-ons:** Matter Server `9.2.0` (официальный `core_matter_server`,
   остановлен до миграции, затем запущен; fabric/nodes проверены) и
   Music Assistant `2.10.8` (`d5369777_music_assistant`, host network).
@@ -29,9 +28,9 @@
   зарегистрирован. Matter endpoint для HA — `ws://127.0.0.1:5580/ws`.
 - K3s `v1.35.9+k3s1`, node `lab-host` внутри VM; namespaces
   `home-assistant`/`monitoring`/`tailscale`. В K3s: GigaAM, Whisper, Piper,
-  Hermes gateway+proxy, health exporter, HAProxy и observability. MA/Matter
-  Deployments удалены; PV `runtime-music`/`runtime-matter` сохранены Retain
-  для отката. K3s kernel после reboot — `7.0.0-38-generic`.
+  Hermes gateway+proxy, health exporter и observability. MA/Matter
+  Deployments, PV, data и images удалены из K3s; rollback-копии — на Mac.
+  K3s kernel после reboot — `7.0.0-38-generic`.
 - Prometheus/Grafana/Alertmanager `kube-prometheus-stack` `92.14.0`;
   Loki `20.0.2`, Alloy `1.14.3`; четыре project dashboards доставляются
   Helm ConfigMap → Grafana sidecar. Prometheus/Loki не опубликованы.
@@ -42,14 +41,14 @@
   только LAN/Ethernet.
 - Hermes — revision `bf0203a794a07aac3ff764972ab9087baa4e4f4e`, собственный
   image, API extras/tini/SQLite 3.53.4; state в `/srv/k3s/volumes/hermes`.
-- Functional E2E: Kubernetes runtime 5/5 (6 Deployments, 7 health endpoints),
+- Functional E2E: Kubernetes runtime 5/5 (5 Deployments, 7 health endpoints),
   HA read-only 3/3, Hermes read-only 3/3 + real chat 1/1, MCP HA 73 /
   MA 86 tools. HA integration Music Assistant работает через add-on,
-  Matter add-on подключён; alarm media URLs — `.27:8123`.
+  Matter add-on подключён; alarm media URLs — `.28:8123`.
 - Cold backup 11 PVC, host recovery, EFI и custom images сохранены на Mac
   вне Git с SHA-256; HA full backup до миграции (`pre-ma-matter-addons`),
   K3s tar `runtime-music`/`runtime-matter` и полный HA backup после
-  миграции с обоими add-ons (`final-ma-matter`) сохранены. Полный
+  миграции с обоими add-ons (`final-cleanup-no-proxy`) сохранены. Полный
   disaster restore на запасном железе и длительный power-loss тест ещё
   не выполнялись.
 - VM `.27/.28` переведены на static внутри guests; router reservations не
@@ -69,7 +68,7 @@
   host filesystem; актуальные пути — внутри VM и в private values.
 - Voice/Hermes endpoints остаются на K3s `.27`; HAOS `.28`. MA — HAOS
   add-on, HA integration использует add-on endpoint; Matter — HAOS add-on
-  localhost. K3s health exporter проверяет HA `.27:8123` и MA `.28:8095`,
+  localhost. K3s health exporter проверяет HA `.28:8123` и MA `.28:8095`,
   voice/Hermes — `.27`; Matter из K3s больше не проверяется.
   Pulsar и BLE gateway на станции не менялись.
 - `helm` releases: `runtime`, `monitoring`, `ha-observability`, `loki`,
@@ -340,16 +339,16 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
 - Matter Server `9.2.0` — HAOS add-on `core_matter_server`, host network,
   WebSocket `ws://127.0.0.1:5580/ws`. HA integration `Matter`
   (`01M5Y0758DM9RS34XGESD2EKXG`) подключена; nodes пока 0.
-  Прежний K3s `runtime-matter` PV сохранён Retain для отката.
+  Прежний K3s `runtime-matter` удалён; rollback-копия есть на Mac.
   Matter-устройства ещё не добавлены; лента Яндекса ожидает pairing.
 - STT primary: `wyoming-onnx-stt` `:10305` (GigaAM v3 CTC int8, CPU, ru);
   Whisper `medium-int8` `:10300` — fallback. HA pipeline `stt.onnx_asr`.
 - Hermes Agent `v0.22.5` в K3s Pod `hermes` (gateway+voice-proxy,
   `hostNetwork`, state `/srv/k3s/volumes/runtime-hermes`), не на станции;
   OpenAI-compatible API `127.0.0.1:8642` внутри Pod, HA использует
-  `192.0.2.27:8643` через HAProxy, модель `gpt-5.6-luna` через
+  `192.0.2.27:8643` напрямую (nftables: только HAOS/K3s/loopback), модель `gpt-5.6-luna` через
   ChatGPT/Codex OAuth. MCP:
-  - HA MCP Server `http://192.0.2.27:8123/api/mcp` — **73 tools**,
+  - HA MCP Server `http://192.0.2.28:8123/api/mcp` — **73 tools**,
     resources и prompts (без `tools.include`), token `HERMES_HA_TOKEN`;
   - Music Assistant FastMCP plugin `http://192.0.2.28:8095/mcp/v1` — **86
     tools**, token `HERMES_MA_TOKEN`; плагин `fastmcp_server` loaded, все
@@ -374,7 +373,7 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
 - Тесты после cutover: Kubernetes runtime 5/5, HA read-only 3/3/Hermes
   read-only 3/3 + real chat 1/1; MCP HA 73 / MA 86 tools; HA config check
   `RC=0`. Полные live audio/microphone тесты остаются отдельными.
-- HAOS `:8123` (и proxy `.27:8123`), MA add-on `.28:8095`/stream `8097`/
+- HAOS `:8123` напрямую, MA add-on `.28:8095`/stream `8097`/
   Sendspin `8927`; Whisper `.27:10300`, Piper `.27:10200`, GigaAM
   `.27:10305`; HA/MA/Whisper/Piper — healthy.
 - **Remote access:** Tailscale Operator `1.104.2` в K3s;
@@ -423,7 +422,8 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
   `archive/legacy/alice-mitm-bootstrap/`; v3rt3p source/архив —
   `archive/legacy/v3rt3p-stack/` + `repos/`; recovery — `REBUILD.md` §4.
 - `:8099` (gateway control), `:6053` (Pulsar API), `:10305` (GigaAM),
-  `:5555`/`:22` — только LAN, не публиковать; `:8642`/`:8643` — loopback.
+  `:5555`/`:22` — только LAN, не публиковать; `:8642` — loopback; `:8643` —
+  только HAOS/K3s/loopback через nftables.
 
 ## Открыто / ограничения
 

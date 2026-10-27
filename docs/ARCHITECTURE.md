@@ -26,7 +26,6 @@ Proxmox host 192.0.2.26 (Ethernet; Wi-Fi .25 DOWN)
   │     ├── Music Assistant add-on :8095 (stream :8097, Sendspin :8927)
   │     └── ESPHome integration ← Pulsar :6053
   └── VM 101 lab-k3s 192.0.2.27 — Ubuntu + K3s
-      ├── HA compatibility HAProxy .27:8123 → HAOS
       ├── STT :10305 GigaAM v3, :10300 Whisper fallback
       ├── Piper TTS :10200 (ru_puriso2-medium)
       ├── Hermes gateway :8642 (loopback) + voice proxy :8643

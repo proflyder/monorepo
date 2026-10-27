@@ -47,7 +47,7 @@ mcp_servers:
       resources: true
       prompts: true
   homeassistant:
-    url: "http://127.0.0.1:8123/api/mcp"
+    url: "http://192.0.2.28:8123/api/mcp"
     headers:
       Authorization: "Bearer ${HERMES_HA_TOKEN}"
     connect_timeout: 20

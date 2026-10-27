@@ -1,0 +1,12 @@
+[Unit]
+Description=Restrict Hermes voice proxy to HAOS/K3s nodes
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ricardo-voice-firewall
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -11,8 +11,9 @@ API directly.  The proxy forwards requests and sanitizes assistant text:
 * strips Markdown emphasis/headings/code/list markers;
 * collapses whitespace.
 
-Only loopback should expose this service.  It is not an authentication
-boundary; keep it on 127.0.0.1 and pass the upstream bearer key through.
+It is not an authentication boundary. The default bind is loopback; the K3s
+deployment binds the K3s node address so HAOS can reach it directly and uses
+an nftables rule to allow only HAOS and the node itself.
 """
 from __future__ import annotations
 
@@ -27,6 +28,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 UPSTREAM = os.environ.get("HERMES_UPSTREAM", "http://127.0.0.1:8642").rstrip("/")
+# Loopback by default. The K3s deployment sets this to the LAN address so HAOS
+# can reach the proxy without the retired HAProxy compatibility layer.
+BIND = os.environ.get("HERMES_PROXY_BIND", "127.0.0.1")
 PORT = int(os.environ.get("HERMES_PROXY_PORT", "8643"))
 MAX_BODY = 10 * 1024 * 1024
 VOICE_REASONING_EFFORT = os.environ.get("HERMES_VOICE_REASONING_EFFORT", "low")
@@ -305,8 +309,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"hermes voice proxy on http://127.0.0.1:{PORT} -> {UPSTREAM}", flush=True)
+    server = ThreadingHTTPServer((BIND, PORT), Handler)
+    print(f"hermes voice proxy on http://{BIND}:{PORT} -> {UPSTREAM}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

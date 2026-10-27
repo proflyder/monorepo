@@ -2,8 +2,8 @@
 
 **Текущий HA Core работает в HAOS VM, а не в Kubernetes.** HAOS `2026.10.4`,
 Supervisor healthy; VM `100` — 2 vCPU / 4 GiB / 32 GiB, `192.0.2.28`.
-HA-совместимый endpoint `192.0.2.27:8123` — HAProxy в K3s, проксирует в HAOS;
-внешний вход — Tailscale Operator. Актуальные операции — [Kubernetes
+HAOS открыт напрямую `192.0.2.28:8123`; compatibility HAProxy удалён.
+Внешний вход — Tailscale Operator. Актуальные операции — [Kubernetes
 runbook](../../docs/KUBERNETES-OPERATIONS.md) и [Proxmox runbook](../../docs/INSTALL-PROXMOX.md).
 
 HAOS add-ons: **Matter Server `9.2.0`** и **Music Assistant `2.10.8`**

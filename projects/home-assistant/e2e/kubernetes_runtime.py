@@ -28,7 +28,7 @@ def kubectl(*args):
 class KubernetesRuntime(unittest.TestCase):
     def test_all_workloads_ready_and_single_instance(self):
         data = kubectl("-n", "home-assistant", "get", "deployments")
-        self.assertEqual(len(data["items"]), 6)
+        self.assertEqual(len(data["items"]), 5)
         for item in data["items"]:
             with self.subTest(workload=item["metadata"]["name"]):
                 self.assertEqual(item["spec"]["replicas"], 1)
@@ -38,7 +38,7 @@ class KubernetesRuntime(unittest.TestCase):
     def test_application_volumes_retained(self):
         data = kubectl("get", "pv")
         volumes = [v for v in data["items"] if v["metadata"]["name"].startswith("runtime-")]
-        self.assertEqual(len(volumes), 7)
+        self.assertEqual(len(volumes), 5)
         for volume in volumes:
             self.assertEqual(volume["status"]["phase"], "Bound")
             self.assertEqual(volume["spec"]["persistentVolumeReclaimPolicy"], "Retain")

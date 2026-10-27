@@ -28,17 +28,17 @@
   (8/8 GiB/200 GiB, `.27`) running; startup order 1/2; Terraform plan — no changes.
 - ✅ HAOS `2026.10.4` healthy; HA restored, integration endpoints переведены
   на `.27`, `internal_url` и trusted proxy обновлены; alarm media URLs
-  исправлены на `.27:8123`.
+  исправлены на `.28:8123`.
 - ✅ **Matter Server `9.2.0`** перенесён в HAOS add-on; HA integration
   использует `ws://127.0.0.1:5580/ws`; K3s Matter Deployment удалён,
-  PV `runtime-matter` сохранён Retain.
+  PV/data `runtime-matter` удалены; backup на Mac.
 - ✅ **Music Assistant `2.10.8`** перенесён в HAOS add-on; data (SQLite/
   settings/Spotify/Sendspin) скопированы из `runtime-music`; HA integration
   автоматически переключилась на add-on, station player зарегистрирован;
   Hermes MCP переключён на `.28:8095`; K3s MA Deployment удалён, PV сохранён.
 - ✅ K3s runtime: GigaAM/Whisper/Piper/Hermes, observability и Tailscale
   Operator `1.104.2`; `pl-home` → HAOS, `/grafana` → Grafana; HAOS proxy
-  `.27:8123` сохраняет локальные callbacks. Health exporter — 7 endpoints.
+  HAOS работает напрямую `.28:8123`; K3s HAProxy удалён. Health exporter — 7 endpoints.
 - ✅ VM `.27/.28` переведены на static в guests (netplan/HAOS Supervisor);
   Proxmox host `.26` static с установки. Router reservations для них не нужны;
   проверить, что адреса вне DHCP-пула, при следующей смене роутера.
@@ -49,7 +49,7 @@
   offsite backup и host Tailscale emergency access.
 - ⏳ Живая приёмка после cutover: микрофон/wake, alarm/stop/resume,
   Spotify/MA transfer, локальные HA intents; read-only E2E уже pass.
-- ✅ Полные HA backups до/после миграции (`final-ma-matter`, 35.6 MiB)
+- ✅ Полные HA backups до/после миграции (`final-cleanup-no-proxy`, 35.9 MiB)
   созданы и скопированы на Mac; checksums записаны. ⏳ Осталось проверить
   Spotify/Sendspin после reboot HAOS; Spotify rate-limit уже снялся.
 
@@ -57,7 +57,7 @@
 
 - ✅ Matter Server `9.2.0` работает как HAOS add-on `core_matter_server`;
   HA integration `Matter` подключена к `ws://127.0.0.1:5580/ws`.
-  Прежние K3s data `runtime-matter` сохранены Retain как rollback.
+  Прежние K3s data `runtime-matter` удалены; tar-копия на Mac.
 - ⏳ Добавить светодиодную ленту Яндекса (Matter over Wi-Fi) через HA
   Companion: Matter → Add device → QR/11-значный код. Телефон на 2.4 ГГц,
   Bluetooth и location permission.
@@ -206,7 +206,8 @@
   слуховая проверка пауз/duck/resume; акустический baseline/p50/p95 ещё впереди.
 
 - ✅ Hermes Agent `v0.22.5` в K3s Pod `hermes`; ChatGPT/Codex OAuth, модель
-  `gpt-5.6-luna`; gateway `127.0.0.1:8642`, HA proxy/API `.27:8643`.
+  `gpt-5.6-luna`; gateway `127.0.0.1:8642`, direct voice proxy `.27:8643`
+  (nftables: HAOS/K3s/loopback).
 - ✅ MCP full access: HA MCP 73 tools; Music Assistant FastMCP 86/86 tools;
   `platform_toolsets.api_server` = `mcp-homeassistant`, `mcp-music-assistant`,
   `web`. MA plugin experimental; all permission flags enabled. Tokens —

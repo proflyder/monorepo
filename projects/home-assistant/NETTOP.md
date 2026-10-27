@@ -27,7 +27,7 @@ DHCP reservations, power-loss reboot и offsite backup — открыты.
 | HAOS VM 100 | HAOS `2026.10.4`, 2 vCPU / 4 GiB / 32 GiB, `.28`; Matter/MA add-ons |
 | K3s VM 101 | Ubuntu 24.04.5, 8 vCPU / 8 GiB / 200 GiB, `.27` |
 | K3s | `v1.35.9+k3s1`, node `lab-host`; voice/Hermes/observability |
-| HA endpoint | HAOS `.28:8123`; compatibility proxy `.27:8123` |
+| HA endpoint | HAOS `.28:8123` (direct) |
 | Remote | Tailscale Operator `1.104.2`; `pl-home` → HAOS, `/grafana` |
 | Terraform | provider `bpg/proxmox` 0.118.1; state root-only на PVE |
 | Wi-Fi | RTL8821CE host DOWN; PCI mapping prepared, not attached |

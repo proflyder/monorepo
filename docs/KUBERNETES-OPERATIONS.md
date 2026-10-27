@@ -13,9 +13,9 @@
   add-ons Matter Server `9.2.0` и Music Assistant `2.10.8`.
   HA больше не Deployment в K3s.
 - VM `101 lab-k3s` — 8 GiB; namespaces `home-assistant`: GigaAM/Whisper/
-  Piper, Hermes gateway+proxy, health exporter и `haos-proxy`
-  (hostNetwork HAProxy). MA/Matter Deployments удалены; их Retain PV
-  `runtime-music`/`runtime-matter` сохранены для отката.
+  Piper, Hermes gateway+proxy и health exporter. MA/Matter Deployments,
+  PV и data удалены из K3s; rollback-копии — на Mac. HAProxy `haos-proxy`
+  удалён; HAOS доступен напрямую `.28:8123`.
 - Namespace `monitoring`: Prometheus/Alertmanager/Grafana, Operator,
   kube-state-metrics/node-exporter, Loki и Alloy.
 - Namespace `tailscale`: Operator и ingress proxy; `pl-home` → HAOS,
@@ -37,9 +37,8 @@ provisioner. `/srv/k3s/volumes/hermes` — writable Hermes home, в Pod
 `/opt/data`. `/srv/k3s/recovery` — закрытые recovery-файлы внутри VM.
 
 STT/TTS и Hermes используют Retain local PV/PVC. `runtime-music` и
-`runtime-matter` больше не подключены к Pod'ам: это rollback-копии данных
-MA/Matter, перенесённых в HAOS add-ons. `runtime-ha` PVC сохранён как архив
-прежнего HA Container. **Не удалять старые PV и каталоги
+`runtime-matter` удалены после переноса MA/Matter в HAOS; их tar-копии лежат
+на Mac. `runtime-ha` PVC сохранён как архив прежнего HA Container. **Не удалять старые PV и каталоги
 `/srv/k3s/volumes/*` без отдельной проверки.** Все application PV и
 observability StorageClass имеют reclaimPolicy Retain.
 
@@ -93,8 +92,10 @@ export KUBECONFIG=/private/path/kubeconfig
 kubectl get pods -A
 ```
 
-HAOS доступен напрямую `http://192.0.2.28:8123`; для старых клиентов и
-station/MA callbacks сохранён `http://192.0.2.27:8123` (HAProxy).
+HAOS доступен напрямую `http://192.0.2.28:8123`; compatibility proxy удалён.
+Hermes voice proxy доступен HAOS на `.27:8643`; nftables разрешает только
+HAOS, K3s node и loopback. Установка правила —
+[`voice-firewall/`](../projects/home/kubernetes/voice-firewall/).
 
 
 Для диагностики внутри SSH tunnel или на хосте можно сделать port-forward:
@@ -131,9 +132,9 @@ K3s VM — 8 GiB, HAOS VM — 4 GiB.
 `ricardo-k3s-firewall.service` ограничивает INPUT на 6443/10250/9100/9116 и
 8472/udp; localhost, pod CIDR и сам node разрешены. С Mac проверено, что
 управляющие/metrics TCP-порты недоступны напрямую в LAN. HAOS/voice endpoints
-сохранены через HAProxy `.27:8123` и `.27:8643`; Matter/MA add-ons
-доступны только в HAOS (`127.0.0.1:5580`/`:8095`), MA — также `.28:8095`.
-Не включать UFW поверх этих правил без проверки.
+HAOS — `.28:8123`; Hermes voice proxy — `.27:8643`, ограничен nftables
+только HAOS/K3s/loopback. Matter/MA add-ons — в HAOS (`127.0.0.1:5580`,
+`.28:8095`). Не включать UFW поверх этих правил без проверки.
 
 Swap в K3s VM — `/swap.img` выключен; на Proxmox host swap 8 GiB. K3s
 резервирует по 1 GiB system/kube памяти; CRI log rotation 10Mi × 3.

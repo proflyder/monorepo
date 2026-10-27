@@ -21,7 +21,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-HA_URL = os.environ.get("HA_URL", "http://192.0.2.27:8123").rstrip("/")
+HA_URL = os.environ.get("HA_URL", "http://192.0.2.28:8123").rstrip("/")
 HA_TOKEN = os.environ.get("HA_TOKEN", "").strip()
 HA_DEVICE_ID = os.environ.get("HA_ASSIST_DEVICE_ID", "").strip()
 E2E = os.environ.get("STATION_E2E") == "1"

@@ -12,6 +12,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [Chart приложений](../../home-assistant/deploy/README.md).
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
 - [Tailscale Operator](tailscale/).
+- [Hermes voice-proxy firewall](voice-firewall/).
 
 `/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
 `/srv/k3s/runtime`. Новые observability PVC используют `local-retain`;

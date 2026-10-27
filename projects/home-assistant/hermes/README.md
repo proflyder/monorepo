@@ -20,7 +20,7 @@ the full Home Assistant MCP surface and the Music Assistant MCP server.
 | Launcher | `~/.local/bin/hermes` |
 | Config | `~/.hermes/config.yaml` |
 | Secrets | `~/.hermes/.env` (mode `600`) |
-| MCP HA | `http://127.0.0.1:8123/api/mcp` (HA MCP Server, streamable HTTP) |
+| MCP HA | `http://192.0.2.28:8123/api/mcp` (HA MCP Server, streamable HTTP) |
 | MCP MA | `http://192.0.2.28:8095/mcp/v1` (Music Assistant FastMCP plugin; HAOS add-on) |
 | API | `http://127.0.0.1:8642/v1` (OpenAI-compatible, loopback only) |
 | Model | ChatGPT/Codex subscription via `openai-codex` |
@@ -135,12 +135,16 @@ Voice uses this only after the local HA intent path fails.  A question such as
 
 ## Voice proxy (TTS sanitizer)
 
-HA does not call the Hermes API directly.  It calls
-`hermes-voice-proxy` on `127.0.0.1:8643`:
+HA does not call the Hermes API directly.  It calls the K3s
+`hermes-voice-proxy` on the node address:
 
 ```text
-HA llama_cpp -> http://127.0.0.1:8643/v1 -> Hermes 127.0.0.1:8642
+HA llama_cpp -> http://192.0.2.27:8643/v1 -> Hermes 127.0.0.1:8642
 ```
+
+The proxy binds `0.0.0.0:8643` in the hostNetwork Hermes Pod. An nftables
+rule on the K3s VM allows only HAOS `.28`, the K3s node `.27` and loopback;
+other LAN clients are dropped.
 
 The proxy forwards the OpenAI-compatible request using the same bearer key and
 sanitizes assistant text before Piper TTS:
@@ -150,7 +154,8 @@ sanitizes assistant text before Piper TTS:
 - strips Markdown headings, emphasis, code ticks and list markers;
 - collapses whitespace.
 
-It is a loopback-only presentation layer, not an authentication boundary.
+It is a presentation layer, not an authentication boundary; the K3s
+nftables rule limits it to HAOS/K3s/loopback.
 The HA entry supports streaming through the proxy. Streaming requests receive
 cleaned complete sentences as SSE; links split across chunks stay buffered.
 Paragraph separators let Piper synthesize each sentence without waiting for

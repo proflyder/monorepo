@@ -1,0 +1,4 @@
+#!/bin/sh
+# Apply the Hermes voice-proxy source restriction; safe to rerun.
+/usr/sbin/nft delete table inet ricardo_voice 2>/dev/null || true
+exec /usr/sbin/nft -f /etc/nftables.d/ricardo-voice.nft

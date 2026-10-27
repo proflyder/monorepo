@@ -2,14 +2,3 @@
 nodeName: ""
 storage: {}
 workloads: {}
-# Optional TCP compatibility endpoint after moving HA into its own HAOS VM.
-# Keeps existing station/MA callbacks and localhost clients on port 8123.
-haProxy:
-  enabled: false
-  upstream: ""
-  privateBridge:
-    enabled: false
-    bindAddress: ""
-    allowedClient: ""
-    # Matter Server is now a HAOS add-on; keep this only for a K3s rollback.
-    matterEnabled: false
