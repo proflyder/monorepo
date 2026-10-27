@@ -65,7 +65,7 @@
 
 ## P1 — Pulsar Rust fork (Ricardo profile, not deployed)
 
-- ✅ Отдельный форк `proflyder/pulsar`, ветка `feat/ricardo-rust`; база v0.5.0.
+- ✅ Отдельный форк `OWNER/pulsar`, ветка `feat/ricardo-rust`; база v0.5.0.
 - ✅ Перенесены «Рикардо»/pre-roll/тихая отмена/стоп-в-HA/локальные команды;
   Zigbee и auto-update выключены, `nearest_answers=0`.
 - ✅ Cross-build aarch64/armhf, clippy обоих targets, 30/30 `pulsar`,

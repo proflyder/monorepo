@@ -1,0 +1,18 @@
+#cloud-config
+hostname: lab-k3s
+manage_etc_hosts: true
+timezone: Asia/Almaty
+ssh_pwauth: false
+disable_root: true
+package_update: true
+packages:
+  - qemu-guest-agent
+  - ca-certificates
+  - curl
+  - rsync
+  - jq
+  - sqlite3
+runcmd:
+  - [systemctl, enable, --now, qemu-guest-agent]
+  - [systemctl, enable, --now, fstrim.timer]
+# The private generated variant adds the operator's SSH public key and user.

@@ -870,7 +870,7 @@ HAOS/Terraform/Operator не развёрнуты. Следующий шаг т�
 
 ## 2026-10-27 — Pulsar Rust fork: профиль Ricardo (не установлен)
 
-- Склонирован отдельный форк `proflyder/pulsar` (база v0.5.0) в
+- Склонирован отдельный форк `OWNER/pulsar` (база v0.5.0) в
   `projects/station/upstream/pulsar-rust/`; активный C++ `v0.4.1-ricardo6`
   не менялся и на станцию ничего не устанавливалось.
 - В Rust-версию перенесены on-device «Рикардо», pre-roll 0.5 с, тихая отмена
@@ -882,3 +882,13 @@ HAOS/Terraform/Operator не развёрнуты. Следующий шаг т�
 - Cross-build aarch64/armhf, clippy обоих targets, 30/30 `pulsar`,
   20/20 `pulsar-audio`, Go installer tests — pass. HIL/микрофон/ESPHome/
   Spotify/MA/откат остаются отдельным gate.
+
+## 2026-10-28 — Proxmox установлен, восстановление начато
+
+Пользователь установил PVE 9.2 на NVMe, подключил Ethernet и отдельный SSH key.
+Проверены bridge, API/TLS через CA и storage: root 64 GiB, swap 8 GiB,
+local-lvm около 379 GiB. Подключён no-subscription repository, установлены
+обновления PVE 9.2.24. Подготовлены pinned Terraform/provider lock, HAOS/Ubuntu
+images с checksum, cloud-init и VM definitions с защитой удаления. Recovery
+archives и custom images staged на PVE с повторной проверкой SHA-256.
+Приложения пока восстанавливаются; текущий статус — STATE.md.

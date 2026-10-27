@@ -1,5 +1,15 @@
 # STATE — текущее состояние (канонические факты)
 
+## Proxmox — миграция в процессе, 2026-10-28
+
+- Proxmox VE 9.2 установлен пользователем на внутренний NVMe; SSH по отдельному
+  ключу проверен. Ethernet `vmbr0`, root 64 GiB, swap 8 GiB, local-lvm около 379 GiB.
+- Предыдущая Ubuntu и её runtime удалены установщиком. Приложения пока недоступны;
+  раздел ниже описывает принятый baseline до переустановки, не работающий сейчас host.
+- Fresh cold snapshot 11 PVC, host recovery, EFI и custom images сохранены на Mac
+  вне Git с проверкой SHA-256. Идёт подготовка HAOS VM + Ubuntu/K3s VM через Terraform.
+- Подробности физической установки — [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md).
+
 ## Kubernetes runtime — внедрение 2026-10-27
 
 - Неттоп сохранён на Ubuntu; рабочий runtime — K3s `v1.35.9+k3s1`, node
@@ -132,7 +142,7 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
 
 - Установка `pulsar-install --no-enable` на `.160`, затем `ctl.sh enable`;
   `ctl.sh disable` возвращает штатный стек, reboot — autostart.
-- Отдельный Rust-форк `proflyder/pulsar` (ветка `feat/ricardo-rust`, база
+- Отдельный Rust-форк `OWNER/pulsar` (ветка `feat/ricardo-rust`, база
   v0.5.0) склонирован в `projects/station/upstream/pulsar-rust/`; профиль
   Ricardo, cross-build aarch64/armhf и unit-тесты проходят, но на станцию **не
   установлен**. Активен C++ `v0.4.1-ricardo6`. Границы и HIL-gate —

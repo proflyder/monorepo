@@ -1,9 +1,10 @@
 # Следующий инфраструктурный слой: Proxmox, HAOS и IaC
 
-Подготовка: 2026-10-27. **Proxmox пока не установлен.** Текущий работающий runtime —
-[K3s на Ubuntu](KUBERNETES-OPERATIONS.md). Подготовлены ISO и свежая внешняя recovery-копия;
-[порядок установки](INSTALL-PROXMOX.md). ОС/гипервизор ещё
-не менялись; HAOS VM, Terraform resources и Tailscale Operator пока не созданы.
+Обновление: 2026-10-28. **Proxmox установлен, восстановление выполняется.**
+SSH, Ethernet bridge и storage проверены. Предыдущая Ubuntu/K3s сохранена в
+recovery archives на Mac, но на неттопе уже удалена установщиком. Подготовлены
+Terraform definitions двух VM; HAOS/K3s runtime и Operator пока не приняты.
+[Порядок установки и восстановления](INSTALL-PROXMOX.md), текущие факты — STATE.md.
 
 ## Что даёт Proxmox
 

@@ -89,3 +89,12 @@ dist/
 /backups
 /logs
 /snapshots
+
+# Terraform credentials, state, plans and provider cache; keep provider lock tracked.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log

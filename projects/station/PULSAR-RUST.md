@@ -2,7 +2,7 @@
 
 Отдельный проект, не замена активному C++ Pulsar.
 
-- Fork: <https://github.com/proflyder/pulsar>
+- Fork: <https://github.com/OWNER/pulsar>
 - Ветка: `feat/ricardo-rust`
 - База: upstream `v0.5.0` (`1934b68`)
 - Локальный checkout: `projects/station/upstream/pulsar-rust/` (gitignored, свой `.git`)
@@ -21,11 +21,11 @@
   `v0.4.1-ricardo6`;
 - `wake_word=ricardo` и `nearest_answers=0` по умолчанию;
 - Zigbee runtime отключён (`ENABLE_ZIGBEE=false`);
-- обновления только с `proflyder/pulsar`, `auto_update=0`;
+- обновления только с `OWNER/pulsar`, `auto_update=0`;
 - модель не коммитится: `satellite/wakewords/` — локальный артефакт.
 
 Полное описание, сборка, проверки и границы — в
-[`upstream/pulsar-rust/RICARDO.md`](upstream/pulsar-rust/RICARDO.md).
+`upstream/pulsar-rust/RICARDO.md` (`upstream/pulsar-rust/RICARDO.md`, локальный upstream checkout).
 
 ## Проверки
 
