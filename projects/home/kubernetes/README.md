@@ -42,5 +42,6 @@ Helm операции над одним release.
 
 Администрирование — по SSH или через закрытый tunnel. API/kubelet/node metrics
 закрыты от обычного LAN; Grafana доступна через Tailscale Operator по
-`/grafana/`, HAOS — по `/`. Host Tailscale на Proxmox пока не включён;
+`/grafana/` и в LAN по `http://192.0.2.27:30300/grafana/`. HAOS — по `/`.
+Host Tailscale на Proxmox пока не включён;
 аварийный доступ к host — LAN/Ethernet. Реальные URL и credentials — в secrets.

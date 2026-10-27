@@ -68,8 +68,9 @@ secrets/kubernetes-research/recovery/
 ## Доступ и обычные команды
 
 Grafana: `https://pl-home.<tailnet>.ts.net/grafana/` через Tailscale
-Operator; `/` ведёт в HAOS. Login `admin`, password — в приватном файле;
-в чат/документацию значение не копировать. Loki/Prometheus не опубликованы.
+Operator и LAN NodePort `http://192.0.2.27:30300/grafana/`; `/` ведёт в
+HAOS. Login `admin`, password — в приватном файле; в чат/документацию
+значение не копировать. Loki/Prometheus не опубликованы.
 
 Внутри K3s VM:
 

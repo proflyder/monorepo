@@ -378,6 +378,7 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
   `.27:10305`; HA/MA/Whisper/Piper — healthy.
 - **Remote access:** Tailscale Operator `1.104.2` в K3s;
   `https://pl-home.example-tailnet.ts.net/` → HAOS, `/grafana/` → Grafana.
+  LAN Grafana — `http://192.0.2.27:30300/grafana/` (NodePort, login required).
   `pl-home` DNS указывает на operator proxy с `tag:k8s`; старый host Serve
   удалён из маршрута. HA MFA, external URL, trusted proxy `192.0.2.27/32`;
   `xiaomi-17` в tailnet. Публичного HA нет, `8123` не проброшен,

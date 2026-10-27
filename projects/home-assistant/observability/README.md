@@ -2,6 +2,9 @@
 
 Dashboard JSON лежит в `chart/dashboards/`; `chart/templates/dashboards.yaml`
 пакует каждый файл в ConfigMap с `grafana_dashboard: "1"` и папкой Home Assistant.
+LAN UI: `http://192.0.2.27:30300/grafana/` (NodePort `grafana-lan`);
+Tailscale UI остаётся `https://pl-home.<tailnet>.ts.net/grafana/`.
+
 Release `ha-observability` устанавливается в namespace monitoring, Grafana sidecar
 читает ConfigMaps только из monitoring и provision’ит JSON. Имена Pod не нужны.
 
