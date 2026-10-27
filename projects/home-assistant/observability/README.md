@@ -8,8 +8,8 @@ Tailscale UI остаётся `https://pl-home.<tailnet>.ts.net/grafana/`.
 Release `ha-observability` устанавливается в namespace monitoring, Grafana sidecar
 читает ConfigMaps только из monitoring и provision’ит JSON. Имена Pod не нужны.
 
-В репозитории четыре дашборда: nettop, cluster, runtime voice endpoints и
-infrastructure logs. Datasource UIDs: `prometheus`, `loki`; dashboard UIDs
+В репозитории четыре дашборда: K3s VM (файл `nettop.json` — историческое
+имя), cluster, runtime voice endpoints и infrastructure logs. Datasource UIDs: `prometheus`, `loki`; dashboard UIDs
 стабильны, UI-изменения provisioned dashboard не сохраняются. Экспериментальную
 копию можно экспортировать в JSON и принять обычным code review.
 

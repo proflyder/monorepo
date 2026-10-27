@@ -1,9 +1,11 @@
 {
   "uid": "ricardo-nettop",
-  "title": "Nettop / resources",
+  "title": "K3s VM / resources",
+  "description": "Ubuntu K3s VM resource overview: CPU, memory and disk space in human units.",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
+  "timezone": "browser",
   "time": {
     "from": "now-1h",
     "to": "now"
@@ -15,7 +17,8 @@
   "panels": [
     {
       "id": 1,
-      "title": "Memory available bytes",
+      "title": "CPU utilization (%)",
+      "description": "Average CPU utilization of the K3s VM.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -30,19 +33,72 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "node_memory_MemAvailable_bytes",
-          "legendFormat": "{{endpoint}}{{pod}}{{instance}}"
+          "editorMode": "code",
+          "expr": "100 * (1 - avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+          "legendFormat": "K3s VM",
+          "range": true,
+          "instant": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "CPU",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 2,
-      "title": "CPU busy ratio",
+      "title": "Memory (GiB)",
+      "description": "Memory used, available and total on the K3s VM.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -57,19 +113,96 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "1 - avg by(instance)(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
-          "legendFormat": "{{endpoint}}{{pod}}{{instance}}"
+          "editorMode": "code",
+          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024 / 1024",
+          "legendFormat": "Used",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "node_memory_MemAvailable_bytes / 1024 / 1024 / 1024",
+          "legendFormat": "Available",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "editorMode": "code",
+          "expr": "node_memory_MemTotal_bytes / 1024 / 1024 / 1024",
+          "legendFormat": "Total",
+          "range": true,
+          "instant": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "unit": "gbytes",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "GiB",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 3,
-      "title": "Filesystem available bytes",
+      "title": "Root filesystem (GiB)",
+      "description": "Used and available space on the K3s VM root filesystem.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -84,19 +217,96 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "node_filesystem_avail_bytes{fstype=\"ext4\"}",
-          "legendFormat": "{{endpoint}}{{pod}}{{instance}}"
+          "editorMode": "code",
+          "expr": "(node_filesystem_size_bytes{fstype=\"ext4\",mountpoint=\"/\"} - node_filesystem_avail_bytes{fstype=\"ext4\",mountpoint=\"/\"}) / 1024 / 1024 / 1024",
+          "legendFormat": "Used",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "node_filesystem_avail_bytes{fstype=\"ext4\",mountpoint=\"/\"} / 1024 / 1024 / 1024",
+          "legendFormat": "Available",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "editorMode": "code",
+          "expr": "node_filesystem_size_bytes{fstype=\"ext4\",mountpoint=\"/\"} / 1024 / 1024 / 1024",
+          "legendFormat": "Total",
+          "range": true,
+          "instant": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "unit": "gbytes",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "GiB",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 4,
-      "title": "Disk IO time",
+      "title": "Disk I/O utilization (%)",
+      "description": "Percentage of time the root disk is busy.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -111,15 +321,67 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(node_disk_io_time_seconds_total[5m])",
-          "legendFormat": "{{endpoint}}{{pod}}{{instance}}"
+          "editorMode": "code",
+          "expr": "100 * rate(node_disk_io_time_seconds_total{device=\"sda\"}[5m])",
+          "legendFormat": "sda",
+          "range": true,
+          "instant": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "I/O",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          }
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ]
 }
