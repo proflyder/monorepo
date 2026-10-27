@@ -56,6 +56,7 @@ checkout: для восстановления нужны отдельная пр
 | Путь | Что | Почему |
 |---|---|---|
 | `backups/station-originals-20261023/` | оригиналы station-файлов | могут содержать маркеры/пути, не ключи |
+| `secrets/NETWORK.md` | реальная LAN-топология, IP, порты, firewall, Tailscale hostname | карта сети; не публиковать |
 | `backups/pre-telemetry-20261023-2223/` | старые compose/nginx/launch | конфиги/пути; проверить токены |
 | `backups/egress-20261024-050346/` | iptables/onboot/keeper | карта сети/правил |
 | `logs/*.txt`, `archive/logs/2026-10/*` | статусы/диагностика | IP, URL, иногда токены; не публиковать как есть |
