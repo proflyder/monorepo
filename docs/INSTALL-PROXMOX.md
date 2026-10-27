@@ -41,7 +41,7 @@ Ubuntu/K3s и восстановления файлов; установка Prox
 5. Выбрать внутренний NVMe `/dev/nvme0n1`, около 512 GB / 476.9 GiB.
    **Установщик сотрёт весь этот диск: Ubuntu, K3s и существующие LVM volumes.**
    Свободная часть текущего VG также переразмечается.
-6. В Options выбрать ext4: `maxroot=64`, `swapsize=4`, `minfree=16` (GiB),
+6. В Options выбрать ext4: `maxroot=64`, `swapsize=8`, `minfree=16` (GiB),
    `hdsize` — весь диск, `maxvz` оставить default/auto. Остаток будет LVM-thin
    storage для VM. Это практичный вариант для одного NVMe и 16 GB RAM.
 7. Country Kazakhstan, timezone Asia/Almaty, keyboard English (US).
