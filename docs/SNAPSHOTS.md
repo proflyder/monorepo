@@ -42,7 +42,7 @@ snapshots/
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 mkdir -p "snapshots/$STAMP"
 git archive --format=tar.gz HEAD > "snapshots/$STAMP/repo.tar.gz"
-shasum -a 256 "snapshots/$STAMP/repo.tar.gz" > "snapshots/$STAMP/SHA256SUMS"
+(cd "snapshots/$STAMP" && shasum -a 256 repo.tar.gz > SHA256SUMS)
 ```
 
 Снапшоты в Git не коммитить. При переносе на внешний носитель копировать
