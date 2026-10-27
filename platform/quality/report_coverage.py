@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 HA = ROOT / "projects" / "home-assistant" / "ha-voice"
 
 
@@ -48,7 +48,7 @@ def pairing_total() -> float | None:
 
 def count_tests() -> dict[str, int]:
     py = 0
-    for path in (ROOT / "tests").rglob("test_*.py"):
+    for path in (p for base in (ROOT / "projects", ROOT / "platform") for p in base.rglob("test_*.py") if not any(part in {"upstream", "resources", ".venv"} for part in p.relative_to(ROOT).parts)):
         py += len(re.findall(r"^\s+def test_", path.read_text(), re.M))
     pairing = len(re.findall(r"^\s+def test_", (ROOT / "projects/station/resources/quasar-connect-bot/tests/test_pairing.py").read_text(), re.M))
     go = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/ble-gateway").glob("*_test.go"))
@@ -85,7 +85,7 @@ def classify(root: Path, patterns: list[str], exclude_tests: bool = True) -> lis
     for pattern in patterns:
         files.extend(root.glob(pattern))
     if exclude_tests:
-        files = [p for p in files if not p.name.endswith("_test.go") and "/tests/" not in str(p)]
+        files = [p for p in files if not p.name.endswith("_test.go") and not p.name.startswith("test_") and "/tests/" not in str(p)]
     return sorted(set(files))
 
 

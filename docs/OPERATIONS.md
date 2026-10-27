@@ -34,7 +34,7 @@ STATION_E2E_MUTATE=1 make test-e2e
 STATION_E2E_AUDIO=1 make test-e2e   # короткий alarm + «стоп» + resume
 ```
 
-Границы и флаги — `../tests/README.md`; измеренная площадь —
+Границы и флаги — `../docs/TESTING.md`; измеренная площадь —
 `../reports/TEST-COVERAGE.md`. Не коммитить токены.
 
 ## HA + MA + Matter + Whisper/Piper на неттопе

@@ -3,9 +3,9 @@
 
 Read-only by default.  A real model turn is opt-in because it costs quota:
 
-    STATION_E2E=1 HERMES_API_KEY=... python3 -m unittest tests.e2e.live_hermes
+    STATION_E2E=1 HERMES_API_KEY=... python3 projects/home-assistant/e2e/live_hermes.py
     STATION_E2E=1 HERMES_API_KEY=... HERMES_E2E_CHAT=1 \
-        python3 -m unittest tests.e2e.live_hermes
+        python3 projects/home-assistant/e2e/live_hermes.py
 
 The API key is supplied only through the environment and never printed.
 """

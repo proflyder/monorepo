@@ -36,7 +36,7 @@
 ## Проверки
 
 Локально: `python3 -m unittest discover -s tests -t . -p 'test_*.py' -q`.
-Профиль: `python3 -m unittest discover -s tests/hermes -q`.
+Профиль: `python3 -m unittest discover -s projects/home-assistant/hermes -q`.
 
 Результат: **91 Python test passed**, из них 25 в Hermes-профиле.
 HA config check RC=0; локальный «какой будильник» по-прежнему отвечает

@@ -31,7 +31,7 @@ HA YAML, BLE, Pulsar patch и компактную wakeword-модель. Это
 - Уточнено, что alarm — каркас, адаптеры/SQLite/scheduler/server/UI пока план.
   Матрица ресурсов больше не утверждает, что Pulsar не устанавливался.
 - Уточнены подготовка к GitHub и фактическое размещение Bazel disk cache.
-- Добавлен `tests/audit_repository.py`: проверяет отслеживаемые файлы,
+- Добавлен `platform/quality/audit_repository.py`: проверяет отслеживаемые файлы,
   credential patterns, приватные пути/медиа, gitlinks и Markdown-ссылки.
 
 ## Приватные данные
@@ -67,7 +67,7 @@ Serial, MAC, домашний внешний IP и tailnet-домен замен
 - Экспорт только tracked-файлов без secrets/upstream: Go test и Bazel build — pass.
 - Проверены 604 исторических blob: известных credential patterns не найдено;
   это не отменяет наличия прежних персональных идентификаторов/аудио в истории.
-- `python3 tests/audit_repository.py` и `git diff --check` — pass.
+- `python3 platform/quality/audit_repository.py` и `git diff --check` — pass.
 - Значения найденных кандидатов не включаются в публичный отчёт/диагностику.
 
 Bazel отсутствовал в PATH; проверка выполнена локальным Bazelisk в

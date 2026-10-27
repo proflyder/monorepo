@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "projects" / "station" / "scripts" / "station-egress-guard.sh"
 
 FAKE_IPTABLES = r"""#!/bin/sh

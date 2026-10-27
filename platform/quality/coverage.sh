@@ -2,12 +2,12 @@
 # Run the hermetic suite, collect machine-measured coverage where possible,
 # and regenerate reports/TEST-COVERAGE.md.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 mkdir -p reports
 
 echo "== hermetic test suite =="
-./tests/run.sh
+./platform/quality/run-tests.sh
 
 echo "== Go coverage: BLE gateway =="
 (cd projects/station/ble-gateway && go test -coverprofile="$ROOT/reports/ble-gateway.cover" ./...)
@@ -26,5 +26,5 @@ else
   echo "WARN: coverage.py is not installed; skipping pairing line coverage" >&2
 fi
 
-python3 tests/report_coverage.py
+python3 platform/quality/report_coverage.py
 echo "written: reports/TEST-COVERAGE.md"

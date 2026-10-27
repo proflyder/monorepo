@@ -84,7 +84,7 @@ go.work            workspace корня и отслеживаемого BLE-мо
 
 Чистый checkout поддерживает `go test ./...`; игнорируемый Pulsar installer
 проверяется отдельно с `GOWORK=off`. `make test` требует
-локальных upstream checkout’ов и Python-зависимостей (см. `tests/README.md`).
+локальных upstream checkout’ов и Python-зависимостей (см. `docs/TESTING.md`).
 
 Команды:
 
@@ -125,3 +125,10 @@ bazel run //:gazelle
 5. Timers/reminders/tasks/notes как отдельные solutions.
 6. Перевести BLE gateway в Bazel.
 7. Mobile после стабилизации контрактов.
+
+## Владение тестами
+
+Тесты относятся к своему solution/package/project и находятся рядом с
+кодом. E2E композиции находятся в `projects/<name>/e2e/`. Общая
+инфраструктура проверок репозитория — `platform/quality/`. Корневая
+папка tests не используется; `make test` агрегирует локальные наборы.

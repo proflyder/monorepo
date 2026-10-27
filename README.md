@@ -25,7 +25,7 @@ root/ADB, SSH, локальный MITM-стенд, OTA/ADB-защита, Янд�
   [`docs/RESEARCH-OWN-ASSISTANT.md`](docs/RESEARCH-OWN-ASSISTANT.md)
 - **Удалённый доступ к HA (Tailscale/Serve, Link, Cloudflare, VPS):**
   [`docs/REMOTE-ACCESS.md`](docs/REMOTE-ACCESS.md)
-- **Тесты и покрытие:** [`tests/README.md`](tests/README.md),
+- **Тесты и покрытие:** [`docs/TESTING.md`](docs/TESTING.md),
   [`reports/TEST-COVERAGE.md`](reports/TEST-COVERAGE.md)
 - **Неттоп `lab-host` / Home Assistant:** [`projects/home-assistant/NETTOP.md`](projects/home-assistant/NETTOP.md)
 - **Голос «Рикардо», внедрение и следующий этап:** [`docs/RICARDO-TTS-HANDOFF.md`](docs/RICARDO-TTS-HANDOFF.md)
@@ -84,7 +84,7 @@ make test-e2e      # live HA/BLE gateway (нужны токены)
 ```
 
 Текущая площадь и границы — [`reports/TEST-COVERAGE.md`](reports/TEST-COVERAGE.md);
-инструкции — [`tests/README.md`](tests/README.md).
+инструкции — [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Локальное версионирование
 

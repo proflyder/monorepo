@@ -1,4 +1,20 @@
-# Tests — hermetic + live E2E
+# Размещение и запуск тестов
+
+Unit- и компонентные тесты живут рядом с кодом: HA YAML — в
+`projects/home-assistant/ha-voice/`, Hermes — в `hermes/`, управление
+стеком — в `stack/`, скрипты станции — в `projects/station/scripts/`.
+Go-тесты остаются рядом с Go-файлами. E2E находятся в `e2e/` своего
+проекта: HA и Hermes — home-assistant, BLE gateway — station.
+
+`platform/quality/` содержит общие проверки всего репозитория, аудит
+публикации и команды-агрегаторы, а не тесты отдельных приложений.
+Новые тесты размещать у владельца проверяемого поведения.
+
+Проектные live-команды: `projects/home-assistant/scripts/test-e2e.sh`
+и `projects/station/scripts/test-e2e.sh`. Их нельзя запускать как часть
+обычного hermetic-прогона; нужны явные токены и разрешение на live-проверку.
+
+## Стратегия проверок
 
 Проект вырос из набора shell-скриптов в несколько runtime-контуров: HA/YAML,
 BLE gateway (Go), HA stack в `projects/home-assistant`, pairing (Python) и Pulsar. Тесты разделены по
@@ -24,18 +40,18 @@ make test-e2e      # live HA/BLE gateway, read-only
 
 | Слой | Файлы | Что ловит |
 |---|---|---|
-| HA static | `tests/ha/test_ha_config.py` | битый YAML, duplicate keys, неизвестные entity/service/script, битый Jinja, drift intent ↔ sentence, сломанный alarm/music state machine |
-| Shell hermetic | `tests/shell/test_ctl.py` | `ctl.sh`: команды, aliases, up/down/status/logs/backup/doctor; fake docker/curl/ss/systemd |
-| Security/ops hermetic | `tests/shell/test_egress_guard.py` | allowlist IPv4/IPv6, NTP toggle, idempotency shape; fake iptables |
-| Static gates | `tests/shell/test_static.py` | `bash -n` всех shell (кроме документированного legacy), ShellCheck errors, Python syntax, secret patterns |
-| Pairing | `tests/pairing/test_station_pairing_sound.py` | WAV/OGG CLI, token redaction |
+| HA static | `projects/home-assistant/ha-voice/test_ha_config.py` | битый YAML, duplicate keys, неизвестные entity/service/script, битый Jinja, drift intent ↔ sentence, сломанный alarm/music state machine |
+| Shell hermetic | `projects/home-assistant/stack/test_ctl.py` | `ctl.sh`: команды, aliases, up/down/status/logs/backup/doctor; fake docker/curl/ss/systemd |
+| Security/ops hermetic | `projects/station/scripts/test_egress_guard.py` | allowlist IPv4/IPv6, NTP toggle, idempotency shape; fake iptables |
+| Static gates | `platform/quality/test_static.py` | `bash -n` всех shell (кроме документированного legacy), ShellCheck errors, Python syntax, secret patterns |
+| Pairing | `projects/station/scripts/test_station_pairing_sound.py` | WAV/OGG CLI, token redaction |
 | BLE gateway | `projects/station/ble-gateway/*_test.go` | token, Wi-Fi validation/rollback, WPA parsing, GATT read/write/offset, commit, HTTP auth/status, event parser |
-| HA live | `tests/e2e/live_ha.py` | API, entities, text intents, optional mutation/alarm |
-| Gateway live | `tests/e2e/live_gateway.py` | bearer auth, status shape, method guards (read-only) |
+| HA live | `projects/home-assistant/e2e/live_ha.py` | API, entities, text intents, optional mutation/alarm |
+| Gateway live | `projects/station/e2e/live_gateway.py` | bearer auth, status shape, method guards (read-only) |
 | Existing pairing | `projects/station/resources/quasar-connect-bot/tests/` | payload/RS/audio roundtrip (15 tests, 88% lines) |
-| Hermes profile | `tests/hermes/test_hermes_config.py` | model/provider, HA MCP allowlist, no dangerous tools, web search backend |
-| Hermes voice proxy | `tests/hermes/test_voice_proxy.py` | URL/Markdown stripping for TTS, source citations, whitespace |
-| Voice stack | `tests/ha/test_ha_config.py` | GigaAM ONNX Wyoming service, Assist satellite watchdog |
+| Hermes profile | `projects/home-assistant/hermes/test_hermes_config.py` | model/provider, HA MCP allowlist, no dangerous tools, web search backend |
+| Hermes voice proxy | `projects/home-assistant/hermes/test_voice_proxy.py` | URL/Markdown stripping for TTS, source citations, whitespace |
+| Voice stack | `projects/home-assistant/ha-voice/test_ha_config.py` | GigaAM ONNX Wyoming service, Assist satellite watchdog |
 
 ## Текущая площадь
 
@@ -95,9 +111,9 @@ model turn is separately opt-in because it spends ChatGPT quota.
 ```bash
 export HERMES_API_URL=http://127.0.0.1:8642
 export HERMES_API_KEY='...'
-python3 -m unittest tests.e2e.live_hermes -v
+python3 projects/home-assistant/e2e/live_hermes.py -v
 
-HERMES_E2E_CHAT=1 python3 -m unittest tests.e2e.live_hermes -v
+HERMES_E2E_CHAT=1 python3 projects/home-assistant/e2e/live_hermes.py -v
 ```
 
 ### BLE gateway
@@ -127,7 +143,7 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
 
 ## Чистый checkout и аудит публикации
 
-`python3 tests/audit_repository.py` проверяет отслеживаемые файлы: локальные
+`python3 platform/quality/audit_repository.py` проверяет отслеживаемые файлы: локальные
 Markdown-ссылки, gitlink, приватные пути/медиа и известные credential patterns.
 Это эвристика, не гарантия отсутствия любых секретов.
 

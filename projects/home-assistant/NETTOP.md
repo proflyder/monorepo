@@ -62,7 +62,7 @@ Wi-Fi/Ethernet failover, Secure Boot + MOK; boot без Ethernet ~20 с.
 - [`configs`](configs) — netplan, compose, modprobe/blacklist, wait-online drop-in.
 - [`patches/rtl8821ce-ubsan.patch`](patches/rtl8821ce-ubsan.patch) — патч драйвера.
 - [`scripts/verify.sh`](scripts/verify.sh) — проверка состояния.
-- [`../../tests/README.md`](../../tests/README.md) — hermetic/live E2E тесты;
+- [`../../docs/TESTING.md`](../../docs/TESTING.md) — hermetic/live E2E тесты;
   [`../../reports/TEST-COVERAGE.md`](../../reports/TEST-COVERAGE.md) — покрытие.
 
 ## Важно

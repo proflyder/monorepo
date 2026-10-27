@@ -368,5 +368,5 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
   ресурсы — `RESOURCES.md`; исследование — `RESEARCH-OWN-ASSISTANT.md`.
 - BLE gateway — `../projects/station/ble-gateway/README.md`; голосовые команды —
   `../projects/home-assistant/ha-voice/README.md`.
-- Тесты — `../tests/README.md`; площадь/результаты — `../reports/TEST-COVERAGE.md`.
+- Тесты — `../docs/TESTING.md`; площадь/результаты — `../reports/TEST-COVERAGE.md`.
 - Hermes — `../projects/home-assistant/hermes/README.md`; MCP overlay — `../projects/home-assistant/hermes/config.fragment.yaml`.

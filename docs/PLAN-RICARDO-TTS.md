@@ -51,7 +51,7 @@ projects/home-assistant/tts/
   voice-profile.json         # backend, speaker, frontend, rate, profile revision
   normalizer.py              # только необходимая обработка
   wyoming_adapter.py         # для Kokoro/MOSS; Silero можно обернуть готовым сервисом
-tests/tts/
+projects/home-assistant/tts/tests/
   test_normalization.py
   test_wyoming_contract.py
   test_failover.py            # если реализован автоматический резерв

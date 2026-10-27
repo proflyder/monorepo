@@ -99,5 +99,5 @@ checkout: для восстановления нужны отдельная пр
 3. Для offsite — шифрованный архив (age/GPG/Borg) + отдельный пароль.
 4. При потере устройства/утечке: ротация SSH/ADB/BLE/DPP/LLM/Tailscale-ключей;
    отзыв HA refresh tokens; смена паролей.
-5. Перед публикацией репозитория — прогнать `tests/shell/test_static.py`
+5. Перед публикацией репозитория — прогнать `platform/quality/test_static.py`
    (secret patterns) и глазами проверить `logs`/`artifacts`.

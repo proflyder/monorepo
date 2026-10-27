@@ -67,7 +67,7 @@
 
 ## Тесты / инструменты
 
-- `../tests/README.md` — стратегия, live E2E;
+- `../docs/TESTING.md` — стратегия, live E2E;
 - `../reports/TEST-COVERAGE.md` — покрытие;
 - `../projects/station/ble-gateway/README.md` — BLE gateway;
 - `../projects/station/tools/quasar-root-kit/` — root kit;
@@ -95,4 +95,4 @@
 - История: `HISTORY.md`
 - Remote: `REMOTE-ACCESS.md`
 - Неттоп/HA: `../projects/home-assistant/NETTOP.md`
-- Тесты: `../tests/README.md`
+- Тесты: `../docs/TESTING.md`

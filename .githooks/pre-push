@@ -26,5 +26,5 @@ if not Path(scanner).is_file():
 scan = subprocess.run([scanner, 'git', '.', '--log-opts=refs/heads/develop', '--redact=100', '--no-banner', '--config=.gitleaks.toml'], cwd=root)
 if scan.returncode:
     sys.exit('Push blocked: secret scan failed; inspect locally with redaction.')
-result = subprocess.run([sys.executable, str(root / 'tests/audit_repository.py')], cwd=root)
+result = subprocess.run([sys.executable, str(root / 'platform/quality/audit_repository.py')], cwd=root)
 sys.exit(result.returncode)

@@ -3,13 +3,13 @@
 BAZEL ?= bazel
 
 test:
-	./tests/run.sh
+	./platform/quality/run-tests.sh
 
 test-e2e:
-	./tests/run_e2e.sh
+	./platform/quality/run-e2e.sh
 
 coverage:
-	./tests/coverage.sh
+	./platform/quality/coverage.sh
 
 bazel-build:
 	$(BAZEL) build //...

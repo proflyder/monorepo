@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 CTL = ROOT / "projects" / "home-assistant" / "stack" / "ctl.sh"
 
 DOCKER_STUB = r"""#!/bin/sh

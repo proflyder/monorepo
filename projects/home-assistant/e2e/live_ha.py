@@ -4,7 +4,7 @@
 Default mode is read-only: it checks API health, required entities, and safe
 conversation intents.  Mutating/audio tests require explicit flags:
 
-    STATION_E2E=1 HA_TOKEN=... python3 -m unittest tests.e2e.live_ha -v
+    STATION_E2E=1 HA_TOKEN=... python3 projects/home-assistant/e2e/live_ha.py -v
     STATION_E2E=1 STATION_E2E_MUTATE=1 HA_TOKEN=... ...
     STATION_E2E=1 STATION_E2E_AUDIO=1 HA_TOKEN=... ...
 
