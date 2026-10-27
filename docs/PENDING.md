@@ -287,7 +287,8 @@
 
 ## Proxmox / HAOS / Terraform / Tailscale Operator
 
-Обсуждается следующий слой инфраструктуры; гипервизор не менялся.
+Выбран Proxmox; ISO и внешняя recovery-копия подготовлены, гипервизор не менялся.
 Границы и варианты — [PROXMOX-HAOS-IAC.md](PROXMOX-HAOS-IAC.md).
-Нужен выбор архитектуры; operator также требует отсутствующие сейчас OAuth/WIF
+Физическая установка — [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md).
+Далее нужны VM/IaC и восстановление; operator также требует отсутствующие сейчас OAuth/WIF
 credentials и tag policy. Не считать подготовленный K3s автоматически Proxmox/HAOS.

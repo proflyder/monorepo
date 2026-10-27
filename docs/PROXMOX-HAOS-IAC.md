@@ -1,7 +1,8 @@
 # Следующий инфраструктурный слой: Proxmox, HAOS и IaC
 
-Обсуждение: 2026-10-27. **Не развёрнуто.** Текущий работающий runtime —
-[K3s на Ubuntu](KUBERNETES-OPERATIONS.md). ОС/гипервизор в рамках этого обсуждения
+Подготовка: 2026-10-27. **Proxmox пока не установлен.** Текущий работающий runtime —
+[K3s на Ubuntu](KUBERNETES-OPERATIONS.md). Подготовлены ISO и свежая внешняя recovery-копия;
+[порядок установки](INSTALL-PROXMOX.md). ОС/гипервизор ещё
 не менялись; HAOS VM, Terraform resources и Tailscale Operator пока не созданы.
 
 ## Что даёт Proxmox
@@ -81,7 +82,7 @@ host tailscaled не заменяет управленческий OAuth client 
 
 Следующие шаги после выбора архитектуры:
 
-1. Определить, сохраняем ли Ubuntu/K3s или готовим Proxmox bootstrap.
+1. Выбран Proxmox: выполнить физическую установку по INSTALL-PROXMOX.md.
 2. Зафиксировать VM network plan и доступ к восстановлению хоста.
 3. Описать ресурсы в IaC и импортировать существующее управление без recreate.
 4. Подготовить operator OAuth/tags с минимальными scopes, закрытый Secret и pinned chart.

@@ -857,3 +857,13 @@ Grafana, Loki, Alloy, проектные dashboard charts и health exporter.
 packages; native Compose/Hermes source/state сохранены в закрытом recovery.
 Pulsar/прошивка станции не менялись. Runbook — KUBERNETES-OPERATIONS.md.
 Proxmox/HAOS/IaC/operator обсуждаются отдельно, их deploy ещё не выполнялся.
+
+## 2026-10-27 — подготовка физической установки Proxmox
+
+Выбрана архитектура Proxmox + HAOS VM + Linux/K3s VM. Подготовлен официальный
+x86-64 ISO 9.2-1, проверен SHA-256. Свежая cold copy 11 PVC, host recovery и
+отдельный EFI archive перенесены на Mac с проверкой checksum; 11 SQLite проверены.
+Приложения и monitoring после snapshot возвращены в работу. Подготовлены
+интерактивный SSH bootstrap и INSTALL-PROXMOX.md. Это recovery-файлы, не образ
+всего диска; полный disaster restore ещё не проверен. Proxmox пока не установлен,
+HAOS/Terraform/Operator не развёрнуты. Следующий шаг требует USB/консоли пользователя.
