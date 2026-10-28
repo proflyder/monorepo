@@ -1,131 +1,87 @@
-# Установка Proxmox на неттоп
+# Proxmox / HAOS / K3s: установка и переустановка
 
-Подготовлено 2026-10-27. Обновление 2026-10-28: Proxmox `9.2.24` установлен,
-SSH проверен; VM `100 haos` и `101 lab-k3s` созданы Terraform, HAOS и
-K3s runtime восстановлены, Tailscale Operator опубликован. Эта инструкция
-сохранена для повторной установки; текущие факты — STATE.md.
+Текущие факты — `STATE.md`. Реальные IP/MAC — `secrets/proxmox-install/install-settings.md`.
+Приватная копия Wi-Fi-профиля и recovery — в `secrets/`.
 
-Текущее состояние после установки (примеры LAN-адресов):
+## Текущая конфигурация
 
 ```text
-PVE host         192.0.2.26   vmbr0; Wi-Fi 4addr / Ethernet fallback
-VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB; static
-                 add-ons: Matter 9.2.0, Music Assistant 2.10.8
-VM 101 lab-k3s   192.0.2.27   8 vCPU / 8 GiB / 200 GiB; static
-HA direct        192.0.2.28:8123 (HAProxy compatibility endpoint удалён)
+PVE host         192.0.2.26   DEXP Jupiter, 16 GiB, NVMe 512 GB
+                 vmbr0; Wi-Fi 4addr/WDS + Ethernet fallback
+VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB, HAOS 2026.10.4
+                 add-ons: Music Assistant 2.10.8, Matter 9.2.0
+VM 101 lab-k3s   192.0.2.27   8 vCPU / 8 GiB / 200 GiB, Ubuntu + K3s
 ```
 
-Terraform plan — `No changes`; state остаётся root-only на PVE и копируется
-в `secrets/`. Wi-Fi работает через 4-address/WDS bridge; полный disaster restore
-и power-loss тест остаются отдельными проверками.
+- PVE `9.2.24`, root 64 GiB, swap 8 GiB, `local-lvm` ~379 GiB.
+- VM — UEFI, guest agent, startup order 1/2.
+- Terraform — `projects/home/proxmox/terraform/`; state root-only на PVE,
+  копия в `secrets/`. `terraform plan` — No changes.
+- Wi-Fi uplink — `projects/home/proxmox/wifi-uplink/`; Ethernet fallback.
 
-## Что уже сохранено
+## Переустановка PVE
 
-На отдельном Mac в игнорируемой папке `secrets/proxmox-install/`:
+**Установщик стирает весь NVMe.** Сначала проверить backup и приватные
+IP/MAC. Ethernet и локальная консоль — на время установки.
 
-- официальный x86-64 ISO Proxmox VE 9.2-1, проверенный SHA-256;
-- свежий cold snapshot всех 11 Bound PVC: приложения и telemetry;
-- 11 SQLite databases прошли quick_check, K3s state — integrity_check;
-- host recovery: конфигурация, SSH/Tailscale, MOK/DKMS/kernel, package list,
-  partition/LVM metadata; EFI сохранён отдельным архивом;
-- приватная памятка `install-settings.md`, отдельная SSH key pair и
-  `authorize-proxmox.sh` для интерактивного добавления ключа после установки.
+1. Записать локальный ISO `secrets/proxmox-install/proxmox-ve_9.2-1.iso`.
+2. Boot UEFI; Install Proxmox VE; диск `nvme0n1`.
+3. ext4: `maxroot=64`, `swapsize=8`, `minfree=16`; остальное — LVM-thin.
+4. Country Kazakhstan, timezone `Asia/Almaty`, keyboard US.
+5. Network: Ethernet + статический IP/gateway/DNS из приватной памятки;
+   `vmbr0` создаётся установщиком.
+6. После reboot — `https://<PVE_IP>:8006`, self-signed TLS.
+7. Добавить отдельный SSH-ключ через `install-settings.md`/wrapper;
+   сравнить host-key fingerprint с консолью.
+8. Проверить PVE version, storage, bridge, time, updates.
 
-SHA-256 архивов на Mac совпадает с исходными на неттопе. Отдельно сохранены
-предыдущие recovery archives и OCI archive собственных Hermes/proxy images
-в `secrets/kubernetes-research/recovery/`. Не удалять эти файлы.
+## Terraform и VM
 
-Это копия состояния и recovery-файлов, **не полный образ диска**. Полное
-восстановление на запасном железе ещё не проверялось. Откат требует установки
-Ubuntu/K3s и восстановления файлов; установка Proxmox сама приложения не восстановит.
-При восстановлении в новые VM нельзя вслепую заменять их `/etc` или K3s database
-старым архивом: новые сетевые адреса и пути нужно адаптировать.
+```bash
+cd projects/home/proxmox/terraform
+terraform init
+terraform plan
+terraform apply
+```
 
-## Физическая установка
+Перед apply проверить приватные tfvars: VM ID, memory, disk, static CIDR,
+gateway, MAC. Не переиспользовать старый config-drive instance ID без
+проверки SSH host keys и сети.
 
-1. Открыть приватную памятку `secrets/proxmox-install/install-settings.md` на Mac.
-   Она содержит реальные IP, MAC и параметры; не копировать её в Git или чат.
-2. Подготовить USB от 4 GB (удобнее 8 GB), записать локальный
-   `secrets/proxmox-install/proxmox-ve_9.2-1.iso` через
-   [balenaEtcher](https://etcher.balena.io/): Flash from file → USB → Flash.
-   Проверить выбранный USB: запись стирает его. Etcher должен завершить validation.
-   Нужен x86-64 ISO для Intel неттопа, даже если Mac на ARM.
-3. Подключить неттоп к роутеру Ethernet, экран и клавиатуру. Вставить USB,
-   открыть Boot Menu и загрузить UEFI USB. Виртуализацию Intel VT-x оставить
-   включённой; Secure Boot заранее отключать не требуется для PVE 9.2.
-4. Выбрать Install Proxmox VE (Graphical); при проблемах с графикой — Terminal UI.
-5. Выбрать внутренний NVMe `/dev/nvme0n1`, около 512 GB / 476.9 GiB.
-   **Установщик сотрёт весь этот диск: Ubuntu, K3s и существующие LVM volumes.**
-   Свободная часть текущего VG также переразмечается.
-6. В Options выбрать ext4: `maxroot=64`, `swapsize=8`, `minfree=16` (GiB),
-   `hdsize` — весь диск, `maxvz` оставить default/auto. Остаток будет LVM-thin
-   storage для VM. Это практичный вариант для одного NVMe и 16 GB RAM.
-7. Country Kazakhstan, timezone Asia/Almaty, keyboard English (US).
-   Задать свой сильный root password и email; пароль хранить в менеджере паролей,
-   не отправлять в чат.
-8. Network: выбрать проводной Realtek с MAC из приватной памятки и подключённым
-   кабелем. Имя интерфейса может отличаться от Ubuntu. FQDN `pve.home.arpa`,
-   IP/prefix/gateway/DNS — точно из памятки. Не принимать случайный DHCP address.
-   Installer создаст management bridge `vmbr0` с этим Ethernet uplink.
-9. На итоговом экране перепроверить диск и сеть, затем Install.
-   После завершения убрать USB и загрузиться с внутреннего NVMe.
-10. Открыть с Mac `https://<адрес-из-памятки>:8006`, войти `root`, realm
-    Linux PAM. Начальный сертификат самоподписанный; сверить адрес с консолью.
-11. На консоли Proxmox выполнить:
+После apply:
 
-    ```sh
-    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
-    ```
+- HAOS — восстановить supported backup через Supervisor, проверить
+  `internal_url`, trusted proxy, add-ons MA/Matter;
+- K3s VM — восстановить data/PV/Helm по `KUBERNETES-OPERATIONS.md`;
+- проверить `.28:8123`, `.27:30300/grafana/`, Tailscale, voice/music.
 
-    На Mac в Terminal запустить локальный wrapper:
+## Wi-Fi uplink
 
-    ```sh
-    ./secrets/proxmox-install/authorize-proxmox.sh
-    ```
+- Wi-Fi остаётся на PVE; `ricardo-uplink` подключает либо Ethernet, либо
+  Wi-Fi 4addr/WDS к `vmbr0`. VM IP/URL не меняются.
+- Не подключать оба uplink в мост одновременно.
+- При смене AP/драйвера повторить canary: отдельный MAC, DHCP, gateway,
+  IPv6 multicast; обычный ping PVE не доказывает L2 для VM.
+- Профиль wpa_supplicant — 0600, вне Git; installer:
+  `projects/home/proxmox/wifi-uplink/install.py`.
 
-    Сравнить fingerprint с консолью и только затем подтвердить SSH host key.
-    Root password вводится в Terminal. Wrapper добавит отдельный публичный
-    ключ и проверит версию PVE, `vmbr0` и storage; пароль не сохраняется.
-12. Оставить Ethernet подключённым и сообщить, что установлен Proxmox и ключ добавлен.
-    Если сеть не поднялась, использовать локальную консоль, не переустанавливать
-    диск повторно. Кабель нужен до проверки VM и отдельного Wi-Fi проекта.
+## Acceptance
 
-Сервисы будут недоступны с момента стирания диска до восстановления VM.
-На этом этапе не создавать вручную HAOS/K3s VM: их ресурсы опишем в IaC.
+```bash
+# PVE
+pveversion
+ip -br addr
+bridge link
 
-## После установки: последовательность работ
+# HA/MA/Grafana
+curl -fsS -o /dev/null -w '%{http_code}\n' http://192.0.2.28:8123/
+curl -fsS -o /dev/null -w '%{http_code}\n' http://192.0.2.28:8095/
+curl -fsS -o /dev/null -w '%{http_code}\n' \
+  http://192.0.2.27:30300/grafana/api/health
 
-1. Проверить PVE version/storage/bridge, обновления, время, firewall и доступ по
-   выделенному ключу; получить CA certificate доверенным SSH-каналом.
-2. Подготовить ограниченный API token для Terraform, закрепить provider,
-   закрытый state и его backup. Проверить plan до apply.
-3. Создать HAOS VM (предварительно 2 vCPU / 3 GiB / 32 GiB) и Linux/K3s VM
-   (8 vCPU / 9 GiB / 200 GiB). Оставить около 3 GiB гипервизору; окончательно
-   проверить бюджет памяти и диска перед apply. IP guests выбрать после проверки
-   DHCP/reservations, не угадывать свободные адреса. HAOS guest UEFI без Secure Boot
-   настраивается отдельно от Secure Boot физического хоста.
-4. Восстановить HA с учётом supported backup/import path в HAOS; текущий cold
-   archive содержит config, но не является готовым Supervisor backup.
-   Восстановить остальные PVC в новую Linux VM, импортировать собственные images,
-   развернуть K3s/Helm charts и dashboard JSON из репозитория.
-5. Заменить localhost dependencies между HAOS и K3s на адреса VM; проверить
-   Wyoming, Matter/multicast, MA, Hermes/MCP, callback/media URLs станции.
-6. Создать Tailscale OAuth client/tags в Admin, сохранить credentials только
-   приватно, развернуть pinned Operator и проверить тестовый Service/ACL/TLS.
-   Затем перенести внешние точки входа HA и Grafana.
-7. Проверить полный voice/media pipeline, dashboards/metrics/logs, reboot обеих VM
-   и хоста, резервное копирование. Только после приёмки убирать временные настройки.
+# K3s
+ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'
+```
 
-На текущем оборудовании принят вариант Wi-Fi 4-address/WDS с сохранением L2.
-После установки восстановить приватный профиль и сервис по
-[runbook uplink](../projects/home/proxmox/wifi-uplink/). На другом AP/драйвере
-перед подключением VM снова проверить отдельный MAC, DHCP и IPv6 multicast.
-
-## Источники
-
-- [Официальный ISO и checksum](https://www.proxmox.com/en/downloads/proxmox-virtual-environment/iso/proxmox-ve-9-2-iso-installer)
-- [Установка и параметры диска](https://github.com/proxmox/pve-docs/blob/master/pve-installation.adoc)
-- [Установочный USB](https://github.com/proxmox/pve-docs/blob/master/pve-installation-media.adoc)
-- [Сетевые схемы PVE](https://github.com/proxmox/pve-docs/blob/master/pve-network.adoc)
-- [HAOS VM](https://www.home-assistant.io/installation/alternative)
-- [Границы IaC и Operator](PROXMOX-HAOS-IAC.md)
+Проверить после reboot: VM autostart, HA, K3s, Sendspin, Spotify, Pulsar,
+Tailscale. Полный disaster restore и power-loss тест — отдельная приёмка.

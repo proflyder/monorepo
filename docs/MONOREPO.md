@@ -1,8 +1,7 @@
 # Монорепозиторий и Bazel
 
-Статус: **структура и первый перенос 2026-10-27**. HA/voice/stack/hermes/tts
-и station/Pulsar/BLE/configs/scripts уже разложены по `projects/`; живые
-remote-пути `/home/labuser/nettop/...` не менялись.
+Статус: **актуальная структура**. HA/voice/Hermes/TTS и station/Pulsar/BLE
+разложены по `projects/`; текущий runtime — `STATE.md`.
 
 ## Горизонтальная структура
 

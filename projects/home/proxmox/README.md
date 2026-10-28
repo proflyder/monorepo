@@ -42,7 +42,7 @@ PVE: добавляет отдельный ключ через ssh-copy-id и п
 Показывает upgrade simulation; само обновление и reboot выполняются отдельно.
 
 `terraform/main.tf` закрепляет версии CLI/provider и описывает VM 100 (HAOS,
-3 GiB / 32 GiB) и 101 (Ubuntu 24.04 LTS, 9 GiB / 200 GiB). `prevent_destroy`
+4 GiB / 32 GiB) и 101 (Ubuntu 24.04 LTS, 8 GiB / 200 GiB). `prevent_destroy`
 защищает от случайного удаления через Terraform. Образы и private cloud-init
 snippet загружаются bootstrap-этапом; Terraform использует их storage IDs.
 `cloud-init.yaml` — публичная часть, приватная добавляет SSH public key.

@@ -1,45 +1,40 @@
-# projects/home-assistant
+# Home Assistant / голос / музыка
 
-**Deployment перенесён в Kubernetes 2026-10-27.**
-[Runbook](../../docs/KUBERNETES-OPERATIONS.md), [chart](deploy/README.md),
-[дашборды](observability/README.md). Live data paths сохранены через local PV;
-`stack/` — прежний Docker deployment, не текущая точка запуска.
+Текущий runtime: HAOS VM `100` + K3s VM `101`. Docker/Compose — legacy.
 
-Проект домашнего сервера: HA Container, Music Assistant, STT/TTS, Hermes,
-Tailscale и HA-конфиг. Станция здесь только как внешний ESPHome/Sendspin
-endpoint.
-
-## Что входит
+## Где что
 
 ```text
-/home/labuser/nettop/homeassistant/config/   live HA configuration (remote)
-projects/home-assistant/ha-voice/               HA intents/scripts/dashboard
-projects/home-assistant/stack/                  compose, ctl.sh, Piper/Whisper/MA
-projects/home-assistant/hermes/                 Hermes/MCP config
-projects/home-assistant/tts/                    Puriso model/runbook
-projects/home-assistant/configs/                host netplan/modprobe
-projects/home-assistant/tools/tts-lab/          TTS evaluation/installer
-docs/OPERATIONS.md
-docs/REMOTE-ACCESS*.md
+ha-voice/      HA intents/scripts/dashboard, Assist, alarms
+deploy/        K3s chart для GigaAM/Whisper/Piper/Hermes
+observability/ dashboards, Prometheus/Loki/Alloy
+hermes/        Hermes gateway + voice proxy + MCP
+tts/puriso/    Piper Puriso model/install
+configs/       host netplan/modprobe/wait-online
+tools/tts-lab/ TTS evaluation/installer
 ```
 
-## Solutions
+## Текущий контур
 
-- `solutions/ha-bridge` — мост HA ↔ alarm;
-- `solutions/mcp-alarm` — MCP для Hermes;
-- `solutions/assistant-ui` — PWA/UI, если нужен отдельный интерфейс;
-- `solutions/alarm` — локальный alarm-инстанс.
+- HAOS: `192.0.2.28:8123`; add-ons MA `2.10.8`, Matter `9.2.0`.
+- K3s: GigaAM `10305`, Whisper `10300`, Piper `10200`, Hermes `8642`,
+  voice proxy `8643`.
+- Pipeline «Рикардо»: GigaAM → local intents → Hermes → Puriso.
+- Pulsar `v0.4.1-ricardo6`; ESPHome `6053`, Sendspin `8928`.
+
+## Документы
+
+- [`../../docs/STATE.md`](../../docs/STATE.md)
+- [`../../docs/OPERATIONS.md`](../../docs/OPERATIONS.md)
+- [`../../docs/KUBERNETES-OPERATIONS.md`](../../docs/KUBERNETES-OPERATIONS.md)
+- [`../../docs/REBUILD.md`](../../docs/REBUILD.md)
+- [`ha-voice/README.md`](ha-voice/README.md)
+- [`hermes/README.md`](hermes/README.md)
+- [`tts/puriso/README.md`](tts/puriso/README.md)
 
 ## Границы
 
-- HA не владеет Pulsar-кодом и прошивкой станции;
-- Pulsar не владеет HA YAML;
-- звук/рингтон/TTS остаются в HA/Pulsar bridge;
-- секреты и endpoint — в project env, не в solutions.
-
-## Статус
-
-First-party voice/stack/hermes/tts/configs уже перенесены в
-`projects/home-assistant/`. Живой HA-конфиг остаётся на сервере в
-`/home/labuser/nettop/homeassistant/config`; его перенос в репозиторий
-потребует отдельного backup и обновления `ctl.sh`/systemd/live-проверок.
+- HA не владеет прошивкой Pulsar и BLE gateway.
+- Hermes не владеет alarm/timer state; локальные intents должны работать без LLM.
+- MA/Spotify — отдельный live-source; один аккаунт = один stream-slot.
+- Секреты и реальные адреса — только в `secrets/`.

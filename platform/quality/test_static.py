@@ -57,7 +57,7 @@ class ShellSyntaxTests(unittest.TestCase):
         broken = sorted(KNOWN_BROKEN_LEGACY)
         for path in broken:
             self.assertTrue(path.exists())
-            self.assertIn("битый", (ROOT / "docs" / "RESOURCES.md").read_text(), "legacy exception must stay documented")
+            self.assertIn("битый", (ROOT / "resources" / "README.md").read_text(), "legacy exception must stay documented")
 
     def test_active_shell_syntax(self):
         files = first_party_shell()

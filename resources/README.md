@@ -1,8 +1,8 @@
 # Resources — внешние проекты/артефакты
 
 Снимки сторонних проектов и артефактов. **Ничего из этого не запускать на
-рабочей станции без отдельной задачи/бэкапа.** Совместимость и решения —
-[`../docs/RESOURCES.md`](../docs/RESOURCES.md); recovery — `../docs/REBUILD.md`.
+рабочей станции без отдельной задачи/бэкапа.** Совместимость и текущее состояние — [`../docs/STATE.md`](../docs/STATE.md);
+recovery — [`../docs/REBUILD.md`](../docs/REBUILD.md).
 
 | Путь | Что | Статус |
 |---|---|---|
@@ -12,7 +12,7 @@
 | `ya-station-root-shell/` | eMudhra MITM root (Mini 2/Lite) | reference |
 | `airplay2-station/` | AirPlay 2 (тест Mini 3) | reference |
 | `airplay-fix/` | AirPlay patch Mini 3 | несовместимо |
-| `spotify-autostart/spotify.sh` | обрывок librespot | битое, не запускать |
+| `spotify-autostart/spotify.sh` | обрывок librespot | битый, не запускать |
 | `yse/` | пакетный менеджер Midi | ждёт исходник |
 | `telemetry-yandex-station-privacy.sh` | vibe-скрипт телеметрии | reference, не запускать |
 

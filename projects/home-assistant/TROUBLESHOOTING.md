@@ -1,263 +1,98 @@
 # TROUBLESHOOTING — неттоп
 
-## 1. `rtw88_8821ce: failed to send h2c command`
+Текущая сеть: PVE Wi-Fi 4addr/WDS, Ethernet fallback. Факты — `../../docs/STATE.md`.
 
-Симптомы:
-
-```text
-failed to send h2c command
-firmware failed to leave lps state
-```
-
-Причина: встроенный `rtw88_8821ce` на Ubuntu 26.04/kernel 7.0 нестабилен с
-RTL8821CE. Это не netplan и не роутер.
-
-Лечение в этом сетапе:
-
-1. `blacklist rtw88_8821ce` и `rtw88_8821c`;
-2. DKMS-драйвер `rtl8821ce` (tomaspinho);
-3. Bluetooth combo-чипа отключён;
-4. Secure Boot + MOK (если Secure Boot включён).
-
-Проверка:
+## Wi-Fi на PVE
 
 ```bash
-lsmod | grep -E '8821|rtw88'
-dkms status
-sudo dmesg | grep -c 'failed to send h2c'
-```
-
-Ожидаем `8821ce`, `h2c=0`.
-
-## 2. UBSAN `array-index-out-of-bounds`
-
-Симптомы:
-
-```text
-UBSAN: array-index-out-of-bounds in core/rtw_wlan_util.c...
-index 1 is out of range for type 'u8 [1]'
-...
-ioctl_cfg80211.c...
-index 16 is out of range for type 'u8 [*]'
-```
-
-Это false-positive вендорского драйвера на flexible-array (`pIE->data`,
-`crypt.key`). Патч:
-
-```bash
-patch -p1 < patches/rtl8821ce-ubsan.patch
-sudo dkms remove rtl8821ce/v5.5.2_34066.20200325 --all
-sudo dkms install rtl8821ce/v5.5.2_34066.20200325 --force
-sudo update-initramfs -u
-sudo reboot
-```
-
-**Важно:** без `update-initramfs -u` загрузится старый модуль из initramfs,
-и UBSAN останется.
-
-Проверка:
-
-```bash
-sudo dmesg | grep -c UBSAN
-```
-
-Ожидаем `0`.
-
-## 3. Secure Boot: `Key was rejected by service`
-
-Причина: DKMS-модуль подписан локальным MOK, ключ не зарегистрирован.
-
-Проверка:
-
-```bash
-sudo mokutil --sb-state
-sudo mokutil --test-key /var/lib/shim-signed/mok/MOK.der
-```
-
-Если `not enrolled`:
-
-```bash
-sudo mokutil --import /var/lib/shim-signed/mok/MOK.der
-```
-
-Задать временный пароль, перезагрузиться, в **MOK Manager** выполнить
-`Enroll MOK → Continue → Yes → пароль → Reboot`.
-
-Если MOK Manager не появляется через shim:
-
-```bash
-sudo efibootmgr -c -d /dev/nvme0n1 -p 1 -L "MOK Manager" -l '\EFI\ubuntu\mmx64.efi'
-sudo efibootmgr -n <N>
-```
-
-Одноразово загрузиться в MOK Manager, зарегистрировать ключ, затем удалить entry:
-
-```bash
-sudo efibootmgr -b <N> -B
-```
-
-Не удалять `/var/lib/shim-signed/mok/`.
-
-## 4. Wi-Fi не поднимается после reboot
-
-Проверить:
-
-```bash
+systemctl status ricardo-uplink wpa_supplicant@wlp4s0
+journalctl -u ricardo-uplink -n 50
+cat /sys/class/net/nic0/carrier
 ip -br addr
-ip route
-sudo wpa_cli -i wlp4s0 status
-sudo iw dev wlp4s0 info
-networkctl status wlp4s0
+bridge link
 ```
 
-Если интерфейс DOWN:
+- Должен быть ровно один physical uplink в `vmbr0`: `nic0` или `wlp4s0`.
+- Оба одновременно не подключать — петля.
+- `wlp4s0` в 4addr; без поддержки AP/драйвера VM потеряют L2.
+- После reboot проверить VM `.27/.28`, HA/MA/Grafana.
+
+## `rtw88_8821ce: failed to send h2c command`
+
+Обычно firmware/regulatory или power-save. Проверить:
 
 ```bash
-sudo ip link set wlp4s0 up
-sudo wpa_cli -i wlp4s0 reconnect
+dmesg | grep -Ei 'rtw|8821|firmware'
+iw dev wlp4s0 link
+iw dev wlp4s0 set power_save off
 ```
 
-Если нет IP:
+Не переустанавливать PVE; сначала проверить профиль/AP/канал.
+
+## Secure Boot / DKMS
 
 ```bash
-sudo netplan generate
-sudo netplan apply
-```
-
-Если IP конфликтует с Ethernet (оба `.26` или `.25`), проверить netplan:
-адреса должны быть статическими и разными (`projects/home-assistant/configs/`).
-
-## 5. Ethernet/Wi-Fi failover
-
-Ожидаемо:
-
-```text
-default via 192.0.2.1 dev enp3s0 metric 100
-default via 192.0.2.1 dev wlp4s0 metric 200
-```
-
-При отключении Ethernet трафик уходит в Wi-Fi; после возврата кабеля —
-обратно. Если нет — проверить `ip route` и `netplan`.
-
-## 6. HA или Music Assistant не открываются
-
-```bash
-cd /home/labuser/nettop
-./ctl.sh status
-./ctl.sh logs ha
-./ctl.sh logs ma
-ss -lntp | grep -E ':(8123|8095|8097|8927|10200|10300)\b'
-curl -v http://127.0.0.1:8123/
-curl -v http://127.0.0.1:8095/
-```
-
-Типовые причины:
-
-- контейнер не Up;
-- ошибка в `configuration.yaml` / MA config;
-- порт 8123/8095/10200/10300 занят;
-- сеть/маршрут;
-- сервис ещё стартует (первые 10–30 секунд);
-- MA запущен не с `network_mode: host`;
-- MA UI отвечает `302` на `/setup` — это нормально до завершения setup.
-
-### 6.1. Whisper/Piper не работают
-
-```bash
-cd /home/labuser/nettop
-./ctl.sh logs whisper
-./ctl.sh logs piper
-docker compose ps
-ss -lntp | grep -E ':(10200|10300)\b'
-```
-
-- Whisper должен быть `healthy`, порт `10300`.
-- Piper должен быть `healthy`, порт `10200`.
-- В HA: Settings → Devices & Services → Wyoming Protocol; сервисы
-  `faster-whisper` и `piper`.
-- В pipeline `Рикардо`: STT `faster-whisper`, TTS `piper`,
-  голос `ru_RU-irina-medium`.
-- Если Piper не видит голос — проверить `data/piper` и лог загрузки voice.
-
-## 7. HA Container и add-ons
-
-Если нужен add-on — его нет в Container. Варианты:
-
-- заменить на отдельный контейнер;
-- перейти на HAOS VM (KVM есть).
-
-## 8. Обновление ядра сломало Wi-Fi
-
-```bash
+mokutil --sb-state
 dkms status
-sudo dkms install rtl8821ce/v5.5.2_34066.20200325 --force
+```
+
+Wi-Fi-модуль должен быть подписан MOK. Не удалять
+`/var/lib/shim-signed/mok/`. После обновления ядра:
+
+```bash
+sudo dkms autoinstall
 sudo update-initramfs -u
-sudo reboot
 ```
 
-Если DKMS-исходник потерян — клонировать `tomaspinho/rtl8821ce`, применить
-`patches/rtl8821ce-ubsan.patch`, `./dkms-install.sh`.
+## UBSAN / Wi-Fi
 
-## 9. Boot 120 s / `degraded` при вынутом Ethernet
+Старый `rtl8821ce` мог давать `array-index-out-of-bounds`. Текущий штатный
+`rtw88_8821ce`; патч — `patches/rtl8821ce-ubsan.patch` (legacy).
+Не менять драйвер без canary на отдельном MAC.
 
-Симптом:
-
-```text
-systemd-networkd-wait-online.service: Timeout occurred while waiting for network connectivity.
-systemd-networkd-wait-online.service: Failed with result 'exit-code'.
-systemd is-system-running: degraded
-```
-
-Причина: `wlp4s0` в netplan помечен `optional: true`, поэтому netplan исключает
-Wi-Fi из wait-online; сервис ждёт только `enp3s0`. Если кабель вынут, он ждёт
-120 с, и HA стартует только после таймаута. Доступ по Wi-Fi при этом работает.
-
-**Статус:** в текущем сетапе применён вариант **B**. После reboot с вынутым
-Ethernet: SSH вернулся через ~20 с, `wait-online` — `active (exited)`,
-`systemctl is-system-running` — `running`, HA — `200`.
-
-Варианты фикса:
-
-**A. Простой (официальный netplan):** Ethernet — optional, Wi-Fi — required.
-
-```yaml
-# 00-installer-config.yaml
-    enp3s0:
-      optional: true
-
-# 50-wifi.yaml
-    wlp4s0:
-      # optional: true  ← убрать
-```
-
-Тогда boot ждёт Wi-Fi. Если Ethernet подключён, а Wi-Fi нет — будет ждать
-Wi-Fi; это цена простоты.
-
-**B. Универсальный (systemd drop-in, применён):** ждать любой из двух
-интерфейсов, максимум 30 с. Файл уже лежит в
-`projects/home-assistant/configs/systemd-networkd-wait-online.service.d/10-netplan.conf`.
+## HA/MA/Grafana не открываются
 
 ```bash
-sudo mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
-sudo cp projects/home-assistant/configs/systemd-networkd-wait-online.service.d/10-netplan.conf \
-  /etc/systemd/system/systemd-networkd-wait-online.service.d/10-netplan.conf
-sudo systemctl daemon-reload
-sudo systemctl restart systemd-networkd-wait-online
+curl -fsS -o /dev/null -w 'HA %{http_code}\n' http://192.0.2.28:8123/
+curl -fsS -o /dev/null -w 'MA %{http_code}\n' http://192.0.2.28:8095/
+curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
+  http://192.0.2.27:30300/grafana/api/health
 ```
 
-Проверка:
+- HAOS VM running? `qm status 100` на PVE.
+- K3s VM running? `qm status 101`; `sudo k3s kubectl get pods -A`.
+- Tailscale/operator: `tailscale status` в K3s VM; проверить ingress.
+- Не путать `.27:8123` (закрыт) с `.28:8123`.
+
+## Voice / Whisper / Piper
 
 ```bash
-systemctl cat systemd-networkd-wait-online.service | grep ExecStart
-systemctl status systemd-networkd-wait-online.service --no-pager
-systemctl is-system-running
+ssh labuser@192.0.2.27
+sudo k3s kubectl -n home-assistant get pods
+curl -fsS http://127.0.0.1:10305/  # Wyoming
+curl -fsS http://127.0.0.1:10200/
+curl -fsS http://127.0.0.1:8643/v1/models
 ```
 
-## 10. Rollback
+Проверить HA pipeline, `stt.onnx_asr`, `tts.piper`, voice
+`ru_puriso2-medium`. Hermes `8642` — loopback; `8643` — только HAOS/K3s.
 
-- Wi-Fi: удалить `blacklist-rtw88.conf`, удалить DKMS `rtl8821ce`, reboot
-  (вернётся h2c-баг).
-- Secure Boot: выключить в BIOS; MOK можно оставить.
-- HA: `docker compose down`; конфиг остаётся.
-- Сеть: вернуть DHCP в netplan.
-- sudo NOPASSWD: удалить `/etc/sudoers.d/90-labuser-nopasswd`.
+## Boot degraded / нет Ethernet
+
+`systemd-networkd-wait-online` не должен блокировать boot при Wi-Fi.
+Если boot долгий — проверить `ricardo-uplink`, `wpa_supplicant@wlp4s0`,
+`nic0` carrier. Ethernet не обязателен, но остаётся fallback.
+
+## Rollback
+
+- PVE network: вернуть предыдущий `/etc/network/interfaces` из
+  `/root/wifi-cutover/*`.
+- Wi-Fi uplink: остановить `ricardo-uplink`, вернуть Ethernet в `vmbr0`.
+- HA/K3s: `../../docs/REBUILD.md`; не запускать второй writer.
+
+## Не делать
+
+- Не подключать Ethernet и Wi-Fi одновременно в мост.
+- Не менять AP/драйвер без проверки отдельным MAC/DHCP/IPv6.
+- Не переустанавливать PVE при потере Wi-Fi — сначала консоль/профиль.
+- Не публиковать SSID/PSK/ключи.

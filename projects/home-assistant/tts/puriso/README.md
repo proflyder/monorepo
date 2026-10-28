@@ -1,6 +1,6 @@
 # Puriso через существующий Piper
 
-Фактический текущий статус — `../../../docs/STATE.md`; протокол внедрения — `../../../docs/DEPLOY-RICARDO-PURISO.md`.
+Фактический текущий статус — `../../../docs/STATE.md`; команды — `../../../docs/OPERATIONS.md`.
 
 Источник: https://huggingface.co/dhammagift/piper-ru-puriso
 
@@ -13,25 +13,25 @@ Checkpoint revision: `4f826cf39157118a2854f0b825917c1f83a342e7`. Файлы ONNX
 На том узле, где находится Piper data-dir:
 
 ```bash
-python3 projects/home-assistant/tools/tts-lab/install_puriso.py --data-dir /home/labuser/nettop/data/piper
+python3 projects/home-assistant/tools/tts-lab/install_puriso.py --data-dir /srv/k3s/volumes/piper
 ```
 
 Скрипт скачивает только два файла с закреплённого revision, проверяет SHA256, не перезапускает сервисы. Если путь скрипта другой, передать его фактический путь. Проверка уже загруженных файлов без сети:
 
 ```bash
-python3 projects/home-assistant/tools/tts-lab/install_puriso.py --data-dir /home/labuser/nettop/data/piper --verify-only
+python3 projects/home-assistant/tools/tts-lab/install_puriso.py --data-dir /srv/k3s/volumes/piper --verify-only
 ```
 
-В рабочем `/home/labuser/nettop/.env`:
+В private values Piper (K3s runtime):
 
 ```text
 PIPER_VOICE=ru_puriso2-medium
 ```
 
-После сохранения файлов и backup пересоздать только Piper из stack root:
+После сохранения файлов и backup перезапустить только Deployment:
 
 ```bash
-docker compose up -d --no-deps --pull never piper
+kubectl -n home-assistant rollout restart deploy/piper
 ```
 
 В HA pipeline «Рикардо»: engine `tts.piper`, language `ru`, voice `ru_puriso2-medium`. Применять через UI/WebSocket API, не править работающую `.storage` вручную.
@@ -40,6 +40,6 @@ docker compose up -d --no-deps --pull never piper
 
 ## Откат к Irina
 
-Вернуть в pipeline `tts_language: ru_RU`, `tts_voice: ru_RU-irina-medium`. В `.env` вернуть `PIPER_VOICE=ru_RU-irina-medium`, пересоздать только Piper. В `alarm_announce` убрать новые `language/options` либо явно задать Irina с `ru_RU`; reload scripts. Веса Irina не удалять. Проверить local intent → TTS и конечное состояние спутника.
+Вернуть в pipeline `tts_language: ru_RU`, `tts_voice: ru_RU-irina-medium`. В private values вернуть `PIPER_VOICE=ru_RU-irina-medium`, перезапустить Piper. В `alarm_announce` убрать новые `language/options` либо явно задать Irina с `ru_RU`; reload scripts. Веса Irina не удалять. Проверить local intent → TTS и конечное состояние спутника.
 
 Откат не требует перезагрузки HA, станции или STT. Не восстанавливать целиком устаревшую `.env`/scripts.yaml из backup поверх чужих последующих изменений: применить точечные изменения либо сначала сравнить файлы.

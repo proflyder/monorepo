@@ -184,8 +184,8 @@ ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 <user>@<K3S_IP>
 - `STATE.md` — текущее состояние;
 - `ARCHITECTURE.md` — устройство стенда и потоки;
 - `KUBERNETES-OPERATIONS.md` — K3s, Helm и firewall;
-- `INSTALL-PROXMOX.md` — VM и восстановление;
-- `REMOTE-ACCESS.md` — Tailscale и альтернативы;
+- `INSTALL-PROXMOX.md` — VM, Terraform и Wi-Fi uplink;
+- `SECURITY.md` — сетевые политики;
 - `SENSITIVE-DATA.md` — реестр приватных данных (без значений).
 
 Реальная карта с LAN-IP, Tailscale-именем и точными firewall source —

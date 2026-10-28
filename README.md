@@ -1,113 +1,64 @@
-# Yandex Station Midi — root lab
+# Yandex Station Midi — home lab
 
-**Runtime неттопа — Kubernetes/K3s.** Эксплуатация, Grafana и восстановление:
-[docs/KUBERNETES-OPERATIONS.md](docs/KUBERNETES-OPERATIONS.md).
-Дашборды доставляются проектным Helm-чартом; Docker Compose сохранён как legacy source.
+Стенд: Proxmox + HAOS VM + Ubuntu/K3s VM; станция Midi с Pulsar.
+Публичные адреса — примеры; реальные — в `secrets/`.
 
+## Старт
 
-> Публичная копия: serial/MAC, внешний адрес и tailnet-домен заменены примерами.
-> Реальные значения и исходные локальные документы — только в `secrets/`.
-> LAN-адреса и remote-пути описывают стенд; перед применением адаптировать.
+- [Текущее состояние](docs/STATE.md)
+- [Эксплуатация](docs/OPERATIONS.md)
+- [Kubernetes/K3s](docs/KUBERNETES-OPERATIONS.md)
+- [Сеть и порты](docs/NETWORK.md)
+- [Восстановление](docs/REBUILD.md)
+- [Все документы](docs/README.md)
 
-Лаборатория по своей **Station Midi** (`STATION_SERIAL`, `cucumber`, `192.0.2.13`):
-root/ADB, SSH, локальный MITM-стенд, OTA/ADB-защита, Яндекс-карантин и
-эксперименты с network provisioning.
+## Что где
 
-## С чего начать
-
-- **Восстановление с нуля:** [`docs/REBUILD.md`](docs/REBUILD.md)
-- **Ключевые решения:** [`docs/DECISIONS.md`](docs/DECISIONS.md)
-- **Текущее состояние:** [`docs/STATE.md`](docs/STATE.md)
-- **Что делать дальше:** [`docs/PENDING.md`](docs/PENDING.md)
-- **Компактная память:** [`docs/CONTEXT.md`](docs/CONTEXT.md)
-- **Команды и откат:** [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
-- **Монорепозиторий и Bazel:** [`docs/MONOREPO.md`](docs/MONOREPO.md)
-- **Карта всех доков и правила обновления:** [`docs/README.md`](docs/README.md)
-- **Чувствительные данные (реестр, без значений):**
-  [`docs/SENSITIVE-DATA.md`](docs/SENSITIVE-DATA.md)
-- **Исследование своего ассистента (Pulsar/HA/Spotify/MCP/wake word):**
-  [`docs/RESEARCH-OWN-ASSISTANT.md`](docs/RESEARCH-OWN-ASSISTANT.md)
-- **Удалённый доступ к HA (Tailscale/Serve, Link, Cloudflare, VPS):**
-  [`docs/REMOTE-ACCESS.md`](docs/REMOTE-ACCESS.md)
-- **Тесты и покрытие:** [`docs/TESTING.md`](docs/TESTING.md),
-  [`reports/TEST-COVERAGE.md`](reports/TEST-COVERAGE.md)
-- **Неттоп `lab-host` / Home Assistant:** [`projects/home-assistant/NETTOP.md`](projects/home-assistant/NETTOP.md)
-- **Голос «Рикардо», внедрение и следующий этап:** [`docs/RICARDO-TTS-HANDOFF.md`](docs/RICARDO-TTS-HANDOFF.md)
-- **Hermes fallback / MCP / web search:** [`projects/home-assistant/hermes/README.md`](projects/home-assistant/hermes/README.md)
+```text
+projects/station/       Pulsar, ADB, BLE, provisioning
+projects/home/          Proxmox, K3s, Terraform, Tailscale
+projects/home-assistant/HA, voice, Hermes, MA, TTS, dashboards
+solutions/              переиспользуемые alarm/MCP/bridge/UI
+packages/               proto, Go/Rust shared
+docs/                   эксплуатация и политики
+secrets/                реальные адреса, доступы, recovery (вне Git)
+```
 
 ## Доступ
 
 ```bash
 adb connect 192.0.2.13:5555
-ssh root@192.0.2.13
+ssh root@192.0.2.13          # пароль: secrets/CREDENTIALS.md
+ssh root@192.0.2.26          # PVE
+ssh labuser@192.0.2.27       # K3s VM
 ```
 
-Пароль SSH — в `secrets/CREDENTIALS.md`. Порты `22/5555` не выставлять наружу.
+HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
+`192.0.2.27:30300/grafana/`. Только LAN/Tailscale; в интернет не публиковать.
 
 ## Статус
 
-Станция в Яндекс-карантине, egress-guard разрешает только private LAN/DHCP/NTP;
-ADB/SSH работают. Установлен **Pulsar v0.4.1-ricardo6** (HA ESPHome satellite +
-Sendspin), штатная Алиса/`maind` остановлены. Свой BLE gateway `Station-Gateway`
-отвечает за 1/3/4/5-жесты; голосовые команды — HA. STT — GigaAM v3
-(`stt.onnx_asr`) с Whisper fallback; Hermes `v0.22.5` на неттопе даёт
-fallback для свободной речи и веб-поиска. Matter Server `matterjs-server`
-(`ws://127.0.0.1:5580/ws`) подключён к HA; Yandex LED strip ждёт pairing.
-Xiaomi Home `v0.5.0` установлена для `MJGJD02YL`; вход в China/импорт — вручную.
-Remote HA — Tailscale/Serve
-(`https://lab-host.example-tailnet.ts.net`), HA не публичный. Детали — `docs/STATE.md`;
-восстановление — `docs/REBUILD.md`.
-
-## Монорепозиторий
-
-Горизонтальная структура: переиспользуемые `solutions/`, общие `packages/` и
-композиции `projects/`. Станция и Home Assistant — независимые проекты
-`projects/station` и `projects/home-assistant`; `projects/home` собирает их
-вместе с alarm/MCP/UI.
-
-```bash
-bazel build //solutions/alarm
-bazel test //solutions/alarm/...
-bazel run //solutions/alarm
-```
-
-Bazelisk: `go install github.com/bazelbuild/bazelisk@latest`. Подробности,
-горизонтальная структура и порядок миграции — [`docs/MONOREPO.md`](docs/MONOREPO.md).
-`projects/station/ble-gateway` пока остаётся отдельным Go-модулем.
-
-Внутренний API нового control plane — gRPC/protobuf:
-`packages/proto/ricardo/v1/alarms.proto`; для HA/браузера — Connect/gRPC-Web на
-том же контракте. Детали — [`docs/GRPC.md`](docs/GRPC.md).
+- PVE `9.2.24`; HAOS `2026.10.4`; K3s `v1.35.9`.
+- Wi-Fi 4addr/WDS + Ethernet fallback; VM IP не меняются.
+- Pulsar `v0.4.1-ricardo6`, wake word «Рикардо», BLE gateway.
+- HAOS add-ons: MA `2.10.8`, Matter `9.2.0`; K3s: STT/TTS/Hermes/observability.
+- Remote — Tailscale Operator, без публичного HA.
 
 ## Тесты
 
 ```bash
-make test          # hermetic: HA YAML, shell, BLE Go, pairing
-make coverage      # + coverage отчёт
-make test-e2e      # live HA/BLE gateway (нужны токены)
+make test          # hermetic
+make coverage      # coverage + reports/TEST-COVERAGE.md
+make test-e2e      # live HA/BLE, нужны токены
 ```
 
-Текущая площадь и границы — [`reports/TEST-COVERAGE.md`](reports/TEST-COVERAGE.md);
-инструкции — [`docs/TESTING.md`](docs/TESTING.md).
+Подробности — `docs/TESTING.md`.
 
-## Локальное версионирование
+## Публикация
 
-Репозиторий готовится к публикации на GitHub; remote/push — по отдельному запросу.
-Результат проверки и ограничения — `docs/REPOSITORY-AUDIT.md`.
-Правила для всех сессий — `AGENTS.md`. Перед коммитом изменений Pulsar
-выполнить `python3 projects/station/scripts/snapshot-pulsar.py`: версия лаборатории сохранит
-полный патч и базовый commit, не затрагивая вложенный upstream-репозиторий.
-Секреты, записи голоса, бэкапы и тяжёлые сборки остаются вне Git.
+Публикуется только `develop`, без секретов и Git-истории с приватными данными.
+Перед push: `make test`, `python3 platform/quality/audit_repository.py`,
+проверка `docs/SENSITIVE-DATA.md` и Gitleaks. Не использовать `push --all`,
+`--mirror`, `--tags` или `--no-verify`.
 
-## Публичные примеры и приватное окружение
-
-Адреса `192.0.2.0/24`, `lab-host`, `labuser`, `/Users/developer` и
-`/home/trainer` — примеры. Перед deployment подставьте свои настройки.
-Оригинальные локальные конфиги сохранены отдельно под `secrets/`; эта
-очистка не меняет запущенные устройства.
-
-Публикуется только `develop`. Ветка `local-history` хранится исключительно
-локально и содержит прежние приватные данные. Не используйте push --all,
---mirror, --tags или --no-verify. Для локальной защиты включите
-`git config --local core.hooksPath .githooks`; перед push нужен Gitleaks.
-Копировать весь каталог проекта или `.git` для публикации нельзя.
+Секреты, записи голоса, backups и тяжёлые сборки остаются вне Git.

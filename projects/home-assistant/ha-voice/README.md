@@ -139,40 +139,12 @@ input_text.taimer_N_nazvanie  (скрыты)
 input_text.tekushchii_budilnik_* (скрыты)
 ```
 
-Установка на сервер:
+Установка:
 
-```bash
-scp -r projects/home-assistant/ha-voice/* labuser@192.0.2.25:/tmp/ha-voice/
-ssh labuser@192.0.2.25
-sudo cp /tmp/ha-voice/rest_commands.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/intent_scripts.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/scripts.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/input_select.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/input_datetime.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/input_boolean.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/input_number.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/input_text.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo cp /tmp/ha-voice/automations.yaml \
-  /home/labuser/nettop/homeassistant/config/
-sudo mkdir -p /home/labuser/nettop/homeassistant/config/custom_sentences/ru
-sudo mkdir -p /home/labuser/nettop/homeassistant/config/www
-sudo cp /tmp/ha-voice/custom_sentences/ru/station_control.yaml \
-  /home/labuser/nettop/homeassistant/config/custom_sentences/ru/
-sudo cp /tmp/ha-voice/custom_sentences/ru/station_alarm.yaml \
-  /home/labuser/nettop/homeassistant/config/custom_sentences/ru/
-sudo cp /tmp/ha-voice/www/alarm_chime.wav \
-  /home/labuser/nettop/homeassistant/config/www/
-sudo cp /tmp/ha-voice/www/alarm_ringtone.wav \
-  /home/labuser/nettop/homeassistant/config/www/
-```
+HA config живёт внутри HAOS в `/config`. Копировать файлы через HA File
+Editor, Samba или HAOS SSH add-on; не писать в HAOS из host. После копирования
+проверить `configuration.yaml` includes и выполнить **Developer Tools → YAML →
+Check configuration → Restart**.
 
 В `configuration.yaml`:
 
@@ -211,7 +183,7 @@ TOKEN=$(adb -s 192.0.2.13:5555 shell   cat /data/quasar/ble-gateway/control-toke
 # secrets.yaml: station_control_bearer: "Bearer $TOKEN"
 ```
 
-Затем `./ctl.sh restart ha`.
+Затем в HA: Developer Tools → YAML → Restart (или перезапустить HAOS VM).
 
 ## Проверка
 
@@ -271,7 +243,7 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 
 ## Будильники, таймеры, напоминания, заметки
 
-Канонический план — [PLAN-SCHEDULES.md](../../../docs/PLAN-SCHEDULES.md).
+Текущее состояние — [STATE.md](../../../docs/STATE.md); команды — [OPERATIONS.md](../../../docs/OPERATIONS.md).
 Источник истины — `local_todo` и `timer` helpers, не старый один слот.
 
 - Будильники: `todo.alarms_once/daily/weekdays/weekends`; scheduler

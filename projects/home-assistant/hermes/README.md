@@ -164,9 +164,7 @@ speech. Non-streaming clients still receive sanitized JSON.
 
 The proxy sets `model_options.reasoning_effort=low` for voice requests only
 (default controlled by `HERMES_VOICE_REASONING_EFFORT`). Other Hermes clients
-keep their configured reasoning. Deployment, measurements and rollback:
-[`../../../docs/DEPLOY-HERMES-STREAMING.md`](../../../docs/DEPLOY-HERMES-STREAMING.md).
-Current runtime facts: [`../../../docs/STATE.md`](../../../docs/STATE.md).
+keep their configured reasoning. Current runtime facts: [`../../../docs/STATE.md`](../../../docs/STATE.md).
 The service is
 `~/.config/systemd/user/hermes-voice-proxy.service`:
 

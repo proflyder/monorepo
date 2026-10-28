@@ -68,7 +68,7 @@ git archive --format=tar.gz HEAD > "snapshots/project/$STAMP/repo.tar.gz"
 Station (ADB; BusyBox tar — archive then gzip):
 
 ```bash
-adb -s 192.168.3.13:5555 shell \
+adb -s 192.0.2.13:5555 shell \
   'tar -C /data -cf /tmp/station-data.tar . && gzip -9 /tmp/station-data.tar'
 adb pull /tmp/station-data.tar.gz snapshots/station/<stamp>/
 ```
@@ -78,9 +78,9 @@ Nettop (Proxmox host):
 ```bash
 ssh -i secrets/proxmox-install/proxmox_admin \
   -o UserKnownHostsFile=secrets/proxmox-install/known_hosts \
-  root@192.168.3.26 \
+  root@192.0.2.26 \
   'tar -C / -czf /tmp/pve-config.tar.gz etc/pve etc/network etc/hosts etc/ssh etc/apt/sources.list.d var/lib/ricardo-terraform'
-scp ... root@192.168.3.26:/tmp/pve-config.tar.gz snapshots/nettop/<stamp>/
+scp ... root@192.0.2.26:/tmp/pve-config.tar.gz snapshots/nettop/<stamp>/
 ```
 
 ## External copy
