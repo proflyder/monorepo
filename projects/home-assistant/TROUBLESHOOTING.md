@@ -77,6 +77,25 @@ curl -fsS http://127.0.0.1:8643/v1/models
 Проверить HA pipeline, `stt.onnx_asr`, `tts.piper`, voice
 `ru_puriso2-medium`. Hermes `8642` — loopback; `8643` — только HAOS/K3s.
 
+## Колонка отвечает на wake красным, но не подключена к HA
+
+Различать два случая: агент `conversation.hermes_agent` в HA недоступен
+(проверить llama_cpp setup/voice proxy), либо сам `assist_satellite` unavailable.
+Во втором случае проверить IP станции, ESPHome 6053 и ADB/SSH с Mac и VM.
+Запись online в роутере сама по себе не доказывает, что станция отвечает в LAN.
+
+При отсутствии сети резервный BLE gateway открывается тремя короткими
+нажатиями mute или удержанием 5 с **на уже включённой станции**. Wi-Fi
+credentials/token брать только из private recovery; failed provisioning
+должен откатиться на прежний профиль. Не делать factory reset.
+
+В наблюдавшемся 2026-10-28 случае не работали ARP/все LAN-службы;
+BLE provisioning вернул TIMEOUT. Полное отключение питания на 20–30 с
+и включение без кнопок восстановили сеть. Дождаться подключения HA и
+Sendspin, затем проверить живой wake/ответ. Это способ восстановления;
+первопричина отказа Wi-Fi/сетевого стека пока не подтверждена.
+Rust Pulsar/данные не откатывать поверх актуальной установки.
+
 ## Boot degraded / нет Ethernet
 
 `systemd-networkd-wait-online` не должен блокировать boot при Wi-Fi.

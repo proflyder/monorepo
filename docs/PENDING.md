@@ -23,6 +23,12 @@
 
 ## Инфраструктура
 
+- [ ] Выяснить причину потери LAN на станции после reboot: роутер online,
+      ARP/ADB/ESPHome недоступны; BLE Wi-Fi TIMEOUT. Cold power cycle помог.
+      Не считать перезапуск постоянным исправлением и не менять прошивку
+      без диагностики; Rust/HA/Sendspin после восстановления работают.
+
+
 - [ ] Offsite encrypted backup + restore rehearsal на запасном железе.
 - [ ] Аварийный power-loss тест host/VM.
 - [ ] Host Tailscale emergency access; сейчас PVE только LAN/Wi-Fi.
