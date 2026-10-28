@@ -1,5 +1,36 @@
 # Работа с yandex-station-lab
 
+## Agent orchestration and model policy
+
+- The primary Codex thread owns planning, architecture, task decomposition,
+  coordination, review, and acceptance. Delegate research, implementation, and
+  test execution to BB child threads using provider `acp-opencode`.
+- Default worker model is `opencode-go/deepseek-v4.1-flash`. Research workers use
+  `mode=plan`; implementation workers use `mode=build`. Prefer Flash throughout.
+- Never launch `opencode-go/deepseek-v4-pro`, any other Pro model, or a fallback
+  model without explicit user approval for that specific escalation. First explain
+  why Flash is insufficient and which bounded task needs Pro. A timeout, failure,
+  or quota limit does not authorize escalation.
+- Every worker assignment specifies objective, relevant context and paths,
+  permitted edit scope, constraints, acceptance criteria, validation commands,
+  and the expected report: findings, changed files, checks/results, blockers.
+- Worker threads must read the applicable `AGENTS.md` files and current sources,
+  preserve other sessions' changes, and obey the existing local Git, privacy,
+  Pulsar, and device-operation rules.
+- Use `bb thread spawn` with `--parent-self` and explicit project, environment,
+  provider, and model. Reuse the existing environment for sequential
+  shared-checkout tasks; use separate worktrees only when appropriate. Do not
+  assume ignored or nested Pulsar sources are copied into worktrees.
+- Start with one write worker per shared checkout. Parallel research is allowed;
+  concurrent writers require nonoverlapping file ownership or deliberate
+  isolation.
+- The primary agent inspects actual diffs and validation evidence before
+  accepting changes. Worker self-reports alone are insufficient. The primary owns
+  final local commits; workers do not commit unless explicitly assigned.
+- If delegation is unavailable, report the blocker; do not silently switch models
+  or take over implementation. The primary may directly edit orchestration
+  instructions and perform review/integration checks.
+
 ## Локальный Git — осознанная конфигурация
 
 Репозиторий готовится к публикации на GitHub. До отдельного запроса
