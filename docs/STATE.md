@@ -7,13 +7,14 @@
 > реальными IP/портами — `secrets/NETWORK.md`.
 
 - Proxmox VE `9.2.24` на внутреннем NVMe; hostname `pve`, management
-  `vmbr0` на Ethernet `192.0.2.26/24`, root 64 GiB, swap 8 GiB,
+  `vmbr0` `192.0.2.26/24`, uplink Wi-Fi 4-address (Ethernet fallback),
+  root 64 GiB, swap 8 GiB,
   `local-lvm` около 379 GiB. SSH — отдельный ключ; PVE API/TLS проверены.
 - VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, UEFI, HAOS, `192.0.2.28/24`
   (static in HAOS Supervisor); VM `101 lab-k3s`: 8 vCPU / 8 GiB / 200 GiB,
   Ubuntu 24.04.5, K3s, `192.0.2.27/24` (static netplan). Обе running,
-  guest agent включён, startup order 1/2; после memory apply K3s VM
-  перезагрузилась и кластер/приложения восстановились.
+  guest agent включён, startup order 1/2; две полные штатные перезагрузки
+  PVE без Ethernet проверены, VM и приложения запускаются автоматически.
 - Terraform `projects/home/proxmox/terraform/main.tf` (provider 0.118.1,
   Terraform 1.17.0) создал обе VM; authoritative state — root-only
   `/var/lib/ricardo-terraform/` на PVE, копия — в `secrets/`.
@@ -40,7 +41,7 @@
   `pl-home.<tailnet>.ts.net/` → HAOS, `/grafana/` → Grafana; DNS указывает
   на operator proxy с `tag:k8s`. Host tailscale K3s VM — `home-k3s-host`;
   Proxmox host tailscaled не запущен, поэтому его аварийный доступ сейчас
-  только LAN/Ethernet.
+  через LAN/Wi-Fi (или Ethernet при подключении).
 - Hermes — revision `bf0203a794a07aac3ff764972ab9087baa4e4f4e`, собственный
   image, API extras/tini/SQLite 3.53.4; state в `/srv/k3s/volumes/hermes`.
 - Functional E2E: Kubernetes runtime 5/5 (5 Deployments, 7 health endpoints),
@@ -53,12 +54,35 @@
   миграции с обоими add-ons (`final-cleanup-no-proxy`) сохранены. Полный
   disaster restore на запасном железе и длительный power-loss тест ещё
   не выполнялись.
-- VM `.27/.28` переведены на static внутри guests; необходимо исключить эти адреса из DHCP-пула либо зарезервировать их
-  на роутере. Открытые вопросы: переход Proxmox host на Wi-Fi
-  (сейчас Ethernet), offsite backup, host Tailscale emergency access.
+- VM `.27/.28` переведены на static внутри guests; адреса PVE/VM и станции
+  закреплены DHCP reservations на роутере. Открытые вопросы: offsite backup
+  и host Tailscale emergency access. Wi-Fi работает без смены VM IP.
 - Команды/пути/восстановление: [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md);
   физическая установка — [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md);
   границы IaC/Operator — [PROXMOX-HAOS-IAC.md](PROXMOX-HAOS-IAC.md).
+
+### Приёмка Wi-Fi, 2026-10-28
+
+- Две штатные полные перезагрузки PVE выполнены с физически отключённым
+  Ethernet; последняя — с окончательными network/cloud-init настройками.
+  Proxmox HTTPS с проверкой CA — 200; Wi-Fi 4addr/WDS, wpa COMPLETED,
+  Ethernet carrier 0 и не включён в мост; host running, failed units нет.
+- Исправлены сброс K3s VM на DHCP и регенерация SSH host keys при смене
+  config-drive instance ID: static CIDR/gateway заданы приватными tfvars,
+  cloud-init сохраняет ключи, eth0 привязан к MAC. После повторного reboot
+  статический IP/имя интерфейса/SSH identity сохранены, plan No changes.
+- После MA restart станция не обнаруживалась по IPv4 mDNS. Через штатный
+  MA API добавлен manual discovery IP станции; pairing/data сохранены.
+  После отдельного повторного restart MA плеер сам вернулся в HA (idle,
+  volume_level присутствует). Адрес станции также закреплён на роутере.
+- Итоговая проверка: Kubernetes 5/5, HA read-only 3/3, Hermes 4/4 с real chat;
+  Piper/GigaAM/Whisper fixed-phrase synthesis/transcription pass без playback;
+  физический Matter node available и свежий attribute read pass.
+  Grafana NodePort и Tailscale HTTPS работают. Management firewall сохранился
+  после reboot: LAN 6443/10250/9100/9116 закрыты, SSH/Grafana доступны.
+- Private Wi-Fi profile/network/IaC recovery и новый supported partial backup
+  Music Assistant скопированы на Mac, архив/ SHA-256 проверены; полный
+  disaster restore и аварийное пропадание питания этим тестом не заменяются.
 
 ## Kubernetes runtime — K3s VM, 2026-10-28
 
@@ -76,8 +100,8 @@
 - `helm` releases: `runtime`, `monitoring`, `ha-observability`, `loki`,
   `alloy`, `tailscale-operator`, `home-access`; все применены и проверены.
 - Host SSH/network/chrony остаются вне кластера; native Hermes units
-  masked. После reboot VM/хоста нужно отдельно проверить порядок старта,
-  HAOS↔K3s endpoints и operator; полный power-loss тест ещё впереди.
+  masked. После каждого reboot проверять HAOS↔K3s endpoints и Operator;
+  штатный reboot без Ethernet принят, аварийный power-loss тест ещё впереди.
 
 
 
@@ -312,13 +336,14 @@ ADB-маркеры: `/data/quasar/activate_adb_quasmodrom`,
 ## Сервер / VM `lab-host`
 
 - DEXP Jupiter JU01CY: i7-12650H, 16 GiB RAM, NVMe; Proxmox VE `9.2.24`
-  на host, kernel `7.0.14-26-pve`; management Ethernet `192.0.2.26`.
+  на host, kernel `7.0.14-26-pve`; management `vmbr0` `192.0.2.26` (Wi-Fi/Ethernet).
   K3s VM `lab-k3s` — Ubuntu 24.04.5, kernel `7.0.0-38-generic`,
   8 GiB, `192.0.2.27`; HAOS VM — 4 GiB, `192.0.2.28`.
-- Wi-Fi RTL8821CE на Proxmox host сейчас DOWN; PCI mapping `home-wifi`
-  создан, но не передан VM. Ethernet остаётся обязательным до отдельного
-  Wi-Fi/routed-проекта. Старые MOK/DKMS-заметки относятся к прежней
-  Ubuntu; на PVE host не переносились.
+- Wi-Fi RTL8821CE на PVE использует штатный `rtw88_8821ce`, 4-address/WDS
+  uplink к `vmbr0`. `ricardo-uplink` выбирает ровно один physical uplink:
+  Ethernet при carrier, иначе Wi-Fi. VM сохраняют `.27/.28` и L2/IPv6
+  multicast. PCI mapping не используется; NAT/passthrough не требуются.
+  Runbook: `projects/home/proxmox/wifi-uplink/README.md`.
 - 2026-10-27 maintenance: systemd `259.9`; Secure Boot KEK/UEFI CA `2023`,
   dbx `20260402`; reboot OK; `UEFI db: Valid`; full backup —
   `backups/maintenance-20261027/` (1.5 ГБ, 600).

@@ -946,3 +946,23 @@ archives и custom images staged на PVE с повторной проверко
   HA backup остаются на Mac. `runtime-ha` — архив прежнего HA Container,
   не MA, оставлен.
 - E2E обновлён: 5 Deployments, 5 runtime PV, 7 health endpoints.
+
+
+## 2026-10-28 — Wi-Fi uplink Proxmox и reboot acceptance
+
+- Проверен 4-address/WDS на RTL8821CE/rtw88 и текущем AP: отдельный MAC за
+  мостом получил DHCP, gateway/IPv6 multicast доступны. Wi-Fi оставлен на
+  PVE, VM сохранили L2/адреса; прежний вариант PCI passthrough/NAT не потребовался.
+- Добавлен ricardo-uplink: ровно один physical bridge port, Ethernet по carrier,
+  иначе Wi-Fi. Две полные штатные перезагрузки без Ethernet пройдены.
+- При reboot выявлен config-drive/cloud-init сброс K3s VM на DHCP с новым
+  SSH host key. Ключ проверен через PVE guest agent, а не принят вслепую.
+  Static IP перенесён в private Terraform variables, MAC→eth0 и host keys
+  сохраняются после повторной загрузки. Plan No changes.
+- После MA restart плеер не находился по mDNS; штатный Sendspin manual IP
+  discovery восстановил reconnect без station firmware/pairing изменений.
+  Повторный MA restart и HA entity acceptance пройдены.
+- На роутере закреплены host/VM/станция, DHCP-пул не менялся. Cluster 5/5,
+  HA 3/3, Hermes 4/4, STT/TTS smoke, физический Matter read, TLS и firewall pass.
+- Private network/IaC recovery и supported partial MA backup сохранены на Mac
+  с SHA-256. Источники/откат — projects/home/proxmox/wifi-uplink/.

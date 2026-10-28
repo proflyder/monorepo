@@ -42,18 +42,21 @@
   Operator `1.104.2`; `pl-home` → HAOS, `/grafana` → Grafana; HAOS proxy
   HAOS работает напрямую `.28:8123`; K3s HAProxy удалён. Health exporter — 7 endpoints.
 - ✅ VM `.27/.28` переведены на static в guests (netplan/HAOS Supervisor);
-  Proxmox host `.26` static с установки. Статические адреса сами по себе не защищают от DHCP-конфликта: известный
-  пул роутера включает `.26–.28`; нужны reservations/exclusions на роутере.
-- ⏳ Wi-Fi: Ethernet обязателен; `home-wifi` PCI mapping создан, но Wi-Fi
-  не передан VM. Нужен отдельный routed/NAT или внешний Wi-Fi bridge design;
-  не отключать Ethernet до приёмки.
-- ⏳ Host/VM power-loss reboot, полный disaster restore на запасном железе,
+  Proxmox host `.26` static с установки; на роутере закреплены
+  `.26/.27/.28` и адрес станции без изменения пула/lease time.
+- ✅ Wi-Fi: RTL8821CE/rtw88 на PVE, 4-address/WDS bridge `vmbr0`,
+  отдельный MAC/DHCP/IPv6 multicast и физический Matter read проверены.
+  `ricardo-uplink` выбирает один uplink, VM IP сохраняются; NAT/PCI passthrough нет.
+- ✅ Штатный host/VM reboot без Ethernet, сохранение статического K3s IP/SSH
+  keys и восстановление Sendspin после MA restart проверены.
+- ⏳ Аварийное пропадание питания, полный disaster restore на запасном железе,
   offsite backup и host Tailscale emergency access.
 - ⏳ Живая приёмка после cutover: микрофон/wake, alarm/stop/resume,
   Spotify/MA transfer, локальные HA intents; read-only E2E уже pass.
 - ✅ Полные HA backups до/после миграции (`final-cleanup-no-proxy`, 35.9 MiB)
-  созданы и скопированы на Mac; checksums записаны. ⏳ Осталось проверить
-  Spotify/Sendspin после reboot HAOS; Spotify rate-limit уже снялся.
+  созданы и скопированы на Mac; checksums записаны. Sendspin
+  reconnect после полного reboot и дополнительного MA restart проверен;
+  отдельный Spotify playback/transfer после cutover остаётся в живой приёмке.
 
 ## P1 — Matter / Yandex LED strip
 
@@ -248,11 +251,11 @@
   trusted proxy `.27`; `xiaomi-17` в tailnet.
 - ✅ Проверено из tailnet: `/` HTTP 200, `/grafana/api/health` HTTP 200;
   `tailscale/verify-tailnet.sh` PASS; старый host Serve route не используется.
-- Публичного HA нет; `8123/8095/8099/6053/6638` не проброшены; ONT/AX3
-  не менялись. Статический IP/WireGuard — альтернатива, не выбрана.
+- Публичного HA нет; `8123/8095/8099/6053/6638` не проброшены; port-forward на ONT/AX3
+  не включался (на AX3 добавлены только DHCP reservations). Статический IP/WireGuard — альтернатива, не выбрана.
 - ⏳ Host Tailscale emergency access: на Proxmox host `tailscaled` не
-  запущен; при падении K3s VM/operator останется только LAN/Ethernet.
-- ⏳ Проверить power-loss/reboot обеих VM и хоста; ONT WAN `22/443`;
+  запущен; при падении K3s VM/operator остаётся прямой LAN-доступ по Wi-Fi или Ethernet.
+- ⏳ Проверить аварийный power-loss обеих VM и хоста (штатный reboot принят); ONT WAN `22/443`;
   offsite backup. Не выставлять сервисные порты в интернет.
 
 ## P1 — API 31116 без авторизации

@@ -18,6 +18,18 @@ variable "guest_ssh_public_key" {
   type = string
 }
 
+variable "k3s_ipv4_address" {
+  description = "Guest CIDR or dhcp; set the deployed static address in private tfvars."
+  type        = string
+  default     = "dhcp"
+}
+
+variable "k3s_ipv4_gateway" {
+  description = "Gateway for a static guest address; null when using DHCP."
+  type        = string
+  default     = null
+}
+
 resource "proxmox_virtual_environment_vm" "haos" {
   node_name       = "pve"
   vm_id           = 100
@@ -100,7 +112,10 @@ resource "proxmox_virtual_environment_vm" "k3s" {
     datastore_id      = "local-lvm"
     user_data_file_id = "local:snippets/lab-k3s-cloud-init.yaml"
     ip_config {
-      ipv4 { address = "dhcp" }
+      ipv4 {
+        address = var.k3s_ipv4_address
+        gateway = var.k3s_ipv4_gateway
+      }
     }
     user_account {
       username = "labuser"

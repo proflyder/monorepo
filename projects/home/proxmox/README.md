@@ -12,9 +12,16 @@ state root-only на PVE и копия в `secrets/`. HAOS восстановл�
 и Tailscale Operator приняты read-only E2E. HA-совместимый endpoint
 HAOS доступен напрямую `.28:8123`; compatibility HAProxy удалён.
 
-Wi-Fi RTL8821CE на host DOWN; `bootstrap-wifi-mapping.sh` создаёт PCI mapping,
-но **не передаёт** карту VM и не меняет Ethernet. Это подготовка, не готовая
-Wi-Fi архитектура: до routed/NAT или внешнего Wi-Fi bridge оставлять Ethernet.
+Wi-Fi RTL8821CE работает на host как 4-address/WDS uplink `vmbr0`,
+VM IP и L2/multicast сохраняются. `ricardo-uplink` выбирает один uplink:
+Ethernet при carrier, иначе Wi-Fi. NAT и PCI passthrough не требуются.
+Исходники/установка/откат: [wifi-uplink](wifi-uplink/).
+`bootstrap-wifi-mapping.sh` — неиспользуемая подготовка прежнего варианта.
+
+Статический IP K3s задаётся приватными Terraform variables
+`k3s_ipv4_address` (CIDR) и `k3s_ipv4_gateway`; default DHCP — только для
+новых универсальных инсталляций. `cloud-init.yaml` сохраняет существующие
+SSH host keys при смене config-drive instance ID.
 
 `backup-before-install.py --output /private/new-directory` запускается root на
 текущем K3s host. Останавливает writers, копирует PVC/host recovery, восстанавливает

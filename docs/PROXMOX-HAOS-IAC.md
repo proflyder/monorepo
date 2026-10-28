@@ -52,19 +52,23 @@ HAOS поддерживается в VM, включая KVM/Proxmox; сам Prox
 
 ## Сеть: текущее состояние и Wi-Fi
 
-Сейчас Proxmox host использует Ethernet `vmbr0`; Wi-Fi RTL8821CE на host
-`DOWN`. PCI mapping `home-wifi` создан, но карта **не передана** ни одной VM:
-client Wi-Fi нельзя автоматически считать эквивалентом Ethernet bridge.
-Типовая схема bridge, где VM — отдельный L2 участник LAN, на Wi-Fi
-client-интерфейсе не гарантируется. Это не запрещает VM: NAT/маршрутизация
-возможны, но discovery/multicast, входящие соединения и media URLs нужно
-проектировать и тестировать. Выбор гипервизора не устраняет этот вопрос.
+Рабочая схема — Wi-Fi 4-address/WDS на Proxmox host, bridge `vmbr0`.
+На текущем RTL8821CE/rtw88 и AP проверены отдельный MAC за мостом, DHCP,
+IPv6 multicast и чтение физического Matter-устройства. Это позволяет
+сохранить прямую L2 сеть VM без NAT и без передачи PCI карты в guest.
 
-До отдельного routed/NAT-проекта или внешнего Wi-Fi bridge Ethernet остаётся
-обязательным. Не отключать кабель и не передавать Wi-Fi PCI VM без плана
-возврата host-доступа. HAOS/K3s используют LAN `.28/.27`; HAOS открыт
-напрямую `.28:8123`, compatibility HAProxy удалён. Hermes voice proxy
-`.27:8643` ограничен nftables только HAOS/K3s/loopback.
+`ricardo-uplink` подключает к мосту ровно один physical uplink: Ethernet
+при наличии carrier, иначе Wi-Fi. IPv4/MAC management bridge и IP гостей
+остаются прежними. Профиль SSID/PSK — root-only вне Git. PCI mapping
+`home-wifi` остаётся неиспользуемой подготовкой, не частью текущей схемы.
+После смены AP/firmware/драйвера WDS необходимо проверять заново: поддержка
+4-address требуется с обеих сторон, обычного host ping недостаточно.
+
+Исходники, установка и откат —
+[`wifi-uplink/`](../projects/home/proxmox/wifi-uplink/).
+Физическое отключение Ethernet проверяется до reboot приёмки.
+HAOS открыт напрямую `.28:8123`, voice proxy `.27:8643` остаётся ограничен
+только HAOS/K3s/loopback.
 
 Proxmox bare-metal — смена хостовой ОС/ядра/сетевого управления, а не установка
 обычного приложения рядом с Ubuntu. На одном физическом узле это отдельное
@@ -75,7 +79,7 @@ RAM неттопа — 16 GB (14.85 GiB доступны ОС). Текущее �
 4 GiB, K3s 8 GiB, остальное Proxmox host; после cutover занято около 13 GiB,
 доступно около 1.9 GiB без swap. MA/Matter перенесены в HAOS как add-ons;
 Whisper/GigaAM/Piper оставлены в K3s. Не увеличивать гостей без измерения;
-power-loss/reboot-тест ещё впереди.
+Штатный reboot без Ethernet принят; аварийный power-loss тест ещё впереди.
 
 ## Tailscale Operator
 
@@ -99,5 +103,5 @@ host tailscaled не заменяет управленческий OAuth client.
 5. ✅ `pl-home` и `/grafana` проверены через operator proxy.
 6. ✅ Старый host Serve route удалён из DNS-маршрута.
 
-Осталось: Wi-Fi/routed-проект, DHCP/static reservations, host Tailscale
-emergency access, power-loss/reboot тест и offsite backup.
+DHCP reservations PVE/VM/станции добавлены. Осталось: host Tailscale
+emergency access, power-loss тест и offsite backup.

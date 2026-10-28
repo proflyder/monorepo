@@ -1,0 +1,14 @@
+[Unit]
+Description=Exclusive Ethernet or WDS Wi-Fi uplink for Proxmox bridge
+Wants=networking.service
+After=networking.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/ricardo-uplink
+ExecStart=/usr/local/sbin/ricardo-uplink
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

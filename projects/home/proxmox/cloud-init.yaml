@@ -4,6 +4,8 @@ manage_etc_hosts: true
 timezone: Asia/Almaty
 ssh_pwauth: false
 disable_root: true
+# Preserve identity if the Proxmox config-drive instance ID changes later.
+ssh_deletekeys: false
 package_update: true
 packages:
   - qemu-guest-agent

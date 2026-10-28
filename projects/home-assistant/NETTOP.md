@@ -2,7 +2,7 @@
 
 **Текущий runtime 2026-10-28:** Proxmox VE; HAOS VM `100` (`.28`) и
 Ubuntu/K3s VM `101` (`.27`). HA Core, MA и Matter add-ons — в HAOS;
-STT/TTS/Hermes — в K3s; вход — Tailscale Operator. Ethernet host `.26`; Wi-Fi пока DOWN.
+STT/TTS/Hermes — в K3s; вход — Tailscale Operator. Host `.26`: Wi-Fi 4-address/WDS с Ethernet fallback.
 Текущие команды — [Kubernetes runbook](../../docs/KUBERNETES-OPERATIONS.md)
 и [Proxmox runbook](../../docs/INSTALL-PROXMOX.md).
 
@@ -13,11 +13,11 @@ STT/TTS/Hermes — в K3s; вход — Tailscale Operator. Ethernet host `.26`;
 Proxmox + HAOS + Ubuntu/K3s + Home Assistant.
 
 **Текущий статус:** HAOS `2026.10.4` healthy; Music Assistant `2.10.8` с
-Spotify в K3s; HA Assist base (Whisper/Piper/`Рикардо`) и голосовые команды
+Spotify в HAOS add-on; HA Assist base (Whisper/Piper/`Рикардо`) и голосовые команды
 сохранены. Pulsar `v0.4.1-ricardo6` подключён; HA integration Music
 Assistant добавлена. Tailscale Operator `1.104.2` публикует `pl-home` →
-HAOS и `/grafana` → Grafana; read-only E2E pass. Wi-Fi/routed-проект,
-DHCP reservations, power-loss reboot и offsite backup — открыты.
+HAOS и `/grafana` → Grafana; read-only E2E pass. DHCP reservations
+добавлены, Wi-Fi/reboot приняты; power-loss и offsite backup — открыты.
 
 ## Быстрые факты (текущий runtime)
 
@@ -30,7 +30,7 @@ DHCP reservations, power-loss reboot и offsite backup — открыты.
 | HA endpoint | HAOS `.28:8123` (direct) |
 | Remote | Tailscale Operator `1.104.2`; `pl-home` → HAOS, `/grafana` |
 | Terraform | provider `bpg/proxmox` 0.118.1; state root-only на PVE |
-| Wi-Fi | RTL8821CE host DOWN; PCI mapping prepared, not attached |
+| Wi-Fi | RTL8821CE/rtw88, 4addr/WDS bridge, exclusive Ethernet fallback |
 
 ## Историческая схема (не текущий runtime)
 

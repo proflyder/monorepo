@@ -122,10 +122,12 @@ Tailscale публикует не host Serve, а Kubernetes Ingress `home`:
 
 ## Сеть и автозапуск
 
-Сейчас node IP `192.0.2.27` закреплён за Ethernet `eth0` внутри K3s VM;
-Ethernet host `vmbr0` — единственный uplink. Wi-Fi `wlp4s0` на Proxmox host
-DOWN, PCI mapping создан но не передан VM. Не отключать Ethernet и не менять
-node-ip/flannel-iface без отдельного routed/NAT-проекта и проверки discovery.
+Node IP `192.0.2.27` закреплён за виртуальным Ethernet `eth0` K3s VM.
+Физический uplink `vmbr0` на Proxmox выбирается между Ethernet и Wi-Fi
+4-address/WDS; внутри VM интерфейсы/IP не меняются. Wi-Fi остаётся на host,
+PCI passthrough и NAT не используются. Инструкция:
+[`wifi-uplink/`](../projects/home/proxmox/wifi-uplink/).
+Не включать оба физических uplink одновременно в мост.
 Matter теперь HAOS add-on и не использует K3s `PRIMARY_INTERFACE`; старые
 K3s Matter values сохранены только как rollback. MA также HAOS add-on.
 K3s VM — 8 GiB, HAOS VM — 4 GiB.

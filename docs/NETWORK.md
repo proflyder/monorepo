@@ -21,7 +21,7 @@
           └── LAN 192.0.2.0/24, плоский L2, без VLAN
                  │
                  ├── Proxmox VE host               192.0.2.26
-                 │      vmbr0, только Ethernet
+                 │      vmbr0, Wi-Fi 4addr / Ethernet
                  │      ├── VM 100  HAOS          192.0.2.28
                  │      │      HA + MA + Matter add-ons
                  │      └── VM 101  Ubuntu/K3s    192.0.2.27
@@ -53,8 +53,10 @@
 | Mac | `192.0.2.11` | DHCP |
 
 HAOS и K3s используют статические адреса внутри guest. Сеть плоская;
-отдельных VLAN для гостей/IoT нет. Proxmox host подключён Ethernet;
-Wi-Fi на хосте не является рабочим uplink.
+отдельных VLAN для гостей/IoT нет. Proxmox host использует Wi-Fi 4-address/WDS uplink с сохранением L2.
+Сервис `ricardo-uplink` выбирает Ethernet при наличии carrier, иначе Wi-Fi;
+оба physical uplink одновременно к мосту не подключаются. Адреса VM не
+меняются, NAT нет. Адреса Proxmox, VM и станции дополнительно зарезервированы на роутере. Профиль Wi-Fi хранится только приватно.
 
 ## 3. Порты
 

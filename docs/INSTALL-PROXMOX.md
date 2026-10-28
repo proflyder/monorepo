@@ -8,7 +8,7 @@ K3s runtime восстановлены, Tailscale Operator опубликова�
 Текущее состояние после установки (примеры LAN-адресов):
 
 ```text
-PVE host         192.0.2.26   Ethernet vmbr0; Wi-Fi пока DOWN
+PVE host         192.0.2.26   vmbr0; Wi-Fi 4addr / Ethernet fallback
 VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB; static
                  add-ons: Matter 9.2.0, Music Assistant 2.10.8
 VM 101 lab-k3s   192.0.2.27   8 vCPU / 8 GiB / 200 GiB; static
@@ -16,8 +16,8 @@ HA direct        192.0.2.28:8123 (HAProxy compatibility endpoint удалён)
 ```
 
 Terraform plan — `No changes`; state остаётся root-only на PVE и копируется
-в `secrets/`. Полный power-loss restore и переход host на Wi-Fi ещё не
-приняты.
+в `secrets/`. Wi-Fi работает через 4-address/WDS bridge; полный disaster restore
+и power-loss тест остаются отдельными проверками.
 
 ## Что уже сохранено
 
@@ -116,9 +116,10 @@ Ubuntu/K3s и восстановления файлов; установка Prox
 7. Проверить полный voice/media pipeline, dashboards/metrics/logs, reboot обеих VM
    и хоста, резервное копирование. Только после приёмки убирать временные настройки.
 
-Переход обратно на Wi-Fi — отдельная проверяемая задача: client Wi-Fi нельзя
-автоматически считать эквивалентом Ethernet bridge. Нужны проверка драйвера PVE
-и выбранная routed/NAT схема с тестами discovery и media URLs.
+На текущем оборудовании принят вариант Wi-Fi 4-address/WDS с сохранением L2.
+После установки восстановить приватный профиль и сервис по
+[runbook uplink](../projects/home/proxmox/wifi-uplink/). На другом AP/драйвере
+перед подключением VM снова проверить отдельный MAC, DHCP и IPv6 multicast.
 
 ## Источники
 
