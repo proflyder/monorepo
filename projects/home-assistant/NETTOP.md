@@ -72,7 +72,7 @@ DHCP reservations, power-loss reboot и offsite backup — открыты.
 - [`../../docs/REMOTE-ACCESS-STATIC-IP.md`](../../docs/REMOTE-ACCESS-STATIC-IP.md) —
   альтернатива для статического IP: WireGuard на `lab-host`, ONT/AX3 forward,
   Caddy/HTTPS, mini-PC router.
-- [`../kubernetes/tailscale/verify-tailnet.sh`](../kubernetes/tailscale/verify-tailnet.sh) —
+- [`../home/kubernetes/tailscale/verify-tailnet.sh`](../home/kubernetes/tailscale/verify-tailnet.sh) —
   текущая read-only проверка operator route; старый
   [`scripts/verify-remote-access.sh`](scripts/verify-remote-access.sh) — legacy.
 - [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — h2c/UBSAN, Secure Boot/MOK, IP.

@@ -3,7 +3,7 @@
 Рабочая композиция: один K3s server/worker в Ubuntu VM `lab-k3s` на Proxmox,
 собственный containerd, GigaAM/Whisper/Piper/Hermes, observability и
 Tailscale Operator. HA Core, **Music Assistant** и **Matter Server** живут
-в HAOS VM как add-ons; их старые PV сохранены Retain для отката. Pulsar и
+в HAOS VM как add-ons; их прежние данные сохранены в приватных backup для отката. Pulsar и
 BLE gateway остаются на станции. Версии зафиксированы в `versions.sh`.
 
 - [Исследование и исходный план](../../../docs/PLAN-KUBERNETES-MIGRATION.md).

@@ -1,0 +1,11 @@
+# Replace NODE_IPV4 and POD_CIDR before installing; single-node K3s only.
+table inet ricardo_k3s {
+  chain input {
+    type filter hook input priority -20; policy accept;
+    iifname "lo" accept
+    ip saddr NODE_IPV4 accept
+    ip saddr POD_CIDR accept
+    tcp dport { 6443, 10250, 9100, 9116 } drop
+    udp dport 8472 drop
+  }
+}

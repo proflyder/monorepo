@@ -130,6 +130,8 @@ Matter теперь HAOS add-on и не использует K3s `PRIMARY_INTERF
 K3s Matter values сохранены только как rollback. MA также HAOS add-on.
 K3s VM — 8 GiB, HAOS VM — 4 GiB.
 
+Исходники и установка: [`management-firewall/`](../projects/home/kubernetes/management-firewall/).
+
 `ricardo-k3s-firewall.service` ограничивает INPUT на 6443/10250/9100/9116 и
 8472/udp; localhost, pod CIDR и сам node разрешены. С Mac проверено, что
 управляющие/metrics TCP-порты недоступны напрямую в LAN. HAOS/voice endpoints

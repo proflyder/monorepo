@@ -53,8 +53,8 @@
   миграции с обоими add-ons (`final-cleanup-no-proxy`) сохранены. Полный
   disaster restore на запасном железе и длительный power-loss тест ещё
   не выполнялись.
-- VM `.27/.28` переведены на static внутри guests; router reservations не
-  требуются для них. Открытые вопросы: переход Proxmox host на Wi-Fi
+- VM `.27/.28` переведены на static внутри guests; необходимо исключить эти адреса из DHCP-пула либо зарезервировать их
+  на роутере. Открытые вопросы: переход Proxmox host на Wi-Fi
   (сейчас Ethernet), offsite backup, host Tailscale emergency access.
 - Команды/пути/восстановление: [KUBERNETES-OPERATIONS.md](KUBERNETES-OPERATIONS.md);
   физическая установка — [INSTALL-PROXMOX.md](INSTALL-PROXMOX.md);

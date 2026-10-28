@@ -1,0 +1,13 @@
+[Unit]
+Description=Restrict single-node K3s management and metrics to local cluster
+After=network-online.target
+Wants=network-online.target
+Before=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ricardo-k3s-firewall
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

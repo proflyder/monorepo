@@ -24,6 +24,8 @@
 
 ## P1 — Proxmox / HAOS / K3s VM cutover
 
+Повторная live-проверка и незакрытые критерии — [PROXMOX-CUTOVER-AUDIT.md](PROXMOX-CUTOVER-AUDIT.md).
+
 - ✅ PVE `9.2.24`; VM `100 haos` (2/4 GiB/32 GiB, `.28`) и VM `101 lab-k3s`
   (8/8 GiB/200 GiB, `.27`) running; startup order 1/2; Terraform plan — no changes.
 - ✅ HAOS `2026.10.4` healthy; HA restored, integration endpoints переведены
@@ -35,13 +37,13 @@
 - ✅ **Music Assistant `2.10.8`** перенесён в HAOS add-on; data (SQLite/
   settings/Spotify/Sendspin) скопированы из `runtime-music`; HA integration
   автоматически переключилась на add-on, station player зарегистрирован;
-  Hermes MCP переключён на `.28:8095`; K3s MA Deployment удалён, PV сохранён.
+  Hermes MCP переключён на `.28:8095`; K3s MA Deployment/PV удалены, rollback backup сохранён.
 - ✅ K3s runtime: GigaAM/Whisper/Piper/Hermes, observability и Tailscale
   Operator `1.104.2`; `pl-home` → HAOS, `/grafana` → Grafana; HAOS proxy
   HAOS работает напрямую `.28:8123`; K3s HAProxy удалён. Health exporter — 7 endpoints.
 - ✅ VM `.27/.28` переведены на static в guests (netplan/HAOS Supervisor);
-  Proxmox host `.26` static с установки. Router reservations для них не нужны;
-  проверить, что адреса вне DHCP-пула, при следующей смене роутера.
+  Proxmox host `.26` static с установки. Статические адреса сами по себе не защищают от DHCP-конфликта: известный
+  пул роутера включает `.26–.28`; нужны reservations/exclusions на роутере.
 - ⏳ Wi-Fi: Ethernet обязателен; `home-wifi` PCI mapping создан, но Wi-Fi
   не передан VM. Нужен отдельный routed/NAT или внешний Wi-Fi bridge design;
   не отключать Ethernet до приёмки.
