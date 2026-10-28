@@ -27,6 +27,10 @@
       ARP/ADB/ESPHome недоступны; BLE Wi-Fi TIMEOUT. Cold power cycle помог.
       Не считать перезапуск постоянным исправлением и не менять прошивку
       без диагностики; Rust/HA/Sendspin после восстановления работают.
+      Проверить DPP auto-listen по отсутствию default route (гонка с WPA/DHCP
+      и BLE provisioning) и общий Amlogic W1 Wi-Fi/BT SDIO при warm reboot.
+      Read-only collector готов: projects/station/scripts/NETWORK-DIAGNOSTIC.md.
+      Reboot test ожидает подтверждения физического доступа.
 
 
 - [ ] Offsite encrypted backup + restore rehearsal на запасном железе.
