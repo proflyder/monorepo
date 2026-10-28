@@ -65,6 +65,10 @@
   Sendspin/MA reconnect и station reboot прошли.
 - BLE gateway: `Station-Gateway`, GATT provisioning, кнопки 1/3/4/5;
   4 нажатия могут временно уронить Wi-Fi — BLE остаётся аварийным каналом.
+- QR/DPP provisioning удалён по решению пользователя: убраны оба автозапуска
+  (onboot/rootkeeper), helper scripts, URI/key/force files и bootstrap state;
+  dpp_config_processing=0. Сохранённые WPA сети не менялись, BLE работает.
+  Прежние данные — только в private off-device recovery archive.
 - OTA/ADB fortress активен: обновления no-op, ADB root только LAN.
 - Egress guard: LAN/DHCP/NTP разрешены, публичный WAN и Яндекс — DROP.
 - 2026-10-28: после перезагрузки станция перестала отвечать в LAN (ARP,

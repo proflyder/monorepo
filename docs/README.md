@@ -37,7 +37,7 @@
 
 | Документ | Содержимое |
 |---|---|
-| [`PROVISIONING.md`](PROVISIONING.md) | BLE/DPP/AP/sound provisioning |
+| [`PROVISIONING.md`](PROVISIONING.md) | BLE gateway / восстановление Wi-Fi |
 | [`OTA-FORTRESS.md`](OTA-FORTRESS.md) | OTA/ADB-защита |
 | [`WAKE-WORD.md`](WAKE-WORD.md) | сборка и установка «Рикардо» |
 

@@ -32,7 +32,8 @@
 
 - `secrets/NETWORK.md` — реальные IP/порты/Tailscale.
 - `secrets/CREDENTIALS.md` — SSH/ADB/сервисные пароли.
-- `secrets/certs/`, `secrets/dpp/` — ключи/QR провижининга.
+- `secrets/certs/` — приватные сертификаты/ключи.
+- QR/DPP отключён; прежний материал — только в private recovery archive.
 - `secrets/kubernetes-research/` — kubeconfig, values, Grafana password,
   recovery OCI/SQLite.
 - Hermes secrets — Kubernetes Secret + writable home.

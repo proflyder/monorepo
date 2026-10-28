@@ -1,5 +1,5 @@
 #!/bin/sh
-# FORTRESS-KEEPER v4: markers + network adbd; start adbd explicitly because
+# FORTRESS-KEEPER v5: markers + network adbd; start adbd explicitly because
 # yandex-debugctl says "already configured" and does not spawn it again.
 M=/data/quasar/activate_adb_quasmodrom
 N=/data/quasar/activate_network_adb
@@ -10,9 +10,6 @@ while :; do
   fi
   /data/quasar/yandex-block.sh >/dev/null 2>&1
   /data/quasar/egress-guard.sh >/dev/null 2>&1
-  if ! ps | grep -q '[d]pp-provision.sh'; then
-    /data/quasar/dpp-provision.sh >/dev/null 2>&1 &
-  fi
   [ -f "$M" ] || touch "$M"
   [ -f "$N" ] || touch "$N"
   if ! listening; then

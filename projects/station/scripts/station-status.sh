@@ -35,8 +35,6 @@ if "$ADB" -s "$S" shell id 2>/dev/null | grep -q uid=0; then
     echo -n "egress guard: "; iptables -C OUTPUT -j EGRESS_GUARD 2>/dev/null && echo ON || echo OFF;
     echo -n "egress drop pkts: "; iptables -L EGRESS_GUARD -v -n 2>/dev/null | awk "/DROP/ {print \$1}";
     echo -n "egress ntp pkts: "; iptables -L EGRESS_GUARD -v -n 2>/dev/null | awk "/216.239.35.0/ {print \$1}";
-    echo -n "dpp config: "; wpa_cli -i wlan0 get dpp_config_processing 2>/dev/null | tail -1; echo;
-    echo -n "dpp bootstrap: "; wpa_cli -i wlan0 dpp_bootstrap_get_uri 1 >/dev/null 2>&1 && echo ON || echo OFF;
     echo -n "root mount: "; mount | grep " / "
   '
 else

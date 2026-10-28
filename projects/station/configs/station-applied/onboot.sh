@@ -44,9 +44,6 @@ if [ "$1" = "start" ]; then
     # Must run after yio_iptables_init.sh, before Quasar starts.
     /data/quasar/egress-guard.sh >/dev/null 2>&1
 
-    # DPP/Wi-Fi Easy Connect: stable QR bootstrap, listen only without network.
-    [ -x /data/quasar/dpp-provision.sh ] && /data/quasar/dpp-provision.sh >/dev/null 2>&1 &
-
     /system/vendor/quasar/set_monotonic_time.sh
 
     # Activate ADB if one of marker files exists

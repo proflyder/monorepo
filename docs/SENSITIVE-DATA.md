@@ -9,7 +9,7 @@
 | `secrets/CREDENTIALS.md` | SSH/ADB/сервисные пароли, IP/MAC | доступ к станции/сети |
 | `secrets/NETWORK.md` | реальные LAN IP, порты, Tailscale | карта сети |
 | `secrets/certs/*.key` | eMudhra/leaf ключи | подпись/доверие станции |
-| `secrets/dpp/*` | DPP bootstrap/QR | доступ к Wi-Fi provisioning |
+| `secrets/proxmox-install/retired-dpp-*/` | архив удалённого QR/DPP, старые config/keys | приватный recovery; не активный provisioning |
 | `secrets/kubernetes-research/` | kubeconfig, values, Grafana password, recovery | admin/state |
 | `secrets/proxmox-install/` | SSH keys, TF state, Wi-Fi profile, install settings | host/VM recovery |
 | `secrets/local/backups/` | HA config/DB, MA/STT/TTS, станция | токены/auth/ключи |
@@ -42,5 +42,5 @@
    `archive/legacy/**/certs/*.key`.
 2. В docs/чатах — имена переменных, не значения.
 3. Offsite — только шифрованный архив + отдельный пароль.
-4. При утечке — ротация SSH/ADB/BLE/DPP/LLM/Tailscale, отзыв HA tokens.
+4. При утечке — ротация SSH/ADB/BLE/LLM/Tailscale, отзыв HA tokens.
 5. Перед публикацией — `make test` + проверка Git-истории.

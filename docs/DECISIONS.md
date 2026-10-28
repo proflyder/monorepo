@@ -18,7 +18,7 @@
 7. **MA + Spotify Connect.** MA — локальный хаб/плейлисты; Connect — телефон;
    Pulsar — Sendspin-плеер. Один аккаунт = один stream-slot.
 8. **BLE gateway — аварийный provisioning.** Работает без Wi-Fi/облака;
-   GATT SSID/PSK/token; 1/3/4/5. DPP/AP/USB — только если BLE недостаточно.
+   GATT SSID/PSK/token; 1/3/4/5. Старый QR/DPP провижининг удалён.
 9. **OTA/ADB fortress + egress guard.** Защита от OTA/сброса/закрытия ADB;
    публичный WAN и Яндекс закрыты. Factory reset сносит защиту.
 10. **Расписания — HA-native.** Будильники в `local_todo`, таймеры в `timer`,
