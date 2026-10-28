@@ -18,7 +18,7 @@
 ```bash
 cd projects/station/upstream/pulsar
 make -C satellite ARCH=armhf ZIG=/path/to/zig-0.14.1 \
-  VERSION=v0.4.1-ricardo6 -j8 binary
+  VERSION=v0.5.0 -j8 binary
 ```
 
 Нужны Zig 0.14.1, make, CMake, Ninja, git, curl, patch. Сборка проверена в

@@ -44,8 +44,8 @@
 ## Голос / разработка
 
 - [ ] Wake word v1: recall/FP в тишине/шуме и latency; независимые записи.
-- [ ] Rust Pulsar fork: HIL-приёмка (libtflite/модель, wake, ESPHome,
-      Spotify/MA, alarm stop/resume, откат). На станцию не ставить без backup.
+- [ ] Rust Pulsar: живой «Рикардо, стоп» во время будильника, snooze/resume,
+      кнопки/mute/clock/volume, phone→speaker; проверить полный откат на C++.
 - [ ] Проверить поведение при падении Hermes: локальные таймеры/будильник/
       громкость должны работать.
 - [ ] Hermes free-speech quota/provider: нужен fallback при 429.

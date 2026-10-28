@@ -95,8 +95,18 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
-Текущая версия — `v0.4.1-ricardo6`. Rollback-бинарники и state —
+Текущая версия — Rust `v0.5.0-1-g908a027`. C++ rollback —
 `/data/pulsar/backups/pre-ricardo*`; протокол — `WAKE-WORD.md`.
+
+Rust → C++ rollback:
+
+```bash
+adb -s 192.0.2.13:5555 shell \
+  'cp /data/pulsar/pulsar.prev /data/pulsar/pulsar && \
+   chmod 755 /data/pulsar/pulsar && /data/pulsar/ctl.sh restart'
+```
+
+C++ copy также в `/data/pulsar/backups/pre-rust-ricardo6/pulsar`.
 
 Проверка OTA/ADB:
 

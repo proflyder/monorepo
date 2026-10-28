@@ -56,11 +56,13 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar `v0.4.1-ricardo6`; ESPHome `6053`, Sendspin `8928`, HTTP control
-  `8099` (bearer), ADB `5555`, SSH `22`.
+- Pulsar Rust `v0.5.0-1-g908a027`; C++ `v0.4.1-ricardo6` — `.prev`/backup.
+  ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
 - ESPHome: 33 entities, Noise; HA satellite работает.
 - Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,
   окно 10, pre-roll 0.5 с.
+- HIL 2026-10-28: Rust active; live wake 0.904, HA pipeline/TTS, HAOS reboot,
+  Sendspin/MA reconnect и station reboot прошли.
 - BLE gateway: `Station-Gateway`, GATT provisioning, кнопки 1/3/4/5;
   4 нажатия могут временно уронить Wi-Fi — BLE остаётся аварийным каналом.
 - OTA/ADB fortress активен: обновления no-op, ADB root только LAN.
@@ -106,6 +108,7 @@
 - Внешний Alertmanager/heartbeat и полная voice latency instrumentation.
 - `quasar-server :31116` без auth — требует решения.
 - Secure Boot PK `DO NOT TRUST - AMI Test PK` — не менять без плана.
-- Rust Pulsar fork: HIL-приёмка не начата; на станцию не установлен.
+- Rust Pulsar: активен; wake/TTS/HA/MA/reboot проверены. Осталось живое
+  «Рикардо, стоп»/snooze, кнопки/mute/clock/volume, phone→speaker и полный откат.
 - Wake word: измерить recall/FP на реальном фоне.
 - Factory/recovery image Midi отсутствует; raw dump — только с согласованием.
