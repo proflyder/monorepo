@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bridge",
+    srcs = ["bridge.go"],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/bridge",
+    visibility = ["//solutions/ha-bridge:__subpackages__"],
+    deps = [
+        "//solutions/ha-bridge/internal/config",
+        "//solutions/ha-bridge/internal/httpapi",
+        "//solutions/ha-bridge/internal/ledger",
+        "//solutions/ha-bridge/internal/scheduler",
+    ],
+)
+
+go_test(
+    name = "bridge_test",
+    srcs = ["bridge_test.go"],
+    deps = [
+        "//solutions/ha-bridge/internal/config",
+        "//solutions/ha-bridge/internal/httpapi",
+        "//solutions/ha-bridge/internal/ledger",
+        "//solutions/ha-bridge/internal/scheduler",
+    ],
+    embed = [":bridge"],
+)

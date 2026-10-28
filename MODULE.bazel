@@ -20,6 +20,23 @@ register_toolchains("@go_toolchains//:all")
 # keeps its own go.mod and is excluded from Bazel until a separate migration.
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
+use_repo(
+    go_deps,
+    "com_connectrpc_connect",
+    "com_github_dustin_go_humanize",
+    "com_github_google_uuid",
+    "com_github_mattn_go_isatty",
+    "com_github_ncruces_go_strftime",
+    "com_github_remyoudompheng_bigfft",
+    "org_golang_google_protobuf",
+    "org_golang_x_net",
+    "org_golang_x_sys",
+    "org_golang_x_text",
+    "org_modernc_libc",
+    "org_modernc_mathutil",
+    "org_modernc_memory",
+    "org_modernc_sqlite",
+)
 
 # Rust is for future performance-sensitive crates (audio/DSP/local inference).
 # It is registered now so a Rust package can be added without changing the root
@@ -32,3 +49,79 @@ rust.toolchain(
 use_repo(rust, "rust_toolchains")
 
 register_toolchains("@rust_toolchains//:all")
+
+# ---------------------------------------------------------------------------
+# Android / Kotlin (projects/mobile/android)
+#
+# The Android SDK is discovered from ANDROID_HOME. It is deliberately not
+# committed as a machine-specific path; see projects/mobile/android/README.md.
+# ---------------------------------------------------------------------------
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_kotlin", version = "2.4.20")
+bazel_dep(name = "rules_jvm_external", version = "7.1")
+
+remote_android_extensions = use_extension(
+    "@rules_android//bzlmod_extensions:android_extensions.bzl",
+    "remote_android_tools_extensions",
+)
+use_repo(remote_android_extensions, "android_tools")
+
+android_sdk_repository_extension = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+android_sdk_repository_extension.configure(
+    api_level = 36,
+    build_tools_version = "36.0.0",
+)
+use_repo(android_sdk_repository_extension, "androidsdk")
+
+register_toolchains(
+    "@androidsdk//:sdk-toolchain",
+    "@androidsdk//:all",
+)
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "maven",
+    aar_import_bzl_label = "@rules_android//rules:rules.bzl",
+    artifacts = [
+        "androidx.activity:activity-ktx:1.9.3",
+        "androidx.appcompat:appcompat:1.7.0",
+        "androidx.core:core-ktx:1.13.1",
+        "androidx.emoji2:emoji2:1.5.0",
+        "androidx.emoji2:emoji2-views-helper:1.5.0",
+        "androidx.fragment:fragment-ktx:1.8.5",
+        "androidx.lifecycle:lifecycle-common:2.8.7",
+        "androidx.lifecycle:lifecycle-livedata:2.8.7",
+        "androidx.lifecycle:lifecycle-livedata-core:2.8.7",
+        "androidx.lifecycle:lifecycle-process:2.8.7",
+        "androidx.lifecycle:lifecycle-runtime:2.8.7",
+        "androidx.lifecycle:lifecycle-runtime-ktx:2.8.7",
+        "androidx.lifecycle:lifecycle-viewmodel:2.8.7",
+        "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7",
+        "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.7",
+        "androidx.recyclerview:recyclerview:1.3.2",
+        "com.google.android.material:material:1.12.0",
+        "com.squareup.okhttp3:mockwebserver:4.12.0",
+        "com.squareup.okhttp3:okhttp:4.12.0",
+        "dev.zacsweers.metro:compiler:1.5.0",
+        "dev.zacsweers.metro:runtime-jvm:1.5.0",
+        "junit:junit:4.13.2",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2",
+        "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0",
+        "org.robolectric:android-all-instrumented:15-robolectric-13954326-i7",
+        "org.robolectric:robolectric:4.17",
+    ],
+    known_contributing_modules = ["protobuf"],
+    lock_file = "//projects/mobile/android:maven_install.json",
+    version_conflict_policy = "pinned",
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+    use_starlark_android_rules = True,
+)
+use_repo(maven, "maven")

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The client talks to a user-supplied LAN or Tailscale address. HTTP is
+     allowed only because users may run the server without TLS on their own
+     network; HTTPS is recommended and cleartext is never enabled for public
+     hosts by this app. See README "Transport security". -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

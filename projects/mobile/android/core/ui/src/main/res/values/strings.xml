@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_retry">Retry</string>
+    <string name="ui_loading">Loading…</string>
+    <string name="ui_error_not_configured">No server is configured. Open Connection and enter your home server address.</string>
+    <string name="ui_error_unauthorized">The server rejected the bearer token. Check the token in Connection.</string>
+    <string name="ui_error_offline">The server cannot be reached. Check LAN or Tailscale connectivity, then retry.</string>
+    <string name="ui_error_timeout">The server did not answer before the configured read timeout.</string>
+    <string name="ui_error_tls">TLS verification failed. Use the server\'s HTTPS address and a trusted certificate.</string>
+    <string name="ui_error_server">Server error (%1$s): %2$s</string>
+    <string name="ui_error_protocol">The server returned an unexpected response.</string>
+    <string name="ui_error_storage">Settings could not be stored securely: %1$s</string>
+    <string name="ui_validation_endpoint">Enter a full http:// or https:// address.</string>
+    <string name="ui_validation_token">Check the bearer token.</string>
+    <string name="ui_validation_timeout">Timeouts must be between 1 and 120 seconds.</string>
+    <string name="ui_validation_label">Enter a short label.</string>
+    <string name="ui_validation_time">Enter a valid time of day.</string>
+    <string name="ui_validation_date">Choose a valid date that is not in the past.</string>
+    <string name="ui_validation_timezone">Enter a valid IANA timezone such as Asia/Almaty.</string>
+    <string name="ui_validation_weekdays">Select at least one weekday.</string>
+    <string name="ui_validation_repeat">Choose a supported repeat option.</string>
+    <string name="ui_validation_duration">Enter a duration between 1 second and 7 days.</string>
+    <string name="ui_empty_alarms">No alarms yet. Alarms run on the home server.</string>
+    <string name="ui_empty_reminders">No reminders yet. Reminders are delivered by the home server.</string>
+    <string name="ui_empty_timers">No active timers. Timers count down on the home server.</string>
+</resources>

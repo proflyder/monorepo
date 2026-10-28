@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "ricardov1connect",
+    srcs = [
+        "alarms.connect.go",
+        "scheduler.connect.go",
+    ],
+    importpath = "ricardo.local/monorepo/packages/proto/ricardo/v1/ricardov1connect",
+    deps = [
+        "//packages/proto/ricardo/v1:ricardo",
+        "@com_connectrpc_connect//:connect",
+    ],
+)

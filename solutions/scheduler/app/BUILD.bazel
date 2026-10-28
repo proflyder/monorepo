@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "app",
+    srcs = ["run.go"],
+    importpath = "ricardo.local/monorepo/solutions/scheduler/app",
+    deps = [
+        "//solutions/scheduler/internal/api",
+        "//solutions/scheduler/internal/config",
+        "//solutions/scheduler/internal/engine",
+        "//solutions/scheduler/internal/store",
+    ],
+)

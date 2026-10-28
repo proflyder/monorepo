@@ -7,6 +7,10 @@ for suite in projects/home-assistant/ha-voice projects/home-assistant/hermes pro
   echo "== Python: $suite =="
   python3 -m unittest discover -s "$suite" -p 'test_*.py' -v
 done
+# Root Go module: reusable solutions and shared packages. Android/Bazel gates are
+# separate (they need the Android SDK) and are documented in docs/TESTING.md.
+echo "== Go: solutions and packages =="
+go test ./solutions/... ./packages/...
 (cd projects/station/ble-gateway && go test ./...)
 (cd projects/station/upstream/pulsar/installer && GOWORK=off go test ./...)
 (cd projects/station/resources/quasar-connect-bot && python3 -m unittest discover -s tests -p 'test_*.py' -v)

@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "httpapi",
+    srcs = [
+        "client.go",
+        "error.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi",
+    visibility = ["//solutions/ha-bridge:__subpackages__"],
+)
+
+go_test(
+    name = "httpapi_test",
+    srcs = ["client_test.go"],
+    embed = [":httpapi"],
+)

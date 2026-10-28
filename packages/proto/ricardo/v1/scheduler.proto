@@ -1,0 +1,378 @@
+syntax = "proto3";
+
+package ricardo.v1;
+
+option go_package = "ricardo.local/monorepo/packages/proto/ricardo/v1;ricardov1";
+
+// SchedulerService is the durable schedule/timer/event contract.
+//
+// Transport: the server exposes this service over Connect (unary JSON/HTTP),
+// gRPC (HTTP/2, including h2c) and gRPC-Web on the same listener. JSON field
+// names follow the standard protobuf JSON mapping (lowerCamelCase); int64
+// values are encoded as decimal strings. Authentication is a bearer token in
+// the `Authorization` header.
+//
+// This service never plays audio. It emits durable DueEvent rows that an
+// executor (HA bridge, Android, ...) leases and acknowledges. Event delivery
+// or acknowledgement is not proof that sound was audible.
+
+// ScheduleKind is the domain of a durable schedule.
+enum ScheduleKind {
+  SCHEDULE_KIND_UNSPECIFIED = 0;
+  SCHEDULE_KIND_ALARM = 1;
+  SCHEDULE_KIND_REMINDER = 2;
+  // SCHEDULE_KIND_SCENARIO is reserved. Events carry the opaque payload for a
+  // future scenario executor; scenario execution is NOT implemented and the
+  // server does not advertise it (GetStatus reports it as unsupported).
+  SCHEDULE_KIND_SCENARIO = 3;
+}
+
+// RepeatKind controls how a schedule advances after an occurrence.
+enum RepeatKind {
+  REPEAT_KIND_UNSPECIFIED = 0;
+  REPEAT_KIND_ONCE = 1;
+  REPEAT_KIND_DAILY = 2;
+  REPEAT_KIND_WEEKDAYS = 3; // ISO weekdays 1..5
+  REPEAT_KIND_WEEKENDS = 4; // ISO weekdays 6..7
+  REPEAT_KIND_CUSTOM = 5;   // explicit ISO weekdays in Schedule.weekdays
+}
+
+// SourceKind identifies what produced an event. It distinguishes timers from
+// calendar schedules, which ScheduleKind cannot do.
+enum SourceKind {
+  SOURCE_KIND_UNSPECIFIED = 0;
+  SOURCE_KIND_ALARM = 1;
+  SOURCE_KIND_REMINDER = 2;
+  SOURCE_KIND_TIMER = 3;
+  SOURCE_KIND_SCENARIO = 4;
+  SOURCE_KIND_TASK = 5; // generic queued task, see EnqueueTask
+}
+
+// TimerState is the durable state of a countdown timer.
+enum TimerState {
+  TIMER_STATE_UNSPECIFIED = 0;
+  TIMER_STATE_RUNNING = 1;
+  TIMER_STATE_PAUSED = 2;
+  TIMER_STATE_FIRED = 3;
+  TIMER_STATE_CANCELLED = 4;
+}
+
+// EventState is the durable outbox state of a DueEvent.
+enum EventState {
+  EVENT_STATE_UNSPECIFIED = 0;
+  EVENT_STATE_PENDING = 1;
+  EVENT_STATE_LEASED = 2;
+  EVENT_STATE_DELIVERED = 3;
+  EVENT_STATE_FAILED = 4;
+  EVENT_STATE_SKIPPED = 5;
+}
+
+// EventAction is what an executor should do for a DueEvent.
+enum EventAction {
+  EVENT_ACTION_UNSPECIFIED = 0; // legacy rows: treat as EVENT_ACTION_FIRE
+  EVENT_ACTION_FIRE = 1;        // start the occurrence
+  EVENT_ACTION_STOP = 2;        // stop/cancel sound for the occurrence
+}
+
+// AckOutcome is the terminal outcome reported by an event consumer.
+enum AckOutcome {
+  ACK_OUTCOME_UNSPECIFIED = 0;
+  ACK_OUTCOME_DELIVERED = 1;
+  ACK_OUTCOME_FAILED = 2;
+  ACK_OUTCOME_SKIPPED = 3;
+}
+
+// WallTime is a local wall-clock time of day in Schedule.timezone.
+message WallTime {
+  int32 hour = 1;   // 0..23
+  int32 minute = 2; // 0..59
+  int32 second = 3; // 0..59
+}
+
+// Schedule is a durable recurring or one-shot schedule.
+message Schedule {
+  string id = 1;
+  string label = 2;
+  ScheduleKind kind = 3;
+  string timezone = 4;        // IANA zone, required
+  WallTime at = 5;            // local time of day
+  string once_date = 6;       // YYYY-MM-DD; required for REPEAT_KIND_ONCE
+  RepeatKind repeat = 7;
+  repeated int32 weekdays = 8; // ISO 1=Mon..7=Sun; REPEAT_KIND_CUSTOM only
+  int64 next_due_unix = 9;     // 0 when disabled or exhausted
+  bool enabled = 10;
+  int64 snooze_until_unix = 11; // 0 when not snoozed
+  int64 last_fired_unix = 12;   // last emitted occurrence (not audible ring)
+  int64 snooze_count = 13;
+  int64 revision = 14;
+  int64 created_unix = 15;
+  int64 updated_unix = 16;
+  string payload_json = 17;     // opaque action payload, max 16 KiB
+  // Active (ringing) occurrence, tracked independently of transport
+  // lease/ack state. 0 when idle. Stop and snooze stay available after a
+  // DELIVERED ack until active_until_unix passes; a one-shot schedule that is
+  // disabled/exhausted can still be snoozed while its window is active.
+  int64 active_occurrence_unix = 18;
+  int64 active_until_unix = 19;
+}
+
+// Timer is a durable countdown. While RUNNING, due_unix is authoritative;
+// while PAUSED, remaining_seconds is authoritative and due_unix is 0.
+message Timer {
+  string id = 1;
+  string label = 2;
+  int64 duration_seconds = 3;
+  int64 remaining_seconds = 4;
+  int64 due_unix = 5;
+  TimerState state = 6;
+  int64 revision = 7;
+  int64 created_unix = 8;
+  int64 updated_unix = 9;
+}
+
+// DueEvent is one durable occurrence waiting for an executor. Its id is the
+// stable UUIDv5 of its dedupe identity, so retries and restarts return the
+// same id. Trigger (FIRE) and control (STOP) events have distinct identities.
+message DueEvent {
+  string id = 1;            // deterministic UUIDv5 of dedupe identity
+  string source_id = 2;
+  SourceKind source_kind = 3;
+  int64 due_unix = 4;       // when the executor should act
+  int64 occurrence_unix = 5; // original wall occurrence; 0 for timers
+  string label = 6;
+  string payload_json = 7;
+  EventState state = 8;
+  int32 attempts = 9;
+  int32 snooze_seq = 10;
+  int64 created_unix = 11;
+  int64 lease_until_unix = 12;
+  string detail = 13;       // skip/failure reason, never contains secrets
+  EventAction action = 14;  // FIRE for triggers, STOP for control events
+  AckOutcome ack_outcome = 15; // terminal outcome once acked
+  // task_type is the executor action for this event, for example
+  // "alarm.fire", "reminder.fire", "timer.fire" or a generic EnqueueTask type.
+  string task_type = 16;
+  // queue routes an event to one executor group. Convenience alarm/reminder/
+  // timer events use "home"; generic tasks default to "tasks". Executors lease
+  // only their own queue and never steal unknown queues.
+  string queue = 17;
+  int64 acked_unix = 18; // 0 until a terminal ack
+}
+
+message CreateScheduleRequest {
+  string label = 1;
+  ScheduleKind kind = 2;
+  string timezone = 3;
+  WallTime at = 4;
+  string once_date = 5;
+  RepeatKind repeat = 6;
+  repeated int32 weekdays = 7;
+  bool enabled = 8;
+  string payload_json = 9;
+  // Optional idempotency key. Replaying the same key with an identical
+  // request returns the original schedule; a different payload is rejected
+  // with ALREADY_EXISTS.
+  string idempotency_key = 10;
+}
+message CreateScheduleResponse {
+  Schedule schedule = 1;
+}
+
+message GetScheduleRequest {
+  string id = 1;
+}
+message GetScheduleResponse {
+  Schedule schedule = 1;
+}
+
+message ListSchedulesRequest {
+  bool include_disabled = 1;
+  ScheduleKind kind = 2; // UNSPECIFIED means all kinds
+}
+message ListSchedulesResponse {
+  repeated Schedule schedules = 1;
+}
+
+message UpdateScheduleRequest {
+  Schedule schedule = 1;
+  // Revision the client last saw. A non-zero value must match the stored
+  // revision, otherwise the update fails with ABORTED. 0 disables the check.
+  int64 expected_revision = 2;
+}
+message UpdateScheduleResponse {
+  Schedule schedule = 1;
+}
+
+message DeleteScheduleRequest {
+  string id = 1;
+}
+message DeleteScheduleResponse {
+  bool deleted = 1;
+}
+
+message SetScheduleEnabledRequest {
+  string id = 1;
+  bool enabled = 2;
+}
+message SetScheduleEnabledResponse {
+  Schedule schedule = 1;
+}
+
+message SnoozeScheduleRequest {
+  string id = 1;
+  int32 minutes = 2; // 1..1440; 0 => server default (9)
+}
+message SnoozeScheduleResponse {
+  Schedule schedule = 1;
+  DueEvent event = 2; // the delayed FIRE occurrence; a STOP control event is also queued
+}
+
+message StopScheduleRequest {
+  string id = 1;
+}
+message StopScheduleResponse {
+  Schedule schedule = 1;
+}
+
+message StartTimerRequest {
+  string label = 1;
+  int64 duration_seconds = 2; // 1..604800
+  string idempotency_key = 3;
+}
+message StartTimerResponse {
+  Timer timer = 1;
+}
+
+message GetTimerRequest {
+  string id = 1;
+}
+message GetTimerResponse {
+  Timer timer = 1;
+}
+
+message ListTimersRequest {
+  bool include_finished = 1;
+}
+message ListTimersResponse {
+  repeated Timer timers = 1;
+}
+
+message PauseTimerRequest {
+  string id = 1;
+}
+message PauseTimerResponse {
+  Timer timer = 1;
+}
+
+message ResumeTimerRequest {
+  string id = 1;
+}
+message ResumeTimerResponse {
+  Timer timer = 1;
+}
+
+message CancelTimerRequest {
+  string id = 1;
+}
+message CancelTimerResponse {
+  Timer timer = 1;
+}
+
+message ListDueEventsRequest {
+  string consumer_id = 1; // 1..64 chars, [A-Za-z0-9._-]
+  int32 lease_seconds = 2; // 1..3600; 0 => 60
+  int32 limit = 3;         // 1..200; 0 => 50
+  string queue = 4;        // empty => all queues; "home" for the HA executor
+}
+message ListDueEventsResponse {
+  repeated DueEvent events = 1;
+}
+
+message EnqueueTaskRequest {
+  string task_type = 1;      // 1..64 chars, [a-z][a-z0-9._-]*
+  string payload_json = 2;   // opaque JSON, max 16 KiB
+  int64 run_at_unix = 3;     // 0 or past => now; bounded to 10 years ahead
+  string queue = 4;          // 1..32 chars, default "tasks"
+  string idempotency_key = 5;
+}
+message EnqueueTaskResponse {
+  DueEvent event = 1;
+}
+
+message CancelTaskRequest {
+  string event_id = 1;
+}
+message CancelTaskResponse {
+  DueEvent event = 1; // terminal state after cancellation or replay
+}
+
+message AckEventRequest {
+  string event_id = 1;
+  string consumer_id = 2;
+  AckOutcome outcome = 3; // UNSPECIFIED is rejected
+  string detail = 4;      // max 1024 chars
+}
+message AckEventResponse {
+  DueEvent event = 1;
+}
+
+message GetStatusRequest {}
+message GetStatusResponse {
+  string version = 1;
+  int32 schema_version = 2;
+  int64 now_unix = 3;       // authoritative server clock
+  int64 last_tick_unix = 4;
+  int32 pending_events = 5;
+  int32 leased_events = 6;
+  int32 enabled_schedules = 7;
+  int32 running_timers = 8;
+  repeated ConsumerStatus consumers = 9;
+  // False until a scenario executor exists. Events are still recorded.
+  bool scenario_execution_supported = 10;
+  // Known queues and their durable backlog, so executors can discover what
+  // they may lease.
+  repeated QueueInfo queues = 11;
+  // ready is true only when the last tick succeeded recently. A failing tick
+  // is never masked by a stale last_tick_unix.
+  bool ready = 12;
+  int64 last_tick_attempt_unix = 13;
+  int64 last_tick_error_unix = 14;
+  string last_tick_error = 15; // bounded, no secrets
+}
+
+message QueueInfo {
+  string name = 1;
+  int32 pending = 2;
+  int32 leased = 3;
+}
+
+message ConsumerStatus {
+  string consumer_id = 1;
+  int64 last_seen_unix = 2;
+  int64 last_ack_unix = 3;
+  bool alive = 4; // last_seen within 90 s
+}
+
+service SchedulerService {
+  rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
+  rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse);
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+  rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse);
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
+  rpc SetScheduleEnabled(SetScheduleEnabledRequest) returns (SetScheduleEnabledResponse);
+  rpc SnoozeSchedule(SnoozeScheduleRequest) returns (SnoozeScheduleResponse);
+  rpc StopSchedule(StopScheduleRequest) returns (StopScheduleResponse);
+
+  rpc StartTimer(StartTimerRequest) returns (StartTimerResponse);
+  rpc GetTimer(GetTimerRequest) returns (GetTimerResponse);
+  rpc ListTimers(ListTimersRequest) returns (ListTimersResponse);
+  rpc PauseTimer(PauseTimerRequest) returns (PauseTimerResponse);
+  rpc ResumeTimer(ResumeTimerRequest) returns (ResumeTimerResponse);
+  rpc CancelTimer(CancelTimerRequest) returns (CancelTimerResponse);
+
+  rpc ListDueEvents(ListDueEventsRequest) returns (ListDueEventsResponse);
+  rpc AckEvent(AckEventRequest) returns (AckEventResponse);
+  rpc EnqueueTask(EnqueueTaskRequest) returns (EnqueueTaskResponse);
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+}

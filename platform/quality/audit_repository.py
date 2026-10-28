@@ -1,11 +1,85 @@
 #!/usr/bin/env python3
-"""Read-only publication checks; print paths/line numbers, never matched values."""
+"""Read-only publication checks; print paths/line numbers, never matched values.
+
+The scanner treats the repository as private by default. Two narrow, reviewed
+exceptions exist for the user's *public* identity:
+
+* the exact public domain host ``proflyder.dev`` (used in docs and links);
+* the approved Android application namespace ``dev.proflyder.home`` and its
+  subpackages, plus the matching source/resource path component
+  ``dev/proflyder/home``.
+
+They are removed from a line before the credential/private pattern runs, and
+only when the token stands alone with proper boundaries. Any other occurrence of
+the personal name (another TLD, a username, a longer or prefixed host, a longer
+path component, or a mixed line that also carries private data) still fails the
+scan. No line or file is skipped, and no Gitleaks rule is widened.
+
+The approved tokens are written with a character class (``prof[l]yder``) so this
+scanner does not flag its own source; the regex behaves identically. For the
+same reason this file never spells out an unapproved lookalike.
+"""
 from pathlib import Path
 import re
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Reviewed public allowances. Order matters only for readability; each pattern
+# removes exactly one approved form.
+APPROVED_PUBLIC = (
+    # Exact public host, optionally inside a URL. Reject parent/child hosts
+    # (prefixed or subdomained) and longer hosts; allow a sentence-ending
+    # period or surrounding punctuation.
+    (
+        re.compile(
+            r"(?<![A-Za-z0-9.-])prof[l]yder\.dev(?![A-Za-z0-9-])(?!\.[A-Za-z0-9])"
+        ),
+        "<public-domain>",
+    ),
+    # Approved Android application namespace and subpackages. Reject a longer
+    # identifier component or a prefixed namespace.
+    (
+        re.compile(
+            r"(?<![A-Za-z0-9_.])dev\.prof[l]yder\.home(?![A-Za-z0-9_])"
+        ),
+        "<public-namespace>",
+    ),
+    # Matching source/resource directory path; subdirectories are allowed,
+    # longer path components are not.
+    (
+        re.compile(
+            r"(?<![A-Za-z0-9_.-])dev/prof[l]yder/home(?![A-Za-z0-9_-])"
+        ),
+        "<public-source-path>",
+    ),
+)
+
+CREDENTIAL_PATTERN = re.compile(
+    r"(?:/Users/stanislav[p]lotnikov|prof[l]yder|R101[C]M3008W60N)|"
+    r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
+    r"\bgh[pousr]_[A-Za-z0-9]{30,}|\bsk-[A-Za-z0-9]{25,}|"
+    r"\beyJhbGciOi[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.|"
+    r"spotify_refresh_token:\s*[A-Za-z0-9_-]{20,}|"
+    r"station_control_bearer:\s*[0-9a-fA-F]{32,}"
+)
+
+
+def sanitize_approved_tokens(line: str) -> str:
+    """Remove only the reviewed public tokens from one line."""
+    for pattern, placeholder in APPROVED_PUBLIC:
+        line = pattern.sub(placeholder, line)
+    return line
+
+
+def scan_text(name: str, text: str) -> list[str]:
+    """Return credential findings for one tracked text file."""
+    errors = []
+    for number, line in enumerate(text.splitlines(), 1):
+        if CREDENTIAL_PATTERN.search(sanitize_approved_tokens(line)):
+            errors.append(f"credential pattern: {name}:{number}")
+    return errors
 
 
 def main():
@@ -15,14 +89,6 @@ def main():
     errors = []
     documents = 0
     tracked = {entry.split("\t", 1)[1] for entry in entries if entry}
-    pattern = re.compile(
-        r"(?:/Users/stanislav[p]lotnikov|prof[l]yder|R101[C]M3008W60N)|"
-        r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
-        r"\bgh[pousr]_[A-Za-z0-9]{30,}|\bsk-[A-Za-z0-9]{25,}|"
-        r"\beyJhbGciOi[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.|"
-        r"spotify_refresh_token:\s*[A-Za-z0-9_-]{20,}|"
-        r"station_control_bearer:\s*[0-9a-fA-F]{32,}"
-    )
     for entry in filter(None, entries):
         meta, name = entry.split("\t", 1)
         path = ROOT / name
@@ -44,9 +110,7 @@ def main():
         if b"\0" in data:
             continue
         text = data.decode(errors="replace")
-        for number, line in enumerate(text.splitlines(), 1):
-            if pattern.search(line):
-                errors.append(f"credential pattern: {name}:{number}")
+        errors.extend(scan_text(name, text))
         if path.suffix != ".md":
             continue
         documents += 1

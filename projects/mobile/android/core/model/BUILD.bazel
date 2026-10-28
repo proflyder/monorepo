@@ -1,0 +1,18 @@
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
+
+package(default_visibility = ["//visibility:public"])
+
+kt_jvm_library(
+    name = "model",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+)
+
+kt_jvm_test(
+    name = "model_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    test_class = "dev.proflyder.home.core.model.ServerClockTest",
+    deps = [
+        ":model",
+        "@maven//:junit_junit",
+    ],
+)

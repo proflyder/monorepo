@@ -1,40 +1,26 @@
 # mcp-alarm
 
-MCP-адаптер, который умеет работать с **любым** инстансом `solutions/alarm`.
-Никакой собственной БД и никакой привязки к домашнему проекту.
+Placeholder for schedule/alarm tools. Отдельного MCP runtime здесь нет и пока
+не требуется.
 
-## Конфигурация
+## Границы
 
-```text
-ALARM_ENDPOINT=http://127.0.0.1:8098
-ALARM_MCP_TOKEN=...
-ALARM_MCP_LISTEN=127.0.0.1:8644
-```
+- Доменные данные и действия принадлежат canonical API
+  `packages/proto/ricardo/v1/scheduler.proto` (`SchedulerService`). Мост и UI
+  используют тот же контракт; собственная БД у адаптера отсутствует.
+- Hermes и будущие клиенты должны получить один общий расширяемый MCP gateway
+  с доменными группами инструментов, а не отдельный MCP server на проект.
+  Группа «schedules/alarms» — одна из групп такого gateway.
+- Gateway не получает project-specific endpoint/DB: инстанс задаётся
+  конфигурацией развёртывания, как для остальных solutions.
+- MCP — только поверхность для LLM-клиента. Локальный голос и Android ходят в
+  scheduler напрямую через Connect/gRPC; MCP не является исполнителем и не
+  владеет расписаниями.
 
-Примеры:
+## Статус
 
-```text
-projects/home:  ALARM_ENDPOINT=alarm-home:8098
-projects/cloud: ALARM_ENDPOINT=alarm-cloud:8098
-```
-
-## Tools
-
-```text
-alarm_create
-alarm_get
-alarm_list
-alarm_update
-alarm_delete
-alarm_set_enabled
-alarm_snooze
-alarm_stop
-```
-
-MCP — отдельная поверхность для Hermes; локальный голос ходит в alarm
-напрямую через Connect/gRPC, без LLM.
-
-## Почему отдельно
-
-Один и тот же MCP-код можно направить на домашний или облачный alarm.
-Проект задаёт только endpoint и токен. Это и есть горизонтальная композиция.
+Runtime, transport, token и listen-настройки не реализованы и не
+задеплоены; прежние `ALARM_MCP_*` из этого README удалены как
+недействительные. Инструменты (`schedule_*`, `timer_*`, `task_*`) появятся в
+общем gateway после стабилизации scheduler API. До этого проект не должен
+подключать отдельный MCP server.

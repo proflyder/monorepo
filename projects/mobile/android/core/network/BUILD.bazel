@@ -1,0 +1,31 @@
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
+
+package(default_visibility = ["//visibility:public"])
+
+kt_jvm_library(
+    name = "network",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    deps = [
+        "//packages/kotlin/core:core",
+        "//projects/mobile/android/core/config:config",
+        "//projects/mobile/android/core/model:model",
+        "@maven//:com_squareup_okhttp3_okhttp",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
+    ],
+)
+
+kt_jvm_test(
+    name = "network_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    test_class = "dev.proflyder.home.core.network.AllNetworkTests",
+    deps = [
+        ":network",
+        "//projects/mobile/android/core/config:config",
+        "//projects/mobile/android/core/model:model",
+        "@maven//:com_squareup_okhttp3_mockwebserver",
+        "@maven//:com_squareup_okhttp3_okhttp",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+    ],
+)

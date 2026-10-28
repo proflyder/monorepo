@@ -31,6 +31,30 @@
   or take over implementation. The primary may directly edit orchestration
   instructions and perform review/integration checks.
 
+## Home platform architecture
+
+- Build the scheduler as a reusable task scheduling and delivery service.
+  Alarms, reminders, and timers are domain conveniences over durable scheduling
+  and queues. Keep HA, Hermes, audio, and mobile concerns out of the core.
+- Start with SQLite-backed durable queues and explicit leases/acknowledgements.
+  Introduce an external broker only for a demonstrated deployment requirement;
+  preserve the versioned protobuf API and idempotency semantics.
+- The home server owns execution. Android manages server state; phone reminder
+  notifications are an optional delivery channel, not the scheduling authority.
+- Android lives in `projects/mobile/android`: Kotlin, root Bazel/Bazelisk,
+  Metro compiler-plugin DI, Android Views, one Activity, and Fragment-based
+  navigation behind typed contracts. Preserve feature API/implementation
+  boundaries, clean architecture, and reusable Kotlin/navigation utilities.
+- The approved public application ID is `dev.proflyder.home`, derived from the
+  user's public domain `proflyder.dev`. Endpoints are configurable LAN or
+  Tailscale addresses. The external Tailscale app owns VPN connectivity; use
+  system routing and verified TLS, without embedding a VPN client.
+- HA integrates through an executor adapter. Hermes and future projects should
+  share one extensible MCP gateway with domain tool groups, rather than one MCP
+  server per project. Start MCP only when an actual client needs it.
+- Keep the current HA scheduler authoritative until an explicit, tested cutover;
+  never enable a second executor for the same live schedules implicitly.
+
 ## Локальный Git — осознанная конфигурация
 
 Репозиторий готовится к публикации на GitHub. До отдельного запроса

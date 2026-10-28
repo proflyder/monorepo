@@ -1,0 +1,57 @@
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_library", "kt_android_local_test")
+load(":robolectric_android_all.bzl", "android_all_dir")
+
+package(default_visibility = ["//visibility:public"])
+
+kt_android_library(
+    name = "navigation",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.core.navigation",
+    manifest = "src/main/AndroidManifest.xml",
+    deps = [
+        "//packages/kotlin/core:core",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+    ],
+)
+
+# Robolectric 4.17 resolves SDK 35 to this pinned preinstrumented jar. Keeping
+# it as a data dependency avoids a runtime Maven download.
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+kt_android_local_test(
+    name = "navigation_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.core.navigation",
+    manifest = "src/test/AndroidManifest.xml",
+    test_class = "dev.proflyder.home.core.navigation.FragmentRouterTest",
+    # rules_android turns this file into -Drobolectric-deps.properties and it
+    # maps the pinned SDK 35 jar relative to its own runfiles directory.
+    robolectric_properties_file = "robolectric-deps.properties",
+    data = [
+        ":robolectric_android_all_sdk35",
+        "robolectric-deps.properties",
+    ],
+    deps = [
+        ":navigation",
+        "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+)

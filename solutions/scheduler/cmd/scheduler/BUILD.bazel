@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "scheduler",
+    embed = [":scheduler_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "scheduler_lib",
+    srcs = ["main.go"],
+    importpath = "ricardo.local/monorepo/solutions/scheduler/cmd/scheduler",
+    visibility = ["//visibility:private"],
+    deps = ["//solutions/scheduler/app"],
+)

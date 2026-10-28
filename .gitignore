@@ -68,6 +68,18 @@ dist/
 .DS_Store
 ._*
 *.log
+# IDE-generated project metadata is local (Android Studio/IntelliJ), not source.
+.idea/
+*.iml
+# Local scheduler/bridge runtime state; deployed data lives on hosts, not Git.
+/scheduler.db
+/scheduler.db-shm
+/scheduler.db-wal
+*.ledger.json
+# Android build outputs.
+*.apk
+*.aab
+*.apks
 /projects/station/ble-gateway/ble-gateway
 /projects/station/ble-gateway/ble-gateway-armhf*
 /projects/station/ble-gateway/bletest-armhf

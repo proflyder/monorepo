@@ -1,0 +1,21 @@
+load("@rules_kotlin//kotlin:core.bzl", "kt_compiler_plugin", "kt_kotlinc_options")
+
+package(default_visibility = ["//visibility:public"])
+
+kt_kotlinc_options(
+    name = "jvm17_options",
+    jvm_target = "17",
+)
+
+# Metro is a compile-time DI framework: the generated graph implementation is
+# produced by this compiler plugin. It is intentionally applied through the
+# macros in //platform/android:defs.bzl so every Kotlin module in the Android
+# app sees the same plugin.
+kt_compiler_plugin(
+    name = "metro_compiler_plugin",
+    compile_phase = True,
+    deps = ["@maven//:dev_zacsweers_metro_compiler"],
+    id = "dev.zacsweers.metro.compiler",
+)
+
+exports_files(["defs.bzl"])

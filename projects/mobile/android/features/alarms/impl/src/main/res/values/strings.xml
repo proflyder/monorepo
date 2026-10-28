@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alarms_title">Alarms</string>
+    <string name="alarms_add">Add alarm</string>
+    <string name="alarms_empty">No alarms yet. Alarms are stored and run on the home server.</string>
+    <string name="alarms_snooze">Snooze 9 min</string>
+    <string name="alarms_stop">Stop</string>
+    <string name="alarms_delete">Delete</string>
+    <string name="alarms_enabled">Enabled</string>
+    <string name="alarms_next">Next: %1$s</string>
+    <string name="alarms_snoozed">Snoozed until %1$s</string>
+    <string name="alarms_off">Disabled</string>
+    <string name="alarms_delete_confirm">Delete this alarm from the home server?</string>
+    <string name="alarms_delete_yes">Delete</string>
+    <string name="alarms_cancel">Cancel</string>
+    <string name="alarms_repeat_daily">Every day</string>
+    <string name="alarms_repeat_weekdays">Weekdays</string>
+    <string name="alarms_repeat_weekends">Weekends</string>
+    <string name="alarms_repeat_custom">Custom days</string>
+    <string name="alarms_repeat_once">One-shot alarm</string>
+    <string name="alarms_repeat_once_on">Once on %1$s</string>
+    <string name="alarms_repeat_unknown">Unsupported repeat</string>
+    <string name="alarms_timezone_default">Asia/Almaty</string>
+    <string name="alarms_editor_title_new">New alarm</string>
+    <string name="alarms_editor_title_edit">Edit alarm</string>
+    <string name="alarms_editor_label">Label</string>
+    <string name="alarms_editor_time">Time</string>
+    <string name="alarms_editor_date">Date (one-shot)</string>
+    <string name="alarms_editor_timezone">IANA timezone</string>
+    <string name="alarms_editor_repeat">Repeat</string>
+    <string name="alarms_editor_days">Days</string>
+    <string name="alarms_editor_save">Save on server</string>
+    <string name="alarms_editor_delete">Delete alarm</string>
+    <string name="alarms_editor_hint">The home server stores this alarm and decides when it fires. This phone does not schedule local alarms.</string>
+    <string name="alarms_day_mon">Mon</string>
+    <string name="alarms_day_tue">Tue</string>
+    <string name="alarms_day_wed">Wed</string>
+    <string name="alarms_day_thu">Thu</string>
+    <string name="alarms_day_fri">Fri</string>
+    <string name="alarms_day_sat">Sat</string>
+    <string name="alarms_day_sun">Sun</string>
+    <string name="alarms_today">Today %1$s</string>
+    <string name="alarms_tomorrow">Tomorrow %1$s</string>
+    <string name="alarms_in_days">%1$s %2$s</string>
+    <string name="alarms_saved">Alarm saved</string>
+    <string name="alarms_deleted">Alarm deleted</string>
+    <string-array name="alarms_day_short">
+        <item>@string/alarms_day_mon</item>
+        <item>@string/alarms_day_tue</item>
+        <item>@string/alarms_day_wed</item>
+        <item>@string/alarms_day_thu</item>
+        <item>@string/alarms_day_fri</item>
+        <item>@string/alarms_day_sat</item>
+        <item>@string/alarms_day_sun</item>
+    </string-array>
+</resources>

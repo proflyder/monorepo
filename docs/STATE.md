@@ -1,6 +1,6 @@
 # STATE — текущее состояние
 
-Обновлено: 2026-10-28. Публичные адреса — примеры; реальные — в
+Обновлено: 2026-10-29. Публичные адреса — примеры; реальные — в
 `secrets/NETWORK.md`.
 
 ## Host / VM
@@ -98,6 +98,42 @@
   `timer.taimer_1…8`; напоминания `todo.reminders`; заметки `todo.notes`;
   dashboard `/assistant-schedules`. Legacy single-slot alarm отключён.
 - Голосовые команды и точные entity/scripts — `projects/home-assistant/ha-voice/`.
+
+## Планировщик, HA bridge, Android
+
+- `solutions/scheduler`: durable на Go/SQLite (inbox/outbox, leases, ack),
+  Connect/gRPC API на одном listener, legacy `AlarmService` facade. Очереди
+  `home` (alarms/reminders/timers) и `tasks` (generic one-shot `EnqueueTask`);
+  Kafka/внешний брокер не используются. Go- и backend-тесты проходят.
+  Процесс не задеплоен на домашний сервер в рамках этой итерации.
+- `solutions/ha-bridge`: executor для очереди `home`. Собирает события через
+  Connect JSON, вызывает allowlisted HA scripts (`alarm_start`,
+  `schedule_announce`, `alarm_stop`), подтверждает только после 2xx HA,
+  at-least-once + локальный receipt-ledger. Dry-run — режим по умолчанию;
+  `BRIDGE_EXECUTE=true` не включался на живой системе. Мост не слушает порт,
+  не создаёт расписания и не вызывает `alarm_snooze`. Исходники и hermetic
+  тесты реализованы; deploy/cutover отсутствуют.
+- Действующий владелец будильников, таймеров и напоминаний — текущий HA
+  (`todo.*`, `timer.*`, scripts/automations). Импорт расписаний и переключение
+  исполнителя не выполнялись; живой HA остаётся источником звука.
+- `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
+  `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
+  `INTERNET`, debug-signed). Вкладки Alarms/Timers/Reminders/Connection;
+  alarms — one-shot и recurring (weekdays/custom, IANA, snooze/stop),
+  reminders — one-shot, timers — server-owned с pause/resume/cancel и
+  server-clock remaining. Есть обязательный bearer token с Keystore
+  AES-GCM, настраиваемые таймауты, GetStatus, SavedStateHandle и стабильные
+  idempotency keys для неоднозначных retry; redirects выключены. Сборка
+  `//projects/mobile/android:app` и общий gate (9 Android-таргетов, включая
+  2 cold-launch smoke и 14 nav lifecycle, + 7 backend) проходят 16/16.
+  Ограничения: телефонных уведомлений/FCM, offline cache, generic task/
+  scenario UI и HA cutover нет; запуск на реальном устройстве/эмуляторе не
+  выполнялся (только Robolectric), переключение вкладки сбрасывает её стек к
+  корню. Телефон управляет серверным состоянием, расписания остаются
+  server-authoritative.
+- Будущая Hermes-интеграция — один общий MCP gateway с доменными группами
+  инструментов; MCP runtime сегодня не разворачивается и Android-срезу не
+  нужен.
 
 ## Приватное / backups
 

@@ -1,26 +1,45 @@
 load("@rules_go//go:def.bzl", "go_library")
-load("@rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# gazelle:proto disable
+
+# Go stubs are checked in (see solutions/scheduler/scripts/generate-proto.sh)
+# so `go test ./packages/...` works outside Bazel. Bazel must not regenerate
+# the same Go types: proto_library stays the canonical schema for other
+# languages and for descriptor tooling.
 proto_library(
     name = "alarms_proto",
     srcs = ["alarms.proto"],
 )
 
-go_proto_library(
+proto_library(
+    name = "scheduler_proto",
+    srcs = ["scheduler.proto"],
+)
+
+# Preserve the previous public proto target name for other workspaces.
+alias(
     name = "alarms_go_proto",
-    compilers = [
-        "@rules_go//proto:go_proto",
-        "@rules_go//proto:go_grpc_v2",
-    ],
-    importpath = "ricardo.local/monorepo/packages/proto/ricardo/v1",
-    proto = ":alarms_proto",
+    actual = ":ricardo",
+)
+
+# Reserved alias matching the scheduler schema naming.
+alias(
+    name = "scheduler_go_proto",
+    actual = ":ricardo",
 )
 
 go_library(
     name = "ricardo",
-    embed = [":alarms_go_proto"],
+    srcs = [
+        "alarms.pb.go",
+        "scheduler.pb.go",
+    ],
     importpath = "ricardo.local/monorepo/packages/proto/ricardo/v1",
+    deps = [
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
 )

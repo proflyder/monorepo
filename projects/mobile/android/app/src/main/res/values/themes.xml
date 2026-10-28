@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Home" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/home_green</item>
+        <item name="colorOnPrimary">@color/home_on_green</item>
+        <item name="colorPrimaryContainer">@color/home_green_dark</item>
+        <item name="colorOnPrimaryContainer">@color/home_on_green</item>
+        <item name="colorSecondary">@color/home_teal</item>
+        <item name="colorOnSecondary">@color/home_on_teal</item>
+        <item name="android:statusBarColor">@color/home_green_dark</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

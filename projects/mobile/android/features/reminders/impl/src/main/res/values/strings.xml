@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminders_title">Reminders</string>
+    <string name="reminders_add">Add reminder</string>
+    <string name="reminders_empty">No reminders yet. The home server delivers one-shot reminders.</string>
+    <string name="reminders_delete">Delete</string>
+    <string name="reminders_enabled">Enabled</string>
+    <string name="reminders_due">Due: %1$s</string>
+    <string name="reminders_off">Disabled</string>
+    <string name="reminders_delete_confirm">Delete this reminder from the home server?</string>
+    <string name="reminders_delete_yes">Delete</string>
+    <string name="reminders_cancel">Cancel</string>
+    <string name="reminders_editor_title_new">New reminder</string>
+    <string name="reminders_editor_title_edit">Edit reminder</string>
+    <string name="reminders_editor_label">Label</string>
+    <string name="reminders_editor_date">Date</string>
+    <string name="reminders_editor_time">Time</string>
+    <string name="reminders_editor_timezone">IANA timezone</string>
+    <string name="reminders_editor_save">Save on server</string>
+    <string name="reminders_editor_delete">Delete reminder</string>
+    <string name="reminders_editor_hint">The home server stores this reminder and delivers one DueEvent at the chosen local date and time. This phone does not schedule it locally.</string>
+    <string name="reminders_saved">Reminder saved</string>
+    <string name="reminders_deleted">Reminder deleted</string>
+</resources>

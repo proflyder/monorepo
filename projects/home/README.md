@@ -10,8 +10,9 @@ projects/home-assistant   HA/MA/STT/TTS/Hermes/Tailscale
 И добавляет домашние solutions:
 
 ```text
-solutions/alarm           instance=home
-solutions/ha-bridge       endpoint=home alarm
+solutions/scheduler       durable расписания/таймеры/задачи, SQLite outbox
+solutions/ha-bridge       executor очереди home → HA scripts (dry-run default)
+solutions/alarm           legacy instance=home (AlarmService facade)
 solutions/mcp-alarm       endpoint=home alarm
 solutions/assistant-ui    endpoint=home alarm
 ```
@@ -20,10 +21,27 @@ solutions/assistant-ui    endpoint=home alarm
 
 - станция и HA развиваются независимо;
 - HA можно перезапускать/обновлять без перепрошивки станции;
-- один и тот же alarm/MCP можно направить на другой инстанс;
+- один и тот же scheduler/bridge можно направить на другой инстанс;
 - project-specific config не попадает в solutions.
+
+## Планировщик и мост
+
+`solutions/scheduler` — server-authoritative планировщик: SQLite durable
+очереди (`home` для alarms/reminders/timers, `tasks` для one-shot
+`EnqueueTask`), lease/ack, Connect/gRPC API. Внешний брокер (Kafka) не
+используется; версия контракта — `packages/proto/ricardo/v1/scheduler.proto`.
+
+`solutions/ha-bridge` — исполнитель: забирает только `home`, вызывает
+allowlisted HA scripts (`alarm_start`, `schedule_announce`, `alarm_stop`),
+подтверждает только после 2xx HA. По умолчанию dry-run; live cutover не
+выполнен, текущий HA остаётся владельцем звука и расписаний.
+
+Локальный процессный E2E (реальные бинарники + fake HA на loopback, без живых
+HA/ADB/Tailscale): `projects/home/e2e/scheduler_smoke.py`.
 
 Рабочая Kubernetes-композиция и pinned Helm releases — [kubernetes/](kubernetes/README.md).
 HA Core перенесён в HAOS VM; K3s VM содержит MA/Matter/STT/TTS/Hermes и
 observability. Старые HA data paths сохранены как архив/PV, но не являются
-текущим writer. Alarm/MCP/UI solutions остаются отдельными дополнениями.
+текущим writer. Legacy alarm/MCP/UI solutions остаются отдельными дополнениями;
+Hermes и другие проекты в будущем используют один общий MCP gateway, а не
+MCP внутри каждого сервиса.

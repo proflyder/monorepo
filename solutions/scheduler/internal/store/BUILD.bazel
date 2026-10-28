@@ -1,0 +1,39 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "store",
+    srcs = [
+        "event.go",
+        "schedule.go",
+        "store.go",
+        "task.go",
+        "tick.go",
+        "timer.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/scheduler/internal/store",
+    deps = [
+        "//packages/proto/ricardo/v1:ricardo",
+        "//solutions/scheduler/internal/idgen",
+        "//solutions/scheduler/internal/planner",
+        "@org_modernc_sqlite//:sqlite",
+    ],
+)
+
+go_test(
+    name = "store_test",
+    srcs = [
+        "event_test.go",
+        "schedule_test.go",
+        "store_test.go",
+        "task_test.go",
+        "tick_test.go",
+        "timer_test.go",
+    ],
+    embed = [":store"],
+    deps = [
+        "//packages/proto/ricardo/v1:ricardo",
+        "@org_modernc_sqlite//:sqlite",
+    ],
+)

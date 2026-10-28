@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "planner",
+    srcs = ["planner.go"],
+    importpath = "ricardo.local/monorepo/solutions/scheduler/internal/planner",
+    deps = ["//packages/proto/ricardo/v1:ricardo"],
+)
+
+go_test(
+    name = "planner_test",
+    srcs = ["planner_test.go"],
+    embed = [":planner"],
+    deps = [
+        "//packages/proto/ricardo/v1:ricardo",
+    ],
+)

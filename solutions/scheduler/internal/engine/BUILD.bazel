@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "engine",
+    srcs = ["engine.go"],
+    importpath = "ricardo.local/monorepo/solutions/scheduler/internal/engine",
+    deps = ["//solutions/scheduler/internal/store"],
+)
+
+go_test(
+    name = "engine_test",
+    srcs = ["engine_test.go"],
+    embed = [":engine"],
+    deps = [
+        "//solutions/scheduler/internal/store",
+    ],
+)

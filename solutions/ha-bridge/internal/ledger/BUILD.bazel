@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ledger",
+    srcs = ["ledger.go"],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/ledger",
+    visibility = ["//solutions/ha-bridge:__subpackages__"],
+)
+
+go_test(
+    name = "ledger_test",
+    srcs = ["ledger_test.go"],
+    embed = [":ledger"],
+)

@@ -11,5 +11,5 @@ go_library(
     srcs = ["main.go"],
     importpath = "ricardo.local/monorepo/solutions/alarm/cmd/alarm",
     visibility = ["//visibility:private"],
-    deps = ["//solutions/alarm/internal/app"],
+    deps = ["//solutions/scheduler/app"],
 )

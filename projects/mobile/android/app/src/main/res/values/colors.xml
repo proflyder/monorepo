@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="home_green">#1B5E20</color>
+    <color name="home_green_dark">#0D3F14</color>
+    <color name="home_on_green">#FFFFFF</color>
+    <color name="home_teal">#00695C</color>
+    <color name="home_on_teal">#FFFFFF</color>
+    <color name="home_surface">#FBFDF7</color>
+    <color name="home_surface_dark">#101410</color>
+</resources>

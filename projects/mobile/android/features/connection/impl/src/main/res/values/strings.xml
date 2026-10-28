@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="connection_title">Connection</string>
+    <string name="connection_intro">The phone manages alarms, reminders, and timers on your home server. The server owns execution; this app does not use AlarmManager, FCM, or a built-in VPN.</string>
+    <string name="connection_endpoint">Server address</string>
+    <string name="connection_endpoint_helper">Full http:// or https:// URL. LAN address, IPv4, bracketed IPv6, or Tailscale MagicDNS. No query or credentials.</string>
+    <string name="connection_http_warning">HTTP is not encrypted. Use HTTPS when the server provides a trusted certificate; HTTP is intended only for an explicit local/Tailscale setup.</string>
+    <string name="connection_token">Bearer token</string>
+    <string name="connection_token_helper">Leave blank to keep the stored token. It is encrypted with a non-exportable Android Keystore key and is never logged or put in a URL.</string>
+    <string name="connection_clear_token">Remove stored token</string>
+    <string name="connection_connect_timeout">Connect timeout (seconds)</string>
+    <string name="connection_read_timeout">Read timeout (seconds)</string>
+    <string name="connection_save">Save settings</string>
+    <string name="connection_test">Save and test connection</string>
+    <string name="connection_status">Status</string>
+    <string name="connection_not_configured">No server configured yet.</string>
+    <string name="connection_token_absent">No token stored.</string>
+    <string name="connection_token_present">Token stored securely.</string>
+    <string name="connection_token_unreadable">The stored token cannot be decrypted on this device. Enter it again to restore access.</string>
+    <string name="connection_online">Server online</string>
+    <string name="connection_version">Version %1$s, schema %2$d</string>
+    <string name="connection_server_time">Server time: %1$s</string>
+    <string name="connection_events">Pending events %1$d, leased %2$d</string>
+    <string name="connection_schedules">Enabled schedules %1$d, running timers %2$d</string>
+    <string name="connection_scenario">Scenario execution is not implemented by this server version.</string>
+    <string name="connection_saved">Settings saved</string>
+    <string name="connection_saved_and_online">Settings saved; server is online.</string>
+    <string name="connection_server_owns">Schedules stay authoritative on the home server. This screen only manages server state.</string>
+    <string name="connection_notification_note">Phone-side reminder notifications are not implemented in this foundation.</string>
+    <string name="connection_not_tested">Settings are saved. Use “Save and test connection” to verify the server.</string>
+</resources>

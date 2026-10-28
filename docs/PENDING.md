@@ -21,6 +21,32 @@
 - [ ] Xiaomi лампы: on/off, brightness, color temperature.
 - [ ] Matter paired nodes сейчас 0; LED — первое устройство.
 
+## Планировщик / HA bridge / Android
+
+- [ ] HA shadow-import существующих `todo.alarms_*`/`timer.*`/reminders в
+  durable scheduler на тестовой БД; сравнить next occurrence и DST, не
+  включая второй исполнитель.
+- [ ] Cutover и rollback-репетиция на живом HA: один executor, STOP/snooze,
+  restore source/volume; критерии — `solutions/ha-bridge/README.md`.
+  Живая звуковая приёмка (audible) не выполнена.
+- [ ] Deploy-шаблон bridge (unit/container, token-файлы, `BRIDGE_LEDGER_PATH`,
+  `BRIDGE_CONSUMER_ID`) и проверка single-consumer на хосте.
+- [ ] Deploy scheduler (переименование legacy alarm DB/порта, миграция,
+  healthcheck) — отдельно от текущего HA runtime.
+- [ ] Уведомления на телефон как канал доставки (Android/пуш), без передачи
+  телефону роли владельца расписаний.
+- [ ] Recurring generic task schedules и event-trigger rules; сейчас
+  `EnqueueTask` — только one-shot.
+- [ ] Один общий MCP gateway для своих сервисов/проектов (доменные tool
+  groups, allowlist); MCP runtime не нужен для текущего Android-среза.
+- [ ] Android: запуск и приёмка на реальном устройстве/эмуляторе
+  (lifecycle/instrumentation), push-уведомления/FCM, offline cache и
+  generic task/scenario UI. Debug APK и общий 16/16 gate уже проходят;
+  Android-гейты отдельные, не часть backend `make test`; HA cutover не
+  выполнялся.
+- [ ] Локальный scheduler+bridge E2E (`projects/home/e2e/scheduler_smoke.py`)
+  подключить к CI/quality после стабилизации API; сейчас запуск ручной.
+
 ## Инфраструктура
 
 - [ ] Выяснить причину потери LAN на станции после reboot: роутер online,

@@ -1,0 +1,17 @@
+load("//platform/android:defs.bzl", "metro_android_library")
+
+package(default_visibility = ["//visibility:public"])
+
+metro_android_library(
+    name = "settings",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.core.settings",
+    manifest = "src/main/AndroidManifest.xml",
+    deps = [
+        "//packages/kotlin/core:core",
+        "//projects/mobile/android/core/config:config",
+        "//projects/mobile/android/core/model:model",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)

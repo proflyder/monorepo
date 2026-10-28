@@ -1,0 +1,27 @@
+package(default_visibility = ["//visibility:public"])
+
+# Convenience entry points for the Android client.
+alias(
+    name = "app",
+    actual = "//projects/mobile/android/app:app",
+)
+
+test_suite(
+    name = "android_tests",
+    tests = [
+        "//packages/kotlin/core:core_test",
+        "//packages/kotlin/core:operation_test",
+        "//projects/mobile/android/core/config:config_test",
+        "//projects/mobile/android/core/model:model_test",
+        "//projects/mobile/android/core/network:network_test",
+        "//projects/mobile/android/features/alarms/api:api_test",
+        "//projects/mobile/android/features/reminders/api:api_test",
+        "//projects/mobile/android/app:main_activity_smoke_test",
+        "//projects/mobile/android/core/navigation:navigation_test",
+    ],
+)
+
+exports_files([
+    "README.md",
+    "maven_install.json",
+])

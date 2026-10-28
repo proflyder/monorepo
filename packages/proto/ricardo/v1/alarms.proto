@@ -25,7 +25,8 @@ message Alarm {
   bool enabled = 8;
   int64 next_run_unix = 9;     // UTC epoch seconds
   int64 snooze_until_unix = 10; // 0 when not snoozed
-  int64 last_ring_unix = 11;    // 0 until first ring
+  int64 last_ring_unix = 11;    // last emitted occurrence, not proof of sound
+  int64 revision = 12;          // optimistic concurrency for UpdateAlarm
 }
 
 message CreateAlarmRequest {

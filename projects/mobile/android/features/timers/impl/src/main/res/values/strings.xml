@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="timers_title">Timers</string>
+    <string name="timers_empty">No active timers. Countdowns run on the home server.</string>
+    <string name="timers_label">Label</string>
+    <string name="timers_duration">Duration</string>
+    <string name="timers_duration_hint">e.g. 5m, 1h 30m, 01:30</string>
+    <string name="timers_start">Start timer</string>
+    <string name="timers_pause">Pause</string>
+    <string name="timers_resume">Resume</string>
+    <string name="timers_cancel">Cancel</string>
+    <string name="timers_paused">Paused</string>
+    <string name="timers_running">Running</string>
+    <string name="timers_remaining">Remaining %1$s</string>
+    <string name="timers_duration_error">Enter a duration between 1 second and 7 days.</string>
+    <string name="timers_started">Timer started</string>
+    <string name="timers_cancelled">Timer cancelled</string>
+    <string name="timers_cancel_confirm">Cancel this timer on the home server?</string>
+    <string name="timers_cancel_yes">Cancel timer</string>
+    <string name="timers_keep">Keep</string>
+    <string name="timers_preset_1">1 min</string>
+    <string name="timers_preset_5">5 min</string>
+    <string name="timers_preset_10">10 min</string>
+    <string name="timers_preset_25">25 min</string>
+    <string name="timers_server_time_note">Remaining time uses the server clock from GetStatus.</string>
+</resources>

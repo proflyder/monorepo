@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scheduler",
+    srcs = [
+        "client.go",
+        "decode.go",
+        "event.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler",
+    visibility = ["//solutions/ha-bridge:__subpackages__"],
+    deps = ["//solutions/ha-bridge/internal/httpapi"],
+)
+
+go_test(
+    name = "scheduler_test",
+    srcs = ["client_test.go"],
+    deps = ["//solutions/ha-bridge/internal/httpapi"],
+    embed = [":scheduler"],
+)

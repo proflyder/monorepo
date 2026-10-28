@@ -3,9 +3,11 @@
 Переиспользуемый сервис будильников. Один и тот же код запускается в разных
 проектах с разными SQLite-базами, портами и timezone.
 
-Сейчас это каркас: бинарник печатает `alarm` и завершается.
-SQLite, scheduler, сервер и перечисленная конфигурация ниже — план,
-а не реализованные возможности.
+Реализация живёт в `solutions/scheduler` (durable SQLite engine, planner,
+outbox, Connect/gRPC). Этот бинарник запускает тот же engine и дополнительно
+отдаёт legacy `AlarmService` facade поверх общих schedules
+(`kind=SCHEDULE_KIND_ALARM`). Это один процесс и одна БД, а не второй
+планировщик; одновременно запускать `scheduler` и `alarm` на одной БД нельзя.
 
 ## Почему Go
 
@@ -18,17 +20,13 @@ SQLite, scheduler, сервер и перечисленная конфигура
 ## Структура
 
 ```text
-cmd/alarm/              entrypoint
-internal/app/           process wiring
-internal/alarms/        alarm domain, next occurrence, repeat
-internal/timers/        future timer domain
-internal/reminders/     future reminder domain
-internal/tasks/         future tasks
-internal/notes/         future notes
-internal/store/         SQLite/repositories
-internal/http/          REST/Connect handlers
+cmd/alarm/              entrypoint: scheduler app + legacy AlarmService facade
+internal/app/           process identity
 api/                    API notes
 ```
+
+Домены, store, planner и сервер находятся в `solutions/scheduler`; README
+там описывает контракт, DST-политику, stop/snooze и очередь задач.
 
 UI и MCP вынесены в отдельные solutions:
 
@@ -62,16 +60,18 @@ bazel run //solutions/alarm
 Без Bazel:
 
 ```bash
-go test ./solutions/alarm/...
+go test ./solutions/alarm/... ./solutions/scheduler/... ./packages/...
 go run ./solutions/alarm/cmd/alarm
 ```
 
 ## API
 
-Канонический контракт — gRPC/protobuf:
-`packages/proto/ricardo/v1/alarms.proto`. Первый срез — `AlarmService`
-(CRUD, enable/disable, snooze, stop). Для HA и браузера тот же сервис будет
-доступен через Connect/gRPC-Web; отдельной REST-модели не будет.
+Канонические контракты — `packages/proto/ricardo/v1/scheduler.proto`
+(`SchedulerService`, основной) и `alarms.proto` (legacy `AlarmService`).
+Оба сервиса отдаются на одном listener через Connect (JSON/HTTP), gRPC
+(HTTP/2, h2c) и gRPC-Web. Отдельной REST-модели нет. Все 8 legacy RPC
+реализованы как view над общим engine; `Alarm.last_ring_unix` — последний
+emission, не подтверждение звука.
 
 ## Границы
 
