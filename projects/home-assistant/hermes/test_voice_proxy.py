@@ -219,5 +219,41 @@ class ProxyTransportTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 429)
 
 
+class StartupRecoveryTests(unittest.TestCase):
+    def test_unavailable_upstream_is_openai_error_and_recovers_without_proxy_restart(self):
+        class Proxy(voice_proxy.Handler):
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{server.server_port}/v1/models"
+        try:
+            with patch.object(Proxy, "_upstream", side_effect=urllib.error.URLError("refused")):
+                for method, body in [("GET", None), ("POST", b'{"stream": false}')]:
+                    with self.subTest(method=method), self.assertRaises(urllib.error.HTTPError) as ctx:
+                        urllib.request.urlopen(urllib.request.Request(url, data=body, method=method))
+                    self.assertEqual(ctx.exception.code, 503)
+                    error = json.loads(ctx.exception.read())["error"]
+                    # The HA llama_cpp parser calls .get on this object.
+                    self.assertIsInstance(error, dict)
+                    self.assertTrue(error.get("message"))
+            with patch.object(Proxy, "_upstream", return_value=(200, b'{"data": []}', "application/json")):
+                with urllib.request.urlopen(url) as response:
+                    self.assertEqual(response.status, 200)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_http_errors_normalize_legacy_string_or_html_and_keep_valid_error(self):
+        for original in [b'{"error": "not ready"}', b'<html>not ready</html>', b'{"error": null}']:
+            with self.subTest(body=original):
+                body, content_type = voice_proxy.normalize_error(502, original, "text/html")
+                self.assertEqual(content_type, "application/json")
+                self.assertTrue(json.loads(body)["error"].get("message"))
+        valid = b'{"error":{"message":"limited","type":"rate_limit_error"}}'
+        self.assertEqual(voice_proxy.normalize_error(429, valid, "application/json")[0], valid)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

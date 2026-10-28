@@ -73,6 +73,13 @@
 - TTS: Piper `2.5.2`, `ru_puriso2-medium`; Irina сохранена для отката.
 - Hermes `v0.22.5`, модель `gpt-5.6-luna` через ChatGPT/Codex OAuth;
   low reasoning + streaming; HA MCP 73 tools, MA MCP 86 tools.
+- Voice proxy `v4`: ошибки upstream приведены к OpenAI error object. При
+  раннем старте HA интеграция llama_cpp получает ConfigEntryNotReady и
+  повторяет подключение, вместо постоянного setup_error. Агент
+  `conversation.hermes_agent` восстановлен; живое обращение подтверждено
+  пользователем. Проверены HA→Hermes model turn и startup fault/recovery
+  на реальном коде интеграции HA. Предыдущая API-only приёмка этот сбой
+  не обнаруживала; agent entity теперь обязателен в live HA tests.
 - MA/Spotify: Soloist `1.3.10.13`, Spotify Connect device
   «Яндекс Станция Миди», music router `Music Assistant` / `Spotify Connect`.
 - Будильники: `todo.alarms_once/daily/weekdays/weekends`; таймеры

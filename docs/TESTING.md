@@ -48,7 +48,13 @@ export HERMES_API_KEY='...'
 python3 projects/home-assistant/e2e/live_hermes.py -v
 
 HERMES_E2E_CHAT=1 python3 projects/home-assistant/e2e/live_hermes.py -v
+
+# Реальный model turn через conversation.hermes_agent в Home Assistant:
+STATION_E2E=1 HA_HERMES_AGENT_TEST=1 python3 projects/home-assistant/e2e/live_ha.py -v
 ```
+
+HA read-only gate проверяет доступность `conversation.hermes_agent`; прямой
+Hermes `/health` и `/v1/models` не заменяют регистрацию агента в HA.
 
 ## BLE gateway
 

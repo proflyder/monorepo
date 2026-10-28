@@ -144,6 +144,27 @@ def sse_events(response):
         yield event, "\n".join(data)
 
 
+def error_body(message: str) -> bytes:
+    """HA's OpenAI client requires error to be an object, including at startup."""
+    return json.dumps({"error": {"message": message, "type": "server_error",
+                                 "code": "upstream_error"}}).encode()
+
+
+def normalize_error(status: int, body: bytes, content_type: str) -> tuple[bytes, str]:
+    if status < 400:
+        return body, content_type
+    try:
+        payload = json.loads(body)
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            return body, "application/json"
+        if isinstance(error, str):
+            return error_body(error), "application/json"
+    except (ValueError, UnicodeError):
+        pass
+    return error_body(f"Hermes upstream returned HTTP {status}"), "application/json"
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "HermesVoiceProxy/2.0"
 
@@ -170,6 +191,7 @@ class Handler(BaseHTTPRequestHandler):
             return exc.code, exc.read(), exc.headers.get("Content-Type", "application/json")
 
     def _send(self, status: int, body: bytes, content_type: str) -> None:
+        body, content_type = normalize_error(status, body, content_type)
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -180,8 +202,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             status, body, ctype = self._upstream("GET", self.path, None)
             self._send(status, body, ctype)
-        except Exception as exc:  # pragma: no cover - network path
-            self._send(502, json.dumps({"error": str(exc)}).encode(), "application/json")
+        except Exception:
+            self._send(503, error_body("Hermes upstream is unavailable"), "application/json")
 
     def do_POST(self) -> None:  # noqa: N802
         self._stream_started = False
@@ -218,7 +240,7 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
             else:
-                self._send(502, json.dumps({"error": type(exc).__name__}).encode(), "application/json")
+                self._send(503, error_body("Hermes upstream is unavailable"), "application/json")
 
     def _write_event(self, payload: dict[str, Any] | str) -> None:
         data = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)

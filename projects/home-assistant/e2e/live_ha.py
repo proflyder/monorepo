@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Opt-in end-to-end tests against the real Home Assistant.
 
-Default mode is read-only: it checks API health, required entities, and safe
-conversation intents.  Mutating/audio tests require explicit flags:
+Default mode is read-only: it checks API health, required entities (including
+the Hermes conversation agent), and safe conversation intents. A real model turn
+through that HA agent is opt-in with HA_HERMES_AGENT_TEST=1.  Mutating/audio tests require explicit flags:
 
     STATION_E2E=1 HA_TOKEN=... python3 projects/home-assistant/e2e/live_ha.py -v
     STATION_E2E=1 STATION_E2E_MUTATE=1 HA_TOKEN=... ...
@@ -77,14 +78,18 @@ def wait_for(entity_id: str, value: str, timeout: float = 12.0) -> str:
     raise AssertionError(f"{entity_id} did not become {value!r}; last={last!r}")
 
 
-def conversation(text: str) -> str:
+def conversation(text: str, agent_id: str | None = None) -> str:
     payload = {"text": text, "language": "ru"}
+    if agent_id:
+        payload["agent_id"] = agent_id
     if HA_DEVICE_ID:
         payload["device_id"] = HA_DEVICE_ID
     code, data = api("/api/conversation/process", "POST", payload)
     if code != 200:
         raise AssertionError(f"conversation {text!r}: HTTP {code}: {data}")
     response = data.get("response", {})
+    if response.get("response_type") == "error":
+        raise AssertionError(f"conversation agent returned an error: {response.get('data')}")
     speech = response.get("speech", {})
     plain = speech.get("plain", {}).get("speech") if isinstance(speech, dict) else None
     return plain or response.get("response_type", "")
@@ -122,6 +127,8 @@ class LiveReadOnlyTests(unittest.TestCase):
             "automation.music_route_follows_player_source",
             "media_player.iandeks_stantsiia_midi",
             "event.iandeks_stantsiia_midi_button",
+            # Direct Hermes health/intent tests miss a failed HA agent setup.
+            "conversation.hermes_agent",
         ]
         for entity_id in required:
             with self.subTest(entity=entity_id):
@@ -141,6 +148,15 @@ class LiveReadOnlyTests(unittest.TestCase):
         attrs = player.get("attributes", {})
         self.assertIn("volume_level", attrs)
         self.assertIn("source", attrs)
+
+
+@unittest.skipUnless(E2E and HA_TOKEN and os.environ.get("HA_HERMES_AGENT_TEST") == "1",
+                     "set HA_HERMES_AGENT_TEST=1 to run a real model turn through HA")
+class LiveHermesAgentTests(unittest.TestCase):
+    def test_real_agent_turn_through_home_assistant(self):
+        reply = conversation("Представься одним коротким предложением. Ничего не изменяй.",
+                             agent_id="conversation.hermes_agent")
+        self.assertTrue(reply, "HA Hermes agent returned no speech")
 
 
 @unittest.skipUnless(MUTATE, "set STATION_E2E_MUTATE=1 to allow volume mutation")
