@@ -30,7 +30,9 @@
       Проверить DPP auto-listen по отсутствию default route (гонка с WPA/DHCP
       и BLE provisioning) и общий Amlogic W1 Wi-Fi/BT SDIO при warm reboot.
       Read-only collector готов: projects/station/scripts/NETWORK-DIAGNOSTIC.md.
-      Reboot test ожидает подтверждения физического доступа.
+      Один контролируемый warm reboot прошёл: сеть вернулась за ~18 с,
+      HA/Sendspin и HA agent tests pass; rootkeeper restored, boot hook удалён.
+      Краткий DPP fault test предложен, ожидает отдельного подтверждения.
 
 
 - [ ] Offsite encrypted backup + restore rehearsal на запасном железе.
