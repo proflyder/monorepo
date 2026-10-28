@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Read-only publication checks; print paths/line numbers, never matched values.
 
-The scanner treats the repository as private by default. Two narrow, reviewed
+The scanner treats the repository as private by default. Narrow, reviewed
 exceptions exist for the user's *public* identity:
 
 * the exact public domain host ``proflyder.dev`` (used in docs and links);
 * the approved Android application namespace ``dev.proflyder.home`` and its
   subpackages, plus the matching source/resource path component
-  ``dev/proflyder/home``.
+  ``dev/proflyder/home``;
+* the exact public GitHub repository slug ``proflyder/pulsar``. The active
+  Rust fork stores it as its update source and version provenance; it is a
+  repository identifier, not a credential, and no other repository owned by
+  the handle is allowed.
 
 They are removed from a line before the credential/private pattern runs, and
 only when the token stands alone with proper boundaries. Any other occurrence of
@@ -53,6 +57,14 @@ APPROVED_PUBLIC = (
             r"(?<![A-Za-z0-9_.-])dev/prof[l]yder/home(?![A-Za-z0-9_-])"
         ),
         "<public-source-path>",
+    ),
+    # Exact public GitHub repository slug used by the active Rust fork. Any
+    # other repository, longer name, or prefixed path still fails.
+    (
+        re.compile(
+            r"(?<![A-Za-z0-9_.-])prof[l]yder/pulsar(?![A-Za-z0-9_.-])"
+        ),
+        "<public-repo>",
     ),
 )
 

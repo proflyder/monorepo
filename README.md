@@ -40,7 +40,7 @@ HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
 
 - PVE `9.2.24`; HAOS `2026.10.4`; K3s `v1.35.9`.
 - Wi-Fi 4addr/WDS + Ethernet fallback; VM IP не меняются.
-- Pulsar `v0.4.1-ricardo6`, wake word «Рикардо», BLE gateway.
+- Pulsar Rust `v0.5.0-1-g908a027`, wake word «Рикардо», BLE gateway.
 - HAOS add-ons: MA `2.10.8`, Matter `9.2.0`; K3s: STT/TTS/Hermes/observability.
 - Remote — Tailscale Operator, без публичного HA.
 

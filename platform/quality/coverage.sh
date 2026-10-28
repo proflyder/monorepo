@@ -13,7 +13,7 @@ echo "== Go coverage: BLE gateway =="
 (cd projects/station/ble-gateway && go test -coverprofile="$ROOT/reports/ble-gateway.cover" ./...)
 
 echo "== Go coverage: Pulsar installer =="
-(cd projects/station/upstream/pulsar/installer && GOWORK=off go test -coverprofile="$ROOT/reports/pulsar-installer.cover" ./...)
+(cd projects/station/upstream/pulsar-rust/installer && GOWORK=off go test -coverprofile="$ROOT/reports/pulsar-installer.cover" ./...)
 
 if command -v coverage >/dev/null 2>&1; then
   echo "== Python line coverage: pairing core =="

@@ -1,641 +1,323 @@
-diff --git a/AGENTS.md b/AGENTS.md
-index 9cf5297..573c979 100644
---- a/AGENTS.md
-+++ b/AGENTS.md
-@@ -195,8 +195,9 @@ From `/system/vendor/quasar/libyandex_evil.so`:
- - Spotter type → VQE output: type 0 = main channel. The wake model (`spotter_models/activation/alisa`)
-   needs `VQE_OMNI_WITH_GAIN` (9); the command model (`spotter_models/command`, single channel)
-   only works with `VQE_OMNI` (6). Measured with `ww_offline`; re-measure when changing it.
--- The command spotter only runs while something plays, during TTS/announcements/timer ring, or
--  2.5 s after the wake word (as `maind` does), to avoid false positives from conversation.
-+- The command spotter only runs while something plays, during TTS/announcements/timer ring.
-+  During a wake-word request or arbitration it is off so the command reaches Home Assistant
-+  (for example, "Рикардо, стоп" must stop a ringing alarm and resume music, not just pause it).
- - `GetOutputChannelData` always returns no error; an absent output type yields `n == 0`.
- - `YandexVqeC_Config_GetOutputChannelCount` takes `(cfg, type, int *out)`; the other `Config_Get*`
-   getters return the value directly.
-@@ -396,9 +397,10 @@ media playback, LED animations.
-   over claims of the same wake word received up to 500 ms before ours. A claim older than the
-   250 ms window wins outright (its station already decided and answers); otherwise busy (speaking,
-   announcing, ringing) beats idle, then the higher level, then the larger station name. While
--  arbitrating the ring shows LISTENING, mic audio is buffered and sent after `voice_request_start`,
--  a command word is held; a losing station blocks voice commands for 2.5 s (cleared by its next
--  wake word or dialog). Stations without a voice subscriber do not claim (the wake word shows the
-+  arbitrating the ring shows LISTENING, mic audio is buffered and sent after `voice_request_start`;
-+  the local command spotter is off, so a command goes to Home Assistant; a losing station blocks
-+  voice commands for 2.5 s (cleared by its next wake word or dialog). Stations without a voice
-+  subscriber do not claim (the wake word shows the
-   usual not-subscribed error). HA's `duplicate_wake_up_detected` error (first phrase per 2 s wins
-   across satellites) is handled silently: no error ring or sound. Not yet verified on stations:
-   level difference near/far (expected ≥ 6 dB at 0.5 m vs 3 m; otherwise switch the level source to
 diff --git a/README.md b/README.md
-index c2dfe4d..c02b1cb 100644
+index 92793e3..ac2135a 100644
 --- a/README.md
 +++ b/README.md
-@@ -94,8 +94,10 @@ ESPHome Dashboard; голосовой конвейер обслуживает п
- ### Локальные голосовые команды
+@@ -11,6 +11,10 @@
+ > колонке контроллер часов (i2c 0-003f) не поднимается,
+ > сущностей часов нет; если ядро найдёт панель, демон подхватит её при старте (не проверялось).
  
- Распознаются без Home Assistant, пока что-то играет (музыка, ответ ассистента, объявление,
--звонок таймера) или в течение 2,5 с после «Алиса»: «Алиса, громче». В тишине и без активационной
--фразы модель команд выключена, чтобы разговор в комнате не давал ложных срабатываний.
-+звонок таймера): «Алиса, громче». В тишине и без активационной фразы модель команд выключена,
-+чтобы разговор в комнате не давал ложных срабатываний. После активационной фразы локальный
-+spotter на время запроса выключен: «Рикардо, стоп» уходит в Home Assistant, чтобы остановить
-+будильник и вернуть музыку, а не просто поставить её на паузу.
- 
- | Фраза | Действие |
- |---|---|
-diff --git a/satellite/Makefile b/satellite/Makefile
-index b024650..cf905b2 100644
---- a/satellite/Makefile
-+++ b/satellite/Makefile
-@@ -73,11 +73,12 @@ SS_LIBS  := $(SS_BUILD)/sendspin/libsendspin.a \
- # for `addr2line -f -e` on the crash report that main.cpp writes to the log.
- # -Wno-date-time: the build date is reported to Home Assistant as compilation_time.
- CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -Wno-unused-parameter -Wno-date-time -Isrc -I$(SYSROOT)/include \
--            -isystem $(SS_SRC)/sendspin-cpp/include -isystem $(SS_SRC)/noise-c/include $(SS_DEFS) -fno-omit-frame-pointer -g1
-+            -isystem $(SS_SRC)/sendspin-cpp/include -isystem $(SS_SRC)/noise-c/include $(SS_DEFS) -fno-omit-frame-pointer -g1 -Ithird_party/microfrontend -Ithird_party/microfrontend/kissfft
- LDFLAGS  := -L$(SYSROOT)/lib -Wl,--start-group $(SS_LIBS) -Wl,--end-group -lasound -ldl -lpthread
- 
- SRCS := $(shell find src -name '*.cpp')
--OBJS := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRCS))
-+MWW_SRCS := $(wildcard third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/*.cc)
-+OBJS := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRCS)) $(patsubst third_party/%.cc,$(BUILD)/vendor/%.o,$(MWW_SRCS))
- DEPS := $(OBJS:.o=.d)
- 
- # Reported by `pulsar --version` and Home Assistant. Only main.o and controller.o see it;
-@@ -104,6 +105,10 @@ $(BUILD)/%.o: src/%.cpp | $(SS_STAMP) $(SYSROOT_STAMP)
- 	@mkdir -p $(dir $@)
- 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
- 
-+$(BUILD)/vendor/%.o: third_party/%.cc
-+	@mkdir -p $(dir $@)
-+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
++> **Ricardo fork:** этот checkout — отдельный Rust-профиль для нашей Midi,
++> ещё не установленный на колонку. Отличия, сборка и границы приёмки —
++> [`RICARDO.md`](RICARDO.md).
 +
- # alsa-lib headers + libasound.so to compile and link against (runtime uses the firmware's copy).
- $(SYSROOT_STAMP): third_party/sysroot.sh
- 	env -u MAKEFLAGS -u MFLAGS third_party/sysroot.sh $(SYSROOT) "$(TARGET) $(CPU)" $(HOST) "$(ALSA)"
-diff --git a/satellite/src/audio/frontend.cpp b/satellite/src/audio/frontend.cpp
-index 5f4f581..cf50b20 100644
---- a/satellite/src/audio/frontend.cpp
-+++ b/satellite/src/audio/frontend.cpp
-@@ -11,6 +11,7 @@
+ Вместо штатного стека Яндекса (`maind`) на колонке работает небольшой нативный демон. Он говорит с
+ Home Assistant по протоколу ESPHome Native API и выглядит в HA как обычное ESPHome-устройство.
+ Для [Music Assistant](https://music-assistant.io/) он дополнительно является нативным
+@@ -402,9 +406,10 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
+   (aarch64/glibc 2.36 — обычный userspace Миди; 32-битный armhf/glibc 2.30 — Лайт 2, Мини 2 и
+   образы Миди с 32-битным userspace). zig 0.13 не подходит: собранные им 32-битные программы
+   падают при запуске. Другой zig можно указать как `ZIG=/путь/к/zig`;
+-- `make`, `git`, `curl`, `patch`, компилятор C для хоста (`cc`), а для библиотеки Sendspin
+-  (sendspin-cpp, единственная C++-часть сборки) — `cmake` ≥ 3.16 и `ninja`
+-  (их можно поставить через `uv tool install cmake ninja`);
++- `make`, `git`, `curl`, `patch`, компилятор C/C++ для хоста (`cc`/`c++`), а для Sendspin
++  (sendspin-cpp) — `cmake` ≥ 3.16 и `ninja`
++  (их можно поставить через `uv tool install cmake ninja`). C++ также собирает
++  on-device детектор «Рикардо» из `crates/pulsar-audio/ricardo/`;
+ - `adb` из Android platform-tools.
  
- #include "audio/spectrum.h"
- #include "audio/alsa_abi.h"
-+#include "audio/microwakeword.h"
- #include "core/log.h"
+ ```sh
+@@ -415,6 +420,10 @@ make -C satellite check                              # проверки на к
+ go -C installer run . 192.168.1.50                  # установщик из копии репозитория; сам вызывает make
+ ```
  
- // Signatures of libyandex_evil.so (recovered by reverse engineering maind, verified on device):
-@@ -98,6 +99,19 @@ struct AudioFrontend::Engine {
-   P cfg = nullptr, vqe = nullptr;
-   int chunk = 0, frame = 0;
-   Spotter wake{"wake word"}, cmd{"command"};
-+  std::unique_ptr<MicroWakeWord> micro;
-+  bool set_wake(const std::string &path) {
-+    if (path.ends_with(".tflite")) {
-+      auto next = std::make_unique<MicroWakeWord>();
-+      if (!next->load(path)) return false;
-+      free_spotter(wake);
-+      micro = std::move(next);
-+      return true;
-+    }
-+    if (!init_spotter(wake, path, VQE_OMNI_WITH_GAIN)) return false;
-+    micro.reset();
-+    return true;
-+  }
- 
-   template <class F>
-   bool bind(F &f, const char *name) {
-@@ -243,7 +257,7 @@ AudioFrontend::~AudioFrontend() { stop(); }
- bool AudioFrontend::start(const std::string &model_dir, const std::string &command_model_dir) {
-   eng_ = std::make_unique<Engine>();
-   if (!eng_->load() || !eng_->init_vqe(model_.vqe_preset) ||
--      !eng_->init_spotter(eng_->wake, model_dir, VQE_OMNI_WITH_GAIN)) {
-+      !eng_->set_wake(model_dir)) {
-     eng_.reset();
-     return false;
-   }
-@@ -373,14 +387,19 @@ void AudioFrontend::run() {
-   SpectrumAnalyzer ana(model_.capture_rate, period);
-   if (!ana.ok()) LOGW("music analysis: unsupported capture layout");
-   bool music_was_on = false;
-+  bool detection_was_on = detect_.load();
-+  std::vector<int16_t> preroll;
-+  constexpr size_t kPrerollSamples = 8000;  // 0.5 s, covers detection and an immediate command
-+  std::vector<int16_t> clean;
- 
-   while (running_) {
-     {
-       std::lock_guard<std::mutex> lk(model_mu_);
-       if (!pending_model_.empty()) {
--        if (!e.init_spotter(e.wake, pending_model_, VQE_OMNI_WITH_GAIN))
-+        if (!e.set_wake(pending_model_))
-           LOGE("failed to switch wake word model to %s", pending_model_.c_str());
-         pending_model_.clear();
-+        preroll.clear();
-       }
-     }
-     // Take exactly one VQE chunk.
-@@ -419,28 +438,51 @@ void AudioFrontend::run() {
-       }
-     }
- 
--    if (stream_.load() && audio_cb_) {
-+    const bool detecting = detect_.load();
-+    if (detecting != detection_was_on) {
-+      preroll.clear();
-+      if (e.micro && !e.micro->reset()) LOGE("microWakeWord: reset failed");
-+      detection_was_on = detecting;
-+    }
-+    clean.clear();
-+    if (stream_.load() || (e.micro && detecting)) {
-       const float *d = nullptr;
-       size_t n = 0;
-       if (e.vqe_check(e.vqe_out(e.vqe, VQE_OMNI_WITH_GAIN, 0, &d, &n), "VQE output") && n) {
--        auto chunk = std::make_shared<std::vector<int16_t>>(n);
--        for (size_t i = 0; i < n; i++) {
-+        clean.resize(n);
-+        for (size_t i = 0; i < n; ++i) {
-           float v = d[i] * 32768.f;
--          (*chunk)[i] = (int16_t)(v > 32767.f ? 32767 : v < -32768.f ? -32768 : std::lrint(v));
-+          clean[i] = int16_t(std::clamp(std::lrint(v), -32768L, 32767L));
-+        }
-+        if (stream_.load() && audio_cb_) {
-+          auto chunk = std::make_shared<std::vector<int16_t>>(clean);
-+          loop_.post([this, chunk] {
-+            if (audio_cb_) audio_cb_(chunk->data(), chunk->size());
-+          });
-         }
--        loop_.post([this, chunk] {
--          if (audio_cb_) audio_cb_(chunk->data(), chunk->size());
--        });
-       }
-     }
--
--    if (detect_.load()) {
--      auto phrases = e.feed(e.wake);
--      if (!phrases.empty()) {
-+    if (detecting) {
-+      if (e.micro) {
-+        preroll.insert(preroll.end(), clean.begin(), clean.end());
-+        if (preroll.size() > kPrerollSamples)
-+          preroll.erase(preroll.begin(), preroll.end() - kPrerollSamples);
-+        float score = -1;
-+        if (e.micro->feed(clean.data(), clean.size(), score)) {
-+          float level = wake_level_db(level_hist);
-+          auto audio = std::make_shared<std::vector<int16_t>>(preroll);
-+          LOGI("microWakeWord detected: 'Рикардо', probability %.3f", score);
-+          loop_.post([this, level, audio] {
-+            if (wake_cb_) wake_cb_("Рикардо", level, std::move(*audio));
-+          });
-+          preroll.clear();
-+        }
-+      } else {
-+        auto phrases = e.feed(e.wake);
-         float level = wake_level_db(level_hist);
-         for (auto &phrase : phrases)
-           loop_.post([this, phrase, level] {
--            if (wake_cb_) wake_cb_(phrase, level);
-+            if (wake_cb_) wake_cb_(phrase, level, {});
-           });
-       }
-     }
-diff --git a/satellite/src/audio/frontend.h b/satellite/src/audio/frontend.h
-index c5434fe..0758e55 100644
---- a/satellite/src/audio/frontend.h
-+++ b/satellite/src/audio/frontend.h
-@@ -26,7 +26,7 @@ class AudioFrontend {
-  public:
-   // level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC), rounded to
-   // 0.1 dB; -100 = no data.
--  using WakeCb = std::function<void(const std::string &phrase, float level_db)>;
-+  using WakeCb = std::function<void(const std::string &phrase, float level_db, std::vector<int16_t> preroll)>;
-   using CommandCb = std::function<void(const std::string &word)>;
-   using AudioCb = std::function<void(const int16_t *pcm, size_t samples)>;  // 16 kHz mono
-   using MusicCb = std::function<void(const MusicFrame &f)>;  // one per VQE chunk (32 ms)
-diff --git a/satellite/src/controller.cpp b/satellite/src/controller.cpp
-index 73ebfa1..732446d 100644
---- a/satellite/src/controller.cpp
-+++ b/satellite/src/controller.cpp
-@@ -150,7 +150,9 @@ Controller::Controller(Loop &loop, const Model &model, const std::string &state_
- 
- Controller::~Controller() = default;
- 
--std::string Controller::model_dir(const std::string &id) const { return kModels + id; }
-+std::string Controller::model_dir(const std::string &id) const {
-+  return id == "ricardo" ? "/data/pulsar/wakewords/ru_ricardo_mww.tflite" : kModels + id;
-+}
- 
- bool Controller::start() {
-   st_.load(state_path_);
-@@ -175,8 +177,8 @@ bool Controller::start() {
-   id.project_version = PULSAR_VERSION;
- 
-   ApiConfig cfg;
--  cfg.wake_words = {{"alisa", "Алиса", {"ru"}}, {"yandex", "Яндекс", {"ru"}}};
--  if (st_.wake_word != "alisa" && st_.wake_word != "yandex") st_.wake_word = "alisa";
-+  cfg.wake_words = {{"alisa", "Алиса", {"ru"}}, {"yandex", "Яндекс", {"ru"}}, {"ricardo", "Рикардо", {"ru"}}};
-+  if (st_.wake_word != "alisa" && st_.wake_word != "yandex" && st_.wake_word != "ricardo") st_.wake_word = "alisa";
-   cfg.active_wake_words = {st_.wake_word};
-   cfg.light_effects = Leds::effect_names();
-   cfg.music_styles = Leds::music_styles();
-@@ -301,7 +303,9 @@ bool Controller::start() {
-     });
-   }
- 
--  mic_.on_wake([this](const std::string &phrase, float level_db) { on_wake(phrase, level_db); });
-+  mic_.on_wake([this](const std::string &phrase, float level_db, std::vector<int16_t> preroll) {
-+    on_wake(phrase, level_db, std::move(preroll));
-+  });
-   mic_.on_command([this](const std::string &word) { on_command(word); });
-   mic_.on_audio([this](const int16_t *pcm, size_t n) {
-     if (phase_ == Phase::LISTENING)
-@@ -402,7 +406,7 @@ void Controller::on_time(uint32_t epoch, const std::string &tz) {
- 
- void Controller::update_detection() { mic_.set_detection(!st_.mic_muted && !hw_mic_muted_); }
- 
--void Controller::on_wake(const std::string &phrase, float level_db) {
-+void Controller::on_wake(const std::string &phrase, float level_db, std::vector<int16_t> preroll) {
-   if (st_.mic_muted || hw_mic_muted_) return;
-   LOGI("wake word '%s', level %.1f dB", phrase.c_str(), level_db);
-   if (timer_ringing_) {  // the wake word works as a stop word while ringing
-@@ -413,13 +417,12 @@ void Controller::on_wake(const std::string &phrase, float level_db) {
-   }
-   if (phase_ == Phase::LISTENING || phase_ == Phase::PROCESSING || arbitrating_) return;
-   // Without the HA pipeline this station could win and stay silent: it does not take part.
--  if (!arbitration_on() || !api_->voice_subscribed()) return answer_wake(phrase, {});
-+  if (!arbitration_on() || !api_->voice_subscribed()) return answer_wake(phrase, std::move(preroll));
-   arbitrating_ = true;
-   commands_blocked_until_ms_ = 0;  // a station that lost the previous wake word may win this one
-   arb_phrase_ = phrase;
-   arb_level_ = level_db;
--  arb_audio_.clear();
--  arb_command_.clear();
-+  arb_audio_ = std::move(preroll);
-   mic_.set_streaming(true);
-   update_commands();
-   update_ui();
-@@ -437,9 +440,7 @@ void Controller::answer_wake(const std::string &phrase, std::vector<int16_t> pre
- void Controller::arbitration_done(bool won, const WakeArbiter::Claim &best, size_t peers) {
-   arbitrating_ = false;
-   std::vector<int16_t> audio = std::move(arb_audio_);
--  std::string command = std::move(arb_command_);
-   arb_audio_.clear();
--  arb_command_.clear();
-   if (!won) {
-     mic_.set_streaming(false);
-     LOGI("wake word: %s answers (%s%.1f dB, ours %.1f dB)", best.station.c_str(), best.busy ? "busy, " : "",
-@@ -451,12 +452,6 @@ void Controller::arbitration_done(bool won, const WakeArbiter::Claim &best, size
-     return;
-   }
-   LOGI("wake word: this station answers (%zu other station(s) heard it)", peers);
--  if (!command.empty()) {  // "Алиса, громче": handled locally, as right after the wake word
--    mic_.set_streaming(false);
--    update_commands();
--    update_ui();
--    return on_command(command);
--  }
-   // Capture keeps streaming into the new dialog: switching it off here could drop the chunk
-   // between the preroll and live audio.
-   answer_wake(arb_phrase_, std::move(audio));
-@@ -468,7 +463,6 @@ void Controller::cancel_arbitration() {
-   arbiter_.cancel();
-   arbitrating_ = false;
-   arb_audio_.clear();
--  arb_command_.clear();
-   if (phase_ != Phase::LISTENING) mic_.set_streaming(false);
- }
- 
-@@ -569,11 +563,18 @@ void Controller::on_voice_event(VaEvent type, const std::map<std::string, std::s
-         stop_streaming();
-         break;
-       }
-+      // An empty STT result after a wake word usually means the user changed their mind or
-+      // spoke too softly. Treat it as a silent cancel, not as a station error.
-+      if (get("code") == "stt-no-text-recognized") {
-+        LOGI("pipeline: no speech recognized, treating as cancel");
-+        stop_streaming();
-+        break;
-+      }
-       LOGW("pipeline error: %s %s", get("code").c_str(), get("message").c_str());
-       stop_streaming();
-       error_shown_ = true;
-       show_ui(UiState::ERROR);
--      if (get("code") != "stt-no-text-recognized") play_closing_earcon(kSounds + model_.error_sound);
-+      play_closing_earcon(kSounds + model_.error_sound);
-       break;
-     case VaEvent::RUN_END:
-       stop_streaming();
-@@ -1309,7 +1310,7 @@ void Controller::on_light(const LightState &l, uint32_t transition_ms) {
- }
- 
- void Controller::on_active_wake_words(const std::vector<std::string> &ids) {
--  if (ids.empty()) return;
-+  if (ids.empty() || (ids[0] != "alisa" && ids[0] != "yandex" && ids[0] != "ricardo")) return;
-   if (ids[0] == st_.wake_word) return;
-   st_.wake_word = ids[0];
-   LOGI("wake word -> %s", st_.wake_word.c_str());
-@@ -1319,13 +1320,17 @@ void Controller::on_active_wake_words(const std::vector<std::string> &ids) {
- }
- 
- // Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше", "назад"):
--// active without the wake word while something plays, and right after the wake word.
-+// active without the wake word while something plays. During a wake-word request (including
-+// arbitration) it stays off: "Рикардо, стоп" must reach Home Assistant so that it can stop an
-+// alarm and restore the paused music; the local spotter would otherwise pause music and swallow
-+// the command. Local barge-in over an answer/announcement and commands without the wake word
-+// keep working.
- void Controller::update_commands() {
--  bool playing = player_.state(Channel::MUSIC) == PlayState::PLAYING || (sendspin_ && sendspin_->streaming()) ||
--                 announcing_ || timer_ringing_ || phase_ == Phase::SPEAKING;
--  bool after_wake =
--      (phase_ == Phase::LISTENING && Loop::now_ms() - listen_started_ms_ < kCommandAfterWakeMs) || arbitrating_;
--  mic_.set_commands(!st_.mic_muted && !hw_mic_muted_ && (playing || after_wake));
-+  const bool playing = player_.state(Channel::MUSIC) == PlayState::PLAYING ||
-+                       (sendspin_ && sendspin_->streaming()) || announcing_ || timer_ringing_ ||
-+                       phase_ == Phase::SPEAKING;
-+  const bool dialog = phase_ == Phase::LISTENING || phase_ == Phase::PROCESSING || arbitrating_;
-+  mic_.set_commands(!st_.mic_muted && !hw_mic_muted_ && playing && !dialog);
- }
- 
- bool Controller::music_pause() {
-@@ -1363,16 +1368,15 @@ void Controller::on_command(const std::string &word) {
-     LOGI("voice command '%s' ignored: another station answers this wake word", word.c_str());
-     return;
-   }
--  if (arbitrating_) {
--    arb_command_ = word;
--    LOGI("voice command '%s' held until the wake arbitration ends", word.c_str());
-+  // A wake-word request owns the command. Sending "стоп" to Home Assistant is what lets it
-+  // stop a ringing alarm and then restore/resume the music; handling it here would only pause
-+  // the music and cancel the pipeline. This also covers a callback queued just before the
-+  // command spotter was switched off in update_commands().
-+  if (phase_ == Phase::LISTENING || phase_ == Phase::PROCESSING || arbitrating_) {
-+    LOGI("voice command '%s' left to Home Assistant during a voice request", word.c_str());
-     return;
-   }
--  bool after_wake = phase_ == Phase::LISTENING && Loop::now_ms() - listen_started_ms_ < kCommandAfterWakeMs;
--  LOGI("voice command '%s'%s", word.c_str(), after_wake ? " (after wake word, HA pipeline cancelled)" : "");
--  if (after_wake) {
--    finish_interaction();
--  }
-+  LOGI("voice command '%s'", word.c_str());
-   switch (c) {
-     case STOP:
-       if (timer_ringing_) {
-diff --git a/satellite/src/controller.h b/satellite/src/controller.h
-index a038276..aebfa4f 100644
---- a/satellite/src/controller.h
-+++ b/satellite/src/controller.h
-@@ -85,7 +85,7 @@ class Controller : public ApiHooks {
-  private:
-   enum class Phase { IDLE, LISTENING, PROCESSING, SPEAKING };
- 
--  void on_wake(const std::string &phrase, float level_db);
-+  void on_wake(const std::string &phrase, float level_db, std::vector<int16_t> preroll = {});
-   void answer_wake(const std::string &phrase, std::vector<int16_t> preroll);
-   void arbitration_done(bool won, const WakeArbiter::Claim &best, size_t peers);
-   void cancel_arbitration();
-@@ -146,14 +146,13 @@ class Controller : public ApiHooks {
-   int64_t listen_started_ms_ = 0;  // start of the current LISTENING phase (commands window)
-   bool hw_mic_muted_ = false;
-   bool error_shown_ = false;
--  // Wake arbitration: the window between our claim and the decision. Microphone audio and a
--  // command word heard in it are held until the decision.
-+  // Wake arbitration: the window between our claim and the decision. Microphone audio heard in
-+  // it is held until the decision; commands belong to Home Assistant, so no local word is kept.
-   bool arbiter_ok_ = false;
-   bool arbitrating_ = false;
-   std::string arb_phrase_;
-   float arb_level_ = -100;
-   std::vector<int16_t> arb_audio_;
--  std::string arb_command_;
-   int64_t commands_blocked_until_ms_ = 0;  // another station answers the wake word just heard
-   uint64_t watchdog_ = 0;  // loop timer ending a LISTENING/PROCESSING phase HA never advances
-   // Pipeline events carry no run id. HA ends a run it replaces (barge-in: our new start cancels
-diff --git a/satellite/src/audio/microwakeword.cpp b/satellite/src/audio/microwakeword.cpp
++Для профиля Ricardo положите модель в `satellite/wakewords/ru_ricardo_mww.tflite`
++(инструкция и SHA-256 — `satellite/wakewords/README.md`). Установщик скопирует её
++в `/data/pulsar/wakewords/` с проверкой хеша.
++
+ Makefile отказывается работать с zig 0.13 и более ранними. Результат: `satellite/build/<arch>/pulsar`
+ (без отладочной информации — его и ставит установщик) и рядом `pulsar.debug` с
+ символами для разбора отчётов о падениях. Версия берётся из `git describe` и видна в
+diff --git a/RICARDO.md b/RICARDO.md
 new file mode 100644
-index 0000000..cd3a406
+index 0000000..62ec4ae
 --- /dev/null
-+++ b/satellite/src/audio/microwakeword.cpp
-@@ -0,0 +1,182 @@
-+#include "audio/microwakeword.h"
++++ b/RICARDO.md
+@@ -0,0 +1,89 @@
++# Ricardo profile of the Rust Pulsar fork
 +
-+#include <dlfcn.h>
-+#include <algorithm>
-+#include <array>
-+#include <cmath>
-+#include <cstring>
++This fork is the **not-yet-deployed** Rust version of Pulsar for the
++Station Midi installation. The active station still runs the C++ build
++`v0.4.1-ricardo6`; nothing here is installed on it.
 +
-+#include "core/log.h"
-+#include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
-+#include "tensorflow/lite/experimental/microfrontend/lib/frontend_util.h"
++Base: `Morvex885/pulsar` `v0.5.0` (`1934b68`), branch `feat/ricardo-rust`.
 +
-+namespace cs {
-+namespace {
-+using P = void *;
-+struct Quantization { float scale; int32_t zero; };
-+constexpr float kCutoff = 0.9f;
-+constexpr size_t kWindow = 10;
++## What this profile keeps
++
++- ESPHome Native API satellite and Sendspin / Music Assistant endpoint.
++- Spotify Connect and phone → speaker transfer through the existing HA/MA
++  routing.
++- Native Yandex VQE, stock command spotter (`стоп`, `громче`, `тише`,
++  `пауза`, `продолжи`, `дальше`, `назад`).
++- The stock «Алиса» / «Яндекс» spotters as a rollback path; the HA API still
++  advertises them, but the default is `ricardo`.
++- Hardware mute, action button, ring, clock, volume curve, timer/alarm
++  announcements and duck/resume.
++
++## What is changed for this installation
++
++| Area | Change |
++|---|---|
++| Wake word | New on-device «Рикардо» detector, same microWakeWord model as `v0.4.1-ricardo6`; `wake_word=ricardo` is the default. |
++| Pre-roll | 0.5 s of VQE-cleaned audio is held and sent with the wake event, so «Рикардо, включи свет» does not lose its first syllables. |
++| Silent cancel | `stt-no-text-recognized` is treated as a cancel, not as an error ring. |
++| `стоп` | The local command spotter is off during LISTENING/PROCESSING/arbitration. «Рикардо, стоп» reaches HA, which stops the alarm and restores the music. |
++| Local commands | The command spotter runs only while something plays and outside a voice request, matching `v0.4.1-ricardo6` rather than upstream's always-on behavior. |
++| Nearest station | Default `nearest_answers=false`: this installation has one station and the 250 ms arbitration window only adds latency. It can be turned back on in HA. |
++| Zigbee | Runtime initialization is disabled (`ENABLE_ZIGBEE=false`); the radio and the `zigbee-*.ybl` assets are left untouched. |
++| Updates | `UPDATE_REPO=proflyder/pulsar`, `auto_update=false` by default. The upstream repository is never an update source. |
++| Hardware | Midi remains the tested target. Lite 2 / Mini 2 code is still compiled by upstream but is not part of this profile's acceptance. |
++
++The custom detector lives in `satellite/crates/pulsar-audio/ricardo/` and is
++linked through a small C ABI. It uses the firmware's `libtflite.so` and the
++vendored TensorFlow Lite microfrontend, exactly like the C++ build; the model
++is not committed (see `satellite/wakewords/README.md`).
++
++## Build
++
++Linux or WSL2, Zig 0.14.1, `cargo-zigbuild` 0.24.0:
++
++```bash
++cd satellite
++make check
++make ARCH=armhf ZIG=/path/to/zig-0.14.1 binary
++```
++
++The active Midi uses the armhf userland. The output is
++`satellite/build/armhf/pulsar` (stripped) and `pulsar.debug`.
++
++Put the model here before an install:
++
++```bash
++cp /path/to/ru_ricardo_mww.tflite satellite/wakewords/
++```
++
++`pulsar-install` copies it to `/data/pulsar/wakewords/` with a SHA-256 check.
++Without the model the daemon starts but logs that the Ricardo detector is
++missing; it does not silently fall back to «Алиса».
++
++## Verification performed
++
++- `cargo fmt --all --check`
++- `cargo-zigbuild clippy --workspace --all-targets --target aarch64-unknown-linux-gnu.2.36 -- -D warnings`
++- Cross-build for `aarch64-unknown-linux-gnu.2.36` and
++  `armv7-unknown-linux-gnueabihf.2.30`; both binaries contain the C ABI
++  symbols `mww_create` / `mww_feed` / `mww_destroy`.
++- `cargo test -p pulsar --bin pulsar` (30 tests) in a Linux container.
++- `cargo test -p pulsar-audio` (host) including the missing-model error path.
++
++Not performed: live microphone/wake-word acceptance, real `libtflite.so`
++loading on the station, ESPHome entity regression, Spotify/MA playback, or a
++rollback test. Those remain a separate deployment gate.
++
++## Rollback
++
++The active C++ binary and its model are untouched. If this fork is ever
++installed, keep:
++
++```text
++/data/pulsar/pulsar.prev
++/data/pulsar/state.conf
++/data/pulsar/wakewords/ru_ricardo_mww.tflite
++```
++
++and restore `pulsar.prev` with `ctl.sh restart`. The current C++ build also
++accepts the same `wake_word=ricardo` state and model path.
+diff --git a/docs/architecture.md b/docs/architecture.md
+index bea7a56..e1b116b 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -307,6 +307,12 @@ println!("cargo:rustc-link-lib=c++");
+ - Ошибка dlopen / VQE / спотера логируется, handle деградированный (событий нет). PCM, который не
+   открылся, не считается ошибкой старта: поток захвата пишет ошибку и повторяет открытие каждые
+   2 с. Потоки останавливаются в `Drop` последнего клона handle.
++- `ricardo/` — C++ bridge к тому же microWakeWord, что и в C++-сборке: вендоренный
++  microfrontend, `libtflite.so` с Yandex FULL resolver, модель
++  `/data/pulsar/wakewords/ru_ricardo_mww.tflite`. Rust-сторона (`src/ricardo.rs`)
++  владеет только opaque handle; `frontend` хранит 0.5 с pre-roll и отправляет его
++  вместе с `FrontendEvent::Wake`. Без модели или `libtflite.so` детектор
++  логирует ошибку и не даёт wake-событий; остальной фронтенд не падает.
+ - `stats()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков и сырой захват для
+   `--record`.
+ 
+diff --git a/installer/deploy.go b/installer/deploy.go
+index 7b3703e..0e7e64c 100644
+--- a/installer/deploy.go
++++ b/installer/deploy.go
+@@ -150,6 +150,12 @@ func deployFiles(s, bin, arch string, zigbee bool) (changed, supChanged, ok bool
+ 		_ = shTo(os.Stdout, s, "sync")
+ 	}
+ 
++	// The Ricardo detector is a separate model, not part of the daemon binary.
++	// A checkout without satellite/wakewords keeps whatever is installed.
++	if !deployWakeModels(s) {
++		return
++	}
++
+ 	if zigbee && (!deployRadioImage(s, "zigbee-coordinator.ybl") || !deployRadioImage(s, "zigbee-router.ybl")) {
+ 		return
+ 	}
+@@ -175,6 +181,58 @@ func deployFiles(s, bin, arch string, zigbee bool) (changed, supChanged, ok bool
+ 	return changed, supChanged, true
+ }
+ 
++// deployWakeModels copies every *.tflite from satellite/wakewords to
++// /data/pulsar/wakewords. The model is deliberately not part of the public
++// source tree: a release or checkout that does not contain it keeps the
++// installed model, and a fresh install without one logs the missing Ricardo
++// detector instead of failing the whole daemon.
++func deployWakeModels(s string) bool {
++	dir := filepath.Join(root, "satellite", "wakewords")
++	entries, err := os.ReadDir(dir)
++	if err != nil {
++		fmt.Println("satellite/wakewords missing: no wake-word model copied")
++		return true
++	}
++	found := false
++	for _, e := range entries {
++		if e.IsDir() || filepath.Ext(e.Name()) != ".tflite" {
++			continue
++		}
++		found = true
++		src := filepath.Join(dir, e.Name())
++		dst := dataDir + "/wakewords/" + e.Name()
++		want := sha256File(src)
++		if want == "" {
++			fmt.Fprintf(os.Stderr, "%s: cannot read %s\n", s, src)
++			return false
++		}
++		have, _ := sh(s, "[ -f "+dst+" ] && sha256sum "+dst)
++		if firstField(have) == want {
++			continue
++		}
++		if shTo(os.Stdout, s, "mkdir -p "+dataDir+"/wakewords") != nil {
++			return false
++		}
++		if push(s, src, dst+".new") != nil {
++			return false
++		}
++		got, _ := sh(s, "sha256sum "+dst+".new")
++		if firstField(got) != want {
++			_ = shTo(os.Stdout, s, "rm -f "+dst+".new")
++			fmt.Fprintf(os.Stderr, "%s: wake model push corrupted (sha256 mismatch)\n", s)
++			return false
++		}
++		if shTo(os.Stdout, s, "chmod 644 "+dst+".new && mv "+dst+".new "+dst+" && sync") != nil {
++			return false
++		}
++		fmt.Printf("wake model %s copied\n", e.Name())
++	}
++	if !found {
++		fmt.Println("satellite/wakewords has no *.tflite: no wake-word model copied")
++	}
++	return true
 +}
 +
-+struct MicroWakeWord::Impl {
-+  P lib = nullptr, model = nullptr, interpreter = nullptr, resolver = nullptr;
-+  P (*model_create)(const char *) = nullptr;
-+  void (*model_delete)(P) = nullptr;
-+  P (*options_create)() = nullptr;
-+  void (*options_threads)(P, int32_t) = nullptr;
-+  void (*options_delete)(P) = nullptr;
-+  P (*resolver_create)(const char *) = nullptr;
-+  P (*interpreter_create)(P, P, P) = nullptr;
-+  void (*interpreter_delete)(P) = nullptr;
-+  int (*allocate)(P) = nullptr;
-+  P (*input)(P, int32_t) = nullptr;
-+  P (*output)(P, int32_t) = nullptr;
-+  int32_t (*num_dims)(P) = nullptr;
-+  int32_t (*dim)(P, int32_t) = nullptr;
-+  int (*type)(P) = nullptr;
-+  size_t (*bytes)(P) = nullptr;
-+  Quantization (*quant)(P) = nullptr;
-+  int (*copy_in)(P, const void *, size_t) = nullptr;
-+  int (*copy_out)(P, void *, size_t) = nullptr;
-+  int (*invoke)(P) = nullptr;
-+  FrontendState fe{};
-+  bool fe_ready = false, ready = false;
-+  std::array<int8_t, 120> features{};
-+  std::array<float, kWindow> probs{};
-+  size_t filled = 0, count = 0, pos = 0;
-+  int warmup = 100;
-+  Quantization iq{}, oq{};
+ // deployRadioImage copies one of pulsar's radio firmware images, read by the daemon only when the
+ // Zigbee role that needs it is chosen. A checkout without radio/build.sh output keeps the installed
+ // one.
+diff --git a/satellite/Cargo.lock b/satellite/Cargo.lock
+index 37110af..05d8ca2 100644
+--- a/satellite/Cargo.lock
++++ b/satellite/Cargo.lock
+@@ -300,6 +300,7 @@ dependencies = [
+ name = "pulsar-audio"
+ version = "0.0.0"
+ dependencies = [
++ "cc",
+  "libc",
+  "libloading",
+  "log",
+diff --git a/satellite/crates/pulsar-audio/Cargo.toml b/satellite/crates/pulsar-audio/Cargo.toml
+index b594f88..5bbcc18 100644
+--- a/satellite/crates/pulsar-audio/Cargo.toml
++++ b/satellite/crates/pulsar-audio/Cargo.toml
+@@ -12,3 +12,6 @@ log = { workspace = true }
+ pulsar-alsa = { path = "../pulsar-alsa" }
+ pulsar-core = { path = "../pulsar-core" }
+ tokio = { workspace = true }
 +
-+  template<class F> bool bind(F &f, const char *name) {
-+    f = reinterpret_cast<F>(dlsym(lib, name));
-+    if (!f) LOGE("microWakeWord: missing %s", name);
-+    return f != nullptr;
-+  }
-+  bool open(const std::string &path) {
-+    lib = dlopen("/system/vendor/quasar/libs/libtflite.so", RTLD_NOW | RTLD_GLOBAL);
-+    if (!lib) { LOGE("microWakeWord: %s", dlerror()); return false; }
-+#define B(member, symbol) if (!bind(member, symbol)) return false
-+    B(model_create, "TfLiteModelCreateFromFile");
-+    B(model_delete, "TfLiteModelDelete");
-+    B(options_create, "TfLiteInterpreterOptionsCreate");
-+    B(options_threads, "TfLiteInterpreterOptionsSetNumThreads");
-+    B(options_delete, "TfLiteInterpreterOptionsDelete");
-+    B(resolver_create, "TfLiteCustomOpResolverCreate");
-+    B(interpreter_create, "TfLiteInterpreterCreateWithCustomResolver");
-+    B(interpreter_delete, "TfLiteInterpreterDelete");
-+    B(allocate, "TfLiteInterpreterAllocateTensors");
-+    B(input, "TfLiteInterpreterGetInputTensor");
-+    B(output, "TfLiteInterpreterGetOutputTensor");
-+    B(num_dims, "TfLiteTensorNumDims"); B(dim, "TfLiteTensorDim");
-+    B(type, "TfLiteTensorType"); B(bytes, "TfLiteTensorByteSize");
-+    B(quant, "TfLiteTensorQuantizationParams");
-+    B(copy_in, "TfLiteTensorCopyFromBuffer"); B(copy_out, "TfLiteTensorCopyToBuffer");
-+    B(invoke, "TfLiteInterpreterInvoke");
-+#undef B
-+    model = model_create(path.c_str());
-+    // Yandex's default interpreter resolver crashes; its named FULL resolver is required.
-+    static P full_resolver = nullptr;
-+    if (!full_resolver) full_resolver = resolver_create("FULL");
-+    resolver = full_resolver;
-+    if (!model || !resolver) { LOGE("microWakeWord: model or FULL resolver unavailable"); return false; }
-+    FrontendConfig cfg{};
-+    FrontendFillConfigWithDefaults(&cfg);
-+    cfg.window.size_ms = 30; cfg.window.step_size_ms = 10;
-+    cfg.filterbank.num_channels = 40;
-+    cfg.filterbank.lower_band_limit = 125; cfg.filterbank.upper_band_limit = 7500;
-+    cfg.noise_reduction.smoothing_bits = 10;
-+    cfg.noise_reduction.even_smoothing = 0.025f;
-+    cfg.noise_reduction.odd_smoothing = 0.06f;
-+    cfg.noise_reduction.min_signal_remaining = 0.05f;
-+    cfg.pcan_gain_control.enable_pcan = 1;
-+    cfg.pcan_gain_control.strength = 0.95f;
-+    cfg.pcan_gain_control.offset = 80; cfg.pcan_gain_control.gain_bits = 21;
-+    cfg.log_scale.enable_log = 1; cfg.log_scale.scale_shift = 6;
-+    if (!FrontendPopulateState(&cfg, &fe, 16000)) return false;
-+    fe_ready = true;
-+    if (!reset()) return false;
-+    LOGI("microWakeWord: loaded %s (int8 [1,3,40], cutoff=%.2f, window=%zu)",
-+         path.c_str(), kCutoff, kWindow);
-+    return true;
-+  }
-+  bool reset() {
-+    ready = false;
-+    if (interpreter) interpreter_delete(interpreter);
-+    interpreter = nullptr;
-+    P options = options_create();
-+    if (!options) return false;
-+    options_threads(options, 1);
-+    interpreter = interpreter_create(model, resolver, options);
-+    options_delete(options);
-+    if (!interpreter || allocate(interpreter) != 0) {
-+      LOGE("microWakeWord: interpreter creation/allocation failed"); return false;
-+    }
-+    P in = input(interpreter, 0), out = output(interpreter, 0);
-+    if (!in || !out || num_dims(in) != 3 || dim(in, 0) != 1 || dim(in, 1) != 3 || dim(in, 2) != 40 ||
-+        type(in) != 9 || type(out) != 3 || bytes(in) != features.size() || bytes(out) != 1) {
-+      LOGE("microWakeWord: expected int8 [1,3,40] -> uint8 [1,1]"); return false;
-+    }
-+    iq = quant(in); oq = quant(out);
-+    if (!(iq.scale > 0) || !(oq.scale > 0)) return false;
-+    FrontendReset(&fe);
-+    filled = count = pos = 0; warmup = 100;
-+    probs.fill(0);
-+    ready = true;
-+    return true;
-+  }
-+  ~Impl() {
-+    if (interpreter && interpreter_delete) interpreter_delete(interpreter);
-+    if (model && model_delete) model_delete(model);
-+    if (fe_ready) FrontendFreeStateContents(&fe);
-+    // Keep the named resolver and library loaded for the firmware's other users.
-+  }
-+};
-+
-+MicroWakeWord::MicroWakeWord() = default;
-+MicroWakeWord::~MicroWakeWord() = default;
-+bool MicroWakeWord::load(const std::string &path) {
-+  impl_ = std::make_unique<Impl>();
-+  return impl_->open(path);
-+}
-+bool MicroWakeWord::ok() const { return impl_ && impl_->ready; }
-+bool MicroWakeWord::reset() { return impl_ && impl_->reset(); }
-+
-+bool MicroWakeWord::feed(const int16_t *pcm, size_t samples, float &score) {
-+  score = -1;
-+  if (!ok()) return false;
-+  auto &e = *impl_;
-+  bool hit = false;
-+  while (samples) {
-+    size_t consumed = 0;
-+    auto frame = FrontendProcessSamples(&e.fe, pcm, samples, &consumed);
-+    pcm += consumed; samples -= consumed;
-+    if (frame.size == 40) {
-+      for (size_t i = 0; i < 40; ++i) {
-+        // pymicro_features uses the microfrontend's fixed-point output * 0.0390625.
-+        long q = std::lrint(frame.values[i] * 0.0390625f / e.iq.scale) + e.iq.zero;
-+        e.features[e.filled * 40 + i] = int8_t(std::clamp(q, -128L, 127L));
-+      }
-+      if (++e.filled == 3) {
-+        e.filled = 0;
-+        uint8_t result = 0;
-+        if (e.copy_in(e.input(e.interpreter, 0), e.features.data(), e.features.size()) != 0 ||
-+            e.invoke(e.interpreter) != 0 || e.copy_out(e.output(e.interpreter, 0), &result, 1) != 0) {
-+          LOGE("microWakeWord: inference failed"); e.ready = false; return false;
-+        }
-+        e.probs[e.pos++ % kWindow] = (int(result) - e.oq.zero) * e.oq.scale;
-+        e.count = std::min(e.count + 1, kWindow);
-+        if (e.warmup > 0) { e.warmup -= 3; continue; }
-+        if (e.count == kWindow) {
-+          float mean = 0;
-+          for (float p : e.probs) mean += p / kWindow;
-+          score = std::max(score, mean);
-+          hit = hit || mean >= kCutoff;
-+        }
-+      }
-+    }
-+    if (!consumed) break;
-+  }
-+  if (hit) e.reset();  // fresh streaming variables, gain estimates and a 1 s warm-up
-+  return hit;
-+}
-+}  // namespace cs
-diff --git a/satellite/src/audio/microwakeword.h b/satellite/src/audio/microwakeword.h
++[build-dependencies]
++cc = { workspace = true }
+diff --git a/satellite/crates/pulsar-audio/build.rs b/satellite/crates/pulsar-audio/build.rs
 new file mode 100644
-index 0000000..7475723
+index 0000000..e5ec1a4
 --- /dev/null
-+++ b/satellite/src/audio/microwakeword.h
-@@ -0,0 +1,23 @@
-+#pragma once
++++ b/satellite/crates/pulsar-audio/build.rs
+@@ -0,0 +1,58 @@
++//! Builds the Ricardo microWakeWord detector and its vendored microfrontend.
++//!
++//! The detector is C++ because it reuses the TensorFlow Lite microfrontend
++//! sources and the firmware's TFLite C API; the daemon sees only the small C ABI
++//! in `ricardo/microwakeword.cpp`. The model and libtflite.so stay on the
++//! speaker, as before.
 +
-+#include <cstddef>
-+#include <cstdint>
-+#include <memory>
-+#include <string>
++use std::env;
++use std::path::{Path, PathBuf};
 +
-+namespace cs {
-+// Owns the model's streaming state. Use only from the audio processing thread.
-+class MicroWakeWord {
-+ public:
-+  MicroWakeWord();
-+  ~MicroWakeWord();
-+  bool load(const std::string &path);
-+  bool reset();
-+  // Returns a detection; score is the highest smoothed probability in this block.
-+  bool feed(const int16_t *pcm, size_t samples, float &score);
-+  bool ok() const;
-+ private:
-+  struct Impl;
-+  std::unique_ptr<Impl> impl_;
-+};
-+}  // namespace cs
-diff --git a/satellite/third_party/microfrontend/LICENSE b/satellite/third_party/microfrontend/LICENSE
++fn collect_cc(dir: &Path, out: &mut Vec<PathBuf>) {
++    let Ok(entries) = std::fs::read_dir(dir) else {
++        return;
++    };
++    for entry in entries.flatten() {
++        let path = entry.path();
++        if path.is_dir() {
++            collect_cc(&path, out);
++        } else if path.extension().is_some_and(|e| e == "cc") {
++            out.push(path);
++        }
++    }
++}
++
++fn main() {
++    let target = env::var("TARGET").unwrap_or_default();
++    println!("cargo:rerun-if-changed=ricardo");
++    println!("cargo:rerun-if-changed=build.rs");
++
++    let mut sources = vec![PathBuf::from("ricardo/microwakeword.cpp")];
++    collect_cc(Path::new("ricardo/microfrontend"), &mut sources);
++    sources.sort();
++
++    let mut build = cc::Build::new();
++    build
++        .cpp(true)
++        .std("c++17")
++        .include("ricardo/microfrontend")
++        .include("ricardo/microfrontend/kissfft")
++        .include("ricardo/microfrontend/kissfft/tools")
++        .warnings(false);
++    for source in sources {
++        build.file(source);
++    }
++    build.compile("ricardo_mww");
++
++    // The C++ runtime is linked by cc on the host. cargo-zigbuild's Linux target
++    // uses zig's static libc++, as the sendspin shim does.
++    if target.contains("linux") {
++        println!("cargo:rustc-link-lib=dl");
++        println!("cargo:rustc-link-lib=m");
++        // cargo-zigbuild links zig's static libc++; a native Linux build uses
++        // libstdc++ and must not ask for libc++.
++        if env::var_os("CARGO_ZIGBUILD_ZIG_PATH").is_some() {
++            println!("cargo:rustc-link-lib=c++");
++        }
++    }
++}
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/LICENSE b/satellite/crates/pulsar-audio/ricardo/microfrontend/LICENSE
 new file mode 100644
 index 0000000..261eeb9
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/LICENSE
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/LICENSE
 @@ -0,0 +1,201 @@
 +                                 Apache License
 +                           Version 2.0, January 2004
@@ -838,11 +520,11 @@ index 0000000..261eeb9
 +   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 +   See the License for the specific language governing permissions and
 +   limitations under the License.
-diff --git a/satellite/third_party/microfrontend/kissfft/_kiss_fft_guts.h b/satellite/third_party/microfrontend/kissfft/_kiss_fft_guts.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/_kiss_fft_guts.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/_kiss_fft_guts.h
 new file mode 100644
-index 0000000..92e94e2
+index 0000000..10368d6
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/kissfft/_kiss_fft_guts.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/_kiss_fft_guts.h
 @@ -0,0 +1,168 @@
 +#ifndef _KISS_FFT_GUTS_H
 +#define _KISS_FFT_GUTS_H
@@ -868,7 +550,7 @@ index 0000000..92e94e2
 +#include <limits.h>
 +
 +#define MAXFACTORS 32
-+/* e.g. an fft of length 128 has 4 factors 
++/* e.g. an fft of length 128 has 4 factors
 + as far as kissfft is concerned
 + 4*4*4*2
 + */
@@ -896,7 +578,7 @@ index 0000000..92e94e2
 +#define SAMP_MAX 2147483647
 +#else
 +# define FRACBITS 15
-+# define SAMPPROD int32_t 
++# define SAMPPROD int32_t
 +#define SAMP_MAX 32767
 +#endif
 +
@@ -1000,23 +682,23 @@ index 0000000..92e94e2
 +
 +#ifdef KISS_FFT_USE_ALLOCA
 +// define this to allow use of alloca instead of malloc for temporary buffers
-+// Temporary buffers are used in two case: 
++// Temporary buffers are used in two case:
 +// 1. FFT sizes that have "bad" factors. i.e. not 2,3 and 5
 +// 2. "in-place" FFTs.  Notice the quotes, since kissfft does not really do an in-place transform.
 +#include <alloca.h>
 +#define  KISS_FFT_TMP_ALLOC(nbytes) alloca(nbytes)
-+#define  KISS_FFT_TMP_FREE(ptr) 
++#define  KISS_FFT_TMP_FREE(ptr)
 +#else
 +#define  KISS_FFT_TMP_ALLOC(nbytes) KISS_FFT_MALLOC(nbytes)
 +#define  KISS_FFT_TMP_FREE(ptr) KISS_FFT_FREE(ptr)
 +#endif
 +
 +#endif // _KISS_FFT_GUTS_H
-diff --git a/satellite/third_party/microfrontend/kissfft/kiss_fft.cc b/satellite/third_party/microfrontend/kissfft/kiss_fft.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/kiss_fft.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/kiss_fft.cc
 new file mode 100644
-index 0000000..9133a01
+index 0000000..e2aeed8
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/kissfft/kiss_fft.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/kiss_fft.cc
 @@ -0,0 +1,408 @@
 +/*
 +Copyright (c) 2003-2010, Mark Borgerding
@@ -1270,7 +952,7 @@ index 0000000..9133a01
 +    const kiss_fft_cpx * Fout_end = Fout + p*m;
 +
 +#ifdef _OPENMP
-+    // use openmp extensions at the 
++    // use openmp extensions at the
 +    // top-level (not recursive)
 +    if (fstride==1 && p<=5)
 +    {
@@ -1278,15 +960,15 @@ index 0000000..9133a01
 +
 +        // execute the p different work units in different threads
 +#       pragma omp parallel for
-+        for (k=0;k<p;++k) 
++        for (k=0;k<p;++k)
 +            kf_work( Fout +k*m, f+ fstride*in_stride*k,fstride*p,in_stride,factors,st);
 +        // all threads have joined by this point
 +
 +        switch (p) {
 +            case 2: kf_bfly2(Fout,fstride,st,m); break;
-+            case 3: kf_bfly3(Fout,fstride,st,m); break; 
++            case 3: kf_bfly3(Fout,fstride,st,m); break;
 +            case 4: kf_bfly4(Fout,fstride,st,m); break;
-+            case 5: kf_bfly5(Fout,fstride,st,m); break; 
++            case 5: kf_bfly5(Fout,fstride,st,m); break;
 +            default: kf_bfly_generic(Fout,fstride,st,m,p); break;
 +        }
 +        return;
@@ -1302,7 +984,7 @@ index 0000000..9133a01
 +        do{
 +            // recursive call:
 +            // DFT of size m*p performed by doing
-+            // p instances of smaller DFTs of size m, 
++            // p instances of smaller DFTs of size m,
 +            // each one takes a decimated version of the input
 +            kf_work( Fout , f, fstride*p, in_stride, factors,st);
 +            f += fstride*in_stride;
@@ -1311,21 +993,21 @@ index 0000000..9133a01
 +
 +    Fout=Fout_beg;
 +
-+    // recombine the p smaller DFTs 
++    // recombine the p smaller DFTs
 +    switch (p) {
 +        case 2: kf_bfly2(Fout,fstride,st,m); break;
-+        case 3: kf_bfly3(Fout,fstride,st,m); break; 
++        case 3: kf_bfly3(Fout,fstride,st,m); break;
 +        case 4: kf_bfly4(Fout,fstride,st,m); break;
-+        case 5: kf_bfly5(Fout,fstride,st,m); break; 
++        case 5: kf_bfly5(Fout,fstride,st,m); break;
 +        default: kf_bfly_generic(Fout,fstride,st,m,p); break;
 +    }
 +}
 +
 +/*  facbuf is populated by p1,m1,p2,m2, ...
-+    where 
++    where
 +    p[i] * m[i] = m[i-1]
 +    m0 = n                  */
-+static 
++static
 +void kf_factor(int n,int * facbuf)
 +{
 +    int p=4;
@@ -1426,11 +1108,11 @@ index 0000000..9133a01
 +    }
 +    return n;
 +}
-diff --git a/satellite/third_party/microfrontend/kissfft/kiss_fft.h b/satellite/third_party/microfrontend/kissfft/kiss_fft.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/kiss_fft.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/kiss_fft.h
 new file mode 100644
-index 0000000..328d0e5
+index 0000000..367b3d5
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/kissfft/kiss_fft.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/kiss_fft.h
 @@ -0,0 +1,126 @@
 +#ifndef KISS_FFT_H
 +#define KISS_FFT_H
@@ -1462,19 +1144,19 @@ index 0000000..328d0e5
 +# define kiss_fft_scalar __m128
 +#define KISS_FFT_MALLOC(nbytes) _mm_malloc(nbytes,16)
 +#define KISS_FFT_FREE _mm_free
-+#else	
++#else
 +/* #define KISS_FFT_MALLOC malloc */
 +/* #define KISS_FFT_FREE free */
 +#define KISS_FFT_MALLOC(X) (void*)(0x0) /* Patched. */
 +#define KISS_FFT_FREE(X) /* Patched. */
-+#endif	
++#endif
 +
 +
 +#ifdef FIXED_POINT
 +#include <stdint.h> /* Patched. */
 +# if (FIXED_POINT == 32)
 +#  define kiss_fft_scalar int32_t
-+# else	
++# else
 +#  define kiss_fft_scalar int16_t
 +# endif
 +#else
@@ -1491,9 +1173,9 @@ index 0000000..328d0e5
 +
 +typedef struct kiss_fft_state* kiss_fft_cfg;
 +
-+/* 
++/*
 + *  kiss_fft_alloc
-+ *  
++ *
 + *  Initialize a FFT (or IFFT) algorithm's cfg/state buffer.
 + *
 + *  typical usage:      kiss_fft_cfg mycfg=kiss_fft_alloc(1024,0,NULL,NULL);
@@ -1503,18 +1185,18 @@ index 0000000..328d0e5
 + *
 + *  If lenmem is NULL, then kiss_fft_alloc will allocate a cfg buffer using malloc.
 + *  The returned value should be free()d when done to avoid memory leaks.
-+ *  
++ *
 + *  The state can be placed in a user supplied buffer 'mem':
 + *  If lenmem is not NULL and mem is not NULL and *lenmem is large enough,
 + *      then the function places the cfg in mem and the size used in *lenmem
 + *      and returns mem.
-+ *  
++ *
 + *  If lenmem is not NULL and ( mem is NULL or *lenmem is not large enough),
-+ *      then the function returns NULL and places the minimum cfg 
++ *      then the function returns NULL and places the minimum cfg
 + *      buffer size in *lenmem.
 + * */
 +
-+kiss_fft_cfg kiss_fft_alloc(int nfft,int inverse_fft,void * mem,size_t * lenmem); 
++kiss_fft_cfg kiss_fft_alloc(int nfft,int inverse_fft,void * mem,size_t * lenmem);
 +
 +/*
 + * kiss_fft(cfg,in_out_buf)
@@ -1533,16 +1215,16 @@ index 0000000..328d0e5
 + * */
 +void kiss_fft_stride(kiss_fft_cfg cfg,const kiss_fft_cpx *fin,kiss_fft_cpx *fout,int fin_stride);
 +
-+/* If kiss_fft_alloc allocated a buffer, it is one contiguous 
++/* If kiss_fft_alloc allocated a buffer, it is one contiguous
 +   buffer and can be simply free()d when no longer needed*/
 +#define kiss_fft_free free
 +
 +/*
-+ Cleans up some memory that gets managed internally. Not necessary to call, but it might clean up 
++ Cleans up some memory that gets managed internally. Not necessary to call, but it might clean up
 + your compiler output to call this before you exit.
 +*/
 +void kiss_fft_cleanup(void);
-+	
++
 +
 +/*
 + * Returns the smallest integer k, such that k>=n and k has only "fast" factors (2,3,5)
@@ -1554,15 +1236,15 @@ index 0000000..328d0e5
 +        (kiss_fft_next_fast_size( ((n)+1)>>1)<<1)
 +
 +#ifdef __cplusplus
-+} 
++}
 +#endif
 +
 +#endif
-diff --git a/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.cc b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/tools/kiss_fftr.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/tools/kiss_fftr.cc
 new file mode 100644
-index 0000000..9f1074d
+index 0000000..a470a96
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/tools/kiss_fftr.cc
 @@ -0,0 +1,161 @@
 +/*
 +Copyright (c) 2003-2004, Mark Borgerding
@@ -1650,12 +1332,12 @@ index 0000000..9f1074d
 +     * contains the sum of the even-numbered elements of the input time sequence
 +     * The imag part is the sum of the odd-numbered elements
 +     *
-+     * The sum of tdc.r and tdc.i is the sum of the input time sequence. 
++     * The sum of tdc.r and tdc.i is the sum of the input time sequence.
 +     *      yielding DC of input time sequence
-+     * The difference of tdc.r - tdc.i is the sum of the input (dot product) [1,-1,1,-1... 
++     * The difference of tdc.r - tdc.i is the sum of the input (dot product) [1,-1,1,-1...
 +     *      yielding Nyquist bin of input time sequence
 +     */
-+ 
++
 +    tdc.r = st->tmpbuf[0].r;
 +    tdc.i = st->tmpbuf[0].i;
 +    C_FIXDIV(tdc,2);
@@ -1663,14 +1345,14 @@ index 0000000..9f1074d
 +    CHECK_OVERFLOW_OP(tdc.r ,-, tdc.i);
 +    freqdata[0].r = tdc.r + tdc.i;
 +    freqdata[ncfft].r = tdc.r - tdc.i;
-+#ifdef USE_SIMD    
++#ifdef USE_SIMD
 +    freqdata[ncfft].i = freqdata[0].i = _mm_set1_ps(0);
 +#else
 +    freqdata[ncfft].i = freqdata[0].i = 0;
 +#endif
 +
 +    for ( k=1;k <= ncfft/2 ; ++k ) {
-+        fpk    = st->tmpbuf[k]; 
++        fpk    = st->tmpbuf[k];
 +        fpnk.r =   st->tmpbuf[ncfft-k].r;
 +        fpnk.i = - st->tmpbuf[ncfft-k].i;
 +        C_FIXDIV(fpk,2);
@@ -1717,7 +1399,7 @@ index 0000000..9f1074d
 +        C_MUL (fok, tmp, st->super_twiddles[k-1]);
 +        C_ADD (st->tmpbuf[k],     fek, fok);
 +        C_SUB (st->tmpbuf[ncfft - k], fek, fok);
-+#ifdef USE_SIMD        
++#ifdef USE_SIMD
 +        st->tmpbuf[ncfft - k].i *= _mm_set1_ps(-1.0);
 +#else
 +        st->tmpbuf[ncfft - k].i *= -1;
@@ -1725,11 +1407,11 @@ index 0000000..9f1074d
 +    }
 +    kiss_fft (st->substate, st->tmpbuf, (kiss_fft_cpx *) timedata);
 +}
-diff --git a/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.h b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/tools/kiss_fftr.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/tools/kiss_fftr.h
 new file mode 100644
-index 0000000..b888a28
+index 0000000..29f0da9
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/kissfft/tools/kiss_fftr.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/kissfft/tools/kiss_fftr.h
 @@ -0,0 +1,46 @@
 +#ifndef KISS_FTR_H
 +#define KISS_FTR_H
@@ -1739,13 +1421,13 @@ index 0000000..b888a28
 +extern "C++" {
 +#endif
 +
-+    
-+/* 
-+ 
++
++/*
++
 + Real optimized version can save about 45% cpu time vs. complex fft of a real seq.
 +
-+ 
-+ 
++
++
 + */
 +
 +typedef struct kiss_fftr_state *kiss_fftr_cfg;
@@ -1755,7 +1437,7 @@ index 0000000..b888a28
 +/*
 + nfft must be even
 +
-+ If you don't care to allocate space, use mem = lenmem = NULL 
++ If you don't care to allocate space, use mem = lenmem = NULL
 +*/
 +
 +
@@ -1777,11 +1459,11 @@ index 0000000..b888a28
 +}
 +#endif
 +#endif
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h
 new file mode 100644
 index 0000000..04b3ba6
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/bits.h
 @@ -0,0 +1,102 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -1885,11 +1567,11 @@ index 0000000..04b3ba6
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_BITS_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc
 new file mode 100644
 index 0000000..bcdd9cc
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.cc
 @@ -0,0 +1,52 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -1943,11 +1625,11 @@ index 0000000..bcdd9cc
 +  memset(state->input, 0, state->fft_size * sizeof(*state->input));
 +  memset(state->output, 0, (state->fft_size / 2 + 1) * sizeof(*state->output));
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h
 new file mode 100644
 index 0000000..aaffa69
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft.h
 @@ -0,0 +1,50 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -1999,11 +1681,11 @@ index 0000000..aaffa69
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc
 new file mode 100644
 index 0000000..ed3dc8f
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.cc
 @@ -0,0 +1,70 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2075,11 +1757,11 @@ index 0000000..ed3dc8f
 +  free(state->output);
 +  free(state->scratch);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h
 new file mode 100644
 index 0000000..6a47130
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/fft_util.h
 @@ -0,0 +1,34 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2115,11 +1797,11 @@ index 0000000..6a47130
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc
 new file mode 100644
 index 0000000..80f8738
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.cc
 @@ -0,0 +1,134 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2255,11 +1937,11 @@ index 0000000..80f8738
 +void FilterbankReset(struct FilterbankState* state) {
 +  memset(state->work, 0, (state->num_channels + 1) * sizeof(*state->work));
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h
 new file mode 100644
 index 0000000..1e6d388
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank.h
 @@ -0,0 +1,63 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2324,11 +2006,11 @@ index 0000000..1e6d388
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc
 new file mode 100644
 index 0000000..4d4064f
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.cc
 @@ -0,0 +1,220 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2550,11 +2232,11 @@ index 0000000..4d4064f
 +  free(state->unweights);
 +  free(state->work);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h
 new file mode 100644
 index 0000000..781d102
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h
 @@ -0,0 +1,50 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2606,11 +2288,11 @@ index 0000000..781d102
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_UTIL_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc
 new file mode 100644
 index 0000000..9de2a87
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.cc
 @@ -0,0 +1,72 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2684,11 +2366,11 @@ index 0000000..9de2a87
 +  FilterbankReset(&state->filterbank);
 +  NoiseReductionReset(&state->noise_reduction);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h
 new file mode 100644
 index 0000000..883df5f
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend.h
 @@ -0,0 +1,64 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2754,11 +2436,11 @@ index 0000000..883df5f
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc
 new file mode 100644
 index 0000000..27224f6
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.cc
 @@ -0,0 +1,85 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2845,11 +2527,11 @@ index 0000000..27224f6
 +  NoiseReductionFreeStateContents(&state->noise_reduction);
 +  PcanGainControlFreeStateContents(&state->pcan_gain_control);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h
 new file mode 100644
 index 0000000..895ce6c
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/frontend_util.h
 @@ -0,0 +1,52 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2903,11 +2585,11 @@ index 0000000..895ce6c
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_UTIL_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h
 new file mode 100644
 index 0000000..33556da
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h
 @@ -0,0 +1,48 @@
 +/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 +
@@ -2957,11 +2639,11 @@ index 0000000..33556da
 +#include <xmmintrin.h>
 +#endif
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_COMMON_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc
 new file mode 100644
 index 0000000..3443f9d
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.cc
 @@ -0,0 +1,10 @@
 +#include <cstdint>
 +
@@ -2973,11 +2655,11 @@ index 0000000..3443f9d
 +#include "tools/kiss_fftr.cc"
 +}  // namespace kissfft_fixed16
 +#undef FIXED_POINT
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h
 new file mode 100644
 index 0000000..beee99a
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h
 @@ -0,0 +1,33 @@
 +/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3012,11 +2694,11 @@ index 0000000..beee99a
 +#undef KISS_FFT_H
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_INT16_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc
 new file mode 100644
 index 0000000..f59618e
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.cc
 @@ -0,0 +1,30 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3048,11 +2730,11 @@ index 0000000..f59618e
 +       3759, 3668, 3575, 3481, 3384, 3286, 3186, 3084, 2981, 2875, 2768, 2659,
 +       2549, 2437, 2323, 2207, 2090, 1971, 1851, 1729, 1605, 1480, 1353, 1224,
 +       1094, 963,  830,  695,  559,  421,  282,  142,  0,    0};
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h
 new file mode 100644
 index 0000000..b2448a3
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_lut.h
 @@ -0,0 +1,40 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3094,11 +2776,11 @@ index 0000000..b2448a3
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_LUT_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc
 new file mode 100644
 index 0000000..c27a50a
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.cc
 @@ -0,0 +1,83 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3183,11 +2865,11 @@ index 0000000..c27a50a
 +  }
 +  return ret;
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h
 new file mode 100644
 index 0000000..a383f32
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale.h
 @@ -0,0 +1,39 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3228,11 +2910,11 @@ index 0000000..a383f32
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc
 new file mode 100644
 index 0000000..0e3dd1d
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.cc
 @@ -0,0 +1,27 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3261,11 +2943,11 @@ index 0000000..0e3dd1d
 +  state->scale_shift = config->scale_shift;
 +  return 1;
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h
 new file mode 100644
 index 0000000..11f7d9e
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h
 @@ -0,0 +1,45 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3312,11 +2994,11 @@ index 0000000..11f7d9e
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc
 new file mode 100644
 index 0000000..16b30e6
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.cc
 @@ -0,0 +1,51 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3369,11 +3051,11 @@ index 0000000..16b30e6
 +void NoiseReductionReset(struct NoiseReductionState* state) {
 +  memset(state->estimate, 0, sizeof(*state->estimate) * state->num_channels);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h
 new file mode 100644
 index 0000000..46d3f52
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h
 @@ -0,0 +1,46 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3421,11 +3103,11 @@ index 0000000..46d3f52
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc
 new file mode 100644
 index 0000000..30da66a
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.cc
 @@ -0,0 +1,45 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3472,11 +3154,11 @@ index 0000000..30da66a
 +void NoiseReductionFreeStateContents(struct NoiseReductionState* state) {
 +  free(state->estimate);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h
 new file mode 100644
 index 0000000..fa55539
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h
 @@ -0,0 +1,50 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3528,11 +3210,11 @@ index 0000000..fa55539
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_UTIL_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc
 new file mode 100644
 index 0000000..22d5876
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.cc
 @@ -0,0 +1,56 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3590,11 +3272,11 @@ index 0000000..22d5876
 +    signal[i] = PcanShrink(snr);
 +  }
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h
 new file mode 100644
 index 0000000..3f6222b
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h
 @@ -0,0 +1,47 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3643,11 +3325,11 @@ index 0000000..3f6222b
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc
 new file mode 100644
 index 0000000..dd66676
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.cc
 @@ -0,0 +1,92 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3741,11 +3423,11 @@ index 0000000..dd66676
 +void PcanGainControlFreeStateContents(struct PcanGainControlState* state) {
 +  free(state->gain_lut);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h
 new file mode 100644
 index 0000000..d4bfaa2
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h
 @@ -0,0 +1,57 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3804,11 +3486,11 @@ index 0000000..d4bfaa2
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_UTIL_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc
 new file mode 100644
 index 0000000..10da676
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.cc
 @@ -0,0 +1,70 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3880,11 +3562,11 @@ index 0000000..10da676
 +  state->input_used = 0;
 +  state->max_abs_output_value = 0;
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h
 new file mode 100644
 index 0000000..bad8151
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window.h
 @@ -0,0 +1,49 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -3935,11 +3617,11 @@ index 0000000..bad8151
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_H_
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc
 new file mode 100644
 index 0000000..e03c28a
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.cc
 @@ -0,0 +1,73 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -4014,11 +3696,11 @@ index 0000000..e03c28a
 +  free(state->input);
 +  free(state->output);
 +}
-diff --git a/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h
+diff --git a/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h
 new file mode 100644
 index 0000000..68e4de9
 --- /dev/null
-+++ b/satellite/third_party/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h
++++ b/satellite/crates/pulsar-audio/ricardo/microfrontend/tensorflow/lite/experimental/microfrontend/lib/window_util.h
 @@ -0,0 +1,45 @@
 +/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 +
@@ -4065,61 +3747,1314 @@ index 0000000..68e4de9
 +#endif
 +
 +#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
-diff --git a/satellite/tools/mww_probe.cpp b/satellite/tools/mww_probe.cpp
+diff --git a/satellite/crates/pulsar-audio/ricardo/microwakeword.cpp b/satellite/crates/pulsar-audio/ricardo/microwakeword.cpp
 new file mode 100644
-index 0000000..8744ef2
+index 0000000..0c0a516
 --- /dev/null
-+++ b/satellite/tools/mww_probe.cpp
-@@ -0,0 +1,52 @@
-+// Offline runtime/frontend check. Does not open microphones or the ESPHome API.
-+#include "audio/microwakeword.h"
++++ b/satellite/crates/pulsar-audio/ricardo/microwakeword.cpp
+@@ -0,0 +1,264 @@
++// Ricardo on-device wake word ("Рикардо") for the Rust daemon.
++//
++// This is the v0.4.1 C++ detector ported behind a small C ABI. It uses the
++// firmware's Yandex TFLite runtime (libtflite.so, loaded with dlopen) and the
++// vendored TensorFlow Lite microfrontend, so the trained model sees exactly the
++// features it was trained on. The model and the runtime are never distributed
++// in this repository.
++//
++// Only the audio processing thread calls mww_feed/mww_reset. mww_destroy runs
++// after that thread has stopped.
++
++#include <dlfcn.h>
++
 +#include <algorithm>
++#include <array>
++#include <cmath>
++#include <cstdint>
 +#include <cstdio>
 +#include <cstring>
-+#include <fstream>
-+#include <iterator>
-+#include <vector>
++#include <new>
++#include <string>
 +
-+static unsigned u16(const unsigned char *p) { return p[0] | unsigned(p[1]) << 8; }
-+static unsigned u32(const unsigned char *p) { return u16(p) | u16(p+2) << 16; }
-+int main(int argc, char **argv) {
-+  if (argc < 2) { std::fprintf(stderr, "usage: mww_probe model.tflite [16k-mono.wav]\n"); return 2; }
-+  cs::MicroWakeWord wake;
-+  if (!wake.load(argv[1])) return 1;
-+  std::vector<int16_t> audio(32000, 0);  // warm up with 2 s of silence
-+  float best = -1, score;
-+  unsigned hits = 0;
-+  auto feed = [&](const std::vector<int16_t> &pcm) {
-+    for (size_t i = 0; i < pcm.size(); i += 512) {
-+      if (wake.feed(pcm.data()+i, std::min<size_t>(512, pcm.size()-i), score)) ++hits;
-+      best = std::max(best, score);
-+      if (!wake.ok()) return false;
++#include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
++#include "tensorflow/lite/experimental/microfrontend/lib/frontend_util.h"
++
++namespace {
++using P = void *;
++struct Quantization {
++  float scale;
++  int32_t zero;
++};
++
++constexpr float kCutoff = 0.9f;
++constexpr size_t kWindow = 10;
++constexpr const char *kLibTflite = "/system/vendor/quasar/libs/libtflite.so";
++
++void log_error(const char *what) { std::fprintf(stderr, "mww: %s\n", what); }
++
++struct Impl {
++  P lib = nullptr, model = nullptr, interpreter = nullptr, resolver = nullptr;
++  P (*model_create)(const char *) = nullptr;
++  void (*model_delete)(P) = nullptr;
++  P (*options_create)() = nullptr;
++  void (*options_threads)(P, int32_t) = nullptr;
++  void (*options_delete)(P) = nullptr;
++  P (*resolver_create)(const char *) = nullptr;
++  P (*interpreter_create)(P, P, P) = nullptr;
++  void (*interpreter_delete)(P) = nullptr;
++  int (*allocate)(P) = nullptr;
++  P (*input)(P, int32_t) = nullptr;
++  P (*output)(P, int32_t) = nullptr;
++  int32_t (*num_dims)(P) = nullptr;
++  int32_t (*dim)(P, int32_t) = nullptr;
++  int (*type)(P) = nullptr;
++  size_t (*bytes)(P) = nullptr;
++  Quantization (*quant)(P) = nullptr;
++  int (*copy_in)(P, const void *, size_t) = nullptr;
++  int (*copy_out)(P, void *, size_t) = nullptr;
++  int (*invoke)(P) = nullptr;
++
++  FrontendState fe{};
++  bool fe_ready = false, ready = false;
++  std::array<int8_t, 120> features{};
++  std::array<float, kWindow> probs{};
++  size_t filled = 0, count = 0, pos = 0;
++  int warmup = 100;
++  Quantization iq{}, oq{};
++
++  template <class F>
++  bool bind(F &f, const char *name) {
++    f = reinterpret_cast<F>(dlsym(lib, name));
++    if (!f) {
++      std::fprintf(stderr, "mww: missing %s\n", name);
++      return false;
 +    }
 +    return true;
-+  };
-+  if (!feed(audio)) return 1;
-+  if (argc > 2) {
-+    std::ifstream in(argv[2], std::ios::binary);
-+    std::vector<unsigned char> wav{std::istreambuf_iterator<char>(in), {}};
-+    if (wav.size() < 12 || std::memcmp(wav.data(), "RIFF", 4) || std::memcmp(wav.data()+8, "WAVE", 4)) return 2;
-+    bool format = false, data = false;
-+    for (size_t i = 12; i+8 <= wav.size();) {
-+      size_t n = u32(wav.data()+i+4);
-+      if (n > wav.size()-i-8) return 2;
-+      if (!std::memcmp(wav.data()+i, "fmt ", 4) && n >= 16)
-+        format = u16(wav.data()+i+8)==1 && u16(wav.data()+i+10)==1 &&
-+                 u32(wav.data()+i+12)==16000 && u16(wav.data()+i+22)==16;
-+      if (!std::memcmp(wav.data()+i, "data", 4)) {
-+        audio.resize(n/2);
-+        for (size_t j=0; j<audio.size(); ++j) audio[j]=int16_t(u16(wav.data()+i+8+j*2));
-+        data = true;
-+      }
-+      i += 8+n+(n&1);
-+    }
-+    if (!format || !data || !feed(audio)) return 2;
-+    audio.assign(16000, 0);
-+    if (!feed(audio)) return 1;
 +  }
-+  std::printf("mww_probe OK hits=%u max_probability=%.6f\n", hits, best);
-+  return 0;
++
++  bool open(const std::string &path) {
++    lib = dlopen(kLibTflite, RTLD_NOW | RTLD_GLOBAL);
++    if (!lib) {
++      std::fprintf(stderr, "mww: libtflite: %s\n", dlerror());
++      return false;
++    }
++#define B(member, symbol) \
++  if (!bind(member, symbol)) return false
++    B(model_create, "TfLiteModelCreateFromFile");
++    B(model_delete, "TfLiteModelDelete");
++    B(options_create, "TfLiteInterpreterOptionsCreate");
++    B(options_threads, "TfLiteInterpreterOptionsSetNumThreads");
++    B(options_delete, "TfLiteInterpreterOptionsDelete");
++    B(resolver_create, "TfLiteCustomOpResolverCreate");
++    B(interpreter_create, "TfLiteInterpreterCreateWithCustomResolver");
++    B(interpreter_delete, "TfLiteInterpreterDelete");
++    B(allocate, "TfLiteInterpreterAllocateTensors");
++    B(input, "TfLiteInterpreterGetInputTensor");
++    B(output, "TfLiteInterpreterGetOutputTensor");
++    B(num_dims, "TfLiteTensorNumDims");
++    B(dim, "TfLiteTensorDim");
++    B(type, "TfLiteTensorType");
++    B(bytes, "TfLiteTensorByteSize");
++    B(quant, "TfLiteTensorQuantizationParams");
++    B(copy_in, "TfLiteTensorCopyFromBuffer");
++    B(copy_out, "TfLiteTensorCopyToBuffer");
++    B(invoke, "TfLiteInterpreterInvoke");
++#undef B
++    model = model_create(path.c_str());
++    // Yandex's default interpreter resolver crashes; its named FULL resolver is
++    // required. Keep it loaded for the firmware's other users.
++    static P full_resolver = nullptr;
++    if (!full_resolver) full_resolver = resolver_create("FULL");
++    resolver = full_resolver;
++    if (!model || !resolver) {
++      log_error("model or FULL resolver unavailable");
++      return false;
++    }
++
++    FrontendConfig cfg{};
++    FrontendFillConfigWithDefaults(&cfg);
++    cfg.window.size_ms = 30;
++    cfg.window.step_size_ms = 10;
++    cfg.filterbank.num_channels = 40;
++    cfg.filterbank.lower_band_limit = 125;
++    cfg.filterbank.upper_band_limit = 7500;
++    cfg.noise_reduction.smoothing_bits = 10;
++    cfg.noise_reduction.even_smoothing = 0.025f;
++    cfg.noise_reduction.odd_smoothing = 0.06f;
++    cfg.noise_reduction.min_signal_remaining = 0.05f;
++    cfg.pcan_gain_control.enable_pcan = 1;
++    cfg.pcan_gain_control.strength = 0.95f;
++    cfg.pcan_gain_control.offset = 80;
++    cfg.pcan_gain_control.gain_bits = 21;
++    cfg.log_scale.enable_log = 1;
++    cfg.log_scale.scale_shift = 6;
++    if (!FrontendPopulateState(&cfg, &fe, 16000)) return false;
++    fe_ready = true;
++    if (!reset()) return false;
++    std::fprintf(
++        stderr,
++        "mww: loaded %s (int8 [1,3,40], cutoff=%.2f, window=%zu)\n",
++        path.c_str(),
++        kCutoff,
++        kWindow);
++    return true;
++  }
++
++  bool reset() {
++    ready = false;
++    if (interpreter) interpreter_delete(interpreter);
++    interpreter = nullptr;
++    P options = options_create();
++    if (!options) return false;
++    options_threads(options, 1);
++    interpreter = interpreter_create(model, resolver, options);
++    options_delete(options);
++    if (!interpreter || allocate(interpreter) != 0) {
++      log_error("interpreter creation/allocation failed");
++      return false;
++    }
++    P in = input(interpreter, 0), out = output(interpreter, 0);
++    if (!in || !out || num_dims(in) != 3 || dim(in, 0) != 1 || dim(in, 1) != 3 ||
++        dim(in, 2) != 40 || type(in) != 9 || type(out) != 3 ||
++        bytes(in) != features.size() || bytes(out) != 1) {
++      log_error("expected int8 [1,3,40] -> uint8 [1,1]");
++      return false;
++    }
++    iq = quant(in);
++    oq = quant(out);
++    if (!(iq.scale > 0) || !(oq.scale > 0)) return false;
++    FrontendReset(&fe);
++    filled = count = pos = 0;
++    warmup = 100;
++    probs.fill(0);
++    ready = true;
++    return true;
++  }
++
++  ~Impl() {
++    if (interpreter && interpreter_delete) interpreter_delete(interpreter);
++    if (model && model_delete) model_delete(model);
++    if (fe_ready) FrontendFreeStateContents(&fe);
++    // Keep the named resolver and library loaded for the firmware's other users.
++  }
++
++  bool feed(const int16_t *pcm, size_t samples, float &score) {
++    score = -1;
++    if (!ready) return false;
++    bool hit = false;
++    while (samples) {
++      size_t consumed = 0;
++      auto frame = FrontendProcessSamples(&fe, pcm, samples, &consumed);
++      pcm += consumed;
++      samples -= consumed;
++      if (frame.size == 40) {
++        for (size_t i = 0; i < 40; ++i) {
++          // pymicro_features uses the microfrontend's fixed-point output * 0.0390625.
++          long q = std::lrint(frame.values[i] * 0.0390625f / iq.scale) + iq.zero;
++          features[filled * 40 + i] = static_cast<int8_t>(std::clamp(q, -128L, 127L));
++        }
++        if (++filled == 3) {
++          filled = 0;
++          uint8_t result = 0;
++          if (copy_in(input(interpreter, 0), features.data(), features.size()) != 0 ||
++              invoke(interpreter) != 0 ||
++              copy_out(output(interpreter, 0), &result, 1) != 0) {
++            log_error("inference failed");
++            ready = false;
++            return false;
++          }
++          probs[pos++ % kWindow] = (int(result) - oq.zero) * oq.scale;
++          count = std::min(count + 1, kWindow);
++          if (warmup > 0) {
++            warmup -= 3;
++            continue;
++          }
++          if (count == kWindow) {
++            float mean = 0;
++            for (float p : probs) mean += p / kWindow;
++            score = std::max(score, mean);
++            hit = hit || mean >= kCutoff;
++          }
++        }
++      }
++      if (!consumed) break;
++    }
++    if (hit) reset();  // fresh streaming variables, gain estimates and a 1 s warm-up
++    return hit;
++  }
++};
++
++}  // namespace
++
++extern "C" {
++
++// NULL on error; the reason is logged to stderr.
++void *mww_create(const char *model_path) {
++  if (!model_path || !*model_path) return nullptr;
++  auto *impl = new (std::nothrow) Impl;
++  if (!impl) return nullptr;
++  if (!impl->open(model_path)) {
++    delete impl;
++    return nullptr;
++  }
++  return impl;
 +}
++
++void mww_destroy(void *handle) { delete static_cast<Impl *>(handle); }
++
++// 1 = detected, 0 = no detection, -1 = detector failed and was disabled.
++int mww_feed(void *handle, const int16_t *pcm, size_t samples, float *score) {
++  if (!handle) return -1;
++  float s = -1;
++  bool hit = static_cast<Impl *>(handle)->feed(pcm, samples, s);
++  if (score) *score = s;
++  if (!static_cast<Impl *>(handle)->ready && !hit) return -1;
++  return hit ? 1 : 0;
++}
++
++int mww_reset(void *handle) {
++  if (!handle) return -1;
++  return static_cast<Impl *>(handle)->reset() ? 0 : -1;
++}
++
++}  // extern "C"
+diff --git a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
+index 1e19a20..b98b4d7 100644
+--- a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
++++ b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
+@@ -1,10 +1,11 @@
+ //! Runs the microphone front-end without the daemon (stop the service first: the capture device
+ //! has one user) and prints its events, plus once a second: VQE chunks, audio chunks, music
+ //! frames, the captured rate and how far the processing thread is behind (FIFO).
+-//! usage: frontend_probe [seconds=30] [--wake alisa|yandex] [--stream] [--music] [--commands]
++//! usage: frontend_probe [seconds=30] [--wake alisa|yandex|ricardo] [--stream] [--music] [--commands]
+ //!                       [--record <wav> <seconds>]
+ //! Without --commands only the wake word spotter runs (the daemon runs the command spotter too,
+-//! unless the microphone is muted). --record writes the first <seconds> of the raw capture (all
++//! unless the microphone is muted). --wake ricardo uses the on-device model in
++//! /data/pulsar/wakewords. --record writes the first <seconds> of the raw capture (all
+ //! channels, S16) as a WAV for ww_offline. No sound is played.
+ #![deny(unsafe_code)]
+ #![deny(unsafe_op_in_unsafe_fn)]
+@@ -22,7 +23,8 @@ use tokio::time::{Instant, MissedTickBehavior};
+ 
+ const MODELS: &str = "/system/vendor/quasar/spotter_models/activation/";
+ const COMMAND_MODEL: &str = "/system/vendor/quasar/spotter_models/command";
+-const USAGE: &str = "usage: frontend_probe [seconds=30] [--wake alisa|yandex] [--stream] [--music] [--commands] [--record <wav> <seconds>]";
++const RICARDO_MODEL: &str = "/data/pulsar/wakewords/ru_ricardo_mww.tflite";
++const USAGE: &str = "usage: frontend_probe [seconds=30] [--wake alisa|yandex|ricardo] [--stream] [--music] [--commands] [--record <wav> <seconds>]";
+ 
+ macro_rules! out {
+     ($($arg:tt)*) => {{
+@@ -59,7 +61,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
+     while let Some(arg) = it.next() {
+         match arg.as_str() {
+             "--wake" => match it.next().as_deref() {
+-                Some(w @ ("alisa" | "yandex")) => a.wake = w.into(),
++                Some(w @ ("alisa" | "yandex" | "ricardo")) => a.wake = w.into(),
+                 other => return Err(format!("bad --wake: {}", other.unwrap_or(""))),
+             },
+             "--stream" => a.stream = true,
+@@ -210,9 +212,13 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
+         Some((path, secs)) => Some(Recorder::create(path, m, secs)?),
+         None => None,
+     };
++    let custom = a.wake == "ricardo";
++    let native = if custom { "alisa" } else { &a.wake };
+     let (h, mut rx) = pulsar_audio::spawn(
+         m,
+-        PathBuf::from(format!("{MODELS}{}", a.wake)),
++        PathBuf::from(format!("{MODELS}{native}")),
++        custom.then(|| PathBuf::from(RICARDO_MODEL)),
++        custom,
+         Some(PathBuf::from(COMMAND_MODEL)),
+     );
+     h.set_commands(a.commands);
+@@ -239,9 +245,17 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
+         tokio::select! {
+             () = &mut end => break,
+             ev = rx.recv() => match ev {
+-                Some(FrontendEvent::Wake { phrase, level_db }) => {
++                Some(FrontendEvent::Wake {
++                    phrase,
++                    level_db,
++                    audio,
++                }) => {
+                     wakes += 1;
+-                    out!("t={:6.2}s WAKE '{phrase}' level {level_db:.1} dB", secs(start));
++                    out!(
++                        "t={:6.2}s WAKE '{phrase}' level {level_db:.1} dB pre-roll {} samples",
++                        secs(start),
++                        audio.len()
++                    );
+                 }
+                 Some(FrontendEvent::Command { word }) => {
+                     commands += 1;
+@@ -356,6 +370,8 @@ mod tests {
+             (20, "yandex", true, true, true)
+         );
+         assert_eq!(a.record, Some((PathBuf::from("/tmp/x.wav"), 5)));
++        let a = args("--wake ricardo").unwrap();
++        assert_eq!(a.wake, "ricardo");
+         assert!(args("--wake bob").is_err());
+         assert!(args("0").is_err());
+         assert!(args("10 20").is_err());
+diff --git a/satellite/crates/pulsar-audio/src/engine/mod.rs b/satellite/crates/pulsar-audio/src/engine/mod.rs
+index 3e999a7..c64f142 100644
+--- a/satellite/crates/pulsar-audio/src/engine/mod.rs
++++ b/satellite/crates/pulsar-audio/src/engine/mod.rs
+@@ -11,6 +11,8 @@ use std::path::Path;
+ 
+ use log::{error, info, warn};
+ 
++use crate::ricardo::RicardoWake;
++
+ pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
+ 
+ pub const VQE_MODELS: &str = "/system/vendor/quasar/vqe_models";
+@@ -229,6 +231,9 @@ pub(crate) struct Engine {
+     // config), as the C++ engine's destructor freed them.
+     wake: Slot,
+     cmd: Slot,
++    /// Optional on-device Ricardo detector. It is fed by the frontend instead of
++    /// the native spotter while the Ricardo wake word is active.
++    custom: Option<RicardoWake>,
+     vqe: Vqe,
+     lib: Lib,
+     /// Capture frames per VQE chunk.
+@@ -243,6 +248,7 @@ impl Engine {
+     pub fn start(
+         model: &pulsar_core::model::Model,
+         wake_dir: &Path,
++        custom_wake_model: Option<&Path>,
+         command_dir: Option<&Path>,
+     ) -> Option<Engine> {
+         if let Err(e) = preload_deps() {
+@@ -281,9 +287,20 @@ impl Engine {
+             return None;
+         };
+         info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
++        let custom = custom_wake_model.map(|path| match RicardoWake::new(path) {
++            Ok(detector) => {
++                info!("Ricardo wake word: {}", path.display());
++                Some(detector)
++            }
++            Err(e) => {
++                error!("Ricardo wake word: {e}");
++                None
++            }
++        });
+         let mut eng = Engine {
+             wake: Slot::new("wake word"),
+             cmd: Slot::new("command"),
++            custom: custom.flatten(),
+             vqe,
+             lib,
+             chunk: chunk_n,
+@@ -326,6 +343,12 @@ impl Engine {
+         feed(&self.vqe, self.frame, &mut self.wake)
+     }
+ 
++    /// Feeds one VQE-cleaned chunk to the optional Ricardo detector.
++    /// None: no detector was loaded.
++    pub fn feed_custom(&mut self, pcm: &[i16]) -> Option<Result<(bool, f32), String>> {
++        self.custom.as_mut().map(|detector| detector.feed(pcm))
++    }
++
+     /// Feeds the last chunk to the command spotter; its confirmed phrases.
+     pub fn feed_command(&mut self) -> Vec<String> {
+         feed(&self.vqe, self.frame, &mut self.cmd)
+diff --git a/satellite/crates/pulsar-audio/src/frontend.rs b/satellite/crates/pulsar-audio/src/frontend.rs
+index ed568b2..874fd18 100644
+--- a/satellite/crates/pulsar-audio/src/frontend.rs
++++ b/satellite/crates/pulsar-audio/src/frontend.rs
+@@ -1,7 +1,8 @@
+ //! Microphone front-end: ALSA capture (mic + speaker-feedback channels, layout per Model) ->
+ //! Yandex VQE (AEC / beamforming / noise reduction, per-model preset) -> Yandex phrase spotters
+-//! (stock models from /system/vendor/quasar/spotter_models): the wake word ("Алиса"/"Яндекс")
+-//! and, optionally, the command model ("стоп", "громче", ...).
++//! (stock models from /system/vendor/quasar/spotter_models): the wake word ("Алиса"/"Яндекс"),
++//! the optional on-device «Рикардо» detector, and, optionally, the command model
++//! ("стоп", "громче", ...).
+ //!
+ //! Two threads: a capture thread that only drains ALSA into a FIFO, and a processing thread
+ //! (VQE + spotters). The Lite 2's PDM capture allows at most ~42 ms of buffer (2048 frames at
+@@ -29,6 +30,8 @@ use crate::spectrum::SpectrumAnalyzer;
+ /// itself.
+ const LEVEL_CHUNKS: usize = 47;
+ const LEVEL_TOP: usize = 8;
++/// 0.5 s of 16 kHz audio kept for the command spoken immediately after the wake word.
++const PREROLL_SAMPLES: usize = 8000;
+ 
+ /// ALSA buffer in VQE chunks.
+ const BUFFER_CHUNKS: u64 = 8;
+@@ -41,10 +44,12 @@ const PROCESSING_STACK: usize = 8 << 20;
+ 
+ pub enum FrontendEvent {
+     /// level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC),
+-    /// rounded to 0.1 dB; -100 = no data.
++    /// rounded to 0.1 dB; -100 = no data. `audio` is the 0.5 s pre-roll ending with the chunk
++    /// that confirmed the phrase: without it an immediate command loses its first syllables.
+     Wake {
+         phrase: String,
+         level_db: f32,
++        audio: Vec<i16>,
+     },
+     Command {
+         word: String,
+@@ -74,25 +79,34 @@ pub struct FrontendHandle {
+     inner: Arc<Inner>,
+ }
+ 
+-/// Starts the front-end: dlopen, VQE for the model's preset, the wake word spotter from
+-/// `wake_model_dir` (e.g. .../spotter_models/activation/alisa) and, if given, the command
+-/// spotter (.../spotter_models/command), then the capture and processing threads. On failure
+-/// (logged, "microphone front-end failed to start") the handle works but no event ever comes.
+-/// A capture device that cannot be opened is retried every 2 s.
++/// Starts the front-end: dlopen, VQE for the model's preset, the native wake word spotter from
++/// `wake_model_dir` (e.g. .../spotter_models/activation/alisa), the optional Ricardo detector
++/// from `custom_wake_model`, and, if given, the command spotter
++/// (.../spotter_models/command), then the capture and processing threads. `custom_active` selects
++/// the Ricardo detector initially. On failure (logged, "microphone front-end failed to start")
++/// the handle works but no event ever comes. A capture device that cannot be opened is retried
++/// every 2 s.
+ pub fn spawn(
+     model: &'static Model,
+     wake_model_dir: PathBuf,
++    custom_wake_model: Option<PathBuf>,
++    custom_active: bool,
+     command_model_dir: Option<PathBuf>,
+ ) -> (FrontendHandle, UnboundedReceiver<FrontendEvent>) {
+     let (tx, rx) = unbounded_channel();
+     let mut inner = Inner {
+-        shared: Arc::new(Shared::new()),
++        shared: Arc::new(Shared::new(custom_active)),
+         pipe: None,
+         threads: Vec::new(),
+         _events: tx.clone(),
+     };
+     let command_dir = command_model_dir.filter(|d| !d.as_os_str().is_empty());
+-    let started = match Engine::start(model, &wake_model_dir, command_dir.as_deref()) {
++    let started = match Engine::start(
++        model,
++        &wake_model_dir,
++        custom_wake_model.as_deref(),
++        command_dir.as_deref(),
++    ) {
+         Some(eng) => inner
+             .start_threads(model, eng, tx)
+             .inspect_err(|e| error!("audio threads: {e}"))
+@@ -122,6 +136,11 @@ impl FrontendHandle {
+         self.inner.shared.detect.store(on, Relaxed);
+     }
+ 
++    /// Selects the Ricardo detector (true) or the native spotter (false).
++    pub fn set_custom_wake(&self, on: bool) {
++        self.inner.shared.custom.store(on, Relaxed);
++    }
++
+     /// Command spotter on/off (commands without the wake word).
+     pub fn set_commands(&self, on: bool) {
+         self.inner.shared.commands.store(on, Relaxed);
+@@ -169,6 +188,8 @@ struct Shared {
+     stop_lock: Mutex<()>,
+     stop_cv: Condvar,
+     detect: AtomicBool,
++    /// Ricardo detector (true) or native Yandex spotter (false).
++    custom: AtomicBool,
+     commands: AtomicBool,
+     stream: AtomicBool,
+     music: AtomicBool,
+@@ -182,12 +203,13 @@ struct Shared {
+ }
+ 
+ impl Shared {
+-    fn new() -> Self {
++    fn new(custom_active: bool) -> Self {
+         Shared {
+             running: AtomicBool::new(false),
+             stop_lock: Mutex::new(()),
+             stop_cv: Condvar::new(),
+             detect: AtomicBool::new(true),
++            custom: AtomicBool::new(custom_active),
+             commands: AtomicBool::new(false),
+             stream: AtomicBool::new(false),
+             music: AtomicBool::new(false),
+@@ -536,6 +558,8 @@ fn processing(
+         warn!("music analysis: unsupported capture layout");
+     }
+     let mut music_was_on = false;
++    let mut preroll = VecDeque::with_capacity(PREROLL_SAMPLES);
++    let mut custom_failed = false;
+ 
+     while shared.running() {
+         let pending = lock(&shared.pending_model).take();
+@@ -582,22 +606,67 @@ fn processing(
+             level_pos = (level_pos + 1) % LEVEL_CHUNKS;
+         }
+ 
+-        if shared.stream.load(Relaxed)
+-            && let Some(d) = eng.output(VQE_OMNI_WITH_GAIN)
+-            && !d.is_empty()
+-        {
+-            let _ = tx.send(FrontendEvent::Audio(d.iter().map(|&v| to_s16(v)).collect()));
++        // One owned copy of the cleaned stream feeds the pre-roll, the detector
++        // and the optional HA stream. It must be owned before feed_wake borrows
++        // the engine mutably.
++        let clean = eng
++            .output(VQE_OMNI_WITH_GAIN)
++            .filter(|d| !d.is_empty())
++            .map(|d| d.iter().map(|&v| to_s16(v)).collect::<Vec<_>>());
++        if let Some(pcm) = &clean {
++            preroll.extend(pcm.iter().copied());
++            while preroll.len() > PREROLL_SAMPLES {
++                preroll.pop_front();
++            }
+         }
+ 
+         if shared.detect.load(Relaxed) {
+-            let phrases = eng.feed_wake();
+-            if !phrases.is_empty() {
+-                let level_db = wake_level_db(&level_hist);
+-                for phrase in phrases {
+-                    let _ = tx.send(FrontendEvent::Wake { phrase, level_db });
++            let custom = shared.custom.load(Relaxed);
++            if custom {
++                if !custom_failed && let Some(pcm) = &clean {
++                    match eng.feed_custom(pcm) {
++                        Some(Ok((true, score))) => {
++                            let audio = preroll.iter().copied().collect();
++                            preroll.clear();
++                            info!("Ricardo wake word detected (probability {score:.3})");
++                            let _ = tx.send(FrontendEvent::Wake {
++                                phrase: "Рикардо".into(),
++                                level_db: wake_level_db(&level_hist),
++                                audio,
++                            });
++                        }
++                        Some(Ok(_)) => {}
++                        Some(Err(e)) => {
++                            custom_failed = true;
++                            error!("Ricardo wake word: {e}");
++                        }
++                        None => {
++                            custom_failed = true;
++                            error!("Ricardo wake word: detector is not loaded");
++                        }
++                    }
++                }
++            } else {
++                let phrases = eng.feed_wake();
++                if !phrases.is_empty() {
++                    let audio: Vec<i16> = preroll.iter().copied().collect();
++                    preroll.clear();
++                    let level_db = wake_level_db(&level_hist);
++                    for phrase in phrases {
++                        let _ = tx.send(FrontendEvent::Wake {
++                            phrase,
++                            level_db,
++                            audio: audio.clone(),
++                        });
++                    }
+                 }
+             }
+         }
++        if shared.stream.load(Relaxed)
++            && let Some(pcm) = clean
++        {
++            let _ = tx.send(FrontendEvent::Audio(pcm));
++        }
+         if shared.commands.load(Relaxed) {
+             for word in eng.feed_command() {
+                 let _ = tx.send(FrontendEvent::Command { word });
+@@ -792,7 +861,7 @@ mod tests {
+     fn without_the_yandex_library_the_handle_is_degraded() {
+         // No /system/vendor/quasar/libs on the build host: dlopen fails.
+         let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
+-        let (h, mut rx) = spawn(midi, PathBuf::from("/nonexistent"), None);
++        let (h, mut rx) = spawn(midi, PathBuf::from("/nonexistent"), None, false, None);
+         h.set_streaming(true);
+         h.set_model(PathBuf::from("/nonexistent/2"));
+         let h2 = h.clone();
+diff --git a/satellite/crates/pulsar-audio/src/lib.rs b/satellite/crates/pulsar-audio/src/lib.rs
+index f86cc2b..623a34e 100644
+--- a/satellite/crates/pulsar-audio/src/lib.rs
++++ b/satellite/crates/pulsar-audio/src/lib.rs
+@@ -8,7 +8,10 @@
+ 
+ pub mod engine;
+ mod frontend;
++#[allow(unsafe_code)]
++mod ricardo;
+ mod spectrum;
+ 
+ pub use frontend::{FrontendEvent, FrontendHandle, FrontendStats, spawn};
++pub use ricardo::RicardoWake;
+ pub use spectrum::SpectrumAnalyzer;
+diff --git a/satellite/crates/pulsar-audio/src/ricardo.rs b/satellite/crates/pulsar-audio/src/ricardo.rs
+new file mode 100644
+index 0000000..312a712
+--- /dev/null
++++ b/satellite/crates/pulsar-audio/src/ricardo.rs
+@@ -0,0 +1,87 @@
++//! Safe wrapper around the C++ microWakeWord detector (`ricardo/microwakeword.cpp`).
++//!
++//! The detector is fed the same 16 kHz, VQE-cleaned `VQE_OMNI_WITH_GAIN` stream
++//! that the native Yandex spotter uses. It owns its streaming feature state and
++//! resets it after a hit; callers only add the 0.5 s pre-roll.
++
++use std::ffi::{CString, c_char, c_void};
++use std::os::unix::ffi::OsStrExt as _;
++use std::path::Path;
++use std::ptr::NonNull;
++
++unsafe extern "C" {
++    fn mww_create(model_path: *const c_char) -> *mut c_void;
++    fn mww_destroy(handle: *mut c_void);
++    fn mww_feed(handle: *mut c_void, pcm: *const i16, samples: usize, score: *mut f32) -> i32;
++    fn mww_reset(handle: *mut c_void) -> i32;
++}
++
++/// The on-device "Рикардо" detector. Use only from the audio processing thread.
++pub struct RicardoWake {
++    raw: NonNull<c_void>,
++}
++
++impl RicardoWake {
++    /// Loads the model and opens the firmware's `libtflite.so`.
++    pub fn new(model: &Path) -> Result<Self, String> {
++        let path = CString::new(model.as_os_str().as_bytes())
++            .map_err(|_| format!("{}: NUL in path", model.display()))?;
++        // SAFETY: the C++ function copies/reads the NUL-terminated path and
++        // returns an opaque handle owned by this wrapper.
++        let raw = unsafe { mww_create(path.as_ptr()) };
++        let raw = NonNull::new(raw).ok_or_else(|| format!("cannot load {}", model.display()))?;
++        Ok(Self { raw })
++    }
++
++    /// Feeds one VQE chunk. Ok((true, score)) on a detection, Ok((false, _))
++    /// otherwise; Err after the detector disabled itself.
++    pub fn feed(&mut self, pcm: &[i16]) -> Result<(bool, f32), String> {
++        let mut score = -1.0f32;
++        // SAFETY: `raw` is a live handle from mww_create; `pcm` is valid for
++        // the call and `score` points to a local.
++        let rc = unsafe { mww_feed(self.raw.as_ptr(), pcm.as_ptr(), pcm.len(), &mut score) };
++        match rc {
++            0 => Ok((false, score)),
++            1 => Ok((true, score)),
++            _ => Err("microWakeWord disabled itself".into()),
++        }
++    }
++
++    /// Resets the streaming state (normally the detector does this after a hit).
++    #[allow(dead_code, reason = "kept for diagnostics and future reconfiguration")]
++    pub fn reset(&mut self) -> Result<(), String> {
++        // SAFETY: live handle, no aliasing.
++        if unsafe { mww_reset(self.raw.as_ptr()) } == 0 {
++            Ok(())
++        } else {
++            Err("microWakeWord reset failed".into())
++        }
++    }
++}
++
++// The detector is constructed on the main thread and moved once to the audio
++// processing thread before it is fed; after that only that thread touches it.
++// The C++ object has no thread-local state of its own.
++//
++// SAFETY: the handle is not shared: ownership moves to exactly one processing
++// thread before any mww_feed call, and mww_destroy runs after that thread stops.
++unsafe impl Send for RicardoWake {}
++
++impl Drop for RicardoWake {
++    fn drop(&mut self) {
++        // SAFETY: the handle is owned by this wrapper and destroyed once.
++        unsafe { mww_destroy(self.raw.as_ptr()) };
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn missing_model_is_an_error() {
++        // No libtflite.so or model on the build host: the C++ bridge must
++        // report failure instead of returning a dangling handle.
++        assert!(RicardoWake::new(Path::new("/nonexistent/ricardo.tflite")).is_err());
++    }
++}
+diff --git a/satellite/crates/pulsar/src/controller/entities.rs b/satellite/crates/pulsar/src/controller/entities.rs
+index cbdce6e..fd99009 100644
+--- a/satellite/crates/pulsar/src/controller/entities.rs
++++ b/satellite/crates/pulsar/src/controller/entities.rs
+@@ -339,12 +339,19 @@ impl Controller {
+         let Some(first) = ids.into_iter().next() else {
+             return;
+         };
++        if !matches!(first.as_str(), "alisa" | "yandex" | "ricardo") {
++            return;
++        }
+         if first == self.st.wake_word {
+             return;
+         }
+         self.st.wake_word = first;
+         info!("wake word -> {}", self.st.wake_word);
+-        self.mic.set_model(model_dir(&self.st.wake_word));
++        let custom = self.st.wake_word == "ricardo";
++        self.mic.set_custom_wake(custom);
++        if !custom {
++            self.mic.set_model(model_dir(&self.st.wake_word));
++        }
+         self.api
+             .set_active_wake_words(vec![self.st.wake_word.clone()]);
+         self.persist();
+diff --git a/satellite/crates/pulsar/src/controller/logic.rs b/satellite/crates/pulsar/src/controller/logic.rs
+index 89f17d8..8c0589a 100644
+--- a/satellite/crates/pulsar/src/controller/logic.rs
++++ b/satellite/crates/pulsar/src/controller/logic.rs
+@@ -237,13 +237,6 @@ pub fn command_of(word: &str) -> Option<VoiceCommand> {
+     })
+ }
+ 
+-/// Within the window after the wake word that opened this dialog: HA may end the speech of a
+-/// short "Алиса, громче" (PROCESSING) before the command spotter confirms the word.
+-pub fn after_wake(phase: Phase, now: i64, listen_started_ms: i64) -> bool {
+-    matches!(phase, Phase::Listening | Phase::Processing)
+-        && now - listen_started_ms < COMMAND_AFTER_WAKE_MS
+-}
+-
+ /// Music of this station: playing or loading on the HA media channel or as a Sendspin stream, or
+ /// paused / ended less than PAUSED_MUSIC_MS ago (Sendspin: its server still connected).
+ /// `*_since`: when the media channel paused / the Sendspin stream ended; None = not since start.
+diff --git a/satellite/crates/pulsar/src/controller/logic/tests.rs b/satellite/crates/pulsar/src/controller/logic/tests.rs
+index 471c2ba..5cb8555 100644
+--- a/satellite/crates/pulsar/src/controller/logic/tests.rs
++++ b/satellite/crates/pulsar/src/controller/logic/tests.rs
+@@ -185,17 +185,6 @@ fn command_words() {
+     }
+ }
+ 
+-#[test]
+-fn command_gating() {
+-    // The window after the wake word: 2.5 s of LISTENING / PROCESSING.
+-    assert!(after_wake(Phase::Listening, 12_499, 10_000));
+-    assert!(!after_wake(Phase::Listening, 12_500, 10_000));
+-    assert!(after_wake(Phase::Processing, 12_499, 10_000));
+-    assert!(!after_wake(Phase::Processing, 12_500, 10_000));
+-    assert!(!after_wake(Phase::Idle, 10_001, 10_000));
+-    assert!(!after_wake(Phase::Speaking, 10_001, 10_000));
+-}
+-
+ #[test]
+ fn music_ownership() {
+     use PlayState as P;
+diff --git a/satellite/crates/pulsar/src/controller/media.rs b/satellite/crates/pulsar/src/controller/media.rs
+index af8a2cf..aaff078 100644
+--- a/satellite/crates/pulsar/src/controller/media.rs
++++ b/satellite/crates/pulsar/src/controller/media.rs
+@@ -107,6 +107,9 @@ impl Controller {
+         );
+         self.api.publish_media(s, self.st.volume, self.st.muted);
+         self.update_music();
++        // The local command spotter follows playback: on while music/announcement/
++        // timer speech plays, off in silence and during a dialog.
++        self.update_commands();
+     }
+ 
+     pub(super) fn update_music(&self) {
+diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
+index e3af604..5f69fda 100644
+--- a/satellite/crates/pulsar/src/controller/mod.rs
++++ b/satellite/crates/pulsar/src/controller/mod.rs
+@@ -32,8 +32,13 @@ use logic::{HaTimer, Phase, RunBinding};
+ 
+ const MODELS: &str = "/system/vendor/quasar/spotter_models/activation/";
+ const COMMAND_MODEL: &str = "/system/vendor/quasar/spotter_models/command";
++const RICARDO_MODEL: &str = "/data/pulsar/wakewords/ru_ricardo_mww.tflite";
+ const SOUNDS: &str = "/system/vendor/quasar/sounds/";
+ 
++/// The Ricardo installation uses the station only as an ESPHome/Sendspin endpoint;
++/// the Yandex Zigbee radio stays untouched (the HA Zigbee coordinator is elsewhere).
++const ENABLE_ZIGBEE: bool = false;
++
+ const DUCK_GAIN: f32 = 0.15;
+ const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
+ // Longest wait for the next pipeline event before the dialog is given up locally. HA's voice
+@@ -42,9 +47,10 @@ const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
+ // starts), and conversation agents (LLMs with tool calls) may think for a minute or more.
+ const LISTEN_TIMEOUT_MS: u64 = 30_000;
+ const PROCESS_TIMEOUT_MS: u64 = 120_000;
+-// Updates: releases of this repository on GitHub. The first check waits for the network after
+-// boot; an automatic install waits until the speaker is idle (it restarts the daemon).
+-const UPDATE_REPO: &str = "Morvex885/pulsar";
++// Updates: releases of this fork on GitHub, never upstream. The first check waits for the
++// network after boot; auto_update stays off by default, so a custom binary is not replaced
++// silently.
++const UPDATE_REPO: &str = "proflyder/pulsar";
+ const UPDATE_FIRST_CHECK_MS: u64 = 60_000;
+ const UPDATE_CHECK_PERIOD_MS: u64 = 6 * 3_600_000;
+ const UPDATE_IDLE_RETRY_MS: u64 = 10 * 60_000;
+@@ -169,7 +175,6 @@ pub struct Controller {
+     arb_phrase: String,
+     arb_level: f32,
+     arb_audio: Vec<i16>,
+-    arb_command: String,
+     /// Another station answers the wake word just heard.
+     commands_blocked_until_ms: i64,
+     run: RunBinding,
+@@ -247,7 +252,11 @@ fn clock_face_index(name: &str) -> i32 {
+ }
+ 
+ fn model_dir(id: &str) -> PathBuf {
+-    PathBuf::from(format!("{MODELS}{id}"))
++    if id == "ricardo" {
++        PathBuf::from(RICARDO_MODEL)
++    } else {
++        PathBuf::from(format!("{MODELS}{id}"))
++    }
+ }
+ 
+ /// C++ `uint8_t(x * 255)`.
+@@ -290,8 +299,8 @@ impl Controller {
+             VERSION,
+             BUILD_TIME,
+         );
+-        if st.wake_word != "alisa" && st.wake_word != "yandex" {
+-            st.wake_word = "alisa".into();
++        if st.wake_word != "alisa" && st.wake_word != "yandex" && st.wake_word != "ricardo" {
++            st.wake_word = "ricardo".into();
+         }
+         let case_colors = pulsar_hw::case_colors();
+         let dir = logic::state_dir(state_path.as_os_str());
+@@ -310,6 +319,11 @@ impl Controller {
+                     phrase: "Яндекс".into(),
+                     languages: vec!["ru".into()],
+                 },
++                WakeWordInfo {
++                    id: "ricardo".into(),
++                    phrase: "Рикардо".into(),
++                    languages: vec!["ru".into()],
++                },
+             ],
+             active_wake_words: vec![st.wake_word.clone()],
+             light_effects: strings(pulsar_hw::effect_names()),
+@@ -317,7 +331,7 @@ impl Controller {
+             music_styles: strings(pulsar_hw::music_styles()),
+             case_colors: with_none(case_colors.clone()),
+             clock_music_styles: strings(pulsar_clock::music_styles()),
+-            zigbee_modes: if model.zigbee_tty.is_empty() {
++            zigbee_modes: if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
+                 Vec::new()
+             } else {
+                 pulsar_zigbee::ROLES
+@@ -423,9 +437,17 @@ impl Controller {
+         } else {
+             None
+         };
++        let custom_wake = st.wake_word == "ricardo";
+         let (mic, mic_rx) = pulsar_audio::spawn(
+             model,
+-            model_dir(&st.wake_word),
++            if custom_wake {
++                // Native spotters stay available for a rollback to «Алиса»/«Яндекс».
++                model_dir("alisa")
++            } else {
++                model_dir(&st.wake_word)
++            },
++            Some(PathBuf::from(RICARDO_MODEL)),
++            custom_wake,
+             Some(PathBuf::from(COMMAND_MODEL)),
+         );
+ 
+@@ -480,7 +502,7 @@ impl Controller {
+             None
+         };
+ 
+-        let (zigbee, zigbee_rx) = if model.zigbee_tty.is_empty() {
++        let (zigbee, zigbee_rx) = if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
+             (None, None)
+         } else {
+             let zcfg = ZigbeeConfig {
+@@ -559,7 +581,6 @@ impl Controller {
+             arb_phrase: String::new(),
+             arb_level: -100.0,
+             arb_audio: Vec::new(),
+-            arb_command: String::new(),
+             commands_blocked_until_ms: 0,
+             run: RunBinding::default(),
+             stop_sent: false,
+@@ -745,8 +766,12 @@ impl Controller {
+ 
+     fn on_frontend(&mut self, ev: FrontendEvent) {
+         match ev {
+-            FrontendEvent::Wake { phrase, level_db } => self.on_wake(&phrase, level_db),
+-            FrontendEvent::Command { word } => self.on_command(&word, false),
++            FrontendEvent::Wake {
++                phrase,
++                level_db,
++                audio,
++            } => self.on_wake(&phrase, level_db, audio),
++            FrontendEvent::Command { word } => self.on_command(&word),
+             FrontendEvent::Audio(pcm) => {
+                 if self.phase == Phase::Listening {
+                     self.api.voice_send_audio(pcm);
+diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
+index d67bbcd..a8815ae 100644
+--- a/satellite/crates/pulsar/src/controller/voice.rs
++++ b/satellite/crates/pulsar/src/controller/voice.rs
+@@ -107,7 +107,7 @@ impl Controller {
+ 
+     // ---------------- wake word ----------------
+ 
+-    pub(super) fn on_wake(&mut self, phrase: &str, level_db: f32) {
++    pub(super) fn on_wake(&mut self, phrase: &str, level_db: f32, audio: Vec<i16>) {
+         if self.mic_muted() {
+             return;
+         }
+@@ -127,15 +127,14 @@ impl Controller {
+         }
+         // Without the HA pipeline this station could win and stay silent: it does not take part.
+         if !self.arbitration_on() || !self.api.voice_subscribed() {
+-            return self.answer_wake(phrase, Vec::new());
++            return self.answer_wake(phrase, audio);
+         }
+         self.arbitrating = true;
+         // A station that lost the previous wake word may win this one.
+         self.commands_blocked_until_ms = 0;
+         self.arb_phrase = phrase.to_owned();
+         self.arb_level = level_db;
+-        self.arb_audio.clear();
+-        self.arb_command.clear();
++        self.arb_audio = audio;
+         self.mic.set_streaming(true);
+         self.update_ui();
+         let busy = self.phase == Phase::Speaking || self.announcing;
+@@ -159,7 +158,6 @@ impl Controller {
+         self.arbitrating = false;
+         self.arb_claim = None;
+         let audio = std::mem::take(&mut self.arb_audio);
+-        let command = std::mem::take(&mut self.arb_command);
+         if !won {
+             self.mic.set_streaming(false);
+             info!(
+@@ -175,12 +173,6 @@ impl Controller {
+             return;
+         }
+         info!("wake word: this station answers ({peers} other station(s) heard it)");
+-        if !command.is_empty() {
+-            // "Алиса, громче": handled locally, as right after the wake word.
+-            self.mic.set_streaming(false);
+-            self.update_ui();
+-            return self.on_command(&command, true);
+-        }
+         // Capture keeps streaming into the new dialog: switching it off here could drop the
+         // chunk between the preroll and live audio.
+         let phrase = self.arb_phrase.clone();
+@@ -198,7 +190,6 @@ impl Controller {
+         self.arbitrating = false;
+         self.arb_claim = None;
+         self.arb_audio.clear();
+-        self.arb_command.clear();
+         if self.phase != Phase::Listening {
+             self.mic.set_streaming(false);
+         }
+@@ -312,15 +303,18 @@ impl Controller {
+                         "pipeline: another satellite answers this wake word (HA duplicate wake-up)"
+                     );
+                     self.stop_streaming();
++                } else if get("code") == "stt-no-text-recognized" {
++                    // Empty STT after a wake word: the user changed their mind or spoke
++                    // too softly. Treat it as a silent cancel, not a station error.
++                    info!("pipeline: no speech recognized, treating as cancel");
++                    self.stop_streaming();
+                 } else {
+                     warn!("pipeline error: {} {}", get("code"), get("message"));
+                     self.stop_streaming();
+                     self.error_shown = true;
+                     self.show_ui(UiState::Error);
+-                    if get("code") != "stt-no-text-recognized" {
+-                        let sound = format!("{SOUNDS}{}", self.model.error_sound);
+-                        self.play_closing_earcon(sound);
+-                    }
++                    let sound = format!("{SOUNDS}{}", self.model.error_sound);
++                    self.play_closing_earcon(sound);
+                 }
+             }
+             VaEvent::RunEnd => {
+@@ -629,10 +623,23 @@ impl Controller {
+     // ---------------- local commands ----------------
+ 
+     /// Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше",
+-    /// "назад"): on unless the microphone is muted, the dialog included; which words act where is
+-    /// logic::command_allowed.
++    /// "назад"): on while something plays, off in silence and during a wake request. Which words
++    /// act where is logic::command_allowed.
+     pub(super) fn update_commands(&self) {
+-        self.mic.set_commands(!self.mic_muted());
++        // Stock commands without the wake word stay available while something plays,
++        // as in the C++ build. During a wake request they are off: «Рикардо, стоп»
++        // must reach Home Assistant so it can stop an alarm and restore the music,
++        // instead of being swallowed as a local pause.
++        let playing = matches!(
++            self.player.state(Channel::Music),
++            PlayState::Playing | PlayState::Loading
++        ) || self.sendspin_streaming()
++            || self.announcing
++            || self.timer_ringing
++            || self.phase == Phase::Speaking;
++        let dialog = matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating;
++        self.mic
++            .set_commands(!self.mic_muted() && playing && !dialog);
+     }
+ 
+     fn owns_music(&self) -> bool {
+@@ -674,9 +681,7 @@ impl Controller {
+         }
+     }
+ 
+-    /// `held`: the word came during a wake arbitration this station won, right after its wake
+-    /// word.
+-    pub(super) fn on_command(&mut self, word: &str, held: bool) {
++    pub(super) fn on_command(&mut self, word: &str) {
+         if self.mic_muted() {
+             return;
+         }
+@@ -687,53 +692,24 @@ impl Controller {
+             info!("voice command '{word}' ignored: another station answers this wake word");
+             return;
+         }
+-        if self.arbitrating {
+-            self.arb_command = word.to_owned();
+-            info!("voice command '{word}' held until the wake arbitration ends");
++        // A wake request owns the command. Sending "стоп" to Home Assistant is what
++        // stops a ringing alarm and restores the paused music; local handling would
++        // only pause the music and cancel the pipeline. This also covers a callback
++        // queued just before update_commands() switched the spotter off.
++        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
++            info!("voice command '{word}' left to Home Assistant during a voice request");
+             return;
+         }
+-        let after_wake = logic::after_wake(self.phase, now_ms(), self.listen_started_ms);
+-        // A dialog past the window after its wake word: its words are the request's, except
+-        // "стоп".
+-        let in_dialog = matches!(self.phase, Phase::Listening | Phase::Processing) && !after_wake;
+         let sounding = self.phase == Phase::Speaking || self.announcing || self.timer_ringing;
+-        if !logic::command_allowed(
+-            c,
+-            held || after_wake,
+-            in_dialog,
+-            sounding,
+-            self.owns_music(),
+-        ) {
+-            if in_dialog {
+-                info!("voice command '{word}' ignored: part of the request");
+-            } else {
+-                info!("voice command '{word}' ignored: not for this station");
+-            }
++        if !logic::command_allowed(c, false, false, sounding, self.owns_music()) {
++            info!("voice command '{word}' ignored: not for this station");
+             return;
+         }
+-        info!(
+-            "voice command '{word}'{}",
+-            if after_wake {
+-                " (after wake word, HA pipeline cancelled)"
+-            } else if held {
+-                " (after wake word)"
+-            } else if in_dialog {
+-                " (in a dialog)"
+-            } else {
+-                ""
+-            }
+-        );
+-        // A word in the dialog's own window ends the dialog first; one held through an
+-        // arbitration in SPEAKING / IDLE leaves the answer playing.
+-        if after_wake {
+-            self.finish_interaction();
+-        }
++        info!("voice command '{word}'");
+         match c {
+             VoiceCommand::Stop => {
+                 if self.timer_ringing {
+                     self.stop_timer_ring();
+-                } else if in_dialog {
+-                    self.cancel_dialog();
+                 } else if self.phase == Phase::Speaking {
+                     self.interrupt_speech();
+                     self.finish_interaction();
+diff --git a/satellite/crates/pulsar/src/settings.rs b/satellite/crates/pulsar/src/settings.rs
+index ba959d8..ed0a329 100644
+--- a/satellite/crates/pulsar/src/settings.rs
++++ b/satellite/crates/pulsar/src/settings.rs
+@@ -84,10 +84,11 @@ impl Default for Settings {
+             clock_brightness: 1.0,
+             clock_scroll_ms: 400,
+             light: LightState::default(),
+-            wake_word: "alisa".into(),
++            wake_word: "ricardo".into(),
+             tz: "MSK-3".into(),
+             auto_update: false,
+-            nearest_answers: true,
++            // One station in this installation: the 250 ms arbitration window only adds latency.
++            nearest_answers: false,
+             music_viz: "All styles".into(),
+             clock_music: "Off".into(),
+             led_speed: 1.0,
+diff --git a/satellite/crates/pulsar/src/settings/tests.rs b/satellite/crates/pulsar/src/settings/tests.rs
+index a7762d7..a26b014 100644
+--- a/satellite/crates/pulsar/src/settings/tests.rs
++++ b/satellite/crates/pulsar/src/settings/tests.rs
+@@ -1,7 +1,7 @@
+-// Fixtures in tests/golden/settings/ come from the C++ reference (rust-port-base): Settings::load
+-// and Settings::save of controller.cpp, copied verbatim into a throwaway host harness built with
+-// `zig c++ -std=c++20 -O2`. save_*.conf: `save` of the values below; load_*.out: `load` of
+-// load_*.in, then `save`.
++// Fixtures in tests/golden/settings/ follow the C++ Settings format (rust-port-base),
++// with this fork's defaults (`wake_word=ricardo`, `nearest_answers=0`). They were produced by
++// the same `Settings::load` / `Settings::save` contract and a throwaway host harness.
++// save_*.conf: `save` of the values below; load_*.out: `load` of load_*.in, then `save`.
+ 
+ use super::*;
+ 
+@@ -44,7 +44,7 @@ fn values() -> Settings {
+ }
+ 
+ #[test]
+-fn save_matches_cxx_byte_for_byte() {
++fn save_matches_golden_byte_for_byte() {
+     assert_eq!(
+         Settings::default().serialize().as_bytes(),
+         golden("save_default.conf")
+@@ -78,7 +78,7 @@ fn save_matches_cxx_byte_for_byte() {
+ }
+ 
+ #[test]
+-fn parses_a_file_written_by_cxx() {
++fn parses_a_file_written_by_the_fork() {
+     let mut s = Settings::default();
+     s.parse(&golden("save_values.conf"));
+     // Written with 6 significant digits: the values read back are those of the text.
+diff --git a/satellite/crates/pulsar/tests/golden/settings/load_edge.out b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
+index 09501fe..57c0138 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/load_edge.out
++++ b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
+@@ -11,13 +11,13 @@ light_r=1
+ light_g=1
+ light_b=inf
+ light_effect=
+-wake_word=alisa
++wake_word=ricardo
+ tz=MSK-3
+ auto_update=0
+ update_attempt=
+ zigbee_role=router
+ zigbee_flash_failed=ffffffff
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=4
+ voice_indication=1
+diff --git a/satellite/crates/pulsar/tests/golden/settings/save_default.conf b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
+index 239aa5c..e4a91fd 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/save_default.conf
++++ b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
+@@ -11,13 +11,13 @@ light_r=1
+ light_g=1
+ light_b=1
+ light_effect=
+-wake_word=alisa
++wake_word=ricardo
+ tz=MSK-3
+ auto_update=0
+ update_attempt=
+ zigbee_role=off
+ zigbee_flash_failed=0
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=1
+ voice_indication=1
+diff --git a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
+index 87befc1..5e2647e 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
++++ b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
+@@ -11,13 +11,13 @@ light_r=0
+ light_g=1
+ light_b=0.5
+ light_effect=
+-wake_word=alisa
++wake_word=ricardo
+ tz=
+ auto_update=0
+ update_attempt=
+ zigbee_role=router
+ zigbee_flash_failed=ffffffff
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=4
+ voice_indication=1
+diff --git a/satellite/crates/pulsar/tests/golden/settings/save_values.conf b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
+index 4acecce..1f6eadd 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/save_values.conf
++++ b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
+@@ -11,13 +11,13 @@ light_r=1e-05
+ light_g=123457
+ light_b=3.14159
+ light_effect=Rainbow
+-wake_word=alisa
++wake_word=ricardo
+ tz=EST5EDT,M3.2.0,M11.1.0
+ auto_update=0
+ update_attempt=v1.2.3
+ zigbee_role=pulsar-coordinator
+ zigbee_flash_failed=5001abcd
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=0.25
+ voice_indication=1
+diff --git a/satellite/wakewords/.gitignore b/satellite/wakewords/.gitignore
+new file mode 100644
+index 0000000..090371c
+--- /dev/null
++++ b/satellite/wakewords/.gitignore
+@@ -0,0 +1,4 @@
++# The trained model and its manifest are local artifacts until the voice/data
++# licenses are reviewed for public distribution.
++*.tflite
++*.json
+diff --git a/satellite/wakewords/README.md b/satellite/wakewords/README.md
+new file mode 100644
+index 0000000..957ed32
+--- /dev/null
++++ b/satellite/wakewords/README.md
+@@ -0,0 +1,28 @@
++# Wake-word model
++
++The Ricardo build uses the on-device microWakeWord model produced by the
++station lab. The model is intentionally not committed to this public fork:
++its training voices and recordings still need a license review.
++
++Put the model here before installing from a checkout:
++
++```text
++ru_ricardo_mww.tflite   # 86,240 bytes, SHA-256 f1ba6dca7c380b584d5e4e1d83f9fd2144e09f4ef9a68135e206f7aab5fd96b2
++```
++
++`pulsar-install` copies every `*.tflite` from this directory to
++`/data/pulsar/wakewords/` and verifies the SHA-256 during the upload. A release
++archive without this directory keeps the model already installed on the
++station; a fresh install without it starts with no «Рикардо» detector and logs
++that fact.
++
++The daemon path is fixed:
++
++```text
++/data/pulsar/wakewords/ru_ricardo_mww.tflite
++```
++
++The detector uses the firmware's `libtflite.so` and the vendored
++microfrontend, so neither the model nor the Yandex runtime is redistributed
++here. The C++ bridge and its license notes are in
++`crates/pulsar-audio/ricardo/`.

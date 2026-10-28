@@ -12,7 +12,6 @@ TTS-исследования — не recovery-critical; Mini 2 — в `archive/
 | `pcap/station.pcap` | TLS-захват | диагностика bootstrap |
 | `firmware/yandexmidi-…zip` | официальная прошивка **Station 2** | **НЕ для Midi**; не прошивать |
 | `wakeword/ricardo-v1/` | модель, manifest, конфиг, метрики и зависимости | обучение и восстановление wake word |
-| `wakeword/ricardo-station/` | бинарник, debug symbols, source archive, rollback | восстановление Pulsar с microWakeWord |
 | `reference/jarvis.zip` | сторонний on-device wake word | reference |
 | `prior-session/codex-session-…md` | транскрипт прошлой сессии | исторический; **секреты** |
 | `tts-research-2026-10-26/`, `tts-samples/` | TTS-ресерч/сэмплы | research, не recovery |
@@ -26,4 +25,5 @@ TTS-исследования — не recovery-critical; Mini 2 — в `archive/
 - Mini 2 downgrade/rollback перенесены в `archive/legacy/mini2/`; **не запускать
   на Midi**.
 - `alice-mitm`/`prior-session` — чувствительные; см. `docs/SENSITIVE-DATA.md`.
+- Legacy Pulsar исходники, patch и binaries — private в `secrets/local/`, вне Git.
 - Полный recovery-порядок — `docs/REBUILD.md`.

@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "checkout": "projects/station/upstream/pulsar-rust",
+  "base_ref": "v0.5.0",
+  "base_commit": "1934b68c00c7d48a2bfdb17e9c4be8d6ddbb4802",
+  "base_description": "v0.5.0",
+  "head_commit": "908a02775255491aa78111de747d9bf022e484e5",
+  "head_description": "v0.5.0-1-g908a027",
+  "branch": "feat/ricardo-rust",
+  "worktree_dirty": false,
+  "new_source_files": [],
+  "restore": {
+    "checkout": "git checkout 1934b68c00c7d48a2bfdb17e9c4be8d6ddbb4802",
+    "apply": "git apply --binary projects/station/patches/pulsar-rust/local.patch"
+  }
+}

@@ -12,6 +12,6 @@ done
 echo "== Go: solutions and packages =="
 go test ./solutions/... ./packages/...
 (cd projects/station/ble-gateway && go test ./...)
-(cd projects/station/upstream/pulsar/installer && GOWORK=off go test ./...)
+(cd projects/station/upstream/pulsar-rust/installer && GOWORK=off go test ./...)
 (cd projects/station/resources/quasar-connect-bot && python3 -m unittest discover -s tests -p 'test_*.py' -v)
 echo "ALL HERMETIC TESTS PASSED"

@@ -6,9 +6,8 @@ BLE gateway и provisioning. Это **не** HA и не TTS-стек.
 ## Что входит
 
 ```text
-projects/station/upstream/pulsar/        upstream Pulsar + локальные изменения
 projects/station/upstream/pulsar-rust/   Rust-форк (активен с 2026-10-28)
-projects/station/patches/pulsar/          snapshots локальных правок
+projects/station/patches/pulsar-rust/     snapshots локальных правок Rust
 projects/station/ble-gateway/       BLE provisioning gateway (пока вне Bazel)
 projects/station/scripts/station-*        station-side операции
 docs/OTA-FORTRESS.md
@@ -17,8 +16,9 @@ docs/WAKE-WORD.md
 ```
 
 Rust-форк и профиль Ricardo: [`PULSAR-RUST.md`](PULSAR-RUST.md).
-Активный бинарник — Rust `v0.5.0-1-g908a027`; C++ `v0.4.1-ricardo6`
-сохранён в `.prev` для отката.
+Активный бинарник — Rust `v0.5.0-1-g908a027`; device-откат `.prev`
+сохранён на станции, legacy исходники и binaries — private в
+`secrets/local/recovery/`.
 
 ## Границы
 
@@ -29,6 +29,7 @@ Rust-форк и профиль Ricardo: [`PULSAR-RUST.md`](PULSAR-RUST.md).
 
 ## Статус
 
-First-party station-файлы: `upstream/pulsar`, `upstream/pulsar-rust`, `ble-gateway`,
+First-party station-файлы: `upstream/pulsar-rust`, `ble-gateway`,
 `configs`, `scripts`, `patches`, `tools`. Живая станция — Rust Pulsar;
-C++ сохранён для отката. Прошивка/rootfs не менялись.
+legacy C++ архив хранится private вне активного worktree. Прошивка/rootfs
+не менялись.

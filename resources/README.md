@@ -17,7 +17,7 @@ recovery — [`../docs/REBUILD.md`](../docs/REBUILD.md).
 | `telemetry-yandex-station-privacy.sh` | vibe-скрипт телеметрии | reference, не запускать |
 
 Pulsar и sound pairing перенесены в `projects/station/`:
-`upstream/pulsar/` и `resources/quasar-connect-bot/`.
+`upstream/pulsar-rust/` и `resources/quasar-connect-bot/`.
 
 ## v3rt3p / Quasar backend
 

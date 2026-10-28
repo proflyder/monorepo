@@ -5,8 +5,10 @@
 - The primary Codex thread owns planning, architecture, task decomposition,
   coordination, review, and acceptance. Delegate research, implementation, and
   test execution to BB child threads using provider `acp-opencode`.
-- Default worker model is `opencode-go/deepseek-v4.1-flash`. Research workers use
-  `mode=plan`; implementation workers use `mode=build`. Prefer Flash throughout.
+- Default worker model is `opencode-go/deepseek-v4.1-flash` with
+  `--reasoning-level low`. Research workers use `mode=plan`; implementation
+  workers use `mode=build`. Prefer Flash throughout; raise the reasoning level
+  or switch model only with explicit user approval.
 - Never launch `opencode-go/deepseek-v4-pro`, any other Pro model, or a fallback
   model without explicit user approval for that specific escalation. First explain
   why Flash is insufficient and which bounded task needs Pro. A timeout, failure,
@@ -17,10 +19,11 @@
 - Worker threads must read the applicable `AGENTS.md` files and current sources,
   preserve other sessions' changes, and obey the existing local Git, privacy,
   Pulsar, and device-operation rules.
-- Use `bb thread spawn` with `--parent-self` and explicit project, environment,
-  provider, and model. Reuse the existing environment for sequential
-  shared-checkout tasks; use separate worktrees only when appropriate. Do not
-  assume ignored or nested Pulsar sources are copied into worktrees.
+- Use `bb thread spawn` with `--parent-self`, `--reasoning-level low`, and
+  explicit project, environment, provider, and model. Reuse the existing
+  environment for sequential shared-checkout tasks; use separate worktrees only
+  when appropriate. Do not assume ignored or nested Pulsar sources are copied
+  into worktrees.
 - Start with one write worker per shared checkout. Parallel research is allowed;
   concurrent writers require nonoverlapping file ownership or deliberate
   isolation.
@@ -76,18 +79,22 @@
 автоматически в submodule и не включать как gitlink в корневой репозиторий.
 Существующие upstream remote не означают разрешения публиковать наши изменения.
 
-Активный Pulsar: `projects/station/upstream/pulsar/`. База и текущие локальные изменения
-фиксируются в корневой истории через `projects/station/patches/pulsar/`:
+Активный Pulsar: Rust-форк `projects/station/upstream/pulsar-rust/` (ветка
+`feat/ricardo-rust`, база upstream `v0.5.0` = `1934b68`). База и текущие
+локальные изменения фиксируются в корневой истории через
+`projects/station/patches/pulsar-rust/`:
 
 ```bash
 python3 projects/station/scripts/snapshot-pulsar.py
 ```
 
-Запускать после правок Pulsar и перед корневым коммитом. Скрипт сохраняет
-базовый commit, полный diff относительно HEAD (включая staged/unstaged) и
-новые исходники, не изменяя индекс или историю вложенного репозитория.
-Следовать также `projects/station/upstream/pulsar/AGENTS.md`; прямой запрос пользователя
-о локальной работе имеет приоритет над upstream-процессом PR/push.
+Запускать после правок Rust Pulsar и перед корневым коммитом. Скрипт сохраняет
+pinned base commit, полный delta от базы до текущего HEAD (committed, staged,
+unstaged и новые исходники), не изменяя индекс или историю вложенного
+репозитория. Legacy C++ checkout, patch и binaries заархивированы private
+в `secrets/local/recovery/`; активный worktree содержит только Rust v0.5.
+Следовать также `projects/station/upstream/pulsar-rust/AGENTS.md`; прямой запрос
+пользователя о локальной работе имеет приоритет над upstream-процессом PR/push.
 
 ## Монорепозиторий и Bazel
 

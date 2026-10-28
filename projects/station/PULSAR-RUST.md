@@ -1,12 +1,15 @@
 # Pulsar Rust fork
 
 **Активная станция:** Rust Pulsar `v0.5.0-1-g908a027`, установлен
-2026-10-28. C++ `v0.4.1-ricardo6` сохранён для отката.
+2026-10-28. Device-откат — `pulsar.prev` на станции; legacy исходники,
+patch и binaries заархивированы private в `secrets/local/recovery/`.
 
 - Fork: <https://github.com/OWNER/pulsar>
 - Ветка: `feat/ricardo-rust`, commit `908a027`
 - База: upstream `v0.5.0` (`1934b68`)
 - Локальный checkout: `projects/station/upstream/pulsar-rust/`
+- Снимок изменений: `projects/station/patches/pulsar-rust/`
+  (`snapshot-pulsar.py`)
 - Бинарник armhf: `satellite/build/armhf/pulsar`; полный SHA-256 — в
   private HIL log.
 - Модель: `/data/pulsar/wakewords/ru_ricardo_mww.tflite`; SHA-256
@@ -31,7 +34,7 @@
 - Live wake `Рикардо` probability `0.904`; HA pipeline и TTS прошли.
 - Sendspin/MA: после HAOS reboot MA переподключилась, player вернулся.
 - Station reboot: Rust autostart, VLAN/HA/MA/Sendspin восстановились.
-- `pulsar.prev --version` = `v0.4.1-ricardo6`; rollback доступен.
+- `pulsar.prev --version` — legacy build; rollback доступен.
 - Backup: `secrets/local/backups/pulsar-rust-migration-20261028/`.
 
 ## Осталось
@@ -39,7 +42,7 @@
 - Живой «Рикардо, стоп» во время будильника, snooze/resume.
 - Кнопки/mute/clock/volume физически после reboot.
 - Spotify phone→speaker transfer.
-- Полный откат на C++ с проверкой HA/MA (бинарник и backup готовы).
+- Полный откат на legacy Pulsar с проверкой HA/MA (бинарник и backup готовы).
 
 ## Rollback
 
@@ -49,5 +52,5 @@ adb -s 192.168.3.13:5555 shell \
    chmod 755 /data/pulsar/pulsar && /data/pulsar/ctl.sh restart'
 ```
 
-C++ backup дополнительно:
-`/data/pulsar/backups/pre-rust-ricardo6/pulsar`.
+Legacy backup на станции — в `/data/pulsar/backups/`; исходники, patch и
+binaries — private в `secrets/local/recovery/`.

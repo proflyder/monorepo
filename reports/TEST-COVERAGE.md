@@ -1,6 +1,6 @@
 # TEST COVERAGE — площадь проверки
 
-Сгенерировано: `2026-10-27 21:08 +0500`. Это не отчёт «покрыто всё»: ниже разделены
+Сгенерировано: `2026-10-29 04:30 +0500`. Это не отчёт «покрыто всё»: ниже разделены
 машинно измеренное покрытие, статическая проверка артефактов и живые E2E.
 
 ## Итог
@@ -9,24 +9,24 @@
 |---|---:|---|---|
 | HA voice YAML | 4969 строк, 14 файлов | 49/49 scripts, 46/46 intents, 7/7 automations, 286 фраз, 991 Jinja-вхождений | ✅ структурно 100% |
 | BLE gateway (Go) | 1304 строк | unit/HTTP/GATT/Wi-Fi mocks | 45.1% statements |
-| home-assistant shell | 422 строк | `bash -n`, ShellCheck errors, `ctl.sh` команды | ✅ command paths + static |
-| scripts (security/ops) | 308 строк | syntax, egress-guard rules, pairing CLI | ✅ targeted |
+| home-assistant shell | 432 строк | `bash -n`, ShellCheck errors, `ctl.sh` команды | ✅ command paths + static |
+| scripts (security/ops) | 433 строк | syntax, egress-guard rules, pairing CLI | ✅ targeted |
 | pairing core | 440 строк | 15 unit tests | 88.0% lines |
-| Pulsar installer (Go) | 1346 строк | upstream unit tests | 17.8% statements |
-| Pulsar satellite C++ | 1830 строк | не покрыто unit-тестами; firmware/hardware | ⚠️ вне gate |
+| Pulsar installer (Go, Rust fork) | 1410 строк | upstream unit tests | 18.0% statements |
+| Pulsar satellite (Rust) | 36781 строк | unit-тесты Rust этим отчётом не исполняются | ⚠️ не измерено |
 
-**Взвешенная оценка по строкам:** ~**64%** первой-party поверхности.
+**Взвешенная оценка по строкам:** ~**15%** первой-party поверхности.
 Это оценка, а не CI-метрика: HA YAML считается структурно проверенным (100%),
-C++/hardware — 0%, Go/Python — по измеренному покрытию. Вендорные
-`resources/` (кроме активного pairing/installer) в оценку не входят.
+Rust satellite/hardware — 0%, Go/Python — по измеренному покрытию. Вендорные
+`resources/` (кроме активного pairing) в оценку не входят.
 
 ## Тесты
 
-- Python hermetic: **94**
+- Python hermetic: **146**
 - Existing pairing: **15**
 - Go BLE gateway: **22**
-- Go Pulsar installer: **11**
-- Итого: **142** тестовых функций
+- Go Pulsar installer: **12**
+- Итого: **195** тестовых функций
 
 ## E2E (live)
 
@@ -51,8 +51,8 @@ E2E запускается отдельно: `make test-e2e` (нужен `HA_TOK
 
 - Реальный BlueZ/D-Bus, ALSA, кнопки event2 и Wi-Fi откат: требуют станции;
   покрыты live smoke/E2E и ручными сценариями, не unit-тестами.
-- Pulsar C++/firmware и vendor-пакеты: требуют cross-toolchain/железа;
-  upstream installer tests запускаются отдельно.
+- Pulsar Rust/hardware: unit-тесты запускаются `make -C satellite check`;
+  этот отчёт их не исполняет и покрытие по ним не заявляет.
 - Реальный микрофон/Whisper/ASR и Spotify 429: недетерминированы; проверяются
   голосом и live E2E там, где возможно.
 - `resources/spotify-autostart/spotify.sh` — документированный битый legacy;

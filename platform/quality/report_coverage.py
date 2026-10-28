@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from datetime import datetime
@@ -30,6 +31,7 @@ def go_total(profile: Path, cwd: Path) -> float | None:
     out = subprocess.run(
         ["go", "tool", "cover", "-func", str(profile.resolve())],
         cwd=cwd,
+        env={**os.environ, "GOWORK": "off"},
         text=True,
         capture_output=True,
         check=False,
@@ -52,7 +54,7 @@ def count_tests() -> dict[str, int]:
         py += len(re.findall(r"^\s+def test_", path.read_text(), re.M))
     pairing = len(re.findall(r"^\s+def test_", (ROOT / "projects/station/resources/quasar-connect-bot/tests/test_pairing.py").read_text(), re.M))
     go = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/ble-gateway").glob("*_test.go"))
-    go_installer = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/upstream/pulsar/installer").glob("*_test.go"))
+    go_installer = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/upstream/pulsar-rust/installer").glob("*_test.go"))
     return {"python": py, "pairing": pairing, "go": go, "go_installer": go_installer}
 
 
@@ -95,7 +97,7 @@ def percent(value: float | None) -> str:
 
 def main() -> int:
     ble = go_total(ROOT / "reports" / "ble-gateway.cover", ROOT / "projects" / "station" / "ble-gateway")
-    installer = go_total(ROOT / "reports" / "pulsar-installer.cover", ROOT / "projects" / "station" / "upstream" / "pulsar" / "installer")
+    installer = go_total(ROOT / "reports" / "pulsar-installer.cover", ROOT / "projects" / "station" / "upstream" / "pulsar-rust" / "installer")
     pairing = pairing_total()
     tests = count_tests()
     ha = ha_metrics()
@@ -105,11 +107,12 @@ def main() -> int:
     shell_files = classify(ROOT / "projects" / "home-assistant", ["**/*.sh"])
     script_files = classify(ROOT / "projects" / "station" / "scripts", ["*.sh", "*.py"])
     pairing_files = [ROOT / "projects/station/resources/quasar-connect-bot/pairing.py"]
-    installer_files = classify(ROOT / "projects/station/upstream/pulsar/installer", ["*.go"])
-    cpp_files = classify(ROOT / "projects/station/upstream/pulsar/satellite", ["src/*.cpp", "src/*.h"])
+    installer_files = classify(ROOT / "projects/station/upstream/pulsar-rust/installer", ["*.go"])
+    rust_files = classify(ROOT / "projects/station/upstream/pulsar-rust/satellite",
+                          ["crates/**/*.rs"])
 
     ble_loc, ha_loc, shell_loc, script_loc = (loc(x) for x in (ble_files, ha_files, shell_files, script_files))
-    pairing_loc, installer_loc, cpp_loc = (loc(x) for x in (pairing_files, installer_files, cpp_files))
+    pairing_loc, installer_loc, rust_loc = (loc(x) for x in (pairing_files, installer_files, rust_files))
 
     # Transparent weighted estimate: HA is structural (100% of artifacts parsed
     # and cross-checked), not runtime line coverage.  This number is deliberately
@@ -121,9 +124,9 @@ def main() -> int:
         + script_loc * 0.60  # egress + pairing CLI are tested; legacy ops scripts are static-only
         + pairing_loc * ((pairing or 0) / 100)
         + installer_loc * ((installer or 0) / 100)
-        + cpp_loc * 0.0
+        + rust_loc * 0.0
     )
-    total_weight = ha_loc + ble_loc + shell_loc + script_loc + pairing_loc + installer_loc + cpp_loc
+    total_weight = ha_loc + ble_loc + shell_loc + script_loc + pairing_loc + installer_loc + rust_loc
     estimate = covered_weight / total_weight * 100 if total_weight else 0
 
     now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %z")
@@ -142,13 +145,13 @@ def main() -> int:
         f"| home-assistant shell | {shell_loc} строк | `bash -n`, ShellCheck errors, `ctl.sh` команды | ✅ command paths + static |",
         f"| scripts (security/ops) | {script_loc} строк | syntax, egress-guard rules, pairing CLI | ✅ targeted |",
         f"| pairing core | {pairing_loc} строк | 15 unit tests | {percent(pairing)} lines |",
-        f"| Pulsar installer (Go) | {installer_loc} строк | upstream unit tests | {percent(installer)} statements |",
-        f"| Pulsar satellite C++ | {cpp_loc} строк | не покрыто unit-тестами; firmware/hardware | ⚠️ вне gate |",
+        f"| Pulsar installer (Go, Rust fork) | {installer_loc} строк | upstream unit tests | {percent(installer)} statements |",
+        f"| Pulsar satellite (Rust) | {rust_loc} строк | unit-тесты Rust этим отчётом не исполняются | ⚠️ не измерено |",
         "",
         f"**Взвешенная оценка по строкам:** ~**{estimate:.0f}%** первой-party поверхности.",
         "Это оценка, а не CI-метрика: HA YAML считается структурно проверенным (100%),",
-        "C++/hardware — 0%, Go/Python — по измеренному покрытию. Вендорные",
-        "`resources/` (кроме активного pairing/installer) в оценку не входят.",
+        "Rust satellite/hardware — 0%, Go/Python — по измеренному покрытию. Вендорные",
+        "`resources/` (кроме активного pairing) в оценку не входят.",
         "",
         "## Тесты",
         "",
@@ -181,8 +184,8 @@ def main() -> int:
         "",
         "- Реальный BlueZ/D-Bus, ALSA, кнопки event2 и Wi-Fi откат: требуют станции;",
         "  покрыты live smoke/E2E и ручными сценариями, не unit-тестами.",
-        "- Pulsar C++/firmware и vendor-пакеты: требуют cross-toolchain/железа;",
-        "  upstream installer tests запускаются отдельно.",
+        "- Pulsar Rust/hardware: unit-тесты запускаются `make -C satellite check`;",
+        "  этот отчёт их не исполняет и покрытие по ним не заявляет.",
         "- Реальный микрофон/Whisper/ASR и Spotify 429: недетерминированы; проверяются",
         "  голосом и live E2E там, где возможно.",
         "- `resources/spotify-autostart/spotify.sh` — документированный битый legacy;",

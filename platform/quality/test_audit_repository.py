@@ -15,6 +15,7 @@ NAME = "prof" + "lyder"
 DOMAIN = NAME + ".dev"
 PACKAGE = "dev." + NAME + ".home"
 SOURCE_PATH = "dev/" + NAME + "/home"
+REPO = NAME + "/pulsar"
 LEGACY_HOME = "/Users/stanislav" + "plotnikov"
 
 
@@ -46,12 +47,22 @@ class ApprovedPublicTests(unittest.TestCase):
                 self.assertEqual(scan_text("projects/mobile/android/README.md", text), [])
 
     def test_sanitizer_replaces_only_approved_tokens(self):
-        line = f"{PACKAGE} {DOMAIN} {SOURCE_PATH}"
+        line = f"{PACKAGE} {DOMAIN} {SOURCE_PATH} {REPO}"
         cleaned = sanitize_approved_tokens(line)
         self.assertNotIn(NAME, cleaned)
         self.assertIn("<public-namespace>", cleaned)
         self.assertIn("<public-domain>", cleaned)
         self.assertIn("<public-source-path>", cleaned)
+        self.assertIn("<public-repo>", cleaned)
+
+    def test_exact_public_repo_slug_is_accepted(self):
+        for text in (
+            f"`UPDATE_REPO={REPO}`,",
+            f"const UPDATE_REPO: &str = \"{REPO}\";",
+            f"https://github.com/{REPO}",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(scan_text("projects/station/upstream/pulsar-rust/RICARDO.md", text), [])
 
 
 class LookalikeTests(unittest.TestCase):
@@ -88,6 +99,27 @@ class LookalikeTests(unittest.TestCase):
 
     def test_legacy_private_path_is_rejected(self):
         self.assert_flagged(f"{LEGACY_HOME}/work")
+
+    def test_other_repository_of_handle_is_rejected(self):
+        self.assert_flagged(f"{NAME}/other")
+
+    def test_longer_repository_name_is_rejected(self):
+        self.assert_flagged(f"{REPO}-private")
+        self.assert_flagged(f"{REPO}2")
+        self.assert_flagged(f"{REPO}.private")
+        self.assert_flagged(f"{REPO}.secret")
+        self.assert_flagged(f"{REPO}.git")
+
+    def test_prefixed_repository_path_is_rejected(self):
+        self.assert_flagged(f"https://github.com/evil{REPO}")
+
+    def test_mixed_public_repo_and_token_is_rejected(self):
+        token = "ghp_" + "c" * 36
+        self.assert_flagged(f"{REPO} token={token}")
+
+    def test_mixed_public_repo_and_private_key_is_rejected(self):
+        key_header = "-----BEGIN " + "PRIVATE KEY-----"
+        self.assert_flagged(f"{REPO} {key_header}")
 
     def test_mixed_approved_namespace_and_private_marker_is_rejected(self):
         self.assert_flagged(f"{PACKAGE} {LEGACY_HOME}")

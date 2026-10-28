@@ -46,11 +46,6 @@
 !/artifacts/wakeword/
 /artifacts/wakeword/*
 !/artifacts/wakeword/ricardo-v1/
-!/artifacts/wakeword/ricardo-station/
-/artifacts/wakeword/ricardo-station/*
-!/artifacts/wakeword/ricardo-station/*.md
-!/artifacts/wakeword/ricardo-station/*.sh
-!/artifacts/wakeword/ricardo-station/SHA256SUMS
 
 # Build outputs / dependencies / editor and OS metadata
 __pycache__/
