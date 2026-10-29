@@ -145,8 +145,8 @@ always-on home-сервиса. Kafka/NATS можно добавить позже
 `AckEvent` остаются контрактом, а broker станет ещё одним consumer/producer.
 
 MCP в этом срезе **не реализуется**. Будущая схема: один общий extensible MCP
-gateway для проектов (Hermes/HA), а `mcp-alarm` — adapter/plugin за ним, не
-отдельный обязательный сервер. Scheduler остаётся transport/domain neutral и
+gateway для проектов (Hermes/HA) с доменной группой scheduler, а не
+отдельный MCP-сервер на каждый проект. Scheduler остаётся transport/domain neutral и
 не импортирует Hermes/HA. Будущие tool groups gateway: `scheduler.schedules.*`
 (create/list/update/enable/snooze/stop), `scheduler.timers.*`
 (start/pause/resume/cancel/list), `scheduler.tasks.*` (enqueue/cancel/status),

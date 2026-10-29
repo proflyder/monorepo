@@ -8,14 +8,6 @@ music_candidates:
   max: 255
   initial: ""
 
-alarm_form_name:
-  name: "Новый будильник: название"
-  max: 64
-  initial: ""
-
-# Canonical scheduler configuration and active-occurrence tracking. The
-# endpoint is a LAN/Tailscale base URL (no token, no credentials, no query).
-# The bearer token stays in secrets.yaml as scheduler_bearer.
 scheduler_endpoint:
   name: "Scheduler Connect endpoint"
   max: 255

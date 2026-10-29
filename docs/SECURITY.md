@@ -78,7 +78,7 @@
 
 ## Что не делать
 
-- Не запускать `rollback.sh` от Mini 2.
+- Mini 2/Light downgrade и rollback — только private archive (`archive/legacy/mini2/`); не запускать на Midi.
 - Не менять `ota_script.pub`, пока обновление ещё нужно.
 - Не запускать p2p0-эксперимент при рабочей сети.
 - Не делать `setenforce 0`, не оставлять rootfs `rw`, не запускать `curl | sh`.

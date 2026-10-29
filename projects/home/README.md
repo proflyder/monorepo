@@ -11,10 +11,9 @@ projects/home-assistant   HA/MA/STT/TTS/Hermes/Tailscale
 
 ```text
 solutions/scheduler       durable расписания/таймеры/задачи, SQLite outbox
-solutions/ha-bridge       executor очереди home → HA scripts (dry-run default)
+solutions/ha-bridge       executor очереди home → HA scripts
 solutions/alarm           legacy instance=home (AlarmService facade)
-solutions/mcp-alarm       endpoint=home alarm
-solutions/assistant-ui    endpoint=home alarm
+solutions/ha-control      каталог Home + executor queue=control
 ```
 
 ## Зачем отдельно

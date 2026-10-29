@@ -18,8 +18,8 @@
 projects/station/       Pulsar, ADB, BLE, provisioning
 projects/home/          Proxmox, K3s, Terraform, Tailscale
 projects/home-assistant/HA, voice, Hermes, MA, TTS, dashboards
-solutions/              переиспользуемые alarm/MCP/bridge/UI
-packages/               proto, Go/Rust shared
+solutions/              переиспользуемые scheduler/alarm/bridge
+packages/               proto, общий Go-код
 docs/                   эксплуатация и политики
 secrets/                реальные адреса, доступы, recovery (вне Git)
 ```
@@ -48,7 +48,7 @@ HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
 
 ```bash
 make test          # hermetic
-make coverage      # coverage + reports/TEST-COVERAGE.md
+make coverage      # coverage (reports/TEST-COVERAGE.md, not tracked)
 make test-e2e      # live HA/BLE, нужны токены
 ```
 

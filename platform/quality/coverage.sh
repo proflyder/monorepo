@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the hermetic suite, collect machine-measured coverage where possible,
-# and regenerate reports/TEST-COVERAGE.md.
+# and regenerate reports/TEST-COVERAGE.md (generated, not tracked).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
@@ -27,4 +27,4 @@ else
 fi
 
 python3 platform/quality/report_coverage.py
-echo "written: reports/TEST-COVERAGE.md"
+echo "written (not tracked): reports/TEST-COVERAGE.md"

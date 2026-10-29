@@ -21,12 +21,15 @@
    GATT SSID/PSK/token; 1/3/4/5. Старый QR/DPP провижининг удалён.
 9. **OTA/ADB fortress + egress guard.** Защита от OTA/сброса/закрытия ADB;
    публичный WAN и Яндекс закрыты. Factory reset сносит защиту.
-10. **Расписания — HA-native.** Будильники в `local_todo`, таймеры в `timer`,
-    напоминания/заметки в `local_todo`; голос + dashboard. Legacy single-slot
-    отключён.
+10. **Расписания — canonical scheduler, звук — HA.** `solutions/scheduler`
+    владеет будильниками/таймерами/напоминаниями; `ha-bridge` исполняет
+    очередь `home` (alarm_start/announce/alarm_stop), голосовые intents и
+    Android работают через Connect API. Legacy HA-тики отключены.
 11. **Recovery — локально + offsite.** HA/K3s/PVE/станция; проверять SHA-256.
     Factory-образа Midi нет; OTA-блок не заменяет recovery.
 12. **Монорепозиторий + Bazel.** Go/Rust/mobile; hermetic build; тесты рядом
     с кодом. Rust — DSP/инференс, Go — control plane.
+13. **Home-сценарии — метка HA `scenario`.** Скрипт попадает в каталог Home
+    только с этой нативной меткой; иконки/комнаты/имена — отображение.
 
 Меняется решение — обновить этот файл и `STATE.md`.

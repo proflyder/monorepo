@@ -1,9 +1,9 @@
 # gRPC / Connect contract
 
-Статус: **scheduler-сервер и legacy alarm facade реализованы** (durable
-SQLite engine, Connect/gRPC, outbox, auth, Go/Bazel-тесты). HA-автоматизации
-пока не переключены на новый сервис и остаются источником звука; deploy и
-Android-клиент — отдельные этапы.
+Статус: **развёрнуто**. `solutions/scheduler` — durable SQLite engine,
+Connect/gRPC, outbox, auth; `ha-bridge` (очередь `home`) и `cmd/ha-control`
+(каталог Home, очередь `control`) работают в K3s; HA-звук остаётся у HA, а
+расписания принадлежат scheduler. Android-клиент использует тот же контракт.
 
 ## Канонические контракты
 
@@ -106,8 +106,9 @@ curl -sS http://127.0.0.1:8098/ricardo.v1.SchedulerService/CreateSchedule \
   `AckEvent` требует `LEASED` + точный `consumer_id` + неистёкший lease.
 - **Очереди:** convenience alarm/reminder/timer идут в `home` с
   `task_type=alarm.fire|reminder.fire|timer.fire` (`.stop` для control).
-  Generic `EnqueueTask` — в `tasks` (default) или указанную очередь.
-  Executor арендует только свою очередь; `queue=""` — admin/all.
+  Generic `EnqueueTask` — в `tasks` (default) или указанную очередь
+  (`home.control` — в `control`). Executor арендует только свою очередь;
+  `queue=""` — admin/all.
   Scenario-события изолированы в очереди `scenario` и не попадают в home,
   пока scenario executor не реализован.
 - **Звук:** сервис никогда не утверждает, что будильник прозвучал.
@@ -153,17 +154,14 @@ target-имена (`alarms_go_proto`, `scheduler_go_proto`) сохранены �
   Tailscale; TLS-терминация — на прокси/деплое.
 - **HA bridge** арендует только `queue=home`, маппит `alarm.fire` →
   `alarm_start`, reminder/timer → announce script, `STOP` → `alarm_stop`.
-  Пока не включён: HA-автоматизации и звук остаются как есть.
-- **MCP** — будущий общий `solutions/mcp-gateway` с tool groups для
-  scheduler/timers/tasks; отдельный `mcp-alarm`-сервер на каждый проект не
-  планируется.
+- **ha-control** отдаёт `GET /v1/catalog` из live HA (сценарии — скрипты с
+  меткой `scenario`) и исполняет только `home.control` из очереди `control`.
 
 ## Что не реализовано
 
 - streaming `WatchEvents`;
 - recurring generic tasks и event-trigger rules;
-- scenario executor;
-- deploy-манифест и выбор always-on хоста;
-- cutover HA, Android runtime и MCP;
+- scenario executor (`SCHEDULE_KIND_SCENARIO` зарезервирован);
+- MCP gateway (только при появлении реального клиента);
 - Kafka/external broker (SQLite inbox/outbox достаточен для одного сервиса;
   broker можно добавить позже без изменения контракта).

@@ -8,14 +8,11 @@
 |---|---|---|---|
 | `scheduler/` | Go | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect/gRPC | реализован backend |
 | `alarm/` | Go | legacy `AlarmService` facade над тем же engine + совместимый entrypoint | реализован facade |
-| `ha-bridge/` | Go | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события | в разработке, не cutover |
-| `mcp-gateway/` | Go | (планируется) единый extensible MCP gateway с domain tool groups | не начат |
-| `mcp-alarm/` | Go | (планируется) adapter/plugin за `mcp-gateway`, не отдельный сервер | не начат |
-| `assistant-ui/` | Go + HTMX | переиспользуемый PWA/UI, endpoint задаётся конфигом | каркас |
+| `ha-bridge/` | Go | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `cmd/ha-control` — каталог Home и очередь `control` | развёрнут |
 
 ## Правила
 
-- solution не знает про `projects/home` или `projects/cloud`;
+- solution не знает про `projects/home`;
 - один и тот же `scheduler` запускается в разных проектах с разными
   SQLite/портами/токенами/timezone;
 - будильник, напоминание и таймер — conveniences над durable scheduling и
@@ -38,12 +35,9 @@ projects/home:
   scheduler@home    sqlite=/data/home/scheduler.db  :8098
   alarm@home        тот же engine + legacy AlarmService facade
   ha-bridge@home    SCHEDULER_ENDPOINT=127.0.0.1:8098, queue=home
+  ha-control@home   каталог Home, queue=control
   android           Connect JSON → LAN/Tailscale endpoint
-
-projects/cloud:
-  scheduler@cloud   sqlite=/data/cloud/scheduler.db :8098
 ```
 
 Это один и тот же код, разные инстансы и конфигурация. Два executor-а на
-одни и те же live schedules одновременно не включаются: текущий HA-контур
-остаётся авторитетным до явного cutover.
+одни и те же live schedules одновременно не включаются.

@@ -27,44 +27,24 @@
   snooze 9 минут, resume source/volume. API/ACK проверены (task SKIPPED,
   consumer alive, bounded recovery 5s), audible — нет; запускать только по
   согласованию.
-- [x] HA voice: имя таймера, «завтра» в reminder create и durable
-  `scheduler_endpoint` (`!secret`) исправлены и проверены live.
 - [ ] Reminder-грамматика: поддерживается один слот `{text}` до или после
   даты/времени; фраза с двумя текстовыми фрагментами вокруг даты не
   распознаётся (осознанное ограничение, не блокер).
 - [ ] Reminder delete проверен только статическими тестами; живой прогон
   удаления напоминания по имени — при следующей голосовой приёмке.
-- [ ] Import: реальных активных alarms/reminders/timers не осталось (0/0/0),
-  поэтому timer migration проверен только герметичными тестами; при появлении
-  активных таймеров прогнать snapshot/execute/verify на живом HA.
-- [x] Home control: `ha-control` развёрнут с ролью «сценарий» (HA label
-  `scenario` на `script.work_mode`/`script.blackout`), LAN 30099 + pl-control,
-  консюмер в allowlist, каталог 2 сценария + 15 устройств; исполнение включено.
-- [x] На телефоне установлен последний APK; настройки перенесены в DataStore,
-  холодный запуск без падения, Home получил HTTP 200 и показал 17 элементов
-  (2 сценария, 4 лампы, 11 выключателей) с чипами категорий.
 - [ ] Home control: интерактивная проверка фильтров и подтверждение действий
   пользователем; автоматические нажатия заблокированы HyperOS. Не запускать
   production-устройства без согласования.
 - [ ] Приложение/Android: остальная приёмка на реальном устройстве,
-  push/FCM, offline cache, generic task UI; debug APK и 11 Android-целей
-  проходят.
+  push/FCM, offline cache, generic task UI.
 - [ ] Recurring generic task schedules; сейчас `EnqueueTask` — one-shot.
-- [ ] Один общий MCP gateway — только при появлении реального клиента;
-  текущий голосовой путь в MCP не нуждается.
 
 ## Инфраструктура
 
-- [ ] Выяснить причину потери LAN на станции после reboot: роутер online,
-      ARP/ADB/ESPHome недоступны; BLE Wi-Fi TIMEOUT. Cold power cycle помог.
-      Не считать перезапуск постоянным исправлением и не менять прошивку
-      без диагностики; Rust/HA/Sendspin после восстановления работают.
-      QR/DPP helper и автозапуски удалены по решению пользователя.
-      Если отказ повторится, проверить Amlogic W1 Wi-Fi/BT SDIO и DHCP/ARP.
-      Read-only collector готов: projects/station/scripts/NETWORK-DIAGNOSTIC.md.
-      Один контролируемый warm reboot прошёл: сеть вернулась за ~18 с,
-      HA/Sendspin и HA agent tests pass; rootkeeper restored, boot hook удалён.
-      DPP fault test отменён: механизм выведен из эксплуатации.
+- [ ] Причина потери LAN на станции после reboot не установлена (роутер
+      online, ARP/ADB/ESPHome недоступны; BLE Wi-Fi TIMEOUT). Cold power
+      cycle восстанавливает; прошивку без диагностики не менять. Read-only
+      collector: `projects/station/scripts/NETWORK-DIAGNOSTIC.md`.
 
 
 - [ ] Offsite encrypted backup + restore rehearsal на запасном железе.
@@ -89,9 +69,8 @@
 
 - [ ] Wake word v1: recall/FP в тишине/шуме и latency; независимые записи.
 - [ ] Rust Pulsar: живой «Рикардо, стоп» во время будильника, snooze/resume,
-      кнопки/mute/clock/volume, phone→speaker; проверить полный откат на C++.
+      кнопки/mute/clock/volume, phone→speaker.
 - [ ] Проверить поведение при падении Hermes: локальные таймеры/будильник/
       громкость должны работать.
 - [ ] Hermes free-speech quota/provider: нужен fallback при 429.
-- [ ] Удалить legacy alarm helpers/automation после недели приёмки schedules.
 - [ ] Решить: динамический `timer_list` или HACS Wakey pilot; сейчас 8 таймеров.

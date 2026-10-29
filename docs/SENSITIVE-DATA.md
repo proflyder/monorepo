@@ -34,7 +34,6 @@
 - `projects/station/configs/*.crt` — публичные сертификаты.
 - `artifacts/ssh/dropbear*` — бинарники, не ключи.
 - `docs/` — только примеры `192.0.2.x`; реальные IP — в `secrets/`.
-- `reports/TEST-COVERAGE.md` — метрики без секретов.
 
 ## Правила
 

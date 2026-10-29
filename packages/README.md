@@ -5,7 +5,6 @@
 ```text
 packages/proto/    protobuf/gRPC contracts
 packages/go/       shared Go packages (later)
-packages/rust/     performance-sensitive Rust crates (later)
 ```
 
 Правило: код, нужный только `solutions/alarm`, живёт в его `internal/`.

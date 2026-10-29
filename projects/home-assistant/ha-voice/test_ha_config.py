@@ -76,9 +76,6 @@ def yaml_files() -> list[Path]:
     files += [
         ROOT / "projects" / "home-assistant" / "configs" / "00-installer-config.yaml",
         ROOT / "projects" / "home-assistant" / "stack" / "docker-compose.yml",
-        ROOT / "projects" / "station" / "configs" / "updates-config.yml",
-        ROOT / "projects" / "station" / "configs" / "docker-compose.yml",
-        ROOT / "projects" / "station" / "configs" / "stack" / "docker-compose.yml",
     ]
     return sorted(p for p in files if p.exists())
 
@@ -131,20 +128,11 @@ def service_targets(value: Any) -> set[str]:
     return out
 
 
-UI_CREATED_INPUT_TEXT = {
-    "tekushchii_budilnik_uid",
-    "tekushchii_budilnik_nazvanie",
-    "tekushchii_budilnik_spisok",
-    *{f"taimer_{i}_nazvanie" for i in range(1, 9)},
-}
-
-
 def defined_entities() -> dict[str, set[str]]:
     result: dict[str, set[str]] = {}
     for prefix in ("input_boolean", "input_datetime", "input_number", "input_select", "input_text"):
         path = HA / f"{prefix}.yaml"
         result[prefix] = set(load_yaml(path).keys())
-    result["input_text"] |= UI_CREATED_INPUT_TEXT
     result["script"] = set(SCRIPTS.keys())
     result["rest_command"] = set(REST.keys())
     result["automation"] = {a["id"] for a in AUTOMATIONS if "id" in a}
@@ -462,32 +450,26 @@ class AlarmMusicStateMachineTests(unittest.TestCase):
         self.assertIn("media_player.iandeks_stantsiia_midi_media_player", yaml.safe_dump(SCRIPTS["alarm_stop"]))
         self.assertLess(svcs.index("script.alarm_restore"), svcs.index("script.alarm_resume"))
 
-    def test_cancel_also_restores_and_resumes(self):
-        svcs = services(SCRIPTS["alarm_cancel"])
-        self.assertIn("script.alarm_restore", svcs)
-        self.assertIn("script.alarm_resume", svcs)
-
-    def test_snooze_keeps_music_paused(self):
-        svcs = services(SCRIPTS["alarm_snooze"])
-        self.assertIn("media_player.media_stop", svcs)
-        self.assertNotIn("script.alarm_resume", svcs)
-
     def test_resume_is_guarded_by_flag_and_clears_it(self):
         dump = yaml.safe_dump(SCRIPTS["alarm_resume"], allow_unicode=True)
         self.assertIn("input_boolean.alarm_music_was_playing", dump)
         self.assertIn("media_player.media_play", dump)
         self.assertIn("input_boolean.turn_off", dump)
 
-    def test_new_alarm_clears_old_playback_state(self):
-        dump = yaml.safe_dump(SCRIPTS["alarm_set"], allow_unicode=True)
-        self.assertIn("input_boolean.alarm_music_was_playing", dump)
-        self.assertIn("input_text.alarm_previous_source", dump)
+    def test_alarm_stop_does_not_write_legacy_slot_state(self):
+        dump = yaml.safe_dump(SCRIPTS["alarm_stop"], allow_unicode=True)
+        for legacy in ("input_boolean.alarm_enabled", "input_boolean.alarm_snooze_active",
+                       "input_select.alarm_repeat", "input_datetime.alarm_next"):
+            self.assertNotIn(legacy, dump)
 
-    def test_scheduler_calls_start_for_regular_and_snooze(self):
-        dump = yaml.safe_dump(AUTOMATIONS, allow_unicode=True)
-        self.assertIn("script.alarm_start", dump)
-        self.assertIn("alarm_schedule_next", dump)
-        self.assertIn("alarm_startup_reconcile", dump)
+    def test_legacy_schedule_authority_is_gone(self):
+        for name in ("alarm_set", "alarm_snooze", "alarm_cancel",
+                     "alarm_schedule_next", "alarm_startup_reconcile",
+                     "schedule_alarm_tick", "schedule_reminder_tick"):
+            self.assertNotIn(name, SCRIPTS)
+        automation_ids = {a["id"] for a in AUTOMATIONS}
+        self.assertNotIn("alarm_scheduler", automation_ids)
+        self.assertIn("schedule_alarm_create", SCRIPTS)
 
     def test_button_stop_uses_the_same_resume_path(self):
         automation = next(a for a in AUTOMATIONS if a["id"] == "alarm_button_stop")
@@ -736,17 +718,15 @@ class InputContractTests(unittest.TestCase):
         numbers = yaml.safe_load((HA / "input_number.yaml").read_text())
         selects = yaml.safe_load((HA / "input_select.yaml").read_text())
         dates = yaml.safe_load((HA / "input_datetime.yaml").read_text())
-        for name in ("alarm_enabled", "alarm_ringing", "alarm_snooze_active", "alarm_music_was_playing"):
+        for name in ("alarm_ringing", "alarm_music_was_playing"):
             self.assertIn(name, booleans)
+        for name in ("alarm_enabled", "alarm_snooze_active"):
+            self.assertNotIn(name, booleans)
         self.assertEqual(numbers["alarm_volume"]["min"], 0.1)
         self.assertEqual(numbers["alarm_volume"]["max"], 1)
         self.assertEqual(selects["music_route"]["options"], ["Music Assistant", "Spotify Connect"])
-        self.assertEqual(
-            selects["alarm_repeat"]["options"],
-            ["Однократно", "Каждый день", "По будням", "По выходным"],
-        )
-        self.assertTrue(dates["alarm_next"]["has_date"])
-        self.assertTrue(dates["alarm_next"]["has_time"])
+        self.assertNotIn("alarm_repeat", selects)
+        self.assertEqual(dates, {})
 
 
 if __name__ == "__main__":

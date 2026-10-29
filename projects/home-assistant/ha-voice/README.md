@@ -120,10 +120,12 @@ so voice snooze/stop target the correct schedule id without guessing.
 
 - `rest_commands.yaml` — station HTTP и `scheduler_rpc` Connect JSON
 - `intent_scripts.yaml` — station, music, schedule intents
-- `scripts.yaml` — Music, legacy `alarm_*` audio path, canonical
-  `scheduler_*` / `schedule_*` client, notes
-- `automations.yaml` — route follows source; legacy alarm/reminder/timer
-  dispatchers disabled with `initial_state: false`
+- `scripts.yaml` — Music, audio executor (`alarm_start` /
+  `alarm_announce` / `alarm_loop` / `alarm_ramp` / `alarm_stop` /
+  `alarm_restore` / `alarm_resume`), canonical `scheduler_*` /
+  `schedule_*` client, notes
+- `automations.yaml` — music route follows source, action-button stop,
+  assist-satellite watchdog
 - `schedules_dashboard.yaml` — dashboard «Помощник» (read-only pointers;
   notes remain editable)
 - `test_ha_config.py` — static audio/entity/template invariants
@@ -132,13 +134,11 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `custom_sentences/ru/station_control.yaml`
 - `custom_sentences/ru/station_alarm.yaml`
 - `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
-- `input_select.yaml` — `music_route` (legacy `alarm_repeat` скрыт)
-- `input_datetime.yaml` — legacy `alarm_next`, `alarm_snooze_until`
-- `input_boolean.yaml` — `alarm_ringing`, `alarm_snooze_active`,
-  `alarm_music_was_playing` (legacy `alarm_enabled` скрыт)
+- `input_select.yaml` — `music_route`
+- `input_datetime.yaml` — empty mapping (kept so an existing include stays valid)
+- `input_boolean.yaml` — `alarm_ringing`, `alarm_music_was_playing`
 - `input_number.yaml` — `alarm_volume`, `alarm_previous_volume`
-- `input_text.yaml` — `alarm_previous_source` (внутренний; UI-created labels
-  создаются отдельно)
+- `input_text.yaml` — `alarm_previous_source`, scheduler endpoint/active-*
 - `www/alarm_chime.wav` — локальный chime для announce/таймеров
 - `www/alarm_ringtone.wav` — приватный пользовательский трек (вне Git;
   перед deploy предоставить свой файл или восстановить из `secrets/local/`), повторяется
@@ -146,14 +146,10 @@ so voice snooze/stop target the correct schedule id without guessing.
   Источник — пользовательский MP3 `HONEYMOAN - Too Much` (4:54), сконвертирован
   целиком; файл локальный, не для публикации.
 
-UI-created / restored entities:
+Notes stay in Home Assistant:
 
 ```text
-todo.notes                        # остаётся каноническим для заметок
-todo.alarms_* / todo.reminders    # только rollback, не источник истины
-timer.taimer_1 … timer.taimer_8   # только rollback
-input_text.taimer_N_nazvanie      # legacy rollback (скрыты)
-input_text.tekushchii_budilnik_*  # legacy rollback (скрыты)
+todo.notes    # canonical notes list, editable from the dashboard
 ```
 
 Установка:
@@ -261,8 +257,8 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 ## Будильники, таймеры, напоминания, заметки
 
 Текущее состояние — [STATE.md](../../../docs/STATE.md); команды — [OPERATIONS.md](../../../docs/OPERATIONS.md).
-Источник истины — `ricardo.v1.SchedulerService`, не `local_todo` и не
-`timer.taimer_*`. Home Assistant остаётся звуковым исполнителем.
+Источник истины — `ricardo.v1.SchedulerService`, не локальные todo/timer
+helpers. Home Assistant остаётся звуковым исполнителем.
 
 ### Канонический путь
 
@@ -347,8 +343,7 @@ scheduler_bearer: "Bearer <scheduler-token>"
   локальный `alarm_stop` и речь говорит «звонок остановлен локально,
   исполнитель не подтвердил». Чужой/новый звонок не глушится. При ошибке API
   речь говорит «перенос не подтверждён»: при потерянном ответе сервер мог
-  успеть зафиксировать snooze. Legacy `alarm_snooze` и
-  `alarm_snooze_active/until` не используются.
+  успеть зафиксировать snooze.
 - Stop: `StopSchedule` + такая же bounded-проверка до 3 с. Локальный
   `alarm_stop` вызывается только для того же captured schedule/event; при
   новом звонке речь говорит, что активен другой звонок. Если звонка не было
@@ -365,33 +360,11 @@ scheduler_bearer: "Bearer <scheduler-token>"
 
 ### Dashboard
 
-`/assistant-schedules` больше не содержит форм и todo/timer-редакторов для
+`/assistant-schedules` не содержит форм и todo/timer-редакторов для
 будильников, таймеров и напоминаний: это были бы параллельные писатели.
 Разделы «Будильники», «Таймеры», «Напоминания» — read-only указатели на
 Android-приложение и голос. «Заметки» остаются `todo.notes` и редактируются
 как раньше.
-
-### Cutover: что выключить
-
-В `automations.yaml` уже стоит `initial_state: false`:
-
-```text
-alarm_scheduler              # legacy input_datetime slot
-schedule_alarm_tick          # legacy todo alarm poller
-schedule_reminder_tick       # legacy todo reminder poller
-schedule_timer_finished      # legacy timer.taimer_* announcement
-```
-
-`alarm_button_stop` остаётся включённой и вызывает
-`script.schedule_alarm_stop`; тот ждёт подтверждения executor и при
-необходимости локально останавливает только тот же captured schedule/event.
-`assist_satellite_responding_watchdog` и music-route automation не меняются.
-Перед включением `BRIDGE_EXECUTE=true` deployment worker должен
-убедиться, что эти четыре automation выключены, старые `todo.alarms_*` и
-`timer.taimer_*` не используются как источник, и работает ровно один
-executor очереди `home`. Legacy-скрипты `schedule_alarm_fire/advance/tick`,
-`schedule_reminder_tick` и `alarm_*` оставлены для rollback и не вызываются
-каноническими путями.
 
 ### Ограничения
 

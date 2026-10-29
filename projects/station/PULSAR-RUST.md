@@ -1,8 +1,8 @@
 # Pulsar Rust fork
 
-**Активная станция:** Rust Pulsar `v0.5.0-1-g908a027`, установлен
-2026-10-28. Device-откат — `pulsar.prev` на станции; legacy исходники,
-patch и binaries заархивированы private в `secrets/local/recovery/`.
+**Активная станция:** Rust Pulsar `v0.5.0-1-g908a027`. Legacy C++ исходники,
+patch и binaries в активном дереве отсутствуют; private recovery archive —
+`secrets/local/recovery/` (в Git не входит).
 
 - Fork: <https://github.com/OWNER/pulsar>
 - Ветка: `feat/ricardo-rust`, commit `908a027`
@@ -34,7 +34,6 @@ patch и binaries заархивированы private в `secrets/local/recover
 - Live wake `Рикардо` probability `0.904`; HA pipeline и TTS прошли.
 - Sendspin/MA: после HAOS reboot MA переподключилась, player вернулся.
 - Station reboot: Rust autostart, VLAN/HA/MA/Sendspin восстановились.
-- `pulsar.prev --version` — legacy build; rollback доступен.
 - Backup: `secrets/local/backups/pulsar-rust-migration-20261028/`.
 
 ## Осталось
@@ -42,15 +41,10 @@ patch и binaries заархивированы private в `secrets/local/recover
 - Живой «Рикардо, стоп» во время будильника, snooze/resume.
 - Кнопки/mute/clock/volume физически после reboot.
 - Spotify phone→speaker transfer.
-- Полный откат на legacy Pulsar с проверкой HA/MA (бинарник и backup готовы).
 
-## Rollback
+## Recovery
 
-```bash
-adb -s 192.168.3.13:5555 shell \
-  'cp /data/pulsar/pulsar.prev /data/pulsar/pulsar && \
-   chmod 755 /data/pulsar/pulsar && /data/pulsar/ctl.sh restart'
-```
-
-Legacy backup на станции — в `/data/pulsar/backups/`; исходники, patch и
-binaries — private в `secrets/local/recovery/`.
+Штатной команды возврата на legacy C++ в активном дереве нет. При
+необходимости использовать private recovery archive и отдельный
+согласованный план; текущие HA/MA/ESPHome настройки и `state.conf` при этом
+не сбрасывать.

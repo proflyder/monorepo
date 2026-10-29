@@ -62,8 +62,8 @@
 - ESPHome: 33 entities, Noise; HA satellite работает.
 - Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,
   окно 10, pre-roll 0.5 с.
-- HIL 2026-10-28: Rust active; live wake 0.904, HA pipeline/TTS, HAOS reboot,
-  Sendspin/MA reconnect и station reboot прошли.
+- Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
+  reconnect и station reboot.
 - BLE gateway: `Station-Gateway`, GATT provisioning, кнопки 1/3/4/5;
   4 нажатия могут временно уронить Wi-Fi — BLE остаётся аварийным каналом.
 - QR/DPP provisioning удалён по решению пользователя: убраны оба автозапуска
@@ -72,18 +72,15 @@
   Прежние данные — только в private off-device recovery archive.
 - OTA/ADB fortress активен: обновления no-op, ADB root только LAN.
 - Egress guard: LAN/DHCP/NTP разрешены, публичный WAN и Яндекс — DROP.
-- 2026-10-28: после перезагрузки станция перестала отвечать в LAN (ARP,
-  SSH/ADB/ESPHome), хотя роутер показывал её online. BLE был доступен, но
-  повторное подключение к сохранённой сети завершилось TIMEOUT и откатом.
-  Снятие питания на 20–30 с восстановило IP, Rust autostart, HA и голосовой
-  ответ (подтверждён пользователем); Sendspin затем переподключился сам.
-  Первопричина сетевого зависания не установлена; прошивка не менялась.
+- Известная проблема: после reboot станция иногда не отвечает в LAN при
+  online-статусе роутера; BLE остаётся доступен, снятие питания на 20–30 с
+  восстанавливает IP/HA/голос. Первопричина не установлена (см. `PENDING.md`).
 
 ## Голос / музыка / расписания
 
 - Pipeline «Рикардо»: GigaAM v3 CTC int8 primary, Whisper `medium-int8`
   fallback; локальные intents → Hermes только для свободной речи.
-- TTS: Piper `2.5.2`, `ru_puriso2-medium`; Irina сохранена для отката.
+- TTS: Piper `2.5.2`, `ru_puriso2-medium`.
 - Hermes `v0.22.5`, модель `gpt-5.6-luna` через ChatGPT/Codex OAuth;
   low reasoning + streaming; HA MCP 73 tools, MA MCP 86 tools.
 - Voice proxy `v4`: ошибки upstream приведены к OpenAI error object. При
@@ -111,10 +108,10 @@
   allowlisted HA scripts; второй исполнитель не запущен. Dry-run Job
   (`ha-bridge-dryrun`) остаётся одноразовой проверкой.
 - Действующий владелец будильников, таймеров и напоминаний — scheduler.
-  Legacy HA writers выключены (`alarm_scheduler`, `schedules_alarm_dispatcher`,
-  `schedules_reminder_dispatcher`, `schedules_timer_finished`), их YAML
-  сохранён для rollback. HA остаётся исполнителем звука (`alarm_start`,
-  `schedule_announce`, `alarm_stop`).
+  Legacy schema writers удалены из HA-исходников (11 scripts/4 automations):
+  live HA ещё не перезагружался, поэтому существующие entity остаются
+  выключенными; повторного исполнителя нет. HA остаётся исполнителем звука
+  (`alarm_start`, `schedule_announce`, `alarm_stop`).
 - Голосовые intents в `projects/home-assistant/ha-voice` вызывают canonical
   Connect API (`rest_command.scheduler_rpc`); endpoint —
   `input_text.scheduler_endpoint` (LAN NodePort base URL, durable via
@@ -125,10 +122,6 @@
   timer start/pause/resume/cancel и reminder create проверены тихими
   `conversation.process` через builtin-агент; живая звуковая приёмка
   (audible) не выполнялась.
-- Импорт при cutover: 0 активных alarms/reminders/timers (единственный
-  malformed элемент «Работа» удалён по решению пользователя; исторический
-  completed item не импортируется). Mapping/verification —
-  `projects/home/scheduler-migration`, evidence — в private thread storage.
 - Deploy/rollback: `projects/home/kubernetes/scheduler/` (manifest templates,
   render, preflight, backup). Реальные адреса — `secrets/home/scheduler.env`;
   rendered manifests — `secrets/local/rendered/`.
@@ -144,14 +137,13 @@
   не менялись. Доставка at-least-once, не exactly-once.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
-  `INTERNET`, debug-signed). Вкладки Alarms/Timers/Reminders/Connection;
-  alarms — one-shot и recurring, reminders — one-shot, timers — server-owned
-  с pause/resume/cancel. Bearer token в Keystore AES-GCM, GetStatus,
-  idempotency keys, redirects выключены. Сборка
-  `//projects/mobile/android:app` и общий gate 16/16 проходят; запуск на
-  реальном устройстве не выполнялся.
-- MCP runtime не разворачивается: текущий голосовой путь идёт через HA
-  intents, отдельный gateway нужен только при появлении реального клиента.
+  `INTERNET`, debug-signed). Вкладки **Home**, Alarms, Timers, Reminders,
+  Connection; Home читает `GET /v1/catalog` (2 сценария + 15 устройств),
+  команды идут через `home.control`/очередь `control`. Bearer token в
+  Keystore AES-GCM, настройки и фильтр Home — Jetpack DataStore с миграцией
+  из SharedPreferences; idempotency keys, redirects выключены. Debug APK
+  установлен на телефон; холодный запуск и каталог проверены, интерактивные
+  фильтры/сценарии/toggle ещё не приняты.
 
 ## Приватное / backups
 

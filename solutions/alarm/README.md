@@ -22,7 +22,6 @@ outbox, Connect/gRPC). Этот бинарник запускает тот же 
 ```text
 cmd/alarm/              entrypoint: scheduler app + legacy AlarmService facade
 internal/app/           process identity
-api/                    API notes
 ```
 
 Домены, store, planner и сервер находятся в `solutions/scheduler`; README
@@ -31,8 +30,6 @@ api/                    API notes
 UI и MCP вынесены в отдельные solutions:
 
 ```text
-solutions/assistant-ui
-solutions/mcp-alarm
 solutions/ha-bridge
 ```
 
@@ -78,5 +75,5 @@ emission, не подтверждение звука.
 - HA/Pulsar отвечают за звонок, рингтон, TTS, громкость и restore source.
 - `alarm` отвечает за расписания и состояние.
 - `ha-bridge` — за голос/вебхуки HA.
-- `mcp-alarm` — за Hermes/MCP.
+
 - UI — отдельный solution, не внутри alarm.

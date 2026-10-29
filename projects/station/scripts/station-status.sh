@@ -5,14 +5,8 @@ set -u
 IP="${STATION_IP:-192.0.2.13}"
 ADB="${ADB:-adb}"
 S="$IP:5555"
-MITM="$HOME/Desktop/alice-mitm-bootstrap"
-STACK="$HOME/Desktop/v3rt3p-stack"
-
 echo "== date =="; date
 echo "== mac ip =="; ipconfig getifaddr en0 2>/dev/null || true
-echo "== listeners =="; lsof -nP -iUDP:53 -iTCP:80 -iTCP:443 -iTCP:31116 -sTCP:LISTEN 2>/dev/null | grep -v '^COMMAND' | head -6
-echo "== dns/proxy =="; (cd "$MITM" && ./scripts/proxy-ctl.sh status 2>&1)
-echo "== stack =="; (cd "$STACK" && docker compose ps --format 'table {{.Service}}\t{{.Status}}' 2>&1)
 echo "== station ports =="
 nc -z -G 2 "$IP" 22 2>/dev/null && echo "22 open" || echo "22 closed"
 nc -z -G 2 "$IP" 5555 2>/dev/null && echo "5555 open" || echo "5555 closed"

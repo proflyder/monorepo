@@ -9,8 +9,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 
 - `secrets/proxmox-install/` — ISO, install settings, SSH keys, TF state,
   HA/K3s recovery, Wi-Fi profile.
-- `secrets/kubernetes-research/recovery/` — cluster/auth, custom OCI images,
-  pre-cutover.
+- `secrets/kubernetes-research/recovery/` — cluster/auth и custom OCI images.
 - `secrets/local/backups/` — HA config/DB, MA/STT/TTS, станция.
 - `secrets/local/snapshots/nettop/` — PVE/VM конфигурация.
 

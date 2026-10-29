@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Cutover preflight: refuse --execute unless the old owner is really off.
+"""Safety preflight for `deploy.sh --execute` (start the executor).
 
 Checks (all read-only):
-1. the four legacy HA schedule writers are off;
-2. no alarm is currently ringing locally (no surprise during switch);
+1. retired legacy HA schedule writers are absent or off (never on/unknown);
+2. no alarm is currently ringing locally;
 3. the scheduler API answers authenticated and ready;
 4. HA's scheduler endpoint points at this scheduler.
 
@@ -60,6 +60,24 @@ def post(url: str, token: str, payload: dict) -> tuple[int, object]:
         return exc.code, None
 
 
+def legacy_writer_failures(states: dict[str, str]) -> list[str]:
+    """Return failures for writers that could still execute schedules.
+
+    A missing entity is safe: the retired writer was removed from the shipped
+    HA YAML on an upgraded install. An entity that exists must be exactly
+    "off"; "on", "unknown", "unavailable" and any other value fail closed.
+    """
+    failures: list[str] = []
+    for entity in LEGACY_WRITERS:
+        state = states.get(entity)
+        if state is None or state == "off":
+            continue
+        failures.append(
+            f"legacy writer {entity} is {state!r}, expected absent or 'off'"
+        )
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ha-url", required=True)
@@ -79,13 +97,10 @@ def main() -> int:
         return 1
     by_id = {s["entity_id"]: s["state"] for s in states}
 
-    for entity in LEGACY_WRITERS:
-        state = by_id.get(entity)
-        if state != "off":
-            failures.append(f"legacy writer {entity} is {state!r}, expected 'off'")
+    failures.extend(legacy_writer_failures(by_id))
 
     if by_id.get("input_boolean.alarm_ringing") == "on":
-        failures.append("an alarm is ringing in HA; stop it before cutover")
+        failures.append("an alarm is ringing in HA; stop it before starting the executor")
 
     if args.expected_endpoint:
         actual = by_id.get("input_text.scheduler_endpoint")
@@ -111,7 +126,7 @@ def main() -> int:
             print("FAIL:", failure)
         return 1
 
-    print("preflight ok: legacy writers off, no ringing alarm, scheduler ready")
+    print("preflight ok: retired writers absent/off, no ringing alarm, scheduler ready")
     return 0
 
 

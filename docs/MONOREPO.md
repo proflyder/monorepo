@@ -11,21 +11,16 @@
 solutions/               переиспользуемые решения
   scheduler/             durable scheduler, SQLite queues, Connect/gRPC
   alarm/                 legacy AlarmService facade над тем же engine
-  ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler
-  mcp-gateway/           (планируется) общий extensible MCP gateway
-  mcp-alarm/             (планируется) adapter/plugin за mcp-gateway
-  assistant-ui/          переиспользуемый PWA/UI
+  ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler (+ cmd/ha-control)
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (+ checked-in Go stubs)
   go/                    shared Go
-  rust/                  Rust DSP/инференс
 
 projects/                композиции и deployment
   station/               Pulsar/ADB/BLE/provisioning
   home-assistant/        HA/MA/STT/TTS/Hermes/Tailscale
-  home/                  station + home-assistant + scheduler/bridge
-  cloud/                 отдельный scheduler instance
+  home/                  station + home-assistant + scheduler/bridge/control
   mobile/android/        Kotlin/Views клиент (dev.proflyder.home)
 
 platform/                Bazel/toolchains/deploy-шаблоны
@@ -40,9 +35,8 @@ archive/                  исторические материалы
   scheduling и очередей, а не отдельные планировщики;
 - `projects/station` и `projects/home-assistant` независимы;
 - `projects/home` — их композиция плюс домашний scheduler и HA bridge;
-- `projects/cloud` задаёт свой DB path, port, timezone, token;
-- `solutions/ha-bridge` арендует только `queue=home` и исполняет события;
-- `solutions/mcp-gateway` (future) один для всех сервисов и проектов;
+- `solutions/ha-bridge` арендует только `queue=home`; `cmd/ha-control` — только
+  `queue=control` и каталог Home;
 - один и тот же код не копируется между проектами;
 - project-specific секреты не попадают в solution.
 
@@ -53,10 +47,8 @@ projects/home:
   scheduler@home      sqlite=/data/home/scheduler.db  :8098
   alarm@home          тот же engine + legacy AlarmService facade
   ha-bridge@home      SCHEDULER_ENDPOINT=127.0.0.1:8098, queue=home
+  ha-control@home     каталог Home, queue=control
   android             Connect JSON → LAN/Tailscale endpoint
-
-projects/cloud:
-  scheduler@cloud     sqlite=/data/cloud/scheduler.db :8098
 ```
 
 Одновременно `scheduler` и `alarm` на одной БД не запускаются: это один
@@ -128,21 +120,11 @@ gRPC-Web; отдельного REST API нет. Go stubs лежат в репо�
   scripts, подтверждает события. Не владеет расписанием.
 - `projects/mobile/android`: управление server state, Connect JSON; нативных
   phone alarm/push пока нет.
-- `solutions/mcp-gateway` (future): единый MCP для всех проектов; отдельный
-  MCP-сервер на проект не разворачивается.
-- `solutions/assistant-ui`: UI/PWA, endpoint из конфига.
 - `projects/*`: композиция, env, compose, systemd.
 
 ## Следующие этапы
 
-1. Довести Android-клиент до рабочего vertical slice (server-authoritative).
-2. Подключить `ha-bridge` к scheduler за флагом, без второго executor-а.
-3. Явный cutover HA со звуком и rollback-планом.
-4. `mcp-gateway` tool groups, когда появится реальный клиент.
-5. Recurring generic tasks и event-trigger rules (сейчас one-shot
-   `EnqueueTask`).
-6. Deploy/always-on хост и наблюдаемость.
-7. Перевести BLE gateway в Bazel.
+Открытые задачи — только `PENDING.md`.
 
 ## Владение тестами
 

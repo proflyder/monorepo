@@ -23,7 +23,7 @@ scheduler.env.example      placeholders; copy to secrets/home/scheduler.env
 render.py                  strict ${VAR} renderer (unknown/empty => fail)
 deploy.sh                  build, release, firewall, apply, mode transitions
 backup.sh                  quiesced SQLite + ledger backup with checksums
-preflight.py               cutover gate (legacy writers off, scheduler ready)
+preflight.py               safety preflight (retired writers absent/off, scheduler ready)
 ```
 
 Tracked templates contain only placeholders/TEST-NET values. Real addresses,
@@ -49,7 +49,7 @@ Kubernetes events.
 NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh            # install/update, preserve mode
 NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --shadow   # dry-run, 0 replicas
 HA_TOKEN_FILE=secrets/home/ha.token \
-NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --execute  # cutover
+NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --execute  # start executor
 NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --skip-build
 ```
 
@@ -128,31 +128,24 @@ Endpoints (private values in `secrets/home/scheduler.env`):
   sums, and restores the recorded counts. Default output is
   `secrets/local/backups/scheduler/<timestamp>`; never inside the repo tree.
 
-## Cutover
+## Operation
 
-1. Enable voice adapters in HA (they are installed and validated separately).
-2. Quiesce the old owner: `automation.alarm_scheduler`,
-   `schedules_alarm_dispatcher`, `schedules_reminder_dispatcher`,
-   `schedules_timer_finished` off. They ship with `initial_state: false`.
-3. Snapshot and import state (see `projects/home/scheduler-migration`), verify.
-4. `deploy.sh --execute` (preflight + bridge execute).
-5. Verify: scheduler `GetStatus` shows a live `ha-bridge-home` consumer,
-   `enabledSchedules` matches the import, and a scheduled occurrence produces
-   `DELIVERED` only after HA returns 2xx.
+- `deploy.sh --shadow`: bridge dry-run, 0 replicas; scheduler keeps its data
+  and stops executing.
+- `deploy.sh --execute`: safety preflight (retired writers absent/off, no
+  ringing alarm, scheduler ready) and then starts the executor at 1 replica.
+- Default reruns preserve the current executor mode/replicas; `--control-*`
+  toggles only ha-control.
+- Readiness: `GetStatus` shows a live `ha-bridge-home` consumer and the expected
+  `enabledSchedules`; a delivered event is acknowledged only after HA returns
+  2xx. Delivery is at-least-once, not proof of audibility.
+- Emergency audio stop: HA script `alarm_stop` stops the current sound
+  independently of scheduler ownership; canonical stop/snooze remains
+  `StopSchedule`/`SnoozeSchedule`.
 
-## Rollback
-
-Order matters: stop the new owners **before** restoring the old writer.
-
-1. `deploy.sh --shadow` (bridge dry-run, 0 replicas). Scheduler keeps its data
-   but stops being an executor.
-2. Re-enable the legacy HA automations (`initial_state` back to true or
-   `automation.turn_on`) only after the bridge is stopped. Never run both.
-3. Restore the previous HA dataset if required. Do not overwrite schedules
-   created in the scheduler after cutover with the pre-cutover snapshot; the
-   migration mapping is the reverse-reconciliation record.
-4. To stop audio immediately, use the HA script `alarm_stop` (executor-level
-   emergency stop); it is independent of scheduler ownership.
+Database restore (current procedure): scale the scheduler to 0, restore the
+files from the latest `backup.sh` output into the `scheduler-data` PVC, then
+scale back to 1 and verify `GetStatus`.
 
 ## Limits
 

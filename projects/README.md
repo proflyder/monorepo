@@ -7,13 +7,11 @@ systemd и deployment, но **не** бизнес-логика.
 projects/station/          Pulsar/ADB/BLE/provisioning
 projects/home-assistant/   HA/MA/STT/TTS/Hermes/Tailscale
 projects/home/             композиция station + home-assistant + alarm
-projects/cloud/            отдельный alarm-инстанс и MCP без HA
-projects/mobile/           будущие мобильные клиенты
+projects/mobile/           Android-клиент
 ```
 
-Один и тот же `solutions/alarm` может быть запущен в `home` и `cloud` с
-разными БД, портами и endpoint. Один и тот же `solutions/mcp-alarm` может
-смотреть на любой из них.
+Один и тот же `solutions/scheduler`/`alarm` запускается с разными БД,
+портами и endpoint; project задаёт только композицию.
 
 ## Правила
 

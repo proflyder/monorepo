@@ -33,21 +33,8 @@ GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath \
 (или запускать функции через ADB), пути маркеров
 `/data/quasar/activate_adb_*` совпадают с текущей прошивкой.
 
-## `misc/yandex-micro-kit.sh`
+## Удалённые legacy-утилиты
 
-Скрипт «OTA off + вечный ADB» для Лайт/Микро. В нём те же три слоя:
-подмена `ota_script.pub`, заглушка `device_ota_update.sh`, удаление `updatesd`
-из `launch.json`, маркеры + `chattr +i`.
-
-**Осторожно:** в нём пути `/data/quasar/activate_adb_*` (совпадают с текущей
-прошивкой, но на старой 2024 были другие). Не запускать вслепую — сверять.
-
-## `misc/rollback.sh` + `README-mini2-rollback.md`
-
-Откат/прошивка **Станции Мини 2** (MTD/UBI, `mtd2/3/6`). **Не применять к
-Миди**: у Миди eMMC/ext4 и другие разделы (`mmcblk0p*`). Можно окирпичить.
-
-## `misc/README-mini2-rollback.md`
-
-Инструкция по downgrade Мини 2, Amlogic USB Burning Tool, тестпоинт.
-Полезно как справка, не как готовый сценарий для Миди.
+`misc/yandex-micro-kit.sh`, `misc/rollback.sh` и Mini 2 downgrade guide
+относились к другим устройствам (Light/Micro/Mini 2) и удалены из активного
+дерева; private archive — `archive/legacy/mini2/`. Не применять к Midi.

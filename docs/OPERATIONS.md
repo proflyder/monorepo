@@ -110,7 +110,7 @@ projects/station/scripts/restore-ota-fortress.sh   # осторожно, отк�
 
 ## Планировщик / HA bridge
 
-Deploy, cutover и rollback — `projects/home/kubernetes/scheduler/README.md`.
+Deploy, пауза и запуск исполнителя — `projects/home/kubernetes/scheduler/README.md`.
 Короткие команды (приватные значения в `secrets/home/scheduler.env`):
 
 ```bash
@@ -120,7 +120,7 @@ NODE_SSH=root@<node> projects/home/kubernetes/scheduler/deploy.sh
 # осознанный переход в shadow (dry-run, 0 реплик)
 NODE_SSH=root@<node> projects/home/kubernetes/scheduler/deploy.sh --shadow
 
-# cutover: preflight + execute
+# запуск исполнителя: preflight + execute
 HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=root@<node> \
   projects/home/kubernetes/scheduler/deploy.sh --execute
 
@@ -150,9 +150,10 @@ Home control (каталог устройств/сценариев):
 (tailnet-only, TLS оператора); LAN endpoint — `http://<node>:30098`.
 Оба требуют bearer. `pl-home` не менять: `/` → HAOS, `/grafana` → Grafana.
 
-Rollback порядок: сначала `--shadow` (bridge перестаёт исполнять), затем
-вернуть legacy HA automations. Не включать два исполнителя одновременно;
-данные scheduler сохраняются, mapping — источник обратного сопоставления.
+Пауза исполнения — `deploy.sh --shadow` (0 реплик, данные scheduler
+сохраняются); возврат — `--execute` после preflight. Legacy writers удалены и
+повторно не включаются; два исполнителя одновременно не запускать. Бэкап/restore
+БД — `backup.sh` и процедура в README scheduler.
 
 ## Egress / карантин
 
@@ -185,9 +186,8 @@ PSK `…4c02`, token `…4c03`, commit `…4c04`, status `…4c05`.
 ## Голос / расписания
 
 Проверка pipeline и фраз — `projects/home-assistant/ha-voice/README.md`.
-Будильники: `todo.alarms_once/daily/weekdays/weekends`; таймеры
-`timer.taimer_1…8`; напоминания `todo.reminders`; заметки `todo.notes`.
-Legacy `input_datetime.alarm_next` выключен; не использовать.
+Расписания и таймеры — canonical scheduler (см. `STATE.md`); старые
+`todo`/`timer` helpers и legacy single-slot не использовать.
 
 Hermes:
 

@@ -7,6 +7,12 @@ for suite in projects/home-assistant/ha-voice projects/home-assistant/hermes pro
   echo "== Python: $suite =="
   python3 -m unittest discover -s "$suite" -p 'test_*.py' -v
 done
+# Scheduler deployment helpers: real preflight regression and the mocked-kubectl
+# control-mode test (the shell test is not covered by unittest discovery).
+echo "== Scheduler deployment: preflight + deploy control =="
+(cd projects/home/kubernetes/scheduler && python3 -m unittest test_preflight.py -v)
+bash projects/home/kubernetes/scheduler/test_deploy_control.sh
+
 # Root Go module: reusable solutions and shared packages. Android/Bazel gates are
 # separate (they need the Android SDK) and are documented in docs/TESTING.md.
 echo "== Go: solutions and packages =="

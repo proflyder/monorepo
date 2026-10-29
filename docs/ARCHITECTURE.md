@@ -18,8 +18,11 @@
 
 - **PVE** — гипервизор; VM получают L2 через `vmbr0`.
 - **HAOS** — единственный HA runtime; MA/Matter — add-ons, не K3s.
-- **K3s** — приложения реального времени и наблюдаемость.
+- **K3s** — приложения реального времени, scheduler/ha-bridge/ha-control и
+  наблюдаемость.
 - **Станция** — ESPHome-спутник HA и Sendspin-плеер; `maind` остановлен.
+- **Scheduler** — единственный владелец расписаний/таймеров; HA bridge
+  исполняет очередь `home`, ha-control — каталог Home и очередь `control`.
 - **Mac** — управление, тесты, recovery.
 
 ## Потоки
@@ -28,9 +31,10 @@
 
 1. Pulsar: VQE + on-device wake «Рикардо» → ESPHome `:6053`.
 2. HA pipeline: GigaAM v3 primary / Whisper fallback.
-3. Локальные intents (свет, музыка, таймеры, будильники) — в HA.
+3. Локальные intents (свет, музыка, таймеры, будильники) — в HA и canonical
+   SchedulerService; HA остаётся исполнителем звука.
 4. Свободная речь → Hermes `:8643` → LLM → Piper Puriso.
-5. TTS/announce → Pulsar; Pulsar не владеет alarm/timer state.
+5. TTS/announce/alarm → Pulsar; Pulsar не владеет alarm/timer state.
 
 ### Музыка
 
@@ -44,11 +48,13 @@
 - PVE `ricardo-uplink`: ровно один physical uplink — Ethernet при carrier,
   иначе Wi-Fi 4-address/WDS. Оба одновременно в мост не подключать.
 - VM сохраняют `.27/.28`, L2, ARP/mDNS/IPv6; NAT и PCI passthrough нет.
-- Tailscale Operator в K3s публикует HA и Grafana без входящих портов.
+- Tailscale Operator в K3s публикует HA (`pl-home`), Grafana, scheduler
+  (`pl-scheduler`) и ha-control (`pl-control`) без входящих портов.
 - Станция: egress guard; публичный WAN и Яндекс закрыты.
 
 ## Данные
 
+- Расписания/таймеры — SQLite scheduler на PVC; каталог Home — live HA.
 - HA state — HAOS Supervisor backup.
 - K3s data/PV — `/srv/k3s/runtime`, `/srv/k3s/volumes/*`; `Retain`.
 - Секреты — Kubernetes Secret/private values/`secrets/`.

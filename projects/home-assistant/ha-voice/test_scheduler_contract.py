@@ -954,7 +954,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         create_fields = SCRIPTS["schedule_alarm_create"]["fields"]
         self.assertIn("second", create_fields)
         self.assertEqual(create_fields["second"].get("default"), 0)
-        self.assertNotIn("second", SCRIPTS["alarm_set"]["fields"])
 
     def test_relative_parser_cannot_exceed_24h(self) -> None:
         # The relative intent slots reuse the alarm_hour/alarm_minute lists, so
@@ -1279,18 +1278,17 @@ class SingleWriterTests(unittest.TestCase):
         self.assertNotIn("todo.alarms", dashboard)
         self.assertNotIn("todo.reminders", dashboard)
         self.assertNotIn("timer.taimer_", dashboard)
-        self.assertNotIn("script.alarm_ui_create", dashboard)
+        self.assertNotIn("alarm_ui_create", SCRIPTS)
 
-    def test_legacy_tick_automations_are_disabled(self):
-        disabled = {
+    def test_legacy_schedule_automations_are_removed(self):
+        automation_ids = {automation["id"] for automation in AUTOMATIONS}
+        for legacy in (
             "alarm_scheduler",
             "schedule_alarm_tick",
             "schedule_reminder_tick",
             "schedule_timer_finished",
-        }
-        for automation in AUTOMATIONS:
-            if automation["id"] in disabled:
-                self.assertIs(automation.get("initial_state"), False, automation["id"])
+        ):
+            self.assertNotIn(legacy, automation_ids)
 
     def test_button_stop_uses_the_confirming_scheduler_script(self):
         automation = next(a for a in AUTOMATIONS if a["id"] == "alarm_button_stop")

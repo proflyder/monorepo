@@ -102,27 +102,18 @@ class LiveReadOnlyTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(data.get("message"), "API running.")
         required = [
-            "input_boolean.alarm_enabled",
             "input_boolean.alarm_ringing",
-            "input_boolean.alarm_snooze_active",
             "input_boolean.alarm_music_was_playing",
-            "input_datetime.alarm_next",
-            "input_datetime.alarm_snooze_until",
             "input_number.alarm_volume",
             "input_number.alarm_previous_volume",
             "input_select.music_route",
-            "input_select.alarm_repeat",
             "input_text.alarm_previous_source",
-            "script.alarm_set",
             "script.alarm_start",
             "script.alarm_stop",
-            "script.alarm_cancel",
-            "script.alarm_snooze",
             "script.alarm_resume",
             "script.alarm_restore",
             "script.music_play_favorites",
             "script.spotify_connect_set_volume",
-            "automation.alarm_scheduler",
             "automation.alarm_stop_with_pulsar_action_button",
             "automation.music_route_follows_player_source",
             "media_player.iandeks_stantsiia_midi",
@@ -183,61 +174,11 @@ class LiveMutationTests(unittest.TestCase):
         self.assertEqual(state_value(PLAYER), "playing")
 
 
-@unittest.skipUnless(MUTATE, "set STATION_E2E_MUTATE=1 to allow alarm schedule mutation")
-class LiveAlarmScheduleTests(unittest.TestCase):
-    def setUp(self):
-        if state_value("input_boolean.alarm_enabled") == "on":
-            self.skipTest("an alarm is already enabled; refusing to overwrite it")
-        self.old_repeat = state_value("input_select.alarm_repeat")
-        self.old_next = state_value("input_datetime.alarm_next")
-        self.player_before = state(PLAYER)
-        self.was_playing = self.player_before["state"] == "playing"
-        self.old_volume = float(self.player_before.get("attributes", {}).get("volume_level", 0.3))
-        self.old_source = self.player_before.get("attributes", {}).get("source")
-
-    def tearDown(self):
-        # alarm_cancel() intentionally media_stop()s before restoring.  Snapshot
-        # and restore the user's playback so this scheduling test is non-destructive.
-        try:
-            if (
-                state_value("input_boolean.alarm_enabled") == "on"
-                or state_value("input_boolean.alarm_ringing") == "on"
-                or state_value("input_boolean.alarm_snooze_active") == "on"
-            ):
-                call("script", "alarm_cancel", {})
-            if self.old_source:
-                call("media_player", "select_source", {"entity_id": PLAYER, "source": self.old_source})
-            if self.was_playing and state_value(PLAYER) != "playing":
-                call("media_player", "media_play", {"entity_id": PLAYER})
-        finally:
-            call("input_select", "select_option", {"entity_id": "input_select.alarm_repeat", "option": self.old_repeat})
-            if self.old_next not in {"unknown", "unavailable"}:
-                call("input_datetime", "set_datetime", {"entity_id": "input_datetime.alarm_next", "datetime": self.old_next})
-            if (self.old_source or "").startswith("Spotify Connect"):
-                call("script", "spotify_connect_set_volume", {"volume_percent": round(self.old_volume * 100)})
-            else:
-                call("media_player", "volume_set", {"entity_id": PLAYER, "volume_level": self.old_volume})
-
-    def test_alarm_set_and_cancel_without_ringing(self):
-        call(
-            "script",
-            "alarm_set",
-            {"hour": 7, "minute": 30, "day": "завтра", "repeat": "По будням"},
-        )
-        self.assertEqual(state_value("input_select.alarm_repeat"), "По будням")
-        self.assertEqual(state_value("input_boolean.alarm_enabled"), "on")
-        next_value = state_value("input_datetime.alarm_next")
-        self.assertRegex(next_value, r"^\d{4}-\d{2}-\d{2} 07:30:00$")
-        self.assertEqual(state_value("input_boolean.alarm_ringing"), "off")
-        call("script", "alarm_cancel", {})
-        self.assertEqual(state_value("input_boolean.alarm_enabled"), "off")
-
-
 @unittest.skipUnless(AUDIO, "set STATION_E2E_AUDIO=1 to allow a short low-volume alarm test")
 class LiveAudioAlarmTests(unittest.TestCase):
     def setUp(self):
-        if state_value("input_boolean.alarm_enabled") == "on":
-            self.skipTest("an alarm is already enabled; refusing to overwrite it")
+        if state_value("input_boolean.alarm_ringing") == "on":
+            self.skipTest("an alarm is already ringing; refusing to interfere")
         self.old_alarm_volume = float(state("input_number.alarm_volume")["state"])
         self.player_before = state(PLAYER)
         self.was_playing = self.player_before["state"] == "playing"
@@ -255,8 +196,6 @@ class LiveAudioAlarmTests(unittest.TestCase):
                 or state_value("input_boolean.alarm_music_was_playing") == "on"
             ):
                 call("script", "alarm_stop", {})
-            if state_value("input_boolean.alarm_enabled") == "on":
-                call("script", "alarm_cancel", {})
             if self.was_playing and state_value(PLAYER) != "playing":
                 call("media_player", "media_play", {"entity_id": PLAYER})
         finally:

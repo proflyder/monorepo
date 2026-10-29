@@ -58,6 +58,7 @@ node_modules/
 .coverage.*
 *.cover
 reports/pairing-coverage.json
+reports/TEST-COVERAGE.md
 build/
 dist/
 .DS_Store

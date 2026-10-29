@@ -7,7 +7,7 @@
 ```bash
 python3 -m pip install -r requirements-test.txt
 make test          # hermetic, без сети/станции
-make coverage      # coverage + reports/TEST-COVERAGE.md
+make coverage      # coverage; reports/TEST-COVERAGE.md (not tracked)
 make test-e2e      # live HA/BLE read-only; нужны токены
 ```
 
@@ -88,20 +88,17 @@ projects/home/e2e/run-scheduler-smoke.sh
 
 Он проверяет: auth reject без/с неверным токеном, timer → FIRE → fake HA →
 DELIVERED, generic task остаётся в очереди `tasks`, STOP через StopSchedule.
-Живой звук, HA shadow-import и cutover этот тест **не** проверяет.
+Живой звук и HA shadow-import этот тест **не** проверяет.
 
-Импорт и голосовые адаптеры:
+Голосовые адаптеры:
 
 ```bash
-python3 -m unittest discover -s projects/home/scheduler-migration -p 'test_*.py' -v
 python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
 ```
 
-Миграция проверяет snapshot из HA `.storage` (ICS + `core.restore_state`),
-running/paused timers, идемпотентный повтор, fail-closed на пустом snapshot и
-quarantine без создания исполняемого расписания. HA voice tests проверяют
-контракт Connect JSON, truthfulness речи, отсутствие legacy snooze/start и
-сохранение `enabled:false` при update; живые HA/scheduler не используются.
+HA voice tests проверяют контракт Connect JSON, truthfulness речи, отсутствие
+legacy snooze/start и сохранение `enabled:false` при update; живые
+HA/scheduler не используются.
 
 Живая проверка голосового маршрута — тихий `conversation.process` через
 builtin-агент (`conversation.home_assistant`), не через Hermes: create/list/
@@ -131,12 +128,11 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 # debug APK: bazel-bin/projects/mobile/android/app/app.apk
 ```
 
-Общий gate — 16/16 targets: 9 Android (включая 2 cold-launch smoke и 14
-Robolectric nav lifecycle) и 7 backend. На устройстве/эмуляторе приложение ещё
-не принималось; push/FCM, offline cache и generic task/scenario UI не
-реализованы. APK debug-signed, appId `dev.proflyder.home`, minSdk 26,
-target/compile 36, только `INTERNET`. Статус Android-таргетов фиксируется в
-`projects/mobile/android/README.md`.
+Android-гейты и их актуальный состав перечислены в
+`projects/mobile/android/README.md`; на устройстве установлен debug APK,
+интерактивная приёмка (фильтры, сценарии, toggle) ещё не завершена. Push/FCM,
+offline cache и generic task UI не реализованы. APK debug-signed, appId
+`dev.proflyder.home`, minSdk 26, target/compile 36, только `INTERNET`.
 
 ## BLE gateway
 
