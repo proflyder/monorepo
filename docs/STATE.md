@@ -125,7 +125,21 @@
 - TTS: Piper `2.5.2`, `ru_puriso2-medium`.
 - Hermes `v0.22.5`, модель `gpt-5.6-luna` через ChatGPT/Codex OAuth;
   low reasoning + streaming; HA MCP 73 tools, MA MCP 86 tools.
-- Voice proxy `v4`: ошибки upstream приведены к OpenAI error object. При
+- Voice proxy `v6`: к v4-санитайзеру добавлен exact cancel guard. Если
+  предыдущий ответ Hermes закончился вопросом, HA включает
+  `continue_conversation` и обходит `prefer_local_intents`; распознанная
+  «отмена» уходила в Hermes. Proxy перехватывает только точную
+  нормализованную фразу последнего user-сообщения, отвечает пустым
+  completion без upstream Hermes и без TTS (`action_done`, `processed_locally=false`,
+  `continue_conversation=false`). Живой continued-run 30.10: cancel 0.02 с,
+  `tts` events нет; свободный follow-up после отмены по-прежнему отвечает
+  Hermes (2.5 с). SHA-256 `voice_proxy.py` в запущенном контейнере совпадает
+  с исходником `projects/home-assistant/hermes/voice_proxy.py`; targeted
+  `kubectl set image` изменил only `hermes` Deployment, остальные workloads
+  сохранили resourceVersion. Helm release `runtime` v13 хранит values с v4:
+  drift зафиксирован, канонические values и `versions.sh` обновлены на v6;
+  следующий helm upgrade применит их. Ошибки upstream по-прежнему
+  нормализуются в OpenAI error object. При
   раннем старте HA интеграция llama_cpp получает ConfigEntryNotReady и
   повторяет подключение, вместо постоянного setup_error. Агент
   `conversation.hermes_agent` восстановлен; живое обращение подтверждено

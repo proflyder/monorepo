@@ -111,6 +111,118 @@ class StreamingTests(unittest.TestCase):
         self.assertEqual(original["model_options"]["reasoning_effort"], "high")
 
 
+class CancelGuardTests(unittest.TestCase):
+    def test_exact_normalized_cancel_phrases_match(self):
+        for text in ["отмена", "Отмена!", "  отмени  ", "  Отмена!  ", "Передумала.",
+                     "не надо", "НИЧЕГО", "отбой…", "забудь", "Неважно?"]:
+            with self.subTest(text=text):
+                payload = {"messages": [{"role": "user", "content": text}]}
+                self.assertIsNotNone(voice_proxy.cancel_short_circuit(payload))
+
+    def test_extra_meaning_and_non_user_roles_do_not_match(self):
+        negatives = [
+            [{"role": "user", "content": "отмена будильника"}],
+            [{"role": "user", "content": "не надо музыку"}],
+            [{"role": "user", "content": "не отмена"}],
+            [{"role": "user", "content": "как отменить"}],
+            [{"role": "user", "content": "«отмена»"}],
+            [{"role": "user", "content": '"отмена"'}],
+            [{"role": "user", "content": "от-мена"}],
+            [{"role": "user", "content": "не, надо"}],
+            [{"role": "user", "content": ""}],
+            [{"role": "assistant", "content": "отмена"}],
+            [{"role": "tool", "content": "отмена", "tool_call_id": "1"}],
+            [{"role": "user", "content": [{"type": "text", "text": "отмена"}]}],
+            [{"role": "user", "content": "привет"}],
+        ]
+        for messages in negatives:
+            with self.subTest(messages=messages):
+                self.assertIsNone(voice_proxy.cancel_short_circuit({"messages": messages}))
+
+    def test_only_last_user_message_is_considered(self):
+        payload = {"messages": [
+            {"role": "user", "content": "отмена"},
+            {"role": "assistant", "content": "Что отменить?"},
+            {"role": "user", "content": "включи музыку"},
+        ]}
+        self.assertIsNone(voice_proxy.cancel_short_circuit(payload))
+
+
+class CancelGuardTransportTests(unittest.TestCase):
+    """The guard answers locally and never opens an upstream connection."""
+
+    def setUp(self):
+        self.received = None
+        case = self
+
+        class Upstream(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                case.received = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"choices":[{"message":{"role":"assistant","content":"upstream"}}]}')
+
+        class QuietProxy(voice_proxy.Handler):
+            def log_message(self, *args):
+                pass
+
+        self.upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+        self.proxy = ThreadingHTTPServer(("127.0.0.1", 0), QuietProxy)
+        self.override = patch.object(
+            voice_proxy, "UPSTREAM", f"http://127.0.0.1:{self.upstream.server_port}")
+        self.override.start()
+        for server in (self.proxy, self.upstream):
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        for server in (self.proxy, self.upstream):
+            server.shutdown()
+            server.server_close()
+        self.override.stop()
+
+    def request(self, text, stream=False, role="user"):
+        payload = {"model": "hermes-agent", "stream": stream,
+                   "messages": [{"role": role, "content": text}]}
+        return urllib.request.urlopen(urllib.request.Request(
+            f"http://127.0.0.1:{self.proxy.server_port}/v1/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"}), timeout=2)
+
+    def test_non_stream_cancel_returns_empty_assistant_without_upstream(self):
+        with self.request("отмена") as response:
+            body = json.loads(response.read())
+        self.assertIsNone(self.received)
+        choice = body["choices"][0]
+        self.assertEqual(choice["finish_reason"], "stop")
+        self.assertEqual(choice["message"]["role"], "assistant")
+        self.assertEqual((choice["message"]["content"] or "").strip(), "")
+
+    def test_stream_cancel_has_role_finish_done_and_no_upstream(self):
+        with self.request("Отмена!", stream=True) as response:
+            events = list(sse_events(response))
+        self.assertIsNone(self.received)
+        self.assertEqual(events[-1], ("message", "[DONE]"))
+        chunks = [json.loads(data) for _, data in events[:-1]]
+        self.assertEqual(chunks[0]["choices"][0]["delta"]["role"], "assistant")
+        self.assertEqual(chunks[1]["choices"][0]["finish_reason"], "stop")
+        spoken = "".join(
+            chunk["choices"][0]["delta"].get("content", "")
+            for chunk in chunks if not chunk["choices"][0]["finish_reason"]
+        )
+        self.assertEqual(spoken.strip(), "")
+
+    def test_tool_continuation_and_free_text_still_reach_upstream(self):
+        self.request("отмена", role="tool")
+        self.assertIsNotNone(self.received)
+        self.received = None
+        self.request("включи музыку")
+        self.assertIsNotNone(self.received)
+
+
 class ProxyTransportTests(unittest.TestCase):
     """Real HTTP checks with a gated upstream: buffering the full answer must fail."""
 

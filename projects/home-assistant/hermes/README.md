@@ -32,6 +32,26 @@ search and `api_server` toolset.  The HA voice prompt lives in
 [`SOUL.md`](SOUL.md); the TTS sanitizer lives in
 [`voice_proxy.py`](voice_proxy.py).  Do not copy secrets into this directory.
 
+## Cancel guard (proxy v6)
+
+HA's `prefer_local_intents` is skipped for the next utterance when the previous
+assistant reply ended with a question (`continue_conversation=true`,
+`_intent_agent_only`). During that follow-up turn a spoken «отмена» used to
+reach the Hermes model. `voice_proxy.py` now checks only the last message when
+its role is `user`, normalizes NFKC/case/whitespace and strips only sentence-
+final `.!?…`, then matches the exact existing `StationCancel` phrases. Quotes,
+hyphens, internal commas and phrases with extra meaning are forwarded unchanged.
+On a match the proxy returns an empty chat completion (JSON or SSE with
+`role`, `finish_reason=stop`, `[DONE]`) and never opens the Hermes upstream.
+It logs only `cancel guarded count=N stream=... upstream=skipped`.
+
+HA's llama_cpp adapter drops an assistant message whose content is empty, so
+the guard sends a single space. The pipeline strips it, skips TTS and keeps
+`continue_conversation=false`; the intent response is `action_done` with
+whitespace-only speech and `processed_locally=false` (the response came through
+the conversation agent, not the local intent path). The proxy image is
+`docker.io/ricardo/voice-proxy:v6` in `projects/home/kubernetes/versions.sh`.
+
 ## Persona — Ricardo
 
 The station assistant is **Рикардо**, the user's personal voice assistant, not

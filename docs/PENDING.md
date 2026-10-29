@@ -12,13 +12,16 @@
       Нужно либо расширить локальный набор, либо fallback в HA.
 - [ ] Живая приёмка отмены: повторный wake во время LISTENING/PROCESSING
       отменяет старый вызов и начинает новый, поздний RUN_END старого run не
-      завершает новый диалог; «отмена» после wake идёт в локальный
-      `StationCancel` без TTS и Hermes. Отмена без wake во время думающего
-      вызова не поддерживается: в command-модели станции нет этого слова.
-      Сборка и HA-intent развёрнуты 30.10; проверено тихими API (HA
-      subscribed, «отмена» → `action_done` без речи), нужна голосовая проверка
-      LISTENING/PROCESSING/SPEAKING и что «Рикардо, стоп» по-прежнему
-      останавливает будильник.
+      завершает новый диалог. «Отмена» после wake идёт в локальный
+      `StationCancel` без TTS; в continued-диалоге (Hermes закончил вопросом)
+      её теперь перехватывает voice proxy v6 до Hermes. Отмена без wake во
+      время думающего вызова не поддерживается: в command-модели станции нет
+      этого слова. Тихие API-проверки 30.10 прошли: direct local intent,
+      continued `assist_pipeline/run` (`end_stage=tts`, 0.02 с, без tts events,
+      без upstream), свободный follow-up после отмены доходит до Hermes.
+      Осталась голосовая проверка LISTENING/PROCESSING/SPEAKING и что
+      «Рикардо, стоп» по-прежнему останавливает будильник; распознавание
+      `StationAlarmStop` проверено без запуска звонка.
 - [ ] MA Liked Songs sync; «включи любимое» при пустом плейлисте.
 - [ ] Bluetooth-пара телефона. `bluetoothctl devices` на станции пуст; в HA
       entry `bluetooth` в `setup_retry` (adapter станции недоступен из HAOS VM),

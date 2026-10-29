@@ -37,6 +37,16 @@
   запрос завершается без озвучки и без Hermes. Слова «отмена» нет в штатной
   command-модели станции, поэтому посреди уже идущего вызова без повторного
   wake word она локально не распознаётся.
+  Отдельный случай — продолжение диалога: если ответ Hermes заканчивается
+  вопросом, HA выставляет `continue_conversation=true` и следующий run
+  намеренно обходит `prefer_local_intents` (`_intent_agent_only`), отправляя
+  «отмена» сразу агенту. Это и был live-дефект 30.10. Теперь
+  `hermes-voice-proxy` (v6) перехватывает точную нормализованную фразу
+  последнего пользовательского сообщения до вызова Hermes и возвращает пустой
+  SSE/JSON completion. HA отвечает `action_done` без TTS; `processed_locally`
+  остаётся `false`, потому что ответ формально пришёл от conversation-агента,
+  а не от локального intent. Свободные запросы и follow-up после отмены
+  по-прежнему идут в Hermes.
 
 Громкость: `volume_mode=sync_spotify` + Web API volume. Слайдер Spotify
 меняет MA/Pulsar; voice «громкость 1…10» меняет MA/Pulsar и Spotify app.

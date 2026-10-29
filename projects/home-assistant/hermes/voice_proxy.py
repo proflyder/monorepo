@@ -26,6 +26,7 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from unicodedata import normalize as unicode_normalize
 
 UPSTREAM = os.environ.get("HERMES_UPSTREAM", "http://127.0.0.1:8642").rstrip("/")
 # Loopback by default. The K3s deployment sets this to the LAN address so HAOS
@@ -43,6 +44,67 @@ _MD_LINE_PREFIX = re.compile(r"(?m)^\s*(?:#{1,6}\s*|[-*+]\s+|\d+[.)]\s+)")
 _MD_MARKS = re.compile(r"[*_`~]+")
 _EMPTY_PARENS = re.compile(r"\(\s*\)")
 _SPACE = re.compile(r"\s+")
+# STT may add a sentence-final mark; nothing else is stripped.  Quotes,
+# hyphens and internal commas must survive so quoted or reworded phrases are
+# not treated as an exact cancel command.
+_TRAILING_PUNCT = ".!?…"
+
+# Exact local cancel phrases already registered by the HA
+# custom_sentences/ru/station_control.yaml StationCancel intent.  This guard is
+# a last-resort path for HA's continued-conversation mode, where the pipeline
+# sends the next utterance straight to the conversation agent and skips
+# prefer_local_intents.  Do not broaden this into fuzzy matching.
+CANCEL_PHRASES = frozenset(
+    {
+        "отмена",
+        "отмени",
+        "передумал",
+        "передумала",
+        "не надо",
+        "ничего",
+        "отбой",
+        "забудь",
+        "неважно",
+    }
+)
+
+# HA's llama_cpp adapter drops an assistant message whose accumulated content
+# is empty, then raises "Unable to get response".  A whitespace-only body keeps
+# the message valid while the pipeline's tts_input.strip() check still skips
+# TTS.  It is never spoken and never reaches Hermes.
+CANCEL_SILENCE = " "
+
+_cancel_total = 0
+
+
+def normalize_utterance(text: str) -> str:
+    """Return a compact lowercase form used only for exact cancel matching.
+
+    Only NFKC, case folding, whitespace collapsing and sentence-final STT
+    punctuation are removed.  Quotes, hyphens and internal commas stay, so
+    «отмена», "отмена", от-мена and не, надо do not match.
+    """
+    text = unicode_normalize("NFKC", text).casefold().strip()
+    return " ".join(text.rstrip(_TRAILING_PUNCT).split())
+
+
+def cancel_short_circuit(payload: dict[str, Any]) -> str | None:
+    """Return the matched cancel phrase for the last user message, or None.
+
+    Only the final message is considered.  Tool results, assistant text,
+    quoted history and messages with extra meaning are forwarded upstream.
+    """
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return None
+    last = messages[-1]
+    if not isinstance(last, dict) or last.get("role") != "user":
+        return None
+    content = last.get("content")
+    if not isinstance(content, str):
+        return None
+    normalized = normalize_utterance(content)
+    return normalized if normalized in CANCEL_PHRASES else None
 
 
 def sanitize_text(text: str) -> str:
@@ -205,12 +267,61 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self._send(503, error_body("Hermes upstream is unavailable"), "application/json")
 
+    def _cancel_chunk(self, payload: dict[str, Any], *, delta: dict[str, Any],
+                      finish_reason: str | None = None) -> dict[str, Any]:
+        return {
+            "id": "chatcmpl-ricardo-cancel",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": payload.get("model") or "hermes-agent",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+
+    def _send_cancel_completion(self, payload: dict[str, Any]) -> None:
+        """Answer a local cancel without any upstream Hermes model turn."""
+        global _cancel_total
+        _cancel_total += 1
+        # Structural evidence only: never log the recognized text or payload.
+        self.log_message(
+            "cancel guarded count=%d stream=%s upstream=skipped",
+            _cancel_total,
+            bool(payload.get("stream")),
+        )
+        if payload.get("stream") is True:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self._stream_started = self.close_connection = True
+            self._write_event(self._cancel_chunk(
+                payload, delta={"role": "assistant", "content": CANCEL_SILENCE}))
+            self._write_event(self._cancel_chunk(payload, delta={}, finish_reason="stop"))
+            self._write_event("[DONE]")
+            return
+        body = {
+            "id": "chatcmpl-ricardo-cancel",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": payload.get("model") or "hermes-agent",
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": CANCEL_SILENCE},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        }
+        self._send(200, json.dumps(body).encode(), "application/json")
+
     def do_POST(self) -> None:  # noqa: N802
         self._stream_started = False
         try:
             raw = self._read_body()
             payload = json.loads(raw or b"{}")
             if self.path.startswith("/v1/chat/completions"):
+                if cancel_short_circuit(payload) is not None:
+                    self._send_cancel_completion(payload)
+                    return
                 payload = prepare_chat_request(payload)
                 if payload.get("stream") is True:
                     self._stream_chat(payload)
