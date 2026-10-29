@@ -222,7 +222,8 @@ alarm_start:
           target:
             entity_id: input_text.alarm_previous_source
           data:
-            value: "{{ state_attr('media_player.iandeks_stantsiia_midi', 'source') | default('') }}"
+            value: "{{ state_attr('media_player.iandeks_stantsiia_midi', 'source') | default('', true) }}"
+          continue_on_error: true
         - choose:
             - conditions:
                 - condition: state
@@ -253,6 +254,7 @@ alarm_start:
         entity_id: media_player.iandeks_stantsiia_midi
       data:
         volume_level: 0.05
+      continue_on_error: true
     - service: script.turn_on
       target:
         entity_id: script.alarm_ramp
@@ -342,6 +344,7 @@ alarm_ramp:
             data:
               volume_level: >-
                 {{ (start_volume + (target_volume - start_volume) * repeat.index / 6) | round(2) }}
+            continue_on_error: true
           - delay: "00:00:03"
 
 alarm_restore:
