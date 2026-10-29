@@ -10,6 +10,9 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
+import tempfile
+from datetime import datetime, timezone
 import wave
 
 
@@ -18,8 +21,17 @@ def main():
     parser.add_argument("--trainer", required=True, type=Path)
     parser.add_argument("--run", required=True, type=Path)
     parser.add_argument("--steps", type=int, default=1000)
+    parser.add_argument("--registry", type=Path, help="Private model registry; defaults to trainer/training/model-registry/ricardo")
+    parser.add_argument("--version", help="New immutable registry version ID")
     args = parser.parse_args()
     root, run = args.trainer.resolve(), args.run.resolve()
+    registry_spec = importlib.util.spec_from_file_location("model_registry", Path(__file__).with_name("registry.py"))
+    registry = importlib.util.module_from_spec(registry_spec)
+    registry_spec.loader.exec_module(registry)
+    registry_path = args.registry.resolve() if args.registry else root / "training/model-registry/ricardo"
+    version = args.version or (run.name + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S").lower())
+    if (registry_path / version).exists():
+        raise FileExistsError("Registry version exists; refusing to overwrite")
     os.umask(0o077)
     os.chdir(root)
     import numpy as np
@@ -41,6 +53,7 @@ def main():
     output = trainer.OUTPUT_DIR / cfg["model_name"]
     modeldir, featdir = output / "model", output / "mww_features"
     modeldir.mkdir(parents=True, exist_ok=True)
+    (modeldir / "epochs").mkdir(exist_ok=True)
     featdir.mkdir(parents=True, exist_ok=True)
     if (modeldir / "training-metrics.csv").exists():
         raise RuntimeError("Run already trained; use a new run directory instead of overwriting it")
@@ -144,6 +157,7 @@ def main():
     model.fit(train, epochs=max(1, args.steps // 100), steps_per_epoch=100,
               validation_data=(xval, yval, valweights), validation_batch_size=batch, callbacks=[
                   tf.keras.callbacks.ModelCheckpoint(str(best), monitor="val_loss", save_best_only=True, save_weights_only=True),
+                  tf.keras.callbacks.ModelCheckpoint(str(modeldir / "epochs/epoch-{epoch:03d}.weights.h5"), save_weights_only=True),
                   tf.keras.callbacks.CSVLogger(str(modeldir / "training-metrics.csv")),
                   tf.keras.callbacks.EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)], verbose=2)
     model.load_weights(str(best))
@@ -160,6 +174,23 @@ def main():
     if list(inp["shape"]) != [1, 3, 40] or inp["dtype"] != np.int8 or out["dtype"] != np.uint8:
         raise RuntimeError("Export is not compatible with the deployed streaming detector")
     print("EXPORT_VERIFIED", path.name, path.stat().st_size, hashlib.sha256(path.read_bytes()).hexdigest(), flush=True)
+    # A model version is complete only after the export, all epoch weights and
+    # its recipe have been copied and verified in the private append-only registry.
+    with tempfile.TemporaryDirectory(prefix="registry-export-", dir=run) as temporary:
+        stage = Path(temporary)
+        for source in modeldir.rglob("*.h5"):
+            dest = stage / "weights" / source.relative_to(modeldir)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, dest)
+        for source in [path, path.with_suffix(".json"), run / "training-provenance.json", run / "manifest.json", modeldir / "training-metrics.csv"]:
+            shutil.copyfile(source, stage / source.name)
+        shutil.copyfile(root / "train_mww.py", stage / "trainer-source.py")
+        shutil.copyfile(Path(__file__), stage / "finetune-source.py")
+        (stage / "config.json").write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+        saved = registry.snapshot(registry_path, version, stage, {
+            "role": "candidate, not deployed", "personal_voice": True,
+            "parent_weights_sha256": origin_hash, "epoch_checkpoints": "all completed epochs"})
+        print("REGISTRY_SAVED", saved.name, "verified files", registry.verify(saved), flush=True)
 
 
 if __name__ == "__main__":
