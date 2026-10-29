@@ -26,6 +26,17 @@ class RecordingTests(unittest.TestCase):
         self.rec.finish_take()
         self.tmp.cleanup()
 
+    def test_voice_take_continues_after_three_minutes_and_stops_after_eight(self):
+        self.rec.start_take("normal", "train", "long track")
+        self.rec.take["monotonic"] = 0
+        with patch.object(app.time, "monotonic", return_value=181):
+            self.rec.consume(b"\x01\x00" * 100)
+        self.assertIsNotNone(self.rec.take)
+        with patch.object(app.time, "monotonic", return_value=481):
+            self.rec.consume(b"\x01\x00" * 100)
+        self.assertIsNone(self.rec.take)
+        self.assertEqual(self.rec.status()["files"][0]["frames"], 200)
+
     def test_pcm_and_metadata_roundtrip(self):
         self.rec.start_take("whisper", "test", "quiet room")
         samples = [12, -40, 32767, -32768] * 4000
@@ -71,7 +82,7 @@ class RecordingTests(unittest.TestCase):
         self.assertTrue(self.rec.last_error)
         self.assertIn("/stop", shell.call_args.args[0])
 
-    def test_long_background_capture_preserves_voice_take_limit(self):
+    def test_background_and_voice_take_share_eight_minute_limit(self):
         with patch.object(app.time, "monotonic", return_value=0) as clock:
             self.rec.start_take("background", "train", "")
             clock.return_value = 181
@@ -82,7 +93,7 @@ class RecordingTests(unittest.TestCase):
             self.assertIsNone(self.rec.take)
             self.assertEqual(self.rec.status()["files"][0]["frames"], 1024)
             self.rec.start_take("normal", "train", "")
-            clock.return_value = 662
+            clock.return_value = 962
             self.rec.consume(b"\x01\x00" * 512)
             self.assertIsNone(self.rec.take)
 
