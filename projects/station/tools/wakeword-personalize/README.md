@@ -142,3 +142,32 @@ python3 -m unittest discover -s projects/station/tools/wakeword-personalize -p '
 ```
 
 Тесты не требуют TensorFlow/GPU и не обращаются к инфраструктуре.
+
+## Model-only deployment и откат
+
+`projects/station/configs/wakeword-personal.json` закрепляет выбранную
+персональную модель через SHA256 и private registry path, не публикуя веса.
+`wakeword-baseline.json` — исходная версия для обратного переключения.
+
+```sh
+python deploy.py --ha-url http://192.0.2.28:8123
+# Откат тем же способом (создаёт backup текущей модели):
+python deploy.py --ha-url http://192.0.2.28:8123 \
+  --profile projects/station/configs/wakeword-baseline.json
+```
+
+Подставьте свой HA URL. Доступ берётся из приватного connection.json
+рекордера и secrets/home/ha.token; модели — из приватного registry.
+Перед запуском закончите режим записи и остановите музыку. При активном
+будильнике или голосовом pipeline deploy отказывается работать.
+Сначала сохраняется пара текущих model/manifest в device backups, затем
+меняется только эта пара и выполняется штатный ctl.sh reload. Бинарник,
+его версия, ключи, firmware и конфигурация HA не обновляются. Проверяются
+HA Assist и MA, hash бинарника и установленной модели; при неуспехе
+предпринимается откат к сохранённой паре. При сетевом отказе смотрите
+приватный журнал в secrets/model-deployments, а не запускайте второй deploy.
+
+secrets/model-registry/ricardo/active.json фиксирует последний успешный
+выбор; регистрационный VERSION.json старых архивов не переписывается.
+Копия прежней модели на станции остаётся в /data/pulsar/backups/model-*.
+Применение не заменяет живой приёмки голосом и проверки ложных срабатываний.

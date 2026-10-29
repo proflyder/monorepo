@@ -4,9 +4,16 @@
 
 ## Модель
 
-- On-device microWakeWord v1, FULL resolver встроенной `libtflite`.
+- On-device microWakeWord: персональная v2, FULL resolver встроенной `libtflite`.
 - Threshold `0.9`, окно `10`, pre-roll `0.5 с`.
-- Модель/manifest/метрики — `artifacts/wakeword/ricardo-v1/`.
+- Активный профиль — `projects/station/configs/wakeword-personal.json`;
+  его SHA256 закреплён в профиле. Персональная модель и обучаемые веса —
+  private в `secrets/model-registry/ricardo/v2-personal-20261029/`.
+- Исходная v1 сохранена для отката в private registry и как общий baseline
+  в `artifacts/wakeword/ricardo-v1/`. Профиль отката —
+  `projects/station/configs/wakeword-baseline.json`.
+- Модель загружена на станции; живая приёмка голосом после установки
+  ещё ожидается. Offline-метрики относятся к автоматически размеченному поднабору.
 - Бинарник и device-откат — `/data/pulsar`; legacy исходники и binaries —
   private в `secrets/local/recovery/`.
 - Изменяемые исходники — `projects/station/upstream/pulsar-rust/`,
@@ -32,6 +39,10 @@ make -C satellite -j"$(nproc)" ZIG=/path/to/zig-0.14.1
 Linux/WSL2; результат — `satellite/build/<arch>/pulsar` и `pulsar.debug`.
 Модель для профиля Ricardo кладётся в `satellite/wakewords/` по
 `satellite/wakewords/README.md`.
+Это путь сборки общего upstream-профиля. Персональные веса туда не
+копировать: они должны оставаться в private registry, вне source snapshot.
+Для персонального профиля после установки Pulsar применяется model-only
+deploy из `projects/station/tools/wakeword-personalize/README.md`.
 
 ## Установка / откат
 

@@ -69,7 +69,7 @@
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
-- Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,
+- Custom wake word «Рикардо» personal v2: on-device microWakeWord, threshold 0.9,
   окно 10, pre-roll 0.5 с.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
   reconnect и station reboot. Supervised `reload` завершает Sendspin-сессию
