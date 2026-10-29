@@ -151,10 +151,20 @@ func (c *Client) CallService(ctx context.Context, domain, service, entity string
 	return c.send(req, op)
 }
 
-// States reads the state string ("on", "off", "unavailable", ...) of every
-// entity. Attributes are discarded: the control catalog only needs the state.
-func (c *Client) States(ctx context.Context) (map[string]string, error) {
-	const op = "read states"
+// Entity is one Home Assistant entity as discovered from /api/states.
+type Entity struct {
+	ID    string
+	State string
+	// Name is attributes.friendly_name ("" when absent).
+	Name string
+	// Icon is attributes.icon with any "mdi:" prefix removed ("" when absent).
+	Icon string
+}
+
+// Entities reads every entity with its state, friendly name and icon. Other
+// attributes are discarded.
+func (c *Client) Entities(ctx context.Context) ([]Entity, error) {
+	const op = "read entities"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+statesPath, nil)
 	if err != nil {
 		return nil, &httpapi.Error{Op: op, Err: errors.New("build request")}
@@ -170,15 +180,59 @@ func (c *Client) States(ctx context.Context) (map[string]string, error) {
 		return nil, &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token)}
 	}
 	var states []struct {
-		EntityID string `json:"entity_id"`
-		State    string `json:"state"`
+		EntityID   string `json:"entity_id"`
+		State      string `json:"state"`
+		Attributes struct {
+			FriendlyName string `json:"friendly_name"`
+			Icon         string `json:"icon"`
+		} `json:"attributes"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxStatesBodyBytes)).Decode(&states); err != nil {
 		return nil, &httpapi.Error{Op: op, Err: errors.New("decode states")}
 	}
-	out := make(map[string]string, len(states))
+	out := make([]Entity, 0, len(states))
 	for _, s := range states {
-		out[s.EntityID] = s.State
+		out = append(out, Entity{
+			ID:    s.EntityID,
+			State: s.State,
+			Name:  s.Attributes.FriendlyName,
+			Icon:  strings.TrimPrefix(s.Attributes.Icon, "mdi:"),
+		})
 	}
 	return out, nil
+}
+
+type templateRequest struct {
+	Template string `json:"template"`
+}
+
+// RenderTemplate renders a Home Assistant template and returns the text. It is
+// read-only discovery (areas, labels, hidden flags); the template is always
+// built by this program, never taken from a client.
+func (c *Client) RenderTemplate(ctx context.Context, template string) (string, error) {
+	const op = "render template"
+	payload, err := json.Marshal(templateRequest{Template: template})
+	if err != nil {
+		return "", &httpapi.Error{Op: op, Err: fmt.Errorf("encode request: %w", err)}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/template", bytes.NewReader(payload))
+	if err != nil {
+		return "", &httpapi.Error{Op: op, Err: errors.New("build request")}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", &httpapi.Error{Op: op, Err: networkError(err, c.token)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBytes))
+		return "", &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token)}
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatesBodyBytes))
+	if err != nil {
+		return "", &httpapi.Error{Op: op, Err: errors.New("read response")}
+	}
+	return string(raw), nil
 }

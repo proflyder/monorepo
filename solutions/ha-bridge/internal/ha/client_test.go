@@ -214,17 +214,20 @@ func TestEntityID(t *testing.T) {
 	}
 }
 
-func TestCallServiceAndStates(t *testing.T) {
-	var gotPath, gotAuth, gotBody string
+func TestCallServiceEntitiesAndTemplate(t *testing.T) {
+	var gotPath, gotAuth, gotBody, gotTemplate string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		if r.URL.Path == "/api/states" {
-			_, _ = w.Write([]byte(`[{"entity_id":"light.a","state":"on","attributes":{"x":1}},{"entity_id":"switch.b","state":"off"}]`))
-			return
-		}
-		gotPath = r.URL.Path
 		b, _ := io.ReadAll(r.Body)
-		gotBody = string(b)
+		switch r.URL.Path {
+		case "/api/states":
+			_, _ = w.Write([]byte(`[{"entity_id":"light.a","state":"on","attributes":{"friendly_name":"Lamp A","icon":"mdi:lightbulb","x":1}},{"entity_id":"switch.b","state":"off","attributes":{}}]`))
+		case "/api/template":
+			gotTemplate = string(b)
+			_, _ = w.Write([]byte("light.a|Bedroom\n"))
+		default:
+			gotPath, gotBody = r.URL.Path, string(b)
+		}
 	}))
 	defer srv.Close()
 	c := New(srv.URL, "tok", srv.Client())
@@ -239,8 +242,16 @@ func TestCallServiceAndStates(t *testing.T) {
 		t.Fatal("empty domain must be rejected")
 	}
 
-	states, err := c.States(context.Background())
-	if err != nil || states["light.a"] != "on" || states["switch.b"] != "off" || len(states) != 2 {
-		t.Fatalf("states=%v err=%v", states, err)
+	entities, err := c.Entities(context.Background())
+	if err != nil || len(entities) != 2 {
+		t.Fatalf("entities=%v err=%v", entities, err)
+	}
+	if entities[0] != (Entity{ID: "light.a", State: "on", Name: "Lamp A", Icon: "lightbulb"}) || entities[1].ID != "switch.b" {
+		t.Fatalf("entities=%+v", entities)
+	}
+
+	out, err := c.RenderTemplate(context.Background(), "{{ 1 }}")
+	if err != nil || out != "light.a|Bedroom\n" || gotTemplate != `{"template":"{{ 1 }}"}` {
+		t.Fatalf("out=%q tmpl=%q err=%v", out, gotTemplate, err)
 	}
 }

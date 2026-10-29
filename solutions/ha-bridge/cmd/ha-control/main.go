@@ -21,6 +21,7 @@ import (
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalogapi"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/control"
+	"ricardo.local/monorepo/solutions/ha-bridge/internal/discovery"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/ha"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler"
@@ -40,10 +41,6 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	cat, err := catalog.Load(cfg.CatalogPath)
-	if err != nil {
-		return err
-	}
 	logger := slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	haHTTP, err := httpapi.NewClient(cfg.HACAFile, cfg.HATimeout)
@@ -51,15 +48,16 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		return fmt.Errorf("home assistant HTTP client: %w", err)
 	}
 	haClient := ha.New(cfg.HAURL, cfg.HAToken, haHTTP)
+	provider := discovery.New(haClient, catalog.Rules{Label: cfg.Label, Exclude: cfg.Exclude}, cfg.CacheTTL, logger)
 
 	server := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           catalogapi.Handler(cat, haClient, cfg.ControlToken, logger),
+		Handler:           catalogapi.Handler(provider, cfg.ControlToken, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	errc := make(chan error, 2)
 	go func() {
-		logger.Info("catalog listening", "addr", cfg.Listen, "entries", len(cat.Entries()), "execute", cfg.Execute)
+		logger.Info("catalog listening", "addr", cfg.Listen, "label", cfg.Label, "exclude", cfg.Exclude, "execute", cfg.Execute)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 		}
@@ -78,7 +76,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 			PollInterval: cfg.PollInterval,
 			MaxBackoff:   cfg.MaxBackoff,
 			MaxAttempts:  cfg.MaxAttempts,
-		}, cat, scheduler.New(cfg.SchedulerURL, cfg.SchedulerToken, schedHTTP), haClient, logger)
+		}, provider, scheduler.New(cfg.SchedulerURL, cfg.SchedulerToken, schedHTTP), haClient, logger)
 		go func() { errc <- executor.Run(ctx) }()
 	} else {
 		logger.Warn("CONTROL_EXECUTE is not true: serving the catalog only; commands are not executed")

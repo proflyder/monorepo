@@ -5,12 +5,15 @@ go_library(
     srcs = ["catalogapi.go"],
     importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/catalogapi",
     visibility = ["//solutions/ha-bridge:__subpackages__"],
-    deps = ["//solutions/ha-bridge/internal/catalog"],
+    deps = ["//solutions/ha-bridge/internal/discovery"],
 )
 
 go_test(
     name = "catalogapi_test",
     srcs = ["catalogapi_test.go"],
     embed = [":catalogapi"],
-    deps = ["//solutions/ha-bridge/internal/catalog"],
+    deps = [
+        "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/discovery",
+    ],
 )

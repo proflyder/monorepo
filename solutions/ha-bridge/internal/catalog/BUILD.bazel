@@ -2,7 +2,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "catalog",
-    srcs = ["catalog.go"],
+    srcs = [
+        "catalog.go",
+        "rules.go",
+    ],
     importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/catalog",
     visibility = ["//solutions/ha-bridge:__subpackages__"],
 )

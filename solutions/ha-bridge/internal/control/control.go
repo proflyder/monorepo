@@ -1,10 +1,11 @@
 // Package control executes phone commands that arrive through the scheduler.
 //
 // The phone enqueues a generic task (task_type "home.control") on the control
-// queue; this executor leases that queue, resolves the task's catalog id and
-// action through the allowlisted catalog, calls Home Assistant and
-// acknowledges. The payload is treated as data only: it names a catalog entry,
-// never a Home Assistant service or entity.
+// queue; this executor leases that queue, resolves the task's entry id and
+// action through the catalog discovered from Home Assistant right now, calls
+// Home Assistant and acknowledges. The payload is data only: it names a
+// catalog entry, and an id that is not in the current catalog is rejected, so
+// it can never reach an entity the discovery rules do not expose.
 package control
 
 import (
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
+	"ricardo.local/monorepo/solutions/ha-bridge/internal/discovery"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler"
 )
@@ -27,6 +29,12 @@ const DefaultQueue = "control"
 type SchedulerAPI interface {
 	ListDueEvents(ctx context.Context, req scheduler.ListRequest) ([]scheduler.Event, error)
 	AckEvent(ctx context.Context, eventID, consumerID, outcome, detail string) error
+}
+
+// Catalog yields the current discovered catalog. A command is honoured only if
+// its entry is in this catalog at execution time.
+type Catalog interface {
+	Get(ctx context.Context) (discovery.Snapshot, error)
 }
 
 // HomeAssistant is the side-effect surface.
@@ -48,7 +56,7 @@ type Config struct {
 // Executor is the control loop.
 type Executor struct {
 	cfg     Config
-	catalog *catalog.Catalog
+	catalog Catalog
 	sched   SchedulerAPI
 	ha      HomeAssistant
 	log     *slog.Logger
@@ -56,7 +64,7 @@ type Executor struct {
 }
 
 // New builds an executor.
-func New(cfg Config, cat *catalog.Catalog, sched SchedulerAPI, ha HomeAssistant, logger *slog.Logger) *Executor {
+func New(cfg Config, cat Catalog, sched SchedulerAPI, ha HomeAssistant, logger *slog.Logger) *Executor {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -115,7 +123,20 @@ func (e *Executor) handle(ctx context.Context, ev scheduler.Event) {
 		return
 	}
 
-	call, entryID, err := e.plan(ev)
+	snap, err := e.catalog.Get(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		// Home Assistant is unreachable, so the command cannot run either:
+		// leave it unacknowledged and let the lease expiry retry it.
+		log.Warn("catalog unavailable; leaving event for retry", "attempts", ev.Attempts, "error", err)
+		if ev.Attempts >= e.cfg.MaxAttempts {
+			e.ack(ctx, log, ev, scheduler.AckFailed, "home assistant unreachable repeatedly")
+		}
+		return
+	}
+	call, entryID, err := e.plan(ev, snap.Catalog)
 	if err != nil {
 		log.Warn("control command rejected", "reason", err.Error())
 		e.ack(ctx, log, ev, scheduler.AckFailed, err.Error())
@@ -145,7 +166,7 @@ func (e *Executor) handle(ctx context.Context, ev scheduler.Event) {
 }
 
 // plan validates the event and resolves it to a service call.
-func (e *Executor) plan(ev scheduler.Event) (catalog.ServiceCall, string, error) {
+func (e *Executor) plan(ev scheduler.Event, cat *catalog.Catalog) (catalog.ServiceCall, string, error) {
 	if ev.Queue != "" && ev.Queue != e.cfg.Queue {
 		return catalog.ServiceCall{}, "", fmt.Errorf("event queue %q does not match %q", ev.Queue, e.cfg.Queue)
 	}
@@ -156,9 +177,9 @@ func (e *Executor) plan(ev scheduler.Event) (catalog.ServiceCall, string, error)
 	if err := json.Unmarshal([]byte(ev.Payload), &cmd); err != nil {
 		return catalog.ServiceCall{}, "", fmt.Errorf("invalid command payload")
 	}
-	entry, ok := e.catalog.Lookup(cmd.Entry)
+	entry, ok := cat.Lookup(cmd.Entry)
 	if !ok {
-		return catalog.ServiceCall{}, "", fmt.Errorf("unknown catalog entry %q", detail(cmd.Entry))
+		return catalog.ServiceCall{}, "", fmt.Errorf("entry %q is not in the catalog", detail(cmd.Entry))
 	}
 	call, err := entry.Resolve(cmd.Action)
 	if err != nil {

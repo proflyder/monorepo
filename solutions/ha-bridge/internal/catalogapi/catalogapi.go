@@ -1,7 +1,7 @@
 // Package catalogapi serves the read-only control catalog to the phone.
 //
-// GET /v1/catalog returns the allowlisted entries with their live Home
-// Assistant state. It has no write surface: commands go through the scheduler
+// GET /v1/catalog returns the entries discovered from Home Assistant with
+// their live state. It has no write surface: commands go through the scheduler
 // (the phone enqueues a task), never through this server.
 package catalogapi
 
@@ -13,12 +13,12 @@ import (
 	"net/http"
 	"strings"
 
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
+	"ricardo.local/monorepo/solutions/ha-bridge/internal/discovery"
 )
 
-// States reads Home Assistant entity states.
-type States interface {
-	States(ctx context.Context) (map[string]string, error)
+// Source yields the discovered catalog.
+type Source interface {
+	Get(ctx context.Context) (discovery.Snapshot, error)
 }
 
 // EntryView is the wire shape of one catalog entry.
@@ -45,7 +45,7 @@ type Response struct {
 }
 
 // Handler builds the HTTP handler. token must be non-empty.
-func Handler(cat *catalog.Catalog, states States, token string, logger *slog.Logger) http.Handler {
+func Handler(src Source, token string, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -56,10 +56,15 @@ func Handler(cat *catalog.Catalog, states States, token string, logger *slog.Log
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		resp := build(r.Context(), cat, states, logger)
+		snap, err := src.Get(r.Context())
+		if err != nil {
+			logger.Warn("catalog discovery failed", "error", err)
+			http.Error(w, "home assistant is not reachable", http.StatusBadGateway)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(build(snap))
 	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -67,27 +72,14 @@ func Handler(cat *catalog.Catalog, states States, token string, logger *slog.Log
 	return mux
 }
 
-func build(ctx context.Context, cat *catalog.Catalog, states States, logger *slog.Logger) Response {
-	live, err := states.States(ctx)
-	statesOK := err == nil
-	if err != nil {
-		logger.Warn("home assistant states unavailable", "error", err)
-	}
-	entries := cat.Entries()
-	resp := Response{Entries: make([]EntryView, 0, len(entries)), StatesOK: statesOK}
+func build(snap discovery.Snapshot) Response {
+	entries := snap.Catalog.Entries()
+	resp := Response{Entries: make([]EntryView, 0, len(entries)), StatesOK: snap.StatesOK}
 	for _, e := range entries {
-		view := EntryView{
+		resp.Entries = append(resp.Entries, EntryView{
 			ID: e.ID, Kind: string(e.Kind), Title: e.Title, Room: e.Room, Icon: e.Icon,
-			Actions: e.Actions(),
-		}
-		if statesOK {
-			state, present := live[e.Entity]
-			view.Available = present && state != "unavailable" && state != "unknown"
-			if e.Kind != catalog.KindScenario && view.Available {
-				view.State = state
-			}
-		}
-		resp.Entries = append(resp.Entries, view)
+			Actions: e.Actions(), State: e.State, Available: e.Available,
+		})
 	}
 	return resp
 }

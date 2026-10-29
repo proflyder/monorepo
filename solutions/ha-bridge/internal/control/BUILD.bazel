@@ -7,6 +7,7 @@ go_library(
     visibility = ["//solutions/ha-bridge:__subpackages__"],
     deps = [
         "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/discovery",
         "//solutions/ha-bridge/internal/httpapi",
         "//solutions/ha-bridge/internal/scheduler",
     ],
@@ -18,6 +19,7 @@ go_test(
     embed = [":control"],
     deps = [
         "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/discovery",
         "//solutions/ha-bridge/internal/httpapi",
         "//solutions/ha-bridge/internal/scheduler",
     ],

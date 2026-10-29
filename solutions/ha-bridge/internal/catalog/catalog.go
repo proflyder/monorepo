@@ -1,17 +1,13 @@
-// Package catalog describes the Home Assistant entities the phone may control.
-//
-// The catalog is deployment configuration (a JSON file), never code. It is an
-// allowlist: only listed entities can be shown or driven, and the executor
-// resolves every command through it, so neither the phone nor a task payload
-// can choose a Home Assistant service or entity.
+// Package catalog is the phone-facing view of controllable Home Assistant
+// entities. Nothing here is listed by hand: entries are built from discovered
+// Home Assistant data by Build, filtered by rules (see rules.go), and resolved
+// back to a service call by Resolve. Only entries that survive the rules can be
+// shown or driven, so neither the phone nor a task payload can reach an
+// arbitrary Home Assistant service or entity.
 package catalog
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"regexp"
 	"strings"
 )
 
@@ -36,124 +32,38 @@ const (
 // TaskType is the scheduler task type of a control command.
 const TaskType = "home.control"
 
-const (
-	maxEntries = 200
-	maxText    = 80
-)
-
-var (
-	idPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
-	entityPattern = regexp.MustCompile(`^[a-z0-9_]+\.[a-z0-9_]+$`)
-	iconPattern   = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
-)
-
-// Entry is one controllable thing.
+// Entry is one controllable thing, with its live state at discovery time.
 type Entry struct {
-	// ID is the stable catalog id the phone sends back; it is not an HA id.
-	ID    string `json:"id"`
-	Kind  Kind   `json:"kind"`
-	Title string `json:"title"`
-	// Room groups devices and scenarios in the UI. Optional.
-	Room string `json:"room,omitempty"`
-	// Icon is a hint ("work", "moon", "bulb", ...); clients map it to artwork.
-	Icon string `json:"icon,omitempty"`
-	// Entity is the Home Assistant entity id, e.g. "script.blackout".
-	Entity string `json:"entity"`
+	// ID is the catalog id the phone sends back. It is the Home Assistant
+	// entity id; the executor only honours ids that are in the current catalog.
+	ID    string
+	Kind  Kind
+	Title string
+	// Room is the HA area name ("" when unassigned).
+	Room string
+	// Icon is a hint from HA (mdi name without the prefix); clients map it.
+	Icon string
+	// Entity is the Home Assistant entity id (same as ID).
+	Entity string
+	// State is "on"/"off" for available devices; "" otherwise.
+	State string
+	// Available is false when HA reports the entity unavailable or unknown.
+	Available bool
 }
 
-// Catalog is a validated, immutable set of entries in display order.
+// Catalog is an immutable set of entries in display order.
 type Catalog struct {
 	entries []Entry
 	byID    map[string]int
 }
 
-type fileFormat struct {
-	Version int     `json:"version"`
-	Entries []Entry `json:"entries"`
-}
-
-// Load reads and validates a catalog file.
-func Load(path string) (*Catalog, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("catalog: read file: %w", err)
+// New wraps already-validated entries (see Build).
+func New(entries []Entry) *Catalog {
+	c := &Catalog{entries: append([]Entry(nil), entries...), byID: make(map[string]int, len(entries))}
+	for i, e := range c.entries {
+		c.byID[e.ID] = i
 	}
-	return Parse(raw)
-}
-
-// Parse validates catalog JSON.
-func Parse(raw []byte) (*Catalog, error) {
-	var file fileFormat
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&file); err != nil {
-		return nil, fmt.Errorf("catalog: invalid JSON: %w", err)
-	}
-	if file.Version != 1 {
-		return nil, fmt.Errorf("catalog: unsupported version %d (want 1)", file.Version)
-	}
-	if len(file.Entries) == 0 {
-		return nil, errors.New("catalog: no entries")
-	}
-	if len(file.Entries) > maxEntries {
-		return nil, fmt.Errorf("catalog: more than %d entries", maxEntries)
-	}
-
-	c := &Catalog{byID: make(map[string]int, len(file.Entries))}
-	entities := make(map[string]bool, len(file.Entries))
-	for i, e := range file.Entries {
-		e.Title = strings.TrimSpace(e.Title)
-		e.Room = strings.TrimSpace(e.Room)
-		if err := validate(e); err != nil {
-			return nil, fmt.Errorf("catalog: entry %d (%q): %w", i, e.ID, err)
-		}
-		if _, dup := c.byID[e.ID]; dup {
-			return nil, fmt.Errorf("catalog: duplicate id %q", e.ID)
-		}
-		if entities[e.Entity] {
-			return nil, fmt.Errorf("catalog: entity %q listed twice", e.Entity)
-		}
-		entities[e.Entity] = true
-		c.byID[e.ID] = len(c.entries)
-		c.entries = append(c.entries, e)
-	}
-	return c, nil
-}
-
-func validate(e Entry) error {
-	if !idPattern.MatchString(e.ID) {
-		return errors.New("id must match [a-z0-9][a-z0-9._-]{0,63}")
-	}
-	if e.Title == "" || len(e.Title) > maxText {
-		return fmt.Errorf("title must be 1..%d bytes", maxText)
-	}
-	if len(e.Room) > maxText {
-		return fmt.Errorf("room must be at most %d bytes", maxText)
-	}
-	if e.Icon != "" && !iconPattern.MatchString(e.Icon) {
-		return errors.New("icon must match [a-z0-9_-]{1,32}")
-	}
-	if !entityPattern.MatchString(e.Entity) {
-		return errors.New("entity must look like domain.object_id")
-	}
-	domain := Domain(e.Entity)
-	switch e.Kind {
-	case KindScenario:
-		if domain != "script" && domain != "scene" {
-			return errors.New("scenario entity must be a script.* or scene.*")
-		}
-	case KindLight:
-		if domain != "light" {
-			return errors.New("light entity must be a light.*")
-		}
-	case KindSwitch:
-		if domain != "switch" {
-			return errors.New("switch entity must be a switch.*")
-		}
-	default:
-		return fmt.Errorf("unknown kind %q", e.Kind)
-	}
-	return nil
+	return c
 }
 
 // Domain returns the HA domain of an entity id.
@@ -164,7 +74,7 @@ func Domain(entity string) string {
 	return ""
 }
 
-// Entries returns a copy of the entries in file order.
+// Entries returns a copy of the entries in display order.
 func (c *Catalog) Entries() []Entry {
 	return append([]Entry(nil), c.entries...)
 }

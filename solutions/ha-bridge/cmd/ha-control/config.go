@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +20,9 @@ var queuePattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,31}$`)
 type settings struct {
 	HAURL, HAToken, HACAFile              string
 	SchedulerURL, SchedulerToken, SchedCA string
-	CatalogPath                           string
+	Label                                 string
+	Exclude                               []string
+	CacheTTL                              time.Duration
 	Listen                                string
 	ControlToken                          string
 	ConsumerID, Queue                     string
@@ -53,8 +56,14 @@ func loadSettings(getenv func(string) string) (*settings, error) {
 	s.HACAFile = strings.TrimSpace(getenv("HA_CA_FILE"))
 	s.SchedCA = strings.TrimSpace(getenv("SCHEDULER_CA_FILE"))
 
-	if s.CatalogPath = strings.TrimSpace(getenv("CONTROL_CATALOG")); s.CatalogPath == "" {
-		return nil, errors.New("config: CONTROL_CATALOG is required")
+	s.Label = strings.TrimSpace(getenv("CONTROL_LABEL"))
+	for _, g := range strings.Split(getenv("CONTROL_EXCLUDE"), ",") {
+		if g = strings.TrimSpace(g); g != "" {
+			s.Exclude = append(s.Exclude, g)
+		}
+	}
+	if err := (catalog.Rules{Label: s.Label, Exclude: s.Exclude}).Validate(); err != nil {
+		return nil, fmt.Errorf("config: CONTROL_LABEL/CONTROL_EXCLUDE: %w", err)
 	}
 	if s.Listen = strings.TrimSpace(getenv("CONTROL_LISTEN")); s.Listen == "" {
 		s.Listen = "127.0.0.1:8099"
@@ -83,11 +92,12 @@ func loadSettings(getenv func(string) string) (*settings, error) {
 	s.MaxBackoff = 2 * time.Minute
 	s.HATimeout = 10 * time.Second
 	s.SchedulerTimeout = 10 * time.Second
+	s.CacheTTL = 3 * time.Second
 	for _, d := range []struct {
 		dst  *time.Duration
 		name string
 	}{{&s.PollInterval, "CONTROL_POLL_INTERVAL"}, {&s.MaxBackoff, "CONTROL_MAX_BACKOFF"},
-		{&s.HATimeout, "CONTROL_HA_TIMEOUT"}, {&s.SchedulerTimeout, "CONTROL_SCHEDULER_TIMEOUT"}} {
+		{&s.HATimeout, "CONTROL_HA_TIMEOUT"}, {&s.CacheTTL, "CONTROL_CACHE_TTL"}, {&s.SchedulerTimeout, "CONTROL_SCHEDULER_TIMEOUT"}} {
 		if raw := strings.TrimSpace(getenv(d.name)); raw != "" {
 			v, err := time.ParseDuration(raw)
 			if err != nil || v <= 0 {

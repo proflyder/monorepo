@@ -18,6 +18,7 @@ go_library(
         "//solutions/ha-bridge/internal/catalog",
         "//solutions/ha-bridge/internal/catalogapi",
         "//solutions/ha-bridge/internal/control",
+        "//solutions/ha-bridge/internal/discovery",
         "//solutions/ha-bridge/internal/ha",
         "//solutions/ha-bridge/internal/httpapi",
         "//solutions/ha-bridge/internal/scheduler",

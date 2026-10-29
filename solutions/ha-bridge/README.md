@@ -274,55 +274,83 @@ ledger) — `projects/home/e2e/scheduler_smoke.py`; живой звук и cutov
 команды, которые телефон кладёт в планировщик.
 
 ```text
-phone ── GET  /v1/catalog ─────────────► ha-control ── GET /api/states ─► HA   (только чтение)
+phone ── GET  /v1/catalog ─────────────► ha-control ── /api/states, /api/template ─► HA   (только чтение)
 phone ── EnqueueTask(queue=control) ───► scheduler ◄── ListDueEvents ──── ha-control (execute)
                                                        └─ POST /api/services/<domain>/<service> ─► HA
 ```
 
-- **Каталог — конфигурация, не код.** JSON-файл (`CONTROL_CATALOG`), пример —
-  `ha-control.catalog.example.json`. Это allowlist: показывается и исполняется
-  только перечисленное. Поля: `id` (стабильный id для телефона, не HA id),
-  `kind` (`scenario` → `script.*`/`scene.*`, `light` → `light.*`,
-  `switch` → `switch.*`), `title`, `room`, `icon` (подсказка для клиента),
-  `entity`. Неизвестные поля, дубли и несовпадение домена отклоняются при старте.
-- **Исполнение идёт через планировщик.** Телефон делает
-  `EnqueueTask(task_type="home.control", queue="control", payload={"entry","action"})`.
-  Исполнитель резолвит `entry`+`action` по каталогу в service call
-  (`run` → `<domain>.turn_on`; `turn_on`/`turn_off` для устройств). Service и entity
-  из payload никогда не берутся; `toggle` намеренно нет (at-least-once доставка
-  не должна переключать дважды).
-- **Планировщик ничего не знает о каталоге.** Он лишь хранит очередь `control`.
-  Очереди `home` и `tasks` исполнителю запрещены.
-- Ответ каталога: `{"statesOk": bool, "entries": [{id, kind, title, room, icon,
-  actions[], state("on"/"off", устройства), available}]}`. Если HA недоступен,
-  записи всё равно отдаются с `available=false`, `statesOk=false`.
-- Авторизация каталога — `Authorization: Bearer <CONTROL_TOKEN>` (сравнение за
-  константное время; пустой токен не авторизует никого). Сервер только читает.
-  Телефон шлёт туда тот же bearer, что и в планировщик; можно задать общий токен.
-  Слушает `CONTROL_LISTEN` (по умолчанию `127.0.0.1:8099`; для LAN/Tailscale
-  задайте адрес интерфейса). TLS на уровне процесса нет — как у scheduler,
-  используйте доверенную сеть/Tailscale.
+### Каталог собирается по факту из Home Assistant
+
+Никакого списка сущностей на сервере нет. При каждом запросе (кэш `CONTROL_CACHE_TTL`,
+3 s) `ha-control` читает из HA:
+
+- сущности домена `light`, `switch`, `scene`, `script` с `friendly_name`, `icon` и
+  состоянием (`/api/states`);
+- **комнату** — HA area сущности (`area_name()` через `/api/template`);
+- **скрытые** сущности (`is_hidden_entity()`): всё, что скрыто в HA, не попадает в каталог;
+- **метку** (label) — если задан `CONTROL_LABEL` (`label_entities()`).
+
+Правила (`CONTROL_LABEL`, `CONTROL_EXCLUDE`), а не списки:
+
+| Настройка | Эффект |
+| --- | --- |
+| не задана метка | автоматически: все `light`, `switch`, `scene`; `script` **не** показываются (почти все скрипты — служебные, как `alarm_start`) |
+| `CONTROL_LABEL=<label_id>` | явный allowlist: только сущности с этой меткой, в любом поддерживаемом домене, включая скрипты |
+| `CONTROL_EXCLUDE=glob,glob` | `path.Match`-маски по entity id, например `switch.*_child_lock` |
+
+Чтобы «Я сел работать» и «Black out» появились в приложении, поставьте на эти
+скрипты/сцены метку в HA (Настройки → Области, метки и зоны → Метки) и задайте её id
+в `CONTROL_LABEL`. Новое устройство, переименование, перенос в другую комнату или
+скрытие в HA подхватываются само, без правок на сервере и в приложении.
+
+Сбои: если HA недоступен, отдаётся последний известный каталог с
+`statesOk=false` и `available=false` у всех записей; если каталога ещё не было —
+`502`. Если метка задана, но не читается (старый HA без labels), обнаружение
+**падает закрыто**: список не расширяется. Области и hidden — best effort: без них
+записи остаются без комнаты / без фильтра скрытых (в лог идёт предупреждение).
+
+### Исполнение — через планировщик
+
+Телефон делает `EnqueueTask(task_type="home.control", queue="control",
+payload={"entry": "<entity_id>", "action": "run|turn_on|turn_off"})`. Исполнитель
+**заново** обнаруживает каталог и принимает команду только если `entry` есть в нём
+сейчас: id вне правил (например `script.alarm_stop`) отклоняется с `ACK_FAILED`
+без вызова HA. `run` → `<domain>.turn_on` для script/scene; `turn_on`/`turn_off` —
+для light/switch. Service из payload никогда не берётся. `toggle` нет намеренно
+(доставка at-least-once не должна переключать дважды). Если HA недоступен в момент
+исполнения — событие остаётся без ack и придёт повторно (до `MaxAttempts`).
+
+Планировщик ничего не знает о каталоге: он лишь хранит очередь `control`
+(очереди `home` и `tasks` исполнителю запрещены).
+
+### API и безопасность
+
+`GET /v1/catalog`, `Authorization: Bearer <CONTROL_TOKEN>` (константное время,
+пустой токен не авторизует никого). Ответ: `{"statesOk": bool, "entries": [{id,
+kind, title, room, icon, actions[], state("on"/"off", устройства), available}]}`;
+порядок: сценарии, затем устройства по комнатам. Сервер только читает. Телефон шлёт
+тот же bearer, что и планировщику (можно задать общий). Слушает `CONTROL_LISTEN`
+(по умолчанию `127.0.0.1:8099`; для LAN/Tailscale — адрес интерфейса). TLS на
+уровне процесса нет, как у scheduler: доверенная сеть/Tailscale.
 
 | Переменная | Обяз. | По умолчанию | Смысл |
 | --- | --- | --- | --- |
 | `HA_URL`, `HA_TOKEN[_FILE]`, `HA_CA_FILE` | да | — | Как у ha-bridge |
 | `SCHEDULER_ENDPOINT`, `SCHEDULER_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-bridge |
-| `CONTROL_CATALOG` | да | — | Путь к JSON-каталогу |
 | `CONTROL_TOKEN[_FILE]` | да | — | Bearer каталога |
 | `CONTROL_CONSUMER_ID` | да | — | Стабильный id потребителя |
+| `CONTROL_LABEL` | нет | — | HA label id (allowlist, включает скрипты) |
+| `CONTROL_EXCLUDE` | нет | — | Маски entity id через запятую |
 | `CONTROL_LISTEN` | нет | `127.0.0.1:8099` | Адрес каталога |
 | `CONTROL_QUEUE` | нет | `control` | Очередь команд (не `home`/`tasks`) |
 | `CONTROL_EXECUTE` | нет | `false` | `true` включает исполнение очереди; без него только каталог |
-| `CONTROL_POLL_INTERVAL`, `CONTROL_MAX_BACKOFF`, `CONTROL_HA_TIMEOUT`, `CONTROL_SCHEDULER_TIMEOUT` | нет | `500ms`, `2m`, `10s`, `10s` | Тайминги |
+| `CONTROL_CACHE_TTL`, `CONTROL_POLL_INTERVAL`, `CONTROL_MAX_BACKOFF`, `CONTROL_HA_TIMEOUT`, `CONTROL_SCHEDULER_TIMEOUT` | нет | `3s`, `500ms`, `2m`, `10s`, `10s` | Тайминги |
 
-Ограничения первой итерации: телефон видит только «поставлено в очередь» —
-результат исполнения не возвращается (для устройств приложение через ~1.5 с
-перечитывает реальное состояние); ledger для дедупа нет, поэтому повторная
-доставка может повторить `turn_on`/сценарий (они идемпотентны по смыслу, но
-сценарий с побочными эффектами нужно проектировать с этим); не задеплоено.
+Ограничения: телефон видит только «поставлено в очередь» (для устройств приложение
+через ~1.5 с перечитывает реальное состояние); ledger для дедупа нет, поэтому
+повторная доставка может повторить `turn_on`/сценарий; не задеплоено.
 
 ```bash
-CONTROL_EXECUTE=true CONTROL_CATALOG=ha-control.catalog.json \
-  go run ./solutions/ha-bridge/cmd/ha-control
+CONTROL_EXECUTE=true CONTROL_LABEL=phone go run ./solutions/ha-bridge/cmd/ha-control
 bazel test //solutions/ha-bridge/...
 ```

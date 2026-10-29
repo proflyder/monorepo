@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "discovery",
+    srcs = ["discovery.go"],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/discovery",
+    visibility = ["//solutions/ha-bridge:__subpackages__"],
+    deps = [
+        "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/ha",
+    ],
+)
+
+go_test(
+    name = "discovery_test",
+    srcs = ["discovery_test.go"],
+    embed = [":discovery"],
+    deps = [
+        "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/ha",
+    ],
+)
