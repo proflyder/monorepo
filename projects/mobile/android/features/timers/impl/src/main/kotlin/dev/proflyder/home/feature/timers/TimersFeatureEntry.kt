@@ -18,7 +18,7 @@ object TimerListDestination : Destination {
 @Inject
 class TimersFeatureEntry : FeatureEntry {
     override val id: String = "timers"
-    override val order: Int = 1
+    override val order: Int = 2
     override val titleRes: Int = R.string.timers_title
     override val iconRes: Int = R.drawable.timers_ic_tab
     override val rootDestination: Destination = TimerListDestination

@@ -6,7 +6,7 @@ Metro-generated DI, feature API/implementation modules, and a small typed router
 
 ## What is implemented
 
-- Bottom tabs for **Alarms**, **Timers**, **Reminders**, **Home**, and **Connection**.
+- Bottom tabs for **Home**, **Alarms**, **Timers**, **Reminders**, and **Connection**.
 - Alarms: list, create, edit, enable/disable, delete, snooze (9 min default), stop.
   Repeats: one-shot with an explicit date, daily, weekdays, weekends, custom ISO
   weekdays. Timezone is IANA. Existing server one-shot alarms are shown and

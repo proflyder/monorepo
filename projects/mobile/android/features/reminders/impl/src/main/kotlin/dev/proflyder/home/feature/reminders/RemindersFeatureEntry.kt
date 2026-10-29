@@ -36,7 +36,7 @@ data class ReminderEditorDestination(
 @Inject
 class RemindersFeatureEntry : FeatureEntry {
     override val id: String = "reminders"
-    override val order: Int = 2
+    override val order: Int = 3
     override val titleRes: Int = R.string.reminders_title
     override val iconRes: Int = R.drawable.reminders_ic_tab
     override val rootDestination: Destination = ReminderListDestination

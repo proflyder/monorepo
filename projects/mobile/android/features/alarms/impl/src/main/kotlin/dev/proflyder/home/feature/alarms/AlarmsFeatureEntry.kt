@@ -35,7 +35,7 @@ data class AlarmEditorDestination(
 @Inject
 class AlarmsFeatureEntry : FeatureEntry {
     override val id: String = "alarms"
-    override val order: Int = 0
+    override val order: Int = 1
     override val titleRes: Int = R.string.alarms_title
     override val iconRes: Int = R.drawable.alarms_ic_tab
     override val rootDestination: Destination = AlarmListDestination

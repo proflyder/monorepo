@@ -18,7 +18,7 @@ object ControlListDestination : Destination {
 @Inject
 class ControlFeatureEntry : FeatureEntry {
     override val id: String = "control"
-    override val order: Int = 3
+    override val order: Int = 0
     override val titleRes: Int = R.string.control_title
     override val iconRes: Int = R.drawable.control_ic_tab
     override val rootDestination: Destination = ControlListDestination
