@@ -33,6 +33,20 @@ def protects_speech(reference, candidate, blocks, cutoff=.9):
     return all(actual[b] >= required[b] for b in required), actual
 
 
+def balanced_indices(labels, limit):
+    """Deterministic round-robin coverage without validation/test examples."""
+    from collections import defaultdict, deque
+    groups = defaultdict(deque)
+    for index, label in enumerate(labels):
+        groups[label].append(index)
+    selected = []
+    while len(selected) < limit and any(groups.values()):
+        for label in sorted(groups):
+            if groups[label] and len(selected) < limit:
+                selected.append(groups[label].popleft())
+    return selected
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trainer", required=True, type=Path)
@@ -88,6 +102,7 @@ def main():
 
     real = {key: [] for key in ["train_pos", "val_pos", "train_neg", "val_neg"]}
     val_pos_blocks = []
+    train_pos_blocks = []
     hard = any(e.get("hard_negative") and e["source_split"] == "train" for e in manifest["records"])
     synthetic_hard = manifest.get("synthetic_hard_features")
     if synthetic_hard and not hard:
@@ -171,6 +186,8 @@ def main():
                         real[part + "_pos"].append(frames[-204:])
                         if part == "val":
                             val_pos_blocks.append(e["block"])
+                        else:
+                            train_pos_blocks.append(e["block"])
     if synthetic_hard:
         for part in ["train", "val"]:
             key = "hard_synth_" + part + "_neg"
@@ -280,8 +297,12 @@ def main():
     (run / "training-provenance.json").write_text(json.dumps(provenance, indent=2))
     model.load_weights(str(best))
     model.save_weights(str(modeldir / (cfg["model_name"] + "_mww.weights.h5")))
-    # Small calibration set includes both old synthesis and real capture features.
-    calibration = np.concatenate([real["train_pos"][:250], np.asarray(synthetic["train_pos"][:250])])
+    # Cover every recorded speech style rather than taking only the first track.
+    indices = balanced_indices(train_pos_blocks, 250)
+    calibration = np.concatenate([real["train_pos"][indices], np.asarray(synthetic["train_pos"][:250])])
+    provenance["calibration"] = {"real_train_indices": indices,
+        "speech_blocks": sorted(set(train_pos_blocks)), "synthetic_train_examples": 250}
+    (run / "training-provenance.json").write_text(json.dumps(provenance, indent=2))
     np.save(featdir / "positive_train.npy", calibration)
     os.chdir(run)
     trainer.phase_export(cfg)

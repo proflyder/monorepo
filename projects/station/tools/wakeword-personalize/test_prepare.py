@@ -18,6 +18,13 @@ train_spec.loader.exec_module(finetune)
 
 
 class PrepareTests(unittest.TestCase):
+    def test_calibration_covers_later_speech_blocks_without_repeating_examples(self):
+        labels = ["normal"] * 300 + ["quiet"] * 100 + ["whisper"] * 100
+        selected = finetune.balanced_indices(labels, 250)
+        self.assertEqual(len(set(selected)), 250)
+        self.assertEqual({labels[i] for i in selected}, {"normal", "quiet", "whisper"})
+        self.assertEqual(finetune.balanced_indices(["whisper", "normal"], 10), [1, 0])
+
     def test_comparison_accumulates_separate_recordings_of_same_speech_block(self):
         manifest = {"records": [dict(id=ident, source_split="test", block="whisper",
             targets=[{"start": 1., "end": 1.8}], review_regions=[]) for ident in ["old", "new"]]}
