@@ -1,8 +1,8 @@
 {
-  "registry_version": "v2-personal-20261029",
-  "model_path": "secrets/model-registry/ricardo/v2-personal-20261029/ru_ricardo_personal_v1_mww.tflite",
-  "manifest_path": "secrets/model-registry/ricardo/v2-personal-20261029/ru_ricardo_personal_v1_mww.json",
-  "model_sha256": "ab01b67e1d16911b38cd96f56070484e15ea0355f9c48e447c129bc73501cb2d",
+  "registry_version": "v7-expanded-positives-20261029",
+  "model_path": "secrets/model-registry/ricardo/v7-expanded-positives-20261029/ru_ricardo_personal_v7_mww.tflite",
+  "manifest_path": "secrets/model-registry/ricardo/v7-expanded-positives-20261029/ru_ricardo_personal_v7_mww.json",
+  "model_sha256": "9ba22bd04894f33b851ae618f26d74f144fa25de3952b75244da63805ff8f704",
   "personal_weights_private": true,
   "probability_cutoff": 0.9,
   "sliding_window_size": 10

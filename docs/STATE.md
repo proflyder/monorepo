@@ -69,11 +69,16 @@
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
-- Пользователь 2026-10-29 подтвердил персональную v2: ответ на
-  «Рикардо, который час?» обычным голосом и шёпотом. Длительное наблюдение
-  ложных срабатываний ещё требуется.
-- Custom wake word «Рикардо» personal v2: on-device microWakeWord, threshold 0.9,
-  окно 10, pre-roll 0.5 с.
+- Custom wake word «Рикардо» personal v7 (`v7-expanded-positives-20261029`):
+  установлена model-only, on-device microWakeWord, threshold 0.9, окно 10,
+  pre-roll 0.5 с. HA/MA подключены, бинарник Pulsar не менялся.
+  Offline на свежем ASR-размеченном поднаборе: 43/46 (v2: 41/46),
+  шёпот 8/8; на проверочных негативах 4 события вместо 26 у v2.
+  На старом шёпотном дубле потерян один target; живая приёмка v7 ожидается.
+- Предыдущая personal v2 сохранена в private registry и device backup,
+  указанный в `secrets/model-registry/ricardo/active.json`.
+- Приватный датасет: `secrets/datasets/ricardo-20261029/` — исходные WAV,
+  PCM-контексты, разметка по версиям, архив обучающих признаков и SHA256.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
   reconnect и station reboot. Supervised `reload` завершает Sendspin-сессию
   goodbye-причиной `restart`, и MA переподключается сам: измерено 3.1 с и 3.1 с

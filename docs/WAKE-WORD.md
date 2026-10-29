@@ -4,18 +4,23 @@
 
 ## Модель
 
-- On-device microWakeWord: персональная v2, FULL resolver встроенной `libtflite`.
+- On-device microWakeWord: персональная v7, FULL resolver встроенной `libtflite`.
 - Threshold `0.9`, окно `10`, pre-roll `0.5 с`.
 - Активный профиль — `projects/station/configs/wakeword-personal.json`;
   его SHA256 закреплён в профиле. Персональная модель и обучаемые веса —
-  private в `secrets/model-registry/ricardo/v2-personal-20261029/`.
+  private в `secrets/model-registry/ricardo/v7-expanded-positives-20261029/`.
 - Исходная v1 сохранена для отката в private registry и как общий baseline
   в `artifacts/wakeword/ricardo-v1/`. Профиль отката —
   `projects/station/configs/wakeword-baseline.json`.
-- Персональная v2 установлена. Пользователь 2026-10-29 подтвердил ответ на
-  «Рикардо, который час?» обычным голосом и шёпотом. Это два успешных
-  сценария, не измерение надёжности в быту. Offline-метрики относятся
-  к автоматически размеченному поднабору.
+- Персональная v7 установлена, HA/MA подключены. Живая приёмка ожидается.
+  Offline на свежем ASR-размеченном поднаборе 43/46 обращений, шёпот 8/8;
+  4 события на проверочных негативах вместо 26 у v2. Старый шёпотный дубль
+  потерял один target; это известный компромисс принятого кандидата.
+  Предыдущая v2 сохранена для отката; device backup указан в приватном
+  `secrets/model-registry/ricardo/active.json`.
+- Записи и нарезанные PCM-контексты с разметкой по версиям сохранены в
+  `secrets/datasets/ricardo-20261029/`, вне Git. Случайные аугментации
+  сохранены как массивы признаков и воспроизводятся по рецептам/seed.
 - Бинарник и device-откат — `/data/pulsar`; legacy исходники и binaries —
   private в `secrets/local/recovery/`.
 - Изменяемые исходники — `projects/station/upstream/pulsar-rust/`,
