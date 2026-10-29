@@ -45,6 +45,20 @@
     <string name="alarms_in_days">%1$s %2$s</string>
     <string name="alarms_saved">Alarm saved</string>
     <string name="alarms_deleted">Alarm deleted</string>
+    <string name="alarms_select_all">Select all</string>
+    <string name="alarms_select_none">Clear</string>
+    <string name="alarms_selection_close">Exit selection</string>
+    <string name="alarms_selection_enable">Enable</string>
+    <string name="alarms_selection_disable">Disable</string>
+    <string name="alarms_selection_delete">Delete</string>
+    <plurals name="alarms_selected_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="alarms_delete_selected_confirm">
+        <item quantity="one">Delete %1$d alarm from the home server?</item>
+        <item quantity="other">Delete %1$d alarms from the home server?</item>
+    </plurals>
     <string-array name="alarms_day_short">
         <item>@string/alarms_day_mon</item>
         <item>@string/alarms_day_tue</item>

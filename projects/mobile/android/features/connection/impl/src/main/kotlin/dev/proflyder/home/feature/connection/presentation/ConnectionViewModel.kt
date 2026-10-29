@@ -7,6 +7,7 @@ import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SchedulerStatus
+import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.connection.ConnectionDraft
@@ -15,9 +16,6 @@ import dev.proflyder.home.feature.connection.TokenUpdate
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 enum class ConnectionNotice {
@@ -44,20 +42,7 @@ data class ConnectionUiState(
 
 class ConnectionViewModel(
     private val repository: ConnectionRepository,
-) : ViewModel() {
-    private val mutableState = MutableStateFlow(initialState())
-    val state: StateFlow<ConnectionUiState> = mutableState.asStateFlow()
-
-    private fun initialState(): ConnectionUiState {
-        val config = repository.config.value
-        return ConnectionUiState(
-            endpointText = config.endpoint?.baseUrl().orEmpty(),
-            hasStoredToken = config.hasToken,
-            tokenStatus = repository.tokenStatus.value,
-            connectSeconds = (config.connectTimeoutMillis / 1000L).toString(),
-            readSeconds = (config.readTimeoutMillis / 1000L).toString(),
-        )
-    }
+) : BaseViewModel<ConnectionUiState>(initialState(repository)) {
 
     fun setEndpoint(value: String) {
         mutableState.value = mutableState.value.copy(endpointText = value, error = null, status = null)
@@ -162,4 +147,15 @@ class ConnectionViewModelFactoryContributor(
     override fun createFactory() = SimpleViewModelFactory {
         ConnectionViewModel(repository)
     }
+}
+
+private fun initialState(repository: ConnectionRepository): ConnectionUiState {
+    val config = repository.config.value
+    return ConnectionUiState(
+        endpointText = config.endpoint?.baseUrl().orEmpty(),
+        hasStoredToken = config.hasToken,
+        tokenStatus = repository.tokenStatus.value,
+        connectSeconds = (config.connectTimeoutMillis / 1000L).toString(),
+        readSeconds = (config.readTimeoutMillis / 1000L).toString(),
+    )
 }

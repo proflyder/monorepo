@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
+import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.reminders.domain.DeleteReminder
@@ -14,9 +15,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class RemindersUiState(
@@ -31,9 +29,7 @@ class RemindersViewModel(
     private val loadReminders: LoadReminders,
     private val setEnabled: SetReminderEnabled,
     private val deleteReminder: DeleteReminder,
-) : ViewModel() {
-    private val mutableState = MutableStateFlow(RemindersUiState())
-    val state: StateFlow<RemindersUiState> = mutableState.asStateFlow()
+) : BaseViewModel<RemindersUiState>(RemindersUiState()) {
 
     private var refreshJob: Job? = null
     private var generation = 0

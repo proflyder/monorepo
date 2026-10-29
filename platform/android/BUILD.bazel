@@ -19,6 +19,7 @@ kt_compiler_plugin(
 )
 
 exports_files([
+    "gen_view_binding.py",
     "defs.bzl",
     # Reusable artifact checker; the owning project declares the sh_test.
     "apk_runtime_closure.py",

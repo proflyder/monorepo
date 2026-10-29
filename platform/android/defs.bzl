@@ -34,8 +34,28 @@ def metro_android_library(
         manifest = None,
         custom_package = None,
         plugins = [],
+        view_binding = False,
         **kwargs):
-    """Kotlin Android library with real Android resources and Metro DI."""
+    """Kotlin Android library with real Android resources and Metro DI.
+
+    With `view_binding = True` a `<Layout>Binding` class is generated for every
+    `res/layout/*.xml` in `resource_files` (package `<custom_package>.databinding`).
+    The module must depend on //projects/mobile/android/core/ui:ui, which owns
+    the `ViewBinding` interface the generated classes implement.
+    """
+    if view_binding:
+        layouts = [f for f in resource_files if "/res/layout/" in f and f.endswith(".xml")]
+        if not custom_package:
+            fail("view_binding requires custom_package")
+        native.genrule(
+            name = name + "_view_binding",
+            srcs = layouts,
+            outs = [name + "_view_binding/ViewBindings.kt"],
+            cmd = "python3 $(location //platform/android:gen_view_binding.py) " +
+                  "--package " + custom_package + " --output $@ $(SRCS)",
+            tools = ["//platform/android:gen_view_binding.py"],
+        )
+        srcs = srcs + [":" + name + "_view_binding"]
     kt_android_library(
         name = name,
         srcs = srcs,

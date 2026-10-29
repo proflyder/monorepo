@@ -6,6 +6,7 @@ metro_android_library(
     name = "impl",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     custom_package = "dev.proflyder.home.feature.alarms.impl",
+    view_binding = True,
     manifest = "src/main/AndroidManifest.xml",
     resource_files = glob(["src/main/res/**"]),
     deps = [

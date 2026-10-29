@@ -12,6 +12,7 @@ import dev.proflyder.home.core.model.WallTime
 import dev.proflyder.home.core.model.isAmbiguousRetryable
 import dev.proflyder.home.core.operation.EditorCompletion
 import dev.proflyder.home.core.operation.IdempotentRequestKey
+import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.reminders.ReminderDraft
@@ -26,9 +27,7 @@ import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class ReminderEditorUiState(
@@ -51,13 +50,10 @@ class ReminderEditorViewModel(
     private val deleteReminder: DeleteReminder,
     private val settings: ConnectionSettingsStore,
     private val savedState: SavedStateHandle,
-) : ViewModel() {
+) : BaseViewModel<ReminderEditorUiState>(restoreState(savedState)) {
     private val restoredDraft: ReminderEditorDraft? = ReminderEditorDraftCodec.fromMap(
         savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
     )
-
-    private val mutableState = MutableStateFlow(restoredDraft?.toUiState() ?: ReminderEditorUiState())
-    val state: StateFlow<ReminderEditorUiState> = mutableState.asStateFlow()
 
     private val editorCompletion = EditorCompletion(
         savedState.get<String>(KEY_COMPLETION)?.let { raw ->
@@ -239,38 +235,6 @@ class ReminderEditorViewModel(
         ReminderEditorDraftCodec.toMap(draft).forEach { (key, value) -> savedState[key] = value }
     }
 
-    private fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
-        existing = restoredExisting(),
-        label = label,
-        date = date,
-        hour = hour,
-        minute = minute,
-        timezone = timezone,
-        enabled = enabled,
-    )
-
-    private fun ReminderEditorDraft.restoredExisting(): Schedule? {
-        val id = existingId ?: return null
-        return Schedule(
-            id = id,
-            label = label,
-            kind = ScheduleKind.REMINDER,
-            timezone = timezone,
-            at = WallTime(hour, minute),
-            onceDate = date.toString(),
-            repeat = dev.proflyder.home.core.model.RepeatKind.ONCE,
-            weekdays = emptyList(),
-            nextDueUnix = 0,
-            enabled = enabled,
-            snoozeUntilUnix = 0,
-            lastFiredUnix = 0,
-            snoozeCount = 0,
-            revision = existingRevision ?: 0,
-            createdUnix = 0,
-            updatedUnix = 0,
-        )
-    }
-
     private fun Schedule.toState(): ReminderEditorUiState = ReminderEditorUiState(
         loading = false,
         existing = this,
@@ -302,4 +266,40 @@ class ReminderEditorViewModelFactoryContributor(
     override fun createFactory() = SavedStateViewModelFactory { savedState ->
         ReminderEditorViewModel(loadReminder, saveReminder, deleteReminder, settings, savedState)
     }
+}
+
+private fun restoreState(savedState: SavedStateHandle): ReminderEditorUiState =
+    ReminderEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
+        ?: ReminderEditorUiState()
+
+private fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
+    existing = restoredExisting(),
+    label = label,
+    date = date,
+    hour = hour,
+    minute = minute,
+    timezone = timezone,
+    enabled = enabled,
+)
+
+private fun ReminderEditorDraft.restoredExisting(): Schedule? {
+    val id = existingId ?: return null
+    return Schedule(
+        id = id,
+        label = label,
+        kind = ScheduleKind.REMINDER,
+        timezone = timezone,
+        at = WallTime(hour, minute),
+        onceDate = date.toString(),
+        repeat = dev.proflyder.home.core.model.RepeatKind.ONCE,
+        weekdays = emptyList(),
+        nextDueUnix = 0,
+        enabled = enabled,
+        snoozeUntilUnix = 0,
+        lastFiredUnix = 0,
+        snoozeCount = 0,
+        revision = existingRevision ?: 0,
+        createdUnix = 0,
+        updatedUnix = 0,
+    )
 }

@@ -11,6 +11,7 @@ metro_android_library(
     custom_package = "dev.proflyder.home",
     manifest = "src/main/AndroidManifest.xml",
     resource_files = glob(["src/main/res/**"]),
+    view_binding = True,
     deps = [
         "//projects/mobile/android/core/config:config",
         "//projects/mobile/android/core/model:model",

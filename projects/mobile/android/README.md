@@ -15,6 +15,11 @@ Metro-generated DI, feature API/implementation modules, and a small typed router
   delete. The server stores the `onceDate`; the phone never schedules it.
 - Timers: start, list, pause, resume, cancel. Remaining time is computed from the
   server clock returned by `GetStatus`, not from the phone clock alone.
+- Alarm multi-select: long-press a card to enter selection mode, tap to add or
+  remove cards, then bulk **Enable / Disable / Delete** (delete asks for
+  confirmation). Back leaves selection mode first. Bulk actions run sequentially
+  against the server; on the first failure the run stops, the error is shown and
+  the unprocessed alarms stay selected for a retry.
 - Connection: endpoint, required bearer token, connect/read timeouts, explicit
   **Save and test connection** using `GetStatus`, and honest offline/auth/TLS
   states. A token can be deliberately removed; the next request fails with a
@@ -103,7 +108,7 @@ projects/mobile/android/
     settings/             Android Keystore token + SharedPreferences store
     network/              Connect unary JSON transport, DTO mapping, errors
     navigation/           Destination/FeatureEntry + typed FragmentRouter
-    ui/                   ViewModel factory registry, errors, list states
+    ui/                   BaseFragment/BaseViewModel, ViewBinding, factory registry, errors, list states
   features/
     alarms/{api,impl}     domain contract / use cases+repo+UI+entry
     reminders/{api,impl}
@@ -134,6 +139,27 @@ is applied to every Kotlin Android compilation through
 - There is no runtime service locator or hand-written mock repository. Fragments
   request their ViewModel factory from the Activity host, which delegates to the
   graph-built `ViewModelFactoryRegistry`.
+
+### UI building blocks
+
+- **ViewBinding.** rules_android has no ViewBinding and `androidx.viewbinding` is not in
+  the pinned Maven closure, so `metro_android_library(view_binding = True, ...)`
+  (`//platform/android:defs.bzl`) runs `platform/android/gen_view_binding.py` over the
+  module's `res/layout/*.xml` and compiles the result with the module. Each layout
+  `fragment_foo.xml` yields `FragmentFooBinding` in `<custom_package>.databinding`,
+  with a typed `val` per `android:id` (camelCase), `inflate(...)` and `bind(view)`,
+  implementing `core.ui.ViewBinding`. `<merge>` roots are rejected; only the default
+  `layout/` directory is bound. Modules using it depend on `core/ui`.
+  Generator tests: `python3 -I platform/android/gen_view_binding_test.py`.
+- **`BaseFragment<VB>`** inflates the binding in `onCreateView`, exposes `binding` only
+  between view creation and destruction, and offers `observe` (lifecycle-aware flow
+  collection), `repeatOnView`, `showMessage`/`showFailure` and `confirm`. Subclasses
+  implement `onBindingCreated` and pass `FooBinding.Companion::inflate`.
+- **`BaseViewModel<S>`** owns immutable UI state: `state` is read-only, changes go through
+  `updateState { copy(...) }`, `currentState` and `launch` are helpers. Savable editors
+  compute their initial state from `SavedStateHandle` in the super call.
+- **`ListStateViews`** shows exactly one of loading / empty / error / content;
+  `showContent(refreshing = true)` keeps the list visible during a refresh.
 
 ### Navigation
 

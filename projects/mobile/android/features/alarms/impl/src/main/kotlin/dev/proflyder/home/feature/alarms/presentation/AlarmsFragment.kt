@@ -1,117 +1,72 @@
 package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
-import android.view.View
-import androidx.appcompat.app.AlertDialog
-import androidx.fragment.app.Fragment
+import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-import com.google.android.material.snackbar.Snackbar
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.navigation.requireNavigator
+import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
+import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.impl.R
-import kotlinx.coroutines.launch
+import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
-class AlarmsFragment : Fragment(R.layout.fragment_alarms) {
+class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding.Companion::inflate) {
     private val viewModel: AlarmsViewModel by viewModels {
         viewModelFactory(AlarmsViewModel::class.java)
     }
 
     private lateinit var adapter: AlarmAdapter
     private lateinit var states: ListStateViews
-    private lateinit var progress: View
-    private lateinit var openConnection: View
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    /** Back leaves multi-select first; enabled only while something is selected. */
+    private val exitSelection = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = viewModel.clearSelection()
+    }
+
+    override fun onBindingCreated(binding: FragmentAlarmsBinding, savedInstanceState: Bundle?) {
         adapter = AlarmAdapter(
-            onClick = { alarm -> requireNavigator().navigate(AlarmEditorDestination(alarm.id)) },
-            onToggle = { alarm, enabled -> viewModel.setEnabled(alarm, enabled) },
+            onClick = ::onAlarmClick,
+            onLongClick = { alarm -> viewModel.toggleSelection(alarm.id) },
+            onToggle = viewModel::setEnabled,
             onSnooze = viewModel::snooze,
             onStop = viewModel::stop,
             onDelete = { alarm -> confirmDelete(alarm.id) },
         )
+        binding.alarmsList.layoutManager =
+            GridLayoutManager(requireContext(), resources.getInteger(R.integer.alarms_columns))
+        binding.alarmsList.adapter = adapter
 
-        val list = view.findViewById<RecyclerView>(R.id.alarms_list)
-        list.layoutManager = GridLayoutManager(requireContext(), resources.getInteger(R.integer.alarms_columns))
-        list.adapter = adapter
-
-        progress = view.findViewById(R.id.alarms_progress)
         states = ListStateViews(
-            progress = progress,
-            empty = view.findViewById(R.id.alarms_empty),
-            error = view.findViewById(R.id.alarms_error_text),
-            content = list,
+            progress = binding.alarmsProgress,
+            empty = binding.alarmsEmpty,
+            error = binding.alarmsError,
+            content = binding.alarmsList,
+            errorText = binding.alarmsErrorText,
         )
-        // The error container must be hidden as a whole; ListStateViews only
-        // controls the text view, so keep the container in sync.
-        val errorContainer = view.findViewById<View>(R.id.alarms_error)
 
-        view.findViewById<View>(R.id.alarms_retry).setOnClickListener { viewModel.refresh() }
+        binding.alarmsRetry.setOnClickListener { viewModel.refresh() }
         // With no endpoint/token configured the server is intentionally
         // unreachable; make the state actionable instead of a dead empty list.
-        openConnection = view.findViewById(R.id.alarms_open_connection)
-        openConnection.setOnClickListener { requireNavigator().selectTab("connection") }
-        view.findViewById<ExtendedFloatingActionButton>(R.id.alarms_add).setOnClickListener {
-            requireNavigator().navigate(AlarmEditorDestination())
-        }
+        binding.alarmsOpenConnection.setOnClickListener { requireNavigator().selectTab("connection") }
+        binding.alarmsAdd.setOnClickListener { requireNavigator().navigate(AlarmEditorDestination()) }
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { state ->
-                    val hasItems = state.alarms.isNotEmpty()
-                    when {
-                        state.refreshing && !hasItems -> {
-                            states.showLoading()
-                            errorContainer.visibility = View.GONE
-                        }
-                        state.loadError != null && !hasItems -> {
-                            states.showError(state.loadError.userMessage(requireContext()))
-                            errorContainer.visibility = View.VISIBLE
-                            openConnection.visibility =
-                                if (state.loadError == RemoteFailure.NotConfigured) View.VISIBLE else View.GONE
-                        }
-                        !hasItems -> {
-                            states.showEmpty(getString(R.string.alarms_empty))
-                            errorContainer.visibility = View.GONE
-                        }
-                        else -> {
-                            states.showContent()
-                            errorContainer.visibility = View.GONE
-                            adapter.submitList(state.alarms)
-                            // Keep the existing list visible while a refresh is
-                            // in flight; do not replace it with a spinner.
-                            progress.visibility = if (state.refreshing) View.VISIBLE else View.GONE
-                        }
-                    }
-
-                    if (state.loadError != null && hasItems) {
-                        Snackbar.make(
-                            requireView(),
-                            state.loadError.userMessage(requireContext()),
-                            Snackbar.LENGTH_LONG,
-                        ).show()
-                        viewModel.consumeLoadError()
-                    }
-                    state.actionError?.let { failure ->
-                        Snackbar.make(requireView(), failure.userMessage(requireContext()), Snackbar.LENGTH_LONG).show()
-                        // The switch may have moved optimistically; re-render
-                        // the server-confirmed values.
-                        adapter.notifyDataSetChanged()
-                        viewModel.consumeActionError()
-                    }
-                }
-            }
+        binding.alarmsSelectionClose.setOnClickListener { viewModel.clearSelection() }
+        binding.alarmsSelectionAll.setOnClickListener {
+            if (viewModel.state.value.allSelected) viewModel.clearSelection() else viewModel.selectAll()
         }
+        binding.alarmsSelectionEnable.setOnClickListener { viewModel.setSelectedEnabled(true) }
+        binding.alarmsSelectionDisable.setOnClickListener { viewModel.setSelectedEnabled(false) }
+        binding.alarmsSelectionDelete.setOnClickListener { confirmDeleteSelected() }
+
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, exitSelection)
+
+        viewModel.state.observe { render(it) }
     }
 
     override fun onResume() {
@@ -119,13 +74,80 @@ class AlarmsFragment : Fragment(R.layout.fragment_alarms) {
         viewModel.refresh()
     }
 
-    private fun confirmDelete(id: String) {
-        AlertDialog.Builder(requireContext())
-            .setMessage(R.string.alarms_delete_confirm)
-            .setNegativeButton(R.string.alarms_cancel, null)
-            .setPositiveButton(R.string.alarms_delete_yes) { _, _ ->
-                viewModel.state.value.alarms.firstOrNull { it.id == id }?.let(viewModel::delete)
+    private fun render(state: AlarmsUiState) {
+        val hasItems = state.alarms.isNotEmpty()
+        val loadError = state.loadError
+        when {
+            state.refreshing && !hasItems -> states.showLoading()
+            loadError != null && !hasItems -> {
+                states.showError(loadError.userMessage(requireContext()))
+                binding.alarmsOpenConnection.setVisible(loadError == RemoteFailure.NotConfigured)
             }
-            .show()
+            !hasItems -> states.showEmpty()
+            else -> {
+                // Keep the existing list visible while a refresh is in flight;
+                // do not replace it with a spinner.
+                states.showContent(refreshing = state.refreshing)
+                adapter.submitList(
+                    state.alarms.map { AlarmRow(it, it.id in state.selectedIds, state.selectionMode) },
+                )
+            }
+        }
+        renderSelection(state)
+
+        if (loadError != null && hasItems) {
+            showFailure(loadError)
+            viewModel.consumeLoadError()
+        }
+        state.actionError?.let { failure ->
+            showFailure(failure)
+            // A switch may have moved optimistically; re-render server-confirmed values.
+            adapter.notifyDataSetChanged()
+            viewModel.consumeActionError()
+        }
+    }
+
+    private fun renderSelection(state: AlarmsUiState) {
+        val selecting = state.selectionMode
+        exitSelection.isEnabled = selecting
+        binding.alarmsSelectionBar.setVisible(selecting)
+        binding.alarmsActionBar.setVisible(selecting)
+        if (selecting) binding.alarmsAdd.hide() else binding.alarmsAdd.show()
+
+        val count = state.selectedIds.size
+        binding.alarmsSelectionCount.text =
+            resources.getQuantityString(R.plurals.alarms_selected_count, count, count)
+        binding.alarmsSelectionAll.setText(
+            if (state.allSelected) R.string.alarms_select_none else R.string.alarms_select_all,
+        )
+        val actionsEnabled = !state.busy
+        binding.alarmsSelectionEnable.isEnabled = actionsEnabled
+        binding.alarmsSelectionDisable.isEnabled = actionsEnabled
+        binding.alarmsSelectionDelete.isEnabled = actionsEnabled
+    }
+
+    private fun onAlarmClick(alarm: Schedule) {
+        if (viewModel.state.value.selectionMode) {
+            viewModel.toggleSelection(alarm.id)
+        } else {
+            requireNavigator().navigate(AlarmEditorDestination(alarm.id))
+        }
+    }
+
+    private fun confirmDelete(id: String) {
+        confirm(R.string.alarms_delete_confirm, R.string.alarms_delete_yes, R.string.alarms_cancel) {
+            viewModel.state.value.alarms.firstOrNull { it.id == id }?.let(viewModel::delete)
+        }
+    }
+
+    private fun confirmDeleteSelected() {
+        val count = viewModel.state.value.selectedIds.size
+        if (count == 0) return
+        confirm(
+            resources.getQuantityString(R.plurals.alarms_delete_selected_confirm, count, count),
+            R.string.alarms_delete_yes,
+            R.string.alarms_cancel,
+            viewModel::deleteSelected,
+        )
     }
 }

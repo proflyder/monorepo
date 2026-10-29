@@ -10,6 +10,7 @@ import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.isAmbiguousRetryable
 import dev.proflyder.home.core.operation.IdempotentRequestKey
+import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.timers.domain.CancelTimer
@@ -21,9 +22,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class TimersUiState(
@@ -45,9 +43,7 @@ class TimersViewModel(
     private val cancelTimer: CancelTimer,
     private val clock: ServerClock,
     private val settings: ConnectionSettingsStore,
-) : ViewModel() {
-    private val mutableState = MutableStateFlow(TimersUiState())
-    val state: StateFlow<TimersUiState> = mutableState.asStateFlow()
+) : BaseViewModel<TimersUiState>(TimersUiState()) {
 
     private var refreshJob: Job? = null
     private var generation = 0

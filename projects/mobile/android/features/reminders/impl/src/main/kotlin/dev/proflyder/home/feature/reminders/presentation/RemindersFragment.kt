@@ -1,96 +1,47 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
-import android.view.View
-import androidx.appcompat.app.AlertDialog
-import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-import com.google.android.material.snackbar.Snackbar
 import dev.proflyder.home.core.navigation.requireNavigator
+import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorDestination
 import dev.proflyder.home.feature.reminders.impl.R
-import kotlinx.coroutines.launch
+import dev.proflyder.home.feature.reminders.impl.databinding.FragmentRemindersBinding
 
-class RemindersFragment : Fragment(R.layout.fragment_reminders) {
+class RemindersFragment :
+    BaseFragment<FragmentRemindersBinding>(FragmentRemindersBinding.Companion::inflate) {
     private val viewModel: RemindersViewModel by viewModels {
         viewModelFactory(RemindersViewModel::class.java)
     }
 
     private lateinit var adapter: ReminderAdapter
+    private lateinit var states: ListStateViews
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    override fun onBindingCreated(binding: FragmentRemindersBinding, savedInstanceState: Bundle?) {
         adapter = ReminderAdapter(
             onClick = { reminder -> requireNavigator().navigate(ReminderEditorDestination(reminder.id)) },
             onToggle = viewModel::toggle,
             onDelete = { reminder -> confirmDelete(reminder.id) },
         )
-        val list = view.findViewById<RecyclerView>(R.id.reminders_list)
-        list.layoutManager = GridLayoutManager(requireContext(), resources.getInteger(R.integer.reminders_columns))
-        list.adapter = adapter
+        binding.remindersList.layoutManager =
+            GridLayoutManager(requireContext(), resources.getInteger(R.integer.reminders_columns))
+        binding.remindersList.adapter = adapter
 
-        val states = ListStateViews(
-            progress = view.findViewById(R.id.reminders_progress),
-            empty = view.findViewById(R.id.reminders_empty),
-            error = view.findViewById(R.id.reminders_error_text),
-            content = list,
+        states = ListStateViews(
+            progress = binding.remindersProgress,
+            empty = binding.remindersEmpty,
+            error = binding.remindersError,
+            content = binding.remindersList,
+            errorText = binding.remindersErrorText,
         )
-        val errorContainer = view.findViewById<View>(R.id.reminders_error)
-        view.findViewById<View>(R.id.reminders_retry).setOnClickListener { viewModel.refresh() }
-        view.findViewById<ExtendedFloatingActionButton>(R.id.reminders_add).setOnClickListener {
-            requireNavigator().navigate(ReminderEditorDestination())
-        }
+        binding.remindersRetry.setOnClickListener { viewModel.refresh() }
+        binding.remindersAdd.setOnClickListener { requireNavigator().navigate(ReminderEditorDestination()) }
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { state ->
-                    val hasItems = state.reminders.isNotEmpty()
-                    when {
-                        state.refreshing && !hasItems -> {
-                            states.showLoading()
-                            errorContainer.visibility = View.GONE
-                        }
-                        state.loadError != null && !hasItems -> {
-                            states.showError(state.loadError.userMessage(requireContext()))
-                            errorContainer.visibility = View.VISIBLE
-                        }
-                        !hasItems -> {
-                            states.showEmpty(getString(R.string.reminders_empty))
-                            errorContainer.visibility = View.GONE
-                        }
-                        else -> {
-                            states.showContent()
-                            errorContainer.visibility = View.GONE
-                            adapter.submitList(state.reminders)
-                            view.findViewById<View>(R.id.reminders_progress).visibility =
-                                if (state.refreshing) View.VISIBLE else View.GONE
-                        }
-                    }
-                    if (state.loadError != null && hasItems) {
-                        Snackbar.make(
-                            requireView(),
-                            state.loadError.userMessage(requireContext()),
-                            Snackbar.LENGTH_LONG,
-                        ).show()
-                        viewModel.consumeLoadError()
-                    }
-                    state.actionError?.let { failure ->
-                        Snackbar.make(requireView(), failure.userMessage(requireContext()), Snackbar.LENGTH_LONG).show()
-                        adapter.notifyDataSetChanged()
-                        viewModel.consumeActionError()
-                    }
-                }
-            }
-        }
+        viewModel.state.observe { render(it) }
     }
 
     override fun onResume() {
@@ -98,13 +49,33 @@ class RemindersFragment : Fragment(R.layout.fragment_reminders) {
         viewModel.refresh()
     }
 
-    private fun confirmDelete(id: String) {
-        AlertDialog.Builder(requireContext())
-            .setMessage(R.string.reminders_delete_confirm)
-            .setNegativeButton(R.string.reminders_cancel, null)
-            .setPositiveButton(R.string.reminders_delete_yes) { _, _ ->
-                viewModel.state.value.reminders.firstOrNull { it.id == id }?.let(viewModel::delete)
+    private fun render(state: RemindersUiState) {
+        val hasItems = state.reminders.isNotEmpty()
+        val loadError = state.loadError
+        when {
+            state.refreshing && !hasItems -> states.showLoading()
+            loadError != null && !hasItems -> states.showError(loadError.userMessage(requireContext()))
+            !hasItems -> states.showEmpty()
+            else -> {
+                states.showContent(refreshing = state.refreshing)
+                adapter.submitList(state.reminders)
             }
-            .show()
+        }
+        if (loadError != null && hasItems) {
+            showFailure(loadError)
+            viewModel.consumeLoadError()
+        }
+        state.actionError?.let { failure ->
+            showFailure(failure)
+            // A switch may have moved optimistically; re-render server-confirmed values.
+            adapter.notifyDataSetChanged()
+            viewModel.consumeActionError()
+        }
+    }
+
+    private fun confirmDelete(id: String) {
+        confirm(R.string.reminders_delete_confirm, R.string.reminders_delete_yes, R.string.reminders_cancel) {
+            viewModel.state.value.reminders.firstOrNull { it.id == id }?.let(viewModel::delete)
+        }
     }
 }

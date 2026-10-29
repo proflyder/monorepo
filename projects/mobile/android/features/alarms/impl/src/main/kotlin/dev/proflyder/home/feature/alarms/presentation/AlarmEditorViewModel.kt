@@ -13,6 +13,7 @@ import dev.proflyder.home.core.model.WallTime
 import dev.proflyder.home.core.model.isAmbiguousRetryable
 import dev.proflyder.home.core.operation.EditorCompletion
 import dev.proflyder.home.core.operation.IdempotentRequestKey
+import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.alarms.AlarmDraft
@@ -27,9 +28,7 @@ import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class AlarmEditorUiState(
@@ -54,13 +53,10 @@ class AlarmEditorViewModel(
     private val deleteAlarm: DeleteAlarm,
     private val settings: ConnectionSettingsStore,
     private val savedState: SavedStateHandle,
-) : ViewModel() {
+) : BaseViewModel<AlarmEditorUiState>(restoreState(savedState)) {
     private val restoredDraft: AlarmEditorDraft? = AlarmEditorDraftCodec.fromMap(
         savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
     )
-
-    private val mutableState = MutableStateFlow(restoredDraft?.toUiState() ?: AlarmEditorUiState())
-    val state: StateFlow<AlarmEditorUiState> = mutableState.asStateFlow()
 
     private val editorCompletion = EditorCompletion(
         savedState.get<String>(KEY_COMPLETION)?.let { raw ->
@@ -265,40 +261,6 @@ class AlarmEditorViewModel(
         AlarmEditorDraftCodec.toMap(draft).forEach { (key, value) -> savedState[key] = value }
     }
 
-    private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
-        existing = restoredExisting(),
-        label = label,
-        hour = hour,
-        minute = minute,
-        timezone = timezone,
-        repeat = repeat,
-        weekdays = weekdays.toSet(),
-        enabled = enabled,
-        onceDate = onceDate,
-    )
-
-    private fun AlarmEditorDraft.restoredExisting(): Schedule? {
-        val id = existingId ?: return null
-        return Schedule(
-            id = id,
-            label = label,
-            kind = ScheduleKind.ALARM,
-            timezone = timezone,
-            at = WallTime(hour, minute),
-            onceDate = if (repeat == RepeatKind.ONCE) onceDate?.toString().orEmpty() else "",
-            repeat = repeat,
-            weekdays = weekdays,
-            nextDueUnix = 0,
-            enabled = enabled,
-            snoozeUntilUnix = 0,
-            lastFiredUnix = 0,
-            snoozeCount = 0,
-            revision = existingRevision ?: 0,
-            createdUnix = 0,
-            updatedUnix = 0,
-        )
-    }
-
     private fun Schedule.toState(): AlarmEditorUiState = AlarmEditorUiState(
         loading = false,
         existing = this,
@@ -339,4 +301,42 @@ class AlarmEditorViewModelFactoryContributor(
     override fun createFactory() = SavedStateViewModelFactory { savedState ->
         AlarmEditorViewModel(loadAlarm, saveAlarm, deleteAlarm, settings, savedState)
     }
+}
+
+private fun restoreState(savedState: SavedStateHandle): AlarmEditorUiState =
+    AlarmEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
+        ?: AlarmEditorUiState()
+
+private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
+    existing = restoredExisting(),
+    label = label,
+    hour = hour,
+    minute = minute,
+    timezone = timezone,
+    repeat = repeat,
+    weekdays = weekdays.toSet(),
+    enabled = enabled,
+    onceDate = onceDate,
+)
+
+private fun AlarmEditorDraft.restoredExisting(): Schedule? {
+    val id = existingId ?: return null
+    return Schedule(
+        id = id,
+        label = label,
+        kind = ScheduleKind.ALARM,
+        timezone = timezone,
+        at = WallTime(hour, minute),
+        onceDate = if (repeat == RepeatKind.ONCE) onceDate?.toString().orEmpty() else "",
+        repeat = repeat,
+        weekdays = weekdays,
+        nextDueUnix = 0,
+        enabled = enabled,
+        snoozeUntilUnix = 0,
+        lastFiredUnix = 0,
+        snoozeCount = 0,
+        revision = existingRevision ?: 0,
+        createdUnix = 0,
+        updatedUnix = 0,
+    )
 }

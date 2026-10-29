@@ -2,7 +2,6 @@ package dev.proflyder.home
 
 import android.os.Bundle
 import android.view.Menu
-import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -22,13 +21,16 @@ import dev.proflyder.home.core.navigation.FragmentRouter
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.ui.ViewModelFactoryProvider
+import dev.proflyder.home.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvider {
     private lateinit var router: FragmentRouter
-    private lateinit var bottomNavigation: BottomNavigationView
-    private lateinit var toolbar: MaterialToolbar
+    private lateinit var binding: ActivityMainBinding
     private lateinit var features: FeatureRegistry
+
+    private val bottomNavigation: BottomNavigationView get() = binding.bottomNavigation
+    private val toolbar: MaterialToolbar get() = binding.toolbar
 
     private val itemIdByFeature = mutableMapOf<String, Int>()
     private val featureByItemId = mutableMapOf<Int, String>()
@@ -41,11 +43,8 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         val graph = (application as HomeApplication).graph
         features = graph.featureRegistry
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        setContentView(R.layout.activity_main)
-        // Resolve views before applying insets: applySystemBarInsets() reads the
-        // bottom navigation and runs on every cold launch.
-        toolbar = findViewById(R.id.toolbar)
-        bottomNavigation = findViewById(R.id.bottom_navigation)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
         applySystemBarInsets()
 
         // FragmentRouter inspects the actual restored FragmentManager state;
@@ -141,7 +140,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     private fun applySystemBarInsets() {
-        val appBar = findViewById<View>(R.id.appbar)
+        val appBar = binding.appbar
         ViewCompat.setOnApplyWindowInsetsListener(appBar) { view, insets ->
             val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             view.updatePadding(top = top)
@@ -152,7 +151,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             view.updatePadding(bottom = bottom)
             insets
         }
-        val content = findViewById<View>(R.id.fragment_container)
+        val content = binding.fragmentContainer
         ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
             view.updatePadding(bottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
             insets

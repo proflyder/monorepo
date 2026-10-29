@@ -10,9 +10,13 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     deps = [
         "//projects/mobile/android/core/model:model",
+        "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",
+        "@maven//:com_google_android_material_material",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
     ],
 )
