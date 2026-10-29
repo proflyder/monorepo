@@ -9,6 +9,7 @@ import dev.proflyder.home.core.time.DurationText
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.timers.impl.R
@@ -45,6 +46,7 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
         }
 
         binding.timersStart.setOnClickListener { startTimer() }
+        binding.timersRefresh.setupPullToRefresh { viewModel.refresh() }
         binding.timersRetry.setOnClickListener { viewModel.refresh() }
 
         viewModel.state.observe { render(it) }
@@ -76,6 +78,7 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
         val hasItems = state.timers.isNotEmpty()
         val loadError = state.loadError
         val showLoadError = loadError != null && !hasItems
+        binding.timersRefresh.isRefreshing = state.refreshing && hasItems
         binding.timersProgress.setVisible(state.starting || (state.refreshing && !hasItems))
         binding.timersStart.isEnabled = !state.starting
         binding.timersErrorText.setVisible(showLoadError)

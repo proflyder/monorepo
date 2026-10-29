@@ -11,6 +11,7 @@ import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
@@ -54,6 +55,7 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
             errorText = binding.alarmsErrorText,
         )
 
+        binding.alarmsRefresh.setupPullToRefresh { viewModel.refresh() }
         binding.alarmsRetry.setOnClickListener { viewModel.refresh() }
         // With no endpoint/token configured the server is intentionally
         // unreachable; make the state actionable instead of a dead empty list.
@@ -91,12 +93,14 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
             else -> {
                 // Keep the existing list visible while a refresh is in flight;
                 // do not replace it with a spinner.
-                states.showContent(refreshing = state.refreshing)
+                states.showContent()
                 adapter.submitList(
                     state.alarms.map { AlarmRow(it, it.id in state.selectedIds, state.selectionMode) },
                 )
             }
         }
+        binding.alarmsRefresh.isRefreshing = state.refreshing && hasItems
+        binding.alarmsRefresh.isEnabled = !state.selectionMode
         renderSelection(state)
 
         if (loadError != null && hasItems) {

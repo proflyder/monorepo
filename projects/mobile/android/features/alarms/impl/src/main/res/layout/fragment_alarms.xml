@@ -45,91 +45,97 @@
             android:textColor="?attr/colorOnSecondaryContainer" />
     </LinearLayout>
 
-    <FrameLayout
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/alarms_refresh"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/alarms_list"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingStart="@dimen/alarms_screen_margin"
-            android:paddingTop="12dp"
-            android:paddingEnd="@dimen/alarms_screen_margin"
-            android:paddingBottom="96dp" />
+            android:layout_height="match_parent">
 
-        <ProgressBar
-            android:id="@+id/alarms_progress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/alarms_empty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:padding="32dp"
-            android:visibility="gone">
-
-            <TextView
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/alarms_list"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="@string/alarms_empty"
-                android:textAppearance="?attr/textAppearanceBodyLarge" />
-        </LinearLayout>
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="@dimen/alarms_screen_margin"
+                android:paddingTop="12dp"
+                android:paddingEnd="@dimen/alarms_screen_margin"
+                android:paddingBottom="96dp" />
 
-        <LinearLayout
-            android:id="@+id/alarms_error"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:padding="32dp"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/alarms_error_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:textAppearance="?attr/textAppearanceBodyLarge" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/alarms_retry"
+            <ProgressBar
+                android:id="@+id/alarms_progress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:minHeight="48dp"
-                android:text="@string/ui_retry" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/alarms_open_connection"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:minHeight="48dp"
-                android:text="@string/alarms_open_connection"
+                android:layout_gravity="center"
                 android:visibility="gone" />
-        </LinearLayout>
 
-        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-            android:id="@+id/alarms_add"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_margin="@dimen/alarms_screen_margin"
-            android:contentDescription="@string/alarms_add"
-            android:text="@string/alarms_add"
-            app:icon="@drawable/alarms_ic_add" />
-    </FrameLayout>
+            <LinearLayout
+                android:id="@+id/alarms_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="32dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="@string/alarms_empty"
+                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/alarms_error"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="32dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/alarms_error_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/alarms_retry"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:minHeight="48dp"
+                    android:text="@string/ui_retry" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/alarms_open_connection"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:minHeight="48dp"
+                    android:text="@string/alarms_open_connection"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+                android:id="@+id/alarms_add"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="@dimen/alarms_screen_margin"
+                android:contentDescription="@string/alarms_add"
+                android:text="@string/alarms_add"
+                app:icon="@drawable/alarms_ic_add" />
+        </FrameLayout>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <!-- Bulk actions: replace the FAB while alarms are selected. -->
     <com.google.android.material.card.MaterialCardView

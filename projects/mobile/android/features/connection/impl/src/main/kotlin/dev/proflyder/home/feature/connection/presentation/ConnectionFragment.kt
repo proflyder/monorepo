@@ -6,6 +6,7 @@ import androidx.fragment.app.viewModels
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.connection.impl.R
@@ -35,6 +36,11 @@ class ConnectionFragment :
         }
         binding.connectionReadTimeout.doAfterTextChanged {
             if (!rendering) viewModel.setReadSeconds(it?.toString().orEmpty())
+        }
+        // Pull to re-check the server with the current settings.
+        binding.connectionRefresh.setupPullToRefresh {
+            viewModel.test()
+            binding.connectionRefresh.isRefreshing = viewModel.state.value.busy
         }
         binding.connectionSave.setOnClickListener { viewModel.save() }
         binding.connectionTest.setOnClickListener { viewModel.test() }
@@ -68,6 +74,7 @@ class ConnectionFragment :
 
             connectionSave.isEnabled = !state.busy
             connectionTest.isEnabled = !state.busy
+            connectionRefresh.isRefreshing = state.busy
             connectionProgress.setVisible(state.busy)
             connectionError.setVisible(state.error != null)
             connectionError.text = state.error?.userMessage(requireContext())

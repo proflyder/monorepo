@@ -8,6 +8,7 @@ import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
+import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorDestination
@@ -43,6 +44,7 @@ class RemindersFragment :
             content = binding.remindersList,
             errorText = binding.remindersErrorText,
         )
+        binding.remindersRefresh.setupPullToRefresh { viewModel.refresh() }
         binding.remindersRetry.setOnClickListener { viewModel.refresh() }
         binding.remindersAdd.setOnClickListener { requireNavigator().navigate(ReminderEditorDestination()) }
 
@@ -62,10 +64,11 @@ class RemindersFragment :
             loadError != null && !hasItems -> states.showError(loadError.userMessage(requireContext()))
             !hasItems -> states.showEmpty()
             else -> {
-                states.showContent(refreshing = state.refreshing)
+                states.showContent()
                 adapter.submitList(state.reminders)
             }
         }
+        binding.remindersRefresh.isRefreshing = state.refreshing && hasItems
         if (loadError != null && hasItems) {
             showFailure(loadError)
             viewModel.consumeLoadError()

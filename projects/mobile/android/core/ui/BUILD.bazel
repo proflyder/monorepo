@@ -14,6 +14,7 @@ metro_android_library(
         "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_recyclerview_recyclerview",
+        "@maven//:androidx_swiperefreshlayout_swiperefreshlayout",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",
         "@maven//:com_google_android_material_material",

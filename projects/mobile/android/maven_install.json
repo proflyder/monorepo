@@ -17,6 +17,7 @@
     "androidx.lifecycle:lifecycle-viewmodel-ktx": 1395607485,
     "androidx.lifecycle:lifecycle-viewmodel-savedstate": -970340652,
     "androidx.recyclerview:recyclerview": -368968563,
+    "androidx.swiperefreshlayout:swiperefreshlayout": 353460823,
     "com.google.android.material:material": 607032841,
     "com.google.code.findbugs:jsr305": 495355163,
     "com.google.code.gson:gson": 597770368,
@@ -92,6 +93,7 @@
     "androidx.savedstate:savedstate-ktx:aar": 980175848,
     "androidx.savedstate:savedstate:aar": 322501117,
     "androidx.startup:startup-runtime:aar": 1805153702,
+    "androidx.swiperefreshlayout:swiperefreshlayout:aar": 270515656,
     "androidx.test.espresso:espresso-idling-resource:aar": 541320167,
     "androidx.test:monitor:aar": 2145325691,
     "androidx.tracing:tracing:aar": -1407669629,
@@ -485,6 +487,12 @@
         "jar": "e0a6329a371262fe4c450372b70fdaf33b769ef6917094723787cfce896b1dd3"
       },
       "version": "1.1.1"
+    },
+    "androidx.swiperefreshlayout:swiperefreshlayout:aar": {
+      "shasums": {
+        "jar": "2ce7906cd1dea05aec81975db22d54382359c05a21b2527ad848bc60f6b27293"
+      },
+      "version": "1.1.0"
     },
     "androidx.test.espresso:espresso-idling-resource:aar": {
       "shasums": {
@@ -1210,6 +1218,11 @@
     "androidx.startup:startup-runtime:aar": [
       "androidx.annotation:annotation",
       "androidx.tracing:tracing:aar"
+    ],
+    "androidx.swiperefreshlayout:swiperefreshlayout:aar": [
+      "androidx.annotation:annotation",
+      "androidx.core:core:aar",
+      "androidx.interpolator:interpolator:aar"
     ],
     "androidx.tracing:tracing:aar": [
       "androidx.annotation:annotation"
@@ -3903,6 +3916,7 @@
       "androidx.savedstate:savedstate-ktx:aar",
       "androidx.savedstate:savedstate:aar",
       "androidx.startup:startup-runtime:aar",
+      "androidx.swiperefreshlayout:swiperefreshlayout:aar",
       "androidx.test.espresso:espresso-idling-resource:aar",
       "androidx.test:monitor:aar",
       "androidx.tracing:tracing:aar",
@@ -4027,6 +4041,7 @@
       "androidx.savedstate:savedstate-ktx:aar",
       "androidx.savedstate:savedstate:aar",
       "androidx.startup:startup-runtime:aar",
+      "androidx.swiperefreshlayout:swiperefreshlayout:aar",
       "androidx.test.espresso:espresso-idling-resource:aar",
       "androidx.test:monitor:aar",
       "androidx.tracing:tracing:aar",
