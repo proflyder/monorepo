@@ -231,7 +231,8 @@ class Recorder:
                 take["wav"].writeframesraw(data)
                 take["frames"] += len(values)
                 take["peak"] = max(take["peak"], max(abs(v) for v in values))
-                if time.monotonic() - take["monotonic"] >= 180:
+                limit = 480 if take["block"] == "background" else 180
+                if time.monotonic() - take["monotonic"] >= limit:
                     self.finish_take()
 
     def start_take(self, block, split, note):

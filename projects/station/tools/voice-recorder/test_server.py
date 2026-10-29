@@ -71,6 +71,21 @@ class RecordingTests(unittest.TestCase):
         self.assertTrue(self.rec.last_error)
         self.assertIn("/stop", shell.call_args.args[0])
 
+    def test_long_background_capture_preserves_voice_take_limit(self):
+        with patch.object(app.time, "monotonic", return_value=0) as clock:
+            self.rec.start_take("background", "train", "")
+            clock.return_value = 181
+            self.rec.consume(b"\x01\x00" * 512)
+            self.assertIsNotNone(self.rec.take)
+            clock.return_value = 481
+            self.rec.consume(b"\x01\x00" * 512)
+            self.assertIsNone(self.rec.take)
+            self.assertEqual(self.rec.status()["files"][0]["frames"], 1024)
+            self.rec.start_take("normal", "train", "")
+            clock.return_value = 662
+            self.rec.consume(b"\x01\x00" * 512)
+            self.assertIsNone(self.rec.take)
+
 
 class HTTPTests(unittest.TestCase):
     def setUp(self):
