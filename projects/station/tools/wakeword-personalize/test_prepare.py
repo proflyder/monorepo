@@ -18,6 +18,17 @@ train_spec.loader.exec_module(finetune)
 
 
 class PrepareTests(unittest.TestCase):
+    def test_scratch_mode_cannot_silently_load_pretrained_weights(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        arguments = ["finetune.py", "--trainer", "unused", "--run", "unused",
+                     "--from-scratch", "--base-weights", "old.weights.h5"]
+        with patch("sys.argv", arguments), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:
+                finetune.main()
+        self.assertEqual(error.exception.code, 2)
+
     def test_detector_rejects_invalid_cutoff_and_smoothing_before_loading_model(self):
         spec = importlib.util.spec_from_file_location("personal_evaluate", Path(__file__).with_name("evaluate.py"))
         module = importlib.util.module_from_spec(spec)

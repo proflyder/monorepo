@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GPU-only bounded adaptation of an existing training checkpoint.
+"""GPU-only bounded personalization or full training from random initialization.
 
 Run inside the existing trainer environment. Original weights/features are read-only;
 personal data, checkpoints and export remain under the private run directory.
@@ -105,7 +105,12 @@ def main():
     parser.add_argument("--steps", type=int, default=1000)
     parser.add_argument("--registry", type=Path, help="Private model registry; defaults to trainer/training/model-registry/ricardo")
     parser.add_argument("--version", help="New immutable registry version ID")
-    parser.add_argument("--base-weights", type=Path)
+    origin = parser.add_mutually_exclusive_group()
+    origin.add_argument("--base-weights", type=Path)
+    origin.add_argument("--from-scratch", action="store_true",
+                        help="Random initialization; BatchNorm learns from the full mixture")
+    parser.add_argument("--extra-features", type=Path,
+                        help="Directory with positive/negative train/val .npy for an additional voice")
     parser.add_argument("--model-name", default="ru_ricardo_personal_v1")
     parser.add_argument("--manifest-version", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=3e-5)
@@ -279,13 +284,28 @@ def main():
     synthetic = {key: np.load(old / "mww_features" / (name + ".npy"), mmap_mode="r")
                  for key, name in [("train_pos", "positive_train"), ("train_neg", "negative_train"),
                                    ("val_pos", "positive_val"), ("val_neg", "negative_val")]}
+    extra = None
+    if args.extra_features:
+        if not hard or synthetic_hard:
+            raise ValueError("Additional voice mixture requires real hard negatives, without synthetic_hard_features")
+        extra = {key: np.load(args.extra_features / (name + ".npy"), mmap_mode="r")
+                 for key, name in [("train_pos", "positive_train"), ("train_neg", "negative_train"),
+                                   ("val_pos", "positive_val"), ("val_neg", "negative_val")]}
+        if any(len(arr) == 0 or arr.shape[1:] != (204, 40) for arr in extra.values()):
+            raise ValueError("Additional voice has empty or incompatible feature arrays")
     model = trainer._build_model(cfg)
-    weights = args.base_weights.resolve() if args.base_weights else old / "model/ru_ricardo_mww.weights.h5"
-    model.load_weights(str(weights))
-    origin_hash = hashlib.sha256(weights.read_bytes()).hexdigest()
-    frozen_bn = freeze_batchnorm(model, tf.keras.layers.BatchNormalization) if args.freeze_batchnorm else 0
+    origin_hash = None
+    if not args.from_scratch:
+        weights = args.base_weights.resolve() if args.base_weights else old / "model/ru_ricardo_mww.weights.h5"
+        model.load_weights(str(weights))
+        origin_hash = hashlib.sha256(weights.read_bytes()).hexdigest()
+    else:
+        print("RANDOM_INITIALIZATION_NO_CHECKPOINT", flush=True)
+    frozen_bn = freeze_batchnorm(model, tf.keras.layers.BatchNormalization) if args.freeze_batchnorm and not args.from_scratch else 0
     print("FROZEN_BATCHNORM", frozen_bn, flush=True)
-    model.compile(optimizer=tf.keras.optimizers.Adam(args.learning_rate), loss="binary_crossentropy", jit_compile=False,
+    learning_rate = (tf.keras.optimizers.schedules.CosineDecay(args.learning_rate, args.steps, alpha=.01)
+                     if args.from_scratch else args.learning_rate)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate), loss="binary_crossentropy", jit_compile=False,
                   metrics=[tf.keras.metrics.BinaryAccuracy(), tf.keras.metrics.Recall(), tf.keras.metrics.Precision()])
     batch = cfg["batch_size"]
     if batch % (8 if hard else 4):
@@ -300,6 +320,15 @@ def main():
                 buckets.append((real, "hard_train_neg", 0, batch // (8 if synthetic_hard else 4)))
             if synthetic_hard:
                 buckets.append((real, "hard_synth_train_neg", 0, batch // 8))
+            if extra is not None:
+                # Half positive, half negative; each new voice supplies both labels.
+                buckets = [(real, "train_pos", 1, batch // 8),
+                           (synthetic, "train_pos", 1, batch // 4),
+                           (extra, "train_pos", 1, batch // 8),
+                           (real, "train_neg", 0, batch // 8),
+                           (real, "hard_train_neg", 0, batch // 8),
+                           (synthetic, "train_neg", 0, batch // 8),
+                           (extra, "train_neg", 0, batch // 8)]
             for arrays, key, label, count in buckets:
                 arr = arrays[key]
                 xs.append(np.asarray(arr[rng.integers(0, len(arr), count)], dtype=np.float32))
@@ -309,6 +338,9 @@ def main():
             yield x[order], y[order]
     train = tf.data.Dataset.from_generator(batches, output_signature=(
         tf.TensorSpec((batch, 204, 40), tf.float32), tf.TensorSpec((batch,), tf.float32))).prefetch(2)
+    if args.from_scratch:
+        train = train.unbatch().map(trainer._make_spec_augment_fn(204, cfg),
+                                   num_parallel_calls=4).batch(batch).prefetch(2)
     # Validation uses held-out personal targets and a separate background take.
     # The user's test recordings are never accessed by training or checkpoint selection.
     vp = real["val_pos"]
@@ -330,9 +362,15 @@ def main():
         valweights = np.concatenate([np.full(len(vp), 200 / len(vp)), np.full(len(vn), 100 / len(vn)),
                                      np.ones(200), np.full(200, .5), np.full(len(hn), 100 / len(hn)),
                                      np.full(len(shn), 100 / len(shn))])
+    if extra is not None:
+        ep, en = np.asarray(extra["val_pos"][:200]), np.asarray(extra["val_neg"][:200])
+        xval = np.concatenate([xval, ep, en])
+        yval = np.concatenate([yval, np.ones(len(ep)), np.zeros(len(en))])
+        valweights = np.concatenate([valweights, np.ones(len(ep)), np.ones(len(en))])
     best = modeldir / "best.weights.h5"
     selection = []
-    if hard:
+    protected_selection = hard and not args.from_scratch
+    if protected_selection:
         protected = np.asarray(val_pos_blocks)
         reference = model.predict(vp, batch_size=batch, verbose=0).reshape(-1)
         reference_counts = {block: int(np.sum(reference[protected == block] >= .9)) for block in set(val_pos_blocks)}
@@ -359,21 +397,31 @@ def main():
     (run / "training-provenance.json").write_text(json.dumps({
         "base_weights_sha256": origin_hash, "gpu": [str(g) for g in gpus], "seed": 42,
         "source_counts": counts, "learning_rate": args.learning_rate,
-        "training_buckets": ("25% real-positive / 25% synthetic-positive / 12.5% real-hard-negative / 12.5% synthetic-confusable / 12.5% real-negative / 12.5% old-synthetic-negative" if synthetic_hard else "25% real-positive / 25% synthetic-positive / 25% hard-negative / 12.5% real-negative / 12.5% synthetic-negative" if hard else "25% real-positive / synthetic-positive / real-negative / synthetic-negative"),
-        "feature_mode": args.feature_mode, "freeze_batchnorm": args.freeze_batchnorm,
+        "training_buckets": ("12.5% personal-positive / 25% original-positive / 12.5% extra-voice-positive / 12.5% personal-negative / 12.5% real-hard-negative / 12.5% original-negative / 12.5% extra-voice-negative" if extra is not None else "25% real-positive / 25% synthetic-positive / 12.5% real-hard-negative / 12.5% synthetic-confusable / 12.5% real-negative / 12.5% old-synthetic-negative" if synthetic_hard else "25% real-positive / 25% synthetic-positive / 25% hard-negative / 12.5% real-negative / 12.5% synthetic-negative" if hard else "25% real-positive / synthetic-positive / real-negative / synthetic-negative"),
+        "initialization": "random" if args.from_scratch else "checkpoint",
+        "learning_rate_schedule": "cosine to 1%" if args.from_scratch else "constant",
+        "spec_augment": args.from_scratch,
+        "class_weights": {"0": cfg["negative_class_weight"], "1": cfg["positive_class_weight"]} if args.from_scratch else None,
+        "additional_voice_features": str(args.extra_features) if args.extra_features else None,
+        "mixture": {"real_positive": .125, "old_positive": .25, "extra_positive": .125,
+                    "real_negative": .125, "hard_negative": .125, "old_negative": .125,
+                    "extra_negative": .125} if extra is not None else None,
+        "feature_mode": args.feature_mode,
+        "freeze_batchnorm": args.freeze_batchnorm and not args.from_scratch,
         "frozen_batchnorm_layers": frozen_bn,
         "test_used_in_training": False, "steps": args.steps}, indent=2))
     print("START_GPU_FINETUNING", args.steps, "steps", flush=True)
     history = model.fit(train, epochs=max(1, args.steps // 100), steps_per_epoch=100,
+              class_weight={0: cfg["negative_class_weight"], 1: cfg["positive_class_weight"]} if args.from_scratch else None,
               validation_data=(xval, yval, valweights), validation_batch_size=batch, callbacks=selection + [
-                  *([] if hard else [tf.keras.callbacks.ModelCheckpoint(str(best), monitor="val_loss", save_best_only=True, save_weights_only=True)]),
+                  *([] if protected_selection else [tf.keras.callbacks.ModelCheckpoint(str(best), monitor="val_loss", save_best_only=True, save_weights_only=True)]),
                   tf.keras.callbacks.ModelCheckpoint(str(modeldir / "epochs/epoch-{epoch:03d}.weights.h5"), save_weights_only=True),
                   tf.keras.callbacks.CSVLogger(str(modeldir / "training-metrics.csv")),
-                  tf.keras.callbacks.EarlyStopping(monitor="deployment_selection" if hard else "val_loss", mode="min", patience=10 if hard else 3, start_from_epoch=4 if hard else 0, restore_best_weights=True)], verbose=2)
+                  tf.keras.callbacks.EarlyStopping(monitor="deployment_selection" if protected_selection else "val_loss", mode="min", patience=10 if protected_selection else 8 if args.from_scratch else 3, start_from_epoch=4 if protected_selection else 10 if args.from_scratch else 0, restore_best_weights=True)], verbose=2)
     provenance = json.loads((run / "training-provenance.json").read_text())
     provenance.update(completed_epochs=len(history.epoch), completed_steps=len(history.epoch) * 100,
-                      selection="protected validation per speech block + hard negatives" if hard else "val_loss",
-                      selected_epoch=selection[0].selected_epoch if hard else None)
+                      selection="protected validation per speech block + hard negatives" if protected_selection else "val_loss",
+                      selected_epoch=selection[0].selected_epoch if protected_selection else None)
     (run / "training-provenance.json").write_text(json.dumps(provenance, indent=2))
     model.load_weights(str(best))
     model.save_weights(str(modeldir / (cfg["model_name"] + "_mww.weights.h5")))
@@ -382,6 +430,9 @@ def main():
     calibration = np.concatenate([real["train_pos"][indices], np.asarray(synthetic["train_pos"][:250])])
     provenance["calibration"] = {"real_train_indices": indices,
         "speech_blocks": sorted(set(train_pos_blocks)), "synthetic_train_examples": 250}
+    if extra is not None:
+        calibration = np.concatenate([calibration[:375], np.asarray(extra["train_pos"][:125])])
+        provenance["calibration"].update(synthetic_train_examples=125, extra_voice_train_examples=125)
     (run / "training-provenance.json").write_text(json.dumps(provenance, indent=2))
     np.save(featdir / "positive_train.npy", calibration)
     os.chdir(run)
@@ -406,12 +457,14 @@ def main():
         shutil.copyfile(root / "train_mww.py", stage / "trainer-source.py")
         shutil.copyfile(Path(__file__), stage / "finetune-source.py")
         (stage / "config.json").write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
-        for name in ["synthetic-recipe.json", "generate_synthetic.py"]:
+        for name in ["synthetic-recipe.json", "generate_synthetic.py", "extra-features-provenance.json", "puriso-quality.json", "voice-lock.json"]:
             if (run / name).is_file():
                 shutil.copyfile(run / name, stage / name)
         saved = registry.snapshot(registry_path, version, stage, {
             "role": "candidate, not deployed", "personal_voice": True,
-            "parent_weights_sha256": origin_hash, "epoch_checkpoints": "all completed epochs"})
+            "parent_weights_sha256": origin_hash,
+            "initialization": "random" if args.from_scratch else "checkpoint",
+            "epoch_checkpoints": "all completed epochs"})
         print("REGISTRY_SAVED", saved.name, "verified files", registry.verify(saved), flush=True)
 
 

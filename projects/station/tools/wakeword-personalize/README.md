@@ -237,3 +237,29 @@ ASR-разметка шёпота требует проверки: совпад�
 
 Обоснование заморозки BN: [Keras fine-tuning guide](https://keras.io/guides/transfer_learning/#important-notes-about-batchnormalization-layer).
 Обоснование длинного контекста: [microWakeWord training process](https://github.com/OHF-Voice/micro-wake-word#training-process).
+
+## Обучение с нуля с дополнительным голосом
+
+--from-scratch запрещает --base-weights: веса создаются случайно и ни один
+checkpoint не загружается. BatchNorm в этом режиме обучается, поскольку
+полезных исходных статистик ещё нет. Применяются SpecAugment, заданные
+class weights, cosine learning-rate schedule и сохранение каждой эпохи.
+Выбор предварительного checkpoint идёт по val_loss; окончательная приёмка
+экспорта требует непрерывной валидации и независимой проверки записей.
+
+--extra-features PRIVATE_DIR добавляет positive_train.npy, positive_val.npy,
+negative_train.npy и negative_val.npy нового синтетического голоса.
+Используются только реальные hard negatives в основном manifest.
+Batch 128 содержит: 16 личных позитивов, 32 исходных синтетических позитива,
+16 позитивов нового голоса и по 16 личных, сложных реальных, исходных
+синтетических и новых синтетических негативов. Отрицательные фразы нового
+голоса обязательны, чтобы не связывать сам тембр с wake word.
+Новый голос также участвует в validation и calibration; контрольные суммы
+модели голоса, рецепта и признаков сохраняются private рядом с экспериментом.
+
+```sh
+python finetune.py --trainer "$TRAINER" --run "$PRIVATE_RUN" \
+  --from-scratch --extra-features "$PRIVATE_EXTRA_FEATURES" \
+  --steps 15000 --learning-rate 0.001 --model-name NEW_MODEL \
+  --version NEW_REGISTRY_VERSION
+```
