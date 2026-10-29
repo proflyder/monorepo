@@ -108,9 +108,9 @@
   allowlisted HA scripts; второй исполнитель не запущен. Dry-run Job
   (`ha-bridge-dryrun`) остаётся одноразовой проверкой.
 - Действующий владелец будильников, таймеров и напоминаний — scheduler.
-  Legacy schema writers удалены из HA-исходников (11 scripts/4 automations):
-  live HA ещё не перезагружался, поэтому существующие entity остаются
-  выключенными; повторного исполнителя нет. HA остаётся исполнителем звука
+  Старые HA-планировщики и их вспомогательные поля удалены из исходников и
+  живой конфигурации; оставшиеся недоступные записи реестра очищены.
+  Повторного исполнителя нет. HA остаётся исполнителем звука
   (`alarm_start`, `schedule_announce`, `alarm_stop`).
 - Голосовые intents в `projects/home-assistant/ha-voice` вызывают canonical
   Connect API (`rest_command.scheduler_rpc`); endpoint —
@@ -165,6 +165,6 @@
 - `quasar-server :31116` без auth — требует решения.
 - Secure Boot PK `DO NOT TRUST - AMI Test PK` — не менять без плана.
 - Rust Pulsar: активен; wake/TTS/HA/MA/reboot проверены. Осталось живое
-  «Рикардо, стоп»/snooze, кнопки/mute/clock/volume, phone→speaker и полный откат.
+  «Рикардо, стоп»/snooze, кнопки/mute/clock/volume и phone→speaker.
 - Wake word: измерить recall/FP на реальном фоне.
 - Factory/recovery image Midi отсутствует; raw dump — только с согласованием.
