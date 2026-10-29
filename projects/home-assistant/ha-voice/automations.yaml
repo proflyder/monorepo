@@ -63,3 +63,21 @@
       entry_id: 01M5TAMM4T0CH5RASFJR8MSKT7
   - delay: 00:00:02
   mode: single
+- id: alarm_local_stop_pauses
+  alias: 'Alarm: local stop command ends the occurrence'
+  description: The wake-free Pulsar command "стоп" only pauses the ringtone player. When that happens while the alarm is ringing, stop the scheduler occurrence as well.
+  trigger:
+  - platform: state
+    entity_id: media_player.iandeks_stantsiia_midi_media_player
+    to: paused
+  condition:
+  - condition: state
+    entity_id: input_boolean.alarm_ringing
+    state: 'on'
+  action:
+  - delay: 00:00:01
+  - condition: state
+    entity_id: input_boolean.alarm_ringing
+    state: 'on'
+  - service: script.schedule_alarm_stop
+  mode: single
