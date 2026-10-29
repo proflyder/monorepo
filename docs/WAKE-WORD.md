@@ -4,24 +4,20 @@
 
 ## Модель
 
-- On-device microWakeWord: персональная v2, FULL resolver встроенной `libtflite`.
+- On-device microWakeWord: персональная v22, FULL resolver встроенной `libtflite`.
 - Threshold `0.9`, окно `10`, pre-roll `0.5 с`.
 - Активный профиль — `projects/station/configs/wakeword-personal.json`;
   его SHA256 закреплён в профиле. Персональная модель и обучаемые веса —
-  private в `secrets/model-registry/ricardo/v2-personal-20261029/`.
+  private в `secrets/model-registry/ricardo/v22-scratch-puriso-selected-20261030/`.
 - Исходная v1 сохранена для отката в private registry и как общий baseline
   в `artifacts/wakeword/ricardo-v1/`. Профиль отката —
   `projects/station/configs/wakeword-baseline.json`.
-- Активна v2: начатый откат после сообщения о регрессии v7 завершился
-  до просьбы пользователя продолжить доработку. V7 сохранена для анализа;
-  несмотря на улучшение суммарного offline-результата, обычная/громкая/резкая
-  речь в живой работе регрессировала. Дальнейшее обучение требует отдельной
-  проверки этих манер, помимо шёпота и сложных негативов.
-- Кандидат `v22-scratch-puriso-selected-20261030` обучен с нуля на исходной
-  синтетике, дополнительном Puriso2 и личных train-записях. Checkpoint выбран
+- Установлена `v22-scratch-puriso-selected-20261030`, обученная с нуля
+  на исходной синтетике, Puriso2 и личных train-записях. Checkpoint выбран
   по непрерывной валидации, затем прошёл offline-регрессию по манерам речи.
-  Все веса и модель private; нативный inference probe прошёл, живая приёмка
-  ожидается. Активный профиль остаётся v2; ошибки на сложных словах ещё остаются.
+  HA/MA подключены, бинарник Pulsar не менялся; живая приёмка ожидается.
+  Ошибки на сложных словах ещё остаются. Предыдущая v2 сохранена private
+  и в device backup, указанном в `secrets/model-registry/ricardo/active.json`.
 - Записи и нарезанные PCM-контексты с разметкой по версиям сохранены в
   `secrets/datasets/ricardo-20261029/`, вне Git. Случайные аугментации
   сохранены как массивы признаков и воспроизводятся по рецептам/seed.
