@@ -119,3 +119,66 @@ func networkError(err error, token string) error {
 	}
 	return errors.New(httpapi.Sanitize(err.Error(), token))
 }
+
+const (
+	statesPath          = "/api/states"
+	maxStatesBodyBytes  = 8 << 20
+	serviceCallBasePath = "/api/services/"
+)
+
+type serviceCallRequest struct {
+	EntityID string `json:"entity_id"`
+}
+
+// CallService invokes <domain>.<service> on one entity. The control executor
+// resolves the call from the catalog; no caller-supplied service is accepted.
+func (c *Client) CallService(ctx context.Context, domain, service, entity string) error {
+	const op = "call service"
+	if domain == "" || service == "" || entity == "" {
+		return &httpapi.Error{Op: op, Err: errors.New("empty service call")}
+	}
+	payload, err := json.Marshal(serviceCallRequest{EntityID: entity})
+	if err != nil {
+		return &httpapi.Error{Op: op, Err: fmt.Errorf("encode request: %w", err)}
+	}
+	path := serviceCallBasePath + url.PathEscape(domain) + "/" + url.PathEscape(service)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(payload))
+	if err != nil {
+		return &httpapi.Error{Op: op, Err: errors.New("build request")}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	return c.send(req, op)
+}
+
+// States reads the state string ("on", "off", "unavailable", ...) of every
+// entity. Attributes are discarded: the control catalog only needs the state.
+func (c *Client) States(ctx context.Context) (map[string]string, error) {
+	const op = "read states"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+statesPath, nil)
+	if err != nil {
+		return nil, &httpapi.Error{Op: op, Err: errors.New("build request")}
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, &httpapi.Error{Op: op, Err: networkError(err, c.token)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBytes))
+		return nil, &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token)}
+	}
+	var states []struct {
+		EntityID string `json:"entity_id"`
+		State    string `json:"state"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxStatesBodyBytes)).Decode(&states); err != nil {
+		return nil, &httpapi.Error{Op: op, Err: errors.New("decode states")}
+	}
+	out := make(map[string]string, len(states))
+	for _, s := range states {
+		out[s.EntityID] = s.State
+	}
+	return out, nil
+}

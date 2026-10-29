@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "control",
+    srcs = ["control.go"],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/control",
+    visibility = ["//solutions/ha-bridge:__subpackages__"],
+    deps = [
+        "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/httpapi",
+        "//solutions/ha-bridge/internal/scheduler",
+    ],
+)
+
+go_test(
+    name = "control_test",
+    srcs = ["control_test.go"],
+    embed = [":control"],
+    deps = [
+        "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/httpapi",
+        "//solutions/ha-bridge/internal/scheduler",
+    ],
+)

@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "catalogapi",
+    srcs = ["catalogapi.go"],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/catalogapi",
+    visibility = ["//solutions/ha-bridge:__subpackages__"],
+    deps = ["//solutions/ha-bridge/internal/catalog"],
+)
+
+go_test(
+    name = "catalogapi_test",
+    srcs = ["catalogapi_test.go"],
+    embed = [":catalogapi"],
+    deps = ["//solutions/ha-bridge/internal/catalog"],
+)

@@ -16,10 +16,10 @@ func TestRunHealthcheck(t *testing.T) {
 
 	env := func(extra map[string]string) func(string) string {
 		base := map[string]string{
-			"SCHEDULER_ENDPOINT":  "",
-			"SCHEDULER_TOKEN":     token,
-			"BRIDGE_CONSUMER_ID":  "ha-bridge-home",
-			"HA_URL":              "http://192.0.2.28:8123",
+			"SCHEDULER_ENDPOINT": "",
+			"SCHEDULER_TOKEN":    token,
+			"BRIDGE_CONSUMER_ID": "ha-bridge-home",
+			"HA_URL":             "http://192.0.2.28:8123",
 		}
 		return func(k string) string {
 			if v, ok := extra[k]; ok {

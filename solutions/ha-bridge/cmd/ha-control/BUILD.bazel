@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_binary(
+    name = "ha-control",
+    embed = [":ha_control_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "ha_control_lib",
+    srcs = [
+        "config.go",
+        "main.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/ha-bridge/cmd/ha-control",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//solutions/ha-bridge/internal/catalog",
+        "//solutions/ha-bridge/internal/catalogapi",
+        "//solutions/ha-bridge/internal/control",
+        "//solutions/ha-bridge/internal/ha",
+        "//solutions/ha-bridge/internal/httpapi",
+        "//solutions/ha-bridge/internal/scheduler",
+    ],
+)
+
+go_test(
+    name = "ha_control_test",
+    srcs = ["config_test.go"],
+    embed = [":ha_control_lib"],
+)

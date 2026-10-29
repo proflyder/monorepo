@@ -44,8 +44,8 @@ const (
 )
 
 // Event is one delivered DueEvent. Only the fields the executor needs are
-// decoded; payload_json is intentionally ignored: no executor reads it today,
-// and an event payload must never select an HA service or entity.
+// decoded. The alarm bridge ignores Payload; the control executor reads it only
+// as data (a catalog id and an action), never as an HA service or entity.
 type Event struct {
 	ID             string
 	SourceID       string
@@ -61,6 +61,8 @@ type Event struct {
 	LeaseUntilUnix int64
 	Action         Action
 	Detail         string
+	// Payload is the opaque payload_json (max 16 KiB). Treat it as data only.
+	Payload string
 }
 
 // ListRequest mirrors ListDueEventsRequest. Queue must always be set: an empty

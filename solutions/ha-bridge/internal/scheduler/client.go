@@ -60,6 +60,7 @@ type eventWire struct {
 	LeaseUntilUnix protoInt64 `json:"leaseUntilUnix"`
 	Detail         string     `json:"detail"`
 	Action         protoEnum  `json:"action"`
+	PayloadJSON    string     `json:"payloadJson"`
 }
 
 type listDueEventsResponse struct {
@@ -96,6 +97,7 @@ func (c *Client) ListDueEvents(ctx context.Context, req ListRequest) ([]Event, e
 			LeaseUntilUnix: int64(wire.LeaseUntilUnix),
 			Action:         actionOf(wire.Action),
 			Detail:         wire.Detail,
+			Payload:        wire.PayloadJSON,
 		})
 	}
 	return events, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -210,5 +211,36 @@ func TestEntityID(t *testing.T) {
 		if got := EntityID(input); got != want {
 			t.Errorf("EntityID(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestCallServiceAndStates(t *testing.T) {
+	var gotPath, gotAuth, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if r.URL.Path == "/api/states" {
+			_, _ = w.Write([]byte(`[{"entity_id":"light.a","state":"on","attributes":{"x":1}},{"entity_id":"switch.b","state":"off"}]`))
+			return
+		}
+		gotPath = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "tok", srv.Client())
+
+	if err := c.CallService(context.Background(), "light", "turn_off", "light.a"); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/services/light/turn_off" || gotAuth != "Bearer tok" || gotBody != `{"entity_id":"light.a"}` {
+		t.Fatalf("path=%q auth=%q body=%q", gotPath, gotAuth, gotBody)
+	}
+	if err := c.CallService(context.Background(), "", "turn_on", "x.y"); err == nil {
+		t.Fatal("empty domain must be rejected")
+	}
+
+	states, err := c.States(context.Background())
+	if err != nil || states["light.a"] != "on" || states["switch.b"] != "off" || len(states) != 2 {
+		t.Fatalf("states=%v err=%v", states, err)
 	}
 }
