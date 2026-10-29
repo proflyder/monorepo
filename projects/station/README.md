@@ -6,7 +6,7 @@ BLE gateway и provisioning. Это **не** HA и не TTS-стек.
 ## Что входит
 
 ```text
-projects/station/upstream/pulsar-rust/   Rust-форк (upstream v0.5.2 интегрирован, не установлен)
+projects/station/upstream/pulsar-rust/   Rust-форк (upstream v0.5.2 интегрирован и установлен)
 projects/station/patches/pulsar-rust/     snapshots локальных правок Rust
 projects/station/ble-gateway/       BLE provisioning gateway (пока вне Bazel)
 projects/station/scripts/station-*        station-side операции
@@ -16,9 +16,9 @@ docs/WAKE-WORD.md
 ```
 
 Rust-форк и профиль Ricardo: [`PULSAR-RUST.md`](PULSAR-RUST.md).
-Установленный бинарник станции — Rust `v0.5.0-1-g908a027`; локальный форк
-интегрировал upstream `v0.5.2` (HEAD `95ce568`, build candidate, не
-установлен). Legacy исходники и binaries — private в `secrets/local/recovery/`.
+Установленный бинарник станции — Rust `v0.5.2-2-g95ce568` (локальный форк на
+базе upstream `v0.5.2`, HEAD `95ce568`); прежняя `v0.5.0-1-g908a027` остаётся
+device-откатом. Legacy исходники и binaries — private в `secrets/local/recovery/`.
 
 ## Границы
 

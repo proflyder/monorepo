@@ -56,16 +56,23 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.0-1-g908a027` — установленная сборка. Локальный форк
-  интегрировал upstream `v0.5.2` (HEAD `95ce568`, build candidate); на станцию
-  не устанавливался. Legacy C++ checkout, patch и binaries — private в
-  `secrets/local/recovery/`.
+- Pulsar Rust `v0.5.2-2-g95ce568` — установленная сборка (локальный форк,
+  база upstream `v0.5.2` = `4cba44a`). Прежняя `v0.5.0-1-g908a027` и
+  `pulsar.prev` остаются device-откатом. Legacy C++ checkout, patch и
+  binaries — private в `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
 - ESPHome: 33 entities, Noise; HA satellite работает.
 - Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,
   окно 10, pre-roll 0.5 с.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
-  reconnect и station reboot.
+  reconnect и station reboot. После рестарта Pulsar MA сам не переподключается
+  (WS close 1006, авто-redial нет) — проверенно восстанавливает рестарт только
+  add-on MA (`hassio.addon_restart`, slug `d5369777_music_assistant`), без
+  рестарта HA. Наблюдалось и на прежней сборке.
+- Пользователь подтвердил живую приёмку установленной `v0.5.2-2-g95ce568`:
+  «Рикардо» просыпается и отвечает на команду сразу после имени («который час»),
+  без потери начального слога. Будильник, snooze, музыка, mute и кнопки в этой
+  приёмке не проверялись.
 - BLE gateway: `Station-Gateway`, GATT provisioning, кнопки 1/3/4/5;
   4 нажатия могут временно уронить Wi-Fi — BLE остаётся аварийным каналом.
 - QR/DPP provisioning удалён по решению пользователя: убраны оба автозапуска
