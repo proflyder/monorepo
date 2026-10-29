@@ -15,6 +15,10 @@
       завершает новый диалог; «отмена» после wake идёт в локальный
       `StationCancel` без TTS и Hermes. Отмена без wake во время думающего
       вызова не поддерживается: в command-модели станции нет этого слова.
+      Сборка и HA-intent развёрнуты 30.10; проверено тихими API (HA
+      subscribed, «отмена» → `action_done` без речи), нужна голосовая проверка
+      LISTENING/PROCESSING/SPEAKING и что «Рикардо, стоп» по-прежнему
+      останавливает будильник.
 - [ ] MA Liked Songs sync; «включи любимое» при пустом плейлисте.
 - [ ] Bluetooth-пара телефона. `bluetoothctl devices` на станции пуст; в HA
       entry `bluetooth` в `setup_retry` (adapter станции недоступен из HAOS VM),

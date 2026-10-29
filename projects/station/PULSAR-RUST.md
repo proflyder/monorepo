@@ -1,8 +1,10 @@
 # Pulsar Rust fork
 
-**Станция (установлено):** Rust Pulsar `v0.5.2-3-gc57d521` — локальная
-интеграция upstream `v0.5.2` (HEAD `c57d521`). `pulsar.prev` содержит только
-`v0.5.2-2-g95ce568`; более старая `v0.5.0-1-g908a027` — private backup вне Git.
+**Станция (установлено):** Rust Pulsar `v0.5.2-3-gc57d521-dirty` —
+сборка из рабочего дерева на HEAD `c57d521` с повторным wake (30.10);
+StationCancel без речи — HA-конфиг, не бинарник. `pulsar.prev` —
+`v0.5.2-3-gc57d521`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только
+private backup вне Git.
 
 **Локальный форк:** upstream `v0.5.2` влит в `feat/ricardo-rust`; HEAD
 `c57d521`, describe `v0.5.2-3-gc57d521` (не release). Safety ref
@@ -61,6 +63,18 @@ unmuted. Supervised `reload` объявляет goodbye-причину `restart`
 начального слога; alarm/snooze/music/mute/кнопки в ней не проверялись.
 Установленная `v0.5.2-3-gc57d521` такой пользовательской приёмки ещё не
 проходила.
+
+Сборка 30.10 с повторным wake (`-dirty` от HEAD `c57d521`); StationCancel без
+речи — отдельное изменение HA-конфига. Проверки: `cargo fmt --check`, Linux
+`cargo test -p pulsar` (31 pass), clippy
+`-D warnings`, `test_ha_config.py` (50 pass) — pass в worker-сессии; armhf
+ELF32 EABI5 собран и stripped LLVM objcopy из NDK, PT_LOAD/NEEDED совпадают с
+предыдущей установленной сборкой. Live: single daemon, HA connected/voice
+subscribed, Noise, Ricardo v22 (cutoff 0.90, window 10), Sendspin→MA reconnect
+за ~1.6 с, `state.conf` и модель не менялись. HA: `StationCancel` без речи
+применён reload-ом `intent_script`; `ha core check` ok, «отмена» через
+`conversation.process` → `action_done` без речи. Живая голосовая приёмка
+повторного wake и отмены ещё нужна. Backup и rollback — в `docs/STATE.md`.
 
 ## Осталось
 

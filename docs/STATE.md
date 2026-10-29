@@ -1,6 +1,6 @@
 # STATE — текущее состояние
 
-Обновлено: 2026-10-29. Публичные адреса — примеры; реальные — в
+Обновлено: 2026-10-30. Публичные адреса — примеры; реальные — в
 `secrets/NETWORK.md`.
 
 ## Host / VM
@@ -59,9 +59,12 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.2-3-gc57d521` — установленная сборка (локальный форк,
-  база upstream `v0.5.2` = `4cba44a`). `pulsar.prev` содержит только
-  `v0.5.2-2-g95ce568`; более старая `v0.5.0-1-g908a027` — private backup вне Git.
+- Pulsar Rust `v0.5.2-3-gc57d521-dirty` — установленная сборка (локальный форк,
+  база upstream `v0.5.2` = `4cba44a`); собрана из рабочего дерева с повторным
+  wake, заменяющим активный диалог (30.10). StationCancel без речи — изменение
+  HA-конфига, не бинарника.
+  `pulsar.prev` — предыдущая `v0.5.2-3-gc57d521`; `v0.5.2-2-g95ce568` и
+  `v0.5.0-1-g908a027` — только private backup вне Git.
   Legacy C++ checkout,
   patch и binaries — private в `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
@@ -81,6 +84,16 @@
 - Актуальная уточнённая разметка и PCM: `secrets/datasets/ricardo-fixed-20261030/`.
 - Приватный датасет: `secrets/datasets/ricardo-20261029/` — исходные WAV,
   PCM-контексты, разметка по версиям, архив обучающих признаков и SHA256.
+- Деплой 30.10: бинарник с повторным wake установлен через
+  backup → `pulsar.new` → `.prev` → `ctl.sh reload`; после рестарта HA
+  подключён и voice subscribed, Sendspin/MA переподключились сами.
+  Отдельно в HA-конфиге применён `StationCancel` без `speech` (бинарник не
+  менялся) через `intent_script.reload` без рестарта HA; `ha core check`
+  прошёл, тихий `conversation.process` («отмена») вернул `action_done` без
+  речи. Живая голосовая приёмка ещё нужна.
+  Backup: `/data/pulsar/backups/deploy-20261029T200123Z`,
+  `secrets/local/backups/pulsar-pre-wake-cancel-20261030-0101/`,
+  live HA — `secrets/local/backups/ha-intent-pre-deploy-20261030/`.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
   reconnect и station reboot. Supervised `reload` завершает Sendspin-сессию
   goodbye-причиной `restart`, и MA переподключается сам: измерено 3.1 с и 3.1 с

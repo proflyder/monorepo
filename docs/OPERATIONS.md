@@ -100,9 +100,11 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
-Установленная версия — Rust `v0.5.2-3-gc57d521` (локальный форк на базе
-upstream `v0.5.2`, HEAD `c57d521`); `pulsar.prev` содержит только
-`v0.5.2-2-g95ce568`, более старая `v0.5.0-1-g908a027` — private backup вне Git.
+Установленная версия — Rust `v0.5.2-3-gc57d521-dirty` (локальный форк на базе
+upstream `v0.5.2`, HEAD `c57d521`, сборка из рабочего дерева с повторным wake);
+`pulsar.prev` — `v0.5.2-3-gc57d521`, `v0.5.2-2-g95ce568` и
+`v0.5.0-1-g908a027` — только private backup вне Git. StationCancel без речи —
+HA-конфиг, а не бинарник.
 Штатный `quasar-server`
 остановлен вместе со stock-стеком; при возврате на него (`ctl.sh disable` или
 crash-loop) снова откроется `:31116` без auth — перед возвратом закрыть порт
