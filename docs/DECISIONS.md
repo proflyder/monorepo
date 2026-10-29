@@ -13,8 +13,8 @@
    ingress `/` → HAOS и `/grafana/` → Grafana. MFA в HA, ACL только `443`.
 5. **STT/TTS локально.** GigaAM primary, Whisper fallback, Piper Puriso;
    Hermes — только свободная речь. Облако видит текст, но не аудио.
-6. **Hermes не владеет state.** Таймеры/будильники/громкость/музыка — HA;
-   локальные intents работают без LLM.
+6. **Hermes не владеет state.** Будильники/таймеры/напоминания — scheduler
+   (решение 10); громкость/музыка — HA; локальные intents работают без LLM.
 7. **MA + Spotify Connect.** MA — локальный хаб/плейлисты; Connect — телефон;
    Pulsar — Sendspin-плеер. Один аккаунт = один stream-slot.
 8. **BLE gateway — аварийный provisioning.** Работает без Wi-Fi/облака;
@@ -31,5 +31,14 @@
     с кодом. Rust — DSP/инференс, Go — control plane.
 13. **Home-сценарии — метка HA `scenario`.** Скрипт попадает в каталог Home
     только с этой нативной меткой; иконки/комнаты/имена — отображение.
+14. **Reminder-грамматика — один слот `{text}`.** Фраза поддерживает один
+    текстовый фрагмент до или после даты/времени; два фрагмента вокруг даты
+    осознанно не распознаются. Расширение — отдельное решение.
+15. **SSH станции — ключ, пароль как fallback.** Ключ Mac
+    `~/.ssh/ricardo_station_ed25519` в `/root/.ssh/authorized_keys`; вход по
+    паролю осознанно оставлен аварийным. ADB/SSH — только LAN.
+16. **Legacy HA-helper-ы расписаний удалены.** `todo.alarms_*` и
+    `todo.reminders` удалены, `timer.taimer_1…8` отключены в registry;
+    источник истины — scheduler. Заметки остаются в `todo.notes`.
 
 Меняется решение — обновить этот файл и `STATE.md`.

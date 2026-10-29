@@ -25,7 +25,10 @@
 - Add-ons:
   - Music Assistant `2.10.8`: UI/API `8095`, stream `8097`, Sendspin `8927`;
     данные перенесены из K3s `runtime-music`.
-  - Matter Server `9.2.0`: `ws://127.0.0.1:5580/ws`; paired nodes пока 0.
+  - Matter Server `9.2.0`: `ws://127.0.0.1:5580/ws`; paired 1 узел —
+    Yandex LED strip `YNDX-00544` («Лента», `light.spalnia_lenta`),
+    on/off, яркость и цвет проверены 29.10. Дублирующий набор сущностей от
+    повторного интервью остался неактивным.
 - K3s HAProxy и HA Container удалены; HAOS — единственный HA runtime.
 
 ## K3s
@@ -62,13 +65,17 @@
   binaries — private в `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
 - ESPHome: 33 entities, Noise; HA satellite работает.
+- SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
+  `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
+  осознанно (решение); ADB/SSH доступны только из LAN.
 - Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,
   окно 10, pre-roll 0.5 с.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
-  reconnect и station reboot. После рестарта Pulsar MA сам не переподключается
-  (WS close 1006, авто-redial нет) — проверенно восстанавливает рестарт только
-  add-on MA (`hassio.addon_restart`, slug `d5369777_music_assistant`), без
-  рестарта HA. Наблюдалось и на прежней сборке.
+  reconnect и station reboot. По логам 29.10 после ручных рестартов Pulsar MA
+  переподключается сам: Noise-хендшейк сразу, `server connected` через 54 с и
+  5 мин 25 с; рестарт add-on MA не выполнялся. Контролируемый замер и
+  ускорение redial — в `PENDING.md`. Ручной fallback остаётся: `hassio.addon_restart`,
+  slug `d5369777_music_assistant`, без рестарта HA.
 - Пользователь подтвердил живую приёмку установленной `v0.5.2-2-g95ce568`:
   «Рикардо» просыпается и отвечает на команду сразу после имени («который час»),
   без потери начального слога. Будильник, snooze, музыка, mute и кнопки в этой
@@ -101,9 +108,13 @@
   не обнаруживала; agent entity теперь обязателен в live HA tests.
 - MA/Spotify: Soloist `1.3.10.13`, Spotify Connect device
   «Яндекс Станция Миди», music router `Music Assistant` / `Spotify Connect`.
-- Будильники: `todo.alarms_once/daily/weekdays/weekends`; таймеры
-  `timer.taimer_1…8`; напоминания `todo.reminders`; заметки `todo.notes`;
-  dashboard `/assistant-schedules`. Legacy single-slot alarm отключён.
+- Будильники, таймеры и напоминания хранит scheduler; голосовые intents и
+  Android работают через Connect API. Legacy helper-ы `todo.alarms_*` и
+  `todo.reminders` удалены, `timer.taimer_1…8` отключены в registry
+  (YAML-определения остаются в живом конфиге HA). Заметки — `todo.notes`;
+  dashboard `/assistant-schedules` только для чтения. Отдельно добавлены
+  Xiaomi-лампы `xiaomi_home` (`Lamp` bsLamp2, `Lighter` lamp22): on/off,
+  яркость и цвет/CT проверены 29.10.
 - Голосовые команды и точные entity/scripts — `projects/home-assistant/ha-voice/`.
 
 ## Планировщик, HA bridge, Android
@@ -161,17 +172,17 @@
   на Mac, вне Git; SHA-256 проверены.
 - `secrets/kubernetes-research/` — kubeconfig, private values, Grafana password,
   recovery.
+- HA automatic backup не настроен: `sensor.backup_next_scheduled_automatic_backup`
+  и `last_successful` = `unknown`; CronJob/Velero для K3s нет.
 - Полный disaster restore на запасном железе и offsite backup ещё не выполнены.
 
 ## Открыто
 
-- Matter: добавить Yandex LED strip; проверить on/off, яркость, цвет.
-- Xiaomi: проверить лампы on/off/brightness/color temp.
-- Живая приёмка: микрофон/wake, будильник/стоп/snooze, Spotify transfer,
-  phone→speaker.
+- Живая приёмка: будильник/стоп/snooze, Spotify transfer, phone→speaker,
+  MA Liked Songs.
 - Offsite encrypted backup, power-loss тест, host Tailscale emergency access.
-- Внешний Alertmanager/heartbeat и полная voice latency instrumentation.
-- `quasar-server :31116` без auth — требует решения.
+- Внешний Alertmanager/heartbeat, регулярный backup K3s/HA и полная voice
+  latency instrumentation.
 - Secure Boot PK `DO NOT TRUST - AMI Test PK` — не менять без плана.
 - Rust Pulsar: активен; wake/TTS/HA/MA/reboot проверены. Осталось живое
   «Рикардо, стоп»/snooze, кнопки/mute/clock/volume и phone→speaker.

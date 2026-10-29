@@ -8,7 +8,7 @@
 # станция
 adb connect 192.0.2.13:5555
 adb devices
-ssh root@192.0.2.13                 # пароль: secrets/CREDENTIALS.md
+ssh -i ~/.ssh/ricardo_station_ed25519 root@192.0.2.13   # ключ; пароль — fallback
 
 # Proxmox / K3s
 ssh root@192.0.2.26                 # PVE
@@ -33,8 +33,9 @@ STATION_E2E_MUTATE=1 make test-e2e
 STATION_E2E_AUDIO=1 make test-e2e
 ```
 
-`make test-e2e` требует `HA_TOKEN`, опционально `STATION_CONTROL_TOKEN`.
-Токены не коммитить и не печатать.
+`make test-e2e` требует `HA_URL` (реальный LAN-адрес HA, не пример из
+документации), `HA_TOKEN`, опционально `STATION_CONTROL_TOKEN` и
+`STATION_GATEWAY_URL`. Токены не коммитить и не печатать.
 
 ```bash
 curl -fsS -o /dev/null -w 'HA %{http_code}\n' http://192.0.2.28:8123/
@@ -97,14 +98,18 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 
 Установленная версия — Rust `v0.5.2-2-g95ce568` (локальный форк на базе
 upstream `v0.5.2`, HEAD `95ce568`); прежний бинарник `v0.5.0-1-g908a027`
-остаётся в `/data/pulsar` как откат (`pulsar.prev`). Legacy C++ checkout, patch и
+остаётся в `/data/pulsar` как откат (`pulsar.prev`). Штатный `quasar-server`
+остановлен вместе со stock-стеком; при возврате на него (`ctl.sh disable` или
+crash-loop) снова откроется `:31116` без auth — перед возвратом закрыть порт
+правилом INPUT. Legacy C++ checkout, patch и
 binaries не входят в активное дерево; приватный архив и способ восстановления —
 в `secrets/local/recovery/` (не публикуется). Возврат к прежней C++-сборке не
 является штатным rollback и не должен выполняться без отдельного плана.
 
-После рестарта Pulsar MA не переподключается сам (Sendspin WS close `1006`,
-авто-redial отсутствует): `media_player.iandeks_stantsiia_midi` остаётся
-`unavailable`. Штатное восстановление — один рестарт только add-on MA через
+После рестарта Pulsar MA на наблюдениях 29.10 переподключается сам: Sendspin
+Noise-хендшейк сразу, `sendspin: server connected: Music Assistant` через
+~1–5 мин. Если за это время entity `media_player.iandeks_stantsiia_midi`
+остаётся `unavailable`, ручной fallback — один рестарт только add-on MA через
 `hassio.addon_restart` (`addon: d5369777_music_assistant`), без рестарта HA.
 Проверка: entity `idle`, source `Music Assistant Queue`, volume 0.3; в
 `/tmp/pulsar.log` появляются `sendspin: connection trust unpaired` и

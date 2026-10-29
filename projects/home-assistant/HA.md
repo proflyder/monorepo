@@ -13,7 +13,8 @@
 ## Add-ons
 
 - Music Assistant `2.10.8`: UI/API `8095`, stream `8097`, Sendspin `8927`.
-- Matter Server `9.2.0`: `ws://127.0.0.1:5580/ws`; paired nodes пока 0.
+- Matter Server `9.2.0`: `ws://127.0.0.1:5580/ws`; paired 1 узел — Yandex LED
+  strip `YNDX-00544` («Лента»).
 - Данные: `/mnt/data/supervisor/apps/data/<slug>`.
 
 ## HA config / backup
