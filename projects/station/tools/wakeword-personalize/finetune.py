@@ -185,9 +185,9 @@ def main():
                     if len(frames) >= 204:
                         real[part + "_pos"].append(frames[-204:])
                         if part == "val":
-                            val_pos_blocks.append(e["block"])
+                            val_pos_blocks.append(target.get("speech_style", e["block"]))
                         else:
-                            train_pos_blocks.append(e["block"])
+                            train_pos_blocks.append(target.get("speech_style", e["block"]))
     if synthetic_hard:
         for part in ["train", "val"]:
             key = "hard_synth_" + part + "_neg"

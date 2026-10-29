@@ -36,13 +36,22 @@ def summarize(manifest, replay):
             continue
         if entry["source_split"] != "test":
             continue
-        block = result["blocks"].setdefault(entry["block"], {
-            "matched": 0, "verified_targets": 0,
-            "unverified_regions": 0, "raw_detector_events": 0})
-        block["matched"] += match_targets(entry["targets"], observed["hits"])
-        block["verified_targets"] += len(entry["targets"])
-        block["unverified_regions"] += len(entry["review_regions"])
-        block["raw_detector_events"] += len(observed["hits"])
+        groups = {}
+        for target in entry["targets"]:
+            groups.setdefault(target.get("speech_style", entry["block"]), []).append(target)
+        for style, targets in groups.items():
+            block = result["blocks"].setdefault(style, {
+                "matched": 0, "verified_targets": 0,
+                "unverified_regions": 0, "raw_detector_events": 0})
+            block["matched"] += match_targets(targets, observed["hits"])
+            block["verified_targets"] += len(targets)
+            if len(groups) == 1:
+                block["unverified_regions"] += len(entry["review_regions"])
+                block["raw_detector_events"] += len(observed["hits"])
+        if len(groups) > 1:
+            result.setdefault("mixed_recordings", []).append({"id": entry["id"],
+                "unverified_regions": len(entry["review_regions"]),
+                "raw_detector_events": len(observed["hits"])})
     result["matched"] = sum(x["matched"] for x in result["blocks"].values())
     result["verified_targets"] = sum(x["verified_targets"] for x in result["blocks"].values())
     return result

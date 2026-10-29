@@ -18,6 +18,15 @@ train_spec.loader.exec_module(finetune)
 
 
 class PrepareTests(unittest.TestCase):
+    def test_mixed_track_reports_sharp_and_normal_separately(self):
+        manifest = {"records": [dict(id="mixed", source_split="test", block="mixed",
+            targets=[dict(start=1., end=1.8, speech_style="normal"),
+                     dict(start=5., end=5.8, speech_style="sharp")], review_regions=[])]}
+        result = compare.summarize(manifest, {"model_sha256": "test", "records": [{"id": "mixed", "hits": [2.]}]})
+        self.assertEqual(result["blocks"]["normal"]["matched"], 1)
+        self.assertEqual(result["blocks"]["sharp"]["matched"], 0)
+        self.assertEqual(result["verified_targets"], 2)
+
     def test_calibration_covers_later_speech_blocks_without_repeating_examples(self):
         labels = ["normal"] * 300 + ["quiet"] * 100 + ["whisper"] * 100
         selected = finetune.balanced_indices(labels, 250)
