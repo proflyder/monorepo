@@ -1,19 +1,20 @@
 diff --git a/README.md b/README.md
-index 92793e3..ac2135a 100644
+index fd071a7..ae5f47f 100644
 --- a/README.md
 +++ b/README.md
-@@ -11,6 +11,10 @@
- > колонке контроллер часов (i2c 0-003f) не поднимается,
- > сущностей часов нет; если ядро найдёт панель, демон подхватит её при старте (не проверялось).
+@@ -6,6 +6,11 @@
  
-+> **Ricardo fork:** этот checkout — отдельный Rust-профиль для нашей Midi,
-+> ещё не установленный на колонку. Отличия, сборка и границы приёмки —
-+> [`RICARDO.md`](RICARDO.md).
+ > Поддержка Мини 2 экспериментальная, см. [Мини 2](#мини-2).
+ 
++> **Ricardo fork:** этот checkout — отдельный Rust-профиль для нашей Midi.
++> На колонке сейчас стоит предыдущая Rust-сборка (`v0.5.0-1-g908a027`); слияние с
++> upstream `v0.5.2` в этом checkout ещё не устанавливалось и не проходило живую
++> приёмку. Отличия, сборка и границы приёмки — [`RICARDO.md`](RICARDO.md).
 +
  Вместо штатного стека Яндекса (`maind`) на колонке работает небольшой нативный демон. Он говорит с
  Home Assistant по протоколу ESPHome Native API и выглядит в HA как обычное ESPHome-устройство.
  Для [Music Assistant](https://music-assistant.io/) он дополнительно является нативным
-@@ -402,9 +406,10 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
+@@ -398,9 +403,10 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
    (aarch64/glibc 2.36 — обычный userspace Миди; 32-битный armhf/glibc 2.30 — Лайт 2, Мини 2 и
    образы Миди с 32-битным userspace). zig 0.13 не подходит: собранные им 32-битные программы
    падают при запуске. Другой zig можно указать как `ZIG=/путь/к/zig`;
@@ -27,7 +28,7 @@ index 92793e3..ac2135a 100644
  - `adb` из Android platform-tools.
  
  ```sh
-@@ -415,6 +420,10 @@ make -C satellite check                              # проверки на к
+@@ -411,6 +417,10 @@ make -C satellite check                              # проверки на к
  go -C installer run . 192.168.1.50                  # установщик из копии репозитория; сам вызывает make
  ```
  
@@ -40,17 +41,19 @@ index 92793e3..ac2135a 100644
  символами для разбора отчётов о падениях. Версия берётся из `git describe` и видна в
 diff --git a/RICARDO.md b/RICARDO.md
 new file mode 100644
-index 0000000..62ec4ae
+index 0000000..8ddaa5a
 --- /dev/null
 +++ b/RICARDO.md
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,104 @@
 +# Ricardo profile of the Rust Pulsar fork
 +
-+This fork is the **not-yet-deployed** Rust version of Pulsar for the
-+Station Midi installation. The active station still runs the C++ build
-+`v0.4.1-ricardo6`; nothing here is installed on it.
++This fork is the Ricardo Rust profile of Pulsar for the Station Midi
++installation. The station currently runs the earlier Rust build
++`v0.5.0-1-g908a027`; the upstream `v0.5.2` merge in this checkout has only
++passed host-side checks and is not installed until live acceptance.
 +
-+Base: `Morvex885/pulsar` `v0.5.0` (`1934b68`), branch `feat/ricardo-rust`.
++Base: `Morvex885/pulsar` `v0.5.2` (`4cba44a`), merged into `feat/ricardo-rust`
++(previous tip `908a027` kept as a parent), branch `feat/ricardo-rust`.
 +
 +## What this profile keeps
 +
@@ -68,11 +71,11 @@ index 0000000..62ec4ae
 +
 +| Area | Change |
 +|---|---|
-+| Wake word | New on-device «Рикардо» detector, same microWakeWord model as `v0.4.1-ricardo6`; `wake_word=ricardo` is the default. |
-+| Pre-roll | 0.5 s of VQE-cleaned audio is held and sent with the wake event, so «Рикардо, включи свет» does not lose its first syllables. |
++| Wake word | New on-device «Рикардо» detector, same microWakeWord model as the deployed fork build; `wake_word=ricardo` is the default. |
++| Pre-roll | The wake event carries 0.5 s (16 chunks, 512 ms) of VQE-cleaned audio taken from the shared 1.024 s ring (upstream `wake_preroll` rule `Fixed(16)` for the `ricardo` id), so «Рикардо, включи свет» does not lose its first syllables. The upstream `WakePreroll` switch and `wake_preroll=` key control it. |
 +| Silent cancel | `stt-no-text-recognized` is treated as a cancel, not as an error ring. |
 +| `стоп` | The local command spotter is off during LISTENING/PROCESSING/arbitration. «Рикардо, стоп» reaches HA, which stops the alarm and restores the music. |
-+| Local commands | The command spotter runs only while something plays and outside a voice request, matching `v0.4.1-ricardo6` rather than upstream's always-on behavior. |
++| Local commands | The command spotter runs only while something plays and outside a voice request, matching the deployed fork profile rather than upstream's always-on behavior. |
 +| Nearest station | Default `nearest_answers=false`: this installation has one station and the 250 ms arbitration window only adds latency. It can be turned back on in HA. |
 +| Zigbee | Runtime initialization is disabled (`ENABLE_ZIGBEE=false`); the radio and the `zigbee-*.ybl` assets are left untouched. |
 +| Updates | `UPDATE_REPO=proflyder/pulsar`, `auto_update=false` by default. The upstream repository is never an update source. |
@@ -80,8 +83,8 @@ index 0000000..62ec4ae
 +
 +The custom detector lives in `satellite/crates/pulsar-audio/ricardo/` and is
 +linked through a small C ABI. It uses the firmware's `libtflite.so` and the
-+vendored TensorFlow Lite microfrontend, exactly like the C++ build; the model
-+is not committed (see `satellite/wakewords/README.md`).
++vendored TensorFlow Lite microfrontend; the model is not committed (see
++`satellite/wakewords/README.md`).
 +
 +## Build
 +
@@ -108,13 +111,26 @@ index 0000000..62ec4ae
 +
 +## Verification performed
 +
-+- `cargo fmt --all --check`
-+- `cargo-zigbuild clippy --workspace --all-targets --target aarch64-unknown-linux-gnu.2.36 -- -D warnings`
-+- Cross-build for `aarch64-unknown-linux-gnu.2.36` and
-+  `armv7-unknown-linux-gnueabihf.2.30`; both binaries contain the C ABI
-+  symbols `mww_create` / `mww_feed` / `mww_destroy`.
-+- `cargo test -p pulsar --bin pulsar` (30 tests) in a Linux container.
-+- `cargo test -p pulsar-audio` (host) including the missing-model error path.
++All checks were host-side; no binary was installed and no station was touched.
++
++- `cargo fmt --all --check` (macOS host, Rust 1.99.1): pass.
++- `cargo clippy --workspace --all-targets --locked -- -D warnings` in
++  `rust:1.99.1-bookworm`, `linux/arm64`: pass.
++- `cargo test --workspace --exclude pulsar-update` in the same container: all
++  suites pass, including the new Ricardo pre-roll tests
++  (`ricardo_preroll_rule_uses_the_custom_id`,
++  `ricardo_preroll_is_the_last_512_ms_of_the_ring`,
++  `preroll_off_is_empty_but_the_wake_hold_is_separate`).
++- `cargo test -p pulsar-update`: 19 passed, 7 failed on arm64. The tests in
++  upstream hard-code the x86_64 asset name `pulsar-host.bin` while the binary
++  reports `pulsar-aarch64.bin`; an export of the unmodified upstream `v0.5.2`
++  (`4cba44a`) shows the same 7 failures on arm64, so this is a pre-existing
++  upstream test limitation, not a merge regression.
++- `make ARCH=armhf ZIG=…/zig-0.14.1 binary`: the daemon compiles and links as
++  an ARM EABI5 armhf ELF (`build/armhf/pulsar.debug`); the last
++  `zig objcopy --strip-all` step fails on the macOS host (undefined symbols in
++  zig's objcopy), so no stripped `build/armhf/pulsar` was produced here. The
++  Linux CI job performs the same strip step.
 +
 +Not performed: live microphone/wake-word acceptance, real `libtflite.so`
 +loading on the station, ESPHome entity regression, Spotify/MA playback, or a
@@ -122,7 +138,7 @@ index 0000000..62ec4ae
 +
 +## Rollback
 +
-+The active C++ binary and its model are untouched. If this fork is ever
++The previous Rust binary and its model are untouched. If this merge is ever
 +installed, keep:
 +
 +```text
@@ -131,25 +147,39 @@ index 0000000..62ec4ae
 +/data/pulsar/wakewords/ru_ricardo_mww.tflite
 +```
 +
-+and restore `pulsar.prev` with `ctl.sh restart`. The current C++ build also
++and restore `pulsar.prev` with `ctl.sh restart`. The previous Rust build also
 +accepts the same `wake_word=ricardo` state and model path.
 diff --git a/docs/architecture.md b/docs/architecture.md
-index bea7a56..e1b116b 100644
+index 99cf9c3..1ed8c3a 100644
 --- a/docs/architecture.md
 +++ b/docs/architecture.md
-@@ -307,6 +307,12 @@ println!("cargo:rustc-link-lib=c++");
+@@ -307,6 +307,14 @@ println!("cargo:rustc-link-lib=c++");
  - Ошибка dlopen / VQE / спотера логируется, handle деградированный (событий нет). PCM, который не
    открылся, не считается ошибкой старта: поток захвата пишет ошибку и повторяет открытие каждые
    2 с. Потоки останавливаются в `Drop` последнего клона handle.
 +- `ricardo/` — C++ bridge к тому же microWakeWord, что и в C++-сборке: вендоренный
 +  microfrontend, `libtflite.so` с Yandex FULL resolver, модель
 +  `/data/pulsar/wakewords/ru_ricardo_mww.tflite`. Rust-сторона (`src/ricardo.rs`)
-+  владеет только opaque handle; `frontend` хранит 0.5 с pre-roll и отправляет его
-+  вместе с `FrontendEvent::Wake`. Без модели или `libtflite.so` детектор
-+  логирует ошибку и не даёт wake-событий; остальной фронтенд не падает.
++  владеет только opaque handle; `frontend` подаёт детектору тот же очищенный чанк, что и
++  нативному спотеру, и берёт пре-ролл из общего кольца (для id `ricardo` — `Fixed(16)`,
++  512 мс: базовая длина ~0.5 с deployed Rust-сборки; настройка на железе — впереди). Без
++  модели или `libtflite.so` детектор логирует ошибку и не даёт wake-событий; остальной
++  фронтенд не падает.
  - `stats()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков и сырой захват для
    `--record`.
- 
+ - Пре-ролл wake word (switch «Command right after wake word», `wake_preroll=` в `state.conf`, по
+@@ -319,8 +327,9 @@ println!("cargo:rustc-link-lib=c++");
+   `Fixed`. Поток обработки держит кольцо последних 32 чанков `VQE_OMNI_WITH_GAIN` (1,024 с) и
+   кладёт в `FrontendEvent::Wake { preroll }` звук от конца слова до подтверждающего чанка
+   включительно. Длина — правило из `Model::wake_preroll` для id модели (имя каталога, `alisa` /
+-  `yandex`): чанки после 1-й стадии плюс смещение или фиксированное число; id без правила —
+-  пустой пре-ролл. Значения берутся с недолётом, чтобы само слово не попало в STT (HA его из
++  `yandex`) или для `ricardo`, когда активен кастомный детектор (его нативный каталог остаётся
++  `alisa` как путь отката): чанки после 1-й стадии плюс смещение или фиксированное число; id без
++  правила — пустой пре-ролл. Значения берутся с недолётом, чтобы само слово не попало в STT (HA его из
+   текста не убирает): на Лайт 2 — самый короткий замер по громким словам, на Миди все слова у
+   шумового пола и замер не отличает артефакт от короткой задержки, поэтому взято типичное
+   значение; окончательно все значения выставлены приёмкой через HA. Каждое срабатывание пишет
 diff --git a/installer/deploy.go b/installer/deploy.go
 index 7b3703e..0e7e64c 100644
 --- a/installer/deploy.go
@@ -4018,7 +4048,7 @@ index 0000000..0c0a516
 +
 +}  // extern "C"
 diff --git a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
-index 1e19a20..b98b4d7 100644
+index e444aad..825f757 100644
 --- a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
 +++ b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
 @@ -1,10 +1,11 @@
@@ -4069,27 +4099,7 @@ index 1e19a20..b98b4d7 100644
          Some(PathBuf::from(COMMAND_MODEL)),
      );
      h.set_commands(a.commands);
-@@ -239,9 +245,17 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
-         tokio::select! {
-             () = &mut end => break,
-             ev = rx.recv() => match ev {
--                Some(FrontendEvent::Wake { phrase, level_db }) => {
-+                Some(FrontendEvent::Wake {
-+                    phrase,
-+                    level_db,
-+                    audio,
-+                }) => {
-                     wakes += 1;
--                    out!("t={:6.2}s WAKE '{phrase}' level {level_db:.1} dB", secs(start));
-+                    out!(
-+                        "t={:6.2}s WAKE '{phrase}' level {level_db:.1} dB pre-roll {} samples",
-+                        secs(start),
-+                        audio.len()
-+                    );
-                 }
-                 Some(FrontendEvent::Command { word }) => {
-                     commands += 1;
-@@ -356,6 +370,8 @@ mod tests {
+@@ -361,6 +367,8 @@ mod tests {
              (20, "yandex", true, true, true)
          );
          assert_eq!(a.record, Some((PathBuf::from("/tmp/x.wav"), 5)));
@@ -4099,7 +4109,7 @@ index 1e19a20..b98b4d7 100644
          assert!(args("0").is_err());
          assert!(args("10 20").is_err());
 diff --git a/satellite/crates/pulsar-audio/src/engine/mod.rs b/satellite/crates/pulsar-audio/src/engine/mod.rs
-index 3e999a7..c64f142 100644
+index 963411a..ecf76e5 100644
 --- a/satellite/crates/pulsar-audio/src/engine/mod.rs
 +++ b/satellite/crates/pulsar-audio/src/engine/mod.rs
 @@ -11,6 +11,8 @@ use std::path::Path;
@@ -4111,7 +4121,7 @@ index 3e999a7..c64f142 100644
  pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
  
  pub const VQE_MODELS: &str = "/system/vendor/quasar/vqe_models";
-@@ -229,6 +231,9 @@ pub(crate) struct Engine {
+@@ -255,6 +257,9 @@ pub(crate) struct Engine {
      // config), as the C++ engine's destructor freed them.
      wake: Slot,
      cmd: Slot,
@@ -4121,7 +4131,7 @@ index 3e999a7..c64f142 100644
      vqe: Vqe,
      lib: Lib,
      /// Capture frames per VQE chunk.
-@@ -243,6 +248,7 @@ impl Engine {
+@@ -279,6 +284,7 @@ impl Engine {
      pub fn start(
          model: &pulsar_core::model::Model,
          wake_dir: &Path,
@@ -4129,7 +4139,7 @@ index 3e999a7..c64f142 100644
          command_dir: Option<&Path>,
      ) -> Option<Engine> {
          if let Err(e) = preload_deps() {
-@@ -281,9 +287,20 @@ impl Engine {
+@@ -317,6 +323,16 @@ impl Engine {
              return None;
          };
          info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
@@ -4143,6 +4153,10 @@ index 3e999a7..c64f142 100644
 +                None
 +            }
 +        });
+         let (hit, rej) = (
+             lib.event_name(EV_FIRST_STAGE_HIT),
+             lib.event_name(EV_REJECTION_2ND),
+@@ -335,6 +351,7 @@ impl Engine {
          let mut eng = Engine {
              wake: Slot::new("wake word"),
              cmd: Slot::new("command"),
@@ -4150,8 +4164,8 @@ index 3e999a7..c64f142 100644
              vqe,
              lib,
              chunk: chunk_n,
-@@ -326,6 +343,12 @@ impl Engine {
-         feed(&self.vqe, self.frame, &mut self.wake)
+@@ -395,6 +412,12 @@ impl Engine {
+         s
      }
  
 +    /// Feeds one VQE-cleaned chunk to the optional Ricardo detector.
@@ -4162,9 +4176,9 @@ index 3e999a7..c64f142 100644
 +
      /// Feeds the last chunk to the command spotter; its confirmed phrases.
      pub fn feed_command(&mut self) -> Vec<String> {
-         feed(&self.vqe, self.frame, &mut self.cmd)
+         feed(&self.vqe, self.frame, &mut self.cmd).phrases
 diff --git a/satellite/crates/pulsar-audio/src/frontend.rs b/satellite/crates/pulsar-audio/src/frontend.rs
-index ed568b2..874fd18 100644
+index 9dcce7c..c92aed9 100644
 --- a/satellite/crates/pulsar-audio/src/frontend.rs
 +++ b/satellite/crates/pulsar-audio/src/frontend.rs
 @@ -1,7 +1,8 @@
@@ -4178,16 +4192,7 @@ index ed568b2..874fd18 100644
  //!
  //! Two threads: a capture thread that only drains ALSA into a FIFO, and a processing thread
  //! (VQE + spotters). The Lite 2's PDM capture allows at most ~42 ms of buffer (2048 frames at
-@@ -29,6 +30,8 @@ use crate::spectrum::SpectrumAnalyzer;
- /// itself.
- const LEVEL_CHUNKS: usize = 47;
- const LEVEL_TOP: usize = 8;
-+/// 0.5 s of 16 kHz audio kept for the command spoken immediately after the wake word.
-+const PREROLL_SAMPLES: usize = 8000;
- 
- /// ALSA buffer in VQE chunks.
- const BUFFER_CHUNKS: u64 = 8;
-@@ -41,10 +44,12 @@ const PROCESSING_STACK: usize = 8 << 20;
+@@ -48,7 +49,8 @@ const PROCESSING_STACK: usize = 8 << 20;
  
  pub enum FrontendEvent {
      /// level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC),
@@ -4197,11 +4202,7 @@ index ed568b2..874fd18 100644
      Wake {
          phrase: String,
          level_db: f32,
-+        audio: Vec<i16>,
-     },
-     Command {
-         word: String,
-@@ -74,25 +79,34 @@ pub struct FrontendHandle {
+@@ -87,25 +89,34 @@ pub struct FrontendHandle {
      inner: Arc<Inner>,
  }
  
@@ -4243,7 +4244,7 @@ index ed568b2..874fd18 100644
          Some(eng) => inner
              .start_threads(model, eng, tx)
              .inspect_err(|e| error!("audio threads: {e}"))
-@@ -122,6 +136,11 @@ impl FrontendHandle {
+@@ -135,6 +146,11 @@ impl FrontendHandle {
          self.inner.shared.detect.store(on, Relaxed);
      }
  
@@ -4255,7 +4256,7 @@ index ed568b2..874fd18 100644
      /// Command spotter on/off (commands without the wake word).
      pub fn set_commands(&self, on: bool) {
          self.inner.shared.commands.store(on, Relaxed);
-@@ -169,6 +188,8 @@ struct Shared {
+@@ -198,6 +214,8 @@ struct Shared {
      stop_lock: Mutex<()>,
      stop_cv: Condvar,
      detect: AtomicBool,
@@ -4263,8 +4264,8 @@ index ed568b2..874fd18 100644
 +    custom: AtomicBool,
      commands: AtomicBool,
      stream: AtomicBool,
-     music: AtomicBool,
-@@ -182,12 +203,13 @@ struct Shared {
+     /// `Wake` events sent and not yet handled: audio keeps coming meanwhile, so nothing is lost
+@@ -215,12 +233,13 @@ struct Shared {
  }
  
  impl Shared {
@@ -4278,95 +4279,182 @@ index ed568b2..874fd18 100644
 +            custom: AtomicBool::new(custom_active),
              commands: AtomicBool::new(false),
              stream: AtomicBool::new(false),
-             music: AtomicBool::new(false),
-@@ -536,6 +558,8 @@ fn processing(
+             wake_pending: AtomicU32::new(0),
+@@ -630,6 +649,25 @@ fn preroll_chunks(rule: Option<PrerollRule>, first_stage_age: Option<usize>) ->
+     }
+ }
+ 
++/// Pre-roll rule for the active detector. The custom Ricardo detector has no stock model
++/// directory, so its id is not `Engine::wake_id` (which still points at the native «Алиса»
++/// model kept for rollback) but the `ricardo` entry of `Model::wake_preroll`.
++fn wake_preroll_rule(model: &Model, shared: &Shared, stock_id: &str) -> Option<PrerollRule> {
++    if !shared.preroll.load(Relaxed) {
++        return None;
++    }
++    let id = if shared.custom.load(Relaxed) {
++        "ricardo"
++    } else {
++        stock_id
++    };
++    model
++        .wake_preroll
++        .iter()
++        .find(|p| p.id == id)
++        .map(|p| p.rule)
++}
++
+ /// "-" for None in the "wake timing" log.
+ struct Chunks(Option<usize>);
+ 
+@@ -664,6 +702,7 @@ fn processing(
          warn!("music analysis: unsupported capture layout");
      }
      let mut music_was_on = false;
-+    let mut preroll = VecDeque::with_capacity(PREROLL_SAMPLES);
 +    let mut custom_failed = false;
- 
-     while shared.running() {
-         let pending = lock(&shared.pending_model).take();
-@@ -582,22 +606,67 @@ fn processing(
-             level_pos = (level_pos + 1) % LEVEL_CHUNKS;
-         }
- 
--        if shared.stream.load(Relaxed)
--            && let Some(d) = eng.output(VQE_OMNI_WITH_GAIN)
--            && !d.is_empty()
--        {
--            let _ = tx.send(FrontendEvent::Audio(d.iter().map(|&v| to_s16(v)).collect()));
-+        // One owned copy of the cleaned stream feeds the pre-roll, the detector
-+        // and the optional HA stream. It must be owned before feed_wake borrows
-+        // the engine mutably.
-+        let clean = eng
-+            .output(VQE_OMNI_WITH_GAIN)
-+            .filter(|d| !d.is_empty())
-+            .map(|d| d.iter().map(|&v| to_s16(v)).collect::<Vec<_>>());
-+        if let Some(pcm) = &clean {
-+            preroll.extend(pcm.iter().copied());
-+            while preroll.len() > PREROLL_SAMPLES {
-+                preroll.pop_front();
-+            }
-         }
- 
-         if shared.detect.load(Relaxed) {
--            let phrases = eng.feed_wake();
--            if !phrases.is_empty() {
--                let level_db = wake_level_db(&level_hist);
--                for phrase in phrases {
--                    let _ = tx.send(FrontendEvent::Wake { phrase, level_db });
-+            let custom = shared.custom.load(Relaxed);
-+            if custom {
-+                if !custom_failed && let Some(pcm) = &clean {
-+                    match eng.feed_custom(pcm) {
-+                        Some(Ok((true, score))) => {
-+                            let audio = preroll.iter().copied().collect();
-+                            preroll.clear();
-+                            info!("Ricardo wake word detected (probability {score:.3})");
-+                            let _ = tx.send(FrontendEvent::Wake {
-+                                phrase: "Рикардо".into(),
-+                                level_db: wake_level_db(&level_hist),
-+                                audio,
-+                            });
-+                        }
-+                        Some(Ok(_)) => {}
-+                        Some(Err(e)) => {
-+                            custom_failed = true;
-+                            error!("Ricardo wake word: {e}");
-+                        }
-+                        None => {
-+                            custom_failed = true;
-+                            error!("Ricardo wake word: detector is not loaded");
+     let frame = eng.frame();
+     let mut ring = PrerollRing::new(PREROLL_CHUNKS, frame);
+     // Chunks since the wake spotter's 1st-stage hit, while its verifier waits.
+@@ -720,18 +759,56 @@ fn processing(
+         // handled holds the stream open: the owner switches streaming on only when it handles
+         // the event, and the chunks in between continue the pre-roll. `wake_pending` is read
+         // first: its Acquire pairs with `wake_handled`, after the owner's `set_streaming(true)`.
++        let custom_active = shared.custom.load(Relaxed);
++        let detecting = shared.detect.load(Relaxed);
++        let mut custom_score = None;
+         match eng.output(VQE_OMNI_WITH_GAIN) {
+             Some(d) => {
+-                if let Some(slot) = ring.push(d)
+-                    && (shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed))
+-                {
+-                    let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
++                if let Some(slot) = ring.push(d) {
++                    // The Ricardo detector hears the same cleaned chunk as the ring and the
++                    // stock spotter; its confirmation then takes the pre-roll from the ring.
++                    if custom_active && detecting && !custom_failed {
++                        match eng.feed_custom(slot) {
++                            Some(Ok((true, score))) => custom_score = Some(score),
++                            Some(Ok(_)) => {}
++                            Some(Err(e)) => {
++                                custom_failed = true;
++                                error!("Ricardo wake word: {e}");
++                            }
++                            None => {
++                                custom_failed = true;
++                                error!("Ricardo wake word: detector is not loaded");
++                            }
 +                        }
 +                    }
-+                }
-+            } else {
-+                let phrases = eng.feed_wake();
-+                if !phrases.is_empty() {
-+                    let audio: Vec<i16> = preroll.iter().copied().collect();
-+                    preroll.clear();
-+                    let level_db = wake_level_db(&level_hist);
-+                    for phrase in phrases {
-+                        let _ = tx.send(FrontendEvent::Wake {
-+                            phrase,
-+                            level_db,
-+                            audio: audio.clone(),
-+                        });
++                    if shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed) {
++                        let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
 +                    }
                  }
              }
+             None => ring.clear(),
          }
-+        if shared.stream.load(Relaxed)
-+            && let Some(pcm) = clean
-+        {
-+            let _ = tx.send(FrontendEvent::Audio(pcm));
+ 
+-        if shared.detect.load(Relaxed) {
++        if let Some(score) = custom_score {
++            let level_db = wake_level_db(&level_hist);
++            let newest = (level_pos + LEVEL_CHUNKS - 1) % LEVEL_CHUNKS;
++            let speech_end = speech_end_chunks(&level_hist, newest);
++            let rule = wake_preroll_rule(model, shared, "ricardo");
++            let n = preroll_chunks(rule, None).min(PREROLL_CHUNKS);
++            let preroll = ring.last(n);
++            info!(
++                "Ricardo wake word detected (probability {score:.3}); \
++                 wake timing: speech_end={} preroll={}",
++                Chunks(speech_end),
++                preroll.len() / frame
++            );
++            shared.wake_pending.fetch_add(1, Relaxed);
++            let _ = tx.send(FrontendEvent::Wake {
++                phrase: "Рикардо".into(),
++                level_db,
++                preroll,
++            });
++        } else if !custom_active && detecting {
+             first_stage_age = first_stage_age.map(|a| a + 1).filter(|&a| a < LEVEL_CHUNKS);
+             let spotted = eng.feed_wake();
+             match spotted.stage {
+@@ -743,12 +820,7 @@ fn processing(
+                 let level_db = wake_level_db(&level_hist);
+                 let newest = (level_pos + LEVEL_CHUNKS - 1) % LEVEL_CHUNKS;
+                 let speech_end = speech_end_chunks(&level_hist, newest);
+-                let rule = shared
+-                    .preroll
+-                    .load(Relaxed)
+-                    .then(|| model.wake_preroll.iter().find(|p| p.id == eng.wake_id()))
+-                    .flatten()
+-                    .map(|p| p.rule);
++                let rule = wake_preroll_rule(model, shared, eng.wake_id());
+                 let n = preroll_chunks(rule, first_stage_age).min(PREROLL_CHUNKS);
+                 let preroll = ring.last(n);
+                 info!(
+@@ -864,6 +936,63 @@ mod tests {
+         assert_eq!(preroll_chunks(first(-3, 9), None), 9);
+     }
+ 
++    #[test]
++    fn ricardo_preroll_rule_uses_the_custom_id() {
++        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
++        // The custom detector is active: the stock model id ("alisa", kept for rollback) must
++        // not select the rule, or the Ricardo word loses its pre-roll.
++        let custom = Shared::new(true);
++        assert_eq!(
++            wake_preroll_rule(midi, &custom, "alisa"),
++            Some(PrerollRule::Fixed(16))
++        );
++        // Switched back to a stock spotter: the custom entry no longer applies.
++        let stock = Shared::new(false);
++        assert_eq!(
++            wake_preroll_rule(midi, &stock, "alisa"),
++            Some(PrerollRule::Fixed(2))
++        );
++    }
++
++    #[test]
++    fn ricardo_preroll_is_the_last_512_ms_of_the_ring() {
++        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
++        const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
++        let mut ring = PrerollRing::new(PREROLL_CHUNKS, FRAME);
++        for k in 0..PREROLL_CHUNKS {
++            ring.push(&[k as f32 / 32768.0; FRAME]);
 +        }
-         if shared.commands.load(Relaxed) {
-             for word in eng.feed_command() {
-                 let _ = tx.send(FrontendEvent::Command { word });
-@@ -792,7 +861,7 @@ mod tests {
++        let rule = wake_preroll_rule(midi, &Shared::new(true), "ricardo");
++        let n = preroll_chunks(rule, None);
++        assert_eq!(n, 16);
++        let preroll = ring.last(n);
++        assert_eq!(preroll.len(), n * FRAME);
++        assert_eq!(preroll.len() / 16, 512, "milliseconds at 16 kHz");
++        // Oldest first, ending with the chunk that confirmed the word.
++        assert_eq!(preroll[0], (PREROLL_CHUNKS - n) as i16);
++        assert_eq!(preroll[preroll.len() - 1], (PREROLL_CHUNKS - 1) as i16);
++    }
++
++    #[test]
++    fn preroll_off_is_empty_but_the_wake_hold_is_separate() {
++        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
++        let shared = Shared::new(true);
++        shared.preroll.store(false, Relaxed);
++        let n = preroll_chunks(wake_preroll_rule(midi, &shared, "ricardo"), None);
++        assert_eq!(n, 0);
++        let mut ring = PrerollRing::new(PREROLL_CHUNKS, 512);
++        ring.push(&[0.5; 512]);
++        assert!(ring.last(n).is_empty());
++        // `wake_pending` holds the stream open regardless of the pre-roll switch: the owner
++        // raises it for every Wake and lowers it once after `set_streaming`.
++        shared.wake_pending.fetch_add(1, Relaxed);
++        assert_eq!(shared.wake_pending.load(Relaxed), 1);
++        let _ = shared
++            .wake_pending
++            .try_update(AcqRel, Acquire, |v| v.checked_sub(1));
++        assert_eq!(shared.wake_pending.load(Relaxed), 0);
++    }
++
+     #[test]
+     fn deinterleave_midi_and_lite2_layouts() {
+         let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
+@@ -1020,7 +1149,7 @@ mod tests {
      fn without_the_yandex_library_the_handle_is_degraded() {
          // No /system/vendor/quasar/libs on the build host: dlopen fails.
          let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
@@ -4483,11 +4571,29 @@ index 0000000..312a712
 +        assert!(RicardoWake::new(Path::new("/nonexistent/ricardo.tflite")).is_err());
 +    }
 +}
+diff --git a/satellite/crates/pulsar-core/src/model.rs b/satellite/crates/pulsar-core/src/model.rs
+index bb6e014..ddeb850 100644
+--- a/satellite/crates/pulsar-core/src/model.rs
++++ b/satellite/crates/pulsar-core/src/model.rs
+@@ -148,6 +148,13 @@ const CUCUMBER_PREROLL: &[WakePreroll] = &[
+         id: "yandex",
+         rule: PrerollRule::Fixed(2),
+     },
++    // The fork's own «Рикардо» microWakeWord detector (no stock model directory, so the
++    // front-end looks it up under this id). 16 chunks = 512 ms preserves the deployed fork's
++    // ~0.5 s pre-roll baseline, ending at the confirming chunk; hardware tuning is pending.
++    WakePreroll {
++        id: "ricardo",
++        rule: PrerollRule::Fixed(16),
++    },
+ ];
+ // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
+ // (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed. Chunks from
 diff --git a/satellite/crates/pulsar/src/controller/entities.rs b/satellite/crates/pulsar/src/controller/entities.rs
-index cbdce6e..fd99009 100644
+index 433667f..138fddb 100644
 --- a/satellite/crates/pulsar/src/controller/entities.rs
 +++ b/satellite/crates/pulsar/src/controller/entities.rs
-@@ -339,12 +339,19 @@ impl Controller {
+@@ -344,12 +344,19 @@ impl Controller {
          let Some(first) = ids.into_iter().next() else {
              return;
          };
@@ -4509,7 +4615,7 @@ index cbdce6e..fd99009 100644
              .set_active_wake_words(vec![self.st.wake_word.clone()]);
          self.persist();
 diff --git a/satellite/crates/pulsar/src/controller/logic.rs b/satellite/crates/pulsar/src/controller/logic.rs
-index 89f17d8..8c0589a 100644
+index 687892b..bf76f00 100644
 --- a/satellite/crates/pulsar/src/controller/logic.rs
 +++ b/satellite/crates/pulsar/src/controller/logic.rs
 @@ -237,13 +237,6 @@ pub fn command_of(word: &str) -> Option<VoiceCommand> {
@@ -4527,7 +4633,7 @@ index 89f17d8..8c0589a 100644
  /// paused / ended less than PAUSED_MUSIC_MS ago (Sendspin: its server still connected).
  /// `*_since`: when the media channel paused / the Sendspin stream ended; None = not since start.
 diff --git a/satellite/crates/pulsar/src/controller/logic/tests.rs b/satellite/crates/pulsar/src/controller/logic/tests.rs
-index 471c2ba..5cb8555 100644
+index 4aad396..84b0243 100644
 --- a/satellite/crates/pulsar/src/controller/logic/tests.rs
 +++ b/satellite/crates/pulsar/src/controller/logic/tests.rs
 @@ -185,17 +185,6 @@ fn command_words() {
@@ -4549,7 +4655,7 @@ index 471c2ba..5cb8555 100644
  fn music_ownership() {
      use PlayState as P;
 diff --git a/satellite/crates/pulsar/src/controller/media.rs b/satellite/crates/pulsar/src/controller/media.rs
-index af8a2cf..aaff078 100644
+index a0f00ba..dd605cf 100644
 --- a/satellite/crates/pulsar/src/controller/media.rs
 +++ b/satellite/crates/pulsar/src/controller/media.rs
 @@ -107,6 +107,9 @@ impl Controller {
@@ -4563,7 +4669,7 @@ index af8a2cf..aaff078 100644
  
      pub(super) fn update_music(&self) {
 diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
-index e3af604..5f69fda 100644
+index 79b3478..ebb91ea 100644
 --- a/satellite/crates/pulsar/src/controller/mod.rs
 +++ b/satellite/crates/pulsar/src/controller/mod.rs
 @@ -32,8 +32,13 @@ use logic::{HaTimer, Phase, RunBinding};
@@ -4626,7 +4732,7 @@ index e3af604..5f69fda 100644
          }
          let case_colors = pulsar_hw::case_colors();
          let dir = logic::state_dir(state_path.as_os_str());
-@@ -310,6 +319,11 @@ impl Controller {
+@@ -323,6 +332,11 @@ impl Controller {
                      phrase: "Яндекс".into(),
                      languages: vec!["ru".into()],
                  },
@@ -4638,7 +4744,7 @@ index e3af604..5f69fda 100644
              ],
              active_wake_words: vec![st.wake_word.clone()],
              light_effects: strings(pulsar_hw::effect_names()),
-@@ -317,7 +331,7 @@ impl Controller {
+@@ -330,7 +344,7 @@ impl Controller {
              music_styles: strings(pulsar_hw::music_styles()),
              case_colors: with_none(case_colors.clone()),
              clock_music_styles: strings(pulsar_clock::music_styles()),
@@ -4647,10 +4753,10 @@ index e3af604..5f69fda 100644
                  Vec::new()
              } else {
                  pulsar_zigbee::ROLES
-@@ -423,9 +437,17 @@ impl Controller {
-         } else {
-             None
+@@ -431,9 +445,17 @@ impl Controller {
+             }
          };
+         let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
 +        let custom_wake = st.wake_word == "ricardo";
          let (mic, mic_rx) = pulsar_audio::spawn(
              model,
@@ -4665,8 +4771,8 @@ index e3af604..5f69fda 100644
 +            custom_wake,
              Some(PathBuf::from(COMMAND_MODEL)),
          );
- 
-@@ -480,7 +502,7 @@ impl Controller {
+         mic.set_preroll(st.wake_preroll);
+@@ -489,7 +511,7 @@ impl Controller {
              None
          };
  
@@ -4675,7 +4781,7 @@ index e3af604..5f69fda 100644
              (None, None)
          } else {
              let zcfg = ZigbeeConfig {
-@@ -559,7 +581,6 @@ impl Controller {
+@@ -568,7 +590,6 @@ impl Controller {
              arb_phrase: String::new(),
              arb_level: -100.0,
              arb_audio: Vec::new(),
@@ -4683,49 +4789,24 @@ index e3af604..5f69fda 100644
              commands_blocked_until_ms: 0,
              run: RunBinding::default(),
              stop_sent: false,
-@@ -745,8 +766,12 @@ impl Controller {
- 
-     fn on_frontend(&mut self, ev: FrontendEvent) {
-         match ev {
--            FrontendEvent::Wake { phrase, level_db } => self.on_wake(&phrase, level_db),
+@@ -763,7 +784,7 @@ impl Controller {
+                 // After on_wake has switched streaming on where the wake word starts a request.
+                 self.mic.wake_handled();
+             }
 -            FrontendEvent::Command { word } => self.on_command(&word, false),
-+            FrontendEvent::Wake {
-+                phrase,
-+                level_db,
-+                audio,
-+            } => self.on_wake(&phrase, level_db, audio),
 +            FrontendEvent::Command { word } => self.on_command(&word),
              FrontendEvent::Audio(pcm) => {
                  if self.phase == Phase::Listening {
                      self.api.voice_send_audio(pcm);
 diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
-index d67bbcd..a8815ae 100644
+index a40b394..6dca0fa 100644
 --- a/satellite/crates/pulsar/src/controller/voice.rs
 +++ b/satellite/crates/pulsar/src/controller/voice.rs
-@@ -107,7 +107,7 @@ impl Controller {
- 
-     // ---------------- wake word ----------------
- 
--    pub(super) fn on_wake(&mut self, phrase: &str, level_db: f32) {
-+    pub(super) fn on_wake(&mut self, phrase: &str, level_db: f32, audio: Vec<i16>) {
-         if self.mic_muted() {
-             return;
-         }
-@@ -127,15 +127,14 @@ impl Controller {
-         }
-         // Without the HA pipeline this station could win and stay silent: it does not take part.
-         if !self.arbitration_on() || !self.api.voice_subscribed() {
--            return self.answer_wake(phrase, Vec::new());
-+            return self.answer_wake(phrase, audio);
-         }
-         self.arbitrating = true;
-         // A station that lost the previous wake word may win this one.
-         self.commands_blocked_until_ms = 0;
+@@ -135,7 +135,6 @@ impl Controller {
          self.arb_phrase = phrase.to_owned();
          self.arb_level = level_db;
--        self.arb_audio.clear();
+         self.arb_audio = preroll;
 -        self.arb_command.clear();
-+        self.arb_audio = audio;
          self.mic.set_streaming(true);
          self.update_ui();
          let busy = self.phase == Phase::Speaking || self.announcing;
@@ -4883,10 +4964,10 @@ index d67bbcd..a8815ae 100644
                      self.interrupt_speech();
                      self.finish_interaction();
 diff --git a/satellite/crates/pulsar/src/settings.rs b/satellite/crates/pulsar/src/settings.rs
-index ba959d8..ed0a329 100644
+index 2813284..f3facab 100644
 --- a/satellite/crates/pulsar/src/settings.rs
 +++ b/satellite/crates/pulsar/src/settings.rs
-@@ -84,10 +84,11 @@ impl Default for Settings {
+@@ -86,10 +86,11 @@ impl Default for Settings {
              clock_brightness: 1.0,
              clock_scroll_ms: 400,
              light: LightState::default(),
@@ -4901,22 +4982,19 @@ index ba959d8..ed0a329 100644
              clock_music: "Off".into(),
              led_speed: 1.0,
 diff --git a/satellite/crates/pulsar/src/settings/tests.rs b/satellite/crates/pulsar/src/settings/tests.rs
-index a7762d7..a26b014 100644
+index eeb5593..ebbac9c 100644
 --- a/satellite/crates/pulsar/src/settings/tests.rs
 +++ b/satellite/crates/pulsar/src/settings/tests.rs
-@@ -1,7 +1,7 @@
--// Fixtures in tests/golden/settings/ come from the C++ reference (rust-port-base): Settings::load
--// and Settings::save of controller.cpp, copied verbatim into a throwaway host harness built with
--// `zig c++ -std=c++20 -O2`. save_*.conf: `save` of the values below; load_*.out: `load` of
--// load_*.in, then `save`.
-+// Fixtures in tests/golden/settings/ follow the C++ Settings format (rust-port-base),
-+// with this fork's defaults (`wake_word=ricardo`, `nearest_answers=0`). They were produced by
-+// the same `Settings::load` / `Settings::save` contract and a throwaway host harness.
-+// save_*.conf: `save` of the values below; load_*.out: `load` of load_*.in, then `save`.
+@@ -2,7 +2,7 @@
+ // and Settings::save of controller.cpp, copied verbatim into a throwaway host harness built with
+ // `zig c++ -std=c++20 -O2`. save_*.conf: `save` of the values below; load_*.out: `load` of
+ // load_*.in, then `save`. Edited by hand since: `wake_preroll` (after `clock_music`; 0 in
+-// load_odd.in).
++// load_odd.in), and this fork's defaults (`wake_word=ricardo`, `nearest_answers=0`).
  
  use super::*;
  
-@@ -44,7 +44,7 @@ fn values() -> Settings {
+@@ -45,7 +45,7 @@ fn values() -> Settings {
  }
  
  #[test]
@@ -4925,7 +5003,7 @@ index a7762d7..a26b014 100644
      assert_eq!(
          Settings::default().serialize().as_bytes(),
          golden("save_default.conf")
-@@ -78,7 +78,7 @@ fn save_matches_cxx_byte_for_byte() {
+@@ -79,7 +79,7 @@ fn save_matches_cxx_byte_for_byte() {
  }
  
  #[test]
@@ -4935,7 +5013,7 @@ index a7762d7..a26b014 100644
      s.parse(&golden("save_values.conf"));
      // Written with 6 significant digits: the values read back are those of the text.
 diff --git a/satellite/crates/pulsar/tests/golden/settings/load_edge.out b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-index 09501fe..57c0138 100644
+index dc09534..179bc14 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/load_edge.out
 +++ b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
 @@ -11,13 +11,13 @@ light_r=1
@@ -4955,7 +5033,7 @@ index 09501fe..57c0138 100644
  led_speed=4
  voice_indication=1
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_default.conf b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-index 239aa5c..e4a91fd 100644
+index 38e8982..cc93a17 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_default.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
 @@ -11,13 +11,13 @@ light_r=1
@@ -4975,7 +5053,7 @@ index 239aa5c..e4a91fd 100644
  led_speed=1
  voice_indication=1
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-index 87befc1..5e2647e 100644
+index 23e5520..6bb0c43 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
 @@ -11,13 +11,13 @@ light_r=0
@@ -4995,7 +5073,7 @@ index 87befc1..5e2647e 100644
  led_speed=4
  voice_indication=1
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_values.conf b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-index 4acecce..1f6eadd 100644
+index 5582f66..a7eba0d 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_values.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
 @@ -11,13 +11,13 @@ light_r=1e-05

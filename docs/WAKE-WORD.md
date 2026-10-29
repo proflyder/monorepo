@@ -12,7 +12,8 @@
 - Изменяемые исходники — `projects/station/upstream/pulsar-rust/`,
   ветка `feat/ricardo-rust`.
 
-База — tag `v0.5.0`, commit `1934b68`. Снимок локальных изменений —
+База локального форка — tag `v0.5.2`, commit `4cba44a`; установленная
+станция остаётся `v0.5.0-1-g908a027`. Снимок локальных изменений —
 `projects/station/patches/pulsar-rust/`; обновляется
 `projects/station/scripts/snapshot-pulsar.py` перед корневым коммитом.
 ALSA ABI armhf обрабатывается runtime-обёрткой `pulsar-alsa`.

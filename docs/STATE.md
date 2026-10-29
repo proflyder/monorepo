@@ -56,8 +56,10 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.0-1-g908a027` — единственная активная сборка. Legacy C++
-  checkout, patch и binaries архивированы private в `secrets/local/recovery/`.
+- Pulsar Rust `v0.5.0-1-g908a027` — установленная сборка. Локальный форк
+  интегрировал upstream `v0.5.2` (HEAD `95ce568`, build candidate); на станцию
+  не устанавливался. Legacy C++ checkout, patch и binaries — private в
+  `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
 - ESPHome: 33 entities, Noise; HA satellite работает.
 - Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,

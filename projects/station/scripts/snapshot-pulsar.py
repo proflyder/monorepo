@@ -2,7 +2,7 @@
 """Record the active Rust Pulsar delta in the lab repo, without changing its checkout.
 
 The patch captures everything between an explicit upstream base (default
-``v0.5.0``) and the current worktree: committed work, staged and unstaged
+``v0.5.2``) and the current worktree: committed work, staged and unstaged
 edits, and untracked source files. It is intentionally not ``git diff HEAD``,
 which would be empty on a clean checkout with committed custom work.
 """
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LAB = ROOT.parents[1]
 DEFAULT_CHECKOUT = ROOT / 'upstream/pulsar-rust'
 DEFAULT_OUTPUT = ROOT / 'patches/pulsar-rust'
-DEFAULT_BASE = 'v0.5.0'
+DEFAULT_BASE = 'v0.5.2'
 MAX_SOURCE_BYTES = 2_000_000
 REJECTED_SUFFIXES = {
     '.bin', '.debug', '.zip', '.tar', '.gz', '.tgz', '.xz', '.wav', '.pcm',

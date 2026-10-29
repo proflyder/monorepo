@@ -95,7 +95,8 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
-Текущая версия — Rust `v0.5.0-1-g908a027`. Legacy C++ checkout, patch и
+Установленная версия — Rust `v0.5.0-1-g908a027`; локальный форк — upstream
+`v0.5.2`, HEAD `95ce568`, не установлен. Legacy C++ checkout, patch и
 binaries не входят в активное дерево; приватный архив и способ восстановления —
 в `secrets/local/recovery/` (не публикуется). Возврат к прежней C++-сборке не
 является штатным rollback и не должен выполняться без отдельного плана.

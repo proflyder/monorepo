@@ -122,6 +122,24 @@ class SnapshotPulsarTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(worktree_state(restore), worktree_state(repo))
 
+    def test_default_base_uses_pinned_upstream_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = init_repo(root / 'upstream')
+            (repo / 'base.rs').write_text('pub fn base() {}\n')
+            commit(repo, 'upstream base')
+            git(repo, 'tag', 'v0.5.2')
+            base_commit = git(repo, 'rev-parse', 'HEAD').strip()
+            output = root / 'patches'
+            result = run([
+                sys.executable, str(SCRIPT),
+                '--checkout', str(repo), '--output', str(output),
+            ])
+            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+            metadata = json.loads((output / 'base.json').read_text())
+            self.assertEqual(metadata['base_ref'], 'v0.5.2')
+            self.assertEqual(metadata['base_commit'], base_commit)
+
     def test_clean_committed_delta_is_not_an_empty_patch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

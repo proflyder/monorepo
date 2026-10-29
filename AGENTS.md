@@ -80,7 +80,7 @@
 Существующие upstream remote не означают разрешения публиковать наши изменения.
 
 Активный Pulsar: Rust-форк `projects/station/upstream/pulsar-rust/` (ветка
-`feat/ricardo-rust`, база upstream `v0.5.0` = `1934b68`). База и текущие
+`feat/ricardo-rust`, база upstream `v0.5.2` = `4cba44a`). База и текущие
 локальные изменения фиксируются в корневой истории через
 `projects/station/patches/pulsar-rust/`:
 
