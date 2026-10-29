@@ -4,8 +4,6 @@
 
 ## Приёмка
 
-- [ ] Будильник: звонок, «стоп», snooze, resume музыки; проверить на реальном
-      Pulsar, не только API.
 - [ ] Spotify/MA: pause/resume, next/previous, phone→speaker/transfer.
 - [ ] MA Liked Songs sync; «включи любимое» при пустом плейлисте.
 - [ ] Bluetooth-пара телефона. `bluetoothctl devices` на станции пуст; в HA
@@ -22,10 +20,6 @@
 
 ## Планировщик / HA bridge / Android
 
-- [ ] Живая звуковая приёмка scheduler→bridge: реальный alarm fire, STOP,
-      snooze 9 минут, resume source/volume. API/ACK проверены (task SKIPPED,
-      consumers `ha-bridge-home`/`ha-control-home` alive, bounded recovery 5s),
-      audible — нет; запускать только по согласованию.
 - [ ] Home control: интерактивная проверка фильтров и подтверждение действий
       пользователем; автоматические нажатия заблокированы HyperOS. Не запускать
       production-устройства без согласования.
@@ -60,8 +54,7 @@
 ## Голос / разработка
 
 - [ ] Wake word v1: recall/FP в тишине/шуме и latency; независимые записи.
-- [ ] Rust Pulsar: живой «Рикардо, стоп» во время будильника, snooze/resume,
-      кнопки/mute/clock/volume, phone→speaker.
+- [ ] Rust Pulsar: кнопки/mute/clock/volume, phone→speaker.
 - [ ] Проверить поведение при падении Hermes: локальные таймеры/будильник/
       громкость должны работать.
 - [ ] Hermes free-speech quota/provider: нужен fallback при 429.
