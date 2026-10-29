@@ -1628,7 +1628,7 @@ schedule_alarm_status:
             {%- if due > 0 and s.get('enabled', true) -%}
               {%- set r = s.get('repeat', '') -%}
               {%- set rtext = {'REPEAT_KIND_ONCE': 'однократно', 'REPEAT_KIND_DAILY': 'ежедневно', 'REPEAT_KIND_WEEKDAYS': 'по будням', 'REPEAT_KIND_WEEKENDS': 'по выходным', 'REPEAT_KIND_CUSTOM': 'по дням недели'}.get(r, '') -%}
-              {%- set ns.rows = ns.rows + [{'due': due, 'label': s.get('label', 'Будильник'), 'repeat': rtext}] -%}
+              {%- set ns.rows = ns.rows + [{'due': due, 'label': s.get('label', 'Будильник'), 'repeat': rtext, 'kind': r}] -%}
             {%- endif -%}
           {%- endfor -%}
           {{ ns.rows | sort(attribute='due') }}
@@ -1638,7 +1638,7 @@ schedule_alarm_status:
           {% elif alarm_status_rows | length == 0 %}
           Будильников нет.
           {% else %}
-          {% for row in alarm_status_rows %}{{ row.label }}: {{ row.due | timestamp_custom('%H:%M, %d.%m', true) }}, {{ row.repeat }}{% if not loop.last %}. {% endif %}{% endfor %}
+          {% for row in alarm_status_rows %}{% if row.kind == 'REPEAT_KIND_ONCE' %}{{ row.label }} на {{ row.due | timestamp_custom('%H:%M', true) }}, {{ row.due | timestamp_custom('%d.%m', true) }}, однократно{% else %}{{ row.label }} на {{ row.due | timestamp_custom('%H:%M', true) }}{% if row.repeat %}, {{ row.repeat }}{% endif %}{% endif %}{% if not loop.last %}. {% endif %}{% endfor %}
           {% endif %}
         alarm_status_result: "{{ {'status': alarm_status_list.status, 'text': alarm_status_text | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
     - stop: "schedule_alarm_status"
@@ -2127,8 +2127,11 @@ schedule_timer_start:
           {% set m = (d % 3600) // 60 %}
           {% set s = d % 60 %}
           {{ ((h | string ~ ' ч ') if h > 0 else '') ~ ((m | string ~ ' мин ') if m > 0 else '') ~ ((s | string ~ ' с') if s > 0 or (h == 0 and m == 0) else '') }}
+        timer_label_text: >-
+          {% set l = (created_timer.get('label', timer_label) | trim) %}
+          {{ '' if l | lower in ['таймер', 'timer'] else l }}
         timer_result: >-
-          {{ ({'status': 'ok', 'text': 'Таймер «' ~ (created_timer.get('label', timer_label) | trim) ~ '» на ' ~ (timer_duration_text | trim) ~ ' установлен.', 'timer_id': created_timer.get('id', '')}
+          {{ ({'status': 'ok', 'text': 'Таймер' ~ (' «' ~ (timer_label_text | trim) ~ '»' if (timer_label_text | trim) else '') ~ ' на ' ~ (timer_duration_text | trim) ~ ' установлен.', 'timer_id': created_timer.get('id', '')}
               if timer_start_rpc.status == 'ok' and created_timer is mapping and created_timer.get('id')
               else {'status': 'error', 'text': (timer_start_rpc.error_text | default('Планировщик вернул пустой ответ.')) if timer_start_rpc.status != 'ok' else 'Планировщик вернул пустой ответ.', 'timer_id': ''}) }}
     - stop: "schedule_timer_start"
@@ -2171,7 +2174,7 @@ schedule_timer_status:
           {% elif timer_status_rows | length == 0 %}
           Активных таймеров нет.
           {% else %}
-          {% for row in timer_status_rows %}{{ row.label }}: {{ row.state }}, осталось {{ row.remaining }}{% if not loop.last %}. {% endif %}{% endfor %}
+          {% for row in timer_status_rows %}{% if row.label and row.label | lower != 'таймер' %}Таймер «{{ row.label }}» {{ row.state }}, осталось {{ row.remaining }}{% else %}Таймер {{ row.state }}, осталось {{ row.remaining }}{% endif %}{% if not loop.last %}. {% endif %}{% endfor %}
           {% endif %}
         timer_status_result: "{{ {'status': timer_status_rpc.status, 'text': timer_status_text | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
     - stop: "schedule_timer_status"
@@ -2213,8 +2216,11 @@ schedule_timer_cancel:
         payload_json: "{{ {'id': cancel_timer.timer.get('id', '')} | to_json }}"
       response_variable: cancel_rpc
     - variables:
+        cancel_label_text: >-
+          {% set l = (cancel_timer.timer.get('label', '') | trim) %}
+          {{ '' if l | lower in ['таймер', 'timer'] else l }}
         cancel_result: >-
-          {{ ({'status': 'ok', 'text': 'Таймер «' ~ cancel_timer.timer.get('label', '') ~ '» отменён.'}
+          {{ ({'status': 'ok', 'text': 'Таймер' ~ (' «' ~ (cancel_label_text | trim) ~ '»' if (cancel_label_text | trim) else '') ~ ' отменён.'}
               if cancel_rpc.status == 'ok'
               else {'status': 'error', 'text': cancel_rpc.error_text | default('Не удалось отменить таймер.')}) }}
     - stop: "schedule_timer_cancel"
