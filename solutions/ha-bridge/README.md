@@ -290,18 +290,22 @@ phone ── EnqueueTask(queue=control) ───► scheduler ◄── ListDue
 - **скрытые** сущности (`is_hidden_entity()`): всё, что скрыто в HA, не попадает в каталог;
 - **метку** (label) — если задан `CONTROL_LABEL` (`label_entities()`).
 
-Правила (`CONTROL_LABEL`, `CONTROL_EXCLUDE`), а не списки:
+Правила, а не списки:
 
-| Настройка | Эффект |
+| Что | Правило |
 | --- | --- |
-| не задана метка | автоматически: все `light`, `switch`, `scene`; `script` **не** показываются (почти все скрипты — служебные, как `alarm_start`) |
-| `CONTROL_LABEL=<label_id>` | явный allowlist: только сущности с этой меткой, в любом поддерживаемом домене, включая скрипты |
+| `light`, `switch`, `scene` | показываются все; скрытые в HA (`hidden`) — нет |
+| `script` | сценарий для телефона, если у скрипта в HA задан **`icon`** (осознанный признак «это пользовательское действие») или он помечен меткой. Скрипты без иконки и метки (служебные: `alarm_start`, `scheduler_rpc`, …) не показываются |
+| `CONTROL_LABEL=<label_id>` | необязательно: тогда `light`/`switch`/`scene` показываются только с этой меткой (явный allowlist). Правило для скриптов не меняется |
 | `CONTROL_EXCLUDE=glob,glob` | `path.Match`-маски по entity id, например `switch.*_child_lock` |
 
-Чтобы «Я сел работать» и «Black out» появились в приложении, поставьте на эти
-скрипты/сцены метку в HA (Настройки → Области, метки и зоны → Метки) и задайте её id
-в `CONTROL_LABEL`. Новое устройство, переименование, перенос в другую комнату или
-скрытие в HA подхватываются само, без правок на сервере и в приложении.
+Почему иконка, а не метка: **YAML-скрипты нельзя пометить меткой** (у них нет записи
+в реестре сущностей, как и areas/hidden). Иконка задаётся прямо в YAML и работает
+для них: `icon: mdi:laptop` у `script.work_mode`, `icon: mdi:weather-night` у
+`script.blackout` (`projects/home-assistant/ha-voice/scripts.yaml`; после правки
+перезагрузите скрипты в HA). Скрипты, созданные в UI, можно ещё и пометить меткой.
+Новое устройство, переименование, перенос в другую комнату, скрытие или иконка в HA
+подхватываются сами, без правок на сервере и в приложении.
 
 Сбои: если HA недоступен, отдаётся последний известный каталог с
 `statesOk=false` и `available=false` у всех записей; если каталога ещё не было —
@@ -339,7 +343,7 @@ kind, title, room, icon, actions[], state("on"/"off", устройства), ava
 | `SCHEDULER_ENDPOINT`, `SCHEDULER_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-bridge |
 | `CONTROL_TOKEN[_FILE]` | да | — | Bearer каталога |
 | `CONTROL_CONSUMER_ID` | да | — | Стабильный id потребителя |
-| `CONTROL_LABEL` | нет | — | HA label id (allowlist, включает скрипты) |
+| `CONTROL_LABEL` | нет | — | HA label id (allowlist для light/switch/scene; скрипты помеченные им тоже показываются) |
 | `CONTROL_EXCLUDE` | нет | — | Маски entity id через запятую |
 | `CONTROL_LISTEN` | нет | `127.0.0.1:8099` | Адрес каталога |
 | `CONTROL_QUEUE` | нет | `control` | Очередь команд (не `home`/`tasks`) |

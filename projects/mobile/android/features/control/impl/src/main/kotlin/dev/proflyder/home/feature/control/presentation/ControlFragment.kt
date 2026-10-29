@@ -15,6 +15,7 @@ import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
 
 class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBinding.Companion::inflate) {
     private val viewModel: ControlViewModel by viewModels {
@@ -23,6 +24,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
     private lateinit var adapter: ControlAdapter
     private lateinit var states: ListStateViews
+    private var shownOptions: List<ControlFilterOption> = emptyList()
+    private var syncingChips = false
 
     /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
@@ -57,14 +60,24 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             progress = binding.controlProgress,
             empty = binding.controlEmpty,
             error = binding.controlError,
-            content = binding.controlList,
+            content = binding.controlContent,
             errorText = binding.controlErrorText,
         )
         binding.controlRefresh.setupPullToRefresh { viewModel.refresh() }
         binding.controlRetry.setOnClickListener { viewModel.refresh() }
         binding.controlOpenConnection.setOnClickListener { requireNavigator().selectTab("connection") }
 
+        binding.controlFilters.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (syncingChips) return@setOnCheckedStateChangeListener
+            val id = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
+            shownOptions.firstOrNull { optionId(it) == id }?.let { viewModel.setFilter(it.filter) }
+        }
+
         viewModel.state.observe { render(it) }
+    }
+
+    override fun onBindingDestroyed() {
+        shownOptions = emptyList()
     }
 
     override fun onResume() {
@@ -90,13 +103,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             !hasItems -> states.showEmpty()
             else -> {
                 states.showContent()
-                adapter.submitList(
-                    ControlItems.build(
-                        state,
-                        scenariosTitle = getString(R.string.control_section_scenarios),
-                        devicesTitle = getString(R.string.control_section_devices),
-                    ),
-                )
+                renderFilters(state)
+                adapter.submitList(ControlItems.build(state, state.filter, texts()))
             }
         }
         binding.controlRefresh.isRefreshing = state.refreshing && hasItems
@@ -120,6 +128,46 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             }
             viewModel.consumeNotice()
         }
+    }
+
+    private fun texts() = ControlTexts(
+        otherDevices = getString(R.string.control_section_other),
+        scenarios = getString(R.string.control_section_scenarios),
+        unavailable = getString(R.string.control_section_unavailable),
+        onSummary = { on, total -> getString(R.string.control_on_summary, on, total) },
+    )
+
+    /** Chips are stable per filter: ids are derived from it so re-checking never needs a rebuild. */
+    private fun optionId(option: ControlFilterOption): Int = option.filter.hashCode().let { if (it == 0) 1 else it }
+
+    private fun renderFilters(state: ControlUiState) {
+        val options = ControlItems.options(state.entries)
+        val group = binding.controlFilters
+        syncingChips = true
+        if (options != shownOptions) {
+            group.removeAllViews()
+            options.forEach { option ->
+                val chip = ItemControlFilterBinding.inflate(layoutInflater, group, false).root
+                chip.id = optionId(option)
+                chip.text = labelOf(option)
+                group.addView(chip)
+            }
+            shownOptions = options
+        }
+        options.firstOrNull { it.filter == state.filter }?.let { group.check(optionId(it)) }
+        syncingChips = false
+        binding.controlFiltersBar.setVisible(options.size > 1)
+    }
+
+    private fun labelOf(option: ControlFilterOption): String {
+        val name = when (val filter = option.filter) {
+            ControlFilter.All -> getString(R.string.control_filter_all)
+            ControlFilter.Scenarios -> getString(R.string.control_filter_scenarios)
+            ControlFilter.Lights -> getString(R.string.control_filter_lights)
+            ControlFilter.Switches -> getString(R.string.control_filter_switches)
+            is ControlFilter.Room -> filter.name
+        }
+        return "$name · ${option.count}"
     }
 
     private fun ControlEntry.isOn(): Boolean = power == dev.proflyder.home.core.model.PowerState.ON

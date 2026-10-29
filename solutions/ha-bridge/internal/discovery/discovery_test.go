@@ -46,6 +46,7 @@ func base() *fakeHA {
 			{ID: "light.lamp", State: "on", Name: "Lamp", Icon: "lightbulb"},
 			{ID: "light.noise", State: "on", Name: "Noise"},
 			{ID: "script.work_mode", State: "off", Name: "Work mode"},
+			{ID: "script.cleaner", State: "off", Name: "Cleaner", Icon: "robot-vacuum"},
 			{ID: "scene.movie", State: "scening", Name: "Movie"},
 		},
 		rooms:  "light.lamp|Bedroom\nlight.noise|\nscript.work_mode|None\nscene.movie|Living\n",
@@ -68,8 +69,8 @@ func TestDiscoversFromHomeAssistant(t *testing.T) {
 	if err != nil || !snap.StatesOK {
 		t.Fatalf("snap=%+v err=%v", snap, err)
 	}
-	if got := ids(snap); got != "scene.movie,light.lamp" {
-		t.Fatalf("got %s (scripts need a label, hidden are skipped)", got)
+	if got := ids(snap); got != "scene.movie,script.cleaner,light.lamp" {
+		t.Fatalf("got %s (a script needs an icon or label; hidden are skipped)", got)
 	}
 	lamp, _ := snap.Catalog.Lookup("light.lamp")
 	if lamp.Room != "Bedroom" || lamp.Title != "Lamp" || lamp.State != "on" {
@@ -83,7 +84,7 @@ func TestLabelAllowlistIncludesScripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(snap); got != "script.work_mode,light.lamp" {
+	if got := ids(snap); got != "script.cleaner,script.work_mode,light.lamp" {
 		t.Fatalf("got %s", got)
 	}
 }

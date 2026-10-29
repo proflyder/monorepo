@@ -11,7 +11,8 @@ func raws() []Raw {
 		{Entity: "light.hall", State: "off", Name: "Hall"},
 		{Entity: "switch.desk_fan", State: "unavailable", Name: "Desk fan", Room: "Workspace"},
 		{Entity: "scene.movie", State: "2026-01-01T00:00:00+00:00", Name: "Movie", Room: "Living"},
-		{Entity: "script.work_mode", State: "off", Name: "Work mode", Labeled: true},
+		{Entity: "script.work_mode", State: "off", Name: "Work mode", Icon: "mdi:laptop"},
+		{Entity: "script.blackout", State: "off", Name: "Blackout", Labeled: true},
 		{Entity: "script.alarm_start", State: "off", Name: "Alarm start"},
 		{Entity: "light.secret", State: "on", Name: "Secret", Hidden: true},
 		{Entity: "sensor.temp", State: "21"},
@@ -31,8 +32,9 @@ func ids(entries []Entry) []string {
 func TestBuildDefaultRules(t *testing.T) {
 	got := ids(Build(raws(), Rules{Exclude: []string{"switch.*_child_lock"}}))
 	want := []string{
-		// scenarios first; scripts are NOT auto-exposed without a label
-		"scene.movie",
+		// scenarios first: scene.* and scripts that have an icon or label;
+		// script.alarm_start (no icon, no label) is an internal and stays out
+		"scene.movie", "script.blackout", "script.work_mode",
 		// devices: by room, unassigned last
 		"light.bedside_lamp", "switch.desk_fan", "light.hall", // Bedroom, Workspace, (none)
 	}
@@ -41,10 +43,15 @@ func TestBuildDefaultRules(t *testing.T) {
 	}
 }
 
-func TestBuildLabelIsAnExplicitAllowlist(t *testing.T) {
-	got := ids(Build(raws(), Rules{Label: "phone"}))
-	if len(got) != 1 || got[0] != "script.work_mode" {
-		t.Fatalf("label must expose only labeled entities (incl. scripts), got %v", got)
+func TestBuildLabelRestrictsDevicesAndScenes(t *testing.T) {
+	r := raws()
+	r[0].Labeled = true // light.bedside_lamp
+	got := ids(Build(r, Rules{Label: "phone"}))
+	// light.bedside_lamp (labeled) and the scripts (icon/label rule); the
+	// unlabeled lights, switches and the scene are out.
+	want := "script.blackout,script.work_mode,light.bedside_lamp"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("got %v want %s", got, want)
 	}
 }
 

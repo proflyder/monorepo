@@ -24,11 +24,9 @@ type Raw struct {
 // Rules decide what discovery exposes. There is no entity list anywhere:
 // the source of truth is Home Assistant (areas, names, labels, hidden flags).
 type Rules struct {
-	// Label is an HA label id. When set it is an explicit allowlist: only
-	// entities carrying it are exposed, in any supported domain (including
-	// scripts). When empty, lights, switches and scenes are exposed
-	// automatically and scripts are NOT (most scripts are internals such as
-	// alarm helpers); label the scripts you want instead.
+	// Label is an optional HA label id. When set, lights, switches and scenes
+	// are exposed only if they carry it (an explicit allowlist); when empty
+	// they are all exposed. Scripts follow their own rule, see Build.
 	Label string
 	// Exclude are path.Match globs on the entity id (e.g. "switch.*_child_lock").
 	Exclude []string
@@ -92,11 +90,15 @@ func Build(raws []Raw, rules Rules) []Entry {
 		if !ok || raw.Hidden || rules.excluded(raw.Entity) {
 			continue
 		}
-		if rules.Label != "" {
-			if !raw.Labeled {
+		if domain == "script" {
+			// Most scripts are internals (alarm helpers, RPC wrappers). A script
+			// is a user-facing scenario when it says so in Home Assistant: it
+			// has an icon, or carries the label. This works for YAML scripts,
+			// which cannot be labeled (they have no entity-registry entry).
+			if !raw.Labeled && strings.TrimSpace(raw.Icon) == "" {
 				continue
 			}
-		} else if domain == "script" {
+		} else if rules.Label != "" && !raw.Labeled {
 			continue
 		}
 

@@ -33,6 +33,7 @@ data class ControlUiState(
     val loadError: RemoteFailure? = null,
     val actionError: RemoteFailure? = null,
     val notice: ControlNotice? = null,
+    val filter: ControlFilter = ControlFilter.All,
 )
 
 class ControlViewModel(
@@ -57,10 +58,13 @@ class ControlViewModel(
             if (requested != generation) return@launch
             when (result) {
                 is Outcome.Success -> updateState {
+                    val options = ControlItems.options(result.value.entries)
                     copy(
                         refreshing = false,
                         entries = result.value.entries,
                         statesOk = result.value.statesOk,
+                        // A room or category that vanished falls back to everything.
+                        filter = if (options.any { it.filter == filter }) filter else ControlFilter.All,
                     )
                 }
                 is Outcome.Failure -> updateState { copy(refreshing = false, loadError = result.failure) }
@@ -107,6 +111,8 @@ class ControlViewModel(
             }
         }
     }
+
+    fun setFilter(filter: ControlFilter) = updateState { copy(filter = filter) }
 
     fun consumeNotice() = updateState { copy(notice = null) }
 

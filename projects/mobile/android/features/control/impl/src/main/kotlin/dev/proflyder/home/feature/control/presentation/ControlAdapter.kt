@@ -50,7 +50,10 @@ internal class ControlAdapter(
         callback: ControlAdapterCallback,
     ) : ControlHolder(views, callback) {
         override fun bind(item: ControlItem) {
-            views.controlHeaderTitle.text = (item as ControlItem.Header).title
+            val header = item as ControlItem.Header
+            views.controlHeaderTitle.text = header.title
+            views.controlHeaderSummary.text = header.summary.orEmpty()
+            views.controlHeaderSummary.setVisible(header.summary != null)
         }
     }
 

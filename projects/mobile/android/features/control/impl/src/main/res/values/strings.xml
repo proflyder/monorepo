@@ -2,7 +2,13 @@
 <resources>
     <string name="control_title">Home</string>
     <string name="control_section_scenarios">Scenarios</string>
-    <string name="control_section_devices">Devices</string>
+    <string name="control_section_other">Other devices</string>
+    <string name="control_section_unavailable">Unavailable</string>
+    <string name="control_on_summary">%1$d of %2$d on</string>
+    <string name="control_filter_all">All</string>
+    <string name="control_filter_scenarios">Scenarios</string>
+    <string name="control_filter_lights">Lights</string>
+    <string name="control_filter_switches">Switches</string>
     <string name="control_empty">Nothing to control yet. Home Assistant exposes no lights, switches or scenes to the app.</string>
     <string name="control_not_configured">Set the home control address in Connection to see your scenarios and devices.</string>
     <string name="control_open_connection">Open Connection</string>

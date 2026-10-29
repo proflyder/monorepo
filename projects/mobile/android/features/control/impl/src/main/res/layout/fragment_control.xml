@@ -9,15 +9,41 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/control_list"
+        <LinearLayout
+            android:id="@+id/control_content"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingStart="@dimen/control_screen_margin"
-            android:paddingTop="4dp"
-            android:paddingEnd="@dimen/control_screen_margin"
-            android:paddingBottom="24dp" />
+            android:orientation="vertical">
+
+            <HorizontalScrollView
+                android:id="@+id/control_filters_bar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:paddingStart="@dimen/control_screen_margin"
+                android:paddingEnd="@dimen/control_screen_margin"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/control_filters"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="true"
+                    app:singleLine="true"
+                    app:singleSelection="true" />
+            </HorizontalScrollView>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/control_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingStart="@dimen/control_screen_margin"
+                android:paddingTop="4dp"
+                android:paddingEnd="@dimen/control_screen_margin"
+                android:paddingBottom="24dp" />
+        </LinearLayout>
 
         <ProgressBar
             android:id="@+id/control_progress"

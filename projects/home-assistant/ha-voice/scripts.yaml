@@ -48,6 +48,8 @@ spotify_connect_set_volume:
 
 work_mode:
   alias: "Scene: work lighting"
+  # icon marks this script as a user-facing scenario for the phone app (ha-control)
+  icon: mdi:laptop
   description: >-
     Turn on all bedroom lights for a work session: LED strip, bedside lamp,
     and monitor light bar.
@@ -62,6 +64,7 @@ work_mode:
 
 blackout:
   alias: "Scene: black out bedroom lighting"
+  icon: mdi:weather-night
   description: >-
     Turn off all bedroom lights: LED strip, bedside lamp, and monitor light bar.
   mode: single
