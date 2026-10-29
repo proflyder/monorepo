@@ -18,6 +18,35 @@ train_spec.loader.exec_module(finetune)
 
 
 class PrepareTests(unittest.TestCase):
+    def test_detector_rejects_invalid_cutoff_and_smoothing_before_loading_model(self):
+        spec = importlib.util.spec_from_file_location("personal_evaluate", Path(__file__).with_name("evaluate.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for cutoff, window in [(0., 10), (1.1, 10), (.9, 0), (.9, 1.5)]:
+            with self.assertRaises(ValueError):
+                module.replay(None, None, cutoff=cutoff, window=window)
+
+    def test_freezes_nested_batchnorm_only(self):
+        class Layer:
+            trainable = True
+            def __init__(self, layers=()): self.layers = layers
+        class BN(Layer): pass
+        first, second, conv = BN(), BN(), Layer()
+        model = Layer([first, Layer([second, conv]), first])
+        self.assertEqual(finetune.freeze_batchnorm(model, BN), 2)
+        self.assertFalse(first.trainable)
+        self.assertFalse(second.trainable)
+        self.assertTrue(conv.trainable)
+
+    def test_feature_window_matches_frontend_frame_timestamps(self):
+        self.assertEqual(finetune.feature_window_bounds(2.24, 300), (18, 222))
+        self.assertEqual(finetune.feature_window_bounds(3., 222), (18, 222))
+        self.assertIsNone(finetune.feature_window_bounds(.5, 300))
+
+    def test_continuous_extraction_refuses_test_labels(self):
+        with self.assertRaisesRegex(ValueError, "train/val only"):
+            list(finetune.continuous_examples(None, [{"partition": "test"}], None, None))
+
     def test_mixed_track_reports_sharp_and_normal_separately(self):
         manifest = {"records": [dict(id="mixed", source_split="test", block="mixed",
             targets=[dict(start=1., end=1.8, speech_style="normal"),

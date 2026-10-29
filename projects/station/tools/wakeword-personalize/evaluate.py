@@ -12,13 +12,15 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 
-def replay(model, pcm, cutoff=.9):
+def replay(model, pcm, cutoff=.9, window=10):
+    if not 0 < cutoff <= 1 or not isinstance(window, int) or window < 1:
+        raise ValueError("Invalid detector cutoff/window")
     import numpy as np
     import tensorflow as tf
     from pymicro_features import MicroFrontend
     hits, scores = [], []
     front = MicroFrontend()
-    frames, probs, warmup = [], deque(maxlen=10), 100
+    frames, probs, warmup = [], deque(maxlen=window), 100
 
     def interpreter():
         obj = tf.lite.Interpreter(model_path=str(model), num_threads=2)
@@ -48,9 +50,9 @@ def replay(model, pcm, cutoff=.9):
         if warmup > 0:
             warmup -= 3
             continue
-        if len(probs) != 10:
+        if len(probs) != window:
             continue
-        mean = sum(probs) / 10
+        mean = sum(probs) / window
         maximum = max(maximum, mean)
         when = (offset + 160) / 16000
         scores.append([round(when, 3), round(mean, 5)])
@@ -70,10 +72,12 @@ def main():
     parser.add_argument("--model", required=True, type=Path)
     parser.add_argument("--recordings", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--cutoff", type=float, default=.9)
+    parser.add_argument("--window", type=int, default=10)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     report = {"model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
-              "cutoff": .9, "window": 10, "warmup_frames": 100, "records": []}
+              "cutoff": args.cutoff, "window": args.window, "warmup_frames": 100, "records": []}
     import numpy as np
     for path in sorted(args.recordings.glob("*.json")):
         if path.name.startswith("."):
@@ -85,7 +89,7 @@ def main():
             if (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) != (16000, 1, 2):
                 raise ValueError("Only original 16kHz mono PCM16 recordings are accepted")
             pcm = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
-        result = replay(args.model, pcm)
+        result = replay(args.model, pcm, args.cutoff, args.window)
         report["records"].append({"id": meta["id"], "split": meta["split"], "block": meta["block"],
                                   "seconds": len(pcm) / 16000, **result})
         args.output.write_text(json.dumps(report, ensure_ascii=False))

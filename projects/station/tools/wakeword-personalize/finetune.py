@@ -47,6 +47,57 @@ def balanced_indices(labels, limit):
     return selected
 
 
+def freeze_batchnorm(model, batchnorm_type):
+    """Freeze normalization before compile, including nested model layers."""
+    count, visited = 0, set()
+    def visit(layer):
+        nonlocal count
+        if id(layer) in visited:
+            return
+        visited.add(id(layer))
+        if isinstance(layer, batchnorm_type):
+            layer.trainable = False
+            count += 1
+        for child in getattr(layer, "layers", []):
+            visit(child)
+    visit(model)
+    return count
+
+
+def feature_window_bounds(end_seconds, count, length=204):
+    # Microfrontend's first frame covers [0,30ms], then one frame every 10ms.
+    end = min(count, int((end_seconds - .03 + 1e-7) / .01) + 1)
+    return (end - length, end) if end >= length else None
+
+
+def continuous_examples(audio, requests, extractor, rng, variants=32):
+    """Extract whole-track features once per augmentation, then slice windows.
+
+    requests contain only train/val labels. Test recordings never enter here.
+    The returned partition is authoritative; augmented validation is prohibited.
+    """
+    if any(r["partition"] not in {"train", "val"} for r in requests):
+        raise ValueError("Continuous extraction accepts train/val only")
+    import numpy as np
+    for variant in range(variants):
+        active = [r for r in requests if r["partition"] == "train" or variant == 0]
+        if not active:
+            continue
+        ratio = 1. if variant == 0 else float(rng.uniform(.95, 1.05))
+        gain = 1. if variant == 0 else float(rng.uniform(.55, 1.6))
+        augmented = audio.astype(np.float32) * gain
+        if ratio != 1.:
+            augmented = np.interp(np.arange(0, len(augmented), ratio), np.arange(len(augmented)), augmented)
+        frames = extractor(np.clip(augmented, -32768, 32767).astype(np.int16))
+        for request in active:
+            jitter = 0. if variant == 0 else float(rng.uniform(-.1, .1))
+            end = (request["end"] + jitter) / ratio
+            bounds = feature_window_bounds(end, len(frames))
+            if bounds is None or end > len(augmented) / 16000:
+                continue
+            yield request, frames[bounds[0]:bounds[1]]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trainer", required=True, type=Path)
@@ -58,6 +109,8 @@ def main():
     parser.add_argument("--model-name", default="ru_ricardo_personal_v1")
     parser.add_argument("--manifest-version", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=3e-5)
+    parser.add_argument("--freeze-batchnorm", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--feature-mode", choices=["continuous", "reset"], default="continuous")
     args = parser.parse_args()
     root, run = args.trainer.resolve(), args.run.resolve()
     registry_spec = importlib.util.spec_from_file_location("model_registry", Path(__file__).with_name("registry.py"))
@@ -114,6 +167,29 @@ def main():
         if e["id"] not in data:
             continue
         audio = data[e["id"]]
+        if args.feature_mode == "continuous" and (e["block"] != "background" or e.get("mined_events")):
+            requests = []
+            if e["block"] != "background":
+                for target in e["targets"]:
+                    if target["partition"] in {"train", "val"}:
+                        requests.append({"end": target["end"] + .18,
+                            "partition": target["partition"], "positive": True,
+                            "block": target.get("speech_style", e["block"])})
+            else:
+                for event in e["mined_events"]:
+                    part = negative_partition(e, event - 2.24, event)
+                    if part in {"train", "val"}:
+                        requests.append({"end": event, "partition": part,
+                                         "positive": False, "block": "hard-negative"})
+            for request, frames in continuous_examples(audio, requests, trainer.extract_all_frames,
+                    rng, variants=int(e.get("augment_variants", 32))):
+                part = request["partition"]
+                key = part + "_pos" if request["positive"] else "hard_" + part + "_neg"
+                real[key].append(frames)
+                counts[key] += 1
+                if request["positive"]:
+                    (val_pos_blocks if part == "val" else train_pos_blocks).append(request["block"])
+            continue
         if e["block"] == "background":
             part = e["partition"]
             if part == "test":
@@ -207,6 +283,8 @@ def main():
     weights = args.base_weights.resolve() if args.base_weights else old / "model/ru_ricardo_mww.weights.h5"
     model.load_weights(str(weights))
     origin_hash = hashlib.sha256(weights.read_bytes()).hexdigest()
+    frozen_bn = freeze_batchnorm(model, tf.keras.layers.BatchNormalization) if args.freeze_batchnorm else 0
+    print("FROZEN_BATCHNORM", frozen_bn, flush=True)
     model.compile(optimizer=tf.keras.optimizers.Adam(args.learning_rate), loss="binary_crossentropy", jit_compile=False,
                   metrics=[tf.keras.metrics.BinaryAccuracy(), tf.keras.metrics.Recall(), tf.keras.metrics.Precision()])
     batch = cfg["batch_size"]
@@ -282,6 +360,8 @@ def main():
         "base_weights_sha256": origin_hash, "gpu": [str(g) for g in gpus], "seed": 42,
         "source_counts": counts, "learning_rate": args.learning_rate,
         "training_buckets": ("25% real-positive / 25% synthetic-positive / 12.5% real-hard-negative / 12.5% synthetic-confusable / 12.5% real-negative / 12.5% old-synthetic-negative" if synthetic_hard else "25% real-positive / 25% synthetic-positive / 25% hard-negative / 12.5% real-negative / 12.5% synthetic-negative" if hard else "25% real-positive / synthetic-positive / real-negative / synthetic-negative"),
+        "feature_mode": args.feature_mode, "freeze_batchnorm": args.freeze_batchnorm,
+        "frozen_batchnorm_layers": frozen_bn,
         "test_used_in_training": False, "steps": args.steps}, indent=2))
     print("START_GPU_FINETUNING", args.steps, "steps", flush=True)
     history = model.fit(train, epochs=max(1, args.steps // 100), steps_per_epoch=100,
