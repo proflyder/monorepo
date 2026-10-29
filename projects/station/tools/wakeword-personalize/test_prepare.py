@@ -12,9 +12,38 @@ spec.loader.exec_module(prepare)
 comparison_spec = importlib.util.spec_from_file_location("personal_compare", Path(__file__).with_name("compare.py"))
 compare = importlib.util.module_from_spec(comparison_spec)
 comparison_spec.loader.exec_module(compare)
+train_spec = importlib.util.spec_from_file_location("personal_train", Path(__file__).with_name("finetune.py"))
+finetune = importlib.util.module_from_spec(train_spec)
+train_spec.loader.exec_module(finetune)
 
 
 class PrepareTests(unittest.TestCase):
+    def test_comparison_accumulates_separate_recordings_of_same_speech_block(self):
+        manifest = {"records": [dict(id=ident, source_split="test", block="whisper",
+            targets=[{"start": 1., "end": 1.8}], review_regions=[]) for ident in ["old", "new"]]}
+        replay = {"model_sha256": "test", "records": [
+            {"id": "old", "hits": [2.]}, {"id": "new", "hits": []}]}
+        result = compare.summarize(manifest, replay)
+        self.assertEqual(result["matched"], 1)
+        self.assertEqual(result["verified_targets"], 2)
+        self.assertEqual(result["blocks"]["whisper"]["raw_detector_events"], 1)
+
+    def test_whisper_regression_cannot_hide_behind_better_normal_voice(self):
+        reference = [.95, .8, .96, .94]
+        candidate = [.97, .98, .97, .85]
+        ok, counts = finetune.protects_speech(reference, candidate, ["normal", "normal", "whisper", "whisper"])
+        self.assertFalse(ok)
+        self.assertEqual(counts, {"normal": 2, "whisper": 1})
+
+    def test_hard_negative_windows_have_guard_and_test_is_never_training(self):
+        entry = {"source_split": "train", "partition": "train", "hard_negative": True,
+                 "validation_boundary": 80, "validation_guard": 2.5}
+        self.assertEqual(finetune.negative_partition(entry, 10, 12.04), "train")
+        self.assertEqual(finetune.negative_partition(entry, 78, 80.04), "guard")
+        self.assertEqual(finetune.negative_partition(entry, 84, 86.04), "val")
+        entry["source_split"] = "test"
+        self.assertEqual(finetune.negative_partition(entry, 10, 12.04), "test")
+
     def test_repeated_events_do_not_double_count_an_utterance(self):
         targets = [{"start": 1., "end": 1.8}, {"start": 5., "end": 5.8}]
         self.assertEqual(compare.match_targets(targets, [.1, 2., 2.2, 10.]), 1)
