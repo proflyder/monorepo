@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.snackbar.Snackbar
+import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.userMessage
@@ -28,6 +29,7 @@ class AlarmsFragment : Fragment(R.layout.fragment_alarms) {
     private lateinit var adapter: AlarmAdapter
     private lateinit var states: ListStateViews
     private lateinit var progress: View
+    private lateinit var openConnection: View
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -55,6 +57,10 @@ class AlarmsFragment : Fragment(R.layout.fragment_alarms) {
         val errorContainer = view.findViewById<View>(R.id.alarms_error)
 
         view.findViewById<View>(R.id.alarms_retry).setOnClickListener { viewModel.refresh() }
+        // With no endpoint/token configured the server is intentionally
+        // unreachable; make the state actionable instead of a dead empty list.
+        openConnection = view.findViewById(R.id.alarms_open_connection)
+        openConnection.setOnClickListener { requireNavigator().selectTab("connection") }
         view.findViewById<ExtendedFloatingActionButton>(R.id.alarms_add).setOnClickListener {
             requireNavigator().navigate(AlarmEditorDestination())
         }
@@ -71,6 +77,8 @@ class AlarmsFragment : Fragment(R.layout.fragment_alarms) {
                         state.loadError != null && !hasItems -> {
                             states.showError(state.loadError.userMessage(requireContext()))
                             errorContainer.visibility = View.VISIBLE
+                            openConnection.visibility =
+                                if (state.loadError == RemoteFailure.NotConfigured) View.VISIBLE else View.GONE
                         }
                         !hasItems -> {
                             states.showEmpty(getString(R.string.alarms_empty))

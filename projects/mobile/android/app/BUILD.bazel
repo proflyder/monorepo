@@ -1,4 +1,5 @@
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load(":robolectric_android_all.bzl", "android_all_dir")
 load("//platform/android:defs.bzl", "home_android_binary", "metro_android_library")
 
@@ -32,6 +33,10 @@ metro_android_library(
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:com_google_android_material_material",
+        # Runtime implementation of ListenableFuture used by
+        # androidx.concurrent.futures / androidx.profileinstaller. It must be a
+        # real APK dependency, not just a test-classpath artifact.
+        "@maven//:com_google_guava_listenablefuture",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
@@ -42,6 +47,23 @@ home_android_binary(
     name = "app",
     manifest = "src/main/AndroidManifest.xml",
     deps = [":app_lib"],
+)
+
+# APK-level packaging gate. Robolectric's classpath contains test-only Guava,
+# so only the packaged artifacts can prove the runtime closure is complete.
+sh_test(
+    name = "apk_runtime_closure_test",
+    srcs = ["//platform/android:apk_runtime_closure.sh"],
+    args = [
+        "$(location //platform/android:apk_runtime_closure.py)",
+        "$(location :app.apk)",
+        "$(location :app_deploy.jar)",
+    ],
+    data = [
+        "//platform/android:apk_runtime_closure.py",
+        ":app.apk",
+        ":app_deploy.jar",
+    ],
 )
 
 

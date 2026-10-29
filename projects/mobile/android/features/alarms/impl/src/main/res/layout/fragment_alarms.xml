@@ -63,6 +63,15 @@
             android:layout_marginTop="12dp"
             android:minHeight="48dp"
             android:text="@string/ui_retry" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/alarms_open_connection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:minHeight="48dp"
+            android:text="@string/alarms_open_connection"
+            android:visibility="gone" />
     </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton

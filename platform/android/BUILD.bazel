@@ -18,4 +18,9 @@ kt_compiler_plugin(
     id = "dev.zacsweers.metro.compiler",
 )
 
-exports_files(["defs.bzl"])
+exports_files([
+    "defs.bzl",
+    # Reusable artifact checker; the owning project declares the sh_test.
+    "apk_runtime_closure.py",
+    "apk_runtime_closure.sh",
+])

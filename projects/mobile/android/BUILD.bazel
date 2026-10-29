@@ -11,6 +11,7 @@ test_suite(
     tests = [
         "//packages/kotlin/core:core_test",
         "//packages/kotlin/core:operation_test",
+        "//projects/mobile/android/app:apk_runtime_closure_test",
         "//projects/mobile/android/core/config:config_test",
         "//projects/mobile/android/core/model:model_test",
         "//projects/mobile/android/core/network:network_test",

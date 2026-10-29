@@ -3,6 +3,7 @@
     <string name="alarms_title">Alarms</string>
     <string name="alarms_add">Add alarm</string>
     <string name="alarms_empty">No alarms yet. Alarms are stored and run on the home server.</string>
+    <string name="alarms_open_connection">Open Connection</string>
     <string name="alarms_snooze">Snooze 9 min</string>
     <string name="alarms_stop">Stop</string>
     <string name="alarms_delete">Delete</string>
