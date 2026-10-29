@@ -61,6 +61,11 @@ SENTENCES = yaml.safe_load(
 NOW = datetime(2026, 10, 29, 6, 0, 0, tzinfo=ZoneInfo("Asia/Almaty"))
 
 
+def ts_at(day_offset=0, hour=7, minute=30):
+    d = (NOW + timedelta(days=day_offset)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return str(int(d.timestamp()))
+
+
 def _timestamp_custom(value, fmt="%Y-%m-%d", local=True, default=""):
     try:
         tz = NOW.tzinfo if local else None
@@ -159,6 +164,14 @@ def render_first_variables(script, marker: str, context: dict) -> dict:
                 rendered[name] = render(value, rendered) if isinstance(value, str) else value
             return rendered
     raise KeyError(marker)
+
+
+def render_result(script_name: str, result_name: str, context: dict):
+    for step in SCRIPTS[script_name]["sequence"]:
+        variables = step.get("variables") or {}
+        if result_name in variables:
+            return render(variables[result_name], context)
+    raise KeyError(result_name)
 
 
 def services(value):
@@ -474,27 +487,76 @@ class SpeechTruthTests(unittest.TestCase):
                 return render(variables[result_name], context)
         raise KeyError(result_name)
 
+    @staticmethod
+    def _ts(day_offset=0, hour=7, minute=30):
+        d = (NOW + timedelta(days=day_offset)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return str(int(d.timestamp()))
+
+    def _created_speech(self, schedule, alarm_label="Работа"):
+        context = {
+            **BASE_CONTEXT,
+            "create_rpc": {"status": "ok", "code": "", "error_text": "", "data": {"schedule": schedule}},
+            "alarm_label": alarm_label,
+        }
+        context = render_variables(
+            SCRIPTS["schedule_alarm_create"], "created_due_hm", context
+        )
+        return render_result("schedule_alarm_create", "create_result", context)
+
     def test_alarm_success_speech_reports_created_schedule(self):
         schedule = {
             "id": "s1",
             "label": "Работа",
-            "nextDueUnix": "1761733200",
+            "nextDueUnix": ts_at(1, 7, 30),
             "repeat": "REPEAT_KIND_WEEKDAYS",
         }
-        context = {
-            **BASE_CONTEXT,
-            "create_rpc": {"status": "ok", "code": "", "error_text": "", "data": {"schedule": schedule}},
-            "created_schedule": schedule,
-            "created_repeat_text": "по будням",
-            "created_due_text": "07:30, 30.10",
-            "alarm_label": "Работа",
-        }
-        result = self._render_result("schedule_alarm_create", "create_result", context)
+        result = self._created_speech(schedule)
         self.assertIsInstance(result, dict)
         self.assertEqual(result["status"], "ok")
-        self.assertIn("Работа", result["text"])
-        self.assertIn("07:30, 30.10", result["text"])
+        self.assertIn("Готово.", result["text"])
+        self.assertIn("«Работа»", result["text"])
+        self.assertIn("07:30", result["text"])
+        self.assertIn("по будням", result["text"])
+        self.assertNotIn("29.10", result["text"])
+        self.assertNotIn("Будильник «", result["text"])
         self.assertNotIn("Не удалось", result["text"])
+
+    def test_auto_label_is_not_repeated(self):
+        schedule = {
+            "id": "s2",
+            "label": "Будильник 10:52",
+            "nextDueUnix": ts_at(0, 10, 52),
+            "repeat": "REPEAT_KIND_ONCE",
+        }
+        text = self._created_speech(schedule, alarm_label="Будильник 10:52")["text"]
+        self.assertEqual(text, "Готово. Будильник на 10:52.")
+        self.assertNotIn("«", text)
+
+    def test_custom_label_starting_with_budilnik_is_preserved(self):
+        schedule = {
+            "id": "s3",
+            "label": "Будильник люкс",
+            "nextDueUnix": ts_at(0, 10, 52),
+            "repeat": "REPEAT_KIND_ONCE",
+        }
+        text = self._created_speech(schedule, alarm_label="Будильник люкс")["text"]
+        self.assertIn("«Будильник люкс»", text)
+
+    def test_tomorrow_and_far_dates_are_short_and_truthful(self):
+        tomorrow = (NOW.date() + timedelta(days=1)).strftime("%Y-%m-%d")
+        schedule = {
+            "id": "s4",
+            "label": "Будильник 09:00",
+            "nextDueUnix": ts_at(1, 9, 0),
+            "onceDate": tomorrow,
+            "repeat": "REPEAT_KIND_ONCE",
+        }
+        self.assertIn("завтра, 09:00", self._created_speech(schedule, "Будильник 09:00")["text"])
+        far = (NOW.date() + timedelta(days=2)).strftime("%Y-%m-%d")
+        schedule["onceDate"] = far
+        text = self._created_speech(schedule, "Будильник 09:00")["text"]
+        self.assertIn(f"{far[8:10]}.{far[5:7]}, 09:00", text)
+        self.assertNotIn("завтра", text)
 
     def test_alarm_failure_speech_never_claims_success(self):
         context = {
@@ -507,7 +569,7 @@ class SpeechTruthTests(unittest.TestCase):
             },
             "alarm_label": "Работа",
         }
-        result = self._render_result("schedule_alarm_create", "create_result", context)
+        result = render_result("schedule_alarm_create", "create_result", context)
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["text"], "Планировщик отклонил доступ.")
         self.assertNotIn("установлен", result["text"])
@@ -521,7 +583,7 @@ class SpeechTruthTests(unittest.TestCase):
             "created_due_text": "",
             "alarm_label": "Работа",
         }
-        result = self._render_result("schedule_alarm_create", "create_result", context)
+        result = render_result("schedule_alarm_create", "create_result", context)
         self.assertEqual(result["status"], "error")
         self.assertIn("пустой ответ", result["text"])
         self.assertNotIn("установлен", result["text"])
@@ -540,7 +602,7 @@ class SpeechTruthTests(unittest.TestCase):
             "timer_duration": "600",
             "timer_duration_text": "10 мин",
         }
-        result = self._render_result("schedule_timer_start", "timer_result", context)
+        result = render_result("schedule_timer_start", "timer_result", context)
         self.assertEqual(result["status"], "error")
         self.assertNotIn("установлен", result["text"])
 
@@ -907,38 +969,71 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         self.assertLess(max(hours) * 60 + max(minutes), 24 * 60)
 
 
+class MediaUrlReachabilityTests(unittest.TestCase):
+    """Live incident: the ringtone/chime URL used the sanitized TEST-NET host.
+
+    `http://192.0.2.28:8123/local/...` is unreachable from HA, so the ESPHome
+    ffmpeg proxy timed out and the alarm stayed silent even though the service
+    call returned 2xx and the bridge ACKed DELIVERED. Local media must be
+    fetched from the HA loopback address, never a documentation placeholder.
+    """
+
+    def test_local_media_uses_reachable_base(self) -> None:
+        text = (HA / "scripts.yaml").read_text(encoding="utf-8")
+        urls = re.findall(r"media_content_id:\s*\"([^\"]+)\"", text)
+        media = [u for u in urls if "/local/alarm_" in u]
+        self.assertGreaterEqual(len(media), 3)
+        for url in media:
+            self.assertTrue(
+                url.startswith("http://127.0.0.1:8123/local/"),
+                f"unreachable media URL: {url}",
+            )
+
+    def test_no_test_net_in_media_urls(self) -> None:
+        text = (HA / "scripts.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("192.0.2.", text)
+
+    def test_station_control_base_is_not_test_net(self) -> None:
+        # The same copy step had also replaced the real station control URL with
+        # a TEST-NET placeholder, breaking gateway/bluetooth HTTP commands.
+        rest = (HA / "rest_commands.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("192.0.2.", rest)
+        for path in ("gateway/on", "gateway/off", "bluetooth/on", "bluetooth/off"):
+            self.assertIn(
+                f"states('input_text.station_base_url')"
+                f" | trim | regex_replace('/+$', '') }}}}/{path}",
+                rest,
+            )
+        inputs = (HA / "input_text.yaml").read_text(encoding="utf-8")
+        self.assertIn("station_base_url:", inputs)
+        self.assertIn("initial: !secret station_base_url", inputs)
+
+
 class SchedulerVerificationTests(unittest.TestCase):
     def test_update_speech_includes_repeat(self):
-        template = find_variable_template(
-            SCRIPTS["schedule_alarm_update"], "update_result", "изменён"
-        )
-        result = render(
-            template,
-            {
-                **BASE_CONTEXT,
-                "update_rpc": {
-                    "status": "ok",
-                    "data": {
-                        "schedule": {
-                            "id": "s1",
-                            "label": "Работа",
-                            "nextDueUnix": "1761733200",
-                            "repeat": "REPEAT_KIND_WEEKDAYS",
-                        }
-                    },
-                },
-                "updated_schedule": {
-                    "id": "s1",
-                    "label": "Работа",
-                    "nextDueUnix": "1761733200",
-                    "repeat": "REPEAT_KIND_WEEKDAYS",
-                },
-                "updated_due_text": "08:45, 29.10",
-                "updated_repeat_text": "по будням",
+        schedule = {
+            "id": "s1",
+            "label": "Работа",
+            "nextDueUnix": ts_at(0, 8, 45),
+            "repeat": "REPEAT_KIND_WEEKDAYS",
+        }
+        context = {
+            **BASE_CONTEXT,
+            "update_rpc": {
+                "status": "ok",
+                "code": "",
+                "error_text": "",
+                "data": {"schedule": schedule},
             },
+        }
+        context = render_variables(
+            SCRIPTS["schedule_alarm_update"], "updated_due_hm", context
         )
+        result = render_result("schedule_alarm_update", "update_result", context)
         self.assertEqual(result["status"], "ok")
+        self.assertIn("08:45", result["text"])
         self.assertIn("по будням", result["text"])
+        self.assertIn("Готово.", result["text"])
 
     def test_disabled_alarm_stays_disabled_when_protojson_omits_enabled(self):
         template = find_variable_template(

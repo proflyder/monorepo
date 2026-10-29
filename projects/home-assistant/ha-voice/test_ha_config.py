@@ -180,11 +180,14 @@ class YamlTests(unittest.TestCase):
 
 
 class MediaUrlTests(unittest.TestCase):
-    def test_alarm_media_uses_the_compatibility_endpoint(self):
+    def test_alarm_media_is_fetchable_from_home_assistant(self):
+        # Live incident: the chime/ringtone URL used a documentation TEST-NET
+        # host, so the ESPHome ffmpeg proxy timed out and the alarm was silent.
+        # HA must fetch its own local media from loopback.
         text = "\n".join(strings(SCRIPTS))
-        self.assertNotIn("192.0.2.25:8123", text)
-        self.assertIn("192.0.2.28:8123/local/alarm_chime.wav", text)
-        self.assertIn("192.0.2.28:8123/local/alarm_ringtone.wav", text)
+        self.assertNotIn("192.0.2.", text)
+        self.assertIn("http://127.0.0.1:8123/local/alarm_chime.wav", text)
+        self.assertIn("http://127.0.0.1:8123/local/alarm_ringtone.wav", text)
 
 
 class EntityAndServiceTests(unittest.TestCase):

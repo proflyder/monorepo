@@ -40,3 +40,10 @@ scheduler_active_kind:
   name: "Scheduler: active kind"
   max: 32
   initial: ""
+
+# Station HTTP control base URL. Non-secret value, but kept out of Git via
+# secrets.yaml so the tracked file never contains a real address.
+station_base_url:
+  name: "Station HTTP control base URL"
+  max: 255
+  initial: !secret station_base_url

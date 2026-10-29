@@ -377,7 +377,7 @@ alarm_announce:
       target:
         entity_id: media_player.iandeks_stantsiia_midi_media_player
       data:
-        media_content_id: "http://192.0.2.28:8123/local/alarm_chime.wav"
+        media_content_id: "http://127.0.0.1:8123/local/alarm_chime.wav"
         media_content_type: music
       continue_on_error: true
     - delay: "00:00:02"
@@ -410,7 +410,7 @@ alarm_loop:
             target:
               entity_id: media_player.iandeks_stantsiia_midi_media_player
             data:
-              media_content_id: "http://192.0.2.28:8123/local/alarm_ringtone.wav"
+              media_content_id: "http://127.0.0.1:8123/local/alarm_ringtone.wav"
               media_content_type: music
             continue_on_error: true
           # Full track is 294.8 s; keep a small gap between loops.
@@ -1671,7 +1671,7 @@ schedule_announce:
           target:
             entity_id: media_player.iandeks_stantsiia_midi_media_player
           data:
-            media_content_id: "http://192.0.2.28:8123/local/alarm_chime.wav"
+            media_content_id: "http://127.0.0.1:8123/local/alarm_chime.wav"
             media_content_type: music
           continue_on_error: true
         - delay: "00:00:02"
@@ -1794,16 +1794,28 @@ schedule_alarm_create:
       response_variable: create_rpc
     - variables:
         created_schedule: "{{ create_rpc.data.get('schedule', {}) if create_rpc.status == 'ok' and create_rpc.data is mapping else {} }}"
-        created_repeat_text: >-
-          {% set r = created_schedule.get('repeat', '') if created_schedule is mapping else '' %}
-          {{ 'каждый день' if r == 'REPEAT_KIND_DAILY' else ('по будням' if r == 'REPEAT_KIND_WEEKDAYS' else ('по выходным' if r == 'REPEAT_KIND_WEEKENDS' else ('однократно' if r == 'REPEAT_KIND_ONCE' else ''))) }}
-        created_due_text: >-
+        created_label_raw: "{{ created_schedule.get('label', alarm_label) | trim if created_schedule is mapping else alarm_label }}"
+        created_due_hm: >-
           {% set due = created_schedule.get('nextDueUnix', '0') | int(0) if created_schedule is mapping else 0 %}
-          {{ due | timestamp_custom('%H:%M, %d.%m', true) if due > 0 else '' }}
+          {{ due | timestamp_custom('%H:%M', true) if due > 0 else '' }}
+        created_is_auto: "{{ created_label_raw == ('Будильник ' ~ (created_due_hm | trim)) }}"
+        created_repeat_natural: >-
+          {% set r = created_schedule.get('repeat', '') if created_schedule is mapping else '' %}
+          {{ 'каждый день' if r == 'REPEAT_KIND_DAILY' else ('по будням' if r == 'REPEAT_KIND_WEEKDAYS' else ('по выходным' if r == 'REPEAT_KIND_WEEKENDS' else '')) }}
+        created_day_prefix: >-
+          {% set once = created_schedule.get('onceDate', '') if created_schedule is mapping else '' %}
+          {% set r = created_schedule.get('repeat', '') if created_schedule is mapping else '' %}
+          {% set today = now().strftime('%Y-%m-%d') %}
+          {% set tomorrow = (now() + timedelta(days=1)).strftime('%Y-%m-%d') %}
+          {% if r == 'REPEAT_KIND_ONCE' and once %}
+            {% if once == tomorrow %}завтра,
+            {% elif once != today %}{{ once[8:10] }}.{{ once[5:7] }},
+            {% endif %}
+          {% endif %}
     - variables:
         create_result: >-
           {{ ({'status': 'ok',
-              'text': 'Будильник «' ~ (created_schedule.get('label', alarm_label) | trim) ~ '» установлен на ' ~ (created_due_text | trim) ~ ((', ' ~ (created_repeat_text | trim)) if (created_repeat_text | trim) else '') ~ '.',
+              'text': 'Готово. ' ~ ('Будильник' if created_is_auto else '«' ~ created_label_raw ~ '»') ~ ' на ' ~ (created_day_prefix | trim ~ ' ' if (created_day_prefix | trim) else '') ~ (created_due_hm | trim) ~ ((' ' ~ (created_repeat_natural | trim)) if (created_repeat_natural | trim) else '') ~ '.',
               'schedule_id': created_schedule.get('id', ''),
               'label': created_schedule.get('label', alarm_label)}
              if create_rpc.status == 'ok' and created_schedule is mapping and created_schedule.get('id')
@@ -2182,15 +2194,26 @@ schedule_alarm_update:
       response_variable: update_rpc
     - variables:
         updated_schedule: "{{ update_rpc.data.get('schedule', {}) if update_rpc.status == 'ok' and update_rpc.data is mapping else {} }}"
-        updated_due_text: >-
+        updated_label_raw: "{{ updated_schedule.get('label', '') | trim if updated_schedule is mapping else '' }}"
+        updated_due_hm: >-
           {% set due = updated_schedule.get('nextDueUnix', '0') | int(0) if updated_schedule is mapping else 0 %}
-          {{ due | timestamp_custom('%H:%M, %d.%m', true) if due > 0 else '' }}
-        updated_repeat_text: >-
+          {{ due | timestamp_custom('%H:%M', true) if due > 0 else '' }}
+        updated_is_auto: "{{ updated_label_raw == ('Будильник ' ~ (updated_due_hm | trim)) }}"
+        updated_repeat_natural: >-
           {% set r = updated_schedule.get('repeat', '') if updated_schedule is mapping else '' %}
-          {% set names = {'REPEAT_KIND_ONCE': 'однократно', 'REPEAT_KIND_DAILY': 'ежедневно', 'REPEAT_KIND_WEEKDAYS': 'по будням', 'REPEAT_KIND_WEEKENDS': 'по выходным', 'REPEAT_KIND_CUSTOM': 'по дням недели'} %}
-          {{ names.get(r, '') }}
+          {{ 'каждый день' if r == 'REPEAT_KIND_DAILY' else ('по будням' if r == 'REPEAT_KIND_WEEKDAYS' else ('по выходным' if r == 'REPEAT_KIND_WEEKENDS' else ('по дням недели' if r == 'REPEAT_KIND_CUSTOM' else ''))) }}
+        updated_day_prefix: >-
+          {% set once = updated_schedule.get('onceDate', '') if updated_schedule is mapping else '' %}
+          {% set r = updated_schedule.get('repeat', '') if updated_schedule is mapping else '' %}
+          {% set today = now().strftime('%Y-%m-%d') %}
+          {% set tomorrow = (now() + timedelta(days=1)).strftime('%Y-%m-%d') %}
+          {% if r == 'REPEAT_KIND_ONCE' and once %}
+            {% if once == tomorrow %}завтра,
+            {% elif once != today %}{{ once[8:10] }}.{{ once[5:7] }},
+            {% endif %}
+          {% endif %}
         update_result: >-
-          {{ ({'status': 'ok', 'text': 'Будильник «' ~ (updated_schedule.get('label', '') | trim) ~ '» изменён на ' ~ (updated_due_text | trim) ~ ((', ' ~ (updated_repeat_text | trim)) if (updated_repeat_text | trim) else '') ~ '.'}
+          {{ ({'status': 'ok', 'text': 'Готово. ' ~ ('Будильник' if updated_is_auto else '«' ~ updated_label_raw ~ '»') ~ ' теперь на ' ~ (updated_day_prefix | trim ~ ' ' if (updated_day_prefix | trim) else '') ~ (updated_due_hm | trim) ~ ((' ' ~ (updated_repeat_natural | trim)) if (updated_repeat_natural | trim) else '') ~ '.'}
               if update_rpc.status == 'ok' and updated_schedule is mapping and updated_schedule.get('id')
               else {'status': 'error', 'text': (update_rpc.error_text | default('Планировщик вернул пустой ответ.')) if update_rpc.status != 'ok' else 'Планировщик вернул пустой ответ.'}) }}
     - stop: "schedule_alarm_update"
