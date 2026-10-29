@@ -56,6 +56,11 @@ spec:
               value: ha-control-home
             - name: CONTROL_QUEUE
               value: control
+            # Native HA label id that marks a script as a personal scenario.
+            # Icons/areas/names are display only; scripts without this label
+            # are never exposed (infrastructure helpers stay hidden).
+            - name: CONTROL_SCENARIO_LABEL
+              value: scenario
             - name: CONTROL_LISTEN
               value: 0.0.0.0:8099
             # Catalog-only until the control queue is reviewed; flipped by an

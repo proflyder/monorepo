@@ -72,8 +72,13 @@ process from the alarm bridge.
   are rejected) and executes only entries present in the catalog.
 - Shares the scheduler bearer: the app has one token field, so
   `CONTROL_TOKEN_FILE` points at the same secret.
-- With no `CONTROL_LABEL`, every visible light/switch/scene is listed and
-  scripts are excluded; set a label and assign it to scripts to expose them.
+- Lights, switches and scenes are listed dynamically. A script appears only
+  when it carries the native HA label `scenario` (`CONTROL_SCENARIO_LABEL`,
+  default `scenario`); icons, areas and names are display-only. Infrastructure
+  scripts (alarm helpers, RPC wrappers) stay hidden. Assign the label in HA
+  (Settings > Automations & scenes > Scripts > Add label) to the scripts that
+  are personal scenarios. `CONTROL_LABEL` was removed and the process refuses
+  to start if it is still set.
 - `CONTROL_EXECUTE=false` serves the catalog only. `deploy.sh --control-execute`
   runs a fail-closed preflight (refuses when GetStatus reports pending/leased
   events on the `control` queue) and only then enables execution;

@@ -135,7 +135,11 @@
 - `ha-control` (тот же solution) развёрнут отдельным Deployment: каталог
   `GET /v1/catalog` из live HA, очередь `control`; `CONTROL_EXECUTE=true`,
   consumer `ha-control-home` в allowlist планировщика рядом с `ha-bridge-home`.
-  Без `CONTROL_LABEL` каталог = 15 видимых light/switch, скрипты исключены.
+  Скрипты попадают в каталог только с нативной меткой HA `scenario`
+  (`CONTROL_SCENARIO_LABEL`); иконки — только отображение. Метка создана и
+  назначена `script.work_mode` и `script.blackout` (registry merge, другие
+  метки сохранены). Живой каталог: 2 сценария + 15 light/switch, служебные
+  скрипты отсутствуют.
   LAN NodePort `30099`, tailnet `pl-control.<tailnet>`; pl-home/pl-scheduler
   не менялись. Доставка at-least-once, не exactly-once.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
