@@ -27,6 +27,9 @@ const (
 	ActionRun     = "run"
 	ActionTurnOn  = "turn_on"
 	ActionTurnOff = "turn_off"
+	// ActionSet adjusts a light (brightness / color temperature / color); the
+	// command carries Params and is validated against the light's capabilities.
+	ActionSet = "set"
 )
 
 // TaskType is the scheduler task type of a control command.
@@ -49,6 +52,8 @@ type Entry struct {
 	State string
 	// Available is false when HA reports the entity unavailable or unknown.
 	Available bool
+	// Light is set for lights that can be adjusted beyond on/off.
+	Light *Light
 }
 
 // Catalog is an immutable set of entries in display order.
@@ -93,6 +98,9 @@ func (e Entry) Actions() []string {
 	if e.Kind == KindScenario {
 		return []string{ActionRun}
 	}
+	if e.Light != nil {
+		return []string{ActionTurnOn, ActionTurnOff, ActionSet}
+	}
 	return []string{ActionTurnOn, ActionTurnOff}
 }
 
@@ -101,13 +109,24 @@ type ServiceCall struct {
 	Domain  string
 	Service string
 	Entity  string
+	// Data is extra service data (only ever built by Resolve from validated Params).
+	Data map[string]any
 }
 
 // Resolve maps (entry, action) to an HA service call. Unsupported actions are
 // rejected here, so the executor can only perform what the catalog allows.
-func (e Entry) Resolve(action string) (ServiceCall, error) {
+func (e Entry) Resolve(action string, params Params) (ServiceCall, error) {
 	domain := Domain(e.Entity)
 	switch {
+	case e.Kind == KindLight && action == ActionSet:
+		if e.Light == nil {
+			return ServiceCall{}, fmt.Errorf("light %q cannot be adjusted", e.ID)
+		}
+		data, err := e.Light.serviceData(params)
+		if err != nil {
+			return ServiceCall{}, err
+		}
+		return ServiceCall{Domain: domain, Service: "turn_on", Entity: e.Entity, Data: data}, nil
 	case e.Kind == KindScenario && action == ActionRun:
 		// script.turn_on and scene.turn_on both start the entity.
 		return ServiceCall{Domain: domain, Service: "turn_on", Entity: e.Entity}, nil

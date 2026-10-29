@@ -35,14 +35,18 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     /** Chip view id -> filter, rebuilt together with the chips (view ids are generated, so they never collide). */
     private var chipFilters: Map<Int, ControlFilter> = emptyMap()
     private var syncingChips = false
+    private var lightSheet: LightSheet? = null
 
     /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
         override fun onItemClick(item: ControlItem) {
             when (item) {
                 is ControlItem.Scenario -> viewModel.run(item.entry)
-                // A row tap flips the device; the switch itself reports its own target.
-                is ControlItem.Device -> viewModel.setPower(item.entry, !item.entry.isOn())
+                // An adjustable light opens its sheet; anything else flips on a row tap.
+                // The switch itself always reports its own target state.
+                is ControlItem.Device ->
+                    if (item.entry.light != null && item.entry.available) openLightSheet(item.entry)
+                    else viewModel.setPower(item.entry, !item.entry.isOn())
                 is ControlItem.Header -> Unit
             }
         }
@@ -85,7 +89,15 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         viewModel.state.observe { render(it) }
     }
 
+    private fun openLightSheet(entry: ControlEntry) {
+        lightSheet?.dismiss()
+        lightSheet = LightSheet(requireContext(), entry) { adjust -> viewModel.adjust(entry, adjust) }
+            .also { it.show() }
+    }
+
     override fun onBindingDestroyed() {
+        lightSheet?.dismiss()
+        lightSheet = null
         shownOptions = emptyList()
         chipFilters = emptyMap()
     }

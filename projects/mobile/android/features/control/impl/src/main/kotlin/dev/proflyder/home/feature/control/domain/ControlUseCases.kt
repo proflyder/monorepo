@@ -4,6 +4,7 @@ import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.feature.control.ControlRepository
 import dev.zacsweers.metro.Inject
@@ -34,4 +35,11 @@ class SetDevicePower @Inject constructor(
 ) {
     suspend operator fun invoke(entry: ControlEntry, on: Boolean): Outcome<Unit> =
         repository.send(entry.id, if (on) ControlAction.TURN_ON else ControlAction.TURN_OFF)
+}
+
+class AdjustLight @Inject constructor(
+    private val repository: ControlRepository,
+) {
+    suspend operator fun invoke(entry: ControlEntry, adjust: LightAdjust): Outcome<Unit> =
+        repository.adjust(entry.id, adjust)
 }

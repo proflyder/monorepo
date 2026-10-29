@@ -39,7 +39,7 @@ type Catalog interface {
 
 // HomeAssistant is the side-effect surface.
 type HomeAssistant interface {
-	CallService(ctx context.Context, domain, service, entity string) error
+	CallService(ctx context.Context, domain, service, entity string, data map[string]any) error
 }
 
 // Config is the executor configuration.
@@ -114,6 +114,7 @@ func (e *Executor) cycle(ctx context.Context) error {
 type command struct {
 	Entry  string `json:"entry"`
 	Action string `json:"action"`
+	catalog.Params
 }
 
 func (e *Executor) handle(ctx context.Context, ev scheduler.Event) {
@@ -143,7 +144,7 @@ func (e *Executor) handle(ctx context.Context, ev scheduler.Event) {
 		return
 	}
 
-	if err := e.ha.CallService(ctx, call.Domain, call.Service, call.Entity); err != nil {
+	if err := e.ha.CallService(ctx, call.Domain, call.Service, call.Entity, call.Data); err != nil {
 		if ctx.Err() != nil {
 			return
 		}
@@ -181,7 +182,7 @@ func (e *Executor) plan(ev scheduler.Event, cat *catalog.Catalog) (catalog.Servi
 	if !ok {
 		return catalog.ServiceCall{}, "", fmt.Errorf("entry %q is not in the catalog", detail(cmd.Entry))
 	}
-	call, err := entry.Resolve(cmd.Action)
+	call, err := entry.Resolve(cmd.Action, cmd.Params)
 	if err != nil {
 		return catalog.ServiceCall{}, "", err
 	}

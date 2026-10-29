@@ -5,6 +5,8 @@ import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.LightAdjust
+import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.model.RemoteFailure
@@ -18,6 +20,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -41,6 +44,17 @@ object ControlJson {
         buildJsonObject {
             put("entry", entryId)
             put("action", action.wire)
+        }.toString()
+
+    /** Payload of a light adjustment: only the fields that are set are sent. */
+    fun adjustPayload(entryId: String, adjust: LightAdjust): String =
+        buildJsonObject {
+            put("entry", entryId)
+            put("action", ControlAction.SET.wire)
+            adjust.brightnessPct?.let { put("brightness", it) }
+            adjust.kelvin?.let { put("kelvin", it) }
+            adjust.hue?.let { put("hue", it) }
+            adjust.saturation?.let { put("saturation", it) }
         }.toString()
 
     fun parseCatalog(element: JsonElement): ControlCatalog {
@@ -68,6 +82,21 @@ object ControlJson {
             "off" -> PowerState.OFF
             else -> null
         }
+        val light = (o["light"] as? JsonObject)?.let { l ->
+            fun num(name: String) = (l[name] as? JsonPrimitive)?.intOrNull ?: 0
+            fun flag(name: String) = (l[name] as? JsonPrimitive)?.booleanOrNull ?: false
+            LightControls(
+                brightness = flag("brightness"),
+                colorTemp = flag("colorTemp"),
+                color = flag("color"),
+                minKelvin = num("minKelvin"),
+                maxKelvin = num("maxKelvin"),
+                brightnessPct = num("brightnessPct"),
+                kelvin = num("kelvin"),
+                hue = num("hue"),
+                saturation = num("saturation"),
+            )
+        }
         val id = text("id")
         require(id.isNotEmpty()) { "entry without id" }
         return ControlEntry(
@@ -79,6 +108,7 @@ object ControlJson {
             actions = actions,
             power = power,
             available = o["available"]?.jsonPrimitive?.booleanOrNull ?: false,
+            light = light,
         )
     }
 }

@@ -18,4 +18,12 @@
     <string name="control_state_off">Off</string>
     <string name="control_state_unknown">State unknown</string>
     <string name="control_state_unavailable">Unavailable</string>
+    <string name="control_state_on_brightness">On · %1$d%%</string>
+    <string name="control_light_brightness">Brightness</string>
+    <string name="control_light_temperature">Color temperature</string>
+    <string name="control_light_color">Color</string>
+    <string name="control_light_hue">Hue</string>
+    <string name="control_light_saturation">Saturation</string>
+    <string name="control_light_kelvin">%1$d K</string>
+    <string name="control_light_percent">%1$d%%</string>
 </resources>

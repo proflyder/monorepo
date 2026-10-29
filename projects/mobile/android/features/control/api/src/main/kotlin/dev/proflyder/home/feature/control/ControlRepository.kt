@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.control
 
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlCatalog
+import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.Outcome
 
 /**
@@ -18,4 +19,7 @@ interface ControlRepository {
     suspend fun catalog(): Outcome<ControlCatalog>
 
     suspend fun send(entryId: String, action: ControlAction): Outcome<Unit>
+
+    /** Queues a light adjustment (brightness / color temperature / color). */
+    suspend fun adjust(entryId: String, adjust: LightAdjust): Outcome<Unit>
 }

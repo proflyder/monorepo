@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -42,8 +43,8 @@ type fakeHA struct {
 	err   error
 }
 
-func (f *fakeHA) CallService(_ context.Context, d, s, e string) error {
-	f.calls = append(f.calls, catalog.ServiceCall{Domain: d, Service: s, Entity: e})
+func (f *fakeHA) CallService(_ context.Context, d, s, e string, data map[string]any) error {
+	f.calls = append(f.calls, catalog.ServiceCall{Domain: d, Service: s, Entity: e, Data: data})
 	return f.err
 }
 
@@ -51,6 +52,8 @@ func testCatalog() *catalog.Catalog {
 	return catalog.New(catalog.Build([]catalog.Raw{
 		{Entity: "scene.focus", State: "x", Name: "Focus"},
 		{Entity: "light.lamp", State: "on", Name: "Lamp"},
+		{Entity: "light.strip", State: "on", Name: "Strip", Light: catalog.NewLight(catalog.LightInput{
+			ColorModes: []string{"color_temp"}, MinKelvin: 2700, MaxKelvin: 6500, Brightness: -1})},
 	}, catalog.Rules{}))
 }
 
@@ -86,7 +89,7 @@ func TestRunsScenarioAndDevice(t *testing.T) {
 		{Domain: "scene", Service: "turn_on", Entity: "scene.focus"},
 		{Domain: "light", Service: "turn_off", Entity: "light.lamp"},
 	}
-	if len(ha.calls) != 2 || ha.calls[0] != want[0] || ha.calls[1] != want[1] {
+	if len(ha.calls) != 2 || !reflect.DeepEqual(ha.calls, want) {
 		t.Fatalf("calls = %+v", ha.calls)
 	}
 	for _, a := range sched.acks {
@@ -164,5 +167,36 @@ func TestHAFailureHandling(t *testing.T) {
 	}
 	if acks := run(errors.New("plain"), 1); len(acks) != 0 {
 		t.Fatalf("unclassified error must stay unacked, got %+v", acks)
+	}
+}
+
+func TestSetAdjustsLightWithinCapabilities(t *testing.T) {
+	ha := &fakeHA{}
+	ex, sched := testExecutor(t, []scheduler.Event{
+		task("ok", `{"entry":"light.strip","action":"set","brightness":40,"kelvin":3000}`),
+		task("no-color", `{"entry":"light.strip","action":"set","hue":10,"saturation":50}`),
+		task("range", `{"entry":"light.strip","action":"set","kelvin":1000}`),
+		task("plain", `{"entry":"light.lamp","action":"set","brightness":10}`),
+		task("empty", `{"entry":"light.strip","action":"set"}`),
+		task("scene", `{"entry":"scene.focus","action":"set","brightness":10}`),
+	}, ha)
+	if err := ex.cycle(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	want := []catalog.ServiceCall{{
+		Domain: "light", Service: "turn_on", Entity: "light.strip",
+		Data: map[string]any{"brightness_pct": 40, "color_temp_kelvin": 3000},
+	}}
+	if !reflect.DeepEqual(ha.calls, want) {
+		t.Fatalf("calls = %+v", ha.calls)
+	}
+	got := map[string]string{}
+	for _, a := range sched.acks {
+		got[a.id] = a.outcome
+	}
+	for id, outcome := range got {
+		if (id == "ok") != (outcome == scheduler.AckDelivered) {
+			t.Errorf("event %s outcome %s", id, outcome)
+		}
 	}
 }

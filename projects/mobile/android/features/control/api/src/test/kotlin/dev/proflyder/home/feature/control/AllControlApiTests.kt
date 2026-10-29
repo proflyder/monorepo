@@ -7,5 +7,6 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     ControlFilterTest::class,
     ControlItemsTest::class,
+    LightColorsTest::class,
 )
 class AllControlApiTests

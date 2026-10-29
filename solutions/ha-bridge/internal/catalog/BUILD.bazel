@@ -4,6 +4,7 @@ go_library(
     name = "catalog",
     srcs = [
         "catalog.go",
+        "light.go",
         "rules.go",
     ],
     importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/catalog",
@@ -12,6 +13,9 @@ go_library(
 
 go_test(
     name = "catalog_test",
-    srcs = ["catalog_test.go"],
+    srcs = [
+        "catalog_test.go",
+        "light_test.go",
+    ],
     embed = [":catalog"],
 )

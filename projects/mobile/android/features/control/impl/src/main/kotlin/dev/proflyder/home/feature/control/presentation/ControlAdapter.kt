@@ -106,6 +106,10 @@ internal class ControlAdapter(
                     else -> R.string.control_state_unknown
                 },
             )
+            val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
+            if (brightness != null) {
+                views.controlDeviceState.text = views.root.context.getString(R.string.control_state_on_brightness, brightness)
+            }
             views.controlDeviceIcon.setImageResource(ControlIcons.resolve(entry))
             val tint = MaterialColors.getColor(
                 views.root,

@@ -20,6 +20,8 @@ type Raw struct {
 	// Scenario is true when the entity carries the scenario role label
 	// (Rules.ScenarioLabel), i.e. the user declared it a personal scenario.
 	Scenario bool
+	// Light is the derived light capability (nil for non-lights / on-off lights).
+	Light *Light
 }
 
 // DefaultScenarioLabel is the Home Assistant label id that marks a script as a
@@ -120,6 +122,9 @@ func Build(raws []Raw, rules Rules) []Entry {
 			Icon:      iconOf(raw.Icon),
 			Entity:    raw.Entity,
 			Available: available,
+		}
+		if kind == KindLight && available {
+			entry.Light = raw.Light
 		}
 		if kind != KindScenario && available && (state == "on" || state == "off") {
 			entry.State = state

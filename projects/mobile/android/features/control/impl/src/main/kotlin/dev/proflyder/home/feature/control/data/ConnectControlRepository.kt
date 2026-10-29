@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.control.data
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlCatalog
+import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.network.ControlCatalogClient
 import dev.proflyder.home.core.network.ControlJson
@@ -27,11 +28,17 @@ class ConnectControlRepository(
     override suspend fun catalog(): Outcome<ControlCatalog> = catalogClient.fetch()
 
     override suspend fun send(entryId: String, action: ControlAction): Outcome<Unit> =
+        enqueue(ControlJson.commandPayload(entryId, action))
+
+    override suspend fun adjust(entryId: String, adjust: LightAdjust): Outcome<Unit> =
+        enqueue(ControlJson.adjustPayload(entryId, adjust))
+
+    private suspend fun enqueue(payloadJson: String): Outcome<Unit> =
         when (
             val queued = scheduler.enqueueTask(
                 taskType = ControlJson.TASK_TYPE,
                 queue = ControlJson.QUEUE,
-                payloadJson = ControlJson.commandPayload(entryId, action),
+                payloadJson = payloadJson,
                 // One tap = one command; the key only protects a transport retry of that tap.
                 idempotencyKey = UUID.randomUUID().toString(),
             )

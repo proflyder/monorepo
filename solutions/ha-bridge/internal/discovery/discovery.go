@@ -99,6 +99,7 @@ func (p *Provider) discover(ctx context.Context) ([]catalog.Entry, error) {
 			Room:     rooms[e.ID],
 			Hidden:   hidden[e.ID],
 			Scenario: scenarios[e.ID],
+			Light:    lightOf(e),
 		})
 	}
 	return catalog.Build(raws, p.rules), nil
@@ -161,4 +162,15 @@ func markUnavailable(c *catalog.Catalog) *catalog.Catalog {
 		entries[i].State = ""
 	}
 	return catalog.New(entries)
+}
+
+func lightOf(e ha.Entity) *catalog.Light {
+	if catalog.Domain(e.ID) != "light" {
+		return nil
+	}
+	return catalog.NewLight(catalog.LightInput{
+		ColorModes: e.ColorModes, MinKelvin: e.MinKelvin, MaxKelvin: e.MaxKelvin,
+		Brightness: e.Brightness, Kelvin: e.Kelvin,
+		Hue: e.Hue, Saturation: e.Saturation, HasHS: e.HasHS,
+	})
 }

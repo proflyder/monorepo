@@ -8,6 +8,7 @@ enum class ControlAction(val wire: String) {
     RUN("run"),
     TURN_ON("turn_on"),
     TURN_OFF("turn_off"),
+    SET("set"),
     ;
 
     companion object {
@@ -21,6 +22,31 @@ enum class PowerState { ON, OFF }
  * One scenario or device from the home control catalog. [id] is the catalog id
  * (not a Home Assistant entity id); [icon] is a free hint the UI may map to art.
  */
+/**
+ * What an adjustable light can do and its current values, as reported by the
+ * server (derived from Home Assistant color modes). A white-only bulb has
+ * [colorTemp] without [color]; unknown live values are 0.
+ */
+data class LightControls(
+    val brightness: Boolean,
+    val colorTemp: Boolean,
+    val color: Boolean,
+    val minKelvin: Int = 0,
+    val maxKelvin: Int = 0,
+    val brightnessPct: Int = 0,
+    val kelvin: Int = 0,
+    val hue: Int = 0,
+    val saturation: Int = 0,
+)
+
+/** A light adjustment; null fields are left as they are. Color is hue + saturation together. */
+data class LightAdjust(
+    val brightnessPct: Int? = null,
+    val kelvin: Int? = null,
+    val hue: Int? = null,
+    val saturation: Int? = null,
+)
+
 data class ControlEntry(
     val id: String,
     val kind: ControlKind,
@@ -31,6 +57,8 @@ data class ControlEntry(
     /** Live on/off for devices; null for scenarios or when the state is unknown. */
     val power: PowerState?,
     val available: Boolean,
+    /** Set for lights that can be adjusted beyond on/off. */
+    val light: LightControls? = null,
 ) {
     val isDevice: Boolean get() = kind == ControlKind.LIGHT || kind == ControlKind.SWITCH
 }

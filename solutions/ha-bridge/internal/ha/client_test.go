@@ -221,7 +221,7 @@ func TestCallServiceEntitiesAndTemplate(t *testing.T) {
 		b, _ := io.ReadAll(r.Body)
 		switch r.URL.Path {
 		case "/api/states":
-			_, _ = w.Write([]byte(`[{"entity_id":"light.a","state":"on","attributes":{"friendly_name":"Lamp A","icon":"mdi:lightbulb","x":1}},{"entity_id":"switch.b","state":"off","attributes":{}}]`))
+			_, _ = w.Write([]byte(`[{"entity_id":"light.a","state":"on","attributes":{"friendly_name":"Lamp A","icon":"mdi:lightbulb","x":1,"supported_color_modes":["color_temp","hs"],"min_color_temp_kelvin":2200,"max_color_temp_kelvin":6500,"brightness":128,"color_temp_kelvin":4000,"hs_color":[30.4,60]}},{"entity_id":"switch.b","state":"off","attributes":{}}]`))
 		case "/api/template":
 			gotTemplate = string(b)
 			_, _ = w.Write([]byte("light.a|Bedroom\n"))
@@ -232,13 +232,13 @@ func TestCallServiceEntitiesAndTemplate(t *testing.T) {
 	defer srv.Close()
 	c := New(srv.URL, "tok", srv.Client())
 
-	if err := c.CallService(context.Background(), "light", "turn_off", "light.a"); err != nil {
+	if err := c.CallService(context.Background(), "light", "turn_off", "light.a", nil); err != nil {
 		t.Fatal(err)
 	}
 	if gotPath != "/api/services/light/turn_off" || gotAuth != "Bearer tok" || gotBody != `{"entity_id":"light.a"}` {
 		t.Fatalf("path=%q auth=%q body=%q", gotPath, gotAuth, gotBody)
 	}
-	if err := c.CallService(context.Background(), "", "turn_on", "x.y"); err == nil {
+	if err := c.CallService(context.Background(), "", "turn_on", "x.y", nil); err == nil {
 		t.Fatal("empty domain must be rejected")
 	}
 
@@ -246,8 +246,20 @@ func TestCallServiceEntitiesAndTemplate(t *testing.T) {
 	if err != nil || len(entities) != 2 {
 		t.Fatalf("entities=%v err=%v", entities, err)
 	}
-	if entities[0] != (Entity{ID: "light.a", State: "on", Name: "Lamp A", Icon: "lightbulb"}) || entities[1].ID != "switch.b" {
-		t.Fatalf("entities=%+v", entities)
+	l := entities[0]
+	if l.ID != "light.a" || l.Name != "Lamp A" || l.Icon != "lightbulb" || len(l.ColorModes) != 2 ||
+		l.MinKelvin != 2200 || l.MaxKelvin != 6500 || l.Brightness != 128 || l.Kelvin != 4000 ||
+		!l.HasHS || l.Hue != 30.4 || l.Saturation != 60 {
+		t.Fatalf("light=%+v", l)
+	}
+	if entities[1].ID != "switch.b" || entities[1].Brightness != -1 || entities[1].HasHS {
+		t.Fatalf("switch=%+v", entities[1])
+	}
+	if err := c.CallService(context.Background(), "light", "turn_on", "light.a", map[string]any{"brightness_pct": 40}); err != nil {
+		t.Fatal(err)
+	}
+	if gotBody != `{"brightness_pct":40,"entity_id":"light.a"}` {
+		t.Fatalf("body=%q", gotBody)
 	}
 
 	out, err := c.RenderTemplate(context.Background(), "{{ 1 }}")

@@ -34,6 +34,21 @@ type EntryView struct {
 	// Available is false when Home Assistant reports the entity missing or
 	// unavailable, or could not be reached.
 	Available bool `json:"available"`
+	// Light is present for lights that can be adjusted beyond on/off.
+	Light *LightView `json:"light,omitempty"`
+}
+
+// LightView is what a light can do and its current values.
+type LightView struct {
+	Brightness    bool `json:"brightness"`
+	ColorTemp     bool `json:"colorTemp"`
+	Color         bool `json:"color"`
+	MinKelvin     int  `json:"minKelvin,omitempty"`
+	MaxKelvin     int  `json:"maxKelvin,omitempty"`
+	BrightnessPct int  `json:"brightnessPct,omitempty"`
+	Kelvin        int  `json:"kelvin,omitempty"`
+	Hue           int  `json:"hue,omitempty"`
+	Saturation    int  `json:"saturation,omitempty"`
 }
 
 // Response is the wire shape of GET /v1/catalog.
@@ -76,10 +91,18 @@ func build(snap discovery.Snapshot) Response {
 	entries := snap.Catalog.Entries()
 	resp := Response{Entries: make([]EntryView, 0, len(entries)), StatesOK: snap.StatesOK}
 	for _, e := range entries {
-		resp.Entries = append(resp.Entries, EntryView{
+		view := EntryView{
 			ID: e.ID, Kind: string(e.Kind), Title: e.Title, Room: e.Room, Icon: e.Icon,
 			Actions: e.Actions(), State: e.State, Available: e.Available,
-		})
+		}
+		if l := e.Light; l != nil {
+			view.Light = &LightView{
+				Brightness: l.Brightness, ColorTemp: l.ColorTemp, Color: l.Color,
+				MinKelvin: l.MinKelvin, MaxKelvin: l.MaxKelvin,
+				BrightnessPct: l.BrightnessPct, Kelvin: l.Kelvin, Hue: l.Hue, Saturation: l.Saturation,
+			}
+		}
+		resp.Entries = append(resp.Entries, view)
 	}
 	return resp
 }

@@ -132,12 +132,17 @@ type serviceCallRequest struct {
 
 // CallService invokes <domain>.<service> on one entity. The control executor
 // resolves the call from the catalog; no caller-supplied service is accepted.
-func (c *Client) CallService(ctx context.Context, domain, service, entity string) error {
+func (c *Client) CallService(ctx context.Context, domain, service, entity string, data map[string]any) error {
 	const op = "call service"
 	if domain == "" || service == "" || entity == "" {
 		return &httpapi.Error{Op: op, Err: errors.New("empty service call")}
 	}
-	payload, err := json.Marshal(serviceCallRequest{EntityID: entity})
+	body := map[string]any{}
+	for k, v := range data {
+		body[k] = v
+	}
+	body["entity_id"] = entity
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return &httpapi.Error{Op: op, Err: fmt.Errorf("encode request: %w", err)}
 	}
@@ -159,6 +164,14 @@ type Entity struct {
 	Name string
 	// Icon is attributes.icon with any "mdi:" prefix removed ("" when absent).
 	Icon string
+	// Light attributes (zero values for other domains). Brightness is -1 when absent.
+	ColorModes      []string
+	MinKelvin       int
+	MaxKelvin       int
+	Brightness      int
+	Kelvin          int
+	Hue, Saturation float64
+	HasHS           bool
 }
 
 // Entities reads every entity with its state, friendly name and icon. Other
@@ -183,8 +196,14 @@ func (c *Client) Entities(ctx context.Context) ([]Entity, error) {
 		EntityID   string `json:"entity_id"`
 		State      string `json:"state"`
 		Attributes struct {
-			FriendlyName string `json:"friendly_name"`
-			Icon         string `json:"icon"`
+			FriendlyName string    `json:"friendly_name"`
+			Icon         string    `json:"icon"`
+			ColorModes   []string  `json:"supported_color_modes"`
+			MinKelvin    *float64  `json:"min_color_temp_kelvin"`
+			MaxKelvin    *float64  `json:"max_color_temp_kelvin"`
+			Brightness   *float64  `json:"brightness"`
+			Kelvin       *float64  `json:"color_temp_kelvin"`
+			HS           []float64 `json:"hs_color"`
 		} `json:"attributes"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxStatesBodyBytes)).Decode(&states); err != nil {
@@ -192,12 +211,25 @@ func (c *Client) Entities(ctx context.Context) ([]Entity, error) {
 	}
 	out := make([]Entity, 0, len(states))
 	for _, s := range states {
-		out = append(out, Entity{
-			ID:    s.EntityID,
-			State: s.State,
-			Name:  s.Attributes.FriendlyName,
-			Icon:  strings.TrimPrefix(s.Attributes.Icon, "mdi:"),
-		})
+		a := s.Attributes
+		e := Entity{
+			ID:         s.EntityID,
+			State:      s.State,
+			Name:       a.FriendlyName,
+			Icon:       strings.TrimPrefix(a.Icon, "mdi:"),
+			ColorModes: a.ColorModes,
+			MinKelvin:  intOf(a.MinKelvin),
+			MaxKelvin:  intOf(a.MaxKelvin),
+			Kelvin:     intOf(a.Kelvin),
+			Brightness: -1,
+		}
+		if a.Brightness != nil {
+			e.Brightness = intOf(a.Brightness)
+		}
+		if len(a.HS) == 2 {
+			e.Hue, e.Saturation, e.HasHS = a.HS[0], a.HS[1], true
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }
@@ -235,4 +267,11 @@ func (c *Client) RenderTemplate(ctx context.Context, template string) (string, e
 		return "", &httpapi.Error{Op: op, Err: errors.New("read response")}
 	}
 	return string(raw), nil
+}
+
+func intOf(v *float64) int {
+	if v == nil {
+		return 0
+	}
+	return int(*v)
 }

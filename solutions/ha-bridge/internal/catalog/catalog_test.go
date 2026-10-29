@@ -113,19 +113,19 @@ func TestResolve(t *testing.T) {
 	scene, _ := c.Lookup("scene.movie")
 	lamp, _ := c.Lookup("light.bedside_lamp")
 
-	call, err := scene.Resolve(ActionRun)
-	if err != nil || call != (ServiceCall{Domain: "scene", Service: "turn_on", Entity: "scene.movie"}) {
+	call, err := scene.Resolve(ActionRun, Params{})
+	if err != nil || call.Domain != "scene" || call.Service != "turn_on" || call.Entity != "scene.movie" || call.Data != nil {
 		t.Fatalf("scene run = %+v, %v", call, err)
 	}
-	call, err = lamp.Resolve(ActionTurnOff)
-	if err != nil || call != (ServiceCall{Domain: "light", Service: "turn_off", Entity: "light.bedside_lamp"}) {
+	call, err = lamp.Resolve(ActionTurnOff, Params{})
+	if err != nil || call.Domain != "light" || call.Service != "turn_off" || call.Entity != "light.bedside_lamp" || call.Data != nil {
 		t.Fatalf("light off = %+v, %v", call, err)
 	}
 	for _, bad := range []struct {
 		e Entry
 		a string
 	}{{scene, ActionTurnOn}, {lamp, ActionRun}, {lamp, "toggle"}, {lamp, ""}} {
-		if _, err := bad.e.Resolve(bad.a); err == nil || !strings.Contains(err.Error(), "not supported") {
+		if _, err := bad.e.Resolve(bad.a, Params{}); err == nil || !strings.Contains(err.Error(), "not supported") {
 			t.Errorf("Resolve(%s,%q) must be rejected, got %v", bad.e.ID, bad.a, err)
 		}
 	}

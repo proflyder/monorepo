@@ -11,6 +11,8 @@ import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItems
 import dev.proflyder.home.feature.control.ControlPreferences
+import dev.proflyder.home.core.model.LightAdjust
+import dev.proflyder.home.feature.control.domain.AdjustLight
 import dev.proflyder.home.feature.control.domain.LoadControlCatalog
 import dev.proflyder.home.feature.control.domain.RunScenario
 import dev.proflyder.home.feature.control.domain.SetDevicePower
@@ -43,6 +45,7 @@ class ControlViewModel(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
     private val setDevicePower: SetDevicePower,
+    private val adjustLight: AdjustLight,
     private val preferences: ControlPreferences,
 ) : BaseViewModel<ControlUiState>(ControlUiState(configured = loadCatalog.isConfigured)) {
     private var refreshJob: Job? = null
@@ -126,6 +129,33 @@ class ControlViewModel(
         }
     }
 
+    /**
+     * Applies a light adjustment. Unlike [setPower] it does not mark the row busy
+     * (the user keeps dragging sliders); the optimistic values are replaced by the
+     * real ones once the executor has applied the command.
+     */
+    fun adjust(entry: ControlEntry, adjust: LightAdjust) {
+        if (!entry.available || entry.light == null) return
+        updateState {
+            copy(
+                actionError = null,
+                entries = entries.map { if (it.id == entry.id) it.withAdjust(adjust) else it },
+            )
+        }
+        launch {
+            when (val result = adjustLight(entry, adjust)) {
+                is Outcome.Success -> {
+                    delay(RECONCILE_DELAY_MS)
+                    refresh(silent = true)
+                }
+                is Outcome.Failure -> {
+                    updateState { copy(actionError = result.failure) }
+                    refresh(silent = true)
+                }
+            }
+        }
+    }
+
     fun setFilter(filter: ControlFilter) {
         filterChosenByUser = true
         updateState { copy(filter = filter) }
@@ -149,11 +179,26 @@ class ControlViewModelFactoryContributor(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
     private val setDevicePower: SetDevicePower,
+    private val adjustLight: AdjustLight,
     private val preferences: ControlPreferences,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
 
     override fun createFactory() = SimpleViewModelFactory {
-        ControlViewModel(loadCatalog, runScenario, setDevicePower, preferences)
+        ControlViewModel(loadCatalog, runScenario, setDevicePower, adjustLight, preferences)
     }
+}
+
+/** The entry as it will look once [adjust] is applied: any adjustment also turns the light on. */
+internal fun ControlEntry.withAdjust(adjust: LightAdjust): ControlEntry {
+    val current = light ?: return this
+    return copy(
+        power = PowerState.ON,
+        light = current.copy(
+            brightnessPct = adjust.brightnessPct ?: current.brightnessPct,
+            kelvin = adjust.kelvin ?: current.kelvin,
+            hue = adjust.hue ?: current.hue,
+            saturation = adjust.saturation ?: current.saturation,
+        ),
+    )
 }

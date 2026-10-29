@@ -366,3 +366,17 @@ kind, title, room, icon, actions[], state("on"/"off", устройства), ava
 CONTROL_EXECUTE=true go run ./solutions/ha-bridge/cmd/ha-control
 bazel test //solutions/ha-bridge/...
 ```
+
+### Настройка света
+
+Возможности светильника не перечислены вручную: берутся из атрибутов HA
+(`supported_color_modes`, `min/max_color_temp_kelvin`, текущие `brightness`,
+`color_temp_kelvin`, `hs_color`). Каталог отдаёт `light` только для регулируемых
+ламп: `brightness`, `colorTemp` (+ диапазон Кельвинов), `color` и текущие
+значения. Лампа без цвета получает только температуру, лампа on/off — ничего.
+
+Команда `set` приходит в payload задачи: `{"entry","action":"set","brightness":1-100,
+"kelvin":N,"hue":0-360,"saturation":0-100}`. Исполнитель проверяет её по
+возможностям лампы из текущего каталога (температура в диапазоне, цвет только
+парой hue+saturation, температура и цвет вместе нельзя) и вызывает
+`light.turn_on`; произвольные сервисы и данные недоступны.

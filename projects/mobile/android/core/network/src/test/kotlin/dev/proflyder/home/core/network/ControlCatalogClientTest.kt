@@ -128,4 +128,29 @@ class ControlCatalogClientTest {
         server.enqueue(MockResponse().setBody("not json"))
         assertTrue((client().fetch() as Outcome.Failure).failure is RemoteFailure.ProtocolFailure)
     }
+
+    @Test
+    fun parsesLightCapabilitiesAndBuildsAdjustPayload() {
+        val catalog = ControlJson.parseCatalog(
+            kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"statesOk":true,"entries":[
+                  {"id":"light.strip","kind":"light","title":"Strip","actions":["turn_on","turn_off","set"],"state":"on","available":true,
+                   "light":{"brightness":true,"colorTemp":true,"color":false,"minKelvin":2700,"maxKelvin":6500,"brightnessPct":40,"kelvin":3000}},
+                  {"id":"light.plain","kind":"light","title":"Plain","actions":["turn_on","turn_off"],"available":true}]}""",
+            ),
+        )
+        val strip = catalog.entries[0].light!!
+        assertTrue(strip.brightness && strip.colorTemp && !strip.color)
+        assertEquals(2700, strip.minKelvin)
+        assertEquals(40, strip.brightnessPct)
+        assertEquals(setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF, ControlAction.SET), catalog.entries[0].actions)
+        assertNull(catalog.entries[1].light)
+        assertEquals(
+            """{"entry":"light.strip","action":"set","brightness":55,"hue":120,"saturation":80}""",
+            ControlJson.adjustPayload(
+                "light.strip",
+                dev.proflyder.home.core.model.LightAdjust(brightnessPct = 55, hue = 120, saturation = 80),
+            ),
+        )
+    }
 }
