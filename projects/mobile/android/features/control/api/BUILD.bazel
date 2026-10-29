@@ -1,4 +1,4 @@
-load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library")
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -6,4 +6,14 @@ kt_jvm_library(
     name = "api",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     deps = ["//projects/mobile/android/core/model:model"],
+)
+
+kt_jvm_test(
+    name = "api_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    test_class = "dev.proflyder.home.feature.control.AllControlApiTests",
+    deps = [
+        ":api",
+        "@maven//:junit_junit",
+    ],
 )

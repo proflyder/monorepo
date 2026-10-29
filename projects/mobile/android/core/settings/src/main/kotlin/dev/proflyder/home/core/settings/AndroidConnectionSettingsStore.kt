@@ -1,144 +1,141 @@
 package dev.proflyder.home.core.settings
 
-import android.content.Context
-import android.content.SharedPreferences
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
+import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import kotlinx.coroutines.Dispatchers
+import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 /**
- * Persists endpoint/timeouts in ordinary SharedPreferences and the bearer token
- * as Keystore-encrypted ciphertext. The application manifest disables Android
- * backup, so neither file is copied off-device or into cloud backups.
+ * Persists endpoints/timeouts as plain preferences in the app DataStore and the
+ * bearer token only as Keystore-encrypted ciphertext. The manifest disables
+ * Android backup, so neither leaves the device.
+ *
+ * Requests read [config] synchronously (interceptors run on I/O threads), so an
+ * in-memory snapshot is the source for readers: it is loaded once when the
+ * store is created (one small file read; this is the single place that blocks)
+ * and replaced after each successful write.
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
 class AndroidConnectionSettingsStore(
-    context: Context,
+    private val dataStore: DataStore<Preferences>,
     private val cipher: TokenCipher,
 ) : ConnectionSettingsStore {
-    private val appContext = context.applicationContext
-    private val prefs: SharedPreferences =
-        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val initial: Preferences = runBlocking {
+        dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.first()
+    }
 
-    private val mutableConfig = MutableStateFlow(readInitialConfig())
+    private val mutableConfig = MutableStateFlow(decode(initial))
     override val config: StateFlow<ConnectionConfig> = mutableConfig.asStateFlow()
 
     private val mutableTokenStatus = MutableStateFlow(
         when {
-            !prefs.contains(KEY_TOKEN_CIPHERTEXT) -> TokenStatus.ABSENT
+            !initial.contains(KEY_TOKEN_CIPHERTEXT) -> TokenStatus.ABSENT
             mutableConfig.value.hasToken -> TokenStatus.AVAILABLE
             else -> TokenStatus.UNREADABLE
         },
     )
     override val tokenStatus: StateFlow<TokenStatus> = mutableTokenStatus.asStateFlow()
 
-    override suspend fun update(config: ConnectionConfig): Outcome<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun update(config: ConnectionConfig): Outcome<Unit> {
         val validated = config.validatedForStorage()
-        if (validated is Outcome.Failure) return@withContext validated
+        if (validated is Outcome.Failure) return validated
 
-        val endpoint = config.endpoint ?: return@withContext Outcome.Failure(
-            RemoteFailure.Validation(dev.proflyder.home.core.model.Field.ENDPOINT),
-        )
+        val endpoint = config.endpoint ?: return Outcome.Failure(RemoteFailure.Validation(Field.ENDPOINT))
 
         val normalizedToken = config.bearerToken?.trim()?.takeIf { it.isNotEmpty() }
-        var encrypted: String? = null
-        if (normalizedToken != null) {
-            encrypted = try {
+        val encrypted = if (normalizedToken != null) {
+            try {
                 cipher.encrypt(normalizedToken)
             } catch (_: Exception) {
-                return@withContext Outcome.Failure(
-                    RemoteFailure.Storage("The token could not be encrypted on this device."),
-                )
+                return Outcome.Failure(RemoteFailure.Storage("The token could not be encrypted on this device."))
             }
-        }
-
-        val editor = prefs.edit()
-            .putString(KEY_ENDPOINT, endpoint.baseUrl())
-            .putString(KEY_CONTROL_ENDPOINT, config.controlEndpoint?.baseUrl())
-            .putLong(KEY_CONNECT_TIMEOUT, config.connectTimeoutMillis)
-            .putLong(KEY_READ_TIMEOUT, config.readTimeoutMillis)
-        if (encrypted != null) {
-            editor.putString(KEY_TOKEN_CIPHERTEXT, encrypted)
         } else {
-            editor.remove(KEY_TOKEN_CIPHERTEXT)
+            null
         }
 
-        if (!editor.commit()) {
-            return@withContext Outcome.Failure(
-                RemoteFailure.Storage("Settings could not be saved on this device."),
-            )
+        try {
+            dataStore.edit { prefs ->
+                prefs[KEY_ENDPOINT] = endpoint.baseUrl()
+                val control = config.controlEndpoint?.baseUrl()
+                if (control != null) prefs[KEY_CONTROL_ENDPOINT] = control else prefs.remove(KEY_CONTROL_ENDPOINT)
+                prefs[KEY_CONNECT_TIMEOUT] = config.connectTimeoutMillis
+                prefs[KEY_READ_TIMEOUT] = config.readTimeoutMillis
+                if (encrypted != null) prefs[KEY_TOKEN_CIPHERTEXT] = encrypted else prefs.remove(KEY_TOKEN_CIPHERTEXT)
+            }
+        } catch (_: IOException) {
+            return Outcome.Failure(RemoteFailure.Storage("Settings could not be saved on this device."))
         }
 
-        val stored = ConnectionConfig(
+        mutableConfig.value = ConnectionConfig(
             endpoint = endpoint,
             controlEndpoint = config.controlEndpoint,
             bearerToken = normalizedToken,
             connectTimeoutMillis = config.connectTimeoutMillis,
             readTimeoutMillis = config.readTimeoutMillis,
         )
-        mutableConfig.value = stored
         mutableTokenStatus.value = if (normalizedToken != null) TokenStatus.AVAILABLE else TokenStatus.ABSENT
-        Outcome.Success(Unit)
+        return Outcome.Success(Unit)
     }
 
-    private fun readInitialConfig(): ConnectionConfig {
-        val endpoint = prefs.getString(KEY_ENDPOINT, null)
-            ?.let { ServerEndpoint.parse(it) as? EndpointParseResult.Valid }
-            ?.endpoint
+    private fun decode(prefs: Preferences): ConnectionConfig {
+        fun endpointOf(key: Preferences.Key<String>): ServerEndpoint? =
+            prefs[key]?.let { ServerEndpoint.parse(it) as? EndpointParseResult.Valid }?.endpoint
 
-        val controlEndpoint = prefs.getString(KEY_CONTROL_ENDPOINT, null)
-            ?.let { ServerEndpoint.parse(it) as? EndpointParseResult.Valid }
-            ?.endpoint
-
-        val encrypted = prefs.getString(KEY_TOKEN_CIPHERTEXT, null)
-        val token = encrypted?.let(cipher::decrypt)
+        val token = prefs[KEY_TOKEN_CIPHERTEXT]
+            ?.let(cipher::decrypt)
             ?.takeIf(ConnectionConfig::isTokenValid)
 
         return ConnectionConfig(
-            endpoint = endpoint,
-            controlEndpoint = controlEndpoint,
+            endpoint = endpointOf(KEY_ENDPOINT),
+            controlEndpoint = endpointOf(KEY_CONTROL_ENDPOINT),
             bearerToken = token,
             connectTimeoutMillis = sanitizedTimeout(
-                KEY_CONNECT_TIMEOUT,
+                prefs[KEY_CONNECT_TIMEOUT],
                 ConnectionConfig.DEFAULT_CONNECT_TIMEOUT_MILLIS,
             ),
             readTimeoutMillis = sanitizedTimeout(
-                KEY_READ_TIMEOUT,
+                prefs[KEY_READ_TIMEOUT],
                 ConnectionConfig.DEFAULT_READ_TIMEOUT_MILLIS,
             ),
         )
     }
 
-    private fun sanitizedTimeout(key: String, default: Long): Long {
-        val stored = prefs.getLong(key, default)
-        return if (stored in ConnectionConfig.MIN_TIMEOUT_MILLIS..ConnectionConfig.MAX_TIMEOUT_MILLIS) {
+    private fun sanitizedTimeout(stored: Long?, default: Long): Long =
+        if (stored != null && stored in ConnectionConfig.MIN_TIMEOUT_MILLIS..ConnectionConfig.MAX_TIMEOUT_MILLIS) {
             stored
         } else {
             default
         }
-    }
 
-    companion object {
-        private const val PREFS_NAME = "home_connection"
-        private const val KEY_ENDPOINT = "endpoint"
-        private const val KEY_CONTROL_ENDPOINT = "control_endpoint"
-        private const val KEY_TOKEN_CIPHERTEXT = "bearer_token_ciphertext"
-        private const val KEY_CONNECT_TIMEOUT = "connect_timeout_millis"
-        private const val KEY_READ_TIMEOUT = "read_timeout_millis"
+    internal companion object {
+        // Same names as the legacy SharedPreferences keys, so the migration maps 1:1.
+        val KEY_ENDPOINT = stringPreferencesKey("endpoint")
+        val KEY_CONTROL_ENDPOINT = stringPreferencesKey("control_endpoint")
+        val KEY_TOKEN_CIPHERTEXT = stringPreferencesKey("bearer_token_ciphertext")
+        val KEY_CONNECT_TIMEOUT = longPreferencesKey("connect_timeout_millis")
+        val KEY_READ_TIMEOUT = longPreferencesKey("read_timeout_millis")
     }
 }

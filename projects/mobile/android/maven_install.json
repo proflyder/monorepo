@@ -4,6 +4,7 @@
     "androidx.activity:activity-ktx": -1628131892,
     "androidx.appcompat:appcompat": 942538221,
     "androidx.core:core-ktx": 438051419,
+    "androidx.datastore:datastore-preferences": -1008894755,
     "androidx.emoji2:emoji2": 1129635293,
     "androidx.emoji2:emoji2-views-helper": 997655465,
     "androidx.fragment:fragment-ktx": -653644145,
@@ -44,13 +45,13 @@
     "repositories": 1670674627
   },
   "__RESOLVED_ARTIFACTS_HASH": {
-    "androidx.activity:activity-ktx:aar": -594253987,
-    "androidx.activity:activity:aar": 616918713,
+    "androidx.activity:activity-ktx:aar": -415873176,
+    "androidx.activity:activity:aar": -1114805314,
     "androidx.annotation:annotation": -36493910,
     "androidx.annotation:annotation-experimental:aar": 1237670489,
     "androidx.annotation:annotation-jvm": 475082639,
-    "androidx.appcompat:appcompat-resources:aar": 1051367471,
-    "androidx.appcompat:appcompat:aar": 1610932205,
+    "androidx.appcompat:appcompat-resources:aar": 1149765172,
+    "androidx.appcompat:appcompat:aar": 1517811381,
     "androidx.arch.core:core-common": 1350718323,
     "androidx.arch.core:core-runtime:aar": 1803154034,
     "androidx.cardview:cardview:aar": -1211742707,
@@ -59,68 +60,79 @@
     "androidx.collection:collection-ktx": -1908706330,
     "androidx.concurrent:concurrent-futures": 557423055,
     "androidx.constraintlayout:constraintlayout-core": 1408059739,
-    "androidx.constraintlayout:constraintlayout:aar": -1831117959,
-    "androidx.coordinatorlayout:coordinatorlayout:aar": 1295067596,
-    "androidx.core:core-ktx:aar": 537571639,
-    "androidx.core:core:aar": -1507905145,
+    "androidx.constraintlayout:constraintlayout:aar": -580258654,
+    "androidx.coordinatorlayout:coordinatorlayout:aar": 757381777,
+    "androidx.core:core-ktx:aar": -2099505957,
+    "androidx.core:core:aar": 1883498319,
     "androidx.cursoradapter:cursoradapter:aar": -1802080633,
-    "androidx.customview:customview-poolingcontainer:aar": -1290968930,
-    "androidx.customview:customview:aar": -238500633,
+    "androidx.customview:customview-poolingcontainer:aar": 1961869112,
+    "androidx.customview:customview:aar": 1439713871,
     "androidx.databinding:viewbinding:aar": -851988147,
+    "androidx.datastore:datastore-android:aar": 1156449763,
+    "androidx.datastore:datastore-core-android:aar": 642544063,
+    "androidx.datastore:datastore-core-jvm": 1879881500,
+    "androidx.datastore:datastore-core-okio": 1176623292,
+    "androidx.datastore:datastore-core-okio-jvm": 701142078,
+    "androidx.datastore:datastore-core:aar": 1601865146,
+    "androidx.datastore:datastore-preferences-android:aar": 132131097,
+    "androidx.datastore:datastore-preferences-core": 1375568288,
+    "androidx.datastore:datastore-preferences-core-jvm": 96090084,
+    "androidx.datastore:datastore-preferences:aar": -1447015888,
+    "androidx.datastore:datastore:aar": 487263825,
     "androidx.documentfile:documentfile:aar": 1631752493,
-    "androidx.drawerlayout:drawerlayout:aar": 1945871805,
-    "androidx.dynamicanimation:dynamicanimation:aar": -1382328462,
-    "androidx.emoji2:emoji2-views-helper:aar": -1818825088,
-    "androidx.emoji2:emoji2:aar": -1318306708,
-    "androidx.fragment:fragment-ktx:aar": 855963326,
-    "androidx.fragment:fragment:aar": 360189756,
+    "androidx.drawerlayout:drawerlayout:aar": -468550528,
+    "androidx.dynamicanimation:dynamicanimation:aar": 1343427634,
+    "androidx.emoji2:emoji2-views-helper:aar": 1561092688,
+    "androidx.emoji2:emoji2:aar": 1425707147,
+    "androidx.fragment:fragment-ktx:aar": 1294143920,
+    "androidx.fragment:fragment:aar": 1224976707,
     "androidx.interpolator:interpolator:aar": -1186669897,
-    "androidx.legacy:legacy-support-core-utils:aar": -1458141731,
-    "androidx.lifecycle:lifecycle-common": -1323737802,
+    "androidx.legacy:legacy-support-core-utils:aar": -834741460,
+    "androidx.lifecycle:lifecycle-common": 1927846811,
     "androidx.lifecycle:lifecycle-common-jvm": -890231660,
-    "androidx.lifecycle:lifecycle-livedata-core-ktx:aar": 2052589913,
-    "androidx.lifecycle:lifecycle-livedata-core:aar": 1931153093,
-    "androidx.lifecycle:lifecycle-livedata-ktx:aar": -317131226,
-    "androidx.lifecycle:lifecycle-livedata:aar": 175356833,
-    "androidx.lifecycle:lifecycle-process:aar": 150896302,
-    "androidx.lifecycle:lifecycle-runtime-android:aar": -472293012,
-    "androidx.lifecycle:lifecycle-runtime-ktx-android:aar": 396190868,
-    "androidx.lifecycle:lifecycle-runtime-ktx:aar": 1726530580,
-    "androidx.lifecycle:lifecycle-runtime:aar": 1443270570,
+    "androidx.lifecycle:lifecycle-livedata-core-ktx:aar": 1963049782,
+    "androidx.lifecycle:lifecycle-livedata-core:aar": -475266199,
+    "androidx.lifecycle:lifecycle-livedata-ktx:aar": -1097198231,
+    "androidx.lifecycle:lifecycle-livedata:aar": -866695387,
+    "androidx.lifecycle:lifecycle-process:aar": -222208026,
+    "androidx.lifecycle:lifecycle-runtime-android:aar": 1849437966,
+    "androidx.lifecycle:lifecycle-runtime-ktx-android:aar": -271303076,
+    "androidx.lifecycle:lifecycle-runtime-ktx:aar": 1263824932,
+    "androidx.lifecycle:lifecycle-runtime:aar": -219075152,
     "androidx.lifecycle:lifecycle-viewmodel-android:aar": -1848246195,
     "androidx.lifecycle:lifecycle-viewmodel-ktx:aar": -1619589916,
-    "androidx.lifecycle:lifecycle-viewmodel-savedstate:aar": 163626505,
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate:aar": -134930841,
     "androidx.lifecycle:lifecycle-viewmodel:aar": 904316542,
-    "androidx.loader:loader:aar": 912643337,
+    "androidx.loader:loader:aar": -1366231417,
     "androidx.localbroadcastmanager:localbroadcastmanager:aar": -1063737663,
     "androidx.paging:paging-common": -498350519,
-    "androidx.palette:palette-ktx:aar": 1573367196,
-    "androidx.palette:palette:aar": -1207939230,
+    "androidx.palette:palette-ktx:aar": -1751534180,
+    "androidx.palette:palette:aar": 1513441314,
     "androidx.print:print:aar": -273325959,
     "androidx.profileinstaller:profileinstaller:aar": -38893239,
-    "androidx.recyclerview:recyclerview:aar": 320493298,
+    "androidx.recyclerview:recyclerview:aar": -259721309,
     "androidx.resourceinspection:resourceinspection-annotation": -1122332468,
     "androidx.room:room-common": 1541845774,
     "androidx.room:room-ktx:aar": -1562978219,
     "androidx.room:room-runtime:aar": -1985008894,
-    "androidx.savedstate:savedstate-ktx:aar": 980175848,
-    "androidx.savedstate:savedstate:aar": 322501117,
+    "androidx.savedstate:savedstate-ktx:aar": 950611283,
+    "androidx.savedstate:savedstate:aar": -1358442191,
     "androidx.sqlite:sqlite-framework:aar": -885480573,
     "androidx.sqlite:sqlite:aar": 487165251,
     "androidx.startup:startup-runtime:aar": 1805153702,
-    "androidx.swiperefreshlayout:swiperefreshlayout:aar": 270515656,
+    "androidx.swiperefreshlayout:swiperefreshlayout:aar": -192019464,
     "androidx.test.espresso:espresso-idling-resource:aar": 541320167,
     "androidx.test:monitor:aar": 2145325691,
     "androidx.tracing:tracing:aar": -1407669629,
-    "androidx.transition:transition:aar": 591639405,
-    "androidx.vectordrawable:vectordrawable-animated:aar": -1808747822,
-    "androidx.vectordrawable:vectordrawable:aar": -1946277329,
+    "androidx.transition:transition:aar": 1091194044,
+    "androidx.vectordrawable:vectordrawable-animated:aar": -1843945530,
+    "androidx.vectordrawable:vectordrawable:aar": 137698311,
     "androidx.versionedparcelable:versionedparcelable:aar": -1605165192,
-    "androidx.viewpager2:viewpager2:aar": -1718099234,
-    "androidx.viewpager:viewpager:aar": -1518680692,
+    "androidx.viewpager2:viewpager2:aar": -1700872213,
+    "androidx.viewpager:viewpager:aar": -1688688943,
     "com.almworks.sqlite4java:sqlite4java": 1585971300,
-    "com.github.chuckerteam.chucker:library:aar": -1316028169,
-    "com.google.android.material:material:aar": -1336908005,
+    "com.github.chuckerteam.chucker:library:aar": 100674601,
+    "com.google.android.material:material:aar": -1018859417,
     "com.google.auto.value:auto-value-annotations": 641752776,
     "com.google.code.findbugs:jsr305": 870839855,
     "com.google.code.gson:gson": -1575757252,
@@ -131,12 +143,12 @@
     "com.google.j2objc:j2objc-annotations": 248818742,
     "com.google.testparameterinjector:test-parameter-injector": 687688988,
     "com.ibm.icu:icu4j": -1667183492,
-    "com.squareup.okhttp3:logging-interceptor": -1025738426,
-    "com.squareup.okhttp3:mockwebserver": 1399798774,
-    "com.squareup.okhttp3:okhttp": 191672665,
-    "com.squareup.okio:okio": -1388757284,
-    "com.squareup.okio:okio-jvm": -1072084470,
-    "com.squareup.retrofit2:retrofit": -1733784974,
+    "com.squareup.okhttp3:logging-interceptor": 1104548968,
+    "com.squareup.okhttp3:mockwebserver": 1663350552,
+    "com.squareup.okhttp3:okhttp": -1236814368,
+    "com.squareup.okio:okio": 340659190,
+    "com.squareup.okio:okio-jvm": -1452902033,
+    "com.squareup.retrofit2:retrofit": -1610929072,
     "dev.zacsweers.metro:compiler": 204546603,
     "dev.zacsweers.metro:runtime-jvm": 1615283542,
     "javax.annotation:javax.annotation-api": -1009230154,
@@ -147,20 +159,25 @@
     "org.checkerframework:checker-qual": -1533199059,
     "org.conscrypt:conscrypt-openjdk-uber": 1592363690,
     "org.hamcrest:hamcrest-core": 649657847,
+    "org.jetbrains.kotlin:kotlin-android-extensions-runtime": 324653921,
+    "org.jetbrains.kotlin:kotlin-parcelize-runtime": 1818728367,
     "org.jetbrains.kotlin:kotlin-stdlib": -1979804293,
-    "org.jetbrains.kotlin:kotlin-stdlib-common": 393704220,
+    "org.jetbrains.kotlin:kotlin-stdlib-common": -1317111636,
     "org.jetbrains.kotlin:kotlin-stdlib-jdk7": -1770760485,
     "org.jetbrains.kotlin:kotlin-stdlib-jdk8": 1337579308,
-    "org.jetbrains.kotlinx:atomicfu": 2112824685,
-    "org.jetbrains.kotlinx:atomicfu-jvm": 876818557,
+    "org.jetbrains.kotlinx:atomicfu": -1887019258,
+    "org.jetbrains.kotlinx:atomicfu-jvm": 1102277048,
     "org.jetbrains.kotlinx:kotlinx-coroutines-android": -1551650999,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core": -202158901,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": 272771419,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test": 639758943,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm": 81249123,
+    "org.jetbrains.kotlinx:kotlinx-serialization-core": -2134210620,
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": -1658023205,
     "org.jetbrains.kotlinx:kotlinx-serialization-json": -42271307,
     "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm": 258081442,
+    "org.jetbrains.kotlinx:kotlinx-serialization-protobuf": 1687288866,
+    "org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm": -262209481,
     "org.jetbrains:annotations": -1663747638,
     "org.jspecify:jspecify": 117231129,
     "org.ow2.asm:asm": -153858314,
@@ -320,6 +337,72 @@
         "jar": "995d561aa5b45401ab6a10e886e53dbd7d813fdfb0d3e170024a4c6260531d80"
       },
       "version": "8.0.2"
+    },
+    "androidx.datastore:datastore-android:aar": {
+      "shasums": {
+        "jar": "fce724038fea3bdef7b0d1aaf10cda6614b61bec66571750cc9be7048b950119"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-core-android:aar": {
+      "shasums": {
+        "jar": "883abc911e4b14119959e44e20a520523f59c303e834d6b325007b3ee5e9cb6c"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-core-jvm": {
+      "shasums": {
+        "jar": "30819f32f0cda25a2fc2e7c4a12045753e48b6b04cd126a1a42f010e441e022c"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-core-okio": {
+      "shasums": {
+        "jar": "117beb462cad6a885864fe0296ed8cfee509da08d064c44d226efbd60538599b"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-core-okio-jvm": {
+      "shasums": {
+        "jar": "5071d03c7be9555fd81e5bd522b490a06a89694e4b937f307da72bc74e33c34a"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-core:aar": {
+      "shasums": {
+        "jar": "1033b479dbeac90932fc598155f0fe190cc116b9174182799c7dad291f4d5b9a"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-preferences-android:aar": {
+      "shasums": {
+        "jar": "0f15760838ff0413521ab1596e8ac5c999c3822d1fcc3f38ce6d6f562aeebbac"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-preferences-core": {
+      "shasums": {
+        "jar": "a22a84cf98bb1f1b04edc3ff2a4a5f3a273205c773c14d008618c9e2501e440b"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-preferences-core-jvm": {
+      "shasums": {
+        "jar": "bd2c7f41cb7d6e857903a03aa4da4dddc831445bd4148f1ac8d0a81f509d0628"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-preferences:aar": {
+      "shasums": {
+        "jar": "777b4f448e970f464c30c2d46327c7d3e5c9856faa6413d4ec9d3c2d31c6d533"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore:aar": {
+      "shasums": {
+        "jar": "bb93975325ddc6b94a9893f5434919a74fe7859bfb77459cff8dcd85232baa09"
+      },
+      "version": "1.1.1"
     },
     "androidx.documentfile:documentfile:aar": {
       "shasums": {
@@ -801,6 +884,18 @@
       },
       "version": "1.3"
     },
+    "org.jetbrains.kotlin:kotlin-android-extensions-runtime": {
+      "shasums": {
+        "jar": "f00537c7023e604933f6a9563b1bb3b83e61fbfd2cc3d0e9900d616bab6862a4"
+      },
+      "version": "1.9.22"
+    },
+    "org.jetbrains.kotlin:kotlin-parcelize-runtime": {
+      "shasums": {
+        "jar": "f0077f35ec828e148ac92d0c6aa141a732b5eb7a4a391679aeefa59fa9a1a5cc"
+      },
+      "version": "1.9.22"
+    },
     "org.jetbrains.kotlin:kotlin-stdlib": {
       "shasums": {
         "jar": "887587c91713250ad52fe14ad9166d042c33835049890e9437f355ffc5a195b1"
@@ -809,9 +904,9 @@
     },
     "org.jetbrains.kotlin:kotlin-stdlib-common": {
       "shasums": {
-        "jar": "cde3341ba18a2ba262b0b7cf6c55b20c90e8d434e42c9a13e6a3f770db965a88"
+        "jar": "60b53a3fc0ed19ff5568ad54372f102f51109b7480417e93c8f3418ae4f73188"
       },
-      "version": "1.9.10"
+      "version": "1.9.22"
     },
     "org.jetbrains.kotlin:kotlin-stdlib-jdk7": {
       "shasums": {
@@ -867,6 +962,12 @@
       },
       "version": "1.10.2"
     },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core": {
+      "shasums": {
+        "jar": "2fa05aff0f33a70da873c09a0ff66b5d54ccdc15e39e7ca4b82633e70c792f34"
+      },
+      "version": "1.6.3"
+    },
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": {
       "shasums": {
         "jar": "1f0afa172110e45a7231ef1b44ae8fd84c1ebaff96f3fc3ad68ef8c48120b59c"
@@ -884,6 +985,18 @@
         "jar": "d94cc34cae39246a1af74fda63f9c4812ce12216ef641d5fa3bbbb539a6922d8"
       },
       "version": "1.9.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-protobuf": {
+      "shasums": {
+        "jar": "d6556739ebbfa9e4fa2f802c55bcb05bfa53f57276b105194842062e0acd3c4e"
+      },
+      "version": "1.6.3"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm": {
+      "shasums": {
+        "jar": "94c6ecb14ef5503db65807caa3cb35bbfa175d1ca83c8ffaba32219f3b992597"
+      },
+      "version": "1.6.3"
     },
     "org.jetbrains:annotations": {
       "shasums": {
@@ -1130,6 +1243,82 @@
     ],
     "androidx.databinding:viewbinding:aar": [
       "androidx.annotation:annotation"
+    ],
+    "androidx.datastore:datastore-android:aar": [
+      "androidx.annotation:annotation",
+      "androidx.datastore:datastore-core-okio",
+      "androidx.datastore:datastore-core:aar",
+      "com.squareup.okio:okio-jvm",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm"
+    ],
+    "androidx.datastore:datastore-core-android:aar": [
+      "androidx.annotation:annotation-jvm",
+      "org.jetbrains.kotlin:kotlin-parcelize-runtime",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm"
+    ],
+    "androidx.datastore:datastore-core-jvm": [
+      "androidx.annotation:annotation-jvm",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+    ],
+    "androidx.datastore:datastore-core-okio": [
+      "androidx.datastore:datastore-core-okio-jvm",
+      "androidx.datastore:datastore-core:aar",
+      "com.squareup.okio:okio",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:atomicfu",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+    ],
+    "androidx.datastore:datastore-core-okio-jvm": [
+      "androidx.datastore:datastore-core-jvm",
+      "com.squareup.okio:okio-jvm",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+    ],
+    "androidx.datastore:datastore-core:aar": [
+      "androidx.annotation:annotation",
+      "androidx.datastore:datastore-core-android:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:atomicfu",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+    ],
+    "androidx.datastore:datastore-preferences-android:aar": [
+      "androidx.datastore:datastore-preferences-core",
+      "androidx.datastore:datastore:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm"
+    ],
+    "androidx.datastore:datastore-preferences-core": [
+      "androidx.datastore:datastore-core-okio",
+      "androidx.datastore:datastore-core:aar",
+      "androidx.datastore:datastore-preferences-core-jvm",
+      "com.squareup.okio:okio",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-serialization-core",
+      "org.jetbrains.kotlinx:kotlinx-serialization-protobuf"
+    ],
+    "androidx.datastore:datastore-preferences-core-jvm": [
+      "androidx.datastore:datastore-core-jvm",
+      "androidx.datastore:datastore-core-okio-jvm",
+      "com.squareup.okio:okio-jvm",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "androidx.datastore:datastore-preferences:aar": [
+      "androidx.datastore:datastore-preferences-android:aar",
+      "androidx.datastore:datastore-preferences-core",
+      "androidx.datastore:datastore:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+    ],
+    "androidx.datastore:datastore:aar": [
+      "androidx.annotation:annotation",
+      "androidx.datastore:datastore-android:aar",
+      "androidx.datastore:datastore-core-okio",
+      "androidx.datastore:datastore-core:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
     ],
     "androidx.documentfile:documentfile:aar": [
       "androidx.annotation:annotation"
@@ -1483,6 +1672,13 @@
     "junit:junit": [
       "org.hamcrest:hamcrest-core"
     ],
+    "org.jetbrains.kotlin:kotlin-android-extensions-runtime": [
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "org.jetbrains.kotlin:kotlin-parcelize-runtime": [
+      "org.jetbrains.kotlin:kotlin-android-extensions-runtime",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
     "org.jetbrains.kotlin:kotlin-stdlib": [
       "org.jetbrains:annotations"
     ],
@@ -1519,6 +1715,9 @@
       "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
       "org.jetbrains:annotations"
     ],
+    "org.jetbrains.kotlinx:kotlinx-serialization-core": [
+      "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm"
+    ],
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": [
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
@@ -1527,6 +1726,14 @@
     ],
     "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm": [
       "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm"
+    ],
+    "org.jetbrains.kotlinx:kotlinx-serialization-protobuf": [
+      "org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm"
+    ],
+    "org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm": [
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlin:kotlin-stdlib-common",
       "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm"
     ],
     "org.ow2.asm:asm-commons": [
@@ -1652,6 +1859,18 @@
       "androidx.constraintlayout.core.state.helpers",
       "androidx.constraintlayout.core.widgets",
       "androidx.constraintlayout.core.widgets.analyzer"
+    ],
+    "androidx.datastore:datastore-core-jvm": [
+      "androidx.datastore.core",
+      "androidx.datastore.core.handlers"
+    ],
+    "androidx.datastore:datastore-core-okio-jvm": [
+      "androidx.datastore.core.okio"
+    ],
+    "androidx.datastore:datastore-preferences-core-jvm": [
+      "androidx.datastore.preferences",
+      "androidx.datastore.preferences.core",
+      "androidx.datastore.preferences.protobuf"
     ],
     "androidx.lifecycle:lifecycle-common-jvm": [
       "androidx.lifecycle"
@@ -2173,6 +2392,13 @@
       "org.hamcrest.core",
       "org.hamcrest.internal"
     ],
+    "org.jetbrains.kotlin:kotlin-android-extensions-runtime": [
+      "kotlinx.android.extensions",
+      "kotlinx.android.parcel"
+    ],
+    "org.jetbrains.kotlin:kotlin-parcelize-runtime": [
+      "kotlinx.parcelize"
+    ],
     "org.jetbrains.kotlin:kotlin-stdlib": [
       "kotlin",
       "kotlin.annotation",
@@ -2259,6 +2485,11 @@
     "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm": [
       "kotlinx.serialization.json",
       "kotlinx.serialization.json.internal"
+    ],
+    "org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm": [
+      "kotlinx.serialization.protobuf",
+      "kotlinx.serialization.protobuf.internal",
+      "kotlinx.serialization.protobuf.schema"
     ],
     "org.jetbrains:annotations": [
       "org.intellij.lang.annotations",
@@ -4081,6 +4312,17 @@
       "androidx.customview:customview-poolingcontainer:aar",
       "androidx.customview:customview:aar",
       "androidx.databinding:viewbinding:aar",
+      "androidx.datastore:datastore-android:aar",
+      "androidx.datastore:datastore-core-android:aar",
+      "androidx.datastore:datastore-core-jvm",
+      "androidx.datastore:datastore-core-okio",
+      "androidx.datastore:datastore-core-okio-jvm",
+      "androidx.datastore:datastore-core:aar",
+      "androidx.datastore:datastore-preferences-android:aar",
+      "androidx.datastore:datastore-preferences-core",
+      "androidx.datastore:datastore-preferences-core-jvm",
+      "androidx.datastore:datastore-preferences:aar",
+      "androidx.datastore:datastore:aar",
       "androidx.documentfile:documentfile:aar",
       "androidx.drawerlayout:drawerlayout:aar",
       "androidx.dynamicanimation:dynamicanimation:aar",
@@ -4161,6 +4403,8 @@
       "org.checkerframework:checker-qual",
       "org.conscrypt:conscrypt-openjdk-uber",
       "org.hamcrest:hamcrest-core",
+      "org.jetbrains.kotlin:kotlin-android-extensions-runtime",
+      "org.jetbrains.kotlin:kotlin-parcelize-runtime",
       "org.jetbrains.kotlin:kotlin-stdlib",
       "org.jetbrains.kotlin:kotlin-stdlib-common",
       "org.jetbrains.kotlin:kotlin-stdlib-jdk7",
@@ -4172,9 +4416,12 @@
       "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm",
+      "org.jetbrains.kotlinx:kotlinx-serialization-core",
       "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm",
       "org.jetbrains.kotlinx:kotlinx-serialization-json",
       "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm",
+      "org.jetbrains.kotlinx:kotlinx-serialization-protobuf",
+      "org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm",
       "org.jetbrains:annotations",
       "org.jspecify:jspecify",
       "org.ow2.asm:asm",
@@ -4220,6 +4467,17 @@
       "androidx.customview:customview-poolingcontainer:aar",
       "androidx.customview:customview:aar",
       "androidx.databinding:viewbinding:aar",
+      "androidx.datastore:datastore-android:aar",
+      "androidx.datastore:datastore-core-android:aar",
+      "androidx.datastore:datastore-core-jvm",
+      "androidx.datastore:datastore-core-okio",
+      "androidx.datastore:datastore-core-okio-jvm",
+      "androidx.datastore:datastore-core:aar",
+      "androidx.datastore:datastore-preferences-android:aar",
+      "androidx.datastore:datastore-preferences-core",
+      "androidx.datastore:datastore-preferences-core-jvm",
+      "androidx.datastore:datastore-preferences:aar",
+      "androidx.datastore:datastore:aar",
       "androidx.documentfile:documentfile:aar",
       "androidx.drawerlayout:drawerlayout:aar",
       "androidx.dynamicanimation:dynamicanimation:aar",
@@ -4300,6 +4558,8 @@
       "org.checkerframework:checker-qual",
       "org.conscrypt:conscrypt-openjdk-uber",
       "org.hamcrest:hamcrest-core",
+      "org.jetbrains.kotlin:kotlin-android-extensions-runtime",
+      "org.jetbrains.kotlin:kotlin-parcelize-runtime",
       "org.jetbrains.kotlin:kotlin-stdlib",
       "org.jetbrains.kotlin:kotlin-stdlib-common",
       "org.jetbrains.kotlin:kotlin-stdlib-jdk7",
@@ -4311,9 +4571,12 @@
       "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm",
+      "org.jetbrains.kotlinx:kotlinx-serialization-core",
       "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm",
       "org.jetbrains.kotlinx:kotlinx-serialization-json",
       "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm",
+      "org.jetbrains.kotlinx:kotlinx-serialization-protobuf",
+      "org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm",
       "org.jetbrains:annotations",
       "org.jspecify:jspecify",
       "org.ow2.asm:asm",

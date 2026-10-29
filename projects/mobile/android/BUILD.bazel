@@ -16,6 +16,7 @@ test_suite(
         "//projects/mobile/android/core/model:model_test",
         "//projects/mobile/android/core/network:network_test",
         "//projects/mobile/android/features/alarms/api:api_test",
+        "//projects/mobile/android/features/control/api:api_test",
         "//projects/mobile/android/features/reminders/api:api_test",
         "//projects/mobile/android/app:main_activity_smoke_test",
         "//projects/mobile/android/core/navigation:navigation_test",

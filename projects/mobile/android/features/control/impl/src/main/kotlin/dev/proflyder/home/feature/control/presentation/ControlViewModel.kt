@@ -8,6 +8,8 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.feature.control.ControlFilter
+import dev.proflyder.home.feature.control.ControlPreferences
 import dev.proflyder.home.feature.control.domain.LoadControlCatalog
 import dev.proflyder.home.feature.control.domain.RunScenario
 import dev.proflyder.home.feature.control.domain.SetDevicePower
@@ -40,9 +42,20 @@ class ControlViewModel(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
     private val setDevicePower: SetDevicePower,
+    private val preferences: ControlPreferences,
 ) : BaseViewModel<ControlUiState>(ControlUiState(configured = loadCatalog.isConfigured)) {
     private var refreshJob: Job? = null
     private var generation = 0
+    private var filterChosenByUser = false
+
+    init {
+        // Restore the last selected filter. A tap that happens before this
+        // returns wins; an unknown room is reset to All once the catalog loads.
+        launch {
+            val saved = preferences.loadFilter() ?: return@launch
+            if (!filterChosenByUser) updateState { copy(filter = saved) }
+        }
+    }
 
     /** [silent] refreshes without the pull-to-refresh spinner (used to reconcile after a command). */
     fun refresh(silent: Boolean = false) {
@@ -112,7 +125,11 @@ class ControlViewModel(
         }
     }
 
-    fun setFilter(filter: ControlFilter) = updateState { copy(filter = filter) }
+    fun setFilter(filter: ControlFilter) {
+        filterChosenByUser = true
+        updateState { copy(filter = filter) }
+        launch { preferences.saveFilter(filter) }
+    }
 
     fun consumeNotice() = updateState { copy(notice = null) }
 
@@ -131,10 +148,11 @@ class ControlViewModelFactoryContributor(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
     private val setDevicePower: SetDevicePower,
+    private val preferences: ControlPreferences,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
 
     override fun createFactory() = SimpleViewModelFactory {
-        ControlViewModel(loadCatalog, runScenario, setDevicePower)
+        ControlViewModel(loadCatalog, runScenario, setDevicePower, preferences)
     }
 }

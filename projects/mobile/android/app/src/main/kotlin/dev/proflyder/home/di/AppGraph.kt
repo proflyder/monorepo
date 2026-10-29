@@ -1,6 +1,8 @@
 package dev.proflyder.home.di
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.navigation.FeatureEntry
@@ -9,6 +11,7 @@ import dev.proflyder.home.core.network.ConnectSchedulerClient
 import dev.proflyder.home.core.network.ControlCatalogClient
 import dev.proflyder.home.core.network.HttpControlCatalogClient
 import dev.proflyder.home.core.network.SchedulerClient
+import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
 import dev.proflyder.home.core.settings.TokenCipher
 import dev.proflyder.home.core.ui.ViewModelFactoryRegistry
@@ -57,6 +60,11 @@ object AppBindings {
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
         .build()
+
+    /** The single DataStore: connection settings and UI preferences (see [HomeDataStore]). */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideDataStore(context: Context): DataStore<Preferences> = HomeDataStore.create(context)
 
     @Provides
     @SingleIn(AppScope::class)

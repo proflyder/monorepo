@@ -11,6 +11,7 @@ metro_android_library(
         "//packages/kotlin/core:core",
         "//projects/mobile/android/core/config:config",
         "//projects/mobile/android/core/model:model",
+        "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
     ],

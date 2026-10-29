@@ -3,15 +3,7 @@ package dev.proflyder.home.feature.control.presentation
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
-
-/** What the Home screen shows; chosen with the chips above the list. */
-sealed interface ControlFilter {
-    data object All : ControlFilter
-    data object Scenarios : ControlFilter
-    data object Lights : ControlFilter
-    data object Switches : ControlFilter
-    data class Room(val name: String) : ControlFilter
-}
+import dev.proflyder.home.feature.control.ControlFilter
 
 /** Rows of the Home screen: section headers, scenario tiles and device rows. */
 internal sealed interface ControlItem {

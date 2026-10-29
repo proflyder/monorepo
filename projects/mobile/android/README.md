@@ -114,7 +114,7 @@ projects/mobile/android/
   core/
     model/                Android-free scheduler domain + ServerClock
     config/               connection settings contract + redaction
-    settings/             Android Keystore token + SharedPreferences store
+    settings/             Android Keystore token + Jetpack DataStore (Preferences) store
     network/              Connect unary JSON transport, DTO mapping, errors
     navigation/           Destination/FeatureEntry + typed FragmentRouter
     ui/                   BaseFragment/BaseViewModel, ViewBinding, factory registry, errors, list states
@@ -251,8 +251,13 @@ The canonical URL is stored, and `toString()` is safe for diagnostics.
 ### Credentials and backup
 
 - The token is encrypted with a non-exportable Android Keystore AES-256/GCM key
-  (`AES/GCM/NoPadding`, random IV, AAD). Ciphertext is stored in
-  SharedPreferences; plaintext token never is.
+  (`AES/GCM/NoPadding`, random IV, AAD). Ciphertext is stored in the app
+  DataStore; plaintext token never is.
+- Connection settings and UI preferences (the Home filter) share one Jetpack
+  DataStore file (`HomeDataStore`). The first run after the upgrade migrates the
+  legacy `home_connection` SharedPreferences, so saved endpoints and the
+  encrypted token survive. Readers get a synchronous in-memory snapshot (loaded
+  once at startup) because request interceptors read settings on I/O threads.
 - If Keystore decryption fails, the UI reports the token as unreadable and asks
   the user to enter it again; it does not silently downgrade to plaintext.
 - `android:allowBackup="false"` plus full-backup and data-extraction rules exclude

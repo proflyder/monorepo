@@ -13,6 +13,7 @@ import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding

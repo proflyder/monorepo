@@ -18,6 +18,7 @@ metro_android_library(
         "//projects/mobile/android/core/ui:ui",
         "//projects/mobile/android/features/control/api:api",
         "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
