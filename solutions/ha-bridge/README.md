@@ -265,3 +265,64 @@ ledger) — `projects/home/e2e/scheduler_smoke.py`; живой звук и cutov
   записей.
 - Generic tasks (`EnqueueTask`) и recurring task schedules не исполняются.
 - Нет MCP, LLM, уведомлений на телефон и импорта расписаний.
+
+## ha-control: каталог устройств и сценариев для телефона
+
+`cmd/ha-control` — **отдельный** бинарь того же solution. Алармовый `ha-bridge`
+остаётся без listener и без изменений поведения; `ha-control` решает другую
+задачу: дать телефону список управляемых сценариев и устройств и исполнить
+команды, которые телефон кладёт в планировщик.
+
+```text
+phone ── GET  /v1/catalog ─────────────► ha-control ── GET /api/states ─► HA   (только чтение)
+phone ── EnqueueTask(queue=control) ───► scheduler ◄── ListDueEvents ──── ha-control (execute)
+                                                       └─ POST /api/services/<domain>/<service> ─► HA
+```
+
+- **Каталог — конфигурация, не код.** JSON-файл (`CONTROL_CATALOG`), пример —
+  `ha-control.catalog.example.json`. Это allowlist: показывается и исполняется
+  только перечисленное. Поля: `id` (стабильный id для телефона, не HA id),
+  `kind` (`scenario` → `script.*`/`scene.*`, `light` → `light.*`,
+  `switch` → `switch.*`), `title`, `room`, `icon` (подсказка для клиента),
+  `entity`. Неизвестные поля, дубли и несовпадение домена отклоняются при старте.
+- **Исполнение идёт через планировщик.** Телефон делает
+  `EnqueueTask(task_type="home.control", queue="control", payload={"entry","action"})`.
+  Исполнитель резолвит `entry`+`action` по каталогу в service call
+  (`run` → `<domain>.turn_on`; `turn_on`/`turn_off` для устройств). Service и entity
+  из payload никогда не берутся; `toggle` намеренно нет (at-least-once доставка
+  не должна переключать дважды).
+- **Планировщик ничего не знает о каталоге.** Он лишь хранит очередь `control`.
+  Очереди `home` и `tasks` исполнителю запрещены.
+- Ответ каталога: `{"statesOk": bool, "entries": [{id, kind, title, room, icon,
+  actions[], state("on"/"off", устройства), available}]}`. Если HA недоступен,
+  записи всё равно отдаются с `available=false`, `statesOk=false`.
+- Авторизация каталога — `Authorization: Bearer <CONTROL_TOKEN>` (сравнение за
+  константное время; пустой токен не авторизует никого). Сервер только читает.
+  Телефон шлёт туда тот же bearer, что и в планировщик; можно задать общий токен.
+  Слушает `CONTROL_LISTEN` (по умолчанию `127.0.0.1:8099`; для LAN/Tailscale
+  задайте адрес интерфейса). TLS на уровне процесса нет — как у scheduler,
+  используйте доверенную сеть/Tailscale.
+
+| Переменная | Обяз. | По умолчанию | Смысл |
+| --- | --- | --- | --- |
+| `HA_URL`, `HA_TOKEN[_FILE]`, `HA_CA_FILE` | да | — | Как у ha-bridge |
+| `SCHEDULER_ENDPOINT`, `SCHEDULER_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-bridge |
+| `CONTROL_CATALOG` | да | — | Путь к JSON-каталогу |
+| `CONTROL_TOKEN[_FILE]` | да | — | Bearer каталога |
+| `CONTROL_CONSUMER_ID` | да | — | Стабильный id потребителя |
+| `CONTROL_LISTEN` | нет | `127.0.0.1:8099` | Адрес каталога |
+| `CONTROL_QUEUE` | нет | `control` | Очередь команд (не `home`/`tasks`) |
+| `CONTROL_EXECUTE` | нет | `false` | `true` включает исполнение очереди; без него только каталог |
+| `CONTROL_POLL_INTERVAL`, `CONTROL_MAX_BACKOFF`, `CONTROL_HA_TIMEOUT`, `CONTROL_SCHEDULER_TIMEOUT` | нет | `500ms`, `2m`, `10s`, `10s` | Тайминги |
+
+Ограничения первой итерации: телефон видит только «поставлено в очередь» —
+результат исполнения не возвращается (для устройств приложение через ~1.5 с
+перечитывает реальное состояние); ledger для дедупа нет, поэтому повторная
+доставка может повторить `turn_on`/сценарий (они идемпотентны по смыслу, но
+сценарий с побочными эффектами нужно проектировать с этим); не задеплоено.
+
+```bash
+CONTROL_EXECUTE=true CONTROL_CATALOG=ha-control.catalog.json \
+  go run ./solutions/ha-bridge/cmd/ha-control
+bazel test //solutions/ha-bridge/...
+```

@@ -22,6 +22,8 @@ metro_android_library(
         "//projects/mobile/android/features/alarms/api:api",
         "//projects/mobile/android/features/alarms/impl:impl",
         "//projects/mobile/android/features/connection/api:api",
+        "//projects/mobile/android/features/control/api:api",
+        "//projects/mobile/android/features/control/impl:impl",
         "//projects/mobile/android/features/connection/impl:impl",
         "//projects/mobile/android/features/reminders/api:api",
         "//projects/mobile/android/features/reminders/impl:impl",

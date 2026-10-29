@@ -28,6 +28,9 @@ class ConnectionFragment :
         binding.connectionEndpoint.doAfterTextChanged {
             if (!rendering) viewModel.setEndpoint(it?.toString().orEmpty())
         }
+        binding.connectionControlEndpoint.doAfterTextChanged {
+            if (!rendering) viewModel.setControlEndpoint(it?.toString().orEmpty())
+        }
         binding.connectionToken.doAfterTextChanged {
             if (!rendering) viewModel.setToken(it?.toString().orEmpty())
         }
@@ -56,6 +59,9 @@ class ConnectionFragment :
         rendering = true
         with(binding) {
             if (connectionEndpoint.text?.toString() != state.endpointText) connectionEndpoint.setText(state.endpointText)
+            if (connectionControlEndpoint.text?.toString() != state.controlEndpointText) {
+                connectionControlEndpoint.setText(state.controlEndpointText)
+            }
             if (connectionToken.text?.toString() != state.tokenInput) connectionToken.setText(state.tokenInput)
             if (connectionConnectTimeout.text?.toString() != state.connectSeconds) {
                 connectionConnectTimeout.setText(state.connectSeconds)

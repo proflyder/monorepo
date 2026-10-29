@@ -128,6 +128,7 @@ sealed interface RemoteFailure {
 
 enum class Field {
     ENDPOINT,
+    CONTROL_ENDPOINT,
     TOKEN,
     TIMEOUT,
     LABEL,

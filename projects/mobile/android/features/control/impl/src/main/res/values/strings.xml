@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="control_title">Home</string>
+    <string name="control_section_scenarios">Scenarios</string>
+    <string name="control_section_devices">Devices</string>
+    <string name="control_empty">Nothing to control yet. The home server\'s catalog is empty.</string>
+    <string name="control_not_configured">Set the home control address in Connection to see your scenarios and devices.</string>
+    <string name="control_open_connection">Open Connection</string>
+    <string name="control_states_unknown">Home Assistant is not reachable, so device states are unknown.</string>
+    <string name="control_scenario_queued">Sent: %1$s</string>
+    <string name="control_state_on">On</string>
+    <string name="control_state_off">Off</string>
+    <string name="control_state_unknown">State unknown</string>
+    <string name="control_state_unavailable">Unavailable</string>
+</resources>

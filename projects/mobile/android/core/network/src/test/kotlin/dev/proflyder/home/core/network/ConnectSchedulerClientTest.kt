@@ -167,6 +167,22 @@ class ConnectSchedulerClientTest {
     }
 
     @Test
+    fun enqueueTaskSendsQueueTypePayloadAndKey() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"event":{"id":"evt-1","state":"EVENT_STATE_PENDING"}}"""))
+
+        val result = client().enqueueTask("home.control", "control", """{"entry":"focus","action":"run"}""", "key-1")
+        assertEquals("evt-1", (result as Outcome.Success).value)
+
+        val request = server.takeRequest(2, TimeUnit.SECONDS)!!
+        assertEquals("/ricardo.v1.SchedulerService/EnqueueTask", request.path)
+        val body = json.parseToJsonElement(request.body.readUtf8()).jsonObject
+        assertEquals("home.control", body.getValue("taskType").jsonPrimitive.content)
+        assertEquals("control", body.getValue("queue").jsonPrimitive.content)
+        assertEquals("""{"entry":"focus","action":"run"}""", body.getValue("payloadJson").jsonPrimitive.content)
+        assertEquals("key-1", body.getValue("idempotencyKey").jsonPrimitive.content)
+    }
+
+    @Test
     fun updateScheduleSendsExpectedRevisionAsString() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(

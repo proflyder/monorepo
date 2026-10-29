@@ -17,6 +17,7 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
     is RemoteFailure.Storage -> context.getString(R.string.ui_error_storage, detail)
     is RemoteFailure.Validation -> when (field) {
         Field.ENDPOINT -> context.getString(R.string.ui_validation_endpoint)
+        Field.CONTROL_ENDPOINT -> context.getString(R.string.ui_validation_control_endpoint)
         Field.TOKEN -> context.getString(R.string.ui_validation_token)
         Field.TIMEOUT -> context.getString(R.string.ui_validation_timeout)
         Field.LABEL -> context.getString(R.string.ui_validation_label)

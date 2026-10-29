@@ -12,18 +12,9 @@ import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.model.Timer
 import java.io.IOException
-import java.net.ConnectException
-import java.net.NoRouteToHostException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
-import javax.net.ssl.SSLException
-import javax.net.ssl.SSLHandshakeException
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -34,14 +25,11 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 
 /** Transport-level contract used by feature repositories. */
 interface SchedulerClient {
@@ -61,6 +49,17 @@ interface SchedulerClient {
     suspend fun pauseTimer(id: String): Outcome<Timer>
     suspend fun resumeTimer(id: String): Outcome<Timer>
     suspend fun cancelTimer(id: String): Outcome<Timer>
+
+    /**
+     * Durably queues a generic task for an executor group. Returns the event id
+     * once the scheduler accepted it; this is "queued", not "executed".
+     */
+    suspend fun enqueueTask(
+        taskType: String,
+        queue: String,
+        payloadJson: String,
+        idempotencyKey: String,
+    ): Outcome<String>
 }
 
 /**
@@ -193,6 +192,23 @@ class ConnectSchedulerClient(
     override suspend fun resumeTimer(id: String): Outcome<Timer> = timerAction("ResumeTimer", id)
     override suspend fun cancelTimer(id: String): Outcome<Timer> = timerAction("CancelTimer", id)
 
+    override suspend fun enqueueTask(
+        taskType: String,
+        queue: String,
+        payloadJson: String,
+        idempotencyKey: String,
+    ): Outcome<String> = call(
+        "EnqueueTask",
+        buildJsonObject {
+            put("taskType", taskType)
+            put("payloadJson", payloadJson)
+            put("queue", queue)
+            if (idempotencyKey.isNotBlank()) put("idempotencyKey", idempotencyKey)
+        },
+    ) { element ->
+        element.jsonObject.getValue("event").jsonObject.getValue("id").jsonPrimitive.content
+    }
+
     private suspend fun timerAction(method: String, id: String): Outcome<Timer> =
         call(method, buildJsonObject { put("id", id) }) { element ->
             SchedulerJson.parseTimer(element.jsonObject.getValue("timer"))
@@ -227,29 +243,8 @@ class ConnectSchedulerClient(
         val call = clientFor(config).newCall(request)
         val response = try {
             call.await()
-        } catch (e: SocketTimeoutException) {
-            return@withContext Outcome.Failure(RemoteFailure.Timeout)
-        } catch (e: java.io.InterruptedIOException) {
-            return@withContext Outcome.Failure(RemoteFailure.Timeout)
-        } catch (e: SSLHandshakeException) {
-            return@withContext Outcome.Failure(RemoteFailure.Tls("TLS handshake failed"))
-        } catch (e: SSLException) {
-            return@withContext Outcome.Failure(RemoteFailure.Tls("TLS connection failed"))
-        } catch (e: UnknownHostException) {
-            return@withContext Outcome.Failure(RemoteFailure.Offline("host not found"))
-        } catch (e: ConnectException) {
-            return@withContext Outcome.Failure(RemoteFailure.Offline("connection refused"))
-        } catch (e: NoRouteToHostException) {
-            return@withContext Outcome.Failure(RemoteFailure.Offline("no route to host"))
         } catch (e: IOException) {
-            val timedOut = e is java.io.InterruptedIOException ||
-                e is SocketTimeoutException ||
-                e.cause is SocketTimeoutException ||
-                e.message?.contains("timed out", ignoreCase = true) == true
-            return@withContext Outcome.Failure(
-                if (timedOut) RemoteFailure.Timeout
-                else RemoteFailure.Offline(sanitize(e.message) ?: "network error"),
-            )
+            return@withContext Outcome.Failure(e.toRemoteFailure())
         }
 
         response.use { result ->
@@ -266,14 +261,7 @@ class ConnectSchedulerClient(
             } catch (_: ResponseTooLargeException) {
                 return@use Outcome.Failure(RemoteFailure.ProtocolFailure("response exceeds 8 MiB limit"))
             } catch (e: IOException) {
-                val timedOut = e is java.io.InterruptedIOException ||
-                    e is SocketTimeoutException ||
-                    e.cause is SocketTimeoutException ||
-                    e.message?.contains("timed out", ignoreCase = true) == true
-                return@use Outcome.Failure(
-                    if (timedOut) RemoteFailure.Timeout
-                    else RemoteFailure.Offline(sanitize(e.message) ?: "network error"),
-                )
+                return@use Outcome.Failure(e.toRemoteFailure())
             }
 
             if (code == 401 || code == 403) {
@@ -293,7 +281,7 @@ class ConnectSchedulerClient(
             try {
                 Outcome.Success(decode(element))
             } catch (e: Exception) {
-                Outcome.Failure(RemoteFailure.ProtocolFailure(sanitize(e.message) ?: "unexpected response shape"))
+                Outcome.Failure(RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"))
             }
         }
     }
@@ -304,8 +292,8 @@ class ConnectSchedulerClient(
         } catch (_: Exception) {
             null
         }
-        val code = sanitize((parsed?.get("code") as? JsonPrimitive)?.content).orEmpty()
-        val message = sanitize((parsed?.get("message") as? JsonPrimitive)?.content).orEmpty()
+        val code = sanitizeMessage((parsed?.get("code") as? JsonPrimitive)?.content).orEmpty()
+        val message = sanitizeMessage((parsed?.get("message") as? JsonPrimitive)?.content).orEmpty()
         return when (code) {
             "unauthenticated", "permission_denied" -> RemoteFailure.Unauthorized
             "deadline_exceeded", "canceled" -> RemoteFailure.Timeout
@@ -329,40 +317,10 @@ class ConnectSchedulerClient(
         return array.map(SchedulerJson::parseTimer)
     }
 
-    private fun readBoundedBody(response: Response): String {
-        val body = response.body ?: return ""
-        val declared = body.contentLength()
-        if (declared > MAX_RESPONSE_BYTES) throw ResponseTooLargeException()
-        val source = body.source()
-        if (source.request(MAX_RESPONSE_BYTES + 1L)) throw ResponseTooLargeException()
-        return source.readUtf8()
-    }
-
-    private fun sanitize(message: String?): String? = message
-        ?.take(200)
-        ?.replace(Regex("[\\p{Cntrl}]"), " ")
-        ?.replace(Regex("(?i)bearer\\s+\\S+"), "Bearer <redacted>")
-
-    private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
-        enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                if (continuation.isActive) continuation.resumeWithException(e)
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                if (continuation.isActive) continuation.resume(response) else response.close()
-            }
-        })
-        continuation.invokeOnCancellation { cancel() }
-    }
-
     private class MalformedResponse(message: String) : Exception(message)
-
-    private class ResponseTooLargeException : Exception()
 
     companion object {
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         private const val USER_AGENT = "home-android/0.1.0"
-        private const val MAX_RESPONSE_BYTES = 8L * 1024L * 1024L
     }
 }

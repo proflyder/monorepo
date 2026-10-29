@@ -69,6 +69,7 @@ class AndroidConnectionSettingsStore(
 
         val editor = prefs.edit()
             .putString(KEY_ENDPOINT, endpoint.baseUrl())
+            .putString(KEY_CONTROL_ENDPOINT, config.controlEndpoint?.baseUrl())
             .putLong(KEY_CONNECT_TIMEOUT, config.connectTimeoutMillis)
             .putLong(KEY_READ_TIMEOUT, config.readTimeoutMillis)
         if (encrypted != null) {
@@ -85,6 +86,7 @@ class AndroidConnectionSettingsStore(
 
         val stored = ConnectionConfig(
             endpoint = endpoint,
+            controlEndpoint = config.controlEndpoint,
             bearerToken = normalizedToken,
             connectTimeoutMillis = config.connectTimeoutMillis,
             readTimeoutMillis = config.readTimeoutMillis,
@@ -99,12 +101,17 @@ class AndroidConnectionSettingsStore(
             ?.let { ServerEndpoint.parse(it) as? EndpointParseResult.Valid }
             ?.endpoint
 
+        val controlEndpoint = prefs.getString(KEY_CONTROL_ENDPOINT, null)
+            ?.let { ServerEndpoint.parse(it) as? EndpointParseResult.Valid }
+            ?.endpoint
+
         val encrypted = prefs.getString(KEY_TOKEN_CIPHERTEXT, null)
         val token = encrypted?.let(cipher::decrypt)
             ?.takeIf(ConnectionConfig::isTokenValid)
 
         return ConnectionConfig(
             endpoint = endpoint,
+            controlEndpoint = controlEndpoint,
             bearerToken = token,
             connectTimeoutMillis = sanitizedTimeout(
                 KEY_CONNECT_TIMEOUT,
@@ -129,6 +136,7 @@ class AndroidConnectionSettingsStore(
     companion object {
         private const val PREFS_NAME = "home_connection"
         private const val KEY_ENDPOINT = "endpoint"
+        private const val KEY_CONTROL_ENDPOINT = "control_endpoint"
         private const val KEY_TOKEN_CIPHERTEXT = "bearer_token_ciphertext"
         private const val KEY_CONNECT_TIMEOUT = "connect_timeout_millis"
         private const val KEY_READ_TIMEOUT = "read_timeout_millis"

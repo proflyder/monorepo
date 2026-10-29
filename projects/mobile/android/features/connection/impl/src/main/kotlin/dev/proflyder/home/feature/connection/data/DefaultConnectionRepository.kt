@@ -36,6 +36,16 @@ class DefaultConnectionRepository(
                 return Outcome.Failure(RemoteFailure.Validation(Field.ENDPOINT))
             }
         }
+        val controlEndpoint = if (draft.controlEndpointText.isBlank()) {
+            null
+        } else {
+            when (val parsed = ServerEndpoint.parse(draft.controlEndpointText)) {
+                is EndpointParseResult.Valid -> parsed.endpoint
+                is EndpointParseResult.Invalid -> {
+                    return Outcome.Failure(RemoteFailure.Validation(Field.CONTROL_ENDPOINT))
+                }
+            }
+        }
         if (draft.connectTimeoutSeconds !in 1..120 || draft.readTimeoutSeconds !in 1..120) {
             return Outcome.Failure(RemoteFailure.Validation(Field.TIMEOUT))
         }
@@ -60,6 +70,7 @@ class DefaultConnectionRepository(
 
         val config = ConnectionConfig(
             endpoint = endpoint,
+            controlEndpoint = controlEndpoint,
             bearerToken = token,
             connectTimeoutMillis = draft.connectTimeoutSeconds * 1000L,
             readTimeoutMillis = draft.readTimeoutSeconds * 1000L,

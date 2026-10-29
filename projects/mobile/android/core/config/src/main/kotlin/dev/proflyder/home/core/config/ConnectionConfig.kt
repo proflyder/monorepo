@@ -13,6 +13,11 @@ import kotlinx.coroutines.flow.StateFlow
  */
 data class ConnectionConfig(
     val endpoint: ServerEndpoint? = null,
+    /**
+     * Optional base URL of the home control service (device/scenario catalog).
+     * The scheduler bearer token is also sent to it.
+     */
+    val controlEndpoint: ServerEndpoint? = null,
     val bearerToken: String? = null,
     val connectTimeoutMillis: Long = DEFAULT_CONNECT_TIMEOUT_MILLIS,
     val readTimeoutMillis: Long = DEFAULT_READ_TIMEOUT_MILLIS,
@@ -56,6 +61,7 @@ data class ConnectionConfig(
 
     override fun toString(): String =
         "ConnectionConfig(endpoint=${endpoint?.baseUrl() ?: "<unset>"}, " +
+            "controlEndpoint=${controlEndpoint?.baseUrl() ?: "<unset>"}, " +
             "token=${if (hasToken) "<set>" else "<unset>"}, " +
             "connectTimeoutMillis=$connectTimeoutMillis, readTimeoutMillis=$readTimeoutMillis)"
 

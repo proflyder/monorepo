@@ -18,7 +18,7 @@ object ConnectionDestination : Destination {
 @Inject
 class ConnectionFeatureEntry : FeatureEntry {
     override val id: String = "connection"
-    override val order: Int = 3
+    override val order: Int = 4
     override val titleRes: Int = R.string.connection_title
     override val iconRes: Int = R.drawable.connection_ic_tab
     override val rootDestination: Destination = ConnectionDestination

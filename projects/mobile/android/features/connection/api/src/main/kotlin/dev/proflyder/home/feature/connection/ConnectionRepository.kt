@@ -22,6 +22,8 @@ data class ConnectionDraft(
     val tokenUpdate: TokenUpdate,
     val connectTimeoutSeconds: Int,
     val readTimeoutSeconds: Int,
+    /** Blank means "no home control service". */
+    val controlEndpointText: String = "",
 )
 
 /** The token is never displayed; blank input means "keep what is stored". */

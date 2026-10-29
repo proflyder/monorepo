@@ -6,7 +6,7 @@ Metro-generated DI, feature API/implementation modules, and a small typed router
 
 ## What is implemented
 
-- Bottom tabs for **Alarms**, **Timers**, **Reminders**, and **Connection**.
+- Bottom tabs for **Alarms**, **Timers**, **Reminders**, **Home**, and **Connection**.
 - Alarms: list, create, edit, enable/disable, delete, snooze (9 min default), stop.
   Repeats: one-shot with an explicit date, daily, weekdays, weekends, custom ISO
   weekdays. Timezone is IANA. Existing server one-shot alarms are shown and
@@ -20,6 +20,14 @@ Metro-generated DI, feature API/implementation modules, and a small typed router
   confirmation). Back leaves selection mode first. Bulk actions run sequentially
   against the server; on the first failure the run stops, the error is shown and
   the unprocessed alarms stay selected for a retry.
+- Home: scenarios and devices (lights, switches) from a server-side catalog —
+  nothing is hard-coded in the app. The list comes from the home control service
+  (`GET /v1/catalog`, optional "Home control address" in Connection); commands go
+  through the scheduler as a `home.control` task on the `control` queue, so the
+  phone only queues them and the server executes. Scenarios run on tap; devices
+  have an on/off switch (optimistic, then re-read from the server). Pull to
+  refresh; without the address the tab explains what to set. See
+  `solutions/ha-bridge/README.md` (ha-control).
 - Connection: endpoint, required bearer token, connect/read timeouts, explicit
   **Save and test connection** using `GetStatus`, and honest offline/auth/TLS
   states. A token can be deliberately removed; the next request fails with a

@@ -6,6 +6,8 @@ import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.network.ConnectSchedulerClient
+import dev.proflyder.home.core.network.ControlCatalogClient
+import dev.proflyder.home.core.network.HttpControlCatalogClient
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
 import dev.proflyder.home.core.settings.TokenCipher
@@ -71,6 +73,13 @@ object AppBindings {
         baseClient = httpClient,
         serverClock = serverClock,
     )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideControlCatalogClient(
+        settings: ConnectionSettingsStore,
+        httpClient: OkHttpClient,
+    ): ControlCatalogClient = HttpControlCatalogClient(settings = settings, baseClient = httpClient)
 
     @Provides
     @SingleIn(AppScope::class)

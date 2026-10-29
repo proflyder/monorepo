@@ -10,6 +10,7 @@
     <string name="ui_error_server">Server error (%1$s): %2$s</string>
     <string name="ui_error_protocol">The server returned an unexpected response.</string>
     <string name="ui_error_storage">Settings could not be stored securely: %1$s</string>
+    <string name="ui_validation_control_endpoint">Enter a full http:// or https:// address for the home control service, or leave it blank.</string>
     <string name="ui_validation_endpoint">Enter a full http:// or https:// address.</string>
     <string name="ui_validation_token">Check the bearer token.</string>
     <string name="ui_validation_timeout">Timeouts must be between 1 and 120 seconds.</string>

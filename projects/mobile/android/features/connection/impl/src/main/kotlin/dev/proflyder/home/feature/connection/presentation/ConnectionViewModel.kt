@@ -25,6 +25,7 @@ enum class ConnectionNotice {
 
 data class ConnectionUiState(
     val endpointText: String = "",
+    val controlEndpointText: String = "",
     val tokenInput: String = "",
     val clearTokenRequested: Boolean = false,
     val hasStoredToken: Boolean = false,
@@ -46,6 +47,10 @@ class ConnectionViewModel(
 
     fun setEndpoint(value: String) {
         mutableState.value = mutableState.value.copy(endpointText = value, error = null, status = null)
+    }
+
+    fun setControlEndpoint(value: String) {
+        mutableState.value = mutableState.value.copy(controlEndpointText = value, error = null, status = null)
     }
 
     fun setToken(value: String) {
@@ -100,7 +105,7 @@ class ConnectionViewModel(
         )
 
         viewModelScope.launch {
-            when (val saved = repository.save(ConnectionDraft(current.endpointText, tokenUpdate, connect, read))) {
+            when (val saved = repository.save(ConnectionDraft(current.endpointText, tokenUpdate, connect, read, current.controlEndpointText))) {
                 is Outcome.Failure -> mutableState.value = mutableState.value.copy(
                     saving = false,
                     testing = false,
@@ -110,6 +115,7 @@ class ConnectionViewModel(
                     val config: ConnectionConfig = saved.value
                     mutableState.value = mutableState.value.copy(
                         endpointText = config.endpoint?.baseUrl().orEmpty(),
+                        controlEndpointText = config.controlEndpoint?.baseUrl().orEmpty(),
                         tokenInput = "",
                         clearTokenRequested = false,
                         hasStoredToken = config.hasToken,
@@ -153,6 +159,7 @@ private fun initialState(repository: ConnectionRepository): ConnectionUiState {
     val config = repository.config.value
     return ConnectionUiState(
         endpointText = config.endpoint?.baseUrl().orEmpty(),
+        controlEndpointText = config.controlEndpoint?.baseUrl().orEmpty(),
         hasStoredToken = config.hasToken,
         tokenStatus = repository.tokenStatus.value,
         connectSeconds = (config.connectTimeoutMillis / 1000L).toString(),

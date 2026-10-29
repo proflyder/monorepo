@@ -62,6 +62,23 @@
                         android:visibility="gone" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/connection_control_endpoint_layout"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:hint="@string/connection_control_endpoint"
+                        app:helperText="@string/connection_control_endpoint_helper">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/connection_control_endpoint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionNext"
+                            android:inputType="textUri" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/connection_token_layout"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
