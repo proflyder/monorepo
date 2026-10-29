@@ -4,7 +4,12 @@
 
 ## Приёмка
 
-- [ ] Spotify/MA: pause/resume, next/previous, phone→speaker/transfer.
+- [ ] Spotify/MA: phone→speaker/transfer. Pause и next проверены 29.10
+      wake-free; resume — с wake; previous для Spotify Connect исправлен через
+      Spotify Web API (MA не предлагает previous transport).
+- [ ] Wake-free команды Pulsar: «продолжи» не распознаётся локальным
+      споттером, «назад» упирается в отсутствие previous transport у MA.
+      Нужно либо расширить локальный набор, либо fallback в HA.
 - [ ] MA Liked Songs sync; «включи любимое» при пустом плейлисте.
 - [ ] Bluetooth-пара телефона. `bluetoothctl devices` на станции пуст; в HA
       entry `bluetooth` в `setup_retry` (adapter станции недоступен из HAOS VM),
