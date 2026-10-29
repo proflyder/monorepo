@@ -12,8 +12,8 @@ func raws() []Raw {
 		{Entity: "switch.desk_fan", State: "unavailable", Name: "Desk fan", Room: "Workspace"},
 		{Entity: "scene.movie", State: "2026-01-01T00:00:00+00:00", Name: "Movie", Room: "Living"},
 		{Entity: "script.work_mode", State: "off", Name: "Work mode", Icon: "mdi:laptop"},
-		{Entity: "script.blackout", State: "off", Name: "Blackout", Labeled: true},
-		{Entity: "script.alarm_start", State: "off", Name: "Alarm start"},
+		{Entity: "script.blackout", State: "off", Name: "Blackout", Scenario: true},
+		{Entity: "script.alarm_start", State: "off", Name: "Alarm start", Icon: "mdi:alarm"},
 		{Entity: "light.secret", State: "on", Name: "Secret", Hidden: true},
 		{Entity: "sensor.temp", State: "21"},
 		{Entity: "switch.router_child_lock", State: "off"},
@@ -29,12 +29,11 @@ func ids(entries []Entry) []string {
 	return out
 }
 
-func TestBuildDefaultRules(t *testing.T) {
-	got := ids(Build(raws(), Rules{Exclude: []string{"switch.*_child_lock"}}))
+func TestBuildExposesDevicesScenesAndLabeledScriptsOnly(t *testing.T) {
+	got := ids(Build(raws(), Rules{ScenarioLabel: "scenario", Exclude: []string{"switch.*_child_lock"}}))
 	want := []string{
-		// scenarios first: scene.* and scripts that have an icon or label;
-		// script.alarm_start (no icon, no label) is an internal and stays out
-		"scene.movie", "script.blackout", "script.work_mode",
+		// scenarios first: scene.* and scripts carrying the scenario label
+		"scene.movie", "script.blackout",
 		// devices: by room, unassigned last
 		"light.bedside_lamp", "switch.desk_fan", "light.hall", // Bedroom, Workspace, (none)
 	}
@@ -43,20 +42,31 @@ func TestBuildDefaultRules(t *testing.T) {
 	}
 }
 
-func TestBuildLabelRestrictsDevicesAndScenes(t *testing.T) {
-	r := raws()
-	r[0].Labeled = true // light.bedside_lamp
-	got := ids(Build(r, Rules{Label: "phone"}))
-	// light.bedside_lamp (labeled) and the scripts (icon/label rule); the
-	// unlabeled lights, switches and the scene are out.
-	want := "script.blackout,script.work_mode,light.bedside_lamp"
-	if strings.Join(got, ",") != want {
-		t.Fatalf("got %v want %s", got, want)
+// An icon is display only: it must never promote a script into the catalog.
+func TestIconNeverDecidesExposure(t *testing.T) {
+	got := ids(Build([]Raw{
+		{Entity: "script.work_mode", State: "off", Icon: "mdi:laptop"},
+		{Entity: "script.alarm_start", State: "off", Icon: "mdi:alarm"},
+	}, Rules{ScenarioLabel: "scenario"}))
+	if len(got) != 0 {
+		t.Fatalf("scripts without the scenario label must stay out, got %v", got)
+	}
+}
+
+func TestScenarioLabelDoesNotRestrictDevicesOrScenes(t *testing.T) {
+	got := ids(Build([]Raw{
+		{Entity: "light.a", State: "on"},
+		{Entity: "scene.b", State: "x"},
+		{Entity: "script.c", State: "off", Scenario: true},
+		{Entity: "script.d", State: "off"},
+	}, Rules{ScenarioLabel: "scenario"}))
+	if strings.Join(got, ",") != "scene.b,script.c,light.a" {
+		t.Fatalf("got %v", got)
 	}
 }
 
 func TestBuildMapsFields(t *testing.T) {
-	entries := Build(raws(), Rules{})
+	entries := Build(raws(), Rules{ScenarioLabel: "scenario"})
 	byID := map[string]Entry{}
 	for _, e := range entries {
 		byID[e.ID] = e
@@ -81,17 +91,17 @@ func TestBuildMapsFields(t *testing.T) {
 }
 
 func TestTitleFallsBackToEntityId(t *testing.T) {
-	e := Build([]Raw{{Entity: "light.reading_corner", State: "on"}}, Rules{})
+	e := Build([]Raw{{Entity: "light.reading_corner", State: "on"}}, Rules{ScenarioLabel: "scenario"})
 	if len(e) != 1 || e[0].Title != "Reading corner" {
 		t.Fatalf("%+v", e)
 	}
 }
 
 func TestRulesValidate(t *testing.T) {
-	if err := (Rules{Label: "phone", Exclude: []string{"switch.*"}}).Validate(); err != nil {
+	if err := (Rules{ScenarioLabel: "scenario", Exclude: []string{"switch.*"}}).Validate(); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []Rules{{Label: "Phone App"}, {Label: "a'b"}, {Exclude: []string{"["}}} {
+	for _, bad := range []Rules{{}, {ScenarioLabel: "Phone App"}, {ScenarioLabel: "a'b"}, {ScenarioLabel: "ok", Exclude: []string{"["}}} {
 		if bad.Validate() == nil {
 			t.Errorf("%+v must be rejected", bad)
 		}
@@ -99,7 +109,7 @@ func TestRulesValidate(t *testing.T) {
 }
 
 func TestResolve(t *testing.T) {
-	c := New(Build(raws(), Rules{}))
+	c := New(Build(raws(), Rules{ScenarioLabel: "scenario"}))
 	scene, _ := c.Lookup("scene.movie")
 	lamp, _ := c.Lookup("light.bedside_lamp")
 

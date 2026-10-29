@@ -14,6 +14,7 @@ kt_jvm_test(
     test_class = "dev.proflyder.home.feature.control.AllControlApiTests",
     deps = [
         ":api",
+        "//projects/mobile/android/core/model:model",
         "@maven//:junit_junit",
     ],
 )

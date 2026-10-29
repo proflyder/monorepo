@@ -1,8 +1,8 @@
 // Package discovery builds the control catalog from Home Assistant itself.
 //
 // It reads entities (name, icon, state) from /api/states and areas, hidden
-// flags and labels through read-only template rendering, then applies the
-// catalog rules. Results are cached briefly; if Home Assistant becomes
+// flags and the scenario-role label through read-only template rendering, then
+// applies the catalog rules. Results are cached briefly; if Home Assistant becomes
 // unreachable the last good catalog is served flagged as stale rather than
 // inventing or hardcoding anything.
 package discovery
@@ -82,28 +82,23 @@ func (p *Provider) discover(ctx context.Context) ([]catalog.Entry, error) {
 	}
 
 	// Areas and hidden flags are nice-to-have: without them entries just lose
-	// their room / noise filtering. The label allowlist is not optional: when
-	// it is configured and cannot be read, discovery fails closed.
+	// their room / noise filtering. The scenario label decides which scripts are
+	// exposed, so when it cannot be read no script is exposed (fail closed);
+	// devices and scenes are unaffected.
 	rooms := p.rooms(ctx)
 	hidden := p.hidden(ctx)
-	var labeled map[string]bool
-	if p.rules.Label != "" {
-		labeled, err = p.labeled(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("read label %q: %w", p.rules.Label, err)
-		}
-	}
+	scenarios := p.scenarios(ctx)
 
 	raws := make([]catalog.Raw, 0, len(entities))
 	for _, e := range entities {
 		raws = append(raws, catalog.Raw{
-			Entity:  e.ID,
-			State:   e.State,
-			Name:    e.Name,
-			Icon:    e.Icon,
-			Room:    rooms[e.ID],
-			Hidden:  hidden[e.ID],
-			Labeled: labeled[e.ID],
+			Entity:   e.ID,
+			State:    e.State,
+			Name:     e.Name,
+			Icon:     e.Icon,
+			Room:     rooms[e.ID],
+			Hidden:   hidden[e.ID],
+			Scenario: scenarios[e.ID],
 		})
 	}
 	return catalog.Build(raws, p.rules), nil
@@ -138,13 +133,15 @@ func (p *Provider) hidden(ctx context.Context) map[string]bool {
 	return lines(out)
 }
 
-func (p *Provider) labeled(ctx context.Context) (map[string]bool, error) {
+func (p *Provider) scenarios(ctx context.Context) map[string]bool {
 	// Rules.Validate guarantees the label is [a-z0-9_-], so it is safe to inline.
-	out, err := p.ha.RenderTemplate(ctx, "{{ label_entities('"+p.rules.Label+"') | join('\\n') }}")
+	out, err := p.ha.RenderTemplate(ctx, "{{ label_entities('"+p.rules.ScenarioLabel+"') | join('\\n') }}")
 	if err != nil {
-		return nil, err
+		p.log.Warn("could not read the scenario label; no scripts will be exposed",
+			"label", p.rules.ScenarioLabel, "error", err)
+		return nil
 	}
-	return lines(out), nil
+	return lines(out)
 }
 
 func lines(text string) map[string]bool {

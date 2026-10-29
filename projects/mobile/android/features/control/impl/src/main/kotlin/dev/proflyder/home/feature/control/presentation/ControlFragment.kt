@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.os.Bundle
+import android.view.View
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.snackbar.Snackbar
@@ -14,6 +15,10 @@ import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.control.ControlFilter
+import dev.proflyder.home.feature.control.ControlFilterOption
+import dev.proflyder.home.feature.control.ControlItem
+import dev.proflyder.home.feature.control.ControlItems
+import dev.proflyder.home.feature.control.ControlTexts
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
@@ -26,6 +31,9 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     private lateinit var adapter: ControlAdapter
     private lateinit var states: ListStateViews
     private var shownOptions: List<ControlFilterOption> = emptyList()
+
+    /** Chip view id -> filter, rebuilt together with the chips (view ids are generated, so they never collide). */
+    private var chipFilters: Map<Int, ControlFilter> = emptyMap()
     private var syncingChips = false
 
     /** The single callback instance shared with the adapter. */
@@ -71,7 +79,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         binding.controlFilters.setOnCheckedStateChangeListener { _, checkedIds ->
             if (syncingChips) return@setOnCheckedStateChangeListener
             val id = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
-            shownOptions.firstOrNull { optionId(it) == id }?.let { viewModel.setFilter(it.filter) }
+            chipFilters[id]?.let { viewModel.setFilter(it) }
         }
 
         viewModel.state.observe { render(it) }
@@ -79,6 +87,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
     override fun onBindingDestroyed() {
         shownOptions = emptyList()
+        chipFilters = emptyMap()
     }
 
     override fun onResume() {
@@ -105,7 +114,9 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             else -> {
                 states.showContent()
                 renderFilters(state)
-                adapter.submitList(ControlItems.build(state, state.filter, texts()))
+                adapter.submitList(
+                    ControlItems.build(state.entries, state.pending, state.statesOk, state.filter, texts()),
+                )
             }
         }
         binding.controlRefresh.isRefreshing = state.refreshing && hasItems
@@ -138,24 +149,26 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         onSummary = { on, total -> getString(R.string.control_on_summary, on, total) },
     )
 
-    /** Chips are stable per filter: ids are derived from it so re-checking never needs a rebuild. */
-    private fun optionId(option: ControlFilterOption): Int = option.filter.hashCode().let { if (it == 0) 1 else it }
-
     private fun renderFilters(state: ControlUiState) {
         val options = ControlItems.options(state.entries)
         val group = binding.controlFilters
         syncingChips = true
         if (options != shownOptions) {
             group.removeAllViews()
+            val filters = LinkedHashMap<Int, ControlFilter>()
             options.forEach { option ->
                 val chip = ItemControlFilterBinding.inflate(layoutInflater, group, false).root
-                chip.id = optionId(option)
+                chip.id = View.generateViewId()
                 chip.text = labelOf(option)
                 group.addView(chip)
+                filters[chip.id] = option.filter
             }
+            chipFilters = filters
             shownOptions = options
         }
-        options.firstOrNull { it.filter == state.filter }?.let { group.check(optionId(it)) }
+        // Always check the *applied* filter, so a stale selection still shows a checked chip.
+        val applied = ControlItems.effectiveFilter(state.entries, state.filter)
+        chipFilters.entries.firstOrNull { it.value == applied }?.let { group.check(it.key) }
         syncingChips = false
         binding.controlFiltersBar.setVisible(options.size > 1)
     }

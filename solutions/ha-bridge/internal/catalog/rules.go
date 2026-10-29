@@ -17,17 +17,32 @@ type Raw struct {
 	Room   string
 	// Hidden mirrors HA's "hidden entity" flag: the user already decided it is noise.
 	Hidden bool
-	// Labeled is true when the entity carries Rules.Label.
-	Labeled bool
+	// Scenario is true when the entity carries the scenario role label
+	// (Rules.ScenarioLabel), i.e. the user declared it a personal scenario.
+	Scenario bool
 }
 
-// Rules decide what discovery exposes. There is no entity list anywhere:
-// the source of truth is Home Assistant (areas, names, labels, hidden flags).
+// DefaultScenarioLabel is the Home Assistant label id that marks a script as a
+// scenario the user runs personally. It names a domain role, not a client: any
+// consumer (phone app, voice, a future MCP gateway) can share the same meaning.
+const DefaultScenarioLabel = "scenario"
+
+// Rules decide what discovery exposes. There is no entity list anywhere: the
+// source of truth is Home Assistant (areas, names, hidden flags, labels).
+//
+//   - light, switch: every one that is not hidden or excluded;
+//   - scene: every one that is not hidden or excluded (a scene is a user preset
+//     by definition);
+//   - script: only when it carries the scenario label. Scripts also hold
+//     infrastructure (alarm helpers, RPC wrappers) and Home Assistant has no
+//     other native marker separating "my scenarios" from those: Assist exposure
+//     is a voice concept (it includes music actions), and an icon or a category
+//     is presentation, not intent. So the intent is one explicit label.
+//
+// An icon (or any other attribute) never decides what is exposed.
 type Rules struct {
-	// Label is an optional HA label id. When set, lights, switches and scenes
-	// are exposed only if they carry it (an explicit allowlist); when empty
-	// they are all exposed. Scripts follow their own rule, see Build.
-	Label string
+	// ScenarioLabel is the HA label id of the scenario role.
+	ScenarioLabel string
 	// Exclude are path.Match globs on the entity id (e.g. "switch.*_child_lock").
 	Exclude []string
 }
@@ -45,8 +60,8 @@ var (
 
 // Validate checks rule syntax so a misconfiguration fails at startup.
 func (r Rules) Validate() error {
-	if r.Label != "" && !labelPattern.MatchString(r.Label) {
-		return errors.New("label must be an HA label id: [a-z0-9_-]{1,64}")
+	if !labelPattern.MatchString(r.ScenarioLabel) {
+		return errors.New("scenario label must be an HA label id: [a-z0-9_-]{1,64}")
 	}
 	for _, g := range r.Exclude {
 		if _, err := path.Match(g, ""); err != nil {
@@ -90,15 +105,8 @@ func Build(raws []Raw, rules Rules) []Entry {
 		if !ok || raw.Hidden || rules.excluded(raw.Entity) {
 			continue
 		}
-		if domain == "script" {
-			// Most scripts are internals (alarm helpers, RPC wrappers). A script
-			// is a user-facing scenario when it says so in Home Assistant: it
-			// has an icon, or carries the label. This works for YAML scripts,
-			// which cannot be labeled (they have no entity-registry entry).
-			if !raw.Labeled && strings.TrimSpace(raw.Icon) == "" {
-				continue
-			}
-		} else if rules.Label != "" && !raw.Labeled {
+		// Scripts are exposed only as declared scenarios; see Rules.
+		if domain == "script" && !raw.Scenario {
 			continue
 		}
 

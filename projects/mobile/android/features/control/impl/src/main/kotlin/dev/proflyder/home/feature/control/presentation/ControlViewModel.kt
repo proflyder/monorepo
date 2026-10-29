@@ -9,6 +9,7 @@ import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.control.ControlFilter
+import dev.proflyder.home.feature.control.ControlItems
 import dev.proflyder.home.feature.control.ControlPreferences
 import dev.proflyder.home.feature.control.domain.LoadControlCatalog
 import dev.proflyder.home.feature.control.domain.RunScenario
@@ -53,7 +54,8 @@ class ControlViewModel(
         // returns wins; an unknown room is reset to All once the catalog loads.
         launch {
             val saved = preferences.loadFilter() ?: return@launch
-            if (!filterChosenByUser) updateState { copy(filter = saved) }
+            // If the catalog is already loaded, validate the stored choice against it.
+            if (!filterChosenByUser) updateState { copy(filter = ControlItems.effectiveFilter(entries, saved)) }
         }
     }
 
@@ -71,13 +73,12 @@ class ControlViewModel(
             if (requested != generation) return@launch
             when (result) {
                 is Outcome.Success -> updateState {
-                    val options = ControlItems.options(result.value.entries)
                     copy(
                         refreshing = false,
                         entries = result.value.entries,
                         statesOk = result.value.statesOk,
                         // A room or category that vanished falls back to everything.
-                        filter = if (options.any { it.filter == filter }) filter else ControlFilter.All,
+                        filter = ControlItems.effectiveFilter(result.value.entries, filter),
                     )
                 }
                 is Outcome.Failure -> updateState { copy(refreshing = false, loadError = result.failure) }

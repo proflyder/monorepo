@@ -20,8 +20,8 @@ func TestLoadSettingsDefaults(t *testing.T) {
 	if s.Queue != "control" || s.Listen != "127.0.0.1:8099" || s.Execute {
 		t.Fatalf("defaults = %+v", s)
 	}
-	if s.Label != "" || len(s.Exclude) != 0 {
-		t.Fatalf("rules default to none: %+v", s)
+	if s.ScenarioLabel != "scenario" || len(s.Exclude) != 0 {
+		t.Fatalf("scenario label defaults to \"scenario\": %+v", s)
 	}
 	if s.SchedulerURL != "http://192.0.2.27:8098" {
 		t.Fatalf("scheduler url = %q", s.SchedulerURL)
@@ -31,7 +31,8 @@ func TestLoadSettingsDefaults(t *testing.T) {
 func TestLoadSettingsRejects(t *testing.T) {
 	mutate := map[string]func(map[string]string){
 		"no control token": func(m map[string]string) { delete(m, "CONTROL_TOKEN") },
-		"bad label":        func(m map[string]string) { m["CONTROL_LABEL"] = "My Label" },
+		"bad label":        func(m map[string]string) { m["CONTROL_SCENARIO_LABEL"] = "My Label" },
+		"legacy label":     func(m map[string]string) { m["CONTROL_LABEL"] = "phone" },
 		"bad exclude":      func(m map[string]string) { m["CONTROL_EXCLUDE"] = "[" },
 		"home queue":       func(m map[string]string) { m["CONTROL_QUEUE"] = "home" },
 		"tasks queue":      func(m map[string]string) { m["CONTROL_QUEUE"] = "tasks" },
@@ -51,13 +52,13 @@ func TestLoadSettingsRejects(t *testing.T) {
 
 func TestLoadSettingsRules(t *testing.T) {
 	m := base()
-	m["CONTROL_LABEL"] = "phone"
+	m["CONTROL_SCENARIO_LABEL"] = "my_scenarios"
 	m["CONTROL_EXCLUDE"] = " switch.*_child_lock , light.hall "
 	s, err := loadSettings(env(m))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Label != "phone" || len(s.Exclude) != 2 || s.Exclude[0] != "switch.*_child_lock" {
+	if s.ScenarioLabel != "my_scenarios" || len(s.Exclude) != 2 || s.Exclude[0] != "switch.*_child_lock" {
 		t.Fatalf("rules = %+v", s)
 	}
 }

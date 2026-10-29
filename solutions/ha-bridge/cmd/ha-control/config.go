@@ -20,7 +20,7 @@ var queuePattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,31}$`)
 type settings struct {
 	HAURL, HAToken, HACAFile              string
 	SchedulerURL, SchedulerToken, SchedCA string
-	Label                                 string
+	ScenarioLabel                         string
 	Exclude                               []string
 	CacheTTL                              time.Duration
 	Listen                                string
@@ -56,14 +56,21 @@ func loadSettings(getenv func(string) string) (*settings, error) {
 	s.HACAFile = strings.TrimSpace(getenv("HA_CA_FILE"))
 	s.SchedCA = strings.TrimSpace(getenv("SCHEDULER_CA_FILE"))
 
-	s.Label = strings.TrimSpace(getenv("CONTROL_LABEL"))
+	if strings.TrimSpace(getenv("CONTROL_LABEL")) != "" {
+		return nil, errors.New("config: CONTROL_LABEL was removed; label scenario scripts with the HA label " +
+			"\"scenario\" (or set CONTROL_SCENARIO_LABEL to another label id)")
+	}
+	s.ScenarioLabel = strings.TrimSpace(getenv("CONTROL_SCENARIO_LABEL"))
+	if s.ScenarioLabel == "" {
+		s.ScenarioLabel = catalog.DefaultScenarioLabel
+	}
 	for _, g := range strings.Split(getenv("CONTROL_EXCLUDE"), ",") {
 		if g = strings.TrimSpace(g); g != "" {
 			s.Exclude = append(s.Exclude, g)
 		}
 	}
-	if err := (catalog.Rules{Label: s.Label, Exclude: s.Exclude}).Validate(); err != nil {
-		return nil, fmt.Errorf("config: CONTROL_LABEL/CONTROL_EXCLUDE: %w", err)
+	if err := (catalog.Rules{ScenarioLabel: s.ScenarioLabel, Exclude: s.Exclude}).Validate(); err != nil {
+		return nil, fmt.Errorf("config: CONTROL_SCENARIO_LABEL/CONTROL_EXCLUDE: %w", err)
 	}
 	if s.Listen = strings.TrimSpace(getenv("CONTROL_LISTEN")); s.Listen == "" {
 		s.Listen = "127.0.0.1:8099"

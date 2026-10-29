@@ -48,7 +48,8 @@ spotify_connect_set_volume:
 
 work_mode:
   alias: "Scene: work lighting"
-  # icon marks this script as a user-facing scenario for the phone app (ha-control)
+  # Display only. Being a personal scenario is declared with the HA label "scenario"
+  # (entity registry), see solutions/ha-bridge/README.md.
   icon: mdi:laptop
   description: >-
     Turn on all bedroom lights for a work session: LED strip, bedside lamp,

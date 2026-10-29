@@ -51,7 +51,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		return fmt.Errorf("home assistant HTTP client: %w", err)
 	}
 	haClient := ha.New(cfg.HAURL, cfg.HAToken, haHTTP)
-	provider := discovery.New(haClient, catalog.Rules{Label: cfg.Label, Exclude: cfg.Exclude}, cfg.CacheTTL, logger)
+	provider := discovery.New(haClient, catalog.Rules{ScenarioLabel: cfg.ScenarioLabel, Exclude: cfg.Exclude}, cfg.CacheTTL, logger)
 
 	server := &http.Server{
 		Addr:              cfg.Listen,
@@ -60,7 +60,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	}
 	errc := make(chan error, 2)
 	go func() {
-		logger.Info("catalog listening", "addr", cfg.Listen, "label", cfg.Label, "exclude", cfg.Exclude, "execute", cfg.Execute)
+		logger.Info("catalog listening", "addr", cfg.Listen, "scenario_label", cfg.ScenarioLabel, "exclude", cfg.Exclude, "execute", cfg.Execute)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 		}

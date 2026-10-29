@@ -47,11 +47,12 @@ func base() *fakeHA {
 			{ID: "light.noise", State: "on", Name: "Noise"},
 			{ID: "script.work_mode", State: "off", Name: "Work mode"},
 			{ID: "script.cleaner", State: "off", Name: "Cleaner", Icon: "robot-vacuum"},
+			{ID: "script.alarm_stop", State: "off", Name: "Alarm stop"},
 			{ID: "scene.movie", State: "scening", Name: "Movie"},
 		},
 		rooms:  "light.lamp|Bedroom\nlight.noise|\nscript.work_mode|None\nscene.movie|Living\n",
 		hidden: "light.noise\n",
-		label:  "script.work_mode\nlight.lamp\n",
+		label:  "script.work_mode\nscript.cleaner\n",
 	}
 }
 
@@ -64,13 +65,15 @@ func ids(s Snapshot) string {
 }
 
 func TestDiscoversFromHomeAssistant(t *testing.T) {
-	p := New(base(), catalog.Rules{}, time.Second, nil)
+	p := New(base(), catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil)
 	snap, err := p.Get(context.Background())
 	if err != nil || !snap.StatesOK {
 		t.Fatalf("snap=%+v err=%v", snap, err)
 	}
-	if got := ids(snap); got != "scene.movie,script.cleaner,light.lamp" {
-		t.Fatalf("got %s (a script needs an icon or label; hidden are skipped)", got)
+	// scene + scripts that carry the scenario label (cleaner has an icon but so
+	// does nothing else; alarm_stop has neither); hidden light.noise is out.
+	if got := ids(snap); got != "scene.movie,script.cleaner,script.work_mode,light.lamp" {
+		t.Fatalf("got %s", got)
 	}
 	lamp, _ := snap.Catalog.Lookup("light.lamp")
 	if lamp.Room != "Bedroom" || lamp.Title != "Lamp" || lamp.State != "on" {
@@ -78,22 +81,15 @@ func TestDiscoversFromHomeAssistant(t *testing.T) {
 	}
 }
 
-func TestLabelAllowlistIncludesScripts(t *testing.T) {
-	p := New(base(), catalog.Rules{Label: "phone"}, time.Second, nil)
-	snap, err := p.Get(context.Background())
+func TestScenarioLabelOutageExposesNoScripts(t *testing.T) {
+	f := base()
+	f.labelErr = errors.New("no labels in this HA")
+	snap, err := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil).Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(snap); got != "script.cleaner,script.work_mode,light.lamp" {
-		t.Fatalf("got %s", got)
-	}
-}
-
-func TestLabelFailsClosed(t *testing.T) {
-	f := base()
-	f.labelErr = errors.New("no labels in this HA")
-	if _, err := New(f, catalog.Rules{Label: "phone"}, time.Second, nil).Get(context.Background()); err == nil {
-		t.Fatal("an unreadable label must not widen the catalog")
+	if got := ids(snap); got != "scene.movie,light.lamp" {
+		t.Fatalf("an unreadable scenario label must fail closed for scripts only, got %s", got)
 	}
 }
 
@@ -101,7 +97,7 @@ func TestAreasAndHiddenAreBestEffort(t *testing.T) {
 	f := base()
 	f.roomsErr = errors.New("boom")
 	f.hiddenErr = errors.New("boom")
-	snap, err := New(f, catalog.Rules{}, time.Second, nil).Get(context.Background())
+	snap, err := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil).Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +112,7 @@ func TestAreasAndHiddenAreBestEffort(t *testing.T) {
 
 func TestCachesWithinTTLAndRefreshesAfter(t *testing.T) {
 	f := base()
-	p := New(f, catalog.Rules{}, 10*time.Second, nil)
+	p := New(f, catalog.Rules{ScenarioLabel: "scenario"}, 10*time.Second, nil)
 	now := time.Unix(1000, 0)
 	p.now = func() time.Time { return now }
 	for i := 0; i < 3; i++ {
@@ -137,7 +133,7 @@ func TestCachesWithinTTLAndRefreshesAfter(t *testing.T) {
 
 func TestServesStaleCatalogWhenHAIsDown(t *testing.T) {
 	f := base()
-	p := New(f, catalog.Rules{}, time.Second, nil)
+	p := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil)
 	now := time.Unix(1000, 0)
 	p.now = func() time.Time { return now }
 	if _, err := p.Get(context.Background()); err != nil {
@@ -159,7 +155,7 @@ func TestServesStaleCatalogWhenHAIsDown(t *testing.T) {
 func TestFirstReadFailureIsAnError(t *testing.T) {
 	f := base()
 	f.entitiesErr = errors.New("down")
-	if _, err := New(f, catalog.Rules{}, time.Second, nil).Get(context.Background()); err == nil {
+	if _, err := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil).Get(context.Background()); err == nil {
 		t.Fatal("no catalog can be invented without HA")
 	}
 }
