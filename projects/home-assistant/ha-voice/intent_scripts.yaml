@@ -224,8 +224,8 @@ StationMusicPrevious:
           target:
             entity_id: media_player.iandeks_stantsiia_midi
 StationCancel:
-  speech:
-    text: "Хорошо."
+  # Local intent: the request is recognized and ends here. No speech means no TTS answer, and
+  # prefer_local_intents keeps "отмена" away from Hermes.
   action: []
 StationPlayFavorites:
   speech:

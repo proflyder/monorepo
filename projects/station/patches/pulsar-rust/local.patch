@@ -41,10 +41,10 @@ index fd071a7..ae5f47f 100644
  символами для разбора отчётов о падениях. Версия берётся из `git describe` и видна в
 diff --git a/RICARDO.md b/RICARDO.md
 new file mode 100644
-index 0000000..8ddaa5a
+index 0000000..f6bdd16
 --- /dev/null
 +++ b/RICARDO.md
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,106 @@
 +# Ricardo profile of the Rust Pulsar fork
 +
 +This fork is the Ricardo Rust profile of Pulsar for the Station Midi
@@ -74,7 +74,9 @@ index 0000000..8ddaa5a
 +| Wake word | New on-device «Рикардо» detector, same microWakeWord model as the deployed fork build; `wake_word=ricardo` is the default. |
 +| Pre-roll | The wake event carries 0.5 s (16 chunks, 512 ms) of VQE-cleaned audio taken from the shared 1.024 s ring (upstream `wake_preroll` rule `Fixed(16)` for the `ricardo` id), so «Рикардо, включи свет» does not lose its first syllables. The upstream `WakePreroll` switch and `wake_preroll=` key control it. |
 +| Silent cancel | `stt-no-text-recognized` is treated as a cancel, not as an error ring. |
++| Repeated wake | A wake word heard during LISTENING / PROCESSING ends that dialog (`voice_request_stop`) and starts a new one with the wake earcon; during SPEAKING the answer is cut and the new dialog starts. A station that loses wake arbitration does not cut its answer. Late events of a replaced started run are dropped (its RUN_END is treated as stale). |
 +| `стоп` | The local command spotter is off during LISTENING/PROCESSING/arbitration. «Рикардо, стоп» reaches HA, which stops the alarm and restores the music. |
++| `отмена` | Recognized after the wake word as the request, it is an HA custom intent (`StationCancel`) with no speech and no side effects: no TTS answer and no Hermes fallback. The stock command model has no «отмена», so a mid-call «отмена» without a repeated wake word is not detected locally. |
 +| Local commands | The command spotter runs only while something plays and outside a voice request, matching the deployed fork profile rather than upstream's always-on behavior. |
 +| Nearest station | Default `nearest_answers=false`: this installation has one station and the 250 ms arbitration window only adds latency. It can be turned back on in HA. |
 +| Zigbee | Runtime initialization is disabled (`ENABLE_ZIGBEE=false`); the radio and the `zigbee-*.ybl` assets are left untouched. |
@@ -4924,10 +4926,25 @@ index 79b3478..ece65e8 100644
          self.st.mic_muted || self.hw_mic_muted
      }
 diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
-index a40b394..6dca0fa 100644
+index a40b394..fe29b7b 100644
 --- a/satellite/crates/pulsar/src/controller/voice.rs
 +++ b/satellite/crates/pulsar/src/controller/voice.rs
-@@ -135,7 +135,6 @@ impl Controller {
+@@ -122,8 +122,12 @@ impl Controller {
+             }
+             return self.stop_timer_ring();
+         }
+-        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
+-            return;
++        // As stock Alice: a repeated wake word replaces the call in progress instead of being
++        // ignored. The old call is ended only when this station starts the new dialog
++        // (answer_wake): a station that loses wake arbitration keeps its answer, and its busy
++        // claim still counts SPEAKING. A pending claim is replaced by this wake word.
++        if self.arbitrating {
++            self.cancel_arbitration();
+         }
+         // Without the HA pipeline this station could win and stay silent: it does not take part.
+         if !self.arbitration_on() || !self.api.voice_subscribed() {
+@@ -135,7 +139,6 @@ impl Controller {
          self.arb_phrase = phrase.to_owned();
          self.arb_level = level_db;
          self.arb_audio = preroll;
@@ -4935,15 +4952,42 @@ index a40b394..6dca0fa 100644
          self.mic.set_streaming(true);
          self.update_ui();
          let busy = self.phase == Phase::Speaking || self.announcing;
-@@ -159,7 +158,6 @@ impl Controller {
+@@ -146,10 +149,16 @@ impl Controller {
+         if self.timer_ringing {
+             return self.stop_timer_ring();
+         }
++        // A repeated wake word: a LISTENING / PROCESSING dialog is ended, its run stopped, and
++        // RunBinding keeps the replaced run's late RUN_END from ending the new dialog. While
++        // SPEAKING the answer is only cut, as before (the new start replaces its dialog id).
++        // ESPHome pipeline events carry no run id: a run replaced before its RUN_START cannot be
++        // told apart from the new one if that RUN_START was still on the wire.
+         if matches!(self.phase, Phase::Listening | Phase::Processing) {
+-            return;
+-        }
+-        if self.phase == Phase::Speaking || self.announcing {
++            info!("wake word: replacing the active dialog");
++            self.interrupt_speech();
++            self.finish_interaction();
++        } else if self.phase == Phase::Speaking || self.announcing {
+             self.interrupt_speech(); // barge-in: cut the answer short
+         }
+         self.start_pipeline(phrase, true, preroll);
+@@ -159,9 +168,12 @@ impl Controller {
          self.arbitrating = false;
          self.arb_claim = None;
          let audio = std::mem::take(&mut self.arb_audio);
 -        let command = std::mem::take(&mut self.arb_command);
          if !won {
-             self.mic.set_streaming(false);
+-            self.mic.set_streaming(false);
++            // A dialog that was already listening keeps streaming: this wake word replaced
++            // nothing unless this station answers it.
++            if self.phase != Phase::Listening {
++                self.mic.set_streaming(false);
++            }
              info!(
-@@ -175,12 +173,6 @@ impl Controller {
+                 "wake word: {} answers ({}{:.1} dB, ours {:.1} dB)",
+                 best.station,
+@@ -175,12 +187,6 @@ impl Controller {
              return;
          }
          info!("wake word: this station answers ({peers} other station(s) heard it)");
@@ -4956,7 +5000,7 @@ index a40b394..6dca0fa 100644
          // Capture keeps streaming into the new dialog: switching it off here could drop the
          // chunk between the preroll and live audio.
          let phrase = self.arb_phrase.clone();
-@@ -198,7 +190,6 @@ impl Controller {
+@@ -198,7 +204,6 @@ impl Controller {
          self.arbitrating = false;
          self.arb_claim = None;
          self.arb_audio.clear();
@@ -4964,7 +5008,7 @@ index a40b394..6dca0fa 100644
          if self.phase != Phase::Listening {
              self.mic.set_streaming(false);
          }
-@@ -312,15 +303,18 @@ impl Controller {
+@@ -312,15 +317,18 @@ impl Controller {
                          "pipeline: another satellite answers this wake word (HA duplicate wake-up)"
                      );
                      self.stop_streaming();
@@ -4987,7 +5031,7 @@ index a40b394..6dca0fa 100644
                  }
              }
              VaEvent::RunEnd => {
-@@ -629,10 +623,23 @@ impl Controller {
+@@ -629,10 +637,23 @@ impl Controller {
      // ---------------- local commands ----------------
  
      /// Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше",
@@ -5014,7 +5058,7 @@ index a40b394..6dca0fa 100644
      }
  
      fn owns_music(&self) -> bool {
-@@ -674,9 +681,7 @@ impl Controller {
+@@ -674,9 +695,7 @@ impl Controller {
          }
      }
  
@@ -5025,7 +5069,7 @@ index a40b394..6dca0fa 100644
          if self.mic_muted() {
              return;
          }
-@@ -687,53 +692,24 @@ impl Controller {
+@@ -687,53 +706,24 @@ impl Controller {
              info!("voice command '{word}' ignored: another station answers this wake word");
              return;
          }

@@ -394,6 +394,8 @@ class IntentTests(unittest.TestCase):
     def test_cancel_has_bare_phrases_and_no_side_effects(self):
         cancel = INTENTS["StationCancel"]
         self.assertEqual(services(cancel), [])
+        # Recognized "отмена" ends locally: no spoken answer and no Hermes fallback.
+        self.assertNotIn("speech", cancel)
         phrases = set()
         for data in self.sentence_data:
             for item in data.get("intents", {}).get("StationCancel", {}).get("data", []):

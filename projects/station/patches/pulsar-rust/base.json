@@ -7,7 +7,7 @@
   "head_commit": "c57d521043880776f1cfa344ab68ddc42295e47b",
   "head_description": "v0.5.2-3-gc57d521",
   "branch": "feat/ricardo-rust",
-  "worktree_dirty": false,
+  "worktree_dirty": true,
   "new_source_files": [],
   "restore": {
     "checkout": "git checkout 4cba44af1a140749b35e1e5074d94f173804cfc3",
