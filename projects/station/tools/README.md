@@ -1,5 +1,12 @@
 # Инструменты
 
+## `voice-recorder/`
+
+Временная локальная веб-консоль записи микрофонов колонки на Mac для
+датасета Ricardo. Явное переключение с отключением Pulsar на время сеанса,
+SSH-поток PCM, watchdog восстановления и удаление без изменения постоянной
+конфигурации. Инструкция — [voice-recorder/README.md](voice-recorder/README.md).
+
 ## `ble-gateway/`
 
 Свой BLE Wi-Fi gateway для Midi (`Station-Gateway`). Go + BlueZ D-Bus GATT;

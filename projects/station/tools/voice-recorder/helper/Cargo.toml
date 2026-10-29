@@ -1,0 +1,12 @@
+[package]
+name = "ricardo-voicestream"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+pulsar-audio = { path = "../../../upstream/pulsar-rust/satellite/crates/pulsar-audio" }
+pulsar-core = { path = "../../../upstream/pulsar-rust/satellite/crates/pulsar-core" }
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time", "macros"] }

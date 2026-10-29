@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Рикардо · запись голоса</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main>
+<header><span class="tag">Локально · микрофоны колонки → Mac</span><h1>Научи Рикардо<br>слышать тебя.</h1><p>Записывай небольшими блоками, в своей обычной манере. Нарезать каждое слово вручную не нужно.</p></header>
+<section class="panel"><div class="row"><h2>1. Подключение</h2><span id="badge">Обычный режим</span></div>
+<p id="status" role="status">Проверяем локальный сервер…</p>
+<label class="consent"><input id="consent" type="checkbox"> На время сеанса выключить Pulsar: музыка и голосовой ассистент станут недоступны. Микрофоны будут записывать звук. После выхода вернуть обычный режим.</label>
+<div class="row"><button id="connect">Включить режим записи</button><button id="disconnect" class="secondary" disabled>Завершить сеанс и вернуть ассистента</button></div>
+<p class="small">Не включай физический mute. Он может выключить сами микрофоны. Страница должна оставаться открытой: при потере связи с ней сеанс автоматически завершается. Один сеанс — до 9½ минут.</p>
+</section>
+<section class="panel"><h2>2. Выбери блок</h2><div class="grid">
+<label>Назначение<select id="split"><option value="train">Обучение</option><option value="test">Проверка — отдельный сеанс позже</option></select></label>
+<label>Манера речи<select id="block"><option value="normal">Обычный голос</option><option value="relaxed">Расслабленно / быстро</option><option value="quiet">Тихий голос</option><option value="whisper">Шёпот</option><option value="commands">Обращение с командой</option><option value="background">Фон — без «Рикардо»</option></select></label></div>
+<div id="prompt" class="prompt"></div><p>Оставляй 2–3 секунды между примерами. После старта подожди секунду, затем говори. Не произноси названия блоков: они сохраняются автоматически.</p>
+<label>Заметка (необязательно)<input id="note" maxlength="300" placeholder="Например: 2 метра, сбоку, тихая комната"></label>
+<div class="meter"><div id="level"></div></div><div class="row small"><span id="db">Нет сигнала</span><span id="remaining"></span></div>
+<div class="row"><button id="record" disabled>● Начать дубль</button><button id="finish" class="secondary" disabled>■ Сохранить дубль</button><strong id="timer">0:00</strong></div>
+<p class="small">Один дубль — до 3 минут. Звук уже обработан VQE/AGC колонки, как на входе детектора. Мониторинг вслух выключен, чтобы не записывать собственное воспроизведение.</p>
+</section>
+<section class="panel"><div class="row"><h2>3. Сохранённые дубли</h2><span id="total"></span></div><p class="small">WAV + разметка сохраняются на Mac в приватной папке проекта. Прослушивание доступно после возврата ассистента. Записи не загружаются в облако. Неудачный дубль можно исключить, сохранив оригинал.</p><div id="files"></div></section>
+<footer>Начни с 10 обычных обращений и проверь запись. Затем — разные расстояния, тихий голос и шёпот. Проверочный набор запиши позже, отдельно от обучающего.</footer>
+</main></body></html>
