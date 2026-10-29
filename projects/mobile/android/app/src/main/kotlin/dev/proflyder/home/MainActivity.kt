@@ -29,7 +29,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private lateinit var binding: ActivityMainBinding
     private lateinit var features: FeatureRegistry
 
-    private val bottomNavigation: BottomNavigationView get() = binding.bottomNavigation
+    private val bottomNavigation: BottomNavigationView get() = binding.homeNoticeAnchor
     private val toolbar: MaterialToolbar get() = binding.toolbar
 
     private val itemIdByFeature = mutableMapOf<String, Int>()

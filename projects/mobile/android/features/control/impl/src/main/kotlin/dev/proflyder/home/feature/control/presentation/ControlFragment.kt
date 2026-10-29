@@ -4,7 +4,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
-import com.google.android.material.snackbar.Snackbar
+import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseAdapterCallback
@@ -132,11 +132,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         }
         state.notice?.let { notice ->
             when (notice) {
-                is ControlNotice.ScenarioQueued -> Snackbar.make(
-                    binding.root,
-                    getString(R.string.control_scenario_queued, notice.title),
-                    Snackbar.LENGTH_SHORT,
-                ).show()
+                is ControlNotice.ScenarioQueued -> Notices.show(binding.root, getString(R.string.control_scenario_queued, notice.title))
             }
             viewModel.consumeNotice()
         }

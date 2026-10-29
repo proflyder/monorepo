@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Put on the view notices should float above (the bottom navigation). -->
+    <id name="home_notice_anchor" />
+</resources>
