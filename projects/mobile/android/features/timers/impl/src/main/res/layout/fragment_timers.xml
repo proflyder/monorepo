@@ -28,7 +28,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:hint="@string/timers_label"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/timers_label_input"
@@ -45,7 +45,7 @@
                 android:layout_marginTop="12dp"
                 android:hint="@string/timers_duration"
                 app:helperText="@string/timers_duration_hint"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/timers_duration_input"
@@ -61,38 +61,34 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 app:singleLine="false"
-                app:singleSelection="true">
+                >
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/timers_preset_1"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    style="@style/Widget.Material3.Chip.Assist"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checkable="true"
                     android:text="@string/timers_preset_1" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/timers_preset_5"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    style="@style/Widget.Material3.Chip.Assist"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checkable="true"
                     android:text="@string/timers_preset_5" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/timers_preset_10"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    style="@style/Widget.Material3.Chip.Assist"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checkable="true"
                     android:text="@string/timers_preset_10" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/timers_preset_25"
-                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    style="@style/Widget.Material3.Chip.Assist"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checkable="true"
                     android:text="@string/timers_preset_25" />
             </com.google.android.material.chip.ChipGroup>
 
@@ -130,7 +126,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/timers_retry"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"

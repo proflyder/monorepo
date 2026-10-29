@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.navigation.requireNavigator
+import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.setVisible
@@ -24,20 +25,23 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
     private lateinit var adapter: AlarmAdapter
     private lateinit var states: ListStateViews
 
+    /** The single callback instance shared with the adapter. */
+    private val adapterCallback = object : BaseAdapterCallback<AlarmRow>(), AlarmAdapterCallback {
+        override fun onItemClick(item: AlarmRow) = onAlarmClick(item.alarm)
+        override fun onItemLongClick(item: AlarmRow) = viewModel.toggleSelection(item.alarm.id)
+        override fun onToggle(alarm: Schedule, enabled: Boolean) = viewModel.setEnabled(alarm, enabled)
+        override fun onSnooze(alarm: Schedule) = viewModel.snooze(alarm)
+        override fun onStop(alarm: Schedule) = viewModel.stop(alarm)
+        override fun onDelete(alarm: Schedule) = confirmDelete(alarm.id)
+    }
+
     /** Back leaves multi-select first; enabled only while something is selected. */
     private val exitSelection = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = viewModel.clearSelection()
     }
 
     override fun onBindingCreated(binding: FragmentAlarmsBinding, savedInstanceState: Bundle?) {
-        adapter = AlarmAdapter(
-            onClick = ::onAlarmClick,
-            onLongClick = { alarm -> viewModel.toggleSelection(alarm.id) },
-            onToggle = viewModel::setEnabled,
-            onSnooze = viewModel::snooze,
-            onStop = viewModel::stop,
-            onDelete = { alarm -> confirmDelete(alarm.id) },
-        )
+        adapter = AlarmAdapter(adapterCallback)
         binding.alarmsList.layoutManager =
             GridLayoutManager(requireContext(), resources.getInteger(R.integer.alarms_columns))
         binding.alarmsList.adapter = adapter

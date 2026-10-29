@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="home_primary">#6FDBC0</color>
+    <color name="home_on_primary">#00382E</color>
+    <color name="home_primary_container">#005144</color>
+    <color name="home_on_primary_container">#8CF8DC</color>
+    <color name="home_secondary">#B1CCC1</color>
+    <color name="home_on_secondary">#1C352D</color>
+    <color name="home_secondary_container">#334B43</color>
+    <color name="home_on_secondary_container">#CCE8DE</color>
+    <color name="home_tertiary">#FFB866</color>
+    <color name="home_on_tertiary">#4A2800</color>
+    <color name="home_tertiary_container">#6A3C00</color>
+    <color name="home_on_tertiary_container">#FFDDB6</color>
+    <color name="home_error">#FFB4AB</color>
+    <color name="home_surface">#0E1512</color>
+    <color name="home_on_surface">#DEE4E0</color>
+    <color name="home_on_surface_variant">#BFC9C4</color>
+    <color name="home_surface_container_low">#161D1A</color>
+    <color name="home_surface_container">#1A211E</color>
+    <color name="home_surface_container_high">#252B28</color>
+    <color name="home_surface_container_highest">#2F3633</color>
+    <color name="home_outline">#89938E</color>
+    <color name="home_outline_variant">#3F4945</color>
+</resources>

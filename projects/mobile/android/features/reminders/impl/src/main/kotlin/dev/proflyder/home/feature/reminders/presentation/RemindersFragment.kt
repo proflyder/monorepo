@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.navigation.requireNavigator
+import dev.proflyder.home.core.model.Schedule
+import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.userMessage
@@ -19,14 +21,17 @@ class RemindersFragment :
     }
 
     private lateinit var adapter: ReminderAdapter
+
+    /** The single callback instance shared with the adapter. */
+    private val adapterCallback = object : BaseAdapterCallback<Schedule>(), ReminderAdapterCallback {
+        override fun onItemClick(item: Schedule) = requireNavigator().navigate(ReminderEditorDestination(item.id))
+        override fun onToggle(reminder: Schedule, enabled: Boolean) = viewModel.toggle(reminder, enabled)
+        override fun onDelete(reminder: Schedule) = confirmDelete(reminder.id)
+    }
     private lateinit var states: ListStateViews
 
     override fun onBindingCreated(binding: FragmentRemindersBinding, savedInstanceState: Bundle?) {
-        adapter = ReminderAdapter(
-            onClick = { reminder -> requireNavigator().navigate(ReminderEditorDestination(reminder.id)) },
-            onToggle = viewModel::toggle,
-            onDelete = { reminder -> confirmDelete(reminder.id) },
-        )
+        adapter = ReminderAdapter(adapterCallback)
         binding.remindersList.layoutManager =
             GridLayoutManager(requireContext(), resources.getInteger(R.integer.reminders_columns))
         binding.remindersList.adapter = adapter

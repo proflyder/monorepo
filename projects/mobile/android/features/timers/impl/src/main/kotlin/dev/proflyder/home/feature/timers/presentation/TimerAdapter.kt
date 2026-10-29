@@ -65,6 +65,7 @@ internal class TimerAdapter(
                 TimerState.RUNNING -> context.getString(R.string.timers_running)
                 else -> timer.state.name
             }
+            binding.timerProgress.setProgressCompat(progressOf(item), false)
             binding.timerPauseResume.text = context.getString(
                 if (timer.state == TimerState.PAUSED) R.string.timers_resume else R.string.timers_pause,
             )
@@ -72,7 +73,19 @@ internal class TimerAdapter(
 
         override fun bindPayloads(item: TimerRow, payloads: List<Any>) {
             val remaining = payloads.filterIsInstance<RemainingChanged>().lastOrNull()
-            if (remaining == null) bind(item) else binding.timerRemaining.text = DurationText.format(remaining.seconds)
+            if (remaining == null) {
+                bind(item)
+            } else {
+                binding.timerRemaining.text = DurationText.format(remaining.seconds)
+                binding.timerProgress.setProgressCompat(progressOf(item), true)
+            }
+        }
+
+        /** Remaining share of the timer in 0..1000 (the indicator's max). */
+        private fun progressOf(row: TimerRow): Int {
+            val total = row.timer.durationSeconds
+            if (total <= 0) return 0
+            return (row.remainingSeconds.coerceIn(0, total) * 1000 / total).toInt()
         }
     }
 }

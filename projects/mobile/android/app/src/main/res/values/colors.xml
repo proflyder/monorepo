@@ -1,10 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- "Evening emerald": deep green-teal accents on soft mint surfaces. Night variants in values-night. -->
 <resources>
-    <color name="home_green">#1B5E20</color>
-    <color name="home_green_dark">#0D3F14</color>
-    <color name="home_on_green">#FFFFFF</color>
-    <color name="home_teal">#00695C</color>
-    <color name="home_on_teal">#FFFFFF</color>
-    <color name="home_surface">#FBFDF7</color>
-    <color name="home_surface_dark">#101410</color>
+    <color name="home_primary">#0E7C66</color>
+    <color name="home_on_primary">#FFFFFF</color>
+    <color name="home_primary_container">#BDF2E0</color>
+    <color name="home_on_primary_container">#00201A</color>
+    <color name="home_secondary">#4A635B</color>
+    <color name="home_on_secondary">#FFFFFF</color>
+    <color name="home_secondary_container">#CCE8DE</color>
+    <color name="home_on_secondary_container">#05201A</color>
+    <color name="home_tertiary">#8A5100</color>
+    <color name="home_on_tertiary">#FFFFFF</color>
+    <color name="home_tertiary_container">#FFDDB6</color>
+    <color name="home_on_tertiary_container">#2C1600</color>
+    <color name="home_error">#BA1A1A</color>
+    <color name="home_surface">#F5FBF7</color>
+    <color name="home_on_surface">#171D1A</color>
+    <color name="home_on_surface_variant">#3F4945</color>
+    <color name="home_surface_container_low">#EFF5F1</color>
+    <color name="home_surface_container">#E9F0EC</color>
+    <color name="home_surface_container_high">#E3EAE6</color>
+    <color name="home_surface_container_highest">#DDE4E0</color>
+    <color name="home_outline">#6F7975</color>
+    <color name="home_outline_variant">#BFC9C4</color>
+    <color name="home_launcher_bg">#0B3D33</color>
+    <color name="home_launcher_fg">#8CF8DC</color>
 </resources>
