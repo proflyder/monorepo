@@ -85,3 +85,9 @@ spotify_play_context:
   payload: '{"context_uri":"{{ uri }}"}'
   content_type: "application/json"
   timeout: 15
+spotify_previous:
+  url: "https://api.spotify.com/v1/me/player/previous"
+  method: POST
+  headers:
+    Authorization: "Bearer {{ access_token }}"
+  timeout: 15

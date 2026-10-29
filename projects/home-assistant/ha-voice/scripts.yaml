@@ -46,6 +46,36 @@ spotify_connect_set_volume:
             volume_percent: "{{ volume_clamped }}"
           continue_on_error: true
 
+spotify_connect_previous:
+  alias: "Spotify Connect: previous track"
+  mode: single
+  sequence:
+    # MA does not offer a previous-track transport for Spotify Connect, so use
+    # the Spotify Web API for the active device when the route is Spotify.
+    - service: rest_command.spotify_token
+      response_variable: spotify_auth
+      continue_on_error: true
+    - if:
+        - condition: template
+          value_template: >-
+            {{ spotify_auth is defined and spotify_auth.status == 200
+               and spotify_auth.content is mapping
+               and spotify_auth.content.access_token is defined }}
+      then:
+        - service: rest_command.spotify_previous
+          data:
+            access_token: "{{ spotify_auth.content.access_token }}"
+          response_variable: spotify_prev
+          continue_on_error: true
+        - variables:
+            spotify_prev_result: "{{ {'result': 'ok' if spotify_prev is defined and spotify_prev.status in [200, 204] else 'fail'} }}"
+        - stop: "spotify previous"
+          response_variable: spotify_prev_result
+    - variables:
+        spotify_prev_result: "{{ {'result': 'no_token'} }}"
+    - stop: "spotify previous without token"
+      response_variable: spotify_prev_result
+
 work_mode:
   alias: "Scene: work lighting"
   # Display only. Being a personal scenario is declared with the HA label "scenario"

@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.Outcome
@@ -51,6 +52,7 @@ class ControlViewModel(
     private var refreshJob: Job? = null
     private var generation = 0
     private var filterChosenByUser = false
+    private val expectedPower = HashMap<String, Pair<PowerState, Long>>()
 
     init {
         // Restore the last selected filter. A tap that happens before this
@@ -78,7 +80,7 @@ class ControlViewModel(
                 is Outcome.Success -> updateState {
                     copy(
                         refreshing = false,
-                        entries = result.value.entries,
+                        entries = withExpectations(result.value.entries),
                         statesOk = result.value.statesOk,
                         // A room or category that vanished falls back to everything.
                         filter = ControlItems.effectiveFilter(result.value.entries, filter),
@@ -102,29 +104,50 @@ class ControlViewModel(
         }
     }
 
+    /**
+     * The executor applies commands asynchronously, so a refresh right after a
+     * tap can still return the old state. The tapped value is therefore kept
+     * (see [expectedPower]) until the server confirms it or [EXPECT_TTL_MS] passes;
+     * the switch never flickers back, and it is not disabled while the command is in flight.
+     */
     fun setPower(entry: ControlEntry, on: Boolean) {
-        if (entry.id in currentState.pending || !entry.available) return
+        if (!entry.available) return
         val target = if (on) PowerState.ON else PowerState.OFF
-        // Optimistic: show the requested state, then reconcile with the real one.
+        expectedPower[entry.id] = target to SystemClock.elapsedRealtime() + EXPECT_TTL_MS
         updateState {
-            copy(
-                pending = pending + entry.id,
-                actionError = null,
-                entries = entries.map { if (it.id == entry.id) it.copy(power = target) else it },
-            )
+            copy(actionError = null, entries = entries.map { if (it.id == entry.id) it.copy(power = target) else it })
         }
         launch {
             when (val result = setDevicePower(entry, on)) {
-                is Outcome.Success -> {
-                    updateState { copy(pending = pending - entry.id) }
-                    // The executor applies the command asynchronously; re-read the real state.
-                    delay(RECONCILE_DELAY_MS)
-                    refresh(silent = true)
-                }
+                is Outcome.Success -> reconcile(entry.id)
                 is Outcome.Failure -> {
-                    updateState { copy(pending = pending - entry.id, actionError = result.failure) }
+                    expectedPower.remove(entry.id)
+                    updateState { copy(actionError = result.failure) }
                     refresh(silent = true)
                 }
+            }
+        }
+    }
+
+    /** Re-reads the catalog until the server shows the expected state (or the wait expires). */
+    private suspend fun reconcile(id: String) {
+        repeat(RECONCILE_ATTEMPTS) {
+            delay(RECONCILE_DELAY_MS)
+            if (expectedPower[id] == null) return
+            refresh(silent = true)
+            refreshJob?.join()
+        }
+    }
+
+    /** Applies still-unconfirmed taps on top of freshly loaded [entries]. */
+    private fun withExpectations(entries: List<ControlEntry>): List<ControlEntry> {
+        if (expectedPower.isEmpty()) return entries
+        val now = SystemClock.elapsedRealtime()
+        return entries.map { entry ->
+            val (target, deadline) = expectedPower[entry.id] ?: return@map entry
+            when {
+                entry.power == target || now >= deadline -> entry.also { expectedPower.remove(entry.id) }
+                else -> entry.copy(power = target)
             }
         }
     }
@@ -136,6 +159,7 @@ class ControlViewModel(
      */
     fun adjust(entry: ControlEntry, adjust: LightAdjust) {
         if (!entry.available || entry.light == null) return
+        expectedPower[entry.id] = PowerState.ON to SystemClock.elapsedRealtime() + EXPECT_TTL_MS
         updateState {
             copy(
                 actionError = null,
@@ -144,11 +168,9 @@ class ControlViewModel(
         }
         launch {
             when (val result = adjustLight(entry, adjust)) {
-                is Outcome.Success -> {
-                    delay(RECONCILE_DELAY_MS)
-                    refresh(silent = true)
-                }
+                is Outcome.Success -> reconcile(entry.id)
                 is Outcome.Failure -> {
+                    expectedPower.remove(entry.id)
                     updateState { copy(actionError = result.failure) }
                     refresh(silent = true)
                 }
@@ -170,6 +192,8 @@ class ControlViewModel(
 
     private companion object {
         const val RECONCILE_DELAY_MS = 1_500L
+        const val RECONCILE_ATTEMPTS = 8
+        const val EXPECT_TTL_MS = 15_000L
     }
 }
 
