@@ -172,6 +172,7 @@ type Entity struct {
 	Kelvin          int
 	Hue, Saturation float64
 	HasHS           bool
+	ColorMode       string
 }
 
 // Entities reads every entity with its state, friendly name and icon. Other
@@ -204,6 +205,7 @@ func (c *Client) Entities(ctx context.Context) ([]Entity, error) {
 			Brightness   *float64  `json:"brightness"`
 			Kelvin       *float64  `json:"color_temp_kelvin"`
 			HS           []float64 `json:"hs_color"`
+			ColorMode    string    `json:"color_mode"`
 		} `json:"attributes"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxStatesBodyBytes)).Decode(&states); err != nil {
@@ -222,6 +224,7 @@ func (c *Client) Entities(ctx context.Context) ([]Entity, error) {
 			MaxKelvin:  intOf(a.MaxKelvin),
 			Kelvin:     intOf(a.Kelvin),
 			Brightness: -1,
+			ColorMode:  a.ColorMode,
 		}
 		if a.Brightness != nil {
 			e.Brightness = intOf(a.Brightness)

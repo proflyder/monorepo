@@ -24,6 +24,10 @@ type Light struct {
 	Kelvin        int
 	Hue           int
 	Saturation    int
+	// Mode is the active mode: "color_temp", "color" or "" (unknown / white-only).
+	// HA reports values only for the active mode, and derives the other
+	// (a color_temp lamp still shows an hs_color), so inactive values are dropped.
+	Mode string
 }
 
 // Default white range when Home Assistant does not report one.
@@ -43,6 +47,8 @@ type LightInput struct {
 	// HS is hue (0-360) and saturation (0-100); HasHS is false when absent.
 	Hue, Saturation float64
 	HasHS           bool
+	// ColorMode is HA's active color_mode ("" when absent).
+	ColorMode string
 }
 
 // NewLight derives the capabilities of a light, or nil when it is on/off only.
@@ -66,14 +72,20 @@ func NewLight(in LightInput) *Light {
 		if l.MinKelvin <= 0 || l.MaxKelvin <= l.MinKelvin {
 			l.MinKelvin, l.MaxKelvin = defaultMinKelvin, defaultMaxKelvin
 		}
-		if in.Kelvin >= l.MinKelvin && in.Kelvin <= l.MaxKelvin {
+		if l.Mode != "color" && in.Kelvin >= l.MinKelvin && in.Kelvin <= l.MaxKelvin {
 			l.Kelvin = in.Kelvin
 		}
+	}
+	switch strings.ToLower(in.ColorMode) {
+	case "color_temp":
+		l.Mode = "color_temp"
+	case "hs", "xy", "rgb", "rgbw", "rgbww":
+		l.Mode = "color"
 	}
 	if in.Brightness >= 0 {
 		l.BrightnessPct = int(math.Round(float64(in.Brightness) * 100 / 255))
 	}
-	if l.Color && in.HasHS {
+	if l.Color && in.HasHS && l.Mode != "color_temp" {
 		l.Hue = int(math.Round(in.Hue)) % 360
 		l.Saturation = int(math.Round(in.Saturation))
 	}

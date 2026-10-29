@@ -33,7 +33,11 @@ internal class LightSheet(
     private var hue = light.hue
     private var saturation = light.saturation
     /** Which of temperature / color the preview currently shows. */
-    private var colorMode = light.color && light.saturation > 0 && !(light.colorTemp && light.kelvin > 0)
+    private var colorMode = light.color && (light.mode == "color" || (light.mode.isEmpty() && !light.colorTemp))
+
+    /** Values Home Assistant does not report (lamp off, or the other mode is active) show "—", not a guess. */
+    private var brightnessKnown = light.brightnessPct > 0
+    private var temperatureKnown = light.kelvin > 0
 
     init {
         dialog.setContentView(views.root)
@@ -50,15 +54,19 @@ internal class LightSheet(
 
     private fun setupBrightness() {
         views.lightBrightnessGroup.setVisible(light.brightness)
-        val start = light.brightnessPct.coerceIn(1, 100).toFloat()
+        val start = if (brightnessKnown) light.brightnessPct.coerceIn(1, 100).toFloat() else 100f
         views.lightBrightness.value = start
         showPercent(start)
-        views.lightBrightness.addOnChangeListener { _, value, _ -> showPercent(value) }
+        views.lightBrightness.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) brightnessKnown = true
+            showPercent(value)
+        }
         views.lightBrightness.onRelease { onAdjust(LightAdjust(brightnessPct = it.roundToInt())) }
     }
 
     private fun showPercent(value: Float) {
-        views.lightBrightnessValue.text = views.root.context.getString(R.string.control_light_percent, value.roundToInt())
+        views.lightBrightnessValue.text =
+            if (brightnessKnown) views.root.context.getString(R.string.control_light_percent, value.roundToInt()) else UNKNOWN
     }
 
     private fun setupTemperature() {
@@ -72,7 +80,10 @@ internal class LightSheet(
         showKelvin()
         views.lightTemp.addOnChangeListener { _, value, fromUser ->
             temperature = value.roundToInt()
-            if (fromUser) colorMode = false
+            if (fromUser) {
+                colorMode = false
+                temperatureKnown = true
+            }
             showKelvin()
             renderPreview()
         }
@@ -80,7 +91,8 @@ internal class LightSheet(
     }
 
     private fun showKelvin() {
-        views.lightTempValue.text = views.root.context.getString(R.string.control_light_kelvin, temperature)
+        views.lightTempValue.text =
+            if (temperatureKnown) views.root.context.getString(R.string.control_light_kelvin, temperature) else UNKNOWN
     }
 
     private fun setupColor() {
@@ -117,7 +129,7 @@ internal class LightSheet(
     private fun renderPreview() {
         val argb = when {
             colorMode && light.color -> LightColors.hsToArgb(hue, saturation)
-            light.colorTemp && temperature > 0 -> LightColors.kelvinToArgb(temperature)
+            light.colorTemp && temperatureKnown -> LightColors.kelvinToArgb(temperature)
             else -> LightColors.kelvinToArgb(NEUTRAL_KELVIN)
         }
         (views.lightPreview.background.mutate() as GradientDrawable).setColor(ColorStateList.valueOf(argb))
@@ -134,5 +146,6 @@ internal class LightSheet(
 
     private companion object {
         const val NEUTRAL_KELVIN = 4000
+        const val UNKNOWN = "—"
     }
 }

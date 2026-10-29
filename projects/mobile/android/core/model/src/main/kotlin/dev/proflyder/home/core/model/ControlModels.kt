@@ -37,6 +37,8 @@ data class LightControls(
     val kelvin: Int = 0,
     val hue: Int = 0,
     val saturation: Int = 0,
+    /** Active mode: "color_temp", "color" or empty. Live values are valid for that mode only. */
+    val mode: String = "",
 )
 
 /** A light adjustment; null fields are left as they are. Color is hue + saturation together. */

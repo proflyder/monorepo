@@ -41,3 +41,16 @@ func TestSetValidation(t *testing.T) {
 		t.Errorf("data=%v err=%v", data, err)
 	}
 }
+
+func TestInactiveModeValuesAreDropped(t *testing.T) {
+	in := LightInput{ColorModes: []string{"color_temp", "hs"}, MinKelvin: 1700, MaxKelvin: 6500, Brightness: 128,
+		Kelvin: 3000, Hue: 30, Saturation: 60, HasHS: true}
+	in.ColorMode = "color_temp"
+	if l := NewLight(in); l.Mode != "color_temp" || l.Kelvin != 3000 || l.Hue != 0 || l.Saturation != 0 {
+		t.Errorf("color_temp mode = %+v", l)
+	}
+	in.ColorMode, in.Kelvin = "hs", 0
+	if l := NewLight(in); l.Mode != "color" || l.Kelvin != 0 || l.Hue != 30 || l.Saturation != 60 {
+		t.Errorf("color mode = %+v", l)
+	}
+}

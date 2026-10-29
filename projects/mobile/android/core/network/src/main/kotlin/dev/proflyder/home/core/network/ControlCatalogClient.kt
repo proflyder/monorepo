@@ -95,6 +95,7 @@ object ControlJson {
                 kelvin = num("kelvin"),
                 hue = num("hue"),
                 saturation = num("saturation"),
+                mode = (l["mode"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty(),
             )
         }
         val id = text("id")

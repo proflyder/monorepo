@@ -49,6 +49,8 @@ type LightView struct {
 	Kelvin        int  `json:"kelvin,omitempty"`
 	Hue           int  `json:"hue,omitempty"`
 	Saturation    int  `json:"saturation,omitempty"`
+	// Mode is "color_temp", "color" or empty; live values belong to this mode only.
+	Mode string `json:"mode,omitempty"`
 }
 
 // Response is the wire shape of GET /v1/catalog.
@@ -99,7 +101,7 @@ func build(snap discovery.Snapshot) Response {
 			view.Light = &LightView{
 				Brightness: l.Brightness, ColorTemp: l.ColorTemp, Color: l.Color,
 				MinKelvin: l.MinKelvin, MaxKelvin: l.MaxKelvin,
-				BrightnessPct: l.BrightnessPct, Kelvin: l.Kelvin, Hue: l.Hue, Saturation: l.Saturation,
+				BrightnessPct: l.BrightnessPct, Kelvin: l.Kelvin, Hue: l.Hue, Saturation: l.Saturation, Mode: l.Mode,
 			}
 		}
 		resp.Entries = append(resp.Entries, view)

@@ -171,6 +171,6 @@ func lightOf(e ha.Entity) *catalog.Light {
 	return catalog.NewLight(catalog.LightInput{
 		ColorModes: e.ColorModes, MinKelvin: e.MinKelvin, MaxKelvin: e.MaxKelvin,
 		Brightness: e.Brightness, Kelvin: e.Kelvin,
-		Hue: e.Hue, Saturation: e.Saturation, HasHS: e.HasHS,
+		Hue: e.Hue, Saturation: e.Saturation, HasHS: e.HasHS, ColorMode: e.ColorMode,
 	})
 }
