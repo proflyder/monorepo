@@ -149,6 +149,23 @@ is applied to every Kotlin Android compilation through
   request their ViewModel factory from the Activity host, which delegates to the
   graph-built `ViewModelFactoryRegistry`.
 
+### Network layer
+
+`core/network` is Retrofit on OkHttp. `SchedulerApi` (Connect unary calls) and
+`ControlApi` (catalog) are declarative interfaces with relative paths and a
+small `JsonElement` converter (bounded to 8 MiB). A `ConnectionInterceptor` reads
+the *current* settings on every request: it rewrites the URL onto the configured
+endpoint, adds the bearer header (never in the URL) and applies the timeouts; a
+missing endpoint/token fails before any I/O as a controlled domain failure.
+Redirects are never followed.
+
+Diagnostics are application interceptors that run after it, so they see the final
+request: `HttpLoggingInterceptor` (BODY, logcat tag `HomeHttp`) and Chucker (a
+notification and a launcher shortcut "Network activity"). Both redact
+`Authorization`; Chucker keeps bodies on the device for one day. They exist only
+while the `home_network_inspection` bool (`app/res/values/bools.xml`) is true;
+a release variant should override it to false.
+
 ### UI building blocks
 
 - **ViewBinding.** rules_android has no ViewBinding and `androidx.viewbinding` is not in

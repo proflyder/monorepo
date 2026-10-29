@@ -10,6 +10,7 @@ kt_jvm_library(
         "//projects/mobile/android/core/config:config",
         "//projects/mobile/android/core/model:model",
         "@maven//:com_squareup_okhttp3_okhttp",
+        "@maven//:com_squareup_retrofit2_retrofit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
         "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],

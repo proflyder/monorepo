@@ -64,14 +64,21 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun provideNetworkInterceptors(context: Context): NetworkInterceptors =
+        NetworkDiagnostics.interceptors(context)
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun provideSchedulerClient(
         settings: ConnectionSettingsStore,
         httpClient: OkHttpClient,
         serverClock: ServerClock,
+        interceptors: NetworkInterceptors,
     ): SchedulerClient = ConnectSchedulerClient(
         settings = settings,
         baseClient = httpClient,
         serverClock = serverClock,
+        interceptors = interceptors.list,
     )
 
     @Provides
@@ -79,7 +86,12 @@ object AppBindings {
     fun provideControlCatalogClient(
         settings: ConnectionSettingsStore,
         httpClient: OkHttpClient,
-    ): ControlCatalogClient = HttpControlCatalogClient(settings = settings, baseClient = httpClient)
+        interceptors: NetworkInterceptors,
+    ): ControlCatalogClient = HttpControlCatalogClient(
+        settings = settings,
+        baseClient = httpClient,
+        interceptors = interceptors.list,
+    )
 
     @Provides
     @SingleIn(AppScope::class)

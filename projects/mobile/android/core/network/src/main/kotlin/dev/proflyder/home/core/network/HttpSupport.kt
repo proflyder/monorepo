@@ -9,21 +9,25 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.Response
+import okhttp3.ResponseBody
 
 /** HTTP plumbing shared by the scheduler and control-catalog clients. */
 
 internal const val MAX_RESPONSE_BYTES = 8L * 1024L * 1024L
 
-internal class ResponseTooLargeException : Exception()
+internal class ResponseTooLargeException : IOException("response exceeds 8 MiB limit")
+
+/**
+ * A request failed before reaching the network for a reason the user can fix
+ * (no endpoint, bad token). Thrown by [ConnectionInterceptor] so it travels
+ * through OkHttp as an [IOException] and is mapped back by [toRemoteFailure].
+ */
+internal class RemoteFailureException(val failure: RemoteFailure) : IOException("request not sent: $failure")
 
 /** Transport failure -> honest, non-secret domain failure. */
 internal fun IOException.toRemoteFailure(): RemoteFailure = when (this) {
+    is RemoteFailureException -> failure
+    is ResponseTooLargeException -> RemoteFailure.ProtocolFailure("response exceeds 8 MiB limit")
     is SocketTimeoutException -> RemoteFailure.Timeout
     is InterruptedIOException -> RemoteFailure.Timeout
     is SSLHandshakeException -> RemoteFailure.Tls("TLS handshake failed")
@@ -43,24 +47,10 @@ internal fun sanitizeMessage(message: String?): String? = message
     ?.replace(Regex("[\\p{Cntrl}]"), " ")
     ?.replace(Regex("(?i)bearer\\s+\\S+"), "Bearer <redacted>")
 
-internal fun readBoundedBody(response: Response): String {
-    val body = response.body ?: return ""
-    val declared = body.contentLength()
-    if (declared > MAX_RESPONSE_BYTES) throw ResponseTooLargeException()
-    val source = body.source()
+/** Reads at most [MAX_RESPONSE_BYTES]; larger bodies fail with [ResponseTooLargeException]. */
+internal fun ResponseBody.readBounded(): String {
+    if (contentLength() > MAX_RESPONSE_BYTES) throw ResponseTooLargeException()
+    val source = source()
     if (source.request(MAX_RESPONSE_BYTES + 1L)) throw ResponseTooLargeException()
     return source.readUtf8()
-}
-
-internal suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
-    enqueue(object : Callback {
-        override fun onFailure(call: Call, e: IOException) {
-            if (continuation.isActive) continuation.resumeWithException(e)
-        }
-
-        override fun onResponse(call: Call, response: Response) {
-            if (continuation.isActive) continuation.resume(response) else response.close()
-        }
-    })
-    continuation.invokeOnCancellation { cancel() }
 }

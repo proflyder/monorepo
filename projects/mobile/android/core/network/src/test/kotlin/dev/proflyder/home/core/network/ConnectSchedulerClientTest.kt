@@ -167,6 +167,34 @@ class ConnectSchedulerClientTest {
     }
 
     @Test
+    fun extraInterceptorsRunAfterTheConnectionInterceptor() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"version":"1","nowUnix":"1"}"""))
+        val seen = mutableListOf<okhttp3.Request>()
+        val client = ConnectSchedulerClient(
+            settings = store,
+            baseClient = OkHttpClient(),
+            serverClock = clock,
+            interceptors = listOf(
+                okhttp3.Interceptor { chain ->
+                    seen += chain.request()
+                    chain.proceed(chain.request())
+                },
+            ),
+        )
+
+        assertTrue(client.getStatus() is Outcome.Success)
+
+        // The logging/inspection layer sees the final request: configured host,
+        // bearer in the header only, Connect headers set.
+        val request = seen.single()
+        assertEquals(server.hostName, request.url.host)
+        assertEquals("/ricardo.v1.SchedulerService/GetStatus", request.url.encodedPath)
+        assertEquals("Bearer test-token", request.header("Authorization"))
+        assertEquals("1", request.header("Connect-Protocol-Version"))
+        assertFalse(request.url.toString().contains("test-token"))
+    }
+
+    @Test
     fun enqueueTaskSendsQueueTypePayloadAndKey() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(200).setBody("""{"event":{"id":"evt-1","state":"EVENT_STATE_PENDING"}}"""))
 

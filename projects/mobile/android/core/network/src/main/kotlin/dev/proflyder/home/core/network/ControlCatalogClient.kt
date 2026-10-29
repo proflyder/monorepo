@@ -1,21 +1,18 @@
 package dev.proflyder.home.core.network
 
-import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
-import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.model.RemoteFailure
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -25,9 +22,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Request
 
 /** Reads the controllable scenarios/devices from the home control service. */
 interface ControlCatalogClient {
@@ -88,74 +84,46 @@ object ControlJson {
 }
 
 /**
- * OkHttp implementation. Same safety rules as [ConnectSchedulerClient]: no
- * redirects (the bearer token must never follow a Location), token only in the
- * Authorization header, system trust store.
+ * Retrofit implementation ([ControlApi]). Same safety rules as
+ * [ConnectSchedulerClient]: no redirects (the bearer token must never follow a
+ * Location), token only in the Authorization header, system trust store.
  */
 class HttpControlCatalogClient(
-    private val settings: ConnectionSettingsStore,
-    private val baseClient: OkHttpClient,
+    settings: ConnectionSettingsStore,
+    baseClient: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
+    interceptors: List<Interceptor> = emptyList(),
 ) : ControlCatalogClient {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val api: ControlApi = HomeRetrofit.create(
+        ControlApi::class.java,
+        settings,
+        baseClient,
+        Target.CONTROL,
+        interceptors,
+    )
 
     override suspend fun fetch(): Outcome<ControlCatalog> = withContext(ioDispatcher) {
-        val config = settings.config.value
-        val endpoint = config.controlEndpoint
-            ?: return@withContext Outcome.Failure(RemoteFailure.Validation(Field.CONTROL_ENDPOINT))
-        val token = config.bearerToken?.trim()
-        if (!ConnectionConfig.isTokenValid(token)) {
-            return@withContext Outcome.Failure(RemoteFailure.Validation(Field.TOKEN))
-        }
-        val url = "${endpoint.baseUrl()}/v1/catalog".toHttpUrlOrNull()
-            ?: return@withContext Outcome.Failure(RemoteFailure.Validation(Field.CONTROL_ENDPOINT))
-
-        val connectMillis = config.connectTimeoutMillis
-            .coerceIn(ConnectionConfig.MIN_TIMEOUT_MILLIS, ConnectionConfig.MAX_TIMEOUT_MILLIS)
-        val readMillis = config.readTimeoutMillis
-            .coerceIn(ConnectionConfig.MIN_TIMEOUT_MILLIS, ConnectionConfig.MAX_TIMEOUT_MILLIS)
-        val client = baseClient.newBuilder()
-            .connectTimeout(connectMillis, TimeUnit.MILLISECONDS)
-            .readTimeout(readMillis, TimeUnit.MILLISECONDS)
-            .callTimeout(connectMillis + readMillis, TimeUnit.MILLISECONDS)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
-            .build()
-
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .header("Accept", "application/json")
-            .header("Authorization", "Bearer $token")
-            .build()
-
         val response = try {
-            client.newCall(request).await()
+            api.catalog()
         } catch (e: IOException) {
             return@withContext Outcome.Failure(e.toRemoteFailure())
+        } catch (e: SerializationException) {
+            return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("invalid JSON response"))
         }
-        response.use { result ->
-            val code = result.code
-            if (code in 300..399) {
-                return@use Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
-            }
-            val text = try {
-                readBoundedBody(result)
-            } catch (_: ResponseTooLargeException) {
-                return@use Outcome.Failure(RemoteFailure.ProtocolFailure("response exceeds 8 MiB limit"))
-            } catch (e: IOException) {
-                return@use Outcome.Failure(e.toRemoteFailure())
-            }
-            when {
-                code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
-                code !in 200..299 -> Outcome.Failure(RemoteFailure.Server("http_$code", "server returned HTTP $code"))
-                else -> try {
-                    Outcome.Success(ControlJson.parseCatalog(json.parseToJsonElement(text)))
+        val code = response.code()
+        response.errorBody()?.close()
+        when {
+            code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
+            code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
+            !response.isSuccessful -> Outcome.Failure(RemoteFailure.Server("http_$code", "server returned HTTP $code"))
+            else -> {
+                val element = response.body()
+                    ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
+                try {
+                    Outcome.Success(ControlJson.parseCatalog(element))
                 } catch (e: Exception) {
-                    Outcome.Failure(
-                        RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"),
-                    )
+                    Outcome.Failure(RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"))
                 }
             }
         }

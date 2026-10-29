@@ -10,14 +10,17 @@
     "androidx.lifecycle:lifecycle-common": -1319395940,
     "androidx.lifecycle:lifecycle-livedata": -941428463,
     "androidx.lifecycle:lifecycle-livedata-core": 1647998925,
+    "androidx.lifecycle:lifecycle-livedata-ktx": -1750080017,
     "androidx.lifecycle:lifecycle-process": -1184601292,
     "androidx.lifecycle:lifecycle-runtime": -2079850837,
     "androidx.lifecycle:lifecycle-runtime-ktx": 2030081673,
     "androidx.lifecycle:lifecycle-viewmodel": 252144095,
     "androidx.lifecycle:lifecycle-viewmodel-ktx": 1395607485,
     "androidx.lifecycle:lifecycle-viewmodel-savedstate": -970340652,
+    "androidx.paging:paging-common": 63895206,
     "androidx.recyclerview:recyclerview": -368968563,
     "androidx.swiperefreshlayout:swiperefreshlayout": 353460823,
+    "com.github.chuckerteam.chucker:library": -874127186,
     "com.google.android.material:material": 607032841,
     "com.google.code.findbugs:jsr305": 495355163,
     "com.google.code.gson:gson": 597770368,
@@ -25,8 +28,10 @@
     "com.google.guava:guava": 1943808618,
     "com.google.guava:listenablefuture": 50807205,
     "com.google.j2objc:j2objc-annotations": 2003271689,
+    "com.squareup.okhttp3:logging-interceptor": -1360087620,
     "com.squareup.okhttp3:mockwebserver": 503345298,
     "com.squareup.okhttp3:okhttp": 916942239,
+    "com.squareup.retrofit2:retrofit": 1537629215,
     "dev.zacsweers.metro:compiler": -487097550,
     "dev.zacsweers.metro:runtime-jvm": -45186423,
     "junit:junit": -744267592,
@@ -53,14 +58,15 @@
     "androidx.collection:collection-jvm": 649783280,
     "androidx.collection:collection-ktx": -1908706330,
     "androidx.concurrent:concurrent-futures": 557423055,
-    "androidx.constraintlayout:constraintlayout-solver": -1529128017,
-    "androidx.constraintlayout:constraintlayout:aar": 588787756,
+    "androidx.constraintlayout:constraintlayout-core": 1408059739,
+    "androidx.constraintlayout:constraintlayout:aar": -1831117959,
     "androidx.coordinatorlayout:coordinatorlayout:aar": 1295067596,
     "androidx.core:core-ktx:aar": 537571639,
     "androidx.core:core:aar": -1507905145,
     "androidx.cursoradapter:cursoradapter:aar": -1802080633,
     "androidx.customview:customview-poolingcontainer:aar": -1290968930,
     "androidx.customview:customview:aar": -238500633,
+    "androidx.databinding:viewbinding:aar": -851988147,
     "androidx.documentfile:documentfile:aar": 1631752493,
     "androidx.drawerlayout:drawerlayout:aar": 1945871805,
     "androidx.dynamicanimation:dynamicanimation:aar": -1382328462,
@@ -74,6 +80,7 @@
     "androidx.lifecycle:lifecycle-common-jvm": -890231660,
     "androidx.lifecycle:lifecycle-livedata-core-ktx:aar": 2052589913,
     "androidx.lifecycle:lifecycle-livedata-core:aar": 1931153093,
+    "androidx.lifecycle:lifecycle-livedata-ktx:aar": -317131226,
     "androidx.lifecycle:lifecycle-livedata:aar": 175356833,
     "androidx.lifecycle:lifecycle-process:aar": 150896302,
     "androidx.lifecycle:lifecycle-runtime-android:aar": -472293012,
@@ -86,12 +93,20 @@
     "androidx.lifecycle:lifecycle-viewmodel:aar": 904316542,
     "androidx.loader:loader:aar": 912643337,
     "androidx.localbroadcastmanager:localbroadcastmanager:aar": -1063737663,
+    "androidx.paging:paging-common": -498350519,
+    "androidx.palette:palette-ktx:aar": 1573367196,
+    "androidx.palette:palette:aar": -1207939230,
     "androidx.print:print:aar": -273325959,
     "androidx.profileinstaller:profileinstaller:aar": -38893239,
     "androidx.recyclerview:recyclerview:aar": 320493298,
     "androidx.resourceinspection:resourceinspection-annotation": -1122332468,
+    "androidx.room:room-common": 1541845774,
+    "androidx.room:room-ktx:aar": -1562978219,
+    "androidx.room:room-runtime:aar": -1985008894,
     "androidx.savedstate:savedstate-ktx:aar": 980175848,
     "androidx.savedstate:savedstate:aar": 322501117,
+    "androidx.sqlite:sqlite-framework:aar": -885480573,
+    "androidx.sqlite:sqlite:aar": 487165251,
     "androidx.startup:startup-runtime:aar": 1805153702,
     "androidx.swiperefreshlayout:swiperefreshlayout:aar": 270515656,
     "androidx.test.espresso:espresso-idling-resource:aar": 541320167,
@@ -104,7 +119,8 @@
     "androidx.viewpager2:viewpager2:aar": -1718099234,
     "androidx.viewpager:viewpager:aar": -1518680692,
     "com.almworks.sqlite4java:sqlite4java": 1585971300,
-    "com.google.android.material:material:aar": -1488235588,
+    "com.github.chuckerteam.chucker:library:aar": -1316028169,
+    "com.google.android.material:material:aar": -1336908005,
     "com.google.auto.value:auto-value-annotations": 641752776,
     "com.google.code.findbugs:jsr305": 870839855,
     "com.google.code.gson:gson": -1575757252,
@@ -115,16 +131,19 @@
     "com.google.j2objc:j2objc-annotations": 248818742,
     "com.google.testparameterinjector:test-parameter-injector": 687688988,
     "com.ibm.icu:icu4j": -1667183492,
+    "com.squareup.okhttp3:logging-interceptor": -1025738426,
     "com.squareup.okhttp3:mockwebserver": 1399798774,
     "com.squareup.okhttp3:okhttp": 191672665,
     "com.squareup.okio:okio": -1388757284,
     "com.squareup.okio:okio-jvm": -1072084470,
+    "com.squareup.retrofit2:retrofit": -1733784974,
     "dev.zacsweers.metro:compiler": 204546603,
     "dev.zacsweers.metro:runtime-jvm": 1615283542,
     "javax.annotation:javax.annotation-api": -1009230154,
     "javax.inject:javax.inject": 698155243,
     "junit:junit": -1256429642,
     "org.bouncycastle:bcprov-jdk18on": -560020060,
+    "org.brotli:dec": -1094961784,
     "org.checkerframework:checker-qual": -1533199059,
     "org.conscrypt:conscrypt-openjdk-uber": 1592363690,
     "org.hamcrest:hamcrest-core": 649657847,
@@ -248,17 +267,17 @@
       },
       "version": "1.1.0"
     },
-    "androidx.constraintlayout:constraintlayout-solver": {
+    "androidx.constraintlayout:constraintlayout-core": {
       "shasums": {
-        "jar": "b23732edbb3511d937fea1ffef047b0e6c001b50c1921f0d959fc384d706ec6a"
+        "jar": "3e477f4de231e58b25f5a992f3be45e97d332c34a39a9e3e7d4b78ae0ac2256f"
       },
-      "version": "2.0.1"
+      "version": "1.0.4"
     },
     "androidx.constraintlayout:constraintlayout:aar": {
       "shasums": {
-        "jar": "ec15b5d4a2eff07888bc1499ce2e2c6efe24c0ed60cc57b08c9dc4b6fd3c2189"
+        "jar": "0df714c0b51e54710ebf746eb469d333176bbb3cb29f80775dc3ca4eb3162512"
       },
-      "version": "2.0.1"
+      "version": "2.1.4"
     },
     "androidx.coordinatorlayout:coordinatorlayout:aar": {
       "shasums": {
@@ -295,6 +314,12 @@
         "jar": "01f76ab043770a97b054046f9815717b82ce0355c02967d16c61981359dc189a"
       },
       "version": "1.1.0"
+    },
+    "androidx.databinding:viewbinding:aar": {
+      "shasums": {
+        "jar": "995d561aa5b45401ab6a10e886e53dbd7d813fdfb0d3e170024a4c6260531d80"
+      },
+      "version": "8.0.2"
     },
     "androidx.documentfile:documentfile:aar": {
       "shasums": {
@@ -374,6 +399,12 @@
       },
       "version": "2.8.7"
     },
+    "androidx.lifecycle:lifecycle-livedata-ktx:aar": {
+      "shasums": {
+        "jar": "80af6960fb8b5d5b26bc04086613435e78a7c214be8b68b461bb79dedc431f76"
+      },
+      "version": "2.8.7"
+    },
     "androidx.lifecycle:lifecycle-livedata:aar": {
       "shasums": {
         "jar": "703634525a67b1c6beaaab4f980dfa0bacdf7e143d0b5d51f5ac0d9404400290"
@@ -446,6 +477,24 @@
       },
       "version": "1.0.0"
     },
+    "androidx.paging:paging-common": {
+      "shasums": {
+        "jar": "891dd24bad908d5d866d7d3545114ab2d26994847cd0200ac68477287c0710b5"
+      },
+      "version": "2.1.2"
+    },
+    "androidx.palette:palette-ktx:aar": {
+      "shasums": {
+        "jar": "c3a321133e616b46cf5ad07191aeebf4affdb73abee455851d39f7b4db7acb36"
+      },
+      "version": "1.0.0"
+    },
+    "androidx.palette:palette:aar": {
+      "shasums": {
+        "jar": "6054ee0184ba0ffd66dc825e060e8c9bf2f6c2ea54336cf3bef15c575037a743"
+      },
+      "version": "1.0.0"
+    },
     "androidx.print:print:aar": {
       "shasums": {
         "jar": "1d5c7f3135a1bba661fc373fd72e11eb0a4adbb3396787826dd8e4190d5d9edd"
@@ -470,6 +519,24 @@
       },
       "version": "1.0.1"
     },
+    "androidx.room:room-common": {
+      "shasums": {
+        "jar": "0262e2a0e2a2e9c7267b9f7a405847ce636a06c4c16c52976cb68df77866b87d"
+      },
+      "version": "2.5.2"
+    },
+    "androidx.room:room-ktx:aar": {
+      "shasums": {
+        "jar": "70e193fb1dc5cf44fbe85fcd5f7181333b2c6b4944dcead0d311aa1cb03c503b"
+      },
+      "version": "2.5.2"
+    },
+    "androidx.room:room-runtime:aar": {
+      "shasums": {
+        "jar": "3520d6f38ebac3f461e587d759a052d98a515f0139cbeb0b68c6791ff7c2de5c"
+      },
+      "version": "2.5.2"
+    },
     "androidx.savedstate:savedstate-ktx:aar": {
       "shasums": {
         "jar": "8553f87e7136c24ec5243560f48f1c32cba56daa77722f89589a5cafcb8f7894"
@@ -481,6 +548,18 @@
         "jar": "21a7d4bcf6bdb94ad7b9283801529300b4fbb8808ca4f191e0cdce6fd8e4705a"
       },
       "version": "1.2.1"
+    },
+    "androidx.sqlite:sqlite-framework:aar": {
+      "shasums": {
+        "jar": "827875a565704925f922de847e02f752b45f64e155909b1db25b23527ee5c25c"
+      },
+      "version": "2.3.1"
+    },
+    "androidx.sqlite:sqlite:aar": {
+      "shasums": {
+        "jar": "e4b0c580b676bd3dfbed21bfc15d4780326c545cc14fda46a5a9247e59ec8b8a"
+      },
+      "version": "2.3.1"
     },
     "androidx.startup:startup-runtime:aar": {
       "shasums": {
@@ -554,6 +633,12 @@
       },
       "version": "1.0.392"
     },
+    "com.github.chuckerteam.chucker:library:aar": {
+      "shasums": {
+        "jar": "9dca7228284d53fd20bf5bfb496cf96ddd218f8df09bbfd925fa96557a0f8d9e"
+      },
+      "version": "4.0.0"
+    },
     "com.google.android.material:material:aar": {
       "shasums": {
         "jar": "4a672941b626b9ab91ae893ed22598ea53ad69125c858c0a59fa9b90daa5cb08"
@@ -620,6 +705,12 @@
       },
       "version": "78.3"
     },
+    "com.squareup.okhttp3:logging-interceptor": {
+      "shasums": {
+        "jar": "f3e8d5f0903c250c2b55d2f47fcfe008e80634385da8385161c7a63aaed0c74c"
+      },
+      "version": "4.12.0"
+    },
     "com.squareup.okhttp3:mockwebserver": {
       "shasums": {
         "jar": "6784673687f4ac8f21679b9d4bc7cdb46e1a1ce1be9d3133b36bede59a741561"
@@ -643,6 +734,12 @@
         "jar": "67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412"
       },
       "version": "3.6.0"
+    },
+    "com.squareup.retrofit2:retrofit": {
+      "shasums": {
+        "jar": "9f4fbbce70728584fbeed38d4061f36d4477e89bca74b4e2ac8aeb6819b0fe43"
+      },
+      "version": "2.11.0"
     },
     "dev.zacsweers.metro:compiler": {
       "shasums": {
@@ -679,6 +776,12 @@
         "jar": "20af26bf6060bb8005cc2389916812c1e0e998dc48d2ced7131b89461b54cff7"
       },
       "version": "1.85"
+    },
+    "org.brotli:dec": {
+      "shasums": {
+        "jar": "615c0c3efef990d77831104475fba6a1f7971388691d4bad1471ad84101f6d52"
+      },
+      "version": "0.1.2"
     },
     "org.checkerframework:checker-qual": {
       "shasums": {
@@ -989,7 +1092,7 @@
     ],
     "androidx.constraintlayout:constraintlayout:aar": [
       "androidx.appcompat:appcompat:aar",
-      "androidx.constraintlayout:constraintlayout-solver",
+      "androidx.constraintlayout:constraintlayout-core",
       "androidx.core:core:aar"
     ],
     "androidx.coordinatorlayout:coordinatorlayout:aar": [
@@ -1024,6 +1127,9 @@
       "androidx.annotation:annotation",
       "androidx.collection:collection",
       "androidx.core:core:aar"
+    ],
+    "androidx.databinding:viewbinding:aar": [
+      "androidx.annotation:annotation"
     ],
     "androidx.documentfile:documentfile:aar": [
       "androidx.annotation:annotation"
@@ -1109,6 +1215,12 @@
       "androidx.lifecycle:lifecycle-common",
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
+    "androidx.lifecycle:lifecycle-livedata-ktx:aar": [
+      "androidx.lifecycle:lifecycle-livedata-core-ktx:aar",
+      "androidx.lifecycle:lifecycle-livedata:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+    ],
     "androidx.lifecycle:lifecycle-livedata:aar": [
       "androidx.arch.core:core-common",
       "androidx.arch.core:core-runtime:aar",
@@ -1186,6 +1298,18 @@
     "androidx.localbroadcastmanager:localbroadcastmanager:aar": [
       "androidx.annotation:annotation"
     ],
+    "androidx.paging:paging-common": [
+      "androidx.annotation:annotation",
+      "androidx.arch.core:core-common"
+    ],
+    "androidx.palette:palette-ktx:aar": [
+      "androidx.palette:palette:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "androidx.palette:palette:aar": [
+      "androidx.core:core:aar",
+      "androidx.legacy:legacy-support-core-utils:aar"
+    ],
     "androidx.print:print:aar": [
       "androidx.annotation:annotation"
     ],
@@ -1205,6 +1329,23 @@
     "androidx.resourceinspection:resourceinspection-annotation": [
       "androidx.annotation:annotation"
     ],
+    "androidx.room:room-common": [
+      "androidx.annotation:annotation",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
+    "androidx.room:room-ktx:aar": [
+      "androidx.room:room-common",
+      "androidx.room:room-runtime:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-android"
+    ],
+    "androidx.room:room-runtime:aar": [
+      "androidx.annotation:annotation-experimental:aar",
+      "androidx.arch.core:core-runtime:aar",
+      "androidx.room:room-common",
+      "androidx.sqlite:sqlite-framework:aar",
+      "androidx.sqlite:sqlite:aar"
+    ],
     "androidx.savedstate:savedstate-ktx:aar": [
       "androidx.savedstate:savedstate:aar",
       "org.jetbrains.kotlin:kotlin-stdlib"
@@ -1213,6 +1354,15 @@
       "androidx.annotation:annotation",
       "androidx.arch.core:core-common",
       "androidx.lifecycle:lifecycle-common",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "androidx.sqlite:sqlite-framework:aar": [
+      "androidx.annotation:annotation",
+      "androidx.sqlite:sqlite:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "androidx.sqlite:sqlite:aar": [
+      "androidx.annotation:annotation",
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
     "androidx.startup:startup-runtime:aar": [
@@ -1259,6 +1409,23 @@
       "androidx.core:core:aar",
       "androidx.customview:customview:aar"
     ],
+    "com.github.chuckerteam.chucker:library:aar": [
+      "androidx.activity:activity-ktx:aar",
+      "androidx.constraintlayout:constraintlayout:aar",
+      "androidx.databinding:viewbinding:aar",
+      "androidx.fragment:fragment-ktx:aar",
+      "androidx.lifecycle:lifecycle-livedata-ktx:aar",
+      "androidx.lifecycle:lifecycle-viewmodel-ktx:aar",
+      "androidx.palette:palette-ktx:aar",
+      "androidx.room:room-ktx:aar",
+      "androidx.room:room-runtime:aar",
+      "com.google.android.material:material:aar",
+      "com.google.code.gson:gson",
+      "com.squareup.okhttp3:okhttp",
+      "org.brotli:dec",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-android"
+    ],
     "com.google.android.material:material:aar": [
       "androidx.activity:activity:aar",
       "androidx.annotation:annotation",
@@ -1287,6 +1454,10 @@
       "com.google.j2objc:j2objc-annotations",
       "org.checkerframework:checker-qual"
     ],
+    "com.squareup.okhttp3:logging-interceptor": [
+      "com.squareup.okhttp3:okhttp",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
     "com.squareup.okhttp3:mockwebserver": [
       "com.squareup.okhttp3:okhttp",
       "junit:junit",
@@ -1302,6 +1473,9 @@
     "com.squareup.okio:okio-jvm": [
       "org.jetbrains.kotlin:kotlin-stdlib-common",
       "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
+    "com.squareup.retrofit2:retrofit": [
+      "com.squareup.okhttp3:okhttp"
     ],
     "dev.zacsweers.metro:runtime-jvm": [
       "org.jetbrains.kotlin:kotlin-stdlib"
@@ -1467,18 +1641,29 @@
     "androidx.concurrent:concurrent-futures": [
       "androidx.concurrent.futures"
     ],
-    "androidx.constraintlayout:constraintlayout-solver": [
-      "androidx.constraintlayout.solver",
-      "androidx.constraintlayout.solver.state",
-      "androidx.constraintlayout.solver.state.helpers",
-      "androidx.constraintlayout.solver.widgets",
-      "androidx.constraintlayout.solver.widgets.analyzer"
+    "androidx.constraintlayout:constraintlayout-core": [
+      "androidx.constraintlayout.core",
+      "androidx.constraintlayout.core.motion",
+      "androidx.constraintlayout.core.motion.key",
+      "androidx.constraintlayout.core.motion.parse",
+      "androidx.constraintlayout.core.motion.utils",
+      "androidx.constraintlayout.core.parser",
+      "androidx.constraintlayout.core.state",
+      "androidx.constraintlayout.core.state.helpers",
+      "androidx.constraintlayout.core.widgets",
+      "androidx.constraintlayout.core.widgets.analyzer"
     ],
     "androidx.lifecycle:lifecycle-common-jvm": [
       "androidx.lifecycle"
     ],
+    "androidx.paging:paging-common": [
+      "androidx.paging"
+    ],
     "androidx.resourceinspection:resourceinspection-annotation": [
       "androidx.resourceinspection.annotation"
+    ],
+    "androidx.room:room-common": [
+      "androidx.room"
     ],
     "com.almworks.sqlite4java:sqlite4java": [
       "com.almworks.sqlite4java",
@@ -1565,6 +1750,9 @@
       "com.ibm.icu.text",
       "com.ibm.icu.util"
     ],
+    "com.squareup.okhttp3:logging-interceptor": [
+      "okhttp3.logging"
+    ],
     "com.squareup.okhttp3:mockwebserver": [
       "okhttp3.internal.duplex",
       "okhttp3.mockwebserver",
@@ -1592,6 +1780,11 @@
     "com.squareup.okio:okio-jvm": [
       "okio",
       "okio.internal"
+    ],
+    "com.squareup.retrofit2:retrofit": [
+      "retrofit2",
+      "retrofit2.http",
+      "retrofit2.internal"
     ],
     "dev.zacsweers.metro:compiler": [
       "_COROUTINE",
@@ -1933,6 +2126,9 @@
       "org.bouncycastle.x509",
       "org.bouncycastle.x509.extension",
       "org.bouncycastle.x509.util"
+    ],
+    "org.brotli:dec": [
+      "org.brotli.dec"
     ],
     "org.checkerframework:checker-qual": [
       "org.checkerframework.checker.builder.qual",
@@ -3876,7 +4072,7 @@
       "androidx.collection:collection-jvm",
       "androidx.collection:collection-ktx",
       "androidx.concurrent:concurrent-futures",
-      "androidx.constraintlayout:constraintlayout-solver",
+      "androidx.constraintlayout:constraintlayout-core",
       "androidx.constraintlayout:constraintlayout:aar",
       "androidx.coordinatorlayout:coordinatorlayout:aar",
       "androidx.core:core-ktx:aar",
@@ -3884,6 +4080,7 @@
       "androidx.cursoradapter:cursoradapter:aar",
       "androidx.customview:customview-poolingcontainer:aar",
       "androidx.customview:customview:aar",
+      "androidx.databinding:viewbinding:aar",
       "androidx.documentfile:documentfile:aar",
       "androidx.drawerlayout:drawerlayout:aar",
       "androidx.dynamicanimation:dynamicanimation:aar",
@@ -3897,6 +4094,7 @@
       "androidx.lifecycle:lifecycle-common-jvm",
       "androidx.lifecycle:lifecycle-livedata-core-ktx:aar",
       "androidx.lifecycle:lifecycle-livedata-core:aar",
+      "androidx.lifecycle:lifecycle-livedata-ktx:aar",
       "androidx.lifecycle:lifecycle-livedata:aar",
       "androidx.lifecycle:lifecycle-process:aar",
       "androidx.lifecycle:lifecycle-runtime-android:aar",
@@ -3909,12 +4107,20 @@
       "androidx.lifecycle:lifecycle-viewmodel:aar",
       "androidx.loader:loader:aar",
       "androidx.localbroadcastmanager:localbroadcastmanager:aar",
+      "androidx.paging:paging-common",
+      "androidx.palette:palette-ktx:aar",
+      "androidx.palette:palette:aar",
       "androidx.print:print:aar",
       "androidx.profileinstaller:profileinstaller:aar",
       "androidx.recyclerview:recyclerview:aar",
       "androidx.resourceinspection:resourceinspection-annotation",
+      "androidx.room:room-common",
+      "androidx.room:room-ktx:aar",
+      "androidx.room:room-runtime:aar",
       "androidx.savedstate:savedstate-ktx:aar",
       "androidx.savedstate:savedstate:aar",
+      "androidx.sqlite:sqlite-framework:aar",
+      "androidx.sqlite:sqlite:aar",
       "androidx.startup:startup-runtime:aar",
       "androidx.swiperefreshlayout:swiperefreshlayout:aar",
       "androidx.test.espresso:espresso-idling-resource:aar",
@@ -3927,6 +4133,7 @@
       "androidx.viewpager2:viewpager2:aar",
       "androidx.viewpager:viewpager:aar",
       "com.almworks.sqlite4java:sqlite4java",
+      "com.github.chuckerteam.chucker:library:aar",
       "com.google.android.material:material:aar",
       "com.google.auto.value:auto-value-annotations",
       "com.google.code.findbugs:jsr305",
@@ -3938,16 +4145,19 @@
       "com.google.j2objc:j2objc-annotations",
       "com.google.testparameterinjector:test-parameter-injector",
       "com.ibm.icu:icu4j",
+      "com.squareup.okhttp3:logging-interceptor",
       "com.squareup.okhttp3:mockwebserver",
       "com.squareup.okhttp3:okhttp",
       "com.squareup.okio:okio",
       "com.squareup.okio:okio-jvm",
+      "com.squareup.retrofit2:retrofit",
       "dev.zacsweers.metro:compiler",
       "dev.zacsweers.metro:runtime-jvm",
       "javax.annotation:javax.annotation-api",
       "javax.inject:javax.inject",
       "junit:junit",
       "org.bouncycastle:bcprov-jdk18on",
+      "org.brotli:dec",
       "org.checkerframework:checker-qual",
       "org.conscrypt:conscrypt-openjdk-uber",
       "org.hamcrest:hamcrest-core",
@@ -4001,7 +4211,7 @@
       "androidx.collection:collection-jvm",
       "androidx.collection:collection-ktx",
       "androidx.concurrent:concurrent-futures",
-      "androidx.constraintlayout:constraintlayout-solver",
+      "androidx.constraintlayout:constraintlayout-core",
       "androidx.constraintlayout:constraintlayout:aar",
       "androidx.coordinatorlayout:coordinatorlayout:aar",
       "androidx.core:core-ktx:aar",
@@ -4009,6 +4219,7 @@
       "androidx.cursoradapter:cursoradapter:aar",
       "androidx.customview:customview-poolingcontainer:aar",
       "androidx.customview:customview:aar",
+      "androidx.databinding:viewbinding:aar",
       "androidx.documentfile:documentfile:aar",
       "androidx.drawerlayout:drawerlayout:aar",
       "androidx.dynamicanimation:dynamicanimation:aar",
@@ -4022,6 +4233,7 @@
       "androidx.lifecycle:lifecycle-common-jvm",
       "androidx.lifecycle:lifecycle-livedata-core-ktx:aar",
       "androidx.lifecycle:lifecycle-livedata-core:aar",
+      "androidx.lifecycle:lifecycle-livedata-ktx:aar",
       "androidx.lifecycle:lifecycle-livedata:aar",
       "androidx.lifecycle:lifecycle-process:aar",
       "androidx.lifecycle:lifecycle-runtime-android:aar",
@@ -4034,12 +4246,20 @@
       "androidx.lifecycle:lifecycle-viewmodel:aar",
       "androidx.loader:loader:aar",
       "androidx.localbroadcastmanager:localbroadcastmanager:aar",
+      "androidx.paging:paging-common",
+      "androidx.palette:palette-ktx:aar",
+      "androidx.palette:palette:aar",
       "androidx.print:print:aar",
       "androidx.profileinstaller:profileinstaller:aar",
       "androidx.recyclerview:recyclerview:aar",
       "androidx.resourceinspection:resourceinspection-annotation",
+      "androidx.room:room-common",
+      "androidx.room:room-ktx:aar",
+      "androidx.room:room-runtime:aar",
       "androidx.savedstate:savedstate-ktx:aar",
       "androidx.savedstate:savedstate:aar",
+      "androidx.sqlite:sqlite-framework:aar",
+      "androidx.sqlite:sqlite:aar",
       "androidx.startup:startup-runtime:aar",
       "androidx.swiperefreshlayout:swiperefreshlayout:aar",
       "androidx.test.espresso:espresso-idling-resource:aar",
@@ -4052,6 +4272,7 @@
       "androidx.viewpager2:viewpager2:aar",
       "androidx.viewpager:viewpager:aar",
       "com.almworks.sqlite4java:sqlite4java",
+      "com.github.chuckerteam.chucker:library:aar",
       "com.google.android.material:material:aar",
       "com.google.auto.value:auto-value-annotations",
       "com.google.code.findbugs:jsr305",
@@ -4063,16 +4284,19 @@
       "com.google.j2objc:j2objc-annotations",
       "com.google.testparameterinjector:test-parameter-injector",
       "com.ibm.icu:icu4j",
+      "com.squareup.okhttp3:logging-interceptor",
       "com.squareup.okhttp3:mockwebserver",
       "com.squareup.okhttp3:okhttp",
       "com.squareup.okio:okio",
       "com.squareup.okio:okio-jvm",
+      "com.squareup.retrofit2:retrofit",
       "dev.zacsweers.metro:compiler",
       "dev.zacsweers.metro:runtime-jvm",
       "javax.annotation:javax.annotation-api",
       "javax.inject:javax.inject",
       "junit:junit",
       "org.bouncycastle:bcprov-jdk18on",
+      "org.brotli:dec",
       "org.checkerframework:checker-qual",
       "org.conscrypt:conscrypt-openjdk-uber",
       "org.hamcrest:hamcrest-core",

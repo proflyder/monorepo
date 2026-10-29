@@ -41,6 +41,10 @@ metro_android_library(
         # real APK dependency, not just a test-classpath artifact.
         "@maven//:com_google_guava_listenablefuture",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
+        # Room (pulled in by Chucker) references paging classes it does not declare.
+        "@maven//:androidx_paging_paging_common",
+        "@maven//:com_github_chuckerteam_chucker_library",
+        "@maven//:com_squareup_okhttp3_logging_interceptor",
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
     ],

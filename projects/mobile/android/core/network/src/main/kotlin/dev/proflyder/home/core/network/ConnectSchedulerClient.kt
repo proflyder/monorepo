@@ -1,8 +1,6 @@
 package dev.proflyder.home.core.network
 
-import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
-import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
@@ -12,10 +10,10 @@ import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.model.Timer
 import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -25,11 +23,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 
 /** Transport-level contract used by feature repositories. */
 interface SchedulerClient {
@@ -73,10 +68,12 @@ interface SchedulerClient {
  *  - no socket is bound to Wi-Fi, so Tailscale/system routing works unchanged.
  */
 class ConnectSchedulerClient(
-    private val settings: ConnectionSettingsStore,
-    private val baseClient: OkHttpClient,
+    settings: ConnectionSettingsStore,
+    baseClient: OkHttpClient,
     private val serverClock: ServerClock,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
+    interceptors: List<Interceptor> = emptyList(),
 ) : SchedulerClient {
 
     private val json = Json {
@@ -84,37 +81,13 @@ class ConnectSchedulerClient(
         isLenient = false
     }
 
-    private val clients = ConcurrentHashMap<TimeoutKey, OkHttpClient>()
-
-    private data class TimeoutKey(val connectMillis: Long, val readMillis: Long)
-
-    private fun clientFor(config: ConnectionConfig): OkHttpClient {
-        // Defensive clamping: corrupted persisted settings must never make
-        // OkHttp's builder throw while constructing a timeout.
-        val connectMillis = config.connectTimeoutMillis.coerceIn(
-            ConnectionConfig.MIN_TIMEOUT_MILLIS,
-            ConnectionConfig.MAX_TIMEOUT_MILLIS,
-        )
-        val readMillis = config.readTimeoutMillis.coerceIn(
-            ConnectionConfig.MIN_TIMEOUT_MILLIS,
-            ConnectionConfig.MAX_TIMEOUT_MILLIS,
-        )
-        val key = TimeoutKey(connectMillis, readMillis)
-        return clients.computeIfAbsent(key) {
-            baseClient.newBuilder()
-                .connectTimeout(connectMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-                .readTimeout(readMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-                .writeTimeout(readMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-                .callTimeout(
-                    connectMillis + readMillis,
-                    java.util.concurrent.TimeUnit.MILLISECONDS,
-                )
-                .followRedirects(false)
-                .followSslRedirects(false)
-                .retryOnConnectionFailure(false)
-                .build()
-        }
-    }
+    private val api: SchedulerApi = HomeRetrofit.create(
+        SchedulerApi::class.java,
+        settings,
+        baseClient,
+        Target.SCHEDULER,
+        interceptors,
+    )
 
     override suspend fun getStatus(): Outcome<SchedulerStatus> =
         call("GetStatus", buildJsonObject { }) { element ->
@@ -219,69 +192,35 @@ class ConnectSchedulerClient(
         body: JsonObject,
         decode: (JsonElement) -> T,
     ): Outcome<T> = withContext(ioDispatcher) {
-        val config = settings.config.value
-        val endpoint = config.endpoint ?: return@withContext Outcome.Failure(RemoteFailure.NotConfigured)
-        val token = config.bearerToken?.trim()
-        if (!ConnectionConfig.isTokenValid(token)) {
-            return@withContext Outcome.Failure(RemoteFailure.Validation(Field.TOKEN))
-        }
-
-        val url = endpoint.rpcUrl(SchedulerJson.SERVICE, method).toHttpUrlOrNull()
-            ?: return@withContext Outcome.Failure(
-                RemoteFailure.Validation(dev.proflyder.home.core.model.Field.ENDPOINT),
-            )
-
-        val request = Request.Builder()
-            .url(url)
-            .post(body.toString().toByteArray(Charsets.UTF_8).toRequestBody(JSON_MEDIA_TYPE))
-            .header("Accept", "application/json")
-            .header("Connect-Protocol-Version", "1")
-            .header("User-Agent", USER_AGENT)
-            .header("Authorization", "Bearer $token")
-            .build()
-
-        val call = clientFor(config).newCall(request)
         val response = try {
-            call.await()
+            api.call(method, body)
         } catch (e: IOException) {
             return@withContext Outcome.Failure(e.toRemoteFailure())
+        } catch (e: SerializationException) {
+            return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("invalid JSON response"))
         }
 
-        response.use { result ->
-            val code = result.code
-            if (code in 300..399) {
-                // Deliberately do not read Location: following it could leak
-                // the bearer token to another host.
-                return@use Outcome.Failure(
-                    RemoteFailure.ProtocolFailure("HTTP $code redirect refused"),
-                )
+        val code = response.code()
+        when {
+            // Never read Location: following it could leak the bearer token.
+            code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
+            code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
+            !response.isSuccessful -> {
+                val text = try {
+                    response.errorBody()?.use { it.readBounded() }.orEmpty()
+                } catch (e: IOException) {
+                    return@withContext Outcome.Failure(e.toRemoteFailure())
+                }
+                Outcome.Failure(parseConnectError(code, text))
             }
-            val text = try {
-                readBoundedBody(result)
-            } catch (_: ResponseTooLargeException) {
-                return@use Outcome.Failure(RemoteFailure.ProtocolFailure("response exceeds 8 MiB limit"))
-            } catch (e: IOException) {
-                return@use Outcome.Failure(e.toRemoteFailure())
-            }
-
-            if (code == 401 || code == 403) {
-                return@use Outcome.Failure(RemoteFailure.Unauthorized)
-            }
-            if (code !in 200..299) {
-                return@use Outcome.Failure(parseConnectError(code, text))
-            }
-            if (text.isBlank()) {
-                return@use Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-            }
-            val element = try {
-                json.parseToJsonElement(text)
-            } catch (_: Exception) {
-                return@use Outcome.Failure(RemoteFailure.ProtocolFailure("invalid JSON response"))
-            }
-            try {
-                Outcome.Success(decode(element))
-            } catch (e: Exception) {
-                Outcome.Failure(RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"))
+            else -> {
+                val element = response.body()
+                    ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
+                try {
+                    Outcome.Success(decode(element))
+                } catch (e: Exception) {
+                    Outcome.Failure(RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"))
+                }
             }
         }
     }
@@ -319,8 +258,4 @@ class ConnectSchedulerClient(
 
     private class MalformedResponse(message: String) : Exception(message)
 
-    companion object {
-        private val JSON_MEDIA_TYPE = "application/json".toMediaType()
-        private const val USER_AGENT = "home-android/0.1.0"
-    }
 }

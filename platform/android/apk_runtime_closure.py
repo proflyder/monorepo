@@ -48,6 +48,7 @@ PLATFORM_PREFIXES = (
     "com.sun.",
     "android.",
     "dalvik.",
+    "org.xml.",
     "org.xmlpull.",
     "org.w3c.",
     "org.json.",
