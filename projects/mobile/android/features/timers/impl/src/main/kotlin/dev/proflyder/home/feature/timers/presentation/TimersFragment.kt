@@ -3,8 +3,10 @@ package dev.proflyder.home.feature.timers.presentation
 import android.os.Bundle
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.SimpleItemAnimator
 import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.time.DurationText
+import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
@@ -20,13 +22,18 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
 
     private lateinit var adapter: TimerAdapter
 
+    /** The single callback instance shared with the adapter. */
+    private val adapterCallback = object : BaseAdapterCallback<TimerRow>(), TimerAdapterCallback {
+        override fun onPauseResume(timer: Timer) = viewModel.togglePause(timer)
+        override fun onCancel(timer: Timer) = confirmCancel(timer)
+    }
+
     override fun onBindingCreated(binding: FragmentTimersBinding, savedInstanceState: Bundle?) {
-        adapter = TimerAdapter(
-            onPauseResume = viewModel::togglePause,
-            onCancel = ::confirmCancel,
-        )
+        adapter = TimerAdapter(adapterCallback)
         binding.timersList.layoutManager = LinearLayoutManager(requireContext())
         binding.timersList.adapter = adapter
+        // The countdown updates every second; a cross-fade on each tick reads as flicker.
+        (binding.timersList.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
 
         mapOf(
             binding.timersPreset1 to "1m",
