@@ -159,6 +159,7 @@ type statusWire struct {
 	EnabledSchedules           protoInt32           `json:"enabledSchedules"`
 	RunningTimers              protoInt32           `json:"runningTimers"`
 	ScenarioExecutionSupported bool                 `json:"scenarioExecutionSupported"`
+	Ready                      bool                 `json:"ready"`
 	Queues                     []queueInfoWire      `json:"queues"`
 	Consumers                  []consumerStatusWire `json:"consumers"`
 }
@@ -179,6 +180,7 @@ func (c *Client) GetStatus(ctx context.Context) (Status, error) {
 		EnabledSchedules:           int32(resp.EnabledSchedules),
 		RunningTimers:              int32(resp.RunningTimers),
 		ScenarioExecutionSupported: resp.ScenarioExecutionSupported,
+		Ready:                      resp.Ready,
 	}
 	for _, queue := range resp.Queues {
 		status.Queues = append(status.Queues, QueueInfo{

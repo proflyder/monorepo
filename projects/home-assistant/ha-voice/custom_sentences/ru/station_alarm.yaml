@@ -399,6 +399,12 @@ lists:
       out: По выходным
   alarm_name:
     wildcard: true
+  alarm_all:
+    values:
+    - in: все
+      out: все
+    - in: всё
+      out: все
 language: ru
 intents:
   StationAlarmSet:
@@ -446,13 +452,13 @@ intents:
       - отмени будильник
       - убери будильник
       - выключи будильник
-      - отмени все будильники
-      - выключи все будильники
+      - отмени {alarm_all:all} будильники
+      - выключи {alarm_all:all} будильники
   StationAlarmDelete:
     data:
     - sentences:
       - удали будильник
-      - удали все будильники
+      - удали {alarm_all:all} будильники
       - удали будильники
   StationAlarmSnooze:
     data:

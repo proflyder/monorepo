@@ -1,0 +1,160 @@
+# Durable scheduler: one process, one SQLite writer, one persistent volume.
+#
+# This file is a TEMPLATE. deploy.sh renders it with private values from an
+# ignored env file; rendered manifests must never be committed.
+#
+#   SCHEDULER_NODE_PORT   NodePort exposed to LAN/Tailscale (default 30098)
+#
+# The binary is delivered from the node path /opt/ricardo/current (an atomically
+# switched symlink to an immutable release directory). The pinned busybox image
+# is only a runtime shell for a static Go binary, so no custom registry image is
+# required on the single-node home cluster.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scheduler-data
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: scheduler
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: scheduler
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 1
+  # SQLite is single-writer: never run two pods against the same volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: scheduler
+      annotations:
+        ricardo.dev/build: ${BUILD_ID}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: scheduler
+          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/ricardo/bin/scheduler"]
+          env:
+            - name: SCHEDULER_DB_PATH
+              value: /data/scheduler.db
+            - name: SCHEDULER_LISTEN
+              value: 0.0.0.0:8098
+            # Home wall clock. Asia/Almaty has no DST; IANA data is embedded
+            # in the binary via time/tzdata.
+            - name: SCHEDULER_TIMEZONE
+              value: Asia/Almaty
+            - name: SCHEDULER_TOKEN_FILE
+              value: /run/secrets/scheduler/token
+            # Only the HA executor may lease the home queue.
+            - name: SCHEDULER_CONSUMERS
+              value: ha-bridge-home
+            - name: SCHEDULER_RING_WINDOW_SECONDS
+              value: "900"
+            - name: SCHEDULER_MISSED_GRACE_SECONDS
+              value: "600"
+          ports:
+            - name: api
+              containerPort: 8098
+              protocol: TCP
+          # Authenticated functional readiness: the probe runs the binary it
+          # guards, reads the token from its file and calls GetStatus. No token
+          # appears in probe arguments or Kubernetes events.
+          readinessProbe:
+            exec:
+              command: ["/opt/ricardo/bin/scheduler", "-healthcheck"]
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 7
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/opt/ricardo/bin/scheduler", "-healthcheck"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 7
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bin
+              mountPath: /opt/ricardo/bin
+              readOnly: true
+            - name: data
+              mountPath: /data
+            - name: token
+              mountPath: /run/secrets/scheduler
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bin
+          hostPath:
+            # Resolved atomically by deploy.sh; restart the pod to pick up a
+            # new release.
+            path: /opt/ricardo/current/bin
+            type: Directory
+        - name: data
+          persistentVolumeClaim:
+            claimName: scheduler-data
+        - name: token
+          secret:
+            secretName: scheduler-auth
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scheduler
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: scheduler
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: scheduler
+  ports:
+    - name: api
+      port: 8098
+      targetPort: api
+      nodePort: ${SCHEDULER_NODE_PORT}
+      protocol: TCP

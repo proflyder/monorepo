@@ -279,7 +279,44 @@ alarm_schedule_next:
 alarm_start:
   alias: "Alarm: start ringing"
   mode: restart
+  fields:
+    source_id:
+      description: "Scheduler schedule id supplied by ha-bridge"
+      example: "019a..."
+    event_id:
+      description: "Scheduler due event id supplied by ha-bridge"
+      example: "019a..."
+    label:
+      description: "Scheduler label supplied by ha-bridge"
+      example: "Работа"
+    kind:
+      description: "Scheduler source kind supplied by ha-bridge"
+      example: "alarm"
   sequence:
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.scheduler_active_schedule_id
+      data:
+        value: "{{ source_id | default('') }}"
+      continue_on_error: true
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.scheduler_active_event_id
+      data:
+        value: "{{ event_id | default('') }}"
+      continue_on_error: true
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.scheduler_active_label
+      data:
+        value: "{{ label | default('') }}"
+      continue_on_error: true
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.scheduler_active_kind
+      data:
+        value: "{{ kind | default('') }}"
+      continue_on_error: true
     - service: input_boolean.turn_on
       target:
         entity_id: input_boolean.alarm_ringing
@@ -519,8 +556,6 @@ alarm_stop:
       continue_on_error: true
     - service: script.alarm_restore
     - service: script.alarm_resume
-    - service: script.schedule_alarm_finalize
-      continue_on_error: true
     - choose:
         - conditions:
             - condition: state
@@ -530,6 +565,16 @@ alarm_stop:
             - service: input_boolean.turn_off
               target:
                 entity_id: input_boolean.alarm_enabled
+    - service: input_text.set_value
+      target:
+        entity_id:
+          - input_text.scheduler_active_schedule_id
+          - input_text.scheduler_active_event_id
+          - input_text.scheduler_active_label
+          - input_text.scheduler_active_kind
+      data:
+        value: ""
+      continue_on_error: true
 
 alarm_cancel:
   alias: "Alarm: cancel"
@@ -1320,9 +1365,292 @@ music_play_candidate:
     - stop: "music_play_candidate"
       response_variable: result
 
-# --- Schedules: alarms, timers, reminders, notes (2026-10-27) ---
-# Alarm items live in local_todo lists; this layer is the single scheduler.
-# Keep the legacy alarm_* scripts above until the new path passes acceptance.
+# --- Schedules: canonical ricardo.v1.SchedulerService client (2026-10-29) ---
+# Authoritative alarm/reminder/timer state lives in the durable scheduler.
+# Home Assistant only speaks, executes audio through ha-bridge, and calls the
+# Connect JSON API. Notes stay in HA todo and are unchanged.
+#
+# Legacy alarm_* audio scripts above are still the sound executor. The legacy
+# todo/timer dispatchers below are kept for rollback but their automations are
+# disabled with initial_state: false; only the scheduler is authoritative.
+
+scheduler_rpc:
+  alias: "Scheduler: Connect JSON RPC"
+  description: "Call one ricardo.v1.SchedulerService RPC and normalize success/error. Never speaks or logs endpoint/token values."
+  mode: parallel
+  max: 20
+  fields:
+    method:
+      required: true
+      description: "SchedulerService method name"
+      example: "ListSchedules"
+    payload_json:
+      default: "{}"
+      description: "Request body already serialized with to_json"
+  sequence:
+    - variables:
+        scheduler_endpoint_value: "{{ states('input_text.scheduler_endpoint') | trim | regex_replace('/+$', '') }}"
+    - if:
+        - condition: template
+          value_template: "{{ scheduler_endpoint_value in ['', 'unknown', 'unavailable', 'None'] or not (scheduler_endpoint_value.startswith('http://') or scheduler_endpoint_value.startswith('https://')) }}"
+      then:
+        - variables:
+            rpc_result: "{{ {'status': 'error', 'code': 'config_error', 'message': '', 'http_status': 0, 'error_text': 'Планировщик не настроен: проверьте адрес.', 'data': {}} }}"
+        - stop: "scheduler endpoint missing"
+          response_variable: rpc_result
+    - service: rest_command.scheduler_rpc
+      data:
+        method: "{{ method }}"
+        payload_json: "{{ payload_json | default('{}') }}"
+      response_variable: rpc_http
+      continue_on_error: true
+    - variables:
+        rpc_http_status: "{{ rpc_http.status | int(0) if rpc_http is mapping and rpc_http.status is defined else 0 }}"
+        rpc_parsed_raw: >-
+          {{ (rpc_http.content if (rpc_http is mapping and rpc_http.content is defined and rpc_http.content is mapping)
+              else ((rpc_http.content | trim | from_json(default={'__scheduler_parse_error__': true}))
+                    if (rpc_http is mapping and rpc_http.content is defined and rpc_http.content is string and (rpc_http.content | trim) != '')
+                    else {'__scheduler_parse_error__': true})) }}
+        rpc_parsed: >-
+          {{ rpc_parsed_raw if rpc_parsed_raw is mapping else {'__scheduler_parse_error__': true} }}
+    - variables:
+        rpc_code: "{{ rpc_parsed.get('code', '') if rpc_parsed is mapping else '' }}"
+        rpc_message: "{{ rpc_parsed.get('message', '') if rpc_parsed is mapping else '' }}"
+        rpc_ok: "{{ rpc_http_status >= 200 and rpc_http_status < 300 and rpc_code == '' and not (rpc_parsed is mapping and rpc_parsed.get('__scheduler_parse_error__', false)) }}"
+        rpc_error_text: >-
+          {% set code = rpc_parsed.get('code', '') if rpc_parsed is mapping else '' %}
+          {% if rpc_http_status == 0 %}Планировщик недоступен.
+          {% elif code in ['unauthenticated', 'permission_denied'] %}Планировщик отклонил доступ.
+          {% elif code in ['invalid_argument', 'out_of_range'] %}Планировщик отклонил параметры.
+          {% elif code == 'not_found' %}В планировщике ничего не найдено.
+          {% elif code == 'already_exists' %}Такое расписание уже существует.
+          {% elif code == 'failed_precondition' %}Это действие сейчас недоступно.
+          {% elif code == 'aborted' %}Расписание уже изменилось, повторите команду.
+          {% elif code == 'resource_exhausted' %}Лимит планировщика исчерпан.
+          {% elif code in ['unavailable', 'deadline_exceeded'] %}Планировщик не отвечает.
+          {% elif rpc_parsed is mapping and rpc_parsed.get('__scheduler_parse_error__') %}Планировщик вернул некорректный ответ.
+          {% elif rpc_http_status >= 400 %}Планировщик вернул ошибку {{ rpc_http_status }}.
+          {% else %}Ошибка планировщика.{% endif %}
+    - variables:
+        rpc_result: >-
+          {{ {'status': ('ok' if rpc_ok else 'error'), 'code': rpc_code,
+              'message': rpc_message, 'http_status': rpc_http_status,
+              'error_text': ('' if rpc_ok else rpc_error_text | trim),
+              'data': (rpc_parsed if rpc_parsed is mapping and not rpc_parsed.get('__scheduler_parse_error__', false) else {})} }}
+    - stop: "scheduler rpc"
+      response_variable: rpc_result
+
+scheduler_list:
+  alias: "Scheduler: list schedules"
+  description: "Read schedules through ListSchedules; empty lists are a normal success."
+  mode: parallel
+  max: 20
+  fields:
+    kind:
+      default: "SCHEDULE_KIND_UNSPECIFIED"
+    include_disabled:
+      default: false
+  sequence:
+    - variables:
+        list_request_json: "{{ {'includeDisabled': include_disabled | default(false) | bool, 'kind': kind | default('SCHEDULE_KIND_UNSPECIFIED')} | to_json }}"
+    - service: script.scheduler_rpc
+      data:
+        method: "ListSchedules"
+        payload_json: "{{ list_request_json }}"
+      response_variable: list_rpc
+    - variables:
+        list_rows: "{{ list_rpc.data.get('schedules', []) if list_rpc.status == 'ok' and list_rpc.data is mapping else [] }}"
+        list_result: "{{ {'status': list_rpc.status, 'code': list_rpc.code | default(''), 'http_status': list_rpc.http_status | default(0), 'error_text': list_rpc.error_text | default(''), 'schedules': list_rows} }}"
+    - stop: "scheduler list"
+      response_variable: list_result
+
+scheduler_resolve_schedule:
+  alias: "Scheduler: resolve one schedule by unambiguous label or time"
+  description: "Never guesses an id. Empty query with more than one candidate is ambiguous."
+  mode: parallel
+  max: 20
+  fields:
+    query:
+      default: ""
+    kind:
+      default: "SCHEDULE_KIND_ALARM"
+    include_disabled:
+      default: true
+  sequence:
+    - service: script.scheduler_list
+      data:
+        kind: "{{ kind }}"
+        include_disabled: "{{ include_disabled | default(true) | bool }}"
+      response_variable: resolve_list
+    - variables:
+        resolve_q: "{{ query | default('') | string | trim | lower }}"
+        resolve_matches: >-
+          {%- set ns = namespace(exact=[], loose=[]) -%}
+          {%- for s in (resolve_list.schedules if resolve_list.status == 'ok' else []) -%}
+            {%- set label = s.get('label', '') | string | lower -%}
+            {%- set due = s.get('nextDueUnix', '0') | int(0) -%}
+            {%- set due_text = due | timestamp_custom('%H:%M', true) if due > 0 else '' -%}
+            {%- if resolve_q == '' -%}
+              {%- set ns.loose = ns.loose + [s] -%}
+            {%- elif label == resolve_q -%}
+              {%- set ns.exact = ns.exact + [s] -%}
+            {%- elif (resolve_q in label) or (due_text != '' and resolve_q == due_text) -%}
+              {%- set ns.loose = ns.loose + [s] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.exact if ns.exact | length > 0 else ns.loose }}
+    - variables:
+        resolve_status: "{{ 'error' if resolve_list.status != 'ok' else ('ok' if resolve_matches | length == 1 else ('ambiguous' if resolve_matches | length > 1 else 'not_found')) }}"
+    - variables:
+        resolve_result: >-
+          {{ {'status': resolve_status, 'code': resolve_list.code | default(''),
+              'error_text': resolve_list.error_text | default(''),
+              'schedule': (resolve_matches[0] if resolve_matches | length == 1 else {}),
+              'count': resolve_matches | length} }}
+    - stop: "scheduler resolve schedule"
+      response_variable: resolve_result
+
+scheduler_resolve_timer:
+  alias: "Scheduler: resolve one timer by unambiguous label"
+  mode: parallel
+  max: 20
+  fields:
+    query:
+      default: ""
+    required_state:
+      default: ""
+  sequence:
+    - variables:
+        timer_request_json: "{{ {'includeFinished': false} | to_json }}"
+    - service: script.scheduler_rpc
+      data:
+        method: "ListTimers"
+        payload_json: "{{ timer_request_json }}"
+      response_variable: timer_rpc
+    - variables:
+        timer_q: "{{ query | default('') | string | trim | lower }}"
+        timer_matches: >-
+          {%- set ns = namespace(exact=[], loose=[]) -%}
+          {%- for t in (timer_rpc.data.get('timers', []) if timer_rpc.status == 'ok' and timer_rpc.data is mapping else []) -%}
+            {%- set state = t.get('state', '') -%}
+            {%- set label = t.get('label', '') | string | lower -%}
+            {%- if state in ['TIMER_STATE_RUNNING', 'TIMER_STATE_PAUSED'] and (required_state | default('') == '' or state == required_state) -%}
+              {%- if timer_q == '' -%}
+                {%- set ns.loose = ns.loose + [t] -%}
+              {%- elif label == timer_q -%}
+                {%- set ns.exact = ns.exact + [t] -%}
+              {%- elif timer_q in label -%}
+                {%- set ns.loose = ns.loose + [t] -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.exact if ns.exact | length > 0 else ns.loose }}
+    - variables:
+        timer_status: "{{ 'error' if timer_rpc.status != 'ok' else ('ok' if timer_matches | length == 1 else ('ambiguous' if timer_matches | length > 1 else 'not_found')) }}"
+    - variables:
+        timer_result: >-
+          {{ {'status': timer_status, 'code': timer_rpc.code | default(''),
+              'error_text': timer_rpc.error_text | default(''),
+              'timer': (timer_matches[0] if timer_matches | length == 1 else {}),
+              'count': timer_matches | length} }}
+    - stop: "scheduler resolve timer"
+      response_variable: timer_result
+
+scheduler_active_alarm:
+  alias: "Scheduler: find the currently ringing alarm"
+  description: "Uses the id stored by alarm_start, then falls back to the scheduler active window."
+  mode: parallel
+  max: 20
+  sequence:
+    - variables:
+        active_stored_id: "{{ states('input_text.scheduler_active_schedule_id') | trim }}"
+        active_stored_label: "{{ states('input_text.scheduler_active_label') | trim }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ active_stored_id not in ['', 'unknown', 'unavailable', 'None'] }}"
+          sequence:
+            - variables:
+                active_result: "{{ {'status': 'ok', 'id': active_stored_id, 'label': active_stored_label, 'source': 'stored', 'http_status': 200, 'error_text': ''} }}"
+            - stop: "stored active alarm"
+              response_variable: active_result
+    - service: script.scheduler_list
+      data:
+        kind: "SCHEDULE_KIND_ALARM"
+        include_disabled: true
+      response_variable: active_list
+    - variables:
+        active_rows: >-
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for s in (active_list.schedules if active_list.status == 'ok' else []) -%}
+            {%- if (s.get('activeUntilUnix', '0') | int(0)) > (now().timestamp() | int(0)) and (s.get('activeOccurrenceUnix', '0') | int(0)) > 0 -%}
+              {%- set ns.rows = ns.rows + [s] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.rows }}
+    - variables:
+        active_status: "{{ 'error' if active_list.status != 'ok' else ('ok' if active_rows | length == 1 else ('ambiguous' if active_rows | length > 1 else 'not_found')) }}"
+    - variables:
+        active_result: >-
+          {{ {'status': active_status, 'id': (active_rows[0].get('id', '') if active_rows | length == 1 else ''),
+              'label': (active_rows[0].get('label', '') if active_rows | length == 1 else ''),
+              'source': 'active_window', 'http_status': active_list.http_status | default(0),
+              'error_text': active_list.error_text | default('')} }}
+    - stop: "scheduler active alarm"
+      response_variable: active_result
+
+
+scheduler_confirm_ring_stopped:
+  alias: "Scheduler: confirm the executor stopped the captured alarm"
+  description: "Wait up to 3 s for alarm_ringing to clear. Local audio stop only when the same captured schedule/event is still ringing; never silence a newer alarm."
+  mode: parallel
+  max: 20
+  fields:
+    schedule_id:
+      default: ""
+    event_id:
+      default: ""
+  sequence:
+    - variables:
+        confirm_schedule_id: "{{ schedule_id | default('') | string | trim }}"
+        confirm_event_id: "{{ event_id | default('') | string | trim }}"
+    - if:
+        - condition: template
+          value_template: "{{ not is_state('input_boolean.alarm_ringing', 'on') }}"
+      then:
+        - variables:
+            confirm_result: "{{ {'outcome': 'not_ringing'} }}"
+        - stop: "already silent"
+          response_variable: confirm_result
+    - wait_template: "{{ is_state('input_boolean.alarm_ringing', 'off') }}"
+      timeout: "00:00:03"
+      continue_on_timeout: true
+    - variables:
+        confirm_same_source: >-
+          {{ is_state('input_boolean.alarm_ringing', 'on')
+             and confirm_schedule_id not in ['', 'None', 'unknown', 'unavailable']
+             and (states('input_text.scheduler_active_schedule_id') | trim) == confirm_schedule_id
+             and (confirm_event_id in ['', 'None', 'unknown', 'unavailable']
+                  or (states('input_text.scheduler_active_event_id') | trim) == confirm_event_id) }}
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ not is_state('input_boolean.alarm_ringing', 'on') }}"
+          sequence:
+            - variables:
+                confirm_result: "{{ {'outcome': 'executor'} }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ confirm_same_source }}"
+          sequence:
+            - service: script.alarm_stop
+            - variables:
+                confirm_result: "{{ {'outcome': 'local'} }}"
+      default:
+        - variables:
+            confirm_result: "{{ {'outcome': 'other'} }}"
+    - stop: "scheduler confirm ring stopped"
+      response_variable: confirm_result
 
 schedule_announce:
   alias: "Schedules: speak a message on Pulsar"
@@ -1360,7 +1688,7 @@ schedule_announce:
       continue_on_error: true
 
 alarm_ui_create:
-  alias: "Alarm: create from UI form"
+  alias: "Alarm: create from UI form (canonical scheduler)"
   mode: single
   sequence:
     - variables:
@@ -1382,7 +1710,8 @@ alarm_ui_create:
         value: ""
 
 schedule_alarm_create:
-  alias: "Schedules: create alarm item"
+  alias: "Scheduler: create alarm"
+  description: "Create an alarm in the canonical SchedulerService with wall time, IANA timezone and repeat."
   mode: single
   fields:
     hour:
@@ -1405,76 +1734,80 @@ schedule_alarm_create:
       example: "Работа"
   sequence:
     - variables:
-        hour_num: "{{ hour | int(7) }}"
-        minute_num: "{{ minute | int(0) }}"
+        hour_num: "{{ hour | default(7) | int(7) }}"
+        minute_num: "{{ minute | default(0) | int(0) }}"
         period_raw: "{{ period | default('') | string | lower }}"
         day_raw: "{{ day | default('') | string | lower }}"
         repeat_raw: "{{ repeat | default('Однократно') | string }}"
         repeat_mode: >-
-          {% if repeat_raw in ['Каждый день', 'Ежедневно', 'каждый день', 'ежедневно'] %}Каждый день
-          {% elif repeat_raw in ['По будням', 'по будням', 'По рабочим дням', 'по рабочим дням'] %}По будням
-          {% elif repeat_raw in ['По выходным', 'по выходным'] %}По выходным
-          {% else %}Однократно{% endif %}
+          {{ 'Каждый день' if repeat_raw in ['Каждый день', 'Ежедневно', 'каждый день', 'ежедневно']
+             else ('По будням' if repeat_raw in ['По будням', 'по будням', 'По рабочим дням', 'по рабочим дням']
+             else ('По выходным' if repeat_raw in ['По выходным', 'по выходным'] else 'Однократно')) }}
+        repeat_kind: >-
+          {{ 'REPEAT_KIND_DAILY' if repeat_mode | trim == 'Каждый день'
+             else ('REPEAT_KIND_WEEKDAYS' if repeat_mode | trim == 'По будням'
+             else ('REPEAT_KIND_WEEKENDS' if repeat_mode | trim == 'По выходным' else 'REPEAT_KIND_ONCE')) }}
         adjusted_hour: >-
           {% set h = hour_num | int %}
-          {% if period_raw in ['вечера', 'дня'] and h < 12 %}{{ h + 12 }}
-          {% elif period_raw in ['ночи', 'утра'] and h == 12 %}{{ 0 }}
-          {% else %}{{ h }}{% endif %}
-        next_dt: >-
+          {{ (h + 12) if period_raw in ['вечера', 'дня'] and h < 12 else (0 if period_raw in ['ночи', 'утра'] and h == 12 else h) }}
+        timezone_name: "{{ now().tzinfo | string | trim }}"
+        once_date: >-
           {% set ns = namespace(dt=now().replace(hour=adjusted_hour | int, minute=minute_num | int, second=0, microsecond=0)) %}
           {% if day_raw == 'завтра' %}
             {% set ns.dt = ns.dt + timedelta(days=1) %}
           {% elif ns.dt <= now() %}
             {% set ns.dt = ns.dt + timedelta(days=1) %}
           {% endif %}
-          {% if repeat_mode == 'По будням' %}
-            {% for i in range(0, 8) %}
-              {% if ns.dt.weekday() >= 5 %}{% set ns.dt = ns.dt + timedelta(days=1) %}{% endif %}
-            {% endfor %}
-          {% elif repeat_mode == 'По выходным' %}
-            {% for i in range(0, 8) %}
-              {% if ns.dt.weekday() < 5 %}{% set ns.dt = ns.dt + timedelta(days=1) %}{% endif %}
-            {% endfor %}
-          {% endif %}
-          {{ ns.dt.strftime('%Y-%m-%dT%H:%M:%S') }}{{ now().strftime('%z')[:3] }}:{{ now().strftime('%z')[3:] }}
-        list_id: >-
-          {% if repeat_mode == 'Каждый день' %}todo.alarms_daily
-          {% elif repeat_mode == 'По будням' %}todo.alarms_weekdays
-          {% elif repeat_mode == 'По выходным' %}todo.alarms_weekends
-          {% else %}todo.alarms_once{% endif %}
-        label: >-
+          {{ ns.dt.strftime('%Y-%m-%d') }}
+        alarm_label: >-
           {% if name is defined and name not in ['', 'unknown', 'unavailable', 'None', None] %}{{ name }}
           {% else %}Будильник {{ '%02d:%02d' | format(adjusted_hour | int, minute_num | int) }}{% endif %}
+        alarm_idempotency_key: "ha:alarm:{{ now().strftime('%Y%m%dT%H%M%S%f') ~ '-' ~ (now().timestamp() | int) ~ '-' ~ (range(0, 65536) | random) }}"
     - if:
-        - condition: state
-          entity_id: input_boolean.alarm_ringing
-          state: "on"
+        - condition: template
+          value_template: "{{ timezone_name in ['', 'None'] or ('/' not in timezone_name and timezone_name not in ['UTC', 'Etc/UTC']) }}"
       then:
-        - service: script.alarm_stop
-    - service: todo.add_item
-      target:
-        entity_id: "{{ list_id }}"
+        - variables:
+            create_result: "{{ {'status': 'error', 'text': 'Не удалось определить часовой пояс Home Assistant.', 'schedule_id': '', 'label': alarm_label} }}"
+        - stop: "invalid timezone"
+          response_variable: create_result
+    - variables:
+        create_request_json: >-
+          {{ {'label': alarm_label | trim,
+              'kind': 'SCHEDULE_KIND_ALARM',
+              'timezone': timezone_name,
+              'at': {'hour': adjusted_hour | int, 'minute': minute_num | int, 'second': 0},
+              'onceDate': ((once_date | trim) if repeat_kind | trim == 'REPEAT_KIND_ONCE' else ''),
+              'repeat': repeat_kind,
+              'enabled': true,
+              'payloadJson': '{}',
+              'idempotencyKey': alarm_idempotency_key} | to_json }}
+    - service: script.scheduler_rpc
       data:
-        item: "{{ label }}"
-        due_datetime: "{{ next_dt }}"
-        description: "alarm"
-    - service: input_boolean.turn_off
-      target:
-        entity_id:
-          - input_boolean.alarm_snooze_active
-          - input_boolean.alarm_ringing
-          - input_boolean.alarm_music_was_playing
-    - service: input_text.set_value
-      target:
-        entity_id:
-          - input_text.tekushchii_budilnik_uid
-          - input_text.tekushchii_budilnik_nazvanie
-          - input_text.tekushchii_budilnik_spisok
-      data:
-        value: ""
+        method: "CreateSchedule"
+        payload_json: "{{ create_request_json }}"
+      response_variable: create_rpc
+    - variables:
+        created_schedule: "{{ create_rpc.data.get('schedule', {}) if create_rpc.status == 'ok' and create_rpc.data is mapping else {} }}"
+        created_repeat_text: >-
+          {% set r = created_schedule.get('repeat', '') if created_schedule is mapping else '' %}
+          {{ 'каждый день' if r == 'REPEAT_KIND_DAILY' else ('по будням' if r == 'REPEAT_KIND_WEEKDAYS' else ('по выходным' if r == 'REPEAT_KIND_WEEKENDS' else ('однократно' if r == 'REPEAT_KIND_ONCE' else ''))) }}
+        created_due_text: >-
+          {% set due = created_schedule.get('nextDueUnix', '0') | int(0) if created_schedule is mapping else 0 %}
+          {{ due | timestamp_custom('%H:%M, %d.%m', true) if due > 0 else '' }}
+    - variables:
+        create_result: >-
+          {{ ({'status': 'ok',
+              'text': 'Будильник «' ~ (created_schedule.get('label', alarm_label) | trim) ~ '» установлен на ' ~ (created_due_text | trim) ~ ((', ' ~ (created_repeat_text | trim)) if (created_repeat_text | trim) else '') ~ '.',
+              'schedule_id': created_schedule.get('id', ''),
+              'label': created_schedule.get('label', alarm_label)}
+             if create_rpc.status == 'ok' and created_schedule is mapping and created_schedule.get('id')
+             else {'status': 'error', 'text': (create_rpc.error_text | default('Планировщик вернул пустой ответ.')) if create_rpc.status != 'ok' else 'Планировщик вернул пустой ответ.', 'schedule_id': '', 'label': alarm_label}) }}
+    - stop: "schedule_alarm_create"
+      response_variable: create_result
 
 schedule_alarm_create_relative:
-  alias: "Schedules: create relative alarm item"
+  alias: "Scheduler: create relative alarm"
   mode: single
   fields:
     hours:
@@ -1491,43 +1824,978 @@ schedule_alarm_create_relative:
         hours_num: "{{ hours | default(0) | int(0) }}"
         minutes_num: "{{ minutes | default(0) | int(0) }}"
         total_minutes: "{{ [1, (hours_num * 60) + minutes_num] | max | int }}"
-        due_dt: >-
-          {% set due = now() + timedelta(minutes=(total_minutes | int)) %}
-          {{ due.strftime('%Y-%m-%dT%H:%M:%S') }}{{ now().strftime('%z')[:3] }}:{{ now().strftime('%z')[3:] }}
-        label: >-
-          {% set due = now() + timedelta(minutes=(total_minutes | int)) %}
-          {% if name is defined and name not in ['', 'unknown', 'unavailable', 'None', None] %}{{ name }}
-          {% else %}Будильник {{ due.strftime('%H:%M') }}{% endif %}
+        relative_due: "{{ now() + timedelta(minutes=(total_minutes | int)) }}"
+        relative_day: "{{ 'завтра' if relative_due.date() > now().date() else '' }}"
+    - service: script.schedule_alarm_create
+      data:
+        hour: "{{ relative_due.hour }}"
+        minute: "{{ relative_due.minute }}"
+        day: "{{ relative_day }}"
+        repeat: "Однократно"
+        name: "{{ name | default('') }}"
+      response_variable: relative_result
+    - stop: "schedule_alarm_create_relative"
+      response_variable: relative_result
+
+schedule_alarm_status:
+  alias: "Scheduler: alarm list text"
+  mode: single
+  sequence:
+    - service: script.scheduler_list
+      data:
+        kind: "SCHEDULE_KIND_ALARM"
+        include_disabled: false
+      response_variable: alarm_status_list
+    - variables:
+        alarm_status_rows: >-
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for s in (alarm_status_list.schedules if alarm_status_list.status == 'ok' else []) -%}
+            {%- set due = s.get('nextDueUnix', '0') | int(0) -%}
+            {%- if due > 0 and s.get('enabled', true) -%}
+              {%- set r = s.get('repeat', '') -%}
+              {%- set rtext = {'REPEAT_KIND_ONCE': 'однократно', 'REPEAT_KIND_DAILY': 'ежедневно', 'REPEAT_KIND_WEEKDAYS': 'по будням', 'REPEAT_KIND_WEEKENDS': 'по выходным', 'REPEAT_KIND_CUSTOM': 'по дням недели'}.get(r, '') -%}
+              {%- set ns.rows = ns.rows + [{'due': due, 'label': s.get('label', 'Будильник'), 'repeat': rtext}] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.rows | sort(attribute='due') }}
+        alarm_status_text: >-
+          {% if alarm_status_list.status != 'ok' %}
+          Не удалось получить список будильников. {{ alarm_status_list.error_text | default('') }}
+          {% elif alarm_status_rows | length == 0 %}
+          Будильников нет.
+          {% else %}
+          {% for row in alarm_status_rows %}{{ row.label }}: {{ row.due | timestamp_custom('%H:%M, %d.%m', true) }}, {{ row.repeat }}{% if not loop.last %}. {% endif %}{% endfor %}
+          {% endif %}
+        alarm_status_result: "{{ {'status': alarm_status_list.status, 'text': alarm_status_text | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
+    - stop: "schedule_alarm_status"
+      response_variable: alarm_status_result
+
+schedule_alarm_set_enabled:
+  alias: "Scheduler: enable or disable alarm"
+  mode: single
+  fields:
+    query:
+      default: ""
+    enabled:
+      required: true
+    all:
+      default: false
+  sequence:
+    - variables:
+        set_enabled_flag: "{{ enabled | default(false) | bool }}"
+        set_all_flag: "{{ all | default(false) | bool }}"
+        set_query: "{{ query | default('') | string | trim }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ set_all_flag }}"
+          sequence:
+            - service: script.scheduler_list
+              data:
+                kind: "SCHEDULE_KIND_ALARM"
+                include_disabled: true
+              response_variable: set_all_list
+            - if:
+                - condition: template
+                  value_template: "{{ set_all_list.status != 'ok' }}"
+              then:
+                - variables:
+                    set_all_result: "{{ {'status': 'error', 'text': set_all_list.error_text | default('Не удалось прочитать будильники.')} }}"
+                - stop: "set all list failed"
+                  response_variable: set_all_result
+            - variables:
+                set_all_rows: "{{ set_all_list.schedules }}"
+            - repeat:
+                for_each: "{{ set_all_rows }}"
+                sequence:
+                  - service: script.scheduler_rpc
+                    data:
+                      method: "SetScheduleEnabled"
+                      payload_json: "{{ {'id': repeat.item.get('id', ''), 'enabled': set_enabled_flag} | to_json }}"
+            - service: script.scheduler_list
+              data:
+                kind: "SCHEDULE_KIND_ALARM"
+                include_disabled: true
+              response_variable: set_after_list
+            - variables:
+                set_all_total: "{{ set_all_rows | length }}"
+                set_all_matched: >-
+                  {% set ns = namespace(count=0) %}
+                  {% set after_rows = set_after_list.schedules if set_after_list.status == 'ok' else [] %}
+                  {% for target in set_all_rows %}
+                    {% set current = after_rows | selectattr('id', 'eq', target.get('id', '')) | list %}
+                    {% if current | length > 0 and (current[0].get('enabled', false) | bool) == set_enabled_flag %}
+                      {% set ns.count = ns.count + 1 %}
+                    {% endif %}
+                  {% endfor %}
+                  {{ ns.count }}
+                set_all_result: >-
+                  {{ ({'status': 'error', 'text': set_after_list.error_text | default('Не удалось проверить результат.')}
+                      if set_after_list.status != 'ok'
+                      else ({'status': 'ok', 'text': 'Будильников нет.'}
+                            if set_all_total | int == 0
+                            else ({'status': 'ok', 'text': ('Все будильники включены.' if set_enabled_flag else 'Все будильники выключены.')}
+                                  if set_all_matched | int == set_all_total | int
+                                  else {'status': 'error', 'text': 'Изменено ' ~ (set_all_matched | trim) ~ ' из ' ~ (set_all_total | trim) ~ '; не удалось изменить ' ~ ((set_all_total | int) - (set_all_matched | int)) ~ ' будильник(ов).'}))) }}
+            - stop: "set all alarms"
+              response_variable: set_all_result
+    - service: script.scheduler_resolve_schedule
+      data:
+        query: "{{ set_query }}"
+        kind: "SCHEDULE_KIND_ALARM"
+        include_disabled: true
+      response_variable: set_target
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ set_target.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                set_single_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько будильников. Уточните название.'} }}"
+            - stop: "ambiguous alarm"
+              response_variable: set_single_result
+        - conditions:
+            - condition: template
+              value_template: "{{ set_target.status != 'ok' }}"
+          sequence:
+            - variables:
+                set_single_result: >-
+                  {{ {'status': set_target.status,
+                      'text': (set_target.error_text | default('Будильник не найден.') if set_target.status == 'error' else 'Будильник не найден.')} }}
+            - stop: "no alarm"
+              response_variable: set_single_result
+    - service: script.scheduler_rpc
+      data:
+        method: "SetScheduleEnabled"
+        payload_json: "{{ {'id': set_target.schedule.get('id', ''), 'enabled': set_enabled_flag} | to_json }}"
+      response_variable: set_rpc
+    - variables:
+        set_single_result: >-
+          {{ ({'status': 'ok', 'text': 'Будильник «' ~ set_target.schedule.get('label', '') ~ '» ' ~ ('включён.' if set_enabled_flag else 'выключен.')}
+              if set_rpc.status == 'ok'
+              else {'status': 'error', 'text': set_rpc.error_text | default('Не удалось изменить будильник.')}) }}
+    - stop: "schedule_alarm_set_enabled"
+      response_variable: set_single_result
+
+schedule_alarm_disable:
+  alias: "Scheduler: disable alarm(s)"
+  mode: single
+  fields:
+    query:
+      default: ""
+    all:
+      default: false
+  sequence:
+    - service: script.schedule_alarm_set_enabled
+      data:
+        query: "{{ query | default('') }}"
+        enabled: false
+        all: "{{ all | default(false) }}"
+      response_variable: disable_result
+    - stop: "schedule_alarm_disable"
+      response_variable: disable_result
+
+schedule_alarm_delete:
+  alias: "Scheduler: delete alarm(s)"
+  description: "Delete one unambiguous alarm, or all alarms only when the user explicitly said all."
+  mode: single
+  fields:
+    query:
+      default: ""
+    all:
+      default: false
+  sequence:
+    - variables:
+        delete_all_flag: "{{ all | default(false) | bool }}"
+        delete_query: "{{ query | default('') | string | trim }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ delete_all_flag }}"
+          sequence:
+            - service: script.scheduler_list
+              data:
+                kind: "SCHEDULE_KIND_ALARM"
+                include_disabled: true
+              response_variable: delete_all_list
+            - if:
+                - condition: template
+                  value_template: "{{ delete_all_list.status != 'ok' }}"
+              then:
+                - variables:
+                    delete_all_result: "{{ {'status': 'error', 'text': delete_all_list.error_text | default('Не удалось прочитать будильники.')} }}"
+                - stop: "delete all list failed"
+                  response_variable: delete_all_result
+            - repeat:
+                for_each: "{{ delete_all_list.schedules }}"
+                sequence:
+                  - service: script.scheduler_rpc
+                    data:
+                      method: "DeleteSchedule"
+                      payload_json: "{{ {'id': repeat.item.get('id', '')} | to_json }}"
+            - service: script.scheduler_list
+              data:
+                kind: "SCHEDULE_KIND_ALARM"
+                include_disabled: true
+              response_variable: delete_after_list
+            - variables:
+                delete_remaining: "{{ delete_after_list.schedules | length if delete_after_list.status == 'ok' else -1 }}"
+                delete_all_result: >-
+                  {{ ({'status': 'error', 'text': delete_after_list.error_text | default('Не удалось проверить результат.')}
+                      if delete_after_list.status != 'ok'
+                      else ({'status': 'ok', 'text': 'Все будильники удалены.'}
+                            if delete_remaining | int == 0
+                            else {'status': 'error', 'text': 'Не удалось удалить ' ~ delete_remaining ~ ' будильник(ов).'})) }}
+            - stop: "delete all alarms"
+              response_variable: delete_all_result
+    - service: script.scheduler_resolve_schedule
+      data:
+        query: "{{ delete_query }}"
+        kind: "SCHEDULE_KIND_ALARM"
+        include_disabled: true
+      response_variable: delete_target
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ delete_target.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                delete_single_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько будильников. Уточните название.'} }}"
+            - stop: "ambiguous alarm"
+              response_variable: delete_single_result
+        - conditions:
+            - condition: template
+              value_template: "{{ delete_target.status != 'ok' }}"
+          sequence:
+            - variables:
+                delete_single_result: >-
+                  {{ {'status': delete_target.status,
+                      'text': (delete_target.error_text | default('Будильник не найден.') if delete_target.status == 'error' else 'Будильник не найден.')} }}
+            - stop: "no alarm"
+              response_variable: delete_single_result
+    - service: script.scheduler_rpc
+      data:
+        method: "DeleteSchedule"
+        payload_json: "{{ {'id': delete_target.schedule.get('id', '')} | to_json }}"
+      response_variable: delete_rpc
+    - variables:
+        delete_single_result: >-
+          {{ ({'status': 'ok', 'text': 'Будильник «' ~ delete_target.schedule.get('label', '') ~ '» удалён.'}
+              if delete_rpc.status == 'ok'
+              else {'status': 'error', 'text': delete_rpc.error_text | default('Не удалось удалить будильник.')}) }}
+    - stop: "schedule_alarm_delete"
+      response_variable: delete_single_result
+
+schedule_alarm_delete_all:
+  alias: "Scheduler: delete all alarms"
+  mode: single
+  sequence:
+    - service: script.schedule_alarm_delete
+      data:
+        all: true
+      response_variable: delete_all_result
+    - stop: "schedule_alarm_delete_all"
+      response_variable: delete_all_result
+
+schedule_alarm_update:
+  alias: "Scheduler: update alarm time"
+  mode: single
+  fields:
+    query:
+      default: ""
+    hour:
+      required: true
+    minute:
+      required: true
+    period:
+      default: ""
+    day:
+      default: ""
+  sequence:
+    - service: script.scheduler_resolve_schedule
+      data:
+        query: "{{ query | default('') }}"
+        kind: "SCHEDULE_KIND_ALARM"
+        include_disabled: true
+      response_variable: update_target
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ update_target.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                update_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько будильников. Уточните название.'} }}"
+            - stop: "ambiguous alarm"
+              response_variable: update_result
+        - conditions:
+            - condition: template
+              value_template: "{{ update_target.status != 'ok' }}"
+          sequence:
+            - variables:
+                update_result: >-
+                  {{ {'status': update_target.status,
+                      'text': (update_target.error_text | default('Будильник не найден.') if update_target.status == 'error' else 'Будильник не найден.')} }}
+            - stop: "no alarm"
+              response_variable: update_result
+    - variables:
+        update_period_raw: "{{ period | default('') | string | lower }}"
+        update_day_raw: "{{ day | default('') | string | lower }}"
+        update_adjusted_hour: >-
+          {% set h = hour | default(7) | int(7) %}
+          {{ (h + 12) if update_period_raw in ['вечера', 'дня'] and h < 12 else (0 if update_period_raw in ['ночи', 'утра'] and h == 12 else h) }}
+        update_once_date: >-
+          {% set ns = namespace(dt=now().replace(hour=update_adjusted_hour | int, minute=minute | default(0) | int(0), second=0, microsecond=0)) %}
+          {% if update_day_raw == 'завтра' %}
+            {% set ns.dt = ns.dt + timedelta(days=1) %}
+          {% elif ns.dt <= now() %}
+            {% set ns.dt = ns.dt + timedelta(days=1) %}
+          {% endif %}
+          {{ ns.dt.strftime('%Y-%m-%d') }}
+        update_request_json: >-
+          {{ {'schedule': {'id': update_target.schedule.get('id', ''),
+              'label': update_target.schedule.get('label', ''),
+              'kind': update_target.schedule.get('kind', 'SCHEDULE_KIND_ALARM'),
+              'timezone': update_target.schedule.get('timezone', now().tzinfo | string),
+              'at': {'hour': update_adjusted_hour | int, 'minute': minute | default(0) | int(0), 'second': 0},
+              'onceDate': ((update_once_date | trim) if update_target.schedule.get('repeat', '') == 'REPEAT_KIND_ONCE' else ''),
+              'repeat': update_target.schedule.get('repeat', 'REPEAT_KIND_ONCE'),
+              'weekdays': update_target.schedule.get('weekdays', []),
+              'enabled': update_target.schedule.get('enabled', false),
+              'payloadJson': update_target.schedule.get('payloadJson', '{}')},
+              'expectedRevision': update_target.schedule.get('revision', '0')} | to_json }}
+    - service: script.scheduler_rpc
+      data:
+        method: "UpdateSchedule"
+        payload_json: "{{ update_request_json }}"
+      response_variable: update_rpc
+    - variables:
+        updated_schedule: "{{ update_rpc.data.get('schedule', {}) if update_rpc.status == 'ok' and update_rpc.data is mapping else {} }}"
+        updated_due_text: >-
+          {% set due = updated_schedule.get('nextDueUnix', '0') | int(0) if updated_schedule is mapping else 0 %}
+          {{ due | timestamp_custom('%H:%M, %d.%m', true) if due > 0 else '' }}
+        updated_repeat_text: >-
+          {% set r = updated_schedule.get('repeat', '') if updated_schedule is mapping else '' %}
+          {% set names = {'REPEAT_KIND_ONCE': 'однократно', 'REPEAT_KIND_DAILY': 'ежедневно', 'REPEAT_KIND_WEEKDAYS': 'по будням', 'REPEAT_KIND_WEEKENDS': 'по выходным', 'REPEAT_KIND_CUSTOM': 'по дням недели'} %}
+          {{ names.get(r, '') }}
+        update_result: >-
+          {{ ({'status': 'ok', 'text': 'Будильник «' ~ (updated_schedule.get('label', '') | trim) ~ '» изменён на ' ~ (updated_due_text | trim) ~ ((', ' ~ (updated_repeat_text | trim)) if (updated_repeat_text | trim) else '') ~ '.'}
+              if update_rpc.status == 'ok' and updated_schedule is mapping and updated_schedule.get('id')
+              else {'status': 'error', 'text': (update_rpc.error_text | default('Планировщик вернул пустой ответ.')) if update_rpc.status != 'ok' else 'Планировщик вернул пустой ответ.'}) }}
+    - stop: "schedule_alarm_update"
+      response_variable: update_result
+
+schedule_alarm_stop:
+  alias: "Scheduler: stop the active alarm occurrence"
+  description: "Calls StopSchedule, then waits briefly for the executor. Local audio stop only for the same captured source/event, never a newer alarm."
+  mode: single
+  sequence:
+    - variables:
+        stop_captured_event_id: "{{ states('input_text.scheduler_active_event_id') | trim }}"
+    - service: script.scheduler_active_alarm
+      response_variable: stop_active
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ stop_active.status == 'ok' and stop_active.id not in ['', 'None'] }}"
+          sequence:
+            - service: script.scheduler_rpc
+              data:
+                method: "StopSchedule"
+                payload_json: "{{ {'id': stop_active.id} | to_json }}"
+              response_variable: stop_rpc
+            - service: script.scheduler_confirm_ring_stopped
+              data:
+                schedule_id: "{{ stop_active.id }}"
+                event_id: "{{ stop_captured_event_id }}"
+              response_variable: stop_confirm
+            - variables:
+                stop_outcome: "{{ stop_confirm.outcome | default('other') if stop_confirm is mapping else 'other' }}"
+                stop_result: >-
+                  {{ ({'status': ('ok' if stop_outcome != 'other' else 'error'),
+                      'text': ('Останавливаю.' if stop_outcome in ['executor', 'not_ringing']
+                               else ('Звонок остановлен локально, исполнитель не подтвердил.' if stop_outcome == 'local'
+                                     else 'Исполнитель не подтвердил остановку; активен другой звонок.'))}
+                      if stop_rpc.status == 'ok'
+                      else {'status': ('not_found' if stop_rpc.code == 'not_found' else 'error'),
+                            'text': (stop_rpc.error_text | default('Планировщик не ответил.')) ~ (' Звонок остановлен локально.' if stop_outcome == 'local' else (' Активен другой звонок.' if stop_outcome == 'other' else ''))}) }}
+            - stop: "stop alarm"
+              response_variable: stop_result
+        - conditions:
+            - condition: template
+              value_template: "{{ stop_active.status == 'error' }}"
+          sequence:
+            - variables:
+                stop_result: >-
+                  {{ {'status': 'error', 'text': (stop_active.error_text | default('Планировщик не ответил.')) ~ (' Звонок не остановлен: не удалось определить активный будильник.' if is_state('input_boolean.alarm_ringing', 'on') else '')} }}
+            - stop: "stop alarm lookup failed"
+              response_variable: stop_result
+        - conditions:
+            - condition: template
+              value_template: "{{ stop_active.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                stop_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько активных будильников. Уточните, какой остановить.'} }}"
+            - stop: "ambiguous active alarm"
+              response_variable: stop_result
+    - variables:
+        stop_result: >-
+          {{ {'status': 'error', 'text': 'Не удалось определить будильник в планировщике. Звонок не остановлен.'}
+             if is_state('input_boolean.alarm_ringing', 'on')
+             else {'status': 'not_found', 'text': 'Будильник не звонит.'} }}
+    - stop: "schedule_alarm_stop"
+      response_variable: stop_result
+
+schedule_alarm_snooze:
+  alias: "Scheduler: snooze the active alarm occurrence"
+  description: "SnoozeSchedule owns the delayed FIRE. After success, wait briefly for the executor; local audio stop only for the same captured source/event."
+  mode: single
+  fields:
+    minutes:
+      default: 9
+  sequence:
+    - variables:
+        snooze_captured_event_id: "{{ states('input_text.scheduler_active_event_id') | trim }}"
+    - service: script.scheduler_active_alarm
+      response_variable: snooze_active
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ snooze_active.status == 'ok' and snooze_active.id not in ['', 'None'] }}"
+          sequence:
+            - service: script.scheduler_rpc
+              data:
+                method: "SnoozeSchedule"
+                payload_json: "{{ {'id': snooze_active.id, 'minutes': minutes | default(9) | int(9)} | to_json }}"
+              response_variable: snooze_rpc
+            - service: script.scheduler_confirm_ring_stopped
+              data:
+                schedule_id: "{{ snooze_active.id }}"
+                event_id: "{{ snooze_captured_event_id }}"
+              response_variable: snooze_confirm
+            - variables:
+                snooze_outcome: "{{ snooze_confirm.outcome | default('other') if snooze_confirm is mapping else 'other' }}"
+                snooze_result: >-
+                  {{ ({'status': ('error' if snooze_outcome == 'other' else 'ok'),
+                      'text': ('Откладываю будильник на девять минут.' if snooze_outcome in ['executor', 'not_ringing']
+                               else ('Будильник отложен. Звонок остановлен локально, исполнитель не подтвердил.' if snooze_outcome == 'local'
+                                     else 'Будильник отложен, но активен другой звонок; звук не остановлен.'))}
+                      if snooze_rpc.status == 'ok'
+                      else {'status': 'error',
+                            'text': (snooze_rpc.error_text | default('Планировщик не ответил.')) ~ (' Звонок остановлен локально. Перенос не подтверждён.' if snooze_outcome == 'local' else (' Перенос не подтверждён. Активен другой звонок.' if snooze_outcome == 'other' else ' Перенос не подтверждён.'))}) }}
+            - stop: "snoozed"
+              response_variable: snooze_result
     - if:
         - condition: state
           entity_id: input_boolean.alarm_ringing
           state: "on"
       then:
-        - service: script.alarm_stop
+        - variables:
+            snooze_result: "{{ {'status': 'error', 'text': 'Не удалось определить будильник в планировщике. Звонок не остановлен, повтор не запрошен.'} }}"
+        - stop: "snooze unknown alarm"
+          response_variable: snooze_result
+    - variables:
+        snooze_result: "{{ {'status': 'not_found', 'text': 'Будильник не звонит.'} }}"
+    - stop: "schedule_alarm_snooze"
+      response_variable: snooze_result
+
+schedule_timer_start:
+  alias: "Scheduler: start a timer"
+  mode: queued
+  max: 8
+  fields:
+    hours:
+      default: 0
+    minutes:
+      default: 0
+    seconds:
+      default: 0
+    name:
+      default: ""
+  sequence:
+    - variables:
+        timer_total_seconds: "{{ (hours | default(0) | int(0) * 3600) + (minutes | default(0) | int(0) * 60) + (seconds | default(0) | int(0)) }}"
+        timer_duration: "{{ timer_total_seconds | int if timer_total_seconds | int > 0 else 60 }}"
+        timer_label: >-
+          {% if name is defined and name not in ['', 'unknown', 'unavailable', 'None', None] %}{{ name }}
+          {% else %}Таймер{% endif %}
+        timer_idempotency_key: "ha:timer:{{ now().strftime('%Y%m%dT%H%M%S%f') ~ '-' ~ (now().timestamp() | int) ~ '-' ~ (range(0, 65536) | random) }}"
+    - if:
+        - condition: template
+          value_template: "{{ timer_duration | int > 604800 }}"
+      then:
+        - variables:
+            timer_result: "{{ {'status': 'error', 'text': 'Слишком длинный таймер. Максимум семь дней.', 'timer_id': ''} }}"
+        - stop: "timer too long"
+          response_variable: timer_result
+    - variables:
+        timer_request_json: "{{ {'label': timer_label | trim, 'durationSeconds': timer_duration | int | string, 'idempotencyKey': timer_idempotency_key} | to_json }}"
+    - service: script.scheduler_rpc
+      data:
+        method: "StartTimer"
+        payload_json: "{{ timer_request_json }}"
+      response_variable: timer_start_rpc
+    - variables:
+        created_timer: "{{ timer_start_rpc.data.get('timer', {}) if timer_start_rpc.status == 'ok' and timer_start_rpc.data is mapping else {} }}"
+        timer_duration_text: >-
+          {% set d = timer_duration | int %}
+          {% set h = d // 3600 %}
+          {% set m = (d % 3600) // 60 %}
+          {% set s = d % 60 %}
+          {{ ((h | string ~ ' ч ') if h > 0 else '') ~ ((m | string ~ ' мин ') if m > 0 else '') ~ ((s | string ~ ' с') if s > 0 or (h == 0 and m == 0) else '') }}
+        timer_result: >-
+          {{ ({'status': 'ok', 'text': 'Таймер «' ~ (created_timer.get('label', timer_label) | trim) ~ '» на ' ~ (timer_duration_text | trim) ~ ' установлен.', 'timer_id': created_timer.get('id', '')}
+              if timer_start_rpc.status == 'ok' and created_timer is mapping and created_timer.get('id')
+              else {'status': 'error', 'text': (timer_start_rpc.error_text | default('Планировщик вернул пустой ответ.')) if timer_start_rpc.status != 'ok' else 'Планировщик вернул пустой ответ.', 'timer_id': ''}) }}
+    - stop: "schedule_timer_start"
+      response_variable: timer_result
+
+schedule_timer_status:
+  alias: "Scheduler: timer list text"
+  mode: single
+  sequence:
+    - variables:
+        timer_status_request_json: "{{ {'includeFinished': false} | to_json }}"
+    - service: script.scheduler_rpc
+      data:
+        method: "ListTimers"
+        payload_json: "{{ timer_status_request_json }}"
+      response_variable: timer_status_rpc
+    - variables:
+        timer_status_rows: >-
+          {%- set now_ts = now().timestamp() | int(0) -%}
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for t in (timer_status_rpc.data.get('timers', []) if timer_status_rpc.status == 'ok' and timer_status_rpc.data is mapping else []) -%}
+            {%- set state = t.get('state', '') -%}
+            {%- if state in ['TIMER_STATE_RUNNING', 'TIMER_STATE_PAUSED'] -%}
+              {%- if state == 'TIMER_STATE_PAUSED' -%}
+                {%- set sec = t.get('remainingSeconds', '0') | int(0) -%}
+              {%- else -%}
+                {%- set sec = [0, (t.get('dueUnix', '0') | int(0)) - now_ts] | max -%}
+              {%- endif -%}
+              {%- set h = sec // 3600 -%}
+              {%- set m = (sec % 3600) // 60 -%}
+              {%- set s = sec % 60 -%}
+              {%- set remaining = ((h | string ~ ' ч ') if h > 0 else '') ~ ((m | string ~ ' мин ') if m > 0 else '') ~ ((s | string ~ ' с') if s > 0 or (h == 0 and m == 0) else '') -%}
+              {%- set ns.rows = ns.rows + [{'label': t.get('label', 'Таймер'), 'state': ('на паузе' if state == 'TIMER_STATE_PAUSED' else 'работает'), 'remaining': (remaining | trim)}] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.rows }}
+        timer_status_text: >-
+          {% if timer_status_rpc.status != 'ok' %}
+          Не удалось получить список таймеров. {{ timer_status_rpc.error_text | default('') }}
+          {% elif timer_status_rows | length == 0 %}
+          Активных таймеров нет.
+          {% else %}
+          {% for row in timer_status_rows %}{{ row.label }}: {{ row.state }}, осталось {{ row.remaining }}{% if not loop.last %}. {% endif %}{% endfor %}
+          {% endif %}
+        timer_status_result: "{{ {'status': timer_status_rpc.status, 'text': timer_status_text | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
+    - stop: "schedule_timer_status"
+      response_variable: timer_status_result
+
+schedule_timer_cancel:
+  alias: "Scheduler: cancel a timer"
+  mode: single
+  fields:
+    name:
+      default: ""
+  sequence:
+    - service: script.scheduler_resolve_timer
+      data:
+        query: "{{ name | default('') }}"
+      response_variable: cancel_timer
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ cancel_timer.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                cancel_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько таймеров. Уточните название.'} }}"
+            - stop: "ambiguous timer"
+              response_variable: cancel_result
+        - conditions:
+            - condition: template
+              value_template: "{{ cancel_timer.status != 'ok' }}"
+          sequence:
+            - variables:
+                cancel_result: >-
+                  {{ {'status': cancel_timer.status,
+                      'text': (cancel_timer.error_text | default('Таймер не найден.') if cancel_timer.status == 'error' else 'Активных таймеров нет.')} }}
+            - stop: "no timer"
+              response_variable: cancel_result
+    - service: script.scheduler_rpc
+      data:
+        method: "CancelTimer"
+        payload_json: "{{ {'id': cancel_timer.timer.get('id', '')} | to_json }}"
+      response_variable: cancel_rpc
+    - variables:
+        cancel_result: >-
+          {{ ({'status': 'ok', 'text': 'Таймер «' ~ cancel_timer.timer.get('label', '') ~ '» отменён.'}
+              if cancel_rpc.status == 'ok'
+              else {'status': 'error', 'text': cancel_rpc.error_text | default('Не удалось отменить таймер.')}) }}
+    - stop: "schedule_timer_cancel"
+      response_variable: cancel_result
+
+schedule_timer_pause:
+  alias: "Scheduler: pause a timer"
+  mode: single
+  fields:
+    name:
+      default: ""
+  sequence:
+    - service: script.scheduler_resolve_timer
+      data:
+        query: "{{ name | default('') }}"
+        required_state: "TIMER_STATE_RUNNING"
+      response_variable: pause_timer
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ pause_timer.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                pause_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько таймеров. Уточните название.'} }}"
+            - stop: "ambiguous timer"
+              response_variable: pause_result
+        - conditions:
+            - condition: template
+              value_template: "{{ pause_timer.status != 'ok' }}"
+          sequence:
+            - variables:
+                pause_result: >-
+                  {{ {'status': pause_timer.status,
+                      'text': (pause_timer.error_text | default('Таймер не найден.') if pause_timer.status == 'error' else 'Работающий таймер не найден.')} }}
+            - stop: "no timer"
+              response_variable: pause_result
+    - service: script.scheduler_rpc
+      data:
+        method: "PauseTimer"
+        payload_json: "{{ {'id': pause_timer.timer.get('id', '')} | to_json }}"
+      response_variable: pause_rpc
+    - variables:
+        pause_result: >-
+          {{ ({'status': 'ok', 'text': 'Таймер «' ~ pause_timer.timer.get('label', '') ~ '» на паузе.'}
+              if pause_rpc.status == 'ok'
+              else {'status': 'error', 'text': pause_rpc.error_text | default('Не удалось поставить таймер на паузу.')}) }}
+    - stop: "schedule_timer_pause"
+      response_variable: pause_result
+
+schedule_timer_resume:
+  alias: "Scheduler: resume a timer"
+  mode: single
+  fields:
+    name:
+      default: ""
+  sequence:
+    - service: script.scheduler_resolve_timer
+      data:
+        query: "{{ name | default('') }}"
+        required_state: "TIMER_STATE_PAUSED"
+      response_variable: resume_timer
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ resume_timer.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                resume_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько таймеров. Уточните название.'} }}"
+            - stop: "ambiguous timer"
+              response_variable: resume_result
+        - conditions:
+            - condition: template
+              value_template: "{{ resume_timer.status != 'ok' }}"
+          sequence:
+            - variables:
+                resume_result: >-
+                  {{ {'status': resume_timer.status,
+                      'text': (resume_timer.error_text | default('Таймер не найден.') if resume_timer.status == 'error' else 'Таймер на паузе не найден.')} }}
+            - stop: "no timer"
+              response_variable: resume_result
+    - service: script.scheduler_rpc
+      data:
+        method: "ResumeTimer"
+        payload_json: "{{ {'id': resume_timer.timer.get('id', '')} | to_json }}"
+      response_variable: resume_rpc
+    - variables:
+        resume_result: >-
+          {{ ({'status': 'ok', 'text': 'Таймер «' ~ resume_timer.timer.get('label', '') ~ '» продолжен.'}
+              if resume_rpc.status == 'ok'
+              else {'status': 'error', 'text': resume_rpc.error_text | default('Не удалось продолжить таймер.')}) }}
+    - stop: "schedule_timer_resume"
+      response_variable: resume_result
+
+schedule_reminder_create:
+  alias: "Scheduler: create reminder"
+  mode: single
+  fields:
+    text:
+      required: true
+    hour:
+      default: 9
+    minute:
+      default: 0
+    period:
+      default: ""
+    day:
+      default: ""
+  sequence:
+    - variables:
+        reminder_hour_num: "{{ hour | default(9) | int(9) }}"
+        reminder_minute_num: "{{ minute | default(0) | int(0) }}"
+        reminder_period_raw: "{{ period | default('') | string | lower }}"
+        reminder_day_raw: "{{ day | default('') | string | lower }}"
+        reminder_adjusted_hour: >-
+          {% set h = reminder_hour_num | int %}
+          {{ (h + 12) if reminder_period_raw in ['вечера', 'дня'] and h < 12 else (0 if reminder_period_raw in ['ночи', 'утра'] and h == 12 else h) }}
+        reminder_timezone: "{{ now().tzinfo | string | trim }}"
+        reminder_once_date: >-
+          {% set ns = namespace(dt=now().replace(hour=reminder_adjusted_hour | int, minute=reminder_minute_num | int, second=0, microsecond=0)) %}
+          {% if reminder_day_raw == 'завтра' %}
+            {% set ns.dt = ns.dt + timedelta(days=1) %}
+          {% elif ns.dt <= now() %}
+            {% set ns.dt = ns.dt + timedelta(days=1) %}
+          {% endif %}
+          {{ ns.dt.strftime('%Y-%m-%d') }}
+        reminder_label: "{{ text | default('Напоминание') | string | trim }}"
+        reminder_idempotency_key: "ha:reminder:{{ now().strftime('%Y%m%dT%H%M%S%f') ~ '-' ~ (now().timestamp() | int) ~ '-' ~ (range(0, 65536) | random) }}"
+    - if:
+        - condition: template
+          value_template: "{{ reminder_timezone in ['', 'None'] or ('/' not in reminder_timezone and reminder_timezone not in ['UTC', 'Etc/UTC']) }}"
+      then:
+        - variables:
+            reminder_result: "{{ {'status': 'error', 'text': 'Не удалось определить часовой пояс Home Assistant.'} }}"
+        - stop: "invalid timezone"
+          response_variable: reminder_result
+    - variables:
+        reminder_request_json: >-
+          {{ {'label': reminder_label,
+              'kind': 'SCHEDULE_KIND_REMINDER',
+              'timezone': reminder_timezone,
+              'at': {'hour': reminder_adjusted_hour | int, 'minute': reminder_minute_num | int, 'second': 0},
+              'onceDate': reminder_once_date | trim,
+              'repeat': 'REPEAT_KIND_ONCE',
+              'enabled': true,
+              'payloadJson': '{}',
+              'idempotencyKey': reminder_idempotency_key} | to_json }}
+    - service: script.scheduler_rpc
+      data:
+        method: "CreateSchedule"
+        payload_json: "{{ reminder_request_json }}"
+      response_variable: reminder_rpc
+    - variables:
+        created_reminder: "{{ reminder_rpc.data.get('schedule', {}) if reminder_rpc.status == 'ok' and reminder_rpc.data is mapping else {} }}"
+        reminder_due_text: >-
+          {% set due = created_reminder.get('nextDueUnix', '0') | int(0) if created_reminder is mapping else 0 %}
+          {{ due | timestamp_custom('%H:%M, %d.%m', true) if due > 0 else '' }}
+        reminder_result: >-
+          {{ ({'status': 'ok', 'text': 'Напоминание «' ~ (created_reminder.get('label', reminder_label) | trim) ~ '» создано на ' ~ (reminder_due_text | trim) ~ '.'}
+              if reminder_rpc.status == 'ok' and created_reminder is mapping and created_reminder.get('id')
+              else {'status': 'error', 'text': (reminder_rpc.error_text | default('Планировщик вернул пустой ответ.')) if reminder_rpc.status != 'ok' else 'Планировщик вернул пустой ответ.'}) }}
+    - stop: "schedule_reminder_create"
+      response_variable: reminder_result
+
+schedule_reminder_status:
+  alias: "Scheduler: reminder list text"
+  mode: single
+  sequence:
+    - service: script.scheduler_list
+      data:
+        kind: "SCHEDULE_KIND_REMINDER"
+        include_disabled: false
+      response_variable: reminder_status_list
+    - variables:
+        reminder_status_rows: >-
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for s in (reminder_status_list.schedules if reminder_status_list.status == 'ok' else []) -%}
+            {%- set due = s.get('nextDueUnix', '0') | int(0) -%}
+            {%- if due > 0 and s.get('enabled', true) -%}
+              {%- set ns.rows = ns.rows + [{'due': due, 'label': s.get('label', 'Напоминание')}] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.rows | sort(attribute='due') }}
+        reminder_status_text: >-
+          {% if reminder_status_list.status != 'ok' %}
+          Не удалось получить список напоминаний. {{ reminder_status_list.error_text | default('') }}
+          {% elif reminder_status_rows | length == 0 %}
+          Напоминаний нет.
+          {% else %}
+          {% for row in reminder_status_rows %}{{ row.label }}: {{ row.due | timestamp_custom('%H:%M, %d.%m', true) }}{% if not loop.last %}. {% endif %}{% endfor %}
+          {% endif %}
+        reminder_status_result: "{{ {'status': reminder_status_list.status, 'text': reminder_status_text | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
+    - stop: "schedule_reminder_status"
+      response_variable: reminder_status_result
+
+schedule_reminder_delete:
+  alias: "Scheduler: delete reminder(s)"
+  description: "Delete one unambiguous reminder, or all reminders only when the user explicitly said all."
+  mode: single
+  fields:
+    query:
+      default: ""
+    all:
+      default: false
+  sequence:
+    - variables:
+        reminder_delete_all: "{{ all | default(false) | bool }}"
+        reminder_delete_query: "{{ query | default('') | string | trim }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ reminder_delete_all }}"
+          sequence:
+            - service: script.scheduler_list
+              data:
+                kind: "SCHEDULE_KIND_REMINDER"
+                include_disabled: true
+              response_variable: reminder_delete_list
+            - if:
+                - condition: template
+                  value_template: "{{ reminder_delete_list.status != 'ok' }}"
+              then:
+                - variables:
+                    reminder_delete_result: "{{ {'status': 'error', 'text': reminder_delete_list.error_text | default('Не удалось прочитать напоминания.')} }}"
+                - stop: "reminder delete all list failed"
+                  response_variable: reminder_delete_result
+            - repeat:
+                for_each: "{{ reminder_delete_list.schedules }}"
+                sequence:
+                  - service: script.scheduler_rpc
+                    data:
+                      method: "DeleteSchedule"
+                      payload_json: "{{ {'id': repeat.item.get('id', '')} | to_json }}"
+            - service: script.scheduler_list
+              data:
+                kind: "SCHEDULE_KIND_REMINDER"
+                include_disabled: true
+              response_variable: reminder_delete_after
+            - variables:
+                reminder_delete_remaining: "{{ reminder_delete_after.schedules | length if reminder_delete_after.status == 'ok' else -1 }}"
+                reminder_delete_result: >-
+                  {{ ({'status': 'error', 'text': reminder_delete_after.error_text | default('Не удалось проверить результат.')}
+                      if reminder_delete_after.status != 'ok'
+                      else ({'status': 'ok', 'text': 'Все напоминания удалены.'}
+                            if reminder_delete_remaining | int == 0
+                            else {'status': 'error', 'text': 'Не удалось удалить ' ~ reminder_delete_remaining ~ ' напоминание(й).'})) }}
+            - stop: "reminder delete all"
+              response_variable: reminder_delete_result
+    - service: script.scheduler_resolve_schedule
+      data:
+        query: "{{ reminder_delete_query }}"
+        kind: "SCHEDULE_KIND_REMINDER"
+        include_disabled: true
+      response_variable: reminder_delete_target
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ reminder_delete_target.status == 'ambiguous' }}"
+          sequence:
+            - variables:
+                reminder_delete_result: "{{ {'status': 'ambiguous', 'text': 'Найдено несколько напоминаний. Уточните текст.'} }}"
+            - stop: "ambiguous reminder"
+              response_variable: reminder_delete_result
+        - conditions:
+            - condition: template
+              value_template: "{{ reminder_delete_target.status != 'ok' }}"
+          sequence:
+            - variables:
+                reminder_delete_result: >-
+                  {{ {'status': reminder_delete_target.status,
+                      'text': (reminder_delete_target.error_text | default('Напоминание не найдено.') if reminder_delete_target.status == 'error' else 'Напоминание не найдено.')} }}
+            - stop: "no reminder"
+              response_variable: reminder_delete_result
+    - service: script.scheduler_rpc
+      data:
+        method: "DeleteSchedule"
+        payload_json: "{{ {'id': reminder_delete_target.schedule.get('id', '')} | to_json }}"
+      response_variable: reminder_delete_rpc
+    - variables:
+        reminder_delete_result: >-
+          {{ ({'status': 'ok', 'text': 'Напоминание «' ~ (reminder_delete_target.schedule.get('label', '') | trim) ~ '» удалено.'}
+              if reminder_delete_rpc.status == 'ok'
+              else {'status': 'error', 'text': reminder_delete_rpc.error_text | default('Не удалось удалить напоминание.')}) }}
+    - stop: "schedule_reminder_delete"
+      response_variable: reminder_delete_result
+
+schedule_note_add:
+  alias: "Schedules: add note"
+  mode: single
+  fields:
+    text:
+      required: true
+  sequence:
     - service: todo.add_item
       target:
-        entity_id: todo.alarms_once
+        entity_id: todo.notes
       data:
-        item: "{{ label }}"
-        due_datetime: "{{ due_dt }}"
-        description: "alarm-relative"
-    - service: input_boolean.turn_off
+        item: "{{ text }}"
+        description: "note"
+
+schedule_note_search:
+  alias: "Schedules: search notes"
+  mode: single
+  fields:
+    query:
+      default: ""
+  sequence:
+    - service: todo.get_items
       target:
-        entity_id:
-          - input_boolean.alarm_snooze_active
-          - input_boolean.alarm_ringing
-          - input_boolean.alarm_music_was_playing
-    - service: input_text.set_value
+        entity_id: todo.notes
+      response_variable: note_data
+    - variables:
+        result: >-
+          {% set q = query | default('') | string | lower %}
+          {% set ns = namespace(rows=[]) %}
+          {% for item in note_data.get('todo.notes', {}).get('items', []) %}
+            {% if q == '' or q in item.summary | lower or q in (item.description | default('')) | lower %}
+              {% set ns.rows = ns.rows + [item.summary] %}
+            {% endif %}
+          {% endfor %}
+          {% if ns.rows | length == 0 %}
+            Заметок не найдено.
+          {% else %}
+            {{ ns.rows | join('. ') }}
+          {% endif %}
+    - variables:
+        response: "{{ {'text': result | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
+    - stop: "schedule_note_search"
+      response_variable: response
+
+schedule_note_delete:
+  alias: "Schedules: delete note"
+  mode: single
+  fields:
+    query:
+      required: true
+  sequence:
+    - service: todo.get_items
       target:
-        entity_id:
-          - input_text.tekushchii_budilnik_uid
-          - input_text.tekushchii_budilnik_nazvanie
-          - input_text.tekushchii_budilnik_spisok
-      data:
-        value: ""
+        entity_id: todo.notes
+      response_variable: note_data
+    - variables:
+        rows: >-
+          {% set q = query | string | lower %}
+          {% set ns = namespace(rows=[]) %}
+          {% for item in note_data.get('todo.notes', {}).get('items', []) %}
+            {% if q in item.summary | lower or q in (item.description | default('')) | lower %}
+              {% set ns.rows = ns.rows + [item.uid] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows }}
+    - repeat:
+        for_each: "{{ rows }}"
+        sequence:
+          - service: todo.remove_item
+            target:
+              entity_id: todo.notes
+            data:
+              item: "{{ repeat.item }}"
+
+# --- Legacy rollback-only dispatchers ---------------------------------------
+# These still write the old HA todo/timer helpers. Their automations are
+# disabled (initial_state: false) so they never compete with the canonical
+# scheduler. Kept so a cutover can be reverted without reconstructing code.
 
 schedule_alarm_fire:
-  alias: "Schedules: fire an alarm item"
+  alias: "Legacy: fire an alarm item"
   mode: single
   fields:
     uid:
@@ -1555,7 +2823,7 @@ schedule_alarm_fire:
     - service: script.alarm_start
 
 schedule_alarm_advance:
-  alias: "Schedules: advance an alarm after ringing or a missed occurrence"
+  alias: "Legacy: advance an alarm item"
   mode: single
   fields:
     uid:
@@ -1622,7 +2890,7 @@ schedule_alarm_advance:
                 status: needs_action
 
 schedule_alarm_finalize:
-  alias: "Schedules: finish current alarm"
+  alias: "Legacy: finish current alarm item"
   mode: single
   sequence:
     - variables:
@@ -1653,7 +2921,7 @@ schedule_alarm_finalize:
         value: ""
 
 schedule_alarm_tick:
-  alias: "Schedules: alarm dispatcher"
+  alias: "Legacy: alarm dispatcher (disabled during cutover)"
   mode: single
   sequence:
     - variables:
@@ -1739,330 +3007,8 @@ schedule_alarm_tick:
                 name: "{{ pick.name }}"
                 list_id: "{{ pick.list_id }}"
 
-schedule_alarm_status:
-  alias: "Schedules: alarm list text"
-  mode: single
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id:
-          - todo.alarms_once
-          - todo.alarms_daily
-          - todo.alarms_weekdays
-          - todo.alarms_weekends
-      response_variable: alarm_lists
-    - variables:
-        result: >-
-          {% set ns = namespace(rows=[]) %}
-          {% set names = {'todo.alarms_once':'однократно', 'todo.alarms_daily':'ежедневно', 'todo.alarms_weekdays':'по будням', 'todo.alarms_weekends':'по выходным'} %}
-          {% for list_id, data in alarm_lists.items() %}
-            {% for item in data.get('items', []) %}
-              {% if item.get('status') == 'needs_action' and item.get('due') %}
-                {% set due = as_datetime(item.get('due')) %}
-                {% set ns.rows = ns.rows + [{'due': due, 'name': item.summary, 'repeat': names.get(list_id, '')}] %}
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          {% if ns.rows | length == 0 %}
-            Будильников нет.
-          {% else %}
-            {% set sorted = ns.rows | sort(attribute='due') %}
-            {% for row in sorted %}
-              {{ row.name }}: {{ row.due.strftime('%H:%M, %d.%m') }}, {{ row.repeat }}{% if not loop.last %}. {% endif %}
-            {% endfor %}
-          {% endif %}
-    - variables:
-        response: "{{ {'text': result | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
-    - stop: "schedule_alarm_status"
-      response_variable: response
-
-schedule_alarm_disable:
-  alias: "Schedules: disable alarm items"
-  mode: single
-  fields:
-    all:
-      description: "Disable all active alarm items"
-      example: true
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id:
-          - todo.alarms_once
-          - todo.alarms_daily
-          - todo.alarms_weekdays
-          - todo.alarms_weekends
-      response_variable: alarm_lists
-    - variables:
-        rows: >-
-          {% set ns = namespace(rows=[]) %}
-          {% for list_id, data in alarm_lists.items() %}
-            {% for item in data.get('items', []) %}
-              {% if item.status == 'needs_action' %}
-                {% set ns.rows = ns.rows + [{'uid': item.uid, 'list_id': list_id}] %}
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          {{ ns.rows }}
-    - repeat:
-        for_each: "{{ rows }}"
-        sequence:
-          - service: todo.update_item
-            target:
-              entity_id: "{{ repeat.item.list_id }}"
-            data:
-              item: "{{ repeat.item.uid }}"
-              status: completed
-
-schedule_alarm_delete_all:
-  alias: "Schedules: delete all alarm items"
-  mode: single
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id:
-          - todo.alarms_once
-          - todo.alarms_daily
-          - todo.alarms_weekdays
-          - todo.alarms_weekends
-      response_variable: alarm_lists
-    - variables:
-        rows: >-
-          {% set ns = namespace(rows=[]) %}
-          {% for list_id, data in alarm_lists.items() %}
-            {% for item in data.get('items', []) %}
-              {% set ns.rows = ns.rows + [{'uid': item.uid, 'list_id': list_id}] %}
-            {% endfor %}
-          {% endfor %}
-          {{ ns.rows }}
-    - repeat:
-        for_each: "{{ rows }}"
-        sequence:
-          - service: todo.remove_item
-            target:
-              entity_id: "{{ repeat.item.list_id }}"
-            data:
-              item: "{{ repeat.item.uid }}"
-
-schedule_timer_start:
-  alias: "Schedules: start a timer"
-  mode: queued
-  max: 8
-  fields:
-    hours:
-      default: 0
-    minutes:
-      default: 0
-    seconds:
-      default: 0
-    name:
-      default: ""
-  sequence:
-    - variables:
-        total_seconds: "{{ (hours | default(0) | int(0) * 3600) + (minutes | default(0) | int(0) * 60) + (seconds | default(0) | int(0)) }}"
-        index: >-
-          {% set ns = namespace(idx=0) %}
-          {% for i in range(1, 9) %}
-            {% if ns.idx == 0 and is_state('timer.taimer_' ~ i, 'idle') %}{% set ns.idx = i %}{% endif %}
-          {% endfor %}
-          {{ ns.idx }}
-    - choose:
-        - conditions:
-            - condition: template
-              value_template: "{{ index | int == 0 }}"
-          sequence:
-            - stop: "no free timer"
-    - variables:
-        label: >-
-          {% if name is defined and name not in ['', 'unknown', 'unavailable', 'None', None] %}{{ name }}
-          {% else %}Таймер {{ index }}{% endif %}
-        duration: "{{ total_seconds if total_seconds | int > 0 else 60 }}"
-    - service: input_text.set_value
-      target:
-        entity_id: "input_text.taimer_{{ index }}_nazvanie"
-      data:
-        value: "{{ label }}"
-    - service: timer.start
-      target:
-        entity_id: "timer.taimer_{{ index }}"
-      data:
-        duration: "{{ duration }}"
-
-schedule_timer_status:
-  alias: "Schedules: timer list text"
-  mode: single
-  sequence:
-    - variables:
-        result: >-
-          {% set ns = namespace(rows=[]) %}
-          {% for i in range(1, 9) %}
-            {% set t = 'timer.taimer_' ~ i %}
-            {% if states(t) in ['active', 'paused'] %}
-              {% set label = states('input_text.taimer_' ~ i ~ '_nazvanie') %}
-              {% set remaining = state_attr(t, 'remaining') %}
-              {% set ns.rows = ns.rows + [{'state': states(t), 'label': label if label not in ['', 'unknown', 'unavailable', 'None'] else 'Таймер ' ~ i, 'remaining': remaining}] %}
-            {% endif %}
-          {% endfor %}
-          {% if ns.rows | length == 0 %}
-            Активных таймеров нет.
-          {% else %}
-            {% for row in ns.rows %}
-              {{ row.label }}: {{ 'на паузе' if row.state == 'paused' else 'работает' }}, осталось {{ row.remaining }}{% if not loop.last %}. {% endif %}
-            {% endfor %}
-          {% endif %}
-    - variables:
-        response: "{{ {'text': result | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
-    - stop: "schedule_timer_status"
-      response_variable: response
-
-schedule_timer_cancel:
-  alias: "Schedules: cancel a timer"
-  mode: single
-  fields:
-    name:
-      default: ""
-  sequence:
-    - variables:
-        index: >-
-          {% set ns = namespace(idx=0, name=name | default('') | string | lower) %}
-          {% for i in range(1, 9) %}
-            {% set t = 'timer.taimer_' ~ i %}
-            {% set label = states('input_text.taimer_' ~ i ~ '_nazvanie') | string | lower %}
-            {% if ns.idx == 0 and states(t) in ['active', 'paused'] and (ns.name == '' or ns.name in label or ns.name == (i | string) or ns.name == ('таймер ' ~ i)) %}
-              {% set ns.idx = i %}
-            {% endif %}
-          {% endfor %}
-          {% if ns.idx == 0 and ns.name == '' %}
-            {% for i in range(1, 9) %}
-              {% if ns.idx == 0 and states('timer.taimer_' ~ i) in ['active', 'paused'] %}{% set ns.idx = i %}{% endif %}
-            {% endfor %}
-          {% endif %}
-          {{ ns.idx }}
-    - choose:
-        - conditions:
-            - condition: template
-              value_template: "{{ index | int > 0 }}"
-          sequence:
-            - service: timer.cancel
-              target:
-                entity_id: "timer.taimer_{{ index }}"
-            - service: input_text.set_value
-              target:
-                entity_id: "input_text.taimer_{{ index }}_nazvanie"
-              data:
-                value: ""
-
-schedule_timer_pause:
-  alias: "Schedules: pause a timer"
-  mode: single
-  fields:
-    name:
-      default: ""
-  sequence:
-    - variables:
-        index: >-
-          {% set ns = namespace(idx=0, name=name | default('') | string | lower) %}
-          {% for i in range(1, 9) %}
-            {% set label = states('input_text.taimer_' ~ i ~ '_nazvanie') | string | lower %}
-            {% if ns.idx == 0 and states('timer.taimer_' ~ i) == 'active' and (ns.name == '' or ns.name in label or ns.name == (i | string)) %}{% set ns.idx = i %}{% endif %}
-          {% endfor %}
-          {{ ns.idx }}
-    - if:
-        - condition: template
-          value_template: "{{ index | int > 0 }}"
-      then:
-        - service: timer.pause
-          target:
-            entity_id: "timer.taimer_{{ index }}"
-
-schedule_timer_resume:
-  alias: "Schedules: resume a timer"
-  mode: single
-  fields:
-    name:
-      default: ""
-  sequence:
-    - variables:
-        index: >-
-          {% set ns = namespace(idx=0, name=name | default('') | string | lower) %}
-          {% for i in range(1, 9) %}
-            {% set label = states('input_text.taimer_' ~ i ~ '_nazvanie') | string | lower %}
-            {% if ns.idx == 0 and states('timer.taimer_' ~ i) == 'paused' and (ns.name == '' or ns.name in label or ns.name == (i | string)) %}{% set ns.idx = i %}{% endif %}
-          {% endfor %}
-          {{ ns.idx }}
-    - if:
-        - condition: template
-          value_template: "{{ index | int > 0 }}"
-      then:
-        - service: timer.start
-          target:
-            entity_id: "timer.taimer_{{ index }}"
-
-schedule_reminder_create:
-  alias: "Schedules: create reminder"
-  mode: single
-  fields:
-    text:
-      required: true
-    hour:
-      default: 9
-    minute:
-      default: 0
-    period:
-      default: ""
-    day:
-      default: ""
-  sequence:
-    - variables:
-        hour_num: "{{ hour | int(9) }}"
-        minute_num: "{{ minute | int(0) }}"
-        period_raw: "{{ period | default('') | string | lower }}"
-        day_raw: "{{ day | default('') | string | lower }}"
-        adjusted_hour: >-
-          {% set h = hour_num | int %}
-          {% if period_raw in ['вечера', 'дня'] and h < 12 %}{{ h + 12 }}
-          {% elif period_raw in ['ночи', 'утра'] and h == 12 %}{{ 0 }}
-          {% else %}{{ h }}{% endif %}
-        next_dt: >-
-          {% set ns = namespace(dt=now().replace(hour=adjusted_hour | int, minute=minute_num | int, second=0, microsecond=0)) %}
-          {% if day_raw == 'завтра' %}
-            {% set ns.dt = ns.dt + timedelta(days=1) %}
-          {% elif ns.dt <= now() %}
-            {% set ns.dt = ns.dt + timedelta(days=1) %}
-          {% endif %}
-          {{ ns.dt.strftime('%Y-%m-%dT%H:%M:%S') }}{{ now().strftime('%z')[:3] }}:{{ now().strftime('%z')[3:] }}
-    - service: todo.add_item
-      target:
-        entity_id: todo.reminders
-      data:
-        item: "{{ text }}"
-        due_datetime: "{{ next_dt }}"
-        description: "reminder"
-
-schedule_reminder_status:
-  alias: "Schedules: reminder list text"
-  mode: single
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id: todo.reminders
-      response_variable: reminder_data
-    - variables:
-        result: >-
-          {% set rows = reminder_data.get('todo.reminders', {}).get('items', []) | selectattr('status', 'eq', 'needs_action') | list %}
-          {% if rows | length == 0 %}
-            Напоминаний нет.
-          {% else %}
-            {% for item in rows %}
-              {{ item.summary }}{% if item.due %}: {{ as_datetime(item.due).strftime('%H:%M, %d.%m') }}{% endif %}{% if not loop.last %}. {% endif %}
-            {% endfor %}
-          {% endif %}
-    - variables:
-        response: "{{ {'text': result | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
-    - stop: "schedule_reminder_status"
-      response_variable: response
-
 schedule_reminder_tick:
-  alias: "Schedules: reminder dispatcher"
+  alias: "Legacy: reminder dispatcher (disabled during cutover)"
   mode: single
   sequence:
     - service: todo.get_items
@@ -2095,232 +3041,3 @@ schedule_reminder_tick:
             data:
               title: "Напоминание"
               message: "{{ repeat.item.summary }}"
-
-schedule_note_add:
-  alias: "Schedules: add note"
-  mode: single
-  fields:
-    text:
-      required: true
-  sequence:
-    - service: todo.add_item
-      target:
-        entity_id: todo.notes
-      data:
-        item: "{{ text }}"
-        description: "note"
-
-schedule_note_search:
-  alias: "Schedules: search notes"
-  mode: single
-  fields:
-    query:
-      default: ""
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id: todo.notes
-      response_variable: note_data
-    - variables:
-        result: >-
-          {% set q = query | default('') | string | lower %}
-          {% set ns = namespace(rows=[]) %}
-          {% for item in note_data.get('todo.notes', {}).get('items', []) %}
-            {% if q == '' or q in item.summary | lower or q in (item.description | default('')) | lower %}
-              {% set ns.rows = ns.rows + [item.summary] %}
-            {% endif %}
-          {% endfor %}
-          {% if ns.rows | length == 0 %}
-            Заметок не найдено.
-          {% else %}
-            {{ ns.rows | join('. ') }}
-          {% endif %}
-    - variables:
-        response: "{{ {'text': result | trim | replace('\n', ' ') | replace('  ', ' ')} }}"
-    - stop: "schedule_note_search"
-      response_variable: response
-
-schedule_note_delete:
-  alias: "Schedules: delete note"
-  mode: single
-  fields:
-    query:
-      required: true
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id: todo.notes
-      response_variable: note_data
-    - variables:
-        rows: >-
-          {% set q = query | string | lower %}
-          {% set ns = namespace(rows=[]) %}
-          {% for item in note_data.get('todo.notes', {}).get('items', []) %}
-            {% if q in item.summary | lower or q in (item.description | default('')) | lower %}
-              {% set ns.rows = ns.rows + [item.uid] %}
-            {% endif %}
-          {% endfor %}
-          {{ ns.rows }}
-    - repeat:
-        for_each: "{{ rows }}"
-        sequence:
-          - service: todo.remove_item
-            target:
-              entity_id: todo.notes
-            data:
-              item: "{{ repeat.item }}"
-
-
-schedule_alarm_delete:
-  alias: "Schedules: delete matching alarm items"
-  mode: single
-  fields:
-    query:
-      required: true
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id:
-          - todo.alarms_once
-          - todo.alarms_daily
-          - todo.alarms_weekdays
-          - todo.alarms_weekends
-      response_variable: alarm_lists
-    - variables:
-        rows: >-
-          {% set q = query | string | lower %}
-          {% set ns = namespace(rows=[]) %}
-          {% for list_id, data in alarm_lists.items() %}
-            {% for item in data.get('items', []) %}
-              {% set due_text = as_datetime(item.due).strftime('%H:%M') if item.due else '' %}
-              {% if q in item.summary | lower or q == due_text %}
-                {% set ns.rows = ns.rows + [{'uid': item.uid, 'list_id': list_id}] %}
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          {{ ns.rows }}
-    - repeat:
-        for_each: "{{ rows }}"
-        sequence:
-          - service: todo.remove_item
-            target:
-              entity_id: "{{ repeat.item.list_id }}"
-            data:
-              item: "{{ repeat.item.uid }}"
-
-schedule_alarm_set_enabled:
-  alias: "Schedules: enable or disable matching alarm items"
-  mode: single
-  fields:
-    query:
-      required: true
-    enabled:
-      required: true
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id:
-          - todo.alarms_once
-          - todo.alarms_daily
-          - todo.alarms_weekdays
-          - todo.alarms_weekends
-      response_variable: alarm_lists
-    - variables:
-        rows: >-
-          {% set q = query | string | lower %}
-          {% set ns = namespace(rows=[]) %}
-          {% for list_id, data in alarm_lists.items() %}
-            {% for item in data.get('items', []) %}
-              {% set due_text = as_datetime(item.due).strftime('%H:%M') if item.due else '' %}
-              {% if q in item.summary | lower or q == due_text %}
-                {% set ns.rows = ns.rows + [{'uid': item.uid, 'list_id': list_id}] %}
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          {{ ns.rows }}
-    - repeat:
-        for_each: "{{ rows }}"
-        sequence:
-          - service: todo.update_item
-            target:
-              entity_id: "{{ repeat.item.list_id }}"
-            data:
-              item: "{{ repeat.item.uid }}"
-              status: "{{ 'needs_action' if enabled | bool else 'completed' }}"
-
-schedule_alarm_update:
-  alias: "Schedules: update alarm time"
-  mode: single
-  fields:
-    query:
-      default: ""
-    hour:
-      required: true
-    minute:
-      required: true
-    period:
-      default: ""
-    day:
-      default: ""
-  sequence:
-    - service: todo.get_items
-      target:
-        entity_id:
-          - todo.alarms_once
-          - todo.alarms_daily
-          - todo.alarms_weekdays
-          - todo.alarms_weekends
-      response_variable: alarm_lists
-    - variables:
-        rows: >-
-          {% set q = query | default('') | string | lower %}
-          {% set ns = namespace(rows=[]) %}
-          {% for list_id, data in alarm_lists.items() %}
-            {% for item in data.get('items', []) %}
-              {% if item.status == 'needs_action' and (q == '' or q in item.summary | lower) %}
-                {% set ns.rows = ns.rows + [{'uid': item.uid, 'list_id': list_id, 'name': item.summary, 'due': item.due}] %}
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          {{ ns.rows | sort(attribute='due') }}
-    - choose:
-        - conditions:
-            - condition: template
-              value_template: "{{ rows | length == 0 }}"
-          sequence:
-            - stop: "no matching alarm"
-    - variables:
-        target: "{{ rows | first }}"
-        hour_num: "{{ hour | int(7) }}"
-        minute_num: "{{ minute | int(0) }}"
-        period_raw: "{{ period | default('') | string | lower }}"
-        day_raw: "{{ day | default('') | string | lower }}"
-        adjusted_hour: >-
-          {% set h = hour_num | int %}
-          {% if period_raw in ['вечера', 'дня'] and h < 12 %}{{ h + 12 }}
-          {% elif period_raw in ['ночи', 'утра'] and h == 12 %}{{ 0 }}
-          {% else %}{{ h }}{% endif %}
-        next_dt: >-
-          {% set ns = namespace(dt=now().replace(hour=adjusted_hour | int, minute=minute_num | int, second=0, microsecond=0)) %}
-          {% if day_raw == 'завтра' %}
-            {% set ns.dt = ns.dt + timedelta(days=1) %}
-          {% elif ns.dt <= now() %}
-            {% set ns.dt = ns.dt + timedelta(days=1) %}
-          {% endif %}
-          {% if target.list_id == 'todo.alarms_weekdays' %}
-            {% for i in range(0, 8) %}
-              {% if ns.dt.weekday() >= 5 %}{% set ns.dt = ns.dt + timedelta(days=1) %}{% endif %}
-            {% endfor %}
-          {% elif target.list_id == 'todo.alarms_weekends' %}
-            {% for i in range(0, 8) %}
-              {% if ns.dt.weekday() < 5 %}{% set ns.dt = ns.dt + timedelta(days=1) %}{% endif %}
-            {% endfor %}
-          {% endif %}
-          {{ ns.dt.strftime('%Y-%m-%dT%H:%M:%S') }}{{ now().strftime('%z')[:3] }}:{{ now().strftime('%z')[3:] }}
-    - service: todo.update_item
-      target:
-        entity_id: "{{ target.list_id }}"
-      data:
-        item: "{{ target.uid }}"
-        due_datetime: "{{ next_dt }}"
-        status: needs_action

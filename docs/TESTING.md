@@ -90,6 +90,25 @@ projects/home/e2e/run-scheduler-smoke.sh
 DELIVERED, generic task остаётся в очереди `tasks`, STOP через StopSchedule.
 Живой звук, HA shadow-import и cutover этот тест **не** проверяет.
 
+Импорт и голосовые адаптеры:
+
+```bash
+python3 -m unittest discover -s projects/home/scheduler-migration -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
+```
+
+Миграция проверяет snapshot из HA `.storage` (ICS + `core.restore_state`),
+running/paused timers, идемпотентный повтор, fail-closed на пустом snapshot и
+quarantine без создания исполняемого расписания. HA voice tests проверяют
+контракт Connect JSON, truthfulness речи, отсутствие legacy snooze/start и
+сохранение `enabled:false` при update; живые HA/scheduler не используются.
+
+Живая проверка голосового маршрута — тихий `conversation.process` через
+builtin-агент (`conversation.home_assistant`), не через Hermes: create/list/
+update/enable/disable/delete, timer start/pause/resume/cancel и reminder
+create/list. Результаты и scheduler state сверяются через
+`ListSchedules`/`ListTimers`; звук и микрофон этим не проверяются.
+
 Bazel-гейты отдельные:
 
 ```bash

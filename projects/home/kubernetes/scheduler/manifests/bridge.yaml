@@ -1,0 +1,152 @@
+# Home Assistant executor for the durable scheduler.
+#
+# This file is a TEMPLATE. deploy.sh renders it with private values from an
+# ignored env file; rendered manifests must never be committed.
+#
+#   HA_URL   base URL of the live Home Assistant (no credentials, no query)
+#
+# The deployment starts with 0 replicas. deploy.sh runs a one-shot dry-run
+# validation first, then sets BRIDGE_EXECUTE=true and scales to 1 only at the
+# controlled ownership switch. Dry-run mode is a finite diagnostic pass, so it
+# must not run as a long-lived deployment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ha-bridge-data
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-bridge
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ha-bridge
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-bridge
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 0
+  # One executor per queue. A second replica would duplicate HA side effects.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ha-bridge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ha-bridge
+      annotations:
+        ricardo.dev/build: ${BUILD_ID}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ha-bridge
+          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/ricardo/bin/ha-bridge"]
+          env:
+            - name: HA_URL
+              value: ${HA_URL}
+            - name: HA_TOKEN_FILE
+              value: /run/secrets/ha/token
+            - name: SCHEDULER_ENDPOINT
+              value: http://scheduler.home-assistant.svc.cluster.local:8098
+            - name: SCHEDULER_TOKEN_FILE
+              value: /run/secrets/scheduler/token
+            - name: BRIDGE_CONSUMER_ID
+              value: ha-bridge-home
+            - name: BRIDGE_QUEUE
+              value: home
+            # Flipped to true only at the controlled cutover.
+            - name: BRIDGE_EXECUTE
+              value: "false"
+            - name: BRIDGE_LEDGER_PATH
+              value: /data/ledger.json
+            - name: BRIDGE_BATCH_SIZE
+              value: "10"
+            - name: BRIDGE_LEASE_SECONDS
+              value: "300"
+            - name: BRIDGE_POLL_INTERVAL
+              value: 1s
+            # Home alarms/timers must resume within seconds after a scheduler
+            # outage; the generic solution default (5m) is too slow for this
+            # deployment.
+            - name: BRIDGE_MAX_BACKOFF
+              value: 5s
+          readinessProbe:
+            exec:
+              # Authenticated scheduler readiness; the token comes from the
+              # mounted file, never from probe arguments.
+              command: ["/opt/ricardo/bin/ha-bridge", "-healthcheck"]
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 8
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/opt/ricardo/bin/ha-bridge", "-healthcheck"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 8
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bin
+              mountPath: /opt/ricardo/bin
+              readOnly: true
+            - name: data
+              mountPath: /data
+            - name: scheduler-token
+              mountPath: /run/secrets/scheduler
+              readOnly: true
+            - name: ha-token
+              mountPath: /run/secrets/ha
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bin
+          hostPath:
+            path: /opt/ricardo/current/bin
+            type: Directory
+        - name: data
+          persistentVolumeClaim:
+            claimName: ha-bridge-data
+        - name: scheduler-token
+          secret:
+            secretName: scheduler-auth
+            defaultMode: 0440
+        - name: ha-token
+          secret:
+            secretName: ha-bridge-ha
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

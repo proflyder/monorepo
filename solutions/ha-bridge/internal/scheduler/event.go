@@ -44,9 +44,8 @@ const (
 )
 
 // Event is one delivered DueEvent. Only the fields the executor needs are
-// decoded; payload_json is intentionally ignored because the proto declares it
-// as int64 (a wire-contract defect) and no executor reads it, and because an
-// event payload must never select an HA service or entity.
+// decoded; payload_json is intentionally ignored: no executor reads it today,
+// and an event payload must never select an HA service or entity.
 type Event struct {
 	ID             string
 	SourceID       string
@@ -101,6 +100,8 @@ type Status struct {
 	EnabledSchedules           int32
 	RunningTimers              int32
 	ScenarioExecutionSupported bool
-	Queues                     []QueueInfo
-	Consumers                  []ConsumerStatus
+	// Ready mirrors GetStatusResponse.ready: the last tick succeeded recently.
+	Ready     bool
+	Queues    []QueueInfo
+	Consumers []ConsumerStatus
 }

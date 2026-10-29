@@ -338,7 +338,9 @@ StationMusicStatus:
 
 StationAlarmSet:
   speech:
-    text: "Будильник установлен."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось установить будильник.') }}
   action:
     - service: script.schedule_alarm_create
       data:
@@ -348,81 +350,105 @@ StationAlarmSet:
         day: "{{ day | default('') }}"
         repeat: "{{ repeat | default('Однократно') }}"
         name: "{{ name | default('') }}"
+      response_variable: alarm_result
+    - stop: "station_alarm_set"
+      response_variable: alarm_result
 
 StationAlarmRelative:
   speech:
-    text: "Будильник установлен."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось установить будильник.') }}
   action:
     - service: script.schedule_alarm_create_relative
       data:
         hours: "{{ hours | default(0) }}"
         minutes: "{{ minutes | default(0) }}"
         name: "{{ name | default('') }}"
+      response_variable: alarm_result
+    - stop: "station_alarm_relative"
+      response_variable: alarm_result
 
 StationAlarmStatus:
   speech:
-    text: "{{ action_response.text if action_response is mapping and action_response.text is defined else 'Не удалось прочитать будильники.' }}"
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось прочитать будильники.') }}
   action:
     - service: script.schedule_alarm_status
       response_variable: alarm_result
-    - stop: "schedule_alarm_status"
+    - stop: "station_alarm_status"
       response_variable: alarm_result
 
 StationAlarmCancel:
   speech:
-    text: "Будильники выключены."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось выключить будильники.') }}
   action:
     - service: script.schedule_alarm_disable
       data:
-        all: true
+        all: "{{ all | default('') == 'все' }}"
+      response_variable: alarm_result
+    - stop: "station_alarm_cancel"
+      response_variable: alarm_result
 
 StationAlarmSnooze:
   speech:
     text: >-
-      {% if is_state('input_boolean.alarm_ringing', 'on') %}
-        Откладываю будильник на девять минут.
-      {% else %}
-        Будильник не звонит.
-      {% endif %}
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось отложить будильник.') }}
   action:
-    - choose:
-        - conditions:
-            - condition: state
-              entity_id: input_boolean.alarm_ringing
-              state: "on"
-          sequence:
-            - service: script.alarm_snooze
+    - service: script.schedule_alarm_snooze
+      response_variable: snooze_result
+    - stop: "station_alarm_snooze"
+      response_variable: snooze_result
 
 StationAlarmStop:
   speech:
-    text: "Останавливаю."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Останавливаю.') }}
   action:
+    - variables:
+        was_ringing: "{{ is_state('input_boolean.alarm_ringing', 'on') }}"
+        was_music_playing: "{{ is_state('media_player.iandeks_stantsiia_midi', 'playing') }}"
+    - service: script.schedule_alarm_stop
+      response_variable: stop_result
     - choose:
         - conditions:
-            - condition: state
-              entity_id: input_boolean.alarm_ringing
-              state: "on"
-          sequence:
-            - service: script.alarm_stop
-        - conditions:
-            - condition: state
-              entity_id: media_player.iandeks_stantsiia_midi
-              state: "playing"
+            - condition: template
+              value_template: "{{ not was_ringing and stop_result is mapping and stop_result.status == 'not_found' and was_music_playing }}"
           sequence:
             - service: media_player.media_stop
               target:
                 entity_id: media_player.iandeks_stantsiia_midi
-
+    - variables:
+        station_stop_result: >-
+          {{ ({'status': 'ok', 'text': 'Останавливаю музыку.'}
+              if (not was_ringing and stop_result is mapping and stop_result.status == 'not_found' and was_music_playing)
+              else (stop_result if stop_result is mapping else {'status': 'error', 'text': 'Планировщик не ответил.'})) }}
+    - stop: "station_alarm_stop"
+      response_variable: station_stop_result
 
 StationAlarmDelete:
   speech:
-    text: "Все будильники удалены."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось удалить будильник.') }}
   action:
-    - service: script.schedule_alarm_delete_all
+    - service: script.schedule_alarm_delete
+      data:
+        all: "{{ all | default('') == 'все' }}"
+      response_variable: alarm_result
+    - stop: "station_alarm_delete"
+      response_variable: alarm_result
 
 StationTimerStart:
   speech:
-    text: "Таймер установлен."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось установить таймер.') }}
   action:
     - service: script.schedule_timer_start
       data:
@@ -430,54 +456,76 @@ StationTimerStart:
         minutes: "{{ minutes | default(0) }}"
         seconds: "{{ seconds | default(0) }}"
         name: "{{ name | default('') }}"
+      response_variable: timer_result
+    - stop: "station_timer_start"
+      response_variable: timer_result
 
 StationTimerStatus:
   speech:
-    text: "{{ action_response.text if action_response is mapping and action_response.text is defined else 'Не удалось прочитать таймеры.' }}"
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось прочитать таймеры.') }}
   action:
     - service: script.schedule_timer_status
       response_variable: timer_result
-    - stop: "schedule_timer_status"
+    - stop: "station_timer_status"
       response_variable: timer_result
 
 StationTimerCancel:
   speech:
-    text: "Таймер отменён."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось отменить таймер.') }}
   action:
     - service: script.schedule_timer_cancel
       data:
         name: "{{ name | default('') }}"
+      response_variable: timer_result
+    - stop: "station_timer_cancel"
+      response_variable: timer_result
 
 StationTimerPause:
   speech:
-    text: "Таймер на паузе."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось поставить таймер на паузу.') }}
   action:
     - service: script.schedule_timer_pause
       data:
         name: "{{ name | default('') }}"
+      response_variable: timer_result
+    - stop: "station_timer_pause"
+      response_variable: timer_result
 
 StationTimerResume:
   speech:
-    text: "Продолжаю таймер."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось продолжить таймер.') }}
   action:
     - service: script.schedule_timer_resume
       data:
         name: "{{ name | default('') }}"
+      response_variable: timer_result
+    - stop: "station_timer_resume"
+      response_variable: timer_result
 
 StationReminderStatus:
   speech:
-    text: "{{ action_response.text if action_response is mapping and action_response.text is defined else 'Не удалось прочитать напоминания.' }}"
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось прочитать напоминания.') }}
   action:
     - service: script.schedule_reminder_status
       response_variable: reminder_result
-    - stop: "schedule_reminder_status"
+    - stop: "station_reminder_status"
       response_variable: reminder_result
-
-
 
 StationReminderCreate:
   speech:
-    text: "Напоминание создано."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось создать напоминание.') }}
   action:
     - service: script.schedule_reminder_create
       data:
@@ -486,6 +534,23 @@ StationReminderCreate:
         minute: "{{ minute | default(0) }}"
         period: "{{ period | default('') }}"
         day: "{{ day | default('') }}"
+      response_variable: reminder_result
+    - stop: "station_reminder_create"
+      response_variable: reminder_result
+
+StationReminderDelete:
+  speech:
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось удалить напоминание.') }}
+  action:
+    - service: script.schedule_reminder_delete
+      data:
+        query: "{{ query | default('') }}"
+        all: "{{ all | default('') == 'все' }}"
+      response_variable: reminder_result
+    - stop: "station_reminder_delete"
+      response_variable: reminder_result
 
 StationNoteAdd:
   speech:
@@ -503,7 +568,7 @@ StationNoteSearch:
       data:
         query: "{{ query | default('') }}"
       response_variable: note_result
-    - stop: "schedule_note_search"
+    - stop: "station_note_search"
       response_variable: note_result
 
 StationNoteDelete:
@@ -514,28 +579,38 @@ StationNoteDelete:
       data:
         query: "{{ query }}"
 
-
 StationAlarmDeleteOne:
   speech:
-    text: "Будильник удалён."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось удалить будильник.') }}
   action:
     - service: script.schedule_alarm_delete
       data:
         query: "{{ alarm_name }}"
+      response_variable: alarm_result
+    - stop: "station_alarm_delete_one"
+      response_variable: alarm_result
 
 StationAlarmDisableOne:
   speech:
-    text: "Будильник выключен."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось выключить будильник.') }}
   action:
     - service: script.schedule_alarm_set_enabled
       data:
         query: "{{ alarm_name }}"
         enabled: false
-
+      response_variable: alarm_result
+    - stop: "station_alarm_disable_one"
+      response_variable: alarm_result
 
 StationAlarmUpdate:
   speech:
-    text: "Будильник изменён."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось изменить будильник.') }}
   action:
     - service: script.schedule_alarm_update
       data:
@@ -544,12 +619,20 @@ StationAlarmUpdate:
         minute: "{{ minute }}"
         period: "{{ period | default('') }}"
         day: "{{ day | default('') }}"
+      response_variable: alarm_result
+    - stop: "station_alarm_update"
+      response_variable: alarm_result
 
 StationAlarmEnableOne:
   speech:
-    text: "Будильник включён."
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось включить будильник.') }}
   action:
     - service: script.schedule_alarm_set_enabled
       data:
         query: "{{ alarm_name | default(hour | default('') ~ ':' ~ minute | default('')) }}"
         enabled: true
+      response_variable: alarm_result
+    - stop: "station_alarm_enable_one"
+      response_variable: alarm_result

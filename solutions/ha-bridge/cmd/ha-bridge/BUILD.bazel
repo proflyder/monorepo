@@ -8,7 +8,10 @@ go_binary(
 
 go_library(
     name = "ha_bridge_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "healthcheck.go",
+        "main.go",
+    ],
     importpath = "ricardo.local/monorepo/solutions/ha-bridge/cmd/ha-bridge",
     visibility = ["//visibility:private"],
     deps = [
@@ -23,6 +26,9 @@ go_library(
 
 go_test(
     name = "ha_bridge_test",
-    srcs = ["main_test.go"],
+    srcs = [
+        "healthcheck_test.go",
+        "main_test.go",
+    ],
     embed = [":ha_bridge_lib"],
 )

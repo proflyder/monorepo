@@ -29,8 +29,9 @@
         data:
           option: Music Assistant
 - id: alarm_scheduler
-  alias: Alarm scheduler
-  description: 'One alarm slot: regular and snoozed triggers; startup reconciliation.'
+  alias: Alarm scheduler (legacy, disabled after scheduler cutover)
+  description: 'Rollback-only single alarm slot. Canonical schedules live in SchedulerService; keep this off while ha-bridge is the executor.'
+  initial_state: false
   trigger:
   - trigger: time
     at: input_datetime.alarm_next
@@ -75,7 +76,7 @@
       - service: script.alarm_start
 - id: alarm_button_stop
   alias: 'Alarm: stop with Pulsar action button'
-  description: Short action click stops the alarm while it is ringing.
+  description: Short action click stops the scheduler occurrence first, then stops the local audio executor.
   trigger:
   - platform: state
     entity_id: event.iandeks_stantsiia_midi_button
@@ -86,7 +87,7 @@
     entity_id: input_boolean.alarm_ringing
     state: 'on'
   action:
-  - service: script.alarm_stop
+  - service: script.schedule_alarm_stop
 - id: assist_satellite_responding_watchdog
   alias: 'Assist satellite: recover stuck responding state'
   description: HA 2026.10.4 sometimes leaves the Pulsar Assist satellite in "responding" after TTS. Reload the ESPHome config entry only after a generous TTS window and never while the alarm is ringing.
@@ -109,8 +110,9 @@
   - delay: 00:00:02
   mode: single
 - id: schedule_alarm_tick
-  alias: 'Schedules: alarm dispatcher'
-  description: Poll local_todo alarm lists; fire one due alarm, advance missed ones.
+  alias: 'Schedules: alarm dispatcher (legacy, disabled after cutover)'
+  description: Rollback-only local_todo poller. Canonical alarms are fired by the scheduler executor, not HA.
+  initial_state: false
   trigger:
   - trigger: time_pattern
     seconds: /30
@@ -121,8 +123,9 @@
   - service: script.schedule_alarm_tick
   mode: single
 - id: schedule_reminder_tick
-  alias: 'Schedules: reminder dispatcher'
-  description: Poll local_todo reminders and announce due items.
+  alias: 'Schedules: reminder dispatcher (legacy, disabled after cutover)'
+  description: Rollback-only local_todo reminder poller. The scheduler executor owns canonical reminders.
+  initial_state: false
   trigger:
   - trigger: time_pattern
     seconds: /30
@@ -133,8 +136,9 @@
   - service: script.schedule_reminder_tick
   mode: single
 - id: schedule_timer_finished
-  alias: 'Schedules: timer finished'
-  description: Announce a finished timer and notify the phone.
+  alias: 'Schedules: timer finished (legacy, disabled after cutover)'
+  description: Rollback-only timer helper announcement. Canonical timers fire scheduler timer.fire events handled by ha-bridge.
+  initial_state: false
   trigger:
   - trigger: event
     event_type: timer.finished

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Minimal exposure for the scheduler NodePort.
+#
+# This file is a TEMPLATE: deploy.sh substitutes the real LAN CIDR from an
+# ignored env file. The published file keeps TEST-NET placeholders.
+#
+# NodePort traffic is DNATed by kube-proxy before the input hook, so an
+# `input` filter never sees the packet. The rule therefore lives in
+# `prerouting` at priority dstnat - 10, i.e. before Kubernetes NAT. The
+# destination scope is the node itself; the source scope is the home LAN, the
+# pod network and Tailscale.
+#
+# IPv4 only: the cluster service is single-stack. Any IPv6 NodePort hit is
+# dropped explicitly instead of silently bypassing the filter.
+#
+# Install on the K3s node:
+#   nft -f /etc/ricardo/scheduler-nodeport.nft
+# Remove with:
+#   nft delete table inet ricardo_scheduler
+table inet ricardo_scheduler {
+  chain prerouting {
+    type filter hook prerouting priority dstnat - 10; policy accept;
+    iifname "lo" accept
+    meta nfproto ipv6 tcp dport ${SCHEDULER_NODE_PORT} drop
+    ip daddr ${NODE_LAN_IP} tcp dport ${SCHEDULER_NODE_PORT} ip saddr != { ${LAN_CIDR}, 10.42.0.0/16, 100.64.0.0/10 } drop
+  }
+}

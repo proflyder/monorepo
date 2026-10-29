@@ -23,13 +23,16 @@
 - «второй» / «третий» — выбрать сохранённый кандидат;
 - «что играет» — текущий трек/состояние;
 - «поставь таймер на 5 минут», «поставь таймер пицца на 10 минут»,
-  «какие таймеры», «поставь на паузу», «продолжи», «отмени» — 8 UI
-  `timer.taimer_*` с restore; видны в dashboard «Помощник»;
+  «какие таймеры», «поставь на паузу», «продолжи», «отмени» — durable
+  таймеры `SchedulerService`; выполнение — ha-bridge;
 - «поставь будильник на 7:30», «на завтра», «по будням», «какие будильники»,
-  «выключи/удали будильник …», «отложи/останови/стоп» — списки `local_todo`,
-  snooze 9 минут, непрерывный рингтон;
-- «напомни завтра в 9:00 …», «какие напоминания» — `todo.reminders`;
-- «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`.
+  «выключи/удали будильник …», «отложи/останови/стоп» — durable расписания
+  `SchedulerService`; snooze и stop управляют серверным occurrence, звук
+  останавливает executor;
+- «напомни завтра в 9:00 …», «какие напоминания» — one-shot расписания
+  `SCHEDULE_KIND_REMINDER` в `SchedulerService`;
+- «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
+  (заметки остаются в Home Assistant без изменений).
 
 Громкость: `volume_mode=sync_spotify` + Web API volume. Слайдер Spotify
 меняет MA/Pulsar; voice «громкость 1…10» меняет MA/Pulsar и Spotify app.
@@ -93,9 +96,17 @@ Pulsar (Алиса)
       ├── media_player.volume_set → Pulsar
       ├── media_player.media_pause/play/stop → MA Pulsar
       ├── browse_media → play_media Liked Songs
-      ├── schedule_* → local_todo / timer helpers
-      └── alarm_* → legacy ring path (start/announce/ramp/stop/restore)
+      ├── scheduler_* → SchedulerService Connect JSON (canonical state)
+      └── alarm_* → audio executor path (start/announce/ramp/stop/restore)
 ```
+
+Canonical schedule/timer/reminder state lives in `SchedulerService`, not in
+HA helpers. `ha-bridge` leases `home` events and calls the HA audio scripts:
+`alarm_start` for alarms, `schedule_announce` for timers/reminders, and
+`alarm_stop` for scheduler STOP. HA remains the audio executor; the scheduler
+never plays sound. The bridge passes `source_id`, `event_id`, `label` and
+`kind` to `alarm_start`; HA stores them in `input_text.scheduler_active_*`
+so voice snooze/stop target the correct schedule id without guessing.
 
 - HTTP control слушает `0.0.0.0:8099` на станции.
 - Авторизация: `Authorization: Bearer <control-token>`.
@@ -107,11 +118,17 @@ Pulsar (Алиса)
 
 ## Файлы
 
-- `rest_commands.yaml`
+- `rest_commands.yaml` — station HTTP и `scheduler_rpc` Connect JSON
 - `intent_scripts.yaml` — station, music, schedule intents
-- `scripts.yaml` — Music + legacy `alarm_*` ring path + `schedule_*`
-- `automations.yaml` — route follows source + `schedules_*`
-- `schedules_dashboard.yaml` — dashboard «Помощник»
+- `scripts.yaml` — Music, legacy `alarm_*` audio path, canonical
+  `scheduler_*` / `schedule_*` client, notes
+- `automations.yaml` — route follows source; legacy alarm/reminder/timer
+  dispatchers disabled with `initial_state: false`
+- `schedules_dashboard.yaml` — dashboard «Помощник» (read-only pointers;
+  notes remain editable)
+- `test_ha_config.py` — static audio/entity/template invariants
+- `test_scheduler_contract.py` — Connect JSON request/response, resolution and
+  truthful-speech contract tests (fake clock/timezone, no live calls)
 - `custom_sentences/ru/station_control.yaml`
 - `custom_sentences/ru/station_alarm.yaml`
 - `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
@@ -129,14 +146,14 @@ Pulsar (Алиса)
   Источник — пользовательский MP3 `HONEYMOAN - Too Much` (4:54), сконвертирован
   целиком; файл локальный, не для публикации.
 
-UI-created (не в `input_*.yaml`):
+UI-created / restored entities:
 
 ```text
-todo.alarms_once / alarms_daily / alarms_weekdays / alarms_weekends
-todo.reminders / todo.notes
-timer.taimer_1 … timer.taimer_8
-input_text.taimer_N_nazvanie  (скрыты)
-input_text.tekushchii_budilnik_* (скрыты)
+todo.notes                        # остаётся каноническим для заметок
+todo.alarms_* / todo.reminders    # только rollback, не источник истины
+timer.taimer_1 … timer.taimer_8   # только rollback
+input_text.taimer_N_nazvanie      # legacy rollback (скрыты)
+input_text.tekushchii_budilnik_*  # legacy rollback (скрыты)
 ```
 
 Установка:
@@ -244,39 +261,154 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 ## Будильники, таймеры, напоминания, заметки
 
 Текущее состояние — [STATE.md](../../../docs/STATE.md); команды — [OPERATIONS.md](../../../docs/OPERATIONS.md).
-Источник истины — `local_todo` и `timer` helpers, не старый один слот.
+Источник истины — `ricardo.v1.SchedulerService`, не `local_todo` и не
+`timer.taimer_*`. Home Assistant остаётся звуковым исполнителем.
 
-- Будильники: `todo.alarms_once/daily/weekdays/weekends`; scheduler
-  `automation.schedules_alarm_dispatcher` → `script.schedule_alarm_tick`
-  каждые 30 s и на старте HA. Элемент = название + `due_datetime`; статус
-  `needs_action` = включён, `completed` = выключен/завершён.
-- Таймеры: `timer.taimer_1…8` с `restore: true`; название —
-  `input_text.taimer_N_nazvanie`; `timer.finished` → TTS + phone.
-- Напоминания/заметки: `todo.reminders` / `todo.notes`.
-- Dashboard: `/assistant-schedules`, «Помощник».
-- Звонок: `alarm_start` → `alarm_ramp` + `alarm_loop`; непрерывный
-  `alarm_ringtone.wav` идёт на ESPHome endpoint, чтобы не менять source
-  universal MA player и не ломать resume. `alarm_stop`/snooze прерывают
-  рингтон; `alarm_announce` (chime + TTS) оставлен отдельно.
-- Старый `alarm_scheduler`/`alarm_next`/`alarm_enabled`/`alarm_repeat`
-  выключен и скрыт; legacy `alarm_*` scripts оставлены для rollback.
-- Snooze 9 минут, grace 10 минут, target `alarm_volume=0.45`.
-
-Голосовые примеры:
+### Канонический путь
 
 ```text
-поставь будильник на 7:30 по будням
-поставь будильник работа на 8:15 по будням
-какие будильники
-измени будильник работа на 8:45
-включи будильник работа
-выключи будильник работа
-удали будильник работа
-удали все будильники
-поставь таймер пицца на 10 минут
-какие таймеры
-отмени таймер пицца
-напомни завтра в 9:00 проверить духовку
-запомни что надо купить молоко
-покажи заметки
+голос / Android
+  → ricardo.v1.SchedulerService (SQLite, durable outbox)
+  → событие очереди home
+  → ha-bridge (Connect JSON, lease/ack)
+  → script.alarm_start | script.schedule_announce | script.alarm_stop
+  → Pulsar / MA / TTS
 ```
+
+HA-клиент использует Connect JSON:
+
+```text
+POST {scheduler_endpoint}/ricardo.v1.SchedulerService/{RPC}
+Authorization: Bearer <token>
+Content-Type: application/json
+Connect-Protocol-Version: 1
+```
+
+Поля — protobuf JSON: lowerCamelCase, `int64` — decimal string, enum — имя
+(`SCHEDULE_KIND_ALARM`, `REPEAT_KIND_WEEKDAYS`, ...). Запросы собираются
+через `to_json`, ответы читаются из `content`/`status`; ошибка Connect
+(`code`/`message`) никогда не превращается в успешную речь.
+
+### Конфигурация HA
+
+В `input_text.yaml`:
+
+```text
+input_text.scheduler_endpoint              # initial: !secret scheduler_endpoint
+input_text.scheduler_active_schedule_id    # заполняет alarm_start из ha-bridge
+input_text.scheduler_active_event_id
+input_text.scheduler_active_label
+input_text.scheduler_active_kind
+```
+
+`scheduler_endpoint` намеренно задан через `!secret`, а не литералом: `input_text`
+не является restore-entity и после restart HA иначе вернулся бы к
+TEST-NET-заглушке. Live-значение — реальный scheduler NodePort/LAN base URL
+(в текущем deployment NodePort `30098`, например
+`http://<scheduler-node>:30098`), без `/ricardo.v1...` и без завершающего
+слэша.
+
+В `secrets.yaml` (не коммитить):
+
+```yaml
+scheduler_endpoint: "http://<scheduler-node>:30098"
+scheduler_bearer: "Bearer <scheduler-token>"
+```
+
+`rest_commands.yaml` → `scheduler_rpc` подставляет endpoint из input_text и
+берёт токен только из `!secret scheduler_bearer`. URL/токен не попадают в
+речь, шаблоны ответов и документацию.
+
+`alarm_start` принимает от bridge `source_id`, `event_id`, `label`, `kind`;
+`alarm_stop` очищает эти поля. Если bridge ещё не передал id, snooze/stop
+ищет активное окно (`activeOccurrenceUnix`/`activeUntilUnix`) и при
+неоднозначности не угадывает id.
+
+### Голосовые операции
+
+- Создание будильника: `CreateSchedule`, `kind=SCHEDULE_KIND_ALARM`,
+  IANA timezone из `now().tzinfo`, локальное `WallTime`, `REPEAT_KIND_ONCE`
+  + `onceDate` для однократного, `DAILY`/`WEEKDAYS`/`WEEKENDS` для повторов.
+  «на завтра» и переход через полночь сохраняются; прошедшее время
+  однократного переносится на следующий день.
+- Создание напоминания: `SCHEDULE_KIND_REMINDER`, только `REPEAT_KIND_ONCE`.
+- Таймер: `StartTimer`, `durationSeconds` — строка; 1…604800 с. Значение
+  ≤ 0 по-прежнему означает 60 с; больше семи дней отклоняется с честной
+  речью.
+- Список: `ListSchedules`/`ListTimers`; пустой ответ — нормальный
+  «Будильников нет» / «Активных таймеров нет», а не ошибка.
+- Включение/выключение/удаление/изменение: id находится по точному или
+  частичному label либо времени следующего срабатывания. Несколько
+  совпадений → просьба уточнить, без массового удаления. Массовое действие
+  выполняется только при явном «все» (отдельный slot `alarm_all`).
+- Snooze: `SnoozeSchedule` (9 минут). Планировщик ставит STOP и отложенный
+  FIRE. После 200 скрипт ждёт до 3 с, пока `alarm_ringing` выключится; если
+  звук всё ещё идёт от **того же** captured schedule/event, вызывается только
+  локальный `alarm_stop` и речь говорит «звонок остановлен локально,
+  исполнитель не подтвердил». Чужой/новый звонок не глушится. При ошибке API
+  речь говорит «перенос не подтверждён»: при потерянном ответе сервер мог
+  успеть зафиксировать snooze. Legacy `alarm_snooze` и
+  `alarm_snooze_active/until` не используются.
+- Stop: `StopSchedule` + такая же bounded-проверка до 3 с. Локальный
+  `alarm_stop` вызывается только для того же captured schedule/event; при
+  новом звонке речь говорит, что активен другой звонок. Если звонка не было
+  и планировщик вернул «не найдено», останавливается только игравшая музыка
+  и речь говорит «Останавливаю музыку». Речь отличает успех, локальную
+  остановку, «уже не активен» и ошибку API.
+- Update: `Get`-данные из `ListSchedules` → `UpdateSchedule` с
+  `expectedRevision`; при `ABORTED` речь просит повторить, состояние не
+  перезаписывается вслепую.
+- Idempotency: `CreateSchedule`/`StartTimer` получают ключ, зафиксированный
+  один раз в `variables` (`ha:alarm|timer|reminder:<timestamp с микросекундами>-<random>`),
+  и повторяют его только для того же запроса. HA не предоставляет `context`
+  в `variables` скрипта, поэтому ключ не строится на `context.id`.
+
+### Dashboard
+
+`/assistant-schedules` больше не содержит форм и todo/timer-редакторов для
+будильников, таймеров и напоминаний: это были бы параллельные писатели.
+Разделы «Будильники», «Таймеры», «Напоминания» — read-only указатели на
+Android-приложение и голос. «Заметки» остаются `todo.notes` и редактируются
+как раньше.
+
+### Cutover: что выключить
+
+В `automations.yaml` уже стоит `initial_state: false`:
+
+```text
+alarm_scheduler              # legacy input_datetime slot
+schedule_alarm_tick          # legacy todo alarm poller
+schedule_reminder_tick       # legacy todo reminder poller
+schedule_timer_finished      # legacy timer.taimer_* announcement
+```
+
+`alarm_button_stop` остаётся включённой и вызывает
+`script.schedule_alarm_stop`; тот ждёт подтверждения executor и при
+необходимости локально останавливает только тот же captured schedule/event.
+`assist_satellite_responding_watchdog` и music-route automation не меняются.
+Перед включением `BRIDGE_EXECUTE=true` deployment worker должен
+убедиться, что эти четыре automation выключены, старые `todo.alarms_*` и
+`timer.taimer_*` не используются как источник, и работает ровно один
+executor очереди `home`. Legacy-скрипты `schedule_alarm_fire/advance/tick`,
+`schedule_reminder_tick` и `alarm_*` оставлены для rollback и не вызываются
+каноническими путями.
+
+### Ограничения
+
+- Нет recurring reminders (контракт разрешает только one-shot).
+- Голос не создаёт `REPEAT_KIND_CUSTOM` с произвольным набором дней; это
+  доступно Android/API. Неподдерживаемый набор не выдумывается.
+- Телефонные уведомления — отдельный канал доставки, не часть scheduler.
+- `schedule_announce` — one-shot: STOP таймера/напоминания не обрывает уже
+  проигранный announce; bridge закрывает такое событие как skipped.
+- Громкость, restore source, рингтон и TTS остаются в HA/Pulsar.
+
+### Проверка
+
+```bash
+python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
+```
+
+Тесты не обращаются к живому HA/scheduler: Jinja рендерится с фиксированным
+`Asia/Almaty`, ответы Connect подменяются словарями. Live-проверки и
+включение executor — задача deployment worker.

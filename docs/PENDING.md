@@ -23,29 +23,26 @@
 
 ## Планировщик / HA bridge / Android
 
-- [ ] HA shadow-import существующих `todo.alarms_*`/`timer.*`/reminders в
-  durable scheduler на тестовой БД; сравнить next occurrence и DST, не
-  включая второй исполнитель.
-- [ ] Cutover и rollback-репетиция на живом HA: один executor, STOP/snooze,
-  restore source/volume; критерии — `solutions/ha-bridge/README.md`.
-  Живая звуковая приёмка (audible) не выполнена.
-- [ ] Deploy-шаблон bridge (unit/container, token-файлы, `BRIDGE_LEDGER_PATH`,
-  `BRIDGE_CONSUMER_ID`) и проверка single-consumer на хосте.
-- [ ] Deploy scheduler (переименование legacy alarm DB/порта, миграция,
-  healthcheck) — отдельно от текущего HA runtime.
-- [ ] Уведомления на телефон как канал доставки (Android/пуш), без передачи
-  телефону роли владельца расписаний.
-- [ ] Recurring generic task schedules и event-trigger rules; сейчас
-  `EnqueueTask` — только one-shot.
-- [ ] Один общий MCP gateway для своих сервисов/проектов (доменные tool
-  groups, allowlist); MCP runtime не нужен для текущего Android-среза.
-- [ ] Android: запуск и приёмка на реальном устройстве/эмуляторе
-  (lifecycle/instrumentation), push-уведомления/FCM, offline cache и
-  generic task/scenario UI. Debug APK и общий 16/16 gate уже проходят;
-  Android-гейты отдельные, не часть backend `make test`; HA cutover не
-  выполнялся.
-- [ ] Локальный scheduler+bridge E2E (`projects/home/e2e/scheduler_smoke.py`)
-  подключить к CI/quality после стабилизации API; сейчас запуск ручной.
+- [ ] Живая звуковая приёмка scheduler→bridge: реальный alarm fire, STOP,
+  snooze 9 минут, resume source/volume. API/ACK проверены (task SKIPPED,
+  consumer alive, bounded recovery 5s), audible — нет; запускать только по
+  согласованию.
+- [x] HA voice: имя таймера, «завтра» в reminder create и durable
+  `scheduler_endpoint` (`!secret`) исправлены и проверены live.
+- [ ] Reminder-грамматика: поддерживается один слот `{text}` до или после
+  даты/времени; фраза с двумя текстовыми фрагментами вокруг даты не
+  распознаётся (осознанное ограничение, не блокер).
+- [ ] Reminder delete проверен только статическими тестами; живой прогон
+  удаления напоминания по имени — при следующей голосовой приёмке.
+- [ ] Import: реальных активных alarms/reminders/timers не осталось (0/0/0),
+  поэтому timer migration проверен только герметичными тестами; при появлении
+  активных таймеров прогнать snapshot/execute/verify на живом HA.
+- [ ] Приложение/Android: запуск и приёмка на реальном устройстве,
+  push/FCM, offline cache, generic task/scenario UI; debug APK и 16/16 gate
+  проходят.
+- [ ] Recurring generic task schedules; сейчас `EnqueueTask` — one-shot.
+- [ ] Один общий MCP gateway — только при появлении реального клиента;
+  текущий голосовой путь в MCP не нуждается.
 
 ## Инфраструктура
 

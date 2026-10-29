@@ -95,18 +95,10 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
-Текущая версия — Rust `v0.5.0-1-g908a027`. C++ rollback —
-`/data/pulsar/backups/pre-ricardo*`; протокол — `WAKE-WORD.md`.
-
-Rust → C++ rollback:
-
-```bash
-adb -s 192.0.2.13:5555 shell \
-  'cp /data/pulsar/pulsar.prev /data/pulsar/pulsar && \
-   chmod 755 /data/pulsar/pulsar && /data/pulsar/ctl.sh restart'
-```
-
-C++ copy также в `/data/pulsar/backups/pre-rust-ricardo6/pulsar`.
+Текущая версия — Rust `v0.5.0-1-g908a027`. Legacy C++ checkout, patch и
+binaries не входят в активное дерево; приватный архив и способ восстановления —
+в `secrets/local/recovery/` (не публикуется). Возврат к прежней C++-сборке не
+является штатным rollback и не должен выполняться без отдельного плана.
 
 Проверка OTA/ADB:
 
@@ -114,6 +106,43 @@ C++ copy также в `/data/pulsar/backups/pre-rust-ricardo6/pulsar`.
 projects/station/scripts/station-status.sh
 projects/station/scripts/restore-ota-fortress.sh   # осторожно, откат
 ```
+
+
+## Планировщик / HA bridge
+
+Deploy, cutover и rollback — `projects/home/kubernetes/scheduler/README.md`.
+Короткие команды (приватные значения в `secrets/home/scheduler.env`):
+
+```bash
+# сборка + применение, режим исполнителя сохраняется
+NODE_SSH=root@<node> projects/home/kubernetes/scheduler/deploy.sh
+
+# осознанный переход в shadow (dry-run, 0 реплик)
+NODE_SSH=root@<node> projects/home/kubernetes/scheduler/deploy.sh --shadow
+
+# cutover: preflight + execute
+HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=root@<node> \
+  projects/home/kubernetes/scheduler/deploy.sh --execute
+
+# резервная копия SQLite (quiesce + checksums, private путь по умолчанию)
+projects/home/kubernetes/scheduler/backup.sh
+```
+
+Проверки:
+
+```bash
+kubectl -n home-assistant exec deployment/scheduler -- \
+  /opt/ricardo/bin/scheduler -healthcheck
+kubectl -n home-assistant logs deploy/ha-bridge --tail=50
+```
+
+Удалённый endpoint для Android: `https://pl-scheduler.<tailnet>.ts.net`
+(tailnet-only, TLS оператора); LAN endpoint — `http://<node>:30098`.
+Оба требуют bearer. `pl-home` не менять: `/` → HAOS, `/grafana` → Grafana.
+
+Rollback порядок: сначала `--shadow` (bridge перестаёт исполнять), затем
+вернуть legacy HA automations. Не включать два исполнителя одновременно;
+данные scheduler сохраняются, mapping — источник обратного сопоставления.
 
 ## Egress / карантин
 

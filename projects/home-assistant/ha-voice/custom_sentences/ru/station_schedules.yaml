@@ -807,6 +807,12 @@ lists:
     wildcard: true
   query:
     wildcard: true
+  reminder_all:
+    values:
+    - in: все
+      out: все
+    - in: всё
+      out: все
   timer_name:
     wildcard: true
   alarm_name:
@@ -827,10 +833,10 @@ intents:
       - запусти таймер на {timer_minutes:minutes}
       - таймер на {timer_minutes:minutes} минут[у|ы]
       - таймер на {timer_minutes:minutes}
-      - поставь таймер {timer_name} на {timer_minutes:minutes} минут[у|ы]
-      - поставь таймер {timer_name} на {timer_minutes:minutes}
-      - поставь таймер {timer_name} на {timer_hours:hours} час[а|ов] [и {timer_minutes:minutes} минут]
-      - поставь таймер {timer_name} на {timer_hours:hours} час[а|ов] [утра|дня|вечера|ночи] [и {timer_minutes:minutes} минут[у|ы]]
+      - поставь таймер {timer_name:name} на {timer_minutes:minutes} минут[у|ы]
+      - поставь таймер {timer_name:name} на {timer_minutes:minutes}
+      - поставь таймер {timer_name:name} на {timer_hours:hours} час[а|ов] [и {timer_minutes:minutes} минут]
+      - поставь таймер {timer_name:name} на {timer_hours:hours} час[а|ов] [утра|дня|вечера|ночи] [и {timer_minutes:minutes} минут[у|ы]]
   StationTimerStatus:
     data:
     - sentences:
@@ -839,30 +845,30 @@ intents:
       - что с таймерами
       - статус таймеров
       - сколько осталось на таймере
-      - сколько осталось на таймере {timer_name}
+      - сколько осталось на таймере {timer_name:name}
   StationTimerCancel:
     data:
     - sentences:
       - отмени таймер
       - удали таймер
       - останови таймер
-      - отмени таймер {timer_name}
-      - удали таймер {timer_name}
-      - останови таймер {timer_name}
+      - отмени таймер {timer_name:name}
+      - удали таймер {timer_name:name}
+      - останови таймер {timer_name:name}
   StationTimerPause:
     data:
     - sentences:
       - поставь таймер на паузу
       - пауза таймер
-      - поставь таймер {timer_name} на паузу
-      - пауза таймер {timer_name}
+      - поставь таймер {timer_name:name} на паузу
+      - пауза таймер {timer_name:name}
   StationTimerResume:
     data:
     - sentences:
       - продолжи таймер
       - возобнови таймер
-      - продолжи таймер {timer_name}
-      - возобнови таймер {timer_name}
+      - продолжи таймер {timer_name:name}
+      - возобнови таймер {timer_name:name}
   StationReminderStatus:
     data:
     - sentences:
@@ -873,13 +879,18 @@ intents:
   StationReminderCreate:
     data:
     - sentences:
+      - напомни {text} [на] {alarm_day:day} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}]
+      - напомни мне {text} [на] {alarm_day:day} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}]
+      - напомни [мне] [на] {alarm_day:day} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] {text}
+      - напомни [мне] в {alarm_hour:hour}:{alarm_minute:minute} [на {alarm_day:day}] {text}
       - напомни {text} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}]
       - напомни мне {text} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}]
-      - напомни {text} завтра в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}]
-      - напомни мне {text} завтра в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}]
       - напомни [мне] в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] {text}
-      - напомни [мне] завтра в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] {text}
-      - напомни [мне] в {alarm_hour:hour}:{alarm_minute:minute} [на {alarm_day:day}] {text}
+  StationReminderDelete:
+    data:
+    - sentences:
+      - удали напоминание {query:query}
+      - удали {reminder_all:all} напоминания
   StationNoteAdd:
     data:
     - sentences:

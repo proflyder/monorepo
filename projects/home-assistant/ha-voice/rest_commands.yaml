@@ -22,6 +22,20 @@ station_bluetooth_off:
   headers:
     Authorization: !secret station_control_bearer
   timeout: 8
+# Canonical ricardo.v1.SchedulerService Connect JSON. The endpoint is a
+# non-secret base URL kept in input_text.scheduler_endpoint; the bearer value
+# (including the "Bearer " prefix) stays in secrets.yaml.
+scheduler_rpc:
+  url: "{{ states('input_text.scheduler_endpoint') | trim | regex_replace('/+$', '') }}/ricardo.v1.SchedulerService/{{ method }}"
+  method: POST
+  headers:
+    Authorization: !secret scheduler_bearer
+    Content-Type: "application/json"
+    Connect-Protocol-Version: "1"
+  payload: "{{ '' }}{{ payload_json | to_json if payload_json is mapping else payload_json }}"
+  content_type: "application/json"
+  timeout: 10
+
 spotify_token:
   url: "https://accounts.spotify.com/api/token"
   method: POST

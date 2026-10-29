@@ -56,7 +56,8 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.0-1-g908a027`; C++ `v0.4.1-ricardo6` — `.prev`/backup.
+- Pulsar Rust `v0.5.0-1-g908a027` — единственная активная сборка. Legacy C++
+  checkout, patch и binaries архивированы private в `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
 - ESPHome: 33 entities, Noise; HA satellite работает.
 - Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,
@@ -101,39 +102,46 @@
 
 ## Планировщик, HA bridge, Android
 
-- `solutions/scheduler`: durable на Go/SQLite (inbox/outbox, leases, ack),
-  Connect/gRPC API на одном listener, legacy `AlarmService` facade. Очереди
-  `home` (alarms/reminders/timers) и `tasks` (generic one-shot `EnqueueTask`);
-  Kafka/внешний брокер не используются. Go- и backend-тесты проходят.
-  Процесс не задеплоен на домашний сервер в рамках этой итерации.
-- `solutions/ha-bridge`: executor для очереди `home`. Собирает события через
-  Connect JSON, вызывает allowlisted HA scripts (`alarm_start`,
-  `schedule_announce`, `alarm_stop`), подтверждает только после 2xx HA,
-  at-least-once + локальный receipt-ledger. Dry-run — режим по умолчанию;
-  `BRIDGE_EXECUTE=true` не включался на живой системе. Мост не слушает порт,
-  не создаёт расписания и не вызывает `alarm_snooze`. Исходники и hermetic
-  тесты реализованы; deploy/cutover отсутствуют.
-- Действующий владелец будильников, таймеров и напоминаний — текущий HA
-  (`todo.*`, `timer.*`, scripts/automations). Импорт расписаний и переключение
-  исполнителя не выполнялись; живой HA остаётся источником звука.
+- `solutions/scheduler` задеплоен в K3s `home-assistant`: один под, SQLite на
+  PVC `scheduler-data` (`local-retain`), NodePort `30098`, bearer обязателен,
+  readiness/liveness — аутентифицированный `-healthcheck`. Состояние
+  переживает рестарт пода (проверено).
+- `solutions/ha-bridge` работает в режиме execute на очереди `home`
+  (`BRIDGE_EXECUTE=true`, 1 реплика, ledger на PVC `ha-bridge-data`), зовёт
+  allowlisted HA scripts; второй исполнитель не запущен. Dry-run Job
+  (`ha-bridge-dryrun`) остаётся одноразовой проверкой.
+- Действующий владелец будильников, таймеров и напоминаний — scheduler.
+  Legacy HA writers выключены (`alarm_scheduler`, `schedules_alarm_dispatcher`,
+  `schedules_reminder_dispatcher`, `schedules_timer_finished`), их YAML
+  сохранён для rollback. HA остаётся исполнителем звука (`alarm_start`,
+  `schedule_announce`, `alarm_stop`).
+- Голосовые intents в `projects/home-assistant/ha-voice` вызывают canonical
+  Connect API (`rest_command.scheduler_rpc`); endpoint —
+  `input_text.scheduler_endpoint` (LAN NodePort base URL, durable via
+  `!secret scheduler_endpoint`), токен — `secrets.yaml:scheduler_bearer`.
+  Удалённый доступ — отдельный tailnet-only Ingress `pl-scheduler` (TLS
+  оператора) на тот же Service; `pl-home` по-прежнему `/` → HAOS,
+  `/grafana` → Grafana. Create/list/update/enable/disable/delete,
+  timer start/pause/resume/cancel и reminder create проверены тихими
+  `conversation.process` через builtin-агент; живая звуковая приёмка
+  (audible) не выполнялась.
+- Импорт при cutover: 0 активных alarms/reminders/timers (единственный
+  malformed элемент «Работа» удалён по решению пользователя; исторический
+  completed item не импортируется). Mapping/verification —
+  `projects/home/scheduler-migration`, evidence — в private thread storage.
+- Deploy/rollback: `projects/home/kubernetes/scheduler/` (manifest templates,
+  render, preflight, backup). Реальные адреса — `secrets/home/scheduler.env`;
+  rendered manifests — `secrets/local/rendered/`.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
   `INTERNET`, debug-signed). Вкладки Alarms/Timers/Reminders/Connection;
-  alarms — one-shot и recurring (weekdays/custom, IANA, snooze/stop),
-  reminders — one-shot, timers — server-owned с pause/resume/cancel и
-  server-clock remaining. Есть обязательный bearer token с Keystore
-  AES-GCM, настраиваемые таймауты, GetStatus, SavedStateHandle и стабильные
-  idempotency keys для неоднозначных retry; redirects выключены. Сборка
-  `//projects/mobile/android:app` и общий gate (9 Android-таргетов, включая
-  2 cold-launch smoke и 14 nav lifecycle, + 7 backend) проходят 16/16.
-  Ограничения: телефонных уведомлений/FCM, offline cache, generic task/
-  scenario UI и HA cutover нет; запуск на реальном устройстве/эмуляторе не
-  выполнялся (только Robolectric), переключение вкладки сбрасывает её стек к
-  корню. Телефон управляет серверным состоянием, расписания остаются
-  server-authoritative.
-- Будущая Hermes-интеграция — один общий MCP gateway с доменными группами
-  инструментов; MCP runtime сегодня не разворачивается и Android-срезу не
-  нужен.
+  alarms — one-shot и recurring, reminders — one-shot, timers — server-owned
+  с pause/resume/cancel. Bearer token в Keystore AES-GCM, GetStatus,
+  idempotency keys, redirects выключены. Сборка
+  `//projects/mobile/android:app` и общий gate 16/16 проходят; запуск на
+  реальном устройстве не выполнялся.
+- MCP runtime не разворачивается: текущий голосовой путь идёт через HA
+  intents, отдельный gateway нужен только при появлении реального клиента.
 
 ## Приватное / backups
 

@@ -12,3 +12,31 @@ alarm_form_name:
   name: "Новый будильник: название"
   max: 64
   initial: ""
+
+# Canonical scheduler configuration and active-occurrence tracking. The
+# endpoint is a LAN/Tailscale base URL (no token, no credentials, no query).
+# The bearer token stays in secrets.yaml as scheduler_bearer.
+scheduler_endpoint:
+  name: "Scheduler Connect endpoint"
+  max: 255
+  initial: !secret scheduler_endpoint
+
+scheduler_active_schedule_id:
+  name: "Scheduler: active schedule id"
+  max: 64
+  initial: ""
+
+scheduler_active_event_id:
+  name: "Scheduler: active event id"
+  max: 64
+  initial: ""
+
+scheduler_active_label:
+  name: "Scheduler: active label"
+  max: 200
+  initial: ""
+
+scheduler_active_kind:
+  name: "Scheduler: active kind"
+  max: 32
+  initial: ""

@@ -143,7 +143,7 @@ def defined_entities() -> dict[str, set[str]]:
     result: dict[str, set[str]] = {}
     for prefix in ("input_boolean", "input_datetime", "input_number", "input_select", "input_text"):
         path = HA / f"{prefix}.yaml"
-        result[prefix] = set(yaml.safe_load(path.read_text()).keys())
+        result[prefix] = set(load_yaml(path).keys())
     result["input_text"] |= UI_CREATED_INPUT_TEXT
     result["script"] = set(SCRIPTS.keys())
     result["rest_command"] = set(REST.keys())
@@ -413,8 +413,11 @@ class IntentTests(unittest.TestCase):
     def test_alarm_stop_has_bare_stop_and_is_unique(self):
         stop = INTENTS["StationAlarmStop"]
         dump = yaml.safe_dump(stop, allow_unicode=True)
-        self.assertIn("script.alarm_stop", dump)
+        self.assertIn("script.schedule_alarm_stop", dump)
         self.assertIn("media_player.media_stop", dump)
+        confirm = yaml.safe_dump(SCRIPTS["scheduler_confirm_ring_stopped"], allow_unicode=True)
+        self.assertIn("script.alarm_stop", confirm)
+        self.assertIn("wait_template", confirm)
         phrases = set()
         for data in self.sentence_data:
             for item in data.get("intents", {}).get("StationAlarmStop", {}).get("data", []):
@@ -486,7 +489,15 @@ class AlarmMusicStateMachineTests(unittest.TestCase):
     def test_button_stop_uses_the_same_resume_path(self):
         automation = next(a for a in AUTOMATIONS if a["id"] == "alarm_button_stop")
         svcs = services(automation)
-        self.assertIn("script.alarm_stop", svcs)
+        self.assertIn("script.schedule_alarm_stop", svcs)
+        self.assertIn(
+            "script.scheduler_confirm_ring_stopped",
+            yaml.safe_dump(SCRIPTS["schedule_alarm_stop"], allow_unicode=True),
+        )
+        self.assertIn(
+            "script.alarm_stop",
+            yaml.safe_dump(SCRIPTS["scheduler_confirm_ring_stopped"], allow_unicode=True),
+        )
         dump = yaml.safe_dump(automation, allow_unicode=True)
         self.assertIn("event_type", dump)
         self.assertIn("action", dump)
@@ -638,7 +649,7 @@ class MusicCascadeTests(unittest.TestCase):
         self.assertNotIn("media_player.media_stop", dump)
 
     def test_music_candidates_are_bounded_to_state_limit(self):
-        inputs = yaml.safe_load((HA / "input_text.yaml").read_text())
+        inputs = load_yaml(HA / "input_text.yaml")
         self.assertIn("music_candidates", inputs)
         self.assertEqual(inputs["music_candidates"]["max"], 255)
 

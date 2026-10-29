@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,8 +10,20 @@ go_binary(
 
 go_library(
     name = "scheduler_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "healthcheck.go",
+        "main.go",
+    ],
     importpath = "ricardo.local/monorepo/solutions/scheduler/cmd/scheduler",
     visibility = ["//visibility:private"],
-    deps = ["//solutions/scheduler/app"],
+    deps = [
+        "//solutions/scheduler/app",
+        "//solutions/scheduler/internal/config",
+    ],
+)
+
+go_test(
+    name = "scheduler_test",
+    srcs = ["healthcheck_test.go"],
+    embed = [":scheduler_lib"],
 )
