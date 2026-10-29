@@ -23,6 +23,12 @@ GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath \
 
 Станция: `/data/quasar/ble-gateway/`; запуск — `station/start.sh`.
 
+## `wakeword-personalize/`
+
+Offline разметка, подготовка, GPU fine-tuning и сравнение персональной
+wakeword-модели. Станцию не меняет; данные и персональные веса остаются
+приватными. Инструкция — [wakeword-personalize/README.md](wakeword-personalize/README.md).
+
 ## `quasar-root-kit/`
 
 Полный набор для root/защиты (Лайт 2, Миди, Лайт 1):

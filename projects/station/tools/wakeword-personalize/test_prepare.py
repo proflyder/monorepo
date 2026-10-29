@@ -1,0 +1,60 @@
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+import wave
+
+spec = importlib.util.spec_from_file_location("personal_prepare", Path(__file__).with_name("prepare.py"))
+prepare = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(prepare)
+comparison_spec = importlib.util.spec_from_file_location("personal_compare", Path(__file__).with_name("compare.py"))
+compare = importlib.util.module_from_spec(comparison_spec)
+comparison_spec.loader.exec_module(compare)
+
+
+class PrepareTests(unittest.TestCase):
+    def test_repeated_events_do_not_double_count_an_utterance(self):
+        targets = [{"start": 1., "end": 1.8}, {"start": 5., "end": 5.8}]
+        self.assertEqual(compare.match_targets(targets, [.1, 2., 2.2, 10.]), 1)
+        self.assertEqual(compare.match_targets(targets, [2., 6.]), 2)
+
+    def test_deduplication_retains_independent_utterances(self):
+        a = {"start": 1., "end": 1.8, "p": .6}
+        b = {"start": 1.1, "end": 1.9, "p": .9}
+        c = {"start": 4., "end": 4.8, "p": .8}
+        self.assertEqual(prepare.deduplicate([c, b, a]), [b, c])
+
+    def test_partitions_preserve_heldout_recordings_and_temporal_guard(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            recordings, align, asr = [root / n for n in ["recordings", "align", "asr"]]
+            for d in [recordings, align, asr]: d.mkdir()
+            def recording(ident, block, split, value):
+                path = recordings / (ident + ".wav")
+                with wave.open(str(path), "wb") as wav:
+                    wav.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+                    wav.writeframes(bytes([value, 0]) * 16000 * 65)
+                (recordings / (ident + ".json")).write_text(json.dumps({
+                    "id": ident, "block": block, "split": split, "frames": 65 * 16000,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}))
+                (asr / (ident + ".json")).write_text('{"segments":[]}')
+            for i in range(3): recording(str(i), "background", "train", i)
+            for ident, split, value in [("p", "train", 5), ("t", "test", 6)]:
+                recording(ident, "normal", split, value)
+                hits = [{"start": a, "end": a + .6, "p": .9} for a in [10., 52., 60.]]
+                (align / (ident + ".json")).write_text(json.dumps({"candidates": [{"start": 0, "end": 65, "hits": hits}]}))
+            result = prepare.prepare(recordings, align, asr)
+            entries = {e["id"]: e for e in result["records"]}
+            self.assertEqual([h["partition"] for h in entries["p"]["targets"]], ["train", "guard", "val"])
+            self.assertEqual({h["partition"] for h in entries["t"]["targets"]}, {"test"})
+            self.assertEqual({e["partition"] for e in entries.values() if e["block"] == "background"}, {"train", "val", "test"})
+            # Mutated audio is rejected before features/training are produced.
+            with (recordings / "p.wav").open("ab") as f: f.write(b"changed")
+            with self.assertRaisesRegex(ValueError, "changed"):
+                prepare.prepare(recordings, align, asr)
+
+
+if __name__ == "__main__":
+    unittest.main()
