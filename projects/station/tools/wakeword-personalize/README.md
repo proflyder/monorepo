@@ -234,3 +234,6 @@ Train/val граница выбирается внутри содержател�
 ASR-разметка шёпота требует проверки: совпадение двух перекрывающихся
 распознаваний усиливает свидетельство, но не заменяет ручную разметку.
 Неподтверждённые участки не объявляются положительными автоматически.
+
+Обоснование заморозки BN: [Keras fine-tuning guide](https://keras.io/guides/transfer_learning/#important-notes-about-batchnormalization-layer).
+Обоснование длинного контекста: [microWakeWord training process](https://github.com/OHF-Voice/micro-wake-word#training-process).
