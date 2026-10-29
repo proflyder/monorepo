@@ -155,7 +155,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
             resources.getQuantityString(R.plurals.alarms_delete_selected_confirm, count, count),
             R.string.alarms_delete_yes,
             R.string.alarms_cancel,
-            viewModel::deleteSelected,
-        )
+        ) { viewModel.deleteSelected() }
     }
 }

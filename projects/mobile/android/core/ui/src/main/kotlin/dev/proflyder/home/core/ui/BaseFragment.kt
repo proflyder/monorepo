@@ -5,11 +5,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AlertDialog
+import android.content.DialogInterface
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import dev.proflyder.home.core.model.RemoteFailure
 import kotlinx.coroutines.CoroutineScope
@@ -86,30 +88,36 @@ abstract class BaseFragment<VB : ViewBinding>(
         Snackbar.make(binding.root, failure.userMessage(requireContext()), Snackbar.LENGTH_LONG).show()
     }
 
-    /** Shows a confirmation dialog; [onConfirm] runs only on the positive button. */
+    /**
+     * Material confirmation dialog; [onConfirm] runs only on the positive button.
+     * [destructive] tints the positive button with the error color.
+     */
     protected fun confirm(
         @StringRes message: Int,
         @StringRes positive: Int,
         @StringRes negative: Int,
+        destructive: Boolean = true,
         onConfirm: () -> Unit,
-    ) {
-        AlertDialog.Builder(requireContext())
-            .setMessage(message)
-            .setNegativeButton(negative, null)
-            .setPositiveButton(positive) { _, _ -> onConfirm() }
-            .show()
-    }
+    ) = confirm(getString(message), positive, negative, destructive, onConfirm)
 
     protected fun confirm(
         message: CharSequence,
         @StringRes positive: Int,
         @StringRes negative: Int,
+        destructive: Boolean = true,
         onConfirm: () -> Unit,
     ) {
-        AlertDialog.Builder(requireContext())
+        val dialog = MaterialAlertDialogBuilder(requireContext())
             .setMessage(message)
             .setNegativeButton(negative, null)
             .setPositiveButton(positive) { _, _ -> onConfirm() }
-            .show()
+            .create()
+        if (destructive) {
+            dialog.setOnShowListener {
+                val error = MaterialColors.getColor(binding.root, androidx.appcompat.R.attr.colorError)
+                dialog.getButton(DialogInterface.BUTTON_POSITIVE).setTextColor(error)
+            }
+        }
+        dialog.show()
     }
 }

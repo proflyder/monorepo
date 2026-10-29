@@ -1,7 +1,5 @@
 package dev.proflyder.home.feature.reminders.presentation
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.os.Bundle
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.viewModels
@@ -9,6 +7,8 @@ import androidx.lifecycle.Lifecycle
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.core.ui.showDatePicker
+import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
@@ -76,27 +76,12 @@ class ReminderEditorFragment :
     }
 
     private fun pickDate() {
-        val current = viewModel.state.value.date
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, day -> viewModel.setDate(LocalDate.of(year, month + 1, day)) },
-            current.year,
-            current.monthValue - 1,
-            current.dayOfMonth,
-        ).apply {
-            datePicker.minDate = LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }.show()
+        childFragmentManager.showDatePicker(viewModel.state.value.date, LocalDate.now(), viewModel::setDate)
     }
 
     private fun pickTime() {
         val state = viewModel.state.value
-        TimePickerDialog(
-            requireContext(),
-            { _, hour, minute -> viewModel.setTime(hour, minute) },
-            state.hour,
-            state.minute,
-            true,
-        ).show()
+        childFragmentManager.showTimePicker(state.hour, state.minute, viewModel::setTime)
     }
 
     private fun confirmDelete() {

@@ -1,7 +1,5 @@
 package dev.proflyder.home.feature.alarms.presentation
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.os.Bundle
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.viewModels
@@ -11,6 +9,8 @@ import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.core.ui.showDatePicker
+import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
@@ -99,13 +99,7 @@ class AlarmEditorFragment :
 
     private fun pickTime() {
         val state = viewModel.state.value
-        TimePickerDialog(
-            requireContext(),
-            { _, hour, minute -> viewModel.setTime(hour, minute) },
-            state.hour,
-            state.minute,
-            true,
-        ).show()
+        childFragmentManager.showTimePicker(state.hour, state.minute, viewModel::setTime)
     }
 
     private fun confirmDelete() {
@@ -116,19 +110,8 @@ class AlarmEditorFragment :
 
     private fun pickDate() {
         val state = viewModel.state.value
-        val date = state.onceDate ?: LocalDate.now(zoneOrSystem(state.timezone))
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, day -> viewModel.setDate(LocalDate.of(year, month + 1, day)) },
-            date.year,
-            date.monthValue - 1,
-            date.dayOfMonth,
-        ).apply {
-            datePicker.minDate = LocalDate.now(zoneOrSystem(state.timezone))
-                .atStartOfDay(zoneOrSystem(state.timezone))
-                .toInstant()
-                .toEpochMilli()
-        }.show()
+        val today = LocalDate.now(zoneOrSystem(state.timezone))
+        childFragmentManager.showDatePicker(state.onceDate ?: today, today, viewModel::setDate)
     }
 
     private fun zoneOrSystem(timezone: String): ZoneId =
