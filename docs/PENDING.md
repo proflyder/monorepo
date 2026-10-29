@@ -37,6 +37,12 @@
 - [ ] Import: реальных активных alarms/reminders/timers не осталось (0/0/0),
   поэтому timer migration проверен только герметичными тестами; при появлении
   активных таймеров прогнать snapshot/execute/verify на живом HA.
+- [x] Home control: `ha-control` развёрнут (каталог из HA, очередь `control`,
+  LAN 30099 + pl-control), консюмер в allowlist; исполнение включено после
+  проверки пустой очереди. На телефоне осталось ввести адрес в Connection.
+- [ ] Home control приёмка на телефоне: каталог, toggle, запуск сценария —
+  требует пользовательского действия и не выполнялась (не запускать
+  production-устройства без согласования).
 - [ ] Приложение/Android: запуск и приёмка на реальном устройстве,
   push/FCM, offline cache, generic task/scenario UI; debug APK и 16/16 gate
   проходят.

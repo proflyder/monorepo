@@ -21,7 +21,7 @@ table inet ricardo_scheduler {
   chain prerouting {
     type filter hook prerouting priority dstnat - 10; policy accept;
     iifname "lo" accept
-    meta nfproto ipv6 tcp dport ${SCHEDULER_NODE_PORT} drop
-    ip daddr ${NODE_LAN_IP} tcp dport ${SCHEDULER_NODE_PORT} ip saddr != { ${LAN_CIDR}, 10.42.0.0/16, 100.64.0.0/10 } drop
+    meta nfproto ipv6 tcp dport { ${SCHEDULER_NODE_PORT}, ${CONTROL_NODE_PORT} } drop
+    ip daddr ${NODE_LAN_IP} tcp dport { ${SCHEDULER_NODE_PORT}, ${CONTROL_NODE_PORT} } ip saddr != { ${LAN_CIDR}, 10.42.0.0/16, 100.64.0.0/10 } drop
   }
 }

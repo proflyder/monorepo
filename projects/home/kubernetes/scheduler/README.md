@@ -15,7 +15,10 @@ Durable `ricardo.v1.SchedulerService` plus the Home Assistant executor
 ```text
 manifests/scheduler.yaml   PVC + Deployment + NodePort Service (template)
 manifests/bridge.yaml      ledger PVC + executor Deployment (template)
+manifests/control.yaml     ha-control Deployment (template)
+manifests/control-service.yaml  ha-control ClusterIP + NodePort
 nft/scheduler-nodeport.nft NodePort source filter (template)
+../tailscale/control-ingress.yaml  tailnet route for ha-control
 scheduler.env.example      placeholders; copy to secrets/home/scheduler.env
 render.py                  strict ${VAR} renderer (unknown/empty => fail)
 deploy.sh                  build, release, firewall, apply, mode transitions
@@ -58,6 +61,37 @@ NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --skip-build
   replica count; it only rolls the build annotation.
 - `--execute` runs `preflight.py` first and refuses if any legacy HA writer is
   still on, an alarm is ringing, or the scheduler is not ready.
+
+## ha-control
+
+`ha-control` is the phone-facing catalog and control executor, a separate
+process from the alarm bridge.
+
+- Serves `GET /v1/catalog` (bearer) built live from HA; no catalog file.
+- Leases only the dedicated `control` queue (`CONTROL_QUEUE`; `home`/`tasks`
+  are rejected) and executes only entries present in the catalog.
+- Shares the scheduler bearer: the app has one token field, so
+  `CONTROL_TOKEN_FILE` points at the same secret.
+- With no `CONTROL_LABEL`, every visible light/switch/scene is listed and
+  scripts are excluded; set a label and assign it to scripts to expose them.
+- `CONTROL_EXECUTE=false` serves the catalog only. `deploy.sh --control-execute`
+  runs a fail-closed preflight (refuses when GetStatus reports pending/leased
+  events on the `control` queue) and only then enables execution;
+  `--control-catalog` disables it again. Default reruns preserve the current
+  execute mode and replica count. Regression: `test_deploy_control.sh`.
+- Delivery is at-least-once: a crash between the HA call and the ACK can repeat
+  a command. The catalog id/action payload is authorization-checked per run,
+  but the executor is not exactly-once.
+- HA's `repeat` delivery for `control` shares the scheduler event lease; the
+  scheduler allowlist must include both `ha-bridge-home` and `ha-control-home`
+  (see `manifests/scheduler.yaml`).
+
+Endpoints (private values in `secrets/home/scheduler.env`):
+
+- LAN: `http://<node>:${CONTROL_NODE_PORT}` (default 30099), same nft source
+  filter as the scheduler NodePort.
+- Tailnet: `https://<TAILNET_CONTROL_HOSTNAME>.<tailnet>.ts.net`, dedicated
+  Ingress; `pl-home` and the scheduler ingress are unchanged.
 
 ## Network and auth
 

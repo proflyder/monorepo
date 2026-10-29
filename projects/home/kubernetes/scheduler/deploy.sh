@@ -35,6 +35,7 @@ KUBECTL=${KUBECTL:-kubectl}
 PRIVATE_ENV=${PRIVATE_ENV:-"$ROOT/secrets/home/scheduler.env"}
 RENDER_DIR="$ROOT/secrets/local/rendered/scheduler"
 MODE=preserve
+CONTROL_MODE=preserve
 BUILD=true
 
 while [[ $# -gt 0 ]]; do
@@ -42,6 +43,8 @@ while [[ $# -gt 0 ]]; do
     --skip-build) BUILD=false ;;
     --shadow) MODE=shadow ;;
     --execute) MODE=execute ;;
+    --control-catalog) CONTROL_MODE=catalog ;;
+    --control-execute) CONTROL_MODE=execute ;;
     -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -80,18 +83,20 @@ if $BUILD; then
   ( cd "$ROOT" && "$(bazel)" build \
       //solutions/scheduler/cmd/scheduler \
       //solutions/ha-bridge/cmd/ha-bridge \
+      //solutions/ha-bridge/cmd/ha-control \
       --platforms=@rules_go//go/toolchain:linux_amd64 )
   mkdir -p "$RELEASE_DIR"
   cp -f "$ROOT/bazel-bin/solutions/scheduler/cmd/scheduler/scheduler_/scheduler" "$RELEASE_DIR/scheduler"
   cp -f "$ROOT/bazel-bin/solutions/ha-bridge/cmd/ha-bridge/ha-bridge_/ha-bridge" "$RELEASE_DIR/ha-bridge"
+  cp -f "$ROOT/bazel-bin/solutions/ha-bridge/cmd/ha-control/ha-control_/ha-control" "$RELEASE_DIR/ha-control"
 fi
 
-for f in scheduler ha-bridge; do
+for f in scheduler ha-bridge ha-control; do
   [[ -x "$RELEASE_DIR/$f" ]] || { echo "missing $RELEASE_DIR/$f" >&2; exit 1; }
 done
 file "$RELEASE_DIR/scheduler" | grep -q 'ELF 64-bit' || { echo "scheduler is not a linux ELF binary" >&2; exit 1; }
 
-BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(shasum -a 256 "$RELEASE_DIR/scheduler" "$RELEASE_DIR/ha-bridge" | shasum -a 256 | cut -c1-12)"
+BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(shasum -a 256 "$RELEASE_DIR/scheduler" "$RELEASE_DIR/ha-bridge" "$RELEASE_DIR/ha-control" | shasum -a 256 | cut -c1-12)"
 echo "== build id: $BUILD_ID"
 echo "$BUILD_ID" > "$RELEASE_DIR/BUILD_ID"
 
@@ -99,15 +104,22 @@ echo "== rendering manifests into $RENDER_DIR"
 python3 "$DIR/render.py" --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
   "$DIR/manifests/scheduler.yaml" "$DIR/manifests/bridge.yaml" \
+  "$DIR/manifests/control.yaml" "$DIR/manifests/control-service.yaml" \
   "$DIR/nft/scheduler-nodeport.nft" \
-  "$DIR/../tailscale/scheduler-ingress.yaml"
+  "$DIR/../tailscale/scheduler-ingress.yaml" \
+  "$DIR/../tailscale/control-ingress.yaml"
 
 if [[ -n "${NODE_SSH:-}" ]]; then
   RELEASE_PATH="/opt/ricardo/releases/$BUILD_ID"
   echo "== staging immutable release on $NODE_SSH:$RELEASE_PATH"
-  ssh "$NODE_SSH" "install -d -m 0755 '$RELEASE_PATH/bin' /opt/ricardo/releases"
+  ssh "$NODE_SSH" "install -d -m 0755 '$RELEASE_PATH/bin' /opt/ricardo/releases /opt/ricardo/control/releases"
   scp -q "$RELEASE_DIR/scheduler" "$RELEASE_DIR/ha-bridge" "$NODE_SSH:$RELEASE_PATH/bin/"
-  ssh "$NODE_SSH" "ln -sfn '$RELEASE_PATH' /opt/ricardo/current.new && mv -Tf /opt/ricardo/current.new /opt/ricardo/current && readlink -f /opt/ricardo/current"
+  # ha-control has its own immutable tree so rolling it never replaces the
+  # running scheduler/ha-bridge binaries.
+  ssh "$NODE_SSH" "install -d -m 0755 '/opt/ricardo/control/releases/$BUILD_ID/bin'"
+  scp -q "$RELEASE_DIR/ha-control" "$NODE_SSH:/opt/ricardo/control/releases/$BUILD_ID/bin/"
+  ssh "$NODE_SSH" "ln -sfn '$RELEASE_PATH' /opt/ricardo/current.new && mv -Tf /opt/ricardo/current.new /opt/ricardo/current"
+  ssh "$NODE_SSH" "ln -sfn '/opt/ricardo/control/releases/$BUILD_ID' /opt/ricardo/control/current.new && mv -Tf /opt/ricardo/control/current.new /opt/ricardo/control/current && readlink -f /opt/ricardo/current /opt/ricardo/control/current"
 fi
 
 if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
@@ -129,12 +141,88 @@ for s in scheduler-auth ha-bridge-ha; do
   fi
 done
 
-echo "== applying scheduler and tailnet route"
+echo "== applying scheduler and tailnet routes"
 $KUBECTL apply -f "$RENDER_DIR/scheduler.yaml"
 $KUBECTL apply -f "$RENDER_DIR/scheduler-ingress.yaml"
 $KUBECTL -n "$NS" rollout status deployment/scheduler --timeout=180s
 $KUBECTL -n "$NS" exec deployment/scheduler -- /opt/ricardo/bin/scheduler -healthcheck
 echo "scheduler authenticated readiness: ok"
+
+echo "== ha-control"
+CONTROL_EXISTS=false
+if $KUBECTL -n "$NS" get deployment ha-control >/dev/null 2>&1; then
+  CONTROL_EXISTS=true
+fi
+
+if ! $CONTROL_EXISTS; then
+  echo "== first install: applying ha-control (catalog only, 1 replica)"
+  $KUBECTL apply -f "$RENDER_DIR/control.yaml"
+else
+  echo "== existing ha-control: preserving execute mode/replicas, rolling build $BUILD_ID"
+  $KUBECTL -n "$NS" patch deployment/ha-control --type merge -p \
+    "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"ricardo.dev/build\":\"$BUILD_ID\"}}}}}"
+fi
+$KUBECTL apply -f "$RENDER_DIR/control-service.yaml"
+$KUBECTL apply -f "$RENDER_DIR/control-ingress.yaml"
+
+control_queue_pending() {
+  # Fail closed: --control-execute refuses when the dedicated control queue has
+  # pending or leased events. GetStatus only reports queues with backlog.
+  local status
+  status=$($KUBECTL -n "$NS" exec deploy/scheduler -- sh -c \
+    'wget -qO- --post-data={} --header="Content-Type: application/json" --header="Authorization: Bearer $(cat /run/secrets/scheduler/token)" http://127.0.0.1:8098/ricardo.v1.SchedulerService/GetStatus')
+  printf '%s' "$status" | python3 -c '
+import json,sys
+
+def fail(msg):
+    print("control preflight refused:", msg, file=sys.stderr)
+    sys.exit(1)
+
+try:
+    d = json.load(sys.stdin)
+except Exception as exc:
+    fail(f"GetStatus is not JSON: {exc}")
+if not isinstance(d, dict):
+    fail("GetStatus response is not an object")
+if d.get("ready") is not True:
+    fail("scheduler reports ready=false")
+queues = d.get("queues")
+if not isinstance(queues, list) or not queues:
+    # GetStatus always reports the default queues; an empty/absent list means a
+    # malformed or stale response, not an empty control queue.
+    fail("GetStatus has no queues array")
+total = 0
+for q in queues:
+    if not isinstance(q, dict) or not isinstance(q.get("name"), str):
+        fail(f"malformed queue entry: {q!r}")
+    for key in ("pending", "leased"):
+        value = q.get(key, 0)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            fail("malformed %s for queue %r: %r" % (key, q.get("name"), value))
+        if q["name"] == "control":
+            total += value
+if total > 0:
+    fail(f"control queue is not empty: pending+leased={total}")
+print("control queue empty")
+'
+}
+
+if [[ "$CONTROL_MODE" == "catalog" ]]; then
+  echo "== ha-control -> catalog only (execution disabled)"
+  $KUBECTL -n "$NS" set env deployment/ha-control CONTROL_EXECUTE=false
+fi
+if [[ "$CONTROL_MODE" == "execute" ]]; then
+  echo "== ha-control cutover preflight"
+  control_queue_pending
+  $KUBECTL -n "$NS" set env deployment/ha-control CONTROL_EXECUTE=true
+  $KUBECTL -n "$NS" scale deployment/ha-control --replicas=1
+fi
+
+if [[ "$($KUBECTL -n "$NS" get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
+  $KUBECTL -n "$NS" rollout status deployment/ha-control --timeout=180s
+  $KUBECTL -n "$NS" exec deployment/ha-control -- /opt/ricardo/bin/ha-control -healthcheck
+  echo "ha-control authenticated readiness: ok"
+fi
 
 BRIDGE_EXISTS=false
 if $KUBECTL -n "$NS" get deployment ha-bridge >/dev/null 2>&1; then

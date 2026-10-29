@@ -72,9 +72,10 @@ spec:
               value: Asia/Almaty
             - name: SCHEDULER_TOKEN_FILE
               value: /run/secrets/scheduler/token
-            # Only the HA executor may lease the home queue.
+            # Consumer allowlist for ListDueEvents (global, not a per-queue ACL):
+            # the alarm bridge and the control executor.
             - name: SCHEDULER_CONSUMERS
-              value: ha-bridge-home
+              value: ha-bridge-home,ha-control-home
             - name: SCHEDULER_RING_WINDOW_SECONDS
               value: "900"
             - name: SCHEDULER_MISSED_GRACE_SECONDS

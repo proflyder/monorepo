@@ -132,6 +132,12 @@
 - Deploy/rollback: `projects/home/kubernetes/scheduler/` (manifest templates,
   render, preflight, backup). Реальные адреса — `secrets/home/scheduler.env`;
   rendered manifests — `secrets/local/rendered/`.
+- `ha-control` (тот же solution) развёрнут отдельным Deployment: каталог
+  `GET /v1/catalog` из live HA, очередь `control`; `CONTROL_EXECUTE=true`,
+  consumer `ha-control-home` в allowlist планировщика рядом с `ha-bridge-home`.
+  Без `CONTROL_LABEL` каталог = 15 видимых light/switch, скрипты исключены.
+  LAN NodePort `30099`, tailnet `pl-control.<tailnet>`; pl-home/pl-scheduler
+  не менялись. Доставка at-least-once, не exactly-once.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
   `INTERNET`, debug-signed). Вкладки Alarms/Timers/Reminders/Connection;

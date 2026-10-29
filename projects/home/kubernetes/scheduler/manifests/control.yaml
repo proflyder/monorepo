@@ -1,0 +1,123 @@
+# ha-control: phone-facing catalog server and dedicated control-queue executor.
+#
+# Separate from ha-bridge on purpose: ha-bridge keeps the alarm `home` queue and
+# has no listener; ha-control serves GET /v1/catalog and leases only the
+# `control` queue (the binary refuses home/tasks).
+#
+# TEMPLATE: deploy.sh renders ${CONTROL_NODE_PORT} from the private env file.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ha-control
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-control
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ha-control
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ha-control
+      annotations:
+        ricardo.dev/build: ${BUILD_ID}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ha-control
+          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/ricardo/bin/ha-control"]
+          env:
+            - name: HA_URL
+              value: ${HA_URL}
+            - name: HA_TOKEN_FILE
+              value: /run/secrets/ha/token
+            - name: SCHEDULER_ENDPOINT
+              value: http://scheduler.home-assistant.svc.cluster.local:8098
+            - name: SCHEDULER_TOKEN_FILE
+              value: /run/secrets/scheduler/token
+            # Same bearer the phone already uses; the app has a single token.
+            - name: CONTROL_TOKEN_FILE
+              value: /run/secrets/scheduler/token
+            - name: CONTROL_CONSUMER_ID
+              value: ha-control-home
+            - name: CONTROL_QUEUE
+              value: control
+            - name: CONTROL_LISTEN
+              value: 0.0.0.0:8099
+            # Catalog-only until the control queue is reviewed; flipped by an
+            # explicit rollout step.
+            - name: CONTROL_EXECUTE
+              value: "false"
+            - name: CONTROL_CACHE_TTL
+              value: 3s
+          ports:
+            - name: catalog
+              containerPort: 8099
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command: ["/opt/ricardo/bin/ha-control", "-healthcheck"]
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 7
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/opt/ricardo/bin/ha-control", "-healthcheck"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 7
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bin
+              mountPath: /opt/ricardo/bin
+              readOnly: true
+            - name: scheduler-token
+              mountPath: /run/secrets/scheduler
+              readOnly: true
+            - name: ha-token
+              mountPath: /run/secrets/ha
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bin
+          hostPath:
+            path: /opt/ricardo/control/current/bin
+            type: Directory
+        - name: scheduler-token
+          secret:
+            secretName: scheduler-auth
+            defaultMode: 0440
+        - name: ha-token
+          secret:
+            secretName: ha-bridge-ha
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

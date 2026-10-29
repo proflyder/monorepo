@@ -136,6 +136,12 @@ kubectl -n home-assistant exec deployment/scheduler -- \
 kubectl -n home-assistant logs deploy/ha-bridge --tail=50
 ```
 
+Home control (каталог устройств/сценариев):
+`http://<node>:30099` (LAN) или `https://pl-control.<tailnet>.ts.net`
+(tailnet), тот же bearer, что у планировщика; в приложении — поле
+«Home control address» без `/v1/catalog`. Переключение исполнения:
+`deploy.sh --control-execute|--control-catalog`.
+
 Удалённый endpoint для Android: `https://pl-scheduler.<tailnet>.ts.net`
 (tailnet-only, TLS оператора); LAN endpoint — `http://<node>:30098`.
 Оба требуют bearer. `pl-home` не менять: `/` → HAOS, `/grafana` → Grafana.

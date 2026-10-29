@@ -10,6 +10,7 @@ go_library(
     name = "ha_control_lib",
     srcs = [
         "config.go",
+        "healthcheck.go",
         "main.go",
     ],
     importpath = "ricardo.local/monorepo/solutions/ha-bridge/cmd/ha-control",
@@ -27,6 +28,9 @@ go_library(
 
 go_test(
     name = "ha_control_test",
-    srcs = ["config_test.go"],
+    srcs = [
+        "config_test.go",
+        "healthcheck_test.go",
+    ],
     embed = [":ha_control_lib"],
 )
