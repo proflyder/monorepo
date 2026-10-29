@@ -41,10 +41,11 @@ class AlarmsViewModel(
     private var refreshJob: Job? = null
     private var generation = 0
 
-    fun refresh() {
+    /** [silent] keeps already loaded data on screen without a spinner (tab returns, resume). */
+    fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation
-        updateState { copy(refreshing = true, loadError = null) }
+        updateState { copy(refreshing = refreshing || !silent, loadError = null) }
         refreshJob = launch {
             val result = loadAlarms()
             if (requested != generation) return@launch

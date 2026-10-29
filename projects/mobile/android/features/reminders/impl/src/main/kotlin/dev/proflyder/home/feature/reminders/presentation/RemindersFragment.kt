@@ -1,7 +1,7 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.model.Schedule
@@ -17,7 +17,7 @@ import dev.proflyder.home.feature.reminders.impl.databinding.FragmentRemindersBi
 
 class RemindersFragment :
     BaseFragment<FragmentRemindersBinding>(FragmentRemindersBinding.Companion::inflate) {
-    private val viewModel: RemindersViewModel by viewModels {
+    private val viewModel: RemindersViewModel by activityViewModels {
         viewModelFactory(RemindersViewModel::class.java)
     }
 
@@ -53,7 +53,7 @@ class RemindersFragment :
 
     override fun onResume() {
         super.onResume()
-        viewModel.refresh()
+        viewModel.refresh(silent = true)
     }
 
     private fun render(state: RemindersUiState) {

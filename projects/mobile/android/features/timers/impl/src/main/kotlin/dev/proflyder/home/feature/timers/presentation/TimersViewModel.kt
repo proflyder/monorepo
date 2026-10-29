@@ -58,11 +58,12 @@ class TimersViewModel(
         val endpoint: String,
     )
 
-    fun refresh() {
+    /** [silent] keeps already loaded data on screen without a spinner (tab returns, resume). */
+    fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation
         lastRefreshNanos = System.nanoTime()
-        mutableState.value = mutableState.value.copy(refreshing = true, loadError = null)
+        mutableState.value = mutableState.value.copy(refreshing = mutableState.value.refreshing || !silent, loadError = null)
         refreshJob = viewModelScope.launch {
             val result = loadTimers()
             if (requested != generation) return@launch
@@ -153,7 +154,7 @@ class TimersViewModel(
         val expiryDue = expired && now - lastExpiryRefreshNanos >= EXPIRY_REFRESH_NANOS
         if ((periodicDue || expiryDue) && !mutableState.value.refreshing) {
             if (expired) lastExpiryRefreshNanos = now
-            refresh()
+            refresh(silent = true)
         }
     }
 

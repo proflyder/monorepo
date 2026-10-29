@@ -34,10 +34,11 @@ class RemindersViewModel(
     private var refreshJob: Job? = null
     private var generation = 0
 
-    fun refresh() {
+    /** [silent] keeps already loaded data on screen without a spinner (tab returns, resume). */
+    fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation
-        mutableState.value = mutableState.value.copy(refreshing = true, loadError = null)
+        mutableState.value = mutableState.value.copy(refreshing = mutableState.value.refreshing || !silent, loadError = null)
         refreshJob = viewModelScope.launch {
             val result = loadReminders()
             if (requested != generation) return@launch

@@ -2,7 +2,7 @@ package dev.proflyder.home.feature.control.presentation
 
 import android.os.Bundle
 import android.view.View
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.model.ControlEntry
@@ -24,7 +24,7 @@ import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBindin
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
 
 class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBinding.Companion::inflate) {
-    private val viewModel: ControlViewModel by viewModels {
+    private val viewModel: ControlViewModel by activityViewModels {
         viewModelFactory(ControlViewModel::class.java)
     }
 
@@ -92,7 +92,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
     override fun onResume() {
         super.onResume()
-        viewModel.refresh()
+        viewModel.refresh(silent = true)
     }
 
     private fun render(state: ControlUiState) {

@@ -1,7 +1,7 @@
 package dev.proflyder.home.feature.timers.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.SimpleItemAnimator
 import dev.proflyder.home.core.model.Timer
@@ -17,7 +17,7 @@ import dev.proflyder.home.feature.timers.impl.databinding.FragmentTimersBinding
 import kotlinx.coroutines.delay
 
 class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding.Companion::inflate) {
-    private val viewModel: TimersViewModel by viewModels {
+    private val viewModel: TimersViewModel by activityViewModels {
         viewModelFactory(TimersViewModel::class.java)
     }
 
@@ -60,7 +60,7 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
 
     override fun onResume() {
         super.onResume()
-        viewModel.refresh()
+        viewModel.refresh(silent = true)
     }
 
     private fun startTimer() {

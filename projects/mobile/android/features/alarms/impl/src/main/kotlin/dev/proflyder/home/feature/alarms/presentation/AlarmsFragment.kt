@@ -2,7 +2,7 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
@@ -19,7 +19,7 @@ import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
 class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding.Companion::inflate) {
-    private val viewModel: AlarmsViewModel by viewModels {
+    private val viewModel: AlarmsViewModel by activityViewModels {
         viewModelFactory(AlarmsViewModel::class.java)
     }
 
@@ -77,7 +77,7 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
 
     override fun onResume() {
         super.onResume()
-        viewModel.refresh()
+        viewModel.refresh(silent = true)
     }
 
     private fun render(state: AlarmsUiState) {
