@@ -1732,10 +1732,15 @@ schedule_alarm_create:
     name:
       description: "Optional alarm label"
       example: "Работа"
+    second:
+      description: "Second 0-59 (relative alarms preserve the target second)"
+      example: 45
+      default: 0
   sequence:
     - variables:
         hour_num: "{{ hour | default(7) | int(7) }}"
         minute_num: "{{ minute | default(0) | int(0) }}"
+        second_num: "{{ (second | default(0) | int(0)) % 60 }}"
         period_raw: "{{ period | default('') | string | lower }}"
         day_raw: "{{ day | default('') | string | lower }}"
         repeat_raw: "{{ repeat | default('Однократно') | string }}"
@@ -1752,7 +1757,7 @@ schedule_alarm_create:
           {{ (h + 12) if period_raw in ['вечера', 'дня'] and h < 12 else (0 if period_raw in ['ночи', 'утра'] and h == 12 else h) }}
         timezone_name: "{{ now().tzinfo | string | trim }}"
         once_date: >-
-          {% set ns = namespace(dt=now().replace(hour=adjusted_hour | int, minute=minute_num | int, second=0, microsecond=0)) %}
+          {% set ns = namespace(dt=now().replace(hour=adjusted_hour | int, minute=minute_num | int, second=second_num | int, microsecond=0)) %}
           {% if day_raw == 'завтра' %}
             {% set ns.dt = ns.dt + timedelta(days=1) %}
           {% elif ns.dt <= now() %}
@@ -1776,7 +1781,7 @@ schedule_alarm_create:
           {{ {'label': alarm_label | trim,
               'kind': 'SCHEDULE_KIND_ALARM',
               'timezone': timezone_name,
-              'at': {'hour': adjusted_hour | int, 'minute': minute_num | int, 'second': 0},
+              'at': {'hour': adjusted_hour | int, 'minute': minute_num | int, 'second': second_num | int},
               'onceDate': ((once_date | trim) if repeat_kind | trim == 'REPEAT_KIND_ONCE' else ''),
               'repeat': repeat_kind,
               'enabled': true,
@@ -1824,12 +1829,19 @@ schedule_alarm_create_relative:
         hours_num: "{{ hours | default(0) | int(0) }}"
         minutes_num: "{{ minutes | default(0) | int(0) }}"
         total_minutes: "{{ [1, (hours_num * 60) + minutes_num] | max | int }}"
-        relative_due: "{{ now() + timedelta(minutes=(total_minutes | int)) }}"
-        relative_day: "{{ 'завтра' if relative_due.date() > now().date() else '' }}"
+        # HA (2026.10) cannot represent a datetime as a script variable value:
+        # the native value is rendered to str, so `.date()` on it fails.
+        # Numbers/dicts/lists keep their type. Keep one epoch integer and derive
+        # every field from it instead.
+        relative_target_ts: "{{ (now().timestamp() + (total_minutes | int) * 60) | int }}"
+        relative_today: "{{ now().timestamp() | timestamp_custom('%Y-%m-%d', true) }}"
+        relative_day_date: "{{ relative_target_ts | timestamp_custom('%Y-%m-%d', true) }}"
+        relative_day: "{{ 'завтра' if relative_day_date != relative_today else '' }}"
     - service: script.schedule_alarm_create
       data:
-        hour: "{{ relative_due.hour }}"
-        minute: "{{ relative_due.minute }}"
+        hour: "{{ relative_target_ts | timestamp_custom('%H', true) | int(0) }}"
+        minute: "{{ relative_target_ts | timestamp_custom('%M', true) | int(0) }}"
+        second: "{{ relative_target_ts | timestamp_custom('%S', true) | int(0) }}"
         day: "{{ relative_day }}"
         repeat: "Однократно"
         name: "{{ name | default('') }}"

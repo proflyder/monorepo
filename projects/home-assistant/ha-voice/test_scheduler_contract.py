@@ -808,6 +808,105 @@ class SpeechTruthTests(unittest.TestCase):
         self.assertNotIn("Останавливаю.", result["text"])
 
 
+class RelativeAlarmTemplateTests(unittest.TestCase):
+    """Regression: HA script variables are rendered to strings.
+
+    `relative_due: "{{ now() + timedelta(...) }}"` becomes a string in a real
+    HA variables step, so calling `.date()` on it raised
+    "UndefinedError: 'str object' has no attribute 'date'" and the live
+    StationAlarmRelative intent failed. The fix derives fields from one epoch
+    integer; these tests render with a non-native environment to reproduce the
+    stringification.
+    """
+
+    @staticmethod
+    def _ha_value(value):
+        # HA keeps JSON-ish native types but renders a datetime to str; that is
+        # why the old `.date()` on a stored datetime variable failed live.
+        if isinstance(value, datetime):
+            return str(value)
+        return value
+
+    def _ha_variables(self, hours: int, minutes: int, now=None) -> dict:
+        now_value = now or NOW
+        context = {
+            "now": lambda: now_value,
+            "timedelta": timedelta,
+            "hours": hours,
+            "minutes": minutes,
+        }
+        rendered = dict(context)
+        step = SCRIPTS["schedule_alarm_create_relative"]["sequence"][0]
+        for name, value in step["variables"].items():
+            result = render(value, rendered) if isinstance(value, str) else value
+            rendered[name] = self._ha_value(result)
+        return rendered
+
+    def _service_data(self, variables: dict) -> dict:
+        step = SCRIPTS["schedule_alarm_create_relative"]["sequence"][1]
+        data = step["data"]
+        return {
+            key: render(data[key], variables)
+            for key in ("hour", "minute", "second", "day")
+        }
+
+    def test_variables_are_strings_not_datetimes(self) -> None:
+        variables = self._ha_variables(1, 30)
+        self.assertIsInstance(variables["relative_day"], str)
+        self.assertNotIn("relative_due", variables)
+        self.assertNotIn(".date()", json.dumps(
+            SCRIPTS["schedule_alarm_create_relative"], ensure_ascii=False
+        ))
+
+    def test_same_day_minutes(self) -> None:
+        data = self._service_data(self._ha_variables(1, 30))
+        self.assertEqual(
+            (int(data["hour"]), int(data["minute"]), int(data["second"]), data["day"]),
+            (7, 30, 0, ""),
+        )
+
+    def test_crossing_midnight_sets_tomorrow(self) -> None:
+        data = self._service_data(self._ha_variables(20, 0))
+        self.assertEqual(
+            (int(data["hour"]), int(data["minute"]), data["day"]), (2, 0, "завтра")
+        )
+
+    def test_minimum_one_minute(self) -> None:
+        data = self._service_data(self._ha_variables(0, 0))
+        self.assertEqual((int(data["hour"]), int(data["minute"])), (6, 1))
+
+    def test_seconds_are_preserved(self) -> None:
+        # Server now 12:34:45 + 5 min must target 12:39:45, not 12:39:00.
+        now = NOW.replace(hour=12, minute=34, second=45)
+        data = self._service_data(self._ha_variables(0, 5, now=now))
+        self.assertEqual(
+            (int(data["hour"]), int(data["minute"]), int(data["second"]), data["day"]),
+            (12, 39, 45, ""),
+        )
+
+    def test_canonical_payload_uses_second(self) -> None:
+        payload = json.dumps(SCRIPTS["schedule_alarm_create"], ensure_ascii=False)
+        self.assertIn("'second': second_num | int", payload)
+
+    def test_second_field_is_owned_by_canonical_create(self) -> None:
+        create_fields = SCRIPTS["schedule_alarm_create"]["fields"]
+        self.assertIn("second", create_fields)
+        self.assertEqual(create_fields["second"].get("default"), 0)
+        self.assertNotIn("second", SCRIPTS["alarm_set"]["fields"])
+
+    def test_relative_parser_cannot_exceed_24h(self) -> None:
+        # The relative intent slots reuse the alarm_hour/alarm_minute lists, so
+        # the maximum is 23h59m and the target can only be today or tomorrow.
+        sentence_doc = yaml.safe_load(
+            (HA / "custom_sentences" / "ru" / "station_alarm.yaml").read_text(encoding="utf-8")
+        )
+        hours = [int(v["out"]) for v in sentence_doc["lists"]["alarm_hour"]["values"]]
+        minutes = [int(v["out"]) for v in sentence_doc["lists"]["alarm_minute"]["values"]]
+        self.assertEqual(max(hours), 23)
+        self.assertEqual(max(minutes), 59)
+        self.assertLess(max(hours) * 60 + max(minutes), 24 * 60)
+
+
 class SchedulerVerificationTests(unittest.TestCase):
     def test_update_speech_includes_repeat(self):
         template = find_variable_template(
