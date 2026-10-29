@@ -26,4 +26,6 @@
     <string name="control_light_saturation">Saturation</string>
     <string name="control_light_kelvin">%1$d K</string>
     <string name="control_light_percent">%1$d%%</string>
+    <string name="control_light_warm">Warm</string>
+    <string name="control_light_cool">Cool</string>
 </resources>

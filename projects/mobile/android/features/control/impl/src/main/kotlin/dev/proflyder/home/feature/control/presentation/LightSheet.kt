@@ -76,6 +76,13 @@ internal class LightSheet(
         views.lightTemp.valueTo = roundTo50(light.maxKelvin).coerceAtLeast(roundTo50(light.minKelvin) + 50).toFloat()
         val start = (if (temperature > 0) temperature else (light.minKelvin + light.maxKelvin) / 2)
         temperature = roundTo50(start).coerceIn(views.lightTemp.valueFrom.toInt(), views.lightTemp.valueTo.toInt())
+        views.lightTempBar.background = GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            intArrayOf(
+                LightColors.kelvinToArgb(views.lightTemp.valueFrom.toInt()),
+                LightColors.kelvinToArgb(views.lightTemp.valueTo.toInt()),
+            ),
+        ).apply { cornerRadius = 100f }
         views.lightTemp.value = temperature.toFloat()
         showKelvin()
         views.lightTemp.addOnChangeListener { _, value, fromUser ->

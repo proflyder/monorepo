@@ -98,6 +98,14 @@
                 android:textColor="?attr/colorPrimary" />
         </LinearLayout>
 
+        <View
+            android:id="@+id/light_temp_bar"
+            android:layout_width="match_parent"
+            android:layout_height="14dp"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="10dp" />
+
         <com.google.android.material.slider.Slider
             android:id="@+id/light_temp"
             android:layout_width="match_parent"
@@ -105,7 +113,30 @@
             android:contentDescription="@string/control_light_temperature"
             android:stepSize="50"
             android:valueFrom="2000"
-            android:valueTo="6500" />
+            android:valueTo="6500"
+            app:trackColorActive="@android:color/transparent"
+            app:trackColorInactive="@android:color/transparent" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/control_light_warm"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/control_light_cool"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
