@@ -69,6 +69,9 @@
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
+- Пользователь 2026-10-29 подтвердил персональную v2: ответ на
+  «Рикардо, который час?» обычным голосом и шёпотом. Длительное наблюдение
+  ложных срабатываний ещё требуется.
 - Custom wake word «Рикардо» personal v2: on-device microWakeWord, threshold 0.9,
   окно 10, pre-roll 0.5 с.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
