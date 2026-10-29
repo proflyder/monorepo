@@ -16,9 +16,10 @@ docs/WAKE-WORD.md
 ```
 
 Rust-форк и профиль Ricardo: [`PULSAR-RUST.md`](PULSAR-RUST.md).
-Установленный бинарник станции — Rust `v0.5.2-2-g95ce568` (локальный форк на
-базе upstream `v0.5.2`, HEAD `95ce568`); прежняя `v0.5.0-1-g908a027` остаётся
-device-откатом. Legacy исходники и binaries — private в `secrets/local/recovery/`.
+Установленный бинарник станции — Rust `v0.5.2-3-gc57d521` (локальный форк на
+базе upstream `v0.5.2`, HEAD `c57d521`); `pulsar.prev` = `v0.5.2-2-g95ce568`,
+более старая `v0.5.0-1-g908a027` — private backup вне Git. Legacy исходники и
+binaries — private в `secrets/local/recovery/`.
 
 ## Границы
 

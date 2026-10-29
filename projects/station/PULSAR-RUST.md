@@ -1,22 +1,22 @@
 # Pulsar Rust fork
 
-**Станция (установлено):** Rust Pulsar `v0.5.2-2-g95ce568` — локальная
-интеграция upstream `v0.5.2` (HEAD `95ce568`). Прежняя сборка
-`v0.5.0-1-g908a027` остаётся device-откатом (`/data/pulsar/pulsar.prev`).
+**Станция (установлено):** Rust Pulsar `v0.5.2-3-gc57d521` — локальная
+интеграция upstream `v0.5.2` (HEAD `c57d521`). `pulsar.prev` содержит только
+`v0.5.2-2-g95ce568`; более старая `v0.5.0-1-g908a027` — private backup вне Git.
 
 **Локальный форк:** upstream `v0.5.2` влит в `feat/ricardo-rust`; HEAD
-`95ce568`, describe `v0.5.2-2-g95ce568` (не release). Safety ref
+`c57d521`, describe `v0.5.2-3-gc57d521` (не release). Safety ref
 `ricardo-rust/pre-v0.5.2` = `908a027`.
 Legacy C++ исходники, patch и binaries в активном дереве отсутствуют; private
 recovery archive — `secrets/local/recovery/`.
 
 - Fork: <https://github.com/OWNER/pulsar>
-- База: upstream `v0.5.2` (`4cba44a`), ancestor HEAD; delta 68 files.
+- База: upstream `v0.5.2` (`4cba44a`), ancestor HEAD; delta 74 files.
 - Локальный checkout: `projects/station/upstream/pulsar-rust/`
 - Снимок изменений: `projects/station/patches/pulsar-rust/`
   (`snapshot-pulsar.py`, base v0.5.2)
 - armhf build: `satellite/build/armhf/pulsar` — stripped ARM EABI5
-  hard-float ELF (`v0.5.2-2-g95ce568`), установлен на станции. Makefile zig
+  hard-float ELF (`v0.5.2-3-gc57d521`), установлен на станции. Makefile zig
   objcopy на macOS всё ещё падает; артефакт получен установленным LLVM objcopy
   (GNU-совместимый, PT_LOAD/NEEDED проверены), source/Makefile не менялись.
   Артефакт не версионируется.
@@ -46,16 +46,21 @@ recovery archive — `secrets/local/recovery/`.
 Deployed baseline v0.5.0-1: armhf ELF, `mww_create/feed/destroy`; live wake
 `0.904`, HA pipeline/TTS, HAOS reboot, Sendspin/MA reconnect, station reboot.
 
-Установленная v0.5.2-2-g95ce568: `cargo fmt --check`, arm64 clippy `-D warnings`,
+Установленная v0.5.2-3-gc57d521: `cargo fmt --check`, arm64 clippy `-D warnings`,
 `cargo test --workspace --exclude pulsar-update` (включая pre-roll tests) —
 pass; `pulsar-update` 19 pass / 7 fail (26 total) на arm64 из-за x86_64 asset name, тот же
 baseline failure у чистого `4cba44a`. armhf build слинкован и stripped
 (Android NDK LLVM objcopy). Live: single daemon, HA connected / voice
 subscribed, Noise, Ricardo model (cutoff 0.90, window 10), volume 0.3
-unmuted, Sendspin/MA reconnected после add-on restart. Пользователь подтвердил
-живую приёмку: «Рикардо» просыпается и отвечает на команду сразу после имени
-(«который час») без потери начального слога. Alarm/snooze/music/mute/кнопки
-в этой приёмке не проверялись.
+unmuted. Supervised `reload` объявляет goodbye-причину `restart`, и MA
+переподключается сам за ~3 с — два подряд рестарта без рестарта MA, player
+остаётся зарегистрированным.
+
+Пользовательскую приёмку проходила предыдущая `v0.5.2-2-g95ce568`: «Рикардо»
+просыпается и отвечает на команду сразу после имени («который час») без потери
+начального слога; alarm/snooze/music/mute/кнопки в ней не проверялись.
+Установленная `v0.5.2-3-gc57d521` такой пользовательской приёмки ещё не
+проходила.
 
 ## Осталось
 

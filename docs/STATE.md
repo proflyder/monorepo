@@ -59,10 +59,11 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.2-2-g95ce568` — установленная сборка (локальный форк,
-  база upstream `v0.5.2` = `4cba44a`). Прежняя `v0.5.0-1-g908a027` и
-  `pulsar.prev` остаются device-откатом. Legacy C++ checkout, patch и
-  binaries — private в `secrets/local/recovery/`.
+- Pulsar Rust `v0.5.2-3-gc57d521` — установленная сборка (локальный форк,
+  база upstream `v0.5.2` = `4cba44a`). `pulsar.prev` содержит только
+  `v0.5.2-2-g95ce568`; более старая `v0.5.0-1-g908a027` — private backup вне Git.
+  Legacy C++ checkout,
+  patch и binaries — private в `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
 - ESPHome: 33 entities, Noise; HA satellite работает.
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
@@ -71,14 +72,15 @@
 - Custom wake word «Рикардо» v1: on-device microWakeWord, threshold 0.9,
   окно 10, pre-roll 0.5 с.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
-  reconnect и station reboot. По логам 29.10 после ручных рестартов Pulsar MA
-  переподключается сам: Noise-хендшейк сразу, `server connected` через 54 с и
-  5 мин 25 с; рестарт add-on MA не выполнялся. Контролируемый замер и
-  ускорение redial — в `PENDING.md`. Ручной fallback остаётся: `hassio.addon_restart`,
-  slug `d5369777_music_assistant`, без рестарта HA.
-- Пользователь подтвердил живую приёмку установленной `v0.5.2-2-g95ce568`:
+  reconnect и station reboot. Supervised `reload` завершает Sendspin-сессию
+  goodbye-причиной `restart`, и MA переподключается сам: измерено 3.1 с и 3.1 с
+  на `v0.5.2-3-gc57d521`, без рестарта add-on MA и без потери регистрации
+  player. Рестарт MA нужен только как необязательное восстановление при реальном
+  сбое, а не после каждого рестарта Pulsar.
+- Пользователь подтвердил живую приёмку `v0.5.2-2-g95ce568`:
   «Рикардо» просыпается и отвечает на команду сразу после имени («который час»),
-  без потери начального слога. Будильник, snooze, музыка, mute и кнопки в этой
+  без потери начального слога. Текущая `v0.5.2-3-gc57d521` такой пользовательской
+  приёмки ещё не проходила. Будильник, snooze, музыка, mute и кнопки в этой
   приёмке не проверялись.
 - BLE gateway: `Station-Gateway`, GATT provisioning, кнопки 1/3/4/5;
   4 нажатия могут временно уронить Wi-Fi — BLE остаётся аварийным каналом.

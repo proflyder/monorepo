@@ -96,9 +96,10 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
-Установленная версия — Rust `v0.5.2-2-g95ce568` (локальный форк на базе
-upstream `v0.5.2`, HEAD `95ce568`); прежний бинарник `v0.5.0-1-g908a027`
-остаётся в `/data/pulsar` как откат (`pulsar.prev`). Штатный `quasar-server`
+Установленная версия — Rust `v0.5.2-3-gc57d521` (локальный форк на базе
+upstream `v0.5.2`, HEAD `c57d521`); `pulsar.prev` содержит только
+`v0.5.2-2-g95ce568`, более старая `v0.5.0-1-g908a027` — private backup вне Git.
+Штатный `quasar-server`
 остановлен вместе со stock-стеком; при возврате на него (`ctl.sh disable` или
 crash-loop) снова откроется `:31116` без auth — перед возвратом закрыть порт
 правилом INPUT. Legacy C++ checkout, patch и
@@ -106,14 +107,15 @@ binaries не входят в активное дерево; приватный 
 в `secrets/local/recovery/` (не публикуется). Возврат к прежней C++-сборке не
 является штатным rollback и не должен выполняться без отдельного плана.
 
-После рестарта Pulsar MA на наблюдениях 29.10 переподключается сам: Sendspin
-Noise-хендшейк сразу, `sendspin: server connected: Music Assistant` через
-~1–5 мин. Если за это время entity `media_player.iandeks_stantsiia_midi`
-остаётся `unavailable`, ручной fallback — один рестарт только add-on MA через
-`hassio.addon_restart` (`addon: d5369777_music_assistant`), без рестарта HA.
-Проверка: entity `idle`, source `Music Assistant Queue`, volume 0.3; в
-`/tmp/pulsar.log` появляются `sendspin: connection trust unpaired` и
-`sendspin: server connected: Music Assistant`.
+После рестарта Pulsar MA переподключается сам: supervised `reload` завершает
+Sendspin-сессию goodbye-причиной `restart`, после чего MA делает redial (на
+`v0.5.2-3-gc57d521` измерено ~3 с) без рестарта add-on MA. Проверка: entity
+`media_player.iandeks_stantsiia_midi` = `idle`, source `Music Assistant Queue`,
+volume 0.3; в `/tmp/pulsar.log` — `sendspin: goodbye restart (daemon restarts)`,
+`sendspin: connection trust unpaired` и `sendspin: server connected: Music
+Assistant`. Необязательное восстановление при реальном сбое (entity остаётся
+`unavailable`) — один рестарт только add-on MA через `hassio.addon_restart`
+(`addon: d5369777_music_assistant`), без рестарта HA.
 
 Проверка OTA/ADB:
 

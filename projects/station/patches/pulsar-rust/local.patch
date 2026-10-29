@@ -150,7 +150,7 @@ index 0000000..8ddaa5a
 +and restore `pulsar.prev` with `ctl.sh restart`. The previous Rust build also
 +accepts the same `wake_word=ricardo` state and model path.
 diff --git a/docs/architecture.md b/docs/architecture.md
-index 99cf9c3..1ed8c3a 100644
+index 99cf9c3..e118732 100644
 --- a/docs/architecture.md
 +++ b/docs/architecture.md
 @@ -307,6 +307,14 @@ println!("cargo:rustc-link-lib=c++");
@@ -180,6 +180,18 @@ index 99cf9c3..1ed8c3a 100644
    текста не убирает): на Лайт 2 — самый короткий замер по громким словам, на Миди все слова у
    шумового пола и замер не отличает артефакт от короткой задержки, поэтому взято типичное
    значение; окончательно все значения выставлены приёмкой через HA. Каждое срабатывание пишет
+@@ -370,6 +379,11 @@ println!("cargo:rustc-link-lib=c++");
+   перезапуск потока сервером (seek / skip) не дёргает состояние медиаплеера в HA и музыкальные
+   дисплеи. `stopped` завершает удерживаемый конец сразу.
+ - `yield_to_local()` только шлёт `client/leave`, `streaming` синхронно не меняет.
++- Выход по рестарту (`enabled` существует: `ctl.sh restart|reload`, HA Restart, обновление)
++  отправляет `client/goodbye` с причиной `restart` до остановки клиента: по протоколу только
++  `restart` разрешает серверу (Music Assistant) переподключиться. Библиотечный `stop()` иначе
++  шлёт `shutdown`, после которого MA сознательно не набирает этот URL до перезапуска своего
++  провайдера. `ctl.sh disable` сначала удаляет `enabled`, поэтому там остаётся `shutdown`.
+ 
+ ### `pulsar-hw` и `pulsar-clock`
+ 
 diff --git a/installer/deploy.go b/installer/deploy.go
 index 7b3703e..0e7e64c 100644
 --- a/installer/deploy.go
@@ -4589,6 +4601,103 @@ index bb6e014..ddeb850 100644
  ];
  // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
  // (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed. Chunks from
+diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
+index 6369f73..d642457 100644
+--- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
++++ b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
+@@ -376,6 +376,16 @@ void ss_leave(ss_client *c) {
+   }
+ }
+ 
++void ss_disconnect_restart(ss_client *c) {
++  if (!c) return;
++  try {
++    // Posts the request; the client's stop() final tick applies it before its shutdown pass
++    // would send reason "shutdown" for every connection still open.
++    c->client.disconnect(ss::SendspinGoodbyeReason::RESTART);
++  } catch (...) {
++  }
++}
++
+ void ss_confirm_pairing_window(ss_client *c) {
+   try {
+     c->client.confirm_pairing_window();
+diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
+index e409ce9..c046c10 100644
+--- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
++++ b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
+@@ -141,6 +141,9 @@ void ss_player_update_volume(ss_client *c, uint8_t volume);
+ void ss_player_update_muted(ss_client *c, bool muted);
+ bool ss_controller_send(ss_client *c, uint8_t command);  // SS_CMD_*
+ void ss_leave(ss_client *c);
++// client/goodbye with reason "restart": the daemon restarts and will reconnect. For a daemon
++// that is deliberately stopped (enabled file removed), let stop() send "shutdown" instead.
++void ss_disconnect_restart(ss_client *c);
+ void ss_confirm_pairing_window(ss_client *c);
+ // Inside load_blob only: stores the loaded bytes. false: out of memory.
+ bool ss_blob_set(ss_blob *blob, const uint8_t *data, size_t len);
+diff --git a/satellite/crates/pulsar-sendspin/src/ffi.rs b/satellite/crates/pulsar-sendspin/src/ffi.rs
+index 1151792..a4d0811 100644
+--- a/satellite/crates/pulsar-sendspin/src/ffi.rs
++++ b/satellite/crates/pulsar-sendspin/src/ffi.rs
+@@ -187,6 +187,7 @@ unsafe extern "C" {
+     fn ss_player_update_muted(c: *mut SsClient, muted: bool);
+     fn ss_controller_send(c: *mut SsClient, command: u8) -> bool;
+     fn ss_leave(c: *mut SsClient);
++    fn ss_disconnect_restart(c: *mut SsClient);
+     fn ss_confirm_pairing_window(c: *mut SsClient);
+     fn ss_blob_set(blob: *mut SsBlob, data: *const u8, len: usize) -> bool;
+ }
+@@ -712,6 +713,13 @@ impl<L: Listener> Client<L> {
+         unsafe { ss_leave(self.raw.as_ptr()) }
+     }
+ 
++    /// Ask the next stop() to send client/goodbye `restart` instead of the shutdown pass's
++    /// `shutdown`: the server (Music Assistant) redials a restarting client.
++    pub(crate) fn disconnect_restart(&self) {
++        // SAFETY: as `start`.
++        unsafe { ss_disconnect_restart(self.raw.as_ptr()) }
++    }
++
+     pub(crate) fn confirm_pairing_window(&self) {
+         // SAFETY: as `start`.
+         unsafe { ss_confirm_pairing_window(self.raw.as_ptr()) }
+diff --git a/satellite/crates/pulsar-sendspin/src/service.rs b/satellite/crates/pulsar-sendspin/src/service.rs
+index 93837c2..d254e3d 100644
+--- a/satellite/crates/pulsar-sendspin/src/service.rs
++++ b/satellite/crates/pulsar-sendspin/src/service.rs
+@@ -160,6 +160,16 @@ impl SendspinHandle {
+         self.client.is_connected()
+     }
+ 
++    /// The daemon is about to be restarted by its supervisor: send `client/goodbye` with reason
++    /// `restart` so Music Assistant redials this player. Without it the library's stop() sends
++    /// `shutdown`, after which MA deliberately does not reconnect until its provider restarts.
++    pub fn goodbye_restart(&self) {
++        if self.client.is_connected() {
++            info!("sendspin: goodbye restart (daemon restarts)");
++            self.client.disconnect_restart();
++        }
++    }
++
+     /// Software gain 0..1 applied to Sendspin audio (ramped), used for ducking.
+     pub fn set_duck_gain(&self, g: f32) {
+         self.ctx.sink.set_gain(g);
+diff --git a/satellite/crates/pulsar-sendspin/src/stub.rs b/satellite/crates/pulsar-sendspin/src/stub.rs
+index 21763e7..2c050ae 100644
+--- a/satellite/crates/pulsar-sendspin/src/stub.rs
++++ b/satellite/crates/pulsar-sendspin/src/stub.rs
+@@ -44,6 +44,10 @@ impl SendspinHandle {
+     pub fn confirm_pairing_window(&self) {
+         match self.never {}
+     }
++
++    pub fn goodbye_restart(&self) {
++        match self.never {}
++    }
+ }
+ 
+ pub fn spawn(
 diff --git a/satellite/crates/pulsar/src/controller/entities.rs b/satellite/crates/pulsar/src/controller/entities.rs
 index 433667f..138fddb 100644
 --- a/satellite/crates/pulsar/src/controller/entities.rs
@@ -4669,7 +4778,7 @@ index a0f00ba..dd605cf 100644
  
      pub(super) fn update_music(&self) {
 diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
-index 79b3478..ebb91ea 100644
+index 79b3478..ece65e8 100644
 --- a/satellite/crates/pulsar/src/controller/mod.rs
 +++ b/satellite/crates/pulsar/src/controller/mod.rs
 @@ -32,8 +32,13 @@ use logic::{HaTimer, Phase, RunBinding};
@@ -4798,6 +4907,22 @@ index 79b3478..ebb91ea 100644
              FrontendEvent::Audio(pcm) => {
                  if self.phase == Phase::Listening {
                      self.api.voice_send_audio(pcm);
+@@ -801,6 +822,15 @@ impl Controller {
+         self.state.flush(&self.st);
+     }
+ 
++    /// The supervisor will start this daemon again (the `enabled` file exists): promise the
++    /// Sendspin server a reconnect before the client stops, otherwise its stop() sends
++    /// `shutdown` and Music Assistant deliberately stops redialing this player.
++    pub fn promise_sendspin_restart(&self) {
++        if let Some(ss) = &self.sendspin {
++            ss.goodbye_restart();
++        }
++    }
++
+     fn mic_muted(&self) -> bool {
+         self.st.mic_muted || self.hw_mic_muted
+     }
 diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
 index a40b394..6dca0fa 100644
 --- a/satellite/crates/pulsar/src/controller/voice.rs
@@ -4963,6 +5088,78 @@ index a40b394..6dca0fa 100644
                  } else if self.phase == Phase::Speaking {
                      self.interrupt_speech();
                      self.finish_interaction();
+diff --git a/satellite/crates/pulsar/src/main.rs b/satellite/crates/pulsar/src/main.rs
+index 89b60c9..a4f3fb5 100644
+--- a/satellite/crates/pulsar/src/main.rs
++++ b/satellite/crates/pulsar/src/main.rs
+@@ -14,7 +14,7 @@ mod version;
+ 
+ use std::ffi::OsStr;
+ use std::io::Write as _;
+-use std::path::PathBuf;
++use std::path::{Path, PathBuf};
+ use std::process::ExitCode;
+ use std::time::Duration;
+ 
+@@ -72,6 +72,11 @@ fn main() -> ExitCode {
+     };
+     let local = tokio::task::LocalSet::new();
+     let status = local.block_on(&rt, async {
++        // Sampled at exit, not here: `ctl.sh disable` removes the marker before stopping us.
++        let restart_marker = state
++            .parent()
++            .unwrap_or_else(|| Path::new("."))
++            .join("enabled");
+         let mut ctl = match Controller::start(model, state) {
+             Ok(c) => c,
+             Err(e) => {
+@@ -85,6 +90,11 @@ fn main() -> ExitCode {
+             model.model_name, model.codename
+         );
+         ctl.run().await;
++        // `enabled` is what supervise.sh restarts on: promise MA a reconnect only when this is
++        // a restart, not a deliberate ctl.sh disable (it removes enabled first) or a manual run.
++        if supervisor_restarts(&restart_marker) {
++            ctl.promise_sendspin_restart();
++        }
+         arm_teardown_watchdog(0);
+         // Nothing changes the settings after run: a change still pending is written once, here.
+         // Inside the watchdog, so a hung fsync cannot keep the daemon from exiting (a write cut
+@@ -105,3 +115,34 @@ fn main() -> ExitCode {
+     rt.shutdown_timeout(Duration::from_secs(1));
+     ExitCode::from(status)
+ }
++
++/// Whether supervise.sh will start this daemon again (`<state dir>/enabled` exists at exit).
++fn supervisor_restarts(enabled: &Path) -> bool {
++    enabled.is_file()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn supervisor_restart_follows_the_enabled_file_next_to_the_state() {
++        let dir = std::env::temp_dir().join(format!("pulsar-restart-test-{}", std::process::id()));
++        let state = dir.join("state.conf");
++        let marker = dir.join("enabled");
++        std::fs::create_dir_all(&dir).unwrap();
++        assert!(!supervisor_restarts(&marker));
++        std::fs::write(&marker, b"").unwrap();
++        assert!(supervisor_restarts(&marker));
++        // `ctl.sh disable`: enabled removed before the signal, so the daemon sends `shutdown`.
++        std::fs::remove_file(&marker).unwrap();
++        assert!(!supervisor_restarts(&marker));
++        // The same state path derives the marker the supervisor reads.
++        assert_eq!(
++            state.parent().unwrap().join("enabled"),
++            marker,
++            "marker next to state.conf"
++        );
++        std::fs::remove_dir_all(&dir).unwrap();
++    }
++}
 diff --git a/satellite/crates/pulsar/src/settings.rs b/satellite/crates/pulsar/src/settings.rs
 index 2813284..f3facab 100644
 --- a/satellite/crates/pulsar/src/settings.rs

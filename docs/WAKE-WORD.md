@@ -13,7 +13,8 @@
   ветка `feat/ricardo-rust`.
 
 База локального форка — tag `v0.5.2`, commit `4cba44a`; на станции установлена
-сборка форка `v0.5.2-2-g95ce568` (прежняя `v0.5.0-1-g908a027` — device-откат).
+сборка форка `v0.5.2-3-gc57d521` (`pulsar.prev` = `v0.5.2-2-g95ce568`;
+`v0.5.0-1-g908a027` — private backup вне Git).
 Снимок локальных изменений — `projects/station/patches/pulsar-rust/`;
 обновляется `projects/station/scripts/snapshot-pulsar.py` перед корневым
 коммитом.
