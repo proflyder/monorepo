@@ -10,9 +10,13 @@ adb connect 192.0.2.13:5555
 adb devices
 ssh -i ~/.ssh/ricardo_station_ed25519 root@192.0.2.13   # ключ; пароль — fallback
 
-# Proxmox / K3s
-ssh root@192.0.2.26                 # PVE
-ssh labuser@192.0.2.27              # K3s VM
+# Proxmox / K3s / HAOS: один ключ из secrets/proxmox-install/
+ssh -i secrets/proxmox-install/proxmox_admin \
+  -o UserKnownHostsFile=secrets/proxmox-install/known_hosts root@192.0.2.26
+ssh -i secrets/proxmox-install/proxmox_admin \
+  -o UserKnownHostsFile=secrets/proxmox-install/guest-known_hosts labuser@192.0.2.27
+ssh -p 22222 -i secrets/proxmox-install/proxmox_admin \
+  -o UserKnownHostsFile=secrets/proxmox-install/haos-known_hosts root@192.0.2.28
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 ```
 
@@ -131,8 +135,10 @@ Deploy, пауза и запуск исполнителя — `projects/home/kub
 Короткие команды (приватные значения в `secrets/home/scheduler.env`):
 
 ```bash
+# ключ ноды: secrets/proxmox-install/proxmox_admin (labuser@<node>);
+# deploy.sh использует ssh/scp без -i — добавьте ключ в ssh-agent или ~/.ssh/config
 # сборка + применение, режим исполнителя сохраняется
-NODE_SSH=root@<node> projects/home/kubernetes/scheduler/deploy.sh
+NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh
 
 # осознанный переход в shadow (dry-run, 0 реплик)
 NODE_SSH=root@<node> projects/home/kubernetes/scheduler/deploy.sh --shadow

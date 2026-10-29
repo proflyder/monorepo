@@ -29,10 +29,14 @@ sudo systemctl status k3s
 С Mac:
 
 ```bash
-ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.27
+ssh -N -i secrets/proxmox-install/proxmox_admin \
+  -o UserKnownHostsFile=secrets/proxmox-install/guest-known_hosts \
+  -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.27
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 kubectl get pods -A
 ```
+
+Ключ и `known_hosts` — `secrets/proxmox-install/` (см. `CREDENTIALS.md`).
 
 API `6443`, kubelet `10250`, node-exporter `9100`, health `9116` и
 VXLAN `8472/udp` закрыты firewall от обычного LAN.

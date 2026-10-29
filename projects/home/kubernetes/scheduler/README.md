@@ -45,6 +45,11 @@ Kubernetes events.
 
 ## Deploy
 
+`NODE_SSH` is the K3s node (`labuser@192.0.2.27` on this stand, key
+`secrets/proxmox-install/proxmox_admin`). `deploy.sh` calls plain `ssh`/`scp`
+without key flags, so bind that key in `~/.ssh/config` or load it into
+`ssh-agent` first.
+
 ```bash
 NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh            # install/update, preserve mode
 NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --shadow   # dry-run, 0 replicas
