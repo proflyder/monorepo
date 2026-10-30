@@ -48,7 +48,9 @@ pct exec 102 -- certbot renew --dry-run --no-random-sleep-on-renew
 pct exec 102 -- systemctl list-timers certbot.timer
 
 # служебные действия
-pct exec 102 -- systemctl restart ocserv
+pct exec 102 -- ocserv --test-config
+pct exec 102 -- systemctl reload ocserv    # без разрыва сессий
+pct exec 102 -- systemctl restart ocserv   # нужен при смене auth-методов
 pct exec 102 -- systemctl restart nftables
 pct reboot 102
 pct exec 102 -- occtl unban ip <ADDRESS>
@@ -73,21 +75,56 @@ python3 projects/home/proxmox/vpn/vpnusers.py <user> \
 Приватные файлы — `secrets/home/vpn/<user>.credentials` и `<user>.png`
 (QR для Google Authenticator), каталог `700`, файлы `600`.
 
+Клиентские сертификаты (вход без пароля/TOTP; пароль + TOTP остаётся):
+
+```bash
+# один раз: частный CA; приватный ключ остаётся только на Mac
+python3 projects/home/proxmox/vpn/vpncerts.py init-ca \
+  --pve 192.0.2.26 --ssh-key secrets/proxmox-install/proxmox_admin \
+  --known-hosts secrets/proxmox-install/known_hosts
+
+# выпуск: p12 + legacy p12 + пароль импорта рядом (600)
+python3 projects/home/proxmox/vpn/vpncerts.py issue <user> --device phone
+
+# отзыв по serial или .p12; обновляет CRL на CT и перезагружает ocserv
+python3 projects/home/proxmox/vpn/vpncerts.py revoke <serial|file.p12> \
+  --pve 192.0.2.26 --ssh-key secrets/proxmox-install/proxmox_admin \
+  --known-hosts secrets/proxmox-install/known_hosts
+
+python3 projects/home/proxmox/vpn/vpncerts.py list
+```
+
+CA: `secrets/home/vpn/client-ca/` (ключ CA на сервер не копируется);
+клиентские файлы — `secrets/home/vpn/clients/<user>-<device>.p12`.
+На CT лежат только `/etc/ocserv/ssl/client-ca.pem` и `client-ca.crl`.
+После изменения методов аутентификации нужен restart ocserv, после смены
+CRL достаточно reload. Проверка конфигурации — `ocserv --test-config`.
+
 Сертификат продлевается автоматически через DNS-01 Cloudflare
 (`certbot.timer`, credentials `/etc/letsencrypt/cloudflare.ini`, deploy hook
 `/etc/letsencrypt/renewal-hooks/deploy/ocserv-ssl.sh`). Ручное продление и
 правка TXT-записи не нужны. Настройка и откат — `projects/home/proxmox/vpn/README.md`.
 
-Проверка только аутентификации (не поднимает туннель на Mac):
+Проверка только аутентификации (не поднимает туннель на Mac; серверный
+сертификат — публичный Let's Encrypt, `--servercert` не нужен):
 
 ```bash
+# пароль + свежий TOTP
 openconnect --authenticate --user=<user> --authgroup=lan \
-  --servercert pin-sha256:<PIN> https://192.0.2.29/
+  --resolve vpn.example.com:192.0.2.29 https://vpn.example.com/
+
+# клиентский сертификат, без пароля/OTP
+openconnect --authenticate --certificate <user>-phone.p12 \
+  --passwd-on-stdin --authgroup=lan \
+  --resolve vpn.example.com:192.0.2.29 https://vpn.example.com/ \
+  < secrets/home/vpn/clients/<user>-phone.password
 ```
 
-Верный пароль + свежий TOTP — успех; неверный TOTP — отказ. Один и тот же
-TOTP повторно не использовать (ocserv считает это replay), несколько неудач
-подряд банят IP на `min-reauth-time`.
+`--authenticate` печатает cookie — вывод не публиковать. Верный пароль +
+свежий TOTP или валидный сертификат — успех (код 0, `COOKIE`); неверный
+TOTP или отозванный сертификат — отказ. Один и тот же TOTP повторно не
+использовать (ocserv считает это replay), несколько неудач подряд банят IP
+на `min-reauth-time`; свой IP разбанить: `pct exec 102 -- occtl unban ip <IP>`.
 
 ## Проверка
 

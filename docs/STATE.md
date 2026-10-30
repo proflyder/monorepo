@@ -73,7 +73,8 @@
 
 ## Собственный VPN
 
-- CT `102 vpn` (`192.0.2.29`): ocserv с паролем + TOTP, профили `lan`
+- CT `102 vpn` (`192.0.2.29`): ocserv с паролем + TOTP и дополнительным
+  входом по клиентскому сертификату, профили `lan`
   (split tunnel до домашней LAN, DNS `192.0.2.1`) и `full` (весь трафик).
   `443/tcp` + `443/udp`, nftables `drop` по умолчанию, masquerade
   VPN → LAN/WAN, SSH только из LAN, onboot.
@@ -88,6 +89,16 @@
   `dns-cloudflare` (DNS-01), `certbot.timer`, deploy hook копирует
   fullchain/privkey в ocserv и перезапускает его. MSS clamp в forward chain
   стоит до accept. Ручные auth-хуки и TXT удалены.
+- 2026-10-31: добавлен вход по клиентскому сертификату без пароля/TOTP.
+  Частный CA (RSA 4096, 10 лет) и его ключ — только в
+  `secrets/home/vpn/client-ca/`; в CT — `client-ca.pem` и `client-ca.crl`.
+  ocserv: `auth = "certificate"`, `enable-auth = "plain[...]"` (пароль +
+  TOTP остаётся), `cert-user-oid`/`cert-group-oid`. Выпущен сертификат
+  `<user>` для `phone` (RSA 2048, 2 года, CN = пользователь, OU = группы).
+  Управление — `vpncerts.py` (`init-ca`/`issue`/`revoke`/`list`); отзыв
+  обновляет CRL и перезагружает ocserv. Профиль при входе по сертификату
+  выбирается полем Group (`lan` по умолчанию или `full`); без группы
+  сервер просит выбрать её при подключении.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
 

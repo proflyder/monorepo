@@ -1,8 +1,9 @@
 # Home VPN (ocserv)
 
 Собственный VPN-сервер для доступа к домашней LAN снаружи: OpenConnect /
-Cisco Secure Client, пароль + TOTP (Google Authenticator). Работает в
-unprivileged Debian 13 LXC на Proxmox, слушает `443/tcp` и `443/udp` (DTLS).
+Cisco Secure Client. Вход — пароль + TOTP (Google Authenticator) либо
+клиентский сертификат (без пароля и кода). Работает в unprivileged Debian 13
+LXC на Proxmox, слушает `443/tcp` и `443/udp` (DTLS).
 Этап 1 — только LAN и самоподписанный сертификат. Этап 2 добавляет
 публичный сертификат Let's Encrypt с автоматическим продлением через
 DNS-01 Cloudflare; самоподписанный сертификат остаётся запасным.
@@ -15,10 +16,12 @@ DNS-01 Cloudflare; самоподписанный сертификат оста�
 | Файл | Назначение |
 |---|---|
 | `create-lxc.sh` | создаёт unprivileged CT (Debian 13, 1 vCPU / 512 MiB / 4 GiB), статический IP, onboot, `/dev/net/tun` |
-| `install-ocserv.sh` | ставит и настраивает ocserv, сертификат, nftables, forwarding |
+| `install-ocserv.sh` | ставит и настраивает ocserv, сертификат, nftables, forwarding; при наличии CA включает вход по клиентскому сертификату |
 | `setup-certbot.sh` | ставит certbot + dns-cloudflare, выпускает/переводит сертификат, ставит deploy hook |
 | `vpnusers.py` | добавляет пользователя: пароль + TOTP, QR для Google Authenticator |
 | `test_vpnusers.py` | unit-тесты чистой логики |
+| `vpncerts.py` | частный CA и клиентские сертификаты: `init-ca`, `issue`, `revoke`, `list` |
+| `test_vpncerts.py` | unit/локальные интеграционные тесты CA (без сети) |
 
 Схема:
 
@@ -80,7 +83,11 @@ ping/ARP, и скачивает шаблон Debian 13, если его нет. 
 uplink и firewall хоста.
 
 `install-ocserv.sh` идемпотентен: существующие `ocpasswd`, `users.oath` и
-сертификат сохраняются.
+сертификат сохраняются. Если передан `--client-ca` (или файл CA уже лежит в
+`/etc/ocserv/ssl/client-ca.pem`), включается вход по клиентскому
+сертификату; дополнительно нужен `--client-crl`. Без CA остаётся только
+пароль + TOTP. Изменение методов аутентификации требует restart ocserv;
+остальные правки применяются reload без разрыва активных сессий.
 
 ## Сертификат Let's Encrypt
 
@@ -143,6 +150,85 @@ python3 projects/home/proxmox/vpn/vpnusers.py <user> \
 
 Пароль и TOTP вводятся в клиенте последовательно: сначала пароль, затем
 6-значный код. В `users.oath` хранится тот же ключ в hex, в QR — в base32.
+
+## Клиентские сертификаты (вход без пароля)
+
+Дополнительный способ входа: частный CA выпускает клиентские сертификаты.
+Клиент с валидным сертификатом входит без пароля и TOTP; без сертификата
+продолжает работать пароль + TOTP. Серверный сертификат Let's Encrypt и
+certbot не затрагиваются.
+
+- CA: RSA 4096, 10 лет. Приватный ключ CA хранится только на рабочей машине
+  в `secrets/home/vpn/client-ca/` (каталог `700`, ключ `600`) и никогда не
+  копируется на сервер.
+- На CT попадают только `client-ca.pem` и `client-ca.crl` в
+  `/etc/ocserv/ssl/`.
+- Клиентский сертификат: RSA 2048, 2 года, EKU clientAuth, CN = имя
+  пользователя, OU = группы (`lan`, `full`), уникальный serial.
+- ocserv: `auth = "certificate"` (основной), `enable-auth = "plain[...]"` —
+  альтернатива для входа паролем + TOTP, `cert-user-oid = 2.5.4.3`,
+  `cert-group-oid = 2.5.4.11`. В ocserv 1.3 сертификат должен быть основным
+  методом: как `enable-auth` он не разрешается security-модулем.
+
+### CA и выпуск
+
+```bash
+# один раз: создать CA и положить на CT client-ca.pem + CRL
+python3 projects/home/proxmox/vpn/vpncerts.py init-ca \
+  --pve 192.0.2.26 \
+  --ssh-key secrets/proxmox-install/proxmox_admin \
+  --known-hosts secrets/proxmox-install/known_hosts
+
+# выпустить сертификат; --device задаёт только имя файлов
+python3 projects/home/proxmox/vpn/vpncerts.py issue <user> --device phone
+# => secrets/home/vpn/clients/<user>-phone.p12
+#    <user>-phone.legacy.p12  (запасной вариант для старого импорта)
+#    <user>-phone.password    (пароль импорта, 600)
+
+# отозвать по serial или по файлу .p12 и обновить CRL на CT
+python3 projects/home/proxmox/vpn/vpncerts.py revoke <serial|file.p12> \
+  --pve 192.0.2.26 --ssh-key ... --known-hosts ...
+
+# список выданных сертификатов
+python3 projects/home/proxmox/vpn/vpncerts.py list
+```
+
+`issue` и `revoke` не печатают пароли и ключи. `revoke` обновляет CRL,
+кладёт его в CT, проверяет `ocserv --test-config` и перезагружает ocserv.
+`issue --groups lan` ограничивает сертификат одной группой.
+
+### Android: Cisco Secure Client
+
+1. Скопировать `<user>-phone.p12` на телефон.
+2. Cisco Secure Client → Diagnostics → Certificate Management → Import,
+   выбрать файл, ввести пароль из `<user>-phone.password`.
+3. В профиле подключения: сервер `vpn.example.com`, сертификат —
+   импортированный; поле Group — `lan` (по умолчанию) или `full`.
+4. Подключение: сертификат выбирается автоматически, пароль и код не нужны.
+
+Если импорт современного `.p12` (AES-256/SHA-256) не принимается, повторить
+с `<user>-phone.legacy.p12` и тем же паролем. Группу нужно указать один раз
+в профиле: ocserv берёт профиль из сертификата, а без группы в запросе
+просит выбрать её при подключении.
+
+### Проверка без пароля
+
+```bash
+openconnect --authenticate \
+  --certificate <user>-phone.p12 --passwd-on-stdin \
+  --authgroup=lan \
+  --resolve vpn.example.com:192.0.2.29 \
+  https://vpn.example.com/ < <user>-phone.password
+```
+
+`--authenticate` печатает cookie — вывод не публиковать. Успех — код 0 и
+строка `COOKIE`. Серверный сертификат — публичный Let's Encrypt, поэтому
+`--servercert` не нужен. Пароль из stdin нужен только для расшифровки
+`.p12`; если сервер попросит пароль VPN, значит сертификат не принят.
+
+Отзыв: `revoke` добавляет serial в CRL, и следующий вход с этим
+сертификатом отклоняется (клиенту остаётся только пароль + TOTP). Файлы
+отозванного сертификата можно удалить из `secrets/home/vpn/clients/`.
 
 ## Проверки
 

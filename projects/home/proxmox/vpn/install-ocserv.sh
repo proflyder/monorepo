@@ -15,6 +15,10 @@ IFACE=eth0
 VPN_NETWORK=10.77.0.0
 VPN_NETMASK=255.255.255.0
 VPN_CIDR=10.77.0.0/24
+CLIENT_CA=
+CLIENT_CRL=
+CLIENT_CA_DEST=/etc/ocserv/ssl/client-ca.pem
+CLIENT_CRL_DEST=/etc/ocserv/ssl/client-ca.crl
 
 usage() {
   cat <<'EOF'
@@ -31,6 +35,13 @@ Options:
   --vpn-network ADDR    VPN pool network (default 10.77.0.0)
   --vpn-netmask MASK    VPN pool netmask (default 255.255.255.0)
   --vpn-cidr CIDR       VPN pool in CIDR form (default 10.77.0.0/24)
+  --client-ca PATH      client CA certificate (PEM); also looks for
+                        PATH-derived CRL unless --client-crl is given
+  --client-crl PATH     CRL for the client CA (PEM)
+
+Client certificate login is enabled only when a client CA is supplied (or a
+previously installed /etc/ocserv/ssl/client-ca.pem exists). Password + TOTP
+stays enabled in every case.
 EOF
 }
 
@@ -46,6 +57,8 @@ while (($#)); do
     --vpn-network) VPN_NETWORK=$2; shift 2 ;;
     --vpn-netmask) VPN_NETMASK=$2; shift 2 ;;
     --vpn-cidr) VPN_CIDR=$2; shift 2 ;;
+    --client-ca) CLIENT_CA=$2; shift 2 ;;
+    --client-crl) CLIENT_CRL=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
@@ -61,6 +74,42 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates gnutls-bin nftables ocserv openssh-server
+
+# ----- optional client certificate authentication --------------------------
+# A re-run without --client-ca keeps an already installed CA, so the script
+# stays idempotent. A fresh container without a CA keeps password + TOTP only.
+if [[ -z $CLIENT_CA && -s $CLIENT_CA_DEST ]]; then
+  CLIENT_CA=$CLIENT_CA_DEST
+  [[ -n $CLIENT_CRL ]] || CLIENT_CRL=$CLIENT_CRL_DEST
+fi
+CERT_AUTH_CONF=
+if [[ -n $CLIENT_CA ]]; then
+  [[ -s $CLIENT_CA ]] || die "client CA not found: $CLIENT_CA"
+  [[ -n $CLIENT_CRL ]] || die "--client-crl is required with --client-ca"
+  [[ -s $CLIENT_CRL ]] || die "client CRL not found: $CLIENT_CRL"
+  openssl x509 -in "$CLIENT_CA" -noout >/dev/null 2>&1 ||
+    die "client CA is not a PEM certificate: $CLIENT_CA"
+  if [[ $CLIENT_CA != "$CLIENT_CA_DEST" ]]; then
+    install -m 644 "$CLIENT_CA" "$CLIENT_CA_DEST"
+  fi
+  if [[ $CLIENT_CRL != "$CLIENT_CRL_DEST" ]]; then
+    install -m 644 "$CLIENT_CRL" "$CLIENT_CRL_DEST"
+  fi
+  # ocserv 1.3 resolves the certificate method through the security module;
+  # it only works as the primary method. Password + TOTP therefore becomes
+  # the alternative method: clients with a valid certificate skip it, clients
+  # without one still log in with password + TOTP.
+  CERT_AUTH_CONF=$(cat <<EOF
+auth = "certificate"
+enable-auth = "plain[passwd=/etc/ocserv/ocpasswd,otp=/etc/ocserv/users.oath]"
+ca-cert = $CLIENT_CA_DEST
+crl = $CLIENT_CRL_DEST
+cert-user-oid = 2.5.4.3
+# Groups (lan/full) are carried as OU values in the client certificate.
+cert-group-oid = 2.5.4.11
+EOF
+)
+fi
 
 install -d -m 755 /etc/ocserv /etc/ocserv/ssl /etc/ocserv/config-per-group \
   /etc/ocserv/defaults
@@ -90,11 +139,17 @@ EOF
 fi
 
 # ----- ocserv configuration ------------------------------------------------
+# Authentication directives are non-reloadable in ocserv: compare them so the
+# service is restarted only when they actually change.
+old_auth=$(grep -E '^(auth|enable-auth|ca-cert|crl|cert-user-oid|cert-group-oid) =' \
+  /etc/ocserv/ocserv.conf 2>/dev/null || true)
 cat >/etc/ocserv/ocserv.conf <<EOF
 # Managed by projects/home/proxmox/vpn/install-ocserv.sh. Do not edit by hand.
 
 # Password + TOTP. Passwords live in ocpasswd, TOTP keys in users.oath.
-auth = "plain[passwd=/etc/ocserv/ocpasswd,otp=/etc/ocserv/users.oath]"
+# When a client CA is configured, certificate authentication is primary and
+# password + TOTP is the alternative (see CERT_AUTH_CONF above).
+${CERT_AUTH_CONF:-auth = "plain[passwd=/etc/ocserv/ocpasswd,otp=/etc/ocserv/users.oath]"}
 
 tcp-port = 443
 udp-port = 443
@@ -230,7 +285,20 @@ systemctl enable ssh
 systemctl restart ssh
 ocserv --test-config
 systemctl enable ocserv
-systemctl restart ocserv
+new_auth=$(grep -E '^(auth|enable-auth|ca-cert|crl|cert-user-oid|cert-group-oid) =' \
+  /etc/ocserv/ocserv.conf)
+if systemctl is-active --quiet ocserv; then
+  if [[ $old_auth == "$new_auth" ]]; then
+    # Reloading keeps established sessions; everything else is re-read.
+    systemctl reload ocserv
+  else
+    # Authentication methods cannot be changed with reload.
+    systemctl restart ocserv
+    echo "authentication methods changed; ocserv restarted"
+  fi
+else
+  systemctl restart ocserv
+fi
 
 pin=$(openssl x509 -in /etc/ocserv/ssl/server-cert.pem -pubkey -noout \
   | openssl pkey -pubin -outform DER \
