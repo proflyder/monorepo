@@ -47,6 +47,78 @@ def balanced_indices(labels, limit):
     return selected
 
 
+def parse_pointwise_filters(text):
+    """Parse the comma-separated MixedNet pointwise widths."""
+    parts = [item.strip() for item in str(text).split(",")]
+    if any(not item for item in parts):
+        raise ValueError("Pointwise filters must not contain empty widths")
+    try:
+        filters = tuple(int(item) for item in parts)
+    except ValueError as error:
+        raise ValueError("Pointwise filters must be comma-separated integers") from error
+    if not filters or any(value <= 0 for value in filters):
+        raise ValueError("Pointwise filters must be positive integers")
+    return filters
+
+
+def _declared_architecture(cfg, changed=False):
+    keys = ("architecture", "pointwise_filters", "first_conv_filters", "repeat_in_block",
+            "mixconv_kernel_sizes", "first_conv_kernel_size", "stride", "spectrogram_length")
+    architecture = {key: cfg.get(key) for key in keys if key in cfg}
+    architecture["changed"] = changed
+    return architecture
+
+
+def apply_architecture(cfg, pointwise=None, first_conv=None, from_scratch=False):
+    """Apply optional MixedNet width overrides to a trainer config.
+
+    Streaming contract keys (kernels, stride, spectrogram length, residual
+    blocks) are deliberately untouched. Without an explicit override the config
+    is preserved verbatim, so non-MixedNet architectures keep their own fields.
+    A width that differs from the config the checkpoint was trained with cannot
+    be warm-started: Keras would either fail on shape mismatch or silently load
+    a partial model, so the guard requires random initialization instead.
+    """
+    updated = dict(cfg)
+    if pointwise is None and first_conv is None:
+        return updated, _declared_architecture(updated)
+    if str(updated.get("architecture", "mixednet")).lower() != "mixednet":
+        raise ValueError("Pointwise/first-conv width overrides apply only to mixednet")
+    current_pointwise = parse_pointwise_filters(updated["pointwise_filters"])
+    current_first = int(updated["first_conv_filters"])
+    pointwise = tuple(pointwise) if pointwise is not None else current_pointwise
+    first_conv = int(first_conv) if first_conv is not None else current_first
+    if not pointwise or any(int(value) <= 0 for value in pointwise):
+        raise ValueError("Pointwise filters must be positive integers")
+    if first_conv <= 0:
+        raise ValueError("First convolution filters must be positive")
+    repeat = updated.get("repeat_in_block")
+    if repeat:
+        blocks = [int(item) for item in str(repeat).split(",") if item.strip()]
+        if len(blocks) != len(pointwise):
+            raise ValueError("Pointwise width count must match repeat_in_block blocks")
+    if (pointwise, first_conv) != (current_pointwise, current_first) and not from_scratch:
+        raise ValueError(
+            "Changed MixedNet width requires --from-scratch; never load weights of another shape")
+    updated["pointwise_filters"] = ",".join(str(int(value)) for value in pointwise)
+    updated["first_conv_filters"] = first_conv
+    return updated, _declared_architecture(
+        updated, changed=(pointwise, first_conv) != (current_pointwise, current_first))
+
+
+def model_parameter_counts(model):
+    """Measured topology count; HDF5 file bytes are not a parameter count."""
+    import numpy as np
+    total = int(model.count_params())
+    trainable = int(sum(int(np.size(weight)) for weight in model.trainable_weights))
+    return {"total": total, "trainable": trainable}
+
+
+def export_signature(details):
+    """Plain-Python description of an exported tensor; NumPy ints are not JSON-safe."""
+    return {"shape": [int(value) for value in details["shape"]], "dtype": str(details["dtype"])}
+
+
 def freeze_batchnorm(model, batchnorm_type):
     """Freeze normalization before compile, including nested model layers."""
     count, visited = 0, set()
@@ -116,12 +188,21 @@ def main():
     parser.add_argument("--learning-rate", type=float, default=3e-5)
     parser.add_argument("--freeze-batchnorm", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--feature-mode", choices=["continuous", "reset"], default="continuous")
+    parser.add_argument("--config", type=Path,
+                        help="Absolute trainer YAML; defaults to <trainer>/ricardo.yaml")
+    parser.add_argument("--pointwise-filters", type=parse_pointwise_filters,
+                        help="MixedNet pointwise widths, e.g. 128,128,128,128 (requires --from-scratch)")
+    parser.add_argument("--first-conv-filters", type=int,
+                        help="MixedNet first convolution width, e.g. 64 (requires --from-scratch)")
     args = parser.parse_args()
     root, run = args.trainer.resolve(), args.run.resolve()
     registry_spec = importlib.util.spec_from_file_location("model_registry", Path(__file__).with_name("registry.py"))
     registry = importlib.util.module_from_spec(registry_spec)
     registry_spec.loader.exec_module(registry)
     registry_path = args.registry.resolve() if args.registry else root / "training/model-registry/ricardo"
+    config_path = args.config if args.config else root / "ricardo.yaml"
+    if not config_path.is_absolute():
+        raise SystemExit("--config must be an absolute path; the script changes to the trainer root")
     version = args.version or (run.name + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S").lower())
     if (registry_path / version).exists():
         raise FileExistsError("Registry version exists; refusing to overwrite")
@@ -139,7 +220,11 @@ def main():
     spec = importlib.util.spec_from_file_location("existing_trainer", root / "train_mww.py")
     trainer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(trainer)
-    cfg = trainer.load_config(str(root / "ricardo.yaml"))
+    cfg = trainer.load_config(str(config_path))
+    cfg, architecture = apply_architecture(cfg, args.pointwise_filters,
+                                           args.first_conv_filters, args.from_scratch)
+    architecture.update(config_path=str(config_path),
+                        config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
     cfg.update(model_name=args.model_name, learning_rate=args.learning_rate, version=args.manifest_version)
     # Redirect all exports away from the old model and from the repo root.
     trainer.OUTPUT_DIR = run / "training-output"
@@ -294,10 +379,26 @@ def main():
         if any(len(arr) == 0 or arr.shape[1:] != (204, 40) for arr in extra.values()):
             raise ValueError("Additional voice has empty or incompatible feature arrays")
     model = trainer._build_model(cfg)
+    parameters = model_parameter_counts(model)
+    architecture.update(parameters)
+    print("ARCHITECTURE", cfg.get("architecture"),
+          "POINTWISE", architecture.get("pointwise_filters"),
+          "FIRST_CONV", architecture.get("first_conv_filters"),
+          "MIXCONV", architecture.get("mixconv_kernel_sizes"),
+          "STRIDE", architecture.get("stride"),
+          "SPEC", architecture.get("spectrogram_length"),
+          "PARAMS", parameters["total"],
+          "TRAINABLE", parameters["trainable"], flush=True)
     origin_hash = None
     if not args.from_scratch:
         weights = args.base_weights.resolve() if args.base_weights else old / "model/ru_ricardo_mww.weights.h5"
-        model.load_weights(str(weights))
+        try:
+            model.load_weights(str(weights))
+        except (ValueError, RuntimeError) as error:
+            raise SystemExit(
+                "Checkpoint shapes do not match this architecture: " + str(weights)
+                + ". A width change requires --from-scratch; "
+                + "refusing to partially restore old weights") from error
         origin_hash = hashlib.sha256(weights.read_bytes()).hexdigest()
     else:
         print("RANDOM_INITIALIZATION_NO_CHECKPOINT", flush=True)
@@ -407,6 +508,7 @@ def main():
                     "real_negative": .125, "hard_negative": .125, "old_negative": .125,
                     "extra_negative": .125} if extra is not None else None,
         "feature_mode": args.feature_mode,
+        "architecture": architecture,
         "freeze_batchnorm": args.freeze_batchnorm and not args.from_scratch,
         "frozen_batchnorm_layers": frozen_bn,
         "test_used_in_training": False, "steps": args.steps}, indent=2))
@@ -444,6 +546,10 @@ def main():
     if list(inp["shape"]) != [1, 3, 40] or inp["dtype"] != np.int8 or out["dtype"] != np.uint8:
         raise RuntimeError("Export is not compatible with the deployed streaming detector")
     print("EXPORT_VERIFIED", path.name, path.stat().st_size, hashlib.sha256(path.read_bytes()).hexdigest(), flush=True)
+    provenance["export"] = {"path": path.name, "bytes": int(path.stat().st_size),
+                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                            "input": export_signature(inp), "output": export_signature(out)}
+    (run / "training-provenance.json").write_text(json.dumps(provenance, indent=2))
     # A model version is complete only after the export, all epoch weights and
     # its recipe have been copied and verified in the private append-only registry.
     with tempfile.TemporaryDirectory(prefix="registry-export-", dir=run) as temporary:

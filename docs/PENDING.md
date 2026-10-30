@@ -4,6 +4,12 @@
 
 ## Приёмка
 
+- [ ] Более ёмкий MixedNet, кандидат e22: firmware-совместимость проверена
+      (C++ 162/164 против 159/164 у v24 при 16 срабатываниях на похожих
+      словах против 17; Python-стенд дал одинаковые 161/164). Открыто: свежий
+      независимый ambient и живая приёмка; установка не выполнялась, решения
+      о замене v24 нет.
+
 - [ ] Spotify/MA: phone→speaker/transfer. Pause и next проверены 29.10
       wake-free; resume — с wake; previous для Spotify Connect исправлен через
       Spotify Web API (MA не предлагает previous transport).

@@ -247,6 +247,23 @@ class weights, cosine learning-rate schedule и сохранение каждо�
 Выбор предварительного checkpoint идёт по val_loss; окончательная приёмка
 экспорта требует непрерывной валидации и независимой проверки записей.
 
+## Более ёмкий MixedNet в том же потоковом контракте
+
+`--config PRIVATE_YAML` читает другой trainer-конфиг вместо `TRAINER/ricardo.yaml`.
+Ширину можно задать явно: `--pointwise-filters 128,128,128,128` и
+`--first-conv-filters 64`. Остальные ключи архитектуры (MixConv-ядра, stride 3,
+контекст 204×40, residual-блоки) не меняются, поэтому потоковый вход остаётся
+`int8[1,3,40]`, выход — `uint8[1,1]`. Число pointwise-ширин должно совпадать
+с `repeat_in_block`.
+
+Изменение ширины требует `--from-scratch`: попытка загрузить checkpoint другой
+формы завершается явной ошибкой, а не частичным восстановлением весов. `--config`
+должен указывать абсолютный путь, потому что скрипт меняет рабочий каталог.
+Измеренное число параметров (`model.count_params()`, не размер HDF5) и форма
+экспорта пишутся в `training-provenance.json`; каждая эпоха сохраняется отдельно,
+а выбор checkpoint для scratch-запуска по-прежнему идёт по val_loss, после чего
+обязателен непрерывный post-hoc replay validation перед единственным test.
+
 --extra-features PRIVATE_DIR добавляет positive_train.npy, positive_val.npy,
 negative_train.npy и negative_val.npy нового синтетического голоса.
 Используются только реальные hard negatives в основном manifest.
