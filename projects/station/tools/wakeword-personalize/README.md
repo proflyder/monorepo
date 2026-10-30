@@ -151,13 +151,18 @@ python3 -m unittest discover -s projects/station/tools/wakeword-personalize -p '
 
 `projects/station/configs/wakeword-personal.json` закрепляет выбранную
 персональную модель через SHA256 и private registry path, не публикуя веса.
-`wakeword-baseline.json` — исходная версия для обратного переключения.
+Сейчас в нём установленный кандидат v27
+(`v27-ambient-capacity-sel22-20261030`). `wakeword-v24.json` — pinned
+best-known/reference и профиль быстрого отката, `wakeword-v22.json` — прежний
+откат, `wakeword-baseline.json` — исходная версия для обратного переключения.
+Профиль не означает приёмку: private `active.json` хранит
+`live_voice_acceptance=pending` до живой голосовой проверки.
 
 ```sh
 python deploy.py --ha-url http://192.0.2.28:8123
-# Откат тем же способом (создаёт backup текущей модели):
+# Откат на best-known v24 тем же способом (создаёт backup текущей модели):
 python deploy.py --ha-url http://192.0.2.28:8123 \
-  --profile projects/station/configs/wakeword-baseline.json
+  --profile projects/station/configs/wakeword-v24.json
 ```
 
 Подставьте свой HA URL. Доступ берётся из приватного connection.json

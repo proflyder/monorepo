@@ -1,8 +1,8 @@
 {
-  "registry_version": "v24-ambient-scratch-20261030",
-  "model_path": "secrets/model-registry/ricardo/v24-ambient-scratch-20261030/ru_ricardo_ambient_scratch_v24_mww.tflite",
-  "manifest_path": "secrets/model-registry/ricardo/v24-ambient-scratch-20261030/ru_ricardo_ambient_scratch_v24_mww.json",
-  "model_sha256": "83b9235160151c30370ba34dc14f58b1bdbf4d61f589cf1abfe11d911314787a",
+  "registry_version": "v27-ambient-capacity-sel22-20261030",
+  "model_path": "secrets/model-registry/ricardo/v27-ambient-capacity-sel22-20261030/ru_ricardo_capacity_w128_e22_mww.tflite",
+  "manifest_path": "secrets/model-registry/ricardo/v27-ambient-capacity-sel22-20261030/ru_ricardo_capacity_w128_e22_mww.json",
+  "model_sha256": "4f645834f82331575f4c300e1b8788de48874c540082a73ef975c416b0e12444",
   "personal_weights_private": true,
   "probability_cutoff": 0.9,
   "sliding_window_size": 10

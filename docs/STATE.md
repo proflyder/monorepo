@@ -72,18 +72,24 @@
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
-- Активная модель wake word — v24 (`v24-ambient-scratch-20261030`),
-  обучена с нуля с Puriso2, личными примерами и двумя новыми ambient-дорожками.
-  Установлена по запросу пользователя model-only: HA/MA доступны, бинарник
-  Pulsar не менялся. Threshold 0.9, окно 10; SHA256 закреплён в personal-профиле.
-  На обучающем ambient: 0 событий вместо 5 у v22; это не независимая оценка.
-  На прежней ASR-assisted проверке: 161/164 против 163/164 у v22.
-  Живая приёмка и новый независимый ambient ожидаются.
-- Экспериментальный кандидат 30.10: более ёмкий MixedNet (pointwise 128×4,
-  первая свёртка 64; те же MixConv-ядра, stride 3, residual, контекст 204×40)
-  обучен с нуля, seed 42, 23 эпохи / 2300 шагов из запрошенных 15000
-  (early stop; RTX 5070, ~2 мин обучения). 138 113 параметров против 40 385,
-  int8-модель ≈207 КБ, вход `int8[1,3,40]`, выход `uint8[1,1]`.
+- Установленная модель wake word — кандидат v27
+  (`v27-ambient-capacity-sel22-20261030`, SHA256 `4f645834…b0e12444`, 207 720 Б).
+  Установлен 30.10 по прямому запросу пользователя model-only: HA/MA доступны,
+  бинарник Pulsar не менялся; threshold 0.9, окно 10. Живая голосовая приёмка
+  не выполнялась — private `active.json` фиксирует `live_voice_acceptance=pending`;
+  установка не является приёмкой.
+- Best-known/reference по решению пользователя остаётся v24
+  (`v24-ambient-scratch-20261030`, SHA256 `83b92351…314787a`) и не заменяется
+  установленным кандидатом до его живой приёмки. V24 обучена с нуля с Puriso2,
+  личными примерами и двумя новыми ambient-дорожками; на обучающем ambient
+  0 событий вместо 5 у v22 (не независимая оценка), на прежней ASR-assisted
+  проверке 161/164 против 163/164 у v22. Designation хранится private отдельно
+  от installed-записи.
+- Кандидат v27 — более ёмкий MixedNet (pointwise 128×4, первая свёртка 64;
+  те же MixConv-ядра, stride 3, residual, контекст 204×40), обучен с нуля,
+  seed 42, 23 эпохи / 2300 шагов из запрошенных 15000 (early stop; RTX 5070,
+  ~2 мин обучения). 138 113 параметров против 40 385, int8-модель ≈207 КБ,
+  вход `int8[1,3,40]`, выход `uint8[1,1]`.
   Потоковый выбор по validation среди всех 23 checkpoint: эпоха 22 даёт
   32/32 по манерам речи и 2 события на validation-наборе отрицательных
   примеров (там есть и намеренно похожие слова, это не обычный ambient
@@ -104,12 +110,17 @@
   Это небольшое улучшение относительно v24 на одном C++-стенде, а не общее
   превосходство: Python-стенд дал 161/164 одинаково с v24, обычный ambient
   на час не измерялся, 130-секундный набор — не бытовой фон.
-  Кандидат не установлен;
-  private registry `v27-ambient-capacity-sel22-20261030` (плюс `v25` —
-  отдельный val_loss-экспорт и `v26` — ранний архив выбора).
-- Откат на v22: профиль `projects/station/configs/wakeword-v22.json`
-  через `projects/station/tools/wakeword-personalize/deploy.py`.
-  Все веса сохранены private на Mac и WSL; device backup указан в
+  Offline-кандидат установлен для живой проверки; private registry
+  `v27-ambient-capacity-sel22-20261030` (плюс `v25` — отдельный val_loss-экспорт
+  и `v26` — ранний архив выбора).
+- Откат на best-known v24: профиль `projects/station/configs/wakeword-v24.json`
+  через `projects/station/tools/wakeword-personalize/deploy.py` (команда в
+  `OPERATIONS.md`). Откат на v22 остаётся отдельным профилем
+  `projects/station/configs/wakeword-v22.json`. Device backup пары v24 до
+  установки v27: `/data/pulsar/backups/model-20261030T160858Z-f28772d8`;
+  независимая private копия —
+  `secrets/local/backups/wakeword-v24-pre-v27-20261030T160839Z/`.
+  Все веса сохранены private на Mac и WSL; installed-запись и hashes —
   `secrets/model-registry/ricardo/active.json`.
 - Актуальная уточнённая разметка и PCM: `secrets/datasets/ricardo-fixed-20261030/`.
 - Приватный датасет: `secrets/datasets/ricardo-20261029/` — исходные WAV,

@@ -113,6 +113,21 @@ binaries не входят в активное дерево; приватный 
 в `secrets/local/recovery/` (не публикуется). Возврат к прежней C++-сборке не
 является штатным rollback и не должен выполняться без отдельного плана.
 
+Модель wake word меняется отдельно, model-only, без замены бинарника.
+Установлен кандидат v27; best-known/reference по решению пользователя — v24.
+Быстрый откат на v24 (в реальном запуске подставьте LAN-адрес HA из
+`secrets/NETWORK.md`; deploy.py сам проверит alarm/idle/recorder, сохранит
+backup пары и проверит hashes/HA/MA):
+
+```bash
+python3 projects/station/tools/wakeword-personalize/deploy.py \
+  --ha-url http://192.0.2.28:8123 \
+  --profile projects/station/configs/wakeword-v24.json
+```
+
+`wakeword-v22.json` — отдельный откат на v22. Установка не заменяет живую
+голосовую приёмку: private `active.json` хранит `live_voice_acceptance=pending`.
+
 После рестарта Pulsar MA переподключается сам: supervised `reload` завершает
 Sendspin-сессию goodbye-причиной `restart`, после чего MA делает redial (на
 `v0.5.2-3-gc57d521` измерено ~3 с) без рестарта add-on MA. Проверка: entity
