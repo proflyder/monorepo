@@ -1,0 +1,72 @@
+name: _quality
+
+# Reusable repository gate: audit, static gates, unit-map invariants, workflow
+# linting and secret scanning. Cheap enough to run on every change, including
+# documentation-only ones, which is why it is never routed away.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.13"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends shellcheck
+
+      - name: Install pinned actionlint
+        run: |
+          platform/ci/install-actionlint.sh "$RUNNER_TEMP/actionlint"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Repository audit (private data, links, gitlinks)
+        run: python3 platform/quality/audit_repository.py
+
+      - name: Static gates (shell/Python syntax, shellcheck, secret patterns)
+        run: python3 -m unittest discover -s platform/quality -p 'test_*.py' -v
+
+      - name: CI unit map is valid and every source/test file is routed
+        run: python3 platform/ci/check_units.py
+
+      - name: CI routing and gate tests
+        run: python3 -m unittest discover -s platform/ci -p 'test_*.py' -v
+
+      - name: Shellcheck (harness, CI scripts and deployment scripts)
+        run: |
+          shellcheck -S error \
+            platform/quality/*.sh \
+            platform/ci/*.sh \
+            projects/home/kubernetes/scheduler/*.sh \
+            projects/station/scripts/*.sh \
+            projects/home-assistant/stack/*.sh
+
+      - name: actionlint (all workflows)
+        run: actionlint -color .github/workflows/*.yml
+
+      - name: Gitleaks (working tree, pinned release with checksum)
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks dir . --redact=100 --no-banner --config=.gitleaks.toml
+          rm -f /tmp/gitleaks /tmp/gitleaks.tgz

@@ -1,7 +1,16 @@
 name: ci
 
-# Stage 1 CI: hermetic checks, no deploy and no repository secrets. Deploy
-# workflows are separate and only run from `develop` with Environments.
+# Smart CI: only the platforms and units a change actually touches.
+#
+# `changes` routes the diff onto units from platform/ci/units.yml (Go: `go list`
+# dependency closure, Android: Bazel reverse dependencies, Python: path rules)
+# and each platform then fans out a matrix of reusable workflows. `ci-ok` is the
+# single required check: green when every job succeeded or was legitimately
+# skipped.
+#
+# No deploy steps and no repository secrets: deploy workflows are separate and
+# only run from `develop` with Environments.
+
 on:
   push:
     branches: [develop]
@@ -18,219 +27,159 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.13"
-  BAZELISK_VERSION: "1.30.0"
-  BAZELISK_SHA256: "a248ae2b2b62b5baebb748f6fba7203bff1a27e5d01b55399a8406744cb539e8"
-  GITLEAKS_VERSION: "8.30.1"
-  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 
 jobs:
-  # Computes which areas changed so docs-only pushes do not pay for Bazel or
-  # Android. `workflow_dispatch` always runs the heavy jobs.
+  # Computes the affected units. Cheap: no toolchains, only a Bazel loading
+  # query for the Android graph and `go list` for Go dependencies.
   changes:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read # dorny/paths-filter lists PR files through the API
+      pull-requests: read
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      android: ${{ steps.filter.outputs.android }}
+      go_units: ${{ steps.route.outputs.go_units }}
+      android_units: ${{ steps.route.outputs.android_units }}
+      python_units: ${{ steps.route.outputs.python_units }}
+      base_sha: ${{ steps.route.outputs.base_sha }}
+      docs_only: ${{ steps.route.outputs.docs_only }}
+      deploy_control: ${{ steps.route.outputs.deploy_control }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
         with:
-          filters: |
-            backend:
-              - 'solutions/**'
-              - 'packages/**'
-              - 'projects/home/kubernetes/**'
-              - 'projects/home/e2e/**'
-              - 'platform/**'
-              - 'go.mod'
-              - 'go.sum'
-              - 'go.work'
-              - 'go.work.sum'
-              - 'MODULE.bazel'
-              - 'MODULE.bazel.lock'
-              - '.bazelrc'
-              - '.bazelversion'
-              - '.bazelignore'
-              - 'Makefile'
-              - '.github/workflows/ci.yml'
-            android:
-              - 'projects/mobile/android/**'
-              - 'platform/android/**'
-              - 'MODULE.bazel'
-              - 'MODULE.bazel.lock'
-              - '.bazelrc'
-              - '.bazelversion'
-              - '.bazelignore'
-              - '.github/workflows/ci.yml'
+          # The base revision of a PR/previous push must be in history.
+          fetch-depth: 0
 
-  # Repository audit, static gates and secret scanning. Runs on every change,
-  # including documentation-only ones.
-  quality:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Ensure base branch history
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          BASE_REF: ${{ github.base_ref || 'develop' }}
+        run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install test dependencies
+      - name: Install routing dependencies
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements-test.txt
-
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends shellcheck
-
-      - name: Repository audit (private data, links, gitlinks)
-        run: python3 platform/quality/audit_repository.py
-
-      - name: Static gates (shell/Python syntax, shellcheck, secret patterns)
-        run: python3 -m unittest discover -s platform/quality -p 'test_*.py' -v
-
-      - name: Shellcheck harness and deployment scripts
-        run: |
-          shellcheck -S error \
-            platform/quality/*.sh \
-            projects/home/kubernetes/scheduler/*.sh \
-            projects/station/scripts/*.sh \
-            projects/home-assistant/stack/*.sh
-
-      - name: Gitleaks (working tree, pinned release with checksum)
-        run: |
-          curl -sSfL -o /tmp/gitleaks.tgz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
-          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
-          /tmp/gitleaks dir . --redact=100 --no-banner --config=.gitleaks.toml
-          rm -f /tmp/gitleaks /tmp/gitleaks.tgz
-
-  # The local hermetic gate (`make test`) on a clean checkout. Tests that need
-  # ignored local sources (nested Pulsar, quasar-connect-bot) skip with a reason;
-  # the deploy control regression runs in the bazel job with built binaries.
-  test:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          # go.work requires a newer toolchain than the root go.mod minimum.
-          go-version: "1.27.x"
-          cache-dependency-path: |
-            go.sum
-            projects/station/ble-gateway/go.sum
-
-      - name: Install test dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements-test.txt
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends shellcheck
-
-      - name: make test
-        run: make test
-
-  # Backend Bazel build/test plus the scheduler deploy-control regression with
-  # real linux/amd64 release binaries.
-  bazel:
-    needs: changes
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Install pinned Bazelisk
         run: |
-          curl -sSfL -o /tmp/bazelisk \
-            "https://github.com/bazelbuild/bazelisk/releases/download/v${BAZELISK_VERSION}/bazelisk-linux-amd64"
-          echo "${BAZELISK_SHA256}  /tmp/bazelisk" | sha256sum -c -
-          sudo install -m 0755 /tmp/bazelisk /usr/local/bin/bazelisk
+          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/bazel
-            ~/.cache/bazel-disk
             ~/.cache/bazelisk
-          key: bazel-backend-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'go.sum') }}
+          key: bazel-plan-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'go.sum') }}
           restore-keys: |
-            bazel-backend-${{ runner.os }}-
+            bazel-plan-${{ runner.os }}-
 
-      - name: bazel build
-        run: bazelisk build //solutions/... //packages/...
+      # `workflow_dispatch` intentionally runs every unit.
+      - name: Route affected units
+        id: route
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          base="${PR_BASE_SHA:-${PUSH_BEFORE_SHA}}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            python3 platform/ci/affected.py --all --bazel "$RUNNER_TEMP/bazelisk" --format github \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            python3 platform/ci/affected.py --base "$base" --bazel "$RUNNER_TEMP/bazelisk" \
+              --format github | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - name: bazel test
-        run: bazelisk test //solutions/... //packages/... --test_output=errors
+  # Repository-wide gates: audit, static checks, unit-map invariants, Gitleaks.
+  # Cheap and always worth running, even for documentation-only changes.
+  quality:
+    needs: changes
+    if: always()
+    uses: ./.github/workflows/_quality.yml
 
-      - name: scheduler deploy control regression
-        run: make test-deploy-control BAZEL=bazelisk
+  # One matrix entry per affected Go unit: scheduler, ha-bridge, alarm,
+  # ble-gateway or the shared packages.
+  go:
+    needs: changes
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.go_units != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.go_units) }}
+    uses: ./.github/workflows/_go.yml
+    with:
+      unit: ${{ matrix.id }}
+      workdir: ${{ matrix.workdir }}
+      packages: ${{ matrix.packages }}
+      race: ${{ matrix.race }}
+      build_packages: ${{ matrix.build_packages }}
+      deploy_control: false
 
-  # Debug APK as an artifact plus the Android Bazel tests. Debug-signed only;
-  # this is not a release build.
+  # One matrix entry per affected application or shared Kotlin library unit.
   android:
     needs: changes
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true')
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.android_units != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.android_units) }}
+    uses: ./.github/workflows/_android.yml
+    with:
+      unit: ${{ matrix.id }}
+      test_targets: ${{ matrix.test_targets }}
+      build_targets: ${{ matrix.build_targets }}
+      universe: ${{ matrix.universe }}
+      artifact: ${{ matrix.artifact }}
+      artifact_name: ${{ matrix.artifact_name }}
+      base_sha: ${{ needs.changes.outputs.base_sha }}
+      precise_targets: true
+
+  # One matrix entry per affected Python project suite.
+  python:
+    needs: changes
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.python_units != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.python_units) }}
+    uses: ./.github/workflows/_python.yml
+    with:
+      unit: ${{ matrix.id }}
+      suites: ${{ matrix.suites }}
+      compile: ${{ matrix.compile }}
+
+  # Expensive regression with real linux/amd64 release binaries. Only when the
+  # scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.
+  deploy-control:
+    needs: changes
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.deploy_control == 'true'
+    uses: ./.github/workflows/_go.yml
+    with:
+      unit: deploy-control
+      packages: ""
+      deploy_control: true
+
+  # Single required check for the branch ruleset. Green only when every
+  # dispatched job succeeded or was legitimately skipped.
+  ci-ok:
+    if: always()
+    needs: [changes, quality, go, android, python, deploy-control]
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
-
-      - name: Install pinned Bazelisk
-        run: |
-          curl -sSfL -o /tmp/bazelisk \
-            "https://github.com/bazelbuild/bazelisk/releases/download/v${BAZELISK_VERSION}/bazelisk-linux-amd64"
-          echo "${BAZELISK_SHA256}  /tmp/bazelisk" | sha256sum -c -
-          sudo install -m 0755 /tmp/bazelisk /usr/local/bin/bazelisk
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          sparse-checkout: platform/ci
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          path: |
-            ~/.cache/bazel
-            ~/.cache/bazel-disk
-            ~/.cache/bazelisk
-          key: bazel-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
-          restore-keys: |
-            bazel-android-${{ runner.os }}-
-
-      # setup-android accepts the SDK licenses by default; install exactly the
-      # platform/build-tools pinned in MODULE.bazel.
-      - name: Install Android SDK packages
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
-
-      - name: bazel test (android)
-        run: |
-          bazelisk test \
-            //projects/mobile/android:android_tests \
-            //projects/mobile/android/app:main_activity_smoke_test \
-            --test_output=errors
-
-      - name: bazel build debug APK
-        run: bazelisk build //projects/mobile/android:app
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: app-debug
-          path: bazel-bin/projects/mobile/android/app/app.apk
-          if-no-files-found: error
-          retention-days: 14
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Verify every required job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 platform/ci/ci_gate.py

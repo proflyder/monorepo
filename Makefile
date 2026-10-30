@@ -1,6 +1,8 @@
-.PHONY: test test-e2e coverage bazel-build bazel-test test-deploy-control
+.PHONY: test test-e2e coverage bazel-build bazel-test test-deploy-control ci-affected ci-units
 
 BAZEL ?= bazel
+BASE ?= origin/develop
+HEAD ?= HEAD
 
 test:
 	./platform/quality/run-tests.sh
@@ -31,3 +33,11 @@ test-deploy-control:
 	cp -f bazel-bin/solutions/ha-bridge/cmd/ha-bridge/ha-bridge_/ha-bridge projects/home/kubernetes/scheduler/dist/ha-bridge
 	cp -f bazel-bin/solutions/ha-bridge/cmd/ha-control/ha-control_/ha-control projects/home/kubernetes/scheduler/dist/ha-control
 	REQUIRE_DEPLOY_CONTROL=1 bash projects/home/kubernetes/scheduler/test_deploy_control.sh
+
+# Which CI units and platform workflows a change range selects.
+ci-affected:
+	./platform/ci/affected.sh --base $(BASE) --head $(HEAD) --format text
+
+# Validate the unit map and prove every tracked source/test file is routed.
+ci-units:
+	python3 platform/ci/check_units.py

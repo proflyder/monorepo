@@ -1,0 +1,172 @@
+name: _android
+
+# Reusable Android platform workflow: one matrix entry per affected application
+# (or shared Kotlin library) unit. The unit is selected by the Bazel reverse
+# dependency graph in ci.yml; inside the unit target-determinator narrows the
+# target list further and falls back to every declared target on any failure.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.yml
+        required: true
+        type: string
+      test_targets:
+        description: Space separated Bazel test targets owned by the unit
+        required: false
+        default: ""
+        type: string
+      build_targets:
+        description: Space separated Bazel build targets owned by the unit
+        required: false
+        default: ""
+        type: string
+      universe:
+        description: Bazel query expression covering all android/kotlin targets
+        required: false
+        default: "//..."
+        type: string
+      artifact:
+        description: Path of the build artifact to upload (empty to skip)
+        required: false
+        default: ""
+        type: string
+      artifact_name:
+        required: false
+        default: ""
+        type: string
+      base_sha:
+        description: Base revision for target narrowing (empty disables it)
+        required: false
+        default: ""
+        type: string
+      precise_targets:
+        description: Narrow the target list with target-determinator
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: android / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      # Full history: target-determinator analyses the base revision worktree.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Ensure base revision history
+        if: inputs.base_sha != ''
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          # A shallow or advanced base branch may not contain the PR base
+          # commit; fetching it by SHA keeps target-determinator usable.
+          git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA" || true
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+      - name: Install pinned Bazelisk
+        run: |
+          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazel-disk
+            ~/.cache/bazelisk
+            ~/.cache/target-determinator
+          key: bazel-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          restore-keys: |
+            bazel-android-${{ runner.os }}-
+
+      # setup-android accepts the SDK licenses by default; install exactly the
+      # platform/build-tools pinned in MODULE.bazel.
+      - name: Install Android SDK packages
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Select affected targets
+        id: select
+        if: inputs.precise_targets && inputs.base_sha != ''
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          TEST_CANDIDATES: ${{ inputs.test_targets }}
+          BUILD_CANDIDATES: ${{ inputs.build_targets }}
+          UNIVERSE: ${{ inputs.universe }}
+        run: |
+          if [ -z "$TEST_CANDIDATES" ] && [ -z "$BUILD_CANDIDATES" ]; then
+            exit 0
+          fi
+          if ! platform/ci/install-target-determinator.sh "$RUNNER_TEMP/target-determinator" >/dev/null; then
+            echo "target-determinator install failed; running every declared target" >&2
+            {
+              echo "test_targets=${TEST_CANDIDATES}"
+              echo "build_targets=${BUILD_CANDIDATES}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tests="$(platform/ci/bazel-targets.sh \
+            --base "$BASE_SHA" --candidates "$TEST_CANDIDATES" --universe "$UNIVERSE" \
+            --bazel "$RUNNER_TEMP/bazelisk" --td "$RUNNER_TEMP/target-determinator")"
+          builds="$(platform/ci/bazel-targets.sh \
+            --base "$BASE_SHA" --candidates "$BUILD_CANDIDATES" --universe "$UNIVERSE" \
+            --bazel "$RUNNER_TEMP/bazelisk" --td "$RUNNER_TEMP/target-determinator")"
+          {
+            echo "test_targets=${tests}"
+            echo "build_targets=${builds}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve target lists
+        id: targets
+        env:
+          SELECTED_TESTS: ${{ steps.select.outputs.test_targets }}
+          SELECTED_BUILDS: ${{ steps.select.outputs.build_targets }}
+          DECLARED_TESTS: ${{ inputs.test_targets }}
+          DECLARED_BUILDS: ${{ inputs.build_targets }}
+        run: |
+          # No narrowing step (disabled, no base revision): run everything the
+          # unit declares. Otherwise use the narrowed subset, including empty.
+          if [ "${{ inputs.precise_targets }}" = "true" ] && [ -n "${{ inputs.base_sha }}" ]; then
+            tests="$SELECTED_TESTS"
+            builds="$SELECTED_BUILDS"
+          else
+            tests="$DECLARED_TESTS"
+            builds="$DECLARED_BUILDS"
+          fi
+          {
+            echo "test_targets=${tests}"
+            echo "build_targets=${builds}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: bazel test ${{ inputs.unit }}
+        if: steps.targets.outputs.test_targets != ''
+        run: |
+          read -r -a targets <<< "${{ steps.targets.outputs.test_targets }}"
+          bazelisk test "${targets[@]}" --test_output=errors
+
+      - name: bazel build ${{ inputs.unit }}
+        if: steps.targets.outputs.build_targets != ''
+        run: |
+          read -r -a targets <<< "${{ steps.targets.outputs.build_targets }}"
+          bazelisk build "${targets[@]}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.artifact != '' && steps.targets.outputs.build_targets != ''
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact }}
+          if-no-files-found: error
+          retention-days: 14

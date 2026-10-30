@@ -1,0 +1,289 @@
+# CI unit map: the single source of truth for "what runs when".
+#
+# A *unit* is the smallest thing CI can run on its own: one service, one
+# application, one shared library or one test suite directory. Each unit maps
+# 1:1 to a matrix entry of one platform workflow (`.github/workflows/_*.yml`).
+#
+# Routing is computed by `platform/ci/affected.py`:
+#   * go       - dependency closure from `go list -deps` of the unit's packages,
+#                so a shared package change selects every importing unit.
+#   * android  - reverse dependencies from the Bazel loading graph
+#                (`bazel query --output=xml`), mapped back to unit names by
+#                `bazel.roots`, so a Kotlin library change selects only the
+#                applications that depend on it.
+#   * python   - path rules below plus optional declarative `depends_on`.
+#   * quality  - always runs; owns repository-wide checks and every shell script.
+#
+# Adding a unit: copy a block, set unique `id`, `platform`, `paths` and the
+# platform-specific commands. `platform/ci/check_units.py` enforces that every
+# tracked test/source file is owned by at least one unit, so a new test cannot
+# silently fall out of CI.
+
+version: 1
+
+# Paths whose change invalidates more than the units whose `paths` match.
+# `platforms: ["*"]` means every platform. Shared libraries are deliberately
+# absent here: they reach their consumers through the dependency engines
+# (`go list -deps`, Bazel reverse dependencies), not through path globs.
+invalidations:
+  - paths:
+      - MODULE.bazel
+      - MODULE.bazel.lock
+      - .bazelrc
+      - .bazelversion
+      - .bazelignore
+      - BUILD.bazel
+      - platform/bazel/**
+    platforms: ["*"]
+  - paths:
+      - platform/android/**
+    platforms: [android]
+  - paths:
+      - go.mod
+      - go.sum
+      - go.work
+      - go.work.sum
+    platforms: [go]
+  - paths:
+      - requirements-test.txt
+    platforms: [python, quality]
+  - paths:
+      - .github/workflows/**
+      - platform/ci/**
+    platforms: [quality]
+
+# The scheduler deploy-control regression is expensive and only meaningful for
+# the scheduler/bridge binaries and the Kubernetes deployment manifests.
+deploy_control:
+  units: [scheduler, ha-bridge]
+  paths:
+    - projects/home/kubernetes/scheduler/**
+
+units:
+  # ---------------------------------------------------------------- Go --------
+  - id: scheduler
+    platform: go
+    title: "solutions/scheduler (scheduler service)"
+    paths:
+      - solutions/scheduler/**
+    go:
+      module: "."
+      packages:
+        - ./solutions/scheduler/...
+      race: true
+      build:
+        - ./solutions/scheduler/cmd/scheduler
+
+  - id: ha-bridge
+    platform: go
+    title: "solutions/ha-bridge (home executor + ha-control)"
+    paths:
+      - solutions/ha-bridge/**
+    go:
+      module: "."
+      packages:
+        - ./solutions/ha-bridge/...
+      race: true
+      build:
+        - ./solutions/ha-bridge/cmd/ha-bridge
+        - ./solutions/ha-bridge/cmd/ha-control
+
+  - id: alarm
+    platform: go
+    title: "solutions/alarm (legacy AlarmService facade)"
+    paths:
+      - solutions/alarm/**
+    go:
+      module: "."
+      packages:
+        - ./solutions/alarm/...
+      race: false
+      build:
+        - ./solutions/alarm/cmd/alarm
+
+  - id: ble-gateway
+    platform: go
+    title: "projects/station/ble-gateway (separate Go module, outside Bazel)"
+    paths:
+      - projects/station/ble-gateway/**
+    go:
+      module: ./projects/station/ble-gateway
+      packages:
+        - ./...
+      race: false
+      build:
+        - ./...
+
+  - id: shared-go-packages
+    platform: go
+    title: "packages/go + packages/proto (shared libraries, no own consumers)"
+    paths:
+      - packages/go/**
+      - packages/proto/**
+    go:
+      module: "."
+      packages:
+        - ./packages/...
+      race: false
+
+  # ----------------------------------------------------------- Android --------
+  # One unit per application; shared Kotlin libraries are their own units and
+  # reach applications through the Bazel graph, not through path globs.
+  - id: android-app
+    platform: android
+    title: "projects/mobile/android (Home client, dev.proflyder.home)"
+    paths:
+      - projects/mobile/android/**
+    bazel:
+      roots:
+        - //projects/mobile/android
+      test_targets:
+        - //projects/mobile/android:android_tests
+        - //projects/mobile/android/app:main_activity_smoke_test
+      build_targets:
+        - //projects/mobile/android:app
+      artifact: bazel-bin/projects/mobile/android/app/app.apk
+      artifact_name: android-app-debug
+
+  - id: kotlin-shared
+    platform: android
+    title: "packages/kotlin (shared Kotlin libraries)"
+    paths:
+      - packages/kotlin/**
+    bazel:
+      roots:
+        - //packages/kotlin
+      test_targets:
+        - //packages/kotlin/core:core_test
+        - //packages/kotlin/core:operation_test
+
+  # ------------------------------------------------------------ Python --------
+  - id: ha-voice
+    platform: python
+    title: "projects/home-assistant/ha-voice"
+    paths:
+      - projects/home-assistant/ha-voice/**
+    python:
+      suites:
+        - projects/home-assistant/ha-voice
+
+  - id: hermes
+    platform: python
+    title: "projects/home-assistant/hermes"
+    paths:
+      - projects/home-assistant/hermes/**
+    python:
+      suites:
+        - projects/home-assistant/hermes
+
+  - id: ha-stack
+    platform: python
+    title: "projects/home-assistant/stack"
+    paths:
+      - projects/home-assistant/stack/**
+    python:
+      suites:
+        - projects/home-assistant/stack
+
+  - id: ha-deploy
+    platform: python
+    title: "projects/home-assistant/deploy"
+    paths:
+      - projects/home-assistant/deploy/**
+    python:
+      suites:
+        - projects/home-assistant/deploy
+
+  - id: proxmox
+    platform: python
+    title: "projects/home/proxmox (+ vpn, wifi-uplink)"
+    paths:
+      - projects/home/proxmox/**
+    python:
+      suites:
+        - projects/home/proxmox
+        - projects/home/proxmox/vpn
+        - projects/home/proxmox/wifi-uplink
+
+  - id: station-scripts
+    platform: python
+    title: "projects/station/scripts"
+    paths:
+      - projects/station/scripts/**
+    python:
+      suites:
+        - projects/station/scripts
+
+  - id: station-tools
+    platform: python
+    title: "projects/station/tools (voice-recorder, wakeword-personalize, root kit)"
+    paths:
+      - projects/station/tools/**
+    python:
+      suites:
+        - projects/station/tools/voice-recorder
+        - projects/station/tools/wakeword-personalize
+      compile:
+        - projects/station/tools/quasar-root-kit
+
+  - id: home-e2e
+    platform: python
+    title: "projects/home/e2e (local process smoke, read-only)"
+    paths:
+      - projects/home/e2e/**
+    python:
+      compile:
+        - projects/home/e2e
+
+  # Live-only scripts: no hermetic tests exist, so these units run a compile
+  # gate and are kept so a syntax error still fails CI.
+  - id: ha-e2e
+    platform: python
+    title: "projects/home-assistant/e2e (live HA/Hermes scripts)"
+    paths:
+      - projects/home-assistant/e2e/**
+    python:
+      compile:
+        - projects/home-assistant/e2e
+
+  - id: ha-tools
+    platform: python
+    title: "projects/home-assistant/tools (tts-lab)"
+    paths:
+      - projects/home-assistant/tools/**
+    python:
+      compile:
+        - projects/home-assistant/tools/tts-lab
+
+  - id: station-e2e
+    platform: python
+    title: "projects/station/e2e (live gateway checks)"
+    paths:
+      - projects/station/e2e/**
+    python:
+      compile:
+        - projects/station/e2e
+
+  - id: scheduler-deploy
+    platform: python
+    title: "projects/home/kubernetes/scheduler (deployment preflight)"
+    paths:
+      - projects/home/kubernetes/scheduler/**
+    python:
+      suites:
+        - projects/home/kubernetes/scheduler
+
+  # ----------------------------------------------------------- Quality --------
+  # Always runs: repository audit, static gates, shellcheck, secret scan and
+  # the CI unit-map invariant check.
+  - id: repository
+    platform: quality
+    title: "repository-wide gates"
+    paths:
+      - platform/**
+      - docs/**
+      - .github/**
+      - Makefile
+      - requirements-test.txt
+      - .gitleaks.toml
+      - "**/*.sh"

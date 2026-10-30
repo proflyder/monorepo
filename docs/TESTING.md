@@ -158,40 +158,147 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
 
 `.github/workflows/ci.yml` — этап 1: hermetic-проверки без деплоя и без
 секретов. Триггеры: push и pull request в `develop`, ручной
-`workflow_dispatch`; `permissions: contents: read`, `concurrency` отменяет
-устаревший прогон только для PR.
+`workflow_dispatch` (он прогоняет все юниты); `permissions: contents: read`,
+`concurrency` отменяет устаревший прогон только для PR.
 
-| Job | Что делает | Таймаут |
+### Маршрутизация по юнитам
+
+CI не гоняет всё на каждый push. Единица запуска — **юнит**: один сервис,
+одно приложение, общая библиотека или каталог тестов. Юнит = одна запись в
+matrix одного платформенного workflow.
+
+| Платформа | Reusable workflow | Что делает юнит |
 |---|---|---|
-| `changes` | определяет затронутые области (`dorny/paths-filter`) | — |
-| `quality` | `audit_repository.py`, static gates, shellcheck, Gitleaks 8.30.1 | 15 мин |
-| `test` | `make test` на чистом checkout | 30 мин |
-| `bazel` | Bazelisk, `bazel build/test //solutions/... //packages/...`, deploy control regression | 45 мин |
-| `android` | Android SDK 36, Android-тесты, debug APK в artifact | 60 мин |
+| go | `_go.yml` | `go vet`, `go test` (`-race` где объявлено), `go build` бинарей |
+| android | `_android.yml` | JDK 21 + SDK 36, `bazel test`/`build`, APK в artifact |
+| python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
+| quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
-`bazel` и `android` не запускаются на изменениях только в документации.
-Версии сторонних actions закреплены commit SHA; Bazelisk `1.30.0` и
-Gitleaks `8.30.1` скачиваются с проверкой sha256.
+`ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
+workflow → `ci-ok`. Отдельного generic Bazel-workflow нет: Bazel — внутренний
+инструмент `_android.yml` и deploy-control регрессии, а не платформа.
+
+`changes` выдаёт outputs `go_units`, `android_units`, `python_units`,
+`deploy_control`, `base_sha`, `docs_only`; каждый output — JSON-массив записей
+matrix. Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
+
+### Карта юнитов
+
+`platform/ci/units.yml` — единственный источник правды: `id`, `platform`,
+`paths`, способ запуска (`go.packages`, `bazel.test_targets`, `python.suites`)
+и Bazel-корни для сопоставления графа с юнитами. Рядом:
+
+* `invalidations` — пути, которые валят больше юнитов, чем совпало по `paths`
+  (`MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `BUILD.bazel`, toolchain-файлы
+  → все платформы; `go.mod/go.sum/go.work` → все go-юниты; `platform/android/**`
+  → все android-юниты; `requirements-test.txt` → python+quality).
+* `deploy_control` — какие go-юниты и пути включают дорогую регрессию
+  `make test-deploy-control` (scheduler, ha-bridge/ha-control,
+  `projects/home/kubernetes/scheduler/**`).
+
+### Как считается затронутость
+
+| Платформа | Источник зависимостей | Пример |
+|---|---|---|
+| go | `go list -deps` пакетов юнита | правка `packages/proto` выбирает все юниты, которые его импортируют |
+| android | обратные зависимости Bazel (`bazel query --output=xml`, loading phase) | правка `packages/kotlin/core` выбирает `kotlin-shared` и только те приложения, что от него зависят |
+| python | пути юнита (+ `depends_on`) | правка `projects/home/proxmox/**` выбирает `proxmox` |
+| quality | всегда | audit/Gitleaks/shellcheck идут на любом изменении |
+
+Android-граф берётся из loading-фазы намеренно: он не требует JDK и Android
+SDK, поэтому маршрутизация дешёвая и не может «сломаться из-за toolchain».
+Изменённый файл сопоставляется с `rule-input` (source file); для нового,
+удалённого файла или правки `BUILD.bazel`/`.bzl` берётся весь пакет — это
+безопасное over-approximation.
+
+### Fallback: только «больше», никогда «ничего»
+
+* `MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `.bazelignore`, `BUILD.bazel`,
+  `platform/bazel/**` → все платформы и все юниты;
+* `go list` упал → все go-юниты; `bazel query` упал → все android-юниты;
+* база не определена (новый push, `workflow_dispatch`) → все юниты
+  (`affected.py --all`);
+* база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
+
+Внутри android-юнита список целей дополнительно сужается
+`target-determinator` (`v0.34.0`, sha256 закреплён в
+`platform/ci/install-target-determinator.sh`). Он анализирует граф базовой
+ревизии, поэтому запускается в job с JDK/SDK и полной историей; при любой
+ошибке, таймауте или отсутствии бинаря `platform/ci/bazel-targets.sh` печатает
+весь объявленный список целей.
+
+### Инварианты и проверки
+
+`platform/ci/check_units.py` падает, если:
+
+* в карте дубли id, неизвестная платформа, пустые `paths` или слишком широкий
+  шаблон (`**`);
+* android-юнит не объявил `bazel.roots`, `test_targets` или цель вне корней;
+* `depends_on` ссылается на несуществующий юнит;
+* объявленный python-suite не содержит `test_*.py` (для каталогов без
+  герметичных тестов есть `python.compile`: только `compileall`);
+* **любой tracked `*.go`/`*.py`/`*.kt`/`*.sh`/`*.bzl`/`BUILD.bazel` не
+  принадлежит ни одному юниту** — новый тест не может молча выпасть из CI.
+
+Тесты маршрутизатора: `platform/ci/test_affected.py` (включая фикстуру
+`testdata/units-two-apps.yml` с двумя Android-приложениями и общим
+Kotlin-юнитом).
+
+### Расширение
+
+Новая платформа (например Rust): добавить reusable workflow `_rust.yml` с
+inputs юнита, добавить `platform: rust` в `units.yml` (`cargo`-поля), научить
+`affected.py` считать затронутые юниты (для Cargo — `cargo metadata`/
+`cargo tree`, для Bazel-целей — `bazel.roots`, как у android) и добавить job с
+matrix в `ci.yml`. Новый юнит — это новая запись в `units.yml` и путь в
+`paths`; отдельный job не нужен.
+
+### Локальное воспроизведение
+
+```bash
+# какие юниты выбрал бы CI для диапазона (по умолчанию origin/develop...HEAD)
+make ci-affected
+platform/ci/affected.sh --base origin/develop --format json
+platform/ci/affected.sh --base HEAD~3 --format text
+
+# имитация конкретного изменения без коммита
+platform/ci/affected.sh --changed-file solutions/scheduler/internal/store/tick.go
+platform/ci/affected.sh --changed-file packages/kotlin/core/src/main/kotlin/.../TimeText.kt
+
+# принудительно все юниты (то же, что workflow_dispatch)
+platform/ci/affected.sh --all
+
+make ci-units                                   # инварианты карты юнитов
+python3 -m unittest discover -s platform/ci -p 'test_*.py' -v
+make test                                       # герметичный gate (включает CI-тесты)
+make test-deploy-control BAZEL=bazelisk         # регрессия deploy control
+actionlint .github/workflows/*.yml
+shellcheck -S error platform/quality/*.sh platform/ci/*.sh \
+  projects/home/kubernetes/scheduler/*.sh projects/station/scripts/*.sh
+```
+
+`affected.sh` только читает Git и граф загрузки Bazel: он ничего не собирает,
+не деплоит и не трогает устройства. Версии сторонних actions закреплены
+commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.0`, actionlint
+`1.7.12`, target-determinator `0.34.0` и Gitleaks `8.30.1` скачиваются с
+проверкой sha256.
 
 На чистом checkout (CI) отсутствуют игнорируемые источники, поэтому
 `make test` явно печатает `SKIP` для тестов, которым нужен nested Pulsar
 (`projects/station/upstream/pulsar-rust/installer`) или
 `projects/station/resources/quasar-connect-bot`; локально, где источники
 есть, те же тесты выполняются. `test_deploy_control.sh` требует собранные
-бинарники в `projects/home/kubernetes/scheduler/dist/`: CI собирает их в
-job `bazel` через `make test-deploy-control`; без бинарников `make test`
+бинарники в `projects/home/kubernetes/scheduler/dist/`: CI собирает их в job
+`deploy-control` через `make test-deploy-control`; без бинарников `make test`
 печатает `SKIP` с причиной, а `REQUIRE_DEPLOY_CONTROL=1` превращает это
 в ошибку.
 
-Локальное воспроизведение CI:
+### Required check
 
-```bash
-make test
-make test-deploy-control BAZEL=bazelisk   # после сборки dist/ прогонит deploy control
-actionlint .github/workflows/ci.yml
-shellcheck -S error platform/quality/*.sh \
-  projects/home/kubernetes/scheduler/*.sh projects/station/scripts/*.sh
-```
+`ci-ok` (`if: always()`) — единственный required status check для ruleset
+ветки `develop`. Он зелёный только если все зависимые job'ы завершились
+`success` или законно `skipped`; любой `failure`/`cancelled` (включая упавший
+`changes`) делает его красным. Логика вынесена в `platform/ci/ci_gate.py`.
 
 Pulsar собирается и релизится в своём репозитории; монорепо в CI его не
 собирает. Деплой (этапы 2–3) — отдельные workflows с Environment и ручным

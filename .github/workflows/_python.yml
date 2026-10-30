@@ -1,0 +1,66 @@
+name: _python
+
+# Reusable Python platform workflow: one matrix entry per project suite. Runs a
+# syntax compile of every file in the unit plus hermetic unittest discovery.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.yml
+        required: true
+        type: string
+      suites:
+        description: Space separated directories with hermetic unittest suites
+        required: false
+        default: ""
+        type: string
+      compile:
+        description: Space separated directories that only need a syntax compile
+        required: false
+        default: ""
+        type: string
+      python_version:
+        required: false
+        default: "3.13"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: python / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+
+      - name: Compile ${{ inputs.unit }}
+        if: inputs.compile != ''
+        run: |
+          read -r -a directories <<< "${{ inputs.compile }}"
+          for directory in "${directories[@]}"; do
+            echo "== compile: ${directory} =="
+            python3 -m compileall -q "$directory"
+          done
+
+      - name: Test ${{ inputs.unit }}
+        if: inputs.suites != ''
+        run: |
+          read -r -a suites <<< "${{ inputs.suites }}"
+          for suite in "${suites[@]}"; do
+            echo "== compile: ${suite} =="
+            python3 -m compileall -q "$suite"
+            echo "== unittest: ${suite} =="
+            python3 -m unittest discover -s "$suite" -p 'test_*.py' -v
+          done

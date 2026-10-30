@@ -1,0 +1,73 @@
+# Fixture: two Android applications sharing one Kotlin library unit.
+# `platform/ci/test_affected.py` asserts that a change in `libs/shared` selects
+# only `app-one` (which depends on it) and never `app-two`.
+version: 1
+
+invalidations:
+  - paths:
+      - MODULE.bazel
+      - .bazelrc
+    platforms: ["*"]
+
+deploy_control:
+  units: [sched]
+
+units:
+  - id: app-one
+    platform: android
+    title: "apps/one"
+    paths:
+      - apps/one/**
+    bazel:
+      roots:
+        - //apps/one
+      test_targets:
+        - //apps/one:one_test
+      build_targets:
+        - //apps/one:app
+      artifact: bazel-bin/apps/one/app.apk
+      artifact_name: app-one-debug
+
+  - id: app-two
+    platform: android
+    title: "apps/two"
+    paths:
+      - apps/two/**
+    bazel:
+      roots:
+        - //apps/two
+      test_targets:
+        - //apps/two:two_test
+      build_targets:
+        - //apps/two:app
+
+  - id: shared-kotlin
+    platform: android
+    title: "libs/shared"
+    paths:
+      - libs/shared/**
+    bazel:
+      roots:
+        - //libs/shared
+      test_targets:
+        - //libs/shared:shared_test
+
+  - id: sched
+    platform: go
+    title: "go/sched"
+    paths:
+      - go/sched/**
+    go:
+      module: "."
+      packages:
+        - ./go/sched/...
+      race: true
+      build:
+        - ./go/sched/cmd/sched
+
+  - id: repository
+    platform: quality
+    title: "repository gates"
+    paths:
+      - platform/**
+      - "**/*.sh"

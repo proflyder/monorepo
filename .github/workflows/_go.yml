@@ -1,0 +1,113 @@
+name: _go
+
+# Reusable Go platform workflow. Called once per affected Go unit (service,
+# module or shared package) from ci.yml; the unit provides its packages,
+# working directory and the binaries it owns.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.yml
+        required: true
+        type: string
+      workdir:
+        description: Go module directory (".", or e.g. ./projects/station/ble-gateway)
+        required: false
+        default: "."
+        type: string
+      packages:
+        description: Space separated package patterns for vet/test
+        required: false
+        default: ""
+        type: string
+      race:
+        description: Run the test binary with -race
+        required: false
+        default: false
+        type: boolean
+      build_packages:
+        description: Space separated packages that must compile into binaries
+        required: false
+        default: ""
+        type: string
+      deploy_control:
+        description: Run the scheduler deploy-control regression
+        required: false
+        default: false
+        type: boolean
+      go_version:
+        required: false
+        default: "1.27.x"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          # go.work requires a newer toolchain than the root go.mod minimum.
+          go-version: ${{ inputs.go_version }}
+          cache-dependency-path: |
+            go.sum
+            projects/station/ble-gateway/go.sum
+
+      - name: Download modules
+        if: inputs.packages != ''
+        working-directory: ${{ inputs.workdir }}
+        run: go mod download
+
+      - name: go vet
+        if: inputs.packages != ''
+        working-directory: ${{ inputs.workdir }}
+        run: |
+          read -r -a packages <<< "${{ inputs.packages }}"
+          go vet "${packages[@]}"
+
+      - name: go test
+        if: inputs.packages != ''
+        working-directory: ${{ inputs.workdir }}
+        run: |
+          read -r -a packages <<< "${{ inputs.packages }}"
+          if [ "${{ inputs.race }}" = "true" ]; then
+            go test -race "${packages[@]}"
+          else
+            go test "${packages[@]}"
+          fi
+
+      - name: go build
+        if: inputs.build_packages != ''
+        working-directory: ${{ inputs.workdir }}
+        run: |
+          read -r -a packages <<< "${{ inputs.build_packages }}"
+          mkdir -p "$RUNNER_TEMP/gobuild"
+          go build -o "$RUNNER_TEMP/gobuild/" "${packages[@]}"
+
+      - name: Install pinned Bazelisk
+        if: inputs.deploy_control
+        run: |
+          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: inputs.deploy_control
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazel-disk
+            ~/.cache/bazelisk
+          key: bazel-deploy-control-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'go.sum') }}
+          restore-keys: |
+            bazel-deploy-control-${{ runner.os }}-
+
+      - name: scheduler deploy control regression
+        if: inputs.deploy_control
+        run: make test-deploy-control BAZEL="$RUNNER_TEMP/bazelisk"

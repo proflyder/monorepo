@@ -1,0 +1,31 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<!-- Synthetic Bazel loading graph: two Android applications, one of which
+     depends on a shared Kotlin library. Used to prove that unit routing uses
+     reverse dependencies rather than path globs. -->
+<query version="2">
+    <rule class="kt_android_library" location="apps/one/BUILD.bazel:1:1" name="//apps/one:lib">
+        <list name="srcs">
+            <label value="//apps/one:src/One.kt"/>
+        </list>
+        <rule-input name="//apps/one:src/One.kt"/>
+        <rule-input name="//libs/shared:shared"/>
+    </rule>
+    <rule class="kt_android_local_test" location="apps/one/BUILD.bazel:9:1" name="//apps/one:one_test">
+        <rule-input name="//apps/one:lib"/>
+        <rule-input name="//apps/one:src/OneTest.kt"/>
+    </rule>
+    <rule class="kt_android_library" location="apps/two/BUILD.bazel:1:1" name="//apps/two:lib">
+        <rule-input name="//apps/two:src/Two.kt"/>
+    </rule>
+    <rule class="kt_android_local_test" location="apps/two/BUILD.bazel:9:1" name="//apps/two:two_test">
+        <rule-input name="//apps/two:lib"/>
+        <rule-input name="//apps/two:src/TwoTest.kt"/>
+    </rule>
+    <rule class="kt_jvm_library" location="libs/shared/BUILD.bazel:1:1" name="//libs/shared:shared">
+        <rule-input name="//libs/shared:src/Shared.kt"/>
+    </rule>
+    <rule class="kt_jvm_test" location="libs/shared/BUILD.bazel:9:1" name="//libs/shared:shared_test">
+        <rule-input name="//libs/shared:shared"/>
+        <rule-input name="//libs/shared:src/SharedTest.kt"/>
+    </rule>
+</query>
