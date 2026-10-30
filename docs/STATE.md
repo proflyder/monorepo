@@ -71,6 +71,10 @@
   `.29` на AX3, сертификат Let's Encrypt для `vpn.example.com` (до
   2027-01-28). Вход с мобильной сети (профиль `lan`, DTLS) проверен.
   Tailscale пока не отключён.
+- 2026-10-31: сертификат продлевается автоматически: certbot +
+  `dns-cloudflare` (DNS-01), `certbot.timer`, deploy hook копирует
+  fullchain/privkey в ocserv и перезапускает его. MSS clamp в forward chain
+  стоит до accept. Ручные auth-хуки и TXT удалены.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
 

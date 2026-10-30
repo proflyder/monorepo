@@ -96,13 +96,6 @@
 
 ## VPN
 
-- [ ] Продлить Let's Encrypt для `vpn.example.com` до ~2027-01-14 (срок
-  2027-01-28): certbot в CT 102 с ручным DNS-01, TXT `_acme-challenge.vpn`
-  в Namecheap (API недоступен). Альтернатива — перенос DNS на Cloudflare.
-- [ ] Перенести в `projects/home/proxmox/vpn/` certbot auth/deploy hooks,
-  сейчас они существуют только в CT (`/etc/letsencrypt/vpn-hooks/`).
-- [ ] nftables в CT: MSS clamp стоит после accept-правила forward и не
-  срабатывает; перенести выше.
 - [ ] Тест профиля `full` с мобильной сети (WAN NAT, MTU, DNS).
 - [ ] Отключение Tailscale — отдельный шаг с планом: замена `pl-home`,
   `pl-control`, `pl-scheduler`, Grafana-ingress и Android endpoints.

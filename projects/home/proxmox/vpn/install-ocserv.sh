@@ -200,9 +200,11 @@ table inet vpn {
 
   chain forward {
     type filter hook forward priority filter; policy drop;
+    # MSS clamp must run before the accept rules: a SYN that is accepted first
+    # never reaches the clamp, so clients keep a too-large MTU.
+    oifname "$IFACE" tcp flags syn tcp option maxseg size set rt mtu
     ct state established,related accept
     iifname "vpns*" oifname "$IFACE" ip saddr $VPN_CIDR accept
-    oifname "$IFACE" tcp flags syn tcp option maxseg size set rt mtu
   }
 
   chain postrouting {

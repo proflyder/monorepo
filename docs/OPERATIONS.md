@@ -38,6 +38,11 @@ pct exec 102 -- nft list ruleset
 pct exec 102 -- occtl show users
 pct exec 102 -- occtl show ip bans
 
+# сертификат Let's Encrypt: продление автоматическое (certbot.timer)
+pct exec 102 -- certbot certificates
+pct exec 102 -- certbot renew --dry-run --no-random-sleep-on-renew
+pct exec 102 -- systemctl list-timers certbot.timer
+
 # служебные действия
 pct exec 102 -- systemctl restart ocserv
 pct exec 102 -- systemctl restart nftables
@@ -63,6 +68,11 @@ python3 projects/home/proxmox/vpn/vpnusers.py <user> \
 
 Приватные файлы — `secrets/home/vpn/<user>.credentials` и `<user>.png`
 (QR для Google Authenticator), каталог `700`, файлы `600`.
+
+Сертификат продлевается автоматически через DNS-01 Cloudflare
+(`certbot.timer`, credentials `/etc/letsencrypt/cloudflare.ini`, deploy hook
+`/etc/letsencrypt/renewal-hooks/deploy/ocserv-ssl.sh`). Ручное продление и
+правка TXT-записи не нужны. Настройка и откат — `projects/home/proxmox/vpn/README.md`.
 
 Проверка только аутентификации (не поднимает туннель на Mac):
 
