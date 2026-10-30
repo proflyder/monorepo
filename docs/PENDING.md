@@ -96,21 +96,16 @@
 
 ## VPN
 
-- [ ] Проброс ONT → WAN-адрес AX3 → CT (двойной NAT): `443/tcp` + `443/udp` →
-  `192.0.2.29` (CT 102). Остальные входящие порты не открывать; WAN
-  `22/443` вне этого проброса проверить/закрыть.
-- [ ] DHCP reservation `192.0.2.29` на AX3 (MAC взять из
-  `pct config 102`); сейчас адрес статический внутри CT, reservation
-  защищает от конфликта.
-- [ ] Let's Encrypt (certbot, ручной DNS-01: API Namecheap недоступен) для `vpn.example.com`;
-  заменить самоподписанный сертификат, перезагрузить ocserv, обновить
-  `pin-sha256` у клиентов. До этого клиенты используют pin.
-- [ ] Тест с мобильной сети (Cisco Secure Client / OpenConnect): профили
-  `lan` и `full`, DNS, доступ к HA/Grafana, стабильность DTLS.
-- [ ] После успешного теста — решение об отключении Tailscale; сейчас
-  Tailscale остаётся основным удалённым доступом и не меняется.
-- [ ] Полный туннель: проверить WAN NAT и MTU на реальном клиенте
-  (`mtu = 1400`, MSS clamp на CT).
+- [ ] Продлить Let's Encrypt для `vpn.example.com` до ~2027-01-14 (срок
+  2027-01-28): certbot в CT 102 с ручным DNS-01, TXT `_acme-challenge.vpn`
+  в Namecheap (API недоступен). Альтернатива — перенос DNS на Cloudflare.
+- [ ] Перенести в `projects/home/proxmox/vpn/` certbot auth/deploy hooks,
+  сейчас они существуют только в CT (`/etc/letsencrypt/vpn-hooks/`).
+- [ ] nftables в CT: MSS clamp стоит после accept-правила forward и не
+  срабатывает; перенести выше.
+- [ ] Тест профиля `full` с мобильной сети (WAN NAT, MTU, DNS).
+- [ ] Отключение Tailscale — отдельный шаг с планом: замена `pl-home`,
+  `pl-control`, `pl-scheduler`, Grafana-ingress и Android endpoints.
 
 ## Безопасность / станция
 

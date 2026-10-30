@@ -54,7 +54,7 @@ pct exec 102 -- sh -c \
 Добавление/ротация пользователя (пароль + TOTP; секреты не печатаются):
 
 ```bash
-python3 projects/home/proxmox/vpn/vpnusers.py stas \
+python3 projects/home/proxmox/vpn/vpnusers.py <user> \
   --pve 192.0.2.26 \
   --ssh-key secrets/proxmox-install/proxmox_admin \
   --known-hosts secrets/proxmox-install/known_hosts
@@ -67,7 +67,7 @@ python3 projects/home/proxmox/vpn/vpnusers.py stas \
 Проверка только аутентификации (не поднимает туннель на Mac):
 
 ```bash
-openconnect --authenticate --user=stas --authgroup=lan \
+openconnect --authenticate --user=<user> --authgroup=lan \
   --servercert pin-sha256:<PIN> https://192.0.2.29/
 ```
 

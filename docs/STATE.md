@@ -64,13 +64,13 @@
   (split tunnel до домашней LAN, DNS `192.0.2.1`) и `full` (весь трафик).
   `443/tcp` + `443/udp`, nftables `drop` по умолчанию, masquerade
   VPN → LAN/WAN, SSH только из LAN, onboot.
-- Сертификат самоподписанный (`vpn.example.com`, IP `192.0.2.29`),
-  клиент проверяет `pin-sha256` публичного ключа; проверены успешная
+- Проверены успешная
   аутентификация с верным TOTP, отказ при неверном TOTP и реальный туннель
   ping до `192.0.2.1` из изолированного netns.
-- Наружу ничего не проброшено; Let's Encrypt, DHCP reservation `.29`,
-  ONT/AX3 forward и тест с мобильной сети — открытые шаги. Tailscale пока
-  остаётся основным удалённым доступом и не менялся.
+- 2026-10-31: проброс `443/tcp+udp` ONT → AX3 → CT, DHCP reservation
+  `.29` на AX3, сертификат Let's Encrypt для `vpn.example.com` (до
+  2027-01-28). Вход с мобильной сети (профиль `lan`, DTLS) проверен.
+  Tailscale пока не отключён.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
 
