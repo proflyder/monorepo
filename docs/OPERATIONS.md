@@ -102,13 +102,28 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 
 Экспериментальный локальный endpointing (см. `PENDING.md`) включается только
 переменной окружения процесса Pulsar: `PULSAR_LOCAL_ENDPOINTING=1`; без неё
-работает прежний путь (HA VAD + 30-секундный watchdog). На уровне
-`ctl.sh`/supervise переменная пока не прокинута — для live-проверки запускать
-тестовый экземпляр с ней.
+работает прежний путь (HA VAD + 30-секундный watchdog). `ctl.sh reload`
+передаёт своё окружение новому supervisor'у, поэтому включение для текущего
+процесса:
 
-Установленная версия — Rust `v0.5.2-3-gc57d521-dirty` (локальный форк на базе
-upstream `v0.5.2`, HEAD `c57d521`, сборка из рабочего дерева с повторным wake);
-`pulsar.prev` — `v0.5.2-3-gc57d521`, `v0.5.2-2-g95ce568` и
+```bash
+adb -s 192.0.2.13:5555 shell 'PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload'
+```
+
+Это не boot-persistent: после reboot или нового supervisor без переменной
+feature снова выключен. Выключить feature без замены бинарника — новый
+`adb shell` без переменной: `/data/pulsar/ctl.sh reload`. Полный откат на
+known-good бинарник — атомарно, не поверх работающего файла:
+
+```bash
+adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
+```
+
+Установленная версия — Rust `v0.5.2-4-g9b5e86a-dirty` (armhf, локальный форк
+на базе upstream `v0.5.2`, сборка проектным Makefile `ARCH=armhf`; повторный
+wake + endpointing); `pulsar.prev` — known-good `v0.5.2-3-gc57d521-dirty`.
+On-device копии перед установкой — `pulsar.pre-endpoint-20261030` и
+`pulsar.prev.pre-endpoint-20261030`; `v0.5.2-2-g95ce568` и
 `v0.5.0-1-g908a027` — только private backup вне Git. StationCancel без речи —
 HA-конфиг, а не бинарник.
 Штатный `quasar-server`

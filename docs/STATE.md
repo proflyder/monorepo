@@ -59,12 +59,19 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.2-3-gc57d521-dirty` — установленная сборка (локальный форк,
-  база upstream `v0.5.2` = `4cba44a`); собрана из рабочего дерева с повторным
-  wake, заменяющим активный диалог (30.10). StationCancel без речи — изменение
-  HA-конфига, не бинарника.
-  `pulsar.prev` — предыдущая `v0.5.2-3-gc57d521`; `v0.5.2-2-g95ce568` и
-  `v0.5.0-1-g908a027` — только private backup вне Git.
+- Pulsar Rust `v0.5.2-4-g9b5e86a-dirty` — установленная armhf-сборка
+  (`/lib/ld-linux-armhf.so.3`; локальный форк, база upstream `v0.5.2` =
+  `4cba44a`), собрана проектным Makefile `ARCH=armhf`; включает повторный
+  wake, заменяющий активный диалог, и экспериментальный локальный
+  endpointing. Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`, унаследованным
+  supervisor'ом от `ctl.sh reload`; это не boot-persistent: после reboot или
+  нового supervisor без env feature выключен. Health 30.10: HA voice
+  subscribed, Sendspin/MA переподключились без рестарта MA, crashloop нет;
+  живая голосовая приёмка endpointing ещё нужна. StationCancel без речи —
+  изменение HA-конфига, не бинарника.
+  `pulsar.prev` — known-good `v0.5.2-3-gc57d521-dirty`; on-device копии —
+  `pulsar.pre-endpoint-20261030` и `pulsar.prev.pre-endpoint-20261030`;
+  `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private backup вне Git.
   Legacy C++ checkout,
   patch и binaries — private в `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
@@ -170,7 +177,8 @@
   тишины. Abort/отмена/повторный wake по-прежнему идут через
   `VoiceAssistantRequest.start=false`; HA VAD остаётся главным и может
   завершить раньше. Это экспериментальная эвристика: включается только
-  `PULSAR_LOCAL_ENDPOINTING=1`, по умолчанию выключена; живых измерений
+  `PULSAR_LOCAL_ENDPOINTING=1`, по умолчанию выключена; 30.10 включена в
+  текущем supervised-процессе на Midi (не boot-persistent); живых измерений
   порогов нет, коэффициенты не откалиброваны. При нехватке окна/SNR wake
   или для turn без wake (кнопка, continued conversation, start_conversation)
   детектор не запускается. Pre-roll считается только pre-wake evidence:

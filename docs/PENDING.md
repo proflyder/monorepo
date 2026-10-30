@@ -4,12 +4,13 @@
 
 ## Приёмка
 
-- [ ] Локальный endpointing Rust Pulsar: код и unit-тесты есть, по умолчанию
-      выключен (`PULSAR_LOCAL_ENDPOINTING=1`). Нужны живая проверка
-      «Рикардо отмена» + повтор, обычных пауз, continued conversation и
-      earcon; затем калибровка onset/release/trailing на реальных записях и
-      решение о включении по умолчанию. Не считать исправлением целевого
-      случая до этой приёмки.
+- [ ] Локальный endpointing Rust Pulsar: armhf-кандидат `v0.5.2-4-g9b5e86a`
+      установлен 30.10, feature включена только в текущем supervised-процессе
+      через `PULSAR_LOCAL_ENDPOINTING=1` (не boot-persistent). Нужны живая
+      проверка «Рикардо отмена» + повтор, обычных пауз, continued
+      conversation и earcon; затем калибровка onset/release/trailing на
+      реальных записях и решение о boot-persistent/default-on. Не считать
+      исправлением целевого случая до этой приёмки.
 - [ ] Кандидат v27 (`v27-ambient-capacity-sel22-20261030`, SHA256
       `4f645834…b0e12444`) установлен 30.10 model-only по прямому запросу
       пользователя; `live_voice_acceptance=pending`. Firmware-совместимость
