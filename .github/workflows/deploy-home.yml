@@ -131,6 +131,8 @@ jobs:
   # One matrix entry per affected deployable unit. Jobs run one at a time and a
   # unit never runs two deploys concurrently; neither is ever cancelled.
   deploy:
+    # One job per affected unit; without a name GitHub lists every matrix value.
+    name: deploy ${{ matrix.id }}
     needs: plan
     if: needs.plan.outputs.units != '[]' && needs.plan.outputs.units != ''
     runs-on: ubuntu-24.04
