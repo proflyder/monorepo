@@ -112,6 +112,8 @@ message Schedule {
   // lease/ack state. 0 when idle. Stop and snooze stay available after a
   // DELIVERED ack until active_until_unix passes; a one-shot schedule that is
   // disabled/exhausted can still be snoozed while its window is active.
+  // RingWindow is the maximum ring duration: when it expires the scheduler
+  // queues a durable STOP for this occurrence and cancels its pending FIRE.
   int64 active_occurrence_unix = 18;
   int64 active_until_unix = 19;
 }

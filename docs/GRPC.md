@@ -88,6 +88,11 @@ curl -sS http://127.0.0.1:8098/ricardo.v1.SchedulerService/CreateSchedule \
 - **Ringing window:** активное occurrence хранится в schedule
   (`active_occurrence_unix`, `active_until_unix`) отдельно от transport
   состояния события. `DELIVERED` ack не запрещает `Stop`/`Snooze`.
+  `RingWindow` — максимальная длительность срабатывания: tick закрывает
+  истёкшее окно и в той же транзакции ставит durable `STOP` для этого
+  occurrence (alarm), отменяя pending `FIRE` того же occurrence. executor
+  обязан идемпотентно принять такой STOP и не затрагивать более новый
+  occurrence.
 - **Control events:** `SnoozeSchedule` ставит немедленный `STOP` + отложенный
   `FIRE`; `StopSchedule` — немедленный `STOP`. `DueEvent.action`:
   `FIRE`/`STOP`; `UNSPECIFIED` от старых строк трактуется как `FIRE`.

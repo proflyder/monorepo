@@ -152,6 +152,32 @@ Database restore (current procedure): scale the scheduler to 0, restore the
 files from the latest `backup.sh` output into the `scheduler-data` PVC, then
 scale back to 1 and verify `GetStatus`.
 
+## Bounded rollout (scheduler + bridge only)
+
+`deploy.sh` is the full path: it also rolls `ha-control`, reinstalls the
+NodePort filter and re-applies the Tailscale ingresses. When a change only
+touches `solutions/scheduler` / the alarm bridge, do not run it; stage and roll
+just the two workloads:
+
+```bash
+# 1. build immutable linux/amd64 binaries and copy them to dist/ as deploy.sh does
+bazel build //solutions/scheduler/cmd/scheduler //solutions/ha-bridge/cmd/ha-bridge \
+  --platforms=@rules_go//go/toolchain:linux_amd64
+# 2. stage under /opt/ricardo/releases/<build-id> with the node's sudo account,
+#    verify sha256 of both binaries, then atomically switch /opt/ricardo/current
+# 3. roll only the two deployments by patching the build annotation
+kubectl -n home-assistant patch deployment/scheduler --type merge \
+  -p '{"spec":{"template":{"metadata":{"annotations":{"ricardo.dev/build":"<build-id>"}}}}}'
+kubectl -n home-assistant patch deployment/ha-bridge --type merge \
+  -p '{"spec":{"template":{"metadata":{"annotations":{"ricardo.dev/build":"<build-id>"}}}}}'
+```
+
+Annotation patching preserves replicas, env, `hostPath` and PVCs. Update HA
+scripts (`ha core check` + `script.reload`) **before** rolling the bridge when
+the contract changes, and leave `ha-control`, the NodePort filter and the
+ingresses alone. Verify afterwards: rollout status, authenticated
+`-healthcheck`, `GetStatus.ready`, live consumers, unchanged `ListSchedules`.
+
 ## Limits
 
 - Single writer: never run two scheduler replicas on the same PVC.

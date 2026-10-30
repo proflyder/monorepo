@@ -113,6 +113,32 @@ Reminder — `SCHEDULE_KIND_REMINDER`, обязательно `REPEAT_KIND_ONCE`
 Control events **не перезаписывают** пользовательский `payload_json`; причина
 лежит в `detail`. Trigger и control имеют разные стабильные dedupe identity.
 
+### Истечение ringing window
+
+`RingWindow` (`SCHEDULER_RING_WINDOW_SECONDS`, 900 по умолчанию) — это
+**максимальная длительность одного срабатывания**, а не grace доставки.
+Scheduler владеет lifecycle occurrence, поэтому истечение окна закрывает
+срабатывание, а не только чистит state:
+
+- в той же SQLite-транзакции tick: pending/leased `FIRE` **этого же**
+  occurrence помечаются `SKIPPED` (`detail=ring_window_expired`), чтобы
+  поздняя доставка не начала звук после закрытия окна;
+- для `SCHEDULE_KIND_ALARM` создаётся ровно одна логическая STOP-запись с
+  `occurrence_unix` истёкшего occurrence и стабильным dedupe key
+  `expiry:stop:<kind>:<id>:<occurrence>`; повторный tick, restart и
+  lease-redelivery возвращают тот же event id. Доставка — штатная durable
+  очередь с at-least-once (не exactly-once side effect), retry ограничен
+  `SCHEDULER_EVENT_MAX_ATTEMPTS`; HA-сторона делает повторный STOP no-op,
+  если звонок уже молчит;
+- окно и snooze очищаются, revision растёт;
+- для reminder/timer глобальный STOP не создаётся (у них нет безопасного
+  общего stop); их pending `FIRE` также отменяется;
+- `StopSchedule` в пределах `RingWindow` после expiry идемпотентен (тот же
+  STOP replay), `SnoozeSchedule` остаётся `FAILED_PRECONDITION`;
+- STOP истёкшего occurrence не трогает следующий occurrence того же
+  расписания: bridge сверяет source+occurrence, HA — source+FIRE event id.
+
+
 ## Durable outbox, leases, tasks
 
 - `events.dedupe_key` уникален; event id = UUIDv5(dedupe identity), поэтому

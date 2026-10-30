@@ -20,16 +20,19 @@ type TickStats struct {
 	Fired          int
 	Skipped        int
 	Timers         int
+	Expired        int
 	LeasesReleased int64
 }
 
 // Tick performs one atomic engine pass:
 //  1. expired leases are released or failed;
-//  2. expired ringing windows are cleared and due snoozes become active;
-//  3. every due schedule emits at most one occurrence event and advances;
-//  4. overdue occurrences older than the grace window emit a visible
+//  2. expired ringing windows are closed: pending FIRE deliveries of that
+//     occurrence are cancelled and an alarm queues exactly one durable STOP;
+//  3. due snoozes become active;
+//  4. every due schedule emits at most one occurrence event and advances;
+//  5. overdue occurrences older than the grace window emit a visible
 //     SKIPPED event and are fast-forwarded;
-//  5. every running timer that is due emits one event and becomes FIRED.
+//  6. every running timer that is due emits one event and becomes FIRED.
 func (s *Store) Tick(ctx context.Context, now time.Time) (TickStats, error) {
 	now = now.UTC()
 	stats := TickStats{}
@@ -45,10 +48,7 @@ func (s *Store) Tick(ctx context.Context, now time.Time) (TickStats, error) {
 	}
 	stats.LeasesReleased = released
 
-	if _, err := tx.ExecContext(ctx, `UPDATE schedules SET active_occurrence_unix=0,
-		active_until_unix=0, snooze_until_unix=0, revision=revision+1, updated_unix=?
-		WHERE active_until_unix>0 AND active_until_unix<=? AND deleted_unix=0`,
-		now.Unix(), now.Unix()); err != nil {
+	if err := s.expireRingWindows(ctx, tx, now, &stats); err != nil {
 		return stats, err
 	}
 
@@ -146,6 +146,48 @@ func (s *Store) Tick(ctx context.Context, now time.Time) (TickStats, error) {
 		return stats, err
 	}
 	return stats, nil
+}
+
+func (s *Store) expireRingWindows(ctx context.Context, tx *sql.Tx, now time.Time, stats *TickStats) error {
+	for batch := 0; batch < maxTickBatches; batch++ {
+		rows, err := tx.QueryContext(ctx, `SELECT `+scheduleCols+` FROM schedules
+			WHERE active_until_unix>0 AND active_until_unix<=? AND deleted_unix=0
+			ORDER BY active_until_unix LIMIT ?`, now.Unix(), tickBatchSize)
+		if err != nil {
+			return err
+		}
+		expired := make([]*scheduleRecord, 0, tickBatchSize)
+		for rows.Next() {
+			rec, err := scanSchedule(rows.Scan)
+			if err != nil {
+				_ = rows.Close()
+				return err
+			}
+			expired = append(expired, rec)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		_ = rows.Close()
+		if len(expired) == 0 {
+			break
+		}
+		for _, rec := range expired {
+			closed, err := s.closeOccurrence(ctx, tx, rec.schedule,
+				rec.schedule.GetActiveOccurrenceUnix(), DetailRingWindowExpired, now)
+			if err != nil {
+				return err
+			}
+			if closed {
+				stats.Expired++
+			}
+		}
+		if len(expired) < tickBatchSize {
+			break
+		}
+	}
+	return nil
 }
 
 func (s *Store) activateSnoozes(ctx context.Context, tx *sql.Tx, now time.Time) error {

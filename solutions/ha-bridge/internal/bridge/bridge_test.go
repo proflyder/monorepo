@@ -413,6 +413,14 @@ func TestAlarmStopOnlySilencesTheActiveAlarm(t *testing.T) {
 	if ha.calls[2].variables["reason"] != "scheduler_stop" {
 		t.Errorf("stop reason = %#v", ha.calls[2].variables["reason"])
 	}
+	// The STOP must carry the identity of the FIRE this bridge started, so HA
+	// can fail closed if a newer occurrence owns the ringing alarm.
+	if got := ha.calls[2].variables["expected_source_id"]; got != "alarm-b" {
+		t.Errorf("expected_source_id = %#v, want alarm-b", got)
+	}
+	if got := ha.calls[2].variables["expected_event_id"]; got != "evt-b-fire" {
+		t.Errorf("expected_event_id = %#v, want evt-b-fire", got)
+	}
 	if strings.Contains(ha.calls[2].script, "snooze") {
 		t.Errorf("STOP called %q: snooze must stay owned by the scheduler", ha.calls[2].script)
 	}

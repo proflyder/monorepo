@@ -22,6 +22,11 @@
       Осталась голосовая проверка LISTENING/PROCESSING/SPEAKING и что
       «Рикардо, стоп» по-прежнему останавливает будильник; распознавание
       `StationAlarmStop` проверено без запуска звонка.
+- [ ] Живая приёмка expiry→STOP: будильник должен замолкнуть сам после
+      `SCHEDULER_RING_WINDOW_SECONDS` (900 с), без участия HA-таймера, с
+      восстановлением source/volume/resume. Требует реального звонка на
+      15 минут (громко) — не запускалось; unit/store/bridge/HA-template
+      покрытие и live no-op guard проверены.
 - [ ] MA Liked Songs sync; «включи любимое» при пустом плейлисте.
 - [ ] Bluetooth-пара телефона. `bluetoothctl devices` на станции пуст; в HA
       entry `bluetooth` в `setup_retry` (adapter станции недоступен из HAOS VM),
@@ -37,6 +42,12 @@
 
 ## Планировщик / HA bridge / Android
 
+- [ ] Ring window lifecycle: `UpdateSchedule` и `SetScheduleEnabled(true)`
+      очищают активное окно без STOP (подтверждённый related bug того же
+      класса, что исправленный expiry). Нужен durable STOP/явный контракт,
+      чтобы правка правила во время звонка не оставляла HA со звуком и
+      `StopSchedule=FAILED_PRECONDITION`. Отдельная правка, не входит в
+      expiry-fix.
 - [ ] Home control: интерактивная проверка фильтров и подтверждение действий
       пользователем; автоматические нажатия заблокированы HyperOS. Не запускать
       production-устройства без согласования.

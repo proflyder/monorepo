@@ -266,17 +266,26 @@ func (r *Runner) handle(ctx context.Context, ev scheduler.Event) {
 	// A global alarm_stop may only silence the alarm this bridge started.
 	// A stale STOP for an older occurrence, or a STOP that races a newer
 	// alarm, must never touch the currently ringing alarm.
+	var active ledger.ActiveAlarm
+	var activeKnown bool
 	if ev.Action == scheduler.ActionStop {
-		active, ok := ledger.ActiveAlarm{}, false
 		if r.receipts != nil {
-			active, ok = r.receipts.ActiveAlarm()
+			active, activeKnown = r.receipts.ActiveAlarm()
 		}
-		if !ok || !stopMatchesActive(ev, active) {
+		if !activeKnown || !stopMatchesActive(ev, active) {
 			reason := "stop ignored: source or occurrence does not match the active alarm started by this bridge"
 			log.Info("event acknowledged without an HA call", "reason", reason)
 			r.ack(ctx, log, ev, scheduler.AckSkipped, reason)
 			return
 		}
+		// Pass the identity of the FIRE this bridge itself started. Home
+		// Assistant writes that identity synchronously inside alarm_start
+		// before the service call returns 2xx, and this consumer handles one
+		// batch at a time, so a newer FIRE processed later always owns a
+		// different stored id. The script fails closed when the stored id is
+		// unknown while the alarm is still ringing.
+		plan.variables["expected_source_id"] = active.SourceID
+		plan.variables["expected_event_id"] = active.EventID
 	}
 
 	if err := r.ha.CallScript(ctx, plan.script, plan.variables); err != nil {

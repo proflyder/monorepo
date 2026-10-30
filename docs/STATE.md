@@ -172,6 +172,25 @@
   живой конфигурации; оставшиеся недоступные записи реестра очищены.
   Повторного исполнителя нет. HA остаётся исполнителем звука
   (`alarm_start`, `schedule_announce`, `alarm_stop`).
+- `RingWindow` = максимальная длительность срабатывания (900 с по
+  умолчанию). Истечение окна закрывает occurrence: tick в одной транзакции
+  отменяет pending `FIRE` того же occurrence и ставит STOP в durable очередь
+  (одна логическая запись, dedupe `expiry:stop:<kind>:<id>:<occurrence>`;
+  доставка at-least-once, HA повторный STOP игнорирует). Bridge доставляет
+  STOP, HA проверяет source+FIRE event id и не трогает более новый звонок.
+  Причина: 30.10 будильник «Работа» звонил 10:00–11:09, при этом scheduler
+  очистил active occurrence в 10:15 без события, а HA продолжала loop;
+  `StopSchedule` в 11:09 был `FAILED_PRECONDITION`. Правка правила во время
+  звонка (`UpdateSchedule`/enable) пока не эмитит STOP — отдельная задача в
+  `PENDING.md`.
+- Задеплоено 30.10 (build `d3b9f0b-05c1df84a9d1`): scheduler + ha-bridge из
+  `solutions/`, HA `scripts.yaml` обновлён (`ha core check` +
+  `script.reload`). `ha-control` не менялся (`5fb9800-84d66babca30`).
+  Бэкапы: `secrets/local/backups/scheduler/20261030-113927`,
+  `secrets/local/backups/ha-scripts-pre-ringwindow-20261030T064220Z`.
+  Живой громкий 15-минутный expiry-тест не запускался; проверены unit/store/
+  bridge/HA-template тесты, live no-op guard при молчащем звонке, health,
+  `GetStatus.ready`, оба consumer-а и неизменный `ListSchedules`.
 - Голосовые intents в `projects/home-assistant/ha-voice` вызывают canonical
   Connect API (`rest_command.scheduler_rpc`); endpoint —
   `input_text.scheduler_endpoint` (LAN NodePort base URL, durable via

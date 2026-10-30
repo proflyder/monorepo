@@ -431,7 +431,54 @@ alarm_resume:
 alarm_stop:
   alias: "Alarm: stop ringing"
   mode: restart
+  fields:
+    expected_source_id:
+      description: "Scheduler schedule id that must still own the ringing alarm"
+      example: "019a..."
+    expected_event_id:
+      description: "Scheduler FIRE event id that must still own the ringing alarm"
+      example: "019a..."
   sequence:
+    # A scheduler-driven STOP carries the identity of the FIRE the executor
+    # started. If Home Assistant stored a different (newer) FIRE, or cannot
+    # prove which occurrence is ringing while sound is still on, stopping and
+    # restoring would silence or disturb an unknown/next call. Manual and
+    # emergency stops pass no expectation and always run.
+    - variables:
+        stop_expected_source: "{{ expected_source_id | default('') | string | trim }}"
+        stop_expected_event: "{{ expected_event_id | default('') | string | trim }}"
+        stop_ringing_now: "{{ is_state('input_boolean.alarm_ringing', 'on') }}"
+        stop_stored_source: "{{ states('input_text.scheduler_active_schedule_id') | trim }}"
+        stop_stored_event: "{{ states('input_text.scheduler_active_event_id') | trim }}"
+        stop_identity_required: >-
+          {{ stop_expected_event not in ['', 'None', 'unknown', 'unavailable']
+             or stop_expected_source not in ['', 'None', 'unknown', 'unavailable'] }}
+        stop_identity_match: >-
+          {{ stop_identity_required
+             and stop_expected_source not in ['', 'None', 'unknown', 'unavailable']
+             and stop_stored_source == stop_expected_source
+             and stop_stored_event == stop_expected_event }}
+        stop_identity_known: >-
+          {{ stop_expected_source not in ['', 'None', 'unknown', 'unavailable']
+             and stop_expected_event not in ['', 'None', 'unknown', 'unavailable']
+             and stop_stored_source not in ['', 'None', 'unknown', 'unavailable']
+             and stop_stored_event not in ['', 'None', 'unknown', 'unavailable'] }}
+        stop_identity_unproven: "{{ stop_identity_required and not stop_identity_match and stop_ringing_now }}"
+        # A scheduler STOP that arrives after the ring already ended (for
+        # example a retried lease) must not run the global media stop/restore:
+        # by then the user may have resumed music. With no expectation
+        # (manual/emergency stop) the cleanup still runs.
+        stop_identity_noop: "{{ stop_identity_required and not stop_ringing_now }}"
+        stop_identity_skip: "{{ stop_identity_unproven or stop_identity_noop }}"
+        stop_identity_reason: >-
+          {{ '' if not stop_identity_skip
+             else ('already_silent' if stop_identity_noop
+                   else ('unknown_active_identity' if not stop_identity_known else 'stale_occurrence')) }}
+    - if:
+        - condition: template
+          value_template: "{{ stop_identity_skip }}"
+      then:
+        - stop: "scheduler stop ignored: {{ stop_identity_reason }}"
     - service: input_boolean.turn_off
       target:
         entity_id: input_boolean.alarm_ringing
@@ -2004,10 +2051,11 @@ schedule_alarm_update:
 
 schedule_alarm_stop:
   alias: "Scheduler: stop the active alarm occurrence"
-  description: "Calls StopSchedule, then waits briefly for the executor. Local audio stop only for the same captured source/event, never a newer alarm."
+  description: "Calls StopSchedule, then waits briefly for the executor. Local audio stop only for the same captured source/event, never a newer alarm. If the scheduler ringing window has expired but that same occurrence is still ringing locally, the confirmed local stop is a success."
   mode: single
   sequence:
     - variables:
+        stop_captured_schedule_id: "{{ states('input_text.scheduler_active_schedule_id') | trim }}"
         stop_captured_event_id: "{{ states('input_text.scheduler_active_event_id') | trim }}"
     - service: script.scheduler_active_alarm
       response_variable: stop_active
@@ -2028,14 +2076,29 @@ schedule_alarm_stop:
               response_variable: stop_confirm
             - variables:
                 stop_outcome: "{{ stop_confirm.outcome | default('other') if stop_confirm is mapping else 'other' }}"
+                # The scheduler expires its ringing window while the HA alarm
+                # loop keeps sounding. failed_precondition then means "no
+                # scheduler window", not a failed local stop. Accept it only
+                # when the pre-RPC captured schedule/event is still the current
+                # source and the local stop was confirmed for that same
+                # occurrence. Transport/auth/other API errors stay errors.
+                stop_expired_local_ok: >-
+                  {{ stop_rpc is mapping
+                     and stop_rpc.code == 'failed_precondition'
+                     and stop_outcome == 'local'
+                     and stop_active.id == stop_captured_schedule_id
+                     and stop_captured_schedule_id not in ['', 'None', 'unknown', 'unavailable']
+                     and stop_captured_event_id not in ['', 'None', 'unknown', 'unavailable'] }}
                 stop_result: >-
-                  {{ ({'status': ('ok' if stop_outcome != 'other' else 'error'),
-                      'text': ('Останавливаю.' if stop_outcome in ['executor', 'not_ringing']
-                               else ('Звонок остановлен локально, исполнитель не подтвердил.' if stop_outcome == 'local'
-                                     else 'Исполнитель не подтвердил остановку; активен другой звонок.'))}
-                      if stop_rpc.status == 'ok'
-                      else {'status': ('not_found' if stop_rpc.code == 'not_found' else 'error'),
-                            'text': (stop_rpc.error_text | default('Планировщик не ответил.')) ~ (' Звонок остановлен локально.' if stop_outcome == 'local' else (' Активен другой звонок.' if stop_outcome == 'other' else ''))}) }}
+                  {{ ({'status': 'ok', 'text': 'Останавливаю.'}
+                      if stop_expired_local_ok
+                      else ({'status': ('ok' if stop_outcome != 'other' else 'error'),
+                             'text': ('Останавливаю.' if stop_outcome in ['executor', 'not_ringing']
+                                      else ('Звонок остановлен локально, исполнитель не подтвердил.' if stop_outcome == 'local'
+                                            else 'Исполнитель не подтвердил остановку; активен другой звонок.'))}
+                            if stop_rpc.status == 'ok'
+                            else {'status': ('not_found' if stop_rpc.code == 'not_found' else 'error'),
+                                  'text': (stop_rpc.error_text | default('Планировщик не ответил.')) ~ (' Звонок остановлен локально.' if stop_outcome == 'local' else (' Активен другой звонок.' if stop_outcome == 'other' else ''))})) }}
             - stop: "stop alarm"
               response_variable: stop_result
         - conditions:

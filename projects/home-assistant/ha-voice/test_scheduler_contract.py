@@ -174,6 +174,20 @@ def render_result(script_name: str, result_name: str, context: dict):
     raise KeyError(result_name)
 
 
+def render_alarm_stop_result(context: dict):
+    """Render the nested stop guard and result in their real order."""
+    script = SCRIPTS["schedule_alarm_stop"]
+    outcome = find_variable_template(script, "stop_outcome")
+    guard = find_variable_template(script, "stop_expired_local_ok")
+    result = find_variable_template(script, "stop_result", "исполнитель не подтвердил")
+    if outcome is None or guard is None or result is None:
+        raise KeyError("alarm stop templates")
+    rendered = dict(context)
+    rendered["stop_outcome"] = render(outcome, rendered)
+    rendered["stop_expired_local_ok"] = render(guard, rendered)
+    return rendered, render(result, rendered)
+
+
 def services(value):
     out = []
     if isinstance(value, dict):
@@ -868,6 +882,236 @@ class SpeechTruthTests(unittest.TestCase):
         self.assertEqual(result["status"], "ok")
         self.assertIn("Звонок остановлен локально", result["text"])
         self.assertNotIn("Останавливаю.", result["text"])
+
+    def test_expired_scheduler_window_with_same_confirmed_local_stop_is_success(self):
+        stop = SCRIPTS["schedule_alarm_stop"]
+        first_variables = stop["sequence"][0]["variables"]
+        self.assertIn("scheduler_active_schedule_id", first_variables["stop_captured_schedule_id"])
+        self.assertIn("scheduler_active_event_id", first_variables["stop_captured_event_id"])
+
+        context = {
+            **BASE_CONTEXT,
+            "stop_active": {"status": "ok", "id": "s1"},
+            "stop_captured_schedule_id": "s1",
+            "stop_captured_event_id": "e1",
+            "stop_confirm": {"outcome": "local"},
+            "stop_rpc": {
+                "status": "error",
+                "code": "failed_precondition",
+                "error_text": "Это действие сейчас недоступно.",
+            },
+        }
+        rendered, result = render_alarm_stop_result(context)
+        self.assertTrue(rendered["stop_expired_local_ok"])
+        self.assertEqual(result, {"status": "ok", "text": "Останавливаю."})
+        self.assertNotIn("недоступно", result["text"])
+
+    def test_expired_window_never_claims_newer_or_unconfirmed_occurrence(self):
+        base = {
+            **BASE_CONTEXT,
+            "stop_active": {"status": "ok", "id": "s1"},
+            "stop_captured_schedule_id": "s1",
+            "stop_captured_event_id": "e1",
+            "stop_rpc": {
+                "status": "error",
+                "code": "failed_precondition",
+                "error_text": "Это действие сейчас недоступно.",
+            },
+        }
+
+        # A newer occurrence replaced the captured source during the RPC.
+        changed, changed_result = render_alarm_stop_result(
+            {**base, "stop_confirm": {"outcome": "other"}}
+        )
+        self.assertFalse(changed["stop_expired_local_ok"])
+        self.assertEqual(changed_result["status"], "error")
+        self.assertIn("другой звонок", changed_result["text"])
+
+        # An empty captured event id cannot prove the same occurrence.
+        no_event, no_event_result = render_alarm_stop_result(
+            {
+                **base,
+                "stop_captured_event_id": "",
+                "stop_confirm": {"outcome": "local"},
+            }
+        )
+        self.assertFalse(no_event["stop_expired_local_ok"])
+        self.assertEqual(no_event_result["status"], "error")
+
+        # Transport/auth errors are not masked by a local stop.
+        for code in ("unavailable", "unauthenticated"):
+            failed, failed_result = render_alarm_stop_result(
+                {
+                    **base,
+                    "stop_confirm": {"outcome": "local"},
+                    "stop_rpc": {
+                        "status": "error",
+                        "code": code,
+                        "error_text": "Планировщик не отвечает.",
+                    },
+                }
+            )
+            self.assertFalse(failed["stop_expired_local_ok"])
+            self.assertEqual(failed_result["status"], "error")
+            self.assertIn("Звонок остановлен локально", failed_result["text"])
+
+    def test_active_and_idempotent_stop_still_answer_success(self):
+        for outcome in ("executor", "not_ringing"):
+            rendered, result = render_alarm_stop_result(
+                {
+                    **BASE_CONTEXT,
+                    "stop_active": {"status": "ok", "id": "s1"},
+                    "stop_captured_schedule_id": "s1",
+                    "stop_captured_event_id": "e1",
+                    "stop_confirm": {"outcome": outcome},
+                    "stop_rpc": {"status": "ok", "code": "", "error_text": ""},
+                }
+            )
+            self.assertFalse(rendered["stop_expired_local_ok"])
+            self.assertEqual(result, {"status": "ok", "text": "Останавливаю."})
+
+
+class AlarmStopIdentityGuardTests(unittest.TestCase):
+    """A scheduler STOP must prove which FIRE it may silence.
+
+    The bridge passes the identity of the FIRE it started. HA fails closed when
+    that identity is given but the ringing alarm cannot be matched, and stays a
+    safe no-op when the alarm is already silent. Manual stops carry no
+    expectation and always run.
+    """
+
+    ORDER = [
+        "stop_expected_source",
+        "stop_expected_event",
+        "stop_ringing_now",
+        "stop_stored_source",
+        "stop_stored_event",
+        "stop_identity_required",
+        "stop_identity_match",
+        "stop_identity_known",
+        "stop_identity_unproven",
+        "stop_identity_noop",
+        "stop_identity_skip",
+        "stop_identity_reason",
+    ]
+
+    def render_guard(self, *, expected_source="", expected_event="", ringing=False,
+                     stored_source="", stored_event=""):
+        script = SCRIPTS["alarm_stop"]
+        variables = script["sequence"][0]["variables"]
+        for name in self.ORDER:
+            self.assertIn(name, variables, f"alarm_stop guard variable {name}")
+
+        def states(entity_id):
+            return {
+                "input_text.scheduler_active_schedule_id": stored_source,
+                "input_text.scheduler_active_event_id": stored_event,
+            }.get(entity_id, "")
+
+        def is_state(entity_id, want):
+            return entity_id == "input_boolean.alarm_ringing" and ringing == (want == "on")
+
+        rendered = {
+            **BASE_CONTEXT,
+            "states": states,
+            "is_state": is_state,
+            "expected_source_id": expected_source,
+            "expected_event_id": expected_event,
+        }
+        for name in self.ORDER:
+            rendered[name] = render(variables[name], rendered)
+        return rendered
+
+    def test_declares_expected_identity_fields(self):
+        fields = SCRIPTS["alarm_stop"]["fields"]
+        self.assertIn("expected_source_id", fields)
+        self.assertIn("expected_event_id", fields)
+        self.assertEqual(fields["expected_source_id"].get("default", ""), "")
+        self.assertEqual(fields["expected_event_id"].get("default", ""), "")
+
+    def test_guard_runs_before_any_audio_side_effect(self):
+        sequence = SCRIPTS["alarm_stop"]["sequence"]
+        self.assertIn("stop_identity_skip", sequence[0]["variables"])
+        guard = sequence[1]
+        rendered = json.dumps(guard, ensure_ascii=False)
+        self.assertIn("stop_identity_skip", rendered)
+        self.assertTrue(any(isinstance(step, dict) and "stop" in step for step in guard["then"]))
+        # Nothing turns the alarm off before the guard decision.
+        self.assertEqual(sequence[2]["service"], "input_boolean.turn_off")
+
+    def test_matching_fire_identity_allows_the_stop(self):
+        rendered = self.render_guard(
+            expected_source="s1", expected_event="e1",
+            stored_source="s1", stored_event="e1", ringing=True,
+        )
+        self.assertFalse(rendered["stop_identity_unproven"])
+        self.assertFalse(rendered["stop_identity_skip"])
+        self.assertEqual(rendered["stop_identity_reason"], "")
+
+    def test_stale_occurrence_is_never_silenced(self):
+        rendered = self.render_guard(
+            expected_source="s1", expected_event="e1",
+            stored_source="s1", stored_event="e2", ringing=True,
+        )
+        self.assertTrue(rendered["stop_identity_unproven"])
+        self.assertTrue(rendered["stop_identity_skip"])
+        self.assertEqual(rendered["stop_identity_reason"], "stale_occurrence")
+
+    def test_unknown_ringing_identity_fails_closed(self):
+        for stored_source, stored_event in (("", ""), ("s1", ""), ("", "e1")):
+            with self.subTest(stored_source=stored_source, stored_event=stored_event):
+                rendered = self.render_guard(
+                    expected_source="s1", expected_event="e1",
+                    stored_source=stored_source, stored_event=stored_event,
+                    ringing=True,
+                )
+                self.assertTrue(rendered["stop_identity_unproven"])
+                self.assertTrue(rendered["stop_identity_skip"])
+                self.assertEqual(rendered["stop_identity_reason"], "unknown_active_identity")
+
+    def test_expected_stop_after_ring_ends_skips_all_side_effects(self):
+        """A retried scheduler STOP must not media_stop/restore/resume later music."""
+        script = SCRIPTS["alarm_stop"]
+        for stored_source, stored_event in (("s1", "e1"), ("", ""), ("s1", "e2")):
+            with self.subTest(stored_source=stored_source, stored_event=stored_event):
+                rendered = self.render_guard(
+                    expected_source="s1", expected_event="e1",
+                    stored_source=stored_source, stored_event=stored_event,
+                    ringing=False,
+                )
+                self.assertTrue(rendered["stop_identity_noop"])
+                self.assertTrue(rendered["stop_identity_skip"])
+                self.assertEqual(rendered["stop_identity_reason"], "already_silent")
+
+        # The guard that consumes this flag stops the script before the first
+        # service call, so turn_off/media_stop/restore/resume stay unreachable.
+        sequence = script["sequence"]
+        guard = sequence[1]
+        self.assertIn("stop_identity_skip", guard["if"][0]["value_template"])
+        self.assertEqual([step for step in guard["then"] if "stop" in step], guard["then"])
+        remaining_services = services(sequence[2:])
+        self.assertIn("input_boolean.turn_off", remaining_services)
+        self.assertIn("media_player.media_stop", remaining_services)
+
+    def test_manual_stop_without_identity_always_runs(self):
+        for ringing in (True, False):
+            with self.subTest(ringing=ringing):
+                rendered = self.render_guard(
+                    stored_source="s1", stored_event="e1", ringing=ringing,
+                )
+                self.assertFalse(rendered["stop_identity_required"])
+                self.assertFalse(rendered["stop_identity_skip"])
+                self.assertEqual(rendered["stop_identity_reason"], "")
+
+    def test_partial_identity_is_fail_closed(self):
+        rendered = self.render_guard(
+            expected_source="s1", expected_event="",
+            stored_source="s1", stored_event="e1", ringing=True,
+        )
+        self.assertTrue(rendered["stop_identity_required"])
+        self.assertFalse(rendered["stop_identity_match"])
+        self.assertTrue(rendered["stop_identity_skip"])
+        self.assertEqual(rendered["stop_identity_reason"], "unknown_active_identity")
 
 
 class RelativeAlarmTemplateTests(unittest.TestCase):

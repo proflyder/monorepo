@@ -577,12 +577,16 @@ func (s *Store) StopSchedule(ctx context.Context, id string, now time.Time) (*ri
 	occ, active := s.activeOccurrence(sch, now)
 	if !active {
 		// Repeated Stop on the same occurrence replays the existing STOP
-		// control event instead of creating a new one or failing.
+		// control event instead of creating a new one or failing. An
+		// occurrence closed by ring-window expiry (the scheduler emitted the
+		// STOP itself) is also already stopped, so the call stays idempotent
+		// inside the same ring window.
 		var prior int64
 		err := tx.QueryRowContext(ctx, `SELECT occurrence_unix FROM events
-			WHERE source_id=? AND action=? AND detail='stopped' AND due_unix>=?
+			WHERE source_id=? AND action=? AND detail IN (?, ?) AND due_unix>=?
 			ORDER BY created_unix DESC LIMIT 1`,
 			sch.Id, int32(ricardov1.EventAction_EVENT_ACTION_STOP),
+			"stopped", DetailRingWindowExpired,
 			now.Add(-s.cfg.RingWindow).Unix()).Scan(&prior)
 		if err == nil {
 			if err := tx.Commit(); err != nil {

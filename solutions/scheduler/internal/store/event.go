@@ -144,20 +144,83 @@ func (s *Store) insertEvent(ctx context.Context, tx *sql.Tx, in eventInsert) (*r
 	return rec.event, inserted > 0, nil
 }
 
+// DetailRingWindowExpired marks the durable STOP emitted when the ring window
+// of an occurrence ends.
+const DetailRingWindowExpired = "ring_window_expired"
+
 func (s *Store) skipFireEvents(ctx context.Context, tx *sql.Tx, sourceID string, now time.Time, detail string) error {
-	_, err := tx.ExecContext(ctx, `UPDATE events SET state=?, lease_owner='', lease_until_unix=0,
+	return s.skipFireEventsForOccurrence(ctx, tx, sourceID, 0, now, detail)
+}
+
+// skipFireEventsForOccurrence cancels pending and leased FIRE deliveries for a
+// source. A zero occurrence means "every occurrence of this source"; a
+// positive value restricts the cancellation to the closed occurrence so a
+// future or snoozed occurrence of the same schedule is never dropped.
+func (s *Store) skipFireEventsForOccurrence(ctx context.Context, tx *sql.Tx, sourceID string, occurrence int64, now time.Time, detail string) error {
+	query := `UPDATE events SET state=?, lease_owner='', lease_until_unix=0,
 		acked_unix=?, ack_outcome=?, detail=?
-		WHERE source_id=? AND action=? AND state IN (?, ?)`,
+		WHERE source_id=? AND action=? AND state IN (?, ?)`
+	args := []any{
 		int32(ricardov1.EventState_EVENT_STATE_SKIPPED), now.Unix(),
 		int32(ricardov1.AckOutcome_ACK_OUTCOME_SKIPPED), detail,
 		sourceID, int32(ricardov1.EventAction_EVENT_ACTION_FIRE),
 		int32(ricardov1.EventState_EVENT_STATE_PENDING),
 		int32(ricardov1.EventState_EVENT_STATE_LEASED),
-	)
-	if err != nil {
+	}
+	if occurrence > 0 {
+		query += ` AND occurrence_unix=?`
+		args = append(args, occurrence)
+	}
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("skip fire events: %w", err)
 	}
 	return nil
+}
+
+// closeOccurrence ends the active ringing window of occ inside tx. The
+// scheduler owns the occurrence lifecycle, so closing a window may never leave
+// an executor ringing:
+//
+//   - pending or leased FIRE deliveries of the same occurrence are cancelled,
+//     so a late delivery cannot start sound after the window closed;
+//   - for alarms exactly one durable STOP for the same occurrence is queued in
+//     the same transaction (stable dedupe identity, so repeated ticks,
+//     restarts and lease redelivery cannot duplicate it);
+//   - the active/snooze window is cleared and the revision advanced.
+//
+// It reports whether a window was closed.
+func (s *Store) closeOccurrence(ctx context.Context, tx *sql.Tx, sch *ricardov1.Schedule, occ int64, detail string, now time.Time) (bool, error) {
+	if sch.GetId() == "" {
+		return false, nil
+	}
+	if occ > 0 {
+		if err := s.skipFireEventsForOccurrence(ctx, tx, sch.GetId(), occ, now, detail); err != nil {
+			return false, err
+		}
+		if sch.GetKind() == ricardov1.ScheduleKind_SCHEDULE_KIND_ALARM {
+			if _, _, err := s.insertEvent(ctx, tx, eventInsert{
+				dedupeKey:   fmt.Sprintf("expiry:stop:%d:%s:%d", sourceKindOf(sch.GetKind()), sch.GetId(), occ),
+				sourceID:    sch.GetId(),
+				sourceKind:  sourceKindOf(sch.GetKind()),
+				action:      ricardov1.EventAction_EVENT_ACTION_STOP,
+				dueUnix:     now.Unix(),
+				occurrence:  occ,
+				label:       sch.GetLabel(),
+				payloadJSON: sch.GetPayloadJson(),
+				state:       ricardov1.EventState_EVENT_STATE_PENDING,
+				detail:      detail,
+				createdUnix: now.Unix(),
+			}); err != nil {
+				return false, err
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE schedules SET active_occurrence_unix=0,
+		active_until_unix=0, snooze_until_unix=0, revision=revision+1, updated_unix=?
+		WHERE id=?`, now.Unix(), sch.GetId()); err != nil {
+		return false, fmt.Errorf("close occurrence window: %w", err)
+	}
+	return true, nil
 }
 
 // releaseExpiredLeases returns timed-out leases to PENDING, or fails an event

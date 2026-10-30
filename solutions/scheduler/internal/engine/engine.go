@@ -143,11 +143,12 @@ func (e *Engine) Tick(ctx context.Context) error {
 	e.lastErr = ""
 	e.lastErrAt = time.Time{}
 	e.mu.Unlock()
-	if stats.Fired > 0 || stats.Skipped > 0 || stats.Timers > 0 || stats.LeasesReleased > 0 {
+	if stats.Fired > 0 || stats.Skipped > 0 || stats.Timers > 0 || stats.Expired > 0 || stats.LeasesReleased > 0 {
 		e.log.Info("scheduler tick",
 			"fired", stats.Fired,
 			"skipped", stats.Skipped,
 			"timers", stats.Timers,
+			"expired", stats.Expired,
 			"leases_released", stats.LeasesReleased,
 		)
 	}
