@@ -18,7 +18,7 @@ ENTITIES = ["assist_satellite.iandeks_stantsiia_midi_assist_satellite", "media_p
 def payload(profile, root=ROOT):
     root = Path(root).resolve()
     paths = [(root / profile[key]).resolve() for key in ["model_path", "manifest_path"]]
-    if not all(p.is_relative_to(root / "secrets/model-registry") for p in paths):
+    if not all(p.is_relative_to((root / "secrets/model-registry").resolve()) for p in paths):
         raise ValueError("Only private registered models can be deployed with this profile")
     model = paths[0].read_bytes()
     if hashlib.sha256(model).hexdigest() != profile["model_sha256"]:
