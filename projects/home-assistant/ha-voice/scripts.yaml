@@ -82,16 +82,37 @@ work_mode:
   # (entity registry), see solutions/ha-bridge/README.md.
   icon: mdi:laptop
   description: >-
-    Turn on all bedroom lights for a work session: LED strip, bedside lamp,
-    and monitor light bar.
+    Turn on all bedroom lights for a work session at the captured work
+    settings: LED strip 100% at 2816 K, bedside lamp 100% at 2800 K, and
+    monitor light 100% at 2800 K.
   mode: single
   sequence:
+    # Captured from the live entities on 2026-10-30. Each light is addressed
+    # separately: their color-temperature ranges differ and the monitor light
+    # supports color_temp only. light.turn_on both restores a light that is off
+    # and re-applies the captured settings to one that is already on. The
+    # bedside lamp's effect "Day" is its separate white-mode property; the
+    # integration applies it after brightness/color temperature, so including
+    # it restores white mode even if the lamp was left in "Color" mode.
     - service: light.turn_on
       target:
-        entity_id:
-          - light.spalnia_lenta
-          - light.yeelink_cn_827036414_bslamp2_s_2_light
-          - light.yeelink_cn_919937191_lamp22_s_2
+        entity_id: light.spalnia_lenta
+      data:
+        brightness: 255
+        color_temp_kelvin: 2816
+    - service: light.turn_on
+      target:
+        entity_id: light.yeelink_cn_827036414_bslamp2_s_2_light
+      data:
+        brightness: 255
+        color_temp_kelvin: 2800
+        effect: Day
+    - service: light.turn_on
+      target:
+        entity_id: light.yeelink_cn_919937191_lamp22_s_2
+      data:
+        brightness: 255
+        color_temp_kelvin: 2800
 
 blackout:
   alias: "Scene: black out bedroom lighting"

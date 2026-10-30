@@ -317,6 +317,35 @@ class IntentTests(unittest.TestCase):
             "light.yeelink_cn_919937191_lamp22_s_2",
         ):
             self.assertIn(entity_id, dump)
+
+        # The scenario must reproduce the captured live work settings, not just
+        # switch the lights on: full brightness and each device's own color
+        # temperature (the monitor light supports color_temp only).
+        captured = {
+            "light.spalnia_lenta": {"brightness": 255, "color_temp_kelvin": 2816},
+            "light.yeelink_cn_827036414_bslamp2_s_2_light": {
+                "brightness": 255,
+                "color_temp_kelvin": 2800,
+                "effect": "Day",
+            },
+            "light.yeelink_cn_919937191_lamp22_s_2": {
+                "brightness": 255,
+                "color_temp_kelvin": 2800,
+            },
+        }
+        applied: dict[str, dict[str, Any]] = {}
+        for step in script["sequence"]:
+            if step.get("service") != "light.turn_on":
+                continue
+            entity_id = step["target"]["entity_id"]
+            self.assertIn(entity_id, captured, f"unexpected work_mode entity {entity_id}")
+            self.assertNotIn(entity_id, applied, f"duplicate work_mode step for {entity_id}")
+            applied[entity_id] = step.get("data", {})
+        self.assertEqual(set(applied), set(captured), "work_mode must address every captured light")
+        for entity_id, settings in captured.items():
+            for key, value in settings.items():
+                self.assertEqual(applied[entity_id].get(key), value, f"{entity_id} {key}")
+
         phrases = {
             phrase
             for item in yaml.safe_load(
