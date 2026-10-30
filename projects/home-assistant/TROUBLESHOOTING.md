@@ -61,7 +61,8 @@ curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
 
 - HAOS VM running? `qm status 100` на PVE.
 - K3s VM running? `qm status 101`; `sudo k3s kubectl get pods -A`.
-- Tailscale/operator: `tailscale status` в K3s VM; проверить ingress.
+- HTTPS ingress: `curl -k --resolve ha.home.example.com:443:<K3S_IP>` и
+  `kubectl -n traefik get ingressroute,certificate`.
 - Не путать `.27:8123` (закрыт) с `.28:8123`.
 
 ## Voice / Whisper / Piper

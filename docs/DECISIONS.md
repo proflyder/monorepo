@@ -9,8 +9,10 @@
 3. **Wi-Fi 4-address/WDS uplink, Ethernet fallback.** Wi-Fi остаётся на PVE,
    `vmbr0` сохраняет L2; VM IP/URL не меняются. NAT/PCI passthrough не нужны.
    Оба uplink одновременно в мост не подключать.
-4. **Tailscale Operator, не публичный HA.** Нет port-forward, TLS `*.ts.net`,
-   ingress `/` → HAOS и `/grafana/` → Grafana. MFA в HA, ACL только `443`.
+4. **Собственный VPN + приватные HTTPS-имена, не публичный HA.** Наружу
+   проброшен только `443` на ocserv (сертификат клиента или пароль + TOTP).
+   Сервисы — Traefik в K3s с wildcard Let's Encrypt (Cloudflare DNS-01) под
+   приватным суффиксом, allow-list LAN; DNS-записи указывают на LAN-адрес.
 5. **STT/TTS локально.** GigaAM primary, Whisper fallback, Piper Puriso;
    Hermes — только свободная речь. Облако видит текст, но не аудио.
 6. **Hermes не владеет state.** Будильники/таймеры/напоминания — scheduler

@@ -155,8 +155,8 @@ target-имена (`alarms_go_proto`, `scheduler_go_proto`) сохранены �
 - **Android** (`projects/mobile/android`, namespace `dev.proflyder.home`,
   Views + Kotlin + Metro, single Activity + typed Fragment router) говорит
   Connect JSON по тому же контракту. Сервер авторитетен для расписаний и
-  событий; нативных phone alarm и push в этом срезе нет. Транспорт — LAN/
-  Tailscale; TLS-терминация — на прокси/деплое.
+  событий; нативных phone alarm и push в этом срезе нет. Транспорт —
+  LAN/VPN; TLS-терминация — на Traefik.
 - **HA bridge** арендует только `queue=home`, маппит `alarm.fire` →
   `alarm_start`, reminder/timer → announce script, `STOP` → `alarm_stop`.
 - **ha-control** отдаёт `GET /v1/catalog` из live HA (сценарии — скрипты с

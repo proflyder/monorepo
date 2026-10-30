@@ -37,8 +37,7 @@
 
 - K3s `v1.35.9+k3s1`, node `lab-host`; data-dir `/srv/k3s/runtime`; SQLite;
   local-path PV с `Retain`.
-- Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
-  `tailscale`.
+- Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
@@ -47,8 +46,7 @@
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
 - Grafana: LAN `http://192.0.2.27:30300/` (корень), HTTPS
-  `https://grafana.home.example.com/`; tailnet-путь `/grafana/` после смены
-  `root_url` не работает (ожидаемо).
+  `https://grafana.home.example.com/`.
 - HTTPS ingress `*.home.example.com` (Traefik `42.2.0` + cert-manager
   `v1.21.3`, ACME DNS-01 Cloudflare, wildcard Let's Encrypt prod до
   2027-01-28): `ha`, `grafana`, `alarms`, `control` → узел `.27`, Cloudflare
@@ -60,16 +58,14 @@
 
 ## Remote
 
-- Tailscale Operator `1.104.2` в K3s; `home-access` ingress:
-  `/` → HAOS; `/grafana/` больше не обслуживается после смены `root_url`.
+- Удалённый доступ — собственный VPN (ocserv, CT `102`): `vpn.example.com`,
+  профили `lan`/`full`, пароль + TOTP или клиентский сертификат.
 - HTTPS-имена LAN/VPN: `https://{ha,grafana,alarms,control}.home.example.com`
-  через Traefik + cert-manager; работают и при выключенном Tailscale, пока
-  клиент в LAN или VPN.
-- `pl-home` указывает на operator proxy `tag:k8s`; host Serve не используется.
+  через Traefik + cert-manager.
 - Публичного HA нет; `8123/8095/8099/6053/6638` наружу не проброшены.
 - K3s management/metrics `6443/10250/9100/9116/8472` закрыты от обычного LAN;
   SSH — LAN, K3s API — через туннель.
-- Host Tailscale emergency access не настроен; Proxmox доступен по LAN/Wi-Fi.
+- Аварийный доступ к Proxmox — LAN/Wi-Fi.
 
 ## Собственный VPN
 
@@ -84,7 +80,6 @@
 - 2026-10-31: проброс `443/tcp+udp` ONT → AX3 → CT, DHCP reservation
   `.29` на AX3, сертификат Let's Encrypt для `vpn.example.com` (до
   2027-01-28). Вход с мобильной сети (профиль `lan`, DTLS) проверен.
-  Tailscale пока не отключён.
 - 2026-10-31: сертификат продлевается автоматически: certbot +
   `dns-cloudflare` (DNS-01), `certbot.timer`, deploy hook копирует
   fullchain/privkey в ocserv и перезапускает его. MSS clamp в forward chain
@@ -320,9 +315,8 @@
   Connect API (`rest_command.scheduler_rpc`); endpoint —
   `input_text.scheduler_endpoint` (LAN NodePort base URL, durable via
   `!secret scheduler_endpoint`), токен — `secrets.yaml:scheduler_bearer`.
-  Удалённый доступ — отдельный tailnet-only Ingress `pl-scheduler` (TLS
-  оператора) на тот же Service; `pl-home` по-прежнему `/` → HAOS,
-  `/grafana` → Grafana. Create/list/update/enable/disable/delete,
+  Удалённый доступ — `https://alarms.home.example.com` (LAN/VPN) на тот же
+  Service. Create/list/update/enable/disable/delete,
   timer start/pause/resume/cancel и reminder create проверены тихими
   `conversation.process` через builtin-агент; живая звуковая приёмка
   (audible) не выполнялась.
@@ -337,8 +331,8 @@
   назначена `script.work_mode` и `script.blackout` (registry merge, другие
   метки сохранены). Живой каталог: 2 сценария + 15 light/switch, служебные
   скрипты отсутствуют.
-  LAN NodePort `30099`, tailnet `pl-control.<tailnet>`; pl-home/pl-scheduler
-  не менялись. Доставка at-least-once, не exactly-once.
+  LAN NodePort `30099`, HTTPS `https://control.home.example.com` (LAN/VPN).
+  Доставка at-least-once, не exactly-once.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
   `INTERNET`, debug-signed). Вкладки **Home**, Alarms, Timers, Reminders,
@@ -364,7 +358,7 @@
 
 - Живая приёмка: будильник/стоп/snooze, Spotify transfer, phone→speaker,
   MA Liked Songs.
-- Offsite encrypted backup, power-loss тест, host Tailscale emergency access.
+- Offsite encrypted backup, power-loss тест.
 - Внешний Alertmanager/heartbeat, регулярный backup K3s/HA и полная voice
   latency instrumentation.
 - Secure Boot PK `DO NOT TRUST - AMI Test PK` — не менять без плана.

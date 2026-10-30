@@ -72,7 +72,7 @@ class ServerEndpoint private constructor(
         const val MAX_LENGTH = 512
 
         /**
-         * Parses a user-entered LAN, Tailscale, or MagicDNS base URL.
+         * Parses a user-entered LAN address or home HTTPS base URL.
          *
          * Accepted forms: `http://host[:port][/prefix]`,
          * `https://host[:port][/prefix]`, IPv4, bracketed IPv6, and DNS names.

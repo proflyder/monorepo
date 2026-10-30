@@ -5,6 +5,7 @@
 # file (default: secrets/home/ingress.env) or the caller's environment:
 #   HOME_DOMAIN              private ingress suffix, e.g. home.example.com
 #   LAN_CIDR                 LAN range allowed by the IP allow-list
+#   HAOS_ADDRESS             HAOS IPv4 address for the Service EndpointSlice
 #   CLOUDFLARE_API_TOKEN_FILE  file with CLOUDFLARE_API_TOKEN=<token>
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -35,6 +36,7 @@ fi
 : "${HOME_DOMAIN:?Set HOME_DOMAIN (private ingress suffix)}"
 
 LAN_CIDR="${LAN_CIDR:-192.0.2.0/24}"
+HAOS_ADDRESS="${HAOS_ADDRESS:-192.0.2.28}"
 CLOUDFLARE_API_TOKEN_FILE="${CLOUDFLARE_API_TOKEN_FILE:-$ROOT/secrets/home/vpn/cloudflare.env}"
 [[ -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || {
   echo "Cloudflare token file not readable: $CLOUDFLARE_API_TOKEN_FILE" >&2
@@ -50,7 +52,7 @@ HA_HOST="ha.$HOME_DOMAIN"
 GRAFANA_HOST="grafana.$HOME_DOMAIN"
 ALARMS_HOST="alarms.$HOME_DOMAIN"
 CONTROL_HOST="control.$HOME_DOMAIN"
-export HOME_DOMAIN LAN_CIDR HA_HOST GRAFANA_HOST ALARMS_HOST CONTROL_HOST
+export HOME_DOMAIN LAN_CIDR HAOS_ADDRESS HA_HOST GRAFANA_HOST ALARMS_HOST CONTROL_HOST
 
 render() {
   python3 - "$1" <<'PY'
@@ -58,7 +60,7 @@ import os
 import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
-for key in ("HOME_DOMAIN", "LAN_CIDR",
+for key in ("HOME_DOMAIN", "LAN_CIDR", "HAOS_ADDRESS",
             "HA_HOST", "GRAFANA_HOST", "ALARMS_HOST", "CONTROL_HOST"):
     text = text.replace("${%s}" % key, os.environ[key])
 if "${" in text:
@@ -123,6 +125,7 @@ helm upgrade --install traefik traefik/traefik \
   -f "$VALUES/traefik.yaml" --wait --timeout 8m
 
 render "$MANIFESTS/middleware.yaml" | kubectl apply -f -
+render "$MANIFESTS/backends.yaml" | kubectl apply -f -
 render "$MANIFESTS/routes.yaml" | kubectl apply -f -
 
 kubectl -n "$TRAEFIK_NS" wait --for=condition=Ready certificate/home-wildcard \

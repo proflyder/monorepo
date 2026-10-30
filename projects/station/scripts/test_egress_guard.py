@@ -49,7 +49,6 @@ class EgressGuardTests(unittest.TestCase):
             "-d 10.0.0.0/8 -j ACCEPT",
             "-d 172.16.0.0/12 -j ACCEPT",
             "-d 192.168.0.0/16 -j ACCEPT",
-            "-d 100.64.0.0/10 -j ACCEPT",
             "-d 169.254.0.0/16 -j ACCEPT",
             "-d 224.0.0.0/4 -j ACCEPT",
             "-d 255.255.255.255 -j ACCEPT",

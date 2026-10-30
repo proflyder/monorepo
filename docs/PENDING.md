@@ -86,7 +86,6 @@
       collector: `projects/station/scripts/NETWORK-DIAGNOSTIC.md`.
 - [ ] Offsite encrypted backup + restore rehearsal на запасном железе.
 - [ ] Аварийный power-loss тест host/VM.
-- [ ] Host Tailscale emergency access; сейчас PVE только LAN/Wi-Fi.
 - [ ] Внешний Alertmanager/heartbeat; внутренний Alertmanager есть, dead-man
       switch наружу нет.
 - [ ] Полная latency instrumentation voice pipeline.
@@ -98,30 +97,39 @@
 
 - [ ] Приёмка пользователем `https://{ha,grafana,alarms,control}.home.example.com`:
       вход с телефона через VPN-профиль `lan` и `full`, HA WebSocket/
-      история/логин, Grafana live и дашборды, редирект `http`→`https`,
-      поведение при выключенном Tailscale.
+      история/логин, Grafana live и дашборды, редирект `http`→`https`.
 - [ ] HA `external_url` → `https://ha.home.example.com` (UI); `internal_url`
       `http://192.0.2.28:8123` не менять. `trusted_proxies` оставить
       `192.0.2.27/32`. После смены проверить уведомления, ссылки и голосовой
       контур.
 - [ ] Android: перевести scheduler/control endpoints на
-      `https://alarms.home.example.com` и `https://control.home.example.com`,
-      обновить подсказки про Tailscale в строках/README и, при желании,
-      запретить cleartext для приватного суффикса. Старые значения в DataStore
-      сохраняются.
-- [ ] Grafana в tailnet: после `root_url` на отдельный хост старый
-      `/grafana/` через `pl-home` больше не работает (ожидаемо); использовать
-      LAN/HTTPS-имя.
+      `https://alarms.home.example.com` и `https://control.home.example.com`
+      и, при желании, запретить cleartext для приватного суффикса. Старые
+      значения в DataStore сохраняются.
 
 ## VPN
 
 - [ ] Тест профиля `full` с мобильной сети (WAN NAT, MTU, DNS).
-- [ ] Отключение Tailscale — отдельный шаг с планом и окном отката: после
-      приёмки HTTPS ingress и VPN убрать `home-access`, три tailscale Ingress,
-      Operator, host `tailscaled` и `100.64.0.0/10` из nft scheduler.
+
+## CI/CD (GitHub-hosted runners)
+
+- [ ] Этап 1: починить тесты, зависящие от локальных файлов
+      (`platform/quality/test_static.py`, `projects/station/scripts`,
+      `test_deploy_control.sh` после сборки); `ci.yml` — quality, gitleaks,
+      Bazel build/test, debug APK как артефакт; без секретов.
+- [ ] Этап 2: сертификат и VPN-группа `ci` с отдельной подсетью; nftables в
+      VPN CT пускает её только к K3s по SSH; отдельный SSH-ключ CI;
+      `deploy-home.yml` для scheduler/ha-bridge/ha-control по path-filter,
+      только `develop`, авто-откат симлинка при неудачном healthcheck.
+- [ ] Этап 3: Hermes/voice-proxy через GHCR; Pulsar собирается и
+      релизится в своём репозитории, монорепо деплоит релиз на станцию
+      через Environment с ручным approve; конфиг HA — по решению.
 
 ## Безопасность / станция
 
+- [ ] Станция: развернуть egress guard без CGNAT-исключения `100.64.0.0/10`
+      (в репозитории уже убрано) вместе с ближайшим деплоем станции и
+      проверкой Pulsar/HA.
 - [ ] Secure Boot PK `DO NOT TRUST - AMI Test PK`: решить отдельно, только
       с физдоступом; не менять вслепую.
 - [ ] Factory/recovery image Midi и raw dump — нужен согласованный read-only

@@ -4,7 +4,7 @@
 
 ```text
 projects/station          Pulsar/ADB/BLE/provisioning
-projects/home-assistant   HA/MA/STT/TTS/Hermes/Tailscale
+projects/home-assistant   HA/MA/STT/TTS/Hermes
 ```
 
 И добавляет домашние solutions:
@@ -36,7 +36,7 @@ allowlisted HA scripts (`alarm_start`, `schedule_announce`, `alarm_stop`),
 выполнен, текущий HA остаётся владельцем звука и расписаний.
 
 Локальный процессный E2E (реальные бинарники + fake HA на loopback, без живых
-HA/ADB/Tailscale): `projects/home/e2e/scheduler_smoke.py`.
+HA/ADB): `projects/home/e2e/scheduler_smoke.py`.
 
 Рабочая Kubernetes-композиция и pinned Helm releases — [kubernetes/](kubernetes/README.md).
 HA Core перенесён в HAOS VM; K3s VM содержит MA/Matter/STT/TTS/Hermes и

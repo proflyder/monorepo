@@ -23,7 +23,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 4. Создать VM 100/101 с теми же ресурсами и MAC/static IP.
 5. Восстановить HAOS и K3s (ниже).
 6. Вернуть Wi-Fi профиль/`ricardo-uplink`; проверить Ethernet fallback.
-7. Проверить HA/MA/Grafana/Tailscale/voice.
+7. Проверить HA/MA/Grafana/HTTPS ingress/voice.
 
 ## 2. HAOS
 
@@ -45,7 +45,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 6. Импортировать custom images:
    `sudo k3s ctr images import --platform linux/amd64 <archive>`.
 7. Применить Helm releases из репозитория/private values.
-8. Проверить pods, PV, Grafana, Tailscale, voice endpoints.
+8. Проверить pods, PV, Grafana, HTTPS ingress, voice endpoints.
 
 Без server token восстановление datastore невозможно. Не заменять свежий
 Hermes auth старой копией.
@@ -70,6 +70,6 @@ curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
 ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'
 ```
 
-Проверить reboot host/VM без Ethernet, Tailscale, voice, alarm/stop/resume,
+Проверить reboot host/VM без Ethernet, HTTPS ingress, voice, alarm/stop/resume,
 Spotify/MA. Полный disaster restore на запасном железе ещё не выполнялся;
 это не заменяется обычным reboot-тестом.

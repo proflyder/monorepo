@@ -49,9 +49,10 @@
   navigation behind typed contracts. Preserve feature API/implementation
   boundaries, clean architecture, and reusable Kotlin/navigation utilities.
 - The approved public application ID is `dev.proflyder.home`, derived from the
-  user's public domain `proflyder.dev`. Endpoints are configurable LAN or
-  Tailscale addresses. The external Tailscale app owns VPN connectivity; use
-  system routing and verified TLS, without embedding a VPN client.
+  user's public domain `proflyder.dev`. Endpoints are configurable LAN
+  addresses or private HTTPS names under the home suffix. Remote access goes
+  through the self-hosted VPN (ocserv, external Cisco Secure Client/OpenConnect
+  app); use system routing and verified TLS, without embedding a VPN client.
 - HA integrates through an executor adapter. Hermes and future projects should
   share one extensible MCP gateway with domain tool groups, rather than one MCP
   server per project. Start MCP only when an actual client needs it.
@@ -60,12 +61,11 @@
 
 ## Локальный Git — осознанная конфигурация
 
-Репозиторий готовится к публикации на GitHub. До отдельного запроса
-работаем локально: история изменений, сравнение версий и восстановление.
-Отсутствие remote, PR и CI не является ошибкой.
+Репозиторий опубликован на GitHub (`origin`, ветка `develop`). Работаем
+локально; публикация — отдельное действие.
 
-- Не создавать remote, не публиковать проект, не выполнять push без прямого
-  запроса пользователя. Не предлагать публикацию как обязательный шаг.
+- Не выполнять push без прямого запроса пользователя; не создавать новые
+  remote. CI строится на GitHub-hosted runners (см. `docs/PENDING.md`).
 - После законченного логического изменения делать локальный коммит с понятным
   описанием, предварительно проверив diff и подходящие проверки.
 - Не переписывать историю и не откатывать чужие изменения; в проекте могут

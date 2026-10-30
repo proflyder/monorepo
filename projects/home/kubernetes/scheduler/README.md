@@ -18,7 +18,6 @@ manifests/bridge.yaml      ledger PVC + executor Deployment (template)
 manifests/control.yaml     ha-control Deployment (template)
 manifests/control-service.yaml  ha-control ClusterIP + NodePort
 nft/scheduler-nodeport.nft NodePort source filter (template)
-../tailscale/control-ingress.yaml  tailnet route for ha-control
 scheduler.env.example      placeholders; copy to secrets/home/scheduler.env
 render.py                  strict ${VAR} renderer (unknown/empty => fail)
 deploy.sh                  build, release, firewall, apply, mode transitions
@@ -100,27 +99,25 @@ Endpoints (private values in `secrets/home/scheduler.env`):
 
 - LAN: `http://<node>:${CONTROL_NODE_PORT}` (default 30099), same nft source
   filter as the scheduler NodePort.
-- Tailnet: `https://<TAILNET_CONTROL_HOSTNAME>.<tailnet>.ts.net`, dedicated
-  Ingress; `pl-home` and the scheduler ingress are unchanged.
+- HTTPS (LAN/VPN): `https://control.<HOME_DOMAIN>` and
+  `https://alarms.<HOME_DOMAIN>` through Traefik; see
+  `projects/home/kubernetes/ingress/`.
 
 ## Network and auth
 
 - `scheduler` Service is a NodePort (`SCHEDULER_NODE_PORT`, default 30098) for
   the LAN (HA voice + Android on the home network).
-- A dedicated Tailscale Ingress (`projects/home/kubernetes/tailscale/scheduler-ingress.yaml`)
-  exposes the same Service on `<TAILNET_SCHED_HOSTNAME>.<tailnet>.ts.net`,
-  tailnet-only, TLS by the operator. The existing `pl-home` ingress still
-  routes `/` to HAOS and `/grafana` to Grafana; the scheduler does not use a
-  path prefix on it.
-- Do not back a tailnet route with a selectorless Service pointing at this
+- The HTTPS names terminate at Traefik `IngressRoute` objects in namespace
+  `traefik` and forward to the `scheduler` / `ha-control` ClusterIP Services.
+- Do not back a proxied route with a selectorless Service pointing at this
   node's own NodePort: single-node ClusterIP DNAT to the node NodePort does not
   re-enter kube-proxy's NodePort hook.
 - `nft` drops the NodePort in `prerouting` before kube-proxy DNAT unless the
-  source is the home LAN, pod CIDR or Tailscale CGNAT; IPv6 NodePort is dropped.
+  source is the home LAN or the pod CIDR; IPv6 NodePort is dropped.
   Persistence: `ricardo-scheduler-firewall.service` on the node.
 - Every RPC requires `Authorization: Bearer <token>`; unauthenticated requests
   get HTTP 401. HA uses the LAN endpoint; Android can use either the LAN
-  endpoint or the tailnet HTTPS hostname. Both terminate at the same Service.
+  endpoint or the HTTPS name over the VPN. Both terminate at the same Service.
 - Readiness/liveness are authenticated: the probe runs the binary itself with
   `-healthcheck`, which reads the token file and calls `GetStatus`.
 
@@ -155,7 +152,7 @@ scale back to 1 and verify `GetStatus`.
 ## Bounded rollout (scheduler + bridge only)
 
 `deploy.sh` is the full path: it also rolls `ha-control`, reinstalls the
-NodePort filter and re-applies the Tailscale ingresses. When a change only
+NodePort filter. When a change only
 touches `solutions/scheduler` / the alarm bridge, do not run it; stage and roll
 just the two workloads:
 
@@ -174,8 +171,7 @@ kubectl -n home-assistant patch deployment/ha-bridge --type merge \
 
 Annotation patching preserves replicas, env, `hostPath` and PVCs. Update HA
 scripts (`ha core check` + `script.reload`) **before** rolling the bridge when
-the contract changes, and leave `ha-control`, the NodePort filter and the
-ingresses alone. Verify afterwards: rollout status, authenticated
+the contract changes, and leave `ha-control` and the NodePort filter alone. Verify afterwards: rollout status, authenticated
 `-healthcheck`, `GetStatus.ready`, live consumers, unchanged `ListSchedules`.
 
 ## Limits

@@ -20,7 +20,6 @@ if ! iptables -C EGRESS_GUARD -j DROP 2>/dev/null; then
   iptables -A EGRESS_GUARD -d 10.0.0.0/8 -j ACCEPT
   iptables -A EGRESS_GUARD -d 172.16.0.0/12 -j ACCEPT
   iptables -A EGRESS_GUARD -d 192.168.0.0/16 -j ACCEPT
-  iptables -A EGRESS_GUARD -d 100.64.0.0/10 -j ACCEPT
   iptables -A EGRESS_GUARD -d 169.254.0.0/16 -j ACCEPT
   iptables -A EGRESS_GUARD -d 224.0.0.0/4 -j ACCEPT
   iptables -A EGRESS_GUARD -d 255.255.255.255 -j ACCEPT

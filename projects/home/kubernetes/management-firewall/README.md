@@ -14,6 +14,6 @@ replace the separate voice-proxy firewall or router policy.
 5. Verify denied ports from LAN, then run cluster tests through an SSH tunnel.
 
 The script validates rules before applying and replaces only its own table
-in one nft transaction. Kubernetes/Tailscale tables remain managed by their
+in one nft transaction. Kubernetes tables remain managed by their
 owners. Update this policy before adding nodes or changing the node address.
 Rollback: disable the service and delete only `table inet ricardo_k3s`.

@@ -36,7 +36,7 @@ projects/home:
   alarm@home        тот же engine + legacy AlarmService facade
   ha-bridge@home    SCHEDULER_ENDPOINT=127.0.0.1:8098, queue=home
   ha-control@home   каталог Home, queue=control
-  android           Connect JSON → LAN/Tailscale endpoint
+  android           Connect JSON → LAN/VPN HTTPS endpoint
 ```
 
 Это один и тот же код, разные инстансы и конфигурация. Два executor-а на

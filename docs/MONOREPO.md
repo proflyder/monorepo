@@ -19,7 +19,7 @@ packages/                общий код и контракты
 
 projects/                композиции и deployment
   station/               Pulsar/ADB/BLE/provisioning
-  home-assistant/        HA/MA/STT/TTS/Hermes/Tailscale
+  home-assistant/        HA/MA/STT/TTS/Hermes
   home/                  station + home-assistant + scheduler/bridge/control
   mobile/android/        Kotlin/Views клиент (dev.proflyder.home)
 
@@ -48,7 +48,7 @@ projects/home:
   alarm@home          тот же engine + legacy AlarmService facade
   ha-bridge@home      SCHEDULER_ENDPOINT=127.0.0.1:8098, queue=home
   ha-control@home     каталог Home, queue=control
-  android             Connect JSON → LAN/Tailscale endpoint
+  android             Connect JSON → LAN/VPN HTTPS endpoint
 ```
 
 Одновременно `scheduler` и `alarm` на одной БД не запускаются: это один

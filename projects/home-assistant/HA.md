@@ -8,7 +8,7 @@
 - HAOS `2026.10.4`, 2 vCPU / 4 GiB / 32 GiB.
 - IP `192.0.2.28`; UI `http://192.0.2.28:8123`.
 - `internal_url` и trusted proxy настроены; HAProxy удалён.
-- Внешний вход — Tailscale Operator.
+- Внешний вход — собственный VPN (ocserv) и `https://ha.home.example.com`.
 
 ## Add-ons
 
@@ -31,7 +31,7 @@ curl -fsS -o /dev/null -w '%{http_code}\n' http://192.0.2.28:8123/
 curl -fsS -o /dev/null -w '%{http_code}\n' http://192.0.2.28:8095/
 ```
 
-После reboot проверить HA, add-ons, MA player/Sendspin, Matter, Tailscale,
+После reboot проверить HA, add-ons, MA player/Sendspin, Matter, HTTPS ingress,
 alarm media URLs и voice pipeline.
 
 ## Связанные документы

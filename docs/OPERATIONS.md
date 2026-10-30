@@ -24,11 +24,9 @@ HA: `http://192.0.2.28:8123`
 MA: `http://192.0.2.28:8095`  
 Grafana LAN: `http://192.0.2.27:30300/`  
 Grafana HTTPS: `https://grafana.home.example.com/`  
-Grafana Tailscale: `https://pl-home.<tailnet>.ts.net/grafana/` (после смены
-`root_url` путь не работает; использовать HTTPS-имя или LAN)  
 HTTPS вход (LAN/VPN): `https://{ha,grafana,alarms,control}.home.example.com/`
 
-Только LAN/VPN/Tailscale. Не пробрасывать `8123/8095/8099/6053/6638` и
+Только LAN/VPN. Не пробрасывать `8123/8095/8099/6053/6638` и
 `80/443` на роутере.
 
 ## VPN (CT 102)
@@ -337,17 +335,15 @@ default `scenario`): назначьте её скриптам в Settings → Au
 Scripts. Иконки/комнаты/имена — только отображение. `CONTROL_LABEL` удалена.
 
 Home control (каталог устройств/сценариев):
-`http://<node>:30099` (LAN) или `https://pl-control.<tailnet>.ts.net`
-(tailnet), тот же bearer, что у планировщика; в приложении — поле
-«Home control address» без `/v1/catalog`. Переключение исполнения:
+`http://<node>:30099` (LAN) или `https://control.home.example.com` (LAN/VPN),
+тот же bearer, что у планировщика; в приложении — поле «Home control address»
+без `/v1/catalog`. Переключение исполнения:
 `deploy.sh --control-execute|--control-catalog`.
 
-Удалённый endpoint для Android: `https://pl-scheduler.<tailnet>.ts.net`
-(tailnet-only, TLS оператора); LAN endpoint — `http://<node>:30098`.
-Новые HTTPS-имена (LAN/VPN, Let's Encrypt): `https://alarms.home.example.com`
-(scheduler) и `https://control.home.example.com` (каталог); переключение
-Android на них — отдельный шаг. Все варианты требуют bearer. `pl-home` не
-менять: `/` → HAOS, `/grafana` → Grafana.
+Endpoint для Android: `https://alarms.home.example.com` (scheduler) и
+`https://control.home.example.com` (каталог) через Traefik + Let's Encrypt;
+LAN endpoint — `http://<node>:30098`. Переключение Android на HTTPS-имена —
+отдельный шаг. Все варианты требуют bearer.
 
 Пауза исполнения — `deploy.sh --shadow` (0 реплик, данные scheduler
 сохраняются); возврат — `--execute` после preflight. Legacy writers удалены и
@@ -410,9 +406,8 @@ qm reboot 101       # K3s
 reboot
 ```
 
-После reboot проверить HA, K3s pods, Grafana, HTTPS ingress, Tailscale,
-Sendspin и Pulsar.
-Аварийный доступ к PVE — LAN/Wi-Fi; host Tailscale не настроен.
+После reboot проверить HA, K3s pods, Grafana, HTTPS ingress, Sendspin и
+Pulsar. Аварийный доступ к PVE — LAN/Wi-Fi.
 
 ## Backup
 

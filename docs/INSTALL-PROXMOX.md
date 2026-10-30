@@ -53,7 +53,7 @@ gateway, MAC. Не переиспользовать старый config-drive in
 - HAOS — восстановить supported backup через Supervisor, проверить
   `internal_url`, trusted proxy, add-ons MA/Matter;
 - K3s VM — восстановить data/PV/Helm по `KUBERNETES-OPERATIONS.md`;
-- проверить `.28:8123`, `.27:30300/grafana/`, Tailscale, voice/music.
+- проверить `.28:8123`, `.27:30300/`, HTTPS ingress, voice/music.
 
 ## Wi-Fi uplink
 
@@ -84,4 +84,4 @@ ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'
 ```
 
 Проверить после reboot: VM autostart, HA, K3s, Sendspin, Spotify, Pulsar,
-Tailscale. Полный disaster restore и power-loss тест — отдельная приёмка.
+HTTPS ingress. Полный disaster restore и power-loss тест — отдельная приёмка.

@@ -90,7 +90,7 @@ def main(output):
         print(f"Cold-copied {copied} bound persistent volumes", flush=True)
         # Filesystem metadata/recovery credentials, not a byte-for-byte disk image.
         host_paths = ["etc", "boot", "boot/efi", "root", "usr/local", "var/lib/shim-signed", "var/lib/dkms", "usr/src",
-                      "var/lib/tailscale", "var/backups/k3s-migration/native-hermes-home",
+                      "var/backups/k3s-migration/native-hermes-home",
                       "var/backups/k3s-migration/native-compose"]
         import pwd
         home = Path(pwd.getpwuid(1000).pw_dir)

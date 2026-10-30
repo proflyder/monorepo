@@ -9,7 +9,7 @@ PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
 8 vCPU/8 GiB/200 GiB) running, static IP в guests, startup order 1/2.
 HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`. Terraform plan — no changes;
 state root-only на PVE и копия в `secrets/`. HAOS восстановлен, K3s runtime
-и Tailscale Operator приняты read-only E2E. HA-совместимый endpoint
+и HTTPS ingress приняты read-only E2E. HA-совместимый endpoint
 HAOS доступен напрямую `.28:8123`; compatibility HAProxy удалён.
 
 Wi-Fi RTL8821CE работает на host как 4-address/WDS uplink `vmbr0`,

@@ -5,7 +5,7 @@
 
 > **Важно:** все адреса ниже — примеры из документационного диапазона
 > `192.0.2.0/24` (RFC 5737), а не реальные адреса стенда. Реальная карта
-> с LAN-IP и Tailscale-именем хранится отдельно, в приватном
+> с LAN-IP и именами VPN/HTTPS хранится отдельно, в приватном
 > `secrets/NETWORK.md`, и не публикуется.
 
 Текущее состояние и версии — `STATE.md`. Этот файл описывает сетевую
@@ -104,7 +104,6 @@ HAOS и K3s используют статические адреса внутр�
 | `9100/tcp` | node-exporter | не обычный LAN |
 | `9116/tcp` | runtime health exporter | не обычный LAN |
 | `8472/udp` | Flannel VXLAN | cluster-only |
-| `41641/udp` | Tailscale | outbound/NAT traversal |
 
 K3s management/metrics-порты закрыты firewall от обычных LAN-клиентов.
 Администрирование — через SSH и локальный туннель к API, а не через
@@ -114,13 +113,13 @@ K3s management/metrics-порты закрыты firewall от обычных LA
 
 | Порт | Назначение | Класс доступа |
 |---|---|---|
-| `443/tcp` | ocserv, TLS/OpenConnect | LAN; позже проброс ONT/AX3 |
-| `443/udp` | ocserv, DTLS | LAN; позже проброс ONT/AX3 |
+| `443/tcp` | ocserv, TLS/OpenConnect | LAN + проброс ONT/AX3 |
+| `443/udp` | ocserv, DTLS | LAN + проброс ONT/AX3 |
 | `22/tcp` | SSH | только LAN `192.0.2.0/24` |
 
 Внутри CT — пул `10.77.0.0/24`, nftables `drop` по умолчанию, masquerade
-VPN → LAN/WAN. Наружу пока ничего не проброшено; сертификат
-самоподписанный, клиент проверяет `pin-sha256`.
+VPN → LAN/WAN. Наружу проброшен только `443/tcp+udp`; сертификат Let's
+Encrypt для `vpn.example.com` продлевается certbot-ом (DNS-01 Cloudflare).
 
 ### Станция
 
@@ -152,46 +151,26 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
 
 ## 5. Удалённый доступ
 
-Удалённый доступ построен на **Tailscale**, без входящих портов на роутере:
+Удалённый доступ — собственный VPN на ocserv (CT 102). На роутере проброшен
+только VPN (`443/tcp+udp`); остальные сервисы в интернет не публикуются.
 
-```text
-https://pl-home.<tailnet>.ts.net/          -> HAOS
-https://pl-home.<tailnet>.ts.net/grafana/  -> Grafana (после перехода Grafana
-                                              на отдельный root_url путь
-                                              работает только в LAN/VPN)
-```
-
-Свойства схемы:
-
-- Tailscale Operator работает в K3s и публикует Kubernetes Ingress;
-- `pl-home` указывает на operator proxy с тегом `k8s`;
-- старый host-level Serve не используется;
-- Funnel и port-forward на ONT/AX3 не используются;
-- публичного HA, MA, ADB или Zigbee-порта нет;
-- LAN-доступ и локальный голосовой контур работают независимо от WAN.
-
-### Собственный VPN — этап 1
-
-Параллельно Tailscale поднимается собственный VPN на ocserv (CT 102).
-Этап 1 работает только внутри LAN: сервер доступен по `https://192.0.2.29/`,
-пробросов на ONT/AX3 нет. Клиент — Cisco Secure Client / OpenConnect,
-аутентификация — пароль + TOTP (6 цифр, 30 с, Google Authenticator).
+VPN доступен из LAN по `https://192.0.2.29/` и снаружи по
+`https://vpn.example.com/`. Клиент — Cisco Secure Client / OpenConnect,
+аутентификация — пароль + TOTP (6 цифр, 30 с, Google Authenticator) или
+клиентский сертификат.
 
 - `443/tcp` и `443/udp` (DTLS), TLS 1.2+, без compression;
 - два профиля на выбор: `lan` (split tunnel, маршрут только на домашнюю
   LAN, DNS `192.0.2.1`) и `full` (весь трафик через дом);
 - NAT/masquerade делает CT, маршруты на LAN-устройствах не нужны;
-- сертификат самоподписанный; позже — Let's Encrypt (certbot, ручной DNS-01: API Namecheap недоступен)
-  и имя `vpn.example.com`;
+- сертификат Let's Encrypt на `vpn.example.com`, продление certbot-ом
+  (DNS-01 Cloudflare);
 - встроенный бан неудачных попыток, SSH в CT — только из LAN.
-
-Tailscale пока остаётся основным удалённым доступом; отключается отдельным
-шагом после проверки VPN с мобильной сети.
 
 ### HTTPS-имена в LAN/VPN
 
-Параллельно Tailscale в K3s поднят Traefik (`hostNetwork`, порты `80/443` на
-узле) и cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
+В K3s работают Traefik (`hostNetwork`, порты `80/443` на узле) и
+cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 `*.home.example.com` выпускается автоматически и продлевается cert-manager.
 
 - A-записи `ha`, `grafana`, `alarms`, `control` → `192.0.2.27`, Cloudflare
@@ -205,19 +184,19 @@ Tailscale пока остаётся основным удалённым дост
   имена резолвятся в приватный адрес и работают только из LAN/VPN.
 
 Управление и проверки — `projects/home/kubernetes/ingress/README.md` и
-`KUBERNETES-OPERATIONS.md`. Tailscale и NodePort остаются аварийным путём до
-отдельной приёмки.
+`KUBERNETES-OPERATIONS.md`. Прямые LAN-адреса и NodePort остаются аварийным
+путём.
 
 ## 6. Политика доступа
 
-- Административные интерфейсы — только LAN или Tailscale.
+- Административные интерфейсы — только LAN или VPN.
 - `6443/10250/9100/9116/8472` не публикуются в обычный LAN.
 - `8643` voice proxy доступен только HAOS, K3s и loopback.
 - `8123/8095/8099/6053/6638` не пробрасываются в интернет.
 - `80/443` на узле K3s обслуживает только Traefik с IP allow-list; роутер их
   не пробрасывает, имена `*.home.example.com` работают только из LAN/VPN.
-- VPN `443/tcp,udp` пока не проброшен; после проброса это единственный
-  входящий порт, SSH в VPN-CT остаётся LAN-only.
+- VPN `443/tcp+udp` — единственный входящий порт из интернета; SSH в
+  VPN-CT остаётся LAN-only.
 - `6638` (Zigbee) не имеет auth; при включении не выставлять наружу.
 - Станция не должна получать публичный WAN: egress guard — часть дизайна.
 - Секреты и реальные адреса хранятся только в `secrets/`; в публичных
@@ -258,5 +237,5 @@ ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 <user>@<K3S_IP>
 - `SECURITY.md` — сетевые политики;
 - `SENSITIVE-DATA.md` — реестр приватных данных (без значений).
 
-Реальная карта с LAN-IP, Tailscale-именем и точными firewall source —
+Реальная карта с LAN-IP, именами VPN/HTTPS и точными firewall source —
 `secrets/NETWORK.md`; она не входит в публичный Git.

@@ -2,8 +2,8 @@
 
 Traefik + cert-manager дают LAN/VPN-доступ к домашним сервисам по именам с
 валидным сертификатом Let's Encrypt: `ha`, `grafana`, `alarms`, `control` под
-приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса,
-NodePort и Tailscale не удаляются и остаются аварийным путём.
+приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса и
+NodePort не удаляются и остаются аварийным путём.
 
 ## Состав
 
@@ -49,6 +49,7 @@ read-only root и без privilege escalation. Менять
 ```bash
 HOME_DOMAIN=home.example.com
 LAN_CIDR=192.0.2.0/24
+HAOS_ADDRESS=192.0.2.28
 CLOUDFLARE_API_TOKEN_FILE=/private/path/cloudflare.env
 ```
 
@@ -115,6 +116,6 @@ kubectl delete clusterissuer letsencrypt-staging letsencrypt-prod
 kubectl delete namespace traefik cert-manager
 ```
 
-Старые пути (NodePort 30098/30099/30300, Tailscale Ingress, LAN-адреса)
-продолжают работать независимо от этого каталога. DNS-записи удаляются
-отдельно через Cloudflare API.
+Прямые LAN-адреса и NodePort 30098/30099/30300 продолжают работать
+независимо от этого каталога. DNS-записи удаляются отдельно через Cloudflare
+API.

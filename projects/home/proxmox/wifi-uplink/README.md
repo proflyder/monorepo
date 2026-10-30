@@ -66,7 +66,7 @@ SSID/MAC. Временный режим задаётся root-only `/run/ricardo
 используется `MODE` из `/etc/default/ricardo-uplink` (обычно auto).
 
 Нужны тесты: доступ по SSH/PVE, HA/MA/Grafana, K3s acceptance через tunnel,
-Tailscale HTTPS, связь HAOS→STT/TTS/Hermes, IPv6 multicast и прямое чтение
+HTTPS-имена, связь HAOS→STT/TTS/Hermes, IPv6 multicast и прямое чтение
 Matter-устройства. Затем физически вынуть Ethernet и проверить reboot.
 Смена uplink — короткий разрыв связи, не бесшовная агрегация каналов.
 

@@ -72,7 +72,7 @@ go vet ./solutions/...
 ```
 
 Тесты scheduler/bridge герметичны: SQLite — во временном каталоге, scheduler,
-HA и Connect-клиенты — через `httptest`/фейки; живые HA, Tailscale, ADB и
+HA и Connect-клиенты — через `httptest`/фейки; живые HA, ADB и
 устройство не используются. Scheduler API отдаёт Connect JSON на
 `/ricardo.v1.SchedulerService/<Method>`; bridge проверяется как настоящий
 клиент этого контракта.

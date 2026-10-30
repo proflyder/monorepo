@@ -105,9 +105,7 @@ python3 "$DIR/render.py" --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
   "$DIR/manifests/scheduler.yaml" "$DIR/manifests/bridge.yaml" \
   "$DIR/manifests/control.yaml" "$DIR/manifests/control-service.yaml" \
-  "$DIR/nft/scheduler-nodeport.nft" \
-  "$DIR/../tailscale/scheduler-ingress.yaml" \
-  "$DIR/../tailscale/control-ingress.yaml"
+  "$DIR/nft/scheduler-nodeport.nft"
 
 if [[ -n "${NODE_SSH:-}" ]]; then
   RELEASE_PATH="/opt/ricardo/releases/$BUILD_ID"
@@ -130,7 +128,7 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
   }
   echo "== installing NodePort source filter on $NODE_SSH"
   scp -q "$RENDER_DIR/scheduler-nodeport.nft" "$NODE_SSH:/etc/ricardo-scheduler-nodeport.nft"
-  ssh "$NODE_SSH" 'nft -f /etc/ricardo-scheduler-nodeport.nft && nft list table inet ricardo_scheduler >/dev/null'
+  ssh "$NODE_SSH" 'nft delete table inet ricardo_scheduler 2>/dev/null || true; nft -f /etc/ricardo-scheduler-nodeport.nft && nft list table inet ricardo_scheduler >/dev/null'
 fi
 
 echo "== checking required secrets"
@@ -141,9 +139,8 @@ for s in scheduler-auth ha-bridge-ha; do
   fi
 done
 
-echo "== applying scheduler and tailnet routes"
+echo "== applying scheduler"
 $KUBECTL apply -f "$RENDER_DIR/scheduler.yaml"
-$KUBECTL apply -f "$RENDER_DIR/scheduler-ingress.yaml"
 $KUBECTL -n "$NS" rollout status deployment/scheduler --timeout=180s
 $KUBECTL -n "$NS" exec deployment/scheduler -- /opt/ricardo/bin/scheduler -healthcheck
 echo "scheduler authenticated readiness: ok"
@@ -163,7 +160,6 @@ else
     "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"ricardo.dev/build\":\"$BUILD_ID\"}}}}}"
 fi
 $KUBECTL apply -f "$RENDER_DIR/control-service.yaml"
-$KUBECTL apply -f "$RENDER_DIR/control-ingress.yaml"
 
 control_queue_pending() {
   # Fail closed: --control-execute refuses when the dedicated control queue has

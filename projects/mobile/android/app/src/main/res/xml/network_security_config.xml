@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The client talks to a user-supplied LAN or Tailscale address. HTTP is
+<!-- The client talks to a user-supplied LAN address or a home HTTPS name
+     reached over the VPN. HTTP is
      allowed only because users may run the server without TLS on their own
      network; HTTPS is recommended and cleartext is never enabled for public
      hosts by this app. See README "Transport security". -->

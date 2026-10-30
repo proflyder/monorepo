@@ -65,7 +65,7 @@ interface SchedulerClient {
  *    forwarded to a Location host,
  *  - the token travels only in the Authorization header, never in the URL,
  *  - the system TLS trust store is used; there is no permissive trust manager,
- *  - no socket is bound to Wi-Fi, so Tailscale/system routing works unchanged.
+ *  - no socket is bound to Wi-Fi, so LAN/VPN system routing works unchanged.
  */
 class ConnectSchedulerClient(
     settings: ConnectionSettingsStore,

@@ -12,8 +12,7 @@
     health exporter;
   - `monitoring`: kube-prometheus-stack, Loki, Alloy, Grafana;
   - `traefik`: ingress-контроллер, wildcard Certificate и IngressRoute;
-  - `cert-manager`: cert-manager и ACME solver Secrets;
-  - `tailscale`: Operator и ingress proxy.
+  - `cert-manager`: cert-manager и ACME solver Secrets.
 - HAOS и add-ons MA/Matter — отдельная VM `.28`; в K3s их больше нет.
 - App PV — local-path, `Retain`; старые PV не удалять без проверки.
 
@@ -82,9 +81,6 @@ Dashboard JSON: `projects/home-assistant/observability/chart/dashboards/`;
 - LAN: `http://192.0.2.27:30300/` (корень; прежний `/grafana/` больше не
   используется после перехода `root_url` на отдельный хост)
 - HTTPS (LAN/VPN): `https://grafana.home.example.com/`
-- Tailscale: `https://pl-home.<tailnet>.ts.net/`; старый
-  `/grafana/` после смены `root_url` больше не работает (ожидаемо) —
-  использовать HTTPS-имя или LAN NodePort.
 - Loki/Prometheus наружу не опубликованы.
 - Port-forward для диагностики:
 
@@ -131,16 +127,15 @@ NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 `kubectl -n traefik logs deploy/traefik`. Порты `80/443` на узле заняты
 Traefik — не запускать там второй прокси без остановки release.
 
-## Tailscale
+## Удалённый доступ
 
-- Operator `1.104.2`, release `home-access`.
-- `/` → HAOS `.28:8123`; `/grafana/` больше не обслуживается после перехода
-  Grafana на отдельный `root_url`.
-- `pl-home` DNS → operator proxy `tag:k8s`.
-- При смене HAOS IP обновить private `haosAddress` и применить chart.
-- Публичного HA нет; Funnel/port-forward не используются.
-- Tailscale остаётся как есть до отдельной приёмки и шага вывода; новые
-  HTTPS-имена его не заменяют автоматически.
+- Вход снаружи — только собственный VPN (ocserv, CT `102`,
+  `vpn.example.com`), см. `projects/home/proxmox/vpn/`.
+- Внутри LAN/VPN — HTTPS-имена `*.home.example.com` из раздела выше.
+- HAOS в K3s подключён через Service `monitoring/home-assistant-external`
+  и EndpointSlice с адресом HAOS; при смене IP обновить `HAOS_ADDRESS`
+  в приватном env и применить `ingress/manifests/backends.yaml`.
+- Публичного HA нет; port-forward на роутере только для VPN.
 
 ## Backup / restore
 
@@ -154,7 +149,7 @@ Traefik — не запускать там второй прокси без ос
   3. вернуть data-dir/token/ключи;
   4. вернуть PVC до запуска Pods;
   5. импортировать images;
-  6. проверить endpoints, Tailscale, voice/music.
+  6. проверить endpoints, HTTPS-имена, voice/music.
 
 Disaster restore на запасном железе ещё не выполнялся.
 

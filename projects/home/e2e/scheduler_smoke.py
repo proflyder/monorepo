@@ -3,7 +3,7 @@
 
 This test is hermetic: it builds both Go binaries into a temporary directory,
 starts the scheduler with a temporary SQLite database and dummy bearer tokens,
-and serves a fake HA on loopback. It never contacts live HA, Tailscale, ADB or
+and serves a fake HA on loopback. It never contacts live HA, ADB or
 the station, and it never touches a production scheduler database.
 
 What it verifies end to end:

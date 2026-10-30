@@ -48,8 +48,9 @@
 - PVE `ricardo-uplink`: ровно один physical uplink — Ethernet при carrier,
   иначе Wi-Fi 4-address/WDS. Оба одновременно в мост не подключать.
 - VM сохраняют `.27/.28`, L2, ARP/mDNS/IPv6; NAT и PCI passthrough нет.
-- Tailscale Operator в K3s публикует HA (`pl-home`), Grafana, scheduler
-  (`pl-scheduler`) и ha-control (`pl-control`) без входящих портов.
+- Traefik в K3s публикует HA, Grafana, scheduler (`alarms`) и ha-control
+  (`control`) как `https://<name>.home.example.com` только в LAN/VPN;
+  снаружи вход — собственный VPN (ocserv).
 - Станция: egress guard; публичный WAN и Яндекс закрыты.
 
 ## Данные
@@ -63,7 +64,7 @@
 ## Границы
 
 - Один K3s node, без HA control plane/distributed storage.
-- Публичного HA/Grafana нет; только LAN/Tailscale.
+- Публичного HA/Grafana нет; только LAN/VPN.
 - Matter devices пока не добавлены; LED strip — первый кандидат.
 - Нет offsite backup, внешнего alerting и полного disaster restore.
 - Станция — единственный экземпляр; factory/recovery image отсутствует.

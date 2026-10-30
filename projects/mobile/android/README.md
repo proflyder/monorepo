@@ -50,10 +50,10 @@ in [STATE](../../../docs/STATE.md) and [PENDING](../../../docs/PENDING.md).
 ## Connection and networking
 
 - Two base URLs, no paths:
-  - **Server address** (scheduler): LAN `http://<node>:30098` or Tailscale
-    `https://pl-scheduler.<tailnet>.ts.net`.
-  - **Home control address** (catalog): LAN `http://<node>:30099` or Tailscale
-    `https://pl-control.<tailnet>.ts.net`.
+  - **Server address** (scheduler): LAN `http://<node>:30098` or the home
+    HTTPS name `https://alarms.<HOME_DOMAIN>` reached over the VPN.
+  - **Home control address** (catalog): LAN `http://<node>:30099` or the home
+    HTTPS name `https://control.<HOME_DOMAIN>` reached over the VPN.
   - The app appends the Connect RPC path or `/v1/catalog` itself. Do not paste
     `/v1/catalog` into the field.
 - The same bearer token is used for scheduler and control. Endpoints and tokens
@@ -65,7 +65,7 @@ in [STATE](../../../docs/STATE.md) and [PENDING](../../../docs/PENDING.md).
 - Direct LAN `http://` is a deliberate private-network trade-off and is allowed
   by `network_security_config.xml`; HTTPS is recommended and uses the platform
   trust store. Redirects are disabled. No custom trust manager, hostname
-  verifier, or certificate pinning; the system chooses LAN or Tailscale routing.
+  verifier, or certificate pinning; the system chooses LAN or VPN routing.
 
 ## Credentials and backup
 

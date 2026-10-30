@@ -7,17 +7,17 @@
 - Стенд только для своих устройств в своей сети.
 - Не публиковать `secrets/`, ключи, архивы, HA auth, логи с токенами.
 - Не пробрасывать HA/MA/ADB/Zigbee в интернет.
-- Публичный доступ — только Tailscale Operator.
+- Публичный доступ — только собственный VPN (ocserv).
 
 ## Сеть
 
-- HAOS `.28`: `8123`, `8095/8097/8927` — LAN/Tailscale, login/MFA.
-- K3s `.27`: `30300` Grafana — LAN/Tailscale, login; `8643` — только
+- HAOS `.28`: `8123`, `8095/8097/8927` — LAN/VPN, login/MFA.
+- K3s `.27`: `30300` Grafana — LAN/VPN, login; `8643` — только
   HAOS/K3s/loopback; `6443/10250/9100/9116/8472` — firewall.
 - Станция `.13`: `6053`, `8928`, `8099`, `5555`, `22` — только LAN.
   `8099` — bearer token; ADB root без пароля; SSH root по паролю.
 - `6638` Zigbee — без auth; сейчас закрыт/не используется, наружу не выставлять.
-- ONT/AX3: входящие порты не открывать; WAN `22/443` проверить/закрыть.
+- ONT/AX3: проброшен только VPN `443/tcp+udp`; WAN `22` проверить/закрыть.
 
 ## VPN
 
@@ -51,7 +51,7 @@
 
 `secrets/` — 700, файлы 600. Реестр — `SENSITIVE-DATA.md`.
 
-- `secrets/NETWORK.md` — реальные IP/порты/Tailscale.
+- `secrets/NETWORK.md` — реальные IP/порты/VPN/HTTPS.
 - `secrets/CREDENTIALS.md` — SSH/ADB/сервисные пароли.
 - `secrets/certs/` — приватные сертификаты/ключи.
 - QR/DPP отключён; прежний материал — только в private recovery archive.

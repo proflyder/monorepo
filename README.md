@@ -16,7 +16,7 @@
 
 ```text
 projects/station/       Pulsar, ADB, BLE, provisioning
-projects/home/          Proxmox, K3s, Terraform, Tailscale
+projects/home/          Proxmox, K3s, Terraform, VPN
 projects/home-assistant/HA, voice, Hermes, MA, TTS, dashboards
 solutions/              переиспользуемые scheduler/alarm/bridge
 packages/               proto, общий Go-код
@@ -34,7 +34,7 @@ ssh labuser@192.0.2.27       # K3s VM
 ```
 
 HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
-`192.0.2.27:30300/grafana/`. Только LAN/Tailscale; в интернет не публиковать.
+`192.0.2.27:30300/grafana/`. Только LAN/VPN; в интернет не публиковать.
 
 ## Статус
 
@@ -42,7 +42,7 @@ HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
 - Wi-Fi 4addr/WDS + Ethernet fallback; VM IP не меняются.
 - Pulsar Rust `v0.5.0-1-g908a027`, wake word «Рикардо», BLE gateway.
 - HAOS add-ons: MA `2.10.8`, Matter `9.2.0`; K3s: STT/TTS/Hermes/observability.
-- Remote — Tailscale Operator, без публичного HA.
+- Remote — собственный VPN (ocserv) и HTTPS-имена, без публичного HA.
 
 ## Тесты
 

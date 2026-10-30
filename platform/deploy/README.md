@@ -11,6 +11,6 @@ systemd/   reusable unit templates
 Правила:
 
 - сервисы слушают loopback или LAN, не публикуются в интернет;
-- Tailscale Serve/Caddy — единственный внешний вход;
+- внешний вход — только собственный VPN (ocserv);
 - секреты — через env/secret files;
 - `ha-bridge` общается с HA, `alarm` не управляет Pulsar напрямую.

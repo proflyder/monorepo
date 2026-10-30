@@ -14,14 +14,14 @@ class ServerEndpointTest {
 
     @Test
     fun acceptsHttpsDnsNameWithDefaultPort() {
-        val endpoint = valid("https://home.tailnet.ts.net")
+        val endpoint = valid("https://home.example.com")
         assertEquals(ServerEndpoint.Scheme.HTTPS, endpoint.scheme)
-        assertEquals("home.tailnet.ts.net", endpoint.host)
+        assertEquals("home.example.com", endpoint.host)
         assertEquals(443, endpoint.port)
         assertFalse(endpoint.portExplicit)
-        assertEquals("https://home.tailnet.ts.net", endpoint.baseUrl())
+        assertEquals("https://home.example.com", endpoint.baseUrl())
         assertEquals(
-            "https://home.tailnet.ts.net/ricardo.v1.SchedulerService/GetStatus",
+            "https://home.example.com/ricardo.v1.SchedulerService/GetStatus",
             endpoint.rpcUrl("ricardo.v1.SchedulerService", "GetStatus"),
         )
     }
@@ -45,10 +45,10 @@ class ServerEndpointTest {
 
     @Test
     fun normalizesCaseAndOptionalPrefix() {
-        val endpoint = valid("HTTPS://Home.Example.TS.NET:443/base")
-        assertEquals("home.example.ts.net", endpoint.host)
+        val endpoint = valid("HTTPS://Home.Example.COM:443/base")
+        assertEquals("home.example.com", endpoint.host)
         assertEquals("/base", endpoint.basePath)
-        assertEquals("https://home.example.ts.net/base", endpoint.baseUrl())
+        assertEquals("https://home.example.com/base", endpoint.baseUrl())
     }
 
     @Test
@@ -60,20 +60,20 @@ class ServerEndpointTest {
 
     @Test
     fun rejectsMissingSchemeInsteadOfGuessing() {
-        assertEquals(EndpointProblem.MISSING_SCHEME, problem("home.tailnet.ts.net"))
+        assertEquals(EndpointProblem.MISSING_SCHEME, problem("home.example.com"))
     }
 
     @Test
     fun rejectsUnsupportedScheme() {
-        assertEquals(EndpointProblem.UNSUPPORTED_SCHEME, problem("ftp://home.tailnet.ts.net"))
-        assertEquals(EndpointProblem.UNSUPPORTED_SCHEME, problem("ws://home.tailnet.ts.net"))
+        assertEquals(EndpointProblem.UNSUPPORTED_SCHEME, problem("ftp://home.example.com"))
+        assertEquals(EndpointProblem.UNSUPPORTED_SCHEME, problem("ws://home.example.com"))
     }
 
     @Test
     fun rejectsCredentialsInUrl() {
         assertEquals(
             EndpointProblem.USERINFO_NOT_ALLOWED,
-            problem("https://user:secret@home.tailnet.ts.net"),
+            problem("https://user:secret@home.example.com"),
         )
     }
 
@@ -81,7 +81,7 @@ class ServerEndpointTest {
     fun rejectsQueryBecauseItOftenCarriesTokens() {
         assertEquals(
             EndpointProblem.QUERY_NOT_ALLOWED,
-            problem("https://home.tailnet.ts.net/?token=secret"),
+            problem("https://home.example.com/?token=secret"),
         )
     }
 
@@ -89,21 +89,21 @@ class ServerEndpointTest {
     fun rejectsFragment() {
         assertEquals(
             EndpointProblem.FRAGMENT_NOT_ALLOWED,
-            problem("https://home.tailnet.ts.net/path#token"),
+            problem("https://home.example.com/path#token"),
         )
     }
 
     @Test
     fun rejectsDotSegmentsAndEncodedPaths() {
-        assertEquals(EndpointProblem.INVALID_PATH, problem("https://home.tailnet.ts.net/a/../b"))
-        assertEquals(EndpointProblem.INVALID_PATH, problem("https://home.tailnet.ts.net/%2e%2e/admin"))
-        assertEquals(EndpointProblem.INVALID_PATH, problem("https://home.tailnet.ts.net/a//b"))
+        assertEquals(EndpointProblem.INVALID_PATH, problem("https://home.example.com/a/../b"))
+        assertEquals(EndpointProblem.INVALID_PATH, problem("https://home.example.com/%2e%2e/admin"))
+        assertEquals(EndpointProblem.INVALID_PATH, problem("https://home.example.com/a//b"))
     }
 
     @Test
     fun rejectsInvalidPorts() {
-        assertEquals(EndpointProblem.INVALID_PORT, problem("https://home.tailnet.ts.net:0"))
-        assertEquals(EndpointProblem.INVALID_PORT, problem("https://home.tailnet.ts.net:70000"))
+        assertEquals(EndpointProblem.INVALID_PORT, problem("https://home.example.com:0"))
+        assertEquals(EndpointProblem.INVALID_PORT, problem("https://home.example.com:70000"))
     }
 
     @Test
@@ -124,8 +124,8 @@ class ServerEndpointTest {
 
     @Test
     fun rejectsWhitespaceAndControls() {
-        assertEquals(EndpointProblem.WHITESPACE, problem("https://home.tailnet.ts.net /x"))
-        assertEquals(EndpointProblem.WHITESPACE, problem("https://home.tailnet.ts.net\n/x"))
+        assertEquals(EndpointProblem.WHITESPACE, problem("https://home.example.com /x"))
+        assertEquals(EndpointProblem.WHITESPACE, problem("https://home.example.com\n/x"))
     }
 
     @Test
@@ -145,15 +145,15 @@ class ServerEndpointTest {
 
     @Test
     fun toStringNeverIncludesCredentials() {
-        val endpoint = valid("https://home.tailnet.ts.net")
+        val endpoint = valid("https://home.example.com")
         val text = endpoint.toString()
         assertFalse(text.contains("@"))
         assertFalse(text.contains("token", ignoreCase = true))
     }
 
     @Test
-    fun acceptsMagicDnsNameAndLocalhost() {
-        assertEquals("home-server.tail1234.ts.net", valid("http://home-server.tail1234.ts.net").host)
+    fun acceptsHomeNameAndLocalhost() {
+        assertEquals("home-server.home.example.com", valid("http://home-server.home.example.com").host)
         assertEquals("localhost", valid("http://localhost:8080").host)
     }
 }

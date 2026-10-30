@@ -220,7 +220,7 @@ bazel test //solutions/ha-bridge/...
   fail-closed, HA-ошибка не превращается в success, дубликаты, порядок
   `HA → ledger → ACK`, STOP раньше FIRE, backoff и graceful shutdown.
 
-Тесты не обращаются к живому scheduler, HA, Tailscale или устройству.
+Тесты не обращаются к живому scheduler, HA или устройству.
 Процессный E2E (реальные бинарники, fake HA на loopback, временные SQLite и
 ledger) — `projects/home/e2e/scheduler_smoke.py`; живой звук и cutover он не
 проверяет.
@@ -342,8 +342,8 @@ payload={"entry": "<entity_id>", "action": "run|turn_on|turn_off"})`. Испол
 kind, title, room, icon, actions[], state("on"/"off", устройства), available}]}`;
 порядок: сценарии, затем устройства по комнатам. Сервер только читает. Телефон шлёт
 тот же bearer, что и планировщику (можно задать общий). Слушает `CONTROL_LISTEN`
-(по умолчанию `127.0.0.1:8099`; для LAN/Tailscale — адрес интерфейса). TLS на
-уровне процесса нет, как у scheduler: доверенная сеть/Tailscale.
+(по умолчанию `127.0.0.1:8099`; для LAN/VPN — адрес интерфейса). TLS на
+уровне процесса нет, как у scheduler: доверенная сеть LAN/VPN.
 
 | Переменная | Обяз. | По умолчанию | Смысл |
 | --- | --- | --- | --- |

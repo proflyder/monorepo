@@ -4,7 +4,7 @@
     <string name="ui_loading">Loading…</string>
     <string name="ui_error_not_configured">No server is configured. Open Connection and enter your home server address.</string>
     <string name="ui_error_unauthorized">The server rejected the bearer token. Check the token in Connection.</string>
-    <string name="ui_error_offline">The server cannot be reached. Check LAN or Tailscale connectivity, then retry.</string>
+    <string name="ui_error_offline">The server cannot be reached. Check LAN or VPN connectivity, then retry.</string>
     <string name="ui_error_timeout">The server did not answer before the configured read timeout.</string>
     <string name="ui_error_tls">TLS verification failed. Use the server\'s HTTPS address and a trusted certificate.</string>
     <string name="ui_error_server">Server error (%1$s): %2$s</string>

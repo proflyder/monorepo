@@ -5,7 +5,7 @@ systemd и deployment, но **не** бизнес-логика.
 
 ```text
 projects/station/          Pulsar/ADB/BLE/provisioning
-projects/home-assistant/   HA/MA/STT/TTS/Hermes/Tailscale
+projects/home-assistant/   HA/MA/STT/TTS/Hermes
 projects/home/             композиция station + home-assistant + alarm
 projects/mobile/           Android-клиент
 ```

@@ -2,7 +2,7 @@
 
 Рабочая композиция: один K3s server/worker в Ubuntu VM `lab-k3s` на Proxmox,
 собственный containerd, GigaAM/Whisper/Piper/Hermes, observability и
-Tailscale Operator. HA Core, **Music Assistant** и **Matter Server** живут
+HTTPS ingress. HA Core, **Music Assistant** и **Matter Server** живут
 в HAOS VM как add-ons; их прежние данные сохранены в приватных backup для отката. Pulsar и
 BLE gateway остаются на станции. Версии зафиксированы в `versions.sh`.
 
@@ -11,7 +11,6 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [Сеть и порты](../../../docs/NETWORK.md).
 - [Chart приложений](../../home-assistant/deploy/README.md).
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
-- [Tailscale Operator](tailscale/).
 - [HTTPS ingress Traefik + cert-manager](ingress/).
 - [Hermes voice-proxy firewall](voice-firewall/).
 
@@ -43,9 +42,8 @@ Helm операции над одним release.
 
 Администрирование — по SSH или через закрытый tunnel. API/kubelet/node metrics
 закрыты от обычного LAN; Grafana доступна по `https://grafana.home.example.com/`,
-в LAN по `http://192.0.2.27:30300/`; tailnet-путь `/grafana/` после смены
-`root_url` не работает (ожидаемо). HAOS — по `/`. HTTPS-имена `*.home.example.com`
+в LAN по `http://192.0.2.27:30300/`. HTTPS-имена `*.home.example.com`
 обслуживает Traefik (`hostNetwork`, `80/443`, IP allow-list) с
 wildcard-сертификатом Let's Encrypt от cert-manager; см. [ingress/](ingress/).
-Host Tailscale на Proxmox пока не включён;
-аварийный доступ к host — LAN/Wi-Fi или Ethernet. Реальные URL и credentials — в secrets.
+Вход снаружи — собственный VPN (ocserv, CT `102`). Аварийный доступ к
+host — LAN/Wi-Fi или Ethernet. Реальные URL и credentials — в secrets.

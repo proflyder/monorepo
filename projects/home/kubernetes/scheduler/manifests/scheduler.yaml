@@ -3,7 +3,7 @@
 # This file is a TEMPLATE. deploy.sh renders it with private values from an
 # ignored env file; rendered manifests must never be committed.
 #
-#   SCHEDULER_NODE_PORT   NodePort exposed to LAN/Tailscale (default 30098)
+#   SCHEDULER_NODE_PORT   NodePort exposed to the home LAN (default 30098)
 #
 # The binary is delivered from the node path /opt/ricardo/current (an atomically
 # switched symlink to an immutable release directory). The pinned busybox image
