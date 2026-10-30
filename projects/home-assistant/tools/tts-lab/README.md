@@ -35,6 +35,26 @@ python generate_samples.py
 Silero). Модели `v5_5_ru`/`v5_6_ru` — CC BY-NC; для домашнего использования
 это допустимо, для коммерческого — нет.
 
+## Проверено и отвергнуто (октябрь 2026)
+
+Для замены Piper Puriso рассматривались варианты ниже; сэмплы и скрипты не
+хранятся. Требования: русский, CPU без GPU (VM 8 vCPU), локально, Wyoming/HA.
+
+| Кандидат | Результат |
+|---|---|
+| NVIDIA Nemotron Speech / Magpie TTS | Русского нет (12 языков: ar, de, en, es, fr, hi, it, ja, ko, pt, vi, zh); нужен GPU. Nemotron/Parakeet ASR знают русский, но это STT. |
+| Chatterbox (NIM) | Русский есть, но слабый; сторонняя модель, в NIM 44 GiB VRAM. |
+| ESpeech TTS-1 RL-V2 (Apache-2.0) | Клонирование тембра; RTF 1.4–2.1 на CPU — медленнее реального времени. |
+| XTTS v2 (CPML, некоммерческая) | Русский есть, RTF ≈0.8–0.9 на M3 Pro, ударений нет; пользователю не подошёл. |
+| Pocket-TTS (Kyutai) | Русского нет; веса gated. |
+| xVASynth | Только Windows; русские голоса — community, слабые. |
+| Qwen3-TTS (Apache-2.0) | Русский есть, но 1.7B на CPU ≈40 с на фразу; не запускался. |
+| Supertonic 3 (OpenRAIL-M) | Русский есть, 99M, ONNX, RTF 0.18–0.29 на 4 потоках (M3 Pro). Голоса M1–M5/F1–F5; M3 понравился. Wyoming-обёртки нет; не внедрён. |
+
+Итоговая оценка пользователя: сэмплы неудовлетворительны (M3 Supertonic был «неплох»). Puriso сделан из Piper
+Ruslan дистилляцией Supertonic M1: тем же способом можно дообучить Piper на
+другом голосе-учителе (лицензия результата останется некоммерческой, CC BY-NC-SA).
+
 ## Puriso
 
 Текущий статус — `docs/STATE.md` (от корня репозитория); установка/откат — `projects/home-assistant/tts/puriso/README.md`. `install_puriso.py` скачивает закреплённые веса/config и проверяет SHA256, но не меняет HA/Compose.
