@@ -52,7 +52,8 @@ make coverage      # coverage (reports/TEST-COVERAGE.md, not tracked)
 make test-e2e      # live HA/BLE, нужны токены
 ```
 
-Подробности — `docs/TESTING.md`.
+Подробности — `docs/TESTING.md`: слои, live-проверки и CI
+(`.github/workflows/ci.yml`).
 
 ## Публикация
 

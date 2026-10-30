@@ -41,7 +41,7 @@ teardown восстанавливает source/volume.
 | BLE gateway | token, Wi-Fi validation/rollback, WPA, GATT, HTTP auth/status |
 | HA live | API, entities, text intents, optional mutation/alarm |
 | Gateway live | bearer auth, status shape, method guards |
-| Pulsar installer | upstream Go tests |
+| Pulsar installer | upstream Go tests (только при наличии nested checkout) |
 
 ## Hermes
 
@@ -153,6 +153,49 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
   исключён из syntax gate.
 
 Эти пути — live/ручная приёмка. Структурная проверка HA не равна runtime coverage.
+
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` — этап 1: hermetic-проверки без деплоя и без
+секретов. Триггеры: push и pull request в `develop`, ручной
+`workflow_dispatch`; `permissions: contents: read`, `concurrency` отменяет
+устаревший прогон только для PR.
+
+| Job | Что делает | Таймаут |
+|---|---|---|
+| `changes` | определяет затронутые области (`dorny/paths-filter`) | — |
+| `quality` | `audit_repository.py`, static gates, shellcheck, Gitleaks 8.30.1 | 15 мин |
+| `test` | `make test` на чистом checkout | 30 мин |
+| `bazel` | Bazelisk, `bazel build/test //solutions/... //packages/...`, deploy control regression | 45 мин |
+| `android` | Android SDK 36, Android-тесты, debug APK в artifact | 60 мин |
+
+`bazel` и `android` не запускаются на изменениях только в документации.
+Версии сторонних actions закреплены commit SHA; Bazelisk `1.30.0` и
+Gitleaks `8.30.1` скачиваются с проверкой sha256.
+
+На чистом checkout (CI) отсутствуют игнорируемые источники, поэтому
+`make test` явно печатает `SKIP` для тестов, которым нужен nested Pulsar
+(`projects/station/upstream/pulsar-rust/installer`) или
+`projects/station/resources/quasar-connect-bot`; локально, где источники
+есть, те же тесты выполняются. `test_deploy_control.sh` требует собранные
+бинарники в `projects/home/kubernetes/scheduler/dist/`: CI собирает их в
+job `bazel` через `make test-deploy-control`; без бинарников `make test`
+печатает `SKIP` с причиной, а `REQUIRE_DEPLOY_CONTROL=1` превращает это
+в ошибку.
+
+Локальное воспроизведение CI:
+
+```bash
+make test
+make test-deploy-control BAZEL=bazelisk   # после сборки dist/ прогонит deploy control
+actionlint .github/workflows/ci.yml
+shellcheck -S error platform/quality/*.sh \
+  projects/home/kubernetes/scheduler/*.sh projects/station/scripts/*.sh
+```
+
+Pulsar собирается и релизится в своём репозитории; монорепо в CI его не
+собирает. Деплой (этапы 2–3) — отдельные workflows с Environment и ручным
+approve.
 
 ## Публикация
 

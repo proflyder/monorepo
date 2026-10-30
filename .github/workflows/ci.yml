@@ -1,0 +1,236 @@
+name: ci
+
+# Stage 1 CI: hermetic checks, no deploy and no repository secrets. Deploy
+# workflows are separate and only run from `develop` with Environments.
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.13"
+  BAZELISK_VERSION: "1.30.0"
+  BAZELISK_SHA256: "a248ae2b2b62b5baebb748f6fba7203bff1a27e5d01b55399a8406744cb539e8"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+jobs:
+  # Computes which areas changed so docs-only pushes do not pay for Bazel or
+  # Android. `workflow_dispatch` always runs the heavy jobs.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read # dorny/paths-filter lists PR files through the API
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'solutions/**'
+              - 'packages/**'
+              - 'projects/home/kubernetes/**'
+              - 'projects/home/e2e/**'
+              - 'platform/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'go.work'
+              - 'go.work.sum'
+              - 'MODULE.bazel'
+              - 'MODULE.bazel.lock'
+              - '.bazelrc'
+              - '.bazelversion'
+              - '.bazelignore'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
+            android:
+              - 'projects/mobile/android/**'
+              - 'platform/android/**'
+              - 'MODULE.bazel'
+              - 'MODULE.bazel.lock'
+              - '.bazelrc'
+              - '.bazelversion'
+              - '.bazelignore'
+              - '.github/workflows/ci.yml'
+
+  # Repository audit, static gates and secret scanning. Runs on every change,
+  # including documentation-only ones.
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends shellcheck
+
+      - name: Repository audit (private data, links, gitlinks)
+        run: python3 platform/quality/audit_repository.py
+
+      - name: Static gates (shell/Python syntax, shellcheck, secret patterns)
+        run: python3 -m unittest discover -s platform/quality -p 'test_*.py' -v
+
+      - name: Shellcheck harness and deployment scripts
+        run: |
+          shellcheck -S error \
+            platform/quality/*.sh \
+            projects/home/kubernetes/scheduler/*.sh \
+            projects/station/scripts/*.sh \
+            projects/home-assistant/stack/*.sh
+
+      - name: Gitleaks (working tree, pinned release with checksum)
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks dir . --redact=100 --no-banner --config=.gitleaks.toml
+          rm -f /tmp/gitleaks /tmp/gitleaks.tgz
+
+  # The local hermetic gate (`make test`) on a clean checkout. Tests that need
+  # ignored local sources (nested Pulsar, quasar-connect-bot) skip with a reason;
+  # the deploy control regression runs in the bazel job with built binaries.
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          # go.work requires a newer toolchain than the root go.mod minimum.
+          go-version: "1.27.x"
+          cache-dependency-path: |
+            go.sum
+            projects/station/ble-gateway/go.sum
+
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends shellcheck
+
+      - name: make test
+        run: make test
+
+  # Backend Bazel build/test plus the scheduler deploy-control regression with
+  # real linux/amd64 release binaries.
+  bazel:
+    needs: changes
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install pinned Bazelisk
+        run: |
+          curl -sSfL -o /tmp/bazelisk \
+            "https://github.com/bazelbuild/bazelisk/releases/download/v${BAZELISK_VERSION}/bazelisk-linux-amd64"
+          echo "${BAZELISK_SHA256}  /tmp/bazelisk" | sha256sum -c -
+          sudo install -m 0755 /tmp/bazelisk /usr/local/bin/bazelisk
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazel-disk
+            ~/.cache/bazelisk
+          key: bazel-backend-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'go.sum') }}
+          restore-keys: |
+            bazel-backend-${{ runner.os }}-
+
+      - name: bazel build
+        run: bazelisk build //solutions/... //packages/...
+
+      - name: bazel test
+        run: bazelisk test //solutions/... //packages/... --test_output=errors
+
+      - name: scheduler deploy control regression
+        run: make test-deploy-control BAZEL=bazelisk
+
+  # Debug APK as an artifact plus the Android Bazel tests. Debug-signed only;
+  # this is not a release build.
+  android:
+    needs: changes
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+      - name: Install pinned Bazelisk
+        run: |
+          curl -sSfL -o /tmp/bazelisk \
+            "https://github.com/bazelbuild/bazelisk/releases/download/v${BAZELISK_VERSION}/bazelisk-linux-amd64"
+          echo "${BAZELISK_SHA256}  /tmp/bazelisk" | sha256sum -c -
+          sudo install -m 0755 /tmp/bazelisk /usr/local/bin/bazelisk
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazel-disk
+            ~/.cache/bazelisk
+          key: bazel-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          restore-keys: |
+            bazel-android-${{ runner.os }}-
+
+      # setup-android accepts the SDK licenses by default; install exactly the
+      # platform/build-tools pinned in MODULE.bazel.
+      - name: Install Android SDK packages
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+
+      - name: bazel test (android)
+        run: |
+          bazelisk test \
+            //projects/mobile/android:android_tests \
+            //projects/mobile/android/app:main_activity_smoke_test \
+            --test_output=errors
+
+      - name: bazel build debug APK
+        run: bazelisk build //projects/mobile/android:app
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-debug
+          path: bazel-bin/projects/mobile/android/app/app.apk
+          if-no-files-found: error
+          retention-days: 14

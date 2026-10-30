@@ -69,6 +69,20 @@ for line in path.read_text().splitlines():
 PY
 }
 
+# Portable short release digest (sha256sum and shasum are not both available
+# on macOS/Linux). Hashes the file contents in argument order.
+release_digest() {
+  python3 - "$@" <<'PY'
+import hashlib, sys
+
+digest = hashlib.sha256()
+for path in sys.argv[1:]:
+    with open(path, "rb") as handle:
+        digest.update(handle.read())
+print(digest.hexdigest()[:12])
+PY
+}
+
 bazel() {
   if [[ -n "${BAZELISK:-}" ]]; then echo "$BAZELISK"; return; fi
   if command -v bazel >/dev/null 2>&1; then echo bazel; return; fi
@@ -96,7 +110,7 @@ for f in scheduler ha-bridge ha-control; do
 done
 file "$RELEASE_DIR/scheduler" | grep -q 'ELF 64-bit' || { echo "scheduler is not a linux ELF binary" >&2; exit 1; }
 
-BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(shasum -a 256 "$RELEASE_DIR/scheduler" "$RELEASE_DIR/ha-bridge" "$RELEASE_DIR/ha-control" | shasum -a 256 | cut -c1-12)"
+BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(release_digest "$RELEASE_DIR/scheduler" "$RELEASE_DIR/ha-bridge" "$RELEASE_DIR/ha-control")"
 echo "== build id: $BUILD_ID"
 echo "$BUILD_ID" > "$RELEASE_DIR/BUILD_ID"
 

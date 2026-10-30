@@ -113,10 +113,10 @@
 
 ## CI/CD (GitHub-hosted runners)
 
-- [ ] Этап 1: починить тесты, зависящие от локальных файлов
-      (`platform/quality/test_static.py`, `projects/station/scripts`,
-      `test_deploy_control.sh` после сборки); `ci.yml` — quality, gitleaks,
-      Bazel build/test, debug APK как артефакт; без секретов.
+- [ ] Этап 1 (CI без деплоя): `ci.yml` и P0-фиксы тестов готовы локально;
+      нужен первый прогон на GitHub (`quality`, `test`, `bazel`, `android`)
+      и проверка времени/кэша. Pulsar в CI монорепо не собирается; тесты
+      без nested checkout печатают `SKIP`.
 - [ ] Этап 2: сертификат и VPN-группа `ci` с отдельной подсетью; nftables в
       VPN CT пускает её только к K3s по SSH; отдельный SSH-ключ CI;
       `deploy-home.yml` для scheduler/ha-bridge/ha-control по path-filter,

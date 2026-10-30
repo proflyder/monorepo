@@ -49,14 +49,22 @@ def first_party_python() -> list[Path]:
 class ShellSyntaxTests(unittest.TestCase):
     def test_all_repo_shell_syntax_except_documented_broken_legacy(self):
         files = [p for p in all_repo_shell() if p not in KNOWN_BROKEN_LEGACY]
-        self.assertGreaterEqual(len(files), 60)
+        # A lower bound catches a broken glob or an accidental mass move. It is
+        # deliberately below the count of a fresh `git archive` checkout, where
+        # ignored checkouts (resources/, secrets/) are absent.
+        self.assertGreaterEqual(len(files), 40)
         for path in files:
             with self.subTest(path=str(path)):
                 res = subprocess.run(["bash", "-n", str(path)], text=True, capture_output=True)
                 self.assertEqual(res.returncode, 0, f"{path}:\n{res.stderr}")
-        broken = sorted(KNOWN_BROKEN_LEGACY)
-        for path in broken:
-            self.assertTrue(path.exists())
+        # Tracked first-party scripts must be part of the full-tree scan even on
+        # a clean checkout; only ignored third-party checkouts may be missing.
+        self.assertTrue(set(first_party_shell()).issubset(files))
+        for path in sorted(KNOWN_BROKEN_LEGACY):
+            if not path.exists():
+                # resources/ is an ignored checkout; the exception only applies
+                # when the documented legacy copy is actually present.
+                continue
             self.assertIn("битый", (ROOT / "resources" / "README.md").read_text(), "legacy exception must stay documented")
 
     def test_active_shell_syntax(self):

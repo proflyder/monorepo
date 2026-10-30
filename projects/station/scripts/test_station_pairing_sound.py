@@ -11,8 +11,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "projects" / "station" / "scripts" / "station-pairing-sound.py"
+PAIRING_LIB = (
+    ROOT / "projects" / "station" / "resources" / "quasar-connect-bot" / "pairing.py"
+)
 
 
+@unittest.skipUnless(
+    PAIRING_LIB.is_file(),
+    "quasar-connect-bot checkout is absent (ignored resource; clone it to run this test)",
+)
 class PairingSoundCliTests(unittest.TestCase):
     def test_wav_generation_and_token_redaction(self):
         with tempfile.TemporaryDirectory() as tmp:
