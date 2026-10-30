@@ -100,6 +100,12 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
+Экспериментальный локальный endpointing (см. `PENDING.md`) включается только
+переменной окружения процесса Pulsar: `PULSAR_LOCAL_ENDPOINTING=1`; без неё
+работает прежний путь (HA VAD + 30-секундный watchdog). На уровне
+`ctl.sh`/supervise переменная пока не прокинута — для live-проверки запускать
+тестовый экземпляр с ней.
+
 Установленная версия — Rust `v0.5.2-3-gc57d521-dirty` (локальный форк на базе
 upstream `v0.5.2`, HEAD `c57d521`, сборка из рабочего дерева с повторным wake);
 `pulsar.prev` — `v0.5.2-3-gc57d521`, `v0.5.2-2-g95ce568` и

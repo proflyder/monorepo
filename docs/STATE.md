@@ -163,6 +163,22 @@
 
 - Pipeline «Рикардо»: GigaAM v3 CTC int8 primary, Whisper `medium-int8`
   fallback; локальные intents → Hermes только для свободной речи.
+- Локальный endpointing в Rust Pulsar (30.10): после VQE детектор конца фразы
+  по энергии чанков (порог относительно уровня wake-слова и тихой части его
+  окна, без абсолютных dBFS) шлёт ровно один graceful
+  `VoiceAssistantAudio.end=true` на активный LISTENING-диалог после ~1 с
+  тишины. Abort/отмена/повторный wake по-прежнему идут через
+  `VoiceAssistantRequest.start=false`; HA VAD остаётся главным и может
+  завершить раньше. Это экспериментальная эвристика: включается только
+  `PULSAR_LOCAL_ENDPOINTING=1`, по умолчанию выключена; живых измерений
+  порогов нет, коэффициенты не откалиброваны. При нехватке окна/SNR wake
+  или для turn без wake (кнопка, continued conversation, start_conversation)
+  детектор не запускается. Pre-roll считается только pre-wake evidence:
+  одного pre-roll недостаточно для завершения фразы, а команда, найденная в
+  arbitration-буфере, помечается как live. Известные ограничения:
+  команда целиком в pre-roll не завершается локально (неотличима от wake
+  tail); хвост wake word в live и громкий earcon по энергии не гарантированно
+  отличимы от речи — они полагаются на AEC и порог длительности.
 - TTS: Piper `2.5.2`, `ru_puriso2-medium`.
 - Hermes `v0.22.5`, модель `gpt-5.6-luna` через ChatGPT/Codex OAuth;
   low reasoning + streaming; HA MCP 73 tools, MA MCP 86 tools.

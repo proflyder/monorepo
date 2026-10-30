@@ -4062,7 +4062,7 @@ index 0000000..0c0a516
 +
 +}  // extern "C"
 diff --git a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
-index e444aad..825f757 100644
+index e444aad..469efc7 100644
 --- a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
 +++ b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
 @@ -1,10 +1,11 @@
@@ -4113,6 +4113,15 @@ index e444aad..825f757 100644
          Some(PathBuf::from(COMMAND_MODEL)),
      );
      h.set_commands(a.commands);
+@@ -239,7 +245,7 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
+         tokio::select! {
+             () = &mut end => break,
+             ev = rx.recv() => match ev {
+-                Some(FrontendEvent::Wake { phrase, level_db, preroll }) => {
++                Some(FrontendEvent::Wake { phrase, level_db, preroll, endpoint_prior: _ }) => {
+                     wakes += 1;
+                     out!(
+                         "t={:6.2}s WAKE '{phrase}' level {level_db:.1} dB preroll {} ms",
 @@ -361,6 +367,8 @@ mod tests {
              (20, "yandex", true, true, true)
          );
@@ -4192,7 +4201,7 @@ index 963411a..ecf76e5 100644
      pub fn feed_command(&mut self) -> Vec<String> {
          feed(&self.vqe, self.frame, &mut self.cmd).phrases
 diff --git a/satellite/crates/pulsar-audio/src/frontend.rs b/satellite/crates/pulsar-audio/src/frontend.rs
-index 9dcce7c..c92aed9 100644
+index 9dcce7c..5179504 100644
 --- a/satellite/crates/pulsar-audio/src/frontend.rs
 +++ b/satellite/crates/pulsar-audio/src/frontend.rs
 @@ -1,7 +1,8 @@
@@ -4206,7 +4215,15 @@ index 9dcce7c..c92aed9 100644
  //!
  //! Two threads: a capture thread that only drains ALSA into a FIFO, and a processing thread
  //! (VQE + spotters). The Lite 2's PDM capture allows at most ~42 ms of buffer (2048 frames at
-@@ -48,7 +49,8 @@ const PROCESSING_STACK: usize = 8 << 20;
+@@ -23,6 +24,7 @@ use pulsar_core::MusicFrame;
+ use pulsar_core::model::{Model, PrerollRule};
+ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+ 
++use crate::endpoint::{EndpointPrior, percentile_db};
+ use crate::engine::{Engine, Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN, to_s16};
+ use crate::spectrum::SpectrumAnalyzer;
+ 
+@@ -48,7 +50,8 @@ const PROCESSING_STACK: usize = 8 << 20;
  
  pub enum FrontendEvent {
      /// level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC),
@@ -4216,7 +4233,17 @@ index 9dcce7c..c92aed9 100644
      Wake {
          phrase: String,
          level_db: f32,
-@@ -87,25 +89,34 @@ pub struct FrontendHandle {
+@@ -57,6 +60,9 @@ pub enum FrontendEvent {
+         /// The `Audio` events after it continue it without a gap until
+         /// [`FrontendHandle::wake_handled`].
+         preroll: Vec<i16>,
++        /// Levels of the wake window on the same channel as `Audio`, for the experimental
++        /// local endpoint detector. None until a full window was seen.
++        endpoint_prior: Option<EndpointPrior>,
+     },
+     Command {
+         word: String,
+@@ -87,25 +93,34 @@ pub struct FrontendHandle {
      inner: Arc<Inner>,
  }
  
@@ -4258,7 +4285,7 @@ index 9dcce7c..c92aed9 100644
          Some(eng) => inner
              .start_threads(model, eng, tx)
              .inspect_err(|e| error!("audio threads: {e}"))
-@@ -135,6 +146,11 @@ impl FrontendHandle {
+@@ -135,6 +150,11 @@ impl FrontendHandle {
          self.inner.shared.detect.store(on, Relaxed);
      }
  
@@ -4270,7 +4297,7 @@ index 9dcce7c..c92aed9 100644
      /// Command spotter on/off (commands without the wake word).
      pub fn set_commands(&self, on: bool) {
          self.inner.shared.commands.store(on, Relaxed);
-@@ -198,6 +214,8 @@ struct Shared {
+@@ -198,6 +218,8 @@ struct Shared {
      stop_lock: Mutex<()>,
      stop_cv: Condvar,
      detect: AtomicBool,
@@ -4279,7 +4306,7 @@ index 9dcce7c..c92aed9 100644
      commands: AtomicBool,
      stream: AtomicBool,
      /// `Wake` events sent and not yet handled: audio keeps coming meanwhile, so nothing is lost
-@@ -215,12 +233,13 @@ struct Shared {
+@@ -215,12 +237,13 @@ struct Shared {
  }
  
  impl Shared {
@@ -4294,7 +4321,23 @@ index 9dcce7c..c92aed9 100644
              commands: AtomicBool::new(false),
              stream: AtomicBool::new(false),
              wake_pending: AtomicU32::new(0),
-@@ -630,6 +649,25 @@ fn preroll_chunks(rule: Option<PrerollRule>, first_stage_age: Option<usize>) ->
+@@ -526,6 +549,15 @@ pub(crate) fn deinterleave(
+     }
+ }
+ 
++/// Wake levels for the local endpoint detector on the stream channel, once the window is full.
++/// A partial window would count its zero padding as a -100 dB floor.
++fn endpoint_prior(hist: &[f32; LEVEL_CHUNKS], filled: usize) -> Option<EndpointPrior> {
++    (filled == LEVEL_CHUNKS).then(|| EndpointPrior {
++        noise_db: percentile_db(hist, 0.10),
++        speech_db: wake_level_db(hist),
++    })
++}
++
+ /// Mean of the 8 loudest of the last 47 frames (mean squares), in dBFS clamped to -100..0 and
+ /// rounded to 0.1 dB: stations compare levels received as "%.1f" text, so ours must be the same
+ /// number the peers see, or ties could resolve differently on each side.
+@@ -630,6 +662,25 @@ fn preroll_chunks(rule: Option<PrerollRule>, first_stage_age: Option<usize>) ->
      }
  }
  
@@ -4320,7 +4363,17 @@ index 9dcce7c..c92aed9 100644
  /// "-" for None in the "wake timing" log.
  struct Chunks(Option<usize>);
  
-@@ -664,6 +702,7 @@ fn processing(
+@@ -659,11 +710,17 @@ fn processing(
+     // Mean square per VQE frame.
+     let mut level_hist = [0f32; LEVEL_CHUNKS];
+     let mut level_pos = 0;
++    // The same on VQE_OMNI_WITH_GAIN, the channel the stream (and so the endpoint detector)
++    // carries: the wake prior must not mix channels.
++    let mut gain_hist = [0f32; LEVEL_CHUNKS];
++    let mut gain_pos = 0;
++    let mut gain_filled = 0usize;
+     let mut ana = SpectrumAnalyzer::new(model.capture_rate, period);
+     if !ana.ok() {
          warn!("music analysis: unsupported capture layout");
      }
      let mut music_was_on = false;
@@ -4328,19 +4381,34 @@ index 9dcce7c..c92aed9 100644
      let frame = eng.frame();
      let mut ring = PrerollRing::new(PREROLL_CHUNKS, frame);
      // Chunks since the wake spotter's 1st-stage hit, while its verifier waits.
-@@ -720,18 +759,56 @@ fn processing(
+@@ -703,6 +760,10 @@ fn processing(
+         }
+         if !eng.process(&mics, &spk) {
+             ring.clear();
++            // The prior must not span a gap in the audio.
++            gain_hist = [0.0; LEVEL_CHUNKS];
++            gain_pos = 0;
++            gain_filled = 0;
+             continue;
+         }
+ 
+@@ -720,18 +781,67 @@ fn processing(
          // handled holds the stream open: the owner switches streaming on only when it handles
          // the event, and the chunks in between continue the pre-roll. `wake_pending` is read
          // first: its Acquire pairs with `wake_handled`, after the owner's `set_streaming(true)`.
+-        match eng.output(VQE_OMNI_WITH_GAIN) {
 +        let custom_active = shared.custom.load(Relaxed);
 +        let detecting = shared.detect.load(Relaxed);
 +        let mut custom_score = None;
-         match eng.output(VQE_OMNI_WITH_GAIN) {
++        match eng.output(VQE_OMNI_WITH_GAIN).filter(|d| !d.is_empty()) {
              Some(d) => {
 -                if let Some(slot) = ring.push(d)
 -                    && (shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed))
 -                {
 -                    let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
++                gain_hist[gain_pos] = mean_square(d);
++                gain_pos = (gain_pos + 1) % LEVEL_CHUNKS;
++                gain_filled = (gain_filled + 1).min(LEVEL_CHUNKS);
 +                if let Some(slot) = ring.push(d) {
 +                    // The Ricardo detector hears the same cleaned chunk as the ring and the
 +                    // stock spotter; its confirmation then takes the pre-roll from the ring.
@@ -4363,7 +4431,14 @@ index 9dcce7c..c92aed9 100644
 +                    }
                  }
              }
-             None => ring.clear(),
+-            None => ring.clear(),
++            None => {
++                ring.clear();
++                // A missing output is a gap: restart the prior window.
++                gain_hist = [0.0; LEVEL_CHUNKS];
++                gain_pos = 0;
++                gain_filled = 0;
++            }
          }
  
 -        if shared.detect.load(Relaxed) {
@@ -4371,6 +4446,7 @@ index 9dcce7c..c92aed9 100644
 +            let level_db = wake_level_db(&level_hist);
 +            let newest = (level_pos + LEVEL_CHUNKS - 1) % LEVEL_CHUNKS;
 +            let speech_end = speech_end_chunks(&level_hist, newest);
++            let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
 +            let rule = wake_preroll_rule(model, shared, "ricardo");
 +            let n = preroll_chunks(rule, None).min(PREROLL_CHUNKS);
 +            let preroll = ring.last(n);
@@ -4385,12 +4461,13 @@ index 9dcce7c..c92aed9 100644
 +                phrase: "Рикардо".into(),
 +                level_db,
 +                preroll,
++                endpoint_prior,
 +            });
 +        } else if !custom_active && detecting {
              first_stage_age = first_stage_age.map(|a| a + 1).filter(|&a| a < LEVEL_CHUNKS);
              let spotted = eng.feed_wake();
              match spotted.stage {
-@@ -743,12 +820,7 @@ fn processing(
+@@ -743,12 +853,8 @@ fn processing(
                  let level_db = wake_level_db(&level_hist);
                  let newest = (level_pos + LEVEL_CHUNKS - 1) % LEVEL_CHUNKS;
                  let speech_end = speech_end_chunks(&level_hist, newest);
@@ -4400,11 +4477,20 @@ index 9dcce7c..c92aed9 100644
 -                    .then(|| model.wake_preroll.iter().find(|p| p.id == eng.wake_id()))
 -                    .flatten()
 -                    .map(|p| p.rule);
++                let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
 +                let rule = wake_preroll_rule(model, shared, eng.wake_id());
                  let n = preroll_chunks(rule, first_stage_age).min(PREROLL_CHUNKS);
                  let preroll = ring.last(n);
                  info!(
-@@ -864,6 +936,63 @@ mod tests {
+@@ -764,6 +870,7 @@ fn processing(
+                         phrase,
+                         level_db,
+                         preroll: preroll.clone(),
++                        endpoint_prior,
+                     });
+                 }
+             }
+@@ -864,6 +971,63 @@ mod tests {
          assert_eq!(preroll_chunks(first(-3, 9), None), 9);
      }
  
@@ -4468,7 +4554,7 @@ index 9dcce7c..c92aed9 100644
      #[test]
      fn deinterleave_midi_and_lite2_layouts() {
          let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-@@ -1020,7 +1149,7 @@ mod tests {
+@@ -1020,7 +1184,7 @@ mod tests {
      fn without_the_yandex_library_the_handle_is_degraded() {
          // No /system/vendor/quasar/libs on the build host: dlopen fails.
          let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
@@ -4478,11 +4564,14 @@ index 9dcce7c..c92aed9 100644
          h.set_model(PathBuf::from("/nonexistent/2"));
          let h2 = h.clone();
 diff --git a/satellite/crates/pulsar-audio/src/lib.rs b/satellite/crates/pulsar-audio/src/lib.rs
-index f86cc2b..623a34e 100644
+index f86cc2b..80b042c 100644
 --- a/satellite/crates/pulsar-audio/src/lib.rs
 +++ b/satellite/crates/pulsar-audio/src/lib.rs
-@@ -8,7 +8,10 @@
+@@ -6,9 +6,13 @@
+ #![deny(unsafe_op_in_unsafe_fn)]
+ #![deny(clippy::undocumented_unsafe_blocks)]
  
++pub mod endpoint;
  pub mod engine;
  mod frontend;
 +#[allow(unsafe_code)]
@@ -4603,6 +4692,104 @@ index bb6e014..ddeb850 100644
  ];
  // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
  // (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed. Chunks from
+diff --git a/satellite/crates/pulsar-esphome/src/lib.rs b/satellite/crates/pulsar-esphome/src/lib.rs
+index 47a714b..0744ef7 100644
+--- a/satellite/crates/pulsar-esphome/src/lib.rs
++++ b/satellite/crates/pulsar-esphome/src/lib.rs
+@@ -96,6 +96,14 @@ impl ApiHandle {
+         self.send(Cmd::VoiceSendAudio(pcm));
+     }
+ 
++    /// Graceful end of the microphone audio (`VoiceAssistantAudio.end = true`). Home Assistant
++    /// treats it as `handle_stop(False)` and finishes the current stage on what it already has,
++    /// unlike [`Self::voice_request_stop`], which sends `VoiceAssistantRequest.start = false`
++    /// (an abort). The detector in the controller sends at most one per dialog.
++    pub fn voice_send_audio_end(&self) {
++        self.send(Cmd::VoiceAudioEnd);
++    }
++
+     /// VoiceAssistantAnnounceFinished for an HA announcement.
+     pub fn voice_announce_finished(&self, success: bool) {
+         self.send(Cmd::VoiceAnnounceFinished(success));
+diff --git a/satellite/crates/pulsar-esphome/src/server.rs b/satellite/crates/pulsar-esphome/src/server.rs
+index 1968139..7cf74be 100644
+--- a/satellite/crates/pulsar-esphome/src/server.rs
++++ b/satellite/crates/pulsar-esphome/src/server.rs
+@@ -185,9 +185,14 @@ pub(crate) struct Shared {
+ }
+ 
+ pub(crate) enum Cmd {
+-    VoiceRequestStart { run: u64, phrase: String },
++    VoiceRequestStart {
++        run: u64,
++        phrase: String,
++    },
+     VoiceRequestStop,
+     VoiceSendAudio(Vec<i16>),
++    /// VoiceAssistantAudio{end=true}: graceful end of the audio stream, not an abort.
++    VoiceAudioEnd,
+     VoiceAnnounceFinished(bool),
+     VoiceAnswerFinished(bool),
+     SetActiveWakeWords(Vec<String>),
+@@ -1413,10 +1418,14 @@ impl Server {
+         match cmd {
+             Cmd::VoiceRequestStart { run, phrase } => self.voice_request_start(run, &phrase),
+             // Stale: meant for the run of the previous owner.
+-            Cmd::VoiceRequestStop | Cmd::VoiceSendAudio(_) | Cmd::VoiceAnswerFinished(_)
++            Cmd::VoiceRequestStop
++            | Cmd::VoiceSendAudio(_)
++            | Cmd::VoiceAudioEnd
++            | Cmd::VoiceAnswerFinished(_)
+                 if self.voice_stale => {}
+             Cmd::VoiceRequestStop => self.voice_request_stop(),
+             Cmd::VoiceSendAudio(pcm) => self.voice_send_audio(&pcm),
++            Cmd::VoiceAudioEnd => self.voice_send_audio_end(),
+             Cmd::VoiceAnnounceFinished(success) | Cmd::VoiceAnswerFinished(success) => {
+                 self.voice_announce_finished(success);
+             }
+@@ -1479,6 +1488,18 @@ impl Server {
+         self.send_msg(vc, msg::VA_AUDIO, &w);
+     }
+ 
++    /// `VoiceAssistantAudio{end = true}` with no data: the graceful "the talker finished"
++    /// signal (aioesphomeapi `handle_stop(False)`), distinct from the aborting
++    /// `VoiceAssistantRequest{start = false}` of [`Self::voice_request_stop`].
++    fn voice_send_audio_end(&mut self) {
++        let Some(vc) = self.voice_client() else {
++            return;
++        };
++        let mut w = Writer::new();
++        w.boolean(2, true, false);
++        self.send_msg(vc, msg::VA_AUDIO, &w);
++    }
++
+     fn voice_announce_finished(&mut self, success: bool) {
+         let Some(vc) = self.voice_client() else {
+             return;
+diff --git a/satellite/crates/pulsar-esphome/src/server/tests.rs b/satellite/crates/pulsar-esphome/src/server/tests.rs
+index 4cdaa99..96b56a6 100644
+--- a/satellite/crates/pulsar-esphome/src/server/tests.rs
++++ b/satellite/crates/pulsar-esphome/src/server/tests.rs
+@@ -542,6 +542,11 @@ async fn voice_owner_hands_over() {
+             h.voice_send_audio(vec![1, -2]);
+             let m = b.expect(msg::VA_AUDIO).await;
+             assert_eq!(field(&m, 1).unwrap().data, [1, 0, 0xfe, 0xff]);
++            // Graceful end: VoiceAssistantAudio.end = true, no data. Not a stop request.
++            h.voice_send_audio_end();
++            let m = b.expect(msg::VA_AUDIO).await;
++            assert!(field(&m, 1).is_none());
++            assert!(field(&m, 2).unwrap().boolean());
+             h.voice_announce_finished(true);
+             let m = b.expect(msg::VA_ANNOUNCE_FINISHED).await;
+             assert!(field(&m, 1).unwrap().boolean());
+@@ -577,6 +582,7 @@ async fn voice_owner_hands_over() {
+             // Without an owner the voice calls send nothing.
+             h.voice_request_start("x");
+             h.voice_send_audio(vec![1]);
++            h.voice_send_audio_end();
+             h.voice_request_stop();
+             assert!(a.sync().await.is_empty());
+ 
 diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
 index 6369f73..d642457 100644
 --- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
@@ -4780,7 +4967,7 @@ index a0f00ba..dd605cf 100644
  
      pub(super) fn update_music(&self) {
 diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
-index 79b3478..ece65e8 100644
+index 79b3478..b774610 100644
 --- a/satellite/crates/pulsar/src/controller/mod.rs
 +++ b/satellite/crates/pulsar/src/controller/mod.rs
 @@ -32,8 +32,13 @@ use logic::{HaTimer, Phase, RunBinding};
@@ -4811,15 +4998,24 @@ index 79b3478..ece65e8 100644
  const UPDATE_FIRST_CHECK_MS: u64 = 60_000;
  const UPDATE_CHECK_PERIOD_MS: u64 = 6 * 3_600_000;
  const UPDATE_IDLE_RETRY_MS: u64 = 10 * 60_000;
-@@ -169,7 +175,6 @@ pub struct Controller {
+@@ -169,10 +175,15 @@ pub struct Controller {
      arb_phrase: String,
      arb_level: f32,
      arb_audio: Vec<i16>,
 -    arb_command: String,
++    /// Samples in `arb_audio` that came with the wake event; the rest arrived after it (live
++    /// post-wake speech held during arbitration).
++    arb_boundary: usize,
++    arb_endpoint: Option<pulsar_audio::endpoint::EndpointPrior>,
      /// Another station answers the wake word just heard.
      commands_blocked_until_ms: i64,
      run: RunBinding,
-@@ -247,7 +252,11 @@ fn clock_face_index(name: &str) -> i32 {
++    /// Experimental local end-of-utterance detector (opt-in, see `PULSAR_LOCAL_ENDPOINTING`).
++    endpoint: Option<pulsar_audio::endpoint::EndpointRun>,
+     /// voice_request_stop already sent for this dialog's run.
+     stop_sent: bool,
+     /// Id of the last voice_request_start: VoiceStartFailed / VoiceAudioOverflow of another
+@@ -247,7 +258,11 @@ fn clock_face_index(name: &str) -> i32 {
  }
  
  fn model_dir(id: &str) -> PathBuf {
@@ -4832,7 +5028,7 @@ index 79b3478..ece65e8 100644
  }
  
  /// C++ `uint8_t(x * 255)`.
-@@ -290,8 +299,8 @@ impl Controller {
+@@ -290,8 +305,8 @@ impl Controller {
              VERSION,
              BUILD_TIME,
          );
@@ -4843,7 +5039,7 @@ index 79b3478..ece65e8 100644
          }
          let case_colors = pulsar_hw::case_colors();
          let dir = logic::state_dir(state_path.as_os_str());
-@@ -323,6 +332,11 @@ impl Controller {
+@@ -323,6 +338,11 @@ impl Controller {
                      phrase: "Яндекс".into(),
                      languages: vec!["ru".into()],
                  },
@@ -4855,7 +5051,7 @@ index 79b3478..ece65e8 100644
              ],
              active_wake_words: vec![st.wake_word.clone()],
              light_effects: strings(pulsar_hw::effect_names()),
-@@ -330,7 +344,7 @@ impl Controller {
+@@ -330,7 +350,7 @@ impl Controller {
              music_styles: strings(pulsar_hw::music_styles()),
              case_colors: with_none(case_colors.clone()),
              clock_music_styles: strings(pulsar_clock::music_styles()),
@@ -4864,7 +5060,7 @@ index 79b3478..ece65e8 100644
                  Vec::new()
              } else {
                  pulsar_zigbee::ROLES
-@@ -431,9 +445,17 @@ impl Controller {
+@@ -431,9 +451,17 @@ impl Controller {
              }
          };
          let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
@@ -4883,7 +5079,7 @@ index 79b3478..ece65e8 100644
              Some(PathBuf::from(COMMAND_MODEL)),
          );
          mic.set_preroll(st.wake_preroll);
-@@ -489,7 +511,7 @@ impl Controller {
+@@ -489,7 +517,7 @@ impl Controller {
              None
          };
  
@@ -4892,15 +5088,27 @@ index 79b3478..ece65e8 100644
              (None, None)
          } else {
              let zcfg = ZigbeeConfig {
-@@ -568,7 +590,6 @@ impl Controller {
+@@ -568,9 +596,11 @@ impl Controller {
              arb_phrase: String::new(),
              arb_level: -100.0,
              arb_audio: Vec::new(),
 -            arb_command: String::new(),
++            arb_boundary: 0,
++            arb_endpoint: None,
              commands_blocked_until_ms: 0,
              run: RunBinding::default(),
++            endpoint: None,
              stop_sent: false,
-@@ -763,7 +784,7 @@ impl Controller {
+             voice_run: 0,
+             tts_url: String::new(),
+@@ -758,15 +788,16 @@ impl Controller {
+                 phrase,
+                 level_db,
+                 preroll,
++                endpoint_prior,
+             } => {
+-                self.on_wake(&phrase, level_db, preroll);
++                self.on_wake(&phrase, level_db, preroll, endpoint_prior);
                  // After on_wake has switched streaming on where the wake word starts a request.
                  self.mic.wake_handled();
              }
@@ -4908,8 +5116,12 @@ index 79b3478..ece65e8 100644
 +            FrontendEvent::Command { word } => self.on_command(&word),
              FrontendEvent::Audio(pcm) => {
                  if self.phase == Phase::Listening {
-                     self.api.voice_send_audio(pcm);
-@@ -801,6 +822,15 @@ impl Controller {
+-                    self.api.voice_send_audio(pcm);
++                    self.on_listening_audio(pcm);
+                 } else if self.arbitrating {
+                     // The request goes on with what was said right after the wake word.
+                     self.arb_audio.extend_from_slice(&pcm);
+@@ -801,6 +832,15 @@ impl Controller {
          self.state.flush(&self.st);
      }
  
@@ -4926,10 +5138,42 @@ index 79b3478..ece65e8 100644
          self.st.mic_muted || self.hw_mic_muted
      }
 diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
-index a40b394..fe29b7b 100644
+index a40b394..08a62e9 100644
 --- a/satellite/crates/pulsar/src/controller/voice.rs
 +++ b/satellite/crates/pulsar/src/controller/voice.rs
-@@ -122,8 +122,12 @@ impl Controller {
+@@ -4,6 +4,7 @@
+ use std::collections::HashMap;
+ 
+ use log::{debug, info, warn};
++use pulsar_audio::endpoint::{EndpointPrior, EndpointRun, pcm_level_db};
+ use pulsar_core::{ClockShot, UiState, now_ms};
+ use pulsar_esphome::{AnnounceRequest, TimerEvent, TimerInfo, VaEvent};
+ use pulsar_lan::arbiter::Claim;
+@@ -53,7 +54,7 @@ impl Controller {
+                         && !self.timer_ringing
+                         && !self.mic_muted()
+                     {
+-                        self.start_pipeline("", false, Vec::new());
++                        self.start_pipeline("", false, Vec::new(), Vec::new(), None);
+                     }
+                     self.end_announce();
+                 }
+@@ -107,7 +108,13 @@ impl Controller {
+ 
+     // ---------------- wake word ----------------
+ 
+-    pub(super) fn on_wake(&mut self, phrase: &str, level_db: f32, preroll: Vec<i16>) {
++    pub(super) fn on_wake(
++        &mut self,
++        phrase: &str,
++        level_db: f32,
++        preroll: Vec<i16>,
++        endpoint_prior: Option<EndpointPrior>,
++    ) {
+         if self.mic_muted() {
+             return;
+         }
+@@ -122,12 +129,16 @@ impl Controller {
              }
              return self.stop_timer_ring();
          }
@@ -4944,15 +5188,34 @@ index a40b394..fe29b7b 100644
          }
          // Without the HA pipeline this station could win and stay silent: it does not take part.
          if !self.arbitration_on() || !self.api.voice_subscribed() {
-@@ -135,7 +139,6 @@ impl Controller {
+-            return self.answer_wake(phrase, preroll);
++            return self.answer_wake(phrase, preroll, Vec::new(), endpoint_prior);
+         }
+         self.arbitrating = true;
+         // A station that lost the previous wake word may win this one.
+@@ -135,33 +146,55 @@ impl Controller {
          self.arb_phrase = phrase.to_owned();
          self.arb_level = level_db;
          self.arb_audio = preroll;
 -        self.arb_command.clear();
++        // Everything after this point is live post-wake speech held during the decision; the
++        // detector must not treat it as pre-roll evidence.
++        self.arb_boundary = self.arb_audio.len();
++        self.arb_endpoint = endpoint_prior;
          self.mic.set_streaming(true);
          self.update_ui();
          let busy = self.phase == Phase::Speaking || self.announcing;
-@@ -146,10 +149,16 @@ impl Controller {
+         self.arb_claim = Some(self.arbiter.claim(&self.st.wake_word, level_db, busy, true));
+     }
+ 
+-    fn answer_wake(&mut self, phrase: &str, preroll: Vec<i16>) {
++    fn answer_wake(
++        &mut self,
++        phrase: &str,
++        preroll: Vec<i16>,
++        live: Vec<i16>,
++        endpoint_prior: Option<EndpointPrior>,
++    ) {
          if self.timer_ringing {
              return self.stop_timer_ring();
          }
@@ -4971,12 +5234,20 @@ index a40b394..fe29b7b 100644
 +        } else if self.phase == Phase::Speaking || self.announcing {
              self.interrupt_speech(); // barge-in: cut the answer short
          }
-         self.start_pipeline(phrase, true, preroll);
-@@ -159,9 +168,12 @@ impl Controller {
+-        self.start_pipeline(phrase, true, preroll);
++        self.start_pipeline(phrase, true, preroll, live, endpoint_prior);
+     }
+ 
+     pub(super) fn arbitration_done(&mut self, won: bool, best: &Claim, peers: usize) {
          self.arbitrating = false;
          self.arb_claim = None;
-         let audio = std::mem::take(&mut self.arb_audio);
+-        let audio = std::mem::take(&mut self.arb_audio);
 -        let command = std::mem::take(&mut self.arb_command);
++        let mut audio = std::mem::take(&mut self.arb_audio);
++        let split = self.arb_boundary.min(audio.len());
++        let live = audio.split_off(split);
++        self.arb_boundary = 0;
++        let prior = self.arb_endpoint.take();
          if !won {
 -            self.mic.set_streaming(false);
 +            // A dialog that was already listening keeps streaming: this wake word replaced
@@ -4987,7 +5258,7 @@ index a40b394..fe29b7b 100644
              info!(
                  "wake word: {} answers ({}{:.1} dB, ours {:.1} dB)",
                  best.station,
-@@ -175,12 +187,6 @@ impl Controller {
+@@ -175,16 +208,10 @@ impl Controller {
              return;
          }
          info!("wake word: this station answers ({peers} other station(s) heard it)");
@@ -5000,15 +5271,139 @@ index a40b394..fe29b7b 100644
          // Capture keeps streaming into the new dialog: switching it off here could drop the
          // chunk between the preroll and live audio.
          let phrase = self.arb_phrase.clone();
-@@ -198,7 +204,6 @@ impl Controller {
+-        self.answer_wake(&phrase, audio);
++        self.answer_wake(&phrase, audio, live, prior);
+         if self.phase != Phase::Listening {
+             self.mic.set_streaming(false); // no dialog started (e.g. HA gone)
+         }
+@@ -198,7 +225,8 @@ impl Controller {
          self.arbitrating = false;
          self.arb_claim = None;
          self.arb_audio.clear();
 -        self.arb_command.clear();
++        self.arb_boundary = 0;
++        self.arb_endpoint = None;
          if self.phase != Phase::Listening {
              self.mic.set_streaming(false);
          }
-@@ -312,15 +317,18 @@ impl Controller {
+@@ -206,8 +234,24 @@ impl Controller {
+ 
+     // ---------------- pipeline ----------------
+ 
+-    /// The only way into LISTENING (the watchdog bounds it).
+-    pub(super) fn start_pipeline(&mut self, phrase: &str, earcon: bool, preroll: Vec<i16>) {
++    /// Uncalibrated energy heuristic: opt-in only, off unless explicitly enabled.
++    fn local_endpointing_enabled() -> bool {
++        matches!(
++            std::env::var("PULSAR_LOCAL_ENDPOINTING").as_deref(),
++            Ok("1")
++        )
++    }
++
++    /// The only way into LISTENING (the watchdog bounds it). `preroll` came with the wake event;
++    /// `live` is post-wake audio held during wake arbitration (empty otherwise).
++    pub(super) fn start_pipeline(
++        &mut self,
++        phrase: &str,
++        earcon: bool,
++        preroll: Vec<i16>,
++        live: Vec<i16>,
++        endpoint_prior: Option<EndpointPrior>,
++    ) {
+         // The button, a continued conversation or HA's start_conversation win.
+         self.cancel_arbitration();
+         if !self.api.voice_subscribed() {
+@@ -222,6 +266,19 @@ impl Controller {
+         self.dialog += 1;
+         self.run.start();
+         self.stop_sent = false;
++        self.endpoint = if Self::local_endpointing_enabled() {
++            endpoint_prior.and_then(|p| EndpointRun::new(p, &preroll, &live))
++        } else {
++            None
++        };
++        if let Some(r) = self.endpoint.as_ref() {
++            let p = r.prior();
++            let (on, off) = r.thresholds();
++            debug!(
++                "local endpointing: noise {:.1} dB, wake {:.1} dB, onset {:.1} dB, release {:.1} dB",
++                p.noise_db, p.speech_db, on, off
++            );
++        }
+         self.listen_started_ms = now_ms();
+         self.tts_url.clear();
+         self.tts_played = false;
+@@ -241,12 +298,21 @@ impl Controller {
+         for chunk in preroll.chunks(512) {
+             self.api.voice_send_audio(chunk.to_vec());
+         }
++        for chunk in live.chunks(512) {
++            self.api.voice_send_audio(chunk.to_vec());
++        }
+         self.mic.set_streaming(true);
+         self.arm_watchdog();
+         self.update_ui();
+     }
+ 
+     fn stop_streaming(&mut self) {
++        // HA finished the phrase first (STT_VAD_END/STT_END), the dialog was cancelled or a
++        // repeated wake replaced it: drop the run so no stale end can follow.
++        if let Some(r) = self.endpoint.as_mut() {
++            r.cancel();
++        }
++        self.endpoint = None;
+         // A wake word heard meanwhile keeps its audio.
+         self.mic.set_streaming(self.arbitrating);
+         if self.phase == Phase::Listening {
+@@ -254,6 +320,47 @@ impl Controller {
+         }
+     }
+ 
++    /// One live 32 ms chunk while the dialog listens. Sends it to HA and feeds the optional
++    /// local detector; a detected end is deferred while the wake earcon is playing.
++    pub(super) fn on_listening_audio(&mut self, pcm: Vec<i16>) {
++        if let Some(r) = self.endpoint.as_mut() {
++            r.push(pcm_level_db(&pcm), true);
++        }
++        self.api.voice_send_audio(pcm);
++        let earcon = matches!(
++            self.player.state(Channel::Announce),
++            PlayState::Playing | PlayState::Loading
++        );
++        if !earcon
++            && self.phase == Phase::Listening
++            && self.endpoint.as_mut().is_some_and(|r| r.take_end())
++        {
++            self.send_endpoint_end();
++        }
++    }
++
++    /// Graceful `VoiceAssistantAudio.end`: finish the phrase on what HA already has, without
++    /// aborting the run. Exactly once per dialog; a stale or replaced dialog sends nothing.
++    fn send_endpoint_end(&mut self) {
++        if self.stop_sent || self.phase != Phase::Listening {
++            return;
++        }
++        if let Some(r) = self.endpoint.as_ref() {
++            let p = r.prior();
++            let (on, off) = r.thresholds();
++            info!(
++                "voice pipeline: local end (experimental), noise {:.1} dB, wake {:.1} dB, \
++                 onset {:.1} dB, release {:.1} dB",
++                p.noise_db, p.speech_db, on, off
++            );
++        }
++        self.api.voice_send_audio_end();
++        // Stop feeding the microphone, but keep the run: HA finishes STT and the answer.
++        self.stop_streaming();
++        self.arm_watchdog();
++        self.update_ui();
++    }
++
+     pub(super) fn on_voice_event(&mut self, ev: VaEvent, data: &HashMap<String, String>) {
+         let get = |k: &str| data.get(k).map_or("", String::as_str);
+         let code = ev.code();
+@@ -312,15 +419,18 @@ impl Controller {
                          "pipeline: another satellite answers this wake word (HA duplicate wake-up)"
                      );
                      self.stop_streaming();
@@ -5031,7 +5426,33 @@ index a40b394..fe29b7b 100644
                  }
              }
              VaEvent::RunEnd => {
-@@ -629,10 +637,23 @@ impl Controller {
+@@ -352,7 +462,7 @@ impl Controller {
+         self.send_tts_report(ok);
+         if ok && self.continue_conversation && !self.timer_ringing && !self.mic_muted() {
+             self.continue_conversation = false;
+-            self.start_pipeline("", false, Vec::new());
++            self.start_pipeline("", false, Vec::new(), Vec::new(), None);
+             return;
+         }
+         self.finish_interaction();
+@@ -384,6 +494,7 @@ impl Controller {
+         }
+         self.run.awaiting_run_start = false;
+         self.send_tts_report(false);
++        self.endpoint = None;
+         self.mic.set_streaming(self.arbitrating);
+         self.phase = Phase::Idle;
+         self.dialog += 1;
+@@ -475,7 +586,7 @@ impl Controller {
+             self.interrupt_speech();
+             return self.finish_interaction();
+         }
+-        self.start_pipeline("", true, Vec::new());
++        self.start_pipeline("", true, Vec::new(), Vec::new(), None);
+     }
+ 
+     // ---------------- announcements ----------------
+@@ -629,10 +740,23 @@ impl Controller {
      // ---------------- local commands ----------------
  
      /// Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше",
@@ -5058,7 +5479,7 @@ index a40b394..fe29b7b 100644
      }
  
      fn owns_music(&self) -> bool {
-@@ -674,9 +695,7 @@ impl Controller {
+@@ -674,9 +798,7 @@ impl Controller {
          }
      }
  
@@ -5069,7 +5490,7 @@ index a40b394..fe29b7b 100644
          if self.mic_muted() {
              return;
          }
-@@ -687,53 +706,24 @@ impl Controller {
+@@ -687,53 +809,24 @@ impl Controller {
              info!("voice command '{word}' ignored: another station answers this wake word");
              return;
          }
@@ -5377,3 +5798,610 @@ index 0000000..957ed32
 +microfrontend, so neither the model nor the Yandex runtime is redistributed
 +here. The C++ bridge and its license notes are in
 +`crates/pulsar-audio/ricardo/`.
+diff --git a/satellite/crates/pulsar-audio/src/endpoint.rs b/satellite/crates/pulsar-audio/src/endpoint.rs
+new file mode 100644
+index 0000000..c6cafd4
+--- /dev/null
++++ b/satellite/crates/pulsar-audio/src/endpoint.rs
+@@ -0,0 +1,601 @@
++//! Experimental local end-of-utterance detector for the voice pipeline.
++//!
++//! The only generic signal the front-end has is the energy of each 32 ms VQE chunk. Yandex VQE
++//! exposes no speech probability, and the phrase spotters are word models, not a VAD. The
++//! detector is therefore a relative energy VAD: all thresholds are derived from the wake word of
++//! the same turn (its level `S` and the quiet part `N` of the same 1.5 s window), so a quiet
++//! speaker in a quiet room and a loud one in a noisy room get different absolute thresholds.
++//! The coefficients below are deliberately *not* claimed as measured calibration; they are
++//! starting values for live tuning (see `docs/STATE.md`).
++//!
++//! It is only a hint for Home Assistant: the device sends one graceful `audio.end` when the
++//! phrase looks finished. Home Assistant's own VAD stays authoritative and may end the run
++//! first. A turn without a usable wake level runs without a detector.
++
++/// One VQE chunk at 16 kHz.
++pub const CHUNK_MS: u32 = 32;
++/// Consecutive chunks above the onset threshold before the detector believes speech started.
++/// 5 * 32 ms = 160 ms: long enough to reject clicks, short enough for a short "отмена".
++pub const ONSET_CHUNKS: u32 = 5;
++/// Chunks below the release threshold that end the phrase. 31 * 32 ms = 992 ms: ordinary
++/// pauses inside a sentence are shorter, while the wait is still much shorter than the
++/// 30 s listening watchdog.
++pub const TRAILING_SILENCE_CHUNKS: u32 = 31;
++/// No detector below this wake-word SNR: the signal does not separate speech from the floor.
++pub const MIN_PRIOR_RANGE_DB: f32 = 3.0;
++/// Onset sits half-way (in dB) between the measured floor and the wake word level.
++pub const ONSET_FRACTION: f32 = 0.5;
++/// Release sits a quarter of the way above the floor: hysteresis against level jitter.
++pub const RELEASE_FRACTION: f32 = 0.25;
++
++/// Levels of the wake word (`speech_db`) and of the quiet part of its window (`noise_db`), both
++/// mean-square dBFS measured on the same VQE channel.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct EndpointPrior {
++    pub noise_db: f32,
++    pub speech_db: f32,
++}
++
++impl EndpointPrior {
++    /// Onset / release thresholds, or None when the wake word does not stand out from the floor.
++    pub fn thresholds(&self) -> Option<(f32, f32)> {
++        if !self.noise_db.is_finite() || !self.speech_db.is_finite() {
++            return None;
++        }
++        let range = self.speech_db - self.noise_db;
++        if range < MIN_PRIOR_RANGE_DB {
++            return None;
++        }
++        Some((
++            self.noise_db + ONSET_FRACTION * range,
++            self.noise_db + RELEASE_FRACTION * range,
++        ))
++    }
++}
++
++/// Result of feeding one chunk.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Step {
++    /// Keep listening.
++    Continue,
++    /// The phrase ended: send one graceful `audio.end`.
++    End,
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++enum State {
++    Waiting,
++    Speech,
++    Ended,
++}
++
++/// Per-dialog detector. Feed pre-roll chunks with `post_wake = false`, then live chunks with
++/// `post_wake = true`.
++///
++/// An end is only reported after sustained speech was seen *after* the wake word was handled.
++/// Pre-roll alone cannot prove a command: the 512 ms Ricardo pre-roll ends at the confirmation
++/// and may contain only the tail of "Рикардо". A detector that ended on pre-roll speech plus live
++/// silence would close the microphone on every wake word, so pre-roll evidence arms the state
++/// machine but never completes a phrase. Live evidence must also last [`ONSET_CHUNKS`] above the
++/// *onset* threshold: short bursts under 160 ms do not qualify. This is a duration guard, not a
++/// guarantee — a loud earcon or wake tail that the AEC does not remove and lasts as long looks
++/// like speech (see `docs/STATE.md`).
++pub struct EndpointDetector {
++    prior: EndpointPrior,
++    on_db: f32,
++    off_db: f32,
++    state: State,
++    above: u32,
++    /// Consecutive live chunks at the onset threshold (post-wake evidence).
++    live_run: u32,
++    trailing: u32,
++    saw_post_wake_speech: bool,
++}
++
++impl EndpointDetector {
++    pub fn new(prior: EndpointPrior) -> Option<Self> {
++        let (on_db, off_db) = prior.thresholds()?;
++        Some(Self {
++            prior,
++            on_db,
++            off_db,
++            state: State::Waiting,
++            above: 0,
++            live_run: 0,
++            trailing: 0,
++            saw_post_wake_speech: false,
++        })
++    }
++
++    pub fn prior(&self) -> EndpointPrior {
++        self.prior
++    }
++
++    pub fn thresholds(&self) -> (f32, f32) {
++        (self.on_db, self.off_db)
++    }
++
++    /// Re-arms a finished phrase after resumed speech: the same dialog may still end later.
++    pub fn reopen(&mut self) {
++        if self.state == State::Ended {
++            self.state = State::Speech;
++            self.above = 0;
++            self.trailing = 0;
++            self.live_run = ONSET_CHUNKS;
++        }
++    }
++
++    /// Live evidence must itself last: pre-roll may fill [`Self::above`] but never counts here,
++    /// and five live chunks starting from `Waiting` qualify exactly as five later ones do.
++    fn live_evidence(&mut self, level_db: f32, post_wake: bool) {
++        if !post_wake {
++            return;
++        }
++        if level_db >= self.on_db {
++            self.live_run += 1;
++            if self.live_run >= ONSET_CHUNKS {
++                self.saw_post_wake_speech = true;
++            }
++        } else {
++            self.live_run = 0;
++        }
++    }
++
++    pub fn push(&mut self, level_db: f32, post_wake: bool) -> Step {
++        if self.state != State::Ended {
++            self.live_evidence(level_db, post_wake);
++        }
++        match self.state {
++            State::Waiting => {
++                if level_db >= self.on_db {
++                    self.above += 1;
++                } else {
++                    self.above = 0;
++                }
++                if self.above >= ONSET_CHUNKS {
++                    self.state = State::Speech;
++                    self.above = 0;
++                    self.trailing = 0;
++                }
++                Step::Continue
++            }
++            State::Speech => {
++                if level_db <= self.off_db {
++                    self.trailing += 1;
++                } else {
++                    self.trailing = 0;
++                }
++                if self.trailing < TRAILING_SILENCE_CHUNKS {
++                    return Step::Continue;
++                }
++                self.trailing = 0;
++                if self.saw_post_wake_speech {
++                    self.state = State::Ended;
++                    Step::End
++                } else {
++                    // Only pre-roll (wake tail) was seen: say nothing, keep waiting. A later
++                    // command is detected from scratch.
++                    self.state = State::Waiting;
++                    self.above = 0;
++                    self.live_run = 0;
++                    Step::Continue
++                }
++            }
++            State::Ended => Step::Continue,
++        }
++    }
++}
++
++/// One dialog's endpointing lifecycle: the detector plus the "one graceful end" bookkeeping,
++/// separated from the controller so the lifecycle is testable without actors.
++pub struct EndpointRun {
++    detector: EndpointDetector,
++    /// An end is due but was not sent yet (the wake earcon is playing).
++    pending: bool,
++    sent: bool,
++}
++
++impl EndpointRun {
++    /// Starts a run. `preroll` is pre-wake evidence, `live` is post-wake audio held during wake
++    /// arbitration.
++    pub fn new(prior: EndpointPrior, preroll: &[i16], live: &[i16]) -> Option<Self> {
++        let detector = EndpointDetector::new(prior)?;
++        let mut run = Self {
++            detector,
++            pending: false,
++            sent: false,
++        };
++        for chunk in preroll.chunks(512) {
++            run.push(pcm_level_db(chunk), false);
++        }
++        // The arbitration backlog can exceed the trailing-silence window on a delayed
++        // scheduler, so feed it through the same path: an end found there must not be lost.
++        for chunk in live.chunks(512) {
++            run.push(pcm_level_db(chunk), true);
++        }
++        Some(run)
++    }
++
++    /// Feeds one chunk. Speech that resumes after a deferred end cancels that end: the phrase
++    /// was not finished after all.
++    pub fn push(&mut self, level_db: f32, post_wake: bool) {
++        match self.detector.push(level_db, post_wake) {
++            Step::End => {
++                if !self.sent {
++                    self.pending = true;
++                }
++            }
++            Step::Continue => {
++                if self.pending && level_db >= self.detector.thresholds().1 {
++                    self.pending = false;
++                    // The phrase continued; a later silence may end it again.
++                    self.detector.reopen();
++                }
++            }
++        }
++    }
++
++    pub fn has_pending(&self) -> bool {
++        self.pending
++    }
++
++    /// Takes the due end, at most once per run. False when nothing is due (or already sent).
++    pub fn take_end(&mut self) -> bool {
++        if !std::mem::take(&mut self.pending) || self.sent {
++            return false;
++        }
++        self.sent = true;
++        true
++    }
++
++    /// The dialog ended elsewhere (HA finished first, cancel, repeated wake): nothing may be
++    /// sent for it afterwards.
++    pub fn cancel(&mut self) {
++        self.pending = false;
++        self.sent = true;
++    }
++
++    pub fn prior(&self) -> EndpointPrior {
++        self.detector.prior()
++    }
++
++    pub fn thresholds(&self) -> (f32, f32) {
++        self.detector.thresholds()
++    }
++}
++
++/// Mean-square dBFS of s16 PCM, clamped like the front-end's levels.
++pub fn pcm_level_db(pcm: &[i16]) -> f32 {
++    if pcm.is_empty() {
++        return -100.0;
++    }
++    let mut sq = 0.0f64;
++    for &s in pcm {
++        let v = f64::from(s) * (1.0 / 32768.0);
++        sq = v.mul_add(v, sq);
++    }
++    mean_square_db((sq / pcm.len() as f64) as f32)
++}
++
++/// Mean-square (linear power) -> dBFS, clamped to -100..0.
++pub fn mean_square_db(ms: f32) -> f32 {
++    (10.0 * (ms.max(0.0) + 1e-10).log10()).clamp(-100.0, 0.0)
++}
++
++/// Quiet-part estimate: dB level at quantile `q` (0..=1) of a window of mean squares.
++pub fn percentile_db(window: &[f32], q: f32) -> f32 {
++    if window.is_empty() {
++        return -100.0;
++    }
++    let mut s = window.to_vec();
++    s.sort_unstable_by(f32::total_cmp);
++    let i = ((s.len() - 1) as f32 * q.clamp(0.0, 1.0)).round() as usize;
++    mean_square_db(s[i])
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn prior() -> EndpointPrior {
++        // A 30 dB wake-word range: onset -40 dB, release -47.5 dB.
++        EndpointPrior {
++            noise_db: -55.0,
++            speech_db: -25.0,
++        }
++    }
++
++    fn push(d: &mut EndpointDetector, level: f32, n: usize, post_wake: bool) -> Vec<Step> {
++        (0..n).map(|_| d.push(level, post_wake)).collect()
++    }
++
++    #[test]
++    fn thresholds_are_relative_to_the_wake_word() {
++        let (on, off) = prior().thresholds().unwrap();
++        assert_eq!(on, -40.0);
++        assert_eq!(off, -47.5);
++        assert!(
++            EndpointDetector::new(EndpointPrior {
++                noise_db: -50.0,
++                speech_db: -48.0,
++            })
++            .is_none()
++        );
++    }
++
++    #[test]
++    fn waiting_silence_never_ends() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        assert!(
++            push(&mut d, -60.0, 1000, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++    }
++
++    #[test]
++    fn speech_then_trailing_silence_ends_once() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        assert!(
++            push(&mut d, -30.0, 13, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        // 30 chunks of silence are not enough (960 ms)...
++        assert!(
++            push(&mut d, -60.0, 30, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        // ...the 31st ends the phrase, exactly once.
++        assert_eq!(d.push(-60.0, true), Step::End);
++        assert!(
++            push(&mut d, -60.0, 100, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        assert!(
++            push(&mut d, -30.0, 100, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++    }
++
++    #[test]
++    fn ordinary_pauses_do_not_end() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        push(&mut d, -30.0, 8, true);
++        // 20 chunks = 640 ms pause inside the sentence.
++        assert!(
++            push(&mut d, -60.0, 20, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        push(&mut d, -30.0, 5, true);
++        assert!(
++            push(&mut d, -60.0, 30, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        assert_eq!(d.push(-60.0, true), Step::End);
++    }
++
++    #[test]
++    fn wake_tail_in_preroll_does_not_end_the_wait() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        // The Ricardo pre-roll ends at the confirmation: this is the wake tail.
++        push(&mut d, -30.0, 12, false);
++        // No live speech follows: never end, keep waiting for a command.
++        assert!(
++            push(&mut d, -60.0, 500, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++    }
++
++    #[test]
++    fn command_continuous_from_preroll_ends() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        // Speech started before the wake word was handled...
++        push(&mut d, -30.0, 6, false);
++        // ...and continues in the live stream for 160 ms.
++        push(&mut d, -30.0, 5, true);
++        assert!(
++            push(&mut d, -60.0, 30, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        assert_eq!(d.push(-60.0, true), Step::End);
++    }
++
++    #[test]
++    fn exactly_five_live_chunks_qualify_when_speech_starts_in_live_audio() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        // Five live chunks cross the onset threshold *and* are the live evidence.
++        assert!(
++            push(&mut d, -30.0, 5, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        assert!(
++            push(&mut d, -60.0, 30, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        assert_eq!(d.push(-60.0, true), Step::End);
++    }
++
++    #[test]
++    fn four_live_chunks_do_not_qualify() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        push(&mut d, -30.0, 4, true);
++        assert!(
++            push(&mut d, -60.0, 100, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++    }
++
++    #[test]
++    fn preroll_arms_speech_but_does_not_count_as_live_evidence() {
++        // Five pre-roll chunks open Speech; only two live chunks follow.
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        push(&mut d, -30.0, 5, false);
++        push(&mut d, -30.0, 2, true);
++        // Three more live chunks reach exactly five consecutive live frames.
++        push(&mut d, -30.0, 3, true);
++        assert!(
++            push(&mut d, -60.0, 30, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++        assert_eq!(d.push(-60.0, true), Step::End);
++
++        // The same mixed start with only four live chunks stays open.
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        push(&mut d, -30.0, 5, false);
++        push(&mut d, -30.0, 4, true);
++        assert!(
++            push(&mut d, -60.0, 100, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++    }
++
++    #[test]
++    fn short_live_wake_tail_does_not_count_as_a_command() {
++        let mut d = EndpointDetector::new(prior()).unwrap();
++        push(&mut d, -30.0, 12, false);
++        // The tail continues into live audio for 4 chunks (128 ms) and then stops.
++        push(&mut d, -30.0, 4, true);
++        assert!(
++            push(&mut d, -60.0, 500, true)
++                .iter()
++                .all(|s| *s == Step::Continue)
++        );
++    }
++
++    #[test]
++    fn pcm_speech_and_silence_end_the_phrase() {
++        let speech: Vec<i16> = vec![3000; 512];
++        let silence: Vec<i16> = vec![20; 512];
++        let n = pcm_level_db(&speech);
++        let f = pcm_level_db(&silence);
++        assert!(n > f + MIN_PRIOR_RANGE_DB, "{n} {f}");
++        let mut d = EndpointDetector::new(EndpointPrior {
++            noise_db: f,
++            speech_db: n,
++        })
++        .unwrap();
++        for _ in 0..13 {
++            assert_eq!(d.push(pcm_level_db(&speech), true), Step::Continue);
++        }
++        let mut end = 0;
++        for _ in 0..40 {
++            if d.push(pcm_level_db(&silence), true) == Step::End {
++                end += 1;
++            }
++        }
++        assert_eq!(end, 1);
++    }
++
++    fn run_with_phrase() -> EndpointRun {
++        let mut r = EndpointRun::new(prior(), &[], &[]).unwrap();
++        for _ in 0..13 {
++            r.push(-30.0, true);
++        }
++        for _ in 0..31 {
++            r.push(-60.0, true);
++        }
++        r
++    }
++
++    #[test]
++    fn one_graceful_end_per_dialog() {
++        let mut r = run_with_phrase();
++        assert!(r.take_end());
++        assert!(!r.take_end());
++        for _ in 0..50 {
++            r.push(-60.0, true);
++            assert!(!r.take_end());
++        }
++    }
++
++    #[test]
++    fn ha_finishing_first_cancels_the_detector() {
++        let mut r = EndpointRun::new(prior(), &[], &[]).unwrap();
++        for _ in 0..13 {
++            r.push(-30.0, true);
++        }
++        for _ in 0..31 {
++            r.push(-60.0, true);
++        }
++        // STT_VAD_END/STT_END arrived before the controller flushed the end.
++        r.cancel();
++        assert!(!r.take_end());
++    }
++
++    #[test]
++    fn cancel_and_repeated_wake_cannot_send_the_old_end() {
++        let mut r = EndpointRun::new(prior(), &[], &[]).unwrap();
++        for _ in 0..13 {
++            r.push(-30.0, true);
++        }
++        for _ in 0..31 {
++            r.push(-60.0, true);
++        }
++        assert!(r.has_pending());
++        r.cancel();
++        assert!(!r.take_end());
++        // A repeated wake started a fresh run; the old one is gone with its state.
++        let mut next = EndpointRun::new(prior(), &[], &[]).unwrap();
++        assert!(!next.take_end());
++    }
++
++    #[test]
++    fn speech_resuming_during_the_earcon_drops_the_deferred_end_but_can_end_later() {
++        let mut r = EndpointRun::new(prior(), &[], &[]).unwrap();
++        for _ in 0..13 {
++            r.push(-30.0, true);
++        }
++        for _ in 0..31 {
++            r.push(-60.0, true);
++        }
++        assert!(r.has_pending());
++        // The user kept talking over the earcon: this was not the end.
++        r.push(-30.0, true);
++        assert!(!r.has_pending());
++        assert!(!r.take_end());
++        // ...but the next silence still ends the same dialog.
++        for _ in 0..31 {
++            r.push(-60.0, true);
++        }
++        assert!(r.take_end());
++    }
++
++    #[test]
++    fn end_found_in_the_arbitration_backlog_is_not_lost() {
++        // 13 speech + 31 silence chunks = 1.4 s of live audio, more than the 250 ms window but
++        // possible when the scheduler was delayed.
++        let mut live = vec![3000i16; 13 * 512];
++        live.extend(std::iter::repeat_n(20i16, 31 * 512));
++        let speech = pcm_level_db(&live[..512]);
++        let floor = pcm_level_db(&live[13 * 512..14 * 512]);
++        let prior = EndpointPrior {
++            noise_db: floor,
++            speech_db: speech,
++        };
++        let mut r = EndpointRun::new(prior, &[], &live).unwrap();
++        assert!(r.has_pending());
++        assert!(r.take_end());
++    }
++
++    #[test]
++    fn quiet_part_of_the_window_is_the_percentile() {
++        // 40 quiet chunks and 7 loud ones: the 10th percentile is the floor.
++        let mut w = vec![1e-6; 40];
++        w.extend_from_slice(&[1e-2; 7]);
++        assert!((percentile_db(&w, 0.10) - (-60.0)).abs() < 0.1);
++        assert!((percentile_db(&w, 0.90) - (-20.0)).abs() < 0.1);
++    }
++}

@@ -7,8 +7,10 @@
   "head_commit": "9b5e86a59704ff9c1c334b410293b6de5a2b70be",
   "head_description": "v0.5.2-4-g9b5e86a",
   "branch": "feat/ricardo-rust",
-  "worktree_dirty": false,
-  "new_source_files": [],
+  "worktree_dirty": true,
+  "new_source_files": [
+    "satellite/crates/pulsar-audio/src/endpoint.rs"
+  ],
   "restore": {
     "checkout": "git checkout 4cba44af1a140749b35e1e5074d94f173804cfc3",
     "apply": "git apply --binary projects/station/patches/pulsar-rust/local.patch"
