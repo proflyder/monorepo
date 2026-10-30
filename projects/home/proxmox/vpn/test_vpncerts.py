@@ -138,9 +138,11 @@ class LocalCaTest(unittest.TestCase):
                  "-ext", "extendedKeyUsage"],
                 text=True, capture_output=True, check=True,
             ).stdout
-            self.assertIn("CN=alice", info)
-            self.assertIn("OU=lan", info)
-            self.assertIn("OU=full", info)
+            # OpenSSL 3 prints "CN = alice", LibreSSL "CN=alice".
+            subject = info.replace(" = ", "=")
+            self.assertIn("CN=alice", subject)
+            self.assertIn("OU=lan", subject)
+            self.assertIn("OU=full", subject)
             self.assertIn("TLS Web Client Authentication", info)
 
     def test_serials_are_unique_and_listed(self):
