@@ -122,13 +122,14 @@ tls-priorities = "NORMAL:%SERVER_PRECEDENCE:%COMPAT:-VERS-SSL3.0:-VERS-TLS1.0:-V
 compression = false
 cisco-client-compat = true
 
-# Ban brute force attempts (ocserv point system).
+# Ban brute force attempts (ocserv point system). Only wrong passwords score:
+# mobile clients reconnect in bursts and must not ban themselves.
 min-reauth-time = 300
 auth-timeout = 120
 max-ban-score = 50
 ban-reset-time = 1200
 ban-points-wrong-password = 10
-ban-points-connection = 1
+ban-points-connection = 0
 
 cookie-timeout = 300
 deny-roaming = false
