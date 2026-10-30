@@ -1,8 +1,8 @@
 {
-  "registry_version": "v22-scratch-puriso-selected-20261030",
-  "model_path": "secrets/model-registry/ricardo/v22-scratch-puriso-selected-20261030/ru_ricardo_scratch_cont_14_mww.tflite",
-  "manifest_path": "secrets/model-registry/ricardo/v22-scratch-puriso-selected-20261030/ru_ricardo_scratch_cont_14_mww.json",
-  "model_sha256": "ab1874e55ed4a4571740ed42a59afc30a995f741b3f06a4c711eb927e1a792da",
+  "registry_version": "v24-ambient-scratch-20261030",
+  "model_path": "secrets/model-registry/ricardo/v24-ambient-scratch-20261030/ru_ricardo_ambient_scratch_v24_mww.tflite",
+  "manifest_path": "secrets/model-registry/ricardo/v24-ambient-scratch-20261030/ru_ricardo_ambient_scratch_v24_mww.json",
+  "model_sha256": "83b9235160151c30370ba34dc14f58b1bdbf4d61f589cf1abfe11d911314787a",
   "personal_weights_private": true,
   "probability_cutoff": 0.9,
   "sliding_window_size": 10

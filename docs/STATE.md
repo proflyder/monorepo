@@ -72,14 +72,16 @@
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
-- Активная модель wake word — v22 (`v22-scratch-puriso-selected-20261030`),
-  обучена с нуля на исходной синтетике, Puriso2 и личных train-примерах.
-  Установлена model-only: HA/MA подключены, бинарник Pulsar не менялся.
-  Threshold 0.9, окно 10, pre-roll 0.5 с; SHA256 закреплён в personal-профиле.
-  Нативный inference probe прошёл. Живая приёмка ожидается; offline-регрессия
-  пройдена по всем манерам речи, но ошибки на сложных негативах остаются.
-- Предыдущая v2, все обученные веса и кандидаты сохранены private.
-  Device backup текущего переключения указан в
+- Активная модель wake word — v24 (`v24-ambient-scratch-20261030`),
+  обучена с нуля с Puriso2, личными примерами и двумя новыми ambient-дорожками.
+  Установлена по запросу пользователя model-only: HA/MA доступны, бинарник
+  Pulsar не менялся. Threshold 0.9, окно 10; SHA256 закреплён в personal-профиле.
+  На обучающем ambient: 0 событий вместо 5 у v22; это не независимая оценка.
+  На прежней ASR-assisted проверке: 161/164 против 163/164 у v22.
+  Живая приёмка и новый независимый ambient ожидаются.
+- Откат на v22: профиль `projects/station/configs/wakeword-v22.json`
+  через `projects/station/tools/wakeword-personalize/deploy.py`.
+  Все веса сохранены private на Mac и WSL; device backup указан в
   `secrets/model-registry/ricardo/active.json`.
 - Актуальная уточнённая разметка и PCM: `secrets/datasets/ricardo-fixed-20261030/`.
 - Приватный датасет: `secrets/datasets/ricardo-20261029/` — исходные WAV,
