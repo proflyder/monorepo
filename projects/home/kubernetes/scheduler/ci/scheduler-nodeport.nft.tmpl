@@ -1,0 +1,17 @@
+# Fixed NodePort filter template for the CI root helper.
+#
+# Installed by provision-node.sh as root:root 0644 and rendered by
+# ricardo-ci-deploy with strictly validated arguments. The CI account never
+# supplies nftables text and cannot reach any other table.
+#
+# NodePort traffic is DNATed by kube-proxy before the input hook, so the rule
+# lives in prerouting at priority dstnat - 10. IPv4 only; IPv6 NodePort hits are
+# dropped explicitly.
+table inet ricardo_scheduler {
+  chain prerouting {
+    type filter hook prerouting priority dstnat - 10; policy accept;
+    iifname "lo" accept
+    meta nfproto ipv6 tcp dport { __SCHEDULER_NODE_PORT__, __CONTROL_NODE_PORT__ } drop
+    ip daddr __NODE_LAN_IP__ tcp dport { __SCHEDULER_NODE_PORT__, __CONTROL_NODE_PORT__ } ip saddr != { __LAN_CIDR__, 10.42.0.0/16 } drop
+  }
+}

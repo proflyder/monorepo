@@ -174,6 +174,52 @@ scripts (`ha core check` + `script.reload`) **before** rolling the bridge when
 the contract changes, and leave `ha-control` and the NodePort filter alone. Verify afterwards: rollout status, authenticated
 `-healthcheck`, `GetStatus.ready`, live consumers, unchanged `ListSchedules`.
 
+## CI deploy (GitHub Actions, environment `home`)
+
+`.github/workflows/deploy-home.yml` deploys this stack from `develop` through
+the home VPN. Push runs **preserve** only; `execute`, `shadow`,
+`control-execute` and `control-catalog` are manual `workflow_dispatch` inputs
+and still go through the normal `deploy.sh` preflight (no bypass, no forced
+writer). `concurrency: deploy-home` is never cancelled, so there is still one
+deploy at a time.
+
+Least-privilege access:
+
+- VPN certificate user `ci`, group `ci`, its own pool and a route only to the
+  K3s node; the VPN firewall allows only `tcp/22` there.
+- SSH user `ci-deploy` on the node: key only, `from` the VPN container
+  address, `restrict,port-forwarding,permitopen="127.0.0.1:6443"`. It cannot
+  run arbitrary root commands: `sudo -n /usr/local/sbin/ricardo-ci-deploy`
+  exposes only `stage`, `firewall`, `activate` and `current`. The helper lives
+  in `ci/ricardo-ci-deploy` and is provisioned by `ci/provision-node.sh`.
+- `firewall` takes only values (`LAN_CIDR`, node address, two NodePorts) and
+  renders the root-owned template `ci/scheduler-nodeport.nft.tmpl`, installed as
+  `/usr/local/share/ricardo-ci/scheduler-nodeport.nft.tmpl`. CI never supplies
+  nftables text, paths or `include` directives: CIDR/address are validated with
+  Python `ipaddress`, ports must be `30000–32767`, the rendered ruleset is
+  syntax-checked, and only `table inet ricardo_scheduler` is replaced.
+- Kubernetes ServiceAccount `ci-deploy` in `home-assistant` (Role in
+  `ci/rbac.yaml`): deployments/replicasets/pods/exec/services/configmaps/
+  secrets/PVCs in that namespace only, plus `deployments/scale`. No other
+  namespace, no cluster-scoped access. Long-lived token Secret
+  `ci-deploy-token`; kubeconfig points at `https://127.0.0.1:16443` and is
+  only usable through the SSH tunnel.
+
+`deploy.sh` additions used by CI:
+
+- `SSH_KEY`/`SSH_OPTS` select the deploy key without touching `~/.ssh/config`.
+- `REMOTE_STAGE=/var/lib/ricardo-ci/stage` stages binaries through the fixed
+  root helper instead of writing `/opt/ricardo` directly.
+- `PREFLIGHT_REMOTE=1` runs the same `preflight.py` on the K3s node, so the
+  runner never needs HA or NodePort access.
+
+The workflow writes the secrets from the `home` Environment to files (never
+into logs), opens the VPN and the SSH tunnel, runs the deploy in preserve mode
+by default, verifies `scheduler`/`ha-control`/`ha-bridge` healthchecks and both
+NodePorts, and on failure restores the previous release symlinks and rolls the
+Deployments back. `if: always()` disconnects the VPN and removes the temporary
+files. Secret file names are listed in `secrets/ci/github/README.txt`.
+
 ## Limits
 
 - Single writer: never run two scheduler replicas on the same PVC.

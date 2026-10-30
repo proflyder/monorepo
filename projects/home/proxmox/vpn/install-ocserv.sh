@@ -19,6 +19,9 @@ CLIENT_CA=
 CLIENT_CRL=
 CLIENT_CA_DEST=/etc/ocserv/ssl/client-ca.pem
 CLIENT_CRL_DEST=/etc/ocserv/ssl/client-ca.crl
+# Optional restricted "ci" group: its own pool and a single allowed target.
+CI_CIDR=10.77.1.0/24
+CI_HOST=
 
 usage() {
   cat <<'EOF'
@@ -38,10 +41,16 @@ Options:
   --client-ca PATH      client CA certificate (PEM); also looks for
                         PATH-derived CRL unless --client-crl is given
   --client-crl PATH     CRL for the client CA (PEM)
+  --ci-cidr CIDR        pool for the restricted "ci" group (default 10.77.1.0/24)
+  --ci-host ADDRESS     the only host the "ci" group may reach (SSH/22)
 
 Client certificate login is enabled only when a client CA is supplied (or a
 previously installed /etc/ocserv/ssl/client-ca.pem exists). Password + TOTP
 stays enabled in every case.
+
+With --ci-host a certificate whose OU is `ci` gets its own pool, a route only
+to ADDRESS/32, no DNS, and firewall rules that allow only ADDRESS tcp/22. The
+general `lan`/`full` pool is never widened to the ci pool.
 EOF
 }
 
@@ -59,6 +68,8 @@ while (($#)); do
     --vpn-cidr) VPN_CIDR=$2; shift 2 ;;
     --client-ca) CLIENT_CA=$2; shift 2 ;;
     --client-crl) CLIENT_CRL=$2; shift 2 ;;
+    --ci-cidr) CI_CIDR=$2; shift 2 ;;
+    --ci-host) CI_HOST=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
@@ -69,6 +80,11 @@ done
   usage >&2
   die "--lan-cidr, --dns and --server-ip are required"
 }
+[[ $CI_CIDR =~ ^[0-9.]+/24$ ]] || die "--ci-cidr must be an IPv4 /24: $CI_CIDR"
+if [[ -n $CI_HOST ]]; then
+  [[ $CI_HOST =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die "--ci-host must be an IPv4 address: $CI_HOST"
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -224,6 +240,20 @@ EOF
 
 cp /etc/ocserv/config-per-group/lan /etc/ocserv/defaults/group.conf
 
+# ----- restricted "ci" group ----------------------------------------------
+# A machine client (CI runner) gets its own pool so the general accept rule for
+# $VPN_CIDR never covers it. It is routed only to the K3s node and no DNS is
+# pushed, so even a leaked certificate cannot reach other home services.
+if [[ -n $CI_HOST ]]; then
+  cat >/etc/ocserv/config-per-group/ci <<EOF
+# Restricted CI profile: own pool, one route, no DNS.
+ipv4-network = ${CI_CIDR%/*}
+ipv4-netmask = 255.255.255.0
+route = $CI_HOST/32
+tunnel-all-dns = false
+EOF
+fi
+
 [[ -e /etc/ocserv/ocpasswd ]] || install -m 600 /dev/null /etc/ocserv/ocpasswd
 [[ -e /etc/ocserv/users.oath ]] || install -m 600 /dev/null /etc/ocserv/users.oath
 
@@ -234,6 +264,22 @@ EOF
 # Unprivileged containers cannot apply every key from sysctl --system.
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
 [[ $(cat /proc/sys/net/ipv4/ip_forward) == 1 ]] || die "IPv4 forwarding is disabled"
+
+CI_NFT_FORWARD=
+CI_NFT_NAT=
+if [[ -n $CI_HOST ]]; then
+  CI_NFT_FORWARD=$(cat <<EOF
+    # CI pool: exactly one target (K3s SSH) and nothing else. This rule sits
+    # before the general pool accept; the pools do not overlap.
+    ip saddr $CI_CIDR iifname "vpns*" oifname "$IFACE" ip daddr $CI_HOST tcp dport 22 accept
+    ip saddr $CI_CIDR drop
+EOF
+)
+  CI_NFT_NAT=$(cat <<EOF
+    ip saddr $CI_CIDR oifname "$IFACE" masquerade
+EOF
+)
+fi
 
 cat >/etc/nftables.conf <<EOF
 #!/usr/sbin/nft -f
@@ -260,11 +306,13 @@ table inet vpn {
     oifname "$IFACE" tcp flags syn tcp option maxseg size set rt mtu
     ct state established,related accept
     iifname "vpns*" oifname "$IFACE" ip saddr $VPN_CIDR accept
+${CI_NFT_FORWARD}
   }
 
   chain postrouting {
     type nat hook postrouting priority srcnat; policy accept;
     ip saddr $VPN_CIDR oifname "$IFACE" masquerade
+${CI_NFT_NAT}
   }
 }
 EOF

@@ -98,6 +98,39 @@ CA: `secrets/home/vpn/client-ca/` (ключ CA на сервер не копир
 После изменения методов аутентификации нужен restart ocserv, после смены
 CRL достаточно reload. Проверка конфигурации — `ocserv --test-config`.
 
+### Доступ CI (`ci-deploy`)
+
+GitHub Actions ходит в дом только сертификатом группы `ci` (свой пул, маршрут
+только до K3s, nft разрешает лишь `tcp/22`), ключом `ci-deploy` с источником
+адреса VPN-CT и ServiceAccount `ci-deploy` в `home-assistant`.
+
+```bash
+# 1. отозвать сертификат CI (CRL обновится на CT, ocserv перезагрузится)
+python3 projects/home/proxmox/vpn/vpncerts.py revoke \
+  secrets/home/vpn/clients/ci-github.p12 \
+  --pve 192.0.2.26 --ssh-key secrets/proxmox-install/proxmox_admin \
+  --known-hosts secrets/proxmox-install/known_hosts
+
+# 2. убрать SSH-ключ (или перевыпустить через provision-node.sh)
+ssh <admin>@<k3s-node> 'sudo rm -f /home/ci-deploy/.ssh/authorized_keys'
+
+# 3. отозвать Kubernetes-доступ: удалить долгоживущий token Secret
+kubectl -n home-assistant delete secret ci-deploy-token
+# rbac.yaml создаёт его заново; после этого пересобрать kubeconfig:
+#   kubectl -n home-assistant get secret ci-deploy-token \
+#     -o jsonpath='{.data.token}' | base64 -d
+
+# полный отзыв роли и аккаунта
+kubectl delete -f projects/home/kubernetes/scheduler/ci/rbac.yaml
+```
+
+Ротация без отзыва: `vpncerts.py issue ci --device github --groups ci --force`,
+новый ключ `ssh-keygen -t ed25519`, затем
+`ci/provision-node.sh --pubkey-file <pub> --vpn-source <vpn-ct-address>`.
+Обновить файлы `secrets/ci/github/` и секреты Environment `home`.
+Проверка: `kubectl auth can-i` с kubeconfig CI не должен видеть другие
+namespace и cluster-scoped объекты.
+
 Сертификат продлевается автоматически через DNS-01 Cloudflare
 (`certbot.timer`, credentials `/etc/letsencrypt/cloudflare.ini`, deploy hook
 `/etc/letsencrypt/renewal-hooks/deploy/ocserv-ssl.sh`). Ручное продление и

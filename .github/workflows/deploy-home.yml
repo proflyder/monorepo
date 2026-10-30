@@ -1,0 +1,273 @@
+name: deploy-home
+
+# Home K3s deploy (scheduler + ha-bridge + ha-control) from `develop`.
+#
+# Push runs only the conservative preserve mode. Mode changes (execute, shadow,
+# control-execute, control-catalog) are manual workflow_dispatch runs and always
+# go through deploy.sh's own fail-closed preflight. There is no second executor
+# path: CI never bypasses preflight and never force-enables a writer.
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'solutions/**'
+      - 'packages/go/**'
+      - 'projects/home/kubernetes/scheduler/**'
+      - 'MODULE.bazel'
+      - 'MODULE.bazel.lock'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Deploy mode (push always uses preserve)
+        type: choice
+        default: preserve
+        options:
+          - preserve
+          - execute
+          - shadow
+          - control-execute
+          - control-catalog
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-home
+  cancel-in-progress: false
+
+env:
+  BAZELISK_VERSION: "1.30.0"
+  BAZELISK_SHA256: "a248ae2b2b62b5baebb748f6fba7203bff1a27e5d01b55399a8406744cb539e8"
+  KUBECTL_VERSION: "v1.35.0"
+  KUBECTL_SHA256: "a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989"
+  DEPLOY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'preserve' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: home
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Mode guard
+        run: |
+          set -euo pipefail
+          case "$DEPLOY_MODE" in
+            preserve|execute|shadow|control-execute|control-catalog) ;;
+            *) echo "unknown mode: $DEPLOY_MODE" >&2; exit 2 ;;
+          esac
+          if [[ "$DEPLOY_MODE" != "preserve" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "mode '$DEPLOY_MODE' is only allowed from workflow_dispatch" >&2
+            exit 1
+          fi
+          echo "selected mode: $DEPLOY_MODE"
+
+      - name: Install pinned tools
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/bazelisk \
+            "https://github.com/bazelbuild/bazelisk/releases/download/v${BAZELISK_VERSION}/bazelisk-linux-amd64"
+          echo "${BAZELISK_SHA256}  /tmp/bazelisk" | sha256sum -c -
+          sudo install -m 0755 /tmp/bazelisk /usr/local/bin/bazelisk
+          curl -sSfL -o /tmp/kubectl \
+            "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "${KUBECTL_SHA256}  /tmp/kubectl" | sha256sum -c -
+          sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+          rm -f /tmp/bazelisk /tmp/kubectl
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends openconnect vpnc-script openssh-client
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazel-disk
+            ~/.cache/bazelisk
+          key: deploy-home-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'go.sum') }}
+          restore-keys: |
+            deploy-home-${{ runner.os }}-
+
+      - name: Materialise secrets as files
+        env:
+          IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
+          IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
+          IN_K3S_SSH_KEY: ${{ secrets.K3S_SSH_KEY }}
+          IN_K3S_KNOWN_HOSTS: ${{ secrets.K3S_KNOWN_HOSTS }}
+          IN_KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+          IN_SCHEDULER_ENV_B64: ${{ secrets.SCHEDULER_ENV_B64 }}
+          IN_HA_TOKEN: ${{ secrets.HA_TOKEN }}
+          IN_SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+        run: |
+          set +x
+          set -euo pipefail
+          umask 077
+          CI_DIR="$RUNNER_TEMP/ci"
+          rm -rf "$CI_DIR"
+          mkdir -p "$CI_DIR"
+          chmod 700 "$CI_DIR"
+          printf '%s' "$IN_VPN_CERT_P12_B64" | base64 -d > "$CI_DIR/ci.p12"
+          printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
+          printf '%s' "$IN_K3S_SSH_KEY" > "$CI_DIR/id_ci"
+          printf '%s\n' "$IN_K3S_KNOWN_HOSTS" > "$CI_DIR/known_hosts"
+          printf '%s' "$IN_KUBECONFIG_B64" | base64 -d > "$CI_DIR/kubeconfig"
+          printf '%s' "$IN_SCHEDULER_ENV_B64" | base64 -d > "$CI_DIR/scheduler.env"
+          printf '%s' "$IN_HA_TOKEN" > "$CI_DIR/ha.token"
+          printf '%s' "$IN_SCHEDULER_TOKEN" > "$CI_DIR/scheduler.token"
+          chmod 600 "$CI_DIR"/*
+          echo "secret files prepared: $(find "$CI_DIR" -maxdepth 1 -type f | wc -l)"
+
+      - name: Connect VPN (group ci)
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          # shellcheck disable=SC2024 # the log is user-writable; only openconnect is root
+          sudo openconnect \
+            --no-dtls \
+            --certificate "$CI_DIR/ci.p12" \
+            --passwd-on-stdin \
+            --authgroup ci \
+            --pid-file "$RUNNER_TEMP/openconnect.pid" \
+            --resolve vpn.proflyder.dev:192.168.3.29 \
+            https://vpn.proflyder.dev/ \
+            < "$CI_DIR/ci.pass" > "$RUNNER_TEMP/openconnect.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            if timeout 5 bash -c 'cat < /dev/null > /dev/tcp/192.168.3.27/22' 2>/dev/null; then
+              echo "K3s SSH reachable over the VPN"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "K3s SSH is not reachable over the VPN" >&2
+          tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
+          exit 1
+
+      - name: Open SSH tunnel and check CI identity
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          SOCK="$RUNNER_TEMP/ci-ssh.sock"
+          SSH=(ssh -i "$CI_DIR/id_ci" -o IdentitiesOnly=yes
+               -o UserKnownHostsFile="$CI_DIR/known_hosts"
+               -o StrictHostKeyChecking=yes -o BatchMode=yes
+               -o ControlMaster=auto -o ControlPath="$SOCK"
+               -o ExitOnForwardFailure=yes -o ServerAliveInterval=15)
+          "${SSH[@]}" -N -f \
+            -L 127.0.0.1:16443:127.0.0.1:6443 \
+            ci-deploy@192.168.3.27
+          export KUBECONFIG="$CI_DIR/kubeconfig"
+          kubectl -n home-assistant get pods
+          "${SSH[@]}" ci-deploy@192.168.3.27 \
+            'sudo -n /usr/local/sbin/ricardo-ci-deploy current' \
+            | tee "$CI_DIR/previous-release.txt"
+
+      - name: Deploy (preserve by default)
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          case "$DEPLOY_MODE" in
+            preserve) MODE_ARGS=() ;;
+            shadow) MODE_ARGS=(--shadow) ;;
+            execute) MODE_ARGS=(--execute) ;;
+            control-execute) MODE_ARGS=(--control-execute) ;;
+            control-catalog) MODE_ARGS=(--control-catalog) ;;
+            *) echo "unknown mode: $DEPLOY_MODE" >&2; exit 2 ;;
+          esac
+          KUBECONFIG="$CI_DIR/kubeconfig" \
+          PRIVATE_ENV="$CI_DIR/scheduler.env" \
+          NODE_SSH=ci-deploy@192.168.3.27 \
+          SSH_KEY="$CI_DIR/id_ci" \
+          SSH_OPTS="-o IdentitiesOnly=yes -o UserKnownHostsFile=$CI_DIR/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes" \
+          REMOTE_STAGE=/var/lib/ricardo-ci/stage \
+          PREFLIGHT_REMOTE=1 \
+          HA_TOKEN_FILE="$CI_DIR/ha.token" \
+          SCHEDULER_TOKEN_FILE="$CI_DIR/scheduler.token" \
+          BAZELISK=bazelisk \
+            projects/home/kubernetes/scheduler/deploy.sh "${MODE_ARGS[@]}"
+
+      - name: Post-deploy smoke
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          export KUBECONFIG="$CI_DIR/kubeconfig"
+          kubectl -n home-assistant rollout status deployment/scheduler --timeout=180s
+          kubectl -n home-assistant exec deployment/scheduler -- /opt/ricardo/bin/scheduler -healthcheck
+          if [[ "$(kubectl -n home-assistant get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
+            kubectl -n home-assistant rollout status deployment/ha-control --timeout=180s
+            kubectl -n home-assistant exec deployment/ha-control -- /opt/ricardo/bin/ha-control -healthcheck
+          fi
+          if [[ "$(kubectl -n home-assistant get deployment ha-bridge -o jsonpath='{.spec.replicas}')" != "0" ]]; then
+            kubectl -n home-assistant rollout status deployment/ha-bridge --timeout=180s
+            kubectl -n home-assistant exec deployment/ha-bridge -- /opt/ricardo/bin/ha-bridge -healthcheck
+          fi
+          ssh -i "$CI_DIR/id_ci" -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$CI_DIR/known_hosts" -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes ci-deploy@192.168.3.27 \
+            'for p in 30098 30099; do timeout 3 bash -c "cat </dev/null >/dev/tcp/127.0.0.1/$p" && echo "nodeport $p ok"; done'
+
+      - name: Roll back symlinks on failure
+        if: failure()
+        run: |
+          set +e
+          CI_DIR="$RUNNER_TEMP/ci"
+          export KUBECONFIG="$CI_DIR/kubeconfig"
+          PREV_SCHEDULER=$(sed -n 's/^scheduler=//p' "$CI_DIR/previous-release.txt" 2>/dev/null)
+          PREV_CONTROL=$(sed -n 's/^control=//p' "$CI_DIR/previous-release.txt" 2>/dev/null)
+          # Only a release id that is not "none" can be activated.
+          SSH=(ssh -i "$CI_DIR/id_ci" -o IdentitiesOnly=yes
+               -o UserKnownHostsFile="$CI_DIR/known_hosts" -o StrictHostKeyChecking=yes
+               -o BatchMode=yes -o ControlPath="$RUNNER_TEMP/ci-ssh.sock")
+          if [[ -n "$PREV_SCHEDULER" && "$PREV_SCHEDULER" != "none" ]]; then
+            "${SSH[@]}" ci-deploy@192.168.3.27 \
+              "sudo -n /usr/local/sbin/ricardo-ci-deploy activate scheduler '$PREV_SCHEDULER'" || true
+          fi
+          if [[ -n "$PREV_CONTROL" && "$PREV_CONTROL" != "none" ]]; then
+            "${SSH[@]}" ci-deploy@192.168.3.27 \
+              "sudo -n /usr/local/sbin/ricardo-ci-deploy activate control '$PREV_CONTROL'" || true
+          fi
+          # Re-resolve the hostPath mount and return to the previous pod spec.
+          for d in scheduler ha-bridge ha-control; do
+            if kubectl -n home-assistant get deployment "$d" >/dev/null 2>&1; then
+              kubectl -n home-assistant rollout undo "deployment/$d" || true
+              kubectl -n home-assistant rollout restart "deployment/$d" || true
+              kubectl -n home-assistant rollout status "deployment/$d" --timeout=180s || true
+            fi
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          set +e
+          CI_DIR="$RUNNER_TEMP/ci"
+          export KUBECONFIG="$CI_DIR/kubeconfig"
+          {
+            echo "### deploy-home"
+            echo
+            echo "- mode: \`$DEPLOY_MODE\`"
+            echo "- event: \`$GITHUB_EVENT_NAME\`"
+            if kubectl -n home-assistant get deployment scheduler >/dev/null 2>&1; then
+              # shellcheck disable=SC2016 # the token is read inside the pod, not on the runner
+              STATUS=$(kubectl -n home-assistant exec deployment/scheduler -- sh -c \
+                'wget -qO- --post-data={} --header="Content-Type: application/json" --header="Authorization: Bearer $(cat /run/secrets/scheduler/token)" http://127.0.0.1:8098/ricardo.v1.SchedulerService/GetStatus' 2>/dev/null)
+              echo "- GetStatus: \`${STATUS:-unavailable}\`"
+            else
+              echo "- GetStatus: unavailable"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Disconnect VPN and remove temporary files
+        if: always()
+        run: |
+          set +e
+          CI_DIR="$RUNNER_TEMP/ci"
+          if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then
+            sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
+          fi
+          sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
+          if [[ -S "$RUNNER_TEMP/ci-ssh.sock" ]]; then
+            ssh -o ControlPath="$RUNNER_TEMP/ci-ssh.sock" -O exit \
+              ci-deploy@192.168.3.27 2>/dev/null
+          fi
+          pkill -f 'ssh .*16443:127.0.0.1:6443' 2>/dev/null
+          rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
+          echo "temporary deploy files removed"

@@ -1,0 +1,5 @@
+# Installed as /etc/sudoers.d/ricardo-ci-deploy (0440 root:root).
+# The GitHub Actions account may run exactly one root helper with fixed
+# subcommands; it cannot invoke nft, install, ln or a shell as root.
+Defaults:ci-deploy !requiretty
+ci-deploy ALL=(root) NOPASSWD: /usr/local/sbin/ricardo-ci-deploy

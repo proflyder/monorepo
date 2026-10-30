@@ -35,6 +35,10 @@
 - Профили `lan` (только домашняя LAN) и `full`; группы берутся из OU
   сертификата (`cert-group-oid`), по умолчанию `lan`. Пул `10.77.0.0/24`,
   masquerade в CT.
+- Группа `ci` для GitHub Actions изолирована: пул `10.77.1.0/24`, маршрут
+  только до K3s, без DNS; nftables `forward` разрешает только `tcp/22` на K3s
+  и `drop` остальное. Сертификат CI не даёт доступа к HA, PVE, станции или
+  другим LAN-адресам.
 - Сейчас сервер доступен только из LAN. После проброса на ONT/AX3 наружу
   открыт только `443`; SSH в CT остаётся только из LAN.
 - Серверный сертификат — публичный Let's Encrypt с автоматическим продлением.
@@ -80,6 +84,15 @@
   физдоступом и планом.
 - `labuser` с sudo NOPASSWD — root-эквивалент; убрать при многопользовательском
   доступе.
+- CI-аккаунт `ci-deploy` не является root-эквивалентом: ключ принимается
+  только с адреса VPN-CT, `sudo -n` разрешает единственный helper
+  `/usr/local/sbin/ricardo-ci-deploy` с фиксированными подкомандами
+  (`stage`, `firewall`, `activate`, `current`).
+- Kubeconfig CI — ServiceAccount `ci-deploy` только в `home-assistant`
+  (Role, не ClusterRole): нет других namespace и cluster-scoped объектов;
+  API доступен лишь через SSH-туннель на `127.0.0.1:6443`.
+- Секреты Environment `home` (VPN p12/пароль, SSH-ключ, kubeconfig, env,
+  preflight-токены) загружаются primary вручную через `gh`; в Git их нет.
 
 ## Логи / публикация
 

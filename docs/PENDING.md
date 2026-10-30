@@ -117,10 +117,14 @@
       нужен первый прогон на GitHub (`quality`, `test`, `bazel`, `android`)
       и проверка времени/кэша. Pulsar в CI монорепо не собирается; тесты
       без nested checkout печатают `SKIP`.
-- [ ] Этап 2: сертификат и VPN-группа `ci` с отдельной подсетью; nftables в
-      VPN CT пускает её только к K3s по SSH; отдельный SSH-ключ CI;
-      `deploy-home.yml` для scheduler/ha-bridge/ha-control по path-filter,
-      только `develop`, авто-откат симлинка при неудачном healthcheck.
+- [ ] Этап 2 (реализовано локально, нужен первый прогон): VPN-группа `ci`
+      (пул `10.77.1.0/24`, доступ только к K3s `tcp/22`), SSH-пользователь
+      `ci-deploy` с helper-only sudo, ServiceAccount `ci-deploy` в
+      `home-assistant`, `deploy-home.yml` (preserve по push, ручные
+      execute/shadow/control-* через тот же `environment: home`) и авто-откат
+      симлинков. Осталось: загрузить секреты `secrets/ci/github/` в
+      Environment `home` и проверить первый прогон на GitHub, включая ручной
+      approve.
 - [ ] Этап 3: Hermes/voice-proxy через GHCR; Pulsar собирается и
       релизится в своём репозитории, монорепо деплоит релиз на станцию
       через Environment с ручным approve; конфиг HA — по решению.

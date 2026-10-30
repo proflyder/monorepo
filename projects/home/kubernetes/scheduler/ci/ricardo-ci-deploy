@@ -1,0 +1,166 @@
+#!/bin/bash
+# Root-only deploy helper for the GitHub Actions user `ci-deploy`.
+#
+# deploy.sh is allowed to run only these fixed subcommands through
+# `sudo -n /usr/local/sbin/ricardo-ci-deploy`. There is no arbitrary shell:
+# every argument is validated and every path is fixed.
+#
+#   stage BUILD_ID     install the staged binaries into immutable release trees
+#                      and atomically switch /opt/ricardo/{,control/}current
+#   firewall LAN_CIDR NODE_IP SCHEDULER_PORT CONTROL_PORT
+#                      render the fixed template and apply the NodePort filter
+#   activate scheduler|control BUILD_ID
+#                      switch one symlink to an already installed release
+#   current            print the active build ids
+set -euo pipefail
+
+STAGE_DIR=/var/lib/ricardo-ci/stage
+SELF=/usr/local/sbin/ricardo-ci-deploy
+RELEASES=/opt/ricardo/releases
+CONTROL_RELEASES=/opt/ricardo/control/releases
+NFT_TEMPLATE=/usr/local/share/ricardo-ci/scheduler-nodeport.nft.tmpl
+NFT_FILE=/etc/ricardo-scheduler-nodeport.nft
+ID_RE='^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+
+die() {
+  echo "ricardo-ci-deploy: $*" >&2
+  exit 2
+}
+
+usage() {
+  cat >&2 <<'EOF'
+usage: ricardo-ci-deploy stage BUILD_ID
+       ricardo-ci-deploy firewall LAN_CIDR NODE_IP SCHEDULER_PORT CONTROL_PORT
+       ricardo-ci-deploy activate scheduler|control BUILD_ID
+       ricardo-ci-deploy current
+EOF
+  exit 2
+}
+
+valid_cidr() {
+  python3 - "$1" <<'PY'
+import ipaddress
+import sys
+
+try:
+    net = ipaddress.ip_network(sys.argv[1], strict=True)
+except ValueError:
+    sys.exit(1)
+sys.exit(0 if net.version == 4 else 1)
+PY
+}
+
+valid_ipv4() {
+  python3 - "$1" <<'PY'
+import ipaddress
+import sys
+
+try:
+    addr = ipaddress.ip_address(sys.argv[1])
+except ValueError:
+    sys.exit(1)
+sys.exit(0 if addr.version == 4 else 1)
+PY
+}
+
+valid_nodeport() {
+  [[ $1 =~ ^[0-9]{5}$ ]] || return 1
+  ((10#$1 >= 30000 && 10#$1 <= 32767))
+}
+
+[[ $(id -u) == 0 ]] || die "must run as root"
+[[ $# -ge 1 ]] || usage
+
+case "$1" in
+  stage)
+    [[ $# == 2 ]] || usage
+    ID=$2
+    [[ $ID =~ $ID_RE ]] || die "invalid build id: $ID"
+    [[ -d $STAGE_DIR && ! -L $STAGE_DIR ]] || die "missing stage dir: $STAGE_DIR"
+    for name in scheduler ha-bridge ha-control; do
+      [[ -f $STAGE_DIR/$name && ! -L $STAGE_DIR/$name ]] ||
+        die "missing staged binary: $STAGE_DIR/$name"
+    done
+
+    install -d -m 0755 "$RELEASES" "$CONTROL_RELEASES"
+    install -d -m 0755 "$RELEASES/$ID" "$RELEASES/$ID/bin"
+    install -d -m 0755 "$CONTROL_RELEASES/$ID" "$CONTROL_RELEASES/$ID/bin"
+    install -m 0755 "$STAGE_DIR/scheduler" "$RELEASES/$ID/bin/scheduler"
+    install -m 0755 "$STAGE_DIR/ha-bridge" "$RELEASES/$ID/bin/ha-bridge"
+    install -m 0755 "$STAGE_DIR/ha-control" "$CONTROL_RELEASES/$ID/bin/ha-control"
+
+    ln -sfn "$RELEASES/$ID" /opt/ricardo/current.new
+    mv -Tf /opt/ricardo/current.new /opt/ricardo/current
+    ln -sfn "$CONTROL_RELEASES/$ID" /opt/ricardo/control/current.new
+    mv -Tf /opt/ricardo/control/current.new /opt/ricardo/control/current
+    readlink -f /opt/ricardo/current /opt/ricardo/control/current
+    ;;
+
+  activate)
+    [[ $# == 3 ]] || usage
+    TREE=$2
+    ID=$3
+    [[ $TREE == scheduler || $TREE == control ]] || usage
+    [[ $ID =~ $ID_RE ]] || die "invalid build id: $ID"
+    if [[ $TREE == scheduler ]]; then
+      [[ -d $RELEASES/$ID/bin ]] || die "release not found: $RELEASES/$ID"
+      ln -sfn "$RELEASES/$ID" /opt/ricardo/current.new
+      mv -Tf /opt/ricardo/current.new /opt/ricardo/current
+      readlink -f /opt/ricardo/current
+    else
+      [[ -d $CONTROL_RELEASES/$ID/bin ]] || die "release not found: $CONTROL_RELEASES/$ID"
+      ln -sfn "$CONTROL_RELEASES/$ID" /opt/ricardo/control/current.new
+      mv -Tf /opt/ricardo/control/current.new /opt/ricardo/control/current
+      readlink -f /opt/ricardo/control/current
+    fi
+    ;;
+
+  firewall)
+    [[ $# == 5 ]] || usage
+    LAN_CIDR=$2
+    NODE_IP=$3
+    SCHED_PORT=$4
+    CONTROL_PORT=$5
+    # The CI account supplies values only; the ruleset text is fixed and owned
+    # by root. This keeps `nft -f` away from caller-controlled files.
+    valid_cidr "$LAN_CIDR" || die "invalid LAN CIDR: $LAN_CIDR"
+    valid_ipv4 "$NODE_IP" || die "invalid node address: $NODE_IP"
+    valid_nodeport "$SCHED_PORT" || die "invalid scheduler NodePort: $SCHED_PORT"
+    valid_nodeport "$CONTROL_PORT" || die "invalid control NodePort: $CONTROL_PORT"
+    [[ -f $NFT_TEMPLATE && ! -L $NFT_TEMPLATE && -O $NFT_TEMPLATE ]] ||
+      die "missing root-owned template: $NFT_TEMPLATE"
+
+    tmp=$(mktemp /run/ricardo-ci-nft.XXXXXX)
+    trap 'rm -f "$tmp"' EXIT
+    sed -e "s|__LAN_CIDR__|$LAN_CIDR|g" \
+      -e "s|__NODE_LAN_IP__|$NODE_IP|g" \
+      -e "s|__SCHEDULER_NODE_PORT__|$SCHED_PORT|g" \
+      -e "s|__CONTROL_NODE_PORT__|$CONTROL_PORT|g" \
+      "$NFT_TEMPLATE" >"$tmp"
+    if grep -q '__[A-Z_]*__' "$tmp"; then
+      die "unrendered placeholder in template"
+    fi
+
+    nft -c -f "$tmp" || die "rendered ruleset failed syntax check"
+    install -m 0644 "$tmp" "$NFT_FILE"
+    nft delete table inet ricardo_scheduler 2>/dev/null || true
+    nft -f "$NFT_FILE"
+    nft list table inet ricardo_scheduler >/dev/null
+    echo "nodeport filter applied from the fixed template"
+    ;;
+
+  current)
+    [[ $# == 1 ]] || usage
+    sched=$(basename "$(readlink -f /opt/ricardo/current 2>/dev/null || echo none)")
+    control=$(basename "$(readlink -f /opt/ricardo/control/current 2>/dev/null || echo none)")
+    echo "scheduler=$sched"
+    echo "control=$control"
+    ;;
+
+  *)
+    usage
+    ;;
+esac
+
+# Keep shellcheck quiet about the intentionally unused absolute path.
+: "$SELF"

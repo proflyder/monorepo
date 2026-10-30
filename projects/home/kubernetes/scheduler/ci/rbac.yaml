@@ -1,0 +1,68 @@
+# Least-privilege identity for GitHub Actions deploys.
+#
+# The CI kubeconfig authenticates as this ServiceAccount in `home-assistant`
+# only. It has no ClusterRole, no access to any other namespace and none to
+# cluster-scoped resources. Verbs are exactly what deploy.sh performs:
+# apply/rollout/get/exec/patch/scale of the scheduler, ha-bridge and ha-control
+# workloads and their Services, plus reading the two pre-created secrets and
+# managing the rendered ConfigMaps/PVCs in this namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-deploy
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ci-deploy-token
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    kubernetes.io/service-account.name: ci-deploy
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-deploy
+  namespace: home-assistant
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources:
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deploy
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-deploy
+subjects:
+  - kind: ServiceAccount
+    name: ci-deploy
+    namespace: home-assistant

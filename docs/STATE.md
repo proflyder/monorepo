@@ -94,6 +94,12 @@
   обновляет CRL и перезагружает ocserv. Профиль при входе по сертификату
   выбирается полем Group (`lan` по умолчанию или `full`); без группы
   сервер просит выбрать её при подключении.
+- 2026-10-31: группа `ci` для GitHub Actions: пул `10.77.1.0/24`, маршрут
+  только до K3s, без DNS; nftables `forward` разрешает только `tcp/22` на
+  K3s и `drop` остальное. Сертификат `ci` (OU `ci`) выпущен, проверены
+  `--authenticate` и реальный туннель из netns: открыт только `K3s:22`,
+  HA/PVE/станция недоступны. CI-деплой — `ci-deploy` (SSH + helper-only
+  sudo) и ServiceAccount `ci-deploy` в `home-assistant`.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
 
