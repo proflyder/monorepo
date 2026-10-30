@@ -112,7 +112,7 @@ jobs:
           chmod 700 "$CI_DIR"
           printf '%s' "$IN_VPN_CERT_P12_B64" | base64 -d > "$CI_DIR/ci.p12"
           printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
-          printf '%s' "$IN_K3S_SSH_KEY" > "$CI_DIR/id_ci"
+          printf '%s\n' "$IN_K3S_SSH_KEY" > "$CI_DIR/id_ci"  # OpenSSH needs the trailing newline
           printf '%s\n' "$IN_K3S_KNOWN_HOSTS" > "$CI_DIR/known_hosts"
           printf '%s' "$IN_KUBECONFIG_B64" | base64 -d > "$CI_DIR/kubeconfig"
           printf '%s' "$IN_SCHEDULER_ENV_B64" | base64 -d > "$CI_DIR/scheduler.env"
