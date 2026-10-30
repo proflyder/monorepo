@@ -12,6 +12,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [Chart приложений](../../home-assistant/deploy/README.md).
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
 - [Tailscale Operator](tailscale/).
+- [HTTPS ingress Traefik + cert-manager](ingress/).
 - [Hermes voice-proxy firewall](voice-firewall/).
 
 `/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
@@ -41,7 +42,10 @@ export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml
 Helm операции над одним release.
 
 Администрирование — по SSH или через закрытый tunnel. API/kubelet/node metrics
-закрыты от обычного LAN; Grafana доступна через Tailscale Operator по
-`/grafana/` и в LAN по `http://192.0.2.27:30300/grafana/`. HAOS — по `/`.
+закрыты от обычного LAN; Grafana доступна по `https://grafana.home.example.com/`,
+в LAN по `http://192.0.2.27:30300/`; tailnet-путь `/grafana/` после смены
+`root_url` не работает (ожидаемо). HAOS — по `/`. HTTPS-имена `*.home.example.com`
+обслуживает Traefik (`hostNetwork`, `80/443`, IP allow-list) с
+wildcard-сертификатом Let's Encrypt от cert-manager; см. [ingress/](ingress/).
 Host Tailscale на Proxmox пока не включён;
 аварийный доступ к host — LAN/Wi-Fi или Ethernet. Реальные URL и credentials — в secrets.

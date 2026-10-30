@@ -94,11 +94,31 @@
       настроен (`sensor.backup_*` = unknown), CronJob/Velero в репозитории нет.
 - [ ] Private registry/build pipeline для Hermes/proxy images.
 
+## HTTPS ingress (LAN/VPN)
+
+- [ ] Приёмка пользователем `https://{ha,grafana,alarms,control}.home.example.com`:
+      вход с телефона через VPN-профиль `lan` и `full`, HA WebSocket/
+      история/логин, Grafana live и дашборды, редирект `http`→`https`,
+      поведение при выключенном Tailscale.
+- [ ] HA `external_url` → `https://ha.home.example.com` (UI); `internal_url`
+      `http://192.0.2.28:8123` не менять. `trusted_proxies` оставить
+      `192.0.2.27/32`. После смены проверить уведомления, ссылки и голосовой
+      контур.
+- [ ] Android: перевести scheduler/control endpoints на
+      `https://alarms.home.example.com` и `https://control.home.example.com`,
+      обновить подсказки про Tailscale в строках/README и, при желании,
+      запретить cleartext для приватного суффикса. Старые значения в DataStore
+      сохраняются.
+- [ ] Grafana в tailnet: после `root_url` на отдельный хост старый
+      `/grafana/` через `pl-home` больше не работает (ожидаемо); использовать
+      LAN/HTTPS-имя.
+
 ## VPN
 
 - [ ] Тест профиля `full` с мобильной сети (WAN NAT, MTU, DNS).
-- [ ] Отключение Tailscale — отдельный шаг с планом: замена `pl-home`,
-  `pl-control`, `pl-scheduler`, Grafana-ingress и Android endpoints.
+- [ ] Отключение Tailscale — отдельный шаг с планом и окном отката: после
+      приёмки HTTPS ingress и VPN убрать `home-access`, три tailscale Ingress,
+      Operator, host `tailscaled` и `100.64.0.0/10` из nft scheduler.
 
 ## Безопасность / станция
 

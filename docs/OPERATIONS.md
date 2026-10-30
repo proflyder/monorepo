@@ -22,10 +22,14 @@ export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 
 HA: `http://192.0.2.28:8123`  
 MA: `http://192.0.2.28:8095`  
-Grafana LAN: `http://192.0.2.27:30300/grafana/`  
-Grafana Tailscale: `https://pl-home.<tailnet>.ts.net/grafana/`
+Grafana LAN: `http://192.0.2.27:30300/`  
+Grafana HTTPS: `https://grafana.home.example.com/`  
+Grafana Tailscale: `https://pl-home.<tailnet>.ts.net/grafana/` (после смены
+`root_url` путь не работает; использовать HTTPS-имя или LAN)  
+HTTPS вход (LAN/VPN): `https://{ha,grafana,alarms,control}.home.example.com/`
 
-Только LAN/Tailscale. Не пробрасывать `8123/8095/8099/6053/6638`.
+Только LAN/VPN/Tailscale. Не пробрасывать `8123/8095/8099/6053/6638` и
+`80/443` на роутере.
 
 ## VPN (CT 102)
 
@@ -103,8 +107,21 @@ STATION_E2E_AUDIO=1 make test-e2e
 curl -fsS -o /dev/null -w 'HA %{http_code}\n' http://192.0.2.28:8123/
 curl -fsS -o /dev/null -w 'MA %{http_code}\n' http://192.0.2.28:8095/
 curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
-  http://192.0.2.27:30300/grafana/api/health
+  http://192.0.2.27:30300/api/health
 ```
+
+```bash
+# HTTPS ingress (LAN/VPN)
+./projects/home/kubernetes/ingress/deploy.sh --staging   # проверка DNS-01
+./projects/home/kubernetes/ingress/deploy.sh             # prod-сертификат
+NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
+
+KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n traefik get pods,certificate,ingressroute
+KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n cert-manager get challenge,order
+```
+
+Реальные имена и LAN_CIDR — `secrets/home/ingress.env`; токен Cloudflare —
+`secrets/home/vpn/cloudflare.env` (не печатать).
 
 ## K3s
 
@@ -290,7 +307,10 @@ Home control (каталог устройств/сценариев):
 
 Удалённый endpoint для Android: `https://pl-scheduler.<tailnet>.ts.net`
 (tailnet-only, TLS оператора); LAN endpoint — `http://<node>:30098`.
-Оба требуют bearer. `pl-home` не менять: `/` → HAOS, `/grafana` → Grafana.
+Новые HTTPS-имена (LAN/VPN, Let's Encrypt): `https://alarms.home.example.com`
+(scheduler) и `https://control.home.example.com` (каталог); переключение
+Android на них — отдельный шаг. Все варианты требуют bearer. `pl-home` не
+менять: `/` → HAOS, `/grafana` → Grafana.
 
 Пауза исполнения — `deploy.sh --shadow` (0 реплик, данные scheduler
 сохраняются); возврат — `--execute` после preflight. Legacy writers удалены и
@@ -353,7 +373,8 @@ qm reboot 101       # K3s
 reboot
 ```
 
-После reboot проверить HA, K3s pods, Grafana, Tailscale, Sendspin и Pulsar.
+После reboot проверить HA, K3s pods, Grafana, HTTPS ingress, Tailscale,
+Sendspin и Pulsar.
 Аварийный доступ к PVE — LAN/Wi-Fi; host Tailscale не настроен.
 
 ## Backup

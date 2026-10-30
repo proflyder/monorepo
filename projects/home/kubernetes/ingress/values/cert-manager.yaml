@@ -1,0 +1,14 @@
+# Public, non-secret values for cert-manager.
+crds:
+  enabled: true
+
+replicaCount: 1
+
+# No ServiceMonitor/PodMonitor: the Prometheus annotation scrape path is
+# enough for a single-node lab and avoids coupling to operator CRDs.
+prometheus:
+  enabled: true
+  podmonitor:
+    enabled: false
+  servicemonitor:
+    enabled: false

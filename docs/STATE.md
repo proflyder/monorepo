@@ -37,7 +37,8 @@
 
 - K3s `v1.35.9+k3s1`, node `lab-host`; data-dir `/srv/k3s/runtime`; SQLite;
   local-path PV с `Retain`.
-- Namespaces: `home-assistant`, `monitoring`, `tailscale`.
+- Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
+  `tailscale`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
@@ -45,13 +46,25 @@
   архив старого HA Container.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
-- Grafana: LAN `http://192.0.2.27:30300/grafana/`; Tailscale
-  `https://pl-home.<tailnet>.ts.net/grafana/`.
+- Grafana: LAN `http://192.0.2.27:30300/` (корень), HTTPS
+  `https://grafana.home.example.com/`; tailnet-путь `/grafana/` после смены
+  `root_url` не работает (ожидаемо).
+- HTTPS ingress `*.home.example.com` (Traefik `42.2.0` + cert-manager
+  `v1.21.3`, ACME DNS-01 Cloudflare, wildcard Let's Encrypt prod до
+  2027-01-28): `ha`, `grafana`, `alarms`, `control` → узел `.27`, Cloudflare
+  DNS only. Traefik в `hostNetwork` (`80/443`), редирект на HTTPS, IP
+  allow-list LAN + pod CIDR; HA-источник остаётся `.27`
+  (`trusted_proxies /32`). WebSocket HA и Grafana проверены.
+  Файлы — `projects/home/kubernetes/ingress/`; приватные имена/токен —
+  `secrets/home/ingress.env` и `secrets/home/vpn/cloudflare.env`.
 
 ## Remote
 
 - Tailscale Operator `1.104.2` в K3s; `home-access` ingress:
-  `/` → HAOS, `/grafana/` → Grafana.
+  `/` → HAOS; `/grafana/` больше не обслуживается после смены `root_url`.
+- HTTPS-имена LAN/VPN: `https://{ha,grafana,alarms,control}.home.example.com`
+  через Traefik + cert-manager; работают и при выключенном Tailscale, пока
+  клиент в LAN или VPN.
 - `pl-home` указывает на operator proxy `tag:k8s`; host Serve не используется.
 - Публичного HA нет; `8123/8095/8099/6053/6638` наружу не проброшены.
 - K3s management/metrics `6443/10250/9100/9116/8472` закрыты от обычного LAN;

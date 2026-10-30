@@ -1,0 +1,85 @@
+# Public template. `deploy.sh` substitutes ${HOME_DOMAIN}.
+#
+# All routes share the `traefik` namespace with the wildcard TLS Secret and the
+# IP allow-list Middleware; Services live in their application namespaces and
+# are reached through `allowCrossNamespace`.
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: home-assistant
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${HA_HOST}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: home-assistant-external
+          namespace: monitoring
+          port: 8123
+  tls:
+    secretName: home-wildcard-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${GRAFANA_HOST}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: monitoring-grafana
+          namespace: monitoring
+          port: 80
+  tls:
+    secretName: home-wildcard-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: scheduler
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${ALARMS_HOST}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: scheduler
+          namespace: home-assistant
+          port: 8098
+  tls:
+    secretName: home-wildcard-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ha-control
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${CONTROL_HOST}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: ha-control
+          namespace: home-assistant
+          port: 8099
+  tls:
+    secretName: home-wildcard-tls

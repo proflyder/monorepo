@@ -1,0 +1,15 @@
+# Public template. `deploy.sh` substitutes ${LAN_CIDR} (the private LAN range).
+# VPN clients are NATed to a LAN address by the VPN container, so they match
+# this allowlist. Pod CIDR keeps in-cluster probes working; loopback covers
+# checks executed on the node.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: home-allowlist
+  namespace: traefik
+spec:
+  ipAllowList:
+    sourceRange:
+      - ${LAN_CIDR}
+      - 10.42.0.0/16
+      - 127.0.0.1/32

@@ -1,0 +1,98 @@
+# Public, non-secret values for the Traefik ingress controller.
+#
+# Traefik runs in the host network namespace (single-node K3s, ServiceLB is
+# disabled) so that upstream requests keep the node LAN address as their
+# source. HA trusts only this address via `http.trusted_proxies`.
+deployment:
+  replicas: 1
+  # hostNetwork pods cannot use ClusterFirst.
+  dnsPolicy: ClusterFirstWithHostNet
+
+# Replace a running pod instead of overlapping two pods on ports 80/443.
+updateStrategy:
+  type: Recreate
+
+hostNetwork: true
+
+# ServiceLB is disabled; the host ports are opened directly by the pod.
+service:
+  spec:
+    type: ClusterIP
+
+ports:
+  # Dashboard/API entrypoint: not published, no dashboard router.
+  traefik:
+    port: 8080
+    expose:
+      default: false
+  web:
+    port: 80
+    hostPort: 80
+    exposedPort: 80
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    port: 443
+    hostPort: 443
+    exposedPort: 443
+  # The metrics entrypoint is always created by the chart. Move it off 9100,
+  # which node-exporter already owns on the host.
+  metrics:
+    port: 19100
+    exposedPort: 19100
+
+api:
+  dashboard: false
+
+# Traefik must bind host ports 80/443 in the host network namespace. The chart
+# default (UID 65532) cannot do that: containerd does not grant ambient
+# capabilities to non-root processes and the image has no file capabilities, so
+# NET_BIND_SERVICE never reaches the effective set. Run as root with all
+# capabilities dropped except NET_BIND_SERVICE, read-only root and no privilege
+# escalation. Alternative (rejected) would be changing the host's
+# net.ipv4.ip_unprivileged_port_start.
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE
+
+# Do not enable Prometheus metrics: the chart would bind 9100, which is
+# already used by node-exporter on the host.
+metrics:
+  prometheus: null
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+
+providers:
+  kubernetesCRD:
+    enabled: true
+    # Routes live in one namespace with the wildcard TLS Secret and reference
+    # Services in `monitoring` and `home-assistant`.
+    allowCrossNamespace: true
+  kubernetesIngress:
+    enabled: false
+
+accessLog:
+  enabled: true
+
+log:
+  level: INFO

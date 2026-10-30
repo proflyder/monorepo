@@ -91,6 +91,8 @@ HAOS и K3s используют статические адреса внутр�
 | Порт | Назначение | Класс доступа |
 |---|---|---|
 | `22/tcp` | SSH | LAN |
+| `80/tcp` | Traefik, редирект на HTTPS | LAN/VPN, IP allow-list |
+| `443/tcp` | Traefik, TLS для `*.home.example.com` | LAN/VPN, IP allow-list |
 | `30300/tcp` | Grafana NodePort | LAN, login required |
 | `10200/tcp` | Piper TTS | LAN/HA |
 | `10300/tcp` | Whisper fallback | LAN/HA |
@@ -138,7 +140,11 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
 ## 4. Grafana и HA
 
 - HA доступен по LAN: `http://192.0.2.28:8123`
-- Grafana доступна по LAN: `http://192.0.2.27:30300/grafana/`
+- Grafana доступна по LAN: `http://192.0.2.27:30300/` (корень)
+- HTTPS (LAN/VPN): `https://ha.home.example.com/`,
+  `https://grafana.home.example.com/`,
+  `https://alarms.home.example.com/` (scheduler),
+  `https://control.home.example.com/` (ha-control)
 - Grafana требует login; анонимный доступ выключен.
 - Matter не имеет отдельного LAN UI: используется HA add-on ingress.
 - Старый compatibility endpoint `http://192.0.2.27:8123` не используется;
@@ -150,7 +156,9 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
 
 ```text
 https://pl-home.<tailnet>.ts.net/          -> HAOS
-https://pl-home.<tailnet>.ts.net/grafana/  -> Grafana
+https://pl-home.<tailnet>.ts.net/grafana/  -> Grafana (после перехода Grafana
+                                              на отдельный root_url путь
+                                              работает только в LAN/VPN)
 ```
 
 Свойства схемы:
@@ -180,12 +188,34 @@ https://pl-home.<tailnet>.ts.net/grafana/  -> Grafana
 Tailscale пока остаётся основным удалённым доступом; отключается отдельным
 шагом после проверки VPN с мобильной сети.
 
+### HTTPS-имена в LAN/VPN
+
+Параллельно Tailscale в K3s поднят Traefik (`hostNetwork`, порты `80/443` на
+узле) и cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
+`*.home.example.com` выпускается автоматически и продлевается cert-manager.
+
+- A-записи `ha`, `grafana`, `alarms`, `control` → `192.0.2.27`, Cloudflare
+  DNS only (не proxied), TTL auto; apex и прочие записи не меняются.
+- `80` редиректит на `443`; вход разрешён только LAN `192.0.2.0/24` (VPN
+  приходит NAT-ом с LAN-адреса), pod CIDR и loopback.
+- HA видит источником адрес узла `192.0.2.27`; `trusted_proxies` не
+  расширяется.
+- WebSocket (`/api/websocket`, Grafana `/api/live/ws`) проходит через прокси.
+- Публикации в интернет нет: роутер по-прежнему не пробрасывает `80/443`;
+  имена резолвятся в приватный адрес и работают только из LAN/VPN.
+
+Управление и проверки — `projects/home/kubernetes/ingress/README.md` и
+`KUBERNETES-OPERATIONS.md`. Tailscale и NodePort остаются аварийным путём до
+отдельной приёмки.
+
 ## 6. Политика доступа
 
 - Административные интерфейсы — только LAN или Tailscale.
 - `6443/10250/9100/9116/8472` не публикуются в обычный LAN.
 - `8643` voice proxy доступен только HAOS, K3s и loopback.
 - `8123/8095/8099/6053/6638` не пробрасываются в интернет.
+- `80/443` на узле K3s обслуживает только Traefik с IP allow-list; роутер их
+  не пробрасывает, имена `*.home.example.com` работают только из LAN/VPN.
 - VPN `443/tcp,udp` пока не проброшен; после проброса это единственный
   входящий порт, SSH в VPN-CT остаётся LAN-only.
 - `6638` (Zigbee) не имеет auth; при включении не выставлять наружу.
@@ -206,6 +236,10 @@ curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
 
 curl -fsS -o /dev/null -w 'MA %{http_code}\n' \
   http://<HAOS_IP>:8095/
+
+curl -fsS -o /dev/null -w 'HA https %{http_code}\n' \
+  https://ha.home.example.com/
+curl -fsS https://grafana.home.example.com/api/health
 ```
 
 K3s API не публикуется в LAN; для административного доступа используется
