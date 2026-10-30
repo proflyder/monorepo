@@ -41,6 +41,10 @@ env:
   KUBECTL_VERSION: "v1.35.0"
   KUBECTL_SHA256: "a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989"
   DEPLOY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'preserve' }}
+  # Public DNS name of the VPN and the home LAN address of the K3s node are
+  # private values: they live in the `home` Environment, not in this file.
+  VPN_SERVER: ${{ secrets.VPN_SERVER }}
+  K3S_NODE: ${{ secrets.K3S_NODE }}
 
 jobs:
   deploy:
@@ -128,11 +132,10 @@ jobs:
             --passwd-on-stdin \
             --authgroup ci \
             --pid-file "$RUNNER_TEMP/openconnect.pid" \
-            --resolve vpn.proflyder.dev:192.168.3.29 \
-            https://vpn.proflyder.dev/ \
+            "${VPN_SERVER%/}" \
             < "$CI_DIR/ci.pass" > "$RUNNER_TEMP/openconnect.log" 2>&1 &
           for _ in $(seq 1 30); do
-            if timeout 5 bash -c 'cat < /dev/null > /dev/tcp/192.168.3.27/22' 2>/dev/null; then
+            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$K3S_NODE/22" 2>/dev/null; then
               echo "K3s SSH reachable over the VPN"
               exit 0
             fi
@@ -154,10 +157,10 @@ jobs:
                -o ExitOnForwardFailure=yes -o ServerAliveInterval=15)
           "${SSH[@]}" -N -f \
             -L 127.0.0.1:16443:127.0.0.1:6443 \
-            ci-deploy@192.168.3.27
+            "ci-deploy@$K3S_NODE"
           export KUBECONFIG="$CI_DIR/kubeconfig"
           kubectl -n home-assistant get pods
-          "${SSH[@]}" ci-deploy@192.168.3.27 \
+          "${SSH[@]}" "ci-deploy@$K3S_NODE" \
             'sudo -n /usr/local/sbin/ricardo-ci-deploy current' \
             | tee "$CI_DIR/previous-release.txt"
 
@@ -175,7 +178,7 @@ jobs:
           esac
           KUBECONFIG="$CI_DIR/kubeconfig" \
           PRIVATE_ENV="$CI_DIR/scheduler.env" \
-          NODE_SSH=ci-deploy@192.168.3.27 \
+          NODE_SSH="ci-deploy@$K3S_NODE" \
           SSH_KEY="$CI_DIR/id_ci" \
           SSH_OPTS="-o IdentitiesOnly=yes -o UserKnownHostsFile=$CI_DIR/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes" \
           REMOTE_STAGE=/var/lib/ricardo-ci/stage \
@@ -202,7 +205,7 @@ jobs:
           fi
           ssh -i "$CI_DIR/id_ci" -o IdentitiesOnly=yes \
             -o UserKnownHostsFile="$CI_DIR/known_hosts" -o StrictHostKeyChecking=yes \
-            -o BatchMode=yes ci-deploy@192.168.3.27 \
+            -o BatchMode=yes "ci-deploy@$K3S_NODE" \
             'for p in 30098 30099; do timeout 3 bash -c "cat </dev/null >/dev/tcp/127.0.0.1/$p" && echo "nodeport $p ok"; done'
 
       - name: Roll back symlinks on failure
@@ -218,11 +221,11 @@ jobs:
                -o UserKnownHostsFile="$CI_DIR/known_hosts" -o StrictHostKeyChecking=yes
                -o BatchMode=yes -o ControlPath="$RUNNER_TEMP/ci-ssh.sock")
           if [[ -n "$PREV_SCHEDULER" && "$PREV_SCHEDULER" != "none" ]]; then
-            "${SSH[@]}" ci-deploy@192.168.3.27 \
+            "${SSH[@]}" "ci-deploy@$K3S_NODE" \
               "sudo -n /usr/local/sbin/ricardo-ci-deploy activate scheduler '$PREV_SCHEDULER'" || true
           fi
           if [[ -n "$PREV_CONTROL" && "$PREV_CONTROL" != "none" ]]; then
-            "${SSH[@]}" ci-deploy@192.168.3.27 \
+            "${SSH[@]}" "ci-deploy@$K3S_NODE" \
               "sudo -n /usr/local/sbin/ricardo-ci-deploy activate control '$PREV_CONTROL'" || true
           fi
           # Re-resolve the hostPath mount and return to the previous pod spec.
@@ -266,7 +269,7 @@ jobs:
           sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
           if [[ -S "$RUNNER_TEMP/ci-ssh.sock" ]]; then
             ssh -o ControlPath="$RUNNER_TEMP/ci-ssh.sock" -O exit \
-              ci-deploy@192.168.3.27 2>/dev/null
+              "ci-deploy@$K3S_NODE" 2>/dev/null
           fi
           pkill -f 'ssh .*16443:127.0.0.1:6443' 2>/dev/null
           rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
