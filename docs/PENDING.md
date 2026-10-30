@@ -4,6 +4,13 @@
 
 ## Приёмка
 
+- [ ] Ricardo pre-roll 256 ms установлен 30.10 (`Fixed(8)`, SHA256
+      `7081ef8e…`, armhf) с `PULSAR_LOCAL_ENDPOINTING=1`. Нужна живая приёмка
+      трёх команд («Рикардо отмена/который час/сколько времени») и других фраз:
+      база n=3, риск среза первого слога, гарантии для остальных команд нет.
+      При регрессе — откат только pre-roll на `pulsar.prev` `0b0c48e4…`
+      (512 ms) с сохранением endpointing; on-device backup
+      `/data/pulsar/backups/deploy-preroll8-20261030T185700Z/`.
 - [ ] Локальный endpointing Rust Pulsar: armhf-кандидат `v0.5.2-4-g9b5e86a`
       установлен 30.10, feature включена только в текущем supervised-процессе
       через `PULSAR_LOCAL_ENDPOINTING=1` (не boot-persistent). Нужны живая

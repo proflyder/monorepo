@@ -30,8 +30,10 @@ recovery archive — `secrets/local/recovery/`.
 - on-device wake word «Рикардо» через C++ bridge, microfrontend и
   `/system/vendor/quasar/libs/libtflite.so`.
 - Pre-roll: upstream `PrerollRing`/`wake_pending` race fix; для Ricardo
-  `Model::wake_preroll` = Fixed(16) chunks = 512 ms (deployed baseline ~0.5 с).
-  HA switch «Command right after wake word» управляет `wake_preroll`.
+  `Model::wake_preroll` = Fixed(8) chunks = 256 ms, установлено 30.10
+  (`v0.5.2-4-g9b5e86a-dirty`, SHA256 `7081ef8e…`; три реальные команды точно,
+  n=3 — эмпирика, не гарантия). HA switch «Command right after wake word»
+  управляет `wake_preroll`.
 - `stt-no-text-recognized` — тихая отмена.
 - Локальный command spotter только во время playback; «Рикардо, стоп»
   уходит в HA для остановки будильника и восстановления музыки.

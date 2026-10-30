@@ -152,10 +152,10 @@ index 0000000..f6bdd16
 +and restore `pulsar.prev` with `ctl.sh restart`. The previous Rust build also
 +accepts the same `wake_word=ricardo` state and model path.
 diff --git a/docs/architecture.md b/docs/architecture.md
-index 99cf9c3..e118732 100644
+index 99cf9c3..ece93de 100644
 --- a/docs/architecture.md
 +++ b/docs/architecture.md
-@@ -307,6 +307,14 @@ println!("cargo:rustc-link-lib=c++");
+@@ -307,6 +307,15 @@ println!("cargo:rustc-link-lib=c++");
  - Ошибка dlopen / VQE / спотера логируется, handle деградированный (событий нет). PCM, который не
    открылся, не считается ошибкой старта: поток захвата пишет ошибку и повторяет открытие каждые
    2 с. Потоки останавливаются в `Drop` последнего клона handle.
@@ -163,14 +163,15 @@ index 99cf9c3..e118732 100644
 +  microfrontend, `libtflite.so` с Yandex FULL resolver, модель
 +  `/data/pulsar/wakewords/ru_ricardo_mww.tflite`. Rust-сторона (`src/ricardo.rs`)
 +  владеет только opaque handle; `frontend` подаёт детектору тот же очищенный чанк, что и
-+  нативному спотеру, и берёт пре-ролл из общего кольца (для id `ricardo` — `Fixed(16)`,
-+  512 мс: базовая длина ~0.5 с deployed Rust-сборки; настройка на железе — впереди). Без
++  нативному спотеру, и берёт пре-ролл из общего кольца (для id `ricardo` — `Fixed(8)`,
++  256 мс: минимальный front cut, на котором три реальные команды распознались точно в
++  sweep 2026-10-30 на v27/Midi, n=3; эмпирика, не гарантия для других команд). Без
 +  модели или `libtflite.so` детектор логирует ошибку и не даёт wake-событий; остальной
 +  фронтенд не падает.
  - `stats()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков и сырой захват для
    `--record`.
  - Пре-ролл wake word (switch «Command right after wake word», `wake_preroll=` в `state.conf`, по
-@@ -319,8 +327,9 @@ println!("cargo:rustc-link-lib=c++");
+@@ -319,8 +328,9 @@ println!("cargo:rustc-link-lib=c++");
    `Fixed`. Поток обработки держит кольцо последних 32 чанков `VQE_OMNI_WITH_GAIN` (1,024 с) и
    кладёт в `FrontendEvent::Wake { preroll }` звук от конца слова до подтверждающего чанка
    включительно. Длина — правило из `Model::wake_preroll` для id модели (имя каталога, `alisa` /
@@ -182,7 +183,7 @@ index 99cf9c3..e118732 100644
    текста не убирает): на Лайт 2 — самый короткий замер по громким словам, на Миди все слова у
    шумового пола и замер не отличает артефакт от короткой задержки, поэтому взято типичное
    значение; окончательно все значения выставлены приёмкой через HA. Каждое срабатывание пишет
-@@ -370,6 +379,11 @@ println!("cargo:rustc-link-lib=c++");
+@@ -370,6 +380,11 @@ println!("cargo:rustc-link-lib=c++");
    перезапуск потока сервером (seek / skip) не дёргает состояние медиаплеера в HA и музыкальные
    дисплеи. `stopped` завершает удерживаемый конец сразу.
  - `yield_to_local()` только шлёт `client/leave`, `streaming` синхронно не меняет.
@@ -4201,7 +4202,7 @@ index 963411a..ecf76e5 100644
      pub fn feed_command(&mut self) -> Vec<String> {
          feed(&self.vqe, self.frame, &mut self.cmd).phrases
 diff --git a/satellite/crates/pulsar-audio/src/frontend.rs b/satellite/crates/pulsar-audio/src/frontend.rs
-index 9dcce7c..5179504 100644
+index 9dcce7c..829a119 100644
 --- a/satellite/crates/pulsar-audio/src/frontend.rs
 +++ b/satellite/crates/pulsar-audio/src/frontend.rs
 @@ -1,7 +1,8 @@
@@ -4502,7 +4503,7 @@ index 9dcce7c..5179504 100644
 +        let custom = Shared::new(true);
 +        assert_eq!(
 +            wake_preroll_rule(midi, &custom, "alisa"),
-+            Some(PrerollRule::Fixed(16))
++            Some(PrerollRule::Fixed(8))
 +        );
 +        // Switched back to a stock spotter: the custom entry no longer applies.
 +        let stock = Shared::new(false);
@@ -4513,7 +4514,7 @@ index 9dcce7c..5179504 100644
 +    }
 +
 +    #[test]
-+    fn ricardo_preroll_is_the_last_512_ms_of_the_ring() {
++    fn ricardo_preroll_is_the_last_256_ms_of_the_ring() {
 +        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
 +        const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
 +        let mut ring = PrerollRing::new(PREROLL_CHUNKS, FRAME);
@@ -4522,10 +4523,10 @@ index 9dcce7c..5179504 100644
 +        }
 +        let rule = wake_preroll_rule(midi, &Shared::new(true), "ricardo");
 +        let n = preroll_chunks(rule, None);
-+        assert_eq!(n, 16);
++        assert_eq!(n, 8);
 +        let preroll = ring.last(n);
 +        assert_eq!(preroll.len(), n * FRAME);
-+        assert_eq!(preroll.len() / 16, 512, "milliseconds at 16 kHz");
++        assert_eq!(preroll.len() / 16, 256, "milliseconds at 16 kHz");
 +        // Oldest first, ending with the chunk that confirmed the word.
 +        assert_eq!(preroll[0], (PREROLL_CHUNKS - n) as i16);
 +        assert_eq!(preroll[preroll.len() - 1], (PREROLL_CHUNKS - 1) as i16);
@@ -4675,19 +4676,20 @@ index 0000000..312a712
 +    }
 +}
 diff --git a/satellite/crates/pulsar-core/src/model.rs b/satellite/crates/pulsar-core/src/model.rs
-index bb6e014..ddeb850 100644
+index bb6e014..1e5ebf9 100644
 --- a/satellite/crates/pulsar-core/src/model.rs
 +++ b/satellite/crates/pulsar-core/src/model.rs
-@@ -148,6 +148,13 @@ const CUCUMBER_PREROLL: &[WakePreroll] = &[
+@@ -148,6 +148,14 @@ const CUCUMBER_PREROLL: &[WakePreroll] = &[
          id: "yandex",
          rule: PrerollRule::Fixed(2),
      },
 +    // The fork's own «Рикардо» microWakeWord detector (no stock model directory, so the
-+    // front-end looks it up under this id). 16 chunks = 512 ms preserves the deployed fork's
-+    // ~0.5 s pre-roll baseline, ending at the confirming chunk; hardware tuning is pending.
++    // front-end looks it up under this id). 8 chunks = 256 ms: the smallest relative front cut
++    // that removed the wake remnant while all three commands transcribed exactly in the
++    // 2026-10-30 v27/Midi capture sweep (n=3, empirical; not a guarantee for other commands).
 +    WakePreroll {
 +        id: "ricardo",
-+        rule: PrerollRule::Fixed(16),
++        rule: PrerollRule::Fixed(8),
 +    },
  ];
  // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
@@ -5800,7 +5802,7 @@ index 0000000..957ed32
 +`crates/pulsar-audio/ricardo/`.
 diff --git a/satellite/crates/pulsar-audio/src/endpoint.rs b/satellite/crates/pulsar-audio/src/endpoint.rs
 new file mode 100644
-index 0000000..c6cafd4
+index 0000000..5cbae37
 --- /dev/null
 +++ b/satellite/crates/pulsar-audio/src/endpoint.rs
 @@ -0,0 +1,601 @@
@@ -5879,7 +5881,7 @@ index 0000000..c6cafd4
 +/// `post_wake = true`.
 +///
 +/// An end is only reported after sustained speech was seen *after* the wake word was handled.
-+/// Pre-roll alone cannot prove a command: the 512 ms Ricardo pre-roll ends at the confirmation
++/// Pre-roll alone cannot prove a command: the 256 ms Ricardo pre-roll ends at the confirmation
 +/// and may contain only the tail of "Рикардо". A detector that ended on pre-roll speech plus live
 +/// silence would close the microphone on every wake word, so pre-roll evidence arms the state
 +/// machine but never completes a phrase. Live evidence must also last [`ONSET_CHUNKS`] above the

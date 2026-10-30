@@ -69,9 +69,13 @@
   subscribed, Sendspin/MA переподключились без рестарта MA, crashloop нет;
   живая голосовая приёмка endpointing ещё нужна. StationCancel без речи —
   изменение HA-конфига, не бинарника.
-  `pulsar.prev` — known-good `v0.5.2-3-gc57d521-dirty`; on-device копии —
-  `pulsar.pre-endpoint-20261030` и `pulsar.prev.pre-endpoint-20261030`;
-  `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private backup вне Git.
+  Установленный бинарник — SHA256 `7081ef8e…` (Ricardo pre-roll 256 ms);
+  `pulsar.prev` — прежний endpointing `0b0c48e4…` (512 ms). Historical
+  known-good `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`) — теперь
+  `pulsar.pre-endpoint-20261030`, не `pulsar.prev`;
+  `pulsar.prev.pre-endpoint-20261030` — более старый pre-endpoint backup
+  `69310a37…`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private
+  backup вне Git.
   Legacy C++ checkout,
   patch и binaries — private в `secrets/local/recovery/`.
   ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`, SSH `22`.
@@ -142,6 +146,16 @@
   Backup: `/data/pulsar/backups/deploy-20261029T200123Z`,
   `secrets/local/backups/pulsar-pre-wake-cancel-20261030-0101/`,
   live HA — `secrets/local/backups/ha-intent-pre-deploy-20261030/`.
+- Ricardo pre-roll 256 ms: установлен `v0.5.2-4-g9b5e86a-dirty` SHA256
+  `7081ef8e…` (armhf, `Fixed(8)`, front cut 256 ms; три реальные команды
+  распознаны точно в replay-sweep 30.10, n=3 — эмпирика, не гарантия).
+  Процесс с `PULSAR_LOCAL_ENDPOINTING=1`; HA voice subscribed, Sendspin/MA
+  переподключились. `pulsar.prev` — прежний endpointing-бинарник `0b0c48e4…`
+  (512 ms); старый historical `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`) сохранён
+  в `/data/pulsar/backups/deploy-preroll8-20261030T185700Z/` и
+  `pulsar.pre-endpoint-20261030`; off-device
+  `secrets/local/backups/pulsar-preroll8-20261030T185157Z/`. Живая приёмка —
+  `PENDING.md`.
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
   reconnect и station reboot. Supervised `reload` завершает Sendspin-сессию
   goodbye-причиной `restart`, и MA переподключается сам: измерено 3.1 с и 3.1 с

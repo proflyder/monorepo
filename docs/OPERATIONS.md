@@ -119,11 +119,34 @@ known-good бинарник — атомарно, не поверх работа
 adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
+Установлен Ricardo pre-roll 256 ms (`Fixed(8)`, SHA256 `7081ef8e…`, armhf).
+Строка версии не менялась (`v0.5.2-4-g9b5e86a-dirty`), поэтому отличать
+установленный бинарник по SHA256 и 256 ms, а не по `--version`. Процесс
+запущен с `PULSAR_LOCAL_ENDPOINTING=1`. `pulsar.prev` — прежний
+endpointing-бинарник `0b0c48e4…` (512 ms); старый historical `d2197f6a…`
+(`v0.5.2-3-gc57d521-dirty`) сохранён в
+`/data/pulsar/backups/deploy-preroll8-20261030T185700Z/` и
+`pulsar.pre-endpoint-20261030`; off-device private
+`secrets/local/backups/pulsar-preroll8-20261030T185157Z/`.
+
+Откат только pre-roll 256→512 ms, с сохранением endpointing:
+
+```bash
+adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload'
+```
+
+Полное выключение endpointing (не откат pre-roll) — по-прежнему reload без
+переменной, как выше. Повторное включение endpointing — reload с переменной;
+длина pre-roll при этом не меняется. Возврат pre-roll 256 ms после бинарного
+отката требует повторной установки `7081ef8e…`.
+
 Установленная версия — Rust `v0.5.2-4-g9b5e86a-dirty` (armhf, локальный форк
 на базе upstream `v0.5.2`, сборка проектным Makefile `ARCH=armhf`; повторный
-wake + endpointing); `pulsar.prev` — known-good `v0.5.2-3-gc57d521-dirty`.
-On-device копии перед установкой — `pulsar.pre-endpoint-20261030` и
-`pulsar.prev.pre-endpoint-20261030`; `v0.5.2-2-g95ce568` и
+wake + endpointing + Ricardo pre-roll 256 ms, SHA256 `7081ef8e…`); `pulsar.prev`
+— прежний endpointing-бинарник `0b0c48e4…` (512 ms). Historical known-good:
+`pulsar.pre-endpoint-20261030` — `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`);
+`pulsar.prev.pre-endpoint-20261030` — более старый pre-endpoint backup
+`69310a37…`; `v0.5.2-2-g95ce568` и
 `v0.5.0-1-g908a027` — только private backup вне Git. StationCancel без речи —
 HA-конфиг, а не бинарник.
 Штатный `quasar-server`
