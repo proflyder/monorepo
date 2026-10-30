@@ -1,6 +1,6 @@
 # STATE — текущее состояние
 
-Обновлено: 2026-10-30. Публичные адреса — примеры; реальные — в
+Обновлено: 2026-10-31. Публичные адреса — примеры; реальные — в
 `secrets/NETWORK.md`.
 
 ## Host / VM
@@ -15,6 +15,8 @@
 - VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, HAOS `2026.10.4`, `192.0.2.28`.
 - VM `101 lab-k3s`: 8 vCPU / 8 GiB / 200 GiB, Ubuntu 24.04.5, K3s,
   `192.0.2.27`; startup order 1/2.
+- CT `102 vpn`: unprivileged Debian 13, 1 vCPU / 512 MiB / 4 GiB,
+  `192.0.2.29`, onboot, ocserv `443/tcp+udp`, пул `10.77.0.0/24`.
 - Terraform: provider `bpg/proxmox 0.118.1`, plan — No changes; state
   root-only на PVE, копия в `secrets/`.
 - Wi-Fi/Ethernet uplink runbook: `projects/home/proxmox/wifi-uplink/`.
@@ -55,6 +57,22 @@
 - K3s management/metrics `6443/10250/9100/9116/8472` закрыты от обычного LAN;
   SSH — LAN, K3s API — через туннель.
 - Host Tailscale emergency access не настроен; Proxmox доступен по LAN/Wi-Fi.
+
+## Собственный VPN
+
+- CT `102 vpn` (`192.0.2.29`): ocserv с паролем + TOTP, профили `lan`
+  (split tunnel до домашней LAN, DNS `192.0.2.1`) и `full` (весь трафик).
+  `443/tcp` + `443/udp`, nftables `drop` по умолчанию, masquerade
+  VPN → LAN/WAN, SSH только из LAN, onboot.
+- Сертификат самоподписанный (`vpn.example.com`, IP `192.0.2.29`),
+  клиент проверяет `pin-sha256` публичного ключа; проверены успешная
+  аутентификация с верным TOTP, отказ при неверном TOTP и реальный туннель
+  ping до `192.0.2.1` из изолированного netns.
+- Наружу ничего не проброшено; Let's Encrypt, DHCP reservation `.29`,
+  ONT/AX3 forward и тест с мобильной сети — открытые шаги. Tailscale пока
+  остаётся основным удалённым доступом и не менялся.
+- Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
+  `secrets/home/vpn/`.
 
 ## Станция
 

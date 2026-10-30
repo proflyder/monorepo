@@ -18,6 +18,12 @@ Ethernet при carrier, иначе Wi-Fi. NAT и PCI passthrough не треб�
 Исходники/установка/откат: [wifi-uplink](wifi-uplink/).
 `bootstrap-wifi-mapping.sh` — неиспользуемая подготовка прежнего варианта.
 
+VPN-сервер (ocserv, пароль + TOTP) разворачивается отдельным
+unprivileged CT 102 `vpn` скриптами [vpn](vpn/): создание LXC, установка
+ocserv с nftables, добавление пользователя и QR. Этап 1 — только LAN,
+самоподписанный сертификат; пробросы и Let's Encrypt — отдельные шаги
+(`docs/PENDING.md`).
+
 Статический IP K3s задаётся приватными Terraform variables
 `k3s_ipv4_address` (CIDR) и `k3s_ipv4_gateway`; default DHCP — только для
 новых универсальных инсталляций. `cloud-init.yaml` сохраняет существующие

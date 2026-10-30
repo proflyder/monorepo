@@ -27,6 +27,54 @@ Grafana Tailscale: `https://pl-home.<tailnet>.ts.net/grafana/`
 
 Только LAN/Tailscale. Не пробрасывать `8123/8095/8099/6053/6638`.
 
+## VPN (CT 102)
+
+```bash
+# состояние
+pct status 102
+pct exec 102 -- systemctl status ocserv nftables --no-pager
+pct exec 102 -- ss -lntup | grep ':443'
+pct exec 102 -- nft list ruleset
+pct exec 102 -- occtl show users
+pct exec 102 -- occtl show ip bans
+
+# служебные действия
+pct exec 102 -- systemctl restart ocserv
+pct exec 102 -- systemctl restart nftables
+pct reboot 102
+pct exec 102 -- occtl unban ip <ADDRESS>
+
+# pin публичного ключа для openconnect --servercert
+pct exec 102 -- sh -c \
+  'openssl x509 -in /etc/ocserv/ssl/server-cert.pem -pubkey -noout \
+   | openssl pkey -pubin -outform DER \
+   | openssl dgst -sha256 -binary | openssl base64'
+```
+
+Добавление/ротация пользователя (пароль + TOTP; секреты не печатаются):
+
+```bash
+python3 projects/home/proxmox/vpn/vpnusers.py stas \
+  --pve 192.0.2.26 \
+  --ssh-key secrets/proxmox-install/proxmox_admin \
+  --known-hosts secrets/proxmox-install/known_hosts
+# повторная выдача: --force
+```
+
+Приватные файлы — `secrets/home/vpn/<user>.credentials` и `<user>.png`
+(QR для Google Authenticator), каталог `700`, файлы `600`.
+
+Проверка только аутентификации (не поднимает туннель на Mac):
+
+```bash
+openconnect --authenticate --user=stas --authgroup=lan \
+  --servercert pin-sha256:<PIN> https://192.0.2.29/
+```
+
+Верный пароль + свежий TOTP — успех; неверный TOTP — отказ. Один и тот же
+TOTP повторно не использовать (ocserv считает это replay), несколько неудач
+подряд банят IP на `min-reauth-time`.
+
 ## Проверка
 
 ```bash

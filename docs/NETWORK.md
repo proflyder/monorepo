@@ -24,8 +24,10 @@
                  │      vmbr0, Wi-Fi 4addr / Ethernet
                  │      ├── VM 100  HAOS          192.0.2.28
                  │      │      HA + MA + Matter add-ons
-                 │      └── VM 101  Ubuntu/K3s    192.0.2.27
-                 │             STT/TTS, Hermes, Grafana, observability
+                 │      ├── VM 101  Ubuntu/K3s    192.0.2.27
+                 │      │      STT/TTS, Hermes, Grafana, observability
+                 │      └── CT 102  vpn           192.0.2.29
+                 │             ocserv, OpenConnect, TOTP
                  │
                  ├── Станция Midi                 192.0.2.13
                  │      Pulsar, ESPHome, Sendspin
@@ -38,6 +40,7 @@
 - **Proxmox host** — гипервизор и management-точка; не публикует HA.
 - **HAOS VM** — Home Assistant, Music Assistant и Matter Server add-ons.
 - **K3s VM** — STT/TTS, Hermes, наблюдаемость и Grafana.
+- **VPN CT** — ocserv для входа в домашнюю LAN снаружи (пароль + TOTP).
 - **Станция** — Pulsar/ESPHome-спутник и Sendspin-плеер.
 - **Mac** — рабочая машина; адрес может меняться по DHCP.
 
@@ -49,6 +52,7 @@
 | Proxmox VE | `192.0.2.26` | `pve`, management `vmbr0` |
 | HAOS VM 100 | `192.0.2.28` | HA Core/Supervisor |
 | K3s VM 101 | `192.0.2.27` | Ubuntu, K3s node |
+| VPN CT 102 | `192.0.2.29` | Debian 13, ocserv |
 | Станция | `192.0.2.13` | Pulsar |
 | Mac | `192.0.2.11` | DHCP |
 
@@ -104,6 +108,18 @@ K3s management/metrics-порты закрыты firewall от обычных LA
 Администрирование — через SSH и локальный туннель к API, а не через
 публикацию `6443` в LAN.
 
+### VPN CT 102
+
+| Порт | Назначение | Класс доступа |
+|---|---|---|
+| `443/tcp` | ocserv, TLS/OpenConnect | LAN; позже проброс ONT/AX3 |
+| `443/udp` | ocserv, DTLS | LAN; позже проброс ONT/AX3 |
+| `22/tcp` | SSH | только LAN `192.0.2.0/24` |
+
+Внутри CT — пул `10.77.0.0/24`, nftables `drop` по умолчанию, masquerade
+VPN → LAN/WAN. Наружу пока ничего не проброшено; сертификат
+самоподписанный, клиент проверяет `pin-sha256`.
+
 ### Станция
 
 | Порт | Назначение | Класс доступа |
@@ -146,12 +162,32 @@ https://pl-home.<tailnet>.ts.net/grafana/  -> Grafana
 - публичного HA, MA, ADB или Zigbee-порта нет;
 - LAN-доступ и локальный голосовой контур работают независимо от WAN.
 
+### Собственный VPN — этап 1
+
+Параллельно Tailscale поднимается собственный VPN на ocserv (CT 102).
+Этап 1 работает только внутри LAN: сервер доступен по `https://192.0.2.29/`,
+пробросов на ONT/AX3 нет. Клиент — Cisco Secure Client / OpenConnect,
+аутентификация — пароль + TOTP (6 цифр, 30 с, Google Authenticator).
+
+- `443/tcp` и `443/udp` (DTLS), TLS 1.2+, без compression;
+- два профиля на выбор: `lan` (split tunnel, маршрут только на домашнюю
+  LAN, DNS `192.0.2.1`) и `full` (весь трафик через дом);
+- NAT/masquerade делает CT, маршруты на LAN-устройствах не нужны;
+- сертификат самоподписанный; позже — Let's Encrypt (certbot, ручной DNS-01: API Namecheap недоступен)
+  и имя `vpn.example.com`;
+- встроенный бан неудачных попыток, SSH в CT — только из LAN.
+
+Tailscale пока остаётся основным удалённым доступом; отключается отдельным
+шагом после проверки VPN с мобильной сети.
+
 ## 6. Политика доступа
 
 - Административные интерфейсы — только LAN или Tailscale.
 - `6443/10250/9100/9116/8472` не публикуются в обычный LAN.
 - `8643` voice proxy доступен только HAOS, K3s и loopback.
 - `8123/8095/8099/6053/6638` не пробрасываются в интернет.
+- VPN `443/tcp,udp` пока не проброшен; после проброса это единственный
+  входящий порт, SSH в VPN-CT остаётся LAN-only.
 - `6638` (Zigbee) не имеет auth; при включении не выставлять наружу.
 - Станция не должна получать публичный WAN: egress guard — часть дизайна.
 - Секреты и реальные адреса хранятся только в `secrets/`; в публичных
