@@ -8,6 +8,26 @@ bazel_dep(name = "gazelle", version = "0.54.0")
 bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "rules_proto", version = "7.1.0")
 
+# Container images for the home K3s services. Images are assembled
+# hermetically (no Docker daemon, no RUN steps) from the Go binaries and a
+# digest-pinned distroless base; the same targets build on macOS and on the
+# GitHub runner.
+bazel_dep(name = "rules_oci", version = "2.3.0")
+bazel_dep(name = "rules_pkg", version = "1.1.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.0")
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+oci.pull(
+    name = "distroless_static",
+    image = "gcr.io/distroless/static-debian12",
+    # Multi-arch index digest of the tag `nonroot`; the amd64 child below is
+    # what the linux/amd64 images actually build on. `bazel run
+    # @distroless_static//:digest` re-prints the pinned index digest.
+    digest = "sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "distroless_static", "distroless_static_linux_amd64")
+
 # Go toolchain is taken from the root go.mod. The app stays a normal Go module
 # for local `go test`/`go run`; Bazel only adds hermetic orchestration.
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")

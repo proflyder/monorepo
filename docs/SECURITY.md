@@ -84,15 +84,20 @@
   физдоступом и планом.
 - `labuser` с sudo NOPASSWD — root-эквивалент; убрать при многопользовательском
   доступе.
-- CI-аккаунт `ci-deploy` не является root-эквивалентом: ключ принимается
-  только с адреса VPN-CT, `sudo -n` разрешает единственный helper
-  `/usr/local/sbin/ricardo-ci-deploy` с фиксированными подкомандами
-  (`stage`, `firewall`, `activate`, `current`).
+- CI не имеет SSH и root на узлах: группа `ci` маршрутизируется только до
+  `K3S_NODE:6443`, VPN nft разрешает только этот порт, а узел принимает
+  `6443` лишь с адреса VPN-CT (пул `ci` маскируется в него). Пользователь
+  `ci-deploy` и root-helper удалены с узла.
 - Kubeconfig CI — ServiceAccount `ci-deploy` только в `home-assistant`
   (Role, не ClusterRole): нет других namespace и cluster-scoped объектов;
-  API доступен лишь через SSH-туннель на `127.0.0.1:6443`.
-- Секреты Environment `home` (VPN p12/пароль, SSH-ключ, kubeconfig, env,
-  preflight-токены) загружаются primary вручную через `gh`; в Git их нет.
+  добавлены только `batch/jobs` для in-cluster preflight. API доступен
+  напрямую по `https://<K3S_NODE>:6443` (IP узла в SAN сертификата).
+- Образы неизменяемы и адресуются по digest; GHCR-пакеты должны быть
+  публичными (pull без секрета), push выполняет job-scoped `GITHUB_TOKEN`
+  с `packages: write` только в deploy-джобе.
+- Секреты Environment `home` (VPN p12/пароль, kubeconfig, env) загружаются
+  primary вручную через `gh`; в Git их нет. HA/scheduler токены CI больше не
+  нужны: preflight выполняется Job-ом в кластере.
 
 ## Логи / публикация
 

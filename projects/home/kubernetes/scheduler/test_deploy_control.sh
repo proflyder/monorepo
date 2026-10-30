@@ -24,6 +24,12 @@ SCHEDULER_PUBLIC_URL=http://192.0.2.27:30098
 CONTROL_NODE_PORT=30099
 EOF
 
+# Pre-resolved digest-pinned images: the regression test must not build or
+# push anything.
+export SCHEDULER_IMAGE="ghcr.io/proflyder/scheduler@sha256:$(printf 'a%.0s' {1..64})"
+export HA_BRIDGE_IMAGE="ghcr.io/proflyder/ha-bridge@sha256:$(printf 'b%.0s' {1..64})"
+export HA_CONTROL_IMAGE="ghcr.io/proflyder/ha-control@sha256:$(printf 'c%.0s' {1..64})"
+
 cat > "$TMP/kubectl" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$CALL_LOG"
@@ -33,7 +39,7 @@ case "$args" in
   *"get deployment ha-control"*) exit "${MOCK_CONTROL_EXISTS:-0}" ;;
   *"get deployment ha-bridge"*) exit 0 ;;
   *"get secret"*) exit 0 ;;
-  *"exec deploy/scheduler"*GetStatus*)
+  *"exec deploy/scheduler"*status*)
     if [[ -n "${CONTROL_QUEUE_STATUS:-}" ]]; then printf '%s' "$CONTROL_QUEUE_STATUS"; else printf '%s' '{"queues":[]}'; fi
     exit 0 ;;
   *"exec deploy/ha-control"*healthcheck*|*"exec deploy/scheduler"*healthcheck*) exit 0 ;;
@@ -76,7 +82,7 @@ grep -q "set env deployment/ha-control CONTROL_EXECUTE=false" "$CALL_LOG" || fai
 export CONTROL_QUEUE_STATUS='{"ready":true,"queues":[{"name":"home","pending":0,"leased":0},{"name":"tasks","pending":0,"leased":0}]}'
 run --control-execute
 grep -q "set env deployment/ha-control CONTROL_EXECUTE=true" "$CALL_LOG" || fail "execute mode did not enable execution"
-grep -q "exec deploy/scheduler.*GetStatus" "$CALL_LOG" || fail "execute mode skipped the queue preflight"
+grep -q "exec deploy/scheduler.*status" "$CALL_LOG" || fail "execute mode skipped the queue preflight"
 
 # 4. Execute with backlog fails closed.
 set +e

@@ -22,19 +22,10 @@ done
 echo "== Scheduler deployment: preflight =="
 (cd projects/home/kubernetes/scheduler && python3 -m unittest test_preflight.py -v)
 
-# The control-mode regression drives deploy.sh --skip-build, so it needs the
-# release binaries in dist/ (ignored, produced by `make test-deploy-control`).
-DIST="$ROOT/projects/home/kubernetes/scheduler/dist"
-if [[ -x "$DIST/scheduler" && -x "$DIST/ha-bridge" && -x "$DIST/ha-control" ]]; then
-  echo "== Scheduler deployment: deploy control =="
-  bash projects/home/kubernetes/scheduler/test_deploy_control.sh
-elif [[ "${REQUIRE_DEPLOY_CONTROL:-0}" == "1" ]]; then
-  echo "ERROR: REQUIRE_DEPLOY_CONTROL=1 but $DIST is missing release binaries" >&2
-  echo "build them first: make test-deploy-control" >&2
-  exit 1
-else
-  skip "scheduler deploy control regression: release binaries not built (make test-deploy-control)"
-fi
+# The control-mode regression drives deploy.sh --skip-build with pre-resolved
+# image digests, so it needs neither Bazel nor release binaries in dist/.
+echo "== Scheduler deployment: deploy control =="
+bash projects/home/kubernetes/scheduler/test_deploy_control.sh
 
 # Root Go module: reusable solutions and shared packages. Android/Bazel gates are
 # separate (they need the Android SDK) and are documented in docs/TESTING.md.

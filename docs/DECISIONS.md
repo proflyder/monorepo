@@ -42,5 +42,12 @@
 16. **Legacy HA-helper-ы расписаний удалены.** `todo.alarms_*` и
     `todo.reminders` удалены, `timer.taimer_1…8` отключены в registry;
     источник истины — scheduler. Заметки остаются в `todo.notes`.
+17. **Сервисы K3s — digest-пины образов, деплой только kubectl.** scheduler,
+    ha-bridge и ha-control собираются Bazel `rules_oci` (distroless,
+    digest-pinned base) и адресуются `ghcr.io/proflyder/<name>@sha256:...`;
+    `imagePullPolicy: IfNotPresent`. CI пушит образы job-scoped
+    `GITHUB_TOKEN` и деплоит kubectl под ServiceAccount `ci-deploy` через
+    VPN `tcp/6443`. SSH, root-helper, hostPath и `/opt/ricardo` из пути
+    деплоя удалены; NodePort-nft остаётся host-конфигурацией.
 
 Меняется решение — обновить этот файл и `STATE.md`.

@@ -13,8 +13,13 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "-healthcheck" || os.Args[1] == "--healthcheck") {
-		os.Exit(runHealthcheck())
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "-healthcheck", "--healthcheck":
+			os.Exit(runHealthcheck())
+		case "-status", "--status":
+			os.Exit(runStatus(os.Stdout, os.Stderr))
+		}
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -66,6 +66,14 @@ APPROVED_PUBLIC = (
         ),
         "<public-repo>",
     ),
+    # Public GHCR namespace for the monorepo service images. Only the registry
+    # path is approved; any other use of the account name still fails.
+    (
+        re.compile(
+            r"(?<![A-Za-z0-9_.-])ghcr\.io/prof[l]yder(?:/[A-Za-z0-9<>${}_-]+)?"
+        ),
+        "<public-registry>",
+    ),
 )
 
 CREDENTIAL_PATTERN = re.compile(

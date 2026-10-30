@@ -44,6 +44,7 @@ jobs:
       base_sha: ${{ steps.route.outputs.base_sha }}
       docs_only: ${{ steps.route.outputs.docs_only }}
       deploy_control: ${{ steps.route.outputs.deploy_control }}
+      deploy_units: ${{ steps.route.outputs.deploy_units }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -154,6 +155,22 @@ jobs:
       suites: ${{ matrix.suites }}
       compile: ${{ matrix.compile }}
 
+  # Container-image build for the affected deployable units. Build only: no
+  # registry credentials and no push on pull requests. `deploy-home` performs
+  # the actual build+push+roll on develop.
+  images:
+    needs: changes
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.deploy_units != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.deploy_units) }}
+    uses: ./.github/workflows/_images.yml
+    with:
+      unit: ${{ matrix.id }}
+      images: ${{ matrix.images }}
+      builder: ${{ matrix.builder }}
+
   # Expensive regression with real linux/amd64 release binaries. Only when the
   # scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.
   deploy-control:
@@ -169,7 +186,7 @@ jobs:
   # dispatched job succeeded or was legitimately skipped.
   ci-ok:
     if: always()
-    needs: [changes, quality, go, android, python, deploy-control]
+    needs: [changes, quality, go, android, python, images, deploy-control]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

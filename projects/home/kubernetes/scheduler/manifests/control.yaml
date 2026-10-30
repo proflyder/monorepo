@@ -37,9 +37,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ha-control
-          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          image: ${HA_CONTROL_IMAGE}
           imagePullPolicy: IfNotPresent
-          command: ["/opt/ricardo/bin/ha-control"]
+          command: ["/usr/local/bin/ha-control"]
           env:
             - name: HA_URL
               value: ${HA_URL}
@@ -75,14 +75,14 @@ spec:
               protocol: TCP
           readinessProbe:
             exec:
-              command: ["/opt/ricardo/bin/ha-control", "-healthcheck"]
+              command: ["/usr/local/bin/ha-control", "-healthcheck"]
             initialDelaySeconds: 3
             periodSeconds: 15
             timeoutSeconds: 7
             failureThreshold: 3
           livenessProbe:
             exec:
-              command: ["/opt/ricardo/bin/ha-control", "-healthcheck"]
+              command: ["/usr/local/bin/ha-control", "-healthcheck"]
             initialDelaySeconds: 30
             periodSeconds: 60
             timeoutSeconds: 7
@@ -99,9 +99,6 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: bin
-              mountPath: /opt/ricardo/bin
-              readOnly: true
             - name: scheduler-token
               mountPath: /run/secrets/scheduler
               readOnly: true
@@ -111,10 +108,6 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: bin
-          hostPath:
-            path: /opt/ricardo/control/current/bin
-            type: Directory
         - name: scheduler-token
           secret:
             secretName: scheduler-auth

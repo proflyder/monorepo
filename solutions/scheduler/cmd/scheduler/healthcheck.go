@@ -52,6 +52,69 @@ func runHealthcheck() int {
 	return 0
 }
 
+// runStatus prints the raw authenticated GetStatus response.
+//
+// The container image is distroless: there is no shell, curl or wget to query
+// the API from a deploy script. `scheduler -status` reads the bearer from
+// SCHEDULER_TOKEN_FILE exactly like the healthcheck and writes the JSON body to
+// stdout, so operators and CI never need a shell inside the pod.
+func runStatus(stdout, stderr io.Writer) int {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(stderr, "status: configuration:", err)
+		return 1
+	}
+	addr, err := healthcheckAddress(cfg.Listen)
+	if err != nil {
+		fmt.Fprintln(stderr, "status:", err)
+		return 1
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout)
+	defer cancel()
+	body, err := getStatusBody(ctx, "http://"+addr, cfg.Token, http.DefaultClient)
+	if err != nil {
+		fmt.Fprintln(stderr, "status:", err)
+		return 1
+	}
+	if _, err := stdout.Write(body); err != nil {
+		return 1
+	}
+	return 0
+}
+
+// getStatusBody performs the authenticated GetStatus call and returns the body.
+func getStatusBody(ctx context.Context, baseURL, token string, hc *http.Client) ([]byte, error) {
+	payload, err := json.Marshal(struct{}{})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		strings.TrimSuffix(baseURL, "/")+"/ricardo.v1.SchedulerService/GetStatus",
+		bytes.NewReader(payload),
+	)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("GetStatus request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return nil, fmt.Errorf("GetStatus response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GetStatus returned HTTP %d", resp.StatusCode)
+	}
+	return body, nil
+}
+
 // healthcheckAddress turns the configured listen address into a loopback
 // address. An empty host (all interfaces) becomes 127.0.0.1.
 func healthcheckAddress(listen string) (string, error) {

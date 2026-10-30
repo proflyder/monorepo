@@ -24,6 +24,13 @@ ALLOWED = {
     "SCHEDULER_NODE_PORT",
     "SCHEDULER_PUBLIC_URL",
     "CONTROL_NODE_PORT",
+    # Digest-pinned container images, resolved by deploy.sh from the Bazel
+    # build (or from the registry push in CI). Never a moving tag.
+    "SCHEDULER_IMAGE",
+    "HA_BRIDGE_IMAGE",
+    "HA_CONTROL_IMAGE",
+    # Pinned python image for the in-cluster cutover preflight Job.
+    "PREFLIGHT_IMAGE",
 }
 
 PLACEHOLDER = re.compile(r"\$\{([A-Z0-9_]+)\}")

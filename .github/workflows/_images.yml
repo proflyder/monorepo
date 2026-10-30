@@ -1,0 +1,89 @@
+name: _images
+
+# Reusable container-image build for one deployable CI unit. Called once per
+# affected deployable unit from ci.yml; this workflow only builds (no push, no
+# registry credentials), so it is safe on pull requests.
+#
+#   bazel  - hermetic distroless images assembled by rules_oci from the Go
+#            binaries (//projects/home/kubernetes/scheduler:<image>_image)
+#   docker - Dockerfile-based images (Hermes gateway and its voice proxy)
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.yml
+        required: true
+        type: string
+      images:
+        description: Space separated image names owned by the unit
+        required: true
+        type: string
+      builder:
+        description: Image builder (bazel or docker)
+        required: false
+        default: bazel
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    name: images / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Build distroless images with Bazel
+        if: inputs.builder == 'bazel'
+        run: |
+          set -euo pipefail
+          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          read -r -a images <<< "${{ inputs.images }}"
+          targets=()
+          for image in "${images[@]}"; do
+            targets+=("//projects/home/kubernetes/scheduler:${image}_image")
+          done
+          "$RUNNER_TEMP/bazelisk" build "${targets[@]}" \
+            --platforms=@rules_go//go/toolchain:linux_amd64
+          for image in "${images[@]}"; do
+            layout="bazel-bin/projects/home/kubernetes/scheduler/${image}_image"
+            digest=$(python3 platform/ci/oci_image.py digest "$layout")
+            echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Build Dockerfile images
+        if: inputs.builder == 'docker'
+        run: |
+          set -euo pipefail
+          read -r -a images <<< "${{ inputs.images }}"
+          revision=$(sed -n 's/^HERMES_REVISION=//p' projects/home/kubernetes/versions.sh)
+          for image in "${images[@]}"; do
+            case "$image" in
+              voice-proxy)
+                docker build \
+                  -f projects/home-assistant/deploy/images/voice-proxy/Dockerfile \
+                  -t "ghcr.io/proflyder/voice-proxy:ci" \
+                  projects/home-assistant/hermes
+                ;;
+              hermes)
+                git clone --quiet --filter=blob:none \
+                  https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-src"
+                mkdir -p "$RUNNER_TEMP/hermes"
+                git -C "$RUNNER_TEMP/hermes-src" archive "$revision" \
+                  | tar -x -C "$RUNNER_TEMP/hermes"
+                docker build \
+                  -f projects/home-assistant/deploy/images/hermes/Dockerfile \
+                  -t "ghcr.io/proflyder/hermes:${revision:0:12}" \
+                  "$RUNNER_TEMP/hermes"
+                ;;
+              *)
+                echo "unknown docker image: $image" >&2
+                exit 2
+                ;;
+            esac
+            echo "built ghcr.io/proflyder/${image}" | tee -a "$GITHUB_STEP_SUMMARY"
+          done

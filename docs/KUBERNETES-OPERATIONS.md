@@ -50,6 +50,10 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 - `/srv/k3s/runtime` — K3s data, containerd, datastore.
 - `/srv/k3s/volumes/hermes` — Hermes home, в Pod `/opt/data`.
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
+- `/opt/ricardo/releases` и `/opt/ricardo/control/releases` — legacy hostPath
+  дерево (больше не монтируется в Pod). Оставлен только последний релиз
+  `9316cd9-…` как запасной откат; удалять после следующего успешного
+  GHCR-деплоя.
 - `runtime-ha` — архив старого HA Container, не активный writer.
 - `runtime-music`/`runtime-matter` удалены; tar-копии на Mac.
 
@@ -142,13 +146,19 @@ Traefik — не запускать там второй прокси без ос
 - Сохранять: cluster SQLite snapshot, token, TLS/cred, app PVC, custom images.
 - SQLite snapshots — через backup API, проверять `integrity_check`.
 - Без server token восстановление datastore невозможно.
-- Custom images Hermes/proxy — recovery OCI archive; `imagePullPolicy: Never`.
+- Образы scheduler/ha-bridge/ha-control собираются Bazel (`rules_oci`,
+  distroless, digest-pinned base) и адресуются по digest; в CI они пушатся в
+  GHCR, на живой узел импортируются в containerd (`ctr images import`).
+- Custom images Hermes/proxy — пока recovery OCI archive и
+  `imagePullPolicy: Never`; CI собирает их (`_images.yml`), переключение
+  runtime-манифестов на GHCR — отдельный шаг.
 - Полный restore:
   1. восстановить Ubuntu/K3s;
   2. остановить K3s;
   3. вернуть data-dir/token/ключи;
   4. вернуть PVC до запуска Pods;
-  5. импортировать images;
+  5. сначала попробовать pull из GHCR (digest-пины); если пакеты недоступны —
+     импортировать OCI-архивы (`k3s ctr images import`);
   6. проверить endpoints, HTTPS-имена, voice/music.
 
 Disaster restore на запасном железе ещё не выполнялся.
@@ -158,4 +168,5 @@ Disaster restore на запасном железе ещё не выполнял
 - Один узел, без HA control plane и распределённого storage.
 - Нет внешнего Alertmanager/heartbeat.
 - Нет полной latency instrumentation voice pipeline.
-- Свои images пока из recovery archive, без registry/build pipeline.
+- Scheduler/bridge/control собираются в CI и публикуются в GHCR; Hermes и
+  voice-proxy пока собираются вручную и импортируются в containerd.

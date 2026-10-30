@@ -2,21 +2,25 @@ name: deploy-home
 
 # Home K3s deploy (scheduler + ha-bridge + ha-control) from `develop`.
 #
+# A push to `develop` is a squash-merge of a PR, so it runs in the base
+# repository context with Environment secrets. The `plan` job routes the change
+# range (`before..sha`) through the same unit map as CI and deploys exactly the
+# affected deployable units; documentation-only pushes deploy nothing.
+#
 # Push runs only the conservative preserve mode. Mode changes (execute, shadow,
-# control-execute, control-catalog) are manual workflow_dispatch runs and always
-# go through deploy.sh's own fail-closed preflight. There is no second executor
-# path: CI never bypasses preflight and never force-enables a writer.
+# control-execute, control-catalog) are manual workflow_dispatch runs for the
+# ha-bridge unit and always go through deploy.sh's own fail-closed preflight.
+# There is no second executor path: CI never bypasses preflight and never
+# force-enables a writer.
 on:
   push:
     branches: [develop]
-    paths:
-      - 'solutions/**'
-      - 'packages/go/**'
-      - 'projects/home/kubernetes/scheduler/**'
-      - 'MODULE.bazel'
-      - 'MODULE.bazel.lock'
   workflow_dispatch:
     inputs:
+      units:
+        description: Deployable units to roll (comma list) or `all`
+        type: string
+        default: all
       mode:
         description: Deploy mode (push always uses preserve)
         type: choice
@@ -32,7 +36,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-home
+  group: deploy-home-plan
   cancel-in-progress: false
 
 env:
@@ -47,10 +51,102 @@ env:
   K3S_NODE: ${{ secrets.K3S_NODE }}
 
 jobs:
+  # Route the change onto deployable units. Unknown/zero `before`, or any
+  # routing failure, falls back to "deploy everything" rather than skipping a
+  # deploy silently.
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      units: ${{ steps.route.outputs.units }}
+      pr_url: ${{ steps.pr.outputs.url }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Install routing dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
+
+      - name: Ensure base branch history
+        if: github.event_name == 'push'
+        run: git fetch --no-tags origin "+refs/heads/develop:refs/remotes/origin/develop"
+
+      - name: Route affected deployable units
+        id: route
+        env:
+          DISPATCH_UNITS: ${{ github.event_name == 'workflow_dispatch' && inputs.units || '' }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/route.out"
+          : > "$out"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            python3 platform/ci/affected.py --all --bazel "$RUNNER_TEMP/bazelisk" \
+              --format github --out "$out" >/dev/null
+          else
+            if ! python3 platform/ci/affected.py --base "$BEFORE_SHA" --head "$GITHUB_SHA" \
+                 --bazel "$RUNNER_TEMP/bazelisk" --format github --out "$out" >/dev/null; then
+              echo "routing failed; falling back to every deployable unit" >&2
+              : > "$out"
+              python3 platform/ci/affected.py --all --bazel "$RUNNER_TEMP/bazelisk" \
+                --format github --out "$out" >/dev/null
+            fi
+          fi
+          units=$(sed -n 's/^deploy_units=//p' "$out" | tail -1)
+          # A dispatch may narrow the list explicitly (comma separated ids).
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "$DISPATCH_UNITS" && "$DISPATCH_UNITS" != "all" ]]; then
+            units=$(UNITS="$units" WANTED="$DISPATCH_UNITS" python3 -c '
+          import json, os
+          units = json.loads(os.environ["UNITS"] or "[]")
+          wanted = {item.strip() for item in os.environ["WANTED"].split(",") if item.strip()}
+          unknown = wanted - {entry["id"] for entry in units}
+          if unknown:
+              raise SystemExit(f"unknown deployable unit(s): {sorted(unknown)}")
+          print(json.dumps([entry for entry in units if entry["id"] in wanted]))
+          ')
+          fi
+          echo "units=$units" >> "$GITHUB_OUTPUT"
+          { echo "### deploy-home plan"; echo; echo '```json'; echo "$units"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Resolve pull request link
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            --jq '.[0].html_url' 2>/dev/null || true)
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+  # One matrix entry per affected deployable unit. Jobs run one at a time and a
+  # unit never runs two deploys concurrently; neither is ever cancelled.
   deploy:
+    needs: plan
+    if: needs.plan.outputs.units != '[]' && needs.plan.outputs.units != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     environment: home
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.units) }}
+    concurrency:
+      group: deploy-home-${{ matrix.id }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -61,11 +157,17 @@ jobs:
             preserve|execute|shadow|control-execute|control-catalog) ;;
             *) echo "unknown mode: $DEPLOY_MODE" >&2; exit 2 ;;
           esac
-          if [[ "$DEPLOY_MODE" != "preserve" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
-            echo "mode '$DEPLOY_MODE' is only allowed from workflow_dispatch" >&2
-            exit 1
+          if [[ "$DEPLOY_MODE" != "preserve" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+              echo "mode '$DEPLOY_MODE' is only allowed from workflow_dispatch" >&2
+              exit 1
+            fi
+            if [[ "${{ matrix.id }}" != "ha-bridge" ]]; then
+              echo "mode '$DEPLOY_MODE' only applies to the ha-bridge unit (executor state)" >&2
+              exit 1
+            fi
           fi
-          echo "selected mode: $DEPLOY_MODE"
+          echo "selected mode: $DEPLOY_MODE for ${{ matrix.id }}"
 
       - name: Install pinned tools
         run: |
@@ -80,7 +182,7 @@ jobs:
           sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
           rm -f /tmp/bazelisk /tmp/kubectl
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts openssh-client
+          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -96,12 +198,8 @@ jobs:
         env:
           IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
           IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
-          IN_K3S_SSH_KEY: ${{ secrets.K3S_SSH_KEY }}
-          IN_K3S_KNOWN_HOSTS: ${{ secrets.K3S_KNOWN_HOSTS }}
           IN_KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
           IN_SCHEDULER_ENV_B64: ${{ secrets.SCHEDULER_ENV_B64 }}
-          IN_HA_TOKEN: ${{ secrets.HA_TOKEN }}
-          IN_SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
         run: |
           set +x
           set -euo pipefail
@@ -112,12 +210,8 @@ jobs:
           chmod 700 "$CI_DIR"
           printf '%s' "$IN_VPN_CERT_P12_B64" | base64 -d > "$CI_DIR/ci.p12"
           printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
-          printf '%s\n' "$IN_K3S_SSH_KEY" > "$CI_DIR/id_ci"  # OpenSSH needs the trailing newline
-          printf '%s\n' "$IN_K3S_KNOWN_HOSTS" > "$CI_DIR/known_hosts"
           printf '%s' "$IN_KUBECONFIG_B64" | base64 -d > "$CI_DIR/kubeconfig"
           printf '%s' "$IN_SCHEDULER_ENV_B64" | base64 -d > "$CI_DIR/scheduler.env"
-          printf '%s' "$IN_HA_TOKEN" > "$CI_DIR/ha.token"
-          printf '%s' "$IN_SCHEDULER_TOKEN" > "$CI_DIR/scheduler.token"
           chmod 600 "$CI_DIR"/*
           echo "secret files prepared: $(find "$CI_DIR" -maxdepth 1 -type f | wc -l)"
 
@@ -135,39 +229,36 @@ jobs:
             "${VPN_SERVER%/}" \
             < "$CI_DIR/ci.pass" > "$RUNNER_TEMP/openconnect.log" 2>&1 &
           for _ in $(seq 1 30); do
-            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$K3S_NODE/22" 2>/dev/null; then
-              echo "K3s SSH reachable over the VPN"
+            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$K3S_NODE/6443" 2>/dev/null; then
+              echo "K3s API reachable over the VPN"
               exit 0
             fi
             sleep 2
           done
-          echo "K3s SSH is not reachable over the VPN" >&2
+          echo "K3s API is not reachable over the VPN" >&2
           tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
           exit 1
 
-      - name: Open SSH tunnel and check CI identity
+      - name: Check CI identity
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
-          SOCK="$RUNNER_TEMP/ci-ssh.sock"
-          SSH=(ssh -i "$CI_DIR/id_ci" -o IdentitiesOnly=yes
-               -o UserKnownHostsFile="$CI_DIR/known_hosts"
-               -o StrictHostKeyChecking=yes -o BatchMode=yes
-               -o ControlMaster=auto -o ControlPath="$SOCK"
-               -o ExitOnForwardFailure=yes -o ServerAliveInterval=15)
-          "${SSH[@]}" -N -f \
-            -L 127.0.0.1:16443:127.0.0.1:6443 \
-            "ci-deploy@$K3S_NODE"
           export KUBECONFIG="$CI_DIR/kubeconfig"
           kubectl -n home-assistant get pods
-          "${SSH[@]}" "ci-deploy@$K3S_NODE" \
-            'sudo -n /usr/local/sbin/ricardo-ci-deploy current' \
-            | tee "$CI_DIR/previous-release.txt"
 
-      - name: Deploy (preserve by default)
+      - name: Build, push and deploy ${{ matrix.id }}
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          if [[ "${{ matrix.builder }}" == "docker" ]]; then
+            # Hermes/voice-proxy: build+push only. The runtime chart keeps the
+            # verified local images until the voice circuit is checked.
+            IMAGE_TAG="$GITHUB_SHA" \
+              projects/home-assistant/deploy/images/build-and-push.sh ${{ matrix.images }}
+            exit 0
+          fi
           case "$DEPLOY_MODE" in
             preserve) MODE_ARGS=() ;;
             shadow) MODE_ARGS=(--shadow) ;;
@@ -176,15 +267,13 @@ jobs:
             control-catalog) MODE_ARGS=(--control-catalog) ;;
             *) echo "unknown mode: $DEPLOY_MODE" >&2; exit 2 ;;
           esac
+          ONLY="${{ matrix.workloads }}"
           KUBECONFIG="$CI_DIR/kubeconfig" \
           PRIVATE_ENV="$CI_DIR/scheduler.env" \
-          NODE_SSH="ci-deploy@$K3S_NODE" \
-          SSH_KEY="$CI_DIR/id_ci" \
-          SSH_OPTS="-o IdentitiesOnly=yes -o UserKnownHostsFile=$CI_DIR/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes" \
-          REMOTE_STAGE=/var/lib/ricardo-ci/stage \
-          PREFLIGHT_REMOTE=1 \
-          HA_TOKEN_FILE="$CI_DIR/ha.token" \
-          SCHEDULER_TOKEN_FILE="$CI_DIR/scheduler.token" \
+          PUSH_IMAGES=1 \
+          IMAGE_TAG="$GITHUB_SHA" \
+          ONLY="${ONLY// /,}" \
+          PREFLIGHT_IN_CLUSTER=1 \
           BAZELISK=bazelisk \
             projects/home/kubernetes/scheduler/deploy.sh "${MODE_ARGS[@]}"
 
@@ -193,47 +282,52 @@ jobs:
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
-          kubectl -n home-assistant rollout status deployment/scheduler --timeout=180s
-          kubectl -n home-assistant exec deployment/scheduler -- /opt/ricardo/bin/scheduler -healthcheck
-          if [[ "$(kubectl -n home-assistant get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
-            kubectl -n home-assistant rollout status deployment/ha-control --timeout=180s
-            kubectl -n home-assistant exec deployment/ha-control -- /opt/ricardo/bin/ha-control -healthcheck
-          fi
-          if [[ "$(kubectl -n home-assistant get deployment ha-bridge -o jsonpath='{.spec.replicas}')" != "0" ]]; then
-            kubectl -n home-assistant rollout status deployment/ha-bridge --timeout=180s
-            kubectl -n home-assistant exec deployment/ha-bridge -- /opt/ricardo/bin/ha-bridge -healthcheck
-          fi
-          ssh -i "$CI_DIR/id_ci" -o IdentitiesOnly=yes \
-            -o UserKnownHostsFile="$CI_DIR/known_hosts" -o StrictHostKeyChecking=yes \
-            -o BatchMode=yes "ci-deploy@$K3S_NODE" \
-            'for p in 30098 30099; do timeout 3 bash -c "cat </dev/null >/dev/tcp/127.0.0.1/$p" && echo "nodeport $p ok"; done'
+          for workload in ${{ matrix.workloads }}; do
+            kubectl -n home-assistant rollout status "deployment/$workload" --timeout=180s
+            case "$workload" in
+              scheduler)
+                kubectl -n home-assistant exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
+                kubectl -n home-assistant exec deployment/scheduler -- /usr/local/bin/scheduler -status \
+                  | tee "$CI_DIR/status.json"
+                python3 - "$CI_DIR/status.json" <<'PY'
+          import json, sys
+          status = json.load(open(sys.argv[1]))
+          assert status.get("ready") is True, "scheduler reports ready=false"
+          print("GetStatus ready:", status.get("ready"))
+          PY
+                ;;
+              ha-bridge)
+                kubectl -n home-assistant exec deployment/ha-bridge -- /usr/local/bin/ha-bridge -healthcheck
+                ;;
+              ha-control)
+                if [[ "$(kubectl -n home-assistant get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
+                  kubectl -n home-assistant exec deployment/ha-control -- /usr/local/bin/ha-control -healthcheck
+                fi
+                ;;
+            esac
+          done
+          # NodePort reachability without a bearer: an unauthenticated Connect
+          # call must reach the Service and be rejected with 401.
+          for port in 30098 30099; do
+            code=$(timeout 5 curl -s -o /dev/null -w '%{http_code}' \
+              -X POST "http://$K3S_NODE:$port/ricardo.v1.SchedulerService/GetStatus" \
+              -H 'Content-Type: application/json' -d '{}' || true)
+            case "$code" in
+              401|403) echo "nodeport $port reachable (HTTP $code, auth required)" ;;
+              *) echo "nodeport $port unexpected response: ${code:-none}" >&2; exit 1 ;;
+            esac
+          done
 
-      - name: Roll back symlinks on failure
-        if: failure()
+      - name: Roll back on failure
+        if: failure() && matrix.builder != 'docker'
         run: |
           set +e
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
-          PREV_SCHEDULER=$(sed -n 's/^scheduler=//p' "$CI_DIR/previous-release.txt" 2>/dev/null)
-          PREV_CONTROL=$(sed -n 's/^control=//p' "$CI_DIR/previous-release.txt" 2>/dev/null)
-          # Only a release id that is not "none" can be activated.
-          SSH=(ssh -i "$CI_DIR/id_ci" -o IdentitiesOnly=yes
-               -o UserKnownHostsFile="$CI_DIR/known_hosts" -o StrictHostKeyChecking=yes
-               -o BatchMode=yes -o ControlPath="$RUNNER_TEMP/ci-ssh.sock")
-          if [[ -n "$PREV_SCHEDULER" && "$PREV_SCHEDULER" != "none" ]]; then
-            "${SSH[@]}" "ci-deploy@$K3S_NODE" \
-              "sudo -n /usr/local/sbin/ricardo-ci-deploy activate scheduler '$PREV_SCHEDULER'" || true
-          fi
-          if [[ -n "$PREV_CONTROL" && "$PREV_CONTROL" != "none" ]]; then
-            "${SSH[@]}" "ci-deploy@$K3S_NODE" \
-              "sudo -n /usr/local/sbin/ricardo-ci-deploy activate control '$PREV_CONTROL'" || true
-          fi
-          # Re-resolve the hostPath mount and return to the previous pod spec.
-          for d in scheduler ha-bridge ha-control; do
-            if kubectl -n home-assistant get deployment "$d" >/dev/null 2>&1; then
-              kubectl -n home-assistant rollout undo "deployment/$d" || true
-              kubectl -n home-assistant rollout restart "deployment/$d" || true
-              kubectl -n home-assistant rollout status "deployment/$d" --timeout=180s || true
+          for workload in ${{ matrix.workloads }}; do
+            if kubectl -n home-assistant get deployment "$workload" >/dev/null 2>&1; then
+              kubectl -n home-assistant rollout undo "deployment/$workload" || true
+              kubectl -n home-assistant rollout status "deployment/$workload" --timeout=180s || true
             fi
           done
 
@@ -244,14 +338,16 @@ jobs:
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
           {
-            echo "### deploy-home"
+            echo "### deploy-home / ${{ matrix.id }}"
             echo
             echo "- mode: \`$DEPLOY_MODE\`"
             echo "- event: \`$GITHUB_EVENT_NAME\`"
+            echo "- workloads: \`${{ matrix.workloads }}\`"
+            echo "- images: \`${{ matrix.images }}\`"
+            echo "- pull request: ${{ needs.plan.outputs.pr_url }}"
             if kubectl -n home-assistant get deployment scheduler >/dev/null 2>&1; then
-              # shellcheck disable=SC2016 # the token is read inside the pod, not on the runner
-              STATUS=$(kubectl -n home-assistant exec deployment/scheduler -- sh -c \
-                'wget -qO- --post-data={} --header="Content-Type: application/json" --header="Authorization: Bearer $(cat /run/secrets/scheduler/token)" http://127.0.0.1:8098/ricardo.v1.SchedulerService/GetStatus' 2>/dev/null)
+              STATUS=$(kubectl -n home-assistant exec deployment/scheduler -- \
+                /usr/local/bin/scheduler -status 2>/dev/null)
               echo "- GetStatus: \`${STATUS:-unavailable}\`"
             else
               echo "- GetStatus: unavailable"
@@ -267,10 +363,5 @@ jobs:
             sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
           fi
           sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
-          if [[ -S "$RUNNER_TEMP/ci-ssh.sock" ]]; then
-            ssh -o ControlPath="$RUNNER_TEMP/ci-ssh.sock" -O exit \
-              "ci-deploy@$K3S_NODE" 2>/dev/null
-          fi
-          pkill -f 'ssh .*16443:127.0.0.1:6443' 2>/dev/null
           rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
           echo "temporary deploy files removed"

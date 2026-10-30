@@ -1,7 +1,7 @@
 # Home Assistant executor for the durable scheduler.
 #
-# This file is a TEMPLATE. deploy.sh renders it with private values from an
-# ignored env file; rendered manifests must never be committed.
+# This file is a TEMPLATE. deploy.sh renders it with private values and the
+# digest-pinned container images; rendered manifests must never be committed.
 #
 #   HA_URL   base URL of the live Home Assistant (no credentials, no query)
 #
@@ -58,9 +58,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ha-bridge
-          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          image: ${HA_BRIDGE_IMAGE}
           imagePullPolicy: IfNotPresent
-          command: ["/opt/ricardo/bin/ha-bridge"]
+          command: ["/usr/local/bin/ha-bridge"]
           env:
             - name: HA_URL
               value: ${HA_URL}
@@ -94,14 +94,14 @@ spec:
             exec:
               # Authenticated scheduler readiness; the token comes from the
               # mounted file, never from probe arguments.
-              command: ["/opt/ricardo/bin/ha-bridge", "-healthcheck"]
+              command: ["/usr/local/bin/ha-bridge", "-healthcheck"]
             initialDelaySeconds: 3
             periodSeconds: 15
             timeoutSeconds: 8
             failureThreshold: 3
           livenessProbe:
             exec:
-              command: ["/opt/ricardo/bin/ha-bridge", "-healthcheck"]
+              command: ["/usr/local/bin/ha-bridge", "-healthcheck"]
             initialDelaySeconds: 30
             periodSeconds: 60
             timeoutSeconds: 8
@@ -118,9 +118,6 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: bin
-              mountPath: /opt/ricardo/bin
-              readOnly: true
             - name: data
               mountPath: /data
             - name: scheduler-token
@@ -132,10 +129,6 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: bin
-          hostPath:
-            path: /opt/ricardo/current/bin
-            type: Directory
         - name: data
           persistentVolumeClaim:
             claimName: ha-bridge-data

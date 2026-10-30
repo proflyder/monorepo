@@ -5,10 +5,10 @@
 #
 #   SCHEDULER_NODE_PORT   NodePort exposed to the home LAN (default 30098)
 #
-# The binary is delivered from the node path /opt/ricardo/current (an atomically
-# switched symlink to an immutable release directory). The pinned busybox image
-# is only a runtime shell for a static Go binary, so no custom registry image is
-# required on the single-node home cluster.
+# The binary is delivered as a distroless container image built by Bazel
+# (//projects/home/kubernetes/scheduler:scheduler_image) and referenced by
+# digest only. There is no hostPath and no shell in the image: probes run the
+# binary itself.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -58,9 +58,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: scheduler
-          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          image: ${SCHEDULER_IMAGE}
           imagePullPolicy: IfNotPresent
-          command: ["/opt/ricardo/bin/scheduler"]
+          command: ["/usr/local/bin/scheduler"]
           env:
             - name: SCHEDULER_DB_PATH
               value: /data/scheduler.db
@@ -89,14 +89,14 @@ spec:
           # appears in probe arguments or Kubernetes events.
           readinessProbe:
             exec:
-              command: ["/opt/ricardo/bin/scheduler", "-healthcheck"]
+              command: ["/usr/local/bin/scheduler", "-healthcheck"]
             initialDelaySeconds: 3
             periodSeconds: 15
             timeoutSeconds: 7
             failureThreshold: 3
           livenessProbe:
             exec:
-              command: ["/opt/ricardo/bin/scheduler", "-healthcheck"]
+              command: ["/usr/local/bin/scheduler", "-healthcheck"]
             initialDelaySeconds: 30
             periodSeconds: 60
             timeoutSeconds: 7
@@ -113,9 +113,6 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: bin
-              mountPath: /opt/ricardo/bin
-              readOnly: true
             - name: data
               mountPath: /data
             - name: token
@@ -124,12 +121,6 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: bin
-          hostPath:
-            # Resolved atomically by deploy.sh; restart the pod to pick up a
-            # new release.
-            path: /opt/ricardo/current/bin
-            type: Directory
         - name: data
           persistentVolumeClaim:
             claimName: scheduler-data

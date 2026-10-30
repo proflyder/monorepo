@@ -90,3 +90,41 @@ func TestCheckReady(t *testing.T) {
 		}
 	})
 }
+
+// TestGetStatusBody proves `scheduler -status` is a faithful, read-only view of
+// the authenticated API: the deploy scripts use it instead of a shell inside
+// the distroless container.
+func TestGetStatusBody(t *testing.T) {
+	const token = "status-token"
+	const body = `{"ready":true,"queues":[{"name":"control","pending":0,"leased":0}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ricardo.v1.SchedulerService/GetStatus" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
+			t.Errorf("authorization header = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	got, err := getStatusBody(context.Background(), srv.URL, token, srv.Client())
+	if err != nil {
+		t.Fatalf("getStatusBody: %v", err)
+	}
+	if string(got) != body {
+		t.Fatalf("body = %q, want %q", got, body)
+	}
+}
+
+func TestGetStatusBodyRejectsNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	if _, err := getStatusBody(context.Background(), srv.URL, "t", srv.Client()); err == nil {
+		t.Fatal("expected an error for HTTP 401")
+	}
+}

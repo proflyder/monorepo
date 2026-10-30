@@ -101,8 +101,10 @@ CRL достаточно reload. Проверка конфигурации — `
 ### Доступ CI (`ci-deploy`)
 
 GitHub Actions ходит в дом только сертификатом группы `ci` (свой пул, маршрут
-только до K3s, nft разрешает лишь `tcp/22`), ключом `ci-deploy` с источником
-адреса VPN-CT и ServiceAccount `ci-deploy` в `home-assistant`.
+только до K3s, nft разрешает лишь `tcp/6443`) и работает kubectl под
+ServiceAccount `ci-deploy` в `home-assistant`. SSH и root-helper на узле
+отсутствуют; узел принимает `6443` только с адреса VPN-CT (пул `ci`
+маскируется в него).
 
 ```bash
 # 1. отозвать сертификат CI (CRL обновится на CT, ocserv перезагрузится)
@@ -111,23 +113,18 @@ python3 projects/home/proxmox/vpn/vpncerts.py revoke \
   --pve 192.0.2.26 --ssh-key secrets/proxmox-install/proxmox_admin \
   --known-hosts secrets/proxmox-install/known_hosts
 
-# 2. убрать SSH-ключ (или перевыпустить через provision-node.sh)
-ssh <admin>@<k3s-node> 'sudo rm -f /home/ci-deploy/.ssh/authorized_keys'
-
-# 3. отозвать Kubernetes-доступ: удалить долгоживущий token Secret
+# 2. отозвать Kubernetes-доступ: удалить долгоживущий token Secret
 kubectl -n home-assistant delete secret ci-deploy-token
-# rbac.yaml создаёт его заново; после этого пересобрать kubeconfig:
-#   kubectl -n home-assistant get secret ci-deploy-token \
-#     -o jsonpath='{.data.token}' | base64 -d
+# rbac.yaml создаёт его заново; после этого пересобрать kubeconfig
+# (server https://<K3S_NODE>:6443, token из этого Secret).
 
 # полный отзыв роли и аккаунта
 kubectl delete -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 
-Ротация без отзыва: `vpncerts.py issue ci --device github --groups ci --force`,
-новый ключ `ssh-keygen -t ed25519`, затем
-`ci/provision-node.sh --pubkey-file <pub> --vpn-source <vpn-ct-address>`.
-Обновить файлы `secrets/ci/github/` и секреты Environment `home`.
+Ротация без отзыва: `vpncerts.py issue ci --device github --groups ci --force`.
+Обновить файлы `secrets/ci/github/` и секреты Environment `home`
+(`VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD`).
 Проверка: `kubectl auth can-i` с kubeconfig CI не должен видеть другие
 namespace и cluster-scoped объекты.
 
@@ -340,16 +337,24 @@ Deploy, пауза и запуск исполнителя — `projects/home/kub
 
 ```bash
 # ключ ноды: secrets/proxmox-install/proxmox_admin (labuser@<node>);
-# deploy.sh использует ssh/scp без -i — добавьте ключ в ssh-agent или ~/.ssh/config
+# образы собираются Bazel и импортируются в containerd по SSH, применяются kubectl.
 # сборка + применение, режим исполнителя сохраняется
-NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh
+NODE_SSH=labuser@<node> SSH_KEY=secrets/proxmox-install/proxmox_admin \
+  projects/home/kubernetes/scheduler/deploy.sh
+
+# только один юнит (scheduler | ha-bridge | ha-control)
+NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh --only scheduler
 
 # осознанный переход в shadow (dry-run, 0 реплик)
-NODE_SSH=root@<node> projects/home/kubernetes/scheduler/deploy.sh --shadow
+NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh --shadow
 
-# запуск исполнителя: preflight + execute
-HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=root@<node> \
+# запуск исполнителя: preflight (в кластере или локально) + execute
+HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@<node> \
   projects/home/kubernetes/scheduler/deploy.sh --execute
+
+# NodePort-фильтр — host-конфигурация, вручную/root на узле
+sudo PRIVATE_ENV=/path/scheduler.env \
+  projects/home/kubernetes/scheduler/nft/apply.sh
 
 # резервная копия SQLite (quiesce + checksums, private путь по умолчанию)
 projects/home/kubernetes/scheduler/backup.sh
@@ -359,7 +364,9 @@ projects/home/kubernetes/scheduler/backup.sh
 
 ```bash
 kubectl -n home-assistant exec deployment/scheduler -- \
-  /opt/ricardo/bin/scheduler -healthcheck
+  /usr/local/bin/scheduler -healthcheck
+kubectl -n home-assistant exec deployment/scheduler -- \
+  /usr/local/bin/scheduler -status
 kubectl -n home-assistant logs deploy/ha-bridge --tail=50
 ```
 

@@ -195,6 +195,10 @@ matrix. Пустой массив означает «пропустить job» 
 * `deploy_control` — какие go-юниты и пути включают дорогую регрессию
   `make test-deploy-control` (scheduler, ha-bridge/ha-control,
   `projects/home/kubernetes/scheduler/**`).
+* `deploy` (у деплоимых юнитов) — `images`, `workloads` и `builder`
+  (`bazel`/`docker`). По нему `deploy-home` и job `images` в `ci.yml`
+  выбирают, что именно собирать и раскатывать; инфраструктурные юниты этой
+  секции не имеют.
 
 ### Как считается затронутость
 
@@ -287,11 +291,10 @@ commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.
 `make test` явно печатает `SKIP` для тестов, которым нужен nested Pulsar
 (`projects/station/upstream/pulsar-rust/installer`) или
 `projects/station/resources/quasar-connect-bot`; локально, где источники
-есть, те же тесты выполняются. `test_deploy_control.sh` требует собранные
-бинарники в `projects/home/kubernetes/scheduler/dist/`: CI собирает их в job
-`deploy-control` через `make test-deploy-control`; без бинарников `make test`
-печатает `SKIP` с причиной, а `REQUIRE_DEPLOY_CONTROL=1` превращает это
-в ошибку.
+есть, те же тесты выполняются. `test_deploy_control.sh` больше не требует
+собранных бинарников: он передаёт deploy.sh заранее разрешённые
+digest-пины образов, поэтому `make test` и `make test-deploy-control`
+запускают его без Bazel.
 
 ### Required check
 

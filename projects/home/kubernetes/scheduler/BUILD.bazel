@@ -1,0 +1,38 @@
+load(":images.bzl", "service_image")
+
+# Container images for the home scheduler stack.
+#
+# Each image contains exactly one static linux/amd64 Go binary on top of a
+# digest-pinned distroless base (MODULE.bazel `distroless_static`). There are
+# no RUN steps and no package manager, so the images are assembled hermetically
+# on any host (macOS workstation or the GitHub runner) and never need a Docker
+# daemon to build. Runtime manifests reference images by digest, never by tag.
+
+service_image(
+    name = "scheduler",
+    binary = "//solutions/scheduler/cmd/scheduler",
+    repo = "ghcr.io/proflyder/scheduler",
+)
+
+service_image(
+    name = "ha-bridge",
+    binary = "//solutions/ha-bridge/cmd/ha-bridge",
+    repo = "ghcr.io/proflyder/ha-bridge",
+)
+
+service_image(
+    name = "ha-control",
+    binary = "//solutions/ha-bridge/cmd/ha-control",
+    repo = "ghcr.io/proflyder/ha-control",
+)
+
+# Convenience alias for CI: one `bazel build` produces all three images.
+filegroup(
+    name = "images",
+    srcs = [
+        ":scheduler_image",
+        ":ha-bridge_image",
+        ":ha-control_image",
+    ],
+    visibility = ["//visibility:public"],
+)

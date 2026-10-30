@@ -118,16 +118,19 @@
       и проверка времени/кэша. Pulsar в CI монорепо не собирается; тесты
       без nested checkout печатают `SKIP`.
 - [ ] Этап 2 (реализовано локально, нужен первый прогон): VPN-группа `ci`
-      (пул `10.77.1.0/24`, доступ только к K3s `tcp/22`), SSH-пользователь
-      `ci-deploy` с helper-only sudo, ServiceAccount `ci-deploy` в
-      `home-assistant`, `deploy-home.yml` (preserve по push, ручные
-      execute/shadow/control-* через тот же `environment: home`) и авто-откат
-      симлинков. Осталось: загрузить секреты `secrets/ci/github/` в
-      Environment `home` и проверить первый прогон на GitHub, включая ручной
-      approve.
-- [ ] Этап 3: Hermes/voice-proxy через GHCR; Pulsar собирается и
-      релизится в своём репозитории, монорепо деплоит релиз на станцию
-      через Environment с ручным approve; конфиг HA — по решению.
+      (пул `10.77.1.0/24`, доступ только к K3s `tcp/6443`), ServiceAccount
+      `ci-deploy` в `home-assistant`, `deploy-home.yml` с планировщиком по
+      затронутым деплоимым юнитам (preserve по push, ручные
+      execute/shadow/control-* через `workflow_dispatch`) и авто-откат
+      `kubectl rollout undo`. Осталось: загрузить секреты
+      `secrets/ci/github/` в Environment `home`, сделать GHCR-пакеты
+      публичными и проверить первый прогон на GitHub.
+- [ ] Этап 3: Hermes/voice-proxy через GHCR: образы собираются в CI
+      (`_images.yml`, Dockerfile-путь), runtime-манифесты ещё не переключены
+      на digest; нужна проверка голосового контура после переключения.
+- [ ] Pulsar собирается и релизится в своём репозитории, монорепо деплоит
+      релиз на станцию через Environment с ручным approve; конфиг HA — по
+      решению.
 
 ## Безопасность / станция
 

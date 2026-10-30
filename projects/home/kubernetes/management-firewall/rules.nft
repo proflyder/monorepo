@@ -1,10 +1,15 @@
-# Replace NODE_IPV4 and POD_CIDR before installing; single-node K3s only.
+# Replace NODE_IPV4, POD_CIDR and CI_VPN_SOURCE before installing; single-node
+# K3s only. CI_VPN_SOURCE is the VPN container address: the isolated `ci` group
+# is masqueraded to that one address, and only the API port is opened for it.
 table inet ricardo_k3s {
   chain input {
     type filter hook input priority -20; policy accept;
     iifname "lo" accept
     ip saddr NODE_IPV4 accept
     ip saddr POD_CIDR accept
+    # GitHub Actions deploys speak to the API directly over the VPN; no SSH and
+    # no other K3s management port is reachable from that group.
+    ip saddr CI_VPN_SOURCE tcp dport 6443 accept
     tcp dport { 6443, 10250, 9100, 9116 } drop
     udp dport 8472 drop
   }

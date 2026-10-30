@@ -1,33 +1,62 @@
 # Scheduler deployment (home K3s)
 
-Durable `ricardo.v1.SchedulerService` plus the Home Assistant executor
-(`ha-bridge`) on the single-node `lab-k3s` cluster.
+Durable `ricardo.v1.SchedulerService` plus the Home Assistant executors
+(`ha-bridge`, `ha-control`) on the single-node `lab-k3s` cluster.
 
 - `solutions/scheduler` owns schedules, timers, occurrences, outbox and leases.
 - `solutions/ha-bridge` leases the `home` queue and calls only allowlisted HA
   scripts (`alarm_start`, `schedule_announce`, `alarm_stop`). It never owns
   schedule state.
+- `ha-control` leases only the `control` queue and serves the phone catalog.
 - Home Assistant performs audio only. Voice intents in
   `projects/home-assistant/ha-voice` call the canonical API.
+
+## Images
+
+Each service runs as its own distroless image, built hermetically by Bazel and
+referenced by digest in the manifests:
+
+```text
+projects/home/kubernetes/scheduler/BUILD.bazel
+  :scheduler_image   :scheduler_load   :scheduler_push    ghcr.io/proflyder/scheduler
+  :ha-bridge_image   :ha-bridge_load   :ha-bridge_push    ghcr.io/proflyder/ha-bridge
+  :ha-control_image  :ha-control_load  :ha-control_push   ghcr.io/proflyder/ha-control
+```
+
+- `rules_oci` assembles one static linux/amd64 Go binary on
+  `gcr.io/distroless/static-debian12:nonroot`, pinned by digest in
+  `MODULE.bazel`. No Docker daemon and no `RUN` steps are involved, so the same
+  targets build on macOS and on the GitHub runner.
+- `platform/ci/oci_image.py` reads the resulting OCI layout: it prints the
+  manifest digest, writes an OCI archive for `ctr images import` or a
+  docker archive for local smoke tests. The image is referenced as
+  `ghcr.io/proflyder/<name>@sha256:...`, never by a moving tag.
+- The image has no shell. Probes and deploy checks run the binary itself:
+  `-healthcheck` (authenticated readiness) and `-status` (raw GetStatus JSON).
+- Pods keep `runAsUser/fsGroup 65534`, matching the existing SQLite and ledger
+  file owners on the `local-retain` PVCs, so the migration needs no chown.
 
 ## Files
 
 ```text
-manifests/scheduler.yaml   PVC + Deployment + NodePort Service (template)
-manifests/bridge.yaml      ledger PVC + executor Deployment (template)
-manifests/control.yaml     ha-control Deployment (template)
+manifests/scheduler.yaml        PVC + Deployment + NodePort Service (template)
+manifests/bridge.yaml           ledger PVC + executor Deployment (template)
+manifests/control.yaml          ha-control Deployment (template)
 manifests/control-service.yaml  ha-control ClusterIP + NodePort
-nft/scheduler-nodeport.nft NodePort source filter (template)
-scheduler.env.example      placeholders; copy to secrets/home/scheduler.env
-render.py                  strict ${VAR} renderer (unknown/empty => fail)
-deploy.sh                  build, release, firewall, apply, mode transitions
-backup.sh                  quiesced SQLite + ledger backup with checksums
-preflight.py               safety preflight (retired writers absent/off, scheduler ready)
+manifests/preflight-job.yaml    in-cluster cutover preflight Job (template)
+nft/scheduler-nodeport.nft      NodePort source filter (template, host config)
+nft/apply.sh                    install/refresh that filter as root on the node
+scheduler.env.example           placeholders; copy to secrets/home/scheduler.env
+render.py                       strict ${VAR} renderer (unknown/empty => fail)
+deploy.sh                       build/push/import images, apply, mode transitions
+backup.sh                       quiesced SQLite + ledger backup with checksums
+preflight.py                    safety preflight (retired writers absent/off, scheduler ready)
+ci/rbac.yaml                    ServiceAccount/Role for CI kubectl
 ```
 
 Tracked templates contain only placeholders/TEST-NET values. Real addresses,
-CIDRs and the NodePort live in `secrets/home/scheduler.env` (git-ignored).
-Rendered manifests go to `secrets/local/rendered/scheduler`.
+CIDRs, NodePorts and image digests are rendered at deploy time; rendered
+manifests go to `secrets/local/rendered/scheduler` (git-ignored).
 
 ## One-time prerequisites
 
@@ -36,35 +65,47 @@ kubectl -n home-assistant create secret generic scheduler-auth \
   --from-file=token=secrets/home/scheduler.token
 kubectl -n home-assistant create secret generic ha-bridge-ha \
   --from-file=token=secrets/home/ha.token
+kubectl -n home-assistant apply -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 
 Both tokens are read from files at runtime (`SCHEDULER_TOKEN_FILE`,
 `HA_TOKEN_FILE`) and never appear in process arguments, probe arguments or
 Kubernetes events.
 
-## Deploy
-
-`NODE_SSH` is the K3s node (`labuser@192.0.2.27` on this stand, key
-`secrets/proxmox-install/proxmox_admin`). `deploy.sh` calls plain `ssh`/`scp`
-without key flags, so bind that key in `~/.ssh/config` or load it into
-`ssh-agent` first.
+The NodePort source filter is host configuration, applied once (and after any
+CIDR/port change) as root on the node:
 
 ```bash
-NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh            # install/update, preserve mode
-NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --shadow   # dry-run, 0 replicas
-HA_TOKEN_FILE=secrets/home/ha.token \
-NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --execute  # start executor
-NODE_SSH=root@node ./projects/home/kubernetes/scheduler/deploy.sh --skip-build
+ssh <node> sudo env PRIVATE_ENV=/path/to/scheduler.env \
+  bash projects/home/kubernetes/scheduler/nft/apply.sh
 ```
 
-- Builds with Bazel (`@rules_go//go/toolchain:linux_amd64`), stages an immutable
-  release under `/opt/ricardo/releases/<build-id>` and atomically switches
-  `/opt/ricardo/current`. Pods mount that path, so a new build rolls the pod.
-- Installs the NodePort source filter **before** the Service is exposed.
-- Re-running without `--execute`/`--shadow` preserves the bridge mode and
-  replica count; it only rolls the build annotation.
-- `--execute` runs `preflight.py` first and refuses if any legacy HA writer is
-  still on, an alarm is ringing, or the scheduler is not ready.
+## Deploy (manual, from the workstation)
+
+`deploy.sh` builds the images, imports them into the node's containerd over SSH
+(no registry push), renders the manifests with the new digests and applies
+them. `NODE_SSH` is the K3s node; `KUBECONFIG` must reach the API (LAN, or the
+documented SSH tunnel).
+
+```bash
+NODE_SSH=labuser@node KUBECONFIG=/path/kubeconfig \
+  ./projects/home/kubernetes/scheduler/deploy.sh                   # preserve modes
+NODE_SSH=labuser@node ./projects/home/kubernetes/scheduler/deploy.sh --shadow
+HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@node \
+  ./projects/home/kubernetes/scheduler/deploy.sh --execute         # preflight, then 1 replica
+./projects/home/kubernetes/scheduler/deploy.sh --only scheduler    # one unit only
+```
+
+- Re-running without `--execute`/`--shadow` preserves the bridge/control modes
+  and replica counts; it only rolls the new image digest.
+- `--only` selects deployable groups (`scheduler`, `ha-bridge` which also rolls
+  `ha-control`, `ha-control`); the default is `all`.
+- `--execute` runs the preflight first and refuses if a legacy HA writer is on,
+  an alarm is ringing, the scheduler is not ready or the HA endpoint differs.
+- The preflight runs locally by default; `PREFLIGHT_IN_CLUSTER=1` runs it as a
+  one-shot Job next to the scheduler (used by CI, which cannot reach HA).
+- Pushing instead of importing (`PUSH_IMAGES=1`, needs `docker login ghcr.io`)
+  is the CI path; the digest is verified against the built image before apply.
 
 ## ha-control
 
@@ -79,10 +120,8 @@ process from the alarm bridge.
 - Lights, switches and scenes are listed dynamically. A script appears only
   when it carries the native HA label `scenario` (`CONTROL_SCENARIO_LABEL`,
   default `scenario`); icons, areas and names are display-only. Infrastructure
-  scripts (alarm helpers, RPC wrappers) stay hidden. Assign the label in HA
-  (Settings > Automations & scenes > Scripts > Add label) to the scripts that
-  are personal scenarios. `CONTROL_LABEL` was removed and the process refuses
-  to start if it is still set.
+  scripts (alarm helpers, RPC wrappers) stay hidden. `CONTROL_LABEL` was
+  removed and the process refuses to start if it is still set.
 - `CONTROL_EXECUTE=false` serves the catalog only. `deploy.sh --control-execute`
   runs a fail-closed preflight (refuses when GetStatus reports pending/leased
   events on the `control` queue) and only then enables execution;
@@ -92,8 +131,7 @@ process from the alarm bridge.
   a command. The catalog id/action payload is authorization-checked per run,
   but the executor is not exactly-once.
 - HA's `repeat` delivery for `control` shares the scheduler event lease; the
-  scheduler allowlist must include both `ha-bridge-home` and `ha-control-home`
-  (see `manifests/scheduler.yaml`).
+  scheduler allowlist must include both `ha-bridge-home` and `ha-control-home`.
 
 Endpoints (private values in `secrets/home/scheduler.env`):
 
@@ -112,9 +150,10 @@ Endpoints (private values in `secrets/home/scheduler.env`):
 - Do not back a proxied route with a selectorless Service pointing at this
   node's own NodePort: single-node ClusterIP DNAT to the node NodePort does not
   re-enter kube-proxy's NodePort hook.
-- `nft` drops the NodePort in `prerouting` before kube-proxy DNAT unless the
-  source is the home LAN or the pod CIDR; IPv6 NodePort is dropped.
-  Persistence: `ricardo-scheduler-firewall.service` on the node.
+- `nft/scheduler-nodeport.nft` drops the NodePort in `prerouting` before
+  kube-proxy DNAT unless the source is the home LAN or the pod CIDR; IPv6
+  NodePort is dropped. Persistence: `ricardo-scheduler-firewall.service` on the
+  node boots from `/etc/ricardo-scheduler-nodeport.nft`.
 - Every RPC requires `Authorization: Bearer <token>`; unauthenticated requests
   get HTTP 401. HA uses the LAN endpoint; Android can use either the LAN
   endpoint or the HTTPS name over the VPN. Both terminate at the same Service.
@@ -145,80 +184,55 @@ Endpoints (private values in `secrets/home/scheduler.env`):
   independently of scheduler ownership; canonical stop/snooze remains
   `StopSchedule`/`SnoozeSchedule`.
 
-Database restore (current procedure): scale the scheduler to 0, restore the
-files from the latest `backup.sh` output into the `scheduler-data` PVC, then
-scale back to 1 and verify `GetStatus`.
+Database restore: scale the scheduler to 0, restore the files from the latest
+`backup.sh` output into the `scheduler-data` PVC, then scale back to 1 and
+verify `GetStatus`.
 
-## Bounded rollout (scheduler + bridge only)
+## Bounded rollout
 
-`deploy.sh` is the full path: it also rolls `ha-control`, reinstalls the
-NodePort filter. When a change only
-touches `solutions/scheduler` / the alarm bridge, do not run it; stage and roll
-just the two workloads:
+`deploy.sh` is the full path: it also rolls `ha-control`. When a change only
+touches one service, use `--only`:
 
 ```bash
-# 1. build immutable linux/amd64 binaries and copy them to dist/ as deploy.sh does
-bazel build //solutions/scheduler/cmd/scheduler //solutions/ha-bridge/cmd/ha-bridge \
-  --platforms=@rules_go//go/toolchain:linux_amd64
-# 2. stage under /opt/ricardo/releases/<build-id> with the node's sudo account,
-#    verify sha256 of both binaries, then atomically switch /opt/ricardo/current
-# 3. roll only the two deployments by patching the build annotation
-kubectl -n home-assistant patch deployment/scheduler --type merge \
-  -p '{"spec":{"template":{"metadata":{"annotations":{"ricardo.dev/build":"<build-id>"}}}}}'
-kubectl -n home-assistant patch deployment/ha-bridge --type merge \
-  -p '{"spec":{"template":{"metadata":{"annotations":{"ricardo.dev/build":"<build-id>"}}}}}'
+./projects/home/kubernetes/scheduler/deploy.sh --only scheduler
 ```
-
-Annotation patching preserves replicas, env, `hostPath` and PVCs. Update HA
-scripts (`ha core check` + `script.reload`) **before** rolling the bridge when
-the contract changes, and leave `ha-control` and the NodePort filter alone. Verify afterwards: rollout status, authenticated
-`-healthcheck`, `GetStatus.ready`, live consumers, unchanged `ListSchedules`.
 
 ## CI deploy (GitHub Actions, environment `home`)
 
-`.github/workflows/deploy-home.yml` deploys this stack from `develop` through
-the home VPN. Push runs **preserve** only; `execute`, `shadow`,
-`control-execute` and `control-catalog` are manual `workflow_dispatch` inputs
-and still go through the normal `deploy.sh` preflight (no bypass, no forced
-writer). `concurrency: deploy-home` is never cancelled, so there is still one
-deploy at a time.
+`.github/workflows/deploy-home.yml` deploys this stack from `develop` with
+kubectl only — no SSH and no root helper.
+
+- `plan` routes the pushed range (`before..sha`) through the CI unit map
+  (`platform/ci/units.yml`) and produces the affected **deployable** units
+  (`deploy.images` / `deploy.workloads`). A documentation-only push deploys
+  nothing; a shared Go package change deploys every importer; an unknown or
+  zero `before` falls back to every deployable unit.
+- The deploy matrix runs one unit at a time (`max-parallel: 1`,
+  `concurrency: deploy-home-<unit>`, never cancelled).
+- Each job logs in to GHCR with the job-scoped `GITHUB_TOKEN`
+  (`packages: write` on that job only), runs `deploy.sh` with `PUSH_IMAGES=1`
+  and `PREFLIGHT_IN_CLUSTER=1`, then verifies rollout, `-healthcheck`,
+  `-status` and both NodePorts. On failure it runs `kubectl rollout undo` for
+  the unit's Deployments.
+- Push runs preserve mode only; `execute`, `shadow`, `control-execute`
+  and `control-catalog` are manual `workflow_dispatch` inputs for the
+  `ha-bridge` unit and still go through the fail-closed preflight.
 
 Least-privilege access:
 
 - VPN certificate user `ci`, group `ci`, its own pool and a route only to the
-  K3s node; the VPN firewall allows only `tcp/22` there.
-- SSH user `ci-deploy` on the node: key only, `from` the VPN container
-  address, `restrict,port-forwarding,permitopen="127.0.0.1:6443"`. It cannot
-  run arbitrary root commands: `sudo -n /usr/local/sbin/ricardo-ci-deploy`
-  exposes only `stage`, `firewall`, `activate` and `current`. The helper lives
-  in `ci/ricardo-ci-deploy` and is provisioned by `ci/provision-node.sh`.
-- `firewall` takes only values (`LAN_CIDR`, node address, two NodePorts) and
-  renders the root-owned template `ci/scheduler-nodeport.nft.tmpl`, installed as
-  `/usr/local/share/ricardo-ci/scheduler-nodeport.nft.tmpl`. CI never supplies
-  nftables text, paths or `include` directives: CIDR/address are validated with
-  Python `ipaddress`, ports must be `30000–32767`, the rendered ruleset is
-  syntax-checked, and only `table inet ricardo_scheduler` is replaced.
+  K3s node; the VPN firewall allows only `tcp/6443` there (no SSH).
+- The K3s node firewall (`ricardo_k3s`) accepts `6443` only from the VPN
+  container address, which masquerades the isolated `ci` pool.
 - Kubernetes ServiceAccount `ci-deploy` in `home-assistant` (Role in
   `ci/rbac.yaml`): deployments/replicasets/pods/exec/services/configmaps/
-  secrets/PVCs in that namespace only, plus `deployments/scale`. No other
-  namespace, no cluster-scoped access. Long-lived token Secret
-  `ci-deploy-token`; kubeconfig points at `https://127.0.0.1:16443` and is
-  only usable through the SSH tunnel.
-
-`deploy.sh` additions used by CI:
-
-- `SSH_KEY`/`SSH_OPTS` select the deploy key without touching `~/.ssh/config`.
-- `REMOTE_STAGE=/var/lib/ricardo-ci/stage` stages binaries through the fixed
-  root helper instead of writing `/opt/ricardo` directly.
-- `PREFLIGHT_REMOTE=1` runs the same `preflight.py` on the K3s node, so the
-  runner never needs HA or NodePort access.
-
-The workflow writes the secrets from the `home` Environment to files (never
-into logs), opens the VPN and the SSH tunnel, runs the deploy in preserve mode
-by default, verifies `scheduler`/`ha-control`/`ha-bridge` healthchecks and both
-NodePorts, and on failure restores the previous release symlinks and rolls the
-Deployments back. `if: always()` disconnects the VPN and removes the temporary
-files. Secret file names are listed in `secrets/ci/github/README.txt`.
+  secrets/PVCs in that namespace only, plus `deployments/scale` and one-shot
+  `jobs` for the preflight. No other namespace, no cluster-scoped access.
+- The kubeconfig points at `https://<K3S_NODE>:6443`; the API certificate
+  already carries the node IP in its SAN, so no k3s restart or `tls-san` change
+  is needed.
+- The cutover preflight runs as a Job in `home-assistant`, so the runner needs
+  neither HA access nor the HA/scheduler tokens.
 
 ## Limits
 

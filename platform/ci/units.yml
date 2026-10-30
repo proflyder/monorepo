@@ -66,6 +66,13 @@ units:
     title: "solutions/scheduler (scheduler service)"
     paths:
       - solutions/scheduler/**
+    # deploy-home rolls exactly these container images and Deployments when the
+    # unit is affected. Infrastructure (ingress, observability, runtime chart)
+    # has no deploy block on purpose: it is not auto-deployed.
+    deploy:
+      builder: bazel
+      images: [scheduler]
+      workloads: [scheduler]
     go:
       module: "."
       packages:
@@ -79,6 +86,11 @@ units:
     title: "solutions/ha-bridge (home executor + ha-control)"
     paths:
       - solutions/ha-bridge/**
+    # The bridge unit owns ha-control too: they share the executor code.
+    deploy:
+      builder: bazel
+      images: [ha-bridge, ha-control]
+      workloads: [ha-bridge, ha-control]
     go:
       module: "."
       packages:
@@ -172,6 +184,12 @@ units:
     title: "projects/home-assistant/hermes"
     paths:
       - projects/home-assistant/hermes/**
+    # Hermes gateway and its voice-proxy sidecar are published as images; the
+    # runtime chart references them by digest.
+    deploy:
+      builder: docker
+      images: [hermes, voice-proxy]
+      workloads: [hermes]
     python:
       suites:
         - projects/home-assistant/hermes

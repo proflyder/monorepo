@@ -42,15 +42,16 @@ Options:
                         PATH-derived CRL unless --client-crl is given
   --client-crl PATH     CRL for the client CA (PEM)
   --ci-cidr CIDR        pool for the restricted "ci" group (default 10.77.1.0/24)
-  --ci-host ADDRESS     the only host the "ci" group may reach (SSH/22)
+  --ci-host ADDRESS     the only host the "ci" group may reach (K3s API/6443)
 
 Client certificate login is enabled only when a client CA is supplied (or a
 previously installed /etc/ocserv/ssl/client-ca.pem exists). Password + TOTP
 stays enabled in every case.
 
 With --ci-host a certificate whose OU is `ci` gets its own pool, a route only
-to ADDRESS/32, no DNS, and firewall rules that allow only ADDRESS tcp/22. The
-general `lan`/`full` pool is never widened to the ci pool.
+to ADDRESS/32, no DNS, and firewall rules that allow only ADDRESS tcp/6443
+(the K3s API, used by kubectl; no SSH). The general `lan`/`full` pool is never
+widened to the ci pool.
 EOF
 }
 
@@ -269,9 +270,9 @@ CI_NFT_FORWARD=
 CI_NFT_NAT=
 if [[ -n $CI_HOST ]]; then
   CI_NFT_FORWARD=$(cat <<EOF
-    # CI pool: exactly one target (K3s SSH) and nothing else. This rule sits
+    # CI pool: exactly one target (the K3s API) and nothing else. This rule sits
     # before the general pool accept; the pools do not overlap.
-    ip saddr $CI_CIDR iifname "vpns*" oifname "$IFACE" ip daddr $CI_HOST tcp dport 22 accept
+    ip saddr $CI_CIDR iifname "vpns*" oifname "$IFACE" ip daddr $CI_HOST tcp dport 6443 accept
     ip saddr $CI_CIDR drop
 EOF
 )

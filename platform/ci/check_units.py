@@ -66,6 +66,12 @@ def validate_schema(config: Config, root: Path | None = None) -> list[str]:
         for dep in unit.depends_on:
             if dep not in ids:
                 problems.append(f"{prefix}: depends_on unknown unit {dep!r}")
+        if unit.deploy_images and not unit.deploy_workloads:
+            problems.append(f"{prefix}: deploy.images without deploy.workloads")
+        if unit.deploy_workloads and not unit.deploy_images:
+            problems.append(f"{prefix}: deploy.workloads without deploy.images")
+        if unit.deploy_images and unit.deploy_builder not in ("bazel", "docker"):
+            problems.append(f"{prefix}: unknown deploy.builder {unit.deploy_builder!r}")
         if unit.platform == "go":
             if not unit.go_packages:
                 problems.append(f"{prefix}: go unit without packages")

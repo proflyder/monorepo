@@ -56,6 +56,7 @@ jobs:
             platform/quality/*.sh \
             platform/ci/*.sh \
             projects/home/kubernetes/scheduler/*.sh \
+            projects/home/kubernetes/scheduler/nft/*.sh \
             projects/station/scripts/*.sh \
             projects/home-assistant/stack/*.sh
 

@@ -292,3 +292,51 @@ class RealRepositoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeployRoutingTests(unittest.TestCase):
+    """deploy-home must roll exactly the affected deployable units."""
+
+    def setUp(self):
+        self.config = affected.load_config(HERE / "units.yml")
+
+    def _route(self, changed, deps=None):
+        with mock.patch.object(
+            affected, "go_package_dirs", side_effect=deps or (lambda _root, unit: set())
+        ):
+            return affected.route(self.config, changed, root=REPO, base="b")
+
+    def test_docs_only_change_deploys_nothing(self):
+        result = self._route(["docs/STATE.md"])
+        self.assertEqual(affected.deploy_entries(result, self.config), [])
+
+    def test_scheduler_change_deploys_only_scheduler(self):
+        result = self._route(["solutions/scheduler/app/run.go"])
+        entries = affected.deploy_entries(result, self.config)
+        self.assertEqual([entry["id"] for entry in entries], ["scheduler"])
+
+    def test_ha_bridge_change_deploys_bridge_and_control(self):
+        result = self._route(["solutions/ha-bridge/internal/bridge/bridge.go"])
+        entries = affected.deploy_entries(result, self.config)
+        self.assertEqual([entry["id"] for entry in entries], ["ha-bridge"])
+        self.assertEqual(entries[0]["images"], "ha-bridge ha-control")
+        self.assertEqual(entries[0]["workloads"], "ha-bridge ha-control")
+
+    def test_shared_go_package_deploys_every_importer(self):
+        shared = {str(REPO / "packages" / "proto" / "ricardo" / "v1")}
+
+        def deps(_root, unit):
+            own = {str(REPO / unit.go_module / Path(unit.go_packages[0]))}
+            if unit.id in ("scheduler", "ha-bridge"):
+                return own | shared
+            return own
+
+        result = self._route(["packages/proto/ricardo/v1/scheduler.pb.go"], deps=deps)
+        entries = affected.deploy_entries(result, self.config)
+        self.assertEqual([entry["id"] for entry in entries], ["scheduler", "ha-bridge"])
+
+    def test_hermes_change_selects_its_images(self):
+        result = self._route(["projects/home-assistant/hermes/voice_proxy.py"])
+        entries = affected.deploy_entries(result, self.config)
+        self.assertEqual([entry["id"] for entry in entries], ["hermes"])
+        self.assertEqual(entries[0]["images"], "hermes voice-proxy")

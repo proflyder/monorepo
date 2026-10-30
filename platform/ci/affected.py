@@ -63,6 +63,11 @@ class Unit:
     suites: list[str] = field(default_factory=list)
     compile_dirs: list[str] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
+    # Deployable units own container images and Kubernetes workloads. An empty
+    # `deploy_images` means "this unit is not deployed by deploy-home".
+    deploy_images: list[str] = field(default_factory=list)
+    deploy_workloads: list[str] = field(default_factory=list)
+    deploy_builder: str = "bazel"
 
 
 @dataclass
@@ -99,6 +104,7 @@ def load_config(path: Path) -> Config:
         bazel = raw.get("bazel") or {}
         go = raw.get("go") or {}
         python = raw.get("python") or {}
+        deploy = raw.get("deploy") or {}
         units.append(
             Unit(
                 id=raw["id"],
@@ -117,6 +123,9 @@ def load_config(path: Path) -> Config:
                 suites=list(python.get("suites") or []),
                 compile_dirs=list(python.get("compile") or []),
                 depends_on=list(raw.get("depends_on") or []),
+                deploy_images=list(deploy.get("images") or []),
+                deploy_workloads=list(deploy.get("workloads") or []),
+                deploy_builder=str(deploy.get("builder") or "bazel"),
             )
         )
     invalidations = [
@@ -565,6 +574,30 @@ def matrix_entries(route_: Route, config: Config) -> dict[str, list[dict[str, ob
     return {"go": go, "android": android, "python": python}
 
 
+def deploy_entries(route_: Route, config: Config) -> list[dict[str, object]]:
+    """Deployable units selected by the same routing as CI.
+
+    A shared Go package change reaches every importer, so it also deploys every
+    importer that declares a `deploy` block. Units without one (documentation,
+    infrastructure, observability) never appear here, so `deploy-home` cannot
+    roll them by accident.
+    """
+    selected = {unit.id for platform_route in route_.routes.values() for unit in platform_route.units}
+    entries: list[dict[str, object]] = []
+    for unit in config.units:
+        if not unit.deploy_images or unit.id not in selected:
+            continue
+        entries.append(
+            {
+                "id": unit.id,
+                "images": _space(unit.deploy_images),
+                "workloads": _space(unit.deploy_workloads),
+                "builder": unit.deploy_builder,
+            }
+        )
+    return entries
+
+
 def summary_markdown(route_: Route) -> str:
     lines = [
         f"Base: `{route_.base or '(none - full run)'}` -> head `{route_.head}`",
@@ -580,6 +613,10 @@ def summary_markdown(route_: Route) -> str:
     lines.append("")
     lines.append(f"Docs only: `{str(route_.docs_only).lower()}`")
     lines.append(f"Deploy control regression: `{str(route_.deploy_control).lower()}`")
+    deployed = sorted(
+        {unit.id for pr in route_.routes.values() for unit in pr.units if unit.deploy_images}
+    )
+    lines.append(f"Deploy units: {', '.join(f'`{u}`' for u in deployed) or '-'}")
     if route_.warnings:
         lines.append("")
         lines.append("Warnings:")
@@ -665,6 +702,7 @@ def main(argv: list[str] | None = None) -> int:
                     "changed_files": result.changed,
                     "docs_only": result.docs_only,
                     "deploy_control": result.deploy_control,
+                    "deploy_units": deploy_entries(result, config),
                     "warnings": result.warnings,
                     "modes": {name: route_.mode for name, route_ in result.routes.items()},
                     "units": entries,
@@ -687,6 +725,7 @@ def main(argv: list[str] | None = None) -> int:
                 "quality": "true",
                 "docs_only": str(result.docs_only).lower(),
                 "deploy_control": str(result.deploy_control).lower(),
+                "deploy_units": json.dumps(deploy_entries(result, config)),
                 "summary": summary_markdown(result),
             },
         )
