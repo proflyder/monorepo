@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Build and push the Hermes gateway and voice-proxy images to GHCR.
 #
-# This is the build+push half of the Hermes image flow. CI never rolls the live
-# Hermes Deployment: the runtime chart reads digest-pinned images from the
-# private values and a rollout must be a deliberate step after the voice
-# circuit was verified against the pushed digest.
+# This is the build+push half of the Hermes image flow. The deploy-home
+# workflow then calls `hermes_rollout.py`, which promotes the pushed digests
+# into the `runtime` Helm release, waits for the rollout, runs the voice smoke
+# checks and rolls back to the previous revision on failure.
 #
-#   IMAGE_TAG=<git-sha> ./build-and-push.sh hermes voice-proxy
+#   IMAGE_TAG=<git-sha> DIGEST_FILE=<path> ./build-and-push.sh hermes voice-proxy
 #
-# After a successful push, update the digest in the private runtime values
-# (`HERMES_IMAGE`/`VOICE_PROXY_IMAGE` in `projects/home/kubernetes/versions.sh`
-# records the current pins) and run `projects/home/kubernetes/apply-runtime.sh`.
-# Then check HA Assist → voice-proxy → Hermes and the health exporter.
+# `DIGEST_FILE` receives one `<image>=<sha256:…>` line per pushed image; the
+# workflow passes those digests to the rollout script. A manual rollout can be
+# run with `hermes_rollout.py --values-file <private values> --hermes-digest …
+# --voice-proxy-digest …`; `projects/home/kubernetes/versions.sh` records the
+# current pins.
 #
 # Authentication is the job-scoped GITHUB_TOKEN already logged in by the
 # caller (`docker login ghcr.io`). The upstream Hermes revision comes from
@@ -40,6 +41,9 @@ push_image() {
   fi
   local digest
   digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$repository:${IMAGE_TAG}")
+  if [[ -n "${DIGEST_FILE:-}" ]]; then
+    printf '%s=%s\n' "${repository##*/}" "${digest#*@}" >> "$DIGEST_FILE"
+  fi
   echo "pushed ${digest} (tags ${IMAGE_TAG}, develop)"
 }
 

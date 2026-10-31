@@ -248,6 +248,10 @@ Least-privilege access:
   `ci/rbac.yaml`): deployments/replicasets/pods/exec/services/configmaps/
   secrets/PVCs in that namespace only, plus `deployments/scale` and one-shot
   `jobs` for the preflight. No other namespace, no cluster-scoped access.
+- The same Role also runs `helm upgrade runtime` for the Hermes/voice-proxy
+  digest rollout: Helm release Secrets (`owner=helm`) and the namespace-scoped
+  chart resources. Runtime storage (PV/PVC) is applied by an admin outside the
+  release, so the CI identity never needs cluster-scoped verbs.
 - The kubeconfig points at `https://<K3S_NODE>:6443`; the API certificate
   already carries the node IP in its SAN, so no k3s restart or `tls-san` change
   is needed.

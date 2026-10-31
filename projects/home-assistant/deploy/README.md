@@ -3,7 +3,8 @@
 Chart `chart/` управляет Piper, Whisper, GigaAM, Hermes
 (gateway+proxy в одном Pod) и TCP health exporter. HA Core, **Music
 Assistant** и **Matter Server** работают отдельно в HAOS как add-ons;
-их workload-блоки в чарте оставлены только как legacy/rollback-опция.
+их workload/storage-блоков в приватных values нет (chart остаётся общим и
+может отрендерить любые values для rollback-сценария).
 Все приложения используют hostNetwork для сохранения loopback и LAN
 discovery. Каждый Deployment имеет Recreate; данные сохраняются в Retain
 local PV/PVC.
@@ -30,9 +31,21 @@ revision; tini reaps дочерние процессы. Изменение ис�
 
 Proxy image собирается из Dockerfile `images/voice-proxy/` и актуального
 `projects/home-assistant/hermes/voice_proxy.py` в build context.
-Локальные образы импортированы в K3s containerd, `imagePullPolicy: Never`.
-Их OCI archive сохранён в закрытом recovery-комплекте; они не опубликованы
-в registry. На новом узле архив необходимо импортировать до запуска Pod.
+Оба образа публикуются в GHCR (`ghcr.io/proflyder/...`) по digest
+`imagePullPolicy: IfNotPresent`, без pull-secret. `deploy-home` собирает и
+пушит их, затем `hermes_rollout.py` подставляет digest'и в релиз `runtime`,
+проверяет rollout, health exporter, Assist через Hermes и логи voice-proxy и
+откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
+перезапускает контур.
+
+## Storage и CI
+
+`apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а workloads —
+через Helm. PV/PVC помечены `helm.sh/resource-policy: keep` и не входят в
+Helm-релиз, чтобы `ci-deploy` (namespace-scoped, без cluster-scoped прав,
+VPN-группа только к API 6443) не мог их изменить или удалить. Ручной rollout
+выполняется тем же скриптом, что и CI; секрет `RUNTIME_VALUES_B64` содержит
+приватные values без токенов (они остаются в Kubernetes Secrets).
 
 ## Перенос Hermes home
 

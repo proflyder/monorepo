@@ -5,7 +5,10 @@
 # cluster-scoped resources. Verbs are exactly what deploy.sh performs:
 # apply/rollout/get/exec/patch/scale of the scheduler, ha-bridge and ha-control
 # workloads and their Services, plus reading the two pre-created secrets and
-# managing the rendered ConfigMaps/PVCs in this namespace.
+# managing the rendered ConfigMaps/PVCs in this namespace. The same identity
+# runs `helm upgrade runtime` for the Hermes/voice-proxy rollout: release
+# Secrets plus the namespace-scoped chart resources, never PVs (storage is
+# applied separately by an admin, see apply-runtime.sh).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -44,9 +47,12 @@ rules:
     resources:
       - services
       - configmaps
+      # Secrets also store Helm release revisions. Helm prunes the oldest
+      # revision at its --history-max, so delete is required; RBAC cannot
+      # restrict this to the `owner=helm` label. The Role is namespace-scoped.
       - secrets
       - persistentvolumeclaims
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
