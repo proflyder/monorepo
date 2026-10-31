@@ -211,7 +211,7 @@ Helm releases и обновление — `KUBERNETES-OPERATIONS.md`.
 Приватный runtime values (путь в `RUNTIME_PRIVATE_VALUES`, файл в `secrets/`)
 обязан давать рендер, совпадающий с живым релизом `runtime`; иначе
 `apply-runtime.sh` заденет несвязанные workloads/PV. Проверка (пустой diff,
-код 0):
+код 0); `helm get values` storage не содержит — он применяется отдельно:
 
 ```bash
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
@@ -219,6 +219,22 @@ helm template runtime projects/home-assistant/deploy/chart \
   -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
   | kubectl diff -n home-assistant -f -
 ```
+
+Полный `apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а
+workloads — через Helm; CI катит только workloads. Автодеплой Hermes
+(build+push → digest в релиз → голосовая проверка → откат) описан в
+`KUBERNETES-OPERATIONS.md`; ручной прогон:
+
+```bash
+KUBECONFIG=secrets/kubernetes-research/kubeconfig \
+  python3 projects/home-assistant/deploy/hermes_rollout.py \
+    --values-file "$RUNTIME_PRIVATE_VALUES" \
+    --hermes-digest sha256:… --voice-proxy-digest sha256:… \
+    --state-dir /tmp/hermes-state
+```
+
+`--force` — повторить upgrade с теми же digest'ами, `--simulate-smoke-failure`
+— проверить откат.
 
 ## HA / MA / Matter / K3s компоненты
 

@@ -120,10 +120,10 @@
       (пул `10.77.1.0/24`, доступ только к K3s `tcp/6443`), ServiceAccount
       `ci-deploy` в `home-assistant`, `deploy-home.yml` с планировщиком по
       затронутым деплоимым юнитам (preserve по push, ручные
-      execute/shadow/control-* через `workflow_dispatch`) и авто-откат
-      `kubectl rollout undo`. Осталось: загрузить секреты
-      `secrets/ci/github/` в Environment `home`, сделать GHCR-пакеты
-      публичными и проверить первый прогон на GitHub.
+      execute/shadow/control-* через `workflow_dispatch`) и авто-откат.
+      Осталось: загрузить секреты `secrets/ci/github/` в Environment `home`
+      (включая новый `RUNTIME_VALUES_B64`), сделать GHCR-пакеты публичными и
+      проверить первый прогон на GitHub.
 - [ ] Pulsar собирается и релизится в своём репозитории, монорепо деплоит
       релиз на станцию через Environment с ручным approve; конфиг HA — по
       решению.

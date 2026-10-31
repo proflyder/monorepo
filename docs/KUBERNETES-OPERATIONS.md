@@ -80,7 +80,8 @@ Helm rollback не откатывает SQLite/auth/state.
 
 Полный `apply-runtime.sh` меняет все объекты чарта, поэтому приватный
 values-файл (`RUNTIME_PRIVATE_VALUES`, лежит в `secrets/`) должен давать
-рендер, совпадающий с живым релизом:
+рендер, совпадающий с живым релизом. Единственная надёжная проверка —
+сравнить рендер со всеми объектами (и storage, который применяется отдельно):
 
 ```bash
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
@@ -90,11 +91,60 @@ helm template runtime projects/home-assistant/deploy/chart \
   | kubectl diff -n home-assistant -f -
 ```
 
-Пустой вывод и код 0 означают совпадение всех объектов (PV/PVC и workloads).
+Пустой вывод и код 0 означают совпадение. `helm get values runtime` после
+разделения storage/workloads намеренно **не содержит** `storage`, поэтому
+сравнивать его с приватным файлом напрямую нельзя; ориентир — рендер.
 Непустой diff означает, что приватный файл разошёлся с live: сначала обновить
 его (бэкап рядом, режим 600) и добиться пустого diff, и только затем делать
 `apply-runtime.sh`. `helm upgrade --dry-run=server` проверяет только схему и
 доступ к API, поэтому недостаточен как доказательство отсутствия изменений.
+
+### Два владельца: storage и workloads
+
+`apply-runtime.sh` применяет один и тот же приватный файл двумя путями:
+
+- `PersistentVolume`/`PersistentVolumeClaim` — `kubectl apply` от администратора
+  (cluster-scoped и `Retain`); они не входят в Helm-релиз;
+- остальные объекты — `helm upgrade --install runtime` (namespace-scoped).
+
+Это разделение обязательно: CI-SA `ci-deploy` не имеет cluster-scoped прав, а
+Helm при удалении объекта из релиза делает GET и без `get persistentvolumes`
+падает. PV/PVC помечены `helm.sh/resource-policy: keep`, поэтому переход
+безопасен и для релиза, который ещё помнит storage. Полный ручной apply —
+единственный путь менять storage; CI его не трогает. На чистой установке
+сначала `apply-runtime.sh` (создаёт PV/PVC), затем CI может катить workloads.
+
+## Автодеплой Hermes / voice-proxy
+
+`deploy-home` для юнита `hermes` (builder `docker`) после build+push вызывает
+`projects/home-assistant/deploy/hermes_rollout.py`:
+
+1. значения берутся из GitHub-секрета `RUNTIME_VALUES_B64` (base64 приватного
+   values; токенов в нём нет — они в Kubernetes Secrets);
+2. если digest'ы не изменились, upgrade не запускается;
+3. `helm upgrade runtime` получает только `--set` образов (без
+   `--reuse-values`), `storage` вырезается;
+4. запоминается ревизия до upgrade, затем проверяются rollout, health exporter
+   (все endpoint'ы = 1), Assist-запрос через `conversation.hermes_agent` и
+   отсутствие ошибок в логах voice-proxy. HA-токен читается Job'ом из Secret
+   `ha-bridge-ha`, HA вызывается по cluster-internal Service, поэтому в GitHub
+   он не попадает;
+5. при провале — `helm rollback runtime <прежняя ревизия>`, повторная проверка;
+   если upgrade не создал ревизию, откат не выполняется.
+
+Ручной прогон того же пути:
+
+```bash
+KUBECONFIG=secrets/kubernetes-research/kubeconfig \
+  python3 projects/home-assistant/deploy/hermes_rollout.py \
+    --values-file secrets/kubernetes-research/runtime-values.yaml \
+    --hermes-digest sha256:… --voice-proxy-digest sha256:… \
+    --state-dir /tmp/hermes-state
+```
+
+`--force` прогоняет upgrade при совпадающих digest'ах (no-op проверка);
+`--simulate-smoke-failure` проверяет откат. Ручной `helm rollback runtime N`
+остаётся аварийным путём.
 
 Dashboard JSON: `projects/home-assistant/observability/chart/dashboards/`;
 доставка через ConfigMap → Grafana sidecar. Ручной import не нужен.
@@ -170,9 +220,10 @@ Traefik — не запускать там второй прокси без ос
   GHCR, на живой узел импортируются в containerd (`ctr images import`).
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
-  IfNotPresent`, без pull-secret. Текущие пины — `versions.sh`; обновление
-  digest в приватных runtime values и rollout — ручной шаг после проверки
-  голосового контура (CI только build+push).
+  IfNotPresent`, без pull-secret. deploy-home собирает и пушит их, затем
+  `hermes_rollout.py` подставляет digest'и в релиз `runtime`, прогоняет
+  голосовую проверку и откатывается на предыдущую ревизию при провале.
+  Текущие пины — `versions.sh`; ручной откат — `helm rollback`.
 - Полный restore:
   1. восстановить Ubuntu/K3s;
   2. остановить K3s;

@@ -121,8 +121,15 @@
   (`bf0203a7…`), SHA-256 `voice_proxy.py` в образе совпадает с исходником
   (`d1fea967…`). Проверено: HA Assist → voice-proxy → Hermes text turn
   (POST /v1/chat/completions 200), health exporter зелёный, логи proxy без
-  ошибок. CI для hermes по-прежнему только build+push; digest в приватных
-  values и rollout — ручной шаг после проверки.
+  ошибок.
+- 2026-10-31: `runtime` release разделён на два владельца: PV/PVC применяет
+  `apply-runtime.sh` через kubectl (`helm.sh/resource-policy: keep`), Helm
+  управляет только namespace-scoped workloads. Поэтому `ci-deploy` не имеет
+  cluster-scoped прав. Приватные values выровнены с live (пустой
+  `kubectl diff`). deploy-home для hermes выполняет build+push →
+  `hermes_rollout.py` (no-op при тех же digest'ах, health/Assist/логи,
+  `helm rollback` при провале). Live no-op и rollback-drill прошли под
+  `ci-deploy`: ревизии 19→20→21, объекты и поды не менялись.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
 

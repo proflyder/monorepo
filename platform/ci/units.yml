@@ -184,9 +184,10 @@ units:
     title: "projects/home-assistant/hermes"
     paths:
       - projects/home-assistant/hermes/**
-    # Hermes/voice-proxy: build+push only. The runtime chart keeps the verified
-    # digest until the private values are updated and the voice circuit is
-    # checked; CI must never restart the voice path on its own.
+    # Hermes/voice-proxy: build+push, then promote both digests into the
+    # runtime Helm release (hermes_rollout.py). The upgrade is skipped when the
+    # digests did not change; the smoke checks must pass or the job rolls the
+    # release back to the previous revision.
     deploy:
       builder: docker
       images: [hermes, voice-proxy]

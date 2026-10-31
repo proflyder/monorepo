@@ -31,6 +31,10 @@ on:
           - shadow
           - control-execute
           - control-catalog
+      simulate_hermes_failure:
+        description: Force the Hermes smoke to fail after upgrade (rollback drill)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,7 +48,10 @@ env:
   BAZELISK_SHA256: "a248ae2b2b62b5baebb748f6fba7203bff1a27e5d01b55399a8406744cb539e8"
   KUBECTL_VERSION: "v1.35.0"
   KUBECTL_SHA256: "a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989"
+  HELM_VERSION: "v4.1.4"
+  HELM_SHA256: "70b2c30a19da4db264dfd68c8a3664e05093a361cefd89572ffb36f8abfa3d09"
   DEPLOY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'preserve' }}
+  HERMES_SIMULATE_SMOKE_FAILURE: ${{ (github.event_name == 'workflow_dispatch' && inputs.simulate_hermes_failure) && '1' || '0' }}
   # Public DNS name of the VPN and the home LAN address of the K3s node are
   # private values: they live in the `home` Environment, not in this file.
   VPN_SERVER: ${{ secrets.VPN_SERVER }}
@@ -182,7 +189,13 @@ jobs:
             "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           echo "${KUBECTL_SHA256}  /tmp/kubectl" | sha256sum -c -
           sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
-          rm -f /tmp/bazelisk /tmp/kubectl
+          curl -sSfL -o /tmp/helm.tgz \
+            "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  /tmp/helm.tgz" | sha256sum -c -
+          tar -xzf /tmp/helm.tgz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+          rm -f /tmp/bazelisk /tmp/kubectl /tmp/helm.tgz
+          rm -rf /tmp/linux-amd64
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl python3-yaml
 
@@ -197,13 +210,12 @@ jobs:
             deploy-home-${{ runner.os }}-
 
       - name: Materialise secrets as files
-        # Image-only units never reach home: no VPN, cluster or secrets.
-        if: matrix.builder != 'docker'
         env:
           IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
           IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
           IN_KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
           IN_SCHEDULER_ENV_B64: ${{ secrets.SCHEDULER_ENV_B64 }}
+          IN_RUNTIME_VALUES_B64: ${{ secrets.RUNTIME_VALUES_B64 }}
         run: |
           set +x
           set -euo pipefail
@@ -216,11 +228,14 @@ jobs:
           printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
           printf '%s' "$IN_KUBECONFIG_B64" | base64 -d > "$CI_DIR/kubeconfig"
           printf '%s' "$IN_SCHEDULER_ENV_B64" | base64 -d > "$CI_DIR/scheduler.env"
+          if [[ "${{ matrix.builder }}" == "docker" ]]; then
+            printf '%s' "$IN_RUNTIME_VALUES_B64" | base64 -d > "$CI_DIR/runtime-values.yaml"
+            test -s "$CI_DIR/runtime-values.yaml"
+          fi
           chmod 600 "$CI_DIR"/*
           echo "secret files prepared: $(find "$CI_DIR" -maxdepth 1 -type f | wc -l)"
 
       - name: Connect VPN (group ci)
-        if: matrix.builder != 'docker'
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -245,12 +260,46 @@ jobs:
           exit 1
 
       - name: Check CI identity
-        if: matrix.builder != 'docker'
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
           kubectl -n home-assistant get pods
+
+      - name: Check CI RBAC boundary
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          export KUBECONFIG="$CI_DIR/kubeconfig"
+          # The runtime chart is split: CI only upgrades namespace-scoped
+          # workloads. Storage (PV/PVC) is applied by an admin, so this must
+          # stay "no" for cluster-scoped resources and every other namespace.
+          denied() {
+            if kubectl "$@" >/dev/null 2>&1; then
+              echo "ci-deploy unexpectedly allows: $*" >&2
+              exit 1
+            fi
+          }
+          allowed() {
+            if ! kubectl -n home-assistant auth can-i "$@" >/dev/null 2>&1; then
+              echo "ci-deploy is missing: $*" >&2
+              exit 1
+            fi
+          }
+          denied -n home-assistant auth can-i get persistentvolumes
+          denied -n home-assistant auth can-i patch persistentvolumes
+          denied -n home-assistant auth can-i get storageclasses.storage.k8s.io
+          denied -n home-assistant auth can-i get clusterroles.rbac.authorization.k8s.io
+          denied -n monitoring auth can-i get deployments.apps
+          denied -n traefik auth can-i get secrets
+          allowed get deployments.apps
+          allowed patch deployments.apps
+          allowed get secrets
+          allowed create secrets
+          allowed delete secrets
+          allowed get configmaps
+          allowed create jobs.batch
+          echo "ci-deploy RBAC boundary is namespace-scoped"
 
       - name: Build, push and deploy ${{ matrix.id }}
         run: |
@@ -259,11 +308,27 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           if [[ "${{ matrix.builder }}" == "docker" ]]; then
-            # Hermes/voice-proxy: build+push only. Promoting the digest into the
-            # runtime chart is a reviewed manual step (private values), because
-            # CI must not restart the voice circuit without a health check.
+            # Hermes/voice-proxy: build+push, then promote the pushed digests
+            # into the runtime release. hermes_rollout.py skips the upgrade when
+            # the digests did not change, runs the voice smoke checks and rolls
+            # back to the previous revision on failure.
+            DIGEST_FILE="$CI_DIR/digests" \
             IMAGE_TAG="$GITHUB_SHA" \
               projects/home-assistant/deploy/images/build-and-push.sh ${{ matrix.images }}
+            hermes_digest=$(sed -n 's/^hermes=//p' "$CI_DIR/digests")
+            voice_digest=$(sed -n 's/^voice-proxy=//p' "$CI_DIR/digests")
+            test -n "$hermes_digest" && test -n "$voice_digest"
+            ROLLOUT_ARGS=()
+            if [[ "$HERMES_SIMULATE_SMOKE_FAILURE" == "1" ]]; then
+              ROLLOUT_ARGS+=(--simulate-smoke-failure)
+            fi
+            KUBECONFIG="$CI_DIR/kubeconfig" \
+              python3 projects/home-assistant/deploy/hermes_rollout.py \
+                --values-file "$CI_DIR/runtime-values.yaml" \
+                --hermes-digest "$hermes_digest" \
+                --voice-proxy-digest "$voice_digest" \
+                --state-dir "$CI_DIR/hermes-state" \
+                "${ROLLOUT_ARGS[@]}"
             exit 0
           fi
           case "$DEPLOY_MODE" in
@@ -347,6 +412,20 @@ jobs:
             --namespace home-assistant \
             --kubectl kubectl | tee "$RUNNER_TEMP/rollback.log"
 
+      - name: Roll back Hermes on failure
+        if: failure() && matrix.builder == 'docker'
+        run: |
+          set +e
+          CI_DIR="$RUNNER_TEMP/ci"
+          export KUBECONFIG="$CI_DIR/kubeconfig"
+          # Safety net if the runner dies before hermes_rollout.py can roll
+          # back. The script removes the marker after a successful smoke, so a
+          # build/push failure never touches the running release.
+          python3 projects/home-assistant/deploy/hermes_rollout.py \
+            --rollback-only \
+            --state-dir "$CI_DIR/hermes-state" \
+            --namespace home-assistant | tee "$RUNNER_TEMP/hermes-rollback.log"
+
       - name: Summary
         if: always()
         run: |
@@ -367,6 +446,10 @@ jobs:
               echo "- GetStatus: \`${STATUS:-unavailable}\`"
             else
               echo "- GetStatus: unavailable"
+            fi
+            if helm -n home-assistant status runtime >/dev/null 2>&1; then
+              echo "- runtime revision: \`$(helm -n home-assistant list -o json \
+                | python3 -c 'import json,sys; print(next((r["revision"] for r in json.load(sys.stdin) if r["name"]=="runtime"), "unknown"))')\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
