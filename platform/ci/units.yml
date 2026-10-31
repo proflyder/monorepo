@@ -293,6 +293,19 @@ units:
       suites:
         - projects/home/kubernetes/scheduler
 
+  - id: external-secrets
+    platform: python
+    title: "projects/home/kubernetes/external-secrets (OpenBao wiring)"
+    paths:
+      - projects/home/kubernetes/external-secrets/**
+      - projects/home/kubernetes/scheduler/manifests/external-secrets.yaml
+      - projects/home-assistant/deploy/manifests/external-secrets.yaml
+      - projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml
+      - projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml
+    python:
+      suites:
+        - projects/home/kubernetes/external-secrets
+
   # ----------------------------------------------------------- Quality --------
   # Always runs: repository audit, static gates, shellcheck, secret scan and
   # the CI unit-map invariant check.

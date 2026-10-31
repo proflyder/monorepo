@@ -1,10 +1,12 @@
-# OpenBao (этап 1: секрет-сервер, UI и доверие для CI/подов)
+# OpenBao (этапы 1–2: секрет-сервер, UI, CI/поды и External Secrets)
 
 Один сервер OpenBao `2.7.2` (chart `openbao/openbao 0.30.6`) в namespace
 `openbao` на узле K3s. UI/API опубликованы как
 `https://vault.<home-domain>/` через Traefik с тем же allow-list, что и
-остальные домашние сервисы. Секреты приложений сюда пока **не** переносились:
-этот этап поднимает хранилище, вход человеком и машинные auth-методы.
+остальные домашние сервисы. Этап 1 поднимает хранилище, вход человеком и
+машинные auth-методы. Этап 2 (External Secrets Operator) переносит
+приложенческие Kubernetes Secrets в KV v2 `secret/k8s/*`; см.
+`projects/home/kubernetes/external-secrets/README.md`.
 
 Публичные примеры используют `home.example.com` и `192.0.2.0/24`. Реальные
 имена — `secrets/home/ingress.env`, данные bootstrap — `secrets/openbao/`.
@@ -19,7 +21,7 @@
 | Audit | декларативный `audit "file"` на PV 5 GiB | OpenBao 2.7 запрещает включать audit через API; конфиг переживает рестарт |
 | Человек | `userpass` + политика `admin`, пароль в `secrets/openbao/` | UI поддерживает логин/пароль; TOTP включается отдельно (см. ниже) |
 | CI | `jwt` mount `github`, GitHub OIDC, без статических токенов | role привязан к repository/environment/ref и короткому TTL |
-| Поды | `kubernetes` auth через TokenReview | SA-идентичность; задел под External Secrets Operator |
+| Поды | `kubernetes` auth через TokenReview | SA-идентичность; используется External Secrets Operator |
 
 Trade-off static seal: ключ лежит рядом с данными (Kubernetes Secret на том же
 узле). Компромисс узла даёт доступ и к ключу, и к raft-данным. Это осознанная
@@ -75,17 +77,45 @@ recovery keys + root token. Затем `configure.py` применяет кон�
 начальный root-токен **отзывается** и удаляется из файла.
 
 Recovery keys — единственный путь выпустить новый root-токен. Их нужно
-сохранить вне узла (менеджер паролей/офлайн-носитель). Процедура:
+сохранить вне узла (менеджер паролей/офлайн-носитель).
+
+### Временный root-токен на OpenBao 2.7
+
+С версии 2.6 команда `bao operator generate-root` использует
+аутентифицированный `/sys/generate-root-token`, поэтому без действующего
+admin-токена она возвращает `403`. Легаси-эндпоинты `/sys/generate-root/*`
+по умолчанию отключены (`disable_unauthed_generate_root_endpoints = true`).
+Чтобы выпустить root из recovery keys, включите их на короткое время:
 
 ```bash
-kubectl -n openbao exec openbao-0 -- /bin/sh -ec '
-  BAO_ADDR=http://127.0.0.1:8200 bao operator generate-root -init -format=json'
-# сохранить nonce и otp; для каждого из 3 ключей:
-kubectl -n openbao exec openbao-0 -- /bin/sh -ec '
-  BAO_ADDR=http://127.0.0.1:8200 bao operator generate-root \
-    -nonce=<nonce> -decode=<encoded-token>'
-# encoded-token выдаётся на предпоследнем шаге; итоговый токен декодируется с otp
+export KUBECONFIG=/private/path/kubeconfig
+# 1. временно разрешить легаси-эндпоинты (только на время операции)
+helm get values openbao -n openbao -o yaml > /tmp/openbao-values.yaml
+# добавить в listener: disable_unauthed_generate_root_endpoints = false
+helm upgrade openbao openbao/openbao --version 0.30.6 -n openbao \
+  -f /tmp/openbao-values.yaml
+kubectl -n openbao delete pod openbao-0     # OnDelete применяет конфиг
+kubectl -n openbao wait --for=condition=Ready pod/openbao-0 --timeout=180s
+
+# 2. инициализировать попытку (nonce/otp сохранить), ввести 3 recovery key
+kubectl -n openbao exec openbao-0 -- /bin/sh -ec \
+  'BAO_ADDR=http://127.0.0.1:8200 bao operator generate-root -init -format=json'
+# для каждого ключа: POST /v1/sys/generate-root/update {"key":..., "nonce":...}
+# или CLI: bao operator generate-root -nonce=<nonce> -   (ключ на stdin)
+
+# 3. декодировать encoded_token (XOR с otp) и проверить токен
+# 4. отозвать root: curl -X POST -H "X-Vault-Token: <root>" \
+#      http://127.0.0.1:8200/v1/auth/token/revoke-self
+# 5. вернуть исходные values (без параметра) и удалить под
+helm upgrade openbao openbao/openbao --version 0.30.6 -n openbao \
+  -f /tmp/openbao-values.original.yaml
+kubectl -n openbao delete pod openbao-0
 ```
+
+Окно с открытыми легаси-эндпоинтами — секунды; endpoint доступен только
+внутри кластера и через уже аутентифицированный Traefik allow-list, но
+включать его «навсегда» нельзя. Токен и recovery keys не печатать; файлы —
+600, удалять после работы.
 
 `configure.py` можно запускать повторно с любым admin-токеном
 (`BAO_TOKEN=… ./configure.py --addr https://vault.<domain> --resolve-ip <node>`);
@@ -125,7 +155,7 @@ OpenBao поддерживает login MFA. `configure.py` создаёт мет
 |---|---|---|---|
 | `userpass` | человек | имя из `secrets/openbao/username` | `admin` |
 | `github` (`jwt`) | GitHub Actions | `deploy-home` | `ci-deploy` |
-| `kubernetes` | External Secrets Operator (будущий) | `external-secrets` | `k8s-read` |
+| `kubernetes` | External Secrets Operator | `external-secrets` | `k8s-read` |
 | `kubernetes` | smoke-под | `k8s-smoke` | `k8s-read` |
 | `kubernetes` | CronJob backup | `backup` | `backup` |
 
@@ -169,9 +199,34 @@ KUBECONFIG=… kubectl auth can-i create tokenreviews.authentication.k8s.io \
 `auth/kubernetes/login`, чтение `secret/k8s/test`, отказ на
 `secret/ci/test` и на запись. Логи печатают только результат.
 
-Роль `external-secrets` заранее привязана к SA
-`external-secrets/external-secrets` — ESO подключается на следующем этапе без
-изменения политики.
+Роль `external-secrets` привязана к SA
+`external-secrets/external-secrets` и используется External Secrets Operator;
+для неё отдельных изменений политики не требуется.
+
+## External Secrets Operator (этап 2)
+
+ESO читает `secret/k8s/<namespace>/<secret-name>` и создаёт Kubernetes Secret
+с тем же именем и ключами в namespace приложения. Установка и таблица
+секретов — `projects/home/kubernetes/external-secrets/README.md`.
+
+```bash
+export KUBECONFIG=/private/path/kubeconfig
+./projects/home/kubernetes/external-secrets/deploy.sh
+kubectl get clustersecretstore openbao
+kubectl get externalsecret -A
+```
+
+Перенесены: `scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
+`grafana-admin`, `cloudflare-api-token`. Не переносятся: `openbao-seal`
+(курица и яйцо), helm release Secrets, SA token Secrets, TLS-сертификаты
+cert-manager и служебные Secrets контроллеров.
+
+Добавление/ротация значения — только в OpenBao; локальные файлы в `secrets/`
+больше не источник правды. Немедленная синхронизация:
+
+```bash
+kubectl -n <ns> annotate externalsecret <name> force-sync="$(date +%s)" --overwrite
+```
 
 ## CI (GitHub OIDC)
 
@@ -229,6 +284,9 @@ kubectl -n openbao exec openbao-0 -- \
   живут ≤15 мин и не хранятся.
 - **Root**: только через recovery keys (`generate-root`), после работ токен
   отозвать.
+- **Приложенческие секреты**: менять значение в OpenBao
+  (`secret/k8s/<ns>/<name>`), затем `force-sync` соответствующего
+  ExternalSecret; Kubernetes Secret обновится без пересоздания.
 - **Образ/чарт**: `versions.sh` + `deploy.sh` + удаление пода.
 
 ## Проверки
@@ -239,6 +297,8 @@ export KUBECONFIG=/private/path/kubeconfig
 kubectl -n openbao get pod,svc,pvc
 kubectl -n traefik get ingressroute openbao
 kubectl -n openbao logs openbao-0 --tail=50
+kubectl get clustersecretstore openbao
+kubectl get externalsecret -A
 ```
 
 Ожидаемо: `initialized=true`, `sealed=false`, `recovery_seal=true`,

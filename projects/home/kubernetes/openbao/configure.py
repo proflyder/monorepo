@@ -74,7 +74,7 @@ path "secret/metadata/ci" {
 """
 
 K8S_POLICY = """\
-# Workloads and the future External Secrets Operator read only secret/k8s/*.
+# Workloads and External Secrets Operator read only secret/k8s/*.
 path "secret/data/k8s/*" {
   capabilities = ["read"]
 }

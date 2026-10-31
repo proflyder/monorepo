@@ -25,7 +25,8 @@ MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`
 
 Нужны Helm repositories `prometheus-community`, `grafana-community`, `grafana`,
 приватный kubeconfig и закрытые values. Kubernetes Secret `grafana-admin`
-создаётся отдельно; значения не передаются через командную строку.
+создаётся External Secrets Operator из OpenBao; значения не передаются через
+командную строку.
 
 ```bash
 export KUBECONFIG=/private/path/kubeconfig

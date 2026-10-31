@@ -7,6 +7,11 @@
 #   LAN_CIDR                 LAN range allowed by the IP allow-list
 #   HAOS_ADDRESS             HAOS IPv4 address for the Service EndpointSlice
 #   CLOUDFLARE_API_TOKEN_FILE  file with CLOUDFLARE_API_TOKEN=<token>
+#
+# The Cloudflare Secret is owned by External Secrets Operator (OpenBao
+# secret/k8s/cert-manager/cloudflare-api-token). Only a first install on a
+# cluster without ESO/OpenBao needs --bootstrap-secrets, which writes the
+# Secret once from the private file; normal runs verify it and never overwrite.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck disable=SC1091
@@ -17,10 +22,12 @@ command -v helm >/dev/null || { echo "helm is required" >&2; exit 1; }
 command -v kubectl >/dev/null || { echo "kubectl is required" >&2; exit 1; }
 
 STAGING=0
+BOOTSTRAP_SECRETS=0
 for arg in "$@"; do
   case "$arg" in
     --staging) STAGING=1 ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    --bootstrap-secrets) BOOTSTRAP_SECRETS=1 ;;
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -107,7 +114,16 @@ kubectl wait --for=condition=Established --timeout=120s \
   crd/clusterissuers.cert-manager.io crd/certificates.cert-manager.io
 
 kubectl create namespace "$TRAEFIK_NS" --dry-run=client -o yaml | kubectl apply -f -
-apply_cloudflare_secret
+
+if [[ "$BOOTSTRAP_SECRETS" == 1 ]]; then
+  echo "bootstrapping cloudflare-api-token from the private file (first install)"
+  apply_cloudflare_secret
+else
+  # Normal path: OpenBao is the source of truth and ESO owns the Secret.
+  kubectl apply -f "$MANIFESTS/external-secret-cloudflare.yaml"
+  kubectl -n "$CERT_MANAGER_NS" wait --for=condition=Ready \
+    externalsecret/cloudflare-api-token --timeout=120s
+fi
 
 render "$MANIFESTS/issuers.yaml" | kubectl apply -f -
 

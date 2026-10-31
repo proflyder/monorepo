@@ -185,8 +185,9 @@ KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n traefik get pods,ce
 KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n cert-manager get challenge,order
 ```
 
-Реальные имена и LAN_CIDR — `secrets/home/ingress.env`; токен Cloudflare —
-`secrets/home/vpn/cloudflare.env` (не печатать).
+Реальные имена и LAN_CIDR — `secrets/home/ingress.env`; токен Cloudflare
+хранится в OpenBao (`secret/k8s/cert-manager/cloudflare-api-token`) и
+материализуется ESO (не печатать).
 
 ## OpenBao
 
@@ -220,6 +221,32 @@ UI. Recovery keys и root-токен bootstrap — `secrets/openbao/init.json` (
 root уже отозван, новый выпускается `bao operator generate-root` из recovery
 keys. GitHub-секреты environment `Home` для smoke: `OPENBAO_ADDR` и
 (опционально) `OPENBAO_ROLE`.
+
+## External Secrets Operator
+
+Источник правды для приложенческих Secrets — OpenBao `secret/k8s/*`;
+Kubernetes Secrets создаёт ESO. Пути, миграция и ротация —
+`projects/home/kubernetes/external-secrets/README.md`.
+
+```bash
+export KUBECONFIG=secrets/kubernetes-research/kubeconfig
+
+# установить/обновить оператор, store и все ExternalSecret
+./projects/home/kubernetes/external-secrets/deploy.sh
+
+# состояние
+kubectl -n external-secrets get pods
+kubectl get clustersecretstore openbao
+kubectl get externalsecret -A
+
+# немедленная синхронизация после смены значения в OpenBao
+kubectl -n home-assistant annotate externalsecret scheduler-auth \
+  force-sync="$(date +%s)" --overwrite
+```
+
+`deploy-home` проверяет `Ready` ExternalSecret перед выкаткой; deploy-скрипты
+не создают и не перезаписывают эти Secrets. `--bootstrap-secrets` у
+`ingress/deploy.sh` — только для первой установки без OpenBao/ESO.
 
 ## K3s
 

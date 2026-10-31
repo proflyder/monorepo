@@ -41,6 +41,7 @@ case "$args" in
   *"get deployment ha-bridge -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-bridge","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-control"*) exit "${MOCK_CONTROL_EXISTS:-0}" ;;
   *"get deployment ha-bridge"*) exit 0 ;;
+  *"get externalsecret"*) printf '%s' 'True'; exit 0 ;;
   *"get secret"*) exit 0 ;;
   *"exec deploy/scheduler"*status*)
     if [[ -n "${CONTROL_QUEUE_STATUS:-}" ]]; then printf '%s' "$CONTROL_QUEUE_STATUS"; else printf '%s' '{"queues":[]}'; fi
@@ -71,6 +72,7 @@ grep -q "apply -f .*control-service.yaml" "$CALL_LOG" || fail "first install did
 [[ -f "$DEPLOY_STATE_DIR/scheduler.applied" ]] || fail "scheduler apply was not recorded for rollback"
 [[ -f "$DEPLOY_STATE_DIR/ha-bridge.applied" ]] || fail "ha-bridge apply was not recorded for rollback"
 [[ -f "$DEPLOY_STATE_DIR/scheduler.before.json" ]] || fail "scheduler pre-deploy state was not recorded"
+grep -q "create secret" "$CALL_LOG" && fail "deploy.sh wrote a Secret; values must come from OpenBao/ESO"
 
 export MOCK_CONTROL_EXISTS=0
 unset CONTROL_QUEUE_STATUS || true

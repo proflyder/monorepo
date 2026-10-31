@@ -92,13 +92,19 @@
   TTL 10/15 мин, политика `ci-deploy` — read только `secret/ci/*`.
 - Поды: `kubernetes` auth через TokenReview (`system:auth-delegator` на SA
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
-  `external-secrets` подготовлена, ESO ещё не включён.
+  `external-secrets` используется External Secrets Operator (namespace
+  `external-secrets`), который создаёт Secrets приложений из OpenBao.
 - Audit — декларативный файловый девиз на отдельном PV; лог не публикуется и
   может содержать пути/metadata запросов.
 - Backup — raft snapshot в локальный PV на том же узле; offsite-копия пока
   открытый пункт, восстановление на отдельном стенде не проверялось.
-- Секреты приложений в OpenBao не переносились; HA/Hermes/scheduler
-  продолжают использовать Kubernetes Secrets.
+- Приложенческие Secrets (`scheduler-auth`, `ha-bridge-ha`,
+  `hermes-environment`, `grafana-admin`, `cloudflare-api-token`) перенесены в
+  `secret/k8s/*`; источник правды — OpenBao, Kubernetes Secrets создаёт ESO.
+  Локальные копии в `secrets/` — бэкап/bootstrap, не используются деплоем.
+- Не переносятся: `openbao-seal` (нужен до старта OpenBao), helm release
+  Secrets, SA token Secrets, TLS, выпускаемые cert-manager, служебные Secrets
+  контроллеров.
 
 ## HA / MCP / LLM
 

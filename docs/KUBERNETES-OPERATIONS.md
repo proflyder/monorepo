@@ -13,7 +13,9 @@
   - `monitoring`: kube-prometheus-stack, Loki, Alloy, Grafana;
   - `traefik`: ingress-контроллер, wildcard Certificate и IngressRoute;
   - `cert-manager`: cert-manager и ACME solver Secrets;
-  - `openbao`: OpenBao (raft, UI, auth), см. `projects/home/kubernetes/openbao/`.
+  - `openbao`: OpenBao (raft, UI, auth), см. `projects/home/kubernetes/openbao/`;
+  - `external-secrets`: External Secrets Operator, читает OpenBao и создаёт
+    Secrets приложений.
 - HAOS и add-ons MA/Matter — отдельная VM `.28`; в K3s их больше нет.
 - App PV — local-path, `Retain`; старые PV не удалять без проверки.
 
@@ -60,8 +62,11 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 - `runtime-ha` — архив старого HA Container, не активный writer.
 - `runtime-music`/`runtime-matter` удалены; tar-копии на Mac.
 
-Секреты Hermes — `Secret/hermes-environment`; Grafana — `Secret/grafana-admin`.
-Значения — только в приватных values/`secrets/`.
+Секреты Hermes (`Secret/hermes-environment`), scheduler/HA
+(`scheduler-auth`, `ha-bridge-ha`), Grafana (`grafana-admin`) и Cloudflare
+(`cloudflare-api-token`) создаются External Secrets Operator из OpenBao
+`secret/k8s/<namespace>/<name>`. Источник правды — OpenBao; локальные файлы в
+`secrets/` — только бэкап/bootstrap.
 
 ## Обновление
 
@@ -189,8 +194,10 @@ Grafana admin password — `secrets/kubernetes-research/grafana-password`.
   разрешает Service из `monitoring`/`home-assistant`. Solver-Secret
   `cloudflare-api-token` живёт в namespace `cert-manager`, потому что
   `ClusterIssuer` резолвит его в cluster resource namespace.
-- Реальные имена и `LAN_CIDR` — `secrets/home/ingress.env`; токен Cloudflare —
-  приватный файл, в Git не попадает.
+- Реальные имена и `LAN_CIDR` — `secrets/home/ingress.env`; токен Cloudflare
+  хранится в OpenBao (`secret/k8s/cert-manager/cloudflare-api-token`) и
+  попадает в Secret через ESO. `--bootstrap-secrets` — только для первой
+  установки без OpenBao/ESO.
 
 ```bash
 export KUBECONFIG=/private/path/kubeconfig
@@ -218,6 +225,26 @@ kubectl -n openbao delete pod openbao-0   # OnDelete: применяет нов�
 ```
 
 Обновление/бутстрап/backup/восстановление — `projects/home/kubernetes/openbao/README.md`.
+
+## External Secrets Operator
+
+ESO `2.14.0` в namespace `external-secrets` читает KV v2 `secret/` и создаёт
+Secrets приложений. `ClusterSecretStore/openbao` использует in-cluster Service
+`http://openbao.openbao.svc:8200`, Kubernetes auth и роль `external-secrets`
+(политика `k8s-read`, только `secret/data/k8s/*`).
+
+```bash
+export KUBECONFIG=/private/path/kubeconfig
+./projects/home/kubernetes/external-secrets/deploy.sh
+kubectl get clustersecretstore openbao
+kubectl get externalsecret -A
+kubectl -n home-assistant annotate externalsecret scheduler-auth \
+  force-sync="$(date +%s)" --overwrite   # немедленная синхронизация
+```
+
+Манифесты — рядом с проектами; таблица путей, миграция и ротация —
+`projects/home/kubernetes/external-secrets/README.md`. `deploy-home`
+проверяет `Ready` ExternalSecret перед выкаткой и не пишет их значения.
 
 ## Удалённый доступ
 

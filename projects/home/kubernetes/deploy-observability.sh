@@ -3,7 +3,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 source "$ROOT/projects/home/kubernetes/versions.sh"
 : "${KUBECONFIG:?Set KUBECONFIG to a private admin kubeconfig}"
-# Bootstrap namespaces, storage and grafana-admin Secret before running this.
+# grafana-admin is owned by External Secrets Operator (OpenBao
+# secret/k8s/monitoring/grafana-admin). Requires ESO and OpenBao; see
+# projects/home/kubernetes/external-secrets/README.md.
+kubectl apply -f "$ROOT/projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml"
+kubectl -n monitoring wait --for=condition=Ready externalsecret/grafana-admin --timeout=120s
 # Real server URL overrides belong in a private values file, never in Git.
 extra=()
 if [[ -n "${PROMETHEUS_PRIVATE_VALUES:-}" ]]; then
