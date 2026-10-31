@@ -84,8 +84,8 @@ PR со squash-merge и зелёным `ci-ok`; merge в `develop` = депло�
 Существующие upstream remote не означают разрешения публиковать наши изменения.
 
 Активный Pulsar: Rust-форк `projects/station/upstream/pulsar-rust/` (ветка
-`feat/ricardo-rust`, база upstream `v0.5.2` = `4cba44a`). База и текущие
-локальные изменения фиксируются в корневой истории через
+`main`, база upstream `v0.5.3` = `504830d`; `feat/ricardo-rust` — только
+история). База и текущие локальные изменения фиксируются в корневой истории через
 `projects/station/patches/pulsar-rust/`:
 
 ```bash

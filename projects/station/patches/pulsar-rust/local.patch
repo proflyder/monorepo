@@ -1,34 +1,317 @@
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+index 4143658..b4ec95e 100644
+--- a/.github/workflows/build.yml
++++ b/.github/workflows/build.yml
+@@ -2,7 +2,7 @@ name: build
+ 
+ on:
+   push:
+-    branches: [main, rust]
++    branches: [main]
+     tags: ['v*']
+   pull_request:
+   workflow_dispatch:
+@@ -200,5 +200,19 @@ jobs:
+             satellite/deploy/dist.sh "pulsar-${t%%:*}.tar.gz" "artifacts/installer/${t#*:}/pulsar-install"
+           done
+           sha256sum pulsar-*.bin zigbee-*.ybl pulsar-*.zip pulsar-*.tar.gz > SHA256SUMS
++          # `--latest`: the daemon finds the release through releases/latest.
+           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes \
+-            pulsar-*.bin pulsar-*.debug zigbee-*.ybl pulsar-*.zip pulsar-*.tar.gz SHA256SUMS
++            --latest pulsar-*.bin pulsar-*.debug zigbee-*.ybl pulsar-*.zip pulsar-*.tar.gz SHA256SUMS
++
++  deploy:
++    # The release is published first; the install itself waits for a human
++    # approval on the `Station` Environment in deploy-station.yml.
++    if: startsWith(github.ref, 'refs/tags/v')
++    needs: [release]
++    permissions:
++      contents: read
++      id-token: write # OpenBao GitHub OIDC login in the called workflow
++    uses: ./.github/workflows/deploy-station.yml
++    with:
++      tag: ${{ github.ref_name }}
++    secrets: inherit
+diff --git a/.github/workflows/deploy-station.yml b/.github/workflows/deploy-station.yml
+new file mode 100644
+index 0000000..83166be
+--- /dev/null
++++ b/.github/workflows/deploy-station.yml
+@@ -0,0 +1,244 @@
++name: deploy-station
++
++# Install an already published release on the station through Home Assistant.
++#
++# Nothing is built here: `build.yml` publishes the release on a `v*` tag and
++# then calls this workflow. The `Station` Environment needs a required reviewer,
++# so the install only runs after a human approved that run in the GitHub UI.
++# `workflow_dispatch` re-runs an install for a release that already exists.
++#
++# Secrets (Environment `Station`): VPN_SERVER, VPN_CERT_P12_B64,
++# VPN_CERT_PASSWORD, OPENBAO_ADDR, optional OPENBAO_ROLE (default
++# `deploy-station`). Everything needed *after* the VPN is up (HA URL, token,
++# entity) lives in OpenBao `secret/data/ci/deploy-station`; the token is revoked
++# in an `if: always()` step and never printed.
++on:
++  workflow_call:
++    inputs:
++      tag:
++        description: Release tag to install (for example v0.5.1001)
++        required: true
++        type: string
++  workflow_dispatch:
++    inputs:
++      tag:
++        description: Release tag to install (must have a published GitHub release)
++        required: true
++        type: string
++
++permissions:
++  contents: read
++
++concurrency:
++  group: station-deploy
++  cancel-in-progress: false
++
++jobs:
++  deploy:
++    runs-on: ubuntu-24.04
++    timeout-minutes: 20
++    # A human approves the deployment here; this is the only gate before the
++    # station is touched. The tag rule `v*` belongs to the Environment.
++    environment: Station
++    permissions:
++      contents: read
++      id-token: write # OpenBao auth/github OIDC (audience = OPENBAO_ADDR)
++    env:
++      TAG: ${{ inputs.tag }}
++      VPN_SERVER: ${{ secrets.VPN_SERVER }}
++      IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
++      IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
++      OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
++      OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE || 'deploy-station' }}
++    steps:
++      - uses: actions/checkout@v7
++
++      - name: Validate tag and release
++        env:
++          GH_TOKEN: ${{ github.token }}
++        run: |
++          set -euo pipefail
++          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
++            echo "::error::'$TAG' is not a release tag (vMAJOR.MINOR.PATCH)"
++            exit 1
++          fi
++          # The station's updater only reaches releases/latest, so the release
++          # must already exist and be a stable one.
++          if ! release=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
++              --json isDraft,isPrerelease 2>/dev/null); then
++            echo "::error::no GitHub release for $TAG"
++            exit 1
++          fi
++          verdict=$(RELEASE="$release" TAG="$TAG" python3 - <<'PY'
++          import json, os
++          release = json.loads(os.environ["RELEASE"])
++          tag = os.environ["TAG"]
++          if release.get("isDraft"):
++              print(f"release {tag} is a draft")
++          elif release.get("isPrerelease"):
++              print(f"release {tag} is a prerelease")
++          else:
++              print("")
++          PY
++          )
++          if [[ -n "$verdict" ]]; then
++            echo "::error::$verdict"
++            exit 1
++          fi
++          echo "release $TAG is published and stable"
++
++      - name: Install openconnect
++        run: |
++          set -euo pipefail
++          sudo apt-get update -q
++          sudo apt-get install -yq --no-install-recommends openconnect vpnc-scripts
++
++      - name: Materialise VPN credentials
++        run: |
++          set +x
++          set -euo pipefail
++          umask 077
++          CI_DIR="$RUNNER_TEMP/ci"
++          rm -rf "$CI_DIR"
++          mkdir -p "$CI_DIR"
++          chmod 700 "$CI_DIR"
++          printf '%s' "$IN_VPN_CERT_P12_B64" | base64 -d > "$CI_DIR/ci.p12"
++          printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
++          chmod 600 "$CI_DIR"/*
++          echo "VPN credentials prepared"
++
++      - name: Connect VPN (group ci)
++        run: |
++          set -euo pipefail
++          CI_DIR="$RUNNER_TEMP/ci"
++          test -n "$OPENBAO_ADDR"
++          # shellcheck disable=SC2024 # the log is user-writable; only openconnect is root
++          sudo openconnect \
++            --no-dtls \
++            --certificate "$CI_DIR/ci.p12" \
++            --passwd-on-stdin \
++            --authgroup ci \
++            --pid-file "$RUNNER_TEMP/openconnect.pid" \
++            "${VPN_SERVER%/}" \
++            < "$CI_DIR/ci.pass" > "$RUNNER_TEMP/openconnect.log" 2>&1 &
++          # The ci group routes only the K3s node; OpenBao health on 443 is the
++          # first service this job needs.
++          for _ in $(seq 1 30); do
++            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
++              "$OPENBAO_ADDR/v1/sys/health" || true)
++            if [[ -n "$code" && "$code" != "000" ]]; then
++              echo "OpenBao reachable over the VPN"
++              exit 0
++            fi
++            sleep 2
++          done
++          echo "OpenBao is not reachable over the VPN" >&2
++          tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
++          exit 1
++
++      - name: Read deploy secrets from OpenBao
++        run: |
++          set +x
++          set -euo pipefail
++          umask 077
++          CI_DIR="$RUNNER_TEMP/ci"
++          test -n "$OPENBAO_ADDR"
++          oidc=$(curl -sSf \
++            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
++            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$OPENBAO_ADDR" \
++            | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
++          echo "::add-mask::$oidc"
++          python3 - "$oidc" "$OPENBAO_ROLE" "$CI_DIR/login.json" <<'PY'
++          import json, sys
++          oidc, role, path = sys.argv[1:4]
++          with open(path, "w", encoding="utf-8") as handle:
++              json.dump({"role": role, "jwt": oidc}, handle)
++          PY
++          chmod 600 "$CI_DIR/login.json"
++          code=$(curl -sS -o "$CI_DIR/login-response.json" -w '%{http_code}' \
++            -X POST --data-binary "@$CI_DIR/login.json" \
++            "$OPENBAO_ADDR/v1/auth/github/login")
++          if [[ "$code" != "200" ]]; then
++            echo "OpenBao GitHub login failed with HTTP $code" >&2
++            exit 1
++          fi
++          python3 - "$CI_DIR/login-response.json" "$CI_DIR/openbao-token" <<'PY'
++          import json, os, sys
++          token = json.load(open(sys.argv[1], encoding="utf-8"))["auth"]["client_token"]
++          with open(sys.argv[2], "w", encoding="utf-8") as handle:
++              handle.write(token)
++          os.chmod(sys.argv[2], 0o600)
++          print(f"::add-mask::{token}")
++          PY
++          rm -f "$CI_DIR/login.json" "$CI_DIR/login-response.json"
++          code=$(curl -sS -o "$CI_DIR/deploy-station.json" -w '%{http_code}' \
++            -H "X-Vault-Token: $(cat "$CI_DIR/openbao-token")" \
++            "$OPENBAO_ADDR/v1/secret/data/ci/deploy-station")
++          if [[ "$code" != "200" ]]; then
++            echo "read secret/ci/deploy-station failed with HTTP $code" >&2
++            exit 1
++          fi
++          # KV v2 payload: {"data": {"data": {"ha_url": ..., "ha_token": ..., ...}}}.
++          # One file per value keeps them out of the command line and the logs.
++          python3 - "$CI_DIR/deploy-station.json" "$CI_DIR" <<'PY'
++          import json, os, sys
++          payload = json.load(open(sys.argv[1], encoding="utf-8"))
++          data = payload["data"]["data"]
++          for key in ("ha_url", "ha_token", "entity_id"):
++              value = data[key]
++              path = os.path.join(sys.argv[2], key)
++              with open(path, "w", encoding="utf-8") as handle:
++                  handle.write(value)
++              os.chmod(path, 0o600)
++              print(f"::add-mask::{value}")
++          PY
++          rm -f "$CI_DIR/deploy-station.json"
++          echo "deploy secrets prepared"
++
++      - name: Install ${{ inputs.tag }} through Home Assistant
++        run: |
++          set +e
++          set -o pipefail
++          CI_DIR="$RUNNER_TEMP/ci"
++          HA_URL="$(cat "$CI_DIR/ha_url")" \
++          HA_TOKEN="$(cat "$CI_DIR/ha_token")" \
++          ENTITY_ID="$(cat "$CI_DIR/entity_id")" \
++            python3 tools/ha_firmware_deploy.py --tag "$TAG" 2>&1 \
++            | tee "$CI_DIR/deploy.log"
++          status=$?
++          {
++            echo "### Station deploy"
++            echo
++            echo "- tag: \`$TAG\`"
++            if grep -q 'already installed' "$CI_DIR/deploy.log"; then
++              echo "- result: already installed"
++            else
++              grep -E 'done: before=|^error:' "$CI_DIR/deploy.log" | sed 's/^/- /' || true
++            fi
++          } >> "$GITHUB_STEP_SUMMARY"
++          exit "$status"
++
++      - name: Revoke OpenBao token
++        if: always()
++        run: |
++          set +e
++          CI_DIR="$RUNNER_TEMP/ci"
++          if [[ -s "$CI_DIR/openbao-token" ]]; then
++            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
++              -X POST -H "X-Vault-Token: $(cat "$CI_DIR/openbao-token")" \
++              "$OPENBAO_ADDR/v1/auth/token/revoke-self")
++            echo "OpenBao token revocation attempted (HTTP $code)"
++            rm -f "$CI_DIR/openbao-token"
++          fi
++
++      - name: Disconnect VPN and remove temporary files
++        if: always()
++        run: |
++          set +e
++          CI_DIR="$RUNNER_TEMP/ci"
++          if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then
++            sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
++          fi
++          sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
++          rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
++          echo "temporary deploy files removed"
 diff --git a/README.md b/README.md
-index fd071a7..ae5f47f 100644
+index 37dfb16..761b96c 100644
 --- a/README.md
 +++ b/README.md
-@@ -6,6 +6,11 @@
+@@ -9,6 +9,11 @@
  
- > Поддержка Мини 2 экспериментальная, см. [Мини 2](#мини-2).
+ > Поддержка Мини 3 экспериментальная, см. [Мини 3](docs/mini3.md).
  
 +> **Ricardo fork:** этот checkout — отдельный Rust-профиль для нашей Midi.
 +> На колонке сейчас стоит предыдущая Rust-сборка (`v0.5.0-1-g908a027`); слияние с
-+> upstream `v0.5.2` в этом checkout ещё не устанавливалось и не проходило живую
++> upstream `v0.5.3` в этом checkout ещё не устанавливалось и не проходило живую
 +> приёмку. Отличия, сборка и границы приёмки — [`RICARDO.md`](RICARDO.md).
 +
  Вместо штатного стека Яндекса (`maind`) на колонке работает небольшой нативный демон. Он говорит с
  Home Assistant по протоколу ESPHome Native API и выглядит в HA как обычное ESPHome-устройство.
  Для [Music Assistant](https://music-assistant.io/) он дополнительно является нативным
-@@ -398,9 +403,10 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
-   (aarch64/glibc 2.36 — обычный userspace Миди; 32-битный armhf/glibc 2.30 — Лайт 2, Мини 2 и
-   образы Миди с 32-битным userspace). zig 0.13 не подходит: собранные им 32-битные программы
-   падают при запуске. Другой zig можно указать как `ZIG=/путь/к/zig`;
+@@ -423,9 +428,9 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
+   Мини 2, Мини 3 и образы Миди с 32-битным userspace, у которых glibc 2.30). zig 0.13 не подходит:
+   собранные им 32-битные программы падают при запуске. Другой zig можно указать как
+   `ZIG=/путь/к/zig`;
 -- `make`, `git`, `curl`, `patch`, компилятор C для хоста (`cc`), а для библиотеки Sendspin
 -  (sendspin-cpp, единственная C++-часть сборки) — `cmake` ≥ 3.16 и `ninja`
 -  (их можно поставить через `uv tool install cmake ninja`);
-+- `make`, `git`, `curl`, `patch`, компилятор C/C++ для хоста (`cc`/`c++`), а для Sendspin
-+  (sendspin-cpp) — `cmake` ≥ 3.16 и `ninja`
-+  (их можно поставить через `uv tool install cmake ninja`). C++ также собирает
-+  on-device детектор «Рикардо» из `crates/pulsar-audio/ricardo/`;
++- `make`, `git`, `curl`, `patch`, компилятор C/C++ для хоста (`cc`/`c++`), а для библиотеки Sendspin
++  (sendspin-cpp) и on-device детектора «Рикардо» из `crates/pulsar-audio/ricardo/` — `cmake` ≥ 3.16
++  и `ninja` (их можно поставить через `uv tool install cmake ninja`);
  - `adb` из Android platform-tools.
  
  ```sh
-@@ -411,6 +417,10 @@ make -C satellite check                              # проверки на к
+@@ -436,6 +441,10 @@ make -C satellite check                              # проверки на к
  go -C installer run . 192.168.1.50                  # установщик из копии репозитория; сам вызывает make
  ```
  
@@ -41,19 +324,21 @@ index fd071a7..ae5f47f 100644
  символами для разбора отчётов о падениях. Версия берётся из `git describe` и видна в
 diff --git a/RICARDO.md b/RICARDO.md
 new file mode 100644
-index 0000000..f6bdd16
+index 0000000..d4736c6
 --- /dev/null
 +++ b/RICARDO.md
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,154 @@
 +# Ricardo profile of the Rust Pulsar fork
 +
 +This fork is the Ricardo Rust profile of Pulsar for the Station Midi
 +installation. The station currently runs the earlier Rust build
-+`v0.5.0-1-g908a027`; the upstream `v0.5.2` merge in this checkout has only
-+passed host-side checks and is not installed until live acceptance.
++`v0.5.0-1-g908a027`; the upstream `v0.5.2` / `v0.5.3` merges in this checkout
++have only passed host-side checks and are not installed until live acceptance.
 +
-+Base: `Morvex885/pulsar` `v0.5.2` (`4cba44a`), merged into `feat/ricardo-rust`
-+(previous tip `908a027` kept as a parent), branch `feat/ricardo-rust`.
++Base: `Morvex885/pulsar` `v0.5.3` (`504830d`), merged into `feat/ricardo-rust`
++(the upstream `v0.5.2` merge stays in history), branch `feat/ricardo-rust`.
++The upstream `v0.5.3` merge itself is on `feat/merge-upstream-v0.5.3` and has not
++been installed or accepted on the station yet.
 +
 +## What this profile keeps
 +
@@ -111,6 +396,52 @@ index 0000000..f6bdd16
 +Without the model the daemon starts but logs that the Ricardo detector is
 +missing; it does not silently fall back to «Алиса».
 +
++## Релизы и деплой форка
++
++Теги форка продолжают нумерацию upstream, чтобы `releases/latest` GitHub всегда указывал на
++сборку форка: `v<upstream major.minor>.<1000+N>` — например `v0.5.1001`, `v0.5.1002`; после
++merge upstream `v0.6.x` — `v0.6.1001`. Патч-номер 1000+ больше любого upstream-патча, поэтому
++сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз форка новее.
++
++1. Собрать и проверить ветку, затем поставить аннотированный тег и отправить его:
++
++   ```bash
++   git tag -a v0.5.1001 -m 'pulsar v0.5.1001'
++   git push origin v0.5.1001
++   ```
++
++2. `build.yml` на тег `v*` собирает оба бинарника, dropbear, radio и установщик, публикует
++   GitHub release (`--latest`) и запускает `deploy-station.yml`.
++3. В Actions запуск деплоя ждёт одобрения в Environment `Station` (required reviewer).
++4. После одобрения job по OIDC входит в OpenBao, поднимает VPN (группа `ci`), вызывает
++   `tools/ha_firmware_deploy.py --tag <tag>`: HA `homeassistant.update_entity` → сущность
++   «Firmware» видит тег → `update.install` → колонка скачивает, проверяет `SHA256SUMS` и
++   `--version`, меняет бинарник (старый остаётся `.prev`) и перезапускается. Скрипт ждёт
++   `installed_version == tag` и ещё 90 с следит за стабильностью; откат `supervise.sh` на
++   `.prev` или недоступность сущности дольше 30 с валят job.
++5. Проверить в HA: «Firmware» показывает установленную версию, колонка онлайн; при сомнениях —
++   `ctl.sh log` на станции.
++
++Повторный деплой уже опубликованного релиза — вручную: Actions → `deploy-station` → Run
++workflow, `tag` = существующий стабильный тег; в «Use workflow from» выбрать этот же тег
++(`gh workflow run deploy-station.yml --ref v0.5.1001 -f tag=v0.5.1001`): Environment пускает
++только теги `v*`. Если версия уже стоит, скрипт печатает
++`already installed` и выходит успешно.
++
++Откат через dispatch **невозможен**: обновлятор предлагает только более новые версии, поэтому
++старый тег не появится в `latest_version`. Откат делается на станции: `.prev` (или резервная
++копия бинарника) и `ctl.sh restart`, подробности и команды — в `docs/OPERATIONS.md`
++монорепозитория (раздел про станцию). После отката автообновление не поставит сломанный тег
++повторно (маркер `update_attempt`).
++
++Что должно быть настроено в GitHub (значения не хранятся в репозитории):
++
++- Environment `Station`: required reviewer, deployment tag rule `v*`;
++- его secrets: `VPN_SERVER`, `VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD`, `OPENBAO_ADDR`,
++  при необходимости `OPENBAO_ROLE` (по умолчанию `deploy-station`);
++- в OpenBao роль `deploy-station` для `auth/github` и секрет `secret/data/ci/deploy-station`
++  с ключами `ha_url`, `ha_token`, `entity_id` (сущность `update.<station>_firmware`).
++
 +## Verification performed
 +
 +All checks were host-side; no binary was installed and no station was touched.
@@ -152,10 +483,10 @@ index 0000000..f6bdd16
 +and restore `pulsar.prev` with `ctl.sh restart`. The previous Rust build also
 +accepts the same `wake_word=ricardo` state and model path.
 diff --git a/docs/architecture.md b/docs/architecture.md
-index 99cf9c3..ece93de 100644
+index 6fcf3c4..202911d 100644
 --- a/docs/architecture.md
 +++ b/docs/architecture.md
-@@ -307,6 +307,15 @@ println!("cargo:rustc-link-lib=c++");
+@@ -322,6 +322,15 @@ println!("cargo:rustc-link-lib=c++");
  - Ошибка dlopen / VQE / спотера логируется, handle деградированный (событий нет). PCM, который не
    открылся, не считается ошибкой старта: поток захвата пишет ошибку и повторяет открытие каждые
    2 с. Потоки останавливаются в `Drop` последнего клона handle.
@@ -168,22 +499,31 @@ index 99cf9c3..ece93de 100644
 +  sweep 2026-10-30 на v27/Midi, n=3; эмпирика, не гарантия для других команд). Без
 +  модели или `libtflite.so` детектор логирует ошибку и не даёт wake-событий; остальной
 +  фронтенд не падает.
- - `stats()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков и сырой захват для
-   `--record`.
- - Пре-ролл wake word (switch «Command right after wake word», `wake_preroll=` в `state.conf`, по
-@@ -319,8 +328,9 @@ println!("cargo:rustc-link-lib=c++");
-   `Fixed`. Поток обработки держит кольцо последних 32 чанков `VQE_OMNI_WITH_GAIN` (1,024 с) и
-   кладёт в `FrontendEvent::Wake { preroll }` звук от конца слова до подтверждающего чанка
-   включительно. Длина — правило из `Model::wake_preroll` для id модели (имя каталога, `alisa` /
--  `yandex`): чанки после 1-й стадии плюс смещение или фиксированное число; id без правила —
--  пустой пре-ролл. Значения берутся с недолётом, чтобы само слово не попало в STT (HA его из
-+  `yandex`) или для `ricardo`, когда активен кастомный детектор (его нативный каталог остаётся
-+  `alisa` как путь отката): чанки после 1-й стадии плюс смещение или фиксированное число; id без
-+  правила — пустой пре-ролл. Значения берутся с недолётом, чтобы само слово не попало в STT (HA его из
-   текста не убирает): на Лайт 2 — самый короткий замер по громким словам, на Миди все слова у
-   шумового пола и замер не отличает артефакт от короткой задержки, поэтому взято типичное
-   значение; окончательно все значения выставлены приёмкой через HA. Каждое срабатывание пишет
-@@ -370,6 +380,11 @@ println!("cargo:rustc-link-lib=c++");
+ - `stats()` / `frame()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков, размер
+   аудиочанка и сырой захват для `--record`. Формат захвата задаёт
+   `pulsar_core::model::CaptureFormat` (`S16`, либо `S32 { shift }` — S32_LE с right-justified 24
+@@ -339,12 +348,14 @@ println!("cargo:rustc-link-lib=c++");
+   `Fixed`. Поток обработки держит кольцо последних 1,024 с `VQE_OMNI_WITH_GAIN` (32 чанка по
+   32 мс, на Мини 3 и Мини — 64 по 16 мс) и кладёт в `FrontendEvent::Wake { preroll }` звук от конца
+   слова до подтверждающего чанка включительно. Длина — правило из `Model::wake_preroll` для id
+-  модели (имя каталога, `alisa` / `yandex`): чанки после 1-й стадии плюс смещение или фиксированное
+-  число; id без правила — пустой пре-ролл (у Мини правил нет). Значения берутся с недолётом, чтобы
+-  само слово не попало в STT (HA его из текста не убирает): на Лайт 2 — самый короткий замер по
+-  громким словам, на Миди все слова у шумового пола и замер не отличает артефакт от короткой
+-  задержки, поэтому взято типичное значение; окончательно все значения выставлены приёмкой через
+-  HA. Мини 3 не замерялась: её значения — длины Лайт 2 во времени. Каждое срабатывание пишет
++  модели (имя каталога, `alisa` / `yandex`) или для `ricardo`, когда активен кастомный детектор (его
++  нативный каталог остаётся `alisa` как путь отката): чанки после 1-й стадии плюс смещение или
++  фиксированное число; id без правила — пустой пре-ролл (у Мини правил нет). Значения берутся с
++  недолётом, чтобы само слово не попало в STT (HA его из текста не убирает): на Лайт 2 — самый
++  короткий замер по громким словам, на Миди все слова у шумового пола и замер не отличает артефакт
++  от короткой задержки, поэтому взято типичное значение; окончательно все значения выставлены
++  приёмкой через HA. Мини 3 не замерялась: её значения — длины Лайт 2 во времени.
++  Каждое срабатывание пишет
+   `wake timing: first_stage=<чанки> speech_end=<чанки> preroll=<чанки>` (`speech_end` — сколько
+   чанков назад уровень `VQE_OMNI` был не ниже −20 дБ от пика окна). Если имена событий 3 / 6 в
+   библиотеке не те (`spotter event table differs` в логе), якорь отключён и действует запасное
+@@ -406,6 +417,11 @@ println!("cargo:rustc-link-lib=c++");
    перезапуск потока сервером (seek / skip) не дёргает состояние медиаплеера в HA и музыкальные
    дисплеи. `stopped` завершает удерживаемый конец сразу.
  - `yield_to_local()` только шлёт `client/leave`, `streaming` синхронно не меняет.
@@ -196,10 +536,10 @@ index 99cf9c3..ece93de 100644
  ### `pulsar-hw` и `pulsar-clock`
  
 diff --git a/installer/deploy.go b/installer/deploy.go
-index 7b3703e..0e7e64c 100644
+index 3f2d39b..af4feb0 100644
 --- a/installer/deploy.go
 +++ b/installer/deploy.go
-@@ -150,6 +150,12 @@ func deployFiles(s, bin, arch string, zigbee bool) (changed, supChanged, ok bool
+@@ -173,6 +173,12 @@ func deployFiles(s, bin, arch, code string, zigbee bool) (changed, supChanged, o
  		_ = shTo(os.Stdout, s, "sync")
  	}
  
@@ -212,7 +552,7 @@ index 7b3703e..0e7e64c 100644
  	if zigbee && (!deployRadioImage(s, "zigbee-coordinator.ybl") || !deployRadioImage(s, "zigbee-router.ybl")) {
  		return
  	}
-@@ -175,6 +181,58 @@ func deployFiles(s, bin, arch string, zigbee bool) (changed, supChanged, ok bool
+@@ -198,6 +204,58 @@ func deployFiles(s, bin, arch, code string, zigbee bool) (changed, supChanged, o
  	return changed, supChanged, true
  }
  
@@ -272,10 +612,10 @@ index 7b3703e..0e7e64c 100644
  // Zigbee role that needs it is chosen. A checkout without radio/build.sh output keeps the installed
  // one.
 diff --git a/satellite/Cargo.lock b/satellite/Cargo.lock
-index 37110af..05d8ca2 100644
+index 8fd0271..4d34d51 100644
 --- a/satellite/Cargo.lock
 +++ b/satellite/Cargo.lock
-@@ -300,6 +300,7 @@ dependencies = [
+@@ -301,6 +301,7 @@ dependencies = [
  name = "pulsar-audio"
  version = "0.0.0"
  dependencies = [
@@ -4063,7 +4403,7 @@ index 0000000..0c0a516
 +
 +}  // extern "C"
 diff --git a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
-index e444aad..469efc7 100644
+index e140d67..af1031e 100644
 --- a/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
 +++ b/satellite/crates/pulsar-audio/src/bin/frontend_probe.rs
 @@ -1,10 +1,11 @@
@@ -4099,7 +4439,7 @@ index e444aad..469efc7 100644
                  other => return Err(format!("bad --wake: {}", other.unwrap_or(""))),
              },
              "--stream" => a.stream = true,
-@@ -210,9 +212,13 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
+@@ -211,9 +213,13 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
          Some((path, secs)) => Some(Recorder::create(path, m, secs)?),
          None => None,
      };
@@ -4113,8 +4453,8 @@ index e444aad..469efc7 100644
 +        custom,
          Some(PathBuf::from(COMMAND_MODEL)),
      );
-     h.set_commands(a.commands);
-@@ -239,7 +245,7 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
+     let frame = h.frame();
+@@ -242,7 +248,7 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
          tokio::select! {
              () = &mut end => break,
              ev = rx.recv() => match ev {
@@ -4123,7 +4463,7 @@ index e444aad..469efc7 100644
                      wakes += 1;
                      out!(
                          "t={:6.2}s WAKE '{phrase}' level {level_db:.1} dB preroll {} ms",
-@@ -361,6 +367,8 @@ mod tests {
+@@ -365,6 +371,8 @@ mod tests {
              (20, "yandex", true, true, true)
          );
          assert_eq!(a.record, Some((PathBuf::from("/tmp/x.wav"), 5)));
@@ -4132,1674 +4472,6 @@ index e444aad..469efc7 100644
          assert!(args("--wake bob").is_err());
          assert!(args("0").is_err());
          assert!(args("10 20").is_err());
-diff --git a/satellite/crates/pulsar-audio/src/engine/mod.rs b/satellite/crates/pulsar-audio/src/engine/mod.rs
-index 963411a..ecf76e5 100644
---- a/satellite/crates/pulsar-audio/src/engine/mod.rs
-+++ b/satellite/crates/pulsar-audio/src/engine/mod.rs
-@@ -11,6 +11,8 @@ use std::path::Path;
- 
- use log::{error, info, warn};
- 
-+use crate::ricardo::RicardoWake;
-+
- pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
- 
- pub const VQE_MODELS: &str = "/system/vendor/quasar/vqe_models";
-@@ -255,6 +257,9 @@ pub(crate) struct Engine {
-     // config), as the C++ engine's destructor freed them.
-     wake: Slot,
-     cmd: Slot,
-+    /// Optional on-device Ricardo detector. It is fed by the frontend instead of
-+    /// the native spotter while the Ricardo wake word is active.
-+    custom: Option<RicardoWake>,
-     vqe: Vqe,
-     lib: Lib,
-     /// Capture frames per VQE chunk.
-@@ -279,6 +284,7 @@ impl Engine {
-     pub fn start(
-         model: &pulsar_core::model::Model,
-         wake_dir: &Path,
-+        custom_wake_model: Option<&Path>,
-         command_dir: Option<&Path>,
-     ) -> Option<Engine> {
-         if let Err(e) = preload_deps() {
-@@ -317,6 +323,16 @@ impl Engine {
-             return None;
-         };
-         info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
-+        let custom = custom_wake_model.map(|path| match RicardoWake::new(path) {
-+            Ok(detector) => {
-+                info!("Ricardo wake word: {}", path.display());
-+                Some(detector)
-+            }
-+            Err(e) => {
-+                error!("Ricardo wake word: {e}");
-+                None
-+            }
-+        });
-         let (hit, rej) = (
-             lib.event_name(EV_FIRST_STAGE_HIT),
-             lib.event_name(EV_REJECTION_2ND),
-@@ -335,6 +351,7 @@ impl Engine {
-         let mut eng = Engine {
-             wake: Slot::new("wake word"),
-             cmd: Slot::new("command"),
-+            custom: custom.flatten(),
-             vqe,
-             lib,
-             chunk: chunk_n,
-@@ -395,6 +412,12 @@ impl Engine {
-         s
-     }
- 
-+    /// Feeds one VQE-cleaned chunk to the optional Ricardo detector.
-+    /// None: no detector was loaded.
-+    pub fn feed_custom(&mut self, pcm: &[i16]) -> Option<Result<(bool, f32), String>> {
-+        self.custom.as_mut().map(|detector| detector.feed(pcm))
-+    }
-+
-     /// Feeds the last chunk to the command spotter; its confirmed phrases.
-     pub fn feed_command(&mut self) -> Vec<String> {
-         feed(&self.vqe, self.frame, &mut self.cmd).phrases
-diff --git a/satellite/crates/pulsar-audio/src/frontend.rs b/satellite/crates/pulsar-audio/src/frontend.rs
-index 9dcce7c..829a119 100644
---- a/satellite/crates/pulsar-audio/src/frontend.rs
-+++ b/satellite/crates/pulsar-audio/src/frontend.rs
-@@ -1,7 +1,8 @@
- //! Microphone front-end: ALSA capture (mic + speaker-feedback channels, layout per Model) ->
- //! Yandex VQE (AEC / beamforming / noise reduction, per-model preset) -> Yandex phrase spotters
--//! (stock models from /system/vendor/quasar/spotter_models): the wake word ("Алиса"/"Яндекс")
--//! and, optionally, the command model ("стоп", "громче", ...).
-+//! (stock models from /system/vendor/quasar/spotter_models): the wake word ("Алиса"/"Яндекс"),
-+//! the optional on-device «Рикардо» detector, and, optionally, the command model
-+//! ("стоп", "громче", ...).
- //!
- //! Two threads: a capture thread that only drains ALSA into a FIFO, and a processing thread
- //! (VQE + spotters). The Lite 2's PDM capture allows at most ~42 ms of buffer (2048 frames at
-@@ -23,6 +24,7 @@ use pulsar_core::MusicFrame;
- use pulsar_core::model::{Model, PrerollRule};
- use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
- 
-+use crate::endpoint::{EndpointPrior, percentile_db};
- use crate::engine::{Engine, Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN, to_s16};
- use crate::spectrum::SpectrumAnalyzer;
- 
-@@ -48,7 +50,8 @@ const PROCESSING_STACK: usize = 8 << 20;
- 
- pub enum FrontendEvent {
-     /// level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC),
--    /// rounded to 0.1 dB; -100 = no data.
-+    /// rounded to 0.1 dB; -100 = no data. `audio` is the 0.5 s pre-roll ending with the chunk
-+    /// that confirmed the phrase: without it an immediate command loses its first syllables.
-     Wake {
-         phrase: String,
-         level_db: f32,
-@@ -57,6 +60,9 @@ pub enum FrontendEvent {
-         /// The `Audio` events after it continue it without a gap until
-         /// [`FrontendHandle::wake_handled`].
-         preroll: Vec<i16>,
-+        /// Levels of the wake window on the same channel as `Audio`, for the experimental
-+        /// local endpoint detector. None until a full window was seen.
-+        endpoint_prior: Option<EndpointPrior>,
-     },
-     Command {
-         word: String,
-@@ -87,25 +93,34 @@ pub struct FrontendHandle {
-     inner: Arc<Inner>,
- }
- 
--/// Starts the front-end: dlopen, VQE for the model's preset, the wake word spotter from
--/// `wake_model_dir` (e.g. .../spotter_models/activation/alisa) and, if given, the command
--/// spotter (.../spotter_models/command), then the capture and processing threads. On failure
--/// (logged, "microphone front-end failed to start") the handle works but no event ever comes.
--/// A capture device that cannot be opened is retried every 2 s.
-+/// Starts the front-end: dlopen, VQE for the model's preset, the native wake word spotter from
-+/// `wake_model_dir` (e.g. .../spotter_models/activation/alisa), the optional Ricardo detector
-+/// from `custom_wake_model`, and, if given, the command spotter
-+/// (.../spotter_models/command), then the capture and processing threads. `custom_active` selects
-+/// the Ricardo detector initially. On failure (logged, "microphone front-end failed to start")
-+/// the handle works but no event ever comes. A capture device that cannot be opened is retried
-+/// every 2 s.
- pub fn spawn(
-     model: &'static Model,
-     wake_model_dir: PathBuf,
-+    custom_wake_model: Option<PathBuf>,
-+    custom_active: bool,
-     command_model_dir: Option<PathBuf>,
- ) -> (FrontendHandle, UnboundedReceiver<FrontendEvent>) {
-     let (tx, rx) = unbounded_channel();
-     let mut inner = Inner {
--        shared: Arc::new(Shared::new()),
-+        shared: Arc::new(Shared::new(custom_active)),
-         pipe: None,
-         threads: Vec::new(),
-         _events: tx.clone(),
-     };
-     let command_dir = command_model_dir.filter(|d| !d.as_os_str().is_empty());
--    let started = match Engine::start(model, &wake_model_dir, command_dir.as_deref()) {
-+    let started = match Engine::start(
-+        model,
-+        &wake_model_dir,
-+        custom_wake_model.as_deref(),
-+        command_dir.as_deref(),
-+    ) {
-         Some(eng) => inner
-             .start_threads(model, eng, tx)
-             .inspect_err(|e| error!("audio threads: {e}"))
-@@ -135,6 +150,11 @@ impl FrontendHandle {
-         self.inner.shared.detect.store(on, Relaxed);
-     }
- 
-+    /// Selects the Ricardo detector (true) or the native spotter (false).
-+    pub fn set_custom_wake(&self, on: bool) {
-+        self.inner.shared.custom.store(on, Relaxed);
-+    }
-+
-     /// Command spotter on/off (commands without the wake word).
-     pub fn set_commands(&self, on: bool) {
-         self.inner.shared.commands.store(on, Relaxed);
-@@ -198,6 +218,8 @@ struct Shared {
-     stop_lock: Mutex<()>,
-     stop_cv: Condvar,
-     detect: AtomicBool,
-+    /// Ricardo detector (true) or native Yandex spotter (false).
-+    custom: AtomicBool,
-     commands: AtomicBool,
-     stream: AtomicBool,
-     /// `Wake` events sent and not yet handled: audio keeps coming meanwhile, so nothing is lost
-@@ -215,12 +237,13 @@ struct Shared {
- }
- 
- impl Shared {
--    fn new() -> Self {
-+    fn new(custom_active: bool) -> Self {
-         Shared {
-             running: AtomicBool::new(false),
-             stop_lock: Mutex::new(()),
-             stop_cv: Condvar::new(),
-             detect: AtomicBool::new(true),
-+            custom: AtomicBool::new(custom_active),
-             commands: AtomicBool::new(false),
-             stream: AtomicBool::new(false),
-             wake_pending: AtomicU32::new(0),
-@@ -526,6 +549,15 @@ pub(crate) fn deinterleave(
-     }
- }
- 
-+/// Wake levels for the local endpoint detector on the stream channel, once the window is full.
-+/// A partial window would count its zero padding as a -100 dB floor.
-+fn endpoint_prior(hist: &[f32; LEVEL_CHUNKS], filled: usize) -> Option<EndpointPrior> {
-+    (filled == LEVEL_CHUNKS).then(|| EndpointPrior {
-+        noise_db: percentile_db(hist, 0.10),
-+        speech_db: wake_level_db(hist),
-+    })
-+}
-+
- /// Mean of the 8 loudest of the last 47 frames (mean squares), in dBFS clamped to -100..0 and
- /// rounded to 0.1 dB: stations compare levels received as "%.1f" text, so ours must be the same
- /// number the peers see, or ties could resolve differently on each side.
-@@ -630,6 +662,25 @@ fn preroll_chunks(rule: Option<PrerollRule>, first_stage_age: Option<usize>) ->
-     }
- }
- 
-+/// Pre-roll rule for the active detector. The custom Ricardo detector has no stock model
-+/// directory, so its id is not `Engine::wake_id` (which still points at the native «Алиса»
-+/// model kept for rollback) but the `ricardo` entry of `Model::wake_preroll`.
-+fn wake_preroll_rule(model: &Model, shared: &Shared, stock_id: &str) -> Option<PrerollRule> {
-+    if !shared.preroll.load(Relaxed) {
-+        return None;
-+    }
-+    let id = if shared.custom.load(Relaxed) {
-+        "ricardo"
-+    } else {
-+        stock_id
-+    };
-+    model
-+        .wake_preroll
-+        .iter()
-+        .find(|p| p.id == id)
-+        .map(|p| p.rule)
-+}
-+
- /// "-" for None in the "wake timing" log.
- struct Chunks(Option<usize>);
- 
-@@ -659,11 +710,17 @@ fn processing(
-     // Mean square per VQE frame.
-     let mut level_hist = [0f32; LEVEL_CHUNKS];
-     let mut level_pos = 0;
-+    // The same on VQE_OMNI_WITH_GAIN, the channel the stream (and so the endpoint detector)
-+    // carries: the wake prior must not mix channels.
-+    let mut gain_hist = [0f32; LEVEL_CHUNKS];
-+    let mut gain_pos = 0;
-+    let mut gain_filled = 0usize;
-     let mut ana = SpectrumAnalyzer::new(model.capture_rate, period);
-     if !ana.ok() {
-         warn!("music analysis: unsupported capture layout");
-     }
-     let mut music_was_on = false;
-+    let mut custom_failed = false;
-     let frame = eng.frame();
-     let mut ring = PrerollRing::new(PREROLL_CHUNKS, frame);
-     // Chunks since the wake spotter's 1st-stage hit, while its verifier waits.
-@@ -703,6 +760,10 @@ fn processing(
-         }
-         if !eng.process(&mics, &spk) {
-             ring.clear();
-+            // The prior must not span a gap in the audio.
-+            gain_hist = [0.0; LEVEL_CHUNKS];
-+            gain_pos = 0;
-+            gain_filled = 0;
-             continue;
-         }
- 
-@@ -720,18 +781,67 @@ fn processing(
-         // handled holds the stream open: the owner switches streaming on only when it handles
-         // the event, and the chunks in between continue the pre-roll. `wake_pending` is read
-         // first: its Acquire pairs with `wake_handled`, after the owner's `set_streaming(true)`.
--        match eng.output(VQE_OMNI_WITH_GAIN) {
-+        let custom_active = shared.custom.load(Relaxed);
-+        let detecting = shared.detect.load(Relaxed);
-+        let mut custom_score = None;
-+        match eng.output(VQE_OMNI_WITH_GAIN).filter(|d| !d.is_empty()) {
-             Some(d) => {
--                if let Some(slot) = ring.push(d)
--                    && (shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed))
--                {
--                    let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
-+                gain_hist[gain_pos] = mean_square(d);
-+                gain_pos = (gain_pos + 1) % LEVEL_CHUNKS;
-+                gain_filled = (gain_filled + 1).min(LEVEL_CHUNKS);
-+                if let Some(slot) = ring.push(d) {
-+                    // The Ricardo detector hears the same cleaned chunk as the ring and the
-+                    // stock spotter; its confirmation then takes the pre-roll from the ring.
-+                    if custom_active && detecting && !custom_failed {
-+                        match eng.feed_custom(slot) {
-+                            Some(Ok((true, score))) => custom_score = Some(score),
-+                            Some(Ok(_)) => {}
-+                            Some(Err(e)) => {
-+                                custom_failed = true;
-+                                error!("Ricardo wake word: {e}");
-+                            }
-+                            None => {
-+                                custom_failed = true;
-+                                error!("Ricardo wake word: detector is not loaded");
-+                            }
-+                        }
-+                    }
-+                    if shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed) {
-+                        let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
-+                    }
-                 }
-             }
--            None => ring.clear(),
-+            None => {
-+                ring.clear();
-+                // A missing output is a gap: restart the prior window.
-+                gain_hist = [0.0; LEVEL_CHUNKS];
-+                gain_pos = 0;
-+                gain_filled = 0;
-+            }
-         }
- 
--        if shared.detect.load(Relaxed) {
-+        if let Some(score) = custom_score {
-+            let level_db = wake_level_db(&level_hist);
-+            let newest = (level_pos + LEVEL_CHUNKS - 1) % LEVEL_CHUNKS;
-+            let speech_end = speech_end_chunks(&level_hist, newest);
-+            let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
-+            let rule = wake_preroll_rule(model, shared, "ricardo");
-+            let n = preroll_chunks(rule, None).min(PREROLL_CHUNKS);
-+            let preroll = ring.last(n);
-+            info!(
-+                "Ricardo wake word detected (probability {score:.3}); \
-+                 wake timing: speech_end={} preroll={}",
-+                Chunks(speech_end),
-+                preroll.len() / frame
-+            );
-+            shared.wake_pending.fetch_add(1, Relaxed);
-+            let _ = tx.send(FrontendEvent::Wake {
-+                phrase: "Рикардо".into(),
-+                level_db,
-+                preroll,
-+                endpoint_prior,
-+            });
-+        } else if !custom_active && detecting {
-             first_stage_age = first_stage_age.map(|a| a + 1).filter(|&a| a < LEVEL_CHUNKS);
-             let spotted = eng.feed_wake();
-             match spotted.stage {
-@@ -743,12 +853,8 @@ fn processing(
-                 let level_db = wake_level_db(&level_hist);
-                 let newest = (level_pos + LEVEL_CHUNKS - 1) % LEVEL_CHUNKS;
-                 let speech_end = speech_end_chunks(&level_hist, newest);
--                let rule = shared
--                    .preroll
--                    .load(Relaxed)
--                    .then(|| model.wake_preroll.iter().find(|p| p.id == eng.wake_id()))
--                    .flatten()
--                    .map(|p| p.rule);
-+                let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
-+                let rule = wake_preroll_rule(model, shared, eng.wake_id());
-                 let n = preroll_chunks(rule, first_stage_age).min(PREROLL_CHUNKS);
-                 let preroll = ring.last(n);
-                 info!(
-@@ -764,6 +870,7 @@ fn processing(
-                         phrase,
-                         level_db,
-                         preroll: preroll.clone(),
-+                        endpoint_prior,
-                     });
-                 }
-             }
-@@ -864,6 +971,63 @@ mod tests {
-         assert_eq!(preroll_chunks(first(-3, 9), None), 9);
-     }
- 
-+    #[test]
-+    fn ricardo_preroll_rule_uses_the_custom_id() {
-+        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-+        // The custom detector is active: the stock model id ("alisa", kept for rollback) must
-+        // not select the rule, or the Ricardo word loses its pre-roll.
-+        let custom = Shared::new(true);
-+        assert_eq!(
-+            wake_preroll_rule(midi, &custom, "alisa"),
-+            Some(PrerollRule::Fixed(8))
-+        );
-+        // Switched back to a stock spotter: the custom entry no longer applies.
-+        let stock = Shared::new(false);
-+        assert_eq!(
-+            wake_preroll_rule(midi, &stock, "alisa"),
-+            Some(PrerollRule::Fixed(2))
-+        );
-+    }
-+
-+    #[test]
-+    fn ricardo_preroll_is_the_last_256_ms_of_the_ring() {
-+        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-+        const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
-+        let mut ring = PrerollRing::new(PREROLL_CHUNKS, FRAME);
-+        for k in 0..PREROLL_CHUNKS {
-+            ring.push(&[k as f32 / 32768.0; FRAME]);
-+        }
-+        let rule = wake_preroll_rule(midi, &Shared::new(true), "ricardo");
-+        let n = preroll_chunks(rule, None);
-+        assert_eq!(n, 8);
-+        let preroll = ring.last(n);
-+        assert_eq!(preroll.len(), n * FRAME);
-+        assert_eq!(preroll.len() / 16, 256, "milliseconds at 16 kHz");
-+        // Oldest first, ending with the chunk that confirmed the word.
-+        assert_eq!(preroll[0], (PREROLL_CHUNKS - n) as i16);
-+        assert_eq!(preroll[preroll.len() - 1], (PREROLL_CHUNKS - 1) as i16);
-+    }
-+
-+    #[test]
-+    fn preroll_off_is_empty_but_the_wake_hold_is_separate() {
-+        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-+        let shared = Shared::new(true);
-+        shared.preroll.store(false, Relaxed);
-+        let n = preroll_chunks(wake_preroll_rule(midi, &shared, "ricardo"), None);
-+        assert_eq!(n, 0);
-+        let mut ring = PrerollRing::new(PREROLL_CHUNKS, 512);
-+        ring.push(&[0.5; 512]);
-+        assert!(ring.last(n).is_empty());
-+        // `wake_pending` holds the stream open regardless of the pre-roll switch: the owner
-+        // raises it for every Wake and lowers it once after `set_streaming`.
-+        shared.wake_pending.fetch_add(1, Relaxed);
-+        assert_eq!(shared.wake_pending.load(Relaxed), 1);
-+        let _ = shared
-+            .wake_pending
-+            .try_update(AcqRel, Acquire, |v| v.checked_sub(1));
-+        assert_eq!(shared.wake_pending.load(Relaxed), 0);
-+    }
-+
-     #[test]
-     fn deinterleave_midi_and_lite2_layouts() {
-         let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-@@ -1020,7 +1184,7 @@ mod tests {
-     fn without_the_yandex_library_the_handle_is_degraded() {
-         // No /system/vendor/quasar/libs on the build host: dlopen fails.
-         let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
--        let (h, mut rx) = spawn(midi, PathBuf::from("/nonexistent"), None);
-+        let (h, mut rx) = spawn(midi, PathBuf::from("/nonexistent"), None, false, None);
-         h.set_streaming(true);
-         h.set_model(PathBuf::from("/nonexistent/2"));
-         let h2 = h.clone();
-diff --git a/satellite/crates/pulsar-audio/src/lib.rs b/satellite/crates/pulsar-audio/src/lib.rs
-index f86cc2b..80b042c 100644
---- a/satellite/crates/pulsar-audio/src/lib.rs
-+++ b/satellite/crates/pulsar-audio/src/lib.rs
-@@ -6,9 +6,13 @@
- #![deny(unsafe_op_in_unsafe_fn)]
- #![deny(clippy::undocumented_unsafe_blocks)]
- 
-+pub mod endpoint;
- pub mod engine;
- mod frontend;
-+#[allow(unsafe_code)]
-+mod ricardo;
- mod spectrum;
- 
- pub use frontend::{FrontendEvent, FrontendHandle, FrontendStats, spawn};
-+pub use ricardo::RicardoWake;
- pub use spectrum::SpectrumAnalyzer;
-diff --git a/satellite/crates/pulsar-audio/src/ricardo.rs b/satellite/crates/pulsar-audio/src/ricardo.rs
-new file mode 100644
-index 0000000..312a712
---- /dev/null
-+++ b/satellite/crates/pulsar-audio/src/ricardo.rs
-@@ -0,0 +1,87 @@
-+//! Safe wrapper around the C++ microWakeWord detector (`ricardo/microwakeword.cpp`).
-+//!
-+//! The detector is fed the same 16 kHz, VQE-cleaned `VQE_OMNI_WITH_GAIN` stream
-+//! that the native Yandex spotter uses. It owns its streaming feature state and
-+//! resets it after a hit; callers only add the 0.5 s pre-roll.
-+
-+use std::ffi::{CString, c_char, c_void};
-+use std::os::unix::ffi::OsStrExt as _;
-+use std::path::Path;
-+use std::ptr::NonNull;
-+
-+unsafe extern "C" {
-+    fn mww_create(model_path: *const c_char) -> *mut c_void;
-+    fn mww_destroy(handle: *mut c_void);
-+    fn mww_feed(handle: *mut c_void, pcm: *const i16, samples: usize, score: *mut f32) -> i32;
-+    fn mww_reset(handle: *mut c_void) -> i32;
-+}
-+
-+/// The on-device "Рикардо" detector. Use only from the audio processing thread.
-+pub struct RicardoWake {
-+    raw: NonNull<c_void>,
-+}
-+
-+impl RicardoWake {
-+    /// Loads the model and opens the firmware's `libtflite.so`.
-+    pub fn new(model: &Path) -> Result<Self, String> {
-+        let path = CString::new(model.as_os_str().as_bytes())
-+            .map_err(|_| format!("{}: NUL in path", model.display()))?;
-+        // SAFETY: the C++ function copies/reads the NUL-terminated path and
-+        // returns an opaque handle owned by this wrapper.
-+        let raw = unsafe { mww_create(path.as_ptr()) };
-+        let raw = NonNull::new(raw).ok_or_else(|| format!("cannot load {}", model.display()))?;
-+        Ok(Self { raw })
-+    }
-+
-+    /// Feeds one VQE chunk. Ok((true, score)) on a detection, Ok((false, _))
-+    /// otherwise; Err after the detector disabled itself.
-+    pub fn feed(&mut self, pcm: &[i16]) -> Result<(bool, f32), String> {
-+        let mut score = -1.0f32;
-+        // SAFETY: `raw` is a live handle from mww_create; `pcm` is valid for
-+        // the call and `score` points to a local.
-+        let rc = unsafe { mww_feed(self.raw.as_ptr(), pcm.as_ptr(), pcm.len(), &mut score) };
-+        match rc {
-+            0 => Ok((false, score)),
-+            1 => Ok((true, score)),
-+            _ => Err("microWakeWord disabled itself".into()),
-+        }
-+    }
-+
-+    /// Resets the streaming state (normally the detector does this after a hit).
-+    #[allow(dead_code, reason = "kept for diagnostics and future reconfiguration")]
-+    pub fn reset(&mut self) -> Result<(), String> {
-+        // SAFETY: live handle, no aliasing.
-+        if unsafe { mww_reset(self.raw.as_ptr()) } == 0 {
-+            Ok(())
-+        } else {
-+            Err("microWakeWord reset failed".into())
-+        }
-+    }
-+}
-+
-+// The detector is constructed on the main thread and moved once to the audio
-+// processing thread before it is fed; after that only that thread touches it.
-+// The C++ object has no thread-local state of its own.
-+//
-+// SAFETY: the handle is not shared: ownership moves to exactly one processing
-+// thread before any mww_feed call, and mww_destroy runs after that thread stops.
-+unsafe impl Send for RicardoWake {}
-+
-+impl Drop for RicardoWake {
-+    fn drop(&mut self) {
-+        // SAFETY: the handle is owned by this wrapper and destroyed once.
-+        unsafe { mww_destroy(self.raw.as_ptr()) };
-+    }
-+}
-+
-+#[cfg(test)]
-+mod tests {
-+    use super::*;
-+
-+    #[test]
-+    fn missing_model_is_an_error() {
-+        // No libtflite.so or model on the build host: the C++ bridge must
-+        // report failure instead of returning a dangling handle.
-+        assert!(RicardoWake::new(Path::new("/nonexistent/ricardo.tflite")).is_err());
-+    }
-+}
-diff --git a/satellite/crates/pulsar-core/src/model.rs b/satellite/crates/pulsar-core/src/model.rs
-index bb6e014..1e5ebf9 100644
---- a/satellite/crates/pulsar-core/src/model.rs
-+++ b/satellite/crates/pulsar-core/src/model.rs
-@@ -148,6 +148,14 @@ const CUCUMBER_PREROLL: &[WakePreroll] = &[
-         id: "yandex",
-         rule: PrerollRule::Fixed(2),
-     },
-+    // The fork's own «Рикардо» microWakeWord detector (no stock model directory, so the
-+    // front-end looks it up under this id). 8 chunks = 256 ms: the smallest relative front cut
-+    // that removed the wake remnant while all three commands transcribed exactly in the
-+    // 2026-10-30 v27/Midi capture sweep (n=3, empirical; not a guarantee for other commands).
-+    WakePreroll {
-+        id: "ricardo",
-+        rule: PrerollRule::Fixed(8),
-+    },
- ];
- // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
- // (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed. Chunks from
-diff --git a/satellite/crates/pulsar-esphome/src/lib.rs b/satellite/crates/pulsar-esphome/src/lib.rs
-index 47a714b..0744ef7 100644
---- a/satellite/crates/pulsar-esphome/src/lib.rs
-+++ b/satellite/crates/pulsar-esphome/src/lib.rs
-@@ -96,6 +96,14 @@ impl ApiHandle {
-         self.send(Cmd::VoiceSendAudio(pcm));
-     }
- 
-+    /// Graceful end of the microphone audio (`VoiceAssistantAudio.end = true`). Home Assistant
-+    /// treats it as `handle_stop(False)` and finishes the current stage on what it already has,
-+    /// unlike [`Self::voice_request_stop`], which sends `VoiceAssistantRequest.start = false`
-+    /// (an abort). The detector in the controller sends at most one per dialog.
-+    pub fn voice_send_audio_end(&self) {
-+        self.send(Cmd::VoiceAudioEnd);
-+    }
-+
-     /// VoiceAssistantAnnounceFinished for an HA announcement.
-     pub fn voice_announce_finished(&self, success: bool) {
-         self.send(Cmd::VoiceAnnounceFinished(success));
-diff --git a/satellite/crates/pulsar-esphome/src/server.rs b/satellite/crates/pulsar-esphome/src/server.rs
-index 1968139..7cf74be 100644
---- a/satellite/crates/pulsar-esphome/src/server.rs
-+++ b/satellite/crates/pulsar-esphome/src/server.rs
-@@ -185,9 +185,14 @@ pub(crate) struct Shared {
- }
- 
- pub(crate) enum Cmd {
--    VoiceRequestStart { run: u64, phrase: String },
-+    VoiceRequestStart {
-+        run: u64,
-+        phrase: String,
-+    },
-     VoiceRequestStop,
-     VoiceSendAudio(Vec<i16>),
-+    /// VoiceAssistantAudio{end=true}: graceful end of the audio stream, not an abort.
-+    VoiceAudioEnd,
-     VoiceAnnounceFinished(bool),
-     VoiceAnswerFinished(bool),
-     SetActiveWakeWords(Vec<String>),
-@@ -1413,10 +1418,14 @@ impl Server {
-         match cmd {
-             Cmd::VoiceRequestStart { run, phrase } => self.voice_request_start(run, &phrase),
-             // Stale: meant for the run of the previous owner.
--            Cmd::VoiceRequestStop | Cmd::VoiceSendAudio(_) | Cmd::VoiceAnswerFinished(_)
-+            Cmd::VoiceRequestStop
-+            | Cmd::VoiceSendAudio(_)
-+            | Cmd::VoiceAudioEnd
-+            | Cmd::VoiceAnswerFinished(_)
-                 if self.voice_stale => {}
-             Cmd::VoiceRequestStop => self.voice_request_stop(),
-             Cmd::VoiceSendAudio(pcm) => self.voice_send_audio(&pcm),
-+            Cmd::VoiceAudioEnd => self.voice_send_audio_end(),
-             Cmd::VoiceAnnounceFinished(success) | Cmd::VoiceAnswerFinished(success) => {
-                 self.voice_announce_finished(success);
-             }
-@@ -1479,6 +1488,18 @@ impl Server {
-         self.send_msg(vc, msg::VA_AUDIO, &w);
-     }
- 
-+    /// `VoiceAssistantAudio{end = true}` with no data: the graceful "the talker finished"
-+    /// signal (aioesphomeapi `handle_stop(False)`), distinct from the aborting
-+    /// `VoiceAssistantRequest{start = false}` of [`Self::voice_request_stop`].
-+    fn voice_send_audio_end(&mut self) {
-+        let Some(vc) = self.voice_client() else {
-+            return;
-+        };
-+        let mut w = Writer::new();
-+        w.boolean(2, true, false);
-+        self.send_msg(vc, msg::VA_AUDIO, &w);
-+    }
-+
-     fn voice_announce_finished(&mut self, success: bool) {
-         let Some(vc) = self.voice_client() else {
-             return;
-diff --git a/satellite/crates/pulsar-esphome/src/server/tests.rs b/satellite/crates/pulsar-esphome/src/server/tests.rs
-index 4cdaa99..96b56a6 100644
---- a/satellite/crates/pulsar-esphome/src/server/tests.rs
-+++ b/satellite/crates/pulsar-esphome/src/server/tests.rs
-@@ -542,6 +542,11 @@ async fn voice_owner_hands_over() {
-             h.voice_send_audio(vec![1, -2]);
-             let m = b.expect(msg::VA_AUDIO).await;
-             assert_eq!(field(&m, 1).unwrap().data, [1, 0, 0xfe, 0xff]);
-+            // Graceful end: VoiceAssistantAudio.end = true, no data. Not a stop request.
-+            h.voice_send_audio_end();
-+            let m = b.expect(msg::VA_AUDIO).await;
-+            assert!(field(&m, 1).is_none());
-+            assert!(field(&m, 2).unwrap().boolean());
-             h.voice_announce_finished(true);
-             let m = b.expect(msg::VA_ANNOUNCE_FINISHED).await;
-             assert!(field(&m, 1).unwrap().boolean());
-@@ -577,6 +582,7 @@ async fn voice_owner_hands_over() {
-             // Without an owner the voice calls send nothing.
-             h.voice_request_start("x");
-             h.voice_send_audio(vec![1]);
-+            h.voice_send_audio_end();
-             h.voice_request_stop();
-             assert!(a.sync().await.is_empty());
- 
-diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
-index 6369f73..d642457 100644
---- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
-+++ b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
-@@ -376,6 +376,16 @@ void ss_leave(ss_client *c) {
-   }
- }
- 
-+void ss_disconnect_restart(ss_client *c) {
-+  if (!c) return;
-+  try {
-+    // Posts the request; the client's stop() final tick applies it before its shutdown pass
-+    // would send reason "shutdown" for every connection still open.
-+    c->client.disconnect(ss::SendspinGoodbyeReason::RESTART);
-+  } catch (...) {
-+  }
-+}
-+
- void ss_confirm_pairing_window(ss_client *c) {
-   try {
-     c->client.confirm_pairing_window();
-diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
-index e409ce9..c046c10 100644
---- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
-+++ b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
-@@ -141,6 +141,9 @@ void ss_player_update_volume(ss_client *c, uint8_t volume);
- void ss_player_update_muted(ss_client *c, bool muted);
- bool ss_controller_send(ss_client *c, uint8_t command);  // SS_CMD_*
- void ss_leave(ss_client *c);
-+// client/goodbye with reason "restart": the daemon restarts and will reconnect. For a daemon
-+// that is deliberately stopped (enabled file removed), let stop() send "shutdown" instead.
-+void ss_disconnect_restart(ss_client *c);
- void ss_confirm_pairing_window(ss_client *c);
- // Inside load_blob only: stores the loaded bytes. false: out of memory.
- bool ss_blob_set(ss_blob *blob, const uint8_t *data, size_t len);
-diff --git a/satellite/crates/pulsar-sendspin/src/ffi.rs b/satellite/crates/pulsar-sendspin/src/ffi.rs
-index 1151792..a4d0811 100644
---- a/satellite/crates/pulsar-sendspin/src/ffi.rs
-+++ b/satellite/crates/pulsar-sendspin/src/ffi.rs
-@@ -187,6 +187,7 @@ unsafe extern "C" {
-     fn ss_player_update_muted(c: *mut SsClient, muted: bool);
-     fn ss_controller_send(c: *mut SsClient, command: u8) -> bool;
-     fn ss_leave(c: *mut SsClient);
-+    fn ss_disconnect_restart(c: *mut SsClient);
-     fn ss_confirm_pairing_window(c: *mut SsClient);
-     fn ss_blob_set(blob: *mut SsBlob, data: *const u8, len: usize) -> bool;
- }
-@@ -712,6 +713,13 @@ impl<L: Listener> Client<L> {
-         unsafe { ss_leave(self.raw.as_ptr()) }
-     }
- 
-+    /// Ask the next stop() to send client/goodbye `restart` instead of the shutdown pass's
-+    /// `shutdown`: the server (Music Assistant) redials a restarting client.
-+    pub(crate) fn disconnect_restart(&self) {
-+        // SAFETY: as `start`.
-+        unsafe { ss_disconnect_restart(self.raw.as_ptr()) }
-+    }
-+
-     pub(crate) fn confirm_pairing_window(&self) {
-         // SAFETY: as `start`.
-         unsafe { ss_confirm_pairing_window(self.raw.as_ptr()) }
-diff --git a/satellite/crates/pulsar-sendspin/src/service.rs b/satellite/crates/pulsar-sendspin/src/service.rs
-index 93837c2..d254e3d 100644
---- a/satellite/crates/pulsar-sendspin/src/service.rs
-+++ b/satellite/crates/pulsar-sendspin/src/service.rs
-@@ -160,6 +160,16 @@ impl SendspinHandle {
-         self.client.is_connected()
-     }
- 
-+    /// The daemon is about to be restarted by its supervisor: send `client/goodbye` with reason
-+    /// `restart` so Music Assistant redials this player. Without it the library's stop() sends
-+    /// `shutdown`, after which MA deliberately does not reconnect until its provider restarts.
-+    pub fn goodbye_restart(&self) {
-+        if self.client.is_connected() {
-+            info!("sendspin: goodbye restart (daemon restarts)");
-+            self.client.disconnect_restart();
-+        }
-+    }
-+
-     /// Software gain 0..1 applied to Sendspin audio (ramped), used for ducking.
-     pub fn set_duck_gain(&self, g: f32) {
-         self.ctx.sink.set_gain(g);
-diff --git a/satellite/crates/pulsar-sendspin/src/stub.rs b/satellite/crates/pulsar-sendspin/src/stub.rs
-index 21763e7..2c050ae 100644
---- a/satellite/crates/pulsar-sendspin/src/stub.rs
-+++ b/satellite/crates/pulsar-sendspin/src/stub.rs
-@@ -44,6 +44,10 @@ impl SendspinHandle {
-     pub fn confirm_pairing_window(&self) {
-         match self.never {}
-     }
-+
-+    pub fn goodbye_restart(&self) {
-+        match self.never {}
-+    }
- }
- 
- pub fn spawn(
-diff --git a/satellite/crates/pulsar/src/controller/entities.rs b/satellite/crates/pulsar/src/controller/entities.rs
-index 433667f..138fddb 100644
---- a/satellite/crates/pulsar/src/controller/entities.rs
-+++ b/satellite/crates/pulsar/src/controller/entities.rs
-@@ -344,12 +344,19 @@ impl Controller {
-         let Some(first) = ids.into_iter().next() else {
-             return;
-         };
-+        if !matches!(first.as_str(), "alisa" | "yandex" | "ricardo") {
-+            return;
-+        }
-         if first == self.st.wake_word {
-             return;
-         }
-         self.st.wake_word = first;
-         info!("wake word -> {}", self.st.wake_word);
--        self.mic.set_model(model_dir(&self.st.wake_word));
-+        let custom = self.st.wake_word == "ricardo";
-+        self.mic.set_custom_wake(custom);
-+        if !custom {
-+            self.mic.set_model(model_dir(&self.st.wake_word));
-+        }
-         self.api
-             .set_active_wake_words(vec![self.st.wake_word.clone()]);
-         self.persist();
-diff --git a/satellite/crates/pulsar/src/controller/logic.rs b/satellite/crates/pulsar/src/controller/logic.rs
-index 687892b..bf76f00 100644
---- a/satellite/crates/pulsar/src/controller/logic.rs
-+++ b/satellite/crates/pulsar/src/controller/logic.rs
-@@ -237,13 +237,6 @@ pub fn command_of(word: &str) -> Option<VoiceCommand> {
-     })
- }
- 
--/// Within the window after the wake word that opened this dialog: HA may end the speech of a
--/// short "Алиса, громче" (PROCESSING) before the command spotter confirms the word.
--pub fn after_wake(phase: Phase, now: i64, listen_started_ms: i64) -> bool {
--    matches!(phase, Phase::Listening | Phase::Processing)
--        && now - listen_started_ms < COMMAND_AFTER_WAKE_MS
--}
--
- /// Music of this station: playing or loading on the HA media channel or as a Sendspin stream, or
- /// paused / ended less than PAUSED_MUSIC_MS ago (Sendspin: its server still connected).
- /// `*_since`: when the media channel paused / the Sendspin stream ended; None = not since start.
-diff --git a/satellite/crates/pulsar/src/controller/logic/tests.rs b/satellite/crates/pulsar/src/controller/logic/tests.rs
-index 4aad396..84b0243 100644
---- a/satellite/crates/pulsar/src/controller/logic/tests.rs
-+++ b/satellite/crates/pulsar/src/controller/logic/tests.rs
-@@ -185,17 +185,6 @@ fn command_words() {
-     }
- }
- 
--#[test]
--fn command_gating() {
--    // The window after the wake word: 2.5 s of LISTENING / PROCESSING.
--    assert!(after_wake(Phase::Listening, 12_499, 10_000));
--    assert!(!after_wake(Phase::Listening, 12_500, 10_000));
--    assert!(after_wake(Phase::Processing, 12_499, 10_000));
--    assert!(!after_wake(Phase::Processing, 12_500, 10_000));
--    assert!(!after_wake(Phase::Idle, 10_001, 10_000));
--    assert!(!after_wake(Phase::Speaking, 10_001, 10_000));
--}
--
- #[test]
- fn music_ownership() {
-     use PlayState as P;
-diff --git a/satellite/crates/pulsar/src/controller/media.rs b/satellite/crates/pulsar/src/controller/media.rs
-index a0f00ba..dd605cf 100644
---- a/satellite/crates/pulsar/src/controller/media.rs
-+++ b/satellite/crates/pulsar/src/controller/media.rs
-@@ -107,6 +107,9 @@ impl Controller {
-         );
-         self.api.publish_media(s, self.st.volume, self.st.muted);
-         self.update_music();
-+        // The local command spotter follows playback: on while music/announcement/
-+        // timer speech plays, off in silence and during a dialog.
-+        self.update_commands();
-     }
- 
-     pub(super) fn update_music(&self) {
-diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
-index 79b3478..b774610 100644
---- a/satellite/crates/pulsar/src/controller/mod.rs
-+++ b/satellite/crates/pulsar/src/controller/mod.rs
-@@ -32,8 +32,13 @@ use logic::{HaTimer, Phase, RunBinding};
- 
- const MODELS: &str = "/system/vendor/quasar/spotter_models/activation/";
- const COMMAND_MODEL: &str = "/system/vendor/quasar/spotter_models/command";
-+const RICARDO_MODEL: &str = "/data/pulsar/wakewords/ru_ricardo_mww.tflite";
- const SOUNDS: &str = "/system/vendor/quasar/sounds/";
- 
-+/// The Ricardo installation uses the station only as an ESPHome/Sendspin endpoint;
-+/// the Yandex Zigbee radio stays untouched (the HA Zigbee coordinator is elsewhere).
-+const ENABLE_ZIGBEE: bool = false;
-+
- const DUCK_GAIN: f32 = 0.15;
- const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
- // Longest wait for the next pipeline event before the dialog is given up locally. HA's voice
-@@ -42,9 +47,10 @@ const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
- // starts), and conversation agents (LLMs with tool calls) may think for a minute or more.
- const LISTEN_TIMEOUT_MS: u64 = 30_000;
- const PROCESS_TIMEOUT_MS: u64 = 120_000;
--// Updates: releases of this repository on GitHub. The first check waits for the network after
--// boot; an automatic install waits until the speaker is idle (it restarts the daemon).
--const UPDATE_REPO: &str = "Morvex885/pulsar";
-+// Updates: releases of this fork on GitHub, never upstream. The first check waits for the
-+// network after boot; auto_update stays off by default, so a custom binary is not replaced
-+// silently.
-+const UPDATE_REPO: &str = "proflyder/pulsar";
- const UPDATE_FIRST_CHECK_MS: u64 = 60_000;
- const UPDATE_CHECK_PERIOD_MS: u64 = 6 * 3_600_000;
- const UPDATE_IDLE_RETRY_MS: u64 = 10 * 60_000;
-@@ -169,10 +175,15 @@ pub struct Controller {
-     arb_phrase: String,
-     arb_level: f32,
-     arb_audio: Vec<i16>,
--    arb_command: String,
-+    /// Samples in `arb_audio` that came with the wake event; the rest arrived after it (live
-+    /// post-wake speech held during arbitration).
-+    arb_boundary: usize,
-+    arb_endpoint: Option<pulsar_audio::endpoint::EndpointPrior>,
-     /// Another station answers the wake word just heard.
-     commands_blocked_until_ms: i64,
-     run: RunBinding,
-+    /// Experimental local end-of-utterance detector (opt-in, see `PULSAR_LOCAL_ENDPOINTING`).
-+    endpoint: Option<pulsar_audio::endpoint::EndpointRun>,
-     /// voice_request_stop already sent for this dialog's run.
-     stop_sent: bool,
-     /// Id of the last voice_request_start: VoiceStartFailed / VoiceAudioOverflow of another
-@@ -247,7 +258,11 @@ fn clock_face_index(name: &str) -> i32 {
- }
- 
- fn model_dir(id: &str) -> PathBuf {
--    PathBuf::from(format!("{MODELS}{id}"))
-+    if id == "ricardo" {
-+        PathBuf::from(RICARDO_MODEL)
-+    } else {
-+        PathBuf::from(format!("{MODELS}{id}"))
-+    }
- }
- 
- /// C++ `uint8_t(x * 255)`.
-@@ -290,8 +305,8 @@ impl Controller {
-             VERSION,
-             BUILD_TIME,
-         );
--        if st.wake_word != "alisa" && st.wake_word != "yandex" {
--            st.wake_word = "alisa".into();
-+        if st.wake_word != "alisa" && st.wake_word != "yandex" && st.wake_word != "ricardo" {
-+            st.wake_word = "ricardo".into();
-         }
-         let case_colors = pulsar_hw::case_colors();
-         let dir = logic::state_dir(state_path.as_os_str());
-@@ -323,6 +338,11 @@ impl Controller {
-                     phrase: "Яндекс".into(),
-                     languages: vec!["ru".into()],
-                 },
-+                WakeWordInfo {
-+                    id: "ricardo".into(),
-+                    phrase: "Рикардо".into(),
-+                    languages: vec!["ru".into()],
-+                },
-             ],
-             active_wake_words: vec![st.wake_word.clone()],
-             light_effects: strings(pulsar_hw::effect_names()),
-@@ -330,7 +350,7 @@ impl Controller {
-             music_styles: strings(pulsar_hw::music_styles()),
-             case_colors: with_none(case_colors.clone()),
-             clock_music_styles: strings(pulsar_clock::music_styles()),
--            zigbee_modes: if model.zigbee_tty.is_empty() {
-+            zigbee_modes: if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
-                 Vec::new()
-             } else {
-                 pulsar_zigbee::ROLES
-@@ -431,9 +451,17 @@ impl Controller {
-             }
-         };
-         let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
-+        let custom_wake = st.wake_word == "ricardo";
-         let (mic, mic_rx) = pulsar_audio::spawn(
-             model,
--            model_dir(&st.wake_word),
-+            if custom_wake {
-+                // Native spotters stay available for a rollback to «Алиса»/«Яндекс».
-+                model_dir("alisa")
-+            } else {
-+                model_dir(&st.wake_word)
-+            },
-+            Some(PathBuf::from(RICARDO_MODEL)),
-+            custom_wake,
-             Some(PathBuf::from(COMMAND_MODEL)),
-         );
-         mic.set_preroll(st.wake_preroll);
-@@ -489,7 +517,7 @@ impl Controller {
-             None
-         };
- 
--        let (zigbee, zigbee_rx) = if model.zigbee_tty.is_empty() {
-+        let (zigbee, zigbee_rx) = if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
-             (None, None)
-         } else {
-             let zcfg = ZigbeeConfig {
-@@ -568,9 +596,11 @@ impl Controller {
-             arb_phrase: String::new(),
-             arb_level: -100.0,
-             arb_audio: Vec::new(),
--            arb_command: String::new(),
-+            arb_boundary: 0,
-+            arb_endpoint: None,
-             commands_blocked_until_ms: 0,
-             run: RunBinding::default(),
-+            endpoint: None,
-             stop_sent: false,
-             voice_run: 0,
-             tts_url: String::new(),
-@@ -758,15 +788,16 @@ impl Controller {
-                 phrase,
-                 level_db,
-                 preroll,
-+                endpoint_prior,
-             } => {
--                self.on_wake(&phrase, level_db, preroll);
-+                self.on_wake(&phrase, level_db, preroll, endpoint_prior);
-                 // After on_wake has switched streaming on where the wake word starts a request.
-                 self.mic.wake_handled();
-             }
--            FrontendEvent::Command { word } => self.on_command(&word, false),
-+            FrontendEvent::Command { word } => self.on_command(&word),
-             FrontendEvent::Audio(pcm) => {
-                 if self.phase == Phase::Listening {
--                    self.api.voice_send_audio(pcm);
-+                    self.on_listening_audio(pcm);
-                 } else if self.arbitrating {
-                     // The request goes on with what was said right after the wake word.
-                     self.arb_audio.extend_from_slice(&pcm);
-@@ -801,6 +832,15 @@ impl Controller {
-         self.state.flush(&self.st);
-     }
- 
-+    /// The supervisor will start this daemon again (the `enabled` file exists): promise the
-+    /// Sendspin server a reconnect before the client stops, otherwise its stop() sends
-+    /// `shutdown` and Music Assistant deliberately stops redialing this player.
-+    pub fn promise_sendspin_restart(&self) {
-+        if let Some(ss) = &self.sendspin {
-+            ss.goodbye_restart();
-+        }
-+    }
-+
-     fn mic_muted(&self) -> bool {
-         self.st.mic_muted || self.hw_mic_muted
-     }
-diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
-index a40b394..08a62e9 100644
---- a/satellite/crates/pulsar/src/controller/voice.rs
-+++ b/satellite/crates/pulsar/src/controller/voice.rs
-@@ -4,6 +4,7 @@
- use std::collections::HashMap;
- 
- use log::{debug, info, warn};
-+use pulsar_audio::endpoint::{EndpointPrior, EndpointRun, pcm_level_db};
- use pulsar_core::{ClockShot, UiState, now_ms};
- use pulsar_esphome::{AnnounceRequest, TimerEvent, TimerInfo, VaEvent};
- use pulsar_lan::arbiter::Claim;
-@@ -53,7 +54,7 @@ impl Controller {
-                         && !self.timer_ringing
-                         && !self.mic_muted()
-                     {
--                        self.start_pipeline("", false, Vec::new());
-+                        self.start_pipeline("", false, Vec::new(), Vec::new(), None);
-                     }
-                     self.end_announce();
-                 }
-@@ -107,7 +108,13 @@ impl Controller {
- 
-     // ---------------- wake word ----------------
- 
--    pub(super) fn on_wake(&mut self, phrase: &str, level_db: f32, preroll: Vec<i16>) {
-+    pub(super) fn on_wake(
-+        &mut self,
-+        phrase: &str,
-+        level_db: f32,
-+        preroll: Vec<i16>,
-+        endpoint_prior: Option<EndpointPrior>,
-+    ) {
-         if self.mic_muted() {
-             return;
-         }
-@@ -122,12 +129,16 @@ impl Controller {
-             }
-             return self.stop_timer_ring();
-         }
--        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
--            return;
-+        // As stock Alice: a repeated wake word replaces the call in progress instead of being
-+        // ignored. The old call is ended only when this station starts the new dialog
-+        // (answer_wake): a station that loses wake arbitration keeps its answer, and its busy
-+        // claim still counts SPEAKING. A pending claim is replaced by this wake word.
-+        if self.arbitrating {
-+            self.cancel_arbitration();
-         }
-         // Without the HA pipeline this station could win and stay silent: it does not take part.
-         if !self.arbitration_on() || !self.api.voice_subscribed() {
--            return self.answer_wake(phrase, preroll);
-+            return self.answer_wake(phrase, preroll, Vec::new(), endpoint_prior);
-         }
-         self.arbitrating = true;
-         // A station that lost the previous wake word may win this one.
-@@ -135,33 +146,55 @@ impl Controller {
-         self.arb_phrase = phrase.to_owned();
-         self.arb_level = level_db;
-         self.arb_audio = preroll;
--        self.arb_command.clear();
-+        // Everything after this point is live post-wake speech held during the decision; the
-+        // detector must not treat it as pre-roll evidence.
-+        self.arb_boundary = self.arb_audio.len();
-+        self.arb_endpoint = endpoint_prior;
-         self.mic.set_streaming(true);
-         self.update_ui();
-         let busy = self.phase == Phase::Speaking || self.announcing;
-         self.arb_claim = Some(self.arbiter.claim(&self.st.wake_word, level_db, busy, true));
-     }
- 
--    fn answer_wake(&mut self, phrase: &str, preroll: Vec<i16>) {
-+    fn answer_wake(
-+        &mut self,
-+        phrase: &str,
-+        preroll: Vec<i16>,
-+        live: Vec<i16>,
-+        endpoint_prior: Option<EndpointPrior>,
-+    ) {
-         if self.timer_ringing {
-             return self.stop_timer_ring();
-         }
-+        // A repeated wake word: a LISTENING / PROCESSING dialog is ended, its run stopped, and
-+        // RunBinding keeps the replaced run's late RUN_END from ending the new dialog. While
-+        // SPEAKING the answer is only cut, as before (the new start replaces its dialog id).
-+        // ESPHome pipeline events carry no run id: a run replaced before its RUN_START cannot be
-+        // told apart from the new one if that RUN_START was still on the wire.
-         if matches!(self.phase, Phase::Listening | Phase::Processing) {
--            return;
--        }
--        if self.phase == Phase::Speaking || self.announcing {
-+            info!("wake word: replacing the active dialog");
-+            self.interrupt_speech();
-+            self.finish_interaction();
-+        } else if self.phase == Phase::Speaking || self.announcing {
-             self.interrupt_speech(); // barge-in: cut the answer short
-         }
--        self.start_pipeline(phrase, true, preroll);
-+        self.start_pipeline(phrase, true, preroll, live, endpoint_prior);
-     }
- 
-     pub(super) fn arbitration_done(&mut self, won: bool, best: &Claim, peers: usize) {
-         self.arbitrating = false;
-         self.arb_claim = None;
--        let audio = std::mem::take(&mut self.arb_audio);
--        let command = std::mem::take(&mut self.arb_command);
-+        let mut audio = std::mem::take(&mut self.arb_audio);
-+        let split = self.arb_boundary.min(audio.len());
-+        let live = audio.split_off(split);
-+        self.arb_boundary = 0;
-+        let prior = self.arb_endpoint.take();
-         if !won {
--            self.mic.set_streaming(false);
-+            // A dialog that was already listening keeps streaming: this wake word replaced
-+            // nothing unless this station answers it.
-+            if self.phase != Phase::Listening {
-+                self.mic.set_streaming(false);
-+            }
-             info!(
-                 "wake word: {} answers ({}{:.1} dB, ours {:.1} dB)",
-                 best.station,
-@@ -175,16 +208,10 @@ impl Controller {
-             return;
-         }
-         info!("wake word: this station answers ({peers} other station(s) heard it)");
--        if !command.is_empty() {
--            // "Алиса, громче": handled locally, as right after the wake word.
--            self.mic.set_streaming(false);
--            self.update_ui();
--            return self.on_command(&command, true);
--        }
-         // Capture keeps streaming into the new dialog: switching it off here could drop the
-         // chunk between the preroll and live audio.
-         let phrase = self.arb_phrase.clone();
--        self.answer_wake(&phrase, audio);
-+        self.answer_wake(&phrase, audio, live, prior);
-         if self.phase != Phase::Listening {
-             self.mic.set_streaming(false); // no dialog started (e.g. HA gone)
-         }
-@@ -198,7 +225,8 @@ impl Controller {
-         self.arbitrating = false;
-         self.arb_claim = None;
-         self.arb_audio.clear();
--        self.arb_command.clear();
-+        self.arb_boundary = 0;
-+        self.arb_endpoint = None;
-         if self.phase != Phase::Listening {
-             self.mic.set_streaming(false);
-         }
-@@ -206,8 +234,24 @@ impl Controller {
- 
-     // ---------------- pipeline ----------------
- 
--    /// The only way into LISTENING (the watchdog bounds it).
--    pub(super) fn start_pipeline(&mut self, phrase: &str, earcon: bool, preroll: Vec<i16>) {
-+    /// Uncalibrated energy heuristic: opt-in only, off unless explicitly enabled.
-+    fn local_endpointing_enabled() -> bool {
-+        matches!(
-+            std::env::var("PULSAR_LOCAL_ENDPOINTING").as_deref(),
-+            Ok("1")
-+        )
-+    }
-+
-+    /// The only way into LISTENING (the watchdog bounds it). `preroll` came with the wake event;
-+    /// `live` is post-wake audio held during wake arbitration (empty otherwise).
-+    pub(super) fn start_pipeline(
-+        &mut self,
-+        phrase: &str,
-+        earcon: bool,
-+        preroll: Vec<i16>,
-+        live: Vec<i16>,
-+        endpoint_prior: Option<EndpointPrior>,
-+    ) {
-         // The button, a continued conversation or HA's start_conversation win.
-         self.cancel_arbitration();
-         if !self.api.voice_subscribed() {
-@@ -222,6 +266,19 @@ impl Controller {
-         self.dialog += 1;
-         self.run.start();
-         self.stop_sent = false;
-+        self.endpoint = if Self::local_endpointing_enabled() {
-+            endpoint_prior.and_then(|p| EndpointRun::new(p, &preroll, &live))
-+        } else {
-+            None
-+        };
-+        if let Some(r) = self.endpoint.as_ref() {
-+            let p = r.prior();
-+            let (on, off) = r.thresholds();
-+            debug!(
-+                "local endpointing: noise {:.1} dB, wake {:.1} dB, onset {:.1} dB, release {:.1} dB",
-+                p.noise_db, p.speech_db, on, off
-+            );
-+        }
-         self.listen_started_ms = now_ms();
-         self.tts_url.clear();
-         self.tts_played = false;
-@@ -241,12 +298,21 @@ impl Controller {
-         for chunk in preroll.chunks(512) {
-             self.api.voice_send_audio(chunk.to_vec());
-         }
-+        for chunk in live.chunks(512) {
-+            self.api.voice_send_audio(chunk.to_vec());
-+        }
-         self.mic.set_streaming(true);
-         self.arm_watchdog();
-         self.update_ui();
-     }
- 
-     fn stop_streaming(&mut self) {
-+        // HA finished the phrase first (STT_VAD_END/STT_END), the dialog was cancelled or a
-+        // repeated wake replaced it: drop the run so no stale end can follow.
-+        if let Some(r) = self.endpoint.as_mut() {
-+            r.cancel();
-+        }
-+        self.endpoint = None;
-         // A wake word heard meanwhile keeps its audio.
-         self.mic.set_streaming(self.arbitrating);
-         if self.phase == Phase::Listening {
-@@ -254,6 +320,47 @@ impl Controller {
-         }
-     }
- 
-+    /// One live 32 ms chunk while the dialog listens. Sends it to HA and feeds the optional
-+    /// local detector; a detected end is deferred while the wake earcon is playing.
-+    pub(super) fn on_listening_audio(&mut self, pcm: Vec<i16>) {
-+        if let Some(r) = self.endpoint.as_mut() {
-+            r.push(pcm_level_db(&pcm), true);
-+        }
-+        self.api.voice_send_audio(pcm);
-+        let earcon = matches!(
-+            self.player.state(Channel::Announce),
-+            PlayState::Playing | PlayState::Loading
-+        );
-+        if !earcon
-+            && self.phase == Phase::Listening
-+            && self.endpoint.as_mut().is_some_and(|r| r.take_end())
-+        {
-+            self.send_endpoint_end();
-+        }
-+    }
-+
-+    /// Graceful `VoiceAssistantAudio.end`: finish the phrase on what HA already has, without
-+    /// aborting the run. Exactly once per dialog; a stale or replaced dialog sends nothing.
-+    fn send_endpoint_end(&mut self) {
-+        if self.stop_sent || self.phase != Phase::Listening {
-+            return;
-+        }
-+        if let Some(r) = self.endpoint.as_ref() {
-+            let p = r.prior();
-+            let (on, off) = r.thresholds();
-+            info!(
-+                "voice pipeline: local end (experimental), noise {:.1} dB, wake {:.1} dB, \
-+                 onset {:.1} dB, release {:.1} dB",
-+                p.noise_db, p.speech_db, on, off
-+            );
-+        }
-+        self.api.voice_send_audio_end();
-+        // Stop feeding the microphone, but keep the run: HA finishes STT and the answer.
-+        self.stop_streaming();
-+        self.arm_watchdog();
-+        self.update_ui();
-+    }
-+
-     pub(super) fn on_voice_event(&mut self, ev: VaEvent, data: &HashMap<String, String>) {
-         let get = |k: &str| data.get(k).map_or("", String::as_str);
-         let code = ev.code();
-@@ -312,15 +419,18 @@ impl Controller {
-                         "pipeline: another satellite answers this wake word (HA duplicate wake-up)"
-                     );
-                     self.stop_streaming();
-+                } else if get("code") == "stt-no-text-recognized" {
-+                    // Empty STT after a wake word: the user changed their mind or spoke
-+                    // too softly. Treat it as a silent cancel, not a station error.
-+                    info!("pipeline: no speech recognized, treating as cancel");
-+                    self.stop_streaming();
-                 } else {
-                     warn!("pipeline error: {} {}", get("code"), get("message"));
-                     self.stop_streaming();
-                     self.error_shown = true;
-                     self.show_ui(UiState::Error);
--                    if get("code") != "stt-no-text-recognized" {
--                        let sound = format!("{SOUNDS}{}", self.model.error_sound);
--                        self.play_closing_earcon(sound);
--                    }
-+                    let sound = format!("{SOUNDS}{}", self.model.error_sound);
-+                    self.play_closing_earcon(sound);
-                 }
-             }
-             VaEvent::RunEnd => {
-@@ -352,7 +462,7 @@ impl Controller {
-         self.send_tts_report(ok);
-         if ok && self.continue_conversation && !self.timer_ringing && !self.mic_muted() {
-             self.continue_conversation = false;
--            self.start_pipeline("", false, Vec::new());
-+            self.start_pipeline("", false, Vec::new(), Vec::new(), None);
-             return;
-         }
-         self.finish_interaction();
-@@ -384,6 +494,7 @@ impl Controller {
-         }
-         self.run.awaiting_run_start = false;
-         self.send_tts_report(false);
-+        self.endpoint = None;
-         self.mic.set_streaming(self.arbitrating);
-         self.phase = Phase::Idle;
-         self.dialog += 1;
-@@ -475,7 +586,7 @@ impl Controller {
-             self.interrupt_speech();
-             return self.finish_interaction();
-         }
--        self.start_pipeline("", true, Vec::new());
-+        self.start_pipeline("", true, Vec::new(), Vec::new(), None);
-     }
- 
-     // ---------------- announcements ----------------
-@@ -629,10 +740,23 @@ impl Controller {
-     // ---------------- local commands ----------------
- 
-     /// Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше",
--    /// "назад"): on unless the microphone is muted, the dialog included; which words act where is
--    /// logic::command_allowed.
-+    /// "назад"): on while something plays, off in silence and during a wake request. Which words
-+    /// act where is logic::command_allowed.
-     pub(super) fn update_commands(&self) {
--        self.mic.set_commands(!self.mic_muted());
-+        // Stock commands without the wake word stay available while something plays,
-+        // as in the C++ build. During a wake request they are off: «Рикардо, стоп»
-+        // must reach Home Assistant so it can stop an alarm and restore the music,
-+        // instead of being swallowed as a local pause.
-+        let playing = matches!(
-+            self.player.state(Channel::Music),
-+            PlayState::Playing | PlayState::Loading
-+        ) || self.sendspin_streaming()
-+            || self.announcing
-+            || self.timer_ringing
-+            || self.phase == Phase::Speaking;
-+        let dialog = matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating;
-+        self.mic
-+            .set_commands(!self.mic_muted() && playing && !dialog);
-     }
- 
-     fn owns_music(&self) -> bool {
-@@ -674,9 +798,7 @@ impl Controller {
-         }
-     }
- 
--    /// `held`: the word came during a wake arbitration this station won, right after its wake
--    /// word.
--    pub(super) fn on_command(&mut self, word: &str, held: bool) {
-+    pub(super) fn on_command(&mut self, word: &str) {
-         if self.mic_muted() {
-             return;
-         }
-@@ -687,53 +809,24 @@ impl Controller {
-             info!("voice command '{word}' ignored: another station answers this wake word");
-             return;
-         }
--        if self.arbitrating {
--            self.arb_command = word.to_owned();
--            info!("voice command '{word}' held until the wake arbitration ends");
-+        // A wake request owns the command. Sending "стоп" to Home Assistant is what
-+        // stops a ringing alarm and restores the paused music; local handling would
-+        // only pause the music and cancel the pipeline. This also covers a callback
-+        // queued just before update_commands() switched the spotter off.
-+        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
-+            info!("voice command '{word}' left to Home Assistant during a voice request");
-             return;
-         }
--        let after_wake = logic::after_wake(self.phase, now_ms(), self.listen_started_ms);
--        // A dialog past the window after its wake word: its words are the request's, except
--        // "стоп".
--        let in_dialog = matches!(self.phase, Phase::Listening | Phase::Processing) && !after_wake;
-         let sounding = self.phase == Phase::Speaking || self.announcing || self.timer_ringing;
--        if !logic::command_allowed(
--            c,
--            held || after_wake,
--            in_dialog,
--            sounding,
--            self.owns_music(),
--        ) {
--            if in_dialog {
--                info!("voice command '{word}' ignored: part of the request");
--            } else {
--                info!("voice command '{word}' ignored: not for this station");
--            }
-+        if !logic::command_allowed(c, false, false, sounding, self.owns_music()) {
-+            info!("voice command '{word}' ignored: not for this station");
-             return;
-         }
--        info!(
--            "voice command '{word}'{}",
--            if after_wake {
--                " (after wake word, HA pipeline cancelled)"
--            } else if held {
--                " (after wake word)"
--            } else if in_dialog {
--                " (in a dialog)"
--            } else {
--                ""
--            }
--        );
--        // A word in the dialog's own window ends the dialog first; one held through an
--        // arbitration in SPEAKING / IDLE leaves the answer playing.
--        if after_wake {
--            self.finish_interaction();
--        }
-+        info!("voice command '{word}'");
-         match c {
-             VoiceCommand::Stop => {
-                 if self.timer_ringing {
-                     self.stop_timer_ring();
--                } else if in_dialog {
--                    self.cancel_dialog();
-                 } else if self.phase == Phase::Speaking {
-                     self.interrupt_speech();
-                     self.finish_interaction();
-diff --git a/satellite/crates/pulsar/src/main.rs b/satellite/crates/pulsar/src/main.rs
-index 89b60c9..a4f3fb5 100644
---- a/satellite/crates/pulsar/src/main.rs
-+++ b/satellite/crates/pulsar/src/main.rs
-@@ -14,7 +14,7 @@ mod version;
- 
- use std::ffi::OsStr;
- use std::io::Write as _;
--use std::path::PathBuf;
-+use std::path::{Path, PathBuf};
- use std::process::ExitCode;
- use std::time::Duration;
- 
-@@ -72,6 +72,11 @@ fn main() -> ExitCode {
-     };
-     let local = tokio::task::LocalSet::new();
-     let status = local.block_on(&rt, async {
-+        // Sampled at exit, not here: `ctl.sh disable` removes the marker before stopping us.
-+        let restart_marker = state
-+            .parent()
-+            .unwrap_or_else(|| Path::new("."))
-+            .join("enabled");
-         let mut ctl = match Controller::start(model, state) {
-             Ok(c) => c,
-             Err(e) => {
-@@ -85,6 +90,11 @@ fn main() -> ExitCode {
-             model.model_name, model.codename
-         );
-         ctl.run().await;
-+        // `enabled` is what supervise.sh restarts on: promise MA a reconnect only when this is
-+        // a restart, not a deliberate ctl.sh disable (it removes enabled first) or a manual run.
-+        if supervisor_restarts(&restart_marker) {
-+            ctl.promise_sendspin_restart();
-+        }
-         arm_teardown_watchdog(0);
-         // Nothing changes the settings after run: a change still pending is written once, here.
-         // Inside the watchdog, so a hung fsync cannot keep the daemon from exiting (a write cut
-@@ -105,3 +115,34 @@ fn main() -> ExitCode {
-     rt.shutdown_timeout(Duration::from_secs(1));
-     ExitCode::from(status)
- }
-+
-+/// Whether supervise.sh will start this daemon again (`<state dir>/enabled` exists at exit).
-+fn supervisor_restarts(enabled: &Path) -> bool {
-+    enabled.is_file()
-+}
-+
-+#[cfg(test)]
-+mod tests {
-+    use super::*;
-+
-+    #[test]
-+    fn supervisor_restart_follows_the_enabled_file_next_to_the_state() {
-+        let dir = std::env::temp_dir().join(format!("pulsar-restart-test-{}", std::process::id()));
-+        let state = dir.join("state.conf");
-+        let marker = dir.join("enabled");
-+        std::fs::create_dir_all(&dir).unwrap();
-+        assert!(!supervisor_restarts(&marker));
-+        std::fs::write(&marker, b"").unwrap();
-+        assert!(supervisor_restarts(&marker));
-+        // `ctl.sh disable`: enabled removed before the signal, so the daemon sends `shutdown`.
-+        std::fs::remove_file(&marker).unwrap();
-+        assert!(!supervisor_restarts(&marker));
-+        // The same state path derives the marker the supervisor reads.
-+        assert_eq!(
-+            state.parent().unwrap().join("enabled"),
-+            marker,
-+            "marker next to state.conf"
-+        );
-+        std::fs::remove_dir_all(&dir).unwrap();
-+    }
-+}
-diff --git a/satellite/crates/pulsar/src/settings.rs b/satellite/crates/pulsar/src/settings.rs
-index 2813284..f3facab 100644
---- a/satellite/crates/pulsar/src/settings.rs
-+++ b/satellite/crates/pulsar/src/settings.rs
-@@ -86,10 +86,11 @@ impl Default for Settings {
-             clock_brightness: 1.0,
-             clock_scroll_ms: 400,
-             light: LightState::default(),
--            wake_word: "alisa".into(),
-+            wake_word: "ricardo".into(),
-             tz: "MSK-3".into(),
-             auto_update: false,
--            nearest_answers: true,
-+            // One station in this installation: the 250 ms arbitration window only adds latency.
-+            nearest_answers: false,
-             music_viz: "All styles".into(),
-             clock_music: "Off".into(),
-             led_speed: 1.0,
-diff --git a/satellite/crates/pulsar/src/settings/tests.rs b/satellite/crates/pulsar/src/settings/tests.rs
-index eeb5593..ebbac9c 100644
---- a/satellite/crates/pulsar/src/settings/tests.rs
-+++ b/satellite/crates/pulsar/src/settings/tests.rs
-@@ -2,7 +2,7 @@
- // and Settings::save of controller.cpp, copied verbatim into a throwaway host harness built with
- // `zig c++ -std=c++20 -O2`. save_*.conf: `save` of the values below; load_*.out: `load` of
- // load_*.in, then `save`. Edited by hand since: `wake_preroll` (after `clock_music`; 0 in
--// load_odd.in).
-+// load_odd.in), and this fork's defaults (`wake_word=ricardo`, `nearest_answers=0`).
- 
- use super::*;
- 
-@@ -45,7 +45,7 @@ fn values() -> Settings {
- }
- 
- #[test]
--fn save_matches_cxx_byte_for_byte() {
-+fn save_matches_golden_byte_for_byte() {
-     assert_eq!(
-         Settings::default().serialize().as_bytes(),
-         golden("save_default.conf")
-@@ -79,7 +79,7 @@ fn save_matches_cxx_byte_for_byte() {
- }
- 
- #[test]
--fn parses_a_file_written_by_cxx() {
-+fn parses_a_file_written_by_the_fork() {
-     let mut s = Settings::default();
-     s.parse(&golden("save_values.conf"));
-     // Written with 6 significant digits: the values read back are those of the text.
-diff --git a/satellite/crates/pulsar/tests/golden/settings/load_edge.out b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-index dc09534..179bc14 100644
---- a/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-+++ b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-@@ -11,13 +11,13 @@ light_r=1
- light_g=1
- light_b=inf
- light_effect=
--wake_word=alisa
-+wake_word=ricardo
- tz=MSK-3
- auto_update=0
- update_attempt=
- zigbee_role=router
- zigbee_flash_failed=ffffffff
--nearest_answers=1
-+nearest_answers=0
- music_viz=All styles
- led_speed=4
- voice_indication=1
-diff --git a/satellite/crates/pulsar/tests/golden/settings/save_default.conf b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-index 38e8982..cc93a17 100644
---- a/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-+++ b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-@@ -11,13 +11,13 @@ light_r=1
- light_g=1
- light_b=1
- light_effect=
--wake_word=alisa
-+wake_word=ricardo
- tz=MSK-3
- auto_update=0
- update_attempt=
- zigbee_role=off
- zigbee_flash_failed=0
--nearest_answers=1
-+nearest_answers=0
- music_viz=All styles
- led_speed=1
- voice_indication=1
-diff --git a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-index 23e5520..6bb0c43 100644
---- a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-+++ b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-@@ -11,13 +11,13 @@ light_r=0
- light_g=1
- light_b=0.5
- light_effect=
--wake_word=alisa
-+wake_word=ricardo
- tz=
- auto_update=0
- update_attempt=
- zigbee_role=router
- zigbee_flash_failed=ffffffff
--nearest_answers=1
-+nearest_answers=0
- music_viz=All styles
- led_speed=4
- voice_indication=1
-diff --git a/satellite/crates/pulsar/tests/golden/settings/save_values.conf b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-index 5582f66..a7eba0d 100644
---- a/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-+++ b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-@@ -11,13 +11,13 @@ light_r=1e-05
- light_g=123457
- light_b=3.14159
- light_effect=Rainbow
--wake_word=alisa
-+wake_word=ricardo
- tz=EST5EDT,M3.2.0,M11.1.0
- auto_update=0
- update_attempt=v1.2.3
- zigbee_role=pulsar-coordinator
- zigbee_flash_failed=5001abcd
--nearest_answers=1
-+nearest_answers=0
- music_viz=All styles
- led_speed=0.25
- voice_indication=1
-diff --git a/satellite/wakewords/.gitignore b/satellite/wakewords/.gitignore
-new file mode 100644
-index 0000000..090371c
---- /dev/null
-+++ b/satellite/wakewords/.gitignore
-@@ -0,0 +1,4 @@
-+# The trained model and its manifest are local artifacts until the voice/data
-+# licenses are reviewed for public distribution.
-+*.tflite
-+*.json
-diff --git a/satellite/wakewords/README.md b/satellite/wakewords/README.md
-new file mode 100644
-index 0000000..957ed32
---- /dev/null
-+++ b/satellite/wakewords/README.md
-@@ -0,0 +1,28 @@
-+# Wake-word model
-+
-+The Ricardo build uses the on-device microWakeWord model produced by the
-+station lab. The model is intentionally not committed to this public fork:
-+its training voices and recordings still need a license review.
-+
-+Put the model here before installing from a checkout:
-+
-+```text
-+ru_ricardo_mww.tflite   # 86,240 bytes, SHA-256 f1ba6dca7c380b584d5e4e1d83f9fd2144e09f4ef9a68135e206f7aab5fd96b2
-+```
-+
-+`pulsar-install` copies every `*.tflite` from this directory to
-+`/data/pulsar/wakewords/` and verifies the SHA-256 during the upload. A release
-+archive without this directory keeps the model already installed on the
-+station; a fresh install without it starts with no «Рикардо» detector and logs
-+that fact.
-+
-+The daemon path is fixed:
-+
-+```text
-+/data/pulsar/wakewords/ru_ricardo_mww.tflite
-+```
-+
-+The detector uses the firmware's `libtflite.so` and the vendored
-+microfrontend, so neither the model nor the Yandex runtime is redistributed
-+here. The C++ bridge and its license notes are in
-+`crates/pulsar-audio/ricardo/`.
 diff --git a/satellite/crates/pulsar-audio/src/endpoint.rs b/satellite/crates/pulsar-audio/src/endpoint.rs
 new file mode 100644
 index 0000000..5cbae37
@@ -6407,3 +5079,2332 @@ index 0000000..5cbae37
 +        assert!((percentile_db(&w, 0.90) - (-20.0)).abs() < 0.1);
 +    }
 +}
+diff --git a/satellite/crates/pulsar-audio/src/engine/mod.rs b/satellite/crates/pulsar-audio/src/engine/mod.rs
+index 963411a..ecf76e5 100644
+--- a/satellite/crates/pulsar-audio/src/engine/mod.rs
++++ b/satellite/crates/pulsar-audio/src/engine/mod.rs
+@@ -11,6 +11,8 @@ use std::path::Path;
+ 
+ use log::{error, info, warn};
+ 
++use crate::ricardo::RicardoWake;
++
+ pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
+ 
+ pub const VQE_MODELS: &str = "/system/vendor/quasar/vqe_models";
+@@ -255,6 +257,9 @@ pub(crate) struct Engine {
+     // config), as the C++ engine's destructor freed them.
+     wake: Slot,
+     cmd: Slot,
++    /// Optional on-device Ricardo detector. It is fed by the frontend instead of
++    /// the native spotter while the Ricardo wake word is active.
++    custom: Option<RicardoWake>,
+     vqe: Vqe,
+     lib: Lib,
+     /// Capture frames per VQE chunk.
+@@ -279,6 +284,7 @@ impl Engine {
+     pub fn start(
+         model: &pulsar_core::model::Model,
+         wake_dir: &Path,
++        custom_wake_model: Option<&Path>,
+         command_dir: Option<&Path>,
+     ) -> Option<Engine> {
+         if let Err(e) = preload_deps() {
+@@ -317,6 +323,16 @@ impl Engine {
+             return None;
+         };
+         info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
++        let custom = custom_wake_model.map(|path| match RicardoWake::new(path) {
++            Ok(detector) => {
++                info!("Ricardo wake word: {}", path.display());
++                Some(detector)
++            }
++            Err(e) => {
++                error!("Ricardo wake word: {e}");
++                None
++            }
++        });
+         let (hit, rej) = (
+             lib.event_name(EV_FIRST_STAGE_HIT),
+             lib.event_name(EV_REJECTION_2ND),
+@@ -335,6 +351,7 @@ impl Engine {
+         let mut eng = Engine {
+             wake: Slot::new("wake word"),
+             cmd: Slot::new("command"),
++            custom: custom.flatten(),
+             vqe,
+             lib,
+             chunk: chunk_n,
+@@ -395,6 +412,12 @@ impl Engine {
+         s
+     }
+ 
++    /// Feeds one VQE-cleaned chunk to the optional Ricardo detector.
++    /// None: no detector was loaded.
++    pub fn feed_custom(&mut self, pcm: &[i16]) -> Option<Result<(bool, f32), String>> {
++        self.custom.as_mut().map(|detector| detector.feed(pcm))
++    }
++
+     /// Feeds the last chunk to the command spotter; its confirmed phrases.
+     pub fn feed_command(&mut self) -> Vec<String> {
+         feed(&self.vqe, self.frame, &mut self.cmd).phrases
+diff --git a/satellite/crates/pulsar-audio/src/frontend.rs b/satellite/crates/pulsar-audio/src/frontend.rs
+index 74d4680..0b8288a 100644
+--- a/satellite/crates/pulsar-audio/src/frontend.rs
++++ b/satellite/crates/pulsar-audio/src/frontend.rs
+@@ -1,7 +1,8 @@
+ //! Microphone front-end: ALSA capture (mic + speaker-feedback channels, layout per Model) ->
+ //! Yandex VQE (AEC / beamforming / noise reduction, per-model preset) -> Yandex phrase spotters
+-//! (stock models from /system/vendor/quasar/spotter_models): the wake word ("Алиса"/"Яндекс")
+-//! and, optionally, the command model ("стоп", "громче", ...).
++//! (stock models from /system/vendor/quasar/spotter_models): the wake word ("Алиса"/"Яндекс"),
++//! the optional on-device «Рикардо» detector, and, optionally, the command model
++//! ("стоп", "громче", ...).
+ //!
+ //! Two threads: a capture thread that only drains ALSA into a FIFO, and a processing thread
+ //! (VQE + spotters). The Lite 2's PDM capture allows at most ~42 ms of buffer (2048 frames at
+@@ -23,6 +24,7 @@ use pulsar_core::MusicFrame;
+ use pulsar_core::model::{CaptureFormat, Model, PrerollRule};
+ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+ 
++use crate::endpoint::{EndpointPrior, percentile_db};
+ use crate::engine::{Engine, Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN, to_s16};
+ use crate::spectrum::SpectrumAnalyzer;
+ 
+@@ -51,7 +53,8 @@ const PROCESSING_STACK: usize = 8 << 20;
+ 
+ pub enum FrontendEvent {
+     /// level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC),
+-    /// rounded to 0.1 dB; -100 = no data.
++    /// rounded to 0.1 dB; -100 = no data. `audio` is the 0.5 s pre-roll ending with the chunk
++    /// that confirmed the phrase: without it an immediate command loses its first syllables.
+     Wake {
+         phrase: String,
+         level_db: f32,
+@@ -60,6 +63,9 @@ pub enum FrontendEvent {
+         /// The `Audio` events after it continue it without a gap until
+         /// [`FrontendHandle::wake_handled`].
+         preroll: Vec<i16>,
++        /// Levels of the wake window on the same channel as `Audio`, for the experimental
++        /// local endpoint detector. None until a full window was seen.
++        endpoint_prior: Option<EndpointPrior>,
+     },
+     Command {
+         word: String,
+@@ -90,26 +96,35 @@ pub struct FrontendHandle {
+     inner: Arc<Inner>,
+ }
+ 
+-/// Starts the front-end: dlopen, VQE for the model's preset, the wake word spotter from
+-/// `wake_model_dir` (e.g. .../spotter_models/activation/alisa) and, if given, the command
+-/// spotter (.../spotter_models/command), then the capture and processing threads. On failure
+-/// (logged, "microphone front-end failed to start") the handle works but no event ever comes.
+-/// A capture device that cannot be opened is retried every 2 s.
++/// Starts the front-end: dlopen, VQE for the model's preset, the native wake word spotter from
++/// `wake_model_dir` (e.g. .../spotter_models/activation/alisa), the optional Ricardo detector
++/// from `custom_wake_model`, and, if given, the command spotter
++/// (.../spotter_models/command), then the capture and processing threads. `custom_active` selects
++/// the Ricardo detector initially. On failure (logged, "microphone front-end failed to start")
++/// the handle works but no event ever comes. A capture device that cannot be opened is retried
++/// every 2 s.
+ pub fn spawn(
+     model: &'static Model,
+     wake_model_dir: PathBuf,
++    custom_wake_model: Option<PathBuf>,
++    custom_active: bool,
+     command_model_dir: Option<PathBuf>,
+ ) -> (FrontendHandle, UnboundedReceiver<FrontendEvent>) {
+     let (tx, rx) = unbounded_channel();
+     let mut inner = Inner {
+-        shared: Arc::new(Shared::new()),
++        shared: Arc::new(Shared::new(custom_active)),
+         pipe: None,
+         threads: Vec::new(),
+         frame: 0,
+         _events: tx.clone(),
+     };
+     let command_dir = command_model_dir.filter(|d| !d.as_os_str().is_empty());
+-    let started = match Engine::start(model, &wake_model_dir, command_dir.as_deref()) {
++    let started = match Engine::start(
++        model,
++        &wake_model_dir,
++        custom_wake_model.as_deref(),
++        command_dir.as_deref(),
++    ) {
+         Some(eng) => {
+             inner.frame = eng.frame();
+             inner
+@@ -143,6 +158,11 @@ impl FrontendHandle {
+         self.inner.shared.detect.store(on, Relaxed);
+     }
+ 
++    /// Selects the Ricardo detector (true) or the native spotter (false).
++    pub fn set_custom_wake(&self, on: bool) {
++        self.inner.shared.custom.store(on, Relaxed);
++    }
++
+     /// Command spotter on/off (commands without the wake word).
+     pub fn set_commands(&self, on: bool) {
+         self.inner.shared.commands.store(on, Relaxed);
+@@ -212,6 +232,8 @@ struct Shared {
+     stop_lock: Mutex<()>,
+     stop_cv: Condvar,
+     detect: AtomicBool,
++    /// Ricardo detector (true) or native Yandex spotter (false).
++    custom: AtomicBool,
+     commands: AtomicBool,
+     stream: AtomicBool,
+     /// `Wake` events sent and not yet handled: audio keeps coming meanwhile, so nothing is lost
+@@ -229,12 +251,13 @@ struct Shared {
+ }
+ 
+ impl Shared {
+-    fn new() -> Self {
++    fn new(custom_active: bool) -> Self {
+         Shared {
+             running: AtomicBool::new(false),
+             stop_lock: Mutex::new(()),
+             stop_cv: Condvar::new(),
+             detect: AtomicBool::new(true),
++            custom: AtomicBool::new(custom_active),
+             commands: AtomicBool::new(false),
+             stream: AtomicBool::new(false),
+             wake_pending: AtomicU32::new(0),
+@@ -598,6 +621,15 @@ pub(crate) fn deinterleave(
+     }
+ }
+ 
++/// Wake levels for the local endpoint detector on the stream channel, once the window is full.
++/// A partial window would count its zero padding as a -100 dB floor.
++fn endpoint_prior(hist: &[f32; LEVEL_CHUNKS], filled: usize) -> Option<EndpointPrior> {
++    (filled == LEVEL_CHUNKS).then(|| EndpointPrior {
++        noise_db: percentile_db(hist, 0.10),
++        speech_db: wake_level_db(hist),
++    })
++}
++
+ /// Mean of the 8 loudest of the last 47 frames (mean squares), in dBFS clamped to -100..0 and
+ /// rounded to 0.1 dB: stations compare levels received as "%.1f" text, so ours must be the same
+ /// number the peers see, or ties could resolve differently on each side.
+@@ -745,6 +777,25 @@ fn preroll_chunks(rule: Option<PrerollRule>, first_stage_age: Option<usize>) ->
+     }
+ }
+ 
++/// Pre-roll rule for the active detector. The custom Ricardo detector has no stock model
++/// directory, so its id is not `Engine::wake_id` (which still points at the native «Алиса»
++/// model kept for rollback) but the `ricardo` entry of `Model::wake_preroll`.
++fn wake_preroll_rule(model: &Model, shared: &Shared, stock_id: &str) -> Option<PrerollRule> {
++    if !shared.preroll.load(Relaxed) {
++        return None;
++    }
++    let id = if shared.custom.load(Relaxed) {
++        "ricardo"
++    } else {
++        stock_id
++    };
++    model
++        .wake_preroll
++        .iter()
++        .find(|p| p.id == id)
++        .map(|p| p.rule)
++}
++
+ /// "-" for None in the "wake timing" log.
+ struct Chunks(Option<usize>);
+ 
+@@ -772,11 +823,17 @@ fn processing(
+     let mut mics = vec![0f32; period * mic_ch.len()];
+     let mut spk = vec![0f32; period * nspk];
+     let mut level_hist = LevelHistory::new();
++    // The same on VQE_OMNI_WITH_GAIN, the channel the stream (and so the endpoint detector)
++    // carries: the wake prior must not mix channels.
++    let mut gain_hist = [0f32; LEVEL_CHUNKS];
++    let mut gain_pos = 0;
++    let mut gain_filled = 0usize;
+     let mut ana = SpectrumAnalyzer::new(model.capture_rate, period);
+     if !ana.ok() {
+         warn!("music analysis: unsupported capture layout");
+     }
+     let mut music_was_on = false;
++    let mut custom_failed = false;
+     let frame = eng.frame();
+     let mut ring = PrerollRing::new(PREROLL_SAMPLES / frame.max(1), frame);
+     // Chunks since the wake spotter's 1st-stage hit, while its verifier waits.
+@@ -816,6 +873,10 @@ fn processing(
+         }
+         if !eng.process(&mics, &spk) {
+             ring.clear();
++            // The prior must not span a gap in the audio.
++            gain_hist = [0.0; LEVEL_CHUNKS];
++            gain_pos = 0;
++            gain_filled = 0;
+             continue;
+         }
+ 
+@@ -832,18 +893,66 @@ fn processing(
+         // handled holds the stream open: the owner switches streaming on only when it handles
+         // the event, and the chunks in between continue the pre-roll. `wake_pending` is read
+         // first: its Acquire pairs with `wake_handled`, after the owner's `set_streaming(true)`.
+-        match eng.output(VQE_OMNI_WITH_GAIN) {
++        let custom_active = shared.custom.load(Relaxed);
++        let detecting = shared.detect.load(Relaxed);
++        let mut custom_score = None;
++        match eng.output(VQE_OMNI_WITH_GAIN).filter(|d| !d.is_empty()) {
+             Some(d) => {
+-                if let Some(slot) = ring.push(d)
+-                    && (shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed))
+-                {
+-                    let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
++                gain_hist[gain_pos] = mean_square(d);
++                gain_pos = (gain_pos + 1) % LEVEL_CHUNKS;
++                gain_filled = (gain_filled + 1).min(LEVEL_CHUNKS);
++                if let Some(slot) = ring.push(d) {
++                    // The Ricardo detector hears the same cleaned chunk as the ring and the
++                    // stock spotter; its confirmation then takes the pre-roll from the ring.
++                    if custom_active && detecting && !custom_failed {
++                        match eng.feed_custom(slot) {
++                            Some(Ok((true, score))) => custom_score = Some(score),
++                            Some(Ok(_)) => {}
++                            Some(Err(e)) => {
++                                custom_failed = true;
++                                error!("Ricardo wake word: {e}");
++                            }
++                            None => {
++                                custom_failed = true;
++                                error!("Ricardo wake word: detector is not loaded");
++                            }
++                        }
++                    }
++                    if shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed) {
++                        let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
++                    }
+                 }
+             }
+-            None => ring.clear(),
++            None => {
++                ring.clear();
++                // A missing output is a gap: restart the prior window.
++                gain_hist = [0.0; LEVEL_CHUNKS];
++                gain_pos = 0;
++                gain_filled = 0;
++            }
+         }
+ 
+-        if shared.detect.load(Relaxed) {
++        if let Some(score) = custom_score {
++            let level_db = wake_level_db(&level_hist.values);
++            let speech_end = level_hist.speech_end(frame);
++            let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
++            let rule = wake_preroll_rule(model, shared, "ricardo");
++            let n = preroll_chunks(rule, None).min(ring.chunks());
++            let preroll = ring.last(n);
++            info!(
++                "Ricardo wake word detected (probability {score:.3}); \
++                 wake timing: speech_end={} preroll={}",
++                Chunks(speech_end),
++                preroll.len() / frame
++            );
++            shared.wake_pending.fetch_add(1, Relaxed);
++            let _ = tx.send(FrontendEvent::Wake {
++                phrase: "Рикардо".into(),
++                level_db,
++                preroll,
++                endpoint_prior,
++            });
++        } else if !custom_active && detecting {
+             // Kept for the level window's 1.5 s, whatever the VQE chunk.
+             first_stage_age = first_stage_age
+                 .map(|a| a + 1)
+@@ -857,12 +966,8 @@ fn processing(
+             if !spotted.phrases.is_empty() {
+                 let level_db = wake_level_db(&level_hist.values);
+                 let speech_end = level_hist.speech_end(frame);
+-                let rule = shared
+-                    .preroll
+-                    .load(Relaxed)
+-                    .then(|| model.wake_preroll.iter().find(|p| p.id == eng.wake_id()))
+-                    .flatten()
+-                    .map(|p| p.rule);
++                let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
++                let rule = wake_preroll_rule(model, shared, eng.wake_id());
+                 let n = preroll_chunks(rule, first_stage_age).min(ring.chunks());
+                 let preroll = ring.last(n);
+                 info!(
+@@ -878,6 +983,7 @@ fn processing(
+                         phrase,
+                         level_db,
+                         preroll: preroll.clone(),
++                        endpoint_prior,
+                     });
+                 }
+             }
+@@ -1018,6 +1124,64 @@ mod tests {
+         assert_eq!(preroll_chunks(first(-3, 9), None), 9);
+     }
+ 
++    #[test]
++    fn ricardo_preroll_rule_uses_the_custom_id() {
++        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
++        // The custom detector is active: the stock model id ("alisa", kept for rollback) must
++        // not select the rule, or the Ricardo word loses its pre-roll.
++        let custom = Shared::new(true);
++        assert_eq!(
++            wake_preroll_rule(midi, &custom, "alisa"),
++            Some(PrerollRule::Fixed(8))
++        );
++        // Switched back to a stock spotter: the custom entry no longer applies.
++        let stock = Shared::new(false);
++        assert_eq!(
++            wake_preroll_rule(midi, &stock, "alisa"),
++            Some(PrerollRule::Fixed(2))
++        );
++    }
++
++    #[test]
++    fn ricardo_preroll_is_the_last_256_ms_of_the_ring() {
++        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
++        const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
++        const RING_CHUNKS: usize = PREROLL_SAMPLES / FRAME;
++        let mut ring = PrerollRing::new(RING_CHUNKS, FRAME);
++        for k in 0..RING_CHUNKS {
++            ring.push(&[k as f32 / 32768.0; FRAME]);
++        }
++        let rule = wake_preroll_rule(midi, &Shared::new(true), "ricardo");
++        let n = preroll_chunks(rule, None);
++        assert_eq!(n, 8);
++        let preroll = ring.last(n);
++        assert_eq!(preroll.len(), n * FRAME);
++        assert_eq!(preroll.len() / 16, 256, "milliseconds at 16 kHz");
++        // Oldest first, ending with the chunk that confirmed the word.
++        assert_eq!(preroll[0], (RING_CHUNKS - n) as i16);
++        assert_eq!(preroll[preroll.len() - 1], (RING_CHUNKS - 1) as i16);
++    }
++
++    #[test]
++    fn preroll_off_is_empty_but_the_wake_hold_is_separate() {
++        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
++        let shared = Shared::new(true);
++        shared.preroll.store(false, Relaxed);
++        let n = preroll_chunks(wake_preroll_rule(midi, &shared, "ricardo"), None);
++        assert_eq!(n, 0);
++        let mut ring = PrerollRing::new(PREROLL_SAMPLES / 512, 512);
++        ring.push(&[0.5; 512]);
++        assert!(ring.last(n).is_empty());
++        // `wake_pending` holds the stream open regardless of the pre-roll switch: the owner
++        // raises it for every Wake and lowers it once after `set_streaming`.
++        shared.wake_pending.fetch_add(1, Relaxed);
++        assert_eq!(shared.wake_pending.load(Relaxed), 1);
++        let _ = shared
++            .wake_pending
++            .try_update(AcqRel, Acquire, |v| v.checked_sub(1));
++        assert_eq!(shared.wake_pending.load(Relaxed), 0);
++    }
++
+     #[test]
+     fn deinterleave_supported_layouts() {
+         let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
+@@ -1175,7 +1339,7 @@ mod tests {
+     fn without_the_yandex_library_the_handle_is_degraded() {
+         // No /system/vendor/quasar/libs on the build host: dlopen fails.
+         let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
+-        let (h, mut rx) = spawn(midi, PathBuf::from("/nonexistent"), None);
++        let (h, mut rx) = spawn(midi, PathBuf::from("/nonexistent"), None, false, None);
+         h.set_streaming(true);
+         h.set_model(PathBuf::from("/nonexistent/2"));
+         let h2 = h.clone();
+diff --git a/satellite/crates/pulsar-audio/src/lib.rs b/satellite/crates/pulsar-audio/src/lib.rs
+index f86cc2b..80b042c 100644
+--- a/satellite/crates/pulsar-audio/src/lib.rs
++++ b/satellite/crates/pulsar-audio/src/lib.rs
+@@ -6,9 +6,13 @@
+ #![deny(unsafe_op_in_unsafe_fn)]
+ #![deny(clippy::undocumented_unsafe_blocks)]
+ 
++pub mod endpoint;
+ pub mod engine;
+ mod frontend;
++#[allow(unsafe_code)]
++mod ricardo;
+ mod spectrum;
+ 
+ pub use frontend::{FrontendEvent, FrontendHandle, FrontendStats, spawn};
++pub use ricardo::RicardoWake;
+ pub use spectrum::SpectrumAnalyzer;
+diff --git a/satellite/crates/pulsar-audio/src/ricardo.rs b/satellite/crates/pulsar-audio/src/ricardo.rs
+new file mode 100644
+index 0000000..312a712
+--- /dev/null
++++ b/satellite/crates/pulsar-audio/src/ricardo.rs
+@@ -0,0 +1,87 @@
++//! Safe wrapper around the C++ microWakeWord detector (`ricardo/microwakeword.cpp`).
++//!
++//! The detector is fed the same 16 kHz, VQE-cleaned `VQE_OMNI_WITH_GAIN` stream
++//! that the native Yandex spotter uses. It owns its streaming feature state and
++//! resets it after a hit; callers only add the 0.5 s pre-roll.
++
++use std::ffi::{CString, c_char, c_void};
++use std::os::unix::ffi::OsStrExt as _;
++use std::path::Path;
++use std::ptr::NonNull;
++
++unsafe extern "C" {
++    fn mww_create(model_path: *const c_char) -> *mut c_void;
++    fn mww_destroy(handle: *mut c_void);
++    fn mww_feed(handle: *mut c_void, pcm: *const i16, samples: usize, score: *mut f32) -> i32;
++    fn mww_reset(handle: *mut c_void) -> i32;
++}
++
++/// The on-device "Рикардо" detector. Use only from the audio processing thread.
++pub struct RicardoWake {
++    raw: NonNull<c_void>,
++}
++
++impl RicardoWake {
++    /// Loads the model and opens the firmware's `libtflite.so`.
++    pub fn new(model: &Path) -> Result<Self, String> {
++        let path = CString::new(model.as_os_str().as_bytes())
++            .map_err(|_| format!("{}: NUL in path", model.display()))?;
++        // SAFETY: the C++ function copies/reads the NUL-terminated path and
++        // returns an opaque handle owned by this wrapper.
++        let raw = unsafe { mww_create(path.as_ptr()) };
++        let raw = NonNull::new(raw).ok_or_else(|| format!("cannot load {}", model.display()))?;
++        Ok(Self { raw })
++    }
++
++    /// Feeds one VQE chunk. Ok((true, score)) on a detection, Ok((false, _))
++    /// otherwise; Err after the detector disabled itself.
++    pub fn feed(&mut self, pcm: &[i16]) -> Result<(bool, f32), String> {
++        let mut score = -1.0f32;
++        // SAFETY: `raw` is a live handle from mww_create; `pcm` is valid for
++        // the call and `score` points to a local.
++        let rc = unsafe { mww_feed(self.raw.as_ptr(), pcm.as_ptr(), pcm.len(), &mut score) };
++        match rc {
++            0 => Ok((false, score)),
++            1 => Ok((true, score)),
++            _ => Err("microWakeWord disabled itself".into()),
++        }
++    }
++
++    /// Resets the streaming state (normally the detector does this after a hit).
++    #[allow(dead_code, reason = "kept for diagnostics and future reconfiguration")]
++    pub fn reset(&mut self) -> Result<(), String> {
++        // SAFETY: live handle, no aliasing.
++        if unsafe { mww_reset(self.raw.as_ptr()) } == 0 {
++            Ok(())
++        } else {
++            Err("microWakeWord reset failed".into())
++        }
++    }
++}
++
++// The detector is constructed on the main thread and moved once to the audio
++// processing thread before it is fed; after that only that thread touches it.
++// The C++ object has no thread-local state of its own.
++//
++// SAFETY: the handle is not shared: ownership moves to exactly one processing
++// thread before any mww_feed call, and mww_destroy runs after that thread stops.
++unsafe impl Send for RicardoWake {}
++
++impl Drop for RicardoWake {
++    fn drop(&mut self) {
++        // SAFETY: the handle is owned by this wrapper and destroyed once.
++        unsafe { mww_destroy(self.raw.as_ptr()) };
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn missing_model_is_an_error() {
++        // No libtflite.so or model on the build host: the C++ bridge must
++        // report failure instead of returning a dangling handle.
++        assert!(RicardoWake::new(Path::new("/nonexistent/ricardo.tflite")).is_err());
++    }
++}
+diff --git a/satellite/crates/pulsar-core/src/model.rs b/satellite/crates/pulsar-core/src/model.rs
+index 9cc093d..4b2adfa 100644
+--- a/satellite/crates/pulsar-core/src/model.rs
++++ b/satellite/crates/pulsar-core/src/model.rs
+@@ -193,6 +193,14 @@ const CUCUMBER_PREROLL: &[WakePreroll] = &[
+         id: "yandex",
+         rule: PrerollRule::Fixed(2),
+     },
++    // The fork's own «Рикардо» microWakeWord detector (no stock model directory, so the
++    // front-end looks it up under this id). 8 chunks = 256 ms: the smallest relative front cut
++    // that removed the wake remnant while all three commands transcribed exactly in the
++    // 2026-10-30 v27/Midi capture sweep (n=3, empirical; not a guarantee for other commands).
++    WakePreroll {
++        id: "ricardo",
++        rule: PrerollRule::Fixed(8),
++    },
+ ];
+ // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
+ // (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed. Chunks from
+diff --git a/satellite/crates/pulsar-esphome/src/lib.rs b/satellite/crates/pulsar-esphome/src/lib.rs
+index 47a714b..0744ef7 100644
+--- a/satellite/crates/pulsar-esphome/src/lib.rs
++++ b/satellite/crates/pulsar-esphome/src/lib.rs
+@@ -96,6 +96,14 @@ impl ApiHandle {
+         self.send(Cmd::VoiceSendAudio(pcm));
+     }
+ 
++    /// Graceful end of the microphone audio (`VoiceAssistantAudio.end = true`). Home Assistant
++    /// treats it as `handle_stop(False)` and finishes the current stage on what it already has,
++    /// unlike [`Self::voice_request_stop`], which sends `VoiceAssistantRequest.start = false`
++    /// (an abort). The detector in the controller sends at most one per dialog.
++    pub fn voice_send_audio_end(&self) {
++        self.send(Cmd::VoiceAudioEnd);
++    }
++
+     /// VoiceAssistantAnnounceFinished for an HA announcement.
+     pub fn voice_announce_finished(&self, success: bool) {
+         self.send(Cmd::VoiceAnnounceFinished(success));
+diff --git a/satellite/crates/pulsar-esphome/src/server.rs b/satellite/crates/pulsar-esphome/src/server.rs
+index 1968139..7cf74be 100644
+--- a/satellite/crates/pulsar-esphome/src/server.rs
++++ b/satellite/crates/pulsar-esphome/src/server.rs
+@@ -185,9 +185,14 @@ pub(crate) struct Shared {
+ }
+ 
+ pub(crate) enum Cmd {
+-    VoiceRequestStart { run: u64, phrase: String },
++    VoiceRequestStart {
++        run: u64,
++        phrase: String,
++    },
+     VoiceRequestStop,
+     VoiceSendAudio(Vec<i16>),
++    /// VoiceAssistantAudio{end=true}: graceful end of the audio stream, not an abort.
++    VoiceAudioEnd,
+     VoiceAnnounceFinished(bool),
+     VoiceAnswerFinished(bool),
+     SetActiveWakeWords(Vec<String>),
+@@ -1413,10 +1418,14 @@ impl Server {
+         match cmd {
+             Cmd::VoiceRequestStart { run, phrase } => self.voice_request_start(run, &phrase),
+             // Stale: meant for the run of the previous owner.
+-            Cmd::VoiceRequestStop | Cmd::VoiceSendAudio(_) | Cmd::VoiceAnswerFinished(_)
++            Cmd::VoiceRequestStop
++            | Cmd::VoiceSendAudio(_)
++            | Cmd::VoiceAudioEnd
++            | Cmd::VoiceAnswerFinished(_)
+                 if self.voice_stale => {}
+             Cmd::VoiceRequestStop => self.voice_request_stop(),
+             Cmd::VoiceSendAudio(pcm) => self.voice_send_audio(&pcm),
++            Cmd::VoiceAudioEnd => self.voice_send_audio_end(),
+             Cmd::VoiceAnnounceFinished(success) | Cmd::VoiceAnswerFinished(success) => {
+                 self.voice_announce_finished(success);
+             }
+@@ -1479,6 +1488,18 @@ impl Server {
+         self.send_msg(vc, msg::VA_AUDIO, &w);
+     }
+ 
++    /// `VoiceAssistantAudio{end = true}` with no data: the graceful "the talker finished"
++    /// signal (aioesphomeapi `handle_stop(False)`), distinct from the aborting
++    /// `VoiceAssistantRequest{start = false}` of [`Self::voice_request_stop`].
++    fn voice_send_audio_end(&mut self) {
++        let Some(vc) = self.voice_client() else {
++            return;
++        };
++        let mut w = Writer::new();
++        w.boolean(2, true, false);
++        self.send_msg(vc, msg::VA_AUDIO, &w);
++    }
++
+     fn voice_announce_finished(&mut self, success: bool) {
+         let Some(vc) = self.voice_client() else {
+             return;
+diff --git a/satellite/crates/pulsar-esphome/src/server/tests.rs b/satellite/crates/pulsar-esphome/src/server/tests.rs
+index 4cdaa99..96b56a6 100644
+--- a/satellite/crates/pulsar-esphome/src/server/tests.rs
++++ b/satellite/crates/pulsar-esphome/src/server/tests.rs
+@@ -542,6 +542,11 @@ async fn voice_owner_hands_over() {
+             h.voice_send_audio(vec![1, -2]);
+             let m = b.expect(msg::VA_AUDIO).await;
+             assert_eq!(field(&m, 1).unwrap().data, [1, 0, 0xfe, 0xff]);
++            // Graceful end: VoiceAssistantAudio.end = true, no data. Not a stop request.
++            h.voice_send_audio_end();
++            let m = b.expect(msg::VA_AUDIO).await;
++            assert!(field(&m, 1).is_none());
++            assert!(field(&m, 2).unwrap().boolean());
+             h.voice_announce_finished(true);
+             let m = b.expect(msg::VA_ANNOUNCE_FINISHED).await;
+             assert!(field(&m, 1).unwrap().boolean());
+@@ -577,6 +582,7 @@ async fn voice_owner_hands_over() {
+             // Without an owner the voice calls send nothing.
+             h.voice_request_start("x");
+             h.voice_send_audio(vec![1]);
++            h.voice_send_audio_end();
+             h.voice_request_stop();
+             assert!(a.sync().await.is_empty());
+ 
+diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
+index 6369f73..d642457 100644
+--- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
++++ b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
+@@ -376,6 +376,16 @@ void ss_leave(ss_client *c) {
+   }
+ }
+ 
++void ss_disconnect_restart(ss_client *c) {
++  if (!c) return;
++  try {
++    // Posts the request; the client's stop() final tick applies it before its shutdown pass
++    // would send reason "shutdown" for every connection still open.
++    c->client.disconnect(ss::SendspinGoodbyeReason::RESTART);
++  } catch (...) {
++  }
++}
++
+ void ss_confirm_pairing_window(ss_client *c) {
+   try {
+     c->client.confirm_pairing_window();
+diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
+index e409ce9..c046c10 100644
+--- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
++++ b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.h
+@@ -141,6 +141,9 @@ void ss_player_update_volume(ss_client *c, uint8_t volume);
+ void ss_player_update_muted(ss_client *c, bool muted);
+ bool ss_controller_send(ss_client *c, uint8_t command);  // SS_CMD_*
+ void ss_leave(ss_client *c);
++// client/goodbye with reason "restart": the daemon restarts and will reconnect. For a daemon
++// that is deliberately stopped (enabled file removed), let stop() send "shutdown" instead.
++void ss_disconnect_restart(ss_client *c);
+ void ss_confirm_pairing_window(ss_client *c);
+ // Inside load_blob only: stores the loaded bytes. false: out of memory.
+ bool ss_blob_set(ss_blob *blob, const uint8_t *data, size_t len);
+diff --git a/satellite/crates/pulsar-sendspin/src/ffi.rs b/satellite/crates/pulsar-sendspin/src/ffi.rs
+index 1151792..a4d0811 100644
+--- a/satellite/crates/pulsar-sendspin/src/ffi.rs
++++ b/satellite/crates/pulsar-sendspin/src/ffi.rs
+@@ -187,6 +187,7 @@ unsafe extern "C" {
+     fn ss_player_update_muted(c: *mut SsClient, muted: bool);
+     fn ss_controller_send(c: *mut SsClient, command: u8) -> bool;
+     fn ss_leave(c: *mut SsClient);
++    fn ss_disconnect_restart(c: *mut SsClient);
+     fn ss_confirm_pairing_window(c: *mut SsClient);
+     fn ss_blob_set(blob: *mut SsBlob, data: *const u8, len: usize) -> bool;
+ }
+@@ -712,6 +713,13 @@ impl<L: Listener> Client<L> {
+         unsafe { ss_leave(self.raw.as_ptr()) }
+     }
+ 
++    /// Ask the next stop() to send client/goodbye `restart` instead of the shutdown pass's
++    /// `shutdown`: the server (Music Assistant) redials a restarting client.
++    pub(crate) fn disconnect_restart(&self) {
++        // SAFETY: as `start`.
++        unsafe { ss_disconnect_restart(self.raw.as_ptr()) }
++    }
++
+     pub(crate) fn confirm_pairing_window(&self) {
+         // SAFETY: as `start`.
+         unsafe { ss_confirm_pairing_window(self.raw.as_ptr()) }
+diff --git a/satellite/crates/pulsar-sendspin/src/service.rs b/satellite/crates/pulsar-sendspin/src/service.rs
+index 7518f36..3338b9b 100644
+--- a/satellite/crates/pulsar-sendspin/src/service.rs
++++ b/satellite/crates/pulsar-sendspin/src/service.rs
+@@ -160,6 +160,16 @@ impl SendspinHandle {
+         self.client.is_connected()
+     }
+ 
++    /// The daemon is about to be restarted by its supervisor: send `client/goodbye` with reason
++    /// `restart` so Music Assistant redials this player. Without it the library's stop() sends
++    /// `shutdown`, after which MA deliberately does not reconnect until its provider restarts.
++    pub fn goodbye_restart(&self) {
++        if self.client.is_connected() {
++            info!("sendspin: goodbye restart (daemon restarts)");
++            self.client.disconnect_restart();
++        }
++    }
++
+     /// Software gain 0..1 applied to Sendspin audio (ramped), used for ducking.
+     pub fn set_duck_gain(&self, g: f32) {
+         self.ctx.sink.set_gain(g);
+diff --git a/satellite/crates/pulsar-sendspin/src/stub.rs b/satellite/crates/pulsar-sendspin/src/stub.rs
+index 4a49772..2f67a4a 100644
+--- a/satellite/crates/pulsar-sendspin/src/stub.rs
++++ b/satellite/crates/pulsar-sendspin/src/stub.rs
+@@ -44,6 +44,10 @@ impl SendspinHandle {
+     pub fn confirm_pairing_window(&self) {
+         match self.never {}
+     }
++
++    pub fn goodbye_restart(&self) {
++        match self.never {}
++    }
+ }
+ 
+ pub fn spawn(
+diff --git a/satellite/crates/pulsar-update/src/bin/update_probe.rs b/satellite/crates/pulsar-update/src/bin/update_probe.rs
+index ef4f24b..f893426 100644
+--- a/satellite/crates/pulsar-update/src/bin/update_probe.rs
++++ b/satellite/crates/pulsar-update/src/bin/update_probe.rs
+@@ -4,7 +4,7 @@
+ //!        update_probe get <https_url>
+ //!          status, size and sha256 of the body (redirects followed)
+ //!        update_probe check [owner/repo]
+-//!          latest stable release as the daemon sees it (default Morvex885/pulsar)
++//!          latest stable release as the daemon sees it (default: this fork)
+ //!        update_probe install <version> <bin_url> <sums_url> <binary>
+ //!          downloads, verifies and swaps <binary> (keeps <binary dir>/pulsar.prev), as the daemon
+ //!          does for a release named <version>
+diff --git a/satellite/crates/pulsar-update/src/lib.rs b/satellite/crates/pulsar-update/src/lib.rs
+index 878250e..2170722 100644
+--- a/satellite/crates/pulsar-update/src/lib.rs
++++ b/satellite/crates/pulsar-update/src/lib.rs
+@@ -18,8 +18,8 @@ mod test_server;
+ mod updater;
+ mod version;
+ 
+-/// GitHub repository the daemon checks for releases.
+-pub const UPDATE_REPO: &str = "Morvex885/pulsar";
++/// GitHub repository the daemon checks for releases: this fork, never upstream.
++pub const UPDATE_REPO: &str = "proflyder/pulsar";
+ 
+ pub use updater::{Release, UpdateEvent, UpdaterHandle, arch, spawn};
+ pub use version::release_newer;
+diff --git a/satellite/crates/pulsar/src/controller/entities.rs b/satellite/crates/pulsar/src/controller/entities.rs
+index 896eb5f..4dea933 100644
+--- a/satellite/crates/pulsar/src/controller/entities.rs
++++ b/satellite/crates/pulsar/src/controller/entities.rs
+@@ -349,12 +349,19 @@ impl Controller {
+         let Some(first) = ids.into_iter().next() else {
+             return;
+         };
++        if !matches!(first.as_str(), "alisa" | "yandex" | "ricardo") {
++            return;
++        }
+         if first == self.st.wake_word {
+             return;
+         }
+         self.st.wake_word = first;
+         info!("wake word -> {}", self.st.wake_word);
+-        self.mic.set_model(model_dir(&self.st.wake_word));
++        let custom = self.st.wake_word == "ricardo";
++        self.mic.set_custom_wake(custom);
++        if !custom {
++            self.mic.set_model(model_dir(&self.st.wake_word));
++        }
+         self.api
+             .set_active_wake_words(vec![self.st.wake_word.clone()]);
+         self.persist();
+diff --git a/satellite/crates/pulsar/src/controller/logic.rs b/satellite/crates/pulsar/src/controller/logic.rs
+index 687892b..bf76f00 100644
+--- a/satellite/crates/pulsar/src/controller/logic.rs
++++ b/satellite/crates/pulsar/src/controller/logic.rs
+@@ -237,13 +237,6 @@ pub fn command_of(word: &str) -> Option<VoiceCommand> {
+     })
+ }
+ 
+-/// Within the window after the wake word that opened this dialog: HA may end the speech of a
+-/// short "Алиса, громче" (PROCESSING) before the command spotter confirms the word.
+-pub fn after_wake(phase: Phase, now: i64, listen_started_ms: i64) -> bool {
+-    matches!(phase, Phase::Listening | Phase::Processing)
+-        && now - listen_started_ms < COMMAND_AFTER_WAKE_MS
+-}
+-
+ /// Music of this station: playing or loading on the HA media channel or as a Sendspin stream, or
+ /// paused / ended less than PAUSED_MUSIC_MS ago (Sendspin: its server still connected).
+ /// `*_since`: when the media channel paused / the Sendspin stream ended; None = not since start.
+diff --git a/satellite/crates/pulsar/src/controller/logic/tests.rs b/satellite/crates/pulsar/src/controller/logic/tests.rs
+index 4aad396..84b0243 100644
+--- a/satellite/crates/pulsar/src/controller/logic/tests.rs
++++ b/satellite/crates/pulsar/src/controller/logic/tests.rs
+@@ -185,17 +185,6 @@ fn command_words() {
+     }
+ }
+ 
+-#[test]
+-fn command_gating() {
+-    // The window after the wake word: 2.5 s of LISTENING / PROCESSING.
+-    assert!(after_wake(Phase::Listening, 12_499, 10_000));
+-    assert!(!after_wake(Phase::Listening, 12_500, 10_000));
+-    assert!(after_wake(Phase::Processing, 12_499, 10_000));
+-    assert!(!after_wake(Phase::Processing, 12_500, 10_000));
+-    assert!(!after_wake(Phase::Idle, 10_001, 10_000));
+-    assert!(!after_wake(Phase::Speaking, 10_001, 10_000));
+-}
+-
+ #[test]
+ fn music_ownership() {
+     use PlayState as P;
+diff --git a/satellite/crates/pulsar/src/controller/media.rs b/satellite/crates/pulsar/src/controller/media.rs
+index 665efb4..11dcc63 100644
+--- a/satellite/crates/pulsar/src/controller/media.rs
++++ b/satellite/crates/pulsar/src/controller/media.rs
+@@ -107,6 +107,9 @@ impl Controller {
+         );
+         self.api.publish_media(s, self.st.volume, self.st.muted);
+         self.update_music();
++        // The local command spotter follows playback: on while music/announcement/
++        // timer speech plays, off in silence and during a dialog.
++        self.update_commands();
+     }
+ 
+     pub(super) fn update_music(&self) {
+diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
+index ba4e888..7fd8860 100644
+--- a/satellite/crates/pulsar/src/controller/mod.rs
++++ b/satellite/crates/pulsar/src/controller/mod.rs
+@@ -32,8 +32,13 @@ use logic::{HaTimer, Phase, RunBinding};
+ 
+ const MODELS: &str = "/system/vendor/quasar/spotter_models/activation/";
+ const COMMAND_MODEL: &str = "/system/vendor/quasar/spotter_models/command";
++const RICARDO_MODEL: &str = "/data/pulsar/wakewords/ru_ricardo_mww.tflite";
+ const SOUNDS: &str = "/system/vendor/quasar/sounds/";
+ 
++/// The Ricardo installation uses the station only as an ESPHome/Sendspin endpoint;
++/// the Yandex Zigbee radio stays untouched (the HA Zigbee coordinator is elsewhere).
++const ENABLE_ZIGBEE: bool = false;
++
+ const DUCK_GAIN: f32 = 0.15;
+ const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
+ // Longest wait for the next pipeline event before the dialog is given up locally. HA's voice
+@@ -42,8 +47,9 @@ const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
+ // starts), and conversation agents (LLMs with tool calls) may think for a minute or more.
+ const LISTEN_TIMEOUT_MS: u64 = 30_000;
+ const PROCESS_TIMEOUT_MS: u64 = 120_000;
+-// Updates: releases of this repository on GitHub. The first check waits for the network
+-// after boot; an automatic install waits until the speaker is idle (it restarts the daemon).
++// Updates: releases of this fork on GitHub, never upstream. The first check waits for the
++// network after boot; auto_update stays off by default, so a custom binary is not replaced
++// silently; an automatic install waits until the speaker is idle (it restarts the daemon).
+ const UPDATE_FIRST_CHECK_MS: u64 = 60_000;
+ const UPDATE_CHECK_PERIOD_MS: u64 = 6 * 3_600_000;
+ const UPDATE_IDLE_RETRY_MS: u64 = 10 * 60_000;
+@@ -168,10 +174,15 @@ pub struct Controller {
+     arb_phrase: String,
+     arb_level: f32,
+     arb_audio: Vec<i16>,
+-    arb_command: String,
++    /// Samples in `arb_audio` that came with the wake event; the rest arrived after it (live
++    /// post-wake speech held during arbitration).
++    arb_boundary: usize,
++    arb_endpoint: Option<pulsar_audio::endpoint::EndpointPrior>,
+     /// Another station answers the wake word just heard.
+     commands_blocked_until_ms: i64,
+     run: RunBinding,
++    /// Experimental local end-of-utterance detector (opt-in, see `PULSAR_LOCAL_ENDPOINTING`).
++    endpoint: Option<pulsar_audio::endpoint::EndpointRun>,
+     /// voice_request_stop already sent for this dialog's run.
+     stop_sent: bool,
+     /// Id of the last voice_request_start: VoiceStartFailed / VoiceAudioOverflow of another
+@@ -246,7 +257,11 @@ fn clock_face_index(name: &str) -> i32 {
+ }
+ 
+ fn model_dir(id: &str) -> PathBuf {
+-    PathBuf::from(format!("{MODELS}{id}"))
++    if id == "ricardo" {
++        PathBuf::from(RICARDO_MODEL)
++    } else {
++        PathBuf::from(format!("{MODELS}{id}"))
++    }
+ }
+ 
+ /// C++ `uint8_t(x * 255)`.
+@@ -289,8 +304,8 @@ impl Controller {
+             VERSION,
+             BUILD_TIME,
+         );
+-        if st.wake_word != "alisa" && st.wake_word != "yandex" {
+-            st.wake_word = "alisa".into();
++        if st.wake_word != "alisa" && st.wake_word != "yandex" && st.wake_word != "ricardo" {
++            st.wake_word = "ricardo".into();
+         }
+         let case_colors = pulsar_hw::case_colors();
+         let dir = logic::state_dir(state_path.as_os_str());
+@@ -323,6 +338,11 @@ impl Controller {
+                     phrase: "Яндекс".into(),
+                     languages: vec!["ru".into()],
+                 },
++                WakeWordInfo {
++                    id: "ricardo".into(),
++                    phrase: "Рикардо".into(),
++                    languages: vec!["ru".into()],
++                },
+             ],
+             active_wake_words: vec![st.wake_word.clone()],
+             light_effects: strings(pulsar_hw::effect_names()),
+@@ -330,7 +350,7 @@ impl Controller {
+             music_styles: strings(pulsar_hw::music_styles()),
+             case_colors: with_none(case_colors.clone()),
+             clock_music_styles: strings(pulsar_clock::music_styles()),
+-            zigbee_modes: if model.zigbee_tty.is_empty() {
++            zigbee_modes: if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
+                 Vec::new()
+             } else {
+                 pulsar_zigbee::ROLES
+@@ -438,9 +458,17 @@ impl Controller {
+             }
+         };
+         let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
++        let custom_wake = st.wake_word == "ricardo";
+         let (mic, mic_rx) = pulsar_audio::spawn(
+             model,
+-            model_dir(&st.wake_word),
++            if custom_wake {
++                // Native spotters stay available for a rollback to «Алиса»/«Яндекс».
++                model_dir("alisa")
++            } else {
++                model_dir(&st.wake_word)
++            },
++            Some(PathBuf::from(RICARDO_MODEL)),
++            custom_wake,
+             Some(PathBuf::from(COMMAND_MODEL)),
+         );
+         mic.set_preroll(st.wake_preroll);
+@@ -498,7 +526,7 @@ impl Controller {
+             None
+         };
+ 
+-        let (zigbee, zigbee_rx) = if model.zigbee_tty.is_empty() {
++        let (zigbee, zigbee_rx) = if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
+             (None, None)
+         } else {
+             let zcfg = ZigbeeConfig {
+@@ -577,9 +605,11 @@ impl Controller {
+             arb_phrase: String::new(),
+             arb_level: -100.0,
+             arb_audio: Vec::new(),
+-            arb_command: String::new(),
++            arb_boundary: 0,
++            arb_endpoint: None,
+             commands_blocked_until_ms: 0,
+             run: RunBinding::default(),
++            endpoint: None,
+             stop_sent: false,
+             voice_run: 0,
+             tts_url: String::new(),
+@@ -767,15 +797,16 @@ impl Controller {
+                 phrase,
+                 level_db,
+                 preroll,
++                endpoint_prior,
+             } => {
+-                self.on_wake(&phrase, level_db, preroll);
++                self.on_wake(&phrase, level_db, preroll, endpoint_prior);
+                 // After on_wake has switched streaming on where the wake word starts a request.
+                 self.mic.wake_handled();
+             }
+-            FrontendEvent::Command { word } => self.on_command(&word, false),
++            FrontendEvent::Command { word } => self.on_command(&word),
+             FrontendEvent::Audio(pcm) => {
+                 if self.phase == Phase::Listening {
+-                    self.api.voice_send_audio(pcm);
++                    self.on_listening_audio(pcm);
+                 } else if self.arbitrating {
+                     // The request goes on with what was said right after the wake word.
+                     self.arb_audio.extend_from_slice(&pcm);
+@@ -810,6 +841,15 @@ impl Controller {
+         self.state.flush(&self.st);
+     }
+ 
++    /// The supervisor will start this daemon again (the `enabled` file exists): promise the
++    /// Sendspin server a reconnect before the client stops, otherwise its stop() sends
++    /// `shutdown` and Music Assistant deliberately stops redialing this player.
++    pub fn promise_sendspin_restart(&self) {
++        if let Some(ss) = &self.sendspin {
++            ss.goodbye_restart();
++        }
++    }
++
+     fn mic_muted(&self) -> bool {
+         self.st.mic_muted || self.hw_mic_muted
+     }
+diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
+index c442678..3118ced 100644
+--- a/satellite/crates/pulsar/src/controller/voice.rs
++++ b/satellite/crates/pulsar/src/controller/voice.rs
+@@ -4,6 +4,7 @@
+ use std::collections::HashMap;
+ 
+ use log::{debug, info, warn};
++use pulsar_audio::endpoint::{EndpointPrior, EndpointRun, pcm_level_db};
+ use pulsar_core::{ClockShot, UiState, now_ms};
+ use pulsar_esphome::{AnnounceRequest, TimerEvent, TimerInfo, VaEvent};
+ use pulsar_lan::arbiter::Claim;
+@@ -53,7 +54,7 @@ impl Controller {
+                         && !self.timer_ringing
+                         && !self.mic_muted()
+                     {
+-                        self.start_pipeline("", false, Vec::new());
++                        self.start_pipeline("", false, Vec::new(), Vec::new(), None);
+                     }
+                     self.end_announce();
+                 }
+@@ -107,7 +108,13 @@ impl Controller {
+ 
+     // ---------------- wake word ----------------
+ 
+-    pub(super) fn on_wake(&mut self, phrase: &str, level_db: f32, preroll: Vec<i16>) {
++    pub(super) fn on_wake(
++        &mut self,
++        phrase: &str,
++        level_db: f32,
++        preroll: Vec<i16>,
++        endpoint_prior: Option<EndpointPrior>,
++    ) {
+         if self.mic_muted() {
+             return;
+         }
+@@ -122,12 +129,16 @@ impl Controller {
+             }
+             return self.stop_timer_ring();
+         }
+-        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
+-            return;
++        // As stock Alice: a repeated wake word replaces the call in progress instead of being
++        // ignored. The old call is ended only when this station starts the new dialog
++        // (answer_wake): a station that loses wake arbitration keeps its answer, and its busy
++        // claim still counts SPEAKING. A pending claim is replaced by this wake word.
++        if self.arbitrating {
++            self.cancel_arbitration();
+         }
+         // Without the HA pipeline this station could win and stay silent: it does not take part.
+         if !self.arbitration_on() || !self.api.voice_subscribed() {
+-            return self.answer_wake(phrase, preroll);
++            return self.answer_wake(phrase, preroll, Vec::new(), endpoint_prior);
+         }
+         self.arbitrating = true;
+         // A station that lost the previous wake word may win this one.
+@@ -135,33 +146,55 @@ impl Controller {
+         self.arb_phrase = phrase.to_owned();
+         self.arb_level = level_db;
+         self.arb_audio = preroll;
+-        self.arb_command.clear();
++        // Everything after this point is live post-wake speech held during the decision; the
++        // detector must not treat it as pre-roll evidence.
++        self.arb_boundary = self.arb_audio.len();
++        self.arb_endpoint = endpoint_prior;
+         self.mic.set_streaming(true);
+         self.update_ui();
+         let busy = self.phase == Phase::Speaking || self.announcing;
+         self.arb_claim = Some(self.arbiter.claim(&self.st.wake_word, level_db, busy, true));
+     }
+ 
+-    fn answer_wake(&mut self, phrase: &str, preroll: Vec<i16>) {
++    fn answer_wake(
++        &mut self,
++        phrase: &str,
++        preroll: Vec<i16>,
++        live: Vec<i16>,
++        endpoint_prior: Option<EndpointPrior>,
++    ) {
+         if self.timer_ringing {
+             return self.stop_timer_ring();
+         }
++        // A repeated wake word: a LISTENING / PROCESSING dialog is ended, its run stopped, and
++        // RunBinding keeps the replaced run's late RUN_END from ending the new dialog. While
++        // SPEAKING the answer is only cut, as before (the new start replaces its dialog id).
++        // ESPHome pipeline events carry no run id: a run replaced before its RUN_START cannot be
++        // told apart from the new one if that RUN_START was still on the wire.
+         if matches!(self.phase, Phase::Listening | Phase::Processing) {
+-            return;
+-        }
+-        if self.phase == Phase::Speaking || self.announcing {
++            info!("wake word: replacing the active dialog");
++            self.interrupt_speech();
++            self.finish_interaction();
++        } else if self.phase == Phase::Speaking || self.announcing {
+             self.interrupt_speech(); // barge-in: cut the answer short
+         }
+-        self.start_pipeline(phrase, true, preroll);
++        self.start_pipeline(phrase, true, preroll, live, endpoint_prior);
+     }
+ 
+     pub(super) fn arbitration_done(&mut self, won: bool, best: &Claim, peers: usize) {
+         self.arbitrating = false;
+         self.arb_claim = None;
+-        let audio = std::mem::take(&mut self.arb_audio);
+-        let command = std::mem::take(&mut self.arb_command);
++        let mut audio = std::mem::take(&mut self.arb_audio);
++        let split = self.arb_boundary.min(audio.len());
++        let live = audio.split_off(split);
++        self.arb_boundary = 0;
++        let prior = self.arb_endpoint.take();
+         if !won {
+-            self.mic.set_streaming(false);
++            // A dialog that was already listening keeps streaming: this wake word replaced
++            // nothing unless this station answers it.
++            if self.phase != Phase::Listening {
++                self.mic.set_streaming(false);
++            }
+             info!(
+                 "wake word: {} answers ({}{:.1} dB, ours {:.1} dB)",
+                 best.station,
+@@ -175,16 +208,10 @@ impl Controller {
+             return;
+         }
+         info!("wake word: this station answers ({peers} other station(s) heard it)");
+-        if !command.is_empty() {
+-            // "Алиса, громче": handled locally, as right after the wake word.
+-            self.mic.set_streaming(false);
+-            self.update_ui();
+-            return self.on_command(&command, true);
+-        }
+         // Capture keeps streaming into the new dialog: switching it off here could drop the
+         // chunk between the preroll and live audio.
+         let phrase = self.arb_phrase.clone();
+-        self.answer_wake(&phrase, audio);
++        self.answer_wake(&phrase, audio, live, prior);
+         if self.phase != Phase::Listening {
+             self.mic.set_streaming(false); // no dialog started (e.g. HA gone)
+         }
+@@ -198,7 +225,8 @@ impl Controller {
+         self.arbitrating = false;
+         self.arb_claim = None;
+         self.arb_audio.clear();
+-        self.arb_command.clear();
++        self.arb_boundary = 0;
++        self.arb_endpoint = None;
+         if self.phase != Phase::Listening {
+             self.mic.set_streaming(false);
+         }
+@@ -206,8 +234,24 @@ impl Controller {
+ 
+     // ---------------- pipeline ----------------
+ 
+-    /// The only way into LISTENING (the watchdog bounds it).
+-    pub(super) fn start_pipeline(&mut self, phrase: &str, earcon: bool, preroll: Vec<i16>) {
++    /// Uncalibrated energy heuristic: opt-in only, off unless explicitly enabled.
++    fn local_endpointing_enabled() -> bool {
++        matches!(
++            std::env::var("PULSAR_LOCAL_ENDPOINTING").as_deref(),
++            Ok("1")
++        )
++    }
++
++    /// The only way into LISTENING (the watchdog bounds it). `preroll` came with the wake event;
++    /// `live` is post-wake audio held during wake arbitration (empty otherwise).
++    pub(super) fn start_pipeline(
++        &mut self,
++        phrase: &str,
++        earcon: bool,
++        preroll: Vec<i16>,
++        live: Vec<i16>,
++        endpoint_prior: Option<EndpointPrior>,
++    ) {
+         // The button, a continued conversation or HA's start_conversation win.
+         self.cancel_arbitration();
+         if !self.api.voice_subscribed() {
+@@ -222,6 +266,19 @@ impl Controller {
+         self.dialog += 1;
+         self.run.start();
+         self.stop_sent = false;
++        self.endpoint = if Self::local_endpointing_enabled() {
++            endpoint_prior.and_then(|p| EndpointRun::new(p, &preroll, &live))
++        } else {
++            None
++        };
++        if let Some(r) = self.endpoint.as_ref() {
++            let p = r.prior();
++            let (on, off) = r.thresholds();
++            debug!(
++                "local endpointing: noise {:.1} dB, wake {:.1} dB, onset {:.1} dB, release {:.1} dB",
++                p.noise_db, p.speech_db, on, off
++            );
++        }
+         self.listen_started_ms = now_ms();
+         self.tts_url.clear();
+         self.tts_played = false;
+@@ -241,12 +298,21 @@ impl Controller {
+         for chunk in preroll.chunks(512) {
+             self.api.voice_send_audio(chunk.to_vec());
+         }
++        for chunk in live.chunks(512) {
++            self.api.voice_send_audio(chunk.to_vec());
++        }
+         self.mic.set_streaming(true);
+         self.arm_watchdog();
+         self.update_ui();
+     }
+ 
+     fn stop_streaming(&mut self) {
++        // HA finished the phrase first (STT_VAD_END/STT_END), the dialog was cancelled or a
++        // repeated wake replaced it: drop the run so no stale end can follow.
++        if let Some(r) = self.endpoint.as_mut() {
++            r.cancel();
++        }
++        self.endpoint = None;
+         // A wake word heard meanwhile keeps its audio.
+         self.mic.set_streaming(self.arbitrating);
+         if self.phase == Phase::Listening {
+@@ -254,6 +320,47 @@ impl Controller {
+         }
+     }
+ 
++    /// One live 32 ms chunk while the dialog listens. Sends it to HA and feeds the optional
++    /// local detector; a detected end is deferred while the wake earcon is playing.
++    pub(super) fn on_listening_audio(&mut self, pcm: Vec<i16>) {
++        if let Some(r) = self.endpoint.as_mut() {
++            r.push(pcm_level_db(&pcm), true);
++        }
++        self.api.voice_send_audio(pcm);
++        let earcon = matches!(
++            self.player.state(Channel::Announce),
++            PlayState::Playing | PlayState::Loading
++        );
++        if !earcon
++            && self.phase == Phase::Listening
++            && self.endpoint.as_mut().is_some_and(|r| r.take_end())
++        {
++            self.send_endpoint_end();
++        }
++    }
++
++    /// Graceful `VoiceAssistantAudio.end`: finish the phrase on what HA already has, without
++    /// aborting the run. Exactly once per dialog; a stale or replaced dialog sends nothing.
++    fn send_endpoint_end(&mut self) {
++        if self.stop_sent || self.phase != Phase::Listening {
++            return;
++        }
++        if let Some(r) = self.endpoint.as_ref() {
++            let p = r.prior();
++            let (on, off) = r.thresholds();
++            info!(
++                "voice pipeline: local end (experimental), noise {:.1} dB, wake {:.1} dB, \
++                 onset {:.1} dB, release {:.1} dB",
++                p.noise_db, p.speech_db, on, off
++            );
++        }
++        self.api.voice_send_audio_end();
++        // Stop feeding the microphone, but keep the run: HA finishes STT and the answer.
++        self.stop_streaming();
++        self.arm_watchdog();
++        self.update_ui();
++    }
++
+     pub(super) fn on_voice_event(&mut self, ev: VaEvent, data: &HashMap<String, String>) {
+         let get = |k: &str| data.get(k).map_or("", String::as_str);
+         let code = ev.code();
+@@ -312,15 +419,18 @@ impl Controller {
+                         "pipeline: another satellite answers this wake word (HA duplicate wake-up)"
+                     );
+                     self.stop_streaming();
++                } else if get("code") == "stt-no-text-recognized" {
++                    // Empty STT after a wake word: the user changed their mind or spoke
++                    // too softly. Treat it as a silent cancel, not a station error.
++                    info!("pipeline: no speech recognized, treating as cancel");
++                    self.stop_streaming();
+                 } else {
+                     warn!("pipeline error: {} {}", get("code"), get("message"));
+                     self.stop_streaming();
+                     self.error_shown = true;
+                     self.show_ui(UiState::Error);
+-                    if get("code") != "stt-no-text-recognized" {
+-                        let sound = format!("{SOUNDS}{}", self.model.error_sound);
+-                        self.play_closing_earcon(sound);
+-                    }
++                    let sound = format!("{SOUNDS}{}", self.model.error_sound);
++                    self.play_closing_earcon(sound);
+                 }
+             }
+             VaEvent::RunEnd => {
+@@ -352,7 +462,7 @@ impl Controller {
+         self.send_tts_report(ok);
+         if ok && self.continue_conversation && !self.timer_ringing && !self.mic_muted() {
+             self.continue_conversation = false;
+-            self.start_pipeline("", false, Vec::new());
++            self.start_pipeline("", false, Vec::new(), Vec::new(), None);
+             return;
+         }
+         self.finish_interaction();
+@@ -384,6 +494,7 @@ impl Controller {
+         }
+         self.run.awaiting_run_start = false;
+         self.send_tts_report(false);
++        self.endpoint = None;
+         self.mic.set_streaming(self.arbitrating);
+         self.phase = Phase::Idle;
+         self.dialog += 1;
+@@ -475,7 +586,7 @@ impl Controller {
+             self.interrupt_speech();
+             return self.finish_interaction();
+         }
+-        self.start_pipeline("", true, Vec::new());
++        self.start_pipeline("", true, Vec::new(), Vec::new(), None);
+     }
+ 
+     // ---------------- announcements ----------------
+@@ -629,10 +740,23 @@ impl Controller {
+     // ---------------- local commands ----------------
+ 
+     /// Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше",
+-    /// "назад"): on unless the microphone is muted, the dialog included; which words act where is
+-    /// logic::command_allowed.
++    /// "назад"): on while something plays, off in silence and during a wake request. Which words
++    /// act where is logic::command_allowed.
+     pub(super) fn update_commands(&self) {
+-        self.mic.set_commands(!self.mic_muted());
++        // Stock commands without the wake word stay available while something plays,
++        // as in the C++ build. During a wake request they are off: «Рикардо, стоп»
++        // must reach Home Assistant so it can stop an alarm and restore the music,
++        // instead of being swallowed as a local pause.
++        let playing = matches!(
++            self.player.state(Channel::Music),
++            PlayState::Playing | PlayState::Loading
++        ) || self.sendspin_streaming()
++            || self.announcing
++            || self.timer_ringing
++            || self.phase == Phase::Speaking;
++        let dialog = matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating;
++        self.mic
++            .set_commands(!self.mic_muted() && playing && !dialog);
+     }
+ 
+     fn owns_music(&self) -> bool {
+@@ -674,9 +798,7 @@ impl Controller {
+         }
+     }
+ 
+-    /// `held`: the word came during a wake arbitration this station won, right after its wake
+-    /// word.
+-    pub(super) fn on_command(&mut self, word: &str, held: bool) {
++    pub(super) fn on_command(&mut self, word: &str) {
+         if self.mic_muted() {
+             return;
+         }
+@@ -687,53 +809,24 @@ impl Controller {
+             info!("voice command '{word}' ignored: another station answers this wake word");
+             return;
+         }
+-        if self.arbitrating {
+-            self.arb_command = word.to_owned();
+-            info!("voice command '{word}' held until the wake arbitration ends");
++        // A wake request owns the command. Sending "стоп" to Home Assistant is what
++        // stops a ringing alarm and restores the paused music; local handling would
++        // only pause the music and cancel the pipeline. This also covers a callback
++        // queued just before update_commands() switched the spotter off.
++        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
++            info!("voice command '{word}' left to Home Assistant during a voice request");
+             return;
+         }
+-        let after_wake = logic::after_wake(self.phase, now_ms(), self.listen_started_ms);
+-        // A dialog past the window after its wake word: its words are the request's, except
+-        // "стоп".
+-        let in_dialog = matches!(self.phase, Phase::Listening | Phase::Processing) && !after_wake;
+         let sounding = self.phase == Phase::Speaking || self.announcing || self.timer_ringing;
+-        if !logic::command_allowed(
+-            c,
+-            held || after_wake,
+-            in_dialog,
+-            sounding,
+-            self.owns_music(),
+-        ) {
+-            if in_dialog {
+-                info!("voice command '{word}' ignored: part of the request");
+-            } else {
+-                info!("voice command '{word}' ignored: not for this station");
+-            }
++        if !logic::command_allowed(c, false, false, sounding, self.owns_music()) {
++            info!("voice command '{word}' ignored: not for this station");
+             return;
+         }
+-        info!(
+-            "voice command '{word}'{}",
+-            if after_wake {
+-                " (after wake word, HA pipeline cancelled)"
+-            } else if held {
+-                " (after wake word)"
+-            } else if in_dialog {
+-                " (in a dialog)"
+-            } else {
+-                ""
+-            }
+-        );
+-        // A word in the dialog's own window ends the dialog first; one held through an
+-        // arbitration in SPEAKING / IDLE leaves the answer playing.
+-        if after_wake {
+-            self.finish_interaction();
+-        }
++        info!("voice command '{word}'");
+         match c {
+             VoiceCommand::Stop => {
+                 if self.timer_ringing {
+                     self.stop_timer_ring();
+-                } else if in_dialog {
+-                    self.cancel_dialog();
+                 } else if self.phase == Phase::Speaking {
+                     self.interrupt_speech();
+                     self.finish_interaction();
+diff --git a/satellite/crates/pulsar/src/main.rs b/satellite/crates/pulsar/src/main.rs
+index 37a0bb9..d42e6d0 100644
+--- a/satellite/crates/pulsar/src/main.rs
++++ b/satellite/crates/pulsar/src/main.rs
+@@ -14,7 +14,7 @@ mod version;
+ 
+ use std::ffi::OsStr;
+ use std::io::Write as _;
+-use std::path::PathBuf;
++use std::path::{Path, PathBuf};
+ use std::process::ExitCode;
+ use std::time::Duration;
+ 
+@@ -74,6 +74,11 @@ fn main() -> ExitCode {
+     };
+     let local = tokio::task::LocalSet::new();
+     let status = local.block_on(&rt, async {
++        // Sampled at exit, not here: `ctl.sh disable` removes the marker before stopping us.
++        let restart_marker = state
++            .parent()
++            .unwrap_or_else(|| Path::new("."))
++            .join("enabled");
+         let mut ctl = match Controller::start(model, state) {
+             Ok(c) => c,
+             Err(e) => {
+@@ -87,6 +92,11 @@ fn main() -> ExitCode {
+             model.model_name, model.codename
+         );
+         ctl.run().await;
++        // `enabled` is what supervise.sh restarts on: promise MA a reconnect only when this is
++        // a restart, not a deliberate ctl.sh disable (it removes enabled first) or a manual run.
++        if supervisor_restarts(&restart_marker) {
++            ctl.promise_sendspin_restart();
++        }
+         arm_teardown_watchdog(0);
+         // Nothing changes the settings after run: a change still pending is written once, here.
+         // Inside the watchdog, so a hung fsync cannot keep the daemon from exiting (a write cut
+@@ -107,3 +117,34 @@ fn main() -> ExitCode {
+     rt.shutdown_timeout(Duration::from_secs(1));
+     ExitCode::from(status)
+ }
++
++/// Whether supervise.sh will start this daemon again (`<state dir>/enabled` exists at exit).
++fn supervisor_restarts(enabled: &Path) -> bool {
++    enabled.is_file()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn supervisor_restart_follows_the_enabled_file_next_to_the_state() {
++        let dir = std::env::temp_dir().join(format!("pulsar-restart-test-{}", std::process::id()));
++        let state = dir.join("state.conf");
++        let marker = dir.join("enabled");
++        std::fs::create_dir_all(&dir).unwrap();
++        assert!(!supervisor_restarts(&marker));
++        std::fs::write(&marker, b"").unwrap();
++        assert!(supervisor_restarts(&marker));
++        // `ctl.sh disable`: enabled removed before the signal, so the daemon sends `shutdown`.
++        std::fs::remove_file(&marker).unwrap();
++        assert!(!supervisor_restarts(&marker));
++        // The same state path derives the marker the supervisor reads.
++        assert_eq!(
++            state.parent().unwrap().join("enabled"),
++            marker,
++            "marker next to state.conf"
++        );
++        std::fs::remove_dir_all(&dir).unwrap();
++    }
++}
+diff --git a/satellite/crates/pulsar/src/settings.rs b/satellite/crates/pulsar/src/settings.rs
+index 862d92c..2a0dde0 100644
+--- a/satellite/crates/pulsar/src/settings.rs
++++ b/satellite/crates/pulsar/src/settings.rs
+@@ -89,10 +89,11 @@ impl Default for Settings {
+             clock_auto_brightness: true,
+             clock_scroll_ms: 400,
+             light: LightState::default(),
+-            wake_word: "alisa".into(),
++            wake_word: "ricardo".into(),
+             tz: "MSK-3".into(),
+             auto_update: false,
+-            nearest_answers: true,
++            // One station in this installation: the 250 ms arbitration window only adds latency.
++            nearest_answers: false,
+             music_viz: "All styles".into(),
+             clock_music: "Off".into(),
+             led_speed: 1.0,
+diff --git a/satellite/crates/pulsar/src/settings/tests.rs b/satellite/crates/pulsar/src/settings/tests.rs
+index f573b05..25c5f73 100644
+--- a/satellite/crates/pulsar/src/settings/tests.rs
++++ b/satellite/crates/pulsar/src/settings/tests.rs
+@@ -2,7 +2,8 @@
+ // and Settings::save of controller.cpp, copied verbatim into a throwaway host harness built with
+ // `zig c++ -std=c++20 -O2`. save_*.conf: `save` of the values below; load_*.out: `load` of
+ // load_*.in, then `save`. Edited by hand since: `wake_preroll` (after `clock_music`; 0 in
+-// load_odd.in); `clock_auto_brightness` (after `wake_preroll`).
++// load_odd.in); `clock_auto_brightness` (after `wake_preroll`), and this fork's defaults
++// (`wake_word=ricardo`, `nearest_answers=0`).
+ 
+ use super::*;
+ 
+@@ -45,7 +46,7 @@ fn values() -> Settings {
+ }
+ 
+ #[test]
+-fn save_matches_cxx_byte_for_byte() {
++fn save_matches_golden_byte_for_byte() {
+     assert_eq!(
+         Settings::default().serialize().as_bytes(),
+         golden("save_default.conf")
+@@ -79,7 +80,7 @@ fn save_matches_cxx_byte_for_byte() {
+ }
+ 
+ #[test]
+-fn parses_a_file_written_by_cxx() {
++fn parses_a_file_written_by_the_fork() {
+     let mut s = Settings::default();
+     s.parse(&golden("save_values.conf"));
+     // Written with 6 significant digits: the values read back are those of the text.
+diff --git a/satellite/crates/pulsar/tests/golden/settings/load_edge.out b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
+index 3180a40..5d44fb0 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/load_edge.out
++++ b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
+@@ -11,13 +11,13 @@ light_r=1
+ light_g=1
+ light_b=inf
+ light_effect=
+-wake_word=alisa
++wake_word=ricardo
+ tz=MSK-3
+ auto_update=0
+ update_attempt=
+ zigbee_role=router
+ zigbee_flash_failed=ffffffff
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=4
+ voice_indication=1
+diff --git a/satellite/crates/pulsar/tests/golden/settings/save_default.conf b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
+index 0408207..3fa973b 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/save_default.conf
++++ b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
+@@ -11,13 +11,13 @@ light_r=1
+ light_g=1
+ light_b=1
+ light_effect=
+-wake_word=alisa
++wake_word=ricardo
+ tz=MSK-3
+ auto_update=0
+ update_attempt=
+ zigbee_role=off
+ zigbee_flash_failed=0
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=1
+ voice_indication=1
+diff --git a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
+index b2058b0..9425c13 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
++++ b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
+@@ -11,13 +11,13 @@ light_r=0
+ light_g=1
+ light_b=0.5
+ light_effect=
+-wake_word=alisa
++wake_word=ricardo
+ tz=
+ auto_update=0
+ update_attempt=
+ zigbee_role=router
+ zigbee_flash_failed=ffffffff
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=4
+ voice_indication=1
+diff --git a/satellite/crates/pulsar/tests/golden/settings/save_values.conf b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
+index 566543b..8abfd4f 100644
+--- a/satellite/crates/pulsar/tests/golden/settings/save_values.conf
++++ b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
+@@ -11,13 +11,13 @@ light_r=1e-05
+ light_g=123457
+ light_b=3.14159
+ light_effect=Rainbow
+-wake_word=alisa
++wake_word=ricardo
+ tz=EST5EDT,M3.2.0,M11.1.0
+ auto_update=0
+ update_attempt=v1.2.3
+ zigbee_role=pulsar-coordinator
+ zigbee_flash_failed=5001abcd
+-nearest_answers=1
++nearest_answers=0
+ music_viz=All styles
+ led_speed=0.25
+ voice_indication=1
+diff --git a/satellite/wakewords/.gitignore b/satellite/wakewords/.gitignore
+new file mode 100644
+index 0000000..090371c
+--- /dev/null
++++ b/satellite/wakewords/.gitignore
+@@ -0,0 +1,4 @@
++# The trained model and its manifest are local artifacts until the voice/data
++# licenses are reviewed for public distribution.
++*.tflite
++*.json
+diff --git a/satellite/wakewords/README.md b/satellite/wakewords/README.md
+new file mode 100644
+index 0000000..957ed32
+--- /dev/null
++++ b/satellite/wakewords/README.md
+@@ -0,0 +1,28 @@
++# Wake-word model
++
++The Ricardo build uses the on-device microWakeWord model produced by the
++station lab. The model is intentionally not committed to this public fork:
++its training voices and recordings still need a license review.
++
++Put the model here before installing from a checkout:
++
++```text
++ru_ricardo_mww.tflite   # 86,240 bytes, SHA-256 f1ba6dca7c380b584d5e4e1d83f9fd2144e09f4ef9a68135e206f7aab5fd96b2
++```
++
++`pulsar-install` copies every `*.tflite` from this directory to
++`/data/pulsar/wakewords/` and verifies the SHA-256 during the upload. A release
++archive without this directory keeps the model already installed on the
++station; a fresh install without it starts with no «Рикардо» detector and logs
++that fact.
++
++The daemon path is fixed:
++
++```text
++/data/pulsar/wakewords/ru_ricardo_mww.tflite
++```
++
++The detector uses the firmware's `libtflite.so` and the vendored
++microfrontend, so neither the model nor the Yandex runtime is redistributed
++here. The C++ bridge and its license notes are in
++`crates/pulsar-audio/ricardo/`.
+diff --git a/tools/ha_firmware_deploy.py b/tools/ha_firmware_deploy.py
+new file mode 100644
+index 0000000..f11ee81
+--- /dev/null
++++ b/tools/ha_firmware_deploy.py
+@@ -0,0 +1,380 @@
++#!/usr/bin/env python3
++"""Install a published pulsar release on a station through Home Assistant.
++
++The station's updater is driven entirely by HA: `homeassistant.update_entity`
++makes the "Firmware" entity re-read `releases/latest`, `update.install` makes
++the daemon download, verify, swap and restart. This tool performs those two
++steps from CI and then watches the entity until the new version is stable, so
++an approved workflow run fails on its own when the install or the restart does
++not take (the supervisor keeps the old binary as `.prev`).
++
++Standard library only: the workflow runner needs no extra packages.
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import sys
++import time
++import urllib.error
++import urllib.request
++from urllib.parse import quote
++
++HTTP_TIMEOUT = 15.0
++
++
++class HaError(Exception):
++    """A Home Assistant request failed or the entity did not reach the goal."""
++
++
++def log(message: str) -> None:
++    print(message, flush=True)
++
++
++class HaClient:
++    def __init__(self, url: str, token: str, http_timeout: float = HTTP_TIMEOUT):
++        self.base = url.rstrip("/")
++        self._token = token
++        self.http_timeout = http_timeout
++
++    def _request(self, method: str, path: str, payload=None, timeout=None):
++        data = None
++        if payload is not None:
++            data = json.dumps(payload).encode("utf-8")
++        request = urllib.request.Request(self.base + path, data=data, method=method)
++        request.add_header("Authorization", "Bearer " + self._token)
++        request.add_header("Content-Type", "application/json")
++        with urllib.request.urlopen(request, timeout=timeout or self.http_timeout) as response:
++            body = response.read()
++        if not body:
++            return None
++        return json.loads(body)
++
++    def state(self, entity: str) -> dict:
++        return self._request("GET", "/api/states/" + quote(entity, safe=""))
++
++    def call_service(self, domain: str, service: str, payload: dict):
++        return self._request("POST", f"/api/services/{domain}/{service}", payload)
++
++
++def _attributes(state: dict) -> dict:
++    attributes = state.get("attributes")
++    return attributes if isinstance(attributes, dict) else {}
++
++
++def installed_version(state: dict) -> str | None:
++    value = _attributes(state).get("installed_version")
++    return value if isinstance(value, str) else None
++
++
++def latest_version(state: dict) -> str | None:
++    value = _attributes(state).get("latest_version")
++    return value if isinstance(value, str) else None
++
++
++def entity_state(state: dict) -> str:
++    value = state.get("state")
++    return value if isinstance(value, str) else "unknown"
++
++
++def _fetch_state(client: HaClient, entity: str) -> dict:
++    try:
++        return client.state(entity)
++    except urllib.error.HTTPError as error:
++        if error.code == 404:
++            raise HaError(f"entity {entity!r} does not exist in Home Assistant") from None
++        raise HaError(f"GET /api/states/{entity} failed with HTTP {error.code}") from None
++    except (urllib.error.URLError, TimeoutError, OSError) as error:
++        raise HaError(f"GET /api/states/{entity} failed: {error}") from None
++    except json.JSONDecodeError:
++        raise HaError(f"GET /api/states/{entity} returned invalid JSON") from None
++
++
++def wait_for_latest(
++    client: HaClient,
++    entity: str,
++    tag: str,
++    *,
++    poll_interval: float,
++    retrigger_interval: float,
++    timeout: float,
++) -> None:
++    """Poll until HA advertises `tag` as the latest release.
++
++    The daemon finds `releases/latest` through GitHub's redirect, which can
++    trail the creation of the release by a little. `update_entity` is repeated
++    so a stale entity re-reads it instead of waiting for the 6 h timer.
++    """
++    deadline = time.monotonic() + timeout
++    next_trigger = 0.0
++    last_seen = None
++    while True:
++        now = time.monotonic()
++        if now >= next_trigger:
++            try:
++                client.call_service("homeassistant", "update_entity", {"entity_id": entity})
++            except (urllib.error.URLError, TimeoutError, OSError) as error:
++                log(f"update_entity failed ({error}); retrying")
++            except json.JSONDecodeError:
++                log("update_entity returned invalid JSON; retrying")
++            next_trigger = now + retrigger_interval
++        try:
++            state = _fetch_state(client, entity)
++        except HaError as error:
++            log(f"waiting for latest: {error}")
++        else:
++            last_seen = latest_version(state)
++            if last_seen == tag:
++                log(f"Home Assistant offers {tag}")
++                return
++        if time.monotonic() >= deadline:
++            raise HaError(
++                f"Home Assistant did not offer {tag} within {timeout:g} s"
++                f" (latest_version={last_seen!r})"
++            )
++        time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
++
++
++def _install_tolerated(client: HaClient, entity: str) -> None:
++    """Call update.install; the station restarts, so a failed response is fine."""
++    try:
++        client.call_service("update", "install", {"entity_id": entity})
++    except urllib.error.HTTPError as error:
++        if error.code >= 500:
++            log(f"install call returned HTTP {error.code}; the station may be restarting")
++            return
++        raise HaError(f"update.install failed with HTTP {error.code}") from None
++    except (urllib.error.URLError, TimeoutError, OSError) as error:
++        log(f"install call did not return ({error}); the station is probably restarting")
++        return
++    except json.JSONDecodeError:
++        log("install call returned invalid JSON; continuing to poll the entity")
++        return
++    log("install call accepted")
++
++
++def wait_for_install(
++    client: HaClient,
++    entity: str,
++    tag: str,
++    *,
++    poll_interval: float,
++    timeout: float,
++) -> None:
++    """Poll until the entity reports `tag` installed and is back online."""
++    deadline = time.monotonic() + timeout
++    last_seen = None
++    while True:
++        try:
++            state = _fetch_state(client, entity)
++        except HaError as error:
++            log(f"waiting for install: {error}")
++        else:
++            last_seen = (entity_state(state), installed_version(state))
++            if entity_state(state) != "unavailable" and installed_version(state) == tag:
++                log(f"station reports {tag} installed")
++                return
++        if time.monotonic() >= deadline:
++            raise HaError(
++                f"station did not report {tag} installed within {timeout:g} s"
++                f" (state={last_seen!r})"
++            )
++        time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
++
++
++def watch_stability(
++    client: HaClient,
++    entity: str,
++    tag: str,
++    *,
++    poll_interval: float,
++    duration: float,
++    unavailable_tolerance: float,
++) -> None:
++    """Keep watching for a crash-loop rollback by `supervise.sh`.
++
++    A binary that starts and then exits is swapped back to `.prev` after a few
++    short crashes; the entity then reports the old version again or stays
++    unavailable.
++    """
++    deadline = time.monotonic() + duration
++    unavailable_since = None
++    while True:
++        now = time.monotonic()
++        try:
++            state = _fetch_state(client, entity)
++        except HaError as error:
++            log(f"stability check: {error}")
++            if unavailable_since is None:
++                unavailable_since = now
++        else:
++            if entity_state(state) == "unavailable":
++                if unavailable_since is None:
++                    unavailable_since = now
++            else:
++                unavailable_since = None
++                current = installed_version(state)
++                if current is not None and current != tag:
++                    raise HaError(
++                        f"station rolled back after install: installed_version={current!r}"
++                        f" instead of {tag!r} (supervise.sh restored .prev)"
++                    )
++        if (
++            unavailable_since is not None
++            and now - unavailable_since > unavailable_tolerance
++        ):
++            raise HaError(
++                f"entity stayed unavailable for more than {unavailable_tolerance:g} s"
++                " after the install"
++            )
++        if now >= deadline:
++            log(f"{tag} stayed installed for {duration:g} s")
++            return
++        time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
++
++
++def deploy(args: argparse.Namespace, token: str) -> int:
++    client = HaClient(args.ha_url, token, args.http_timeout)
++    entity = args.entity_id
++
++    before = _fetch_state(client, entity)
++    before_version = installed_version(before)
++    log(f"{entity}: installed_version={before_version!r} state={entity_state(before)!r}")
++    if before_version == args.tag:
++        log(f"{args.tag} is already installed")
++        return 0
++
++    wait_for_latest(
++        client,
++        entity,
++        args.tag,
++        poll_interval=args.poll_interval,
++        retrigger_interval=args.latest_retrigger,
++        timeout=args.latest_timeout,
++    )
++
++    _install_tolerated(client, entity)
++    wait_for_install(
++        client,
++        entity,
++        args.tag,
++        poll_interval=args.poll_interval,
++        timeout=args.install_timeout,
++    )
++    watch_stability(
++        client,
++        entity,
++        args.tag,
++        poll_interval=args.poll_interval,
++        duration=args.stability,
++        unavailable_tolerance=args.unavailable_tolerance,
++    )
++
++    try:
++        after = _fetch_state(client, entity)
++        after_version = installed_version(after)
++    except HaError:
++        after_version = None
++    log(f"done: before={before_version!r} after={after_version!r}")
++    return 0
++
++
++def parse_args(argv=None) -> argparse.Namespace:
++    parser = argparse.ArgumentParser(
++        description="Install a published pulsar release through Home Assistant.",
++    )
++    parser.add_argument("--tag", required=True, help="release tag, for example v0.5.1001")
++    parser.add_argument(
++        "--entity-id",
++        default=None,
++        help="HA update entity (default: $ENTITY_ID)",
++    )
++    parser.add_argument("--ha-url", default=None, help="HA base URL (default: $HA_URL)")
++    parser.add_argument(
++        "--token-file",
++        default=None,
++        help="file with the HA long-lived token (default: $HA_TOKEN)",
++    )
++    parser.add_argument(
++        "--http-timeout",
++        type=float,
++        default=HTTP_TIMEOUT,
++        help="per-request timeout in seconds (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--poll-interval",
++        type=float,
++        default=5.0,
++        help="state poll interval in seconds (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--latest-timeout",
++        type=float,
++        default=300.0,
++        help="how long to wait for HA to offer the tag (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--latest-retrigger",
++        type=float,
++        default=30.0,
++        help="repeat homeassistant.update_entity after this many seconds"
++        " (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--install-timeout",
++        type=float,
++        default=600.0,
++        help="how long to wait for the install to take (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--stability",
++        type=float,
++        default=90.0,
++        help="how long the new version must stay installed (default: %(default)s)",
++    )
++    parser.add_argument(
++        "--unavailable-tolerance",
++        type=float,
++        default=30.0,
++        help="fail after the entity has been unavailable this long (default: %(default)s)",
++    )
++    return parser.parse_args(argv)
++
++
++def _resolve(args: argparse.Namespace) -> tuple[str, str, str]:
++    import os
++
++    ha_url = args.ha_url or os.environ.get("HA_URL")
++    entity_id = args.entity_id or os.environ.get("ENTITY_ID")
++    if not ha_url:
++        raise HaError("HA_URL or --ha-url is required")
++    if not entity_id:
++        raise HaError("ENTITY_ID or --entity-id is required")
++    if args.token_file:
++        try:
++            with open(args.token_file, encoding="utf-8") as handle:
++                token = handle.read().strip()
++        except OSError as error:
++            raise HaError(f"cannot read token file: {error}") from None
++    else:
++        token = os.environ.get("HA_TOKEN") or ""
++    if not token:
++        raise HaError("HA_TOKEN or --token-file is required")
++    return ha_url, entity_id, token
++
++
++def main(argv=None) -> int:
++    args = parse_args(argv)
++    try:
++        ha_url, entity_id, token = _resolve(args)
++        args.ha_url = ha_url
++        args.entity_id = entity_id
++        return deploy(args, token)
++    except HaError as error:
++        print(f"error: {error}", file=sys.stderr, flush=True)
++        return 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/tools/test_ha_firmware_deploy.py b/tools/test_ha_firmware_deploy.py
+new file mode 100644
+index 0000000..310e10b
+--- /dev/null
++++ b/tools/test_ha_firmware_deploy.py
+@@ -0,0 +1,241 @@
++#!/usr/bin/env python3
++"""Tests for tools/ha_firmware_deploy.py against a fake Home Assistant."""
++
++from __future__ import annotations
++
++import contextlib
++import io
++import json
++import sys
++import tempfile
++import threading
++import unittest
++from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++
++import ha_firmware_deploy as deployer  # noqa: E402
++
++ENTITY = "update.station_firmware"
++OLD = "v0.5.1000"
++TAG = "v0.5.1001"
++
++
++class FakeStation:
++    """State machine of the HA update entity and the station restart."""
++
++    def __init__(self, tag: str):
++        self.tag = tag
++        self.installed = OLD
++        self.latest = OLD
++        self.state = "on"
++        self.update_calls = 0
++        self.install_calls = 0
++        self.polls = 0
++        # Number of `homeassistant.update_entity` calls before the tag shows up.
++        self.latest_after_updates = 0
++        # State polls between `update.install` and the new version coming up.
++        self.install_delay_polls = 1
++        # Answer the install call without a response (the station went down).
++        self.drop_install = False
++        # Flip back to the old version this many polls after the install took.
++        self.revert_after_polls = None
++        self._install_at = None
++        self._revert_at = None
++
++    def snapshot(self) -> dict:
++        return {
++            "entity_id": ENTITY,
++            "state": self.state,
++            "attributes": {
++                "installed_version": self.installed,
++                "latest_version": self.latest,
++            },
++        }
++
++    def poll(self) -> None:
++        self.polls += 1
++        if self._install_at is not None:
++            if self.polls - self._install_at >= self.install_delay_polls:
++                self.installed = self.tag
++                self.state = "on"
++                self._install_at = None
++                if self.revert_after_polls is not None:
++                    self._revert_at = self.polls + self.revert_after_polls
++        if self._revert_at is not None and self.polls >= self._revert_at:
++            self.installed = OLD
++            self.state = "on"
++
++    def check_updates(self) -> None:
++        self.update_calls += 1
++        if self.update_calls >= self.latest_after_updates:
++            self.latest = self.tag
++
++    def install(self) -> None:
++        self.install_calls += 1
++        self.state = "unavailable"
++        self._install_at = self.polls
++
++
++class _Handler(BaseHTTPRequestHandler):
++    protocol_version = "HTTP/1.1"
++
++    @property
++    def station(self) -> FakeStation:
++        return self.server.station  # type: ignore[attr-defined]
++
++    def log_message(self, *args) -> None:  # keep the test output clean
++        pass
++
++    def _json(self, payload: dict, code: int = 200) -> None:
++        body = json.dumps(payload).encode("utf-8")
++        self.send_response(code)
++        self.send_header("Content-Type", "application/json")
++        self.send_header("Content-Length", str(len(body)))
++        self.end_headers()
++        self.wfile.write(body)
++
++    def _authorized(self) -> bool:
++        if self.headers.get("Authorization") != "Bearer test-token":
++            self._json({"message": "unauthorized"}, 401)
++            return False
++        return True
++
++    def do_GET(self) -> None:  # noqa: N802
++        if not self._authorized():
++            return
++        if self.path != "/api/states/" + ENTITY:
++            self._json({"message": "not found"}, 404)
++            return
++        self.station.poll()
++        self._json(self.station.snapshot())
++
++    def do_POST(self) -> None:  # noqa: N802
++        if not self._authorized():
++            return
++        length = int(self.headers.get("Content-Length") or 0)
++        payload = json.loads(self.rfile.read(length) or b"{}")
++        if payload.get("entity_id") != ENTITY:
++            self._json({"message": "wrong entity"}, 400)
++            return
++        if self.path == "/api/services/homeassistant/update_entity":
++            self.station.check_updates()
++            self._json([])
++        elif self.path == "/api/services/update/install":
++            self.station.install()
++            if self.station.drop_install:
++                # The station restarts inside the call: no response at all.
++                self.close_connection = True
++                return
++            self._json([])
++        else:
++            self._json({"message": "not found"}, 404)
++
++
++def start_server(station: FakeStation) -> ThreadingHTTPServer:
++    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
++    server.daemon_threads = True
++    server.station = station  # type: ignore[attr-defined]
++    thread = threading.Thread(target=server.serve_forever, daemon=True)
++    thread.start()
++    return server
++
++
++def run_deploy(server: ThreadingHTTPServer, *extra: str) -> int:
++    port = server.server_address[1]
++    argv = [
++        "--tag",
++        TAG,
++        "--ha-url",
++        f"http://127.0.0.1:{port}",
++        "--entity-id",
++        ENTITY,
++        "--token-file",
++        str(_TOKEN_FILE),
++        "--http-timeout",
++        "2",
++        "--poll-interval",
++        "0.05",
++        "--latest-timeout",
++        "1.5",
++        "--latest-retrigger",
++        "0.2",
++        "--install-timeout",
++        "2",
++        "--stability",
++        "0.6",
++        "--unavailable-tolerance",
++        "0.6",
++        *extra,
++    ]
++    # The token value must never appear on stdout/stderr.
++    out = io.StringIO()
++    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
++        code = deployer.main(argv)
++    captured = out.getvalue()
++    assert "test-token" not in captured, "the tool printed the HA token"
++    return code
++
++
++_TOKEN_FILE = None
++_TOKEN_DIR = None
++
++
++def setUpModule() -> None:
++    global _TOKEN_FILE, _TOKEN_DIR
++    _TOKEN_DIR = tempfile.TemporaryDirectory(prefix="pulsar-deploy-test-")
++    _TOKEN_FILE = Path(_TOKEN_DIR.name) / "ha_token"
++    _TOKEN_FILE.write_text("test-token\n", encoding="utf-8")
++
++
++def tearDownModule() -> None:
++    _TOKEN_DIR.cleanup()
++
++
++class DeployTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.station = FakeStation(TAG)
++        self.server = start_server(self.station)
++
++    def tearDown(self) -> None:
++        self.server.shutdown()
++        self.server.server_close()
++
++    def test_already_installed(self) -> None:
++        self.station.installed = TAG
++        self.station.latest = TAG
++        self.assertEqual(run_deploy(self.server), 0)
++        self.assertEqual(self.station.install_calls, 0)
++        self.assertEqual(self.station.update_calls, 0)
++
++    def test_normal_install(self) -> None:
++        self.station.latest_after_updates = 2
++        self.station.install_delay_polls = 2
++        self.assertEqual(run_deploy(self.server), 0)
++        self.assertGreaterEqual(self.station.update_calls, 2)
++        self.assertEqual(self.station.install_calls, 1)
++        self.assertEqual(self.station.installed, TAG)
++
++    def test_latest_never_appears(self) -> None:
++        self.station.latest_after_updates = 10**9
++        self.assertEqual(run_deploy(self.server), 1)
++        self.assertEqual(self.station.install_calls, 0)
++        self.assertGreaterEqual(self.station.update_calls, 2)
++
++    def test_install_call_drops_the_connection(self) -> None:
++        self.station.drop_install = True
++        self.station.install_delay_polls = 2
++        self.assertEqual(run_deploy(self.server), 0)
++        self.assertEqual(self.station.install_calls, 1)
++        self.assertEqual(self.station.installed, TAG)
++
++    def test_rollback_after_install(self) -> None:
++        self.station.install_delay_polls = 1
++        self.station.revert_after_polls = 2
++        self.assertEqual(run_deploy(self.server), 1)
++        self.assertEqual(self.station.installed, OLD)
++
++
++if __name__ == "__main__":
++    unittest.main()

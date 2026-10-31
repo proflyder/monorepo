@@ -154,31 +154,43 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.1001` — установленная armhf-сборка
+- Pulsar Rust `v0.5.1002` — установленная armhf-сборка
   (`/lib/ld-linux-armhf.so.3`; релиз форка Pulsar, origin вложенного checkout
   `projects/station/upstream/pulsar-rust`, линия `main` = Ricardo; база
-  upstream `v0.5.2` = `4cba44a`). Включает повторный wake, заменяющий
+  upstream `v0.5.3` = `504830d`). Включает повторный wake, заменяющий
   активный диалог, экспериментальный локальный endpointing и Ricardo
-  pre-roll 256 ms. Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
+  pre-roll 256 ms; из upstream `v0.5.3` — switch часов «Clock auto
+  brightness», Mini gen1 и Mini 3 (experimental), S32 capture,
+  переработанные volume/mixer/player/pcm_out/sendspin и `deploy/asound.conf`.
+  Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
   унаследованным supervisor'ом от `ctl.sh reload`; это не boot-persistent:
   после reboot или нового supervisor без env feature выключен.
   `--version` теперь различает сборки по тегу.
-- Теги форка — `v<upstream major.minor>.<1000+N>` (первый `v0.5.1001`):
+- Теги форка — `v<upstream major.minor>.<1000+N>` (`v0.5.1002`, следующий
+  `v0.5.1003`):
   updater демона ставит только строго большую `MAJOR.MINOR.PATCH`, а upstream
   уже имеет `v0.5.3`. Релиз — push тега → `build.yml` собирает и публикует
   GitHub release (latest) → `deploy-station.yml` после approve в Environment
   `Station` (только теги `v*`) катит на станцию через HA updater. Процедура —
-  RICARDO.md «Релизы и деплой форка» в форке.
-- Установленный бинарник — SHA256 `80aea2ec…` (поставлен этим flow
-  2026-10-31); `pulsar.prev` — предыдущая сборка `7081ef8e…`
-  (`v0.5.2-4-g9b5e86a-dirty`, тот же код: pre-roll 256 ms + endpointing).
-  Historical старше: `0b0c48e4…` (endpointing 512 ms), `d2197f6a…`
+  RICARDO.md «Релизы и деплой форка» в форке. Репозиторий обновлений —
+  константа `pulsar_update::UPDATE_REPO` в форке (перенесена upstream),
+  указывает на форк.
+- Установленный бинарник — SHA256 `3a544979…` (поставлен этим flow
+  2026-10-31); `pulsar.prev` — предыдущая сборка `80aea2ec…`
+  (`v0.5.1001`, база upstream `v0.5.2`, тот же Ricardo-код: pre-roll 256 ms +
+  endpointing). Historical старше: `7081ef8e…`
+  (`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (endpointing 512 ms), `d2197f6a…`
   (`v0.5.2-3-gc57d521-dirty`, `pulsar.pre-endpoint-20261030`),
   `pulsar.prev.pre-endpoint-20261030` — `69310a37…`; `v0.5.2-2-g95ce568` и
   `v0.5.0-1-g908a027` — только private backup вне Git. Legacy C++ checkout,
   patch и binaries — private в `secrets/local/recovery/`.
 - ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`,
-  SSH `22`; 33 ESPHome entities, Noise; HA satellite работает.
+  SSH `22`; 33 ESPHome entities на `v0.5.1001`, Noise; HA satellite работает.
+  `v0.5.1002` добавляет switch «Clock auto brightness» (включён): автояркость
+  часов по датчику освещённости, при выключении — уровень «Clock brightness»;
+  число сущностей после обновления не пересчитывалось.
+- После `v0.5.1002` живая проверка: модель Ricardo загружена, Sendspin
+  подключён к MA, HA satellite в `idle`.
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.

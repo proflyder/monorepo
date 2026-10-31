@@ -25,13 +25,15 @@
 - Бинарник и device-откат — `/data/pulsar`; legacy исходники и binaries —
   private в `secrets/local/recovery/`.
 - Изменяемые исходники — `projects/station/upstream/pulsar-rust/`,
-  ветка `feat/ricardo-rust`.
+  ветка `main`.
 
-База локального форка — tag `v0.5.2`, commit `4cba44a`; на станции установлена
-сборка форка `v0.5.2-4-g9b5e86a-dirty` (SHA256 `7081ef8e…`). `pulsar.prev` —
-прежний endpointing 512 ms (`0b0c48e4…`); historical
-`pulsar.pre-endpoint-20261030` — `v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568`
-и `v0.5.0-1-g908a027` — private backup вне Git.
+База локального форка — tag `v0.5.3`, commit `504830d` (upstream `v0.5.2`
+остаётся в истории); на станции установлена сборка форка `v0.5.1002`
+(SHA256 `3a544979…`). `pulsar.prev` — `v0.5.1001` (`80aea2ec…`, база
+`v0.5.2`); historical: `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
+`0b0c48e4…` (endpointing 512 ms), `pulsar.pre-endpoint-20261030` —
+`v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
+private backup вне Git.
 Снимок локальных изменений — `projects/station/patches/pulsar-rust/`;
 обновляется `projects/station/scripts/snapshot-pulsar.py` перед корневым
 коммитом.

@@ -356,20 +356,22 @@ known-good бинарник — атомарно, не поверх работа
 adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
-Установлен релиз форка `v0.5.1001` (armhf, SHA256 `80aea2ec…`): Ricardo
-pre-roll 256 ms (`Fixed(8)`) и локальный endpointing. `--version` теперь
-показывает тег релиза. Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`.
-`pulsar.prev` — предыдущая сборка `7081ef8e…`
-(`v0.5.2-4-g9b5e86a-dirty`, тот же код: pre-roll 256 ms + endpointing).
-Historical старше в `/data/pulsar/backups/` и private: `0b0c48e4…`
-(endpointing 512 ms), `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`,
-`pulsar.pre-endpoint-20261030`), `69310a37…`
-(`pulsar.prev.pre-endpoint-20261030`); off-device private
+Установлен релиз форка `v0.5.1002` (armhf, SHA256 `3a544979…`, база upstream
+`v0.5.3`): Ricardo pre-roll 256 ms (`Fixed(8)`), локальный endpointing и
+upstream-функции `v0.5.3` (switch часов «Clock auto brightness», Mini gen1 и
+Mini 3 experimental, переработанные volume/mixer/player/pcm_out/sendspin).
+`--version` теперь показывает тег релиза. Процесс запущен с
+`PULSAR_LOCAL_ENDPOINTING=1`. `pulsar.prev` — предыдущая сборка `80aea2ec…`
+(`v0.5.1001`, база upstream `v0.5.2`, тот же Ricardo-код).
+Historical старше в `/data/pulsar/backups/` и private: `7081ef8e…`
+(`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (endpointing 512 ms),
+`d2197f6a…` (`v0.5.2-3-gc57d521-dirty`, `pulsar.pre-endpoint-20261030`),
+`69310a37…` (`pulsar.prev.pre-endpoint-20261030`); off-device private
 `secrets/local/backups/pulsar-preroll8-20261030T185157Z/`.
 
 Откат на предыдущую сборку — только на станции, не через CI: updater
 предлагает лишь более новые версии. Команда ниже возвращает `pulsar.prev`
-(сейчас — тот же код `7081ef8e…`; более старые сборки лежат в
+(сейчас — `v0.5.1001`, `80aea2ec…`; более старые сборки лежат в
 `/data/pulsar/backups/`):
 
 ```bash
@@ -384,15 +386,15 @@ RICARDO.md «Релизы и деплой форка» в форке. Кратк
 
 ```bash
 # 1. в форке: аннотированный тег и push (v<major.minor>.<1000+N>)
-git tag -a v0.5.1001 -m 'pulsar v0.5.1001'
-git push origin v0.5.1001
+git tag -a v0.5.1003 -m 'pulsar v0.5.1003'
+git push origin v0.5.1003
 # build.yml собирает и публикует GitHub release (latest),
 # затем запускает deploy-station.yml
 
 # 2. approve в GitHub Environment `Station` (только теги v*)
 
 # 3. повторный деплой уже опубликованного релиза — вручную
-gh workflow run deploy-station.yml --ref v0.5.1001 -f tag=v0.5.1001
+gh workflow run deploy-station.yml --ref v0.5.1003 -f tag=v0.5.1003
 ```
 
 После approve job входит в VPN группой `ci` (отдельный клиентский сертификат
@@ -414,11 +416,11 @@ job. Если версия уже стоит, скрипт пишет `already i
 Повторное включение endpointing — reload с переменной; длина pre-roll при
 этом не меняется.
 
-Установленная версия — Rust `v0.5.1001` (armhf, релиз форка на базе upstream
-`v0.5.2`; повторный wake + endpointing + Ricardo pre-roll 256 ms, SHA256
-`80aea2ec…`); `pulsar.prev` — `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`, тот же
-код). Historical known-good: `0b0c48e4…` (512 ms endpointing),
-`pulsar.pre-endpoint-20261030` — `d2197f6a…`
+Установленная версия — Rust `v0.5.1002` (armhf, релиз форка на базе upstream
+`v0.5.3`; повторный wake + endpointing + Ricardo pre-roll 256 ms, SHA256
+`3a544979…`); `pulsar.prev` — `80aea2ec…` (`v0.5.1001`, база `v0.5.2`, тот же
+Ricardo-код). Historical known-good: `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
+`0b0c48e4…` (512 ms endpointing), `pulsar.pre-endpoint-20261030` — `d2197f6a…`
 (`v0.5.2-3-gc57d521-dirty`); `pulsar.prev.pre-endpoint-20261030` — более
 старый pre-endpoint backup `69310a37…`; `v0.5.2-2-g95ce568` и
 `v0.5.0-1-g908a027` — только private backup вне Git. StationCancel без речи —

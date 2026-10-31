@@ -1,26 +1,28 @@
 # Pulsar Rust fork
 
-**Станция (установлено):** Rust Pulsar `v0.5.2-4-g9b5e86a-dirty` —
+**Станция (установлено):** Rust Pulsar `v0.5.1002` —
 armhf-сборка с повторным wake, экспериментальным локальным endpointing и
-Ricardo pre-roll 256 ms (SHA256 `7081ef8e…`); процесс запущен с
-`PULSAR_LOCAL_ENDPOINTING=1`. StationCancel без речи — HA-конфиг, не
-бинарник. `pulsar.prev` — прежний endpointing 512 ms (`0b0c48e4…`);
-historical `pulsar.pre-endpoint-20261030` — `v0.5.2-3-gc57d521-dirty`;
-`v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private backup вне Git.
+Ricardo pre-roll 256 ms (SHA256 `3a544979…`, база upstream `v0.5.3`); процесс
+запущен с `PULSAR_LOCAL_ENDPOINTING=1`. StationCancel без речи — HA-конфиг, не
+бинарник. `pulsar.prev` — `v0.5.1001` (`80aea2ec…`, база `v0.5.2`, тот же
+Ricardo-код); historical: `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
+`0b0c48e4…` (endpointing 512 ms), `pulsar.pre-endpoint-20261030` —
+`v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
+только private backup вне Git.
 
-**Локальный форк:** upstream `v0.5.2` влит в `feat/ricardo-rust`; HEAD
-`9b5e86a`, describe `v0.5.2-4-g9b5e86a` (не release). Safety ref
-`ricardo-rust/pre-v0.5.2` = `908a027`.
+**Локальный форк:** upstream `v0.5.3` (`504830d`) влит в ветку `main` (merge
+`02f0298`, PR merge `ccef054` = тег `v0.5.1002`); `feat/ricardo-rust` —
+только история. Safety ref `ricardo-rust/pre-v0.5.2` = `908a027`.
 Legacy C++ исходники, patch и binaries в активном дереве отсутствуют; private
 recovery archive — `secrets/local/recovery/`.
 
 - Fork: <https://github.com/OWNER/pulsar>
-- База: upstream `v0.5.2` (`4cba44a`), ancestor HEAD; delta 74 files.
+- База: upstream `v0.5.3` (`504830d`), ancestor HEAD.
 - Локальный checkout: `projects/station/upstream/pulsar-rust/`
 - Снимок изменений: `projects/station/patches/pulsar-rust/`
-  (`snapshot-pulsar.py`, base v0.5.2)
+  (`snapshot-pulsar.py`, base v0.5.3)
 - armhf build: `satellite/build/armhf/pulsar` — stripped ARM EABI5
-  hard-float ELF (`v0.5.2-4-g9b5e86a-dirty`), установлен на станции. Makefile
+  hard-float ELF (`v0.5.1002`), установлен на станции. Makefile
   zig objcopy на macOS всё ещё падает; артефакт получен установленным LLVM
   objcopy (GNU-совместимый, PT_LOAD/NEEDED проверены), source/Makefile не
   менялись. Артефакт не версионируется.
@@ -69,8 +71,8 @@ player остаётся зарегистрированным.
 просыпается и отвечает на команду сразу после имени («который час») без потери
 начального слога; alarm/snooze/music/mute/кнопки в ней не проверялись.
 Установленная `v0.5.2-3-gc57d521` такой пользовательской приёмки ещё не
-проходила; текущая `v0.5.2-4` с pre-roll 256 ms — тоже (см.
-`docs/PENDING.md`).
+проходила; последующие сборки форка (`v0.5.2-4` с pre-roll 256 ms и текущая
+`v0.5.1002`) — тоже (см. `docs/PENDING.md`).
 
 Сборка с повторным wake (`-dirty` от HEAD `c57d521`); StationCancel без
 речи — отдельное изменение HA-конфига. Проверки: `cargo fmt --check`, Linux
