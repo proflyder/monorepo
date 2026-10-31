@@ -10,12 +10,13 @@ name: ci
 #
 # No deploy steps and no repository secrets: deploy workflows are separate and
 # only run from `develop` with Environments.
-
-# The push run on `develop` is what saves the shared caches (cache-save is off
-# for pull_request): PRs can read caches from their base branch only.
+#
+# `develop` changes only through a PR with a green `ci-ok`, so there is no push
+# trigger: re-running the same checks on the squash merge would be redundant.
+# The shared caches that PRs restore (setup-go, setup-bazel and actions/cache
+# scopes) are warmed after merge by `deploy-home`'s `warm-caches` job, which
+# runs on `push` to `develop` without secrets or an Environment.
 on:
-  push:
-    branches: [develop]
   pull_request:
     branches: [develop]
   workflow_dispatch:

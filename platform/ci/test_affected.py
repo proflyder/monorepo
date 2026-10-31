@@ -357,6 +357,26 @@ class DeployRoutingTests(unittest.TestCase):
         self.assertEqual([entry["id"] for entry in entries], ["hermes"])
         self.assertEqual(entries[0]["images"], "hermes voice-proxy")
 
+    def test_ci_workflow_change_runs_checks_but_deploys_nothing(self):
+        result = self._route([".github/workflows/ci.yml"])
+        # CI must still exercise every platform the workflow entrypoint covers.
+        for platform in ("go", "android", "python"):
+            self.assertTrue(result.routes[platform].units, platform)
+        # ...but deploy-home must not roll units for a workflow-only change.
+        self.assertEqual(affected.deploy_entries(result, self.config), [])
+
+    def test_workflow_and_service_change_deploys_only_the_service(self):
+        result = self._route([".github/workflows/ci.yml", "solutions/currency-bot/x.go"])
+        entries = affected.deploy_entries(result, self.config)
+        self.assertEqual([entry["id"] for entry in entries], ["currency-bot"])
+
+    def test_module_change_still_deploys_every_deployable_unit(self):
+        result = self._route(["MODULE.bazel"])
+        entries = affected.deploy_entries(result, self.config)
+        expected = [unit.id for unit in self.config.units if unit.deploy_images]
+        self.assertEqual([entry["id"] for entry in entries], expected)
+        self.assertEqual(len(expected), len(entries))
+
 
 class WorkflowInvalidationTests(unittest.TestCase):
     """Editing a reusable workflow must run the jobs that workflow defines."""

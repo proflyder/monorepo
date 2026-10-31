@@ -54,6 +54,18 @@ def validate_schema(config: Config, root: Path | None = None) -> list[str]:
     if duplicates:
         problems.append(f"duplicate unit ids: {duplicates}")
 
+    for rule in config.invalidations:
+        prefix = f"invalidation {rule.paths}"
+        if not rule.paths:
+            problems.append(f"{prefix}: no paths declared")
+        if not rule.platforms:
+            problems.append(f"{prefix}: no platforms declared")
+        for platform in rule.platforms:
+            if platform != "*" and platform not in KNOWN_PLATFORMS:
+                problems.append(f"{prefix}: unknown platform {platform!r}")
+        if not isinstance(rule.deploy, bool):
+            problems.append(f"{prefix}: deploy must be a bool")
+
     for unit in config.units:
         prefix = f"unit {unit.id}"
         if unit.platform not in KNOWN_PLATFORMS:
