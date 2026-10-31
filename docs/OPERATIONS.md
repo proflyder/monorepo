@@ -72,6 +72,8 @@ python3 projects/home/proxmox/vpn/vpnusers.py <user> \
 
 Приватные файлы — `secrets/home/vpn/<user>.credentials` и `<user>.png`
 (QR для Google Authenticator), каталог `700`, файлы `600`.
+`max-same-clients = 10` — не больше 10 одновременных сессий одного
+пользователя.
 
 Клиентские сертификаты (вход без пароля/TOTP; пароль + TOTP остаётся):
 
@@ -216,13 +218,18 @@ kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manu
 kubectl -n openbao logs job/snapshot-manual
 ```
 
-Временный пароль человека — `secrets/openbao/human.pass` (600), сменить в
-UI. Recovery keys и root-токен bootstrap — `secrets/openbao/init.json` (600);
-root уже отозван, новый выпускается `bao operator generate-root` из recovery
-keys. GitHub Environment `Home` хранит только VPN-креды, `OPENBAO_ADDR` и
-(опционально) `OPENBAO_ROLE`; `kubeconfig`, `scheduler.env` и runtime values
-лежат в `secret/ci/deploy-home` и материализуются job'ом после OIDC-входа
-(схема и команда обновления — README OpenBao).
+Пароль человека задаёт сам пользователь и меняет через UI
+(`Access → Authentication methods → userpass → <user> → Edit`) или API
+`bao write auth/userpass/users/<user> password=…`; файла `human.pass` в
+рабочем дереве нет. В bootstrap-выводе может остаться путь к нему, но
+источник правды — значение в OpenBao.
+
+Recovery keys — `secrets/openbao/init.json` (600); root уже отозван, новый
+выпускается `bao operator generate-root` из recovery keys. GitHub Environment
+`Home` хранит только VPN-креды, `OPENBAO_ADDR` и (опционально)
+`OPENBAO_ROLE`; `kubeconfig`, `scheduler.env` и runtime values лежат в
+`secret/ci/deploy-home` и материализуются job'ом после OIDC-входа (схема и
+команда обновления — README OpenBao).
 
 ## External Secrets Operator
 

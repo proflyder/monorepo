@@ -156,10 +156,11 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
 
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` — этап 1: hermetic-проверки без деплоя и без
-секретов. Триггеры: push и pull request в `develop`, ручной
-`workflow_dispatch` (он прогоняет все юниты); `permissions: contents: read`,
-`concurrency` отменяет устаревший прогон только для PR.
+`.github/workflows/ci.yml` — hermetic-проверки без деплоя и без секретов.
+Триггеры: push и pull request в `develop`, ручной `workflow_dispatch` (он
+прогоняет все юниты); `permissions: contents: read`, `concurrency` отменяет
+устаревший прогон только для PR. Выкладка — отдельный
+`.github/workflows/deploy-home.yml` на push в `develop` (см. ниже).
 
 ### Маршрутизация по юнитам
 
@@ -303,9 +304,24 @@ digest-пины образов, поэтому `make test` и `make test-deploy-
 `success` или законно `skipped`; любой `failure`/`cancelled` (включая упавший
 `changes`) делает его красным. Логика вынесена в `platform/ci/ci_gate.py`.
 
+### Деплой (`deploy-home`)
+
+Push в `develop` — это squash-merge PR, поэтому workflow получает секреты
+Environment `Home`. `plan` прогоняет тот же `units.yml` по диапазону
+`before..sha` и деплоит только затронутые деплоимые юниты параллельно:
+VPN группой `ci` → GitHub OIDC в OpenBao (роль `deploy-home`) →
+`secret/ci/deploy-home` → kubectl/helm к K3s `6443` и Traefik `443`.
+Документация и инфраструктурные юниты без `deploy` ничего не катят.
+
+- Смена режима (`preserve`, `execute`, `shadow`, `control-*`) — только
+  `workflow_dispatch`; push всегда conservative preserve.
+- Hermes/voice-proxy: build+push → digest в релиз `runtime` →
+  health/Assist-проверка → `helm rollback` при провале.
+- Откат — только применённого объекта; изменение целиком откатывается новым
+  PR с `git revert`.
+
 Pulsar собирается и релизится в своём репозитории; монорепо в CI его не
-собирает. Деплой (этапы 2–3) — отдельные workflows с Environment и ручным
-approve.
+собирает. Деплой релиза Pulsar на станцию — открытая задача (`PENDING.md`).
 
 ## Публикация
 

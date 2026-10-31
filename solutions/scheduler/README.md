@@ -6,9 +6,10 @@ Durable планировщик будильников, напоминаний, �
 Android, будущий агент) забирает событие, выполняет действие и подтверждает
 его.
 
-Статус: durable core, Connect/gRPC API, legacy `AlarmService` facade и
-backend-тесты реализованы. Deploy, HA/Pulsar-интеграция и Android-клиент —
-отдельные изменения; live HA по-прежнему владеет звуком.
+Статус: durable core, Connect/gRPC API, legacy `AlarmService` facade, тесты и
+K3s-деплой. scheduler — действующий владелец будильников, таймеров и
+напоминаний; HA выполняет звук по событиям исполнителя. Android-клиент —
+`projects/mobile/android`.
 
 ## Компоненты
 

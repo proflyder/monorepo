@@ -10,9 +10,10 @@
    `vmbr0` сохраняет L2; VM IP/URL не меняются. NAT/PCI passthrough не нужны.
    Оба uplink одновременно в мост не подключать.
 4. **Собственный VPN + приватные HTTPS-имена, не публичный HA.** Наружу
-   проброшен только `443` на ocserv (сертификат клиента или пароль + TOTP).
-   Сервисы — Traefik в K3s с wildcard Let's Encrypt (Cloudflare DNS-01) под
-   приватным суффиксом, allow-list LAN; DNS-записи указывают на LAN-адрес.
+   проброшен только `443/tcp+udp` на ocserv (сертификат клиента или пароль +
+   TOTP). Сервисы — Traefik в K3s с wildcard Let's Encrypt (Cloudflare
+   DNS-01) под приватным суффиксом, allow-list LAN/VPN; DNS-записи указывают
+   на LAN-адрес.
 5. **STT/TTS локально.** GigaAM primary, Whisper fallback, Piper Puriso;
    Hermes — только свободная речь. Облако видит текст, но не аудио.
 6. **Hermes не владеет state.** Будильники/таймеры/напоминания — scheduler
@@ -46,8 +47,9 @@
     ha-bridge и ha-control собираются Bazel `rules_oci` (distroless,
     digest-pinned base) и адресуются `ghcr.io/proflyder/<name>@sha256:...`;
     `imagePullPolicy: IfNotPresent`. CI пушит образы job-scoped
-    `GITHUB_TOKEN` и деплоит kubectl под ServiceAccount `ci-deploy` через
-    VPN `tcp/6443`. SSH, root-helper, hostPath и `/opt/ricardo` из пути
+    `GITHUB_TOKEN`, а `deploy-home` на push в `develop` катит только
+    затронутые юниты через VPN группу `ci` и kubectl под ServiceAccount
+    `ci-deploy`. SSH, root-helper, hostPath и `/opt/ricardo` из пути
     деплоя удалены; NodePort-nft остаётся host-конфигурацией.
 
 18. **OpenBao — единственный секрет-сервер.** OpenBao 2.7 (chart и образ
@@ -60,5 +62,10 @@
     GitHub OIDC (repository, environment, ref `develop`, TTL ≤ 15 мин, только
     `secret/ci/{test,deploy-home}`); поды — Kubernetes auth (только
     `secret/k8s/*`). Root-токен отозван, recovery keys — только офлайн.
+
+19. **Git — только PR, squash и `ci-ok`.** Прямой push в `develop` запрещён;
+    merge PR запускает `deploy-home`. Режимы исполнения меняются только
+    ручным `workflow_dispatch`; откат — только применённого объекта, полный —
+    новым revert-PR.
 
 Меняется решение — обновить этот файл и `STATE.md`.

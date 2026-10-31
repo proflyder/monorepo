@@ -12,6 +12,8 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [Chart приложений](../../home-assistant/deploy/README.md).
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
 - [HTTPS ingress Traefik + cert-manager](ingress/).
+- [OpenBao](openbao/).
+- [External Secrets Operator](external-secrets/).
 - [Hermes voice-proxy firewall](voice-firewall/).
 
 `/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
@@ -46,5 +48,6 @@ Helm операции над одним release.
 в LAN по `http://192.0.2.27:30300/`. HTTPS-имена `*.home.example.com`
 обслуживает Traefik (`hostNetwork`, `80/443`, IP allow-list) с
 wildcard-сертификатом Let's Encrypt от cert-manager; см. [ingress/](ingress/).
-Вход снаружи — собственный VPN (ocserv, CT `102`). Аварийный доступ к
-host — LAN/Wi-Fi или Ethernet. Реальные URL и credentials — в secrets.
+Вход снаружи — собственный VPN (ocserv, CT `102`); CI ходит группой `ci`
+только до K3s `tcp/{443,6443}`. Аварийный доступ к host — LAN/Wi-Fi или
+Ethernet. Реальные URL и credentials — в secrets.

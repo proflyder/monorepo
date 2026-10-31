@@ -118,8 +118,11 @@ K3s management/metrics-порты закрыты firewall от обычных LA
 | `22/tcp` | SSH | только LAN `192.0.2.0/24` |
 
 Внутри CT — пул `10.77.0.0/24`, nftables `drop` по умолчанию, masquerade
-VPN → LAN/WAN. Наружу проброшен только `443/tcp+udp`; сертификат Let's
-Encrypt для `vpn.example.com` продлевается certbot-ом (DNS-01 Cloudflare).
+VPN → LAN/WAN. Профили `lan`/`full`; отдельная группа `ci` получает пул
+`10.77.1.0/24` и маршрут только до K3s. На пользователя — не больше 10
+одновременных сессий. Наружу проброшен только `443/tcp+udp`; сертификат
+Let's Encrypt для `vpn.example.com` продлевается certbot-ом (DNS-01
+Cloudflare) автоматически.
 
 ### Станция
 
@@ -161,8 +164,9 @@ VPN доступен из LAN по `https://192.0.2.29/` и снаружи по
 клиентский сертификат.
 
 - `443/tcp` и `443/udp` (DTLS), TLS 1.2+, без compression;
-- два профиля на выбор: `lan` (split tunnel, маршрут только на домашнюю
-  LAN, DNS `192.0.2.1`) и `full` (весь трафик через дом);
+- профили `lan` (split tunnel, маршрут только на домашнюю LAN, DNS
+  `192.0.2.1`) и `full` (весь трафик через дом); отдельная группа `ci` — только
+  для GitHub Actions и только до K3s;
 - NAT/masquerade делает CT, маршруты на LAN-устройствах не нужны;
 - сертификат Let's Encrypt на `vpn.example.com`, продление certbot-ом
   (DNS-01 Cloudflare);
@@ -178,7 +182,7 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
   Cloudflare DNS only (не proxied), TTL auto; apex и прочие записи не
   меняются.
 - `80` редиректит на `443`; вход разрешён только LAN `192.0.2.0/24` (VPN
-  приходит NAT-ом с LAN-адреса), pod CIDR и loopback.
+  приходит NAT-ом с адреса CT), pod CIDR и loopback.
 - HA видит источником адрес узла `192.0.2.27`; `trusted_proxies` не
   расширяется.
 - WebSocket (`/api/websocket`, Grafana `/api/live/ws`) проходит через прокси.
@@ -217,7 +221,7 @@ curl -fsS -o /dev/null -w 'HA %{http_code}\n' \
   http://<HAOS_IP>:8123/
 
 curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
-  http://<K3S_IP>:30300/grafana/api/health
+  http://<K3S_IP>:30300/api/health
 
 curl -fsS -o /dev/null -w 'MA %{http_code}\n' \
   http://<HAOS_IP>:8095/

@@ -6,7 +6,7 @@
 
 | Solution | Язык | Назначение | Статус |
 |---|---|---|---|
-| `scheduler/` | Go | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect/gRPC | реализован backend |
+| `scheduler/` | Go | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect/gRPC | развёрнут |
 | `alarm/` | Go | legacy `AlarmService` facade над тем же engine + совместимый entrypoint | реализован facade |
 | `ha-bridge/` | Go | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `cmd/ha-control` — каталог Home и очередь `control` | развёрнут |
 

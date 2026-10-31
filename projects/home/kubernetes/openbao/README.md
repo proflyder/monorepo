@@ -1,4 +1,4 @@
-# OpenBao (этапы 1–3: секрет-сервер, UI, CI/поды, External Secrets)
+# OpenBao (секрет-сервер, UI, CI/поды, External Secrets)
 
 Один сервер OpenBao `2.7.2` (chart `openbao/openbao 0.30.6`) в namespace
 `openbao` на узле K3s. UI/API опубликованы как
@@ -129,10 +129,11 @@ kubectl -n openbao delete pod openbao-0
 
 - URL: `https://vault.<home-domain>/ui/`, метод **Username**.
 - Имя пользователя — `secrets/openbao/username` (600), политика `admin`, TTL 8 ч (max 24 ч).
-- Временный пароль — `secrets/openbao/human.pass` (600). Сменить в UI:
+- Пароль задаёт человек и хранит его в менеджере паролей; файла
+  `secrets/openbao/human.pass` в рабочем дереве нет. Смена — UI
   `Access → Authentication methods → userpass → <user> → Edit` или
   `bao write auth/userpass/users/<user> password=…` (нужен admin-токен).
-  После смены обновить/удалить файл.
+  `verify.sh` пропускает live-логин, если файла пароля нет.
 
 Политика `admin`: полный доступ (`*` c `sudo`), но запрещены
 `sys/seal`, `sys/step-down`, `sys/raw/*`, `sys/replication/*`, `sys/rotate`,
@@ -350,7 +351,8 @@ kubectl -n openbao exec openbao-0 -- \
   `secrets/openbao/seal.key.new`, обновить `current_key_id` (например
   `static-2`), указать старый как `previous_key`, применить, дождаться
   unseal, затем убрать `previous_key` и перезапустить.
-- **Пароль человека**: UI или API; файл `human.pass` обновить.
+- **Пароль человека**: задаёт человек, меняет через UI или API; файла
+  `human.pass` нет.
 - **CI**: смена role/audience — правка `configure.py`, повторный запуск; токены
   живут ≤15 мин и не хранятся. Смена значений деплоя — обновление
   `secret/ci/deploy-home` (см. «CI-секреты»), workflow не меняется.

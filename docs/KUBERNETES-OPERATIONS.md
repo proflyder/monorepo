@@ -56,9 +56,8 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
   raft snapshots (PV `openbao-data`/`openbao-audit`/`openbao-backups`,
   `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
-- `/opt/ricardo` удалён: ни один Pod/Deployment больше не ссылается на это
-  дерево, запасных релизов на хосте нет. Откат — только digest-pinned образы
-  в GHCR/containerd.
+- Host-дерева `/opt/ricardo` и запасных релизов нет: откат — только
+  digest-pinned образы в GHCR/containerd, деплой — `converge.py`.
 - `runtime-ha` — архив старого HA Container, не активный writer.
 - `runtime-music`/`runtime-matter` удалены; tar-копии на Mac.
 

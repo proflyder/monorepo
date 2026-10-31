@@ -46,7 +46,7 @@
   Отдельный случай — продолжение диалога: если ответ Hermes заканчивается
   вопросом, HA выставляет `continue_conversation=true` и следующий run
   намеренно обходит `prefer_local_intents` (`_intent_agent_only`), отправляя
-  «отмена» сразу агенту. Это и был live-дефект 30.10. Теперь
+  «отмена» сразу агенту. Это был live-дефект; теперь
   `hermes-voice-proxy` (v6) перехватывает точную нормализованную фразу
   последнего пользовательского сообщения до вызова Hermes и возвращает пустой
   SSE/JSON completion. HA отвечает `action_done` без TTS; `processed_locally`
@@ -77,7 +77,7 @@ observed fallback `громкая стрима` → 3.
 ```
 
 Spotify 429 обрабатывается голосовым ответом; поиск не выдумывает URI.
-После снятия 429 2026-10-27 проверены поиск и play (`Белые розы`, `Nirvana`).
+После снятия 429 проверены поиск и play (`Белые розы`, `Nirvana`).
 В Spotify-ветке `music_search` поля `tracks/albums/playlists/artists`
 читаются через `content.get(...).get('items')`; старый `.items` давал
 `TypeError: builtin_function_or_method`. MA-ветка использует

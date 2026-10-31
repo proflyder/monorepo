@@ -7,10 +7,10 @@
 
 | Документ | Содержимое |
 |---|---|
-| [`STATE.md`](STATE.md) | текущие факты: host, VM, HA, K3s, станция |
+| [`STATE.md`](STATE.md) | текущие факты: host, VM, HA, K3s, VPN, OpenBao, CI/CD, станция |
 | [`OPERATIONS.md`](OPERATIONS.md) | ежедневные команды и откаты |
 | [`NETWORK.md`](NETWORK.md) | публичная схема LAN/портов; реальные адреса — `secrets/NETWORK.md` |
-| [`PENDING.md`](PENDING.md) | только открытые задачи |
+| [`PENDING.md`](PENDING.md) | открытые задачи с приоритетами P1–P3 |
 
 ## Эксплуатация
 
@@ -29,7 +29,7 @@
 |---|---|
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | компоненты и потоки |
 | [`DECISIONS.md`](DECISIONS.md) | ключевые решения |
-| [`SECURITY.md`](SECURITY.md) | сеть, секреты, обновления |
+| [`SECURITY.md`](SECURITY.md) | сеть, VPN, секреты, обновления |
 | [`SENSITIVE-DATA.md`](SENSITIVE-DATA.md) | реестр приватных данных без значений |
 | [`GRPC.md`](GRPC.md) | gRPC-контракт |
 | [`MONOREPO.md`](MONOREPO.md) | структура репозитория |

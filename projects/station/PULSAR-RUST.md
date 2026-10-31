@@ -1,13 +1,15 @@
 # Pulsar Rust fork
 
-**Станция (установлено):** Rust Pulsar `v0.5.2-3-gc57d521-dirty` —
-сборка из рабочего дерева на HEAD `c57d521` с повторным wake (30.10);
-StationCancel без речи — HA-конфиг, не бинарник. `pulsar.prev` —
-`v0.5.2-3-gc57d521`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только
-private backup вне Git.
+**Станция (установлено):** Rust Pulsar `v0.5.2-4-g9b5e86a-dirty` —
+armhf-сборка с повторным wake, экспериментальным локальным endpointing и
+Ricardo pre-roll 256 ms (SHA256 `7081ef8e…`); процесс запущен с
+`PULSAR_LOCAL_ENDPOINTING=1`. StationCancel без речи — HA-конфиг, не
+бинарник. `pulsar.prev` — прежний endpointing 512 ms (`0b0c48e4…`);
+historical `pulsar.pre-endpoint-20261030` — `v0.5.2-3-gc57d521-dirty`;
+`v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private backup вне Git.
 
 **Локальный форк:** upstream `v0.5.2` влит в `feat/ricardo-rust`; HEAD
-`c57d521`, describe `v0.5.2-3-gc57d521` (не release). Safety ref
+`9b5e86a`, describe `v0.5.2-4-g9b5e86a` (не release). Safety ref
 `ricardo-rust/pre-v0.5.2` = `908a027`.
 Legacy C++ исходники, patch и binaries в активном дереве отсутствуют; private
 recovery archive — `secrets/local/recovery/`.
@@ -18,19 +20,21 @@ recovery archive — `secrets/local/recovery/`.
 - Снимок изменений: `projects/station/patches/pulsar-rust/`
   (`snapshot-pulsar.py`, base v0.5.2)
 - armhf build: `satellite/build/armhf/pulsar` — stripped ARM EABI5
-  hard-float ELF (`v0.5.2-3-gc57d521`), установлен на станции. Makefile zig
-  objcopy на macOS всё ещё падает; артефакт получен установленным LLVM objcopy
-  (GNU-совместимый, PT_LOAD/NEEDED проверены), source/Makefile не менялись.
-  Артефакт не версионируется.
-- Модель: `/data/pulsar/wakewords/ru_ricardo_mww.tflite`; SHA-256
-  совпадает с `artifacts/wakeword/ricardo-v1/model-sha256.txt`.
+  hard-float ELF (`v0.5.2-4-g9b5e86a-dirty`), установлен на станции. Makefile
+  zig objcopy на macOS всё ещё падает; артефакт получен установленным LLVM
+  objcopy (GNU-совместимый, PT_LOAD/NEEDED проверены), source/Makefile не
+  менялись. Артефакт не версионируется.
+- Модель: базовый профиль `/data/pulsar/wakewords/ru_ricardo_mww.tflite`
+  (SHA-256 совпадает с `artifacts/wakeword/ricardo-v1/model-sha256.txt`);
+  установленный персональный кандидат — v27, best-known — v24 (см.
+  `docs/STATE.md`).
 
 ## Профиль
 
 - on-device wake word «Рикардо» через C++ bridge, microfrontend и
   `/system/vendor/quasar/libs/libtflite.so`.
 - Pre-roll: upstream `PrerollRing`/`wake_pending` race fix; для Ricardo
-  `Model::wake_preroll` = Fixed(8) chunks = 256 ms, установлено 30.10
+  `Model::wake_preroll` = Fixed(8) chunks = 256 ms
   (`v0.5.2-4-g9b5e86a-dirty`, SHA256 `7081ef8e…`; три реальные команды точно,
   n=3 — эмпирика, не гарантия). HA switch «Command right after wake word»
   управляет `wake_preroll`.
@@ -50,23 +54,25 @@ recovery archive — `secrets/local/recovery/`.
 Deployed baseline v0.5.0-1: armhf ELF, `mww_create/feed/destroy`; live wake
 `0.904`, HA pipeline/TTS, HAOS reboot, Sendspin/MA reconnect, station reboot.
 
-Установленная v0.5.2-3-gc57d521: `cargo fmt --check`, arm64 clippy `-D warnings`,
+Проверки сборки `v0.5.2-3-gc57d521` (база текущей установленной `-4`):
+`cargo fmt --check`, arm64 clippy `-D warnings`,
 `cargo test --workspace --exclude pulsar-update` (включая pre-roll tests) —
-pass; `pulsar-update` 19 pass / 7 fail (26 total) на arm64 из-за x86_64 asset name, тот же
-baseline failure у чистого `4cba44a`. armhf build слинкован и stripped
-(Android NDK LLVM objcopy). Live: single daemon, HA connected / voice
-subscribed, Noise, Ricardo model (cutoff 0.90, window 10), volume 0.3
-unmuted. Supervised `reload` объявляет goodbye-причину `restart`, и MA
-переподключается сам за ~3 с — два подряд рестарта без рестарта MA, player
-остаётся зарегистрированным.
+pass; `pulsar-update` 19 pass / 7 fail (26 total) на arm64 из-за x86_64
+asset name, тот же baseline failure у чистого `4cba44a`. armhf build
+слинкован и stripped (Android NDK LLVM objcopy). Live: single daemon, HA
+connected / voice subscribed, Noise, Ricardo model (cutoff 0.90, window 10),
+volume 0.3 unmuted. Supervised `reload` объявляет goodbye-причину `restart`,
+и MA переподключается сам за ~3 с — два подряд рестарта без рестарта MA,
+player остаётся зарегистрированным.
 
 Пользовательскую приёмку проходила предыдущая `v0.5.2-2-g95ce568`: «Рикардо»
 просыпается и отвечает на команду сразу после имени («который час») без потери
 начального слога; alarm/snooze/music/mute/кнопки в ней не проверялись.
 Установленная `v0.5.2-3-gc57d521` такой пользовательской приёмки ещё не
-проходила.
+проходила; текущая `v0.5.2-4` с pre-roll 256 ms — тоже (см.
+`docs/PENDING.md`).
 
-Сборка 30.10 с повторным wake (`-dirty` от HEAD `c57d521`); StationCancel без
+Сборка с повторным wake (`-dirty` от HEAD `c57d521`); StationCancel без
 речи — отдельное изменение HA-конфига. Проверки: `cargo fmt --check`, Linux
 `cargo test -p pulsar` (31 pass), clippy
 `-D warnings`, `test_ha_config.py` (50 pass) — pass в worker-сессии; armhf

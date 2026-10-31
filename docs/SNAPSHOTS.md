@@ -48,7 +48,8 @@ private external storage.
 
 - `/etc/pve`, `/etc/network`, `/etc/ssh`, `/etc/apt/sources.list.d`;
 - `/var/lib/ricardo-terraform`;
-- `pveversion`, `qm list`, `qm config 100/101`, `pvesm`, `lsblk`, network;
+- `pveversion`, `qm list`, `qm config 100/101`, `pct config 102`, `pvesm`,
+  `lsblk`, network;
 - selected recovery: HA native backup, EFI, K3s `cluster-and-auth`.
 
 **Не** включает VM disk images/full vzdump. Для полного восстановления VM
