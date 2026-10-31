@@ -118,12 +118,8 @@ Trade-offs:
 
    | OpenBao path | Keys | Kubernetes Secret |
    |---|---|---|
-   | `secret/k8s/currency-bot` | `BOT_TOKEN`, `CHAT_ID`, `WEBHOOK_SECRET`, `API_TOKEN` | `currency-bot/currency-bot` |
-   | `secret/k8s/cloudflared` | `TUNNEL_TOKEN` | `currency-bot/cloudflared-tunnel` |
-
-   These two paths predate the `k8s/<namespace>/<name>` convention; moving them
-   to `k8s/currency-bot/currency-bot` and `k8s/currency-bot/cloudflared` is a
-   P3 item in `docs/PENDING.md`.
+   | `secret/k8s/currency-bot/currency-bot` | `BOT_TOKEN`, `CHAT_ID`, `WEBHOOK_SECRET`, `API_TOKEN` | `currency-bot/currency-bot` |
+   | `secret/k8s/currency-bot/cloudflared-tunnel` | `TUNNEL_TOKEN` | `currency-bot/cloudflared-tunnel` |
 
    After writing the values, apply the ExternalSecrets (or run
    `external-secrets/deploy.sh`) and wait for `Ready`.

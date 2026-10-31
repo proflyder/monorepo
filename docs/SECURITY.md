@@ -62,7 +62,7 @@
 - Webhook проверяет `X-Telegram-Bot-Api-Secret-Token` (constant time) и
   allowlist `CHAT_ID`; без секрета — 401. После успешной аутентификации
   всегда 200, чтобы Telegram не ретраил и не повторял `/trigger`.
-- `TUNNEL_TOKEN` — только OpenBao `k8s/cloudflared` → ESO Secret
+- `TUNNEL_TOKEN` — только OpenBao `k8s/currency-bot/cloudflared-tunnel` → ESO Secret
   `cloudflared-tunnel`; Cloudflare API token и tunnel credentials — в
   `secrets/currency-bot/`. Токены не логировать.
 - `cloudflared` egress ограничен NetworkPolicy; webhook ingress — только от

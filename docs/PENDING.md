@@ -100,13 +100,6 @@
 
 ### Инфраструктура и станция
 
-- [ ] **OpenBao: пути currency-bot по конвенции.** Сейчас
-      `k8s/currency-bot` и `k8s/cloudflared` вместо
-      `k8s/<namespace>/<name>`. Следующий шаг: при следующем использовании
-      admin-токена перенести значения в `k8s/currency-bot/currency-bot` и
-      `k8s/currency-bot/cloudflared`, обновить ExternalSecrets и проверить
-      синхронизацию.
-
 - [ ] **Потеря LAN станцией после reboot.** Роутер online, ARP/ADB/ESPHome
       недоступны, BLE Wi-Fi TIMEOUT; cold power cycle восстанавливает.
       Следующий шаг: собрать read-only диагностику

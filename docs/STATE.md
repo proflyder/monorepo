@@ -359,14 +359,14 @@
 - API и `/metrics` — ClusterIP :8080; снаружи только LAN/VPN через
   IngressRoute `currency.home.<domain>` (`home-allowlist`) с Bearer-токеном.
   `ServiceMonitor` скрейпит `/metrics` (up=1).
-- Secrets — ESO из OpenBao `k8s/currency-bot` (`BOT_TOKEN`, `CHAT_ID`,
-  `WEBHOOK_SECRET`, `API_TOKEN`) и `k8s/cloudflared` (`TUNNEL_TOKEN`).
+- Secrets — ESO из OpenBao `k8s/currency-bot/currency-bot` (`BOT_TOKEN`,
+  `CHAT_ID`, `WEBHOOK_SECRET`, `API_TOKEN`) и
+  `k8s/currency-bot/cloudflared-tunnel` (`TUNNEL_TOKEN`).
   `CHAT_ID` — два чата: первый (группа/канал) получает алерты, второй — личный
   чат владельца для команд; в отличие от Kotlin-бота команды из других чатов
   игнорируются.
   NetworkPolicies: 8081 только от cloudflared; egress cloudflared к Cloudflare
-  `7844/udp` + `443/tcp` и DNS. Пути OpenBao пока не по конвенции
-  `k8s/<namespace>/<name>` (`PENDING.md`).
+  `7844/udp` + `443/tcp` и DNS.
 - История перенесена из H2 2026-10-31: 990 записей (2026-09-20 … 2026-10-31)
   и 2 `sent_alerts`; PVC заполнен до первого старта. `/trigger` и
   `POST /api/trigger` по-прежнему всегда отправляют.

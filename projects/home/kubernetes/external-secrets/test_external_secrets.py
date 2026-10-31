@@ -22,8 +22,8 @@ MANIFESTS = {
     (ROOT / "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml"):
         {("monitoring", "grafana-admin"): "k8s/monitoring/grafana-admin"},
     (ROOT / "projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml"):
-        {("currency-bot", "currency-bot"): "k8s/currency-bot",
-         ("currency-bot", "cloudflared-tunnel"): "k8s/cloudflared"},
+        {("currency-bot", "currency-bot"): "k8s/currency-bot/currency-bot",
+         ("currency-bot", "cloudflared-tunnel"): "k8s/currency-bot/cloudflared-tunnel"},
 }
 
 
@@ -48,7 +48,8 @@ class ExternalSecretsContracts(unittest.TestCase):
                     self.assertEqual(target["creationPolicy"], "Owner")
                     self.assertEqual(target["deletionPolicy"], "Retain")
                     extract = doc["spec"]["dataFrom"][0]["extract"]["key"]
-                    self.assertTrue(extract.startswith("k8s/"))
+                    # One OpenBao entry per Secret: k8s/<namespace>/<name>.
+                    self.assertEqual(extract, f"k8s/{ns}/{name}")
                     found[(ns, name)] = extract
                 self.assertEqual(found, expected)
 
