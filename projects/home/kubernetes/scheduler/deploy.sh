@@ -208,7 +208,9 @@ push_tag() {
       echo "pushing ${repo}:${tag} failed" >&2
       return 1
     }
-  pushed=$(printf '%s\n' "$out" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -1)
+  # crane prints `digest: sha256:…` for a new upload and `existing manifest:
+  # …@sha256:…` when the registry already has it; both end with `repo@sha256:…`.
+  pushed=$(printf '%s\n' "$out" | grep -oE 'sha256:[0-9a-f]{64}' | tail -1)
   if [[ -z "$pushed" ]]; then
     printf '%s\n' "$out" >&2
     echo "could not read the pushed digest for ${repo}:${tag}" >&2
