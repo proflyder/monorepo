@@ -80,6 +80,10 @@
 
 ## Инфраструктура
 
+- [ ] Привести приватные runtime values в соответствие с live release
+      `runtime`: сейчас они расходятся по storage/workloads, поэтому полный
+      `apply-runtime.sh` с ними задел бы несвязанные workloads/PV. Hermes и
+      voice-proxy в live уже на GHCR digest.
 - [ ] Причина потери LAN на станции после reboot не установлена (роутер
       online, ARP/ADB/ESPHome недоступны; BLE Wi-Fi TIMEOUT). Cold power
       cycle восстанавливает; прошивку без диагностики не менять. Read-only
