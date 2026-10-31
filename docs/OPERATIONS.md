@@ -526,6 +526,53 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 повторно не включаются; два исполнителя одновременно не запускать. Бэкап/restore
 БД — `backup.sh` и процедура в README scheduler.
 
+## Currency bot
+
+`solutions/currency-bot` в namespace `currency-bot`; устройство и импорт
+истории — `projects/home/kubernetes/currency-bot/README.md`. Приватные
+значения — `secrets/home/currency-bot.env` и `secrets/currency-bot/`.
+
+```bash
+export KUBECONFIG=secrets/kubernetes-research/kubeconfig
+
+# деплой вручную: Bazel-образ импортируется на узел по SSH
+NODE_SSH=labuser@192.0.2.27 \
+  ./projects/home/kubernetes/currency-bot/deploy.sh
+
+# состояние; ExternalSecrets должны быть SecretSynced=True
+kubectl -n currency-bot get deploy,pod,svc,pvc,externalsecret
+kubectl -n currency-bot get --raw \
+  "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
+
+# логи: JSON в stdout; Alloy шипит их в Loki
+kubectl -n currency-bot logs deploy/currency-bot --tail=100
+kubectl -n currency-bot logs deploy/cloudflared --tail=50
+
+# ручной прогон через LAN/VPN API (Bearer не печатать)
+curl -fsS -X POST https://currency.home.example.com/api/trigger \
+  -H "Authorization: Bearer <API_TOKEN>"
+
+# webhook, который видит Telegram (токен не печатать)
+curl -fsS "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
+```
+
+Webhook — `https://tg.example.com/telegram/webhook`: без secret token — 401,
+с ним — 200. Метрики скрейпит `ServiceMonitor/currency-bot`; Grafana —
+dashboard `currency-bot` (uid `currency-bot`).
+
+Откат Deployment из state последнего деплоя:
+
+```bash
+python3 projects/home/kubernetes/scheduler/rollback.py \
+  --state-dir secrets/local/rendered/currency-bot/state \
+  --namespace currency-bot
+```
+
+Аварийный откат до вывода VPS: в `/app/currency-bot` выполнить
+`docker compose start currency-bot` и вернуть Telegram `setWebhook` на старый
+URL. Это допустимо только пока VPS не выведен (`PENDING.md`). Удаление
+PVC/namespace — только после backup SQLite.
+
 ## Egress / карантин
 
 ```bash

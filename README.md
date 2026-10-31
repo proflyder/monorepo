@@ -20,7 +20,7 @@ projects/station/       Pulsar, ADB, BLE, provisioning
 projects/home/          Proxmox, K3s, Terraform, VPN
 projects/home-assistant/HA, voice, Hermes, MA, TTS, dashboards
 projects/mobile/        Android-клиент
-solutions/              переиспользуемые scheduler/alarm/bridge
+solutions/              переиспользуемые scheduler/alarm/bridge/currency-bot
 packages/               proto, общий Go/Kotlin-код
 docs/                   эксплуатация и политики
 secrets/                реальные адреса, доступы, recovery (вне Git)
@@ -31,13 +31,14 @@ secrets/                реальные адреса, доступы, recovery 
 - **HAOS** — единственный HA runtime: Home Assistant, Music Assistant,
   Matter Server как add-ons.
 - **K3s** — GigaAM/Whisper/Piper, Hermes + voice proxy, scheduler,
-  ha-bridge, ha-control, observability.
+  ha-bridge, ha-control, currency-bot, observability.
 - **Traefik + cert-manager** — HTTPS-имена `ha`, `grafana`, `alarms`,
-  `control`, `vault` под `*.home.example.com` с wildcard-сертификатом
-  Let's Encrypt (ACME DNS-01 Cloudflare) и allow-list LAN/VPN.
+  `control`, `currency`, `vault` под `*.home.example.com` с wildcard-
+  сертификатом Let's Encrypt (ACME DNS-01 Cloudflare) и allow-list LAN/VPN.
 - **VPN** — собственный ocserv в CT 102: `443/tcp+udp`, вход клиентским
-  сертификатом или паролем + TOTP, группы `lan`/`full`/`ci`. Публичных
-  сервисов нет.
+  сертификатом или паролем + TOTP, группы `lan`/`full`/`ci`.
+- **Cloudflare Tunnel** — единственный публичный HTTP-путь:
+  `tg.example.com/telegram/webhook` для currency-bot; остальное LAN/VPN.
 - **OpenBao + External Secrets Operator** — единственный источник правды для
   секретов; ESO создаёт Kubernetes Secrets из `secret/k8s/*`.
 - **CI/CD** — GitHub Actions: PR → `ci-ok` → squash merge → `deploy-home`
@@ -54,7 +55,8 @@ ssh labuser@192.0.2.27       # K3s VM
 
 HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
 `192.0.2.27:30300/`. Имена `https://<name>.home.example.com` — только через
-LAN/VPN. В интернет ничего не публиковать, кроме VPN `443/tcp+udp`.
+LAN/VPN. Публично доступны только VPN `443/tcp+udp` и webhook currency-bot
+через Cloudflare Tunnel.
 
 ## Статус
 
@@ -63,8 +65,11 @@ LAN/VPN. В интернет ничего не публиковать, кром�
 - Pulsar Rust `v0.5.1002` (armhf, база upstream `v0.5.3`, Ricardo pre-roll
   256 ms), wake word «Рикардо», BLE gateway.
 - HAOS add-ons: MA `2.10.8`, Matter `9.2.0`; K3s: STT/TTS/Hermes/
-  scheduler/observability.
-- Remote — собственный VPN (ocserv), HTTPS-имена, без публичного HA.
+  scheduler/currency-bot/observability.
+- Currency bot живёт в K3s (`currency-bot`): история перенесена из H2
+  (990 записей и 2 `sent_alerts`), webhook — через Cloudflare Tunnel.
+- Remote — собственный VPN (ocserv), HTTPS-имена; публично только
+  Telegram webhook currency-bot.
 
 ## Тесты
 

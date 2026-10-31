@@ -9,7 +9,7 @@
 | `scheduler/` | Go | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect/gRPC | развёрнут |
 | `alarm/` | Go | legacy `AlarmService` facade над тем же engine + совместимый entrypoint | реализован facade |
 | `ha-bridge/` | Go | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `cmd/ha-control` — каталог Home и очередь `control` | развёрнут |
-| `currency-bot/` | Go | курсы kurs.kz → SQLite, алерты и API; Telegram webhook, импорт H2 | реализован |
+| `currency-bot/` | Go | курсы kurs.kz → SQLite, алерты и API; Telegram webhook через Cloudflare Tunnel, импорт H2 | развёрнут |
 
 ## Правила
 
@@ -37,6 +37,7 @@ projects/home:
   alarm@home        тот же engine + legacy AlarmService facade
   ha-bridge@home    SCHEDULER_ENDPOINT=127.0.0.1:8098, queue=home
   ha-control@home   каталог Home, queue=control
+  currency-bot@home sqlite=/data/currency-bot.db :8080/:8081, webhook через tunnel
   android           Connect JSON → LAN/VPN HTTPS endpoint
 ```
 

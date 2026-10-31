@@ -16,6 +16,9 @@
 ```text
 Интернет
    │
+   ├── Cloudflare Tunnel ──► K3s cloudflared
+   │        публично только tg.example.com/telegram/webhook
+   │
    └── роутер / gateway / DNS       192.0.2.1
           │
           └── LAN 192.0.2.0/24, плоский L2, без VLAN
@@ -25,7 +28,7 @@
                  │      ├── VM 100  HAOS          192.0.2.28
                  │      │      HA + MA + Matter add-ons
                  │      ├── VM 101  Ubuntu/K3s    192.0.2.27
-                 │      │      STT/TTS, Hermes, Grafana, observability
+                 │      │      STT/TTS, Hermes, currency-bot, observability
                  │      └── CT 102  vpn           192.0.2.29
                  │             ocserv, OpenConnect, TOTP
                  │
@@ -39,8 +42,10 @@
 
 - **Proxmox host** — гипервизор и management-точка; не публикует HA.
 - **HAOS VM** — Home Assistant, Music Assistant и Matter Server add-ons.
-- **K3s VM** — STT/TTS, Hermes, наблюдаемость и Grafana.
+- **K3s VM** — STT/TTS, Hermes, currency-bot, наблюдаемость и Grafana.
 - **VPN CT** — ocserv для входа в домашнюю LAN снаружи (пароль + TOTP).
+- **Cloudflare Tunnel** — единственный публичный HTTP-путь: только webhook
+  currency-bot.
 - **Станция** — Pulsar/ESPHome-спутник и Sendspin-плеер.
 - **Mac** — рабочая машина; адрес может меняться по DHCP.
 
@@ -109,6 +114,14 @@ K3s management/metrics-порты закрыты firewall от обычных LA
 Администрирование — через SSH и локальный туннель к API, а не через
 публикацию `6443` в LAN.
 
+### Currency bot
+
+`currency-bot` не публикует порт на узле: webhook Service `:8081` доступен
+только подам `cloudflared`, API и `/metrics` `:8080` — из кластера, узла,
+LAN CIDR через Traefik и Prometheus. Наружу API выходит только как
+`https://currency.home.example.com/api/*` (LAN/VPN, Bearer); публичный
+webhook — `tg.example.com/telegram/webhook` через Cloudflare Tunnel.
+
 ### VPN CT 102
 
 | Порт | Назначение | Класс доступа |
@@ -147,7 +160,10 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
   `https://grafana.home.example.com/`,
   `https://alarms.home.example.com/` (scheduler),
   `https://control.home.example.com/` (ha-control),
+  `https://currency.home.example.com/` (currency-bot API, Bearer),
   `https://vault.home.example.com/` (OpenBao UI/API)
+- Публично (Cloudflare Tunnel): `https://tg.example.com/telegram/webhook`
+  (currency-bot), остальные пути — 404.
 - Grafana требует login; анонимный доступ выключен.
 - Matter не имеет отдельного LAN UI: используется HA add-on ingress.
 - Старый compatibility endpoint `http://192.0.2.27:8123` не используется;
@@ -193,6 +209,17 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
   GitHub OIDC), `6443` — K3s API. Остальные адреса и порты для пула
   `10.77.1.0/24` закрыты.
 
+### Публичный webhook currency-bot
+
+Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
+`cloudflared` в namespace `currency-bot` и ходит только наружу
+(`7844/udp` QUIC + `443/tcp` fallback и DNS). На стороне Cloudflare маршрут
+`tg.example.com` с путём `^/telegram/webhook$` ведёт на
+`http://currency-bot-webhook.currency-bot.svc.cluster.local:8081`; остальные
+пути отдают 404. Входящих портов на роутере это не открывает. Webhook
+принимает только запросы с Telegram `secret_token` (иначе 401) и только из
+чатов allowlist.
+
 Управление и проверки — `projects/home/kubernetes/ingress/README.md` и
 `KUBERNETES-OPERATIONS.md`. Прямые LAN-адреса и NodePort остаются аварийным
 путём.
@@ -206,7 +233,8 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 - `80/443` на узле K3s обслуживает только Traefik с IP allow-list; роутер их
   не пробрасывает, имена `*.home.example.com` работают только из LAN/VPN.
 - VPN `443/tcp+udp` — единственный входящий порт из интернета; SSH в
-  VPN-CT остаётся LAN-only.
+  VPN-CT остаётся LAN-only. HTTP наружу идёт только исходящим Cloudflare
+  Tunnel и только на `tg.example.com/telegram/webhook`.
 - `6638` (Zigbee) не имеет auth; при включении не выставлять наружу.
 - Станция не должна получать публичный WAN: egress guard — часть дизайна.
 - Секреты и реальные адреса хранятся только в `secrets/`; в публичных
@@ -232,6 +260,10 @@ curl -fsS -o /dev/null -w 'HA https %{http_code}\n' \
 curl -fsS -o /dev/null -w 'OpenBao %{http_code}\n' \
   https://vault.home.example.com/v1/sys/health
 curl -fsS https://grafana.home.example.com/api/health
+
+# webhook currency-bot: без secret token ожидается 401
+curl -sS -o /dev/null -w 'webhook %{http_code}\n' \
+  -X POST https://tg.example.com/telegram/webhook
 ```
 
 K3s API не публикуется в LAN; для административного доступа используется
