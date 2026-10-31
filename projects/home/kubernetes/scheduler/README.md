@@ -224,10 +224,16 @@ kubectl only — no SSH and no root helper.
 - Rollback is driven by recorded state, not `kubectl rollout undo`.
   `deploy.sh` captures each Deployment before it changes it
   (`<name>.before.json`, or `<name>.absent`) and writes `<name>.applied` only
-  after the apply/patch succeeds. `rollback.py` restores the remembered spec
-  with a merge patch, and only when the generation actually changed. A failure
-  during build, push, rendering or preflight leaves no marker, so the live
-  Deployments are untouched.
+  after the converge succeeds. `rollback.py` replaces the Deployment with the
+  full remembered object, and only when the generation actually changed. A
+  failure during build, push, rendering or preflight leaves no marker, so the
+  live Deployments are untouched.
+- Existing Deployments are converged with `converge.py` (a full replace of the
+  rendered object) instead of `kubectl apply`/`kubectl patch`. A patch cannot
+  remove a volume or mount that an earlier ad-hoc change added; the replace
+  prunes such drift. `--preserve-env` keeps `BRIDGE_EXECUTE`/`CONTROL_EXECUTE`
+  and `--preserve-replicas` keeps the current scale, so mode transitions stay
+  manual.
 - Push runs preserve mode only; `execute`, `shadow`, `control-execute`
   and `control-catalog` are manual `workflow_dispatch` inputs for the
   `ha-bridge` unit and still go through the fail-closed preflight.

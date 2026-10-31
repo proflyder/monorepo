@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Build and push the Hermes gateway and voice-proxy images to GHCR.
 #
-# This is the build+push half of the Hermes migration. It does not switch the
-# runtime chart: the live Deployment still references the locally imported
-# images until the voice circuit is verified against the pushed digests
-# (`docs/PENDING.md`, "Этап 3").
+# This is the build+push half of the Hermes image flow. CI never rolls the live
+# Hermes Deployment: the runtime chart reads digest-pinned images from the
+# private values and a rollout must be a deliberate step after the voice
+# circuit was verified against the pushed digest.
 #
 #   IMAGE_TAG=<git-sha> ./build-and-push.sh hermes voice-proxy
+#
+# After a successful push, update the digest in the private runtime values
+# (`HERMES_IMAGE`/`VOICE_PROXY_IMAGE` in `projects/home/kubernetes/versions.sh`
+# records the current pins) and run `projects/home/kubernetes/apply-runtime.sh`.
+# Then check HA Assist → voice-proxy → Hermes and the health exporter.
 #
 # Authentication is the job-scoped GITHUB_TOKEN already logged in by the
 # caller (`docker login ghcr.io`). The upstream Hermes revision comes from

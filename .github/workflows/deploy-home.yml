@@ -184,7 +184,7 @@ jobs:
           sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
           rm -f /tmp/bazelisk /tmp/kubectl
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl
+          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl python3-yaml
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -259,8 +259,9 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           if [[ "${{ matrix.builder }}" == "docker" ]]; then
-            # Hermes/voice-proxy: build+push only. The runtime chart keeps the
-            # verified local images until the voice circuit is checked.
+            # Hermes/voice-proxy: build+push only. Promoting the digest into the
+            # runtime chart is a reviewed manual step (private values), because
+            # CI must not restart the voice circuit without a health check.
             IMAGE_TAG="$GITHUB_SHA" \
               projects/home-assistant/deploy/images/build-and-push.sh ${{ matrix.images }}
             exit 0

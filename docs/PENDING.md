@@ -80,6 +80,10 @@
 
 ## Инфраструктура
 
+- [ ] Привести приватные runtime values в соответствие с live release
+      `runtime`: сейчас они расходятся по storage/workloads, поэтому полный
+      `apply-runtime.sh` с ними задел бы несвязанные workloads/PV. Hermes и
+      voice-proxy в live уже на GHCR digest.
 - [ ] Причина потери LAN на станции после reboot не установлена (роутер
       online, ARP/ADB/ESPHome недоступны; BLE Wi-Fi TIMEOUT). Cold power
       cycle восстанавливает; прошивку без диагностики не менять. Read-only
@@ -91,7 +95,6 @@
 - [ ] Полная latency instrumentation voice pipeline.
 - [ ] Регулярный backup K3s/HA с проверкой freshness. HA automatic backup не
       настроен (`sensor.backup_*` = unknown), CronJob/Velero в репозитории нет.
-- [ ] Private registry/build pipeline для Hermes/proxy images.
 
 ## HTTPS ingress (LAN/VPN)
 
@@ -125,9 +128,6 @@
       `kubectl rollout undo`. Осталось: загрузить секреты
       `secrets/ci/github/` в Environment `home`, сделать GHCR-пакеты
       публичными и проверить первый прогон на GitHub.
-- [ ] Этап 3: Hermes/voice-proxy через GHCR: образы собираются в CI
-      (`_images.yml`, Dockerfile-путь), runtime-манифесты ещё не переключены
-      на digest; нужна проверка голосового контура после переключения.
 - [ ] Pulsar собирается и релизится в своём репозитории, монорепо деплоит
       релиз на станцию через Environment с ручным approve; конфиг HA — по
       решению.

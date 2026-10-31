@@ -26,10 +26,10 @@ class FakeKubectl:
             name = args[4]
             value = self.generations.get(name)
             return mock.Mock(returncode=0 if value is not None else 1, stdout=str(value or ""), stderr="")
-        if args[2] == "patch":
-            path = pathlib.Path(args[args.index("--patch-file") + 1])
+        if args[2] == "replace":
+            path = pathlib.Path(args[args.index("-f") + 1])
             self.patch = json.loads(path.read_text())
-            return mock.Mock(returncode=0, stdout="patched", stderr="")
+            return mock.Mock(returncode=0, stdout="replaced", stderr="")
         if args[2] == "delete":
             return mock.Mock(returncode=0, stdout="deleted", stderr="")
         if args[2] == "rollout":
@@ -80,18 +80,27 @@ class RollbackTests(unittest.TestCase):
         fake = FakeKubectl({"scheduler": 3})
         with mock.patch.object(rollback, "_run", side_effect=fake):
             messages = rollback.rollback("kubectl", "home-assistant", self.state)
-        self.assertNotIn("patch", fake.verbs())
+        self.assertNotIn("replace", fake.verbs())
         self.assertIn("did not change", messages[0])
 
-    def test_applied_change_is_restored_to_the_recorded_spec(self):
+    def test_applied_change_is_restored_to_the_recorded_object(self):
         before = before_object(7, "ghcr.io/proflyder/scheduler@sha256:" + "b" * 64)
+        before["metadata"]["resourceVersion"] = "42"
+        before["metadata"]["uid"] = "uid-1"
+        before["status"] = {"replicas": 1}
         (self.state / "scheduler.before.json").write_text(json.dumps(before))
         (self.state / "scheduler.applied").write_text("")
         fake = FakeKubectl({"scheduler": 8})
         with mock.patch.object(rollback, "_run", side_effect=fake):
             messages = rollback.rollback("kubectl", "home-assistant", self.state)
-        self.assertIn("patch", fake.verbs())
-        self.assertEqual(fake.patch, {"spec": before["spec"]})
+        self.assertIn("replace", fake.verbs())
+        self.assertEqual(fake.patch["spec"], before["spec"])
+        self.assertEqual(fake.patch["metadata"]["name"], "scheduler")
+        # Read-only fields must not be sent back; an unconditional PUT restores
+        # the full remembered object (including volumes) exactly.
+        self.assertNotIn("status", fake.patch)
+        self.assertNotIn("resourceVersion", fake.patch["metadata"])
+        self.assertNotIn("uid", fake.patch["metadata"])
         self.assertIn("rollout", fake.verbs())
         self.assertIn("restored to generation 7", messages[0])
 
@@ -109,7 +118,7 @@ class RollbackTests(unittest.TestCase):
         fake = FakeKubectl({"scheduler": 4})
         with mock.patch.object(rollback, "_run", side_effect=fake):
             messages = rollback.rollback("kubectl", "home-assistant", self.state)
-        self.assertNotIn("patch", fake.verbs())
+        self.assertNotIn("replace", fake.verbs())
         self.assertIn("no recorded state", messages[0])
 
 
