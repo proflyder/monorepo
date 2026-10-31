@@ -173,6 +173,15 @@ SQLite (`modernc.org/sqlite`, WAL) with the H2 tables translated 1:1:
 - `sent_alerts(id, pair, period, rate_type, level, direction, rate_at_alert,
   change_percent)` with a unique index on `(pair, period, rate_type)`.
 
+## Deployment at home
+
+Running in K3s namespace `currency-bot`: SQLite on PVC `currency-bot-data`, the
+API on LAN/VPN `currency.<home-domain>` and the webhook exposed only through the
+Cloudflare Tunnel `home-k3s` at `tg.example.com/telegram/webhook`. The old
+Kotlin deployment was replaced on 2026-10-31 with 990 history rows and 2
+`sent_alerts` migrated; details, cutover and rollback are in
+`projects/home/kubernetes/currency-bot/README.md`.
+
 ## Importing the H2 data
 
 Stop the old bot first, then export both tables with H2 Shell from the old

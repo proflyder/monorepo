@@ -38,9 +38,10 @@
 - K3s `v1.35.9+k3s1`, node `lab-host`; data-dir `/srv/k3s/runtime`; SQLite;
   local-path PV с `Retain`.
 - Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
-  `openbao`, `external-secrets`.
+  `openbao`, `external-secrets`, `currency-bot`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
-  Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`.
+  Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
+  currency-bot + cloudflared.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - MA/Matter Deployments, PV и data из K3s удалены; `runtime-ha` оставлен как
   архив старого HA Container.
@@ -340,6 +341,48 @@
   установлен на телефон; холодный запуск и каталог проверены, интерактивные
   фильтры/сценарии/toggle ещё не приняты.
 
+## Currency bot
+
+- `solutions/currency-bot` (Go) заменил Kotlin `tg-bot-currency` с тем же
+  поведением: парсер kurs.kz, часовой job в :00 UTC, алерты только при
+  порогах HOUR/DAY/WEEK/MONTH с dedup в `sent_alerts`, retention 35 дней,
+  команды `/start` `/help` `/trigger`.
+- K3s namespace `currency-bot`: Deployment `currency-bot` (SQLite на PVC
+  `currency-bot-data` 1 GiB `local-retain`, образ
+  `ghcr.io/<owner>/currency-bot@sha256:…`) и Deployment `cloudflared`
+  (remotely-managed Cloudflare Tunnel `home-k3s`). Публичный хост
+  `tg.example.com` принимает только `^/telegram/webhook$` → Service
+  `currency-bot-webhook:8081`; остальные пути — 404. Webhook проверяет
+  Telegram `secret_token` и allowlist `CHAT_ID`: без секрета — 401, с
+  секретом — 200. Telegram `getWebhookInfo` указывает на туннель,
+  `allowed_updates=["message"]`.
+- API и `/metrics` — ClusterIP :8080; снаружи только LAN/VPN через
+  IngressRoute `currency.home.<domain>` (`home-allowlist`) с Bearer-токеном.
+  `ServiceMonitor` скрейпит `/metrics` (up=1).
+- Secrets — ESO из OpenBao `k8s/currency-bot` (`BOT_TOKEN`, `CHAT_ID`,
+  `WEBHOOK_SECRET`, `API_TOKEN`) и `k8s/cloudflared` (`TUNNEL_TOKEN`).
+  `CHAT_ID` — два чата: первый (группа/канал) получает алерты, второй — личный
+  чат владельца для команд; в отличие от Kotlin-бота команды из других чатов
+  игнорируются.
+  NetworkPolicies: 8081 только от cloudflared; egress cloudflared к Cloudflare
+  `7844/udp` + `443/tcp` и DNS. Пути OpenBao пока не по конвенции
+  `k8s/<namespace>/<name>` (`PENDING.md`).
+- История перенесена из H2 2026-10-31: 990 записей (2026-09-20 … 2026-10-31)
+  и 2 `sent_alerts`; PVC заполнен до первого старта. `/trigger` и
+  `POST /api/trigger` по-прежнему всегда отправляют.
+- CI: юниты `currency-bot` (go + образ + deploy) и `currency-bot-deploy`
+  (contract-тест `deploy.sh`); deploy-env — `secret/ci/deploy-home`,
+  ключ `currency_bot_env` (`WEBHOOK_URL`, `LAN_CIDR`, `NODE_LAN_IP`).
+  Деплой `currency-bot` зелёный.
+- Наблюдаемость: Alloy шипит логи namespace `currency-bot` (редакция
+  Telegram bot tokens, Bearer и key=value/JSON секретов); дашборд Grafana
+  `currency-bot` (uid `currency-bot`). VPS-дашборд node не переносился.
+- Старые `tg-bot-currency`, `infra-monitoring`, `infra-ci` заменены монорепо
+  и будут архивированы; на VPS бот остановлен, данные выгружены, monitoring
+  выключается. Приватные материалы — `secrets/currency-bot/` (VPS ssh
+  key/config, CSV/DB, tunnel token, Cloudflare tunnel API token, `k8s.env`) и
+  `secrets/home/currency-bot.env`.
+
 ## Приватное / backups
 
 - `secrets/NETWORK.md` — реальные IP/порты; `secrets/CREDENTIALS.md` — доступы.
@@ -355,6 +398,7 @@
 ## Ограничения
 
 - Один K3s node, без HA control plane и распределённого storage.
-- Публичного HA/Grafana нет; доступ только LAN/VPN.
+- Публичного HA/Grafana нет; доступ только LAN/VPN. Единственный публичный
+  путь — Telegram webhook `tg.example.com` через Cloudflare Tunnel.
 - Нет offsite backup, внешнего alerting и проверенного disaster restore.
 - Станция — единственный экземпляр; factory/recovery image отсутствует.

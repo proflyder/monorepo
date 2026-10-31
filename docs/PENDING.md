@@ -12,6 +12,9 @@
       `./projects/home/kubernetes/openbao/bootstrap.sh --enforce-totp`
       (или API `identity/mfa/login-enforcement/userpass-totp`) и проверить
       вход с кодом и без него.
+- [ ] **VPS: ротация пароля и key-only SSH.** Пароль был отправлен в чат, на
+      VPS ещё живёт старый стек. Следующий шаг: сменить пароль, включить вход
+      только по ключу и проверить доступ; затем вывести VPS (P2).
 - [ ] **Offsite-бэкап с шифрованием.** Сейчас raft snapshots лежат на том же
       узле; HA/K3s/scheduler/`secrets/`, CA и recovery keys не вывозятся.
       Следующий шаг: выбрать offsite-назначение и ключ, вывозить OpenBao
@@ -37,6 +40,15 @@
 - [ ] **Внешний KMS/HSM для seal.** `static` seal хранит ключ рядом с данными.
       Следующий шаг: выбрать KMS/HSM/transit, оформить решение и миграцию
       отдельным изменением.
+- [ ] **Вывод VPS после недели стабильности.** Бот остановлен, данные
+      выгружены, но monitoring stack и старые containers/volumes ещё живы.
+      Следующий шаг: после недели зелёного CI-деплоя и штатной работы
+      currency-bot погасить Prometheus/Grafana/Loki, удалить старые
+      контейнеры и volumes, затем вывести VPS.
+- [ ] **Архивировать `tg-bot-currency`, `infra-monitoring`, `infra-ci`.**
+      Функции заменены монорепо. Следующий шаг: подтвердить у владельца и
+      перевести три GitHub-репозитория в archive (read-only), сохранив
+      историю.
 
 ## P3 — приёмка и развитие
 
@@ -110,6 +122,16 @@
       Следующий шаг: добавить `SCHEDULE_KIND_TASK` и тесты повторяемости.
 
 ### Инфраструктура и станция
+
+- [ ] **OpenBao: пути currency-bot по конвенции.** Сейчас
+      `k8s/currency-bot` и `k8s/cloudflared` вместо
+      `k8s/<namespace>/<name>`. Следующий шаг: при следующем использовании
+      admin-токена перенести значения в `k8s/currency-bot/currency-bot` и
+      `k8s/currency-bot/cloudflared`, обновить ExternalSecrets и проверить
+      синхронизацию.
+- [ ] **Удалить неиспользуемый Unkey.** API currency-bot проверяет Bearer из
+      OpenBao, Unkey больше не нужен. Следующий шаг: убедиться, что других
+      клиентов нет, и удалить аккаунт/ключи.
 
 - [ ] **Потеря LAN станцией после reboot.** Роутер online, ARP/ADB/ESPHome
       недоступны, BLE Wi-Fi TIMEOUT; cold power cycle восстанавливает.

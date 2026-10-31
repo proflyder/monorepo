@@ -7,13 +7,17 @@
 - Стенд только для своих устройств в своей сети.
 - Не публиковать `secrets/`, ключи, архивы, HA auth, логи с токенами.
 - Не пробрасывать HA/MA/ADB/Zigbee в интернет.
-- Публичный доступ — только собственный VPN (ocserv).
+- Публичный доступ — собственный VPN (ocserv) и единственный webhook
+  currency-bot через Cloudflare Tunnel; больше наружу ничего не публикуется.
 
 ## Сеть
 
 - HAOS `.28`: `8123`, `8095/8097/8927` — LAN/VPN, login/MFA.
 - K3s `.27`: `30300` Grafana — LAN/VPN, login; `8643` — только
   HAOS/K3s/loopback; `6443/10250/9100/9116/8472` — firewall.
+- currency-bot: `8081` webhook — только cloudflared, `8080` API/metrics —
+  кластер/узел/LAN и Traefik; API `currency.home.example.com` — LAN/VPN,
+  Bearer. Публично только `tg.example.com/telegram/webhook` через туннель.
 - Станция `.13`: `6053`, `8928`, `8099`, `5555`, `22` — только LAN.
   `8099` — bearer token; ADB root без пароля; SSH root по паролю.
 - `6638` Zigbee — без auth; сейчас закрыт/не используется, наружу не выставлять.
@@ -46,6 +50,23 @@
   (certbot, DNS-01 Cloudflare). Приватные пароли/TOTP/QR и ключ клиентского
   CA — только в `secrets/home/vpn/`.
 
+## Cloudflare Tunnel
+
+- Remotely-managed tunnel `home-k3s` запущен как Deployment `cloudflared` в
+  namespace `currency-bot`; он только исходящий: `7844/udp` (QUIC) +
+  `443/tcp` fallback и DNS. Входящих портов на роутере не добавляет.
+- Публичный маршрут один: `tg.example.com` путь `^/telegram/webhook$` →
+  `currency-bot-webhook:8081`; остальные пути — 404. Туннель не даёт доступа
+  к HA, API, Grafana, OpenBao или K3s API.
+- Webhook проверяет `X-Telegram-Bot-Api-Secret-Token` (constant time) и
+  allowlist `CHAT_ID`; без секрета — 401. После успешной аутентификации
+  всегда 200, чтобы Telegram не ретраил и не повторял `/trigger`.
+- `TUNNEL_TOKEN` — только OpenBao `k8s/cloudflared` → ESO Secret
+  `cloudflared-tunnel`; Cloudflare API token и tunnel credentials — в
+  `secrets/currency-bot/`. Токены не логировать.
+- `cloudflared` egress ограничен NetworkPolicy; webhook ingress — только от
+  подов cloudflared.
+
 ## Egress guard
 
 - Разрешены LAN, loopback, DHCP, multicast, Google NTP; публичный WAN —
@@ -63,6 +84,9 @@
 - QR/DPP отключён; прежний материал — только в private recovery archive.
 - `secrets/kubernetes-research/` — kubeconfig, values, Grafana password,
   recovery OCI/SQLite.
+- `secrets/currency-bot/` — VPS ssh key/config, экспорт H2 CSV/SQLite,
+  tunnel token, Cloudflare tunnel API token, `k8s.env`;
+  `secrets/home/currency-bot.env`.
 - Hermes secrets — Kubernetes Secret + writable home.
 - BLE token — `/data/quasar/ble-gateway/token`; HTTP control token —
   `/data/quasar/ble-gateway/control-token`; HA token — `secrets.yaml`.
@@ -102,7 +126,8 @@
 - Backup — raft snapshot в локальный PV на том же узле; offsite-копия пока
   открытый пункт, восстановление на отдельном стенде не проверялось.
 - Приложенческие Secrets (`scheduler-auth`, `ha-bridge-ha`,
-  `hermes-environment`, `grafana-admin`, `cloudflare-api-token`) перенесены в
+  `hermes-environment`, `grafana-admin`, `cloudflare-api-token`,
+  `currency-bot`, `cloudflared-tunnel`) перенесены в
   `secret/k8s/*`; источник правды — OpenBao, Kubernetes Secrets создаёт ESO.
   Локальные копии в `secrets/` — бэкап/bootstrap, не используются деплоем.
 - Не переносятся: `openbao-seal` (нужен до старта OpenBao), helm release

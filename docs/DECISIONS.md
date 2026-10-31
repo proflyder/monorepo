@@ -79,4 +79,15 @@
     только к публичным IPv4-диапазонам GitHub, весь остальной WAN и Яндекс —
     DROP.
 
+21. **Currency bot — Go-переписывание, Cloudflare Tunnel, OpenBao вместо
+    Unkey.** Kotlin `tg-bot-currency` и VPS-стек `infra-monitoring`/`infra-ci`
+    заменены монорепо, старые репозитории архивируются. Поведение 1:1
+    (kurs.kz, часовой job, алерты HOUR/DAY/WEEK/MONTH с dedup, retention
+    35 дней), но SQLite вместо H2, webhook на отдельном порту `8081` с
+    Telegram `secret_token` и allowlist чатов, Bearer-токен API из OpenBao
+    вместо Unkey. Публичный ingress — только
+    `tg.example.com/telegram/webhook` через Cloudflare Tunnel `home-k3s`;
+    API остаётся LAN/VPN. Логи — JSON в stdout, метрики — Prometheus,
+    деплой — data-driven CI-юнит `currency-bot`.
+
 Меняется решение — обновить этот файл и `STATE.md`.

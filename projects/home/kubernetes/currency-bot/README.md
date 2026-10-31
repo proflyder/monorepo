@@ -8,8 +8,30 @@ Telegram webhook delivered through a Cloudflare Tunnel.
   schema.
 - The home server is authoritative for scheduling and storage; Telegram is only
   the delivery channel.
-- The old VPS deployment (`/app/currency-bot`, H2 + Quartz + Promtail) is
-  retired after the cutover below.
+- The old VPS deployment (`/app/currency-bot`, H2 + Quartz + Promtail) was
+  retired in the 2026-10-31 cutover: the bot is stopped, data is exported, and
+  the three old repositories (`tg-bot-currency`, `infra-monitoring`,
+  `infra-ci`) are replaced by this monorepo and will be archived.
+
+## Current state (2026-10-31)
+
+- Namespace `currency-bot`: Deployment `currency-bot` (PVC `currency-bot-data`,
+  1 GiB `local-retain`, digest-pinned image) and Deployment `cloudflared`
+  (remotely-managed Cloudflare Tunnel `home-k3s`).
+- Public webhook `https://tg.example.com/telegram/webhook`; the tunnel route is
+  path-scoped to `^/telegram/webhook$` and everything else returns 404.
+  Verified: no secret token → 401, valid token → 200; Telegram `getWebhookInfo`
+  points at the tunnel with `allowed_updates=["message"]`.
+- LAN/VPN API `https://currency.home.<domain>/api/*` (Bearer, `home-allowlist`);
+  `ServiceMonitor` scrapes `/metrics` (verified `up=1`).
+- History migrated from H2: 990 `currency_history` rows (2026-09-20 …
+  2026-10-31) and 2 `sent_alerts`; the PVC was seeded before the first start.
+- CI units `currency-bot` (Go, image, deploy) and `currency-bot-deploy`
+  (deploy-script contract test) are green; the deploy env lives in OpenBao
+  `secret/ci/deploy-home` key `currency_bot_env`.
+- Observability: Alloy ships the namespace's logs with secret redaction and the
+  Grafana dashboard `currency-bot` (uid `currency-bot`) is live. The old VPS
+  node dashboard was not ported.
 
 ## Files
 
@@ -99,6 +121,10 @@ Trade-offs:
    | `secret/k8s/currency-bot` | `BOT_TOKEN`, `CHAT_ID`, `WEBHOOK_SECRET`, `API_TOKEN` | `currency-bot/currency-bot` |
    | `secret/k8s/cloudflared` | `TUNNEL_TOKEN` | `currency-bot/cloudflared-tunnel` |
 
+   These two paths predate the `k8s/<namespace>/<name>` convention; moving them
+   to `k8s/currency-bot/currency-bot` and `k8s/currency-bot/cloudflared` is a
+   P3 item in `docs/PENDING.md`.
+
    After writing the values, apply the ExternalSecrets (or run
    `external-secrets/deploy.sh`) and wait for `Ready`.
 
@@ -106,19 +132,19 @@ Trade-offs:
    (copy `currency-bot.env.example`):
 
    ```bash
-   WEBHOOK_URL=https://<public webhook host>/telegram/webhook
+   WEBHOOK_URL=https://tg.example.com/telegram/webhook
    LAN_CIDR=<LAN CIDR>
    NODE_LAN_IP=<K3s node address>
    ```
 
    `WEBHOOK_URL` is not secret but it is deployment-specific, so it is never
    committed. CI reads it from the `currency_bot_env` key of
-   `secret/ci/deploy-home` (same file text). Add that key to the OpenBao secret
-   before the first CI deploy.
+   `secret/ci/deploy-home` (same file text); that key is already provisioned.
 
-5. **Cloudflare side:** create/confirm the tunnel, its credentials token and a
-   public hostname route `<public webhook host> → http://currency-bot-webhook.currency-bot.svc.cluster.local:8081`.
-   These are Cloudflare operations and are not automated here.
+5. **Cloudflare side:** create/confirm the tunnel `home-k3s`, its credentials
+   token and a public hostname route `tg.example.com → http://currency-bot-webhook.currency-bot.svc.cluster.local:8081`
+   restricted to `^/telegram/webhook$`. These are Cloudflare operations and are
+   not automated here.
 
 6. **DNS/TLS for the internal route:** `currency.<HOME_DOMAIN>` A record →
    node (DNS only), and run `projects/home/kubernetes/ingress/deploy.sh` so the
@@ -164,10 +190,12 @@ kubectl -n currency-bot get --raw \
   "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
 ```
 
-## Cutover from the VPS (H2 → SQLite)
+## Cutover from the VPS (H2 → SQLite, done 2026-10-31)
 
-The importer is `solutions/currency-bot/cmd/currency-bot-import`. It reads the
-H2 CSV exports and is idempotent (existing timestamps are skipped).
+This is the record of the completed cutover. The importer is
+`solutions/currency-bot/cmd/currency-bot-import`. It reads the H2 CSV exports
+and is idempotent (existing timestamps are skipped). The production run moved
+990 history rows and 2 `sent_alerts`.
 
 1. **Prepare the new deployment** (steps 1–6 above), but keep `cloudflared` at
    0 replicas / do not point Telegram at it yet. Deploying the bot pod is safe:
@@ -289,7 +317,7 @@ H2 CSV exports and is idempotent (existing timestamps are skipped).
 
 7. **Retire old monitoring**: the VPS Promtail/Prometheus currency job and the
    four jsonnet dashboards are replaced by the ServiceMonitor and the Home
-   dashboards (delivered by a separate observability change).
+   dashboard `currency-bot` (delivered by the observability change).
 
 ## Rollback
 
@@ -309,6 +337,11 @@ ServiceMonitor) are idempotent and intentionally not rolled back; the previous
 manifests can be re-applied by checking out the previous commit and re-running
 `deploy.sh`.
 
+Emergency rollback (only until the VPS is decommissioned): run
+`docker compose start currency-bot` in `/app/currency-bot` and point Telegram
+`setWebhook` back at the old URL. This depends on the VPS still existing; fix
+forward in K3s where possible (`docs/PENDING.md`).
+
 Full removal (history is lost unless the PVC is backed up first):
 
 ```bash
@@ -321,12 +354,12 @@ kubectl delete -f projects/home/kubernetes/currency-bot/ci/rbac.yaml
 Also remove the Cloudflare tunnel route and call Telegram `deleteWebhook` or
 point `setWebhook` back at the old service.
 
-## Manual checks before the first CI deploy
+## Cutover checks (all passed 2026-10-31)
 
-- [ ] `kubectl -n currency-bot get secret currency-bot cloudflared-tunnel`
-- [ ] `kubectl -n currency-bot get externalsecret` → both `SecretSynced=True`
-- [ ] `kubectl auth can-i -n currency-bot get deployments` as the CI identity
-- [ ] `secret/ci/deploy-home` has `currency_bot_env` with `WEBHOOK_URL`,
+- [x] `kubectl -n currency-bot get secret currency-bot cloudflared-tunnel`
+- [x] `kubectl -n currency-bot get externalsecret` → both `SecretSynced=True`
+- [x] `kubectl auth can-i -n currency-bot get deployments` as the CI identity
+- [x] `secret/ci/deploy-home` has `currency_bot_env` with `WEBHOOK_URL`,
       `LAN_CIDR`, `NODE_LAN_IP`
-- [ ] `currency.<HOME_DOMAIN>` DNS record and ingress route exist
-- [ ] Cloudflare tunnel route targets the webhook Service
+- [x] `currency.<HOME_DOMAIN>` DNS record and ingress route exist
+- [x] Cloudflare tunnel route targets the webhook Service
