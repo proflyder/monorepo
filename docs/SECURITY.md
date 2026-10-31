@@ -110,8 +110,8 @@
   keys хранить офлайн/в менеджере паролей, не на узле.
 - Человек: `userpass` (имя — `secrets/openbao/username`) → политика `admin` с запретом
   `sys/seal`, `sys/step-down`, `sys/raw/*`, `sys/replication/*`,
-  `sys/rotate`, `sys/rekey*`. TOTP-метод создан; устройство человек ещё не
-  зарегистрировал, enforcement не включён (`docs/PENDING.md`).
+  `sys/rotate`, `sys/rekey*`. Вход человека — пароль + обязательный
+  TOTP (enforcement на `auth/userpass` с 2026-10-31).
 - CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
   OpenBao, claims `repository`, `environment=Home`, `ref=refs/heads/develop`,
