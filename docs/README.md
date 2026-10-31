@@ -21,6 +21,7 @@
 | [`REBUILD.md`](REBUILD.md) | восстановление после потери host/VM/станции |
 | [`SNAPSHOTS.md`](SNAPSHOTS.md) | снапшоты и приватные копии |
 | [`TESTING.md`](TESTING.md) | hermetic и live-проверки |
+| [`GIT.md`](GIT.md) | ветки, pull request, защита и выкладка |
 
 ## Политики и дизайн
 

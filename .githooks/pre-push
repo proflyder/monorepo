@@ -1,30 +1,66 @@
 #!/usr/bin/env python3
-"""Fail closed: publish only develop, never the private archive or tags."""
+"""Fail closed: publish only work branches, never develop, the archive or tags.
+
+`develop` changes only through pull requests (squash merge); the remote ruleset
+enforces that too. Locally this guard allows pushing the checked-out work
+branch `<type>/<name>` to the same name, after checking that its history has
+no private ancestry, the working tree is clean, Gitleaks finds nothing in the
+outgoing commits and the repository audit passes.
+"""
+import re
+import shutil
 import subprocess
 import sys
-import shutil
 from pathlib import Path
+
 root = Path(__file__).resolve().parents[1]
+WORK_BRANCH = re.compile(
+    r"refs/heads/(feat|fix|chore|docs|ci|refactor|test|perf)/[a-z0-9][a-z0-9._-]*"
+)
+
+
+def git(*args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+
+head = git("rev-parse", "HEAD")
+pushed = []
 for line in sys.stdin:
     local_ref, local_sha, remote_ref, remote_sha = line.split()
-    if local_ref != 'refs/heads/develop' or remote_ref != 'refs/heads/develop':
-        sys.exit('Push blocked: only develop -> develop is permitted; archive/tags stay private.')
-    if local_sha != subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip():
-        sys.exit('Push blocked: check out develop before publishing it.')
-    if set(local_sha) == {'0'}:
-        sys.exit('Push blocked: branch deletion is not permitted by this guard.')
-    private = subprocess.run(['git', 'merge-base', 'local-history', local_sha], cwd=root, capture_output=True)
+    if set(local_sha) == {"0"}:
+        sys.exit("Push blocked: branch deletion is not permitted by this guard.")
+    if local_ref != remote_ref or not WORK_BRANCH.fullmatch(local_ref):
+        sys.exit(
+            "Push blocked: push a work branch <type>/<name> to the same name "
+            "and open a pull request; develop, archive refs and tags stay local."
+        )
+    if local_sha != head:
+        sys.exit("Push blocked: check out the branch you are publishing.")
+    private = subprocess.run(
+        ["git", "merge-base", "local-history", local_sha], cwd=root, capture_output=True
+    )
     if private.returncode not in (0, 1):
-        sys.exit('Push blocked: cannot verify private history isolation.')
+        sys.exit("Push blocked: cannot verify private history isolation.")
     if private.returncode == 0:
-        sys.exit('Push blocked: outgoing history includes private historical ancestry.')
-if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root).strip():
-    sys.exit('Push blocked: commit or stash changes before the publication audit.')
-scanner = shutil.which('gitleaks') or str(root / 'secrets/local-tools/gitleaks')
+        sys.exit("Push blocked: outgoing history includes private historical ancestry.")
+    pushed.append(local_sha)
+
+if not pushed:
+    sys.exit(0)
+if git("status", "--porcelain"):
+    sys.exit("Push blocked: commit or stash changes before the publication audit.")
+scanner = shutil.which("gitleaks") or str(root / "secrets/local-tools/gitleaks")
 if not Path(scanner).is_file():
-    sys.exit('Push blocked: install gitleaks before publishing.')
-scan = subprocess.run([scanner, 'git', '.', '--log-opts=refs/heads/develop', '--redact=100', '--no-banner', '--config=.gitleaks.toml'], cwd=root)
-if scan.returncode:
-    sys.exit('Push blocked: secret scan failed; inspect locally with redaction.')
-result = subprocess.run([sys.executable, str(root / 'platform/quality/audit_repository.py')], cwd=root)
+    sys.exit("Push blocked: install gitleaks before publishing.")
+for sha in pushed:
+    scan = subprocess.run(
+        [scanner, "git", ".", f"--log-opts={sha}", "--redact=100", "--no-banner",
+         "--config=.gitleaks.toml"],
+        cwd=root,
+    )
+    if scan.returncode:
+        sys.exit("Push blocked: secret scan failed; inspect locally with redaction.")
+result = subprocess.run(
+    [sys.executable, str(root / "platform/quality/audit_repository.py")], cwd=root
+)
 sys.exit(result.returncode)

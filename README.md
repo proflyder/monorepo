@@ -57,9 +57,12 @@ make test-e2e      # live HA/BLE, нужны токены
 
 ## Публикация
 
-Публикуется только `develop`, без секретов и Git-истории с приватными данными.
-Перед push: `make test`, `python3 platform/quality/audit_repository.py`,
-проверка `docs/SENSITIVE-DATA.md` и Gitleaks. Не использовать `push --all`,
-`--mirror`, `--tags` или `--no-verify`.
+Изменения попадают в `develop` только через pull request (squash, обязательный
+`ci-ok`); merge в `develop` выкатывает затронутые сервисы. Публикуются рабочие
+ветки `<type>/<name>`, без секретов и Git-истории с приватными данными. Перед
+push: `make test`, `python3 platform/quality/audit_repository.py`, проверка
+`docs/SENSITIVE-DATA.md` и Gitleaks (их же выполняет pre-push guard). Не
+использовать `push --all`, `--mirror`, `--tags` или `--no-verify`. Поток
+веток и PR — `docs/GIT.md`.
 
 Секреты, записи голоса, backups и тяжёлые сборки остаются вне Git.
