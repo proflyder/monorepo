@@ -3,9 +3,12 @@ name: openbao-smoke
 # Manual end-to-end check of the GitHub OIDC -> OpenBao path.
 #
 # The runner joins the restricted `ci` VPN group (route only to the K3s node,
-# nft allows tcp/443 and tcp/6443), requests a GitHub Actions OIDC token with a
-# dedicated audience, logs in with auth/github role `deploy-home` and reads
-# secret/ci/test. Only key names are printed; no value or token is echoed.
+# nft allows tcp/443 and tcp/6443), then `hashicorp/vault-action` requests a
+# GitHub Actions OIDC token with a dedicated audience, logs in with auth/github
+# role `deploy-home` and reads secret/ci/test and secret/ci/deploy-home. Every
+# value is masked by the action; the probe is only compared, never printed, and
+# nothing else is echoed. The expected-denial policy check keeps a raw request
+# because the action is read-only and cannot express "must be refused".
 #
 # Required Environment `Home` secrets (set by the primary, never in Git):
 #   VPN_CERT_P12_B64, VPN_CERT_PASSWORD, VPN_SERVER
@@ -87,70 +90,48 @@ jobs:
           tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
           exit 1
 
-      - name: Login with GitHub OIDC
-        run: |
-          set -euo pipefail
-          AUDIENCE="$OPENBAO_ADDR"
-          CI_DIR="$RUNNER_TEMP/openbao-smoke"
-          oidc=$(curl -sSf \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
-          echo "::add-mask::$oidc"
-          python3 - "$oidc" "$OPENBAO_ROLE" "$CI_DIR/login.json" <<'PY'
-          import json, sys
-          oidc, role, path = sys.argv[1:4]
-          open(path, "w").write(json.dumps({"role": role, "jwt": oidc}))
-          PY
-          chmod 600 "$CI_DIR/login.json"
-          code=$(curl -sS -o "$CI_DIR/login-response.json" -w '%{http_code}' \
-            -X POST --data-binary "@$CI_DIR/login.json" \
-            "$OPENBAO_ADDR/v1/auth/github/login")
-          if [[ "$code" != "200" ]]; then
-            echo "OpenBao GitHub login failed with HTTP $code" >&2
-            exit 1
-          fi
-          token=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["auth"]["client_token"])' \
-            "$CI_DIR/login-response.json")
-          echo "::add-mask::$token"
-          echo "OPENBAO_TOKEN=$token" >> "$GITHUB_ENV"
-          echo "GitHub OIDC login: ok"
+      # GitHub OIDC -> OpenBao (auth/github, JWT audience = OPENBAO_ADDR). The
+      # action masks every line of every value and publishes them as outputs;
+      # `exportEnv: false` keeps the values out of later steps' environment.
+      - name: Read OpenBao secrets
+        id: openbao
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        with:
+          url: ${{ env.OPENBAO_ADDR }}
+          method: jwt
+          path: github
+          role: ${{ env.OPENBAO_ROLE }}
+          jwtGithubAudience: ${{ env.OPENBAO_ADDR }}
+          exportEnv: false
+          # Later steps need raw requests for the expected-denial checks.
+          outputToken: true
+          secrets: |
+            secret/data/ci/test probe | PROBE ;
+            secret/data/ci/deploy-home kubeconfig | DEPLOY_HOME_KUBECONFIG ;
+            secret/data/ci/deploy-home scheduler_env | DEPLOY_HOME_SCHEDULER_ENV ;
+            secret/data/ci/deploy-home runtime_values | DEPLOY_HOME_RUNTIME_VALUES
 
-      - name: Read secret/ci/test
+      - name: Verify secret/ci/test and secret/ci/deploy-home
+        env:
+          PROBE: ${{ steps.openbao.outputs.PROBE }}
+          DEPLOY_HOME_KUBECONFIG: ${{ steps.openbao.outputs.DEPLOY_HOME_KUBECONFIG }}
+          DEPLOY_HOME_SCHEDULER_ENV: ${{ steps.openbao.outputs.DEPLOY_HOME_SCHEDULER_ENV }}
+          DEPLOY_HOME_RUNTIME_VALUES: ${{ steps.openbao.outputs.DEPLOY_HOME_RUNTIME_VALUES }}
         run: |
           set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/openbao-smoke"
-          code=$(curl -sS -o "$CI_DIR/ci.json" -w '%{http_code}' \
-            -H "X-Vault-Token: $OPENBAO_TOKEN" \
-            "$OPENBAO_ADDR/v1/secret/data/ci/test")
-          test "$code" = "200" || { echo "read secret/ci/test failed with HTTP $code" >&2; exit 1; }
-          python3 - "$CI_DIR/ci.json" <<'PY'
-          import json, sys
-          data = json.load(open(sys.argv[1]))["data"]["data"]
-          assert data.get("probe") == "ok-ci", "unexpected probe value"
-          print("read secret/ci/test: ok; keys:", sorted(data))
-          PY
-
-      - name: Read secret/ci/deploy-home (key names only)
-        run: |
-          set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/openbao-smoke"
-          code=$(curl -sS -o "$CI_DIR/deploy-home.json" -w '%{http_code}' \
-            -H "X-Vault-Token: $OPENBAO_TOKEN" \
-            "$OPENBAO_ADDR/v1/secret/data/ci/deploy-home")
-          test "$code" = "200" || { echo "read secret/ci/deploy-home failed with HTTP $code" >&2; exit 1; }
-          python3 - "$CI_DIR/deploy-home.json" <<'PY'
-          import json, sys
-          data = json.load(open(sys.argv[1]))["data"]["data"]
-          required = {"kubeconfig", "scheduler_env", "runtime_values"}
-          missing = required - set(data)
-          assert not missing, f"secret/ci/deploy-home is missing: {sorted(missing)}"
-          assert all(isinstance(data[key], str) and data[key] for key in required)
-          print("read secret/ci/deploy-home: ok; keys:", sorted(data))
-          PY
-          rm -f "$CI_DIR/deploy-home.json"
+          [[ "$PROBE" == "ok-ci" ]] || { echo "unexpected probe value" >&2; exit 1; }
+          for name in DEPLOY_HOME_KUBECONFIG DEPLOY_HOME_SCHEDULER_ENV \
+            DEPLOY_HOME_RUNTIME_VALUES; do
+            [[ -n "${!name:-}" ]] || {
+              echo "secret/ci/deploy-home has an empty required value ($name)" >&2
+              exit 1
+            }
+          done
+          echo "read secret/ci/test and secret/ci/deploy-home: ok (values masked)"
 
       - name: Policy boundary (must be denied)
+        env:
+          OPENBAO_TOKEN: ${{ steps.openbao.outputs.vault_token }}
         run: |
           set -euo pipefail
           deny() {
@@ -167,15 +148,6 @@ jobs:
             -H "X-Vault-Token: $OPENBAO_TOKEN" "$OPENBAO_ADDR/v1/secret/data/ci/test"
           deny "read secret/k8s/test" \
             -H "X-Vault-Token: $OPENBAO_TOKEN" "$OPENBAO_ADDR/v1/secret/data/k8s/test"
-
-      - name: Revoke token
-        if: always()
-        run: |
-          set +e
-          if [[ -n "${OPENBAO_TOKEN:-}" ]]; then
-            curl -sS -o /dev/null -X POST -H "X-Vault-Token: $OPENBAO_TOKEN" \
-              "$OPENBAO_ADDR/v1/auth/token/revoke-self"
-          fi
 
       - name: Disconnect VPN and remove temporary files
         if: always()

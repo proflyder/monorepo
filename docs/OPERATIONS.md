@@ -228,8 +228,9 @@ Recovery keys — `secrets/openbao/init.json` (600); root уже отозван,
 выпускается `bao operator generate-root` из recovery keys. GitHub Environment
 `Home` хранит только VPN-креды, `OPENBAO_ADDR` и (опционально)
 `OPENBAO_ROLE`; `kubeconfig`, `scheduler.env` и runtime values лежат в
-`secret/ci/deploy-home` и материализуются job'ом после OIDC-входа (схема и
-команда обновления — README OpenBao).
+`secret/ci/deploy-home` и материализуются job'ом в файлы 600 из outputs
+`hashicorp/vault-action` после OIDC-входа (схема и команда обновления —
+README OpenBao).
 
 ## External Secrets Operator
 

@@ -41,12 +41,18 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        if: inputs.builder == 'bazel'
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
       - name: Build distroless images with Bazel
         if: inputs.builder == 'bazel'
         run: |
           set -euo pipefail
-          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
           read -r -a images <<< "${{ inputs.images }}"
           target_root="${{ inputs.target_root }}"
           if [[ "$target_root" != //* ]]; then
@@ -58,7 +64,7 @@ jobs:
           for image in "${images[@]}"; do
             targets+=("${target_root}:${image}_image")
           done
-          "$RUNNER_TEMP/bazelisk" build "${targets[@]}" \
+          bazel build "${targets[@]}" \
             --platforms=@rules_go//go/toolchain:linux_amd64
           for image in "${images[@]}"; do
             layout="bazel-bin/${package}/${image}_image"

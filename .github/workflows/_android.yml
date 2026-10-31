@@ -77,17 +77,19 @@ jobs:
 
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
-      - name: Install pinned Bazelisk
-        run: |
-          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      # Pinned Bazelisk on PATH, plus its Bzlmod/repository caches.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
+          # Action-output disk cache (.bazelrc) and target-determinator builds.
           path: |
-            ~/.cache/bazel
             ~/.cache/bazel-disk
-            ~/.cache/bazelisk
             ~/.cache/target-determinator
           key: bazel-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
@@ -120,10 +122,10 @@ jobs:
           fi
           tests="$(platform/ci/bazel-targets.sh \
             --base "$BASE_SHA" --candidates "$TEST_CANDIDATES" --universe "$UNIVERSE" \
-            --bazel "$RUNNER_TEMP/bazelisk" --td "$RUNNER_TEMP/target-determinator")"
+            --td "$RUNNER_TEMP/target-determinator")"
           builds="$(platform/ci/bazel-targets.sh \
             --base "$BASE_SHA" --candidates "$BUILD_CANDIDATES" --universe "$UNIVERSE" \
-            --bazel "$RUNNER_TEMP/bazelisk" --td "$RUNNER_TEMP/target-determinator")"
+            --td "$RUNNER_TEMP/target-determinator")"
           {
             echo "test_targets=${tests}"
             echo "build_targets=${builds}"
@@ -155,13 +157,13 @@ jobs:
         if: steps.targets.outputs.test_targets != ''
         run: |
           read -r -a targets <<< "${{ steps.targets.outputs.test_targets }}"
-          bazelisk test "${targets[@]}" --test_output=errors
+          bazel test "${targets[@]}" --test_output=errors
 
       - name: bazel build ${{ inputs.unit }}
         if: steps.targets.outputs.build_targets != ''
         run: |
           read -r -a targets <<< "${{ steps.targets.outputs.build_targets }}"
-          bazelisk build "${targets[@]}"
+          bazel build "${targets[@]}"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.artifact != '' && steps.targets.outputs.build_targets != ''
