@@ -8,7 +8,9 @@
 приложенческие Kubernetes Secrets в KV v2 `secret/k8s/*`; см.
 `projects/home/kubernetes/external-secrets/README.md`. Этап 3 переносит
 секреты CI-деплоя из GitHub Environment в `secret/ci/deploy-home`: GitHub
-хранит только то, что нужно до входа в OpenBao (VPN и адрес сервера).
+хранит только то, что нужно до входа в OpenBao (VPN и адрес сервера). Тот же
+JWT-метод обслуживает второй репозиторий (форк Pulsar): роль `deploy-station`
+читает `secret/ci/deploy-station` для деплоя прошивки станции.
 
 Публичные примеры используют `home.example.com` и `192.0.2.0/24`. Реальные
 имена — `secrets/home/ingress.env`, данные bootstrap — `secrets/openbao/`.
@@ -39,6 +41,7 @@ projects/home/kubernetes/openbao/
   bootstrap.sh       operator init (один раз), configure.py, отзыв root-токена
   configure.py       KV v2, auth-методы, политики, роли, тестовые записи, TOTP
   ci_secrets.py      материализация secret/ci/deploy-home в файлы 600 (CI)
+  test_configure.py  контракты ролей/политик (в т.ч. deploy-station)
   test_ci_secrets.py контракты материализации и маскирования
   verify.sh          HTTPS/UI/логин/политики (+ --kubernetes: под-проба)
   values/openbao.yaml
@@ -123,7 +126,10 @@ kubectl -n openbao delete pod openbao-0
 
 `configure.py` можно запускать повторно с любым admin-токеном
 (`BAO_TOKEN=… ./configure.py --addr https://vault.<domain> --resolve-ip <node>`);
-он не меняет существующие пароли и записи.
+он не меняет существующие пароли и записи. Второй GitHub-репозиторий
+включается явно:
+`OPENBAO_STATION_REPOSITORY=<owner>/<station-repo>` (или
+`--station-repository …`); без него роль `deploy-station` не создаётся.
 
 ## Вход человеком
 
@@ -160,6 +166,7 @@ OpenBao поддерживает login MFA. `configure.py` создаёт мет
 |---|---|---|---|
 | `userpass` | человек | имя из `secrets/openbao/username` | `admin` |
 | `github` (`jwt`) | GitHub Actions | `deploy-home` | `ci-deploy` |
+| `github` (`jwt`) | GitHub Actions, station deploy | `deploy-station` | `ci-station` |
 | `kubernetes` | External Secrets Operator | `external-secrets` | `k8s-read` |
 | `kubernetes` | smoke-под | `k8s-smoke` | `k8s-read` |
 | `kubernetes` | CronJob backup | `backup` | `backup` |
@@ -171,6 +178,11 @@ OpenBao поддерживает login MFA. `configure.py` создаёт мет
 правки `configure.py` и повторного применения.
 
 `k8s-read`: read `secret/data/k8s/*`, list/read metadata; запись запрещена.
+
+`ci-station`: read ровно `secret/data/ci/deploy-station` и
+`secret/metadata/ci/deploy-station`; ни `secret/ci/deploy-home`, ни
+`secret/k8s/*`, ни запись политика не разрешает. Создаётся только вместе с
+параметром `--station-repository`.
 
 `backup`: только `read sys/storage/raft/snapshot`.
 
@@ -194,10 +206,31 @@ OpenBao поддерживает login MFA. `configure.py` создаёт мет
 каноническое имя; в OIDC-токене для environment-джобы
 `sub=repo:<owner>/<repo>:environment:Home`.
 
+Роль `deploy-station` (`auth/github/role/deploy-station`) — второй GitHub
+репозиторий (форк Pulsar) деплоит прошивку станции через OpenBao:
+
+- `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
+- `bound_audiences` = тот же публичный URL OpenBao, что у `deploy-home`;
+- `bound_claims`: `repository=<owner>/<station-repo>` и
+  `environment=Station`. Репозиторий передаётся как
+  `--station-repository <owner>/<station-repo>` или через
+  `OPENBAO_STATION_REPOSITORY`; в публичной документации используются только
+  обезличенные имена;
+- claim `ref` намеренно не задан: деплой запускается с тега через reusable
+  workflow, а какие теги допустимы, ограничивает GitHub Environment `Station`
+  (protection rules/rulesets), а не OIDC-роль;
+- `user_claim=job_workflow_ref`, `token_policies=["ci-station"]`, TTL 10 мин,
+  max 15 мин, `clock_skew=60`.
+
+Без `--station-repository` политика `ci-station` и роль `deploy-station` не
+создаются, остальная конфигурация не меняется. Повторный запуск с параметром
+идемпотентно обновляет роль.
+
 Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}`,
 `secret/ci/deploy-home` → `{kubeconfig, scheduler_env, runtime_values}` (см.
-«CI-секреты»), `secret/k8s/test` → `{probe: ok-k8s}`. Значения `test`
-не секретные и нужны только для smoke-проверок.
+«CI-секреты»), `secret/ci/deploy-station` → `{ha_url, ha_token, entity_id}`
+(см. «Station-секреты»), `secret/k8s/test` → `{probe: ok-k8s}`. Значения
+`test` не секретные и нужны только для smoke-проверок.
 
 ## Kubernetes auth
 
@@ -292,6 +325,33 @@ SHA-256 прочитанного значения с локальным файл
 workflow: обновить ключ, при необходимости перезапустить `deploy-home`
 (токен роли живёт ≤15 мин и не хранится).
 
+### Station-секреты (деплой прошивки станции)
+
+`secret/ci/deploy-station` — отдельная запись для второго репозитория; её
+читает только политика `ci-station`:
+
+| Ключ | Зачем |
+|---|---|
+| `ha_url` | базовый URL Home Assistant, например `https://ha.example.test` |
+| `ha_token` | long-lived token Home Assistant для деплой-задачи |
+| `entity_id` | entity станции в HA, на которую нацелен деплой |
+
+Значения пишутся из файлов через `@file` или из stdin, чтобы не попасть в
+argv, историю shell и логи:
+
+```bash
+export BAO_ADDR=https://vault.<home-domain>
+export BAO_TOKEN=...            # admin-токен, не печатать
+bao kv put -mount=secret ci/deploy-station \
+  ha_url=@secrets/ci/pulsar/ha_url \
+  ha_token=@secrets/ci/pulsar/ha_token \
+  entity_id=@secrets/ci/pulsar/entity_id
+```
+
+Файлы — 600 в `secrets/` (вне Git), они же источник для ротации. Проверка — `bao kv get
+-mount=secret ci/deploy-station` (печатает значения; не в CI-логе). Ротация —
+тот же вызов, workflow не меняется: токен роли живёт ≤15 мин и не хранится.
+
 ### Поток deploy-home
 
 `deploy-home.yml` (`environment: home`, `permissions: id-token: write` только
@@ -355,7 +415,8 @@ kubectl -n openbao exec openbao-0 -- \
   `human.pass` нет.
 - **CI**: смена role/audience — правка `configure.py`, повторный запуск; токены
   живут ≤15 мин и не хранятся. Смена значений деплоя — обновление
-  `secret/ci/deploy-home` (см. «CI-секреты»), workflow не меняется.
+  `secret/ci/deploy-home` (см. «CI-секреты»), workflow не меняется. Для станции
+  аналогично: `secret/ci/deploy-station` и роль `deploy-station`.
 - **Root**: только через recovery keys (`generate-root`), после работ токен
   отозвать.
 - **Приложенческие секреты**: менять значение в OpenBao
