@@ -9,9 +9,9 @@ Telegram webhook delivered through a Cloudflare Tunnel.
 - The home server is authoritative for scheduling and storage; Telegram is only
   the delivery channel.
 - The old VPS deployment (`/app/currency-bot`, H2 + Quartz + Promtail) was
-  retired in the 2026-10-31 cutover: the bot is stopped, data is exported, and
-  the three old repositories (`tg-bot-currency`, `infra-monitoring`,
-  `infra-ci`) are replaced by this monorepo and will be archived.
+  retired in the 2026-10-31 cutover: data exported, all VPS containers and
+  volumes removed, and the three old repositories (`tg-bot-currency`,
+  `infra-monitoring`, `infra-ci`) archived with their secrets deleted.
 
 ## Current state (2026-10-31)
 
@@ -337,10 +337,9 @@ ServiceMonitor) are idempotent and intentionally not rolled back; the previous
 manifests can be re-applied by checking out the previous commit and re-running
 `deploy.sh`.
 
-Emergency rollback (only until the VPS is decommissioned): run
-`docker compose start currency-bot` in `/app/currency-bot` and point Telegram
-`setWebhook` back at the old URL. This depends on the VPS still existing; fix
-forward in K3s where possible (`docs/PENDING.md`).
+The VPS deployment no longer exists, so there is no fallback outside K3s: roll
+back with the script above or fix forward. The original H2 files are kept in
+the private VPS backup.
 
 Full removal (history is lost unless the PVC is backed up first):
 

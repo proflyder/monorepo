@@ -377,9 +377,13 @@
 - Наблюдаемость: Alloy шипит логи namespace `currency-bot` (редакция
   Telegram bot tokens, Bearer и key=value/JSON секретов); дашборд Grafana
   `currency-bot` (uid `currency-bot`). VPS-дашборд node не переносился.
-- Старые `tg-bot-currency`, `infra-monitoring`, `infra-ci` заменены монорепо
-  и будут архивированы; на VPS бот остановлен, данные выгружены, monitoring
-  выключается. Приватные материалы — `secrets/currency-bot/` (VPS ssh
+- Старые `tg-bot-currency`, `infra-monitoring`, `infra-ci` заменены монорепо,
+  их GitHub secrets удалены, репозитории в archive (2026-10-31). На VPS
+  снесены бот, Prometheus/Grafana/Loki/node-exporter/promtail (контейнеры,
+  volumes, образы, `/app/currency-bot`, `/opt/monitoring`); nginx на домене
+  отдаёт только 404 (certbot продлевает сертификат), наружу открыты лишь
+  22/80/443. Backup конфигов и данных — `secrets/currency-bot/vps-backup/`.
+  Приватные материалы — `secrets/currency-bot/` (VPS ssh
   key/config, CSV/DB, tunnel token, Cloudflare tunnel API token, `k8s.env`) и
   `secrets/home/currency-bot.env`.
 
