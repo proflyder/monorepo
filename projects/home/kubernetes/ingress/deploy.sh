@@ -59,7 +59,8 @@ HA_HOST="ha.$HOME_DOMAIN"
 GRAFANA_HOST="grafana.$HOME_DOMAIN"
 ALARMS_HOST="alarms.$HOME_DOMAIN"
 CONTROL_HOST="control.$HOME_DOMAIN"
-export HOME_DOMAIN LAN_CIDR HAOS_ADDRESS HA_HOST GRAFANA_HOST ALARMS_HOST CONTROL_HOST
+CURRENCY_HOST="currency.$HOME_DOMAIN"
+export HOME_DOMAIN LAN_CIDR HAOS_ADDRESS HA_HOST GRAFANA_HOST ALARMS_HOST CONTROL_HOST CURRENCY_HOST
 
 render() {
   python3 - "$1" <<'PY'
@@ -68,7 +69,8 @@ import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
 for key in ("HOME_DOMAIN", "LAN_CIDR", "HAOS_ADDRESS",
-            "HA_HOST", "GRAFANA_HOST", "ALARMS_HOST", "CONTROL_HOST"):
+            "HA_HOST", "GRAFANA_HOST", "ALARMS_HOST", "CONTROL_HOST",
+            "CURRENCY_HOST"):
     text = text.replace("${%s}" % key, os.environ[key])
 if "${" in text:
     sys.exit("unrendered placeholder in %s" % sys.argv[1])

@@ -68,6 +68,7 @@ if [[ "$APPLY_SECRETS" == 1 ]]; then
     "$ROOT/projects/home-assistant/deploy/manifests/external-secrets.yaml"
     "$ROOT/projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml"
     "$ROOT/projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml"
+    "$ROOT/projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml"
   )
   for manifest in "${manifests[@]}"; do
     kubectl apply -f "$manifest"

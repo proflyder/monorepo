@@ -1,0 +1,173 @@
+# Currency bot: one static Go binary, one SQLite writer, one persistent volume.
+#
+# TEMPLATE. deploy.sh renders it with private values from an ignored env file
+# (or from the CI job's OpenBao-backed env); rendered manifests must never be
+# committed.
+#
+#   CURRENCY_BOT_IMAGE    digest-pinned image built by Bazel
+#   CURRENCY_WEBHOOK_URL  public Cloudflare Tunnel host, e.g.
+#                         https://<public webhook host>/telegram/webhook
+#   BUILD_ID              rollout annotation (image fingerprint)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: currency-bot-data
+  namespace: currency-bot
+  labels:
+    app.kubernetes.io/name: currency-bot
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: currency-bot
+  namespace: currency-bot
+  labels:
+    app.kubernetes.io/name: currency-bot
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 1
+  # SQLite is single-writer: never two pods against the same volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: currency-bot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: currency-bot
+      annotations:
+        ricardo.dev/build: ${BUILD_ID}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: currency-bot
+          image: ${CURRENCY_BOT_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: currency-bot
+                  key: BOT_TOKEN
+            - name: CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: currency-bot
+                  key: CHAT_ID
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: currency-bot
+                  key: WEBHOOK_SECRET
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: currency-bot
+                  key: API_TOKEN
+            - name: WEBHOOK_URL
+              value: ${CURRENCY_WEBHOOK_URL}
+            - name: DB_PATH
+              value: /data/currency-bot.db
+            - name: TZ
+              value: UTC
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: webhook
+              containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: currency-bot-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: currency-bot
+  namespace: currency-bot
+  labels:
+    app.kubernetes.io/name: currency-bot
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: currency-bot
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+# Separate Service for the Telegram webhook: the Cloudflare Tunnel ingress
+# targets http://currency-bot-webhook.currency-bot.svc.cluster.local:8081 and
+# the NetworkPolicy only opens 8081 to cloudflared pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: currency-bot-webhook
+  namespace: currency-bot
+  labels:
+    app.kubernetes.io/name: currency-bot
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: currency-bot
+  ports:
+    - name: webhook
+      port: 8081
+      targetPort: webhook
+      protocol: TCP

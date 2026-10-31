@@ -1,8 +1,8 @@
 # HTTPS ingress (`*.home.example.com`)
 
 Traefik + cert-manager дают LAN/VPN-доступ к домашним сервисам по именам с
-валидным сертификатом Let's Encrypt: `ha`, `grafana`, `alarms`, `control` под
-приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса и
+валидным сертификатом Let's Encrypt: `ha`, `grafana`, `alarms`, `control`,
+`currency` под приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса и
 NodePort не удаляются и остаются аварийным путём.
 
 ## Состав
@@ -13,7 +13,7 @@ NodePort не удаляются и остаются аварийным путё
 | cert-manager `v1.21.3` | `cert-manager` | ACME DNS-01 Cloudflare, wildcard-сертификат |
 | ClusterIssuer | cluster | `letsencrypt-staging`, `letsencrypt-prod` |
 | Certificate `home-wildcard` | `traefik` | `*.home.example.com` → Secret `home-wildcard-tls` |
-| IngressRoute ×4 | `traefik` | маршруты к Service в `monitoring`/`home-assistant` |
+| IngressRoute ×5 | `traefik` | маршруты к Service в `monitoring`/`home-assistant`/`currency-bot` |
 
 Маршрут `vault.<домен>` и его DNS-запись обслуживает
 `projects/home/kubernetes/openbao/deploy.sh` — тот же namespace, allow-list и
@@ -65,8 +65,13 @@ Edit только на зону; IP-фильтр — домашний внешн
 скриптом из файла и попадает только в Kubernetes Secret; в argv, логи и Git он
 не передаётся.
 
-DNS: A-записи `ha`, `grafana`, `alarms`, `control` → узел K3s, Cloudflare
-**DNS only** (не proxied), TTL auto. Wildcard-сертификат не покрывает apex.
+DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency` → узел K3s,
+Cloudflare **DNS only** (не proxied), TTL auto. Wildcard-сертификат не
+покрывает apex.
+
+`currency.<домен>` — внутренний JSON API бота (`/api/*`, `/metrics`), доступен
+только из LAN/VPN через `home-allowlist`. Telegram webhook идёт отдельным
+путём через Cloudflare Tunnel и этот маршрут не использует.
 
 ## Деплой
 

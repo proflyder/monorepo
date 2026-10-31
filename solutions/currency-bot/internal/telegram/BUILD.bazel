@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "telegram",
+    srcs = ["client.go"],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/telegram",
+)
+
+go_test(
+    name = "telegram_test",
+    srcs = ["client_test.go"],
+    embed = [":telegram"],
+)

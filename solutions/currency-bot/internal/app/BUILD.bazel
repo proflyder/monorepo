@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "app",
+    srcs = [
+        "run.go",
+        "schedule.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/app",
+    deps = [
+        "//solutions/currency-bot/internal/alerts",
+        "//solutions/currency-bot/internal/config",
+        "//solutions/currency-bot/internal/metrics",
+        "//solutions/currency-bot/internal/rates",
+        "//solutions/currency-bot/internal/server",
+        "//solutions/currency-bot/internal/service",
+        "//solutions/currency-bot/internal/store",
+        "//solutions/currency-bot/internal/telegram",
+    ],
+)
+
+go_test(
+    name = "app_test",
+    srcs = ["schedule_test.go"],
+    embed = [":app"],
+)

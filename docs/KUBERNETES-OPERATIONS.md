@@ -11,6 +11,8 @@
   - `home-assistant`: GigaAM, Whisper, Piper, Hermes gateway+proxy,
     health exporter;
   - `monitoring`: kube-prometheus-stack, Loki, Alloy, Grafana;
+  - `currency-bot`: Telegram-бот валют, SQLite на `local-retain` и
+    `cloudflared` для webhook, см. `projects/home/kubernetes/currency-bot/`;
   - `traefik`: ingress-контроллер, wildcard Certificate и IngressRoute;
   - `cert-manager`: cert-manager и ACME solver Secrets;
   - `openbao`: OpenBao (raft, UI, auth), см. `projects/home/kubernetes/openbao/`;
@@ -62,7 +64,8 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 - `runtime-music`/`runtime-matter` удалены; tar-копии на Mac.
 
 Секреты Hermes (`Secret/hermes-environment`), scheduler/HA
-(`scheduler-auth`, `ha-bridge-ha`), Grafana (`grafana-admin`) и Cloudflare
+(`scheduler-auth`, `ha-bridge-ha`), currency-bot (`currency-bot`,
+`cloudflared-tunnel`), Grafana (`grafana-admin`) и Cloudflare
 (`cloudflare-api-token`) создаются External Secrets Operator из OpenBao
 `secret/k8s/<namespace>/<name>`. Источник правды — OpenBao; локальные файлы в
 `secrets/` — только бэкап/bootstrap.
@@ -189,9 +192,10 @@ Grafana admin password — `secrets/kubernetes-research/grafana-password`.
 - Маршруты: `ha.home.example.com` → `monitoring/home-assistant-external:8123`,
   `grafana.home.example.com` → `monitoring/monitoring-grafana:80`,
   `alarms.home.example.com` → `home-assistant/scheduler:8098`,
-  `control.home.example.com` → `home-assistant/ha-control:8099`.
+  `control.home.example.com` → `home-assistant/ha-control:8099`,
+  `currency.home.example.com` → `currency-bot/currency-bot:8080`.
 - Все маршруты и сертификат — в namespace `traefik`; `allowCrossNamespace`
-  разрешает Service из `monitoring`/`home-assistant`. Solver-Secret
+  разрешает Service из `monitoring`/`home-assistant`/`currency-bot`. Solver-Secret
   `cloudflare-api-token` живёт в namespace `cert-manager`, потому что
   `ClusterIssuer` резолвит его в cluster resource namespace.
 - Реальные имена и `LAN_CIDR` — `secrets/home/ingress.env`; токен Cloudflare
@@ -261,9 +265,13 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
 - Сохранять: cluster SQLite snapshot, token, TLS/cred, app PVC, custom images.
 - SQLite snapshots — через backup API, проверять `integrity_check`.
 - Без server token восстановление datastore невозможно.
-- Образы scheduler/ha-bridge/ha-control собираются Bazel (`rules_oci`,
-  distroless, digest-pinned base) и адресуются по digest; в CI они пушатся в
-  GHCR, на живой узел импортируются в containerd (`ctr images import`).
+- Образы scheduler/ha-bridge/ha-control/currency-bot собираются Bazel
+  (`rules_oci`, distroless, digest-pinned base) и адресуются по digest; в CI
+  они пушатся в GHCR, на живой узел импортируются в containerd
+  (`ctr images import`).
+- currency-bot хранит историю в SQLite на PVC `currency-bot-data` (1Gi,
+  `local-retain`); H2→SQLite перенос и импорт — в
+  `projects/home/kubernetes/currency-bot/README.md`.
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
   IfNotPresent`, без pull-secret. deploy-home собирает и пушит их, затем

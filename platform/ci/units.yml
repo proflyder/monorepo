@@ -71,8 +71,14 @@ units:
     # has no deploy block on purpose: it is not auto-deployed.
     deploy:
       builder: bazel
+      target_root: //projects/home/kubernetes/scheduler
       images: [scheduler]
       workloads: [scheduler]
+      namespace: home-assistant
+      script: projects/home/kubernetes/scheduler/deploy.sh
+      env_key: scheduler_env
+      env_file: scheduler.env
+      externalsecrets: [scheduler-auth, ha-bridge-ha]
     go:
       module: "."
       packages:
@@ -80,6 +86,33 @@ units:
       race: true
       build:
         - ./solutions/scheduler/cmd/scheduler
+
+  - id: currency-bot
+    platform: go
+    title: "solutions/currency-bot (Telegram currency bot)"
+    paths:
+      - solutions/currency-bot/**
+      - projects/home/kubernetes/currency-bot/**
+    # One image and one Deployment; the Cloudflare Tunnel sidecar is part of the
+    # same unit because the webhook is unusable without it.
+    deploy:
+      builder: bazel
+      target_root: //solutions/currency-bot
+      images: [currency-bot]
+      workloads: [currency-bot]
+      namespace: currency-bot
+      script: projects/home/kubernetes/currency-bot/deploy.sh
+      env_key: currency_bot_env
+      env_file: currency-bot.env
+      externalsecrets: [currency-bot, cloudflared-tunnel]
+    go:
+      module: "."
+      packages:
+        - ./solutions/currency-bot/...
+      race: true
+      build:
+        - ./solutions/currency-bot/cmd/currency-bot
+        - ./solutions/currency-bot/cmd/currency-bot-import
 
   - id: ha-bridge
     platform: go
@@ -89,8 +122,14 @@ units:
     # The bridge unit owns ha-control too: they share the executor code.
     deploy:
       builder: bazel
+      target_root: //projects/home/kubernetes/scheduler
       images: [ha-bridge, ha-control]
       workloads: [ha-bridge, ha-control]
+      namespace: home-assistant
+      script: projects/home/kubernetes/scheduler/deploy.sh
+      env_key: scheduler_env
+      env_file: scheduler.env
+      externalsecrets: [scheduler-auth, ha-bridge-ha]
     go:
       module: "."
       packages:
@@ -192,6 +231,11 @@ units:
       builder: docker
       images: [hermes, voice-proxy]
       workloads: [hermes]
+      namespace: home-assistant
+      script: projects/home-assistant/deploy/hermes_rollout.py
+      env_key: runtime_values
+      env_file: runtime-values.yaml
+      externalsecrets: [hermes-environment]
     python:
       suites:
         - projects/home-assistant/hermes
@@ -311,6 +355,7 @@ units:
       - projects/home-assistant/deploy/manifests/external-secrets.yaml
       - projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml
       - projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml
+      - projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml
     python:
       suites:
         - projects/home/kubernetes/external-secrets

@@ -1,0 +1,72 @@
+# Extend the existing GitHub Actions identity (ServiceAccount
+# home-assistant/ci-deploy) into the currency-bot namespace.
+#
+# The kubeconfig still authenticates as home-assistant/ci-deploy; Kubernetes
+# RBAC is namespaced, so a Role/RoleBinding here grants exactly the verbs
+# deploy.sh performs and nothing else. No ClusterRole is involved.
+#
+# Applied once by an admin, together with manifests/namespace.yaml:
+#   kubectl apply -f projects/home/kubernetes/currency-bot/manifests/namespace.yaml
+#   kubectl apply -f projects/home/kubernetes/currency-bot/ci/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-deploy
+  namespace: currency-bot
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list"]
+  # Same namespace-scoped surface as home-assistant: the deploy script applies
+  # Services/PVCs, the smoke reads /readyz through the API-server Service proxy,
+  # and rollback needs to replace Deployments. CI never writes Secrets; the
+  # ExtraSecret verbs are the same guard used by the existing Role.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources:
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors"]
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deploy
+  namespace: currency-bot
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-deploy
+subjects:
+  - kind: ServiceAccount
+    name: ci-deploy
+    namespace: home-assistant

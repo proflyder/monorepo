@@ -68,6 +68,16 @@ class Unit:
     deploy_images: list[str] = field(default_factory=list)
     deploy_workloads: list[str] = field(default_factory=list)
     deploy_builder: str = "bazel"
+    # Bazel package that owns the `<image>_image`/`<image>_push` targets.
+    deploy_target_root: str = ""
+    # Kubernetes namespace, deploy entrypoint and the OpenBao `secret/ci/
+    # deploy-home` key/file that carries the private deploy-time env.
+    deploy_namespace: str = ""
+    deploy_script: str = ""
+    deploy_env_key: str = ""
+    deploy_env_file: str = ""
+    # ExternalSecrets that must be Ready before the deploy touches workloads.
+    deploy_externalsecrets: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -126,6 +136,12 @@ def load_config(path: Path) -> Config:
                 deploy_images=list(deploy.get("images") or []),
                 deploy_workloads=list(deploy.get("workloads") or []),
                 deploy_builder=str(deploy.get("builder") or "bazel"),
+                deploy_target_root=str(deploy.get("target_root") or ""),
+                deploy_namespace=str(deploy.get("namespace") or ""),
+                deploy_script=str(deploy.get("script") or ""),
+                deploy_env_key=str(deploy.get("env_key") or ""),
+                deploy_env_file=str(deploy.get("env_file") or ""),
+                deploy_externalsecrets=list(deploy.get("externalsecrets") or []),
             )
         )
     invalidations = [
@@ -593,6 +609,12 @@ def deploy_entries(route_: Route, config: Config) -> list[dict[str, object]]:
                 "images": _space(unit.deploy_images),
                 "workloads": _space(unit.deploy_workloads),
                 "builder": unit.deploy_builder,
+                "target_root": unit.deploy_target_root,
+                "namespace": unit.deploy_namespace,
+                "script": unit.deploy_script,
+                "env_key": unit.deploy_env_key,
+                "env_file": unit.deploy_env_file,
+                "externalsecrets": _space(unit.deploy_externalsecrets),
             }
         )
     return entries

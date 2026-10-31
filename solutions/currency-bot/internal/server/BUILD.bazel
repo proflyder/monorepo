@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "server",
+    srcs = [
+        "history.go",
+        "server.go",
+        "webhook.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/server",
+    deps = [
+        "//solutions/currency-bot/internal/metrics",
+        "//solutions/currency-bot/internal/model",
+        "//solutions/currency-bot/internal/service",
+        "//solutions/currency-bot/internal/store",
+    ],
+)
+
+go_test(
+    name = "server_test",
+    srcs = ["server_test.go"],
+    embed = [":server"],
+    deps = [
+        "//solutions/currency-bot/internal/metrics",
+        "//solutions/currency-bot/internal/model",
+        "//solutions/currency-bot/internal/service",
+        "//solutions/currency-bot/internal/store",
+    ],
+)

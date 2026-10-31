@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "model",
+    srcs = ["model.go"],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/model",
+)

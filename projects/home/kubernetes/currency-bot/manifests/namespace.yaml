@@ -1,0 +1,10 @@
+# The namespace is applied once by an admin (Kubernetes namespaces are
+# cluster-scoped and the CI ServiceAccount has no cluster-scoped permissions).
+# deploy.sh only creates it when it is missing; on the CI path it must already
+# exist, together with ci/rbac.yaml.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: currency-bot
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
