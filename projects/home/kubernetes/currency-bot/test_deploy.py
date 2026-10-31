@@ -24,7 +24,8 @@ NODE_LAN_IP="192.0.2.27"
 
 
 class DeployEnvTests(unittest.TestCase):
-    def run_deploy(self, env_text: str, kubectl_script: str | None = None) -> subprocess.CompletedProcess:
+    def run_deploy(self, env_text: str, kubectl_script: str | None = None,
+                   build: bool = False) -> subprocess.CompletedProcess:
         tmp = Path(tempfile.mkdtemp(prefix="currency-deploy-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
         env_file = tmp / "currency-bot.env"
@@ -32,18 +33,26 @@ class DeployEnvTests(unittest.TestCase):
         kubectl = tmp / "kubectl"
         kubectl.write_text(kubectl_script or '#!/bin/sh\necho "kubectl $*" >> "$KUBECTL_LOG"\nexit 3\n')
         kubectl.chmod(0o755)
+        bazel = tmp / "bazel"
+        bazel.write_text('#!/bin/sh\necho "bazel $*" >> "$BAZEL_LOG"\nexit 0\n')
+        bazel.chmod(0o755)
         env = os.environ.copy()
+        env.pop("BAZELISK", None)
         env.update({
             "PRIVATE_ENV": str(env_file),
             "KUBECTL": str(kubectl),
             "KUBECTL_LOG": str(tmp / "kubectl.log"),
-            "CURRENCY_BOT_IMAGE": "ghcr.io/example/currency-bot@sha256:" + "0" * 64,
+            "BAZEL_LOG": str(tmp / "bazel.log"),
             "RENDER_DIR": str(tmp / "rendered"),
             "PATH": f"{tmp}:{env['PATH']}",
         })
-        res = subprocess.run(["bash", str(SCRIPT), "--skip-build"], env=env,
+        if not build:
+            env["CURRENCY_BOT_IMAGE"] = "ghcr.io/example/currency-bot@sha256:" + "0" * 64
+        args = ["bash", str(SCRIPT)] + ([] if build else ["--skip-build"])
+        res = subprocess.run(args, env=env,
                              text=True, capture_output=True, timeout=60)
         res.kubectl_log = str(tmp / "kubectl.log")
+        res.bazel_log = tmp / "bazel.log"
         res.kubectl_called = (tmp / "kubectl.log").exists()
         return res
 
@@ -94,6 +103,14 @@ exit 3
         log = Path(res.kubectl_log).read_text()
         self.assertIn("apply -f", log)
         self.assertIn("namespace.yaml", log)
+
+    def test_build_invokes_the_bazel_binary_from_path(self):
+        # CI puts Bazelisk on PATH as `bazel` (setup-bazel). A helper function
+        # named `bazel` used to shadow it, so the build silently never ran.
+        res = self.run_deploy(GOOD_ENV, build=True)
+        self.assertTrue(res.bazel_log.exists(), res.stderr)
+        self.assertIn("build //solutions/currency-bot:currency-bot_image",
+                      res.bazel_log.read_text())
 
 
 if __name__ == "__main__":

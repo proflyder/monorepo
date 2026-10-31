@@ -11,6 +11,8 @@ name: ci
 # No deploy steps and no repository secrets: deploy workflows are separate and
 # only run from `develop` with Environments.
 
+# The push run on `develop` is what saves the shared caches (cache-save is off
+# for pull_request): PRs can read caches from their base branch only.
 on:
   push:
     branches: [develop]

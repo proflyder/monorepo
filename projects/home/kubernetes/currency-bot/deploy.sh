@@ -79,9 +79,11 @@ NODE_LAN_IP=$(env_value NODE_LAN_IP)
   exit 1
 }
 
-bazel() {
+# Not named `bazel`: a function of that name would shadow the binary and
+# `command -v bazel` would find the function itself.
+bazel_bin() {
   if [[ -n "${BAZELISK:-}" ]]; then echo "$BAZELISK"; return; fi
-  if command -v bazel >/dev/null 2>&1; then echo bazel; return; fi
+  if type -P bazel >/dev/null 2>&1; then type -P bazel; return; fi
   if [[ -x "$ROOT/secrets/local-tools/bazelisk" ]]; then echo "$ROOT/secrets/local-tools/bazelisk"; return; fi
   echo "bazel/bazelisk not found; set BAZELISK" >&2
   exit 1
@@ -93,7 +95,7 @@ fi
 
 if $BUILD; then
   echo "== building the currency-bot image with Bazel"
-  ( cd "$ROOT" && "$(bazel)" build \
+  ( cd "$ROOT" && "$(bazel_bin)" build \
       //solutions/currency-bot:currency-bot_image \
       --platforms=@rules_go//go/toolchain:linux_amd64 )
 fi
@@ -106,7 +108,7 @@ if [[ -z "$IMAGE_REF" ]]; then
   digest=$(python3 "$OCI" digest "$layout")
   repo="${IMAGE_REGISTRY}/currency-bot"
   if [[ "$PUSH_IMAGES" == 1 ]]; then
-    out=$( cd "$ROOT" && "$(bazel)" run //solutions/currency-bot:currency-bot_push \
+    out=$( cd "$ROOT" && "$(bazel_bin)" run //solutions/currency-bot:currency-bot_push \
       --platforms=@rules_go//go/toolchain:linux_amd64 \
       -- --repository "$repo" --tag "$IMAGE_TAG" 2>&1 ) || {
         printf '%s\n' "$out" >&2

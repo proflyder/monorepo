@@ -152,9 +152,11 @@ for line in path.read_text().splitlines():
 PY
 }
 
-bazel() {
+# Not named `bazel`: a function of that name would shadow the binary and
+# `command -v bazel` would find the function itself.
+bazel_bin() {
   if [[ -n "${BAZELISK:-}" ]]; then echo "$BAZELISK"; return; fi
-  if command -v bazel >/dev/null 2>&1; then echo bazel; return; fi
+  if type -P bazel >/dev/null 2>&1; then type -P bazel; return; fi
   if [[ -x "$ROOT/secrets/local-tools/bazelisk" ]]; then echo "$ROOT/secrets/local-tools/bazelisk"; return; fi
   echo "bazel/bazelisk not found; set BAZELISK" >&2
   exit 1
@@ -166,7 +168,7 @@ fi
 
 if $BUILD; then
   echo "== building container images with Bazel"
-  ( cd "$ROOT" && "$(bazel)" build \
+  ( cd "$ROOT" && "$(bazel_bin)" build \
       //projects/home/kubernetes/scheduler:images \
       --platforms=@rules_go//go/toolchain:linux_amd64 )
 fi
@@ -201,7 +203,7 @@ image_var() {
 push_tag() {
   local name=$1 digest=$2 tag=$3 repo="${IMAGE_REGISTRY}/${name}"
   local bin out pushed
-  bin=$(bazel)
+  bin=$(bazel_bin)
   out=$( cd "$ROOT" && "$bin" run "//projects/home/kubernetes/scheduler:${name}_push" \
     --platforms=@rules_go//go/toolchain:linux_amd64 \
     -- --repository "${IMAGE_REGISTRY}/${name}" --tag "$tag" 2>&1 ) || {
