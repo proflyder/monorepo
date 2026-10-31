@@ -11,6 +11,7 @@ PVE host         192.0.2.26   DEXP Jupiter, 16 GiB, NVMe 512 GB
 VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB, HAOS 2026.10.4
                  add-ons: Music Assistant 2.10.8, Matter 9.2.0
 VM 101 lab-k3s   192.0.2.27   8 vCPU / 8 GiB / 200 GiB, Ubuntu + K3s
+CT 102 vpn       192.0.2.29   1 vCPU / 512 MiB / 4 GiB, Debian 13, ocserv
 ```
 
 - PVE `9.2.24`, root 64 GiB, swap 8 GiB, `local-lvm` ~379 GiB.
@@ -77,7 +78,7 @@ bridge link
 curl -fsS -o /dev/null -w '%{http_code}\n' http://192.0.2.28:8123/
 curl -fsS -o /dev/null -w '%{http_code}\n' http://192.0.2.28:8095/
 curl -fsS -o /dev/null -w '%{http_code}\n' \
-  http://192.0.2.27:30300/grafana/api/health
+  http://192.0.2.27:30300/api/health
 
 # K3s
 ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'

@@ -4,31 +4,34 @@
 
 ## Модель
 
-- On-device microWakeWord: персональная v22, FULL resolver встроенной `libtflite`.
-- Threshold `0.9`, окно `10`, pre-roll `0.5 с`.
-- Активный профиль — `projects/station/configs/wakeword-personal.json`;
-  его SHA256 закреплён в профиле. Персональная модель и обучаемые веса —
-  private в `secrets/model-registry/ricardo/v22-scratch-puriso-selected-20261030/`.
-- Исходная v1 сохранена для отката в private registry и как общий baseline
-  в `artifacts/wakeword/ricardo-v1/`. Профиль отката —
-  `projects/station/configs/wakeword-baseline.json`.
-- Установлена `v22-scratch-puriso-selected-20261030`, обученная с нуля
-  на исходной синтетике, Puriso2 и личных train-записях. Checkpoint выбран
-  по непрерывной валидации, затем прошёл offline-регрессию по манерам речи.
-  HA/MA подключены, бинарник Pulsar не менялся; живая приёмка ожидается.
-  Ошибки на сложных словах ещё остаются. Предыдущая v2 сохранена private
-  и в device backup, указанном в `secrets/model-registry/ricardo/active.json`.
+- On-device microWakeWord: установлен кандидат v27 (более ёмкий MixedNet);
+  best-known/reference по решению пользователя — v24. Базовая v1 остаётся
+  baseline и путём отката.
+- Threshold `0.9`, окно `10`, pre-roll Pulsar `256 ms` (Ricardo `Fixed(8)`).
+- Активный профиль — `projects/station/configs/wakeword-personal.json`
+  (`v27-ambient-capacity-sel22-20261030`); его SHA256 закреплён в профиле.
+  Персональные модели и обучаемые веса — private в
+  `secrets/model-registry/ricardo/`, вне Git.
+- Откат: `projects/station/configs/wakeword-v24.json` (best-known) и
+  `projects/station/configs/wakeword-v22.json`; исходная v1 — профиль
+  `wakeword-baseline.json` и `artifacts/wakeword/ricardo-v1/`.
+- v27 обучена с нуля и прошла firmware-совместимость (C++ 162/164 против
+  159/164 у v24 на регрессионном наборе); Python-стенд дал 161/164 одинаково
+  с v24. Живая приёмка всех манер речи и независимый ambient ещё нужны;
+  установка model-only не является приёмкой.
 - Записи и нарезанные PCM-контексты с разметкой по версиям сохранены в
-  `secrets/datasets/ricardo-20261029/`, вне Git. Случайные аугментации
-  сохранены как массивы признаков и воспроизводятся по рецептам/seed.
+  `secrets/datasets/`, вне Git. Случайные аугментации сохранены как массивы
+  признаков и воспроизводятся по рецептам/seed.
 - Бинарник и device-откат — `/data/pulsar`; legacy исходники и binaries —
   private в `secrets/local/recovery/`.
 - Изменяемые исходники — `projects/station/upstream/pulsar-rust/`,
   ветка `feat/ricardo-rust`.
 
 База локального форка — tag `v0.5.2`, commit `4cba44a`; на станции установлена
-сборка форка `v0.5.2-3-gc57d521` (`pulsar.prev` = `v0.5.2-2-g95ce568`;
-`v0.5.0-1-g908a027` — private backup вне Git).
+сборка форка `v0.5.2-4-g9b5e86a-dirty` (SHA256 `7081ef8e…`). `pulsar.prev` —
+прежний endpointing 512 ms (`0b0c48e4…`); historical
+`pulsar.pre-endpoint-20261030` — `v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568`
+и `v0.5.0-1-g908a027` — private backup вне Git.
 Снимок локальных изменений — `projects/station/patches/pulsar-rust/`;
 обновляется `projects/station/scripts/snapshot-pulsar.py` перед корневым
 коммитом.

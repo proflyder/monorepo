@@ -2,15 +2,16 @@
 
 Физическая установка и этапы восстановления: [runbook](../../../docs/INSTALL-PROXMOX.md).
 
-## Текущее состояние 2026-10-28
+## Текущее состояние
 
 PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
-2 vCPU/4 GiB/32 GiB) и VM `101 lab-k3s` (`192.0.2.27`,
-8 vCPU/8 GiB/200 GiB) running, static IP в guests, startup order 1/2.
-HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`. Terraform plan — no changes;
-state root-only на PVE и копия в `secrets/`. HAOS восстановлен, K3s runtime
-и HTTPS ingress приняты read-only E2E. HA-совместимый endpoint
-HAOS доступен напрямую `.28:8123`; compatibility HAProxy удалён.
+2 vCPU/4 GiB/32 GiB), VM `101 lab-k3s` (`192.0.2.27`, 8 vCPU/8 GiB/200 GiB)
+и CT `102 vpn` (`192.0.2.29`, Debian 13, ocserv). Static IP в guests,
+startup order 1/2. HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`.
+Terraform plan — no changes; state root-only на PVE и копия в `secrets/`.
+HAOS восстановлен, K3s runtime и HTTPS ingress приняты read-only E2E.
+HA-совместимый endpoint HAOS доступен напрямую `.28:8123`; compatibility
+HAProxy удалён.
 
 Wi-Fi RTL8821CE работает на host как 4-address/WDS uplink `vmbr0`,
 VM IP и L2/multicast сохраняются. `ricardo-uplink` выбирает один uplink:
@@ -18,11 +19,12 @@ Ethernet при carrier, иначе Wi-Fi. NAT и PCI passthrough не треб�
 Исходники/установка/откат: [wifi-uplink](wifi-uplink/).
 `bootstrap-wifi-mapping.sh` — неиспользуемая подготовка прежнего варианта.
 
-VPN-сервер (ocserv, пароль + TOTP) разворачивается отдельным
-unprivileged CT 102 `vpn` скриптами [vpn](vpn/): создание LXC, установка
-ocserv с nftables, добавление пользователя и QR. Этап 1 — только LAN,
-самоподписанный сертификат; пробросы и Let's Encrypt — отдельные шаги
-(`docs/PENDING.md`).
+VPN-сервер (ocserv) разворачивается отдельным unprivileged CT 102 `vpn`
+скриптами [vpn](vpn/): создание LXC, установка ocserv с nftables,
+пользователи и клиентские сертификаты. Публичный сертификат Let's Encrypt
+продлевается автоматически (DNS-01 Cloudflare); группа `ci` — только до K3s.
+Проброс на роутере — только `443/tcp+udp`; подробности и откат — в
+[vpn/README.md](vpn/README.md).
 
 Статический IP K3s задаётся приватными Terraform variables
 `k3s_ipv4_address` (CIDR) и `k3s_ipv4_gateway`; default DHCP — только для

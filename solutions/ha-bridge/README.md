@@ -4,10 +4,10 @@
 Home Assistant. Забирает события из очереди `home`, вызывает allowlisted HA
 script и подтверждает доставку только после HTTP 2xx от Home Assistant.
 
-Статус: **исходники и тесты реализованы; мост не задеплоен, cutover не
-выполнен**. Действующим владельцем расписаний остаётся текущий HA
-(`input_datetime` + `script.schedule_alarm_*` / `alarm_*` ticks). Мост не
-создаёт, не включает и не импортирует расписания.
+Статус: **развёрнут в K3s `home-assistant`** (очередь `home`, 1 реплика,
+`BRIDGE_EXECUTE=true`, ledger на PVC). Действующий владелец расписаний —
+scheduler; HA выполняет только звук (`alarm_start`, `schedule_announce`,
+`alarm_stop`). Мост не создаёт, не включает и не импортирует расписания.
 
 ## Границы
 
@@ -227,7 +227,9 @@ ledger) — `projects/home/e2e/scheduler_smoke.py`; живой звук и cutov
 
 ## Cutover, shadow и rollback
 
-Ни один шаг не выполняется автоматически и не заявляется как выполненный.
+Cutover выполнен: мост работает в execute, старые HA ticks/automations
+удалены, второго исполнителя нет. Ниже — процедура для повторного перехода
+или отката; она не запускается автоматически.
 
 1. **Dry-run на целевом хосте**: мост читает `GetStatus`, проверяет HA
    reachability и имена script. Убедиться, что `pending`/`leased` не растут из-за

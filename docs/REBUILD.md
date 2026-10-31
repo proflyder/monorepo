@@ -12,6 +12,8 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 - `secrets/kubernetes-research/recovery/` — cluster/auth и custom OCI images.
 - `secrets/local/backups/` — HA config/DB, MA/STT/TTS, станция.
 - `secrets/local/snapshots/nettop/` — PVE/VM конфигурация.
+- `secrets/openbao/` — recovery keys, seal key, username; `secrets/home/vpn/` —
+  CA и клиентские сертификаты VPN.
 
 Проверять SHA-256, `quick_check`/`integrity_check`. Не публиковать.
 
@@ -23,7 +25,10 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 4. Создать VM 100/101 с теми же ресурсами и MAC/static IP.
 5. Восстановить HAOS и K3s (ниже).
 6. Вернуть Wi-Fi профиль/`ricardo-uplink`; проверить Ethernet fallback.
-7. Проверить HA/MA/Grafana/HTTPS ingress/voice.
+7. Пересоздать CT 102 `vpn` скриптами `projects/home/proxmox/vpn/`;
+   восстановить пользователей/клиентские сертификаты или выпустить новые
+   (старые `.p12` в `secrets/home/vpn/clients/`), проверить `443/tcp+udp`.
+8. Проверить HA/MA/Grafana/HTTPS ingress/voice/VPN.
 
 ## 2. HAOS
 
@@ -42,10 +47,15 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 3. Остановить K3s перед восстановлением datastore.
 4. Вернуть SQLite cluster snapshot, token, TLS/cred, config.
 5. Вернуть `/srv/k3s/volumes/*` до старта Pods.
-6. Импортировать custom images:
-   `sudo k3s ctr images import --platform linux/amd64 <archive>`.
-7. Применить Helm releases из репозитория/private values.
-8. Проверить pods, PV, Grafana, HTTPS ingress, voice endpoints.
+6. Поднять образы: сначала попробовать pull из GHCR по digest
+   (`scheduler`, `ha-bridge`, `ha-control`, `hermes`, `voice-proxy`); если
+   пакеты недоступны — импортировать OCI-архивы
+   (`sudo k3s ctr images import --platform linux/amd64 <archive>`).
+7. Восстановить OpenBao: PV raft/audit/backups, Secret `openbao-seal`,
+   recovery keys из `secrets/openbao/`; проверить auto-unseal и логин.
+8. Применить Helm releases из репозитория/private values.
+9. Проверить pods, PV, Grafana, HTTPS ingress, ExternalSecrets и voice
+   endpoints.
 
 Без server token восстановление datastore невозможно. Не заменять свежий
 Hermes auth старой копией.
@@ -66,7 +76,7 @@ Hermes auth старой копией.
 curl -fsS -o /dev/null -w 'HA %{http_code}\n' http://192.0.2.28:8123/
 curl -fsS -o /dev/null -w 'MA %{http_code}\n' http://192.0.2.28:8095/
 curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
-  http://192.0.2.27:30300/grafana/api/health
+  http://192.0.2.27:30300/api/health
 ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'
 ```
 

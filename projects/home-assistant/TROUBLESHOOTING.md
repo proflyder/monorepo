@@ -56,7 +56,7 @@ sudo update-initramfs -u
 curl -fsS -o /dev/null -w 'HA %{http_code}\n' http://192.0.2.28:8123/
 curl -fsS -o /dev/null -w 'MA %{http_code}\n' http://192.0.2.28:8095/
 curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
-  http://192.0.2.27:30300/grafana/api/health
+  http://192.0.2.27:30300/api/health
 ```
 
 - HAOS VM running? `qm status 100` на PVE.
@@ -90,7 +90,7 @@ curl -fsS http://127.0.0.1:8643/v1/models
 credentials/token брать только из private recovery; failed provisioning
 должен откатиться на прежний профиль. Не делать factory reset.
 
-В наблюдавшемся 2026-10-28 случае не работали ARP/все LAN-службы;
+В наблюдавшемся случае не работали ARP/все LAN-службы;
 BLE provisioning вернул TIMEOUT. Полное отключение питания на 20–30 с
 и включение без кнопок восстановили сеть. Дождаться подключения HA и
 Sendspin, затем проверить живой wake/ответ. Это способ восстановления;

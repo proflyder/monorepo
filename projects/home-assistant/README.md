@@ -20,7 +20,8 @@ tools/tts-lab/ TTS evaluation/installer
 - K3s: GigaAM `10305`, Whisper `10300`, Piper `10200`, Hermes `8642`,
   voice proxy `8643`.
 - Pipeline «Рикардо»: GigaAM → local intents → Hermes → Puriso.
-- Pulsar Rust `v0.5.0-1-g908a027`; ESPHome `6053`, Sendspin `8928`.
+- Pulsar Rust `v0.5.2-4-g9b5e86a-dirty` (armhf, Ricardo pre-roll 256 ms);
+  ESPHome `6053`, Sendspin `8928`.
 
 ## Документы
 

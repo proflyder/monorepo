@@ -32,15 +32,16 @@ solutions/ha-control      каталог Home + executor queue=control
 
 `solutions/ha-bridge` — исполнитель: забирает только `home`, вызывает
 allowlisted HA scripts (`alarm_start`, `schedule_announce`, `alarm_stop`),
-подтверждает только после 2xx HA. По умолчанию dry-run; live cutover не
-выполнен, текущий HA остаётся владельцем звука и расписаний.
+подтверждает только после 2xx HA. Работает в режиме execute (1 реплика,
+очередь `home`); scheduler — действующий владелец расписаний, HA остаётся
+исполнителем звука. Второй исполнитель не запущен.
 
 Локальный процессный E2E (реальные бинарники + fake HA на loopback, без живых
 HA/ADB): `projects/home/e2e/scheduler_smoke.py`.
 
 Рабочая Kubernetes-композиция и pinned Helm releases — [kubernetes/](kubernetes/README.md).
-HA Core перенесён в HAOS VM; K3s VM содержит MA/Matter/STT/TTS/Hermes и
-observability. Старые HA data paths сохранены как архив/PV, но не являются
-текущим writer. Legacy alarm/MCP/UI solutions остаются отдельными дополнениями;
-Hermes и другие проекты в будущем используют один общий MCP gateway, а не
-MCP внутри каждого сервиса.
+HA Core перенесён в HAOS VM; MA и Matter — add-ons в HAOS. K3s VM содержит
+STT/TTS, Hermes, scheduler, OpenBao/ESO и observability. Старые HA data paths
+сохранены как архив/PV, но не являются текущим writer. Legacy alarm/MCP/UI
+solutions остаются отдельными дополнениями; Hermes и другие проекты в будущем
+используют один общий MCP gateway, а не MCP внутри каждого сервиса.

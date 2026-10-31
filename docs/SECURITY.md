@@ -36,13 +36,15 @@
   сертификата (`cert-group-oid`), по умолчанию `lan`. Пул `10.77.0.0/24`,
   masquerade в CT.
 - Группа `ci` для GitHub Actions изолирована: пул `10.77.1.0/24`, маршрут
-  только до K3s, без DNS; nftables `forward` разрешает только `tcp/22` на K3s
-  и `drop` остальное. Сертификат CI не даёт доступа к HA, PVE, станции или
-  другим LAN-адресам.
-- Сейчас сервер доступен только из LAN. После проброса на ONT/AX3 наружу
-  открыт только `443`; SSH в CT остаётся только из LAN.
-- Серверный сертификат — публичный Let's Encrypt с автоматическим продлением.
-  Приватные пароли/TOTP/QR и ключ клиентского CA — только в `secrets/home/vpn/`.
+  только до K3s, без DNS; nftables `forward` разрешает только
+  `tcp/{443,6443}` на K3s (443 — Traefik/OpenBao OIDC, 6443 — API) и `drop`
+  остальное. Сертификат CI не даёт доступа к HA, PVE, станции или другим
+  LAN-адресам.
+- Сервер проброшен на ONT/AX3: снаружи открыт только `443/tcp+udp`; SSH в CT
+  остаётся только из LAN. Лимит `max-same-clients = 10` на пользователя.
+- Серверный сертификат — публичный Let's Encrypt с автоматическим продлением
+  (certbot, DNS-01 Cloudflare). Приватные пароли/TOTP/QR и ключ клиентского
+  CA — только в `secrets/home/vpn/`.
 
 ## Egress guard
 
@@ -77,15 +79,15 @@
   `openbao-seal` на том же узле, что и raft-данные. Это компромисс ради
   перезагрузки без человека: компромисс узла даёт и ключ, и данные. Ключ не
   копируется в snapshot; при появлении внешнего KMS/HSM/transit перейти на
-  него (предложение — в отчёте, `docs/DECISIONS.md` обновляет primary).
+  него (`docs/PENDING.md`).
 - Recovery keys (5/3) и начальный root-токен — только
   `secrets/openbao/init.json` (600). Root-токен после bootstrap отозван;
   новый выпускается процедурой `generate-root` из recovery keys. Recovery
   keys хранить офлайн/в менеджере паролей, не на узле.
 - Человек: `userpass` (имя — `secrets/openbao/username`) → политика `admin` с запретом
   `sys/seal`, `sys/step-down`, `sys/raw/*`, `sys/replication/*`,
-  `sys/rotate`, `sys/rekey*`. TOTP-метод создан, enforcement включается после
-  регистрации устройства (`docs/PENDING.md`).
+  `sys/rotate`, `sys/rekey*`. TOTP-метод создан; устройство человек ещё не
+  зарегистрировал, enforcement не включён (`docs/PENDING.md`).
 - CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
   OpenBao, claims `repository`, `environment=Home`, `ref=refs/heads/develop`,
