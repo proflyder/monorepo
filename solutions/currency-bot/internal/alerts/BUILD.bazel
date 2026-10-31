@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "alerts",
+    srcs = ["checker.go"],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/alerts",
+    deps = ["//solutions/currency-bot/internal/model"],
+)
+
+go_test(
+    name = "alerts_test",
+    srcs = ["checker_test.go"],
+    embed = [":alerts"],
+    deps = ["//solutions/currency-bot/internal/model"],
+)

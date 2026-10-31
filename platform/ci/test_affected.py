@@ -314,6 +314,22 @@ class DeployRoutingTests(unittest.TestCase):
         result = self._route(["solutions/scheduler/app/run.go"])
         entries = affected.deploy_entries(result, self.config)
         self.assertEqual([entry["id"] for entry in entries], ["scheduler"])
+        self.assertEqual(entries[0]["namespace"], "home-assistant")
+        self.assertEqual(entries[0]["target_root"], "//projects/home/kubernetes/scheduler")
+
+    def test_currency_bot_change_deploys_its_namespace(self):
+        result = self._route(["solutions/currency-bot/internal/server/webhook.go"])
+        entries = affected.deploy_entries(result, self.config)
+        self.assertEqual([entry["id"] for entry in entries], ["currency-bot"])
+        self.assertEqual(entries[0]["namespace"], "currency-bot")
+        self.assertEqual(entries[0]["target_root"], "//solutions/currency-bot")
+        self.assertEqual(entries[0]["script"], "projects/home/kubernetes/currency-bot/deploy.sh")
+        self.assertEqual(entries[0]["externalsecrets"], "currency-bot cloudflared-tunnel")
+
+    def test_currency_bot_manifest_change_deploys_it(self):
+        result = self._route(["projects/home/kubernetes/currency-bot/manifests/currency-bot.yaml"])
+        entries = affected.deploy_entries(result, self.config)
+        self.assertEqual([entry["id"] for entry in entries], ["currency-bot"])
 
     def test_ha_bridge_change_deploys_bridge_and_control(self):
         result = self._route(["solutions/ha-bridge/internal/bridge/bridge.go"])

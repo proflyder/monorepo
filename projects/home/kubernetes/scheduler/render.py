@@ -31,6 +31,10 @@ ALLOWED = {
     "HA_CONTROL_IMAGE",
     # Pinned python image for the in-cluster cutover preflight Job.
     "PREFLIGHT_IMAGE",
+    # Currency bot (projects/home/kubernetes/currency-bot) placeholders.
+    "CURRENCY_BOT_IMAGE",
+    "CLOUDFLARED_IMAGE",
+    "CURRENCY_WEBHOOK_URL",
 }
 
 PLACEHOLDER = re.compile(r"\$\{([A-Z0-9_]+)\}")

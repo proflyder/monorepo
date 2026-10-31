@@ -21,6 +21,9 @@ MANIFESTS = {
         {("cert-manager", "cloudflare-api-token"): "k8s/cert-manager/cloudflare-api-token"},
     (ROOT / "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml"):
         {("monitoring", "grafana-admin"): "k8s/monitoring/grafana-admin"},
+    (ROOT / "projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml"):
+        {("currency-bot", "currency-bot"): "k8s/currency-bot",
+         ("currency-bot", "cloudflared-tunnel"): "k8s/cloudflared"},
 }
 
 

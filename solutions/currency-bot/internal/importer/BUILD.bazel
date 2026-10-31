@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "importer",
+    srcs = ["importer.go"],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/importer",
+    deps = [
+        "//solutions/currency-bot/internal/model",
+        "//solutions/currency-bot/internal/store",
+    ],
+)
+
+go_test(
+    name = "importer_test",
+    srcs = ["importer_test.go"],
+    embed = [":importer"],
+    deps = ["//solutions/currency-bot/internal/store"],
+)

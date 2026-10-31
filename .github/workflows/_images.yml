@@ -24,6 +24,11 @@ on:
         required: false
         default: bazel
         type: string
+      target_root:
+        description: Bazel package owning the <image>_image targets (bazel only)
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -43,14 +48,20 @@ jobs:
           platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
           read -r -a images <<< "${{ inputs.images }}"
+          target_root="${{ inputs.target_root }}"
+          if [[ "$target_root" != //* ]]; then
+            echo "bazel unit without a //target_root: '$target_root'" >&2
+            exit 2
+          fi
+          package="${target_root#//}"
           targets=()
           for image in "${images[@]}"; do
-            targets+=("//projects/home/kubernetes/scheduler:${image}_image")
+            targets+=("${target_root}:${image}_image")
           done
           "$RUNNER_TEMP/bazelisk" build "${targets[@]}" \
             --platforms=@rules_go//go/toolchain:linux_amd64
           for image in "${images[@]}"; do
-            layout="bazel-bin/projects/home/kubernetes/scheduler/${image}_image"
+            layout="bazel-bin/${package}/${image}_image"
             digest=$(python3 platform/ci/oci_image.py digest "$layout")
             echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\`" | tee -a "$GITHUB_STEP_SUMMARY"
           done

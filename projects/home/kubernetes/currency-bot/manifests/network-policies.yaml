@@ -1,0 +1,148 @@
+# K3s enforces NetworkPolicies (kube-router). Traffic paths:
+#
+#   Telegram -> Cloudflare -> cloudflared pod -> currency-bot-webhook:8081
+#   LAN/VPN -> Traefik (hostNetwork on the node) -> currency-bot:8080
+#   Prometheus (namespace monitoring) -> currency-bot:8080/metrics
+#   kubelet probes originate from the node address
+#
+# Traefik is hostNetwork, so its packets reach the ClusterIP Service with the
+# source rewritten to the node (or kept as the LAN client) depending on the
+# kube-proxy conntrack path. There is no per-pod identity to select, so the
+# 8080 rule allows the node address, the pod CIDR and the LAN CIDR. That also
+# covers kubelet probes and the API-server Service proxy used by CI smoke.
+# The cost is that any host-network process on the node may reach 8080; the
+# Service is still ClusterIP, so nothing outside the node/VPN can.
+#
+# TEMPLATE: LAN_CIDR and NODE_LAN_IP come from the private deploy env.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: currency-bot-ingress
+  namespace: currency-bot
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: currency-bot
+  policyTypes:
+    - Ingress
+  ingress:
+    # Telegram webhook: only the tunnel may reach 8081.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudflared
+      ports:
+        - protocol: TCP
+          port: 8081
+    # Prometheus scrape of /metrics on the main listener.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Traefik (hostNetwork), kubelet probes, API-server proxy and pod clients.
+    - from:
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+        - ipBlock:
+            cidr: ${LAN_CIDR}
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: currency-bot-egress
+  namespace: currency-bot
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: currency-bot
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS to Telegram and kurs.kz. The Service has no fixed destination set,
+    # so this cannot be narrowed to an ipBlock without pinning third parties.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # DNS: CoreDNS in kube-system (the Service DNAT path kube-router sees) plus
+    # any external resolver reachable over the same port.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudflared-ingress
+  namespace: currency-bot
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  policyTypes:
+    - Ingress
+  ingress:
+    # Readiness/internal metrics. Kubelet probes arrive from the node.
+    - from:
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 2000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudflared-egress
+  namespace: currency-bot
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  policyTypes:
+    - Egress
+  egress:
+    # Cloudflare edge: QUIC/7844 preferred, HTTPS/443 fallback.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 7844
+        - protocol: TCP
+          port: 7844
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

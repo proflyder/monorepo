@@ -104,8 +104,8 @@ jobs:
     if: always()
     uses: ./.github/workflows/_quality.yml
 
-  # One matrix entry per affected Go unit: scheduler, ha-bridge, alarm,
-  # ble-gateway or the shared packages.
+  # One matrix entry per affected Go unit: scheduler, currency-bot, ha-bridge,
+  # alarm, ble-gateway or the shared packages.
   go:
     needs: changes
     if: always() && needs.changes.result == 'success' && needs.changes.outputs.go_units != '[]'
@@ -170,6 +170,7 @@ jobs:
       unit: ${{ matrix.id }}
       images: ${{ matrix.images }}
       builder: ${{ matrix.builder }}
+      target_root: ${{ matrix.target_root }}
 
   # Expensive regression with real linux/amd64 release binaries. Only when the
   # scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.

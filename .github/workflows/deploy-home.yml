@@ -1,6 +1,9 @@
 name: deploy-home
 
-# Home K3s deploy (scheduler + ha-bridge + ha-control) from `develop`.
+# Home K3s deploy (scheduler, ha-bridge/ha-control, currency-bot, Hermes) from
+# `develop`. Per-unit namespace, workload list, deploy script, OpenBao env key
+# and ExternalSecret set come from `platform/ci/units.yml` (matrix payload), so
+# adding a deployable unit does not need a workflow edit.
 #
 # A push to `develop` is a squash-merge of a PR, so it runs in the base
 # repository context with Environment secrets. The `plan` job routes the change
@@ -272,11 +275,15 @@ jobs:
           exit 1
 
       - name: Read deploy secrets from OpenBao
+        env:
+          DEPLOY_ENV_KEY: ${{ matrix.env_key }}
+          DEPLOY_ENV_FILE: ${{ matrix.env_file }}
         run: |
           set +x
           set -euo pipefail
           umask 077
           CI_DIR="$RUNNER_TEMP/ci"
+          test -n "$DEPLOY_ENV_KEY" && test -n "$DEPLOY_ENV_FILE"
           test -n "$OPENBAO_ADDR"
           oidc=$(curl -sSf \
             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
@@ -313,14 +320,10 @@ jobs:
             echo "read secret/ci/deploy-home failed with HTTP $code" >&2
             exit 1
           fi
-          # Each unit materialises only the files it consumes: bazel units use
-          # the scheduler env, the docker (Hermes) unit needs the runtime values.
-          KEYS=(kubeconfig=kubeconfig)
-          if [[ "${{ matrix.builder }}" == "docker" ]]; then
-            KEYS+=(runtime_values=runtime-values.yaml)
-          else
-            KEYS+=(scheduler_env=scheduler.env)
-          fi
+          # Each unit materialises only the files it consumes: the kubeconfig
+          # plus the private deploy-time env named by units.yml (scheduler.env,
+          # currency-bot.env or runtime-values.yaml).
+          KEYS=(kubeconfig=kubeconfig "${DEPLOY_ENV_KEY}=${DEPLOY_ENV_FILE}")
           ARGS=()
           for key in "${KEYS[@]}"; do ARGS+=(--key "$key"); done
           python3 projects/home/kubernetes/openbao/ci_secrets.py \
@@ -345,13 +348,14 @@ jobs:
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
-          kubectl -n home-assistant get pods
+          kubectl -n "${{ matrix.namespace }}" get pods
 
       - name: Check CI RBAC boundary
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
+          NS="${{ matrix.namespace }}"
           # The runtime chart is split: CI only upgrades namespace-scoped
           # workloads. Storage (PV/PVC) is applied by an admin, so this must
           # stay "no" for cluster-scoped resources and every other namespace.
@@ -362,15 +366,15 @@ jobs:
             fi
           }
           allowed() {
-            if ! kubectl -n home-assistant auth can-i "$@" >/dev/null 2>&1; then
+            if ! kubectl -n "$NS" auth can-i "$@" >/dev/null 2>&1; then
               echo "ci-deploy is missing: $*" >&2
               exit 1
             fi
           }
-          denied -n home-assistant auth can-i get persistentvolumes
-          denied -n home-assistant auth can-i patch persistentvolumes
-          denied -n home-assistant auth can-i get storageclasses.storage.k8s.io
-          denied -n home-assistant auth can-i get clusterroles.rbac.authorization.k8s.io
+          denied -n "$NS" auth can-i get persistentvolumes
+          denied -n "$NS" auth can-i patch persistentvolumes
+          denied -n "$NS" auth can-i get storageclasses.storage.k8s.io
+          denied -n "$NS" auth can-i get clusterroles.rbac.authorization.k8s.io
           denied -n monitoring auth can-i get deployments.apps
           denied -n traefik auth can-i get secrets
           allowed get deployments.apps
@@ -383,7 +387,7 @@ jobs:
           allowed delete secrets
           allowed get configmaps
           allowed create jobs.batch
-          echo "ci-deploy RBAC boundary is namespace-scoped"
+          echo "ci-deploy RBAC boundary is namespace-scoped ($NS)"
 
       - name: Verify External Secrets are Ready
         run: |
@@ -392,15 +396,15 @@ jobs:
           export KUBECONFIG="$CI_DIR/kubeconfig"
           # Application Secrets are owned by External Secrets Operator and
           # sourced from OpenBao. A deploy must fail closed if ESO is unhealthy
-          # rather than let a script recreate a stale value.
-          for es in scheduler-auth ha-bridge-ha hermes-environment; do
-            kubectl -n home-assistant wait --for=condition=Ready \
+          # rather than let a script recreate a stale value. The list is
+          # per-unit, from units.yml.
+          NS="${{ matrix.namespace }}"
+          for es in ${{ matrix.externalsecrets }}; do
+            kubectl -n "$NS" wait --for=condition=Ready \
               "externalsecret/$es" --timeout=90s
+            kubectl -n "$NS" get secret "$es" >/dev/null
           done
-          for secret in scheduler-auth ha-bridge-ha hermes-environment; do
-            kubectl -n home-assistant get secret "$secret" >/dev/null
-          done
-          echo "ESO-managed Secrets are Ready"
+          echo "ESO-managed Secrets are Ready in $NS"
 
       - name: Build, push and deploy ${{ matrix.id }}
         run: |
@@ -424,8 +428,8 @@ jobs:
               ROLLOUT_ARGS+=(--simulate-smoke-failure)
             fi
             KUBECONFIG="$CI_DIR/kubeconfig" \
-              python3 projects/home-assistant/deploy/hermes_rollout.py \
-                --values-file "$CI_DIR/runtime-values.yaml" \
+              python3 "${{ matrix.script }}" \
+                --values-file "$CI_DIR/${{ matrix.env_file }}" \
                 --hermes-digest "$hermes_digest" \
                 --voice-proxy-digest "$voice_digest" \
                 --state-dir "$CI_DIR/hermes-state" \
@@ -442,14 +446,14 @@ jobs:
           esac
           ONLY="${{ matrix.workloads }}"
           KUBECONFIG="$CI_DIR/kubeconfig" \
-          PRIVATE_ENV="$CI_DIR/scheduler.env" \
+          PRIVATE_ENV="$CI_DIR/${{ matrix.env_file }}" \
           DEPLOY_STATE_DIR="$CI_DIR/deploy-state" \
           PUSH_IMAGES=1 \
           IMAGE_TAG="$GITHUB_SHA" \
           ONLY="${ONLY// /,}" \
           PREFLIGHT_IN_CLUSTER=1 \
           BAZELISK=bazelisk \
-            projects/home/kubernetes/scheduler/deploy.sh "${MODE_ARGS[@]}"
+            "${{ matrix.script }}" "${MODE_ARGS[@]}"
 
       - name: Post-deploy smoke
         if: matrix.builder != 'docker'
@@ -457,12 +461,13 @@ jobs:
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
+          NS="${{ matrix.namespace }}"
           for workload in ${{ matrix.workloads }}; do
-            kubectl -n home-assistant rollout status "deployment/$workload" --timeout=180s
+            kubectl -n "$NS" rollout status "deployment/$workload" --timeout=180s
             case "$workload" in
               scheduler)
-                kubectl -n home-assistant exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
-                kubectl -n home-assistant exec deployment/scheduler -- /usr/local/bin/scheduler -status \
+                kubectl -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
+                kubectl -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -status \
                   | tee "$CI_DIR/status.json"
                 python3 - "$CI_DIR/status.json" <<'PY'
           import json, sys
@@ -472,23 +477,46 @@ jobs:
           PY
                 ;;
               ha-bridge)
-                kubectl -n home-assistant exec deployment/ha-bridge -- /usr/local/bin/ha-bridge -healthcheck
+                kubectl -n "$NS" exec deployment/ha-bridge -- /usr/local/bin/ha-bridge -healthcheck
                 ;;
               ha-control)
-                if [[ "$(kubectl -n home-assistant get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
-                  kubectl -n home-assistant exec deployment/ha-control -- /usr/local/bin/ha-control -healthcheck
+                if [[ "$(kubectl -n "$NS" get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
+                  kubectl -n "$NS" exec deployment/ha-control -- /usr/local/bin/ha-control -healthcheck
                 fi
+                ;;
+              currency-bot)
+                # The image is distroless and has no shell/curl. Read /readyz
+                # through the API-server Service proxy, which load-balances over
+                # the ready endpointslices exactly like an in-cluster client.
+                kubectl -n "$NS" get --raw \
+                  "/api/v1/namespaces/$NS/services/http:currency-bot:8080/proxy/readyz" \
+                  | tee "$CI_DIR/readyz.json"
+                python3 - "$CI_DIR/readyz.json" <<'PY'
+          import json, sys
+          status = json.load(open(sys.argv[1]))
+          assert status.get("status") == "ready", "currency-bot reports not ready"
+          print("currency-bot /readyz:", status.get("status"))
+          PY
+                webhook_ready=$(kubectl -n "$NS" get endpointslices \
+                  -l "kubernetes.io/service-name=currency-bot-webhook" \
+                  -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
+                  | grep -c '^true$' || true)
+                if [[ "$webhook_ready" -lt 1 ]]; then
+                  echo "currency-bot-webhook has no ready endpoint" >&2
+                  exit 1
+                fi
+                echo "currency-bot-webhook ready endpoints: $webhook_ready"
                 ;;
             esac
           done
           # The ci VPN group reaches only the K3s API, so NodePorts are checked
           # from the cluster side: each Service must have a ready endpoint.
           for workload in ${{ matrix.workloads }}; do
-            if ! kubectl -n home-assistant get service "$workload" >/dev/null 2>&1; then
+            if ! kubectl -n "$NS" get service "$workload" >/dev/null 2>&1; then
               echo "service $workload: none (worker without a Service)"
               continue
             fi
-            ready=$(kubectl -n home-assistant get endpointslices \
+            ready=$(kubectl -n "$NS" get endpointslices \
               -l "kubernetes.io/service-name=$workload" \
               -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
               | grep -c '^true$' || true)
@@ -510,7 +538,7 @@ jobs:
           # marker and must not touch the running Deployments.
           python3 projects/home/kubernetes/scheduler/rollback.py \
             --state-dir "$CI_DIR/deploy-state" \
-            --namespace home-assistant \
+            --namespace "${{ matrix.namespace }}" \
             --kubectl kubectl | tee "$RUNNER_TEMP/rollback.log"
 
       - name: Roll back Hermes on failure
@@ -522,10 +550,10 @@ jobs:
           # Safety net if the runner dies before hermes_rollout.py can roll
           # back. The script removes the marker after a successful smoke, so a
           # build/push failure never touches the running release.
-          python3 projects/home-assistant/deploy/hermes_rollout.py \
+          python3 "${{ matrix.script }}" \
             --rollback-only \
             --state-dir "$CI_DIR/hermes-state" \
-            --namespace home-assistant | tee "$RUNNER_TEMP/hermes-rollback.log"
+            --namespace "${{ matrix.namespace }}" | tee "$RUNNER_TEMP/hermes-rollback.log"
 
       - name: Summary
         if: always()
@@ -541,8 +569,8 @@ jobs:
             echo "- workloads: \`${{ matrix.workloads }}\`"
             echo "- images: \`${{ matrix.images }}\`"
             echo "- pull request: ${{ needs.plan.outputs.pr_url }}"
-            if kubectl -n home-assistant get deployment scheduler >/dev/null 2>&1; then
-              STATUS=$(kubectl -n home-assistant exec deployment/scheduler -- \
+            if kubectl -n "${{ matrix.namespace }}" get deployment scheduler >/dev/null 2>&1; then
+              STATUS=$(kubectl -n "${{ matrix.namespace }}" exec deployment/scheduler -- \
                 /usr/local/bin/scheduler -status 2>/dev/null)
               echo "- GetStatus: \`${STATUS:-unavailable}\`"
             else

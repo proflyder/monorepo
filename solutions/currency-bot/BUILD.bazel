@@ -1,0 +1,26 @@
+load(":images.bzl", "service_image")
+
+package(default_visibility = ["//visibility:public"])
+
+# The same hermetic image pattern as the home scheduler stack: one static
+# linux/amd64 binary on the digest-pinned distroless base, no Docker daemon.
+service_image(
+    name = "currency-bot",
+    binary = "//solutions/currency-bot/cmd/currency-bot",
+    repo = "ghcr.io/proflyder/currency-bot",
+)
+
+# One-off migration helper (H2 CSV -> SQLite). Not part of the runtime
+# Deployment and not built by CI; the cutover runbook builds it on demand and
+# runs it as a Job against the currency-bot PVC.
+service_image(
+    name = "currency-bot-import",
+    binary = "//solutions/currency-bot/cmd/currency-bot-import",
+    repo = "ghcr.io/proflyder/currency-bot-import",
+)
+
+filegroup(
+    name = "images",
+    srcs = [":currency-bot_image", ":currency-bot-import_image"],
+    visibility = ["//visibility:public"],
+)

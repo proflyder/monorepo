@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "message",
+    srcs = ["format.go"],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/message",
+    deps = ["//solutions/currency-bot/internal/model"],
+)
+
+go_test(
+    name = "message_test",
+    srcs = ["format_test.go"],
+    embed = [":message"],
+    deps = ["//solutions/currency-bot/internal/model"],
+)

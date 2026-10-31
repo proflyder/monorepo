@@ -72,6 +72,24 @@ def validate_schema(config: Config, root: Path | None = None) -> list[str]:
             problems.append(f"{prefix}: deploy.workloads without deploy.images")
         if unit.deploy_images and unit.deploy_builder not in ("bazel", "docker"):
             problems.append(f"{prefix}: unknown deploy.builder {unit.deploy_builder!r}")
+        if unit.deploy_images:
+            if not unit.deploy_namespace:
+                problems.append(f"{prefix}: deploy.namespace is required")
+            if not unit.deploy_script:
+                problems.append(f"{prefix}: deploy.script is required")
+            elif not (root / unit.deploy_script).is_file():
+                problems.append(f"{prefix}: deploy.script does not exist: {unit.deploy_script}")
+            if not unit.deploy_env_key or not unit.deploy_env_file:
+                problems.append(
+                    f"{prefix}: deploy.env_key and deploy.env_file are required "
+                    "(OpenBao secret/ci/deploy-home key and local filename)"
+                )
+            if not unit.deploy_externalsecrets:
+                problems.append(f"{prefix}: deploy.externalsecrets is required")
+            if unit.deploy_builder == "bazel" and not unit.deploy_target_root.startswith("//"):
+                problems.append(
+                    f"{prefix}: deploy.target_root must be a Bazel package (//pkg)"
+                )
         if unit.platform == "go":
             if not unit.go_packages:
                 problems.append(f"{prefix}: go unit without packages")

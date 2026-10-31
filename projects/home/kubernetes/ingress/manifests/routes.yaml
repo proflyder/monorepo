@@ -67,6 +67,26 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
+  name: currency-bot
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${CURRENCY_HOST}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: currency-bot
+          namespace: currency-bot
+          port: 8080
+  tls:
+    secretName: home-wildcard-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
   name: ha-control
   namespace: traefik
 spec:

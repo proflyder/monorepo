@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "currency-bot",
+    embed = [":currency-bot_lib"],
+)
+
+go_library(
+    name = "currency-bot_lib",
+    srcs = ["main.go"],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/cmd/currency-bot",
+    deps = ["//solutions/currency-bot/internal/app"],
+)

@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "metrics",
+    srcs = ["metrics.go"],
+    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/metrics",
+    deps = [
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/collectors",
+        "@com_github_prometheus_client_golang//prometheus/promhttp",
+    ],
+)
