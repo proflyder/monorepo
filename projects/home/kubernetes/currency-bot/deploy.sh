@@ -153,9 +153,20 @@ python3 "$ROOT/projects/home/kubernetes/scheduler/render.py" \
   "$DIR/manifests/servicemonitor.yaml"
 
 echo "== namespace $NS"
-if ! $KUBECTL get namespace "$NS" >/dev/null 2>&1; then
+# The namespace is cluster-scoped and admin-applied. CI's ServiceAccount may
+# not read namespaces at all, so only a definite NotFound triggers an apply;
+# Forbidden means "managed by an admin" and the namespaced steps below fail
+# loudly if it is really missing.
+if ns_out=$($KUBECTL get namespace "$NS" -o name 2>&1); then
+  echo "$ns_out exists"
+elif grep -q "NotFound" <<<"$ns_out"; then
   echo "namespace is missing; applying manifests/namespace.yaml (admin action)" >&2
   $KUBECTL apply -f "$DIR/manifests/namespace.yaml"
+elif grep -q "Forbidden" <<<"$ns_out"; then
+  echo "cannot read namespaces (CI scope); assuming admin-managed $NS"
+else
+  echo "namespace check failed: $ns_out" >&2
+  exit 1
 fi
 
 echo "== verifying ExternalSecrets (ESO-owned; CI never applies them)"

@@ -146,3 +146,13 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # The only origin: the bot's dedicated webhook listener. Without this rule
+    # the tunnel gets "connection refused" (the pod's ingress policy alone is
+    # not enough once egress is restricted).
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: currency-bot
+      ports:
+        - protocol: TCP
+          port: 8081

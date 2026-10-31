@@ -24,13 +24,13 @@ NODE_LAN_IP="192.0.2.27"
 
 
 class DeployEnvTests(unittest.TestCase):
-    def run_deploy(self, env_text: str) -> subprocess.CompletedProcess:
+    def run_deploy(self, env_text: str, kubectl_script: str | None = None) -> subprocess.CompletedProcess:
         tmp = Path(tempfile.mkdtemp(prefix="currency-deploy-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
         env_file = tmp / "currency-bot.env"
         env_file.write_text(env_text)
         kubectl = tmp / "kubectl"
-        kubectl.write_text('#!/bin/sh\necho "kubectl $*" >> "$KUBECTL_LOG"\nexit 3\n')
+        kubectl.write_text(kubectl_script or '#!/bin/sh\necho "kubectl $*" >> "$KUBECTL_LOG"\nexit 3\n')
         kubectl.chmod(0o755)
         env = os.environ.copy()
         env.update({
@@ -43,6 +43,7 @@ class DeployEnvTests(unittest.TestCase):
         })
         res = subprocess.run(["bash", str(SCRIPT), "--skip-build"], env=env,
                              text=True, capture_output=True, timeout=60)
+        res.kubectl_log = str(tmp / "kubectl.log")
         res.kubectl_called = (tmp / "kubectl.log").exists()
         return res
 
@@ -63,6 +64,36 @@ class DeployEnvTests(unittest.TestCase):
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("are required", res.stderr)
         self.assertFalse(res.kubectl_called)
+
+    def test_forbidden_namespace_read_is_not_an_apply(self):
+        # CI's ServiceAccount cannot read cluster-scoped namespaces; that must
+        # not turn into an attempt to create the namespace.
+        stub = """#!/bin/sh
+echo "kubectl $*" >> "$KUBECTL_LOG"
+case "$*" in
+  "get namespace currency-bot -o name")
+    echo 'Error from server (Forbidden): namespaces "currency-bot" is forbidden' >&2; exit 1 ;;
+esac
+exit 3
+"""
+        res = self.run_deploy(GOOD_ENV, stub)
+        self.assertIn("assuming admin-managed", res.stdout)
+        log = Path(res.kubectl_log).read_text()
+        self.assertNotIn("namespace.yaml", log)
+
+    def test_missing_namespace_is_applied(self):
+        stub = """#!/bin/sh
+echo "kubectl $*" >> "$KUBECTL_LOG"
+case "$*" in
+  "get namespace currency-bot -o name")
+    echo 'Error from server (NotFound): namespaces "currency-bot" not found' >&2; exit 1 ;;
+esac
+exit 3
+"""
+        res = self.run_deploy(GOOD_ENV, stub)
+        log = Path(res.kubectl_log).read_text()
+        self.assertIn("apply -f", log)
+        self.assertIn("namespace.yaml", log)
 
 
 if __name__ == "__main__":
