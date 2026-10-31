@@ -6,12 +6,6 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **OpenBao TOTP enforcement.** TOTP-метод создан, устройство ещё не
-      зарегистрировано, enforcement выключен. Следующий шаг: человек
-      регистрирует TOTP в UI (профиль → MFA), затем включить
-      `./projects/home/kubernetes/openbao/bootstrap.sh --enforce-totp`
-      (или API `identity/mfa/login-enforcement/userpass-totp`) и проверить
-      вход с кодом и без него.
 - [ ] **Offsite-бэкап с шифрованием.** Сейчас raft snapshots лежат на том же
       узле; HA/K3s/scheduler/`secrets/`, CA и recovery keys не вывозятся.
       Следующий шаг: выбрать offsite-назначение и ключ, вывозить OpenBao

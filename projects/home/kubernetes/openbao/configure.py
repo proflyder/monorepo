@@ -334,7 +334,12 @@ def ensure_totp(bao: Bao, enforce: bool) -> None:
         (SECRETS / "totp-method-id").write_text(method_id + "\n", encoding="utf-8")
 
     if not enforce:
-        print("mfa: enforcement not enabled (enroll in the UI, then run --enforce-totp)")
+        # Never removes an existing enforcement; only reports the live state.
+        code, _ = bao.call("GET", "/v1/identity/mfa/login-enforcement/userpass-totp")
+        if code == 200:
+            print("mfa: TOTP already enforced on auth/userpass")
+        else:
+            print("mfa: enforcement not enabled (enroll a device, then run --enforce-totp)")
         return
     methods_list = keys_of(bao, "/v1/sys/auth")
     accessor = (methods_list.get("userpass/") or {}).get("accessor")

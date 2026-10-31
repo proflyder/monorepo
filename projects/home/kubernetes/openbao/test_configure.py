@@ -139,3 +139,38 @@ class MainGating(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TotpState(unittest.TestCase):
+    """A rerun without --enforce-totp must not touch nor misreport enforcement."""
+
+    def run_totp(self, enforcement_code):
+        class Bao(Recorder):
+            def call(self, method, path, data=None):
+                self.calls.append((method, path, data))
+                if path == "/v1/identity/mfa/method":
+                    return 200, {"data": {"keys": ["m1"]}}
+                if path == "/v1/identity/mfa/method/m1":
+                    return 200, {"data": {"name": "human-totp", "id": "m1"}}
+                if path.endswith("/login-enforcement/userpass-totp"):
+                    return enforcement_code, {}
+                return 200, {}
+
+        bao, out = Bao(), StringIO()
+        with mock.patch.object(configure, "SECRETS", Path(self.tmp)), redirect_stdout(out):
+            configure.ensure_totp(bao, enforce=False)
+        return bao, out.getvalue()
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def test_existing_enforcement_is_reported_and_kept(self):
+        bao, out = self.run_totp(200)
+        self.assertIn("already enforced", out)
+        self.assertFalse([c for c in bao.calls if c[0] in ("POST", "DELETE")
+                          and "login-enforcement" in c[1]])
+
+    def test_missing_enforcement_is_reported(self):
+        _, out = self.run_totp(404)
+        self.assertIn("enforcement not enabled", out)

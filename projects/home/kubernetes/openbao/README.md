@@ -149,16 +149,26 @@ kubectl -n openbao delete pod openbao-0
 ### TOTP
 
 OpenBao поддерживает login MFA. `configure.py` создаёт метод `human-totp`
-(per-entity TOTP, `generate=false`) и **не** включает enforcement, чтобы не
-заблокировать вход до регистрации устройства:
+(per-entity TOTP, SHA1/6/30 с, issuer `OpenBao home`). **Состояние:**
+устройство зарегистрировано, enforcement на `auth/userpass` включён
+(2026-10-31); вход в UI требует пароль и 6-значный код. Повторный запуск
+`configure.py` без флага enforcement не трогает и сообщает его состояние.
 
-1. войти в UI, `Access → Multi-factor authentication` (или профиль) и
-   зарегистрировать TOTP для сущности человека;
-2. включить enforcement:
-   `./bootstrap.sh --enforce-totp` (нужен admin-токен) или
-   `curl -X POST …/v1/identity/mfa/login-enforcement/userpass-totp` с
-   `mfa_method_ids` и accessor'ом `userpass/`;
-3. проверить вход: логин попросит 6-значный код.
+Регистрация/перевыпуск устройства (UI самостоятельной регистрации нет):
+
+1. admin-токен свежей сессии; `entity_id` — из `auth/token/lookup-self`;
+2. `POST /v1/identity/mfa/method/totp/admin-generate` с `method_id`
+   (`secrets/openbao/totp-method-id`) и `entity_id` → `data.barcode` (PNG,
+   base64): показать QR только локально, отсканировать, файл удалить;
+   `admin-destroy` сбрасывает старый секрет;
+3. включить enforcement: `configure.py --enforce-totp` или
+   `POST /v1/identity/mfa/login-enforcement/userpass-totp` с `mfa_method_ids`
+   и accessor'ом `userpass/`;
+4. проверить вход в UI: после пароля спрашивается код.
+
+Admin-токен держать до успешного входа с кодом — им же можно снять
+enforcement (`DELETE …/login-enforcement/userpass-totp`). Потерян телефон —
+recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate`.
 
 ## Auth-методы и политики
 
