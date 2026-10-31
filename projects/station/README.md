@@ -16,13 +16,20 @@ docs/WAKE-WORD.md
 ```
 
 Rust-форк и профиль Ricardo: [`PULSAR-RUST.md`](PULSAR-RUST.md).
-Установленный бинарник станции — Rust `v0.5.2-4-g9b5e86a-dirty`
-(локальный форк на базе upstream `v0.5.2`) с Ricardo pre-roll 256 ms;
-SHA256 `7081ef8e…`. `pulsar.prev` — прежний endpointing 512 ms
-(`0b0c48e4…`); historical `pulsar.pre-endpoint-20261030` —
+Установленный бинарник станции — Rust `v0.5.1001` (релиз форка, линия
+`main` = Ricardo, база upstream `v0.5.2`) с Ricardo pre-roll 256 ms;
+SHA256 `80aea2ec…`. `pulsar.prev` — предыдущая сборка `7081ef8e…`
+(`v0.5.2-4-g9b5e86a-dirty`, тот же код); historical старше —
+`0b0c48e4…` (endpointing 512 ms), `pulsar.pre-endpoint-20261030` —
 `v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
 private backup вне Git. Legacy исходники и binaries — private в
 `secrets/local/recovery/`.
+
+Релизы Pulsar собираются и публикуются в форке, не в монорепо: push тега
+`v<major.minor>.<1000+N>` → GitHub release → `deploy-station.yml` после
+approve в Environment `Station` → HA updater. Процедура — RICARDO.md
+«Релизы и деплой форка» в форке, краткие команды — `docs/OPERATIONS.md`.
+Откат — только на станции (`pulsar.prev` + `ctl.sh reload`).
 
 ## Границы
 

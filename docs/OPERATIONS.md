@@ -356,34 +356,71 @@ known-good бинарник — атомарно, не поверх работа
 adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
-Установлен Ricardo pre-roll 256 ms (`Fixed(8)`, SHA256 `7081ef8e…`, armhf).
-Строка версии не менялась (`v0.5.2-4-g9b5e86a-dirty`), поэтому отличать
-установленный бинарник по SHA256 и 256 ms, а не по `--version`. Процесс
-запущен с `PULSAR_LOCAL_ENDPOINTING=1`. `pulsar.prev` — прежний
-endpointing-бинарник `0b0c48e4…` (512 ms); старый historical `d2197f6a…`
-(`v0.5.2-3-gc57d521-dirty`) сохранён в
-`/data/pulsar/backups/deploy-preroll8-20261030T185700Z/` и
-`pulsar.pre-endpoint-20261030`; off-device private
+Установлен релиз форка `v0.5.1001` (armhf, SHA256 `80aea2ec…`): Ricardo
+pre-roll 256 ms (`Fixed(8)`) и локальный endpointing. `--version` теперь
+показывает тег релиза. Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`.
+`pulsar.prev` — предыдущая сборка `7081ef8e…`
+(`v0.5.2-4-g9b5e86a-dirty`, тот же код: pre-roll 256 ms + endpointing).
+Historical старше в `/data/pulsar/backups/` и private: `0b0c48e4…`
+(endpointing 512 ms), `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`,
+`pulsar.pre-endpoint-20261030`), `69310a37…`
+(`pulsar.prev.pre-endpoint-20261030`); off-device private
 `secrets/local/backups/pulsar-preroll8-20261030T185157Z/`.
 
-Откат только pre-roll 256→512 ms, с сохранением endpointing:
+Откат на предыдущую сборку — только на станции, не через CI: updater
+предлагает лишь более новые версии. Команда ниже возвращает `pulsar.prev`
+(сейчас — тот же код `7081ef8e…`; более старые сборки лежат в
+`/data/pulsar/backups/`):
 
 ```bash
-adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload'
+adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
-Полное выключение endpointing (не откат pre-roll) — по-прежнему reload без
-переменной, как выше. Повторное включение endpointing — reload с переменной;
-длина pre-roll при этом не меняется. Возврат pre-roll 256 ms после бинарного
-отката требует повторной установки `7081ef8e…`.
+### Релиз и деплой Pulsar
 
-Установленная версия — Rust `v0.5.2-4-g9b5e86a-dirty` (armhf, локальный форк
-на базе upstream `v0.5.2`, сборка проектным Makefile `ARCH=armhf`; повторный
-wake + endpointing + Ricardo pre-roll 256 ms, SHA256 `7081ef8e…`); `pulsar.prev`
-— прежний endpointing-бинарник `0b0c48e4…` (512 ms). Historical known-good:
-`pulsar.pre-endpoint-20261030` — `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`);
-`pulsar.prev.pre-endpoint-20261030` — более старый pre-endpoint backup
-`69310a37…`; `v0.5.2-2-g95ce568` и
+Pulsar собирается и релизится в форке (origin вложенного checkout
+`projects/station/upstream/pulsar-rust`), а не в монорепо. Полная процедура —
+RICARDO.md «Релизы и деплой форка» в форке. Кратко:
+
+```bash
+# 1. в форке: аннотированный тег и push (v<major.minor>.<1000+N>)
+git tag -a v0.5.1001 -m 'pulsar v0.5.1001'
+git push origin v0.5.1001
+# build.yml собирает и публикует GitHub release (latest),
+# затем запускает deploy-station.yml
+
+# 2. approve в GitHub Environment `Station` (только теги v*)
+
+# 3. повторный деплой уже опубликованного релиза — вручную
+gh workflow run deploy-station.yml --ref v0.5.1001 -f tag=v0.5.1001
+```
+
+После approve job входит в VPN группой `ci` (отдельный клиентский сертификат
+`ci-pulsar`, выпускается `vpncerts.py`) и по GitHub OIDC в OpenBao роль
+`deploy-station`. Политика `ci-station` читает
+`secret/ci/deploy-station` (`ha_url`, `ha_token`, `entity_id`; HA long-lived
+token `ci-pulsar-deploy`, 2 года). Деплой — HA `update_entity` +
+`update.install` на Firmware-сущность станции: колонка скачивает релиз,
+проверяет `SHA256SUMS` и `--version`, меняет бинарник (старый — `.prev`) и
+перезапускается. Job ждёт `installed_version == tag` и 90 с стабильности;
+откат `supervise.sh` на `.prev` или недоступность сущности дольше 30 с валят
+job. Если версия уже стоит, скрипт пишет `already installed` и выходит
+успешно.
+
+Локальные приватные копии CI-значений — `secrets/ci/pulsar/` (`VPN_*`,
+`ha_url`, `ha_token`, `entity_id`); значения не печатать и не коммитить.
+
+Полное выключение endpointing — по-прежнему reload без переменной, как выше.
+Повторное включение endpointing — reload с переменной; длина pre-roll при
+этом не меняется.
+
+Установленная версия — Rust `v0.5.1001` (armhf, релиз форка на базе upstream
+`v0.5.2`; повторный wake + endpointing + Ricardo pre-roll 256 ms, SHA256
+`80aea2ec…`); `pulsar.prev` — `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`, тот же
+код). Historical known-good: `0b0c48e4…` (512 ms endpointing),
+`pulsar.pre-endpoint-20261030` — `d2197f6a…`
+(`v0.5.2-3-gc57d521-dirty`); `pulsar.prev.pre-endpoint-20261030` — более
+старый pre-endpoint backup `69310a37…`; `v0.5.2-2-g95ce568` и
 `v0.5.0-1-g908a027` — только private backup вне Git. StationCancel без речи —
 HA-конфиг, а не бинарник.
 Штатный `quasar-server`
@@ -497,8 +534,12 @@ adb -s 192.0.2.13:5555 shell /data/quasar/egress-guard-off.sh
 adb -s 192.0.2.13:5555 shell /data/quasar/yandex-block.sh
 ```
 
-Guard разрешает LAN/DHCP/NTP; публичный WAN и Яндекс — DROP.
-Снятие guard не снимает Яндекс-блок/OTA.
+Guard разрешает LAN/DHCP/NTP и — при `ALLOW_GITHUB=1` (по умолчанию) —
+`tcp/443` только к публичным IPv4-диапазонам GitHub
+(`140.82.112.0/20`, `143.55.64.0/20`, `185.199.108.0/22`, `192.30.252.0/22`)
+для updater'а; публичный WAN и Яндекс — DROP. При смене диапазонов GitHub
+обновить `GITHUB_NETS` в скрипте. Снятие guard не снимает Яндекс-блок/OTA.
+Прежний скрипт без GitHub-разрешения — `egress-guard.sh.bak-20261031-github`.
 
 ## BLE gateway
 

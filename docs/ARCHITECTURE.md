@@ -59,7 +59,8 @@ CT 102 vpn (ocserv)                    группы lan / full / ci
   wildcard Let's Encrypt от cert-manager (ACME DNS-01 Cloudflare).
 - Трафик снаружи приходит только через VPN; allow-list пускает LAN и pod
   CIDR, VPN-клиенты приходят NAT-ом с адреса CT.
-- Станция: egress guard; публичный WAN и Яндекс закрыты.
+- Станция: egress guard; публичный WAN и Яндекс закрыты, разрешён только
+  `tcp/443` к публичным IPv4-диапазонам GitHub для updater'а.
 
 ### Секреты
 
@@ -103,6 +104,25 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
   откат восстанавливает ровно тот объект, который применил job.
 - Режимы исполнения (`execute`, `shadow`, `control-*`) меняются только
   ручным `workflow_dispatch`.
+
+Pulsar живёт вне монорепо: релиз собирается и публикуется в форке (origin
+вложенного checkout `projects/station/upstream/pulsar-rust`), монорепо его не
+собирает и не деплоит. Поток:
+
+```text
+push тега v0.5.100N в форке
+   → build.yml: сборка + GitHub release (latest)
+   → deploy-station.yml: ручной approve в Environment `Station` (теги v*)
+        → VPN группа ci (сертификат ci-pulsar)
+        → OIDC в OpenBao: роль deploy-station → secret/ci/deploy-station
+        → HA update_entity + update.install (Firmware станции)
+        → проверка installed_version == tag и 90 с стабильности
+```
+
+- Тег `v<upstream major.minor>.<1000+N>` больше любого upstream-патча, поэтому
+  updater (`vMAJOR.MINOR.PATCH`) видит релиз форка новее.
+- Откат через CI невозможен (updater только повышает версию): на станции
+  `.prev` + `ctl.sh reload`.
 
 ## Данные
 
