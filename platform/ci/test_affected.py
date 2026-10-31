@@ -356,3 +356,30 @@ class DeployRoutingTests(unittest.TestCase):
         entries = affected.deploy_entries(result, self.config)
         self.assertEqual([entry["id"] for entry in entries], ["hermes"])
         self.assertEqual(entries[0]["images"], "hermes voice-proxy")
+
+
+class WorkflowInvalidationTests(unittest.TestCase):
+    """Editing a reusable workflow must run the jobs that workflow defines."""
+
+    def setUp(self):
+        self.config = affected.load_config(HERE / "units.yml")
+
+    def _route(self, changed):
+        with mock.patch.object(affected, "go_package_dirs", side_effect=lambda _r, _u: set()):
+            return affected.route(self.config, changed, root=REPO, base="b")
+
+    def test_go_workflow_runs_every_go_unit(self):
+        result = self._route([".github/workflows/_go.yml"])
+        self.assertEqual(result.routes["go"].mode, "all")
+        self.assertTrue(result.routes["go"].units)
+        self.assertEqual(result.routes["android"].units, [])
+
+    def test_android_workflow_runs_android(self):
+        result = self._route([".github/workflows/_android.yml"])
+        self.assertEqual(result.routes["android"].mode, "all")
+        self.assertTrue(result.routes["android"].units)
+
+    def test_ci_entrypoint_runs_everything(self):
+        result = self._route([".github/workflows/ci.yml"])
+        for platform in ("go", "android", "python"):
+            self.assertTrue(result.routes[platform].units, platform)

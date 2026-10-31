@@ -40,9 +40,7 @@ projects/home/kubernetes/openbao/
   deploy.sh          namespace, seal Secret, PV/PVC, helm, DNS, IngressRoute
   bootstrap.sh       operator init (один раз), configure.py, отзыв root-токена
   configure.py       KV v2, auth-методы, политики, роли, тестовые записи, TOTP
-  ci_secrets.py      материализация secret/ci/deploy-home в файлы 600 (CI)
   test_configure.py  контракты ролей/политик (в т.ч. deploy-station)
-  test_ci_secrets.py контракты материализации и маскирования
   verify.sh          HTTPS/UI/логин/политики (+ --kubernetes: под-проба)
   values/openbao.yaml
   manifests/storage.yaml        PV data/audit/backups
@@ -369,19 +367,24 @@ bao kv put -mount=secret ci/deploy-station \
 
 1. материализует VPN-сертификат и пароль в `$RUNNER_TEMP/ci` (600);
 2. поднимает VPN-группу `ci` и ждёт `200/…` от `$OPENBAO_ADDR/v1/sys/health`;
-3. запрашивает GitHub OIDC-токен с audience `OPENBAO_ADDR`, логинится в
-   `auth/github` ролью `deploy-home`, читает `secret/ci/deploy-home`;
-4. `ci_secrets.py` пишет только нужные юниту файлы (600) и регистрирует
-   `::add-mask::` для каждой значимой строки значения; сами значения в лог не
-   печатаются;
-5. отдельный шаг `if: always()` отзывает токен OpenBao (`revoke-self`);
+3. `hashicorp/vault-action` (OIDC `method: jwt`, `path: github`, audience =
+   `OPENBAO_ADDR`, роль `deploy-home`) логинится и читает
+   `secret/ci/deploy-home`; action маскирует каждую строку значения и отдаёт
+   его только как step output (`exportEnv: false`);
+4. минимальный shell-шаг пишет из outputs нужные юниту файлы (kubeconfig и
+   env из `units.yml`) в `$RUNNER_TEMP/ci` с правами 600; сами значения в лог
+   не печатаются;
+5. отдельного шага отзыва токена нет: роль выдаёт токен с коротким TTL, он
+   живёт только до конца job;
 6. дальше — прежние kubectl/helm шаги, smoke и откат; cleanup удаляет
    `$RUNNER_TEMP/ci`.
 
 Политика `ci-deploy` допускает только read `secret/ci/test` и
 `secret/ci/deploy-home` (плюс metadata); запись и `secret/k8s/*` запрещены —
-это проверяет `openbao-smoke.yml`, который также убеждается, что в
-`secret/ci/deploy-home` есть все три ключа (печатаются только имена ключей).
+это проверяет `openbao-smoke.yml` (ожидаемые отказы остаются сырыми API
+запросами: `vault-action` только читает и не умеет выражать «должно быть
+запрещено»), он же убеждается, что в `secret/ci/deploy-home` есть все три
+ключа.
 
 Сеть: группа `ci` пула `10.77.1.0/24` маршрутизируется только до узла K3s,
 nftables `forward` разрешает `tcp/{443,6443}`, `postrouting` маскирует в адрес

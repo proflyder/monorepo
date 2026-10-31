@@ -309,8 +309,9 @@ digest-пины образов, поэтому `make test` и `make test-deploy-
 Push в `develop` — это squash-merge PR, поэтому workflow получает секреты
 Environment `Home`. `plan` прогоняет тот же `units.yml` по диапазону
 `before..sha` и деплоит только затронутые деплоимые юниты параллельно:
-VPN группой `ci` → GitHub OIDC в OpenBao (роль `deploy-home`) →
-`secret/ci/deploy-home` → kubectl/helm к K3s `6443` и Traefik `443`.
+VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
+роль `deploy-home`) → `secret/ci/deploy-home` → kubectl/helm к K3s `6443`
+и Traefik `443`.
 Документация и инфраструктурные юниты без `deploy` ничего не катят.
 
 - Смена режима (`preserve`, `execute`, `shadow`, `control-*`) — только

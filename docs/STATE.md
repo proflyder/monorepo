@@ -74,9 +74,10 @@
 - KV v2 `secret/`: `secret/ci/test`, `secret/ci/deploy-home` и
   `secret/k8s/*`. `secret/ci/deploy-home` (`kubeconfig`, `scheduler_env`,
   `runtime_values`) — источник для CI; в GitHub этих значений больше нет.
-  `deploy-home` входит по OIDC после VPN, читает запись, материализует файлы
-  600, маскирует значения и отзывает токен; политика `ci-deploy` — read
-  только `secret/ci/test` и `secret/ci/deploy-home`.
+  `deploy-home` входит по OIDC после VPN, читает запись через
+  `hashicorp/vault-action`, материализует файлы 600 и маскирует значения;
+  токен живёт только до конца job (TTL роли), отдельного revoke нет; политика
+  `ci-deploy` — read только `secret/ci/test` и `secret/ci/deploy-home`.
 - Ночной CronJob raft snapshot в `/srv/k3s/volumes/openbao-backups`
   (7 файлов). Root-токен отозван, recovery keys — только `secrets/openbao/`.
 - External Secrets Operator `2.14.0` (chart `2.14.0`, образ по digest) в

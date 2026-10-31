@@ -18,10 +18,12 @@ name: deploy-home
 #
 # Secrets: GitHub holds only what is needed to reach OpenBao (VPN client
 # credentials, OPENBAO_ADDR, OPENBAO_ROLE). After the VPN is up the job logs in
-# with GitHub OIDC (auth/github role `deploy-home`, audience = OPENBAO_ADDR),
-# reads `secret/ci/deploy-home` and materialises kubeconfig / scheduler env /
-# runtime values into `$RUNNER_TEMP/ci` (mode 600). Every value is masked
-# before use and the token is revoked in an `if: always()` step.
+# with GitHub OIDC (auth/github role `deploy-home`, audience = OPENBAO_ADDR)
+# through `hashicorp/vault-action`, which reads `secret/ci/deploy-home` and
+# exposes each value as a masked step output; a minimal step then writes
+# kubeconfig / scheduler env / runtime values into `$RUNNER_TEMP/ci` (mode 600).
+# The role's short token TTL is the revocation limit, so there is no explicit
+# revoke step.
 on:
   push:
     branches: [develop]
@@ -55,11 +57,9 @@ concurrency:
 
 env:
   BAZELISK_VERSION: "1.30.0"
-  BAZELISK_SHA256: "a248ae2b2b62b5baebb748f6fba7203bff1a27e5d01b55399a8406744cb539e8"
   KUBECTL_VERSION: "v1.35.0"
   KUBECTL_SHA256: "a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989"
   HELM_VERSION: "v4.1.4"
-  HELM_SHA256: "70b2c30a19da4db264dfd68c8a3664e05093a361cefd89572ffb36f8abfa3d09"
   DEPLOY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'preserve' }}
   HERMES_SIMULATE_SMOKE_FAILURE: ${{ (github.event_name == 'workflow_dispatch' && inputs.simulate_hermes_failure) && '1' || '0' }}
   # Public DNS name of the VPN and the OpenBao address are private values: they
@@ -94,7 +94,13 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements-test.txt
-          platform/ci/install-bazelisk.sh "$RUNNER_TEMP/bazelisk"
+
+      # Pinned Bazelisk on PATH (`bazel`) plus its Bzlmod/repository caches.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-cache: true
+          repository-cache: true
 
       - name: Ensure base branch history
         if: github.event_name == 'push'
@@ -110,14 +116,14 @@ jobs:
           out="$RUNNER_TEMP/route.out"
           : > "$out"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            python3 platform/ci/affected.py --all --bazel "$RUNNER_TEMP/bazelisk" \
+            python3 platform/ci/affected.py --all \
               --format github --out "$out" >/dev/null
           else
             if ! python3 platform/ci/affected.py --base "$BEFORE_SHA" --head "$GITHUB_SHA" \
-                 --bazel "$RUNNER_TEMP/bazelisk" --format github --out "$out" >/dev/null; then
+                 --format github --out "$out" >/dev/null; then
               echo "routing failed; falling back to every deployable unit" >&2
               : > "$out"
-              python3 platform/ci/affected.py --all --bazel "$RUNNER_TEMP/bazelisk" \
+              python3 platform/ci/affected.py --all \
                 --format github --out "$out" >/dev/null
             fi
           fi
@@ -196,33 +202,35 @@ jobs:
           fi
           echo "selected mode: $DEPLOY_MODE for ${{ matrix.id }}"
 
-      - name: Install pinned tools
+      - name: Install pinned kubectl
+        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5.2.0
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+          checksum: ${{ env.KUBECTL_SHA256 }}
+
+      - name: Install pinned helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # Pinned Bazelisk on PATH (`bazel`) plus its Bzlmod/repository caches.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-cache: true
+          repository-cache: true
+
+      - name: Install VPN client
+        # No official action exists for openconnect; the runner image has none.
         run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/bazelisk \
-            "https://github.com/bazelbuild/bazelisk/releases/download/v${BAZELISK_VERSION}/bazelisk-linux-amd64"
-          echo "${BAZELISK_SHA256}  /tmp/bazelisk" | sha256sum -c -
-          sudo install -m 0755 /tmp/bazelisk /usr/local/bin/bazelisk
-          curl -sSfL -o /tmp/kubectl \
-            "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-          echo "${KUBECTL_SHA256}  /tmp/kubectl" | sha256sum -c -
-          sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
-          curl -sSfL -o /tmp/helm.tgz \
-            "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
-          echo "${HELM_SHA256}  /tmp/helm.tgz" | sha256sum -c -
-          tar -xzf /tmp/helm.tgz -C /tmp
-          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
-          rm -f /tmp/bazelisk /tmp/kubectl /tmp/helm.tgz
-          rm -rf /tmp/linux-amd64
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl python3-yaml
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ~/.cache/bazel
-            ~/.cache/bazel-disk
-            ~/.cache/bazelisk
+          # Action-output disk cache (.bazelrc); Bazelisk/repository caches come
+          # from setup-bazel above.
+          path: ~/.cache/bazel-disk
           key: deploy-home-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'go.sum') }}
           restore-keys: |
             deploy-home-${{ runner.os }}-
@@ -274,74 +282,48 @@ jobs:
           tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
           exit 1
 
+      # GitHub OIDC -> OpenBao (auth/github, JWT audience = OPENBAO_ADDR). The
+      # action masks every line of every value and exposes them as step outputs
+      # only (`exportEnv: false`), so they do not leak into later steps' env.
       - name: Read deploy secrets from OpenBao
+        id: openbao
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        with:
+          url: ${{ env.OPENBAO_ADDR }}
+          method: jwt
+          path: github
+          role: ${{ env.OPENBAO_ROLE }}
+          jwtGithubAudience: ${{ env.OPENBAO_ADDR }}
+          exportEnv: false
+          secrets: |
+            secret/data/ci/deploy-home kubeconfig | KUBECONFIG_CONTENT ;
+            secret/data/ci/deploy-home ${{ matrix.env_key }} | DEPLOY_ENV_CONTENT
+
+      # Each unit materialises only the files it consumes: the kubeconfig plus
+      # the private deploy-time env named by units.yml (scheduler.env,
+      # currency-bot.env or runtime-values.yaml).
+      - name: Write deploy files
         env:
-          DEPLOY_ENV_KEY: ${{ matrix.env_key }}
+          KUBECONFIG_CONTENT: ${{ steps.openbao.outputs.KUBECONFIG_CONTENT }}
+          DEPLOY_ENV_CONTENT: ${{ steps.openbao.outputs.DEPLOY_ENV_CONTENT }}
           DEPLOY_ENV_FILE: ${{ matrix.env_file }}
         run: |
-          set +x
           set -euo pipefail
           umask 077
           CI_DIR="$RUNNER_TEMP/ci"
-          test -n "$DEPLOY_ENV_KEY" && test -n "$DEPLOY_ENV_FILE"
-          test -n "$OPENBAO_ADDR"
-          oidc=$(curl -sSf \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$OPENBAO_ADDR" \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
-          echo "::add-mask::$oidc"
-          python3 - "$oidc" "$OPENBAO_ROLE" "$CI_DIR/login.json" <<'PY'
-          import json, sys
-          oidc, role, path = sys.argv[1:4]
-          with open(path, "w", encoding="utf-8") as handle:
-              json.dump({"role": role, "jwt": oidc}, handle)
-          PY
-          chmod 600 "$CI_DIR/login.json"
-          code=$(curl -sS -o "$CI_DIR/login-response.json" -w '%{http_code}' \
-            -X POST --data-binary "@$CI_DIR/login.json" \
-            "$OPENBAO_ADDR/v1/auth/github/login")
-          if [[ "$code" != "200" ]]; then
-            echo "OpenBao GitHub login failed with HTTP $code" >&2
+          if [[ -z "${KUBECONFIG_CONTENT:-}" || -z "${DEPLOY_ENV_CONTENT:-}" ]]; then
+            echo "OpenBao returned an empty deploy value" >&2
             exit 1
           fi
-          python3 - "$CI_DIR/login-response.json" "$CI_DIR/openbao-token" <<'PY'
-          import json, os, sys
-          token = json.load(open(sys.argv[1], encoding="utf-8"))["auth"]["client_token"]
-          with open(sys.argv[2], "w", encoding="utf-8") as handle:
-              handle.write(token)
-          os.chmod(sys.argv[2], 0o600)
-          print(f"::add-mask::{token}")
-          PY
-          rm -f "$CI_DIR/login.json" "$CI_DIR/login-response.json"
-          code=$(curl -sS -o "$CI_DIR/deploy-home.json" -w '%{http_code}' \
-            -H "X-Vault-Token: $(cat "$CI_DIR/openbao-token")" \
-            "$OPENBAO_ADDR/v1/secret/data/ci/deploy-home")
-          if [[ "$code" != "200" ]]; then
-            echo "read secret/ci/deploy-home failed with HTTP $code" >&2
-            exit 1
-          fi
-          # Each unit materialises only the files it consumes: the kubeconfig
-          # plus the private deploy-time env named by units.yml (scheduler.env,
-          # currency-bot.env or runtime-values.yaml).
-          KEYS=(kubeconfig=kubeconfig "${DEPLOY_ENV_KEY}=${DEPLOY_ENV_FILE}")
-          ARGS=()
-          for key in "${KEYS[@]}"; do ARGS+=(--key "$key"); done
-          python3 projects/home/kubernetes/openbao/ci_secrets.py \
-            --payload "$CI_DIR/deploy-home.json" --dir "$CI_DIR" "${ARGS[@]}"
-          rm -f "$CI_DIR/deploy-home.json"
-
-      - name: Revoke OpenBao token
-        if: always()
-        run: |
-          set +e
-          CI_DIR="$RUNNER_TEMP/ci"
-          if [[ -s "$CI_DIR/openbao-token" ]]; then
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
-              -X POST -H "X-Vault-Token: $(cat "$CI_DIR/openbao-token")" \
-              "$OPENBAO_ADDR/v1/auth/token/revoke-self")
-            echo "OpenBao token revocation attempted (HTTP $code)"
-            rm -f "$CI_DIR/openbao-token"
-          fi
+          case "$DEPLOY_ENV_FILE" in
+            ""|*/*) echo "unsafe env file name: '$DEPLOY_ENV_FILE'" >&2; exit 2 ;;
+          esac
+          mkdir -p "$CI_DIR"
+          chmod 700 "$CI_DIR"
+          printf '%s' "$KUBECONFIG_CONTENT" > "$CI_DIR/kubeconfig"
+          printf '%s' "$DEPLOY_ENV_CONTENT" > "$CI_DIR/$DEPLOY_ENV_FILE"
+          chmod 600 "$CI_DIR/kubeconfig" "$CI_DIR/$DEPLOY_ENV_FILE"
+          echo "deploy files prepared"
 
       - name: Check CI identity
         run: |
@@ -406,12 +388,17 @@ jobs:
           done
           echo "ESO-managed Secrets are Ready in $NS"
 
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build, push and deploy ${{ matrix.id }}
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           if [[ "${{ matrix.builder }}" == "docker" ]]; then
             # Hermes/voice-proxy: build+push, then promote the pushed digests
             # into the runtime release. hermes_rollout.py skips the upgrade when
@@ -452,7 +439,6 @@ jobs:
           IMAGE_TAG="$GITHUB_SHA" \
           ONLY="${ONLY// /,}" \
           PREFLIGHT_IN_CLUSTER=1 \
-          BAZELISK=bazelisk \
             "${{ matrix.script }}" "${MODE_ARGS[@]}"
 
       - name: Post-deploy smoke
