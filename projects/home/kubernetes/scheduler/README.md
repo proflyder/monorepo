@@ -208,8 +208,9 @@ kubectl only — no SSH and no root helper.
   (`deploy.images` / `deploy.workloads`). A documentation-only push deploys
   nothing; a shared Go package change deploys every importer; an unknown or
   zero `before` falls back to every deployable unit.
-- The deploy matrix runs one unit at a time (`max-parallel: 1`,
-  `concurrency: deploy-home-<unit>`, never cancelled).
+- The deploy matrix runs affected units in parallel; each unit is
+  serialised by `concurrency: deploy-home-<unit>` and never cancelled.
+  Image-only units (Hermes/voice-proxy) skip the VPN and the cluster.
 - Each job logs in to GHCR with the job-scoped `GITHUB_TOKEN`
   (`packages: write` on that job only), runs `deploy.sh` with `PUSH_IMAGES=1`
   and `PREFLIGHT_IN_CLUSTER=1`, then verifies rollout, `-healthcheck`,

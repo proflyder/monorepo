@@ -142,8 +142,8 @@ jobs:
       contents: read
       packages: write
     strategy:
+      # Units are independent; per-unit concurrency still serialises a unit.
       fail-fast: false
-      max-parallel: 1
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.units) }}
     concurrency:
@@ -197,6 +197,8 @@ jobs:
             deploy-home-${{ runner.os }}-
 
       - name: Materialise secrets as files
+        # Image-only units never reach home: no VPN, cluster or secrets.
+        if: matrix.builder != 'docker'
         env:
           IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
           IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
@@ -218,6 +220,7 @@ jobs:
           echo "secret files prepared: $(find "$CI_DIR" -maxdepth 1 -type f | wc -l)"
 
       - name: Connect VPN (group ci)
+        if: matrix.builder != 'docker'
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -242,6 +245,7 @@ jobs:
           exit 1
 
       - name: Check CI identity
+        if: matrix.builder != 'docker'
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -281,6 +285,7 @@ jobs:
             projects/home/kubernetes/scheduler/deploy.sh "${MODE_ARGS[@]}"
 
       - name: Post-deploy smoke
+        if: matrix.builder != 'docker'
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -309,16 +314,22 @@ jobs:
                 ;;
             esac
           done
-          # NodePort reachability without a bearer: an unauthenticated Connect
-          # call must reach the Service and be rejected with 401.
-          for port in 30098 30099; do
-            code=$(timeout 5 curl -s -o /dev/null -w '%{http_code}' \
-              -X POST "http://$K3S_NODE:$port/ricardo.v1.SchedulerService/GetStatus" \
-              -H 'Content-Type: application/json' -d '{}' || true)
-            case "$code" in
-              401|403) echo "nodeport $port reachable (HTTP $code, auth required)" ;;
-              *) echo "nodeport $port unexpected response: ${code:-none}" >&2; exit 1 ;;
-            esac
+          # The ci VPN group reaches only the K3s API, so NodePorts are checked
+          # from the cluster side: each Service must have a ready endpoint.
+          for workload in ${{ matrix.workloads }}; do
+            if ! kubectl -n home-assistant get service "$workload" >/dev/null 2>&1; then
+              echo "service $workload: none (worker without a Service)"
+              continue
+            fi
+            ready=$(kubectl -n home-assistant get endpointslices \
+              -l "kubernetes.io/service-name=$workload" \
+              -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
+              | grep -c '^true$' || true)
+            if [[ "$ready" -lt 1 ]]; then
+              echo "service $workload has no ready endpoint" >&2
+              exit 1
+            fi
+            echo "service $workload ready endpoints: $ready"
           done
 
       - name: Roll back on failure

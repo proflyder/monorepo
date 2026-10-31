@@ -180,7 +180,8 @@ server-key = /etc/ocserv/ssl/server-key.pem
 
 isolate-workers = true
 max-clients = 16
-max-same-clients = 2
+# CI deploys run one VPN session per parallel matrix job with one certificate.
+max-same-clients = 10
 rate-limit-ms = 200
 keepalive = 32400
 dpd = 90
