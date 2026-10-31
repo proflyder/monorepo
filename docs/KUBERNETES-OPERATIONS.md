@@ -128,8 +128,9 @@ Helm при удалении объекта из релиза делает GET �
 `deploy-home` для юнита `hermes` (builder `docker`) после build+push вызывает
 `projects/home-assistant/deploy/hermes_rollout.py`:
 
-1. значения берутся из GitHub-секрета `RUNTIME_VALUES_B64` (base64 приватного
-   values; токенов в нём нет — они в Kubernetes Secrets);
+1. значения берутся из OpenBao `secret/ci/deploy-home` (key `runtime_values`,
+   исходный текст без base64; токенов в нём нет — они в Kubernetes Secrets),
+   job материализует их в файл 600 после OIDC-входа;
 2. если digest'ы не изменились, upgrade не запускается;
 3. `helm upgrade runtime` получает только `--set` образов (без
    `--reuse-values`), `storage` вырезается;

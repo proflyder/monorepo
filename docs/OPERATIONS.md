@@ -219,8 +219,10 @@ kubectl -n openbao logs job/snapshot-manual
 Временный пароль человека — `secrets/openbao/human.pass` (600), сменить в
 UI. Recovery keys и root-токен bootstrap — `secrets/openbao/init.json` (600);
 root уже отозван, новый выпускается `bao operator generate-root` из recovery
-keys. GitHub-секреты environment `Home` для smoke: `OPENBAO_ADDR` и
-(опционально) `OPENBAO_ROLE`.
+keys. GitHub Environment `Home` хранит только VPN-креды, `OPENBAO_ADDR` и
+(опционально) `OPENBAO_ROLE`; `kubeconfig`, `scheduler.env` и runtime values
+лежат в `secret/ci/deploy-home` и материализуются job'ом после OIDC-входа
+(схема и команда обновления — README OpenBao).
 
 ## External Secrets Operator
 

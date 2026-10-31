@@ -46,8 +46,9 @@ Proxy image собирается из Dockerfile `images/voice-proxy/` и акт
 через Helm. PV/PVC помечены `helm.sh/resource-policy: keep` и не входят в
 Helm-релиз, чтобы `ci-deploy` (namespace-scoped, без cluster-scoped прав,
 VPN-группа только к API 6443) не мог их изменить или удалить. Ручной rollout
-выполняется тем же скриптом, что и CI; секрет `RUNTIME_VALUES_B64` содержит
-приватные values без токенов (они остаются в Kubernetes Secrets).
+выполняется тем же скриптом, что и CI; OpenBao `secret/ci/deploy-home`
+(key `runtime_values`) содержит приватные values без токенов (они остаются в
+Kubernetes Secrets).
 
 ## Перенос Hermes home
 

@@ -293,6 +293,15 @@ units:
       suites:
         - projects/home/kubernetes/scheduler
 
+  - id: openbao
+    platform: python
+    title: "projects/home/kubernetes/openbao (config, CI OIDC secret hand-off)"
+    paths:
+      - projects/home/kubernetes/openbao/**
+    python:
+      suites:
+        - projects/home/kubernetes/openbao
+
   - id: external-secrets
     platform: python
     title: "projects/home/kubernetes/external-secrets (OpenBao wiring)"

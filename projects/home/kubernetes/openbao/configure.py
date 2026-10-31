@@ -61,15 +61,22 @@ path "sys/rekey-recovery-key/*" {
 """
 
 CI_POLICY = """\
-# GitHub Actions may only read the CI namespace.
-path "secret/data/ci/*" {
+# GitHub Actions may only read the CI entries that deploy-home and the smoke
+# check actually use. A new secret/ci/<name> needs an explicit entry here.
+path "secret/data/ci/test" {
   capabilities = ["read"]
 }
-path "secret/metadata/ci/*" {
-  capabilities = ["read", "list"]
+path "secret/data/ci/deploy-home" {
+  capabilities = ["read"]
 }
 path "secret/metadata/ci" {
   capabilities = ["list"]
+}
+path "secret/metadata/ci/test" {
+  capabilities = ["read"]
+}
+path "secret/metadata/ci/deploy-home" {
+  capabilities = ["read"]
 }
 """
 
