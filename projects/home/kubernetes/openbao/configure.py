@@ -348,6 +348,8 @@ def main() -> None:
     parser.add_argument("--repository",
                         default=default_repository(),
                         help="GitHub owner/name for the OIDC role claim")
+    parser.add_argument("--audience", default=os.environ.get("OPENBAO_AUDIENCE"),
+                        help="GitHub OIDC audience; defaults to --addr")
     parser.add_argument("--enforce-totp", action="store_true",
                         help="enforce TOTP for userpass (only after enrolment)")
     args = parser.parse_args()
@@ -359,8 +361,13 @@ def main() -> None:
         sys.exit("cannot determine the GitHub repository; set "
                  "OPENBAO_GITHUB_REPOSITORY")
 
-    host = args.addr.split("://", 1)[1].split("/", 1)[0]
-    audience = "https://" + host
+    # The audience must be the public URL GitHub requests tokens for, not a
+    # temporary port-forward or loopback address used to reach the API.
+    audience = (args.audience or args.addr).rstrip("/")
+    host = audience.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+    if not audience.startswith("https://") or host in ("127.0.0.1", "localhost"):
+        sys.exit("--audience must be the public https URL of OpenBao "
+                 "(set OPENBAO_AUDIENCE when --addr is a local forward)")
     bao = Bao(args.addr, args.token, args.resolve_ip)
 
     ensure_kv(bao)

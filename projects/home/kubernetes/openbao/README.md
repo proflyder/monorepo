@@ -178,6 +178,11 @@ OpenBao поддерживает login MFA. `configure.py` создаёт мет
 - `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
 - `bound_audiences` = `https://vault.<home-domain>` (workflow запрашивает
   ровно этот audience);
+- в workflow `environment:` пишется с той же буквы, что в `bound_claims`
+  (`Home`): claim сохраняет регистр из YAML;
+- `configure.py` через локальный port-forward запускать с
+  `OPENBAO_AUDIENCE=https://vault.<home-domain>`, иначе роль привяжется к
+  loopback-адресу (скрипт теперь отказывает в таком audience);
 - `bound_claims`: `repository=<owner>/<repo>` (берётся из `git remote origin`, можно
   переопределить `OPENBAO_GITHUB_REPOSITORY`), `environment=Home`
   (каноническое имя environment в GitHub — `Home`, хотя в YAML пишется
