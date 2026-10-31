@@ -29,6 +29,7 @@ SECRETS = ROOT / "secrets" / "openbao"
 GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_ENVIRONMENT = "Home"
 GITHUB_REF = "refs/heads/develop"
+GITHUB_STATION_ENVIRONMENT = "Station"
 
 ADMIN_POLICY = """\
 # Full administration, minus operations that can destroy availability or
@@ -76,6 +77,16 @@ path "secret/metadata/ci/test" {
   capabilities = ["read"]
 }
 path "secret/metadata/ci/deploy-home" {
+  capabilities = ["read"]
+}
+"""
+
+STATION_POLICY = """\
+# The station (firmware) deploy reads exactly its own CI entry.
+path "secret/data/ci/deploy-station" {
+  capabilities = ["read"]
+}
+path "secret/metadata/ci/deploy-station" {
   capabilities = ["read"]
 }
 """
@@ -218,7 +229,8 @@ def ensure_userpass(bao: Bao, user: str) -> None:
     print(f"user: {user} created (password in {password_file})")
 
 
-def ensure_github(bao: Bao, audience: str, repository: str) -> None:
+def ensure_github(bao: Bao, audience: str, repository: str,
+                  station_repository: str | None = None) -> None:
     created = ensure_auth(bao, "github", {"type": "jwt"})
     print("auth: jwt (github) " + ("enabled" if created else "already enabled"))
     bao.expect("POST", "/v1/auth/github/config",
@@ -238,6 +250,25 @@ def ensure_github(bao: Bao, audience: str, repository: str) -> None:
         "clock_skew": 60,
     })
     print("role: auth/github/role/deploy-home (audience %s)" % audience)
+    if not station_repository:
+        return
+    # The station deploy runs from a tag through a reusable workflow, so it
+    # binds repository + environment only: the GitHub Environment restricts
+    # which refs may deploy. No ref claim here on purpose.
+    bao.expect("POST", "/v1/auth/github/role/deploy-station", {
+        "role_type": "jwt",
+        "user_claim": "job_workflow_ref",
+        "bound_audiences": [audience],
+        "bound_claims": {
+            "repository": station_repository,
+            "environment": GITHUB_STATION_ENVIRONMENT,
+        },
+        "token_policies": ["ci-station"],
+        "token_ttl": "10m",
+        "token_max_ttl": "15m",
+        "clock_skew": 60,
+    })
+    print("role: auth/github/role/deploy-station (audience %s)" % audience)
 
 
 def ensure_kubernetes(bao: Bao) -> None:
@@ -350,6 +381,11 @@ def main() -> None:
                         help="GitHub owner/name for the OIDC role claim")
     parser.add_argument("--audience", default=os.environ.get("OPENBAO_AUDIENCE"),
                         help="GitHub OIDC audience; defaults to --addr")
+    parser.add_argument("--station-repository",
+                        default=os.environ.get("OPENBAO_STATION_REPOSITORY"),
+                        help="GitHub owner/name of the station repository; "
+                             "enables the deploy-station role and ci-station "
+                             "policy (also OPENBAO_STATION_REPOSITORY)")
     parser.add_argument("--enforce-totp", action="store_true",
                         help="enforce TOTP for userpass (only after enrolment)")
     args = parser.parse_args()
@@ -369,15 +405,20 @@ def main() -> None:
         sys.exit("--audience must be the public https URL of OpenBao "
                  "(set OPENBAO_AUDIENCE when --addr is a local forward)")
     bao = Bao(args.addr, args.token, args.resolve_ip)
+    station_repository = (args.station_repository or "").strip() or None
 
     ensure_kv(bao)
     ensure_audit(bao)
     ensure_policy(bao, "admin", ADMIN_POLICY)
     ensure_policy(bao, "ci-deploy", CI_POLICY)
+    if station_repository:
+        ensure_policy(bao, "ci-station", STATION_POLICY)
     ensure_policy(bao, "k8s-read", K8S_POLICY)
     ensure_policy(bao, "backup", BACKUP_POLICY)
     ensure_userpass(bao, args.user)
-    ensure_github(bao, audience, args.repository)
+    ensure_github(bao, audience, args.repository, station_repository)
+    if not station_repository:
+        print("station: no --station-repository, deploy-station role skipped")
     ensure_kubernetes(bao)
     ensure_secret(bao, "ci/test", {"probe": "ok-ci",
                                    "purpose": "CI auth smoke test; non-secret"})
