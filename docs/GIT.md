@@ -25,6 +25,7 @@ git push -u origin fix/<name>               # pre-push guard
 gh pr create --base develop --fill          # PR в develop
 # CI: ci-ok зелёный → squash merge → ветка удаляется
 # push в develop = merge PR → deploy-home выкатывает затронутые юниты
+#   и job warm-caches прогревает общие кэши для следующих PR
 ```
 
 - Одно логическое изменение — одна ветка и один PR. Мелкие PR проще

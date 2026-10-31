@@ -84,6 +84,10 @@ class Unit:
 class Invalidation:
     paths: list[str]
     platforms: list[str]
+    # `deploy: false` means "run these CI jobs, but do not redeploy units just
+    # because this path changed". Workflow and CI-harness edits only need the
+    # checks to re-run; they must not roll the home units after merge.
+    deploy: bool = True
 
 
 @dataclass
@@ -144,10 +148,18 @@ def load_config(path: Path) -> Config:
                 deploy_externalsecrets=list(deploy.get("externalsecrets") or []),
             )
         )
-    invalidations = [
-        Invalidation(paths=list(item.get("paths") or []), platforms=list(item.get("platforms") or []))
-        for item in data.get("invalidations") or []
-    ]
+    invalidations: list[Invalidation] = []
+    for item in data.get("invalidations") or []:
+        deploy = item.get("deploy", True)
+        if not isinstance(deploy, bool):
+            raise ValueError(f"{path}: invalidation {item.get('paths')}: deploy must be a bool")
+        invalidations.append(
+            Invalidation(
+                paths=list(item.get("paths") or []),
+                platforms=list(item.get("platforms") or []),
+                deploy=deploy,
+            )
+        )
     deploy_control = data.get("deploy_control") or {}
     return Config(
         units=units,
@@ -390,15 +402,22 @@ class Route:
     routes: dict[str, PlatformRoute]
     docs_only: bool
     deploy_control: bool
+    # Units selected for deploy-home, which ignores `deploy: false`
+    # invalidations. CI routing (`routes`) keeps using every invalidation.
+    deploy_selected: set[str] = field(default_factory=set)
     warnings: list[str] = field(default_factory=list)
 
 
 GLOBAL = "*"
 
 
-def _invalidated_platforms(config: Config, changed: list[str]) -> set[str]:
+def _invalidated_platforms(
+    config: Config, changed: list[str], deploy_only: bool = False
+) -> set[str]:
     hit: set[str] = set()
     for rule in config.invalidations:
+        if deploy_only and not rule.deploy:
+            continue
         if any(path_matches(path, rule.paths) for path in changed):
             for platform in rule.platforms:
                 if platform == GLOBAL:
@@ -423,23 +442,20 @@ def _expand_depends_on(config: Config, selected: list[Unit]) -> list[Unit]:
     return [u for u in config.units if u.id in seen]
 
 
-def route(
+def _route_platforms(
     config: Config,
     changed: list[str],
     root: Path,
-    base: str | None,
-    head: str = "HEAD",
-    bazel: str = "bazel",
-    graph: BazelGraph | None = None,
-    graph_loader=None,
-) -> Route:
-    """Route changed paths onto units. Exposed for tests."""
-    invalidated = _invalidated_platforms(config, changed)
+    invalidated: set[str],
+    graph: BazelGraph | None,
+    graph_loader,
+    warnings: list[str],
+) -> dict[str, PlatformRoute]:
+    """Select units per platform for the given invalidation set."""
     changed_dirs = {
         str((root / Path(path).parent).resolve()) for path in changed if path
     }
     routes: dict[str, PlatformRoute] = {}
-    warnings: list[str] = []
 
     # --- go: dependency closure from the Go toolchain ---------------------
     go_route = PlatformRoute("go", "go-list")
@@ -525,6 +541,44 @@ def route(
     quality_route = PlatformRoute("quality", "always", list(config.by_platform("quality")))
     routes["quality"] = quality_route
 
+    return routes
+
+
+def route(
+    config: Config,
+    changed: list[str],
+    root: Path,
+    base: str | None,
+    head: str = "HEAD",
+    bazel: str = "bazel",
+    graph: BazelGraph | None = None,
+    graph_loader=None,
+) -> Route:
+    """Route changed paths onto units. Exposed for tests."""
+    invalidated = _invalidated_platforms(config, changed)
+    warnings: list[str] = []
+    routes = _route_platforms(
+        config, changed, root, invalidated, graph, graph_loader, warnings
+    )
+
+    # Deploy selection ignores `deploy: false` invalidations. CI keeps running
+    # the invalidated jobs (routes above), but a workflow/harness-only change
+    # must not roll every deployable unit after merge. When a deploy-relevant
+    # invalidation covers the same platforms, the CI selection is already the
+    # deploy selection and no second pass is needed.
+    deploy_invalidated = _invalidated_platforms(config, changed, deploy_only=True)
+    if deploy_invalidated == invalidated:
+        deploy_selected = {
+            unit.id for platform_route in routes.values() for unit in platform_route.units
+        }
+    else:
+        deploy_routes = _route_platforms(
+            config, changed, root, deploy_invalidated, graph, graph_loader, warnings
+        )
+        deploy_selected = {
+            unit.id for platform_route in deploy_routes.values() for unit in platform_route.units
+        }
+
     docs_only = bool(changed) and all(
         path.endswith((".md", ".mdx")) or path.startswith("docs/") for path in changed
     )
@@ -542,6 +596,7 @@ def route(
         routes=routes,
         docs_only=docs_only,
         deploy_control=deploy_control,
+        deploy_selected=deploy_selected,
         warnings=warnings,
     )
 
@@ -598,7 +653,7 @@ def deploy_entries(route_: Route, config: Config) -> list[dict[str, object]]:
     infrastructure, observability) never appear here, so `deploy-home` cannot
     roll them by accident.
     """
-    selected = {unit.id for platform_route in route_.routes.values() for unit in platform_route.units}
+    selected = route_.deploy_selected
     entries: list[dict[str, object]] = []
     for unit in config.units:
         if not unit.deploy_images or unit.id not in selected:
@@ -620,7 +675,7 @@ def deploy_entries(route_: Route, config: Config) -> list[dict[str, object]]:
     return entries
 
 
-def summary_markdown(route_: Route) -> str:
+def summary_markdown(route_: Route, config: Config) -> str:
     lines = [
         f"Base: `{route_.base or '(none - full run)'}` -> head `{route_.head}`",
         f"Changed files: {len(route_.changed)}",
@@ -636,7 +691,9 @@ def summary_markdown(route_: Route) -> str:
     lines.append(f"Docs only: `{str(route_.docs_only).lower()}`")
     lines.append(f"Deploy control regression: `{str(route_.deploy_control).lower()}`")
     deployed = sorted(
-        {unit.id for pr in route_.routes.values() for unit in pr.units if unit.deploy_images}
+        unit.id
+        for unit in config.units
+        if unit.deploy_images and unit.id in route_.deploy_selected
     )
     lines.append(f"Deploy units: {', '.join(f'`{u}`' for u in deployed) or '-'}")
     if route_.warnings:
@@ -709,6 +766,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             platform_route.mode = "all"
             platform_route.units = list(config.by_platform(platform))
+        result.deploy_selected = {unit.id for unit in config.units}
         result.deploy_control = True
         result.changed = []
         result.warnings.append("no base revision resolved; running every unit")
@@ -748,13 +806,13 @@ def main(argv: list[str] | None = None) -> int:
                 "docs_only": str(result.docs_only).lower(),
                 "deploy_control": str(result.deploy_control).lower(),
                 "deploy_units": json.dumps(deploy_entries(result, config)),
-                "summary": summary_markdown(result),
+                "summary": summary_markdown(result, config),
             },
         )
-        print(summary_markdown(result))
+        print(summary_markdown(result, config))
         return 0
 
-    print(summary_markdown(result))
+    print(summary_markdown(result, config))
     return 0
 
 

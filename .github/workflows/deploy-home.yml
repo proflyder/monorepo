@@ -10,6 +10,9 @@ name: deploy-home
 # range (`before..sha`) through the same unit map as CI and deploys exactly the
 # affected deployable units; documentation-only pushes deploy nothing.
 #
+# The push also runs `warm-caches`, which saves the shared setup-go/setup-bazel
+# caches under the keys PR jobs restore (CI itself no longer runs on develop).
+#
 # Push runs only the conservative preserve mode. Mode changes (execute, shadow,
 # control-execute, control-catalog) are manual workflow_dispatch runs for the
 # ha-bridge unit and always go through deploy.sh's own fail-closed preflight.
@@ -69,6 +72,89 @@ env:
   VPN_SERVER: ${{ secrets.VPN_SERVER }}
 
 jobs:
+  # Save the shared caches that PR jobs restore. `ci.yml` no longer runs on
+  # push to `develop`, so this is the only place where a develop-side cache is
+  # written. It runs on push only, in parallel with `plan`, with no Environment,
+  # no secrets and no VPN; it never runs on workflow_dispatch.
+  #
+  # Cache keys are derived by the actions themselves from their inputs:
+  #   * setup-go (same version/inputs as `_go.yml`): key is
+  #     `setup-go-<os>-<arch>-<imageOS>-go-<versionSpec>-<hash(cache-dependency-path)>`.
+  #     The inputs below are byte-identical to `_go.yml` (`go-version: 1.27.x`,
+  #     the same two go.sum files), so a PR that does not change go.sum
+  #     restores exactly this key. setup-go v6.5.0 has no restore-keys, so only
+  #     the exact file hash matches - a PR changing go.sum starts cold.
+  #   * setup-bazel (same version/inputs as the PR jobs): keys are
+  #     `setup-bazel-<cache-version>-<platform>-<arch>-<name>-<hash>`, with
+  #     name `bazelisk` (hash of `.bazelversion`) and `repository` (hash of
+  #     MODULE.bazel/WORKSPACE). `cache-version` defaults to `1` and is not
+  #     overridden anywhere, so every workflow produces the same key/prefix and
+  #     PRs restore develop's cache. `bazel fetch` only populates the
+  #     repository cache; it does not run tests or builds.
+  #
+  # The actions/cache disk caches in `_android.yml` and the deploy-control job
+  # of `_go.yml` stay PR-local: their content is produced by an Android build /
+  # deploy-control run, which this job deliberately does not do.
+  warm-caches:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # Identical to `_go.yml`: same action, go-version input and dependency
+      # paths, so the saved key matches what every Go PR job restores.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          # go.work requires a newer toolchain than the root go.mod minimum;
+          # this is `_go.yml`'s `go_version` default, which ci.yml never overrides.
+          go-version: "1.27.x"
+          cache-dependency-path: |
+            go.sum
+            projects/station/ble-gateway/go.sum
+
+      - name: Download root modules
+        run: go mod download
+
+      - name: Build root module for the Go build cache
+        run: go build ./...
+
+      - name: Download ble-gateway modules
+        working-directory: projects/station/ble-gateway
+        run: go mod download
+
+      - name: Build ble-gateway for its own build cache
+        working-directory: projects/station/ble-gateway
+        run: go build ./...
+
+      # The Android targets in `//projects/...` need the same SDK the Android
+      # PR jobs install, otherwise fetching them would fail before the Maven
+      # repositories are cached. No Android build or test runs here.
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+      - name: Install Android SDK packages for repository fetching
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+
+      # Identical inputs to `_android.yml`, `_images.yml`, `_go.yml`
+      # (deploy-control) and the `changes` job; explicit cache-save true writes
+      # the develop-side caches that PRs restore.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: true
+
+      - name: Populate the Bazel repository cache
+        run: |
+          set -euo pipefail
+          # Same target space as the PR jobs: Go tests/builds, container images
+          # from //projects/... and the Android/Kotlin targets that pull the
+          # Maven repositories. `fetch` resolves external repositories only.
+          bazel fetch //solutions/... //packages/... //projects/...
+
   # Route the change onto deployable units. Unknown/zero `before`, or any
   # routing failure, falls back to "deploy everything" rather than skipping a
   # deploy silently.

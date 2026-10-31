@@ -25,6 +25,11 @@ version: 1
 # `platforms: ["*"]` means every platform. Shared libraries are deliberately
 # absent here: they reach their consumers through the dependency engines
 # (`go list -deps`, Bazel reverse dependencies), not through path globs.
+#
+# `deploy: false` (default true) keeps the invalidation for CI only:
+# `deploy-home` never redeploys a unit selected *solely* by such a path. Workflow
+# and CI-harness edits must exercise the checks, but they do not change runtime
+# code and must not roll the home units.
 invalidations:
   - paths:
       - MODULE.bazel
@@ -52,20 +57,25 @@ invalidations:
   - paths:
       - .github/workflows/ci.yml
     platforms: ["*"]
+    deploy: false
   - paths:
       - .github/workflows/_go.yml
       - .github/workflows/_images.yml
     platforms: [go]
+    deploy: false
   - paths:
       - .github/workflows/_android.yml
     platforms: [android]
+    deploy: false
   - paths:
       - .github/workflows/_python.yml
     platforms: [python]
+    deploy: false
   - paths:
       - .github/workflows/**
       - platform/ci/**
     platforms: [quality]
+    deploy: false
 
 # The scheduler deploy-control regression is expensive and only meaningful for
 # the scheduler/bridge binaries and the Kubernetes deployment manifests.

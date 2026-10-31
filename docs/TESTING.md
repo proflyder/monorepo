@@ -157,10 +157,15 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
 ## CI (GitHub Actions)
 
 `.github/workflows/ci.yml` — hermetic-проверки без деплоя и без секретов.
-Триггеры: push и pull request в `develop`, ручной `workflow_dispatch` (он
-прогоняет все юниты); `permissions: contents: read`, `concurrency` отменяет
-устаревший прогон только для PR. Выкладка — отдельный
-`.github/workflows/deploy-home.yml` на push в `develop` (см. ниже).
+Триггеры: pull request в `develop` и ручной `workflow_dispatch` (он прогоняет
+все юниты). Push в `develop` CI не запускает: он меняется только через PR с
+зелёным `ci-ok`, повторный прогон после squash-merge избыточен.
+`permissions: contents: read`, `concurrency` отменяет устаревший прогон только
+для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
+`develop` (см. ниже); его job `warm-caches` после merge сохраняет общие кэши
+`setup-go`/`setup-bazel` под теми же ключами, которые восстанавливают PR.
+Кэши `actions/cache` для Android и deploy-control остаются PR-локальными:
+их содержимое создаёт только соответствующий build/regression.
 
 ### Маршрутизация по юнитам
 
@@ -192,7 +197,10 @@ matrix. Пустой массив означает «пропустить job» 
 * `invalidations` — пути, которые валят больше юнитов, чем совпало по `paths`
   (`MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `BUILD.bazel`, toolchain-файлы
   → все платформы; `go.mod/go.sum/go.work` → все go-юниты; `platform/android/**`
-  → все android-юниты; `requirements-test.txt` → python+quality).
+  → все android-юниты; `requirements-test.txt` → python+quality). Флаг
+  `deploy: false` оставляет правило только для CI: правка workflow или
+  `platform/ci/**` перезапускает проверки, но `deploy-home` не выкатывает
+  юнит, выбранный лишь таким правилом.
 * `deploy_control` — какие go-юниты и пути включают дорогую регрессию
   `make test-deploy-control` (scheduler, ha-bridge/ha-control,
   `projects/home/kubernetes/scheduler/**`).
