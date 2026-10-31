@@ -568,9 +568,8 @@ python3 projects/home/kubernetes/scheduler/rollback.py \
   --namespace currency-bot
 ```
 
-Аварийный откат до вывода VPS: в `/app/currency-bot` выполнить
-`docker compose start currency-bot` и вернуть Telegram `setWebhook` на старый
-URL. Это допустимо только пока VPS не выведен (`PENDING.md`). Удаление
+Старый VPS-деплой снесён, откат только внутри K3s (выше) или fix forward;
+H2-оригинал и конфиги — `secrets/currency-bot/vps-backup/`. Удаление
 PVC/namespace — только после backup SQLite.
 
 ## Egress / карантин
