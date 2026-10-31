@@ -208,6 +208,18 @@ kubectl get pods -A
 
 Helm releases и обновление — `KUBERNETES-OPERATIONS.md`.
 
+Приватный runtime values (путь в `RUNTIME_PRIVATE_VALUES`, файл в `secrets/`)
+обязан давать рендер, совпадающий с живым релизом `runtime`; иначе
+`apply-runtime.sh` заденет несвязанные workloads/PV. Проверка (пустой diff,
+код 0):
+
+```bash
+export KUBECONFIG=secrets/kubernetes-research/kubeconfig
+helm template runtime projects/home-assistant/deploy/chart \
+  -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
+  | kubectl diff -n home-assistant -f -
+```
+
 ## HA / MA / Matter / K3s компоненты
 
 ```bash

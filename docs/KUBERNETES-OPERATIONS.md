@@ -76,6 +76,26 @@ helm upgrade --install ha-observability \
 API и storage schema одновременно. Один Deployment = один writer.
 Helm rollback не откатывает SQLite/auth/state.
 
+### Проверка: приватные values совпадают с live
+
+Полный `apply-runtime.sh` меняет все объекты чарта, поэтому приватный
+values-файл (`RUNTIME_PRIVATE_VALUES`, лежит в `secrets/`) должен давать
+рендер, совпадающий с живым релизом:
+
+```bash
+export KUBECONFIG=secrets/kubernetes-research/kubeconfig
+
+helm template runtime projects/home-assistant/deploy/chart \
+  -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
+  | kubectl diff -n home-assistant -f -
+```
+
+Пустой вывод и код 0 означают совпадение всех объектов (PV/PVC и workloads).
+Непустой diff означает, что приватный файл разошёлся с live: сначала обновить
+его (бэкап рядом, режим 600) и добиться пустого diff, и только затем делать
+`apply-runtime.sh`. `helm upgrade --dry-run=server` проверяет только схему и
+доступ к API, поэтому недостаточен как доказательство отсутствия изменений.
+
 Dashboard JSON: `projects/home-assistant/observability/chart/dashboards/`;
 доставка через ConfigMap → Grafana sidecar. Ручной import не нужен.
 
