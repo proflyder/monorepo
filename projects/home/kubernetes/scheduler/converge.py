@@ -33,12 +33,30 @@ def _run(kubectl: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run([kubectl, *args], text=True, capture_output=True, check=False)
 
 
-def desired_deployment(path: pathlib.Path) -> dict:
-    docs = [doc for doc in yaml.safe_load_all(path.read_text()) if doc]
-    deployments = [doc for doc in docs if doc.get("kind") == "Deployment"]
+def desired_objects(path: pathlib.Path) -> list[dict]:
+    return [doc for doc in yaml.safe_load_all(path.read_text()) if doc]
+
+
+def desired_deployment(objects: list[dict], path: pathlib.Path) -> dict:
+    deployments = [doc for doc in objects if doc.get("kind") == "Deployment"]
     if len(deployments) != 1:
         raise SystemExit(f"{path}: expected exactly one Deployment, found {len(deployments)}")
     return deployments[0]
+
+
+def apply_support_objects(kubectl: str, namespace: str, objects: list[dict]) -> None:
+    """Apply the Service/PVC in the same file; only the Deployment is converged."""
+    if not objects:
+        return
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as handle:
+        yaml.safe_dump_all(objects, handle)
+        path = pathlib.Path(handle.name)
+    try:
+        result = _run(kubectl, "-n", namespace, "apply", "-f", str(path))
+    finally:
+        path.unlink(missing_ok=True)
+    if result.returncode != 0:
+        raise SystemExit(f"support objects: apply failed: {result.stderr.strip()}")
 
 
 def live_deployment(kubectl: str, namespace: str, name: str) -> dict | None:
@@ -87,11 +105,23 @@ def converge(
     preserve_replicas: bool = False,
     preserve_env: bool = False,
 ) -> str:
-    desired = desired_deployment(manifest)
+    objects = desired_objects(manifest)
+    desired = desired_deployment(objects, manifest)
+    apply_support_objects(
+        kubectl,
+        namespace,
+        [doc for doc in objects if doc.get("kind") != "Deployment"],
+    )
     current = live_deployment(kubectl, namespace, name)
 
     if current is None:
-        result = _run(kubectl, "-n", namespace, "create", "-f", str(manifest))
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as handle:
+            yaml.safe_dump(desired, handle)
+            path = pathlib.Path(handle.name)
+        try:
+            result = _run(kubectl, "-n", namespace, "create", "-f", str(path))
+        finally:
+            path.unlink(missing_ok=True)
         if result.returncode != 0:
             raise SystemExit(f"{name}: create failed: {result.stderr.strip()}")
         return f"{name}: created from manifest"

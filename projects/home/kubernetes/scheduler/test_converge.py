@@ -150,7 +150,27 @@ class ConvergeTests(unittest.TestCase):
         self.assertEqual(calls[-1][2], "create")
 
     def test_rendered_manifest_is_yaml_with_the_expected_name(self):
-        self.assertEqual(converge.desired_deployment(self.manifest)["metadata"]["name"], "ha-bridge")
+        objects = converge.desired_objects(self.manifest)
+        self.assertEqual(converge.desired_deployment(objects, self.manifest)["metadata"]["name"], "ha-bridge")
+
+    def test_service_in_the_same_file_is_applied_before_the_replace(self):
+        manifest = self.dir / "scheduler-like.yaml"
+        manifest.write_text(
+            "apiVersion: v1\nkind: Service\nmetadata:\n  name: scheduler\n  namespace: home-assistant\n---\n"
+            + MANIFEST
+        )
+        verbs: list[str] = []
+
+        def tracking(kubectl, *args):
+            verbs.append(args[2])
+            if args[:3] == ("-n", "home-assistant", "get"):
+                return mock.Mock(returncode=0, stdout=json.dumps(LIVE), stderr="")
+            return mock.Mock(returncode=0, stdout="ok", stderr="")
+
+        with mock.patch.object(converge, "_run", side_effect=tracking):
+            converge.converge("kubectl", "home-assistant", "ha-bridge", manifest)
+        self.assertEqual(verbs[0], "apply")
+        self.assertIn("replace", verbs)
 
 
 if __name__ == "__main__":
