@@ -37,7 +37,8 @@
 
 - K3s `v1.35.9+k3s1`, node `lab-host`; data-dir `/srv/k3s/runtime`; SQLite;
   local-path PV с `Retain`.
-- Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`.
+- Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
+  `openbao` (+ временный `openbao-smoke` для проб).
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
@@ -55,13 +56,26 @@
   (`trusted_proxies /32`). WebSocket HA и Grafana проверены.
   Файлы — `projects/home/kubernetes/ingress/`; приватные имена/токен —
   `secrets/home/ingress.env` и `secrets/home/vpn/cloudflare.env`.
+- OpenBao `2.7.2` (chart `0.30.6`) в namespace `openbao`, `https://vault.home.example.com/`
+  через тот же Traefik/allow-list и wildcard-сертификат. Один узел:
+  `raft` + локальные PV (`/srv/k3s/volumes/openbao*`, `ricardo-existing`,
+  `Retain`), декларативный файловый audit на PV, UI включён. Auto-unseal —
+  встроенный `static` seal (ключ в Secret `openbao-seal`), после
+  `kubectl delete pod` сервер распечатывается сам. Auth: `userpass` (человек,
+  политика `admin`), `jwt` `github` (GitHub OIDC, роль
+  `deploy-home`, environment `Home`, ref `develop`, TTL ≤15 мин), `kubernetes`
+  (TokenReview, роли `external-secrets`/`k8s-smoke`/`backup`). KV v2 `secret/`
+  с `secret/ci/test` и `secret/k8s/test`. Ночной CronJob raft snapshot в
+  `/srv/k3s/volumes/openbao-backups` (7 файлов). Root-токен отозван,
+  recovery keys — только `secrets/openbao/`. Существующие секреты не
+  мигрированы. Файлы — `projects/home/kubernetes/openbao/`.
 
 ## Remote
 
 - Удалённый доступ — собственный VPN (ocserv, CT `102`): `vpn.example.com`,
   профили `lan`/`full`, пароль + TOTP или клиентский сертификат.
-- HTTPS-имена LAN/VPN: `https://{ha,grafana,alarms,control}.home.example.com`
-  через Traefik + cert-manager.
+- HTTPS-имена LAN/VPN: `https://{ha,grafana,alarms,control,vault}.home.example.com`
+  через Traefik + cert-manager. `vault` — UI/API OpenBao.
 - Публичного HA нет; `8123/8095/8099/6053/6638` наружу не проброшены.
 - K3s management/metrics `6443/10250/9100/9116/8472` закрыты от обычного LAN;
   SSH — LAN, K3s API — через туннель.
@@ -95,8 +109,9 @@
   выбирается полем Group (`lan` по умолчанию или `full`); без группы
   сервер просит выбрать её при подключении.
 - 2026-10-31: группа `ci` для GitHub Actions: пул `10.77.1.0/24`, маршрут
-  только до K3s, без DNS; nftables `forward` разрешает только `tcp/6443`
-  (K3s API) на K3s и `drop` остальное, SSH из группы закрыт. Сертификат `ci`
+  только до K3s, без DNS; nftables `forward` разрешает только
+  `tcp/{443,6443}` (K3s API и HTTPS/Traefik для OpenBao) на K3s и `drop`
+  остальное, SSH из группы закрыт. Сертификат `ci`
   (OU `ci`) выпущен. CI-деплой — kubectl под ServiceAccount `ci-deploy` в
   `home-assistant`; пользователь `ci-deploy` и root-helper удалены с узла.
   Узел принимает `6443` только с адреса VPN-CT.

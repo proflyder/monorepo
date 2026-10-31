@@ -92,6 +92,23 @@
 - [ ] Регулярный backup K3s/HA с проверкой freshness. HA automatic backup не
       настроен (`sensor.backup_*` = unknown), CronJob/Velero в репозитории нет.
 
+## OpenBao
+
+- [ ] Пользователь: войти человеком, сменить временный пароль из
+      `secrets/openbao/human.pass`, зарегистрировать TOTP и включить
+      enforcement: `./projects/home/kubernetes/openbao/bootstrap.sh --enforce-totp`
+      (или API `identity/mfa/login-enforcement/userpass-totp`).
+- [ ] GitHub: добавить в Environment `Home` секреты `OPENBAO_ADDR` (и
+      `OPENBAO_ROLE`, если роль не `deploy-home`), затем прогнать
+      `openbao-smoke` (`workflow_dispatch`) после merge.
+- [ ] Offsite-копия raft snapshot и проверка restore на отдельном стенде;
+      сейчас 7 снапшотов лежат на том же узле, что и данные.
+- [ ] Внешний KMS/HSM для seal вместо `static` (ключ рядом с данными);
+      решение и миграцию оформить отдельно.
+- [ ] Следующий этап: External Secrets Operator поверх подготовленной роли
+      `external-secrets` и миграция существующих секретов приложений (сейчас
+      не выполнялась).
+
 ## HTTPS ingress (LAN/VPN)
 
 - [ ] Приёмка пользователем `https://{ha,grafana,alarms,control}.home.example.com`:
@@ -117,7 +134,7 @@
       и проверка времени/кэша. Pulsar в CI монорепо не собирается; тесты
       без nested checkout печатают `SKIP`.
 - [ ] Этап 2 (реализовано локально, нужен первый прогон): VPN-группа `ci`
-      (пул `10.77.1.0/24`, доступ только к K3s `tcp/6443`), ServiceAccount
+      (пул `10.77.1.0/24`, доступ только к K3s `tcp/{443,6443}`), ServiceAccount
       `ci-deploy` в `home-assistant`, `deploy-home.yml` с планировщиком по
       затронутым деплоимым юнитам (preserve по push, ручные
       execute/shadow/control-* через `workflow_dispatch`) и авто-откат.

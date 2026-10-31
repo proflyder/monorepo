@@ -238,9 +238,10 @@ openconnect --authenticate \
 - собственный пул `10.77.1.0/24` (`ipv4-network` в
   `config-per-group/ci`), общий пул `10.77.0.0/24` в него не входит;
 - клиенту выдаётся единственный маршрут `<k3s-node>/32`, DNS не пушится;
-- nftables `forward` разрешает из `10.77.1.0/24` только `<k3s-node> tcp/6443`
-  (K3s API; SSH из этой группы закрыт — правило стоит до общего `accept` для
-  `10.77.0.0/24`, затем `drop`),
+- nftables `forward` разрешает из `10.77.1.0/24` только
+  `<k3s-node> tcp/{443,6443}` (K3s API и HTTPS/Traefik для OpenBao; SSH из
+  этой группы закрыт — правило стоит до общего `accept` для `10.77.0.0/24`,
+  затем `drop`),
   `postrouting` маскирует пул в адрес CT;
 - сертификат выпускается только с OU `ci`:
   `vpncerts.py issue ci --device github --groups ci`. В профиле клиента

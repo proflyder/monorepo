@@ -11,6 +11,7 @@
 | `secrets/certs/*.key` | eMudhra/leaf ключи | подпись/доверие станции |
 | `secrets/proxmox-install/retired-dpp-*/` | архив удалённого QR/DPP, старые config/keys | приватный recovery; не активный provisioning |
 | `secrets/kubernetes-research/` | kubeconfig, values, Grafana password, recovery | admin/state |
+| `secrets/openbao/` | seal key, recovery keys, admin password, TOTP method id | доступ к секретам/root recovery |
 | `secrets/proxmox-install/` | SSH keys, TF state, Wi-Fi profile, install settings | host/VM recovery |
 | `secrets/local/backups/` | HA config/DB, MA/STT/TTS, станция | токены/auth/ключи |
 | `/data/quasar/ble-gateway/token` | BLE token | смена Wi-Fi |

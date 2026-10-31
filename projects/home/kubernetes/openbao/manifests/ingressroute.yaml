@@ -1,0 +1,24 @@
+# Public template. deploy.sh substitutes ${VAULT_HOST} (private suffix).
+#
+# The route shares the `traefik` namespace with the wildcard TLS Secret and the
+# `home-allowlist` Middleware, exactly like the other home routes. TLS is
+# terminated here; the OpenBao pod speaks plain HTTP on 8200.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: openbao
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${VAULT_HOST}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: openbao
+          namespace: openbao
+          port: 8200
+  tls:
+    secretName: home-wildcard-tls

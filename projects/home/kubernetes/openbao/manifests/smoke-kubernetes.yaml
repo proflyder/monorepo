@@ -1,0 +1,76 @@
+# Acceptance probe for the Kubernetes auth method.
+#
+# Proves that a pod using a dedicated ServiceAccount can log in through
+# `auth/kubernetes` (TokenReview via system:auth-delegator), read
+# `secret/k8s/test`, and is denied everything outside `secret/k8s/`.
+#
+#   ./projects/home/kubernetes/openbao/verify.sh --kubernetes
+#
+# Values read here are non-secret probes; the job prints only pass/fail.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openbao-smoke
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-smoke
+  namespace: openbao-smoke
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-kubernetes-auth
+  namespace: openbao-smoke
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: openbao-smoke
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: probe
+          image: "quay.io/openbao/openbao:__OPENBAO_IMAGE_TAG__"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              export BAO_ADDR=http://openbao.openbao.svc:8200
+              token=$(bao write -field=token auth/kubernetes/login \
+                role=k8s-smoke jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token)
+              test -n "$token"
+              echo "kubernetes login: ok"
+              value=$(BAO_TOKEN="$token" bao kv get -field=probe secret/k8s/test)
+              test "$value" = "ok-k8s"
+              echo "read secret/k8s/test: ok"
+              if BAO_TOKEN="$token" bao kv get secret/ci/test >/dev/null 2>&1; then
+                echo "unexpected read of secret/ci/test" >&2
+                exit 1
+              fi
+              echo "denied outside secret/k8s/*: ok"
+              if BAO_TOKEN="$token" bao kv put secret/k8s/write-probe probe=x >/dev/null 2>&1; then
+                echo "unexpected write to secret/k8s" >&2
+                exit 1
+              fi
+              echo "denied write: ok"
+              BAO_TOKEN="$token" bao token revoke -self >/dev/null
+              echo "probe passed"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

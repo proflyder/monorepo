@@ -143,7 +143,8 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
 - HTTPS (LAN/VPN): `https://ha.home.example.com/`,
   `https://grafana.home.example.com/`,
   `https://alarms.home.example.com/` (scheduler),
-  `https://control.home.example.com/` (ha-control)
+  `https://control.home.example.com/` (ha-control),
+  `https://vault.home.example.com/` (OpenBao UI/API)
 - Grafana требует login; анонимный доступ выключен.
 - Matter не имеет отдельного LAN UI: используется HA add-on ingress.
 - Старый compatibility endpoint `http://192.0.2.27:8123` не используется;
@@ -173,8 +174,9 @@ VPN доступен из LAN по `https://192.0.2.29/` и снаружи по
 cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 `*.home.example.com` выпускается автоматически и продлевается cert-manager.
 
-- A-записи `ha`, `grafana`, `alarms`, `control` → `192.0.2.27`, Cloudflare
-  DNS only (не proxied), TTL auto; apex и прочие записи не меняются.
+- A-записи `ha`, `grafana`, `alarms`, `control`, `vault` → `192.0.2.27`,
+  Cloudflare DNS only (не proxied), TTL auto; apex и прочие записи не
+  меняются.
 - `80` редиректит на `443`; вход разрешён только LAN `192.0.2.0/24` (VPN
   приходит NAT-ом с LAN-адреса), pod CIDR и loopback.
 - HA видит источником адрес узла `192.0.2.27`; `trusted_proxies` не
@@ -182,6 +184,10 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 - WebSocket (`/api/websocket`, Grafana `/api/live/ws`) проходит через прокси.
 - Публикации в интернет нет: роутер по-прежнему не пробрасывает `80/443`;
   имена резолвятся в приватный адрес и работают только из LAN/VPN.
+- Группа VPN `ci` (CI) маршрутизируется только до `192.0.2.27`; nft
+  `forward` разрешает `tcp/{443,6443}`: `443` — Traefik (OpenBao API/UI для
+  GitHub OIDC), `6443` — K3s API. Остальные адреса и порты для пула
+  `10.77.1.0/24` закрыты.
 
 Управление и проверки — `projects/home/kubernetes/ingress/README.md` и
 `KUBERNETES-OPERATIONS.md`. Прямые LAN-адреса и NodePort остаются аварийным
@@ -218,6 +224,9 @@ curl -fsS -o /dev/null -w 'MA %{http_code}\n' \
 
 curl -fsS -o /dev/null -w 'HA https %{http_code}\n' \
   https://ha.home.example.com/
+
+curl -fsS -o /dev/null -w 'OpenBao %{http_code}\n' \
+  https://vault.home.example.com/v1/sys/health
 curl -fsS https://grafana.home.example.com/api/health
 ```
 

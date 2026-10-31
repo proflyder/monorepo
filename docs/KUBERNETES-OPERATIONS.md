@@ -12,7 +12,8 @@
     health exporter;
   - `monitoring`: kube-prometheus-stack, Loki, Alloy, Grafana;
   - `traefik`: ingress-контроллер, wildcard Certificate и IngressRoute;
-  - `cert-manager`: cert-manager и ACME solver Secrets.
+  - `cert-manager`: cert-manager и ACME solver Secrets;
+  - `openbao`: OpenBao (raft, UI, auth), см. `projects/home/kubernetes/openbao/`.
 - HAOS и add-ons MA/Matter — отдельная VM `.28`; в K3s их больше нет.
 - App PV — local-path, `Retain`; старые PV не удалять без проверки.
 
@@ -49,6 +50,9 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 
 - `/srv/k3s/runtime` — K3s data, containerd, datastore.
 - `/srv/k3s/volumes/hermes` — Hermes home, в Pod `/opt/data`.
+- `/srv/k3s/volumes/openbao{, -audit, -backups}` — OpenBao raft, audit-лог и
+  raft snapshots (PV `openbao-data`/`openbao-audit`/`openbao-backups`,
+  `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
 - `/opt/ricardo` удалён: ни один Pod/Deployment больше не ссылается на это
   дерево, запасных релизов на хосте нет. Откат — только digest-pinned образы
@@ -199,6 +203,21 @@ NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 `kubectl -n traefik get certificate,secret,ingressroute`,
 `kubectl -n traefik logs deploy/traefik`. Порты `80/443` на узле заняты
 Traefik — не запускать там второй прокси без остановки release.
+
+## OpenBao
+
+`openbao` namespace: StatefulSet `openbao-0`, raft на PV, декларативный
+файловый audit, UI/API `https://vault.home.example.com/` через Traefik.
+Auto-unseal — `static` seal (Secret `openbao-seal`), поэтому после рестарта
+пода распечатывание не требуется.
+
+```bash
+kubectl -n openbao get pod,pvc,cronjob
+kubectl -n openbao exec openbao-0 -- /bin/sh -ec 'BAO_ADDR=http://127.0.0.1:8200 bao status'
+kubectl -n openbao delete pod openbao-0   # OnDelete: применяет новый конфиг
+```
+
+Обновление/бутстрап/backup/восстановление — `projects/home/kubernetes/openbao/README.md`.
 
 ## Удалённый доступ
 
