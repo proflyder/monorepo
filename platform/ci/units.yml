@@ -47,6 +47,21 @@ invalidations:
   - paths:
       - requirements-test.txt
     platforms: [python, quality]
+  # A reusable workflow change must run the jobs it defines, otherwise a broken
+  # _go.yml/_android.yml passes PR CI unexercised.
+  - paths:
+      - .github/workflows/ci.yml
+    platforms: ["*"]
+  - paths:
+      - .github/workflows/_go.yml
+      - .github/workflows/_images.yml
+    platforms: [go]
+  - paths:
+      - .github/workflows/_android.yml
+    platforms: [android]
+  - paths:
+      - .github/workflows/_python.yml
+    platforms: [python]
   - paths:
       - .github/workflows/**
       - platform/ci/**
