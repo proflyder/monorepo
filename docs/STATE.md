@@ -66,8 +66,8 @@
   файловый audit на PV, UI включён.
 - Auto-unseal — встроенный `static` seal (ключ в Secret `openbao-seal`), после
   `kubectl delete pod` сервер распечатывается сам.
-- Auth: `userpass` (человек, политика `admin`; пароль задаёт человек, TOTP
-  зарегистрирован, enforcement ещё не включён), `jwt` `github` (GitHub OIDC,
+- Auth: `userpass` (человек, политика `admin`; пароль задаёт человек, TOTP-метод
+  создан, устройство не зарегистрировано, enforcement не включён), `jwt` `github` (GitHub OIDC,
   роль `deploy-home`, environment `Home`, ref `develop`, TTL ≤15 мин),
   `kubernetes` (TokenReview, роли `external-secrets`/`k8s-smoke`/`backup`).
 - KV v2 `secret/`: `secret/ci/test`, `secret/ci/deploy-home` и

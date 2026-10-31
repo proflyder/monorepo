@@ -6,9 +6,9 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **OpenBao TOTP enforcement.** TOTP-метод создан, устройство
-      зарегистрировано, но enforcement выключен.
-      Следующий шаг: включить
+- [ ] **OpenBao TOTP enforcement.** TOTP-метод создан, устройство ещё не
+      зарегистрировано, enforcement выключен. Следующий шаг: человек
+      регистрирует TOTP в UI (профиль → MFA), затем включить
       `./projects/home/kubernetes/openbao/bootstrap.sh --enforce-totp`
       (или API `identity/mfa/login-enforcement/userpass-totp`) и проверить
       вход с кодом и без него.
