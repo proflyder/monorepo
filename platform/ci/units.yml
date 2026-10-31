@@ -337,6 +337,15 @@ units:
       suites:
         - projects/home/kubernetes/scheduler
 
+  - id: currency-bot-deploy
+    platform: python
+    title: "projects/home/kubernetes/currency-bot (deploy script contract)"
+    paths:
+      - projects/home/kubernetes/currency-bot/**
+    python:
+      suites:
+        - projects/home/kubernetes/currency-bot
+
   - id: openbao
     platform: python
     title: "projects/home/kubernetes/openbao (config, CI OIDC secret hand-off)"

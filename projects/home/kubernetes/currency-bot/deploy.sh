@@ -58,7 +58,7 @@ fi
 env_value() {
   python3 - "$PRIVATE_ENV" "$1" <<'PY'
 import sys, pathlib
-path, key = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+path, key = pathlib.Path(sys.argv[1]), sys.argv[2]
 for line in path.read_text().splitlines():
     line = line.strip()
     if line and not line.startswith("#") and line.split("=", 1)[0] == key:
