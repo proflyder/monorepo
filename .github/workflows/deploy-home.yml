@@ -152,7 +152,8 @@ jobs:
     if: needs.plan.outputs.units != '[]' && needs.plan.outputs.units != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    environment: home
+    # OIDC `environment` claim keeps this exact casing; OpenBao binds "Home".
+    environment: Home
     permissions:
       contents: read
       packages: write
