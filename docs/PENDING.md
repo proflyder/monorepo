@@ -12,10 +12,6 @@
       `./projects/home/kubernetes/openbao/bootstrap.sh --enforce-totp`
       (или API `identity/mfa/login-enforcement/userpass-totp`) и проверить
       вход с кодом и без него.
-- [ ] **VPS: ротация пароля и key-only SSH.** Пароль был отправлен в чат;
-      сервисов на VPS больше нет (nginx отдаёт 404). Следующий шаг: сменить
-      пароль и включить вход только по ключу либо удалить VPS целиком
-      (решение владельца; домен тогда перевести на Cloudflare без A-записи).
 - [ ] **Offsite-бэкап с шифрованием.** Сейчас raft snapshots лежат на том же
       узле; HA/K3s/scheduler/`secrets/`, CA и recovery keys не вывозятся.
       Следующий шаг: выбрать offsite-назначение и ключ, вывозить OpenBao
@@ -121,10 +117,10 @@
       admin-токена перенести значения в `k8s/currency-bot/currency-bot` и
       `k8s/currency-bot/cloudflared`, обновить ExternalSecrets и проверить
       синхронизацию.
-- [ ] **Удалить неиспользуемый Unkey.** API currency-bot проверяет Bearer из
-      OpenBao, Unkey больше не нужен. Следующий шаг: убедиться, что других
-      клиентов нет, и удалить аккаунт/ключи.
 
+- [ ] **VPS: key-only SSH или удаление.** Пароль сменён (2026-10-31),
+      сервисов нет, nginx отдаёт 404. Следующий шаг: отключить вход по паролю
+      (`PasswordAuthentication no`) либо удалить VPS и A-запись домена.
 - [ ] **Потеря LAN станцией после reboot.** Роутер online, ARP/ADB/ESPHome
       недоступны, BLE Wi-Fi TIMEOUT; cold power cycle восстанавливает.
       Следующий шаг: собрать read-only диагностику
