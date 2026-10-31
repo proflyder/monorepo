@@ -50,4 +50,15 @@
     VPN `tcp/6443`. SSH, root-helper, hostPath и `/opt/ricardo` из пути
     деплоя удалены; NodePort-nft остаётся host-конфигурацией.
 
+18. **OpenBao — единственный секрет-сервер.** OpenBao 2.7 (chart и образ
+    по digest) в namespace `openbao`, UI/API — `vault` под приватным
+    суффиксом через Traefik и общий allow-list. Raft на локальном Retain-PV,
+    audit — файл на отдельном PV. Auto-unseal — встроенный `static` seal:
+    ключ в Secret на том же узле, чтобы перезагрузка не требовала человека
+    (компромисс до внешнего KMS; ключ не входит в snapshot). Человек —
+    `userpass` + TOTP, политика `admin` без `sys/seal`/`raw`/`rekey`; CI —
+    GitHub OIDC (repository, environment, ref `develop`, TTL ≤ 15 мин, только
+    `secret/ci/*`); поды — Kubernetes auth (только `secret/k8s/*`). Root-токен
+    отозван, recovery keys — только офлайн.
+
 Меняется решение — обновить этот файл и `STATE.md`.

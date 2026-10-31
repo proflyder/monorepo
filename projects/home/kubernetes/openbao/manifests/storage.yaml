@@ -1,0 +1,88 @@
+# Static local volumes for OpenBao. Applied by deploy.sh as a cluster admin
+# (the CI ServiceAccount never touches cluster-scoped objects).
+#
+# The directories live on the K3s node under /srv/k3s/volumes/. claimRef pins
+# each PersistentVolume to one PersistentVolumeClaim so a smaller request can
+# never bind the (larger) backup volume. The data/audit PVCs are created by the
+# chart's StatefulSet (`data-openbao-0`, `audit-openbao-0`).
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: openbao-data
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ricardo-existing
+  claimRef:
+    namespace: openbao
+    name: data-openbao-0
+  local:
+    path: /srv/k3s/volumes/openbao
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [__OPENBAO_NODE_NAME__]
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: openbao-audit
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ricardo-existing
+  claimRef:
+    namespace: openbao
+    name: audit-openbao-0
+  local:
+    path: /srv/k3s/volumes/openbao-audit
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [__OPENBAO_NODE_NAME__]
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: openbao-backups
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ricardo-existing
+  claimRef:
+    namespace: openbao
+    name: openbao-backups
+  local:
+    path: /srv/k3s/volumes/openbao-backups
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [__OPENBAO_NODE_NAME__]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openbao-backups
+  namespace: openbao
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ricardo-existing
+  resources:
+    requests:
+      storage: 20Gi

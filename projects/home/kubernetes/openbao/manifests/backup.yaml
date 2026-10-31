@@ -1,0 +1,78 @@
+# Nightly raft snapshot to the local `openbao-backups` volume.
+#
+# The job authenticates with the Kubernetes auth method (ServiceAccount
+# `openbao-backup`, role `backup`, policy `backup`), so no long-lived token is
+# stored anywhere. Snapshots are integrity-protected by OpenBao and can be
+# restored with `bao operator raft snapshot restore`.
+#
+# Keeps the newest 7 snapshots. Offsite/encrypted copy is an open item
+# (docs/PENDING.md): the volume is on the same node as the data.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-backup
+  namespace: openbao
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-raft-snapshot
+  namespace: openbao
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: openbao-backup
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: snapshot
+              image: "quay.io/openbao/openbao:__OPENBAO_IMAGE_TAG__"
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  umask 077
+                  token=$(bao write -field=token auth/kubernetes/login \
+                    role=backup jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token)
+                  ts=$(date -u +%Y%m%dT%H%M%SZ)
+                  BAO_TOKEN="$token" bao operator raft snapshot save "/backups/openbao-$ts.snap"
+                  BAO_TOKEN="$token" bao token revoke -self >/dev/null
+                  # Keep the newest seven snapshots.
+                  ls -1t /backups/*.snap 2>/dev/null | tail -n +8 | xargs -r rm -f
+                  test -s "/backups/openbao-$ts.snap"
+                  echo "raft snapshot written: openbao-$ts.snap"
+              env:
+                - name: BAO_ADDR
+                  value: "http://openbao.openbao.svc:8200"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: openbao-backups

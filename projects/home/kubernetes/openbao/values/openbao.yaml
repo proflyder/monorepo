@@ -1,0 +1,123 @@
+# OpenBao server for the home K3s node (single node, integrated raft storage).
+#
+# TLS terminates in Traefik: the pod listener is plain HTTP on 8200 and is
+# reachable only through the ClusterIP Service and the `vault` IngressRoute.
+# Auto-unseal uses the built-in `static` seal: the 32-byte key is mounted from
+# the `openbao-seal` Secret at /openbao/seal. The key therefore lives in the
+# same trust domain as the data (see the OpenBao section in docs/SECURITY.md).
+#
+# Chart version and image digest are pinned in
+# projects/home/kubernetes/versions.sh; deploy.sh renders the image tag.
+global:
+  enabled: true
+  tlsDisable: true
+
+# No sidecars, CSI provider or injector: the cluster does not consume them.
+injector:
+  enabled: false
+csi:
+  enabled: false
+
+server:
+  image:
+    registry: quay.io
+    repository: openbao/openbao
+    # Rendered as `2.7.2@sha256:…` by deploy.sh (immutable reference).
+    tag: "__OPENBAO_IMAGE_TAG__"
+    pullPolicy: IfNotPresent
+
+  logLevel: info
+  logFormat: json
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  # One pod: an anti-affinity term across hostnames is meaningless here.
+  affinity: ""
+
+  # RollingUpdate is unsafe for a single raft node; deploy.sh deletes the pod
+  # explicitly after a chart or configuration change.
+  updateStrategyType: OnDelete
+
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+
+      listener "tcp" {
+        address         = "[::]:8200"
+        cluster_address = "[::]:8201"
+        tls_disable     = 1
+      }
+
+      storage "raft" {
+        path    = "/openbao/data"
+        node_id = "openbao-0"
+      }
+
+      # Auto-unseal: after a node reboot the pod unseals itself without a
+      # person. The key is a Kubernetes Secret mounted read-only below.
+      seal "static" {
+        current_key_id = "static-1"
+        current_key    = "file:///openbao/seal/unseal.key"
+      }
+
+      # Declarative audit device (OpenBao 2.7 refuses API enablement). The
+      # device is (re)created on start and SIGHUP; logs stay on the audit PV.
+      audit "file" "file" {
+        options {
+          file_path = "/openbao/audit/audit.log"
+        }
+      }
+
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    mountPath: "/openbao/data"
+    storageClass: ricardo-existing
+
+  auditStorage:
+    enabled: true
+    size: 5Gi
+    mountPath: "/openbao/audit"
+    storageClass: ricardo-existing
+
+  # The seal key is a Secret, not a ConfigMap: it is never rendered into the
+  # Helm release or written to the repository.
+  volumes:
+    - name: seal
+      secret:
+        secretName: openbao-seal
+        defaultMode: 288 # 0440, readable by the pod's fsGroup
+  volumeMounts:
+    - name: seal
+      mountPath: /openbao/seal
+      readOnly: true
+
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 8200
+    targetPort: 8200
+    # The active/standby services are unused with one replica.
+    active:
+      enabled: false
+    standby:
+      enabled: false
+
+  # The chart binds the server ServiceAccount to system:auth-delegator, which
+  # is what the Kubernetes auth method needs for TokenReview.
+  authDelegator:
+    enabled: true
+
+  networkPolicy:
+    enabled: false
+
+  # OpenBao keeps no liveness probe by default; the readiness probe already
+  # gates the Service.
+  livenessProbe:
+    enabled: false

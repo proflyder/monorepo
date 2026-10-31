@@ -49,9 +49,9 @@ previously installed /etc/ocserv/ssl/client-ca.pem exists). Password + TOTP
 stays enabled in every case.
 
 With --ci-host a certificate whose OU is `ci` gets its own pool, a route only
-to ADDRESS/32, no DNS, and firewall rules that allow only ADDRESS tcp/6443
-(the K3s API, used by kubectl; no SSH). The general `lan`/`full` pool is never
-widened to the ci pool.
+to ADDRESS/32, no DNS, and firewall rules that allow only ADDRESS tcp/443
+(Traefik, for OpenBao over HTTPS) and tcp/6443 (the K3s API, used by kubectl;
+no SSH). The general `lan`/`full` pool is never widened to the ci pool.
 EOF
 }
 
@@ -271,9 +271,10 @@ CI_NFT_FORWARD=
 CI_NFT_NAT=
 if [[ -n $CI_HOST ]]; then
   CI_NFT_FORWARD=$(cat <<EOF
-    # CI pool: exactly one target (the K3s API) and nothing else. This rule sits
-    # before the general pool accept; the pools do not overlap.
-    ip saddr $CI_CIDR iifname "vpns*" oifname "$IFACE" ip daddr $CI_HOST tcp dport 6443 accept
+    # CI pool: two targets only, the K3s API and HTTPS (Traefik, used for
+    # OpenBao CI auth). This rule sits before the general pool accept; the
+    # pools do not overlap.
+    ip saddr $CI_CIDR iifname "vpns*" oifname "$IFACE" ip daddr $CI_HOST tcp dport { 443, 6443 } accept
     ip saddr $CI_CIDR drop
 EOF
 )

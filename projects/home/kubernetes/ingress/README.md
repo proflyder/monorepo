@@ -15,6 +15,10 @@ NodePort не удаляются и остаются аварийным путё
 | Certificate `home-wildcard` | `traefik` | `*.home.example.com` → Secret `home-wildcard-tls` |
 | IngressRoute ×4 | `traefik` | маршруты к Service в `monitoring`/`home-assistant` |
 
+Маршрут `vault.<домен>` и его DNS-запись обслуживает
+`projects/home/kubernetes/openbao/deploy.sh` — тот же namespace, allow-list и
+wildcard-сертификат.
+
 Traefik работает в `hostNetwork` и слушает 80/443 на узле K3s. Поэтому HA
 видит источником `192.0.2.27` (адрес узла) и продолжает доверять
 `http.trusted_proxies: 192.0.2.27/32`; расширять `trusted_proxies` до pod-CIDR

@@ -101,10 +101,10 @@ CRL достаточно reload. Проверка конфигурации — `
 ### Доступ CI (`ci-deploy`)
 
 GitHub Actions ходит в дом только сертификатом группы `ci` (свой пул, маршрут
-только до K3s, nft разрешает лишь `tcp/6443`) и работает kubectl под
-ServiceAccount `ci-deploy` в `home-assistant`. SSH и root-helper на узле
-отсутствуют; узел принимает `6443` только с адреса VPN-CT (пул `ci`
-маскируется в него).
+только до K3s, nft разрешает лишь `tcp/{443,6443}` — Traefik для OpenBao и
+K3s API) и работает kubectl под ServiceAccount `ci-deploy` в
+`home-assistant`. SSH и root-helper на узле отсутствуют; узел принимает
+`6443` только с адреса VPN-CT (пул `ci` маскируется в него).
 
 ```bash
 # 1. отозвать сертификат CI (CRL обновится на CT, ocserv перезагрузится)
@@ -187,6 +187,39 @@ KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n cert-manager get ch
 
 Реальные имена и LAN_CIDR — `secrets/home/ingress.env`; токен Cloudflare —
 `secrets/home/vpn/cloudflare.env` (не печатать).
+
+## OpenBao
+
+UI/API — `https://vault.<home-domain>/` (LAN/VPN), файлы —
+`projects/home/kubernetes/openbao/`, подробности — его `README.md`.
+
+```bash
+export KUBECONFIG=secrets/kubernetes-research/kubeconfig
+
+# состояние и логи
+kubectl -n openbao get pod,svc,pvc
+kubectl -n openbao exec openbao-0 -- /bin/sh -ec \
+  'BAO_ADDR=http://127.0.0.1:8200 bao status'
+kubectl -n openbao logs openbao-0 --tail=50
+
+# раскатать конфигурацию (chart/values меняются — только через deploy.sh)
+./projects/home/kubernetes/openbao/deploy.sh
+./projects/home/kubernetes/openbao/bootstrap.sh   # идемпотентно; нужен admin-токен
+./projects/home/kubernetes/openbao/verify.sh --kubernetes
+
+# рестарт (auto-unseal, без человека)
+kubectl -n openbao delete pod openbao-0
+
+# snapshot вручную
+kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
+kubectl -n openbao logs job/snapshot-manual
+```
+
+Временный пароль человека — `secrets/openbao/human.pass` (600), сменить в
+UI. Recovery keys и root-токен bootstrap — `secrets/openbao/init.json` (600);
+root уже отозван, новый выпускается `bao operator generate-root` из recovery
+keys. GitHub-секреты environment `Home` для smoke: `OPENBAO_ADDR` и
+(опционально) `OPENBAO_ROLE`.
 
 ## K3s
 

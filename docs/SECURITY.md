@@ -69,6 +69,37 @@
 
 Не коммитить, не синхронизировать без шифрования, не печатать в чат.
 
+## OpenBao
+
+- UI/API — `https://vault.<home-suffix>/`, только LAN/VPN через Traefik и
+  `home-allowlist`; listener внутри кластера без TLS.
+- Auto-unseal — встроенный `static` seal: 32-байтный ключ в Kubernetes Secret
+  `openbao-seal` на том же узле, что и raft-данные. Это компромисс ради
+  перезагрузки без человека: компромисс узла даёт и ключ, и данные. Ключ не
+  копируется в snapshot; при появлении внешнего KMS/HSM/transit перейти на
+  него (предложение — в отчёте, `docs/DECISIONS.md` обновляет primary).
+- Recovery keys (5/3) и начальный root-токен — только
+  `secrets/openbao/init.json` (600). Root-токен после bootstrap отозван;
+  новый выпускается процедурой `generate-root` из recovery keys. Recovery
+  keys хранить офлайн/в менеджере паролей, не на узле.
+- Человек: `userpass` (имя — `secrets/openbao/username`) → политика `admin` с запретом
+  `sys/seal`, `sys/step-down`, `sys/raw/*`, `sys/replication/*`,
+  `sys/rotate`, `sys/rekey*`. TOTP-метод создан, enforcement включается после
+  регистрации устройства (`docs/PENDING.md`).
+- CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
+  issuer `https://token.actions.githubusercontent.com`, audience = адрес
+  OpenBao, claims `repository`, `environment=Home`, `ref=refs/heads/develop`,
+  TTL 10/15 мин, политика `ci-deploy` — read только `secret/ci/*`.
+- Поды: `kubernetes` auth через TokenReview (`system:auth-delegator` на SA
+  `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
+  `external-secrets` подготовлена, ESO ещё не включён.
+- Audit — декларативный файловый девиз на отдельном PV; лог не публикуется и
+  может содержать пути/metadata запросов.
+- Backup — raft snapshot в локальный PV на том же узле; offsite-копия пока
+  открытый пункт, восстановление на отдельном стенде не проверялось.
+- Секреты приложений в OpenBao не переносились; HA/Hermes/scheduler
+  продолжают использовать Kubernetes Secrets.
+
 ## HA / MCP / LLM
 
 - MCP-токены — минимальные права; опасные действия — с подтверждением.
@@ -85,9 +116,10 @@
 - `labuser` с sudo NOPASSWD — root-эквивалент; убрать при многопользовательском
   доступе.
 - CI не имеет SSH и root на узлах: группа `ci` маршрутизируется только до
-  `K3S_NODE:6443`, VPN nft разрешает только этот порт, а узел принимает
-  `6443` лишь с адреса VPN-CT (пул `ci` маскируется в него). Пользователь
-  `ci-deploy` и root-helper удалены с узла.
+  `K3S_NODE`, VPN nft разрешает только `tcp/{443,6443}` (443 — Traefik для
+  OpenBao OIDC, 6443 — API), а узел принимает `6443` лишь с адреса VPN-CT
+  (пул `ci` маскируется в него). Пользователь `ci-deploy` и root-helper
+  удалены с узла.
 - Kubeconfig CI — ServiceAccount `ci-deploy` только в `home-assistant`
   (Role, не ClusterRole): нет других namespace и cluster-scoped объектов;
   добавлены только `batch/jobs` для in-cluster preflight. API доступен

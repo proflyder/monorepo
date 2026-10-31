@@ -307,3 +307,6 @@ units:
       - requirements-test.txt
       - .gitleaks.toml
       - "**/*.sh"
+      # Infrastructure bootstrap helpers written in Python; the shell
+      # entrypoints that call them are covered by `**/*.sh` above.
+      - projects/home/kubernetes/openbao/configure.py
