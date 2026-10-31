@@ -50,7 +50,12 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["external-secrets.io"]
     resources: ["externalsecrets"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch"]
+  # deploy.sh owns this namespace's NetworkPolicies (webhook only from
+  # cloudflared); they are namespaced, so the grant stays inside currency-bot.
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["monitoring.coreos.com"]
     resources: ["servicemonitors"]
     verbs: ["get", "list", "create", "update", "patch"]
