@@ -1,6 +1,7 @@
 """Render contracts that protect state and dashboard delivery during upgrades."""
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -58,6 +59,98 @@ class ChartContracts(unittest.TestCase):
                 self.assertNotIn(dashboard["uid"], uids)
                 uids.add(dashboard["uid"])
                 self.assertTrue(dashboard["panels"])
+
+
+def _hcl_unescape(value):
+    """Decode the small HCL string escape subset used by the Alloy config."""
+    return re.sub(
+        r"\\(.)",
+        lambda m: {"n": "\n", "t": "\t", "r": "\r"}.get(m.group(1), m.group(1)),
+        value,
+    )
+
+
+class AlloyPrivacy(unittest.TestCase):
+    """Alloy redaction is the only privacy boundary for the collected pod logs."""
+
+    @classmethod
+    def setUpClass(cls):
+        root = HERE.parents[2]
+        values = yaml.safe_load(
+            (root / "platform/observability/values/alloy.yaml").read_text()
+        )
+        cls.content = values["alloy"]["configMap"]["content"]
+        cls.rules = []
+        for block in re.findall(r"stage\.replace\s*\{\n(.*?)\n\s*\}", cls.content, re.S):
+            expression = re.search(r'expression\s*=\s*"((?:[^"\\]|\\.)*)"', block)
+            replacement = re.search(r'replace\s*=\s*"((?:[^"\\]|\\.)*)"', block)
+            cls.rules.append(
+                (_hcl_unescape(expression.group(1)), _hcl_unescape(replacement.group(1)))
+            )
+
+    def redact(self, line):
+        # Alloy's stage.replace substitutes capture groups, not the whole match;
+        # an expression without a group would redact nothing.
+        for expression, replacement in self.rules:
+            pattern = re.compile(expression)
+            self.assertGreater(pattern.groups, 0, expression)
+
+            def sub(match, replacement=replacement):
+                text, start = match.group(0), match.start(0)
+                out, pos = [], 0
+                for g in range(1, pattern.groups + 1):
+                    if match.start(g) < 0:
+                        continue
+                    a, b = match.start(g) - start, match.end(g) - start
+                    out.append(text[pos:a] + replacement)
+                    pos = b
+                return "".join(out) + text[pos:]
+
+            line = pattern.sub(sub, line)
+        return line
+
+    def test_replacement_stages_are_configured(self):
+        self.assertGreaterEqual(len(self.rules), 2)
+
+    def test_currency_bot_namespace_is_collected(self):
+        keep = re.search(
+            r'source_labels = \["__meta_kubernetes_namespace"\]\s*'
+            r'regex = "([^"]+)"',
+            self.content,
+        )
+        self.assertIn("currency-bot", keep.group(1).split("|"))
+
+    def test_telegram_bot_token_is_redacted(self):
+        secret = "TESTTESTTESTTESTTESTTESTTESTTESTTES"
+        self.assertEqual(len(secret), 35)
+        token = f"000000000:{secret}"
+        output = self.redact(
+            "level=ERROR msg=send_failed "
+            f"url=https://api.telegram.org/bot{token}/sendMessage"
+        )
+        self.assertNotIn(token, output)
+        self.assertNotIn(secret, output)
+        self.assertIn("[REDACTED]", output)
+
+    def test_bearer_token_is_redacted(self):
+        output = self.redact(
+            'level=WARN msg="request" header="Authorization: Bearer test-bearer-value"'
+        )
+        self.assertNotIn("test-bearer-value", output)
+
+    def test_key_value_secret_is_redacted(self):
+        output = self.redact(
+            'level=INFO msg=config token="test-api-token" password=test-password'
+        )
+        self.assertNotIn("test-api-token", output)
+        self.assertNotIn("test-password", output)
+
+    def test_ordinary_logs_are_unchanged(self):
+        line = (
+            'level=INFO msg="rate updated" event=currency_rate_updated '
+            "currency_from=USD currency_to=KZT"
+        )
+        self.assertEqual(self.redact(line), line)
 
 
 if __name__ == "__main__":
