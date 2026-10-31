@@ -1,4 +1,4 @@
-# OpenBao (этапы 1–2: секрет-сервер, UI, CI/поды и External Secrets)
+# OpenBao (этапы 1–3: секрет-сервер, UI, CI/поды, External Secrets)
 
 Один сервер OpenBao `2.7.2` (chart `openbao/openbao 0.30.6`) в namespace
 `openbao` на узле K3s. UI/API опубликованы как
@@ -6,7 +6,9 @@
 остальные домашние сервисы. Этап 1 поднимает хранилище, вход человеком и
 машинные auth-методы. Этап 2 (External Secrets Operator) переносит
 приложенческие Kubernetes Secrets в KV v2 `secret/k8s/*`; см.
-`projects/home/kubernetes/external-secrets/README.md`.
+`projects/home/kubernetes/external-secrets/README.md`. Этап 3 переносит
+секреты CI-деплоя из GitHub Environment в `secret/ci/deploy-home`: GitHub
+хранит только то, что нужно до входа в OpenBao (VPN и адрес сервера).
 
 Публичные примеры используют `home.example.com` и `192.0.2.0/24`. Реальные
 имена — `secrets/home/ingress.env`, данные bootstrap — `secrets/openbao/`.
@@ -36,6 +38,8 @@ projects/home/kubernetes/openbao/
   deploy.sh          namespace, seal Secret, PV/PVC, helm, DNS, IngressRoute
   bootstrap.sh       operator init (один раз), configure.py, отзыв root-токена
   configure.py       KV v2, auth-методы, политики, роли, тестовые записи, TOTP
+  ci_secrets.py      материализация secret/ci/deploy-home в файлы 600 (CI)
+  test_ci_secrets.py контракты материализации и маскирования
   verify.sh          HTTPS/UI/логин/политики (+ --kubernetes: под-проба)
   values/openbao.yaml
   manifests/storage.yaml        PV data/audit/backups
@@ -159,8 +163,11 @@ OpenBao поддерживает login MFA. `configure.py` создаёт мет
 | `kubernetes` | smoke-под | `k8s-smoke` | `k8s-read` |
 | `kubernetes` | CronJob backup | `backup` | `backup` |
 
-`ci-deploy`: read `secret/data/ci/*`, list/read metadata `secret/metadata/ci*`;
-запись и любой другой namespace запрещены.
+`ci-deploy`: read ровно `secret/data/ci/test` и
+`secret/data/ci/deploy-home`; list `secret/metadata/ci` и read metadata этих
+двух записей; запись, другие пути и другой namespace запрещены. Политика
+намеренно перечисляет пути явно: новая запись `secret/ci/<name>` требует
+правки `configure.py` и повторного применения.
 
 `k8s-read`: read `secret/data/k8s/*`, list/read metadata; запись запрещена.
 
@@ -181,8 +188,10 @@ OpenBao поддерживает login MFA. `configure.py` создаёт мет
 каноническое имя; в OIDC-токене для environment-джобы
 `sub=repo:<owner>/<repo>:environment:Home`.
 
-Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}`, `secret/k8s/test` →
-`{probe: ok-k8s}`. Значения не секретные и нужны только для smoke-проверок.
+Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}`,
+`secret/ci/deploy-home` → `{kubeconfig, scheduler_env, runtime_values}` (см.
+«CI-секреты»), `secret/k8s/test` → `{probe: ok-k8s}`. Значения `test`
+не секретные и нужны только для smoke-проверок.
 
 ## Kubernetes auth
 
@@ -230,16 +239,73 @@ kubectl -n <ns> annotate externalsecret <name> force-sync="$(date +%s)" --overwr
 
 ## CI (GitHub OIDC)
 
-Workflow `.github/workflows/openbao-smoke.yml` (`workflow_dispatch`,
-`environment: Home`, `permissions: id-token: write`) подключается к VPN
-группой `ci`, берёт OIDC-токен с audience `OPENBAO_ADDR`, логинится ролью
-`deploy-home`, читает `secret/ci/test` и проверяет запреты. Значения не
-печатаются.
+### CI-секреты (этап 3)
 
-Нужные секреты environment `Home` (задаёт primary, в Git их нет):
-`OPENBAO_ADDR` — базовый URL **без завершающего слэша** (например
-`https://vault.example.home`), он же служит audience; и, если роль называется
-иначе, `OPENBAO_ROLE`. VPN-секреты уже используются deploy-home.
+В GitHub Environment `Home` остаются только значения, нужные до входа в
+OpenBao:
+
+| Secret | Зачем |
+|---|---|
+| `VPN_SERVER`, `VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD` | подключение в VPN-группу `ci` |
+| `OPENBAO_ADDR` | базовый URL без завершающего слэша; он же audience OIDC |
+| `OPENBAO_ROLE` | опционально, по умолчанию `deploy-home` |
+
+Остальные значения лежат в OpenBao в одной записи `secret/ci/deploy-home`
+(KV v2, исходный текст, не base64; многострочные значения — с переводами
+строк):
+
+| Ключ | Файл в CI (`$RUNNER_TEMP/ci`, 600) | Кто использует |
+|---|---|---|
+| `kubeconfig` | `kubeconfig` | все deploy-юниты (kubectl/helm/smoke) |
+| `scheduler_env` | `scheduler.env` | bazel-юниты (`scheduler`, `ha-bridge`) |
+| `runtime_values` | `runtime-values.yaml` | docker-юнит `hermes` (rollout/откат) |
+
+`K3S_NODE` в GitHub больше не нужен: VPN-проверка идёт через
+`$OPENBAO_ADDR/v1/sys/health`, а адрес API уже внутри kubeconfig. GitHub
+хранит только то, без чего не дойти до OpenBao; `kubeconfig`,
+`scheduler_env` и `runtime_values` удаляются из Environment после первого
+успешного прогона.
+
+Запись и обновление (нужен admin/root-токен, после работы отозвать):
+
+```bash
+export BAO_ADDR=https://vault.<home-domain>
+export BAO_TOKEN=...            # admin-токен, не печатать
+jq -n \
+  --rawfile kubeconfig secrets/ci/github/kubeconfig.yaml \
+  --rawfile scheduler_env secrets/home/scheduler.env \
+  --rawfile runtime_values "$RUNTIME_PRIVATE_VALUES" \
+  '{data: {kubeconfig: $kubeconfig, scheduler_env: $scheduler_env,
+           runtime_values: $runtime_values}}' \
+| curl -sS --fail -X POST -H "X-Vault-Token: $BAO_TOKEN" \
+    --data-binary @- "$BAO_ADDR/v1/secret/data/ci/deploy-home" >/dev/null
+```
+
+`jq --rawfile` сохраняет переводы строк байт-в-байт; после записи сверить
+SHA-256 прочитанного значения с локальным файлом. Ротация значения не меняет
+workflow: обновить ключ, при необходимости перезапустить `deploy-home`
+(токен роли живёт ≤15 мин и не хранится).
+
+### Поток deploy-home
+
+`deploy-home.yml` (`environment: home`, `permissions: id-token: write` только
+у deploy-джобы; у `plan` секретов нет) выполняет шаги строго по порядку:
+
+1. материализует VPN-сертификат и пароль в `$RUNNER_TEMP/ci` (600);
+2. поднимает VPN-группу `ci` и ждёт `200/…` от `$OPENBAO_ADDR/v1/sys/health`;
+3. запрашивает GitHub OIDC-токен с audience `OPENBAO_ADDR`, логинится в
+   `auth/github` ролью `deploy-home`, читает `secret/ci/deploy-home`;
+4. `ci_secrets.py` пишет только нужные юниту файлы (600) и регистрирует
+   `::add-mask::` для каждой значимой строки значения; сами значения в лог не
+   печатаются;
+5. отдельный шаг `if: always()` отзывает токен OpenBao (`revoke-self`);
+6. дальше — прежние kubectl/helm шаги, smoke и откат; cleanup удаляет
+   `$RUNNER_TEMP/ci`.
+
+Политика `ci-deploy` допускает только read `secret/ci/test` и
+`secret/ci/deploy-home` (плюс metadata); запись и `secret/k8s/*` запрещены —
+это проверяет `openbao-smoke.yml`, который также убеждается, что в
+`secret/ci/deploy-home` есть все три ключа (печатаются только имена ключей).
 
 Сеть: группа `ci` пула `10.77.1.0/24` маршрутизируется только до узла K3s,
 nftables `forward` разрешает `tcp/{443,6443}`, `postrouting` маскирует в адрес
@@ -281,7 +347,8 @@ kubectl -n openbao exec openbao-0 -- \
   unseal, затем убрать `previous_key` и перезапустить.
 - **Пароль человека**: UI или API; файл `human.pass` обновить.
 - **CI**: смена role/audience — правка `configure.py`, повторный запуск; токены
-  живут ≤15 мин и не хранятся.
+  живут ≤15 мин и не хранятся. Смена значений деплоя — обновление
+  `secret/ci/deploy-home` (см. «CI-секреты»), workflow не меняется.
 - **Root**: только через recovery keys (`generate-root`), после работ токен
   отозвать.
 - **Приложенческие секреты**: менять значение в OpenBao
@@ -294,6 +361,7 @@ kubectl -n openbao exec openbao-0 -- \
 ```bash
 export KUBECONFIG=/private/path/kubeconfig
 ./projects/home/kubernetes/openbao/verify.sh --kubernetes
+python3 -m unittest discover -s projects/home/kubernetes/openbao -p 'test_*.py'
 kubectl -n openbao get pod,svc,pvc
 kubectl -n traefik get ingressroute openbao
 kubectl -n openbao logs openbao-0 --tail=50

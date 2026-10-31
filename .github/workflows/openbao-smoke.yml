@@ -131,6 +131,25 @@ jobs:
           print("read secret/ci/test: ok; keys:", sorted(data))
           PY
 
+      - name: Read secret/ci/deploy-home (key names only)
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/openbao-smoke"
+          code=$(curl -sS -o "$CI_DIR/deploy-home.json" -w '%{http_code}' \
+            -H "X-Vault-Token: $OPENBAO_TOKEN" \
+            "$OPENBAO_ADDR/v1/secret/data/ci/deploy-home")
+          test "$code" = "200" || { echo "read secret/ci/deploy-home failed with HTTP $code" >&2; exit 1; }
+          python3 - "$CI_DIR/deploy-home.json" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1]))["data"]["data"]
+          required = {"kubeconfig", "scheduler_env", "runtime_values"}
+          missing = required - set(data)
+          assert not missing, f"secret/ci/deploy-home is missing: {sorted(missing)}"
+          assert all(isinstance(data[key], str) and data[key] for key in required)
+          print("read secret/ci/deploy-home: ok; keys:", sorted(data))
+          PY
+          rm -f "$CI_DIR/deploy-home.json"
+
       - name: Policy boundary (must be denied)
         run: |
           set -euo pipefail

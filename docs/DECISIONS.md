@@ -58,7 +58,7 @@
     (компромисс до внешнего KMS; ключ не входит в snapshot). Человек —
     `userpass` + TOTP, политика `admin` без `sys/seal`/`raw`/`rekey`; CI —
     GitHub OIDC (repository, environment, ref `develop`, TTL ≤ 15 мин, только
-    `secret/ci/*`); поды — Kubernetes auth (только `secret/k8s/*`). Root-токен
-    отозван, recovery keys — только офлайн.
+    `secret/ci/{test,deploy-home}`); поды — Kubernetes auth (только
+    `secret/k8s/*`). Root-токен отозван, recovery keys — только офлайн.
 
 Меняется решение — обновить этот файл и `STATE.md`.

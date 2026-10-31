@@ -140,9 +140,16 @@
       `ci-deploy` в `home-assistant`, `deploy-home.yml` с планировщиком по
       затронутым деплоимым юнитам (preserve по push, ручные
       execute/shadow/control-* через `workflow_dispatch`) и авто-откат.
-      Осталось: загрузить секреты `secrets/ci/github/` в Environment `home`
-      (включая новый `RUNTIME_VALUES_B64`), сделать GHCR-пакеты публичными и
-      проверить первый прогон на GitHub.
+      Осталось: сделать GHCR-пакеты публичными и проверить первый прогон на
+      GitHub.
+- [ ] Этап 3 OpenBao (реализовано локально, ждёт прогона primary): значения
+      `kubeconfig`, `scheduler_env`, `runtime_values` записаны в
+      `secret/ci/deploy-home`, политика `ci-deploy` сужена до
+      `secret/ci/{test,deploy-home}` и применена live; `deploy-home` читает их
+      по OIDC после VPN и отзывает токен. Нужен `workflow_dispatch`
+      (`units=all`, `mode=preserve`) и `openbao-smoke`; после успеха удалить из
+      Environment `Home` секреты `KUBECONFIG_B64`, `SCHEDULER_ENV_B64`,
+      `RUNTIME_VALUES_B64`, `K3S_NODE`.
 - [ ] Pulsar собирается и релизится в своём репозитории, монорепо деплоит
       релиз на станцию через Environment с ручным approve; конфиг HA — по
       решению.

@@ -65,7 +65,12 @@
   политика `admin`), `jwt` `github` (GitHub OIDC, роль
   `deploy-home`, environment `Home`, ref `develop`, TTL ≤15 мин), `kubernetes`
   (TokenReview, роли `external-secrets`/`k8s-smoke`/`backup`). KV v2 `secret/`
-  с `secret/ci/test` и `secret/k8s/test`. Ночной CronJob raft snapshot в
+  с `secret/ci/test`, `secret/ci/deploy-home` и `secret/k8s/test`.
+  `secret/ci/deploy-home` (`kubeconfig`, `scheduler_env`, `runtime_values`)
+  заменил одноимённые GitHub-секреты: `deploy-home` входит по OIDC после VPN,
+  читает запись, материализует файлы 600, маскирует значения и отзывает токен;
+  политика `ci-deploy` — read только `secret/ci/test` и
+  `secret/ci/deploy-home`. Ночной CronJob raft snapshot в
   `/srv/k3s/volumes/openbao-backups` (7 файлов). Root-токен отозван,
   recovery keys — только `secrets/openbao/`.
 - External Secrets Operator `2.14.0` (chart `2.14.0`, образ по digest) в

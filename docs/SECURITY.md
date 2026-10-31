@@ -89,7 +89,8 @@
 - CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
   OpenBao, claims `repository`, `environment=Home`, `ref=refs/heads/develop`,
-  TTL 10/15 мин, политика `ci-deploy` — read только `secret/ci/*`.
+  TTL 10/15 мин, политика `ci-deploy` — read только `secret/ci/test` и
+  `secret/ci/deploy-home`.
 - Поды: `kubernetes` auth через TokenReview (`system:auth-delegator` на SA
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
   `external-secrets` используется External Secrets Operator (namespace
@@ -133,9 +134,14 @@
 - Образы неизменяемы и адресуются по digest; GHCR-пакеты должны быть
   публичными (pull без секрета), push выполняет job-scoped `GITHUB_TOKEN`
   с `packages: write` только в deploy-джобе.
-- Секреты Environment `home` (VPN p12/пароль, kubeconfig, env) загружаются
-  primary вручную через `gh`; в Git их нет. HA/scheduler токены CI больше не
-  нужны: preflight выполняется Job-ом в кластере.
+- Секреты Environment `Home` (VPN p12/пароль, `OPENBAO_ADDR`, `OPENBAO_ROLE`)
+  загружаются primary вручную через `gh`; в Git их нет. Всё, что нужно только
+  после входа в OpenBao (`kubeconfig`, `scheduler.env`, runtime values),
+  хранится в `secret/ci/deploy-home`, читается по GitHub OIDC ролью
+  `deploy-home` (политика `ci-deploy`: read только `secret/ci/test` и
+  `secret/ci/deploy-home`) и материализуется в файлы 600 с маскированием
+  значений; токен отзывается в `if: always()`. HA/scheduler токены CI больше
+  не нужны: preflight выполняется Job-ом в кластере.
 
 ## Логи / публикация
 

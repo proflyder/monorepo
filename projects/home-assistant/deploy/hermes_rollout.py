@@ -4,7 +4,8 @@
 deploy-home builds the two images, then calls this script with the digests it
 pushed. The script owns the risky part of the rollout:
 
-1. read the full private runtime values from the `RUNTIME_VALUES_B64` secret;
+1. read the full private runtime values from the file materialised from
+   OpenBao `secret/ci/deploy-home` key `runtime_values`;
 2. if neither live image differs from the requested digest, exit without an
    upgrade (a build that did not change the voice images must not restart it);
 3. remove the `storage` block and hand the workload values to `helm upgrade`,

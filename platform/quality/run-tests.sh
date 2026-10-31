@@ -12,7 +12,7 @@ skip() {
   echo "SKIP: $*"
 }
 
-for suite in projects/home-assistant/ha-voice projects/home-assistant/hermes projects/home-assistant/stack projects/home-assistant/deploy projects/home/proxmox projects/station/scripts projects/station/tools/voice-recorder projects/station/tools/wakeword-personalize platform/quality platform/ci; do
+for suite in projects/home-assistant/ha-voice projects/home-assistant/hermes projects/home-assistant/stack projects/home-assistant/deploy projects/home/proxmox projects/home/kubernetes/openbao projects/station/scripts projects/station/tools/voice-recorder projects/station/tools/wakeword-personalize platform/quality platform/ci; do
   echo "== Python: $suite =="
   python3 -m unittest discover -s "$suite" -p 'test_*.py' -v
 done
