@@ -272,6 +272,7 @@ jobs:
           ONLY="${{ matrix.workloads }}"
           KUBECONFIG="$CI_DIR/kubeconfig" \
           PRIVATE_ENV="$CI_DIR/scheduler.env" \
+          DEPLOY_STATE_DIR="$CI_DIR/deploy-state" \
           PUSH_IMAGES=1 \
           IMAGE_TAG="$GITHUB_SHA" \
           ONLY="${ONLY// /,}" \
@@ -326,12 +327,13 @@ jobs:
           set +e
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
-          for workload in ${{ matrix.workloads }}; do
-            if kubectl -n home-assistant get deployment "$workload" >/dev/null 2>&1; then
-              kubectl -n home-assistant rollout undo "deployment/$workload" || true
-              kubectl -n home-assistant rollout status "deployment/$workload" --timeout=180s || true
-            fi
-          done
+          # Restore only what this job actually applied, to the exact recorded
+          # spec. A failure during build/push/render leaves no `.applied`
+          # marker and must not touch the running Deployments.
+          python3 projects/home/kubernetes/scheduler/rollback.py \
+            --state-dir "$CI_DIR/deploy-state" \
+            --namespace home-assistant \
+            --kubectl kubectl | tee "$RUNNER_TEMP/rollback.log"
 
       - name: Summary
         if: always()

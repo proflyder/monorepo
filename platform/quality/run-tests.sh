@@ -20,7 +20,7 @@ done
 # Scheduler deployment helpers: real preflight regression and the mocked-kubectl
 # control-mode test (the shell test is not covered by unittest discovery).
 echo "== Scheduler deployment: preflight =="
-(cd projects/home/kubernetes/scheduler && python3 -m unittest test_preflight.py -v)
+(cd projects/home/kubernetes/scheduler && python3 -m unittest test_preflight.py test_rollback.py -v)
 
 # The control-mode regression drives deploy.sh --skip-build with pre-resolved
 # image digests, so it needs neither Bazel nor release binaries in dist/.

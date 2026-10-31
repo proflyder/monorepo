@@ -14,7 +14,7 @@
 # tracked `projects/home-assistant/hermes/voice_proxy.py`.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 IMAGES_DIR="$ROOT/projects/home-assistant/deploy/images"
 HERMES_DIR="$ROOT/projects/home-assistant/hermes"
 REGISTRY=${REGISTRY:-"ghcr.io/proflyder"}

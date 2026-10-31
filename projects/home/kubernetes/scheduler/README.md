@@ -51,6 +51,7 @@ render.py                       strict ${VAR} renderer (unknown/empty => fail)
 deploy.sh                       build/push/import images, apply, mode transitions
 backup.sh                       quiesced SQLite + ledger backup with checksums
 preflight.py                    safety preflight (retired writers absent/off, scheduler ready)
+rollback.py                     restore exactly the Deployments this deploy applied
 ci/rbac.yaml                    ServiceAccount/Role for CI kubectl
 ```
 
@@ -212,8 +213,20 @@ kubectl only — no SSH and no root helper.
 - Each job logs in to GHCR with the job-scoped `GITHUB_TOKEN`
   (`packages: write` on that job only), runs `deploy.sh` with `PUSH_IMAGES=1`
   and `PREFLIGHT_IN_CLUSTER=1`, then verifies rollout, `-healthcheck`,
-  `-status` and both NodePorts. On failure it runs `kubectl rollout undo` for
-  the unit's Deployments.
+  `-status` and both NodePorts.
+- Images are pushed with the `rules_oci` `oci_push` targets (crane), not
+  `docker push`: crane stores the exact OCI manifest that was built, so the
+  registry digest equals the built digest. `deploy.sh` fails if they differ —
+  this is what "deploy exactly the pushed digest" means. (A `docker push`
+  rewrites the manifest into Docker media types and can add an attestation
+  index, which changes the digest.)
+- Rollback is driven by recorded state, not `kubectl rollout undo`.
+  `deploy.sh` captures each Deployment before it changes it
+  (`<name>.before.json`, or `<name>.absent`) and writes `<name>.applied` only
+  after the apply/patch succeeds. `rollback.py` restores the remembered spec
+  with a merge patch, and only when the generation actually changed. A failure
+  during build, push, rendering or preflight leaves no marker, so the live
+  Deployments are untouched.
 - Push runs preserve mode only; `execute`, `shadow`, `control-execute`
   and `control-catalog` are manual `workflow_dispatch` inputs for the
   `ha-bridge` unit and still go through the fail-closed preflight.

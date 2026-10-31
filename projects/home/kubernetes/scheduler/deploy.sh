@@ -49,10 +49,19 @@ CONTROL_MODE=preserve
 BUILD=true
 ONLY=${ONLY:-all}
 PUSH_IMAGES=${PUSH_IMAGES:-0}
+# Registry namespace for PUSH_IMAGES. Overridable so the push path can be
+# exercised against a throwaway local registry.
+IMAGE_REGISTRY=${IMAGE_REGISTRY:-"ghcr.io/proflyder"}
+# Stop after building/pushing (used by the local push/digest verification).
+PUSH_ONLY=${PUSH_ONLY:-0}
 PREFLIGHT_IN_CLUSTER=${PREFLIGHT_IN_CLUSTER:-0}
 SCHEDULER_TOKEN_FILE=${SCHEDULER_TOKEN_FILE:-"$ROOT/secrets/home/scheduler.token"}
 OCI="$ROOT/platform/ci/oci_image.py"
 PREFLIGHT_JOB=scheduler-preflight
+# Pre-deploy state for a safe rollback: deploy.sh records each Deployment it is
+# about to change and marks it only after a successful apply. CI restores from
+# this, never with a blind `kubectl rollout undo`.
+DEPLOY_STATE_DIR=${DEPLOY_STATE_DIR:-"$RENDER_DIR/state"}
 # Pinned python image for the in-cluster preflight Job (digest of the multi-arch
 # `3.13-slim` index). The node resolves the linux/amd64 child itself.
 PREFLIGHT_IMAGE=${PREFLIGHT_IMAGE:-"docker.io/library/python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb"}
@@ -188,6 +197,29 @@ image_var() {
   esac
 }
 
+push_tag() {
+  local name=$1 digest=$2 tag=$3 repo="${IMAGE_REGISTRY}/${name}"
+  local bin out pushed
+  bin=$(bazel)
+  out=$( cd "$ROOT" && "$bin" run "//projects/home/kubernetes/scheduler:${name}_push" \
+    --platforms=@rules_go//go/toolchain:linux_amd64 \
+    -- --repository "${IMAGE_REGISTRY}/${name}" --tag "$tag" 2>&1 ) || {
+      printf '%s\n' "$out" >&2
+      echo "pushing ${repo}:${tag} failed" >&2
+      return 1
+    }
+  pushed=$(printf '%s\n' "$out" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -1)
+  if [[ -z "$pushed" ]]; then
+    printf '%s\n' "$out" >&2
+    echo "could not read the pushed digest for ${repo}:${tag}" >&2
+    return 1
+  fi
+  if [[ "$pushed" != "$digest" ]]; then
+    echo "pushed digest ${repo}@${pushed} does not match the built digest ${repo}@${digest}" >&2
+    return 1
+  fi
+}
+
 resolve_image() {
   local name=$1 var override layout digest tag repo
   var=$(image_var "$name")
@@ -206,35 +238,30 @@ resolve_image() {
   digest=$(python3 "$OCI" digest "$layout")
 
   if [[ "$PUSH_IMAGES" == 1 ]]; then
-    repo="ghcr.io/proflyder/${name}"
-    python3 "$OCI" docker "$layout" --ref "${repo}:local" --out "$TMP_IMAGES/${name}.tar" >/dev/null
-    docker load -i "$TMP_IMAGES/${name}.tar" >/dev/null
-    docker tag "${repo}:local" "${repo}:${IMAGE_TAG}"
-    docker push "${repo}:${IMAGE_TAG}" >/dev/null
+    repo="${IMAGE_REGISTRY}/${name}"
+    # Push the exact OCI manifest we built with `rules_oci`/crane. A `docker
+    # push` rewrites the manifest into Docker media types (and can add an
+    # attestation index), so the registry digest would not be the digest we
+    # built. Crane stores the bytes as-is: the tag digest must equal $digest.
+    push_tag "$name" "$digest" "$IMAGE_TAG" || exit 1
     if [[ "$IMAGE_TAG" != develop ]]; then
-      docker tag "${repo}:local" "${repo}:develop"
-      docker push "${repo}:develop" >/dev/null
+      push_tag "$name" "$digest" develop || exit 1
     fi
-    tag=$(docker inspect --format '{{index .RepoDigests 0}}' "${repo}:${IMAGE_TAG}")
-    [[ "$tag" == "${repo}@${digest}" ]] || {
-      echo "pushed digest $tag does not match the built digest ${repo}@${digest}" >&2
-      exit 1
-    }
     echo "== image ${name}: pushed ${repo}@${digest} (tags ${IMAGE_TAG}, develop)"
   elif [[ -n "${NODE_SSH:-}" ]]; then
-    python3 "$OCI" pack "$layout" --ref "ghcr.io/proflyder/${name}:${IMAGE_TAG}" \
+    python3 "$OCI" pack "$layout" --ref "${IMAGE_REGISTRY}/${name}:${IMAGE_TAG}" \
       --out "$TMP_IMAGES/${name}.tar" >/dev/null
     remote_scp -q "$TMP_IMAGES/${name}.tar" "$NODE_SSH:/tmp/${name}-${IMAGE_TAG}.tar"
     remote_ssh "sudo -n k3s ctr -n k8s.io images import '/tmp/${name}-${IMAGE_TAG}.tar' >/dev/null && rm -f '/tmp/${name}-${IMAGE_TAG}.tar'"
     # The manifest references the digest, so the containerd image record must
     # carry exactly that digest as a name (no registry pull is attempted).
-    remote_ssh "sudo -n k3s ctr -n k8s.io images tag 'ghcr.io/proflyder/${name}:${IMAGE_TAG}' 'ghcr.io/proflyder/${name}@${digest}' >/dev/null"
-    echo "== image ${name}: imported into the node as ghcr.io/proflyder/${name}@${digest}"
+    remote_ssh "sudo -n k3s ctr -n k8s.io images tag '${IMAGE_REGISTRY}/${name}:${IMAGE_TAG}' '${IMAGE_REGISTRY}/${name}@${digest}' >/dev/null"
+    echo "== image ${name}: imported into the node as ${IMAGE_REGISTRY}/${name}@${digest}"
   else
     echo "no delivery channel for ${name}: set NODE_SSH (import into the node) or PUSH_IMAGES=1 (push to GHCR)" >&2
     exit 1
   fi
-  set_image_ref "$name" "ghcr.io/proflyder/${name}@${digest}"
+  set_image_ref "$name" "${IMAGE_REGISTRY}/${name}@${digest}"
 }
 
 TMP_IMAGES=$(mktemp -d)
@@ -244,6 +271,11 @@ trap 'rm -rf "$TMP_IMAGES"' EXIT
 for image in scheduler ha-bridge ha-control; do
   resolve_image "$image"
 done
+
+if [[ "$PUSH_ONLY" == 1 ]]; then
+  echo "push-only: $(get_image_ref scheduler) $(get_image_ref ha-bridge) $(get_image_ref ha-control)"
+  exit 0
+fi
 
 IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)"
 BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(printf '%s' "$IMAGE_FINGERPRINT" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:12])')"
@@ -260,6 +292,24 @@ python3 "$DIR/render.py" --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   "$DIR/manifests/control.yaml" "$DIR/manifests/control-service.yaml" \
   "$DIR/manifests/preflight-job.yaml"
 
+# --- rollback bookkeeping ---------------------------------------------------
+rm -rf "$DEPLOY_STATE_DIR"
+mkdir -p "$DEPLOY_STATE_DIR"
+
+record_before() {
+  local name=$1
+  if $KUBECTL -n "$NS" get deployment "$name" >/dev/null 2>&1; then
+    $KUBECTL -n "$NS" get deployment "$name" -o json >"$DEPLOY_STATE_DIR/$name.before.json"
+  else
+    : >"$DEPLOY_STATE_DIR/$name.absent"
+  fi
+  rm -f "$DEPLOY_STATE_DIR/$name.applied"
+}
+
+mark_applied() {
+  : >"$DEPLOY_STATE_DIR/$1.applied"
+}
+
 echo "== checking required secrets"
 for s in scheduler-auth ha-bridge-ha; do
   if ! $KUBECTL -n "$NS" get secret "$s" >/dev/null 2>&1; then
@@ -270,7 +320,9 @@ done
 
 if $WANT_SCHEDULER; then
   echo "== applying scheduler"
+  record_before scheduler
   $KUBECTL apply -f "$RENDER_DIR/scheduler.yaml"
+  mark_applied scheduler
   $KUBECTL -n "$NS" rollout status deployment/scheduler --timeout=180s
   $KUBECTL -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
   echo "scheduler authenticated readiness: ok"
@@ -287,6 +339,7 @@ if $WANT_CONTROL; then
     CONTROL_EXISTS=true
   fi
 
+  record_before ha-control
   if ! $CONTROL_EXISTS; then
     echo "== first install: applying ha-control (catalog only, 1 replica)"
     $KUBECTL apply -f "$RENDER_DIR/control.yaml"
@@ -295,6 +348,7 @@ if $WANT_CONTROL; then
     $KUBECTL -n "$NS" patch deployment/ha-control --type strategic -p \
       "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"ricardo.dev/build\":\"$BUILD_ID\"}},\"spec\":{\"containers\":[{\"name\":\"ha-control\",\"image\":\"$(get_image_ref ha-control)\"}]}}}}"
   fi
+  mark_applied ha-control
   $KUBECTL apply -f "$RENDER_DIR/control-service.yaml"
 
   control_queue_pending() {
@@ -362,6 +416,7 @@ if $WANT_BRIDGE; then
     BRIDGE_EXISTS=true
   fi
 
+  record_before ha-bridge
   if ! $BRIDGE_EXISTS; then
     echo "== first install: applying ha-bridge at 0 replicas"
     $KUBECTL apply -f "$RENDER_DIR/bridge.yaml"
@@ -375,6 +430,7 @@ if $WANT_BRIDGE; then
       $KUBECTL -n "$NS" rollout status deployment/ha-bridge --timeout=180s
     fi
   fi
+  mark_applied ha-bridge
 
   if [[ "$MODE" == "shadow" ]]; then
     echo "== switching bridge to shadow (dry-run, 0 replicas)"

@@ -36,6 +36,9 @@ echo "$*" >> "$CALL_LOG"
 args="$*"
 case "$args" in
   *"get deployment ha-control -o jsonpath"*) echo "${CONTROL_REPLICAS:-1}"; exit 0 ;;
+  *"get deployment scheduler -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"scheduler","image":"old"}]}}}}'; exit 0 ;;
+  *"get deployment ha-control -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-control","image":"old"}]}}}}'; exit 0 ;;
+  *"get deployment ha-bridge -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-bridge","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-control"*) exit "${MOCK_CONTROL_EXISTS:-0}" ;;
   *"get deployment ha-bridge"*) exit 0 ;;
   *"get secret"*) exit 0 ;;
@@ -51,6 +54,7 @@ export CALL_LOG="$TMP/calls.log"
 export KUBECTL="$TMP/kubectl"
 export PRIVATE_ENV="$TMP/env"
 export SKIP_FIREWALL=1
+export DEPLOY_STATE_DIR="$TMP/state"
 
 run() {
   : > "$CALL_LOG"
@@ -64,6 +68,9 @@ export MOCK_CONTROL_EXISTS=1
 run
 grep -q "apply -f .*control.yaml" "$CALL_LOG" || fail "first install did not apply control.yaml"
 grep -q "apply -f .*control-service.yaml" "$CALL_LOG" || fail "first install did not apply control-service.yaml"
+[[ -f "$DEPLOY_STATE_DIR/scheduler.applied" ]] || fail "scheduler apply was not recorded for rollback"
+[[ -f "$DEPLOY_STATE_DIR/ha-bridge.applied" ]] || fail "ha-bridge apply was not recorded for rollback"
+[[ -f "$DEPLOY_STATE_DIR/scheduler.before.json" ]] || fail "scheduler pre-deploy state was not recorded"
 
 export MOCK_CONTROL_EXISTS=0
 unset CONTROL_QUEUE_STATUS || true
