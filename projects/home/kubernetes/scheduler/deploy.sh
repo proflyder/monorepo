@@ -312,6 +312,17 @@ mark_applied() {
   : >"$DEPLOY_STATE_DIR/$1.applied"
 }
 
+# Replace the live Deployment with the rendered object instead of patching it.
+# A patch never removes a volume/volumeMount that an earlier ad-hoc change added;
+# a full replace converges the live spec to the manifest and prunes that drift.
+# Runtime mode/scaling that the manifest does not own is carried over explicitly.
+converge_deployment() {
+  local name=$1 file=$2
+  shift 2
+  python3 "$DIR/converge.py" \
+    --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file" "$@"
+}
+
 echo "== checking required secrets"
 for s in scheduler-auth ha-bridge-ha; do
   if ! $KUBECTL -n "$NS" get secret "$s" >/dev/null 2>&1; then
@@ -323,7 +334,7 @@ done
 if $WANT_SCHEDULER; then
   echo "== applying scheduler"
   record_before scheduler
-  $KUBECTL apply -f "$RENDER_DIR/scheduler.yaml"
+  converge_deployment scheduler "$RENDER_DIR/scheduler.yaml" --preserve-replicas
   mark_applied scheduler
   $KUBECTL -n "$NS" rollout status deployment/scheduler --timeout=180s
   $KUBECTL -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
@@ -346,9 +357,8 @@ if $WANT_CONTROL; then
     echo "== first install: applying ha-control (catalog only, 1 replica)"
     $KUBECTL apply -f "$RENDER_DIR/control.yaml"
   else
-    echo "== existing ha-control: preserving execute mode/replicas, rolling build $BUILD_ID"
-    $KUBECTL -n "$NS" patch deployment/ha-control --type strategic -p \
-      "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"ricardo.dev/build\":\"$BUILD_ID\"}},\"spec\":{\"containers\":[{\"name\":\"ha-control\",\"image\":\"$(get_image_ref ha-control)\"}]}}}}"
+    echo "== existing ha-control: preserving execute mode/replicas, converging build $BUILD_ID"
+    converge_deployment ha-control "$RENDER_DIR/control.yaml" --preserve-env --preserve-replicas
   fi
   mark_applied ha-control
   $KUBECTL apply -f "$RENDER_DIR/control-service.yaml"
@@ -423,11 +433,10 @@ if $WANT_BRIDGE; then
     echo "== first install: applying ha-bridge at 0 replicas"
     $KUBECTL apply -f "$RENDER_DIR/bridge.yaml"
   else
-    # Preserve mode and replicas. Only the build annotation and the image
-    # digest change, which rolls the pod onto the new immutable image.
-    echo "== existing ha-bridge: preserving mode/replicas, rolling build $BUILD_ID"
-    $KUBECTL -n "$NS" patch deployment/ha-bridge --type strategic -p \
-      "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"ricardo.dev/build\":\"$BUILD_ID\"}},\"spec\":{\"containers\":[{\"name\":\"ha-bridge\",\"image\":\"$(get_image_ref ha-bridge)\"}]}}}}"
+    # Preserve mode and replicas. The rendered image/annotation replace rolls the
+    # pod onto the new immutable image and also prunes any drifted spec fields.
+    echo "== existing ha-bridge: preserving mode/replicas, converging build $BUILD_ID"
+    converge_deployment ha-bridge "$RENDER_DIR/bridge.yaml" --preserve-env --preserve-replicas
     if [[ "$($KUBECTL -n "$NS" get deployment ha-bridge -o jsonpath='{.spec.replicas}')" != "0" ]]; then
       $KUBECTL -n "$NS" rollout status deployment/ha-bridge --timeout=180s
     fi

@@ -91,7 +91,6 @@
 - [ ] Полная latency instrumentation voice pipeline.
 - [ ] Регулярный backup K3s/HA с проверкой freshness. HA automatic backup не
       настроен (`sensor.backup_*` = unknown), CronJob/Velero в репозитории нет.
-- [ ] Private registry/build pipeline для Hermes/proxy images.
 
 ## HTTPS ingress (LAN/VPN)
 
@@ -125,9 +124,6 @@
       `kubectl rollout undo`. Осталось: загрузить секреты
       `secrets/ci/github/` в Environment `home`, сделать GHCR-пакеты
       публичными и проверить первый прогон на GitHub.
-- [ ] Этап 3: Hermes/voice-proxy через GHCR: образы собираются в CI
-      (`_images.yml`, Dockerfile-путь), runtime-манифесты ещё не переключены
-      на digest; нужна проверка голосового контура после переключения.
 - [ ] Pulsar собирается и релизится в своём репозитории, монорепо деплоит
       релиз на станцию через Environment с ручным approve; конфиг HA — по
       решению.

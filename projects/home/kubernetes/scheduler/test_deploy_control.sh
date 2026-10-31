@@ -76,7 +76,8 @@ export MOCK_CONTROL_EXISTS=0
 unset CONTROL_QUEUE_STATUS || true
 run
 grep -q "apply -f .*control.yaml" "$CALL_LOG" && fail "rerun applied control.yaml (would reset mode)"
-grep -q "patch deployment/ha-control" "$CALL_LOG" || fail "rerun did not roll the control build"
+[[ "$(grep -c 'replace -f' "$CALL_LOG")" -eq 3 ]] || fail "rerun did not converge scheduler, ha-control and ha-bridge"
+grep -q -- "--type strategic" "$CALL_LOG" && fail "rerun used a strategic patch (leaves drifted fields behind)"
 grep -q "set env deployment/ha-control" "$CALL_LOG" && fail "rerun changed CONTROL_EXECUTE"
 grep -q "scale deployment/ha-control" "$CALL_LOG" && fail "rerun changed control replicas"
 

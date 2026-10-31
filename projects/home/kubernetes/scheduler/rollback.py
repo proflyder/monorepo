@@ -11,9 +11,10 @@ This script restores from that record instead of running
 
 * a failure before `apply` (image build/push, rendering, preflight) leaves no
   `.applied` marker, so nothing is rolled back;
-* a failure after `apply` restores the exact remembered spec (image, env,
-  replicas, probes) with a merge patch — not "one revision back", which could
-  undo an unrelated change made by an earlier deploy step;
+* a failure after `apply` restores the exact remembered object (image, env,
+  replicas, probes, volumes) with a full replace — not "one revision back",
+  which could undo an unrelated change made by an earlier deploy step, and not
+  a merge patch, which cannot remove fields added by the failed deploy;
 * if the Deployment generation did not change, no request is sent at all.
 
 Usage:
@@ -46,6 +47,19 @@ def generation(kubectl: str, namespace: str, name: str) -> int | None:
         return None
 
 
+def restore_object(before: dict) -> dict:
+    """Strip read-only fields so the recorded object can be PUT back as-is."""
+    obj = json.loads(json.dumps(before))
+    obj.pop("status", None)
+    metadata = obj.get("metadata", {})
+    for key in ("managedFields", "generation", "creationTimestamp", "selfLink", "uid"):
+        metadata.pop(key, None)
+    # An empty resourceVersion makes the update unconditional; the recorded
+    # revision is gone by definition after a failed deploy.
+    metadata.pop("resourceVersion", None)
+    return obj
+
+
 def restore_one(kubectl: str, namespace: str, state: pathlib.Path, name: str) -> str:
     marker_applied = state / f"{name}.applied"
     before_path = state / f"{name}.before.json"
@@ -75,19 +89,18 @@ def restore_one(kubectl: str, namespace: str, state: pathlib.Path, name: str) ->
     if current <= before_generation:
         return f"{name}: generation {current} did not change (was {before_generation}), skip"
 
-    patch = json.dumps({"spec": before["spec"]})
+    patch = restore_object(before)
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
-        handle.write(patch)
+        json.dump(patch, handle)
         patch_path = handle.name
     try:
         result = _run(
-            kubectl, "-n", namespace, "patch", "deployment", name,
-            "--type", "merge", "--patch-file", patch_path,
+            kubectl, "-n", namespace, "replace", "-f", patch_path,
         )
     finally:
         pathlib.Path(patch_path).unlink(missing_ok=True)
     if result.returncode != 0:
-        return f"{name}: restore patch failed: {result.stderr.strip()}"
+        return f"{name}: restore replace failed: {result.stderr.strip()}"
 
     rollout = _run(kubectl, "-n", namespace, "rollout", "status", f"deployment/{name}", "--timeout=180s")
     if rollout.returncode != 0:

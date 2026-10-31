@@ -184,8 +184,9 @@ units:
     title: "projects/home-assistant/hermes"
     paths:
       - projects/home-assistant/hermes/**
-    # Hermes gateway and its voice-proxy sidecar are published as images; the
-    # runtime chart references them by digest.
+    # Hermes/voice-proxy: build+push only. The runtime chart keeps the verified
+    # digest until the private values are updated and the voice circuit is
+    # checked; CI must never restart the voice path on its own.
     deploy:
       builder: docker
       images: [hermes, voice-proxy]

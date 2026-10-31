@@ -106,6 +106,23 @@
   containerd; CI пушит те же образы в GHCR (`ghcr.io/proflyder/<name>`).
   Данные PVC сохранены: enabledSchedules=1, будильник «Работа» тот же,
   consumer `ha-bridge-home` live, BRIDGE_EXECUTE/CONTROL_EXECUTE=true.
+- 2026-10-31: дрейф hostPath закрыт. В live `scheduler`/`ha-bridge` оставался
+  volume `bin` → `/opt/ricardo/current/bin` от прежнего patch/apply без
+  last-applied. `deploy.sh`/`rollback.py` теперь сходятся полным replace
+  rendered-объекта (`converge.py`) с сохранением env/режима и replicas, а
+  откат восстанавливает запомненный объект целиком. Live переприменён:
+  volume/mount `bin` исчезли, режимы и endpoint'ы прежние, enabledSchedules=1.
+  `/opt/ricardo` удалён (49 МиБ), ссылок в Pods/Deployments/StatefulSets/
+  DaemonSets/Jobs/CronJobs нет; запасных релизов на хосте больше нет.
+- 2026-10-31: Hermes и voice-proxy переведены на публичные digest-pinned
+  образы GHCR (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`) с
+  `imagePullPolicy: IfNotPresent`, без pull-secret; health exporter использует
+  тот же voice-proxy digest. Hermes собран из `HERMES_REVISION`
+  (`bf0203a7…`), SHA-256 `voice_proxy.py` в образе совпадает с исходником
+  (`d1fea967…`). Проверено: HA Assist → voice-proxy → Hermes text turn
+  (POST /v1/chat/completions 200), health exporter зелёный, логи proxy без
+  ошибок. CI для hermes по-прежнему только build+push; digest в приватных
+  values и rollout — ручной шаг после проверки.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
 

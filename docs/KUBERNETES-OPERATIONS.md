@@ -50,10 +50,9 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 - `/srv/k3s/runtime` — K3s data, containerd, datastore.
 - `/srv/k3s/volumes/hermes` — Hermes home, в Pod `/opt/data`.
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
-- `/opt/ricardo/releases` и `/opt/ricardo/control/releases` — legacy hostPath
-  дерево (больше не монтируется в Pod). Оставлен только последний релиз
-  `9316cd9-…` как запасной откат; удалять после следующего успешного
-  GHCR-деплоя.
+- `/opt/ricardo` удалён: ни один Pod/Deployment больше не ссылается на это
+  дерево, запасных релизов на хосте нет. Откат — только digest-pinned образы
+  в GHCR/containerd.
 - `runtime-ha` — архив старого HA Container, не активный writer.
 - `runtime-music`/`runtime-matter` удалены; tar-копии на Mac.
 
@@ -149,9 +148,11 @@ Traefik — не запускать там второй прокси без ос
 - Образы scheduler/ha-bridge/ha-control собираются Bazel (`rules_oci`,
   distroless, digest-pinned base) и адресуются по digest; в CI они пушатся в
   GHCR, на живой узел импортируются в containerd (`ctr images import`).
-- Custom images Hermes/proxy — пока recovery OCI archive и
-  `imagePullPolicy: Never`; CI собирает их (`_images.yml`), переключение
-  runtime-манифестов на GHCR — отдельный шаг.
+- Hermes и voice-proxy — публичные digest-pinned образы GHCR
+  (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
+  IfNotPresent`, без pull-secret. Текущие пины — `versions.sh`; обновление
+  digest в приватных runtime values и rollout — ручной шаг после проверки
+  голосового контура (CI только build+push).
 - Полный restore:
   1. восстановить Ubuntu/K3s;
   2. остановить K3s;
@@ -168,5 +169,5 @@ Disaster restore на запасном железе ещё не выполнял
 - Один узел, без HA control plane и распределённого storage.
 - Нет внешнего Alertmanager/heartbeat.
 - Нет полной latency instrumentation voice pipeline.
-- Scheduler/bridge/control собираются в CI и публикуются в GHCR; Hermes и
-  voice-proxy пока собираются вручную и импортируются в containerd.
+- Scheduler/bridge/control и Hermes/voice-proxy собираются в CI и
+  публикуются в GHCR; runtime ссылается на них по digest.
