@@ -67,5 +67,16 @@
     merge PR запускает `deploy-home`. Режимы исполнения меняются только
     ручным `workflow_dispatch`; откат — только применённого объекта, полный —
     новым revert-PR.
+20. **Pulsar — релизы в форке, деплой через HA updater.** Монорепо Pulsar не
+    собирает: сборка и GitHub release выходят из форка (origin вложенного
+    checkout `projects/station/upstream/pulsar-rust`, линия `main` = Ricardo),
+    теги `v<major.minor>.<1000+N>` — updater ставит только строго большую
+    версию. Выкатка на станцию — только `deploy-station.yml` после ручного
+    approve в Environment `Station` (теги `v*`), через VPN группу `ci` и OIDC
+    в OpenBao (`deploy-station`), затем HA `update.install`; job проверяет
+    установленную версию и стабильность. Откат — не через CI, а на станции
+    (`.prev` + `ctl.sh reload`). Egress станции при этом разрешает HTTPS
+    только к публичным IPv4-диапазонам GitHub, весь остальной WAN и Яндекс —
+    DROP.
 
 Меняется решение — обновить этот файл и `STATE.md`.

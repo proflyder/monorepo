@@ -114,6 +114,16 @@
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
   namespace-scoped workloads, поэтому `ci-deploy` не имеет cluster-scoped
   прав.
+- Pulsar не собирается монорепо: релиз выходит в форке. Push тега `v0.5.100N`
+  → `build.yml` публикует GitHub release → `deploy-station.yml` после approve
+  в Environment `Station` входит в VPN группой `ci` (отдельный сертификат
+  `ci-pulsar`) и по OIDC в OpenBao роль `deploy-station` (политика `ci-station`,
+  `secret/ci/deploy-station`: `ha_url`, `ha_token`, `entity_id`), затем
+  вызывает HA `update_entity` + `update.install`. Job ждёт
+  `installed_version == tag` и 90 с стабильности; откат `supervise.sh` на
+  `.prev` валит job. Ручной повтор — `gh workflow run deploy-station.yml
+  --ref <tag> -f tag=<tag>` в форке. Откат — не через CI, а на станции
+  (`.prev` + `ctl.sh reload`).
 
 ## Remote / VPN
 
@@ -144,20 +154,29 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.2-4-g9b5e86a-dirty` — установленная armhf-сборка
-  (`/lib/ld-linux-armhf.so.3`; локальный форк, база upstream `v0.5.2` =
-  `4cba44a`), собрана проектным Makefile `ARCH=armhf`; включает повторный
-  wake, заменяющий активный диалог, экспериментальный локальный endpointing
-  и Ricardo pre-roll 256 ms. Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
+- Pulsar Rust `v0.5.1001` — установленная armhf-сборка
+  (`/lib/ld-linux-armhf.so.3`; релиз форка Pulsar, origin вложенного checkout
+  `projects/station/upstream/pulsar-rust`, линия `main` = Ricardo; база
+  upstream `v0.5.2` = `4cba44a`). Включает повторный wake, заменяющий
+  активный диалог, экспериментальный локальный endpointing и Ricardo
+  pre-roll 256 ms. Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
   унаследованным supervisor'ом от `ctl.sh reload`; это не boot-persistent:
   после reboot или нового supervisor без env feature выключен.
-- Установленный бинарник — SHA256 `7081ef8e…`; `pulsar.prev` — прежний
-  endpointing `0b0c48e4…` (512 ms). Historical known-good `d2197f6a…`
-  (`v0.5.2-3-gc57d521-dirty`) — `pulsar.pre-endpoint-20261030`;
-  `pulsar.prev.pre-endpoint-20261030` — более старый pre-endpoint backup
-  `69310a37…`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private
-  backup вне Git. Legacy C++ checkout, patch и binaries — private в
-  `secrets/local/recovery/`.
+  `--version` теперь различает сборки по тегу.
+- Теги форка — `v<upstream major.minor>.<1000+N>` (первый `v0.5.1001`):
+  updater демона ставит только строго большую `MAJOR.MINOR.PATCH`, а upstream
+  уже имеет `v0.5.3`. Релиз — push тега → `build.yml` собирает и публикует
+  GitHub release (latest) → `deploy-station.yml` после approve в Environment
+  `Station` (только теги `v*`) катит на станцию через HA updater. Процедура —
+  RICARDO.md «Релизы и деплой форка» в форке.
+- Установленный бинарник — SHA256 `80aea2ec…` (поставлен этим flow
+  2026-10-31); `pulsar.prev` — предыдущая сборка `7081ef8e…`
+  (`v0.5.2-4-g9b5e86a-dirty`, тот же код: pre-roll 256 ms + endpointing).
+  Historical старше: `0b0c48e4…` (endpointing 512 ms), `d2197f6a…`
+  (`v0.5.2-3-gc57d521-dirty`, `pulsar.pre-endpoint-20261030`),
+  `pulsar.prev.pre-endpoint-20261030` — `69310a37…`; `v0.5.2-2-g95ce568` и
+  `v0.5.0-1-g908a027` — только private backup вне Git. Legacy C++ checkout,
+  patch и binaries — private в `secrets/local/recovery/`.
 - ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`,
   SSH `22`; 33 ESPHome entities, Noise; HA satellite работает.
 - SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
@@ -202,6 +221,11 @@
   Прежние данные — только в private off-device recovery archive.
 - OTA/ADB fortress активен: обновления no-op, ADB root только LAN.
 - Egress guard: LAN/DHCP/NTP разрешены, публичный WAN и Яндекс — DROP.
+  `ALLOW_GITHUB=1` (по умолчанию) дополнительно разрешает `tcp/443` только к
+  публичным IPv4-диапазонам GitHub (`140.82.112.0/20`, `143.55.64.0/20`,
+  `185.199.108.0/22`, `192.30.252.0/22`, по `api.github.com/meta`) — для
+  updater'а; при смене диапазонов обновить `GITHUB_NETS`. Прежний скрипт —
+  `egress-guard.sh.bak-20261031-github`.
 - Известная проблема: после reboot станция иногда не отвечает в LAN при
   online-статусе роутера; BLE остаётся доступен, снятие питания на 20–30 с
   восстанавливает IP/HA/голос. Первопричина не установлена (`PENDING.md`).
