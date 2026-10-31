@@ -6,7 +6,7 @@ BLE gateway и provisioning. Это **не** HA и не TTS-стек.
 ## Что входит
 
 ```text
-projects/station/upstream/pulsar-rust/   Rust-форк (upstream v0.5.2 интегрирован и установлен)
+projects/station/upstream/pulsar-rust/   Rust-форк (upstream v0.5.3 интегрирован и установлен)
 projects/station/patches/pulsar-rust/     snapshots локальных правок Rust
 projects/station/ble-gateway/       BLE provisioning gateway (пока вне Bazel)
 projects/station/scripts/station-*        station-side операции
@@ -16,10 +16,11 @@ docs/WAKE-WORD.md
 ```
 
 Rust-форк и профиль Ricardo: [`PULSAR-RUST.md`](PULSAR-RUST.md).
-Установленный бинарник станции — Rust `v0.5.1001` (релиз форка, линия
-`main` = Ricardo, база upstream `v0.5.2`) с Ricardo pre-roll 256 ms;
-SHA256 `80aea2ec…`. `pulsar.prev` — предыдущая сборка `7081ef8e…`
-(`v0.5.2-4-g9b5e86a-dirty`, тот же код); historical старше —
+Установленный бинарник станции — Rust `v0.5.1002` (релиз форка, линия
+`main` = Ricardo, база upstream `v0.5.3` = `504830d`) с Ricardo pre-roll
+256 ms и upstream-функциями `v0.5.3`; SHA256 `3a544979…`. `pulsar.prev` —
+предыдущая сборка `v0.5.1001` (`80aea2ec…`, база `v0.5.2`, тот же
+Ricardo-код); historical старше — `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
 `0b0c48e4…` (endpointing 512 ms), `pulsar.pre-endpoint-20261030` —
 `v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
 private backup вне Git. Legacy исходники и binaries — private в

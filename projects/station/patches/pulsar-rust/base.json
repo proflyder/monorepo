@@ -1,18 +1,16 @@
 {
   "schema": 2,
   "checkout": "projects/station/upstream/pulsar-rust",
-  "base_ref": "v0.5.2",
-  "base_commit": "4cba44af1a140749b35e1e5074d94f173804cfc3",
-  "base_description": "v0.5.2",
-  "head_commit": "9b5e86a59704ff9c1c334b410293b6de5a2b70be",
-  "head_description": "v0.5.2-4-g9b5e86a",
-  "branch": "feat/ricardo-rust",
-  "worktree_dirty": true,
-  "new_source_files": [
-    "satellite/crates/pulsar-audio/src/endpoint.rs"
-  ],
+  "base_ref": "v0.5.3",
+  "base_commit": "504830d53759a74518f4a4b72e03d81270af225c",
+  "base_description": "v0.5.3",
+  "head_commit": "ccef0547ae7313bc711112881fe424ef77ad595b",
+  "head_description": "v0.5.1002",
+  "branch": "main",
+  "worktree_dirty": false,
+  "new_source_files": [],
   "restore": {
-    "checkout": "git checkout 4cba44af1a140749b35e1e5074d94f173804cfc3",
+    "checkout": "git checkout 504830d53759a74518f4a4b72e03d81270af225c",
     "apply": "git apply --binary projects/station/patches/pulsar-rust/local.patch"
   }
 }
