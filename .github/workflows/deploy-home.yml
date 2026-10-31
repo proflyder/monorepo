@@ -295,11 +295,31 @@ jobs:
           allowed get deployments.apps
           allowed patch deployments.apps
           allowed get secrets
+          # Secrets are ESO-managed; CI may read them (and Helm release
+          # Secrets) but must not need to write application values.
+          allowed get externalsecrets.external-secrets.io
           allowed create secrets
           allowed delete secrets
           allowed get configmaps
           allowed create jobs.batch
           echo "ci-deploy RBAC boundary is namespace-scoped"
+
+      - name: Verify External Secrets are Ready
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          export KUBECONFIG="$CI_DIR/kubeconfig"
+          # Application Secrets are owned by External Secrets Operator and
+          # sourced from OpenBao. A deploy must fail closed if ESO is unhealthy
+          # rather than let a script recreate a stale value.
+          for es in scheduler-auth ha-bridge-ha hermes-environment; do
+            kubectl -n home-assistant wait --for=condition=Ready \
+              "externalsecret/$es" --timeout=90s
+          done
+          for secret in scheduler-auth ha-bridge-ha hermes-environment; do
+            kubectl -n home-assistant get secret "$secret" >/dev/null
+          done
+          echo "ESO-managed Secrets are Ready"
 
       - name: Build, push and deploy ${{ matrix.id }}
         run: |

@@ -44,6 +44,7 @@ manifests/bridge.yaml           ledger PVC + executor Deployment (template)
 manifests/control.yaml          ha-control Deployment (template)
 manifests/control-service.yaml  ha-control ClusterIP + NodePort
 manifests/preflight-job.yaml    in-cluster cutover preflight Job (template)
+manifests/external-secrets.yaml ExternalSecrets for scheduler-auth/ha-bridge-ha
 nft/scheduler-nodeport.nft      NodePort source filter (template, host config)
 nft/apply.sh                    install/refresh that filter as root on the node
 scheduler.env.example           placeholders; copy to secrets/home/scheduler.env
@@ -62,16 +63,16 @@ manifests go to `secrets/local/rendered/scheduler` (git-ignored).
 ## One-time prerequisites
 
 ```bash
-kubectl -n home-assistant create secret generic scheduler-auth \
-  --from-file=token=secrets/home/scheduler.token
-kubectl -n home-assistant create secret generic ha-bridge-ha \
-  --from-file=token=secrets/home/ha.token
+# Secrets are owned by External Secrets Operator and sourced from OpenBao
+# (secret/k8s/home-assistant/{scheduler-auth,ha-bridge-ha}). Apply once:
+./projects/home/kubernetes/external-secrets/deploy.sh
 kubectl -n home-assistant apply -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 
 Both tokens are read from files at runtime (`SCHEDULER_TOKEN_FILE`,
 `HA_TOKEN_FILE`) and never appear in process arguments, probe arguments or
-Kubernetes events.
+Kubernetes events. Local files `secrets/home/*.token` remain a backup and for
+the manual preflight only; they no longer create the Secrets.
 
 The NodePort source filter is host configuration, applied once (and after any
 CIDR/port change) as root on the node:

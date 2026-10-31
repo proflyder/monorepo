@@ -15,7 +15,9 @@ Hermes voice proxy слушает `.27:8643` и ограничен nftables-пр
 
 Tracked `values.yaml` пуст: реальные images/digests, host paths и параметры
 развёртывания находятся в приватных values. Ключи Hermes передаются отдельно
-через Kubernetes Secret `hermes-environment`; refreshable auth находится на PVC.
+через Kubernetes Secret `hermes-environment`, который создаёт External Secrets
+Operator из OpenBao (`secret/k8s/home-assistant/hermes-environment`);
+refreshable auth находится на PVC.
 Не добавлять реальные private values в Git и не выводить `helm get values`
 в публичные отчёты.
 

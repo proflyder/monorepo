@@ -50,5 +50,12 @@ if [[ -s "$TMP/storage.yaml" ]]; then
   "$KUBECTL" -n home-assistant apply -f "$TMP/storage.yaml"
 fi
 
+# hermes-environment is owned by External Secrets Operator (OpenBao
+# secret/k8s/home-assistant/hermes-environment). Applying the manifest here
+# keeps a manual full apply self-consistent; the values still come only from
+# OpenBao.
+"$KUBECTL" apply -f "$ROOT/projects/home-assistant/deploy/manifests/external-secrets.yaml"
+"$KUBECTL" -n home-assistant wait --for=condition=Ready externalsecret/hermes-environment --timeout=120s
+
 helm upgrade --install runtime "$ROOT/projects/home-assistant/deploy/chart" \
   -n home-assistant -f "$TMP/values.yaml" --wait --timeout 8m

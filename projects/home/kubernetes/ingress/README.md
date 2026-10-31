@@ -43,7 +43,10 @@ read-only root и без privilege escalation. Менять
 - Secret `cloudflare-api-token` создаётся в namespace `cert-manager`: для
   `ClusterIssuer` solver-секреты резолвятся в cluster resource namespace
   (`cert-manager`), а не в namespace Certificate; проверено на staging-
-  сертификате.
+  сертификате. Значение хранится в OpenBao
+  (`secret/k8s/cert-manager/cloudflare-api-token`) и материализуется
+  ExternalSecret; `deploy.sh --bootstrap-secrets` — только первая установка
+  без OpenBao/ESO.
 
 ## Приватные значения
 

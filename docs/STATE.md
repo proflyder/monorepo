@@ -38,7 +38,7 @@
 - K3s `v1.35.9+k3s1`, node `lab-host`; data-dir `/srv/k3s/runtime`; SQLite;
   local-path PV с `Retain`.
 - Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
-  `openbao` (+ временный `openbao-smoke` для проб).
+  `openbao`, `external-secrets` (+ временный `openbao-smoke` для проб).
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
@@ -67,8 +67,18 @@
   (TokenReview, роли `external-secrets`/`k8s-smoke`/`backup`). KV v2 `secret/`
   с `secret/ci/test` и `secret/k8s/test`. Ночной CronJob raft snapshot в
   `/srv/k3s/volumes/openbao-backups` (7 файлов). Root-токен отозван,
-  recovery keys — только `secrets/openbao/`. Существующие секреты не
-  мигрированы. Файлы — `projects/home/kubernetes/openbao/`.
+  recovery keys — только `secrets/openbao/`.
+- External Secrets Operator `2.14.0` (chart `2.14.0`, образ по digest) в
+  namespace `external-secrets`: `ClusterSecretStore/openbao` через in-cluster
+  Service (Kubernetes auth, роль `external-secrets`, KV v2). Перенесены в
+  `secret/k8s/*`: `scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
+  `grafana-admin`, `cloudflare-api-token`. Kubernetes Secrets с теми же
+  именами/ключами создаёт ESO (`creationPolicy: Owner`,
+  `deletionPolicy: Retain`, `refreshInterval: 1h`); deploy-скрипты и CI их не
+  перезаписывают. Не переносятся: `openbao-seal`, helm release/SA token
+  Secrets, TLS и служебные Secrets контроллеров. Файлы —
+  `projects/home/kubernetes/openbao/` и
+  `projects/home/kubernetes/external-secrets/`.
 
 ## Remote
 

@@ -18,11 +18,12 @@
 #   * PUSH_IMAGES=1 pushes them to GHCR with `docker` (CI); otherwise they are
 #     imported into the node's containerd over SSH (manual workstation flow).
 #
-# Prerequisites (created once, out of band; values never live in Git):
-#   kubectl -n home-assistant create secret generic scheduler-auth \
-#     --from-file=token=/path/to/scheduler.token
-#   kubectl -n home-assistant create secret generic ha-bridge-ha \
-#     --from-file=token=/path/to/ha.token
+# Prerequisites (External Secrets Operator, values never live in Git):
+#   Secret/scheduler-auth and Secret/ha-bridge-ha are materialised by the
+#   ExternalSecrets in manifests/external-secrets.yaml from OpenBao
+#   secret/k8s/home-assistant/{scheduler-auth,ha-bridge-ha}. Apply them with
+#   projects/home/kubernetes/external-secrets/deploy.sh. This script only
+#   verifies that they are present and Ready; it never writes their values.
 #
 # Environment:
 #   PRIVATE_ENV     private values file (default secrets/home/scheduler.env)
@@ -326,8 +327,19 @@ converge_deployment() {
 echo "== checking required secrets"
 for s in scheduler-auth ha-bridge-ha; do
   if ! $KUBECTL -n "$NS" get secret "$s" >/dev/null 2>&1; then
-    echo "missing secret $NS/$s; create it with --from-file (see header)" >&2
+    echo "missing secret $NS/$s; apply the ExternalSecrets with" >&2
+    echo "  projects/home/kubernetes/external-secrets/deploy.sh" >&2
     exit 1
+  fi
+  # An ExternalSecret that exists but is not Ready will not repair a deleted or
+  # drifted Secret, so fail before touching live workloads.
+  if $KUBECTL -n "$NS" get externalsecret "$s" >/dev/null 2>&1; then
+    synced=$($KUBECTL -n "$NS" get externalsecret "$s" \
+      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)
+    if [[ "$synced" != "True" ]]; then
+      echo "ExternalSecret $NS/$s is not Ready (Ready=$synced)" >&2
+      exit 1
+    fi
   fi
 done
 
