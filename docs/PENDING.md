@@ -94,36 +94,13 @@
 
 ## OpenBao
 
-- [ ] Пользователь: войти человеком, сменить временный пароль из
-      `secrets/openbao/human.pass`, зарегистрировать TOTP и включить
+- [ ] OpenBao TOTP: пользователь регистрирует TOTP в UI, затем включить
       enforcement: `./projects/home/kubernetes/openbao/bootstrap.sh --enforce-totp`
       (или API `identity/mfa/login-enforcement/userpass-totp`).
-- [ ] GitHub: добавить в Environment `Home` секреты `OPENBAO_ADDR` (и
-      `OPENBAO_ROLE`, если роль не `deploy-home`), затем прогнать
-      `openbao-smoke` (`workflow_dispatch`) после merge.
 - [ ] Offsite-копия raft snapshot и проверка restore на отдельном стенде;
       сейчас 7 снапшотов лежат на том же узле, что и данные.
 - [ ] Внешний KMS/HSM для seal вместо `static` (ключ рядом с данными);
       решение и миграцию оформить отдельно.
-- [ ] Этап 3: CI (`deploy-home`) читает нужные значения из OpenBao по
-      GitHub OIDC (роль `deploy-home`, политика `ci-deploy`) вместо
-      GitHub Environment secrets/локальных копий; ESO остаётся единственным
-      писателем Kubernetes Secrets. TOTP для человека остаётся включить после
-      регистрации устройства (пункт выше).
-
-## HTTPS ingress (LAN/VPN)
-
-- [ ] Приёмка пользователем `https://{ha,grafana,alarms,control}.home.example.com`:
-      вход с телефона через VPN-профиль `lan` и `full`, HA WebSocket/
-      история/логин, Grafana live и дашборды, редирект `http`→`https`.
-- [ ] HA `external_url` → `https://ha.home.example.com` (UI); `internal_url`
-      `http://192.0.2.28:8123` не менять. `trusted_proxies` оставить
-      `192.0.2.27/32`. После смены проверить уведомления, ссылки и голосовой
-      контур.
-- [ ] Android: перевести scheduler/control endpoints на
-      `https://alarms.home.example.com` и `https://control.home.example.com`
-      и, при желании, запретить cleartext для приватного суффикса. Старые
-      значения в DataStore сохраняются.
 
 ## VPN
 
@@ -131,25 +108,6 @@
 
 ## CI/CD (GitHub-hosted runners)
 
-- [ ] Этап 1 (CI без деплоя): `ci.yml` и P0-фиксы тестов готовы локально;
-      нужен первый прогон на GitHub (`quality`, `test`, `bazel`, `android`)
-      и проверка времени/кэша. Pulsar в CI монорепо не собирается; тесты
-      без nested checkout печатают `SKIP`.
-- [ ] Этап 2 (реализовано локально, нужен первый прогон): VPN-группа `ci`
-      (пул `10.77.1.0/24`, доступ только к K3s `tcp/{443,6443}`), ServiceAccount
-      `ci-deploy` в `home-assistant`, `deploy-home.yml` с планировщиком по
-      затронутым деплоимым юнитам (preserve по push, ручные
-      execute/shadow/control-* через `workflow_dispatch`) и авто-откат.
-      Осталось: сделать GHCR-пакеты публичными и проверить первый прогон на
-      GitHub.
-- [ ] Этап 3 OpenBao (реализовано локально, ждёт прогона primary): значения
-      `kubeconfig`, `scheduler_env`, `runtime_values` записаны в
-      `secret/ci/deploy-home`, политика `ci-deploy` сужена до
-      `secret/ci/{test,deploy-home}` и применена live; `deploy-home` читает их
-      по OIDC после VPN и отзывает токен. Нужен `workflow_dispatch`
-      (`units=all`, `mode=preserve`) и `openbao-smoke`; после успеха удалить из
-      Environment `Home` секреты `KUBECONFIG_B64`, `SCHEDULER_ENV_B64`,
-      `RUNTIME_VALUES_B64`, `K3S_NODE`.
 - [ ] Pulsar собирается и релизится в своём репозитории, монорепо деплоит
       релиз на станцию через Environment с ручным approve; конфиг HA — по
       решению.
