@@ -20,6 +20,7 @@ const testCatalog = `
 overview: |
   ## Тестовая топология
   Два узла и один кластер.
+ignore_alerts: [Watchdog, InfoInhibitor]
 services:
   - id: scheduler
     aliases:

@@ -235,9 +235,11 @@ units:
   # ----------------------------------------------------------- Android --------
   # One unit per application; shared Kotlin libraries are their own units and
   # reach applications through the Bazel graph, not through path globs.
-  # `android-app` is also the trigger for PR App Distribution in `ci.yml`
-  # (job `android-distribute`), which therefore runs whenever Bazel routing
-  # selects this unit, including when a shared library or ci.yml changed.
+  # `android-app` also has the Android build inputs of PR App Distribution in
+  # `ci.yml` (job `android-distribute`). That job follows `android_distribute`
+  # from `affected.py`: real `projects/mobile/android/**`, `packages/kotlin/**`
+  # or `platform/android/**` changes publish an APK; a global invalidation or a
+  # CI-workflow edit only runs this unit's checks.
   - id: android-app
     platform: android
     title: "projects/mobile/android (Home client, dev.proflyder.home)"

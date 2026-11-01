@@ -141,8 +141,8 @@ rules:
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     resourceNames:
-      - monitoring-prometheus
-      - monitoring-alertmanager
+      - prometheus-monitoring-prometheus
+      - alertmanager-monitoring-alertmanager
       - loki
     verbs: ["patch"]
   - apiGroups: ["apps"]

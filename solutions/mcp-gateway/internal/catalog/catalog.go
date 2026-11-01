@@ -42,6 +42,10 @@ type Catalog struct {
 	// Overview is sanitized free-form markdown about the topology. It is served
 	// as the infra://catalog MCP resource and returned by infra_overview.
 	Overview string `yaml:"overview"`
+	// IgnoreAlerts lists alert names that are expected to fire permanently
+	// (for example Prometheus' Watchdog) and must not count as problems in
+	// infra_status. They stay reachable through infra_alert and infra_service.
+	IgnoreAlerts []string `yaml:"ignore_alerts"`
 	// Services is the allow-list of things the gateway may read and (when
 	// restart.allowed) restart.
 	Services []Service `yaml:"services"`
@@ -135,6 +139,21 @@ func (c *Catalog) Validate() error {
 	if len(c.Services) == 0 {
 		problems = append(problems, "catalog has no services")
 	}
+	ignored := make(map[string]int, len(c.IgnoreAlerts))
+	for i, name := range c.IgnoreAlerts {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			problems = append(problems, fmt.Sprintf("ignore_alerts[%d]: alert name is required", i))
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if first, ok := ignored[key]; ok {
+			problems = append(problems, fmt.Sprintf(
+				"ignore_alerts[%d]: duplicate alert %q (first at ignore_alerts[%d])", i, trimmed, first))
+			continue
+		}
+		ignored[key] = i
+	}
 	seen := make(map[string]int, len(c.Services))
 	for i := range c.Services {
 		s := &c.Services[i]
@@ -221,6 +240,9 @@ func (c *Catalog) Validate() error {
 
 // prepare builds alias lookup structures. Call after Validate.
 func (c *Catalog) prepare() {
+	for i := range c.IgnoreAlerts {
+		c.IgnoreAlerts[i] = strings.TrimSpace(c.IgnoreAlerts[i])
+	}
 	for i := range c.Services {
 		s := &c.Services[i]
 		s.AliasIndex = append(append([]string(nil), s.Aliases.RU...), s.Aliases.EN...)
@@ -229,6 +251,21 @@ func (c *Catalog) prepare() {
 			s.Normalized = append(s.Normalized, Normalize(alias))
 		}
 	}
+}
+
+// IgnoresAlert reports whether infra_status should treat the named alert as
+// expected background noise. Matching ignores surrounding spaces and case.
+func (c *Catalog) IgnoresAlert(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	for _, ignored := range c.IgnoreAlerts {
+		if strings.EqualFold(strings.TrimSpace(ignored), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // Find returns the service with the given id.
@@ -369,6 +406,10 @@ func (c *Catalog) OverviewText() string {
 func (c *Catalog) CatalogText() string {
 	var b strings.Builder
 	b.WriteString("# Каталог сервисов\n\n")
+	if len(c.IgnoreAlerts) > 0 {
+		fmt.Fprintf(&b, "Ожидаемо всегда активные алерты (не считаются проблемой): %s\n\n",
+			strings.Join(c.IgnoreAlerts, ", "))
+	}
 	for _, s := range c.Services {
 		aliases := append(append([]string(nil), s.Aliases.RU...), s.Aliases.EN...)
 		fmt.Fprintf(&b, "## %s\n", s.ID)

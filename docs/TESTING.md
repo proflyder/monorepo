@@ -184,12 +184,17 @@ matrix одного платформенного workflow.
 workflow → `ci-ok`. Отдельного generic Bazel-workflow нет: Bazel — внутренний
 инструмент `_android.yml` и deploy-control регрессии, а не платформа.
 Единственное исключение — job `android-distribute`: он ждёт `android` и при
-PR с юнитом `android-app` (и не из форка) собирает и загружает APK в Firebase.
-Он намеренно не входит в `ci-ok`, поэтому его падение не блокирует merge.
+PR (не из форка) с `android_distribute` = true собирает и загружает APK в
+Firebase. Этот output true только когда изменился реальный вход приложения
+(`projects/mobile/android/**`, `packages/kotlin/**` или `platform/android/**`);
+глобальная инвалидация вроде `MODULE.bazel` прогоняет проверки `android`, но не
+публикует сборку. Job намеренно не входит в `ci-ok`, поэтому его падение не
+блокирует merge.
 
 `changes` выдаёт outputs `go_units`, `android_units`, `python_units`,
-`deploy_control`, `base_sha`, `docs_only`; каждый output — JSON-массив записей
-matrix. Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
+`deploy_control`, `android_distribute`, `base_sha`, `docs_only`; каждый output —
+JSON-массив записей matrix (`android_distribute` — `true`/`false`). Пустой
+массив означает «пропустить job» (законный skip для `ci-ok`).
 
 ### Карта юнитов
 

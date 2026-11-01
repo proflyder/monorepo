@@ -54,6 +54,9 @@ Tracked files contain only placeholders/TEST-NET values.
   them to a catalog id, never to free text.
 - Signals with `status: true` describe the **bad** state (`... == 0`,
   `... < 1`, `... > 0`); any non-empty result is a problem.
+- `ignore_alerts` lists alerts that are always active by design (`Watchdog`,
+  `InfoInhibitor`); `infra_status` reports them separately as
+  `details.ignoredAlerts` and never counts or speaks them as a problem.
 - Logs: `loki` only for namespaces Alloy ingests (`monitoring`,
   `currency-bot`, `openbao`, `kube-system`), `pods` for everything else
   (`pods/log` through the API), `none` for HAOS/MA/station. `logs.containers`
@@ -65,7 +68,10 @@ Tracked files contain only placeholders/TEST-NET values.
 - `restart.allowed: true` for every repository-managed Kubernetes workload,
   each with an honest Russian warning. `hermes`, `mcp-gateway` are
   `self_disrupting: true`, so the patch is deferred ~20 s and the reply is
-  spoken first.
+  spoken first. The two operator-managed monitoring StatefulSets keep their
+  live names — `prometheus-monitoring-prometheus` and
+  `alertmanager-monitoring-alertmanager` — and their warnings say the
+  Prometheus Operator owns them and may roll the pods a second time.
 - External targets (HAOS, Music Assistant, station) are read-only: the gateway
   cannot restart anything outside Kubernetes, and the station exposes no
   metrics at all (documented limitation in the catalog).
@@ -164,8 +170,9 @@ Never paste secret values into chat or a commit. Use the private paths below.
      externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram --timeout=120s
    ```
 
-   `ci/rbac.yaml` only adds the two kinds the scheduler Role for
-   `home-assistant` lacks: NetworkPolicy and ServiceMonitor.
+   `ci/rbac.yaml` only adds what the scheduler Role for `home-assistant`
+   lacks: NetworkPolicy and ServiceMonitor, plus `get` on `services/proxy` for
+   the gateway's Service so the post-deploy smoke can read `/readyz`.
 
 4. **Deploy-time env** in `secrets/home/mcp-gateway.env` (copy the example):
 

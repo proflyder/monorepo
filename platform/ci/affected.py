@@ -405,10 +405,43 @@ class Route:
     # Units selected for deploy-home, which ignores `deploy: false`
     # invalidations. CI routing (`routes`) keeps using every invalidation.
     deploy_selected: set[str] = field(default_factory=set)
+    # True only when an Android application input actually changed. A global
+    # invalidation (MODULE.bazel) or a CI-harness edit still selects the android
+    # units for tests, but must never publish an APK.
+    android_distribute: bool = False
     warnings: list[str] = field(default_factory=list)
 
 
 GLOBAL = "*"
+
+
+def android_distribute_paths(config: Config) -> list[str]:
+    """Paths whose change means the Android application itself changed.
+
+    Android unit paths cover the application and the shared Kotlin libraries it
+    builds; deploy-relevant Android invalidations cover the platform build
+    tooling (for example `platform/android/**`). A global invalidation such as
+    `MODULE.bazel`, or a CI-harness edit (`deploy: false`), still selects the
+    Android units for their checks but must never publish an APK: the checks
+    prove the change is safe, not that the app changed.
+    """
+    patterns = [pattern for unit in config.by_platform("android") for pattern in unit.paths]
+    patterns += [
+        pattern
+        for rule in config.invalidations
+        if rule.deploy
+        for platform in (part.strip() for part in ",".join(rule.platforms).split(","))
+        if platform == "android"
+        for pattern in rule.paths
+    ]
+    return patterns
+
+
+def android_distribution(config: Config, changed: list[str]) -> bool:
+    """Whether a changed path is an actual Android application input."""
+    if not changed:
+        return False
+    return any(path_matches(path, android_distribute_paths(config)) for path in changed)
 
 
 def _invalidated_platforms(
@@ -597,6 +630,7 @@ def route(
         docs_only=docs_only,
         deploy_control=deploy_control,
         deploy_selected=deploy_selected,
+        android_distribute=android_distribution(config, changed),
         warnings=warnings,
     )
 
@@ -690,6 +724,7 @@ def summary_markdown(route_: Route, config: Config) -> str:
     lines.append("")
     lines.append(f"Docs only: `{str(route_.docs_only).lower()}`")
     lines.append(f"Deploy control regression: `{str(route_.deploy_control).lower()}`")
+    lines.append(f"Android distribute: `{str(route_.android_distribute).lower()}`")
     deployed = sorted(
         unit.id
         for unit in config.units
@@ -782,6 +817,7 @@ def main(argv: list[str] | None = None) -> int:
                     "changed_files": result.changed,
                     "docs_only": result.docs_only,
                     "deploy_control": result.deploy_control,
+                    "android_distribute": result.android_distribute,
                     "deploy_units": deploy_entries(result, config),
                     "warnings": result.warnings,
                     "modes": {name: route_.mode for name, route_ in result.routes.items()},
@@ -805,6 +841,7 @@ def main(argv: list[str] | None = None) -> int:
                 "quality": "true",
                 "docs_only": str(result.docs_only).lower(),
                 "deploy_control": str(result.deploy_control).lower(),
+                "android_distribute": str(result.android_distribute).lower(),
                 "deploy_units": json.dumps(deploy_entries(result, config)),
                 "summary": summary_markdown(result, config),
             },

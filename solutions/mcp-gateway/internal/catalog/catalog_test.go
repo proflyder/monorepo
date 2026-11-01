@@ -10,6 +10,7 @@ const minimalCatalog = `
 overview: |
   ## Топология
   Один кластер.
+ignore_alerts: [Watchdog, InfoInhibitor]
 services:
   - id: scheduler
     aliases:
@@ -83,6 +84,27 @@ func TestParseValid(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("catalog text missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestIgnoreAlerts(t *testing.T) {
+	cat, err := Parse([]byte(minimalCatalog))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	for _, name := range []string{"Watchdog", "watchdog", "  INFOINHIBITOR  "} {
+		if !cat.IgnoresAlert(name) {
+			t.Fatalf("IgnoresAlert(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"", "RicardoEndpointDown"} {
+		if cat.IgnoresAlert(name) {
+			t.Fatalf("IgnoresAlert(%q) = true, want false", name)
+		}
+	}
+	text := cat.CatalogText()
+	if !strings.Contains(text, "Watchdog") || !strings.Contains(text, "InfoInhibitor") {
+		t.Fatalf("catalog text does not mention ignored alerts:\n%s", text)
 	}
 }
 
@@ -233,6 +255,16 @@ services:
     kind: k8s
     namespace: home
     workload: {kind: Pod, name: a}
+`,
+		"empty ignore alert": `
+ignore_alerts: [Watchdog, ""]
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+`,
+		"duplicate ignore alert": `
+ignore_alerts: [Watchdog, watchdog]
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
 `,
 	}
 	for name, raw := range tests {

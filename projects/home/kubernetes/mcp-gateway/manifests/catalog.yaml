@@ -8,6 +8,8 @@
 # Contract (see solutions/mcp-gateway/README.md):
 #   * a signal with `status: true` is evaluated inside infra_status, and its
 #     PromQL must describe the BAD state: any non-empty result is a problem;
+#   * `ignore_alerts` names alerts that always fire by design; infra_status
+#     counts them separately as ignored and never speaks them as a problem;
 #   * `restart.allowed` is exactly what infra.fix may patch, and RBAC
 #     (manifests/rbac.yaml) restricts `patch` to the same workload names;
 #   * `restart.self_disrupting` defers the patch so the spoken reply survives;
@@ -57,6 +59,13 @@ overview: |
     кластера; шлюз не публикуется наружу (ClusterIP, без ingress).
   - Внешние цели (HAOS, Music Assistant, станция) только читаются; их
     перезапуск выполняется вручную вне шлюза.
+
+# Alerts that always fire by design and must never be spoken as a problem:
+# Watchdog proves the alerting pipeline is alive; InfoInhibitor is its
+# alertmanager-side suppressor. Both stay reachable through infra_alert.
+ignore_alerts:
+  - Watchdog
+  - InfoInhibitor
 
 services:
   # ------------------------------------------------------ home-assistant ----
@@ -266,9 +275,9 @@ services:
     namespace: monitoring
     workload:
       kind: StatefulSet
-      name: monitoring-prometheus
+      name: prometheus-monitoring-prometheus
     signals:
-      - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="monitoring-prometheus"} < 1
+      - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="prometheus-monitoring-prometheus"} < 1
         meaning: Prometheus недоступен
         status: true
     logs:
@@ -276,7 +285,7 @@ services:
       selector: '{namespace="monitoring",container="prometheus"}'
     restart:
       allowed: true
-      warning: "Метрики и алерты не будут собираться несколько минут, данные за это время потеряются."
+      warning: "Метрики и алерты не будут собираться несколько минут, данные за это время потеряются. StatefulSet принадлежит Prometheus Operator: после патча оператор может перезапустить поды ещё раз."
     description: Prometheus kube-prometheus-stack (7 дней retention).
 
   - id: alertmanager
@@ -287,9 +296,9 @@ services:
     namespace: monitoring
     workload:
       kind: StatefulSet
-      name: monitoring-alertmanager
+      name: alertmanager-monitoring-alertmanager
     signals:
-      - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="monitoring-alertmanager"} < 1
+      - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="alertmanager-monitoring-alertmanager"} < 1
         meaning: Alertmanager недоступен
         status: true
     logs:
@@ -297,7 +306,7 @@ services:
       selector: '{namespace="monitoring",container="alertmanager"}'
     restart:
       allowed: true
-      warning: "Уведомления об алертах в Telegram не будут доставляться, пока он не поднимется."
+      warning: "Уведомления об алертах в Telegram не будут доставляться, пока он не поднимется. StatefulSet принадлежит Prometheus Operator: после патча оператор может перезапустить поды ещё раз."
     description: Alertmanager (Telegram-уведомления, тишины).
 
   - id: grafana
