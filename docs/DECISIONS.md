@@ -93,4 +93,21 @@
     API остаётся LAN/VPN. Логи — JSON в stdout, метрики — Prometheus,
     деплой — data-driven CI-юнит `currency-bot`.
 
+22. **Один MCP-шлюз, перезапуск только с подтверждением.** Вся
+    инфраструктурная диагностика идёт через `solutions/mcp-gateway`: Hermes
+    (голос и Telegram) не имеет ServiceAccount-токена и kubectl, доступ к
+    Prometheus/Alertmanager/Loki/Kubernetes API есть только у шлюза. Группы
+    `infra.read` (чтение), `infra.fix` (единственная мутация — rollout restart
+    Deployment/StatefulSet/DaemonSet из каталога, два шага: prepare → confirm,
+    TTL 90 с, cooldown 5 мин) и `infra.report` (Telegram, получатель
+    фиксирован). Перезапуск разрешён для всех repo-managed workload'ов только
+    после голосового или Telegram-подтверждения, у каждого — честное
+    предупреждение; `hermes`, `voice-proxy` (Deployment `hermes`) и
+    `mcp-gateway` помечены `self_disrupting`, патч откладывается ~20 с, чтобы
+    ответ успели озвучить. Внешние HAOS/MA/станция — только чтение. Список
+    целей — каталог (ConfigMap), и RBAC `patch` с `resourceNames` обязан
+    совпадать с ним (contract-тест). Логи — Loki там, где Alloy шипит
+    namespace, иначе `pods/log`; отчёты и алерты — отдельный инфра-бот,
+    бот currency-bot остаётся только у currency-bot.
+
 Меняется решение — обновить этот файл и `STATE.md`.

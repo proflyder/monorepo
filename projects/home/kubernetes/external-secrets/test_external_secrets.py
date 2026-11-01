@@ -53,9 +53,10 @@ class ExternalSecretsContracts(unittest.TestCase):
                     found[(ns, name)] = extract
                 self.assertEqual(found, expected)
 
-    def test_alertmanager_config_reads_only_the_bot_token_and_chat_ids(self):
-        # The one deliberate cross-namespace read: Alertmanager sends through
-        # the currency bot, so the bot token keeps a single source of truth.
+    def test_alertmanager_config_reads_the_hermes_bot_and_owner_chat(self):
+        # The one deliberate cross-namespace read: Alertmanager alerts and
+        # Hermes chat share one dedicated bot, so both the token and the owner
+        # chat id come from k8s/home-assistant/hermes-environment.
         path = ROOT / "projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml"
         docs = [d for d in yaml.safe_load_all(path.read_text()) if d]
         self.assertEqual(len(docs), 1)
@@ -66,8 +67,8 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertEqual(spec["target"]["deletionPolicy"], "Retain")
         self.assertNotIn("dataFrom", spec)
         refs = {(d["remoteRef"]["key"], d["remoteRef"]["property"]) for d in spec["data"]}
-        self.assertEqual(refs, {("k8s/currency-bot/currency-bot", "BOT_TOKEN"),
-                                ("k8s/currency-bot/currency-bot", "CHAT_ID")})
+        self.assertEqual(refs, {("k8s/home-assistant/hermes-environment", "TELEGRAM_BOT_TOKEN"),
+                                ("k8s/home-assistant/hermes-environment", "TELEGRAM_ALLOWED_USERS")})
         config = yaml.safe_load(spec["target"]["template"]["data"]["alertmanager.yaml"]
                                 .replace("{{", "").replace("}}", ""))
         routes = config["route"]["routes"]
@@ -79,8 +80,14 @@ class ExternalSecretsContracts(unittest.TestCase):
         raw = spec["target"]["template"]["data"]["alertmanager.yaml"]
         self.assertIn('{{ `{{ template "telegram.home.message" . }}` }}', raw)
         self.assertIn("/etc/alertmanager/configmaps/alertmanager-templates/*.tmpl", raw)
+        # The owner id is the first allow-list entry and doubles as the chat id.
+        self.assertIn('index (splitList "," .chat_ids) 0', raw)
         tmpl = (ROOT / "projects/home/kubernetes/observability/alertmanager/telegram.tmpl").read_text()
         self.assertIn('{{ define "telegram.home.message" -}}', tmpl)
+        # Each alert carries a fingerprint prefix so a Telegram reply can be
+        # resolved by mcp-gateway's infra_alert.
+        self.assertIn('{{ .Fingerprint | reReplaceAll "^(.{12}).*$" "$1" }}', tmpl)
+        self.assertIn("ответьте на это сообщение", tmpl)
         values = yaml.safe_load((ROOT / "platform/observability/values/prometheus.yaml").read_text())
         self.assertEqual(values["alertmanager"]["alertmanagerSpec"]["configMaps"],
                          ["alertmanager-templates"])

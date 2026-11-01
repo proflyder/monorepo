@@ -1,9 +1,9 @@
 name: deploy-home
 
-# Home K3s deploy (scheduler, ha-bridge/ha-control, currency-bot, Hermes) from
-# `develop`. Per-unit namespace, workload list, deploy script, OpenBao env key
-# and ExternalSecret set come from `platform/ci/units.yml` (matrix payload), so
-# adding a deployable unit does not need a workflow edit.
+# Home K3s deploy (scheduler, ha-bridge/ha-control, currency-bot, mcp-gateway,
+# Hermes) from `develop`. Per-unit namespace, workload list, deploy script,
+# OpenBao env key and ExternalSecret set come from `platform/ci/units.yml`
+# (matrix payload), so adding a deployable unit does not need a workflow edit.
 #
 # A push to `develop` is a squash-merge of a PR, so it runs in the base
 # repository context with Environment secrets. The `plan` job routes the change
@@ -578,6 +578,20 @@ jobs:
                   exit 1
                 fi
                 echo "currency-bot-webhook ready endpoints: $webhook_ready"
+                ;;
+              mcp-gateway)
+                # Readiness through the API-server Service proxy: proves the
+                # catalog and both mounted Secrets are wired, which plain
+                # `rollout status` cannot show for a distroless image.
+                kubectl -n "$NS" get --raw \
+                  "/api/v1/namespaces/$NS/services/http:mcp-gateway:8080/proxy/readyz" \
+                  | tee "$CI_DIR/mcp-readyz.json"
+                python3 - "$CI_DIR/mcp-readyz.json" <<'PY'
+          import json, sys
+          status = json.load(open(sys.argv[1]))
+          assert status.get("status") == "ready", "mcp-gateway reports not ready"
+          print("mcp-gateway /readyz:", status.get("status"))
+          PY
                 ;;
             esac
           done

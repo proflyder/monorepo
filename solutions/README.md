@@ -10,6 +10,7 @@
 | `alarm/` | Go | legacy `AlarmService` facade над тем же engine + совместимый entrypoint | реализован facade |
 | `ha-bridge/` | Go | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `cmd/ha-control` — каталог Home и очередь `control` | развёрнут |
 | `currency-bot/` | Go | курсы kurs.kz → SQLite, алерты и API; Telegram webhook через Cloudflare Tunnel, импорт H2 | развёрнут |
+| `mcp-gateway/` | Go | MCP Streamable HTTP шлюз: группы `infra.read`, `infra.fix`, `infra.report`; каталог сервисов из env | реализован |
 
 ## Правила
 

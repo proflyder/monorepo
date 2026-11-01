@@ -53,7 +53,7 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 ## Данные
 
 - `/srv/k3s/runtime` — K3s data, containerd, datastore.
-- `/srv/k3s/volumes/hermes` — Hermes home, в Pod `/opt/data`.
+- `/srv/k3s/volumes/runtime-hermes` — Hermes home, в Pod `/opt/data`.
 - `/srv/k3s/volumes/openbao{, -backups}` — OpenBao raft и raft snapshots
   (PV `openbao-data`/`openbao-backups`, `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
@@ -159,6 +159,72 @@ KUBECONFIG=secrets/kubernetes-research/kubeconfig \
 
 Dashboard JSON: `projects/home-assistant/observability/chart/dashboards/`;
 доставка через ConfigMap → Grafana sidecar. Ручной import не нужен.
+
+## MCP gateway (инфраструктурный шлюз)
+
+`solutions/mcp-gateway` в namespace `home-assistant`: ClusterIP `:8080`, один
+Deployment, `ServiceMonitor`. Hermes ходит в `/mcp` с Bearer-токеном
+(`HERMES_INFRA_TOKEN`); сам Hermes доступа к Kubernetes API не имеет
+(`automountServiceAccountToken: false`) — весь доступ к кластеру идёт через
+шлюз. Инструкция по каталогу и RBAC —
+`projects/home/kubernetes/mcp-gateway/README.md`.
+
+Одноразово (admin, до первого деплоя):
+
+```bash
+export KUBECONFIG=/private/path/kubeconfig
+# токен шлюза↔Hermes; значение никогда не печатать
+bao kv put secret/k8s/home-assistant/mcp-gateway-auth token="$(openssl rand -hex 32)"
+kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
+kubectl apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
+kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
+kubectl -n home-assistant wait --for=condition=Ready \
+  externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram --timeout=120s
+```
+
+`ci/rbac.yaml` добавляет `home-assistant/ci-deploy` только NetworkPolicy и
+ServiceMonitor; остальные глаголы деплоя уже есть в scheduler-Role.
+
+Деплой и проверки:
+
+```bash
+NODE_SSH=labuser@192.0.2.27 ./projects/home/kubernetes/mcp-gateway/deploy.sh
+
+kubectl -n home-assistant get deploy,pod,svc -l app.kubernetes.io/name=mcp-gateway
+kubectl -n home-assistant logs deploy/mcp-gateway --tail=50
+kubectl -n home-assistant get --raw \
+  "/api/v1/namespaces/home-assistant/services/http:mcp-gateway:8080/proxy/readyz"
+kubectl -n home-assistant exec deploy/mcp-gateway -- \
+  /usr/local/bin/mcp-gateway -healthcheck
+```
+
+Проверка прав ровно по каталогу:
+
+```bash
+kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+  patch deployment/scheduler -n home-assistant      # yes
+kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+  delete deployment/scheduler -n home-assistant     # no
+kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+  patch statefulset/openbao -n openbao              # yes
+kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+  patch deployment/traefik -n monitoring            # no
+```
+
+Перезапуск выполняет только шлюз, всегда два шага (`infra_prepare_restart` →
+`infra_confirm`, TTL 90 с, cooldown 5 мин на workload). Ручной эквивалент для
+диагностики — обычный rollout restart, но он обходит предупреждения:
+
+```bash
+kubectl -n home-assistant rollout restart deployment/piper
+kubectl -n home-assistant annotate deployment/piper mcp-gateway/last-restart- --overwrite
+```
+
+Ротация токена: обновить OpenBao `k8s/home-assistant/mcp-gateway-auth`, затем
+перезапустить `mcp-gateway` и `hermes` (иначе Hermes продолжит слать старый
+Bearer). Ротация Telegram-бота: обновить `TELEGRAM_BOT_TOKEN` /
+`TELEGRAM_ALLOWED_USERS` в `k8s/home-assistant/hermes-environment` и
+дождаться синхронизации обоих ExternalSecret (force-sync аннотацией).
 
 ## Grafana / observability
 

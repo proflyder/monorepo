@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "mcp-gateway_lib",
+    srcs = [
+        "healthcheck.go",
+        "main.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/cmd/mcp-gateway",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//solutions/mcp-gateway/app",
+        "//solutions/mcp-gateway/internal/config",
+    ],
+)
+
+go_binary(
+    name = "mcp-gateway",
+    embed = [":mcp-gateway_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,281 @@
+package catalog
+
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+const minimalCatalog = `
+overview: |
+  ## Топология
+  Один кластер.
+services:
+  - id: scheduler
+    aliases:
+      ru: [планировщик, будильники]
+      en: [scheduler, alarms]
+    kind: k8s
+    namespace: home
+    workload:
+      kind: Deployment
+      name: scheduler
+    containers: [scheduler]
+    signals:
+      - promql: up{job="scheduler"} == 0
+        meaning: планировщик недоступен
+        status: true
+    logs:
+      source: pods
+      containers: [scheduler]
+    restart:
+      allowed: true
+      warning: Будильники в ближайшие минуты могут не сработать.
+    description: Планировщик будильников.
+  - id: hermes
+    aliases:
+      ru: [гермес, ассистент]
+      en: [hermes]
+    kind: k8s
+    namespace: home
+    workload:
+      kind: Deployment
+      name: hermes
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="hermes"} == 0
+        meaning: Гермес недоступен
+    logs:
+      source: loki
+      selector: '{namespace="home"}'
+    restart:
+      allowed: true
+      self_disrupting: true
+      warning: Текущий разговор прервётся.
+  - id: ha
+    aliases:
+      ru: [дом, хоум ассистент]
+      en: [ha]
+    kind: external
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="ha"} == 0
+        meaning: Home Assistant недоступен
+        status: true
+    restart:
+      allowed: false
+`
+
+func TestParseValid(t *testing.T) {
+	cat, err := Parse([]byte(minimalCatalog))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(cat.Services) != 3 {
+		t.Fatalf("services = %d, want 3", len(cat.Services))
+	}
+	if len(cat.K8sServices()) != 2 {
+		t.Fatalf("k8s services = %d, want 2", len(cat.K8sServices()))
+	}
+	if got := cat.OverviewText(); !strings.Contains(got, "Топология") {
+		t.Fatalf("overview = %q", got)
+	}
+	text := cat.CatalogText()
+	for _, want := range []string{"## scheduler", "restart: allowed", "workload: Deployment home/scheduler"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("catalog text missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestResolveAliases(t *testing.T) {
+	cat, err := Parse([]byte(minimalCatalog))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	cases := map[string]string{
+		"планировщик":     "scheduler",
+		"ПЛАНИРОВЩИК":     "scheduler",
+		"  Планировщик  ": "scheduler",
+		"будильники":      "scheduler",
+		"scheduler":       "scheduler",
+		"Гермес":          "hermes",
+		"ГЕРМЁС":          "hermes",
+		"гермёс":          "hermes",
+		"ассистент":       "hermes",
+		"гермес!":         "hermes",
+		"хоум ассистент":  "ha",
+		"планировщикк":    "scheduler", // one edit away
+	}
+	for input, wantID := range cases {
+		service, err := cat.Resolve(input)
+		if err != nil {
+			t.Fatalf("Resolve(%q): %v", input, err)
+		}
+		if service.ID != wantID {
+			t.Fatalf("Resolve(%q) = %q, want %q", input, service.ID, wantID)
+		}
+	}
+}
+
+func TestResolveUnknownAndAmbiguous(t *testing.T) {
+	cat, err := Parse([]byte(minimalCatalog))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	for _, input := range []string{"", "   ", "база данных", "x"} {
+		if _, err := cat.Resolve(input); err == nil {
+			t.Fatalf("Resolve(%q) succeeded, want error", input)
+		}
+	}
+	ambiguous := `
+services:
+  - id: a
+    aliases: {en: [alpha]}
+    kind: external
+  - id: b
+    aliases: {en: [alphabet]}
+    kind: external
+`
+	cat, err = Parse([]byte(ambiguous))
+	if err != nil {
+		t.Fatalf("Parse ambiguous: %v", err)
+	}
+	// "alpha" is an exact alias, so it must still win over the substring match.
+	if service, err := cat.Resolve("alpha"); err != nil || service.ID != "a" {
+		t.Fatalf("exact alias resolve = %q, %v", service.ID, err)
+	}
+}
+
+func TestValidateErrors(t *testing.T) {
+	tests := map[string]string{
+		"no services": `
+overview: x
+`,
+		"duplicate id": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+  - {id: a, aliases: {en: [b]}, kind: external}
+`,
+		"missing alias": `
+services:
+  - {id: a, kind: external}
+`,
+		"bad kind": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: alien}
+`,
+		"k8s without namespace": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: k8s
+    workload: {kind: Deployment, name: a}
+`,
+		"k8s without workload": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: k8s
+    namespace: home
+`,
+		"external with workload": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: external
+    namespace: home
+    workload: {kind: Deployment, name: a}
+`,
+		"external restart": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: external
+    restart: {allowed: true, warning: x}
+`,
+		"restart without warning": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: k8s
+    namespace: home
+    workload: {kind: Deployment, name: a}
+    restart: {allowed: true}
+`,
+		"loki without selector": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: k8s
+    namespace: home
+    workload: {kind: Deployment, name: a}
+    logs: {source: loki}
+`,
+		"bad log source": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: k8s
+    namespace: home
+    workload: {kind: Deployment, name: a}
+    logs: {source: file}
+`,
+		"signal without meaning": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: external
+    signals: [{promql: up == 0}]
+`,
+		"bad workload kind": `
+services:
+  - id: a
+    aliases: {en: [a]}
+    kind: k8s
+    namespace: home
+    workload: {kind: Pod, name: a}
+`,
+	}
+	for name, raw := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Parse([]byte(raw)); err == nil {
+				t.Fatalf("Parse succeeded, want validation error")
+			}
+		})
+	}
+}
+
+func TestParseInvalidYAML(t *testing.T) {
+	if _, err := Parse([]byte("services: [")); err == nil {
+		t.Fatal("Parse succeeded on invalid YAML")
+	}
+}
+
+func TestExampleCatalogIsValid(t *testing.T) {
+	// `go test` runs in the package directory; the Bazel sandbox runs from the
+	// runfiles workspace root.
+	path := ""
+	for _, candidate := range []string{
+		"../../testdata/catalog.example.yaml",
+		"solutions/mcp-gateway/testdata/catalog.example.yaml",
+	} {
+		if _, err := os.Stat(candidate); err == nil {
+			path = candidate
+			break
+		}
+	}
+	if path == "" {
+		t.Fatal("catalog.example.yaml not found in runfiles")
+	}
+	cat, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if len(cat.Services) == 0 {
+		t.Fatal("example catalog has no services")
+	}
+	for _, service := range cat.Services {
+		if _, err := cat.Resolve(service.ID); err != nil {
+			t.Fatalf("example service %q does not resolve by id: %v", service.ID, err)
+		}
+	}
+}

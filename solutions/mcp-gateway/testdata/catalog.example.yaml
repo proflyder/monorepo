@@ -1,0 +1,139 @@
+# Example service catalog for solutions/mcp-gateway.
+#
+# This file is deployment data, not solution data. Copy it into a project,
+# replace every id, alias, namespace, workload and PromQL expression, and mount
+# the result from a ConfigMap. All values below are neutral examples; the only
+# addresses are documentation addresses from 192.0.2.0/24.
+overview: |
+  ## Example topology
+
+  A single Kubernetes cluster runs three zones of workloads:
+
+  - `example-apps` — user-facing services (assistant, scheduler).
+  - `example-data` — stateful services (database).
+  - `example-edge` — ingress and network edge (edge-proxy).
+
+  Two machines live outside the cluster:
+
+  - `ha-core` at 192.0.2.10:8123 — home automation core (read-only here).
+  - `media` at 192.0.2.11:8095 — media service (read-only here).
+
+  The gateway may only restart workloads whose catalog entry sets
+  `restart.allowed: true`. Everything else is read-only.
+
+services:
+  - id: scheduler
+    aliases:
+      ru: [планировщик, будильники]
+      en: [scheduler, alarms]
+    kind: k8s
+    namespace: example-apps
+    workload:
+      kind: Deployment
+      name: scheduler
+    containers: [scheduler]
+    signals:
+      - promql: up{job="scheduler"} == 0
+        meaning: планировщик недоступен
+        status: true
+      - promql: rate(process_cpu_seconds_total{job="scheduler"}[5m]) > 0.9
+        meaning: планировщик перегружен
+        status: false
+    logs:
+      source: pods
+      containers: [scheduler]
+    restart:
+      allowed: true
+      warning: Будильники в ближайшие минуты могут не сработать.
+    description: Планировщик фоновых задач и напоминаний.
+
+  - id: assistant
+    aliases:
+      ru: [ассистент, помощник]
+      en: [assistant, agent]
+    kind: k8s
+    namespace: example-apps
+    workload:
+      kind: Deployment
+      name: assistant
+    containers: [assistant, proxy]
+    signals:
+      - promql: probe_success{endpoint="assistant"} == 0
+        meaning: ассистент недоступен
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="example-apps", app="assistant"}'
+    restart:
+      allowed: true
+      self_disrupting: true
+      warning: Текущий разговор прервётся.
+    description: Ассистент, который вызывает этот шлюз. Перезапуск откладывается.
+
+  - id: database
+    aliases:
+      ru: [база данных, хранилище]
+      en: [database, db]
+    kind: k8s
+    namespace: example-data
+    workload:
+      kind: StatefulSet
+      name: database
+    containers: [database]
+    signals:
+      - promql: probe_success{endpoint="database"} == 0
+        meaning: база данных недоступна
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="example-data"}'
+    restart:
+      allowed: false
+    description: Хранилище с одним экземпляром; перезапуск только вручную.
+
+  - id: edge-proxy
+    aliases:
+      ru: [прокси, вход]
+      en: [edge, proxy, ingress]
+    kind: k8s
+    namespace: example-edge
+    workload:
+      kind: DaemonSet
+      name: edge-proxy
+    signals:
+      - promql: up{job="edge-proxy"} == 0
+        meaning: прокси недоступен
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="example-edge"}'
+    restart:
+      allowed: true
+      warning: Все внешние соединения прервутся на несколько секунд.
+    description: Входной прокси кластера.
+
+  - id: ha-core
+    aliases:
+      ru: [дом, умный дом]
+      en: [home automation, ha]
+    kind: external
+    signals:
+      - promql: probe_success{endpoint="ha"} == 0
+        meaning: умный дом недоступен
+        status: true
+    restart:
+      allowed: false
+    description: Система умного дома вне Kubernetes; только чтение сигналов.
+
+  - id: media
+    aliases:
+      ru: [музыка, медиа]
+      en: [media, music]
+    kind: external
+    signals:
+      - promql: probe_success{endpoint="media"} == 0
+        meaning: медиа-сервис недоступен
+        status: true
+    restart:
+      allowed: false
+    description: Медиа-сервис вне Kubernetes; только чтение сигналов.

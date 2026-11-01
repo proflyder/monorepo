@@ -1,0 +1,113 @@
+# NetworkPolicy for the MCP gateway pod.
+#
+# K3s (kube-router) enforces NetworkPolicies. Traffic paths:
+#
+#   Hermes pod (hostNetwork, node address) -> mcp-gateway:8080/mcp
+#   Prometheus (namespace monitoring)      -> mcp-gateway:8080/metrics
+#   kubelet probes                         -> mcp-gateway:8080/healthz (node)
+#   mcp-gateway -> kube-API :6443, Prometheus/Alertmanager/Loki,
+#                  api.telegram.org:443, CoreDNS:53
+#
+# Hermes runs with hostNetwork, so its packets arrive with the node address as
+# the source and there is no per-pod identity to select: a podSelector would
+# silently block the voice path. The node address, the pod CIDR and the LAN
+# CIDR are therefore allowed explicitly (the same trade-off already documented
+# for currency-bot). The Service is ClusterIP, so this only exposes the gateway
+# to the node and its own cluster, and /mcp still requires the bearer token.
+#
+# TEMPLATE: LAN_CIDR and NODE_LAN_IP come from the private deploy env.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-gateway-ingress
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    # Hermes (hostNetwork -> node address), kubelet probes, API-server Service
+    # proxy used by the deploy smoke, and other in-cluster clients.
+    - from:
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+        - ipBlock:
+            cidr: ${LAN_CIDR}
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Prometheus scrape of /metrics (and /healthz) inside the cluster network.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-gateway-egress
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-gateway
+  policyTypes:
+    - Egress
+  egress:
+    # Kubernetes API server: the ClusterIP Service (service CIDR) and the node
+    # on 6443. The client uses the in-cluster ServiceAccount and CA.
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+      ports:
+        - protocol: TCP
+          port: 6443
+    # Prometheus (:9090), Alertmanager (:9093) and Loki (:3100).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 9093
+        - protocol: TCP
+          port: 3100
+    # Telegram Bot API for infra.report. Telegram publishes no stable address
+    # range, so the destination cannot be narrowed to an ipBlock without
+    # breaking quietly; only 443/tcp is opened.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # DNS: CoreDNS in kube-system, plus any resolver reachable on port 53.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

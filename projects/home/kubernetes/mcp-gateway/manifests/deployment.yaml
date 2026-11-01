@@ -1,0 +1,168 @@
+# MCP infra gateway: one Deployment, one ClusterIP Service.
+#
+# TEMPLATE. deploy.sh renders it with private values (NODE_LAN_IP is used by the
+# NetworkPolicy, the image digest comes from the Bazel build); rendered
+# manifests are never committed.
+#
+#   MCP_GATEWAY_IMAGE   digest-pinned image built by Bazel
+#   BUILD_ID            rollout annotation (image fingerprint)
+#
+# The pod runs as 65534 with a read-only root filesystem. It has a
+# ServiceAccount token on purpose: the only cluster access in the whole voice
+# path goes through this pod (Hermes itself has none).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-gateway
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 1
+  # A second replica would double the pending-action store and the cooldown
+  # bookkeeping is per pod, so the gateway stays single-writer.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp-gateway
+      annotations:
+        ricardo.dev/build: ${BUILD_ID}
+    spec:
+      enableServiceLinks: false
+      serviceAccountName: mcp-gateway
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp-gateway
+          image: ${MCP_GATEWAY_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MCP_GROUPS
+              value: infra.read,infra.fix,infra.report
+            - name: MCP_HTTP_ADDR
+              value: ":8080"
+            - name: MCP_AUTH_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-auth/token
+            - name: MCP_INFRA_CATALOG_FILE
+              value: /etc/mcp-gateway/catalog.yaml
+            - name: MCP_PROMETHEUS_URL
+              value: http://monitoring-prometheus.monitoring.svc:9090
+            - name: MCP_ALERTMANAGER_URL
+              value: http://monitoring-alertmanager.monitoring.svc:9093
+            - name: MCP_LOKI_URL
+              value: http://loki.monitoring.svc:3100
+            # KUBERNETES_API_URL/TOKEN_FILE/CA_FILE are left at their in-cluster
+            # defaults: https://kubernetes.default.svc and the projected
+            # ServiceAccount volume.
+            - name: TELEGRAM_BOT_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-telegram/token
+            - name: TELEGRAM_CHAT_ID_FILE
+              value: /run/secrets/mcp-gateway-telegram/chat_id
+            - name: LOG_LEVEL
+              value: info
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          # The image is distroless: the probe is the binary itself, which loads
+          # the configuration (token file, catalog, groups) and then calls
+          # /healthz on loopback.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/mcp-gateway", "-healthcheck"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 7
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: catalog
+              mountPath: /etc/mcp-gateway
+              readOnly: true
+            - name: auth
+              mountPath: /run/secrets/mcp-gateway-auth
+              readOnly: true
+            - name: telegram
+              mountPath: /run/secrets/mcp-gateway-telegram
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: catalog
+          configMap:
+            name: mcp-gateway-catalog
+            items:
+              - key: catalog.yaml
+                path: catalog.yaml
+        - name: auth
+          secret:
+            secretName: mcp-gateway-auth
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        - name: telegram
+          secret:
+            secretName: mcp-gateway-telegram
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+              - key: chat_id
+                path: chat_id
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+# ClusterIP only: the gateway is reachable from Hermes (hostNetwork, node
+# address) and from Prometheus; it is never published through Traefik.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-gateway
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mcp-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

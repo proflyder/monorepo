@@ -4,6 +4,13 @@
   with summary, description, where and since when (Asia/Almaty), runbook link.
   Every label/annotation value goes through `html` so <, > and & cannot break
   Telegram's HTML parser.
+
+  Each alert carries its Alertmanager fingerprint: the template `Alert` type
+  exposes `.Fingerprint` as the 16-hex string that the v2 API also returns.
+  Replying to the Telegram message quotes it back into Hermes/mcp-gateway, where
+  `infra_alert` resolves it. The message shows the first 12 characters; the
+  gateway accepts a 6+ character prefix. Alertmanager has no `trunc` and no
+  sprig, so `reReplaceAll` does the shortening.
 */}}
 
 {{ define "home.time" }}{{ (.StartsAt | tz "Asia/Almaty").Format "02.01 15:04" }}{{ end }}
@@ -23,6 +30,7 @@
 {{- end }}
 {{ template "home.where" . }}🕒 с {{ template "home.time" . }}
 {{- with .Annotations.runbook_url }}   <a href="{{ . }}">runbook</a>{{ end }}
+🔎 <code>{{ .Fingerprint | reReplaceAll "^(.{12}).*$" "$1" }}</code>
 {{- end }}
 
 {{ define "telegram.home.message" -}}
@@ -36,7 +44,8 @@
 {{ end }}{{ end }}
 {{- if gt (len .Alerts.Firing) 5 }}
 …всего {{ len .Alerts.Firing }}
-{{ end }}
+{{- end }}
+↩️ ответьте на это сообщение, чтобы разобраться
 {{- if .Alerts.Resolved }}
 ✅ решено: {{ len .Alerts.Resolved }}
 {{- end }}

@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "telegram",
+    srcs = ["sender.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/telegram",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+)
+
+go_test(
+    name = "telegram_test",
+    srcs = ["sender_test.go"],
+    embed = [":telegram"],
+)

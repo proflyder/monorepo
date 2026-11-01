@@ -1,0 +1,17 @@
+load(":images.bzl", "service_image")
+
+package(default_visibility = ["//visibility:public"])
+
+# One static linux/amd64 binary on the digest-pinned distroless base, built
+# hermetically without a Docker daemon.
+service_image(
+    name = "mcp-gateway",
+    binary = "//solutions/mcp-gateway/cmd/mcp-gateway",
+    repo = "ghcr.io/proflyder/mcp-gateway",
+)
+
+filegroup(
+    name = "images",
+    srcs = [":mcp-gateway_image"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "redact",
+    srcs = ["redact.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/redact",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+)
+
+go_test(
+    name = "redact_test",
+    srcs = ["redact_test.go"],
+    embed = [":redact"],
+)
