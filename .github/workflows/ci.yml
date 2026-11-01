@@ -219,9 +219,9 @@ jobs:
           path: |
             ~/.cache/bazel-disk
             ~/.cache/target-determinator
-          key: bazel-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          key: bazel-android-android-app-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
-            bazel-android-${{ runner.os }}-
+            bazel-android-android-app-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the
       # platform/build-tools pinned in MODULE.bazel.
