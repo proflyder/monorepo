@@ -75,6 +75,15 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertIn('alertname =~ "Watchdog|InfoInhibitor"', routes[0]["matchers"])
         self.assertEqual(routes[0]["receiver"], "null")
         self.assertEqual(routes[1]["receiver"], "telegram")
+        # The message layout comes from the mounted template file.
+        raw = spec["target"]["template"]["data"]["alertmanager.yaml"]
+        self.assertIn('{{ `{{ template "telegram.home.message" . }}` }}', raw)
+        self.assertIn("/etc/alertmanager/configmaps/alertmanager-templates/*.tmpl", raw)
+        tmpl = (ROOT / "projects/home/kubernetes/observability/alertmanager/telegram.tmpl").read_text()
+        self.assertIn('{{ define "telegram.home.message" -}}', tmpl)
+        values = yaml.safe_load((ROOT / "platform/observability/values/prometheus.yaml").read_text())
+        self.assertEqual(values["alertmanager"]["alertmanagerSpec"]["configMaps"],
+                         ["alertmanager-templates"])
 
     def test_cluster_secret_store_uses_in_cluster_service_and_kubernetes_auth(self):
         docs = [d for d in yaml.safe_load_all(
