@@ -129,16 +129,19 @@ type podDetail struct {
 }
 
 type statusDetail struct {
-	Verdict      string           `json:"verdict"`
-	CheckedAt    string           `json:"checkedAt"`
-	ServiceCount int              `json:"serviceCount"`
-	Degraded     bool             `json:"degraded"`
-	Partial      bool             `json:"partial"`
-	Alerts       []alertDetail    `json:"alerts"`
-	Signals      []signalDetail   `json:"signals"`
-	Workloads    []workloadDetail `json:"workloads"`
-	Restarts     []podDetail      `json:"restarts"`
-	Errors       []string         `json:"errors,omitempty"`
+	Verdict      string        `json:"verdict"`
+	CheckedAt    string        `json:"checkedAt"`
+	ServiceCount int           `json:"serviceCount"`
+	Degraded     bool          `json:"degraded"`
+	Partial      bool          `json:"partial"`
+	Alerts       []alertDetail `json:"alerts"`
+	// IgnoredAlerts are active alerts the catalog marks as permanent
+	// background noise (ignore_alerts). They never affect the verdict.
+	IgnoredAlerts []alertDetail    `json:"ignoredAlerts"`
+	Signals       []signalDetail   `json:"signals"`
+	Workloads     []workloadDetail `json:"workloads"`
+	Restarts      []podDetail      `json:"restarts"`
+	Errors        []string         `json:"errors,omitempty"`
 }
 
 func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
@@ -151,12 +154,13 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 
 	var mu sync.Mutex
 	detail := statusDetail{
-		CheckedAt:    d.now().UTC().Format(time.RFC3339),
-		ServiceCount: len(cat.Services),
-		Alerts:       []alertDetail{},
-		Signals:      []signalDetail{},
-		Workloads:    []workloadDetail{},
-		Restarts:     []podDetail{},
+		CheckedAt:     d.now().UTC().Format(time.RFC3339),
+		ServiceCount:  len(cat.Services),
+		Alerts:        []alertDetail{},
+		IgnoredAlerts: []alertDetail{},
+		Signals:       []signalDetail{},
+		Workloads:     []workloadDetail{},
+		Restarts:      []podDetail{},
 	}
 	addError := func(msg string) {
 		mu.Lock()
@@ -177,16 +181,23 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 				return
 			}
 			items := make([]alertDetail, 0, len(alerts))
+			ignored := make([]alertDetail, 0)
 			for _, a := range alerts {
-				items = append(items, alertDetail{
+				item := alertDetail{
 					Name:      a.Labels["alertname"],
 					Severity:  a.Severity(),
 					Summary:   a.Summary(),
 					StartedAt: a.StartsAt.UTC().Format(time.RFC3339),
-				})
+				}
+				if cat.IgnoresAlert(item.Name) {
+					ignored = append(ignored, item)
+					continue
+				}
+				items = append(items, item)
 			}
 			mu.Lock()
 			detail.Alerts = items
+			detail.IgnoredAlerts = ignored
 			mu.Unlock()
 		}()
 	} else {
@@ -307,6 +318,7 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 	wg.Wait()
 
 	sort.SliceStable(detail.Alerts, func(i, j int) bool { return detail.Alerts[i].Name < detail.Alerts[j].Name })
+	sort.SliceStable(detail.IgnoredAlerts, func(i, j int) bool { return detail.IgnoredAlerts[i].Name < detail.IgnoredAlerts[j].Name })
 	sort.SliceStable(detail.Signals, func(i, j int) bool {
 		if detail.Signals[i].Service != detail.Signals[j].Service {
 			return detail.Signals[i].Service < detail.Signals[j].Service

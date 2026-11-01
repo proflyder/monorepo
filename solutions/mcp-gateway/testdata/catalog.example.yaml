@@ -21,6 +21,12 @@ overview: |
   The gateway may only restart workloads whose catalog entry sets
   `restart.allowed: true`. Everything else is read-only.
 
+# Alerts that always fire by design (Prometheus' Watchdog and the alert that
+# suppresses it) are reported as `ignoredAlerts`, never as a problem.
+ignore_alerts:
+  - Watchdog
+  - InfoInhibitor
+
 services:
   - id: scheduler
     aliases:

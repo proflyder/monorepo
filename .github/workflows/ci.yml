@@ -50,6 +50,7 @@ jobs:
       docs_only: ${{ steps.route.outputs.docs_only }}
       deploy_control: ${{ steps.route.outputs.deploy_control }}
       deploy_units: ${{ steps.route.outputs.deploy_units }}
+      android_distribute: ${{ steps.route.outputs.android_distribute }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -144,6 +145,11 @@ jobs:
   # Firebase App Distribution of the Home Android app on every PR that changes
   # it: one APK per push, after that PR's `android` build passed.
   #
+  # `android_distribute` is true only for a real Android input (the app, the
+  # shared Kotlin libraries it builds, or `platform/android/**`). A global
+  # invalidation such as `MODULE.bazel` still runs the `android` checks but does
+  # not change the app, so it must not publish a build.
+  #
   # Deliberately NOT a dependency of `ci-ok`: distribution is a delivery
   # side effect, not a code gate. A failed upload stays visible on the PR (and
   # in the run) without blocking the merge.
@@ -166,7 +172,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       needs.changes.result == 'success' &&
       needs.android.result == 'success' &&
-      contains(fromJSON(needs.changes.outputs.android_units).*.id, 'android-app')
+      needs.changes.outputs.android_distribute == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     # OIDC `environment` claim keeps this exact casing; OpenBao binds "Android".

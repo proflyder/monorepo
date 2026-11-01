@@ -288,6 +288,7 @@ class RealRepositoryTests(unittest.TestCase):
                     values[key] = value
         self.assertEqual(json.loads(values["go_units"]), [])
         self.assertEqual(values["docs_only"], "true")
+        self.assertEqual(values["android_distribute"], "false")
 
 
 if __name__ == "__main__":
@@ -376,6 +377,59 @@ class DeployRoutingTests(unittest.TestCase):
         expected = [unit.id for unit in self.config.units if unit.deploy_images]
         self.assertEqual([entry["id"] for entry in entries], expected)
         self.assertEqual(len(expected), len(entries))
+
+
+class AndroidDistributionTests(unittest.TestCase):
+    """Distribution is a delivery side effect, not a test invalidation."""
+
+    def setUp(self):
+        self.config = affected.load_config(HERE / "units.yml")
+
+    def _route(self, changed):
+        with mock.patch.object(affected, "go_package_dirs", side_effect=lambda _r, _u: set()):
+            return affected.route(self.config, changed, root=REPO, base="b")
+
+    def test_module_change_runs_android_tests_without_distributing(self):
+        result = self._route(["MODULE.bazel"])
+        ids = [unit.id for unit in result.routes["android"].units]
+        self.assertIn("android-app", ids, "android tests must still run")
+        self.assertEqual(result.routes["android"].mode, "all")
+        self.assertFalse(result.android_distribute)
+
+    def test_application_change_distributes(self):
+        self.assertTrue(
+            self._route(["projects/mobile/android/app/BUILD.bazel"]).android_distribute
+        )
+
+    def test_shared_kotlin_change_distributes(self):
+        self.assertTrue(
+            self._route(["packages/kotlin/core/src/main/Kotlin.kt"]).android_distribute
+        )
+
+    def test_platform_android_change_distributes(self):
+        self.assertTrue(self._route(["platform/android/defs.bzl"]).android_distribute)
+
+    def test_workflow_and_docs_changes_do_not_distribute(self):
+        for changed in (".github/workflows/ci.yml", ".github/workflows/_android.yml", "docs/STATE.md"):
+            self.assertFalse(self._route([changed]).android_distribute, changed)
+
+    def test_markdown_inside_android_tree_does_not_distribute(self):
+        for changed in ("projects/mobile/android/README.md", "packages/kotlin/core/README.md"):
+            self.assertFalse(self._route([changed]).android_distribute, changed)
+        self.assertTrue(
+            self._route(
+                ["projects/mobile/android/README.md", "projects/mobile/android/app/BUILD.bazel"]
+            ).android_distribute
+        )
+
+    def test_distribution_paths_cover_android_units_and_platform_tooling(self):
+        paths = affected.android_distribute_paths(self.config)
+        for pattern in (
+            "projects/mobile/android/**",
+            "packages/kotlin/**",
+            "platform/android/**",
+        ):
+            self.assertIn(pattern, paths)
 
 
 class WorkflowInvalidationTests(unittest.TestCase):

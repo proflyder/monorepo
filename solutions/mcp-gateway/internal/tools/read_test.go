@@ -108,6 +108,78 @@ func TestInfraStatusAggregatesProblems(t *testing.T) {
 	}
 }
 
+func TestInfraStatusIgnoreAlerts(t *testing.T) {
+	d := testDeps(t)
+	kube := d.Kube.(*fakeKube)
+	kube.workloads[kubeKey("home", "Deployment", "scheduler")] = healthyScheduler()
+	kube.workloads[kubeKey("home", "Deployment", "hermes")] = healthyScheduler()
+	kube.workloads[kubeKey("home", "StatefulSet", "readonly")] = healthyScheduler()
+	d.Alerts.(*fakeAlerts).alerts = []alertmanager.Alert{
+		{
+			Labels:      map[string]string{"alertname": "Watchdog"},
+			Annotations: map[string]string{"summary": "Always firing"},
+			StartsAt:    time.Date(2026, 11, 1, 11, 0, 0, 0, time.UTC),
+		},
+		{
+			Labels:      map[string]string{"alertname": "InfoInhibitor", "severity": "warning"},
+			Annotations: map[string]string{"summary": "Info level inhibiting"},
+		},
+	}
+
+	_, out, err := d.infraStatus(context.Background(), nil, struct{}{})
+	if err != nil {
+		t.Fatalf("infraStatus: %v", err)
+	}
+	result := resultOf(t, out)
+	if !strings.Contains(result.Speech, "Всё в порядке") {
+		t.Fatalf("speech = %q, want a healthy verdict", result.Speech)
+	}
+	detail := result.Details.(statusDetail)
+	if detail.Degraded {
+		t.Fatalf("degraded, ignored alerts leaked into problems: %+v", detail)
+	}
+	if len(detail.Alerts) != 0 {
+		t.Fatalf("alerts = %+v, want none", detail.Alerts)
+	}
+	if len(detail.IgnoredAlerts) != 2 {
+		t.Fatalf("ignoredAlerts = %+v, want 2", detail.IgnoredAlerts)
+	}
+	if detail.IgnoredAlerts[0].Name != "InfoInhibitor" || detail.IgnoredAlerts[1].Name != "Watchdog" {
+		t.Fatalf("ignored alerts are not sorted by name: %+v", detail.IgnoredAlerts)
+	}
+}
+
+func TestInfraStatusIgnoredAlertsDoNotHideRealProblems(t *testing.T) {
+	d := testDeps(t)
+	kube := d.Kube.(*fakeKube)
+	kube.workloads[kubeKey("home", "Deployment", "scheduler")] = healthyScheduler()
+	kube.workloads[kubeKey("home", "Deployment", "hermes")] = healthyScheduler()
+	kube.workloads[kubeKey("home", "StatefulSet", "readonly")] = healthyScheduler()
+	d.Alerts.(*fakeAlerts).alerts = []alertmanager.Alert{
+		{Labels: map[string]string{"alertname": "Watchdog"}, Annotations: map[string]string{"summary": "Always firing"}},
+		{
+			Labels:      map[string]string{"alertname": "RicardoEndpointDown", "severity": "critical"},
+			Annotations: map[string]string{"summary": "Планировщик недоступен"},
+		},
+	}
+
+	_, out, err := d.infraStatus(context.Background(), nil, struct{}{})
+	if err != nil {
+		t.Fatalf("infraStatus: %v", err)
+	}
+	result := resultOf(t, out)
+	if !strings.Contains(result.Speech, "Проблемы") || strings.Contains(result.Speech, "Always firing") {
+		t.Fatalf("speech = %q", result.Speech)
+	}
+	detail := result.Details.(statusDetail)
+	if !detail.Degraded {
+		t.Fatal("real alert did not degrade the status")
+	}
+	if len(detail.Alerts) != 1 || len(detail.IgnoredAlerts) != 1 {
+		t.Fatalf("alerts=%+v ignored=%+v", detail.Alerts, detail.IgnoredAlerts)
+	}
+}
+
 func TestInfraStatusTimeoutIsBounded(t *testing.T) {
 	d := testDeps(t)
 	d.StatusTimeout = 120 * time.Millisecond

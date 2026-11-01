@@ -222,9 +222,10 @@ to Firebase App Distribution. It runs both locally and from CI.
 
 CI runs on **every pull request that changes the Android app**:
 `.github/workflows/ci.yml` job `android-distribute` needs the `changes` routing
-and the `android` build, and starts only when `android-app` is among the
-affected units (a `projects/mobile/android/` change or any shared Kotlin/Bazel
-dependency it consumes). The job:
+and the `android` build, and starts only when the router sets
+`android_distribute` (an actual `projects/mobile/android/`, `packages/kotlin/`
+or `platform/android/` change). A global invalidation such as `MODULE.bazel`
+still runs the `android` checks but does not publish a build. The job:
 
 - runs only for pull requests whose head branch lives in this repository: a
   fork PR gets a read-only token without Environment secrets, so it can never

@@ -35,7 +35,9 @@ Alloy собирает CRI-логи kube-system/monitoring и `currency-bot`, и
 Тексты речи, запросы/ответы Hermes и приватные данные HA не собираются. Фильтр
 секретных маркеров проверен синтетическим Pod через полную цепочку Alloy→Loki.
 Расширение списка источников требует отдельной проверки содержимого, одной
-redaction regex недостаточно. Внешний канал alerts ещё не настроен.
+redaction regex недостаточно. Алерты уходят во внешний канал — Telegram через
+`k8s/home-assistant/hermes-environment` (`TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_ALLOWED_USERS`, отдельный инфра-бот).
 
 Приложения не обязаны иметь нативный `/metrics`: TCP availability собирается
 health exporter’ом, host/container state — node-exporter/kubelet/kube-state-metrics.

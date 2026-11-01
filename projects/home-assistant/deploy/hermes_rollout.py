@@ -14,7 +14,10 @@ pushed. The script owns the risky part of the rollout:
    `helm.sh/resource-policy: keep`;
 4. remember the deployed revision *before* the upgrade;
 5. wait for the rollout and run the smoke checks (health exporter, a Hermes
-   Assist turn through the in-cluster HA API, voice-proxy error log scan);
+   Assist turn through the in-cluster HA API, voice-proxy error log scan); the
+   Assist turn retries a bounded warm-up window (up to 90 s, 5 s backoff)
+   because a just-started Hermes can answer 500 `runtime_draining` before its
+   turn machinery is ready;
 6. on any failure after a revision was created, `helm rollback` to the
    remembered revision and re-check the voice circuit.
 
@@ -215,7 +218,7 @@ def check_voice_logs(text: str) -> None:
 
 
 SMOKE_SCRIPT = r"""
-import json, os, sys, urllib.request
+import json, os, sys, urllib.error, urllib.request
 token = open("/run/secrets/ha/token", encoding="utf-8").read().strip()
 payload = json.dumps({
     "text": os.environ["SMOKE_TEXT"],
@@ -231,6 +234,10 @@ try:
     with urllib.request.urlopen(request, timeout=150) as response:
         body = response.read().decode()
         status = response.status
+except urllib.error.HTTPError as exc:
+    # Keep the status code: the caller retries transient 5xx while Hermes warms up.
+    print(json.dumps({"ok": False, "status": exc.code, "error": "HTTPError: " + str(exc)}))
+    sys.exit(1)
 except Exception as exc:  # noqa: BLE001 - report, never print the token
     print(json.dumps({"ok": False, "error": type(exc).__name__ + ": " + str(exc)}))
     sys.exit(1)
@@ -247,6 +254,37 @@ if status != 200 or reply.get("response_type") == "error" or not speech.strip():
     sys.exit(1)
 print(json.dumps({"ok": True, "speech": speech}))
 """
+
+# Hermes restarts faster than its own warm-up: the first Assist turn after a
+# rollout can hit HTTP 500 (`runtime_draining`) or a refused connection for a
+# few seconds. Retrying that transient window is not a weaker check: the
+# request must still succeed with speech before the rollout is accepted.
+SMOKE_RETRY_WINDOW = 90
+SMOKE_RETRY_DELAY = 5
+_TRANSIENT_ERROR_MARKERS = (
+    "HTTPError",   # status decides; kept for the message only
+    "URLError",
+    "TimeoutError",
+    "ConnectionError",
+    "ConnectionResetError",
+    "RemoteDisconnected",
+    "timed out",
+    "connection refused",
+)
+
+
+def transient_smoke_result(result: dict) -> bool:
+    """True when a failed Assist smoke may succeed once Hermes finishes warming."""
+    if result.get("ok"):
+        return False
+    status = result.get("status")
+    if isinstance(status, int) and 500 <= status < 600:
+        return True
+    if isinstance(status, int) and status != 200:
+        # 4xx is a real request/auth problem, not warm-up.
+        return False
+    error = str(result.get("error", ""))
+    return any(marker in error for marker in _TRANSIENT_ERROR_MARKERS)
 
 
 def smoke_job(name: str, namespace: str, image: str) -> dict:
@@ -333,28 +371,74 @@ def wait_for_job(kubectl: str, namespace: str, name: str, timeout: int = 200) ->
     raise RolloutError(f"smoke job {name} did not finish within {timeout}s")
 
 
-def assist_smoke(kubectl: str, namespace: str, image: str) -> str:
-    name = f"hermes-smoke-{int(time.time())}"
+def _smoke_result(output: str) -> dict | None:
+    """Parse the JSON line the smoke pod prints, if there is one."""
+    try:
+        parsed = json.loads(output.splitlines()[-1])
+    except (IndexError, json.JSONDecodeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def assist_attempt(kubectl: str, namespace: str, image: str) -> dict:
+    """Run one smoke Job and return the JSON result it printed.
+
+    Raises RolloutError only when the Job produced no parseable result (it did
+    not start, or was killed). A structured failure is returned so the caller
+    can decide whether it is transient warm-up.
+    """
+    name = f"hermes-smoke-{time.time_ns() // 1_000_000}"
     manifest = yaml.safe_dump(smoke_job(name, namespace, image), sort_keys=False)
     _checked([kubectl, "-n", namespace, "apply", "-f", "-"], input_text=manifest)
     try:
         condition = wait_for_job(kubectl, namespace, name)
         logs = _run([kubectl, "-n", namespace, "logs", f"job/{name}", "--tail=20"])
-        if condition != "Complete":
-            detail = _run([kubectl, "-n", namespace, "describe", "job", name, "--tail=40"]).stdout
-            raise RolloutError(
-                f"Assist smoke job failed: {logs.stderr.strip() or logs.stdout.strip()}\n{detail.strip()}"
-            )
         output = logs.stdout.strip()
-        try:
-            result = json.loads(output.splitlines()[-1])
-        except (IndexError, json.JSONDecodeError):
+        result = _smoke_result(output)
+        if result is not None:
+            return result
+        if condition == "Complete":
             raise RolloutError(f"Assist smoke produced unexpected output: {output!r}")
-        if not result.get("ok") or not str(result.get("speech", "")).strip():
-            raise RolloutError(f"Assist smoke failed: {result}")
-        return str(result["speech"]).strip()
+        detail = _run([kubectl, "-n", namespace, "describe", "job", name, "--tail=40"]).stdout
+        raise RolloutError(
+            f"Assist smoke job failed: {logs.stderr.strip() or output}\n{detail.strip()}"
+        )
     finally:
         _run([kubectl, "-n", namespace, "delete", "job", name, "--ignore-not-found"])
+
+
+def assist_smoke(
+    kubectl: str,
+    namespace: str,
+    image: str,
+    *,
+    retry_window: int = SMOKE_RETRY_WINDOW,
+    retry_delay: int = SMOKE_RETRY_DELAY,
+    sleep=time.sleep,
+    clock=time.monotonic,
+) -> str:
+    """Ask Hermes one Assist turn, retrying a bounded transient window.
+
+    A freshly started Hermes connects Telegram and warms its turn machinery for
+    several seconds after the pod is Ready; an Assist request in that window
+    fails with HTTP 500 (`runtime_draining`) or a refused connection. Those are
+    retried for at most `retry_window` seconds; every other failure (4xx, an
+    empty reply, `response_type: error`) fails immediately, as before.
+    """
+    deadline = clock() + retry_window
+    while True:
+        result = assist_attempt(kubectl, namespace, image)
+        if result.get("ok") and str(result.get("speech", "")).strip():
+            return str(result["speech"]).strip()
+        if not transient_smoke_result(result):
+            raise RolloutError(f"Assist smoke failed: {result}")
+        if clock() >= deadline:
+            raise RolloutError(
+                f"Assist smoke still failing after {retry_window}s: {result}"
+            )
+        reason = result.get("status") or result.get("error") or "transient failure"
+        print(f"Assist smoke is not ready yet ({reason}); retrying in {retry_delay}s", flush=True)
+        sleep(retry_delay)
 
 
 def run_smoke(kubectl: str, namespace: str, image: str, *, simulate_failure: bool = False) -> None:

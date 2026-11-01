@@ -593,12 +593,14 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 
 ### Android / App Distribution
 
-Каждый PR в `develop`, затрагивающий Android-приложение (`projects/mobile/android/`
-или общие Kotlin/Bazel-зависимости, из-за которых `android-app` попадает в
-`android_units`), после успешной сборки `android` запускает job
-`android-distribute` в `.github/workflows/ci.yml`: Environment `Android`, VPN
-группа `ci`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`.
-Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
+Каждый PR в `develop`, затрагивающий Android-приложение (изменился
+`projects/mobile/android/**`, общая Kotlin-библиотека `packages/kotlin/**` или
+`platform/android/**`; routing выставляет `android_distribute` = true), после
+успешной сборки `android` запускает job `android-distribute` в
+`.github/workflows/ci.yml`: Environment `Android`, VPN группа `ci`, роль OpenBao
+`android-distribute` → `secret/ci/android-distribute`. Глобальная инвалидация
+(например `MODULE.bazel`) по-прежнему прогоняет проверки `android`, но APK не
+публикует. Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
 (`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `admins` («Admins»)
 и удаляет ключи. PR из форков пропускается: у них нет ни OIDC-токена, ни
 секретов Environment. Job не входит в `ci-ok` — неудачная загрузка видна на PR,

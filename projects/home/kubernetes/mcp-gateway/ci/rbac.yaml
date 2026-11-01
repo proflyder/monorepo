@@ -1,7 +1,9 @@
 # Extend the existing GitHub Actions identity (ServiceAccount
-# home-assistant/ci-deploy) with the two namespaced object kinds the gateway's
+# home-assistant/ci-deploy) with the namespaced object kinds the gateway's
 # deploy.sh applies and that the scheduler Role for home-assistant does not
-# grant: NetworkPolicy and ServiceMonitor.
+# grant (NetworkPolicy and ServiceMonitor), plus `get` on the
+# `services/proxy` subresource so deploy-home can read /readyz through the
+# API-server Service proxy.
 #
 # Everything else deploy.sh performs (ConfigMap with the catalog, Service,
 # Deployment converge, pods/exec -healthcheck, rollout status) is already
@@ -25,6 +27,13 @@ rules:
   - apiGroups: ["monitoring.coreos.com"]
     resources: ["servicemonitors"]
     verbs: ["get", "list", "create", "update", "patch"]
+  # deploy-home proves readiness through the API-server Service proxy, which
+  # authorizes the `services/proxy` subresource by the full request name. Only
+  # the gateway's own Service (named port form used in the URL) is reachable.
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    resourceNames: ["http:mcp-gateway:8080", "mcp-gateway"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

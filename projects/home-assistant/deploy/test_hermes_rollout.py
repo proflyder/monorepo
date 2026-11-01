@@ -143,6 +143,94 @@ class SmokeJobTests(unittest.TestCase):
         self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
 
 
+class AssistSmokeRetryTests(unittest.TestCase):
+    """A warm-up 5xx is retried; a real failure is not."""
+
+    def run_smoke(self, results, *, retry_window=90, retry_delay=5):
+        now = [0]
+
+        def clock():
+            return now[0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        with mock.patch.object(rollout, "assist_attempt", side_effect=results) as attempt:
+            speech = rollout.assist_smoke(
+                "kubectl", "home-assistant", PROXY,
+                retry_window=retry_window, retry_delay=retry_delay,
+                sleep=sleep, clock=clock,
+            )
+        return speech, attempt, now[0]
+
+    def test_transient_500_is_retried(self):
+        speech, attempt, slept = self.run_smoke([
+            {"ok": False, "status": 500, "error": "HTTPError: 500 runtime_draining"},
+            {"ok": True, "speech": "Готов."},
+        ])
+        self.assertEqual(speech, "Готов.")
+        self.assertEqual(attempt.call_count, 2)
+        self.assertEqual(slept, rollout.SMOKE_RETRY_DELAY)
+
+    def test_connection_error_is_retried(self):
+        speech, attempt, _ = self.run_smoke([
+            {"ok": False, "error": "URLError: [Errno 111] Connection refused"},
+            {"ok": True, "speech": "Готов."},
+        ])
+        self.assertEqual(speech, "Готов.")
+        self.assertEqual(attempt.call_count, 2)
+
+    def test_4xx_is_not_retried(self):
+        with mock.patch.object(rollout, "assist_attempt",
+                               return_value={"ok": False, "status": 401}) as attempt:
+            with self.assertRaises(rollout.RolloutError):
+                rollout.assist_smoke("kubectl", "home-assistant", PROXY,
+                                     retry_window=90, retry_delay=5, sleep=mock.Mock())
+        self.assertEqual(attempt.call_count, 1)
+
+    def test_empty_speech_is_not_retried(self):
+        with mock.patch.object(rollout, "assist_attempt",
+                               return_value={"ok": False, "status": 200, "speech": ""}) as attempt:
+            with self.assertRaises(rollout.RolloutError):
+                rollout.assist_smoke("kubectl", "home-assistant", PROXY,
+                                     retry_window=90, retry_delay=5, sleep=mock.Mock())
+        self.assertEqual(attempt.call_count, 1)
+
+    def test_window_is_bounded(self):
+        now = [0]
+
+        def clock():
+            return now[0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        with mock.patch.object(
+            rollout, "assist_attempt", return_value={"ok": False, "status": 503}
+        ) as attempt:
+            with self.assertRaises(rollout.RolloutError) as caught:
+                rollout.assist_smoke(
+                    "kubectl", "home-assistant", PROXY,
+                    retry_window=10, retry_delay=5, sleep=sleep, clock=clock,
+                )
+        self.assertIn("still failing after 10s", str(caught.exception))
+        self.assertEqual(attempt.call_count, 3)
+
+    def test_transient_classification(self):
+        self.assertTrue(rollout.transient_smoke_result({"ok": False, "status": 502}))
+        self.assertTrue(
+            rollout.transient_smoke_result(
+                {"ok": False, "error": "TimeoutError: timed out"}
+            )
+        )
+        self.assertFalse(rollout.transient_smoke_result({"ok": False, "status": 404}))
+        self.assertFalse(rollout.transient_smoke_result({"ok": True, "speech": "ok"}))
+
+    def test_smoke_script_reports_http_status(self):
+        self.assertIn("urllib.error.HTTPError", rollout.SMOKE_SCRIPT)
+        self.assertIn('"status": exc.code', rollout.SMOKE_SCRIPT)
+
+
 class RollbackTests(unittest.TestCase):
     def test_rollback_only_is_noop_without_applied_marker(self):
         with tempfile.TemporaryDirectory() as directory:

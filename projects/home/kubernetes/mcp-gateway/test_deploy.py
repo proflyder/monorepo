@@ -145,6 +145,41 @@ class CatalogTests(unittest.TestCase):
             if service["kind"] == "external":
                 self.assertEqual(service["logs"]["source"], "none")
 
+    def test_status_signal_labels_match_workload_names(self):
+        # kube-state-metrics labels a workload by its real object name. A
+        # renamed object (operator-managed monitoring StatefulSets) must update
+        # both the catalog workload and the PromQL in the same change.
+        label_of = {"Deployment": "deployment", "StatefulSet": "statefulset", "DaemonSet": "daemonset"}
+        checked = 0
+        for service in self.services:
+            workload = service.get("workload") or {}
+            name = workload.get("name")
+            if not name:
+                continue
+            label = label_of[workload["kind"]]
+            for signal in service.get("signals", []):
+                if "kube_" not in signal["promql"]:
+                    continue
+                checked += 1
+                match = re.search(
+                    rf'kube_(?:deployment|statefulset|daemonset)_[a-z_]+{{([^}}]*)}}',
+                    signal["promql"],
+                )
+                self.assertIsNotNone(match, f"{service['id']}: unparsable kube signal")
+                labels = match.group(1)
+                self.assertIn(f'{label}="{name}"', labels, f"{service['id']}: workload and signal diverge")
+        self.assertGreater(checked, 0)
+
+    def test_operator_managed_statefulsets_warn_about_a_second_roll(self):
+        by_id = {s["id"]: s for s in self.services}
+        for service_id, name in (
+            ("prometheus", "prometheus-monitoring-prometheus"),
+            ("alertmanager", "alertmanager-monitoring-alertmanager"),
+        ):
+            service = by_id[service_id]
+            self.assertEqual(service["workload"], {"kind": "StatefulSet", "name": name})
+            self.assertIn("оператор", service["restart"]["warning"].lower(), service_id)
+
 
 class RbacTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -233,7 +268,7 @@ class RbacTests(unittest.TestCase):
         }
         self.assertEqual(declared, bound)
 
-    def test_ci_role_only_adds_policy_and_monitor(self):
+    def test_ci_role_only_adds_policy_monitor_and_readiness_proxy(self):
         # home-assistant/ci-deploy already owns Services/ConfigMaps/Deployments;
         # this extension must not widen that.
         ci_roles = [doc for doc in load_docs(CI_RBAC) if doc.get("kind") == "Role"]
@@ -245,7 +280,11 @@ class RbacTests(unittest.TestCase):
         }
         self.assertEqual(
             granted,
-            {("networking.k8s.io", "networkpolicies"), ("monitoring.coreos.com", "servicemonitors")},
+            {
+                ("networking.k8s.io", "networkpolicies"),
+                ("monitoring.coreos.com", "servicemonitors"),
+                ("", "services/proxy"),
+            },
         )
         self.assertTrue(
             all(
@@ -253,6 +292,23 @@ class RbacTests(unittest.TestCase):
                 for rule in ci_roles[0]["rules"]
             )
         )
+
+    def test_ci_role_allows_exactly_the_deploy_home_readiness_proxy(self):
+        # The smoke reads /readyz through the API-server Service proxy, which
+        # authorizes `services/proxy` by the full name used in the URL. The
+        # rule must cover that name and stay restricted with resourceNames.
+        workflow = (
+            HERE.parents[3] / ".github" / "workflows" / "deploy-home.yml"
+        ).read_text()
+        proxied = set(re.findall(r"services/(http:mcp-gateway:[0-9]+)/proxy/readyz", workflow))
+        self.assertEqual(proxied, {"http:mcp-gateway:8080"})
+        ci_role = next(doc for doc in load_docs(CI_RBAC) if doc.get("kind") == "Role")
+        rule = next(
+            rule for rule in ci_role["rules"] if rule["resources"] == ["services/proxy"]
+        )
+        self.assertEqual(rule["apiGroups"], [""])
+        self.assertEqual(rule["verbs"], ["get"])
+        self.assertTrue(proxied <= set(rule["resourceNames"]))
 
 
 class ManifestTests(unittest.TestCase):
