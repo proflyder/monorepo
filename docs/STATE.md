@@ -37,6 +37,9 @@
 
 - K3s `v1.35.9+k3s1`, node `lab-host`; data-dir `/srv/k3s/runtime`; SQLite;
   local-path PV с `Retain`.
+- Kubelet: логи контейнеров 10Mi×3; неиспользуемые образы удаляются через
+  48 ч (`imageMaximumGCAge`, drop-in `agent/etc/kubelet.conf.d/50-image-gc.conf`
+  в data-dir), иначе — при 85% диска. Откат берёт образ по digest из GHCR.
 - Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
   `openbao`, `external-secrets`, `currency-bot`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
