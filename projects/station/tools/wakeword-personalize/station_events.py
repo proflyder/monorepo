@@ -689,6 +689,16 @@ def _positive_candidate(event, split):
     }
 
 
+NEAR_FOLLOWUP_SECONDS = 15
+
+
+def followed_by(moment, followups, seconds=NEAR_FOLLOWUP_SECONDS):
+    """True when a hit/miss event starts within `seconds` after `moment`."""
+    import bisect
+    index = bisect.bisect_right(followups, moment)
+    return index < len(followups) and (followups[index] - moment).total_seconds() <= seconds
+
+
 def to_manifest(root, output, include_suspected=False, near_negatives=True,
                 seed="station-events", train=0.70, val=0.15, copy_audio=True,
                 force=False):
@@ -698,6 +708,10 @@ def to_manifest(root, output, include_suspected=False, near_negatives=True,
     events = scan_events(root)
     overrides = load_overrides(root)
     records, skipped, counts = [], [], Counter()
+    # A near-miss followed by a hit or a "не услышала" press is likely a quiet real
+    # wake word the user repeated; it must not become a negative unless labelled false.
+    followups = sorted(parse_utc(item["sidecar"]["utc"]) for item in events
+                       if item["sidecar"]["kind"] in ("hit", "miss"))
     for event in sorted(events, key=lambda item: item["id"]):
         sidecar = event["sidecar"]
         label = effective_label(event, overrides)
@@ -707,9 +721,13 @@ def to_manifest(root, output, include_suspected=False, near_negatives=True,
             if label == "false":
                 records.append(_negative_entry(event, split, label, "confirmed_false", seed))
                 counts["confirmed_false"] += 1
-            elif sidecar["kind"] == "near" and label in (None, "false") and near_negatives:
-                records.append(_negative_entry(event, split, label, "near_miss", seed))
-                counts["near_miss"] += 1
+            elif sidecar["kind"] == "near" and label is None and near_negatives:
+                if followed_by(parse_utc(sidecar["utc"]), followups):
+                    skipped.append((event["id"], "near-miss followed by a hit/miss; label it"))
+                    counts["near_followed_skipped"] += 1
+                else:
+                    records.append(_negative_entry(event, split, label, "near_miss", seed))
+                    counts["near_miss"] += 1
             elif (sidecar["kind"] == "hit" and label is None
                   and sidecar.get("outcome") in SUSPECTED_OUTCOMES):
                 if include_suspected:

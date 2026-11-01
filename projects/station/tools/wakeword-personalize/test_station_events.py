@@ -304,6 +304,26 @@ class ManifestTests(unittest.TestCase):
             nearless = station.to_manifest(folder, output, near_negatives=False, force=True)
             self.assertNotIn(near, {record["id"] for record in nearless["records"]})
 
+    def test_near_miss_followed_by_a_miss_press_is_not_a_negative(self):
+        near = "20261101T101530Z-near-18"
+        missed = "20261101T101540Z-miss-19"
+        lone = "20261101T120000Z-near-20"
+        events = {
+            near: (sidecar(near, kind="near", utc="2026-11-01T10:15:30Z", score_peak=.7),
+                   wav_bytes()),
+            missed: (sidecar(missed, kind="miss", utc="2026-11-01T10:15:40Z", pre_ms=6000,
+                             post_ms=0, label="missed", label_source="user"), wav_bytes(6.0)),
+            lone: (sidecar(lone, kind="near", utc="2026-11-01T12:00:00Z", score_peak=.6),
+                   wav_bytes()),
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            pull(folder, bundle(events))
+            manifest = station.to_manifest(folder, Path(folder) / "run/station-manifest.json")
+            ids = {record["id"] for record in manifest["records"]}
+            self.assertNotIn(near, ids)
+            self.assertIn(lone, ids)
+            self.assertIn(missed, ids)
+
 
 class FinetuneMergeTests(unittest.TestCase):
     def test_negative_key_keeps_station_bucket_separate(self):

@@ -123,8 +123,9 @@ python station_events.py to-manifest --events secrets/datasets/station-events \
 - `to-manifest` копирует нужные WAV в `PRIVATE_RUN/recordings/` и пишет
   записи, совместимые с `finetune.py`:
   - `label=false` hits и `near` → отрицательные, `hard_negative=true`,
-    весь 4-секундный клип отрицателен; near можно исключить
-    `--no-near-negatives`;
+    весь 4-секундный клип отрицателен; near, за которым в течение 15 с
+    был hit или «не услышала», не используется без явной метки (вероятно,
+    тихое настоящее «Рикардо»); все near исключает `--no-near-negatives`;
   - неразмеченные `empty_stt`/`cancelled` по умолчанию не используются;
     `--include-suspected` добавляет их как hard negatives — риск: часть
     таких клипов содержит настоящее обращение, это осознанный компромисс;
