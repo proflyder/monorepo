@@ -6,13 +6,10 @@
 
 ## Следующее (согласовано 2026-11-01)
 
-Аудит роста дисков: всё ограничено, но оповещений наружу нет.
-
-- [ ] **Алерты наружу — в Telegram.** Правила Prometheus (в т.ч. заполнение
-      диска) есть, но Alertmanager никуда не шлёт. Следующий шаг: receiver
-      `telegram_configs` (бот currency-bot, личный чат владельца, токен из
-      OpenBao через ESO), тестовый алерт, dead-man switch (`Watchdog`) с
-      внешней проверкой — закрывает P3 «Внешний Alertmanager/heartbeat».
+- [ ] **Внешний heartbeat (dead-man switch).** Алерты уже уходят в Telegram,
+      но если упадёт весь узел/Alertmanager, сообщать некому. Следующий шаг:
+      выбрать внешний приёмник, слать ему `Watchdog` (webhook раз в N минут),
+      он сам пишет в Telegram при пропуске.
 
 ## P1 — безопасность и надёжность
 
@@ -108,9 +105,6 @@
       диагностики не менять.
 - [ ] **Power-loss тест host/VM.** Следующий шаг: согласовать окно и проверить
       автозапуск VM, HA, K3s, Sendspin и Pulsar после жёсткого отключения.
-- [ ] **Внешний Alertmanager/heartbeat.** Внутренний Alertmanager есть,
-      dead-man switch наружу нет.
-      Следующий шаг: выбрать внешний приёмник и отправлять heartbeat.
 - [ ] **Latency instrumentation voice pipeline.** Полных измерений нет.
       Следующий шаг: добавить метрики по этапам wake→STT→intent→TTS.
 - [ ] **Secure Boot PK `DO NOT TRUST - AMI Test PK`.** Следующий шаг: решать

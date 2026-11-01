@@ -53,6 +53,29 @@ class ExternalSecretsContracts(unittest.TestCase):
                     found[(ns, name)] = extract
                 self.assertEqual(found, expected)
 
+    def test_alertmanager_config_reads_only_the_bot_token_and_chat_ids(self):
+        # The one deliberate cross-namespace read: Alertmanager sends through
+        # the currency bot, so the bot token keeps a single source of truth.
+        path = ROOT / "projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml"
+        docs = [d for d in yaml.safe_load_all(path.read_text()) if d]
+        self.assertEqual(len(docs), 1)
+        spec = docs[0]["spec"]
+        self.assertEqual(docs[0]["metadata"]["namespace"], "monitoring")
+        self.assertEqual(spec["secretStoreRef"], {"name": "openbao", "kind": "ClusterSecretStore"})
+        self.assertEqual(spec["target"]["creationPolicy"], "Owner")
+        self.assertEqual(spec["target"]["deletionPolicy"], "Retain")
+        self.assertNotIn("dataFrom", spec)
+        refs = {(d["remoteRef"]["key"], d["remoteRef"]["property"]) for d in spec["data"]}
+        self.assertEqual(refs, {("k8s/currency-bot/currency-bot", "BOT_TOKEN"),
+                                ("k8s/currency-bot/currency-bot", "CHAT_ID")})
+        config = yaml.safe_load(spec["target"]["template"]["data"]["alertmanager.yaml"]
+                                .replace("{{", "").replace("}}", ""))
+        routes = config["route"]["routes"]
+        self.assertEqual(config["route"]["receiver"], "null")
+        self.assertIn('alertname =~ "Watchdog|InfoInhibitor"', routes[0]["matchers"])
+        self.assertEqual(routes[0]["receiver"], "null")
+        self.assertEqual(routes[1]["receiver"], "telegram")
+
     def test_cluster_secret_store_uses_in_cluster_service_and_kubernetes_auth(self):
         docs = [d for d in yaml.safe_load_all(
             (ESO_DIR / "manifests/clustersecretstore.yaml").read_text()) if d]
