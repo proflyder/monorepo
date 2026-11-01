@@ -67,7 +67,7 @@
   `https://vault.home.example.com/` через тот же Traefik/allow-list и
   wildcard-сертификат. Один узел: `raft` + локальные PV
   (`/srv/k3s/volumes/openbao*`, `ricardo-existing`, `Retain`), декларативный
-  файловый audit на PV, UI включён.
+  audit `stdout/` (ротация kubelet 10Mi×3, Alloy → Loki 7 дней), UI включён.
 - Auto-unseal — встроенный `static` seal (ключ в Secret `openbao-seal`), после
   `kubectl delete pod` сервер распечатывается сам.
 - Auth: `userpass` (человек, политика `admin`; пароль задаёт человек; обязательный

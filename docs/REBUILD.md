@@ -51,7 +51,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
    (`scheduler`, `ha-bridge`, `ha-control`, `hermes`, `voice-proxy`); если
    пакеты недоступны — импортировать OCI-архивы
    (`sudo k3s ctr images import --platform linux/amd64 <archive>`).
-7. Восстановить OpenBao: PV raft/audit/backups, Secret `openbao-seal`,
+7. Восстановить OpenBao: PV raft/backups, Secret `openbao-seal`,
    recovery keys из `secrets/openbao/`; проверить auto-unseal и логин.
 8. Применить Helm releases из репозитория/private values.
 9. Проверить pods, PV, Grafana, HTTPS ingress, ExternalSecrets и voice

@@ -55,7 +55,8 @@
 18. **OpenBao — единственный секрет-сервер.** OpenBao 2.7 (chart и образ
     по digest) в namespace `openbao`, UI/API — `vault` под приватным
     суффиксом через Traefik и общий allow-list. Raft на локальном Retain-PV,
-    audit — файл на отдельном PV. Auto-unseal — встроенный `static` seal:
+    audit — в stdout → Loki (заполненный диск
+    не блокирует запросы). Auto-unseal — встроенный `static` seal:
     ключ в Secret на том же узле, чтобы перезагрузка не требовала человека
     (осознанно принятый риск, решение владельца 2026-11-01: внешний
     KMS/HSM/TPM не вводим; ключ не входит в snapshot и в offsite-бэкап

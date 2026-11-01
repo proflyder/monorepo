@@ -22,7 +22,7 @@ alloy:
         targets = discovery.kubernetes.pods.targets
         rule {
           source_labels = ["__meta_kubernetes_namespace"]
-          regex = "kube-system|monitoring|currency-bot"
+          regex = "kube-system|monitoring|currency-bot|openbao"
           action = "keep"
         }
         rule {

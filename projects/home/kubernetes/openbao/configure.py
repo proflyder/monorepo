@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Idempotent OpenBao configuration for the home deployment.
 
-Enables the KV v2 mount, the file audit device, the auth methods (userpass for
-the human, JWT for GitHub Actions, Kubernetes for pods), the policies and the
-non-secret test entries. It never prints tokens or passwords.
+Enables the KV v2 mount, the auth methods (userpass for the human, JWT for
+GitHub Actions, Kubernetes for pods), the policies and the non-secret test
+entries, and checks the declarative stdout audit device. It never prints tokens
+or passwords.
 
 Run through bootstrap.sh, or manually with an admin token:
 
@@ -180,10 +181,10 @@ def ensure_audit(bao: Bao) -> None:
     # Enabled declaratively in the server config (OpenBao 2.7 rejects API
     # enablement); this only verifies that the device is live.
     devices = keys_of(bao, "/v1/sys/audit")
-    if "file/" in devices:
-        print("audit: file device active")
+    if "stdout/" in devices:
+        print("audit: stdout device active")
     else:
-        print("warning: file audit device is not active yet "
+        print("warning: stdout audit device is not active yet "
               "(declarative config applies on the next server start)",
               file=sys.stderr)
 

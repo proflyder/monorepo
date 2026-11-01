@@ -95,7 +95,7 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 ```
 
 - **OpenBao** — единственный источник правды для секретов: raft на локальном
-  PV, статический auto-unseal, файловый audit, UI `vault`.
+  PV, статический auto-unseal, audit в stdout → Loki, UI `vault`.
 - **External Secrets Operator** синхронизирует `secret/k8s/*` в Kubernetes
   Secrets (`scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
   `grafana-admin`, `cloudflare-api-token`, `currency-bot`,
@@ -153,7 +153,7 @@ push тега v0.5.100N в форке
   `currency-bot-data`; логи — stdout → Alloy → Loki.
 - HA state — HAOS Supervisor backup.
 - K3s data/PV — `/srv/k3s/runtime`, `/srv/k3s/volumes/*`; `Retain`.
-- OpenBao — raft/audit/backups на отдельных PV; recovery keys и seal key —
+- OpenBao — raft/backups на отдельных PV, audit — stdout → Loki; recovery keys и seal key —
   только `secrets/openbao/`.
 - Секреты приложений — OpenBao → ESO; приватные копии в `secrets/` — backup.
 - Recovery — `REBUILD.md`, `KUBERNETES-OPERATIONS.md`.
