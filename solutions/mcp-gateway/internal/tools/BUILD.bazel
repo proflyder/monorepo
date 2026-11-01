@@ -34,6 +34,10 @@ go_test(
         "read_test.go",
         "report_test.go",
     ],
+    data = [
+        "//solutions/mcp-gateway/testdata:report_ok.txt",
+        "//solutions/mcp-gateway/testdata:report_problems.txt",
+    ],
     embed = [":tools"],
     deps = [
         "//solutions/mcp-gateway/internal/alertmanager",

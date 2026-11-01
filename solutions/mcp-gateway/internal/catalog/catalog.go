@@ -85,6 +85,9 @@ type Catalog struct {
 	// (for example Prometheus' Watchdog) and must not count as problems in
 	// infra_status. They stay reachable through infra_alert and infra_service.
 	IgnoreAlerts []string `yaml:"ignore_alerts"`
+	// GroupOrder fixes the order of report groups. Groups missing from this
+	// list follow in first-appearance order.
+	GroupOrder []string `yaml:"group_order"`
 	// Services is the allow-list of things the gateway may read and (when
 	// restart.allowed) restart.
 	Services []Service `yaml:"services"`
@@ -136,7 +139,18 @@ type Restart struct {
 
 // Service is one catalog entry.
 type Service struct {
-	ID          string    `yaml:"id"`
+	ID string `yaml:"id"`
+	// Title is the human display name used in reports, status and speech.
+	// Optional; when empty the first Russian alias is used.
+	Title string `yaml:"title"`
+	// Group is the report section this service belongs to (for example
+	// "Голос" or "Мониторинг"). Optional; when empty a namespace/host
+	// fallback is used.
+	Group string `yaml:"group"`
+	// HostTitle is the human display name of the external host a service
+	// lives on (for example "HAOS VM"). Optional; never print a raw address
+	// when it is set.
+	HostTitle   string    `yaml:"host_title"`
 	Aliases     Aliases   `yaml:"aliases"`
 	Kind        string    `yaml:"kind"`
 	Namespace   string    `yaml:"namespace"`
@@ -195,6 +209,20 @@ func (c *Catalog) Validate() error {
 		ignored[key] = i
 	}
 	seen := make(map[string]int, len(c.Services))
+	groupsSeen := make(map[string]int, len(c.GroupOrder))
+	for i, group := range c.GroupOrder {
+		trimmed := strings.TrimSpace(group)
+		if trimmed == "" {
+			problems = append(problems, fmt.Sprintf("group_order[%d]: group name is required", i))
+			continue
+		}
+		if first, ok := groupsSeen[trimmed]; ok {
+			problems = append(problems, fmt.Sprintf(
+				"group_order[%d]: duplicate group %q (first at group_order[%d])", i, trimmed, first))
+			continue
+		}
+		groupsSeen[trimmed] = i
+	}
 	for i := range c.Services {
 		s := &c.Services[i]
 		prefix := fmt.Sprintf("services[%d]", i)
@@ -207,6 +235,13 @@ func (c *Catalog) Validate() error {
 				problems = append(problems, fmt.Sprintf("%s: duplicate id (first at services[%d])", prefix, first))
 			} else {
 				seen[s.ID] = i
+			}
+		}
+		for name, value := range map[string]string{
+			"title": s.Title, "group": s.Group, "host_title": s.HostTitle,
+		} {
+			if value != "" && strings.TrimSpace(value) == "" {
+				problems = append(problems, prefix+": "+name+" must not be blank")
 			}
 		}
 		if len(s.Aliases.RU)+len(s.Aliases.EN) == 0 {
@@ -511,6 +546,12 @@ func (c *Catalog) CatalogText() string {
 	for _, s := range c.Services {
 		aliases := append(append([]string(nil), s.Aliases.RU...), s.Aliases.EN...)
 		fmt.Fprintf(&b, "## %s\n", s.ID)
+		if s.Title != "" {
+			fmt.Fprintf(&b, "- title: %s\n", s.Title)
+		}
+		if s.Group != "" {
+			fmt.Fprintf(&b, "- group: %s\n", s.Group)
+		}
 		if s.Description != "" {
 			fmt.Fprintf(&b, "%s\n", s.Description)
 		}

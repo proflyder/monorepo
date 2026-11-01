@@ -27,8 +27,13 @@ ignore_alerts:
   - Watchdog
   - InfoInhibitor
 
+# Fixed report section order. A service selects its section with `group`.
+group_order: [Apps, Data, Edge, External]
+
 services:
   - id: scheduler
+    title: Scheduler
+    group: Apps
     aliases:
       ru: [планировщик, будильники]
       en: [scheduler, alarms]
@@ -54,6 +59,8 @@ services:
     description: Планировщик фоновых задач и напоминаний.
 
   - id: assistant
+    title: Assistant
+    group: Apps
     aliases:
       ru: [ассистент, помощник]
       en: [assistant, agent]
@@ -77,6 +84,8 @@ services:
     description: Ассистент, который вызывает этот шлюз. Перезапуск откладывается.
 
   - id: database
+    title: Database
+    group: Data
     aliases:
       ru: [база данных, хранилище]
       en: [database, db]
@@ -98,6 +107,8 @@ services:
     description: Хранилище с одним экземпляром; перезапуск только вручную.
 
   - id: edge-proxy
+    title: Edge Proxy
+    group: Edge
     aliases:
       ru: [прокси, вход]
       en: [edge, proxy, ingress]
@@ -119,6 +130,9 @@ services:
     description: Входной прокси кластера.
 
   - id: ha-core
+    title: Home Automation
+    group: External
+    host_title: HA core host
     aliases:
       ru: [дом, умный дом]
       en: [home automation, ha]
@@ -135,6 +149,9 @@ services:
     description: Система умного дома вне Kubernetes; только чтение сигналов.
 
   - id: media
+    title: Media
+    group: External
+    host_title: Media host
     aliases:
       ru: [музыка, медиа]
       en: [media, music]

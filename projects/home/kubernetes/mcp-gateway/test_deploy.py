@@ -105,6 +105,40 @@ class CatalogTests(unittest.TestCase):
                     self.fail(f"alias {alias!r} is claimed by {owner[key]} and {service['id']}")
                 owner[key] = service["id"]
 
+    def test_every_service_has_a_human_title(self):
+        for service in self.services:
+            title = service.get("title", "")
+            self.assertIsInstance(title, str, service["id"])
+            self.assertTrue(title.strip(), f"{service['id']}: title must be non-empty")
+
+    def test_group_order_covers_every_service(self):
+        order = self.catalog.get("group_order", [])
+        self.assertTrue(order)
+        self.assertEqual(len(order), len(set(order)), "duplicate group_order entries")
+        for service in self.services:
+            self.assertIn(service.get("group"), order, f"{service['id']}: group is not in group_order")
+
+    def test_multi_container_workloads_name_their_main_container(self):
+        # containers[0] selects the image shown in the report and the default
+        # log container; it must be the real main container name of the live
+        # workload (verified against the cluster), not a sidecar or a guess.
+        by_id = {service["id"]: service for service in self.services}
+        for service_id, container in (
+            ("prometheus", "prometheus"),
+            ("alertmanager", "alertmanager"),
+            ("hermes", "gateway"),
+            ("prometheus-operator", "kube-prometheus-stack"),
+            ("external-secrets-webhook", "webhook"),
+            ("cert-manager", "cert-manager-controller"),
+        ):
+            self.assertEqual(by_id[service_id]["containers"][0], container, service_id)
+
+    def test_external_services_have_a_host_title(self):
+        # Never print a raw address in a group header when a host name exists.
+        for service in self.services:
+            if service["kind"] == "external":
+                self.assertTrue(service.get("host_title", "").strip(), service["id"])
+
     def test_every_k8s_workload_is_restartable_with_warning(self):
         k8s = [s for s in self.services if s["kind"] == "k8s"]
         external = [s for s in self.services if s["kind"] == "external"]

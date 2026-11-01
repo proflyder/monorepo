@@ -238,8 +238,13 @@ func Speech(s string) string {
 	return out
 }
 
-// DisplayName returns the best spoken name for a service.
+// DisplayName returns the best spoken name for a service: the catalog title
+// when set, otherwise the first Russian alias, then the first English alias,
+// then the id.
 func DisplayName(s catalog.Service) string {
+	if title := strings.TrimSpace(s.Title); title != "" {
+		return title
+	}
 	if len(s.Aliases.RU) > 0 {
 		return capitalize(s.Aliases.RU[0])
 	}
@@ -249,6 +254,17 @@ func DisplayName(s catalog.Service) string {
 	return capitalize(s.ID)
 }
 
+// displayName resolves a service id through the catalog and returns the
+// human display name; unknown ids are returned unchanged.
+func displayName(cat *catalog.Catalog, id string) string {
+	if cat != nil {
+		if service, ok := cat.Find(id); ok {
+			return DisplayName(service)
+		}
+	}
+	return id
+}
+
 func capitalize(s string) string {
 	runes := []rune(strings.TrimSpace(s))
 	if len(runes) == 0 {
@@ -256,6 +272,41 @@ func capitalize(s string) string {
 	}
 	runes[0] = unicode.ToUpper(runes[0])
 	return string(runes)
+}
+
+// maxUnavailableEntitiesShown keeps a failing Home Assistant summary short
+// enough for a Telegram line.
+const maxUnavailableEntitiesShown = 5
+
+// checkIssue renders one failed check without repeating its label. The
+// ha_unavailable_summary check already says "недоступно сущностей", so
+// prefixing its label again produced "недоступные сущности: недоступно
+// сущностей: 1"; here the count and the entity ids stay inline and the label
+// is used at most once.
+func checkIssue(check checks.Result) string {
+	if check.Type == catalog.CheckHAUnavailable {
+		return unavailableIssue(check)
+	}
+	return check.Label + ": " + check.Error
+}
+
+func unavailableIssue(check checks.Result) string {
+	count := strings.TrimSpace(check.Value)
+	if count == "" {
+		count = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(check.Error), "недоступно сущностей:"))
+	}
+	if count == "" {
+		count = "?"
+	}
+	ids := check.Details
+	if len(ids) > maxUnavailableEntitiesShown {
+		ids = ids[:maxUnavailableEntitiesShown]
+	}
+	text := "недоступно сущностей: " + count
+	if len(ids) > 0 {
+		text += " (" + strings.Join(ids, ", ") + ")"
+	}
+	return text
 }
 
 // audit writes the structured action log and bumps the action metric.

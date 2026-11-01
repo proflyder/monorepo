@@ -213,18 +213,14 @@ func (c *Client) ListPods(ctx context.Context, namespace string, labels map[stri
 		if item.Status.StartTime != nil {
 			pod.StartTime = *item.Status.StartTime
 		}
-		images := make(map[string]string, len(item.Spec.Containers))
-		for _, container := range item.Spec.Containers {
-			images[container.Name] = container.Image
-		}
 		pod.Ready = true
-		if len(item.Status.ContainerStatuses) == 0 {
+		if len(item.Spec.Containers) == 0 {
 			pod.Ready = false
 		}
+		statuses := make(map[string]ContainerStatus, len(item.Status.ContainerStatuses))
 		for _, cs := range item.Status.ContainerStatuses {
 			status := ContainerStatus{
 				Name:         cs.Name,
-				Image:        images[cs.Name],
 				Ready:        cs.Ready,
 				RestartCount: cs.RestartCount,
 				WaitingReason: firstNonEmpty(
@@ -237,6 +233,17 @@ func (c *Client) ListPods(ctx context.Context, namespace string, labels map[stri
 			} else if cs.State.Terminated.FinishedAt != nil {
 				status.LastTerminatedAt = *cs.State.Terminated.FinishedAt
 			}
+			statuses[cs.Name] = status
+		}
+		// Keep the pod template order instead of the API's alphabetical
+		// containerStatuses order: reports pick the workload's own container,
+		// not a sidecar that happens to sort first.
+		for _, container := range item.Spec.Containers {
+			status, ok := statuses[container.Name]
+			if !ok {
+				status = ContainerStatus{Name: container.Name}
+			}
+			status.Image = container.Image
 			if !status.Ready {
 				pod.Ready = false
 			}
