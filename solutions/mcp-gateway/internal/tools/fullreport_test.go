@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata" // keep IANA zone assertions independent of host zoneinfo
 	"unicode/utf8"
 
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
@@ -83,6 +84,48 @@ func TestInfraReportHealthy(t *testing.T) {
 	for _, unwanted := range []string{"scheduler@sha256", "Pulsar: 1.2.3", "Версии"} {
 		if strings.Contains(detail.Text, unwanted) {
 			t.Fatalf("default text unexpectedly contains %q:\n%s", unwanted, detail.Text)
+		}
+	}
+}
+
+func TestInfraReportUsesConfiguredTimezone(t *testing.T) {
+	d := healthyReportDeps(t)
+	loc, err := time.LoadLocation("Asia/Almaty")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	d.Location = loc
+	_, out, err := d.infraReport(context.Background(), nil, infraReportInput{})
+	if err != nil {
+		t.Fatalf("infraReport: %v", err)
+	}
+	detail := resultOf(t, out).Details.(infraReportDetail)
+	// d.Now is 2026-11-01 12:00 UTC; Asia/Almaty has no DST and is UTC+5.
+	if !strings.HasPrefix(detail.Text, "Отчёт по инфраструктуре, 01.11 17:00\n") {
+		t.Fatalf("header not in configured timezone:\n%s", detail.Text)
+	}
+	if detail.CheckedAt != "2026-11-01T12:00:00Z" {
+		t.Fatalf("machine checkedAt must stay UTC: %q", detail.CheckedAt)
+	}
+}
+
+func TestHumanStampTimezone(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Almaty")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	cases := []struct {
+		raw  string
+		loc  *time.Location
+		want string
+	}{
+		{"2026-11-01T20:17:00Z", nil, "01.11 20:17"},
+		{"2026-11-01T20:17:00Z", loc, "02.11 01:17"},
+		{"not-a-time", loc, "not-a-time"},
+	}
+	for _, tc := range cases {
+		if got := humanStamp(tc.raw, tc.loc); got != tc.want {
+			t.Fatalf("humanStamp(%q) = %q, want %q", tc.raw, got, tc.want)
 		}
 	}
 }

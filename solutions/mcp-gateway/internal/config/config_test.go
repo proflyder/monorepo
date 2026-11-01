@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata" // keep IANA zone assertions independent of host zoneinfo
 )
 
 func loader(env map[string]string, files map[string]string) (Config, error) {
@@ -54,6 +55,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ReportTimeout != DefaultReportTimeout {
 		t.Fatalf("report timeout = %v", cfg.ReportTimeout)
 	}
+	if cfg.Timezone != DefaultTimezone || cfg.Location == nil || cfg.Location.String() != "UTC" {
+		t.Fatalf("timezone = %q, location = %v", cfg.Timezone, cfg.Location)
+	}
 	if cfg.HAURL != "" || cfg.HAToken != "" {
 		t.Fatalf("HA unexpectedly configured: %q %q", cfg.HAURL, cfg.HAToken)
 	}
@@ -74,6 +78,7 @@ func TestLoadOverrides(t *testing.T) {
 	env["MCP_HA_URL"] = "http://192.0.2.28:8123"
 	env["MCP_HA_TOKEN_FILE"] = "/run/secrets/ha-token"
 	env["MCP_HTTP_ADDR"] = ":9000"
+	env["MCP_TIMEZONE"] = "Asia/Almaty"
 	files := baseFiles()
 	files["/run/secrets/tg-token"] = "123:ABC"
 	files["/run/secrets/tg-chat"] = "-100123,-100456\n"
@@ -99,6 +104,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.HTTPAddr != ":9000" {
 		t.Fatalf("addr = %q", cfg.HTTPAddr)
+	}
+	if cfg.Timezone != "Asia/Almaty" || cfg.Location.String() != "Asia/Almaty" {
+		t.Fatalf("timezone = %q, location = %v", cfg.Timezone, cfg.Location)
 	}
 }
 
@@ -157,6 +165,11 @@ func TestLoadErrors(t *testing.T) {
 			env:   withEnv(withEnv(baseEnv(), "MCP_HA_URL", "http://192.0.2.28:8123"), "MCP_HA_TOKEN_FILE", "/nope"),
 			files: baseFiles(),
 			want:  "MCP_HA_TOKEN_FILE",
+		},
+		"unknown timezone": {
+			env:   withEnv(baseEnv(), "MCP_TIMEZONE", "Nowhere/Nope"),
+			files: baseFiles(),
+			want:  "MCP_TIMEZONE",
 		},
 	}
 	for name, tc := range tests {

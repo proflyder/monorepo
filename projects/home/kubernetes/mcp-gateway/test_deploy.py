@@ -410,6 +410,7 @@ class ManifestTests(unittest.TestCase):
         ]["containers"][0]
         env = {entry["name"]: entry.get("value") for entry in container["env"]}
         self.assertEqual(env["MCP_GROUPS"], "infra.read,infra.fix,infra.report")
+        self.assertEqual(env["MCP_TIMEZONE"], "Asia/Almaty")
         self.assertEqual(env["MCP_AUTH_TOKEN_FILE"], "/run/secrets/mcp-gateway-auth/token")
         self.assertEqual(env["MCP_INFRA_CATALOG_FILE"], "/etc/mcp-gateway/catalog.yaml")
         self.assertEqual(env["MCP_PROMETHEUS_URL"], "http://monitoring-prometheus.monitoring.svc:9090")
