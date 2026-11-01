@@ -16,6 +16,7 @@ import (
 
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/config"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/group"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
@@ -68,8 +69,10 @@ func Run(ctx context.Context) error {
 		SelfRestartDelay: cfg.SelfRestartDelay,
 		QueryTimeout:     cfg.QueryTimeout,
 		StatusTimeout:    cfg.StatusTimeout,
+		ReportTimeout:    cfg.ReportTimeout,
 		LogByteCap:       cfg.LogByteCap,
 	}
+	deps.Checks = checks.New(cfg.HAURL, cfg.HAToken, nil).WithTimeout(cfg.QueryTimeout)
 	if cfg.PrometheusURL != "" {
 		deps.Prom = prometheus.New(cfg.PrometheusURL, nil)
 	}
@@ -153,6 +156,7 @@ func Run(ctx context.Context) error {
 		"prometheus", cfg.PrometheusURL != "",
 		"alertmanager", cfg.AlertmanagerURL != "",
 		"loki", cfg.LokiURL != "",
+		"home_assistant", cfg.HAURL != "",
 		"telegram", deps.Report != nil,
 		"pending_ttl", cfg.PendingTTL.String(),
 		"cooldown", cfg.Cooldown.String(),

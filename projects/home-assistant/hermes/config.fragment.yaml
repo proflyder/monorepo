@@ -59,6 +59,20 @@ platforms:
     # TELEGRAM_ALLOWED_USERS restricts the chat to the owner.  Long polling is
     # the default transport; do not configure a webhook for this bot.
     enabled: true
+    extra:
+      # Built-in-plus-skill menus exceed the default 60-slot cap; /report is a
+      # skill command and must stay visible in the bot menu.
+      command_menu:
+        max_commands: 100
+        priority_mode: prepend
+        priority: [report]
+
+# The /report skill is a Telegram/CLI command that calls infra_report.  On the
+# voice api_server surface it is unnecessary (free text already works) and the
+# voice path must not gain a slash entry point.
+skills:
+  platform_disabled:
+    api_server: [report]
 
 mcp_servers:
   music-assistant:

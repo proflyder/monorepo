@@ -3,11 +3,16 @@
 
 `projects/home/kubernetes/scheduler/render.py` owns the placeholder policy:
 every `${KEY}` must be declared in its `ALLOWED` set and must have a value, so
-a half-rendered manifest can never be applied. The gateway needs exactly one
-placeholder it does not know (`MCP_GATEWAY_IMAGE`, plus the shared `BUILD_ID`,
-`LAN_CIDR` and `NODE_LAN_IP`), so this module imports that renderer, extends
-`ALLOWED` with the gateway-only key and delegates. Nothing else is duplicated:
-when the scheduler set grows, the union here follows automatically.
+a half-rendered manifest can never be applied. The gateway adds the
+placeholders the shared renderer does not know (`MCP_GATEWAY_IMAGE`, `HAOS_IP`
+and `STATION_IP`, plus the shared `BUILD_ID`, `LAN_CIDR` and `NODE_LAN_IP`), so
+this module imports that renderer, extends `ALLOWED` with the gateway-only keys
+and delegates. Nothing else is duplicated: when the scheduler set grows, the
+union here follows automatically.
+
+`manifests/catalog.yaml` is rendered too: external checks contain host
+placeholders, so the ConfigMap is applied from the rendered copy, never from
+the tracked file.
 
 Usage is identical to the scheduler renderer:
 
@@ -23,7 +28,7 @@ sys.path.insert(0, str(SCHEDULER_DIR))
 
 import render as scheduler_render  # noqa: E402  (path set above on purpose)
 
-GATEWAY_PLACEHOLDERS = {"MCP_GATEWAY_IMAGE"}
+GATEWAY_PLACEHOLDERS = {"MCP_GATEWAY_IMAGE", "HAOS_IP", "STATION_IP"}
 scheduler_render.ALLOWED |= GATEWAY_PLACEHOLDERS
 
 

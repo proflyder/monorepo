@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/loki"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/prometheus"
@@ -535,6 +536,30 @@ func TestInfraAlertErrors(t *testing.T) {
 	}
 }
 
+func TestInfraStatusIncludesExternalChecks(t *testing.T) {
+	d := testDeps(t)
+	kube := d.Kube.(*fakeKube)
+	kube.workloads[kubeKey("home", "Deployment", "scheduler")] = healthyScheduler()
+	kube.workloads[kubeKey("home", "Deployment", "hermes")] = healthyScheduler()
+	kube.workloads[kubeKey("home", "StatefulSet", "readonly")] = healthyScheduler()
+	d.Checks = &fakeChecks{byService: map[string][]checks.Result{
+		"ha": {{Service: "ha", Type: "tcp", Label: "HA API", OK: false, Error: "connection refused"}},
+	}}
+
+	_, out, err := d.infraStatus(context.Background(), nil, struct{}{})
+	if err != nil {
+		t.Fatalf("infraStatus: %v", err)
+	}
+	result := resultOf(t, out)
+	detail := result.Details.(statusDetail)
+	if len(detail.ExternalChecks) != 1 || detail.ExternalChecks[0].OK {
+		t.Fatalf("checks = %+v", detail.ExternalChecks)
+	}
+	if !detail.Degraded || !strings.Contains(result.Speech, "Проблемы") {
+		t.Fatalf("degraded=%v speech=%q", detail.Degraded, result.Speech)
+	}
+}
+
 func TestReadGroupRegistersAllTools(t *testing.T) {
 	d := testDeps(t)
 	server := mcp.NewServer(&mcp.Implementation{Name: "tools-test", Version: "0"}, nil)
@@ -559,7 +584,7 @@ func TestReadGroupRegistersAllTools(t *testing.T) {
 	for _, tool := range tools.Tools {
 		got[tool.Name] = true
 	}
-	for _, want := range []string{"infra_status", "infra_service", "infra_alert", "infra_logs", "infra_query", "infra_overview"} {
+	for _, want := range []string{"infra_status", "infra_service", "infra_alert", "infra_logs", "infra_query", "infra_overview", "infra_report"} {
 		if !got[want] {
 			t.Errorf("tool %q not registered (got %v)", want, got)
 		}

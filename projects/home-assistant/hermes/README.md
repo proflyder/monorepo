@@ -30,7 +30,7 @@ the full Home Assistant MCP surface and the Music Assistant MCP server.
 The generated Hermes config is large; [`config.fragment.yaml`](config.fragment.yaml)
 contains the reviewed overlay for the three MCP servers, model provider, web
 search, platform toolsets and the Telegram channel.  The HA voice prompt lives
-in [`voice_prompt.txt`](voice_prompt.txt); the canonical Hermes identity lives
+in `voice_prompt.txt`; the canonical Hermes identity lives
 in [`SOUL.md`](SOUL.md); the infra context that becomes `/opt/data/.hermes.md`
 lives in [`HERMES.md`](HERMES.md); the TTS sanitizer lives in
 [`voice_proxy.py`](voice_proxy.py).  Do not copy secrets into this directory.
@@ -72,7 +72,10 @@ The merge is deep: unrelated keys in the generated `config.yaml` survive
 the keys it declares, private values win over both, and lists are replaced.
 `agent.personalities.voice` is not in the fragment: it is set from
 [`voice_prompt.txt`](voice_prompt.txt), the single source of truth for the
-Ricardo persona.  Comments in a hand-edited `config.yaml` are not preserved —
+Ricardo persona.  The renderer also installs `skills/` (currently
+`skills/report`) into `<HERMES_HOME>/skills` and, when the private file has
+`telegram_owner_chat_id`, the Telegram channel prompt and home channel from
+`telegram_prompt.txt` — see «Telegram-промпт» below.  Comments in a hand-edited `config.yaml` are not preserved —
 `config.yaml.prev` is the one-step rollback (`cp config.yaml.prev config.yaml`
 + restart).  A second run is a no-op, and `--check` exits `1` when a render is
 pending (pre-flight use).
@@ -90,9 +93,11 @@ open its own config.
 
 `mcp_servers.infra` points at the shared `mcp-gateway` Service in the same
 namespace.  It exposes `infra_status`, `infra_service`, `infra_logs`,
-`infra_query`, `infra_alert`, `infra_overview` (read-only) and the two-step
-`infra_prepare_restart` → `infra_confirm` / `infra_cancel`, plus
-`infra_send_report`.  The restart confirmation is a normal tool pair because
+`infra_query`, `infra_alert`, `infra_overview`, `infra_report` (read-only) and
+the two-step `infra_prepare_restart` → `infra_confirm` / `infra_cancel`, plus
+`infra_send_report`.  `infra_report` is the full house report (K3s, HA, MA,
+station, alerts) used by `/report` and by the voice path when it only needs a
+verdict and an offer to send details.  The restart confirmation is a normal tool pair because
 the voice path cannot show Hermes approval prompts; `trust: full` is required
 for the same reason.
 
@@ -136,6 +141,34 @@ the currency bot keeps its own bot for rate alerts.  Reply to an alert message
 to quote its fingerprint into the model, then ask `infra_alert` about it.
 
 
+## Telegram-промпт и `/report`
+
+Hermes applies `display.personality: voice` to every platform, so Telegram
+replies used to be cut to the 180-character voice limit even when the tool
+returned a full report.  The fix is a per-chat override, which Hermes reads
+from `platforms.telegram.channel_overrides[<chat_id>].system_prompt`.
+
+- `telegram_prompt.txt` is the reviewed prompt for the owner's Telegram chat
+  (long structured answers, `/report`, the full MCP tool set, no `exec`).
+- The private `telegram_owner_chat_id` (numeric id, same value as the owner in
+  `TELEGRAM_ALLOWED_USERS`) is renderer input only.  The renderer writes the
+  channel override and `platforms.telegram.home_channel`
+  (`{platform: telegram, chat_id, name}`) so Hermes knows the default delivery
+  destination; the key itself is removed from `config.yaml`.
+- `skills/report/SKILL.md` installs as `<HERMES_HOME>/skills/report/SKILL.md`.
+  A skill directory becomes a slash command on messaging platforms, so
+  `/report` starts a normal agent turn that calls `infra_report` (no shell
+  `exec` command).  The fragment keeps the command visible with
+  `platforms.telegram.extra.command_menu` (100 slots, `report` prepended) and
+  disables it on the voice api_server surface
+  (`skills.platform_disabled.api_server: [report]`).
+- Only our own skill directories are installed; any other skill already on the
+  PVC is left untouched, and the renderer never deletes files.
+
+After rendering, restart the gateway; `/report` appears in the bot menu on the
+next Telegram connect.  Verify with a `/report` message from the owner account
+and check the reply length (it must exceed 180 characters for a real report).
+
 ## Cancel guard (proxy v6)
 
 HA's `prefer_local_intents` is skipped for the next utterance when the previous
@@ -164,10 +197,10 @@ The station assistant is **Рикардо**, the user's personal voice assistant
 1. `~/.hermes/SOUL.md` — primary identity (`SOUL.md` in this directory is the
    reviewed source).  It explicitly says not to call itself Hermes/Гермес.
 2. `agent.personalities.voice` in `~/.hermes/config.yaml` — the active
-   `voice` personality, rendered from [`voice_prompt.txt`](voice_prompt.txt)
+   `voice` personality, rendered from `voice_prompt.txt`
    (single source; the fragment does not repeat the text).
 3. HA `llama_cpp` conversation subentry — prompt from
-   [`voice_prompt.txt`](voice_prompt.txt), title/entity `Рикардо`.
+   `voice_prompt.txt`, title/entity `Рикардо`.
 
 Apply on lab-host after editing the repo files.  The renderer installs
 `SOUL.md` and `agent.personalities.voice` (from `voice_prompt.txt`) into the

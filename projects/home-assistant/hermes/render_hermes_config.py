@@ -9,8 +9,11 @@ reviewed path from the repository files to the volume:
     config.fragment.yaml  ->  <home>/config.yaml   (deep merge, unrelated keys kept)
     private values (opt.) ->  <home>/config.yaml   (deep merge AFTER the fragment)
     voice_prompt.txt      ->  agent.personalities.voice (single source of truth)
+    telegram_prompt.txt   ->  platforms.telegram.channel_overrides[<owner id>]
+    owner chat id (private)-> platforms.telegram.home_channel (renderer input)
     HERMES.md             ->  <home>/.hermes.md    (infra context, cwd = /opt/data)
     SOUL.md               ->  <home>/SOUL.md       (identity)
+    skills/<name>/        ->  <home>/skills/<name>/ (slash-command skills)
 
 The tracked fragment uses TEST-NET placeholders (192.0.2.0/24) for the Home
 Assistant and Music Assistant endpoints.  Real addresses come from a private
@@ -58,9 +61,15 @@ DEFAULT_FRAGMENT = HERE / "config.fragment.yaml"
 DEFAULT_CONTEXT = HERE / "HERMES.md"
 DEFAULT_SOUL = HERE / "SOUL.md"
 DEFAULT_VOICE_PROMPT = HERE / "voice_prompt.txt"
+DEFAULT_TELEGRAM_PROMPT = HERE / "telegram_prompt.txt"
+DEFAULT_SKILLS = HERE / "skills"
 
 # Files installed verbatim into HERMES_HOME, keyed by their in-home name.
 INSTALLED = (".hermes.md", "SOUL.md")
+
+# Renderer-only private keys: they configure the render and are never written
+# into the Hermes config itself.
+PRIVATE_ONLY_KEYS = ("telegram_owner_chat_id",)
 
 # Values that must never silently replace a live endpoint: TEST-NET addresses
 # (RFC 5737, used across this repository as public placeholders) and the
@@ -150,6 +159,78 @@ def set_voice_personality(merged: dict, voice: str) -> dict:
     return merged
 
 
+def set_telegram_channel_prompt(merged: dict, chat_id: str, prompt: str) -> dict:
+    """Install a per-chat system prompt for the owner's Telegram chat.
+
+    Hermes applies ``display.personality`` to every platform; a channel
+    override replaces it for that chat so Telegram answers stay full-length
+    while the voice path keeps its short personality.
+    """
+    platforms = merged.setdefault("platforms", {})
+    if not isinstance(platforms, dict):
+        raise SystemExit("config.yaml: platforms must be a mapping")
+    telegram = platforms.setdefault("telegram", {})
+    if not isinstance(telegram, dict):
+        raise SystemExit("config.yaml: platforms.telegram must be a mapping")
+    overrides = telegram.setdefault("channel_overrides", {})
+    if not isinstance(overrides, dict):
+        raise SystemExit("config.yaml: platforms.telegram.channel_overrides must be a mapping")
+    channel = overrides.setdefault(str(chat_id), {})
+    if not isinstance(channel, dict):
+        raise SystemExit(
+            "config.yaml: platforms.telegram.channel_overrides entry must be a mapping"
+        )
+    channel["system_prompt"] = prompt
+    return merged
+
+
+def set_telegram_home_channel(merged: dict, chat_id: str) -> dict:
+    """Set ``platforms.telegram.home_channel`` for the owner's private chat.
+
+    Hermes stores the default delivery destination as
+    ``{platform, chat_id, name}`` (``gateway/config.py`` ``HomeChannel``); without
+    it the first inbound message logs "No home channel is set for Telegram".
+    """
+    platforms = merged.setdefault("platforms", {})
+    if not isinstance(platforms, dict):
+        raise SystemExit("config.yaml: platforms must be a mapping")
+    telegram = platforms.setdefault("telegram", {})
+    if not isinstance(telegram, dict):
+        raise SystemExit("config.yaml: platforms.telegram must be a mapping")
+    current = telegram.get("home_channel")
+    name = "Home"
+    if isinstance(current, dict) and str(current.get("name") or "").strip():
+        name = str(current["name"]).strip()
+    telegram["home_channel"] = {
+        "platform": "telegram",
+        "chat_id": str(chat_id),
+        "name": name,
+    }
+    return merged
+
+
+def skill_plan(home: Path, skills_dir: Path) -> dict[Path, str]:
+    """Plan copies of the repository's skill directories into HERMES_HOME.
+
+    Only our own skill directories are touched; any other skill already on the
+    volume (installed by hand or by another project) is left alone.
+    """
+    if not skills_dir.is_dir():
+        return {}
+    plan: dict[Path, str] = {}
+    for source_dir in sorted(skills_dir.iterdir()):
+        if not source_dir.is_dir() or not (source_dir / "SKILL.md").is_file():
+            continue
+        for source in sorted(source_dir.rglob("*")):
+            if not source.is_file():
+                continue
+            destination = home / "skills" / source.relative_to(skills_dir)
+            text = source.read_text(encoding="utf-8")
+            if not destination.exists() or destination.read_text(encoding="utf-8") != text:
+                plan[destination] = text
+    return plan
+
+
 def build_plan(
     home: Path,
     fragment: Path,
@@ -157,6 +238,8 @@ def build_plan(
     soul: Path,
     private_values: Path | None = None,
     voice_prompt: Path = DEFAULT_VOICE_PROMPT,
+    telegram_prompt: Path = DEFAULT_TELEGRAM_PROMPT,
+    skills_dir: Path = DEFAULT_SKILLS,
     allow_placeholders: bool = False,
 ) -> dict[Path, str]:
     """Return {destination: new content} for every file a render would change."""
@@ -164,15 +247,32 @@ def build_plan(
     current = _read_mapping(config, "config.yaml") if config.exists() else {}
 
     merged = deep_merge(current, _read_mapping(fragment, "fragment"))
+    owner_chat_id = ""
     if private_values is not None:
         if not private_values.exists():
             raise SystemExit(f"{private_values}: private values file not found")
-        merged = deep_merge(merged, _read_mapping(private_values, "private values"))
+        private = _read_mapping(private_values, "private values")
+        # Renderer input, not Hermes config: pull it out before the merge so it
+        # can never leak into config.yaml.
+        raw_owner = str(private.pop("telegram_owner_chat_id", "") or "").strip()
+        if raw_owner:
+            owner_chat_id = raw_owner
+        merged = deep_merge(merged, private)
+    for key in PRIVATE_ONLY_KEYS:
+        merged.pop(key, None)
 
     if voice_prompt.exists():
         merged = set_voice_personality(merged, voice_prompt.read_text(encoding="utf-8").strip())
     else:
         raise SystemExit(f"{voice_prompt}: voice prompt not found")
+
+    if owner_chat_id:
+        if not telegram_prompt.exists():
+            raise SystemExit(f"{telegram_prompt}: Telegram prompt not found")
+        merged = set_telegram_channel_prompt(
+            merged, owner_chat_id, telegram_prompt.read_text(encoding="utf-8").strip()
+        )
+        merged = set_telegram_home_channel(merged, owner_chat_id)
 
     if not allow_placeholders:
         victims = placeholder_violations(merged, current)
@@ -196,6 +296,7 @@ def build_plan(
         destination = home / name
         if not destination.exists() or destination.read_text(encoding="utf-8") != text:
             plan[destination] = text
+    plan.update(skill_plan(home, skills_dir))
     return plan
 
 
@@ -218,6 +319,7 @@ def apply_plan(plan: dict[Path, str]) -> list[Path]:
             backup = path.with_name(path.name + ".prev")
             backup.write_bytes(path.read_bytes())
             backup.chmod(0o600)
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         written.append(path)
     print(f"rendered {len(written)} file(s) at {stamp}")
@@ -238,9 +340,13 @@ def main(argv: list[str] | None = None) -> int:
                         help="private YAML with real endpoints (merged after the fragment)")
     parser.add_argument("--voice-prompt", type=Path, default=DEFAULT_VOICE_PROMPT,
                         help="source for agent.personalities.voice")
+    parser.add_argument("--telegram-prompt", type=Path, default=DEFAULT_TELEGRAM_PROMPT,
+                        help="system prompt for the owner's Telegram chat override")
     parser.add_argument("--context", type=Path, default=DEFAULT_CONTEXT,
                         help="infra context source installed as .hermes.md")
     parser.add_argument("--soul", type=Path, default=DEFAULT_SOUL)
+    parser.add_argument("--skills", type=Path, default=DEFAULT_SKILLS,
+                        help="skill directories installed into <home>/skills")
     parser.add_argument("--allow-placeholders", action="store_true",
                         help="allow TEST-NET/example placeholders (tests only)")
     mode = parser.add_mutually_exclusive_group()
@@ -261,10 +367,12 @@ def main(argv: list[str] | None = None) -> int:
         args.soul,
         private_values=args.private_values,
         voice_prompt=args.voice_prompt,
+        telegram_prompt=args.telegram_prompt,
+        skills_dir=args.skills,
         allow_placeholders=args.allow_placeholders,
     )
     if not plan:
-        print("up to date: config.yaml, .hermes.md and SOUL.md already match the repository")
+        print("up to date: config.yaml, .hermes.md, SOUL.md and skills already match the repository")
         return 0
     for path, text in plan.items():
         print(f"--- would update {path} ---")

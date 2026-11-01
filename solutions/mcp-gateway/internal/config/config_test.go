@@ -51,6 +51,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.LogByteCap != DefaultLogByteCap || cfg.StatusTimeout != DefaultStatusTimeout {
 		t.Fatalf("cap=%d status=%v", cfg.LogByteCap, cfg.StatusTimeout)
 	}
+	if cfg.ReportTimeout != DefaultReportTimeout {
+		t.Fatalf("report timeout = %v", cfg.ReportTimeout)
+	}
+	if cfg.HAURL != "" || cfg.HAToken != "" {
+		t.Fatalf("HA unexpectedly configured: %q %q", cfg.HAURL, cfg.HAToken)
+	}
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -64,10 +70,14 @@ func TestLoadOverrides(t *testing.T) {
 	env["MCP_QUERY_TIMEOUT"] = "2s"
 	env["MCP_STATUS_TIMEOUT"] = "6s"
 	env["MCP_LOG_BYTE_CAP"] = "2048"
+	env["MCP_REPORT_TIMEOUT"] = "7s"
+	env["MCP_HA_URL"] = "http://192.0.2.28:8123"
+	env["MCP_HA_TOKEN_FILE"] = "/run/secrets/ha-token"
 	env["MCP_HTTP_ADDR"] = ":9000"
 	files := baseFiles()
 	files["/run/secrets/tg-token"] = "123:ABC"
 	files["/run/secrets/tg-chat"] = "-100123,-100456\n"
+	files["/run/secrets/ha-token"] = "ha-long-lived\n"
 	cfg, err := loader(env, files)
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -77,6 +87,12 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.QueryTimeout != 2*time.Second || cfg.StatusTimeout != 6*time.Second || cfg.LogByteCap != 2048 {
 		t.Fatalf("timeouts = %v %v %d", cfg.QueryTimeout, cfg.StatusTimeout, cfg.LogByteCap)
+	}
+	if cfg.ReportTimeout != 7*time.Second {
+		t.Fatalf("report timeout = %v", cfg.ReportTimeout)
+	}
+	if cfg.HAURL != "http://192.0.2.28:8123" || cfg.HAToken != "ha-long-lived" {
+		t.Fatalf("HA = %q %q", cfg.HAURL, cfg.HAToken)
 	}
 	if cfg.TelegramToken != "123:ABC" || cfg.TelegramChatID != "-100123" {
 		t.Fatalf("telegram = %q %q", cfg.TelegramToken, cfg.TelegramChatID)
@@ -131,6 +147,16 @@ func TestLoadErrors(t *testing.T) {
 			env:   withEnv(baseEnv(), "MCP_LOG_BYTE_CAP", "10"),
 			files: baseFiles(),
 			want:  "MCP_LOG_BYTE_CAP",
+		},
+		"HA url without token": {
+			env:   withEnv(baseEnv(), "MCP_HA_URL", "http://192.0.2.28:8123"),
+			files: baseFiles(),
+			want:  "MCP_HA_TOKEN_FILE",
+		},
+		"HA token file missing": {
+			env:   withEnv(withEnv(baseEnv(), "MCP_HA_URL", "http://192.0.2.28:8123"), "MCP_HA_TOKEN_FILE", "/nope"),
+			files: baseFiles(),
+			want:  "MCP_HA_TOKEN_FILE",
 		},
 	}
 	for name, tc := range tests {

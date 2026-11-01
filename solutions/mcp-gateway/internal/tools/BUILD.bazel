@@ -4,6 +4,7 @@ go_library(
     name = "tools",
     srcs = [
         "fix.go",
+        "fullreport.go",
         "read.go",
         "report.go",
         "tools.go",
@@ -13,6 +14,7 @@ go_library(
     deps = [
         "//solutions/mcp-gateway/internal/alertmanager",
         "//solutions/mcp-gateway/internal/catalog",
+        "//solutions/mcp-gateway/internal/checks",
         "//solutions/mcp-gateway/internal/kubernetes",
         "//solutions/mcp-gateway/internal/loki",
         "//solutions/mcp-gateway/internal/metrics",
@@ -28,6 +30,7 @@ go_test(
     srcs = [
         "fakes_test.go",
         "fix_test.go",
+        "fullreport_test.go",
         "read_test.go",
         "report_test.go",
     ],
@@ -35,6 +38,7 @@ go_test(
     deps = [
         "//solutions/mcp-gateway/internal/alertmanager",
         "//solutions/mcp-gateway/internal/catalog",
+        "//solutions/mcp-gateway/internal/checks",
         "//solutions/mcp-gateway/internal/kubernetes",
         "//solutions/mcp-gateway/internal/loki",
         "//solutions/mcp-gateway/internal/metrics",

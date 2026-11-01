@@ -30,7 +30,7 @@ Service mcp-gateway:8080 ──► Deployment mcp-gateway
 manifests/deployment.yaml         Deployment + ClusterIP Service (template)
 manifests/catalog.yaml            service catalog + sanitized topology overview
 manifests/rbac.yaml               ServiceAccount + per-namespace read/restart Roles
-manifests/external-secrets.yaml   mcp-gateway-auth, mcp-gateway-telegram
+manifests/external-secrets.yaml   mcp-gateway-auth, mcp-gateway-telegram, mcp-gateway-ha
 manifests/network-policies.yaml   ingress from Hermes/monitoring, narrow egress
 manifests/servicemonitor.yaml     Prometheus scrape of /metrics
 ci/rbac.yaml                      extra ci-deploy verbs (NetworkPolicy, ServiceMonitor)
@@ -73,8 +73,17 @@ Tracked files contain only placeholders/TEST-NET values.
   `alertmanager-monitoring-alertmanager` — and their warnings say the
   Prometheus Operator owns them and may roll the pods a second time.
 - External targets (HAOS, Music Assistant, station) are read-only: the gateway
-  cannot restart anything outside Kubernetes, and the station exposes no
-  metrics at all (documented limitation in the catalog).
+  cannot restart anything outside Kubernetes. Their availability comes from
+  catalog `checks:`: HA REST (`http` with `auth: ha` plus
+  `ha_unavailable_summary`), MA TCP + web root, and station TCP ports plus
+  `ha_state`/`ha_template` for the ESPHome entities and the Pulsar version.
+  The catalog, the Deployment and the NetworkPolicy carry `${HAOS_IP}` /
+  `${STATION_IP}`; `deploy.sh` renders them from the private env, so tracked
+  files never contain real host addresses.
+- `infra_report` is the full-report tool used by the Telegram `/report` skill:
+  per-service status, ready replicas, restarts in the last hour, shortened
+  image digest, age, external checks, versions and active alerts. It returns a
+  short verdict plus a plain-text report capped at 3500 characters.
 
 The catalog and RBAC are checked against each other: `patch` resourceNames in
 `manifests/rbac.yaml` must equal the restartable catalog workloads
@@ -104,8 +113,10 @@ catalog loads (and that an invalid one refuses to start).
   ClusterIP, so this only exposes the gateway to the node and the cluster, and
   `/mcp` still requires the bearer token.
 - Egress: kube-API 6443 (service CIDR `10.43.0.0/16` and the node), monitoring
-  9090/9093/3100, DNS 53 (UDP/TCP), Telegram 443. Telegram publishes no stable
-  ranges, so 443 is any-destination — the same trade-off as currency-bot.
+  9090/9093/3100, external checks on the `${LAN_CIDR}` (HAOS 8123/8095, station
+  6053/8928/8099), DNS 53 (UDP/TCP), Telegram 443. Telegram publishes no
+  stable ranges, so 443 is any-destination — the same trade-off as
+  currency-bot.
 - K3s (kube-router) enforces NetworkPolicies. Prefer allowing over breaking:
   if the CNI ever stops attributing hostNetwork sources to the node address,
   the ingress rules still cover the pod CIDR.
@@ -160,25 +171,34 @@ Never paste secret values into chat or a commit. Use the private paths below.
    `TELEGRAM_ALLOWED_USERS` as the fixed report recipient. The currency-bot bot
    stays dedicated to currency-bot.
 
-3. **Admin manifests** (cluster/namespace objects, applied once):
+3. **Home Assistant REST token** — no new secret: `ExternalSecret/mcp-gateway-ha`
+   reads the same OpenBao key as the scheduler bridge,
+   `secret/k8s/home-assistant/ha-bridge-ha`, property `token`
+   (`HA_TOKEN_FILE` in `ha-bridge`). Rotating the HA token means patching that
+   one key and restarting `ha-bridge` and `mcp-gateway`.
+
+4. **Admin manifests** (cluster/namespace objects, applied once):
 
    ```bash
    kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
    kubectl apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
    kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
    kubectl -n home-assistant wait --for=condition=Ready \
-     externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram --timeout=120s
+     externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram \
+     externalsecret/mcp-gateway-ha --timeout=120s
    ```
 
    `ci/rbac.yaml` only adds what the scheduler Role for `home-assistant`
    lacks: NetworkPolicy and ServiceMonitor, plus `get` on `services/proxy` for
    the gateway's Service so the post-deploy smoke can read `/readyz`.
 
-4. **Deploy-time env** in `secrets/home/mcp-gateway.env` (copy the example):
+5. **Deploy-time env** in `secrets/home/mcp-gateway.env` (copy the example):
 
    ```bash
    LAN_CIDR=<LAN CIDR>
    NODE_LAN_IP=<K3s node address>
+   HAOS_IP=<HAOS VM address>
+   STATION_IP=<station address>
    ```
 
    CI reads the same text from `secret/ci/deploy-home` key
@@ -190,11 +210,11 @@ Never paste secret values into chat or a commit. Use the private paths below.
      mcp_gateway_env="$(cat secrets/home/mcp-gateway.env)"
    ```
 
-5. **ExternalSecrets in the ESO apply set.** `external-secrets/deploy.sh`
+6. **ExternalSecrets in the ESO apply set.** `external-secrets/deploy.sh`
    keeps an explicit list of ExternalSecret manifests. Until
    `projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml` is
    added to that list (a separate change outside this unit), apply it with the
-   command in step 3. The CI job fails closed if either ExternalSecret is
+   command in step 4. The CI job fails closed if any ExternalSecret is
    missing or not Ready.
 
 ## Deploy
@@ -215,8 +235,9 @@ runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/mcp-gateway.env`.
 1. builds `//solutions/mcp-gateway:mcp-gateway_image` and resolves the digest
    (never a moving tag);
 2. renders the manifests (no half-rendered input is possible);
-3. verifies the ServiceAccount and both ExternalSecrets exist and are Ready;
-4. applies the catalog ConfigMap exactly from `manifests/catalog.yaml`;
+3. verifies the ServiceAccount and all three ExternalSecrets exist and are Ready;
+4. renders `manifests/catalog.yaml` (host placeholders) and applies it as the
+   catalog ConfigMap;
 5. applies NetworkPolicies and the ServiceMonitor;
 6. converges the Deployment and waits for the rollout;
 7. runs the binary's `-healthcheck` through `kubectl exec`, which loads the
@@ -272,8 +293,11 @@ kubectl delete -f projects/home/kubernetes/mcp-gateway/manifests/external-secret
 
 ## Open risks
 
-- HAOS, Music Assistant and the station have no Kubernetes metrics; HA/MA are
-  visible only through the health exporter's TCP probe, the station not at all.
+- HAOS, Music Assistant and the station have no Kubernetes metrics; their
+  status now comes from external catalog checks (HA REST, MA TCP/HTTP, station
+  TCP and HA entities). A check proves reachability, not application-level
+  correctness, and `ha_unavailable_summary` is limited to the configured
+  domains to avoid noise from permanently unavailable entities.
 - `TELEGRAM_ALLOWED_USERS` must exist in `hermes-environment`; until the
   Hermes/Telegram rollout writes it, `mcp-gateway-telegram` stays not Ready and
   the deploy fails closed on purpose.

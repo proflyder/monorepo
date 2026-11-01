@@ -34,7 +34,11 @@ EXTERNAL_SECRETS = MANIFESTS / "external-secrets.yaml"
 GOOD_ENV = """# private values
 LAN_CIDR=192.0.2.0/24
 NODE_LAN_IP="192.0.2.27"
+HAOS_IP=192.0.2.28
+STATION_IP=192.0.2.13
 """
+
+ALLOWED_CATALOG_PLACEHOLDERS = {"HAOS_IP", "STATION_IP"}
 
 # Namespaces the gateway may look into. kube-system is read-only, so it is not
 # derived from the catalog (which only lists repository-managed workloads).
@@ -132,6 +136,32 @@ class CatalogTests(unittest.TestCase):
                     f"{service['id']}: a status signal must describe the bad state",
                 )
         self.assertGreater(status_signals, 0)
+
+    def test_external_checks_cover_ha_ma_and_station(self):
+        by_id = {service["id"]: service for service in self.services}
+        for service_id in ("home-assistant", "music-assistant", "station"):
+            self.assertTrue(by_id[service_id].get("checks"), service_id)
+        # Every check is typed, labelled and type-complete.
+        allowed = {"tcp", "http", "ha_state", "ha_template", "ha_unavailable_summary"}
+        for service in self.services:
+            for check in service.get("checks", []):
+                self.assertIn(check["type"], allowed, service["id"])
+                self.assertTrue(check.get("label", "").strip(), service["id"])
+                if check["type"] == "tcp":
+                    self.assertTrue(check.get("host", "").startswith("${"))
+                    self.assertTrue(0 < int(check["port"]) <= 65535)
+                if check["type"] == "http":
+                    self.assertIn("${", check["url"])
+                    self.assertIn(check.get("auth", "none"), {"none", "ha"})
+                if check["type"] in {"ha_state", "ha_template"}:
+                    self.assertTrue(check.get("entity_id") or check.get("template"))
+        station = by_id["station"]
+        station_types = {check["type"] for check in station["checks"]}
+        self.assertTrue({"tcp", "ha_state", "ha_template"} <= station_types)
+        # The HTTP check against HA must use the REST token, not an anonymous
+        # request that would only prove the login page is reachable.
+        ha_http = [check for check in by_id["home-assistant"]["checks"] if check["type"] == "http"]
+        self.assertEqual(ha_http[0]["auth"], "ha")
 
     def test_loki_only_where_alloy_ingests(self):
         for service in self.services:
@@ -312,10 +342,12 @@ class RbacTests(unittest.TestCase):
 
 
 class ManifestTests(unittest.TestCase):
-    def test_catalog_has_no_placeholders(self):
-        # It is applied verbatim as a ConfigMap, so an unrendered ${...} would
-        # silently become part of a PromQL query.
-        self.assertIsNone(re.search(r"\$\{", CATALOG.read_text()))
+    def test_catalog_only_uses_renderable_placeholders(self):
+        # The catalog is rendered before it becomes a ConfigMap. Only the
+        # documented host placeholders may appear; anything else would fail
+        # the renderer (or leak into PromQL/check URLs).
+        found = set(re.findall(r"\$\{([A-Z0-9_]+)\}", CATALOG.read_text()))
+        self.assertEqual(found, ALLOWED_CATALOG_PLACEHOLDERS)
 
     def test_deployment_is_hardened_and_single_writer(self):
         docs = load_docs(DEPLOYMENT)
@@ -349,17 +381,22 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(env["MCP_PROMETHEUS_URL"], "http://monitoring-prometheus.monitoring.svc:9090")
         self.assertEqual(env["MCP_ALERTMANAGER_URL"], "http://monitoring-alertmanager.monitoring.svc:9093")
         self.assertEqual(env["MCP_LOKI_URL"], "http://loki.monitoring.svc:3100")
+        self.assertEqual(env["MCP_HA_URL"], "http://${HAOS_IP}:8123")
+        self.assertEqual(env["MCP_HA_TOKEN_FILE"], "/run/secrets/mcp-gateway-ha/token")
         self.assertEqual(env["TELEGRAM_BOT_TOKEN_FILE"], "/run/secrets/mcp-gateway-telegram/token")
         self.assertEqual(env["TELEGRAM_CHAT_ID_FILE"], "/run/secrets/mcp-gateway-telegram/chat_id")
         # Secrets only as files; no secret value and no *_TOKEN env.
         self.assertNotIn("TELEGRAM_BOT_TOKEN", env)
         self.assertNotIn("MCP_AUTH_TOKEN", env)
+        self.assertNotIn("MCP_HA_TOKEN", env)
         volumes = {volume["name"]: volume for volume in container_volumes(docs)}
         self.assertEqual(volumes["catalog"]["configMap"]["name"], "mcp-gateway-catalog")
         auth_items = volumes["auth"]["secret"]["items"]
         self.assertEqual(auth_items, [{"key": "token", "path": "token"}])
         telegram_items = {(item["key"], item["path"]) for item in volumes["telegram"]["secret"]["items"]}
         self.assertEqual(telegram_items, {("token", "token"), ("chat_id", "chat_id")})
+        ha_items = volumes["ha"]["secret"]["items"]
+        self.assertEqual(ha_items, [{"key": "token", "path": "token"}])
 
     def test_service_is_cluster_ip_only(self):
         docs = load_docs(DEPLOYMENT)
@@ -389,6 +426,16 @@ class ManifestTests(unittest.TestCase):
             for port in rule["ports"]
         }
         self.assertTrue({6443, 9090, 9093, 3100, 443, 53} <= ports)
+        # External catalog checks: HA REST/MA and the station's ports, all on
+        # the LAN CIDR (host IPs are rendered at deploy time).
+        self.assertTrue({8123, 8095, 6053, 8928, 8099} <= ports)
+        lan_rule = next(
+            rule
+            for rule in egress["spec"]["egress"]
+            if {"ipBlock": {"cidr": "${LAN_CIDR}"}} in rule["to"]
+        )
+        lan_ports = {port["port"] for port in lan_rule["ports"]}
+        self.assertTrue({8123, 8095, 6053, 8928, 8099} <= lan_ports)
 
     def test_servicemonitor_selects_the_gateway_service(self):
         monitor = yaml.safe_load(SERVICEMONITOR.read_text())
@@ -416,6 +463,17 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(telegram["token"]["key"], "k8s/home-assistant/hermes-environment")
         self.assertEqual(telegram["token"]["property"], "TELEGRAM_BOT_TOKEN")
         self.assertEqual(telegram["chat_id"]["property"], "TELEGRAM_ALLOWED_USERS")
+        # HA REST checks reuse the scheduler bridge's long-lived token.
+        ha = by_name["mcp-gateway-ha"]["spec"]["data"]
+        self.assertEqual(
+            ha,
+            [
+                {
+                    "secretKey": "token",
+                    "remoteRef": {"key": "k8s/home-assistant/ha-bridge-ha", "property": "token"},
+                }
+            ],
+        )
         for doc in docs:
             self.assertEqual(doc["spec"]["target"]["creationPolicy"], "Owner")
             self.assertEqual(doc["spec"]["target"]["deletionPolicy"], "Retain")
@@ -427,7 +485,7 @@ class ManifestTests(unittest.TestCase):
             for line in example.splitlines()
             if line.strip() and not line.startswith("#")
         }
-        self.assertEqual(keys, {"LAN_CIDR", "NODE_LAN_IP"})
+        self.assertEqual(keys, {"LAN_CIDR", "NODE_LAN_IP", "HAOS_IP", "STATION_IP"})
         values = dict(
             line.split("=", 1)
             for line in example.splitlines()
@@ -468,6 +526,7 @@ class RenderTests(unittest.TestCase):
                 str(DEPLOYMENT),
                 str(NETWORK),
                 str(SERVICEMONITOR),
+                str(CATALOG),
             ],
             text=True,
             capture_output=True,
@@ -480,6 +539,13 @@ class RenderTests(unittest.TestCase):
         network = (out / "network-policies.yaml").read_text()
         self.assertIn("192.0.2.27/32", network)
         self.assertNotIn("${NODE_LAN_IP}", network)
+        rendered_deployment = (out / "deployment.yaml").read_text()
+        self.assertIn("http://192.0.2.28:8123", rendered_deployment)
+        self.assertNotIn("${HAOS_IP}", rendered_deployment)
+        catalog = (out / "catalog.yaml").read_text()
+        self.assertIn("http://192.0.2.28:8123/api/", catalog)
+        self.assertIn("192.0.2.13", catalog)
+        self.assertNotIn("${", catalog)
 
     def test_unknown_placeholder_is_rejected(self):
         tmp = Path(tempfile.mkdtemp(prefix="mcp-render-bad-"))
@@ -548,7 +614,7 @@ class DeployScriptTests(unittest.TestCase):
     def test_missing_network_values_are_rejected_before_kubectl(self):
         res = self.run_deploy("LAN_CIDR=192.0.2.0/24\n")
         self.assertNotEqual(res.returncode, 0)
-        self.assertIn("LAN_CIDR and NODE_LAN_IP are required", res.stderr)
+        self.assertIn("LAN_CIDR, NODE_LAN_IP, HAOS_IP and STATION_IP are required", res.stderr)
         self.assertFalse(res.kubectl_log.exists())
 
     def test_unknown_only_group_is_rejected(self):

@@ -17,6 +17,7 @@ import (
 
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/loki"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/metrics"
@@ -63,6 +64,11 @@ type ReportSender interface {
 	Send(ctx context.Context, title, text string) error
 }
 
+// CheckRunner executes the typed external checks of every catalog service.
+type CheckRunner interface {
+	RunAll(ctx context.Context, services []catalog.Service) []checks.Result
+}
+
 // Scheduler defers work without blocking a tool call.
 type Scheduler interface {
 	AfterFunc(d time.Duration, f func())
@@ -83,6 +89,7 @@ type Deps struct {
 	Loki    LogQuerier
 	Kube    KubeAPI
 	Report  ReportSender
+	Checks  CheckRunner
 	Pending *pending.Store
 	Timers  Scheduler
 	Metrics *metrics.Metrics
@@ -97,6 +104,8 @@ type Deps struct {
 	QueryTimeout time.Duration
 	// StatusTimeout bounds the whole infra_status aggregate.
 	StatusTimeout time.Duration
+	// ReportTimeout bounds the whole infra_report aggregate.
+	ReportTimeout time.Duration
 	// LogByteCap bounds the returned log payload.
 	LogByteCap int
 }
@@ -134,6 +143,13 @@ func (d *Deps) statusTimeout() time.Duration {
 		return d.StatusTimeout
 	}
 	return 8 * time.Second
+}
+
+func (d *Deps) reportTimeout() time.Duration {
+	if d.ReportTimeout > 0 {
+		return d.ReportTimeout
+	}
+	return 9 * time.Second
 }
 
 func (d *Deps) cooldown() time.Duration {

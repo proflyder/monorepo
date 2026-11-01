@@ -7,7 +7,7 @@
 #
 # Environment:
 #   PRIVATE_ENV    private values file (default secrets/home/mcp-gateway.env)
-#                  keys: LAN_CIDR, NODE_LAN_IP
+#                  keys: LAN_CIDR, NODE_LAN_IP, HAOS_IP, STATION_IP
 #   PUSH_IMAGES=1  push the image to GHCR (CI path)
 #   NODE_SSH       import the image into the node's containerd (manual path)
 #   IMAGE_TAG      tag used for the push/import (default HEAD sha)
@@ -72,10 +72,13 @@ PY
 
 LAN_CIDR=$(env_value LAN_CIDR)
 NODE_LAN_IP=$(env_value NODE_LAN_IP)
+HAOS_IP=$(env_value HAOS_IP)
+STATION_IP=$(env_value STATION_IP)
 # The NetworkPolicy admits Hermes (hostNetwork -> node address) and kubelet
-# probes explicitly, so both values are required.
-[[ -n "$LAN_CIDR" && -n "$NODE_LAN_IP" ]] || {
-  echo "LAN_CIDR and NODE_LAN_IP are required in $PRIVATE_ENV" >&2
+# probes explicitly; the external checks need the HAOS and station host
+# addresses. All four values are required.
+[[ -n "$LAN_CIDR" && -n "$NODE_LAN_IP" && -n "$HAOS_IP" && -n "$STATION_IP" ]] || {
+  echo "LAN_CIDR, NODE_LAN_IP, HAOS_IP and STATION_IP are required in $PRIVATE_ENV" >&2
   exit 1
 }
 
@@ -149,7 +152,8 @@ python3 "$DIR/render.py" \
   --set "MCP_GATEWAY_IMAGE=$IMAGE_REF" \
   "$DIR/manifests/deployment.yaml" \
   "$DIR/manifests/network-policies.yaml" \
-  "$DIR/manifests/servicemonitor.yaml"
+  "$DIR/manifests/servicemonitor.yaml" \
+  "$DIR/manifests/catalog.yaml"
 
 echo "== namespace $NS"
 # The namespace is cluster-scoped and admin-applied. CI's ServiceAccount may
@@ -166,7 +170,7 @@ else
   exit 1
 fi
 
-# The gateway's ServiceAccount, Roles and both ExternalSecrets are admin/ESO
+# The gateway's ServiceAccount, Roles and all ExternalSecrets are admin/ESO
 # owned. Fail before touching workloads if the one-time apply was skipped.
 # CI's ServiceAccount may not even read ServiceAccounts, so Forbidden means
 # "admin-managed, cannot check" and a definite NotFound is the hard failure.
@@ -184,7 +188,7 @@ else
 fi
 
 echo "== verifying ExternalSecrets (ESO-owned; CI never applies them)"
-for es in mcp-gateway-auth mcp-gateway-telegram; do
+for es in mcp-gateway-auth mcp-gateway-telegram mcp-gateway-ha; do
   if ! $KUBECTL -n "$NS" get externalsecret "$es" >/dev/null 2>&1; then
     echo "missing ExternalSecret $NS/$es; apply it with" >&2
     echo "  kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml" >&2
@@ -192,7 +196,7 @@ for es in mcp-gateway-auth mcp-gateway-telegram; do
   fi
   $KUBECTL -n "$NS" wait --for=condition=Ready "externalsecret/$es" --timeout=120s
 done
-for secret in mcp-gateway-auth mcp-gateway-telegram; do
+for secret in mcp-gateway-auth mcp-gateway-telegram mcp-gateway-ha; do
   if ! $KUBECTL -n "$NS" get secret "$secret" >/dev/null 2>&1; then
     echo "missing secret $NS/$secret; apply the ExternalSecrets and wait for Ready" >&2
     exit 1
@@ -200,10 +204,11 @@ for secret in mcp-gateway-auth mcp-gateway-telegram; do
 done
 
 echo "== catalog ConfigMap"
-# The catalog is applied from the tracked file (no placeholders in it), so the
-# ConfigMap content is exactly the reviewed YAML.
+# External check hosts are rendered from the private env, so the ConfigMap is
+# built from the rendered copy. render.py refuses an unknown or unset
+# placeholder, which keeps a half-rendered catalog out of the cluster.
 $KUBECTL -n "$NS" create configmap mcp-gateway-catalog \
-  --from-file=catalog.yaml="$DIR/manifests/catalog.yaml" \
+  --from-file=catalog.yaml="$RENDER_DIR/catalog.yaml" \
   --dry-run=client -o yaml | $KUBECTL apply -f -
 
 echo "== NetworkPolicies and ServiceMonitor"

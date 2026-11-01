@@ -88,6 +88,25 @@ class HermesConfigTests(unittest.TestCase):
             with self.subTest(platform=platform):
                 assert not (set(enabled) & forbidden), enabled
 
+    def test_telegram_report_command_is_visible_and_voice_safe(self):
+        telegram = self.data["platforms"]["telegram"]
+        menu = telegram["extra"]["command_menu"]
+        self.assertEqual(menu["max_commands"], 100)
+        self.assertEqual(menu["priority_mode"], "prepend")
+        self.assertEqual(menu["priority"], ["report"])
+        # The skill is a Telegram/CLI command only; the voice surface has no
+        # slash entry point.
+        self.assertEqual(self.data["skills"]["platform_disabled"]["api_server"], ["report"])
+
+    def test_telegram_prompt_covers_the_report_command(self):
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
+        for marker in ("Рикардо", "Telegram", "infra_status", "/report", "infra_report", "details.text"):
+            assert marker in prompt
+        # The shared voice personality is capped at 180 characters; this prompt
+        # must stay a full-chat prompt, not a voice one-liner.
+        assert "180" not in prompt
+        assert len(prompt) > 1000
+
     def test_telegram_uses_polling_and_owner_allowlist(self):
         # Telegram is enabled by TELEGRAM_BOT_TOKEN from hermes-environment and
         # limited by TELEGRAM_ALLOWED_USERS; a webhook would move it off polling
@@ -107,8 +126,8 @@ class HermesConfigTests(unittest.TestCase):
 
     def test_voice_layers_require_infra_confirmation(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
-        for marker in ("infra_status", "infra_prepare_restart", "infra_confirm",
-                       "infra_cancel"):
+        for marker in ("infra_status", "infra_report", "infra_prepare_restart",
+                       "infra_confirm", "infra_cancel"):
             assert marker in prompt
         assert "подтвержд" in prompt.lower()
 

@@ -122,6 +122,7 @@ func (w Workload) RolloutInProgress() bool {
 // ContainerStatus is one container's state in a pod.
 type ContainerStatus struct {
 	Name             string    `json:"name"`
+	Image            string    `json:"image,omitempty"`
 	Ready            bool      `json:"ready"`
 	RestartCount     int32     `json:"restartCount"`
 	WaitingReason    string    `json:"waitingReason,omitempty"`
@@ -212,6 +213,10 @@ func (c *Client) ListPods(ctx context.Context, namespace string, labels map[stri
 		if item.Status.StartTime != nil {
 			pod.StartTime = *item.Status.StartTime
 		}
+		images := make(map[string]string, len(item.Spec.Containers))
+		for _, container := range item.Spec.Containers {
+			images[container.Name] = container.Image
+		}
 		pod.Ready = true
 		if len(item.Status.ContainerStatuses) == 0 {
 			pod.Ready = false
@@ -219,6 +224,7 @@ func (c *Client) ListPods(ctx context.Context, namespace string, labels map[stri
 		for _, cs := range item.Status.ContainerStatuses {
 			status := ContainerStatus{
 				Name:         cs.Name,
+				Image:        images[cs.Name],
 				Ready:        cs.Ready,
 				RestartCount: cs.RestartCount,
 				WaitingReason: firstNonEmpty(
@@ -494,7 +500,11 @@ type podListJSON struct {
 			Name string `json:"name"`
 		} `json:"metadata"`
 		Spec struct {
-			NodeName string `json:"nodeName"`
+			NodeName   string `json:"nodeName"`
+			Containers []struct {
+				Name  string `json:"name"`
+				Image string `json:"image"`
+			} `json:"containers"`
 		} `json:"spec"`
 		Status struct {
 			Phase             string     `json:"phase"`

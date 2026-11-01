@@ -412,6 +412,16 @@
   Kubernetes REST), `infra.fix` (только rollout restart, два шага) и
   `infra.report` (Telegram с фиксированным получателем). Решение —
   `DECISIONS.md`; деплой-контракт — `projects/home/kubernetes/mcp-gateway/`.
+- `infra_report` — полный отчёт по всем сервисам каталога: статус, готовые
+  реплики, перезапуски за час, digest-образ, возраст, внешние проверки, версии
+  HA и алерты; короткий вердикт + plain-text ≤ 3500 символов. `infra_status`
+  тоже выполняет внешние проверки.
+- Внешние проверки каталога (`checks:`): `tcp`, `http` (`auth: ha`, тело не
+  возвращается), `ha_state`, `ha_template`, `ha_unavailable_summary`. HA URL и
+  токен — `MCP_HA_URL`/`MCP_HA_TOKEN_FILE` из Secret `mcp-gateway-ha` (та же
+  OpenBao-запись `k8s/home-assistant/ha-bridge-ha`, что у ha-bridge); если не
+  заданы — «не настроено», не ошибка. Адреса HAOS/станции — плейсхолдеры
+  `${HAOS_IP}`/`${STATION_IP}`, рендерятся из `secrets/home/mcp-gateway.env`.
 - Namespace `home-assistant`, Deployment `mcp-gateway` (1 реплика,
   RollingUpdate, distroless, non-root, read-only rootfs), ClusterIP
   `mcp-gateway:8080` без ingress/NodePort; `/mcp` требует Bearer, `/healthz`,
@@ -430,12 +440,14 @@
   каталогу. `kube-system` — только чтение.
 - NetworkPolicy: ingress на 8080 от адреса узла (Hermes в `hostNetwork`),
   LAN/pod CIDR и namespace `monitoring`; egress — kube-API 6443, monitoring
-  9090/9093/3100, DNS 53 и Telegram 443.
+  9090/9093/3100, LAN-порты проверок (HAOS 8123/8095, станция
+  6053/8928/8099), DNS 53 и Telegram 443.
 - Секреты — ESO: `mcp-gateway-auth` (OpenBao
   `k8s/home-assistant/mcp-gateway-auth`, ключ `token`, тот же токен Hermes
   получает как `HERMES_INFRA_TOKEN`) и `mcp-gateway-telegram`
   (`TELEGRAM_BOT_TOKEN` + первый элемент `TELEGRAM_ALLOWED_USERS` из
-  `k8s/home-assistant/hermes-environment`). Telegram — отдельный инфра-бот;
+  `k8s/home-assistant/hermes-environment`), `mcp-gateway-ha` (HA REST-токен из
+  `k8s/home-assistant/ha-bridge-ha`, ключ `token`). Telegram — отдельный инфра-бот;
   бот currency-bot остаётся только для currency-bot.
 - Перезапуск разрешён для всех repo-managed workload'ов после голосового или
   Telegram-подтверждения, у каждого — честное предупреждение; `hermes` и
@@ -454,6 +466,13 @@
   идемпотентный `hermes/render_hermes_config.py` (реальные endpoint'ы — из
   git-ignored `secrets/home/hermes-private.yaml`, `--private-values`;
   `agent.personalities.voice` рендерится из `voice_prompt.txt`).
+  Telegram-промпт — `telegram_prompt.txt` в
+  `platforms.telegram.channel_overrides[<owner chat id>].system_prompt`
+  (иначе `display.personality: voice` режет ответы до 180 символов);
+  `telegram_owner_chat_id` — renderer-only ключ, он же задаёт
+  `platforms.telegram.home_channel`. Skill `skills/report` даёт команду
+  `/report` → `infra_report`, виден в меню (`command_menu`), отключён на
+  `api_server`.
 - ExternalSecret `alertmanager-telegram` переведён на инфра-бот (живой
   Secret обновится после раскатки); в каждом алерте — fingerprint для
   `infra_alert`, ответ на алерт в Telegram передаёт его Hermes.

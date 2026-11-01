@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//solutions/mcp-gateway/internal/alertmanager",
         "//solutions/mcp-gateway/internal/catalog",
+        "//solutions/mcp-gateway/internal/checks",
         "//solutions/mcp-gateway/internal/config",
         "//solutions/mcp-gateway/internal/group",
         "//solutions/mcp-gateway/internal/kubernetes",

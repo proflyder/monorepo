@@ -29,7 +29,13 @@ overview: |
     (`ricardo_endpoint_up{endpoint="ha"}` и `"music_assistant"`).
   - **K3s VM** (один узел) — все приложения ниже, observability и секреты.
   - **Станция** — колонка с Pulsar/ESPHome; метрик и логов в кластере нет,
-    поэтому она в каталоге только для справки (перезапуск не поддержан).
+    поэтому доступность проверяется TCP-портами и сущностями Home Assistant
+    (перезапуск не поддержан).
+
+  Внешние проверки объявлены в каталоге (`checks:`) и выполняются шлюзом:
+  TCP, HTTP и Home Assistant REST (`ha_state`, `ha_template`,
+  `ha_unavailable_summary`). Адреса подставляются при деплое из
+  `mcp-gateway.env`, в публичном файле только плейсхолдеры.
 
   ## Пространства имён K3s
 
@@ -653,6 +659,17 @@ services:
       - promql: ricardo_endpoint_up{endpoint="ha"} == 0
         meaning: Home Assistant не отвечает
         status: true
+    checks:
+      - type: http
+        label: REST API
+        url: "http://${HAOS_IP}:8123/api/"
+        expect_status: 200
+        auth: ha
+      - type: ha_unavailable_summary
+        label: недоступные сущности
+        # Только голосовой спутник и медиаплееры: диагностические сенсоры и
+        # отключённые устройства не должны делать отчёт «проблемным».
+        domains: [assist_satellite, media_player]
     logs:
       source: none
     restart:
@@ -668,6 +685,16 @@ services:
       - promql: ricardo_endpoint_up{endpoint="music_assistant"} == 0
         meaning: Music Assistant не отвечает
         status: true
+    checks:
+      - type: tcp
+        label: API
+        host: ${HAOS_IP}
+        port: 8095
+      # Отдельного health-endpoint у MA нет; корень UI отвечает 200.
+      - type: http
+        label: веб-интерфейс
+        url: "http://${HAOS_IP}:8095/"
+        expect_status: 200
     logs:
       source: none
     restart:
@@ -679,8 +706,31 @@ services:
       ru: [станция, колонка, рикардо]
       en: [station, speaker, pulsar]
     kind: external
+    checks:
+      - type: tcp
+        label: ESPHome
+        host: ${STATION_IP}
+        port: 6053
+      - type: tcp
+        label: Sendspin
+        host: ${STATION_IP}
+        port: 8928
+      - type: tcp
+        label: HTTP control
+        host: ${STATION_IP}
+        port: 8099
+      - type: ha_state
+        label: Assist-спутник
+        entity_id: assist_satellite.iandeks_stantsiia_midi_assist_satellite
+      - type: ha_state
+        label: ESPHome media player
+        entity_id: media_player.iandeks_stantsiia_midi_media_player
+      # Версия прошивки Pulsar из Device Registry: справочно, не влияет на статус.
+      - type: ha_template
+        label: Версия Pulsar
+        template: "{{ device_attr(device_id('assist_satellite.iandeks_stantsiia_midi_assist_satellite'), 'sw_version') }}"
     logs:
       source: none
     restart:
       allowed: false
-    description: Колонка Midi с Pulsar/ESPHome. Метрик и логов в кластере нет; диагностика — только вручную (SSH/ADB).
+    description: Колонка Midi с Pulsar/ESPHome. Метрик и логов в кластере нет; доступность — TCP и сущности HA.

@@ -9,6 +9,7 @@ import (
 
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/loki"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/metrics"
@@ -63,6 +64,8 @@ services:
       - promql: ricardo_endpoint_up{endpoint="ha"} == 0
         meaning: home assistant недоступен
         status: true
+    checks:
+      - {type: tcp, label: HA API, host: 192.0.2.28, port: 8123}
     restart: {allowed: false}
   - id: readonly
     aliases:
@@ -237,6 +240,18 @@ type fakeReport struct {
 func (f *fakeReport) Send(_ context.Context, title, text string) error {
 	f.title, f.text = title, text
 	return f.err
+}
+
+type fakeChecks struct {
+	byService map[string][]checks.Result
+}
+
+func (f *fakeChecks) RunAll(_ context.Context, services []catalog.Service) []checks.Result {
+	var out []checks.Result
+	for _, service := range services {
+		out = append(out, f.byService[service.ID]...)
+	}
+	return out
 }
 
 type fakeTimers struct {
