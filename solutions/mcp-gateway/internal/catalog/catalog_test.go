@@ -266,6 +266,28 @@ ignore_alerts: [Watchdog, watchdog]
 services:
   - {id: a, aliases: {en: [a]}, kind: external}
 `,
+		"blank title": `
+services:
+  - {id: a, title: "   ", aliases: {en: [a]}, kind: external}
+`,
+		"blank group": `
+services:
+  - {id: a, group: "   ", aliases: {en: [a]}, kind: external}
+`,
+		"blank host title": `
+services:
+  - {id: a, host_title: "   ", aliases: {en: [a]}, kind: external}
+`,
+		"empty group order entry": `
+group_order: [Apps, ""]
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+`,
+		"duplicate group order": `
+group_order: [Apps, Apps]
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+`,
 		"check without label": `
 services:
   - {id: a, aliases: {en: [a]}, kind: external}
@@ -303,6 +325,43 @@ services:
 				t.Fatalf("Parse succeeded, want validation error")
 			}
 		})
+	}
+}
+
+func TestPresentationFieldsParse(t *testing.T) {
+	raw := `
+group_order: [Голос, Дом]
+services:
+  - id: a
+    title: GigaAM
+    group: Голос
+    aliases: {ru: [гигаам], en: [gigaam]}
+    kind: external
+  - id: b
+    title: Home Assistant
+    group: Дом
+    host_title: HAOS VM
+    aliases: {ru: [дом], en: [ha]}
+    kind: external
+`
+	cat, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(cat.GroupOrder) != 2 || cat.GroupOrder[0] != "Голос" {
+		t.Fatalf("group_order = %v", cat.GroupOrder)
+	}
+	if cat.Services[0].Title != "GigaAM" || cat.Services[0].Group != "Голос" {
+		t.Fatalf("service = %+v", cat.Services[0])
+	}
+	if cat.Services[1].HostTitle != "HAOS VM" {
+		t.Fatalf("host_title = %q", cat.Services[1].HostTitle)
+	}
+	text := cat.CatalogText()
+	for _, want := range []string{"- title: GigaAM", "- group: Голос"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("catalog text missing %q:\n%s", want, text)
+		}
 	}
 }
 

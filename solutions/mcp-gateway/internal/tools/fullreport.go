@@ -15,6 +15,7 @@ import (
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
 )
 
 // reportTextCap keeps the Telegram-ready report below the message budget.
@@ -31,6 +32,7 @@ const (
 type serviceReport struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
+	Group     string          `json:"group,omitempty"`
 	Kind      string          `json:"kind"`
 	Namespace string          `json:"namespace,omitempty"`
 	Status    string          `json:"status"`
@@ -58,7 +60,11 @@ type infraReportDetail struct {
 	Errors    []string        `json:"errors,omitempty"`
 }
 
-func (d *Deps) infraReport(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+type infraReportInput struct {
+	Verbose bool `json:"verbose,omitempty" jsonschema:"append a compact versions section (image, age, versions) to the text report"`
+}
+
+func (d *Deps) infraReport(ctx context.Context, _ *mcp.CallToolRequest, in infraReportInput) (*mcp.CallToolResult, any, error) {
 	cat := d.Catalog
 	if cat == nil {
 		return Failure("Каталог сервисов не загружен.", nil)
@@ -149,7 +155,7 @@ func (d *Deps) infraReport(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 		}
 	}
 	detail.Verdict = reportVerdict(detail)
-	detail.Text = formatServiceReport(detail, cat)
+	detail.Text = formatServiceReport(detail, cat, in.Verbose)
 	return respond(Result{Speech: detail.Verdict, Details: detail})
 }
 
@@ -162,6 +168,7 @@ func (d *Deps) collectServiceReport(ctx context.Context, service catalog.Service
 	item := serviceReport{
 		ID:        service.ID,
 		Name:      DisplayName(service),
+		Group:     serviceGroup(service),
 		Kind:      service.Kind,
 		Namespace: service.Namespace,
 		Status:    statusOK,
@@ -218,12 +225,7 @@ func (d *Deps) collectWorkloadReport(ctx context.Context, service catalog.Servic
 		oldest := time.Time{}
 		for _, pod := range pods {
 			if item.Image == "" {
-				for _, container := range pod.Containers {
-					if container.Image != "" {
-						item.Image = shortImage(container.Image)
-						break
-					}
-				}
+				item.Image = shortImage(pickImage(pod, service))
 			}
 			if !pod.StartTime.IsZero() && (oldest.IsZero() || pod.StartTime.Before(oldest)) {
 				oldest = pod.StartTime
@@ -262,7 +264,7 @@ func classifyService(item *serviceReport, service catalog.Service) {
 			continue
 		}
 		failed++
-		item.Issues = append(item.Issues, check.Label+": "+check.Error)
+		item.Issues = append(item.Issues, checkIssue(check))
 	}
 	if failed > 0 {
 		if service.Kind == catalog.ServiceExternal && failed == evaluated {
@@ -307,90 +309,249 @@ func reportVerdict(detail infraReportDetail) string {
 		detail.Total, detail.OK, strings.Join(shown, ", "), suffix)
 }
 
-func formatServiceReport(detail infraReportDetail, cat *catalog.Catalog) string {
+// reportHeadline is the second line of the Telegram text: a short verdict with
+// an emoji. It never asks a question; the offered follow-up lives in speech.
+func reportHeadline(detail infraReportDetail) string {
+	if detail.Problems == 0 {
+		line := fmt.Sprintf("✅ Всё работает: %d из %d", detail.OK, detail.Total)
+		if detail.Unknown > 0 {
+			line += fmt.Sprintf(", не проверено %d", detail.Unknown)
+		}
+		return line
+	}
+	return fmt.Sprintf("⚠️ Есть проблемы: %d из %d", detail.Problems, detail.Total)
+}
+
+func formatServiceReport(detail infraReportDetail, cat *catalog.Catalog, verbose bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Отчёт по инфраструктуре, %s\n", humanStamp(detail.CheckedAt))
-	fmt.Fprintf(&b, "%s\n", detail.Verdict)
-
-	groups := make(map[string][]serviceReport)
-	var order []string
-	for _, service := range detail.Services {
-		group := serviceGroup(serviceByID(cat, service.ID))
-		if _, seen := groups[group]; !seen {
-			order = append(order, group)
-		}
-		groups[group] = append(groups[group], service)
+	b.WriteString(reportHeadline(detail) + "\n")
+	if len(detail.Errors) > 0 {
+		fmt.Fprintf(&b, "⚠️ Проверка неполная: %s\n", detail.Errors[0])
 	}
-	sort.Strings(order)
-	for _, group := range order {
-		fmt.Fprintf(&b, "\n%s\n", group)
-		items := groups[group]
-		sort.SliceStable(items, func(i, j int) bool { return items[i].ID < items[j].ID })
-		for _, service := range items {
-			b.WriteString("  " + serviceReportLine(service) + "\n")
+
+	if detail.Problems > 0 {
+		b.WriteString("\nПроблемы\n")
+		for _, group := range reportGroups(detail, cat) {
+			for _, service := range group.items {
+				if !isProblem(service) {
+					continue
+				}
+				writeProblem(&b, service)
+			}
+		}
+	}
+
+	if normal := normalGroupLines(detail, cat); len(normal) > 0 {
+		b.WriteString("\nВ норме\n")
+		for _, line := range normal {
+			b.WriteString(line + "\n")
 		}
 	}
 
 	if len(detail.Alerts) > 0 {
 		b.WriteString("\nАлерты\n")
 		for _, alert := range detail.Alerts {
-			line := "  - " + alert.Name
-			if alert.Severity != "" {
-				line += " (" + alert.Severity + ")"
-			}
-			if alert.Summary != "" {
-				line += ": " + alert.Summary
-			}
-			b.WriteString(line + "\n")
+			b.WriteString(alertLine(alert) + "\n")
 		}
 	}
-	if len(detail.Errors) > 0 {
-		b.WriteString("\nНе проверено\n")
-		for _, err := range detail.Errors {
-			b.WriteString("  - " + err + "\n")
+
+	if verbose {
+		if lines := versionLines(detail); len(lines) > 0 {
+			b.WriteString("\nВерсии\n")
+			for _, line := range lines {
+				b.WriteString(line + "\n")
+			}
 		}
 	}
 	return capReport(strings.TrimSpace(b.String()))
 }
 
-func serviceReportLine(service serviceReport) string {
-	var parts []string
-	parts = append(parts, service.Name+": "+service.Status)
+func isProblem(service serviceReport) bool {
+	if service.Status == statusOK {
+		return false
+	}
+	if service.Status == statusUnknown && service.Kind == catalog.ServiceExternal {
+		return false
+	}
+	return true
+}
+
+func writeProblem(b *strings.Builder, service serviceReport) {
+	marker := "⚠️"
+	if service.Status == statusDown {
+		marker = "❌"
+	}
+	reason := problemReason(service)
+	fmt.Fprintf(b, "%s %s — %s\n", marker, service.Name, reason)
+	if facts := problemFacts(service, reason); len(facts) > 0 {
+		b.WriteString("   " + strings.Join(facts, ", ") + "\n")
+	}
+}
+
+func problemReason(service serviceReport) string {
+	for _, issue := range service.Issues {
+		if strings.TrimSpace(issue) != "" {
+			return issue
+		}
+	}
+	if len(service.Alerts) > 0 {
+		return service.Alerts[0]
+	}
+	switch service.Status {
+	case statusDown:
+		return "недоступен"
+	case statusUnknown:
+		return "состояние неизвестно"
+	default:
+		return "работает неполностью"
+	}
+}
+
+func problemFacts(service serviceReport, reason string) []string {
+	var facts []string
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || value == reason {
+			return
+		}
+		for _, existing := range facts {
+			if existing == value {
+				return
+			}
+		}
+		facts = append(facts, value)
+	}
 	if service.Kind == catalog.ServiceK8s {
 		if service.Desired > 0 || service.Ready > 0 {
-			parts = append(parts, fmt.Sprintf("%d/%d", service.Ready, service.Desired))
+			add(fmt.Sprintf("готовы %d из %d", service.Ready, service.Desired))
 		}
-		parts = append(parts, fmt.Sprintf("рестартов 1ч: %d", service.Restarts))
+		add(fmt.Sprintf("рестартов 1ч: %d", service.Restarts))
 	}
-	if service.Image != "" {
-		parts = append(parts, service.Image)
-	}
-	if service.Age != "" {
-		parts = append(parts, service.Age)
-	}
-	for _, version := range service.Versions {
-		parts = append(parts, version)
-	}
-	if len(service.Issues) > 0 {
-		issues := service.Issues
-		if len(issues) > 3 {
-			issues = issues[:3]
+	for _, check := range service.Checks {
+		if check.Skipped || check.OK {
+			continue
 		}
-		parts = append(parts, strings.Join(issues, "; "))
-	} else {
-		for _, check := range service.Checks {
-			if !check.Skipped && check.OK {
-				parts = append(parts, check.Label+" ok")
-				break
+		add(checkIssue(check))
+	}
+	for _, alert := range service.Alerts {
+		add("алерт: " + alert)
+	}
+	for _, issue := range service.Issues {
+		add(issue)
+	}
+	if len(facts) > 5 {
+		facts = facts[:5]
+	}
+	return facts
+}
+
+type reportGroup struct {
+	name  string
+	items []serviceReport
+}
+
+// normalGroupLines renders one short line per group of healthy services.
+// Groups with more than five healthy services collapse to a count so the
+// report stays scannable.
+func normalGroupLines(detail infraReportDetail, cat *catalog.Catalog) []string {
+	var lines []string
+	for _, group := range reportGroups(detail, cat) {
+		var names []string
+		for _, service := range group.items {
+			if service.Status == statusOK {
+				names = append(names, service.Name)
+			}
+		}
+		if len(names) == 0 {
+			continue
+		}
+		if len(names) > 5 {
+			lines = append(lines, fmt.Sprintf("✅ %s (%d)", group.name, len(names)))
+			continue
+		}
+		lines = append(lines, "✅ "+group.name+": "+strings.Join(names, ", "))
+	}
+	return lines
+}
+
+// reportGroups keeps the catalog group order: first group_order, then any
+// group that only appears in services in first-appearance order.
+func reportGroups(detail infraReportDetail, cat *catalog.Catalog) []reportGroup {
+	groups := make([]reportGroup, 0)
+	index := make(map[string]int)
+	add := func(name string, service serviceReport) {
+		if name == "" {
+			name = "Прочее"
+		}
+		if i, ok := index[name]; ok {
+			groups[i].items = append(groups[i].items, service)
+			return
+		}
+		index[name] = len(groups)
+		groups = append(groups, reportGroup{name: name, items: []serviceReport{service}})
+	}
+	ordered := make(map[string]bool, len(cat.GroupOrder))
+	for _, name := range cat.GroupOrder {
+		ordered[name] = true
+		for _, service := range detail.Services {
+			if service.Group == name {
+				add(name, service)
 			}
 		}
 	}
-	return strings.Join(parts, ", ")
+	for _, service := range detail.Services {
+		if ordered[service.Group] {
+			continue
+		}
+		add(service.Group, service)
+	}
+	return groups
 }
 
+func alertLine(alert alertDetail) string {
+	line := "⚠️ " + alert.Name
+	if alert.Severity != "" {
+		line += " (" + alert.Severity + ")"
+	}
+	if alert.Summary != "" {
+		line += ": " + alert.Summary
+	}
+	return line
+}
+
+func versionLines(detail infraReportDetail) []string {
+	var lines []string
+	for _, service := range detail.Services {
+		var facts []string
+		if service.Image != "" {
+			facts = append(facts, service.Image)
+		}
+		if service.Age != "" {
+			facts = append(facts, "возраст "+service.Age)
+		}
+		facts = append(facts, service.Versions...)
+		if len(facts) == 0 {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s — %s", service.Name, strings.Join(facts, ", ")))
+	}
+	return lines
+}
+
+// serviceGroup returns the catalog group of a service. When the catalog does
+// not set one, Kubernetes services fall back to their namespace and external
+// services to their host title or address; a raw address is only a last
+// resort for catalogs that predate the group field.
 func serviceGroup(service catalog.Service) string {
+	if group := strings.TrimSpace(service.Group); group != "" {
+		return group
+	}
 	if service.Kind == catalog.ServiceK8s {
 		return "K3s / " + service.Namespace
+	}
+	if host := strings.TrimSpace(service.HostTitle); host != "" {
+		return host
 	}
 	for _, check := range service.Checks {
 		switch check.Type {
@@ -432,6 +593,44 @@ func dedupeAlerts(alerts []alertDetail) []alertDetail {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// pickImage chooses the image that represents the workload, not a sidecar.
+// Preference: the catalog containers[0], then the container named after the
+// workload (or its suffix after the last dash), then pod spec order.
+func pickImage(pod kubernetes.Pod, service catalog.Service) string {
+	if len(service.Containers) > 0 {
+		if image := imageOfContainer(pod, service.Containers[0]); image != "" {
+			return image
+		}
+	}
+	name := strings.TrimSpace(service.Workload.Name)
+	if name != "" {
+		candidates := []string{name}
+		if idx := strings.LastIndex(name, "-"); idx >= 0 && idx < len(name)-1 {
+			candidates = append(candidates, name[idx+1:])
+		}
+		for _, candidate := range candidates {
+			if image := imageOfContainer(pod, candidate); image != "" {
+				return image
+			}
+		}
+	}
+	for _, container := range pod.Containers {
+		if container.Image != "" {
+			return container.Image
+		}
+	}
+	return ""
+}
+
+func imageOfContainer(pod kubernetes.Pod, name string) string {
+	for _, container := range pod.Containers {
+		if container.Name == name {
+			return container.Image
+		}
+	}
+	return ""
 }
 
 func shortImage(image string) string {

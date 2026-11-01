@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -192,6 +193,31 @@ func TestHAUnavailableSummary(t *testing.T) {
 	})
 	if result.Value != "4" {
 		t.Fatalf("all result = %+v", result)
+	}
+}
+
+func TestHAUnavailableDetailPrefersFriendlyName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `[
+  {"entity_id":"media_player.kitchen","state":"unavailable","attributes":{"friendly_name":"Кухня"}},
+  {"entity_id":"media_player.hall","state":"unavailable"}
+]`)
+	}))
+	defer server.Close()
+	result := New(server.URL, "token", nil).Run(context.Background(), "ha", catalog.Check{
+		Type: catalog.CheckHAUnavailable, Label: "недоступные", Domains: []string{"media_player"},
+	})
+	if result.Value != "2" {
+		t.Fatalf("result = %+v", result)
+	}
+	want := []string{"Кухня (media_player.kitchen)", "media_player.hall"}
+	if len(result.Details) != len(want) {
+		t.Fatalf("details = %v", result.Details)
+	}
+	for i := range want {
+		if result.Details[i] != want[i] {
+			t.Fatalf("details[%d] = %q, want %q", i, result.Details[i], want[i])
+		}
 	}
 }
 

@@ -80,10 +80,50 @@ Tracked files contain only placeholders/TEST-NET values.
   The catalog, the Deployment and the NetworkPolicy carry `${HAOS_IP}` /
   `${STATION_IP}`; `deploy.sh` renders them from the private env, so tracked
   files never contain real host addresses.
-- `infra_report` is the full-report tool used by the Telegram `/report` skill:
-  per-service status, ready replicas, restarts in the last hour, shortened
-  image digest, age, external checks, versions and active alerts. It returns a
-  short verdict plus a plain-text report capped at 3500 characters.
+- `infra_report` is the full-report tool used by the Telegram `/report` skill.
+  The text is cognitive-first: a header, an emoji verdict, then «Проблемы»
+  (one block per failing service with ready/restarts/failing check/entities),
+  «В норме» (one short line per catalog `group`), and «Алерты» only when
+  active. Images, age and versions stay in the structured `details` JSON;
+  `verbose: true` appends a compact «Версии» section. The text is capped at
+  3500 characters. `title` replaces the first alias everywhere a human name is
+  shown, and `group_order` fixes the section order.
+- `containers[0]` names the container whose image represents a workload
+  (`prometheus`, `alertmanager`, …), so a config-reloader sidecar cannot
+  become the reported image. Without it the gateway matches the workload name
+  or its last dash-segment, then falls back to pod spec order — never to the
+  alphabetical `containerStatuses` order.
+
+Rendered sample (all healthy):
+
+```text
+Отчёт по инфраструктуре, 01.11 19:52
+✅ Всё работает: 30 из 30
+
+В норме
+✅ Голос: Hermes, GigaAM, Whisper, Piper, Runtime Health Exporter
+✅ Дом: Home Assistant, Music Assistant, Станция Midi (Pulsar)
+✅ Планировщик: Scheduler, HA Bridge, HA Control
+✅ Мониторинг (8)
+✅ Секреты и сеть (8)
+✅ Приложения: MCP Gateway, Currency Bot, Cloudflared
+```
+
+With problems the failing services come first, for example:
+
+```text
+Отчёт по инфраструктуре, 01.11 19:52
+⚠️ Есть проблемы: 2 из 30
+
+Проблемы
+❌ Home Assistant — недоступно сущностей: 1 (media_player.kitchen)
+❌ Prometheus — готовы 0 из 1
+   рестартов 1ч: 0
+
+В норме
+✅ Голос: Hermes, GigaAM, Whisper, Piper, Runtime Health Exporter
+...
+```
 
 The catalog and RBAC are checked against each other: `patch` resourceNames in
 `manifests/rbac.yaml` must equal the restartable catalog workloads

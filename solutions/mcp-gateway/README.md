@@ -43,7 +43,7 @@ MCP client (Hermes, IDE, agent)
 | `infra_logs(name, since, grep, limit)` | Логи сервиса: Loki, если он там есть, иначе `pods/log` (все контейнеры каталога или выбранные). Секреты редактируются. Размер ограничен `MCP_LOG_BYTE_CAP`. |
 | `infra_query(promql)` | Один instant-запрос PromQL, только чтение, результат ограничен. |
 | `infra_overview()` | Топология и каталог для контекста модели. |
-| `infra_report()` | Полный отчёт по всем сервисам каталога: статус, готовые реплики, перезапуски за час, образ (digest сокращён), возраст, внешние проверки, версии HA и активные алерты. Возвращает короткий вердикт и компактный plain-text отчёт (≤ 3500 символов) для Telegram. |
+| `infra_report(verbose)` | Полный отчёт по всем сервисам каталога: статус, готовые реплики, перезапуски за час, образ (digest сокращён), возраст, внешние проверки, версии HA и активные алерты. Возвращает короткий вердикт и компактный plain-text отчёт (≤ 3500 символов) для Telegram: проблемы первыми, затем «В норме» по группам каталога. Образ выбирается по `containers[0]`, затем по имени workload/суффиксу, затем по порядку контейнеров в поде — сайдкар не подменяет основной контейнер. `verbose: true` добавляет секцию «Версии» (образ, возраст, версии); по умолчанию их нет в тексте, но они есть в `details` JSON. |
 | ресурс `infra://catalog` | То же в виде markdown-ресурса. |
 
 ### `infra.fix` (`destructiveHint=true`)
@@ -120,9 +120,13 @@ overview: |
   Свободный markdown о топологии: без секретов и реальных адресов.
 
 ignore_alerts: [Watchdog, InfoInhibitor]   # всегда активные алерты, не проблема
+group_order: [Apps, External]              # фиксированный порядок групп в отчёте
 
 services:
   - id: scheduler                # стабильный идентификатор
+    title: Scheduler             # необязательное отображаемое имя (отчёт, статус, речь)
+    group: Apps                  # необязательная группа отчёта
+    host_title: HAOS VM          # необязательное имя хоста для external-сервисов
     aliases:
       ru: [планировщик]          # spoken-имена, обязателен хотя бы один alias
       en: [scheduler]
@@ -131,7 +135,7 @@ services:
     workload:
       kind: Deployment           # Deployment | StatefulSet | DaemonSet
       name: scheduler
-    containers: [scheduler]      # используется для pods/log
+    containers: [scheduler]      # containers[0] задаёт образ в отчёте и pods/log
     signals:
       - promql: up{job="scheduler"} == 0
         meaning: планировщик недоступен
@@ -151,6 +155,11 @@ services:
 описывать *плохое* состояние (например `up{job="x"} == 0`), потому что любой
 непустой результат считается срабатыванием. Сигналы без `status` доступны
 только в `infra_service`.
+
+`title`, `group` и `host_title` необязательны, но если заданы — не могут быть
+пустыми. `title` заменяет первый alias во всех человекочитаемых местах
+(отчёт, статус, речь); `group` задаёт секцию отчёта, порядок секций —
+`group_order`; `host_title` не даёт печатать сырой адрес внешнего хоста.
 
 `ignore_alerts` — имена алертов, которые активны постоянно по замыслу
 (у kube-prometheus-stack это `Watchdog` и `InfoInhibitor`). `infra_status`
@@ -176,7 +185,7 @@ checks:
      template: "{{ device_attr(device_id('assist_satellite.example'), 'sw_version') }}",
      required: false}                              # справочно
   - {type: ha_unavailable_summary, label: недоступные,
-     domains: [media_player]}                      # до 10 id в details
+     domains: [media_player]}                      # до 10 сущностей в details
 ```
 
 Правила проверок: `label` обязателен; `tcp` требует host и port 1..65535;

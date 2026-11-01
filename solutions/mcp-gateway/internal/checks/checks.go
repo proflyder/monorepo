@@ -172,8 +172,11 @@ func (r *Runner) runHTTP(ctx context.Context, check catalog.Check, result *Resul
 }
 
 type haState struct {
-	EntityID string `json:"entity_id"`
-	State    string `json:"state"`
+	EntityID   string `json:"entity_id"`
+	State      string `json:"state"`
+	Attributes struct {
+		FriendlyName string `json:"friendly_name"`
+	} `json:"attributes"`
 }
 
 func (r *Runner) requireHA(result *Result) bool {
@@ -261,7 +264,13 @@ func (r *Runner) runHAUnavailable(ctx context.Context, check catalog.Check, resu
 		}
 		count++
 		if len(result.Details) < 10 {
-			result.Details = append(result.Details, state.EntityID)
+			// Prefer the friendly name, but keep the entity id so the report is
+			// actionable; fall back to the id alone when HA has no name.
+			entity := state.EntityID
+			if name := strings.TrimSpace(state.Attributes.FriendlyName); name != "" {
+				entity = name + " (" + state.EntityID + ")"
+			}
+			result.Details = append(result.Details, entity)
 		}
 	}
 	result.Value = strconv.Itoa(count)

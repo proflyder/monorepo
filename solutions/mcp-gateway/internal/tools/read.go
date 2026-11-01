@@ -64,8 +64,8 @@ func (g *ReadGroup) Register(r *mcp.Server) {
 
 	mcp.AddTool(r, &mcp.Tool{
 		Name: "infra_report",
-		Description: "Full infrastructure report across every catalog service: status, Kubernetes replicas, restarts in the last hour, image digest, age, external TCP/HTTP/Home Assistant checks, versions and active alerts. " +
-			"Returns a short Russian verdict plus a compact plain-text report suitable for Telegram. Read-only; use infra_send_report to deliver the text.",
+		Description: "Full infrastructure report across every catalog service. Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. " +
+			"Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.",
 		Annotations: readOnly(),
 	}, instrument(d, "infra_report", d.infraReport))
 
@@ -351,14 +351,14 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 	sort.SliceStable(detail.Workloads, func(i, j int) bool { return detail.Workloads[i].Service < detail.Workloads[j].Service })
 	sort.SliceStable(detail.Restarts, func(i, j int) bool { return detail.Restarts[i].Pod < detail.Restarts[j].Pod })
 
-	issues := statusIssues(detail)
+	issues := statusIssues(detail, cat)
 	detail.Degraded = len(issues) > 0
 	detail.Partial = len(detail.Errors) > 0
 	detail.Verdict = statusVerdict(detail, issues)
 	return respond(Result{Speech: detail.Verdict, Details: detail})
 }
 
-func statusIssues(detail statusDetail) []string {
+func statusIssues(detail statusDetail, cat *catalog.Catalog) []string {
 	var issues []string
 	for _, a := range detail.Alerts {
 		label := a.Summary
@@ -374,7 +374,7 @@ func statusIssues(detail statusDetail) []string {
 	}
 	for _, w := range detail.Workloads {
 		if w.Error != "" || !w.Healthy {
-			issues = append(issues, fmt.Sprintf("%s: готово %d из %d", w.Service, w.Ready, w.Desired))
+			issues = append(issues, fmt.Sprintf("%s: готово %d из %d", displayName(cat, w.Service), w.Ready, w.Desired))
 		}
 	}
 	for _, p := range detail.Restarts {
@@ -384,7 +384,7 @@ func statusIssues(detail statusDetail) []string {
 		if check.Skipped || check.OK {
 			continue
 		}
-		issues = append(issues, check.Label+": "+check.Error)
+		issues = append(issues, checkIssue(check))
 	}
 	return issues
 }

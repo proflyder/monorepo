@@ -1,0 +1,7 @@
+Отчёт по инфраструктуре, 01.11 12:00
+✅ Всё работает: 4 из 4
+
+В норме
+✅ Голос: Hermes
+✅ Дом: Home Assistant, Music Assistant
+✅ Мониторинг: Prometheus

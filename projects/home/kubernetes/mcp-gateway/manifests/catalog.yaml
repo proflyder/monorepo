@@ -73,9 +73,14 @@ ignore_alerts:
   - Watchdog
   - InfoInhibitor
 
+# Report section order. Each service selects one of these with `group`.
+group_order: [Голос, Дом, Планировщик, Мониторинг, Секреты и сеть, Приложения]
+
 services:
   # ------------------------------------------------------ home-assistant ----
   - id: hermes
+    title: Hermes
+    group: Голос
     aliases:
       ru: [гермес, ассистент, голосовой прокси, войс прокси]
       en: [hermes, voice-proxy, voice proxy, agent]
@@ -84,6 +89,7 @@ services:
     workload:
       kind: Deployment
       name: hermes
+    containers: [gateway, voice-proxy]
     signals:
       - promql: ricardo_endpoint_up{endpoint="hermes"} == 0
         meaning: шлюз Hermes не отвечает
@@ -103,6 +109,8 @@ services:
     description: Hermes (LLM-агент) и voice-proxy в одном Deployment.
 
   - id: gigaam
+    title: GigaAM
+    group: Голос
     aliases:
       ru: [гигаам, распознавание речи, стт]
       en: [gigaam, stt, speech-to-text]
@@ -111,6 +119,7 @@ services:
     workload:
       kind: Deployment
       name: gigaam
+    containers: [gigaam]
     signals:
       - promql: ricardo_endpoint_up{endpoint="gigaam"} == 0
         meaning: основное распознавание речи не отвечает
@@ -126,6 +135,8 @@ services:
     description: Основная модель распознавания речи (GigaAM).
 
   - id: whisper
+    title: Whisper
+    group: Голос
     aliases:
       ru: [виспер, резервное распознавание]
       en: [whisper, fallback stt]
@@ -134,6 +145,7 @@ services:
     workload:
       kind: Deployment
       name: whisper
+    containers: [whisper]
     signals:
       - promql: ricardo_endpoint_up{endpoint="whisper"} == 0
         meaning: резервное распознавание речи не отвечает
@@ -149,6 +161,8 @@ services:
     description: Резервная модель распознавания речи (Whisper).
 
   - id: piper
+    title: Piper
+    group: Голос
     aliases:
       ru: [пайпер, синтез речи, ттс]
       en: [piper, tts, text-to-speech]
@@ -157,6 +171,7 @@ services:
     workload:
       kind: Deployment
       name: piper
+    containers: [piper]
     signals:
       - promql: ricardo_endpoint_up{endpoint="piper"} == 0
         meaning: синтез речи не отвечает
@@ -172,6 +187,8 @@ services:
     description: Синтез речи Piper.
 
   - id: runtime-health-exporter
+    title: Runtime Health Exporter
+    group: Голос
     aliases:
       ru: [экспортер здоровья, проверка доступности]
       en: [health-exporter, runtime-health-exporter]
@@ -192,6 +209,8 @@ services:
     description: TCP-проверки HAOS, MA, STT/TTS, Hermes и voice-proxy.
 
   - id: scheduler
+    title: Scheduler
+    group: Планировщик
     aliases:
       ru: [планировщик, будильники, напоминания, таймеры]
       en: [scheduler, alarms, reminders, timers]
@@ -200,6 +219,7 @@ services:
     workload:
       kind: Deployment
       name: scheduler
+    containers: [scheduler]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="scheduler"} < 1
         meaning: планировщик недоступен
@@ -212,6 +232,8 @@ services:
     description: Единственный владелец расписаний, таймеров и очередей (SQLite).
 
   - id: ha-bridge
+    title: HA Bridge
+    group: Планировщик
     aliases:
       ru: [мост, исполнитель будильников, ha bridge]
       en: [ha-bridge, bridge, executor]
@@ -220,6 +242,7 @@ services:
     workload:
       kind: Deployment
       name: ha-bridge
+    containers: [ha-bridge]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="ha-bridge"} < 1
         meaning: исполнитель будильников недоступен
@@ -232,6 +255,8 @@ services:
     description: Исполнитель очереди Home Assistant (звонки, TTS, громкость).
 
   - id: ha-control
+    title: HA Control
+    group: Планировщик
     aliases:
       ru: [контроль, управление домом, ha control]
       en: [ha-control, control]
@@ -240,6 +265,7 @@ services:
     workload:
       kind: Deployment
       name: ha-control
+    containers: [ha-control]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="ha-control"} < 1
         meaning: исполнитель команд управления недоступен
@@ -252,6 +278,8 @@ services:
     description: Исполнитель каталога Home и очереди control.
 
   - id: mcp-gateway
+    title: MCP Gateway
+    group: Приложения
     aliases:
       ru: [шлюз, mcp шлюз, инфраструктурный шлюз]
       en: [mcp-gateway, gateway, infra gateway]
@@ -260,6 +288,7 @@ services:
     workload:
       kind: Deployment
       name: mcp-gateway
+    containers: [mcp-gateway]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="mcp-gateway"} < 1
         meaning: инфраструктурный шлюз недоступен
@@ -274,6 +303,8 @@ services:
 
   # ---------------------------------------------------------- monitoring ----
   - id: prometheus
+    title: Prometheus
+    group: Мониторинг
     aliases:
       ru: [прометеус, метрики]
       en: [prometheus, metrics]
@@ -282,6 +313,7 @@ services:
     workload:
       kind: StatefulSet
       name: prometheus-monitoring-prometheus
+    containers: [prometheus]
     signals:
       - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="prometheus-monitoring-prometheus"} < 1
         meaning: Prometheus недоступен
@@ -295,6 +327,8 @@ services:
     description: Prometheus kube-prometheus-stack (7 дней retention).
 
   - id: alertmanager
+    title: Alertmanager
+    group: Мониторинг
     aliases:
       ru: [алертменеджер, алерты, уведомления]
       en: [alertmanager, alerts]
@@ -303,6 +337,7 @@ services:
     workload:
       kind: StatefulSet
       name: alertmanager-monitoring-alertmanager
+    containers: [alertmanager]
     signals:
       - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="alertmanager-monitoring-alertmanager"} < 1
         meaning: Alertmanager недоступен
@@ -316,6 +351,8 @@ services:
     description: Alertmanager (Telegram-уведомления, тишины).
 
   - id: grafana
+    title: Grafana
+    group: Мониторинг
     aliases:
       ru: [графана, графики]
       en: [grafana, dashboards]
@@ -324,6 +361,7 @@ services:
     workload:
       kind: Deployment
       name: monitoring-grafana
+    containers: [grafana]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="monitoring",deployment="monitoring-grafana"} < 1
         meaning: Grafana недоступна
@@ -337,6 +375,8 @@ services:
     description: Витрина метрик и логов.
 
   - id: kube-state-metrics
+    title: kube-state-metrics
+    group: Мониторинг
     aliases:
       ru: [метрики кубернетеса]
       en: [kube-state-metrics, ksm]
@@ -345,6 +385,7 @@ services:
     workload:
       kind: Deployment
       name: monitoring-kube-state-metrics
+    containers: [kube-state-metrics]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="monitoring",deployment="monitoring-kube-state-metrics"} < 1
         meaning: kube-state-metrics недоступен
@@ -358,6 +399,8 @@ services:
     description: Метрики состояния Deployment/Pod/Node.
 
   - id: prometheus-operator
+    title: Prometheus Operator
+    group: Мониторинг
     aliases:
       ru: [оператор прометеуса]
       en: [prometheus-operator, operator]
@@ -366,6 +409,7 @@ services:
     workload:
       kind: Deployment
       name: monitoring-operator
+    containers: [kube-prometheus-stack]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="monitoring",deployment="monitoring-operator"} < 1
         meaning: Prometheus Operator недоступен
@@ -379,6 +423,8 @@ services:
     description: Оператор kube-prometheus-stack.
 
   - id: node-exporter
+    title: Node Exporter
+    group: Мониторинг
     aliases:
       ru: [экспортер узла, метрики узла]
       en: [node-exporter]
@@ -387,6 +433,7 @@ services:
     workload:
       kind: DaemonSet
       name: monitoring-prometheus-node-exporter
+    containers: [node-exporter]
     signals:
       - promql: kube_daemonset_status_number_unavailable{namespace="monitoring",daemonset="monitoring-prometheus-node-exporter"} > 0
         meaning: node-exporter недоступен
@@ -400,6 +447,8 @@ services:
     description: Метрики узла K3s.
 
   - id: loki
+    title: Loki
+    group: Мониторинг
     aliases:
       ru: [локи, логи]
       en: [loki, logs]
@@ -408,6 +457,7 @@ services:
     workload:
       kind: StatefulSet
       name: loki
+    containers: [loki]
     signals:
       - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="loki"} < 1
         meaning: Loki недоступен
@@ -421,6 +471,8 @@ services:
     description: Хранилище логов (7 дней, только разрешённые namespace).
 
   - id: alloy
+    title: Alloy
+    group: Мониторинг
     aliases:
       ru: [аллой, сборщик логов]
       en: [alloy, log collector]
@@ -429,6 +481,7 @@ services:
     workload:
       kind: DaemonSet
       name: alloy
+    containers: [alloy]
     signals:
       - promql: kube_daemonset_status_number_unavailable{namespace="monitoring",daemonset="alloy"} > 0
         meaning: Alloy не собирает логи
@@ -443,6 +496,8 @@ services:
 
   # --------------------------------------------------------- currency-bot ----
   - id: currency-bot
+    title: Currency Bot
+    group: Приложения
     aliases:
       ru: [валютный бот, бот курсов, валюта]
       en: [currency-bot, currency]
@@ -451,6 +506,7 @@ services:
     workload:
       kind: Deployment
       name: currency-bot
+    containers: [currency-bot]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="currency-bot",deployment="currency-bot"} < 1
         meaning: валютный бот недоступен
@@ -464,6 +520,8 @@ services:
     description: Бот курсов kurs.kz с SQLite на PVC и JSON API.
 
   - id: cloudflared
+    title: Cloudflared
+    group: Приложения
     aliases:
       ru: [туннель, клаудфлер]
       en: [cloudflared, tunnel]
@@ -472,6 +530,7 @@ services:
     workload:
       kind: Deployment
       name: cloudflared
+    containers: [cloudflared]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="currency-bot",deployment="cloudflared"} < 1
         meaning: Cloudflare Tunnel недоступен
@@ -486,6 +545,8 @@ services:
 
   # --------------------------------------------------------------- openbao ----
   - id: openbao
+    title: OpenBao
+    group: Секреты и сеть
     aliases:
       ru: [опенбао, сейф, хранилище секретов]
       en: [openbao, vault, secrets]
@@ -494,6 +555,7 @@ services:
     workload:
       kind: StatefulSet
       name: openbao
+    containers: [openbao]
     signals:
       - promql: kube_statefulset_status_replicas_ready{namespace="openbao",statefulset="openbao"} < 1
         meaning: OpenBao недоступен
@@ -508,6 +570,8 @@ services:
 
   # ------------------------------------------------------ external-secrets ----
   - id: external-secrets
+    title: External Secrets
+    group: Секреты и сеть
     aliases:
       ru: [внешние секреты, синхронизация секретов]
       en: [external-secrets, eso]
@@ -516,6 +580,7 @@ services:
     workload:
       kind: Deployment
       name: external-secrets
+    containers: [external-secrets]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="external-secrets",deployment="external-secrets"} < 1
         meaning: External Secrets Operator недоступен
@@ -528,6 +593,8 @@ services:
     description: Оператор, материализующий Secrets из OpenBao.
 
   - id: external-secrets-webhook
+    title: External Secrets Webhook
+    group: Секреты и сеть
     aliases:
       ru: [вебхук секретов]
       en: [eso webhook, external-secrets webhook]
@@ -536,6 +603,7 @@ services:
     workload:
       kind: Deployment
       name: external-secrets-webhook
+    containers: [webhook]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="external-secrets",deployment="external-secrets-webhook"} < 1
         meaning: webhook ESO недоступен
@@ -548,6 +616,8 @@ services:
     description: Admission webhook External Secrets Operator.
 
   - id: external-secrets-cert-controller
+    title: External Secrets Cert Controller
+    group: Секреты и сеть
     aliases:
       ru: [сертификаты секретов]
       en: [eso cert controller]
@@ -569,6 +639,8 @@ services:
 
   # --------------------------------------------------------------- traefik ----
   - id: traefik
+    title: Traefik
+    group: Секреты и сеть
     aliases:
       ru: [траефик, ингресс, https]
       en: [traefik, ingress]
@@ -577,6 +649,7 @@ services:
     workload:
       kind: Deployment
       name: traefik
+    containers: [traefik]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="traefik",deployment="traefik"} < 1
         meaning: Traefik недоступен
@@ -590,6 +663,8 @@ services:
 
   # ---------------------------------------------------------- cert-manager ----
   - id: cert-manager
+    title: cert-manager
+    group: Секреты и сеть
     aliases:
       ru: [сертификаты, cert manager]
       en: [cert-manager]
@@ -598,6 +673,7 @@ services:
     workload:
       kind: Deployment
       name: cert-manager
+    containers: [cert-manager-controller]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager"} < 1
         meaning: cert-manager недоступен
@@ -610,6 +686,8 @@ services:
     description: Выпуск сертификатов Let's Encrypt (ACME DNS-01).
 
   - id: cert-manager-webhook
+    title: cert-manager Webhook
+    group: Секреты и сеть
     aliases:
       ru: [вебхук сертификатов]
       en: [cert-manager webhook]
@@ -618,6 +696,7 @@ services:
     workload:
       kind: Deployment
       name: cert-manager-webhook
+    containers: [cert-manager-webhook]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager-webhook"} < 1
         meaning: webhook cert-manager недоступен
@@ -630,6 +709,8 @@ services:
     description: Admission webhook cert-manager.
 
   - id: cert-manager-cainjector
+    title: cert-manager cainjector
+    group: Секреты и сеть
     aliases:
       ru: [инжектор ca]
       en: [cert-manager cainjector, cainjector]
@@ -638,6 +719,7 @@ services:
     workload:
       kind: Deployment
       name: cert-manager-cainjector
+    containers: [cert-manager-cainjector]
     signals:
       - promql: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager-cainjector"} < 1
         meaning: cainjector cert-manager недоступен
@@ -651,6 +733,9 @@ services:
 
   # -------------------------------------------------------------- external ----
   - id: home-assistant
+    title: Home Assistant
+    group: Дом
+    host_title: HAOS VM
     aliases:
       ru: [home assistant, ха, дом, хом ассистент]
       en: [home-assistant, ha, home]
@@ -677,6 +762,9 @@ services:
     description: HAOS VM (add-ons MA и Matter). Перезапуск — только вручную в Proxmox/HA.
 
   - id: music-assistant
+    title: Music Assistant
+    group: Дом
+    host_title: HAOS VM
     aliases:
       ru: [музыка, музыкальный ассистент, ма]
       en: [music-assistant, ma, music]
@@ -702,6 +790,9 @@ services:
     description: Music Assistant — add-on в HAOS. Перезапуск только вручную.
 
   - id: station
+    title: Станция Midi (Pulsar)
+    group: Дом
+    host_title: Станция
     aliases:
       ru: [станция, колонка, рикардо]
       en: [station, speaker, pulsar]
