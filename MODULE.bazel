@@ -7,6 +7,9 @@ bazel_dep(name = "rules_go", version = "0.65.0")
 bazel_dep(name = "gazelle", version = "0.54.0")
 bazel_dep(name = "rules_rust", version = "0.75.0")
 bazel_dep(name = "rules_proto", version = "7.1.0")
+# Direct dep only to name its build setting in .bazelrc (`@protobuf//...`);
+# same version the graph already resolves.
+bazel_dep(name = "protobuf", version = "33.4")
 
 # Container images for the home K3s services. Images are assembled
 # hermetically (no Docker daemon, no RUN steps) from the Go binaries and a
