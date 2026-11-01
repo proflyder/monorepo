@@ -69,6 +69,16 @@ OPTIONAL_PREFIXES = (
     "org.openjsse.",
 )
 
+# Stale constant-pool entries in `firebase-components`: the published
+# `Component$Builder.class` lists these two nested classes, but neither the
+# artifact nor any caller defines or resolves them (the build uses primitive
+# flags). Firebase is the only source of these names; ignoring them keeps the
+# closure check focused on classes that can actually fail at runtime.
+OPTIONAL_CLASSES = frozenset((
+    "com.google.firebase.components.Component$ComponentType",
+    "com.google.firebase.components.Component$Instantiation",
+))
+
 _DEX_MAGIC = b"dex\n"
 _DESCRIPTOR_CLASS = re.compile(r"L([A-Za-z0-9_$/]+);")
 
@@ -303,7 +313,7 @@ def _normalise(name: str) -> str:
 
 
 def _allowed(name: str) -> bool:
-    return name.startswith(PLATFORM_PREFIXES + OPTIONAL_PREFIXES)
+    return name in OPTIONAL_CLASSES or name.startswith(PLATFORM_PREFIXES + OPTIONAL_PREFIXES)
 
 
 def check_deploy_jar(deploy_jar: Path) -> list[str]:

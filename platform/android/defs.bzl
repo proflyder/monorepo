@@ -79,19 +79,66 @@ def metro_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
         **kwargs
     )
 
+def home_google_services_resources(
+        name,
+        package_name,
+        version_name = "$(home_version_name)",
+        version_code = "$(home_version_code)"):
+    """Values resources derived from the optional google-services.json.
+
+    The private file is reached through the gitignored symlink
+    `platform/android/keys/google-services.json`. The generator warns and emits
+    an empty values file when the link is absent, so clean checkouts and CI
+    build without Firebase configuration.
+    """
+    native.genrule(
+        name = name,
+        srcs = ["//platform/android:google_services_json"],
+        tools = ["//platform/android:google_services"],
+        outs = ["res/values/google_services.xml"],
+        cmd = "\n".join([
+            "set -e",
+            "input=''",
+            "for candidate in $(SRCS); do",
+            "  case \"$$candidate\" in",
+            "    */google-services.json) input=\"$$candidate\" ;;",
+            "  esac",
+            "done",
+            "if [ -n \"$$input\" ]; then",
+            "  $(location //platform/android:google_services) \\",
+            "    --input \"$$input\" \\",
+            "    --package " + package_name + " \\",
+            "    --version-name \"" + version_name + "\" \\",
+            "    --version-code \"" + version_code + "\" \\",
+            "    --output $@",
+            "else",
+            "  $(location //platform/android:google_services) \\",
+            "    --package " + package_name + " \\",
+            "    --version-name \"" + version_name + "\" \\",
+            "    --version-code \"" + version_code + "\" \\",
+            "    --output $@",
+            "fi",
+        ]),
+    )
+
 def home_android_binary(
         name,
         manifest,
         deps,
         application_id = "dev.proflyder.home",
-        version_code = "1",
-        version_name = "0.1.0",
+        version_code = "$(home_version_code)",
+        version_name = "$(home_version_name)",
         **kwargs):
     """debug-signed application APK for the home client.
 
-    The APK is signed with //platform/android:home_debug_keystore, which uses
-    the personal key when it is present and the public rules_android debug
-    keystore otherwise. A caller can override this with `debug_key = ...`.
+    `versionCode`/`versionName` come from the `home_version_code` and
+    `home_version_name` build settings (`--define`), defaulted in `.bazelrc` to
+    1 and 0.1.0; `projects/mobile/android/distribute.sh` overrides them so each
+    App Distribution build has a higher versionCode. rules_android expands
+    `$(...)` in manifest_values. The APK is signed with
+    //platform/android:home_debug_keystore, which uses the personal key when it
+    is present and the public rules_android debug keystore otherwise. A caller
+    can override this with `debug_key = ...`.
     """
     if "debug_key" not in kwargs:
         kwargs["debug_key"] = "//platform/android:home_debug_keystore"

@@ -73,6 +73,17 @@ bazel_dep(name = "rules_jvm_external", version = "7.1")
 # Packaging gate (platform/android) is a shell test; Bazel 9 no longer ships
 # native sh_test.
 bazel_dep(name = "rules_shell", version = "0.6.1")
+# Bazel 9 no longer ships native py_binary/py_test; platform tools and their
+# unit tests use rules_python with a hermetic interpreter.
+bazel_dep(name = "rules_python", version = "2.4.6")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    python_version = "3.12",
+    is_default = True,
+)
+use_repo(python, "python_3_12")
+register_toolchains("@python_3_12//:all")
 
 remote_android_extensions = use_extension(
     "@rules_android//bzlmod_extensions:android_extensions.bzl",
@@ -103,7 +114,7 @@ maven.install(
         "androidx.activity:activity-ktx:1.9.3",
         "androidx.appcompat:appcompat:1.7.0",
         "androidx.core:core-ktx:1.13.1",
-        "androidx.datastore:datastore-preferences:1.1.1",
+        "androidx.datastore:datastore-preferences:1.1.1@aar",
         "androidx.emoji2:emoji2:1.5.0",
         "androidx.emoji2:emoji2-views-helper:1.5.0",
         "androidx.fragment:fragment-ktx:1.8.5",
@@ -122,12 +133,34 @@ maven.install(
         "androidx.recyclerview:recyclerview:1.3.2",
         "androidx.swiperefreshlayout:swiperefreshlayout:1.1.0",
         "com.google.android.material:material:1.12.0",
+        # Firebase Crashlytics, pinned from Firebase BoM 33.16.0 (Gradle BOMs
+        # cannot be consumed by rules_jvm_external, so versions are explicit).
+        # BoM 34+ pulls datastore-preferences 1.1.7, a Kotlin-multiplatform
+        # artifact whose placeholder jar the coursier resolver cannot fetch;
+        # this BoM is the latest one that keeps the pinned datastore version.
+        "com.google.firebase:firebase-annotations:16.2.0",
+        "com.google.firebase:firebase-common:21.0.0",
+        "com.google.firebase:firebase-components:18.0.0",
+        "com.google.firebase:firebase-config-interop:16.0.1",
+        "com.google.firebase:firebase-crashlytics:19.4.4",
+        "com.google.firebase:firebase-encoders:17.0.0",
+        "com.google.firebase:firebase-encoders-json:18.0.1",
+        "com.google.firebase:firebase-installations:18.0.0",
+        "com.google.firebase:firebase-installations-interop:17.2.0",
+        "com.google.firebase:firebase-measurement-connector:20.0.1",
+        "com.google.firebase:firebase-sessions:2.1.2",
         # Guava is only a Robolectric (test) dependency. Without an explicit
         # pin, Maven selects Guava's empty `9999.0-empty-to-avoid-conflict-with-guava`
         # placeholder for androidx.concurrent.futures, leaving ListenableFuture
         # out of the APK while AbstractResolvableFuture ships. Pin the real
         # standalone artifact so the runtime closure is self-contained.
         "com.google.guava:listenablefuture:1.0",
+        # Runtime dependencies of firebase-crashlytics not otherwise pinned.
+        "com.google.android.datatransport:transport-api:3.2.0",
+        "com.google.android.datatransport:transport-backend-cct:3.3.0",
+        "com.google.android.datatransport:transport-runtime:3.3.0",
+        "com.google.android.gms:play-services-basement:18.3.0",
+        "com.google.android.gms:play-services-tasks:18.1.0",
         "com.github.chuckerteam.chucker:library:4.0.0",
         "com.squareup.okhttp3:logging-interceptor:4.12.0",
         "com.squareup.okhttp3:mockwebserver:4.12.0",
@@ -138,6 +171,7 @@ maven.install(
         "junit:junit:4.13.2",
         "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2",
         "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2",
         "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2",
         "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0",
         "org.robolectric:android-all-instrumented:15-robolectric-13954326-i7",

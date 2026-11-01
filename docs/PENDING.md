@@ -99,6 +99,13 @@
       действий пользователем; автоматические нажатия блокирует HyperOS.
       Следующий шаг: согласовать окно и проверить на реальном телефоне, не
       трогая production-устройства без согласования.
+- [ ] **Первый релиз в Firebase App Distribution и первый тестовый краш.**
+      Crashlytics и `distribute.sh` собраны и проверены локально (dry-run);
+      реальной загрузки в App Distribution и отчёта о краше ещё не было.
+      Следующий шаг: в консоли Firebase включить Crashlytics и App Distribution,
+      создать группу `owner` и добавить свой email, выполнить
+      `projects/mobile/android/distribute.sh`, установить сборку и проверить
+      краш через `adb shell am crash dev.proflyder.home`.
 - [ ] **Android-приёмка.** Остальные экраны на реальном устройстве.
       Следующий шаг: пройти сценарии, затем решить по push/FCM, offline cache
       и generic task UI.

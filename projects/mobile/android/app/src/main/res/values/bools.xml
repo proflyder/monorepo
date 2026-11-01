@@ -3,4 +3,8 @@
     <bool name="home_light_bars">true</bool>
     <!-- Logging + Chucker request inspection. Override to false in a release variant. -->
     <bool name="home_network_inspection">true</bool>
+    <!-- Crashlytics collection. The app only sends crash stack traces, device
+         model/OS and app version; never tokens or endpoints. Set to false to
+         keep Crashlytics initialized but not collecting. -->
+    <bool name="home_crash_reporting">true</bool>
 </resources>
