@@ -33,6 +33,10 @@
   исполняет очередь `home`, ha-control — каталог Home и очередь `control`.
 - **Currency bot** — Go-сервис курсов: SQLite на PVC, алерты в Telegram,
   webhook через Cloudflare Tunnel, внутренний JSON API.
+- **MCP gateway** — единый MCP-сервер для инфраструктуры: чтение
+  Prometheus/Alertmanager/Loki/Kubernetes и подтверждаемый rollout restart.
+  Hermes сам не имеет доступа к Kubernetes API; весь доступ идёт через шлюз
+  (ClusterIP, Bearer, без ingress).
 - **Mac** — управление, тесты, recovery.
 
 ## Потоки
@@ -44,7 +48,11 @@
 3. Локальные intents (свет, музыка, таймеры, будильники) — в HA и canonical
    SchedulerService; HA остаётся исполнителем звука.
 4. Свободная речь → Hermes `:8643` → LLM → Piper Puriso.
-5. TTS/announce/alarm → Pulsar; Pulsar не владеет alarm/timer state.
+5. Инфраструктурные вопросы («проверь сервисы», «почему не работает X»)
+   Hermes решает через `mcp-gateway` (MCP Streamable HTTP, Bearer): только
+   чтение, а перезапуск — лишь после голосового/Telegram-подтверждения, одним
+   двухшаговым действием.
+6. TTS/announce/alarm → Pulsar; Pulsar не владеет alarm/timer state.
 
 ### Музыка
 

@@ -51,7 +51,51 @@ class HermesConfigTests(unittest.TestCase):
             "mcp-homeassistant",
             "mcp-music-assistant",
             "web",
+            "mcp-infra",
         ]
+
+    def test_infra_mcp_points_at_the_cluster_gateway_with_env_token(self):
+        server = self.data["mcp_servers"]["infra"]
+        assert server["url"] == (
+            "http://mcp-gateway.home-assistant.svc.cluster.local:8080/mcp"
+        )
+        assert server["headers"]["Authorization"] == "Bearer ${HERMES_INFRA_TOKEN}"
+        # The voice path cannot answer approval prompts, so the restart
+        # confirmation is a gateway tool pair instead of a Hermes approval.
+        assert server["trust"] == "full"
+        assert server["connect_timeout"] == 10
+        assert server["timeout"] == 30
+        assert server["tools"]["resources"] is True
+        assert server["tools"]["prompts"] is True
+
+    def test_telegram_channel_shares_the_curated_surface(self):
+        toolsets = self.data["platform_toolsets"]
+        assert toolsets["telegram"] == [
+            "mcp-homeassistant",
+            "mcp-music-assistant",
+            "web",
+            "mcp-infra",
+        ]
+        assert self.data["platforms"]["telegram"]["enabled"] is True
+
+    def test_no_platform_gets_a_shell_like_toolset(self):
+        forbidden = {
+            "terminal", "shell", "file", "files", "browser", "computer",
+            "computer_use", "computer-use", "code_execution", "skills",
+            "hermes-telegram", "hermes-agent", "webhook",
+        }
+        for platform, enabled in self.data["platform_toolsets"].items():
+            with self.subTest(platform=platform):
+                assert not (set(enabled) & forbidden), enabled
+
+    def test_telegram_uses_polling_and_owner_allowlist(self):
+        # Telegram is enabled by TELEGRAM_BOT_TOKEN from hermes-environment and
+        # limited by TELEGRAM_ALLOWED_USERS; a webhook would move it off polling
+        # and needs a public ingress, which this bot must not have.
+        text = FRAGMENT.read_text()
+        assert "TELEGRAM_BOT_TOKEN" in text
+        assert "TELEGRAM_WEBHOOK_URL" in text
+        assert "webhook" not in yaml.safe_dump(self.data["platforms"]).lower()
 
     def test_web_search_uses_chatgpt_codex_native_backend(self):
         assert self.data["web"]["search_backend"] == "openai-native"
@@ -60,6 +104,17 @@ class HermesConfigTests(unittest.TestCase):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         for marker in ("Рикардо", "Никогда не называй", "URL", "web_search", "music_search", "Будильники", "искажённым", "Похоже", "180"):
             assert marker in prompt
+
+    def test_voice_layers_require_infra_confirmation(self):
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        voice = self.data["agent"]["personalities"]["voice"]
+        for text in (prompt, voice):
+            with self.subTest(target=text[:20]):
+                assert "infra_status" in text
+                assert "infra_prepare_restart" in text
+                assert "infra_confirm" in text
+                assert "infra_cancel" in text
+                assert "подтвержд" in text.lower()
 
     def test_persona_is_ricardo_not_hermes(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()

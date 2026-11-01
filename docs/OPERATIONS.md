@@ -258,6 +258,36 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
 не создают и не перезаписывают эти Secrets. `--bootstrap-secrets` у
 `ingress/deploy.sh` — только для первой установки без OpenBao/ESO.
 
+## MCP-шлюз (голосовая диагностика)
+
+Голосом: «проверь сервисы», «что с гермесом», «почему не работает X»,
+«перезапусти планировщик» (два шага с подтверждением), «пришли отчёт».
+Установка, RBAC и ротация — `KUBERNETES-OPERATIONS.md`.
+
+```bash
+export KUBECONFIG=secrets/kubernetes-research/kubeconfig
+
+# состояние и метрики
+kubectl -n home-assistant get deploy,pod -l app.kubernetes.io/name=mcp-gateway
+kubectl -n home-assistant logs deploy/mcp-gateway --tail=100
+kubectl -n home-assistant get --raw \
+  "/api/v1/namespaces/home-assistant/services/http:mcp-gateway:8080/proxy/readyz"
+
+# каталог, который реально смонтирован (сверка с manifests/catalog.yaml)
+kubectl -n home-assistant get configmap mcp-gateway-catalog \
+  -o jsonpath='{.data.catalog\.yaml}' | head -40
+
+# секреты синхронизированы
+kubectl -n home-assistant get externalsecret mcp-gateway-auth mcp-gateway-telegram
+```
+
+Шлюз не публикуется наружу: порт-форвард нужен только для отладки MCP-клиента
+и требует Bearer-токен из `Secret/mcp-gateway-auth`.
+
+```bash
+kubectl -n home-assistant port-forward svc/mcp-gateway 18080:8080
+```
+
 ## K3s
 
 ```bash

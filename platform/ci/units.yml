@@ -141,15 +141,30 @@ units:
 
   - id: mcp-gateway
     platform: go
-    title: "solutions/mcp-gateway (MCP infra tool groups)"
+    title: "solutions/mcp-gateway (MCP infra tool groups + home deployment)"
     paths:
       - solutions/mcp-gateway/**
-    # No deploy block yet: the Kubernetes manifests, RBAC and catalog
-    # ConfigMap are owned by a separate project-side change.
+      - projects/home/kubernetes/mcp-gateway/**
+    # One image and one Deployment in home-assistant. The catalog ConfigMap,
+    # RBAC, ExternalSecrets and NetworkPolicy are part of the same unit because
+    # an image without its catalog or token is unusable.
+    deploy:
+      builder: bazel
+      target_root: //solutions/mcp-gateway
+      images: [mcp-gateway]
+      workloads: [mcp-gateway]
+      namespace: home-assistant
+      script: projects/home/kubernetes/mcp-gateway/deploy.sh
+      env_key: mcp_gateway_env
+      env_file: mcp-gateway.env
+      externalsecrets: [mcp-gateway-auth, mcp-gateway-telegram]
     go:
       module: "."
       packages:
         - ./solutions/mcp-gateway/...
+        # Project-side deploy contract: loads the tracked catalog with the
+        # gateway's real loader (builds and starts the binary).
+        - ./projects/home/kubernetes/mcp-gateway
       race: true
       build:
         - ./solutions/mcp-gateway/cmd/mcp-gateway
@@ -386,6 +401,18 @@ units:
       suites:
         - projects/home/kubernetes/currency-bot
 
+  - id: mcp-gateway-deploy
+    platform: python
+    title: "projects/home/kubernetes/mcp-gateway (catalog/RBAC/deploy contract)"
+    paths:
+      # The catalog's schema is checked by the go unit (real loader); this unit
+      # owns the catalog↔RBAC correspondence, manifest hardening and the
+      # deploy-script/render contract.
+      - projects/home/kubernetes/mcp-gateway/**
+    python:
+      suites:
+        - projects/home/kubernetes/mcp-gateway
+
   - id: openbao
     platform: python
     title: "projects/home/kubernetes/openbao (config, CI OIDC secret hand-off)"
@@ -407,6 +434,7 @@ units:
       - projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml
       - projects/home/kubernetes/observability/alertmanager/**
       - projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml
+      - projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
     python:
       suites:
         - projects/home/kubernetes/external-secrets

@@ -8,10 +8,15 @@ through that HA agent is opt-in with HA_HERMES_AGENT_TEST=1.  Mutating/audio tes
     STATION_E2E=1 HA_TOKEN=... python3 projects/home-assistant/e2e/live_ha.py -v
     STATION_E2E=1 STATION_E2E_MUTATE=1 HA_TOKEN=... ...
     STATION_E2E=1 STATION_E2E_AUDIO=1 HA_TOKEN=... ...
+    STATION_E2E=1 HA_INFRA_E2E=1 HA_TOKEN=... ...   # mcp-gateway voice turns
 
 The alarm test is deliberately small (low volume, a few seconds) and always
 restores the pre-test alarm volume, source, volume and flags.  If the user has
 an alarm enabled, it skips rather than overwrite it.
+
+The infra tests (HA_INFRA_E2E=1) ask real questions through the model.  They
+never send the confirmation turn, so no rollout restart is requested: the
+"restart" test only proves that the first reply is still a question.
 """
 from __future__ import annotations
 
@@ -28,6 +33,7 @@ HA_DEVICE_ID = os.environ.get("HA_ASSIST_DEVICE_ID", "").strip()
 E2E = os.environ.get("STATION_E2E") == "1"
 MUTATE = E2E and os.environ.get("STATION_E2E_MUTATE") == "1"
 AUDIO = E2E and os.environ.get("STATION_E2E_AUDIO") == "1"
+INFRA = E2E and os.environ.get("HA_INFRA_E2E") == "1"
 
 PLAYER = "media_player.iandeks_stantsiia_midi"
 
@@ -148,6 +154,28 @@ class LiveHermesAgentTests(unittest.TestCase):
         reply = conversation("Представься одним коротким предложением. Ничего не изменяй.",
                              agent_id="conversation.hermes_agent")
         self.assertTrue(reply, "HA Hermes agent returned no speech")
+
+
+@unittest.skipUnless(INFRA and HA_TOKEN,
+                     "set HA_INFRA_E2E=1 (with STATION_E2E=1) to run infra voice turns")
+class LiveInfraVoiceTests(unittest.TestCase):
+    """Real voice turns through Hermes and mcp-gateway.  Read-only by design."""
+
+    AGENT = "conversation.hermes_agent"
+
+    def test_status_question_returns_speech(self):
+        # "проверь сервисы" must reach infra_status and come back as a spoken
+        # verdict; an empty reply means the MCP toolset or the gateway is down.
+        reply = conversation("проверь сервисы", agent_id=self.AGENT)
+        self.assertTrue(reply.strip(), "infra status turn returned no speech")
+        self.assertGreater(len(reply.strip()), 3)
+
+    def test_restart_asks_before_acting(self):
+        # The confirmation turn is deliberately NOT sent: the gateway must keep
+        # the action pending and answer with a question, never restart by itself.
+        reply = conversation("перезапусти планировщик", agent_id=self.AGENT)
+        self.assertTrue(reply.strip(), "restart preparation returned no speech")
+        self.assertIn("?", reply, f"expected a confirmation question, got: {reply!r}")
 
 
 @unittest.skipUnless(MUTATE, "set STATION_E2E_MUTATE=1 to allow volume mutation")

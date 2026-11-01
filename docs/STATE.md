@@ -44,7 +44,7 @@
   `openbao`, `external-secrets`, `currency-bot`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
-  currency-bot + cloudflared.
+  currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`).
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - MA/Matter Deployments, PV и data из K3s удалены; `runtime-ha` оставлен как
   архив старого HA Container.
@@ -404,6 +404,58 @@
   Приватные материалы — `secrets/currency-bot/` (VPS ssh
   key/config, CSV/DB, tunnel token, Cloudflare tunnel API token, `k8s.env`) и
   `secrets/home/currency-bot.env`.
+
+## MCP gateway (инфраструктурный шлюз)
+
+- `solutions/mcp-gateway` (Go, distroless, один бинарник) — единый MCP-шлюз
+  для инфраструктуры: группы `infra.read` (Prometheus, Alertmanager, Loki,
+  Kubernetes REST), `infra.fix` (только rollout restart, два шага) и
+  `infra.report` (Telegram с фиксированным получателем). Решение —
+  `DECISIONS.md`; деплой-контракт — `projects/home/kubernetes/mcp-gateway/`.
+- Namespace `home-assistant`, Deployment `mcp-gateway` (1 реплика,
+  RollingUpdate, distroless, non-root, read-only rootfs), ClusterIP
+  `mcp-gateway:8080` без ingress/NodePort; `/mcp` требует Bearer, `/healthz`,
+  `/readyz`, `/metrics` — только внутри кластера; `ServiceMonitor` скрейпит
+  `/metrics`.
+- Каталог сервисов — ConfigMap `mcp-gateway-catalog` из
+  `manifests/catalog.yaml`: spoken-алиасы ru/en, namespace/workload, PromQL
+  сигналы (пустой результат = норма, непустой = проблема), источник логов
+  (Loki там, где Alloy шипит namespace, иначе `pods/log`), предупреждение и
+  `self_disrupting` для перезапуска.
+- RBAC — ServiceAccount `home-assistant/mcp-gateway`, без ClusterRole:
+  чтение pods/pods-log/events/services и четырёх видов workload в
+  `home-assistant`, `monitoring`, `currency-bot`, `openbao`,
+  `external-secrets`, `traefik`, `cert-manager`, `kube-system`; `patch`
+  только на deployments/statefulsets/daemonsets с `resourceNames`, равными
+  каталогу. `kube-system` — только чтение.
+- NetworkPolicy: ingress на 8080 от адреса узла (Hermes в `hostNetwork`),
+  LAN/pod CIDR и namespace `monitoring`; egress — kube-API 6443, monitoring
+  9090/9093/3100, DNS 53 и Telegram 443.
+- Секреты — ESO: `mcp-gateway-auth` (OpenBao
+  `k8s/home-assistant/mcp-gateway-auth`, ключ `token`, тот же токен Hermes
+  получает как `HERMES_INFRA_TOKEN`) и `mcp-gateway-telegram`
+  (`TELEGRAM_BOT_TOKEN` + первый элемент `TELEGRAM_ALLOWED_USERS` из
+  `k8s/home-assistant/hermes-environment`). Telegram — отдельный инфра-бот;
+  бот currency-bot остаётся только для currency-bot.
+- Перезапуск разрешён для всех repo-managed workload'ов после голосового или
+  Telegram-подтверждения, у каждого — честное предупреждение; `hermes` и
+  `mcp-gateway` помечены `self_disrupting` (патч откладывается на ~20 с, чтобы
+  ответ успели озвучить). HAOS, Music Assistant и станция — только чтение.
+- CI: юниты `mcp-gateway` (go + образ + deploy, env
+  `mcp_gateway_env` в `secret/ci/deploy-home`) и `mcp-gateway-deploy`
+  (catalog↔RBAC, манифесты, render, contract-тест `deploy.sh`); схема каталога
+  проверяется настоящим загрузчиком шлюза в `catalog_contract_test.go`.
+- Hermes: третий MCP-сервер `infra`
+  (`mcp-gateway.home-assistant.svc.cluster.local:8080/mcp`, Bearer
+  `HERMES_INFRA_TOKEN`); `platform_toolsets.api_server` и `telegram` =
+  home/music/web/mcp-infra, без terminal/file/browser. Telegram-канал Hermes —
+  тот же инфра-бот, long polling, allow-list владельца. Контекст —
+  `hermes/HERMES.md` → `/opt/data/.hermes.md`; overlay на PVC ставит
+  идемпотентный `hermes/render_hermes_config.py`.
+- ExternalSecret `alertmanager-telegram` переведён на инфра-бот (живой
+  Secret обновится после раскатки); в каждом алерте — fingerprint для
+  `infra_alert`, ответ на алерт в Telegram передаёт его Hermes.
+- Статус: код и манифесты готовы, живой раскатки ещё не было (`PENDING.md`).
 
 ## Приватное / backups
 

@@ -6,6 +6,11 @@ Read-only by default.  A real model turn is opt-in because it costs quota:
     STATION_E2E=1 HERMES_API_KEY=... python3 projects/home-assistant/e2e/live_hermes.py
     STATION_E2E=1 HERMES_API_KEY=... HERMES_E2E_CHAT=1 \
         python3 projects/home-assistant/e2e/live_hermes.py
+    STATION_E2E=1 HERMES_API_KEY=... HA_INFRA_E2E=1 \
+        python3 projects/home-assistant/e2e/live_hermes.py
+
+HA_INFRA_E2E=1 additionally asserts that the mcp-infra toolset (the
+mcp-gateway) is advertised and enabled; it needs the gateway deployed.
 
 The API key is supplied only through the environment and never printed.
 """
@@ -21,6 +26,7 @@ HERMES_URL = os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642").rstrip("/
 HERMES_KEY = os.environ.get("HERMES_API_KEY", "").strip()
 E2E = os.environ.get("STATION_E2E") == "1"
 CHAT = E2E and os.environ.get("HERMES_E2E_CHAT") == "1"
+INFRA = E2E and os.environ.get("HA_INFRA_E2E") == "1"
 
 
 def api(path: str, method: str = "GET", payload: dict | None = None) -> tuple[int, dict]:
@@ -68,6 +74,21 @@ class LiveHermesReadOnlyTests(unittest.TestCase):
         enabled = {t.get("name") for t in toolsets if t.get("enabled")}
         disabled = {t.get("name") for t in toolsets if not t.get("enabled")}
         self.assertIn("web", enabled)
+        for name in ("terminal", "file", "browser", "code_execution"):
+            self.assertIn(name, disabled)
+
+    @unittest.skipUnless(INFRA, "set HA_INFRA_E2E=1 to check the infra MCP toolset")
+    def test_infra_mcp_toolset_is_advertised(self):
+        # mcp-gateway is a third MCP server (mcp_servers.infra). Without this
+        # toolset the voice path silently keeps answering without infra tools.
+        code, data = api("/v1/toolsets")
+        self.assertEqual(code, 200)
+        toolsets = data.get("data", []) if isinstance(data, dict) else []
+        enabled = {t.get("name") for t in toolsets if t.get("enabled")}
+        disabled = {t.get("name") for t in toolsets if not t.get("enabled")}
+        self.assertIn("mcp-infra", enabled, f"enabled={sorted(enabled)} disabled={sorted(disabled)}")
+        for name in ("mcp-homeassistant", "mcp-music-assistant", "web"):
+            self.assertIn(name, enabled)
         for name in ("terminal", "file", "browser", "code_execution"):
             self.assertIn(name, disabled)
 

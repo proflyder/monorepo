@@ -19,18 +19,108 @@ the full Home Assistant MCP surface and the Music Assistant MCP server.
 | Data | `~/.hermes/` |
 | Launcher | `~/.local/bin/hermes` |
 | Config | `~/.hermes/config.yaml` |
-| Secrets | `~/.hermes/.env` (mode `600`) |
+| Secrets | `~/.hermes/.env` (mode `600`); in K3s, `Secret/hermes-environment` |
 | MCP HA | `http://192.0.2.28:8123/api/mcp` (HA MCP Server, streamable HTTP) |
 | MCP MA | `http://192.0.2.28:8095/mcp/v1` (Music Assistant FastMCP plugin; HAOS add-on) |
+| MCP infra | `http://mcp-gateway.home-assistant.svc.cluster.local:8080/mcp` (cluster-internal) |
+| Telegram | Long polling with the dedicated Hermes/infra bot (`TELEGRAM_BOT_TOKEN`) |
 | API | `http://127.0.0.1:8642/v1` (OpenAI-compatible, loopback only) |
 | Model | ChatGPT/Codex subscription via `openai-codex` |
 
 The generated Hermes config is large; [`config.fragment.yaml`](config.fragment.yaml)
-contains the reviewed overlay for the two MCP servers, model provider, web
-search and `api_server` toolset.  The HA voice prompt lives in
-[`voice_prompt.txt`](voice_prompt.txt); the canonical Hermes identity lives in
-[`SOUL.md`](SOUL.md); the TTS sanitizer lives in
+contains the reviewed overlay for the three MCP servers, model provider, web
+search, platform toolsets and the Telegram channel.  The HA voice prompt lives
+in [`voice_prompt.txt`](voice_prompt.txt); the canonical Hermes identity lives
+in [`SOUL.md`](SOUL.md); the infra context that becomes `/opt/data/.hermes.md`
+lives in [`HERMES.md`](HERMES.md); the TTS sanitizer lives in
 [`voice_proxy.py`](voice_proxy.py).  Do not copy secrets into this directory.
+
+## Render the overlay into the live home
+
+`config.yaml`, `.hermes.md` and `SOUL.md` live on the PVC
+(`/srv/k3s/volumes/hermes` on lab-host, `/opt/data` in the Pod) and are not
+watched by CI.  [`render_hermes_config.py`](render_hermes_config.py) is the
+only reviewed path from this directory to that volume:
+
+```bash
+cd <repo>
+# 1. see what would change (prints a redacted diff, writes nothing)
+python3 projects/home-assistant/hermes/render_hermes_config.py \
+  --home /srv/k3s/volumes/hermes --dry-run
+
+# 2. render; a changed file keeps its previous version as <name>.prev (600)
+sudo python3 projects/home-assistant/hermes/render_hermes_config.py \
+  --home /srv/k3s/volumes/hermes
+
+# 3. restart the gateway so it re-reads config.yaml and the context files
+kubectl -n home-assistant rollout restart deployment/hermes
+kubectl -n home-assistant rollout status deployment/hermes --timeout=180s
+```
+
+The merge is deep: unrelated keys in the generated `config.yaml` survive, the
+fragment wins for the keys it declares, and lists are replaced.  Comments in a
+hand-edited `config.yaml` are not preserved — `config.yaml.prev` is the
+one-step rollback (`cp config.yaml.prev config.yaml` + restart).  A second run
+is a no-op, and `--check` exits `1` when a render is pending (pre-flight use).
+
+Run it on lab-host against the host path, not inside the Pod: the Pod has no
+Python tooling guarantee, and the files are the same.  Stop the gateway first
+only when you need a consistent read; a restart after the render is enough
+because the gateway reads the config once at start.  Run as the user that owns
+`/srv/k3s/volumes/hermes`; if you had to use `sudo`, restore ownership of the
+rendered files to the Pod's uid (`kubectl -n home-assistant exec
+deploy/hermes -c hermes -- id`) and check `ls -l`, otherwise the gateway cannot
+open its own config.
+
+## Infra tools (mcp-gateway)
+
+`mcp_servers.infra` points at the shared `mcp-gateway` Service in the same
+namespace.  It exposes `infra_status`, `infra_service`, `infra_logs`,
+`infra_query`, `infra_alert`, `infra_overview` (read-only) and the two-step
+`infra_prepare_restart` → `infra_confirm` / `infra_cancel`, plus
+`infra_send_report`.  The restart confirmation is a normal tool pair because
+the voice path cannot show Hermes approval prompts; `trust: full` is required
+for the same reason.
+
+The bearer token is not in this repository.  It is one OpenBao key,
+`k8s/home-assistant/mcp-gateway-auth` property `token`, delivered to the Pod as
+the environment variable `HERMES_INFRA_TOKEN`.  The
+`ExternalSecret/hermes-environment` uses `dataFrom.extract`, so adding the key
+to OpenBao is enough on the ESO side; whether the Deployment consumes the
+Secret with `envFrom` or per-key `secretKeyRef` is defined in the private
+`runtime_values`.  If it uses per-key references, add an entry for
+`HERMES_INFRA_TOKEN` there as well, otherwise the variable stays unset and the
+gateway answers `401`.
+
+`HERMES.md` is installed as `/opt/data/.hermes.md`.  Hermes auto-loads that
+file from the working directory (`/opt/data`, no git root) and injects it into
+the system prompt; it must stay under 2 KB and must not contain instruction
+override wording — the injection scanner blocks such a file entirely.
+
+Verify from the Pod (the tokens are already in the Pod environment from
+`Secret/hermes-environment`; the Pod also runs `voice-proxy`, hence `-c`):
+
+```bash
+kubectl -n home-assistant exec deploy/hermes -c hermes -- hermes mcp test infra
+kubectl -n home-assistant exec deploy/hermes -c hermes -- hermes mcp list
+```
+
+A healthy `mcp test infra` reports the tool count; `401` means the token is
+missing or stale, `connection refused` means the gateway Service or its Pod is
+not ready.
+
+## Telegram channel
+
+The same bot carries Alertmanager alerts and the owner's chat; Hermes consumes
+its updates, so that bot must not have a webhook (`TELEGRAM_WEBHOOK_URL`
+unset — polling only).  Values from `Secret/hermes-environment`:
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALLOWED_USERS` (owner numeric id; for a
+private chat it is also the chat id).  `platform_toolsets.telegram` is an
+explicit list, so a chat message cannot reach terminal/file/browser tools.
+Alertmanager reads the same OpenBao keys, so the token has one source of truth;
+the currency bot keeps its own bot for rate alerts.  Reply to an alert message
+to quote its fingerprint into the model, then ask `infra_alert` about it.
+
 
 ## Cancel guard (proxy v6)
 
@@ -65,13 +155,16 @@ The station assistant is **Рикардо**, the user's personal voice assistant
 3. HA `llama_cpp` conversation subentry — prompt from
    [`voice_prompt.txt`](voice_prompt.txt), title/entity `Рикардо`.
 
-Apply on lab-host after editing the repo files:
+Apply on lab-host after editing the repo files.  The renderer installs
+`SOUL.md` and `agent.personalities.voice` (from `config.fragment.yaml`) into
+the HERMES_HOME, so no hand edit of the PVC is needed:
 
 ```bash
-cp projects/home-assistant/hermes/SOUL.md ~/.hermes/SOUL.md
-~/.local/bin/hermes config set --force agent.personalities.voice \
-  "$(cat projects/home-assistant/hermes/voice_prompt.txt)"
-~/.local/bin/hermes gateway restart
+python3 projects/home-assistant/hermes/render_hermes_config.py \
+  --home /srv/k3s/volumes/hermes --dry-run
+sudo python3 projects/home-assistant/hermes/render_hermes_config.py \
+  --home /srv/k3s/volumes/hermes
+kubectl -n home-assistant rollout restart deployment/hermes
 ```
 
 The HA prompt/title are part of the live `llama_cpp` subentry and are updated
@@ -141,8 +234,9 @@ remove the `music-assistant` entry from Hermes and/or disable the plugin.
 
 ## Web search and general questions
 
-The fallback is not music-only.  `platform_toolsets.api_server` contains
-`mcp-homeassistant`, `mcp-music-assistant` and `web`.  General knowledge is
+The fallback is not music-only.  `platform_toolsets.api_server` and
+`platform_toolsets.telegram` contain `mcp-homeassistant`,
+`mcp-music-assistant`, `web` and `mcp-infra`.  General knowledge is
 answered by the model;
 current facts (news, weather, prices, links) use the `web_search` tool.  The
 search backend is `openai-native`, which uses the same ChatGPT/Codex
@@ -200,7 +294,7 @@ plain text.
 
 ## MCP contract
 
-**Full access is intentional.** Both MCP servers are configured without a
+**Full access is intentional.** All MCP servers are configured without a
 `tools.include`/`tools.exclude` allowlist, with MCP resources and prompts
 enabled:
 
@@ -210,11 +304,14 @@ enabled:
 - **Music Assistant** exposes all discovered MA MCP tools (86 at deployment),
   including library search, queue/playback/player control, playlists, favorites,
   volume, announcements, debug and config namespaces.
+- **infra** (mcp-gateway) exposes the read-only diagnostics, the two-step
+  restart pair and `infra_send_report`; every restart target is allow-listed by
+  the gateway catalog, and the gateway itself performs only a rollout restart.
 
 Non-HA platform toolsets remain disabled: terminal, shell, file, browser,
-computer-use and similar. Only the two MCP servers and `web` are enabled for
-`api_server`. The HA voice prompt still tells Hermes that local intents own
-timers/alarms; the MCP surface is broader than the voice policy.
+computer-use and similar. Only the MCP servers and `web` are enabled, on both
+`api_server` and `telegram`. The HA voice prompt still tells Hermes that local
+intents own timers/alarms; the MCP surface is broader than the voice policy.
 
 This is a deliberate tradeoff: Hermes can now do anything the HA/MA MCP servers
 expose. MA config/debug tools and destructive library/queue operations are

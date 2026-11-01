@@ -1,0 +1,23 @@
+# kube-prometheus-stack runs with *SelectorNilUsesHelmValues=false, so any
+# ServiceMonitor in the cluster is picked up. The selector matches only this
+# Service, and the port name is explicit.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mcp-gateway
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  namespaceSelector:
+    matchNames:
+      - home-assistant
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

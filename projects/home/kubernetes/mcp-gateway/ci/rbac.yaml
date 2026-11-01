@@ -1,0 +1,43 @@
+# Extend the existing GitHub Actions identity (ServiceAccount
+# home-assistant/ci-deploy) with the two namespaced object kinds the gateway's
+# deploy.sh applies and that the scheduler Role for home-assistant does not
+# grant: NetworkPolicy and ServiceMonitor.
+#
+# Everything else deploy.sh performs (ConfigMap with the catalog, Service,
+# Deployment converge, pods/exec -healthcheck, rollout status) is already
+# allowed by the existing home-assistant/ci-deploy Role.
+#
+# Applied once by an admin, together with manifests/rbac.yaml:
+#   kubectl apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
+#
+# No ClusterRole is involved; the identity stays namespace-scoped.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-deploy-mcp-gateway
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors"]
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deploy-mcp-gateway
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/part-of: ricardo-home
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-deploy-mcp-gateway
+subjects:
+  - kind: ServiceAccount
+    name: ci-deploy
+    namespace: home-assistant
