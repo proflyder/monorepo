@@ -80,6 +80,43 @@ class StationRole(unittest.TestCase):
             self.assertNotIn(forbidden, configure.STATION_POLICY)
 
 
+class AndroidRole(unittest.TestCase):
+    def test_android_role_payload(self):
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
+        self.assertEqual(bao.payload("/v1/auth/github/role/android-distribute"), {
+            "role_type": "jwt",
+            "user_claim": "job_workflow_ref",
+            "bound_audiences": [AUDIENCE],
+            "bound_claims": {
+                "repository": HOME_REPOSITORY,
+                "environment": "Android",
+                "ref": "refs/heads/develop",
+            },
+            "token_policies": ["ci-android"],
+            "token_ttl": "10m",
+            "token_max_ttl": "15m",
+            "clock_skew": 60,
+        })
+
+    def test_android_role_does_not_change_deploy_home(self):
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
+        self.assertEqual(bao.payload("/v1/auth/github/role/deploy-home")[
+            "token_policies"], ["ci-deploy"])
+
+    def test_android_policy_is_scoped_to_its_entry(self):
+        self.assertIn('path "secret/data/ci/android-distribute"',
+                      configure.CI_ANDROID_POLICY)
+        self.assertIn('path "secret/metadata/ci/android-distribute"',
+                      configure.CI_ANDROID_POLICY)
+        for forbidden in ("ci/deploy-home", "ci/deploy-station", "ci/test",
+                          "k8s/", '"*"'):
+            self.assertNotIn(forbidden, configure.CI_ANDROID_POLICY)
+
+
 def run_main(*extra_args, env=None):
     """Run main() with the API surface replaced by recorders."""
     policies: list[tuple[str, str]] = []
@@ -115,7 +152,8 @@ class MainGating(unittest.TestCase):
     def test_no_flag_keeps_existing_configuration(self):
         names, _, github = run_main()
         self.assertNotIn("ci-station", names)
-        self.assertEqual(names, ["admin", "ci-deploy", "k8s-read", "backup"])
+        self.assertEqual(names, ["admin", "ci-deploy", "ci-android",
+                                 "k8s-read", "backup"])
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
 
     def test_flag_adds_policy_and_role(self):

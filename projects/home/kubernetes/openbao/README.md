@@ -174,6 +174,7 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 |---|---|---|---|
 | `userpass` | человек | имя из `secrets/openbao/username` | `admin` |
 | `github` (`jwt`) | GitHub Actions | `deploy-home` | `ci-deploy` |
+| `github` (`jwt`) | GitHub Actions, Android App Distribution | `android-distribute` | `ci-android` |
 | `github` (`jwt`) | GitHub Actions, station deploy | `deploy-station` | `ci-station` |
 | `kubernetes` | External Secrets Operator | `external-secrets` | `k8s-read` |
 | `kubernetes` | smoke-под | `k8s-smoke` | `k8s-read` |
@@ -191,6 +192,11 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 `secret/metadata/ci/deploy-station`; ни `secret/ci/deploy-home`, ни
 `secret/k8s/*`, ни запись политика не разрешает. Создаётся только вместе с
 параметром `--station-repository`.
+
+`ci-android`: read ровно `secret/data/ci/android-distribute` и
+`secret/metadata/ci/android-distribute`; `secret/ci/deploy-home`,
+`secret/ci/deploy-station`, `secret/k8s/*` и запись запрещены. Политика
+создаётся всегда вместе с ролью `android-distribute`.
 
 `backup`: только `read sys/storage/raft/snapshot`.
 
@@ -234,11 +240,26 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 создаются, остальная конфигурация не меняется. Повторный запуск с параметром
 идемпотентно обновляет роль.
 
+Роль `android-distribute` (`auth/github/role/android-distribute`) обслуживает
+сборку и загрузку Android APK в Firebase App Distribution:
+
+- `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
+- `bound_audiences` = тот же публичный URL OpenBao, что у `deploy-home`;
+- `bound_claims`: `repository=<owner>/<repo>` (как у `deploy-home`, из
+  `git remote origin` или `OPENBAO_GITHUB_REPOSITORY`), `environment=Android`
+  и `ref=refs/heads/develop`; workflow `.github/workflows/android-distribute.yml`
+  запускается только из `develop`;
+- `user_claim=job_workflow_ref`, `token_policies=["ci-android"]`, TTL 10 мин,
+  max 15 мин, `clock_skew=60`.
+
 Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}`,
 `secret/ci/deploy-home` → `{kubeconfig, scheduler_env, runtime_values}` (см.
 «CI-секреты»), `secret/ci/deploy-station` → `{ha_url, ha_token, entity_id}`
-(см. «Station-секреты»), `secret/k8s/test` → `{probe: ok-k8s}`. Значения
-`test` не секретные и нужны только для smoke-проверок.
+(см. «Station-секреты»), `secret/ci/android-distribute` →
+`{keystore_b64, keystore_password, google_services_json,
+firebase_service_account_json}` (см. «Android-секреты»), `secret/k8s/test` →
+`{probe: ok-k8s}`. Значения `test` не секретные и нужны только для
+smoke-проверок.
 
 ## Kubernetes auth
 
@@ -332,6 +353,53 @@ jq -n \
 SHA-256 прочитанного значения с локальным файлом. Ротация значения не меняет
 workflow: обновить ключ, при необходимости перезапустить `deploy-home`
 (токен роли живёт ≤15 мин и не хранится).
+
+Environment `Android` (workflow `android-distribute`) хранит те же четыре
+значения доступа: `VPN_SERVER`, `VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD`,
+`OPENBAO_ADDR`; роль выбирается в workflow (`android-distribute`), отдельного
+`OPENBAO_ROLE` нет.
+
+### Android-секреты (App Distribution)
+
+`secret/ci/android-distribute` читает только роль `android-distribute`
+(политика `ci-android`). Значения — исходный текст (не base64), кроме
+keystore, который хранится как base64:
+
+| Ключ | Откуда | Зачем |
+|---|---|---|
+| `keystore_b64` | `base64 secrets/android/home-debug.keystore` | подпись APK личным debug-ключом (SHA-256 `88ef5d61…04ad`) |
+| `keystore_password` | всегда `android` | rules_android подписывает с `--ks-pass pass:android` |
+| `google_services_json` | `secrets/android/google-services.json` | `google_app_id` и Firebase-ресурсы |
+| `firebase_service_account_json` | JSON-ключ сервисного аккаунта GCP | аутентификация `firebase-tools appdistribution:distribute` |
+
+Сервисный аккаунт создаётся один раз: GCP console → **IAM & Admin** →
+**Service accounts** → создать аккаунт → роль **Firebase App Distribution
+Admin** → **Keys** → **Add key** → JSON. Ключ сохраняется локально как
+`secrets/android/firebase-distribute-sa.json` (600, вне Git); в GitHub он не
+попадает.
+
+Запись и обновление (нужен admin/root-токен, после работы отозвать):
+
+```bash
+export BAO_ADDR=https://vault.<home-domain>
+export BAO_TOKEN=...            # admin-токен, не печатать
+jq -n \
+  --arg keystore_b64 "$(base64 < secrets/android/home-debug.keystore)" \
+  --arg keystore_password android \
+  --rawfile google_services_json secrets/android/google-services.json \
+  --rawfile firebase_service_account_json secrets/android/firebase-distribute-sa.json \
+  '{data: {keystore_b64: $keystore_b64,
+           keystore_password: $keystore_password,
+           google_services_json: $google_services_json,
+           firebase_service_account_json: $firebase_service_account_json}}' \
+| curl -sS --fail -X POST -H "X-Vault-Token: $BAO_TOKEN" \
+    --data-binary @- "$BAO_ADDR/v1/secret/data/ci/android-distribute" >/dev/null
+```
+
+`jq --rawfile` сохраняет переводы строк JSON-файлов; base64 читается без
+переносов. Ротация ключа или сервисного аккаунта — повторная запись значения,
+workflow не меняется. Пароль keystore обязан остаться `android`: workflow
+падает до сборки, если значение другое.
 
 ### Station-секреты (деплой прошивки станции)
 

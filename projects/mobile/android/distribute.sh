@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # Build the Home Android app and distribute it to Firebase App Distribution.
 #
-# Local only: CI never distributes. Requires the private links
+# Runs locally and in the `android-distribute` workflow. Requires the private
+# files
 #   platform/android/keys/home-debug.keystore
 #   platform/android/keys/google-services.json
-# (see projects/mobile/android/README.md). The APK must be signed with the
-# personal debug key: distributing the public fallback key would produce
+# (see projects/mobile/android/README.md). CI materialises both from OpenBao;
+# locally they are links under secrets/android/. The APK must be signed with
+# the personal debug key: distributing the public fallback key would produce
 # builds that cannot update an existing install.
 #
 # Authentication uses an existing `npx firebase-tools login` session or
-# GOOGLE_APPLICATION_CREDENTIALS (a service-account JSON under
-# secrets/android/). Credentials are never printed.
+# GOOGLE_APPLICATION_CREDENTIALS (a service-account JSON). Credentials are
+# never printed.
 #
 # Usage:
-#   projects/mobile/android/distribute.sh [--dry-run]
+#   projects/mobile/android/distribute.sh [--dry-run] [--ci]
+#
+# --ci formats release notes for a GitHub Actions push run (commit subject,
+# short SHA and run URL from the GitHub environment).
 set -euo pipefail
 
 FIREBASE_TOOLS_VERSION="15.34.2"
@@ -28,11 +33,13 @@ GOOGLE_SERVICES_LINK="$ROOT/platform/android/keys/google-services.json"
 APK="$ROOT/bazel-bin/projects/mobile/android/app/app.apk"
 
 DRY_RUN=0
+CI_MODE=0
 for argument in "$@"; do
   case "$argument" in
     --dry-run) DRY_RUN=1 ;;
+    --ci) CI_MODE=1 ;;
     -h|--help)
-      sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -53,7 +60,7 @@ if [[ ! -e "$GOOGLE_SERVICES_LINK" ]]; then
   exit 1
 fi
 
-export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 BUILD_TOOLS="${ANDROID_BUILD_TOOLS:-$ANDROID_HOME/build-tools/36.0.0}"
 for tool in apksigner aapt2; do
   if [[ ! -x "$BUILD_TOOLS/$tool" ]]; then
@@ -61,6 +68,17 @@ for tool in apksigner aapt2; do
     exit 1
   fi
 done
+
+# Local worktrees use `bazelisk`; GitHub's setup-bazel exposes the same pinned
+# Bazelisk as `bazel`.
+if command -v bazelisk >/dev/null 2>&1; then
+  BAZEL=bazelisk
+elif command -v bazel >/dev/null 2>&1; then
+  BAZEL=bazel
+else
+  echo "Neither bazelisk nor bazel is on PATH." >&2
+  exit 1
+fi
 
 # Each distribution needs a higher versionCode. UTC epoch seconds are
 # strictly increasing per build, time-ordered, and fit int32 until 2038.
@@ -73,7 +91,7 @@ VERSION_NAME="0.1.0-$SHORT_SHA"
 echo "Building //projects/mobile/android:app (versionCode $VERSION_CODE, versionName $VERSION_NAME)"
 (
   cd "$ROOT"
-  bazelisk build //projects/mobile/android:app \
+  "$BAZEL" build //projects/mobile/android:app \
     --define "home_version_code=$VERSION_CODE" \
     --define "home_version_name=$VERSION_NAME"
 )
@@ -112,8 +130,23 @@ if [[ -z "$APP_ID" ]]; then
   exit 1
 fi
 
-RELEASE_NOTES="$(git -C "$ROOT" describe --tags --always --dirty)"
-RELEASE_NOTES="$RELEASE_NOTES"$'\n'"$(git -C "$ROOT" log --oneline -5)"
+if [[ "$CI_MODE" -eq 1 ]]; then
+  # A push to develop is a squash merge: its subject is the PR title and the
+  # commit list of the merge itself is a single line.
+  COMMIT_SUBJECT="$(git -C "$ROOT" log -1 --pretty=%s)"
+  RUN_URL="${GITHUB_RUN_URL:-}"
+  if [[ -z "$RUN_URL" && -n "${GITHUB_SERVER_URL:-}" && -n "${GITHUB_REPOSITORY:-}" \
+        && -n "${GITHUB_RUN_ID:-}" ]]; then
+    RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+  fi
+  RELEASE_NOTES="$COMMIT_SUBJECT"$'\n'"$SHORT_SHA"
+  if [[ -n "$RUN_URL" ]]; then
+    RELEASE_NOTES="$RELEASE_NOTES"$'\n'"$RUN_URL"
+  fi
+else
+  RELEASE_NOTES="$(git -C "$ROOT" describe --tags --always --dirty)"
+  RELEASE_NOTES="$RELEASE_NOTES"$'\n'"$(git -C "$ROOT" log --oneline -5)"
+fi
 
 echo "APK signer verified: $SIGNER_SHA256"
 echo "Firebase app: $APP_ID, group: $TESTER_GROUP"

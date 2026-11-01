@@ -561,6 +561,19 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 повторно не включаются; два исполнителя одновременно не запускать. Бэкап/restore
 БД — `backup.sh` и процедура в README scheduler.
 
+### Android / App Distribution
+
+Push в `develop`, затрагивающий `projects/mobile/android/`,
+`platform/android/`, `packages/kotlin/` или Bazel-контракт, запускает
+`.github/workflows/android-distribute.yml`: Environment `Android`, VPN группа
+`ci`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`.
+Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
+(`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `owner`
+и удаляет ключи. Локально — `projects/mobile/android/distribute.sh`
+(`--dry-run` печатает команду без загрузки). Секреты и запись KV — README
+`projects/home/kubernetes/openbao`; статус — вкладка Actions workflow
+`android-distribute`.
+
 ## Currency bot
 
 `solutions/currency-bot` в namespace `currency-bot`; устройство и импорт
