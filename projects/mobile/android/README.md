@@ -8,9 +8,9 @@ API/implementation modules, and a typed router.
 ## Limits
 
 Debug-signed only, with a stable personal key so upgrades keep app data and the
-encrypted token (see [Signing](#signing)). No FCM, phone-side background
-execution, offline cache, or generic task UI. Current device acceptance and
-remaining work are tracked in [STATE](../../../docs/STATE.md) and
+encrypted token (see [Signing](#signing)). No FCM messaging, phone-side
+background execution, offline cache, or generic task UI. Current device
+acceptance and remaining work are tracked in [STATE](../../../docs/STATE.md) and
 [PENDING](../../../docs/PENDING.md).
 
 ## Features
@@ -102,6 +102,7 @@ bazelisk build //projects/mobile/android:app
 # bazel-bin/projects/mobile/android/app/app.apk
 
 bazelisk test //projects/mobile/android:android_tests
+bazelisk test //platform/android:google_services_test
 
 # Optional: install on a connected device (keeps app data).
 adb install -r bazel-bin/projects/mobile/android/app/app.apk
@@ -160,6 +161,92 @@ signed with the public fallback key and will not update in place. Moving from
 the old debug key to this one requires one uninstall (app data, including the
 token, is cleared).
 
+## Firebase (Crashlytics)
+
+Crash reporting is the only Firebase service. There is no FCM, Analytics,
+Remote Config, or phone-side scheduling.
+
+**What is sent to Google:** crash stack traces, device model and OS version,
+and the app version. The app does not send the bearer token, scheduler or
+control endpoints, Home catalog contents, or any custom keys. Crashlytics uses
+its own Firebase installation id, not the app's Home credentials.
+
+**Build wiring without Gradle.** `google-services.json` is private and lives in
+`secrets/android/`; Bazel reads it through the gitignored symlink
+`platform/android/keys/google-services.json`:
+
+```sh
+mkdir -p platform/android/keys
+ln -s "$PWD/secrets/android/google-services.json" \
+  platform/android/keys/google-services.json
+```
+
+`platform/android/google_services.py` converts the JSON client for
+`dev.proflyder.home` into `res/values/google_services.xml` (`google_app_id`,
+`gcm_defaultSenderId`, `google_api_key`, `google_crash_reporting_api_key`,
+`google_storage_bucket`, `project_id`) and the Crashlytics build id
+`com.google.firebase.crashlytics.mapping_file_id` (32 hex, derived from the app
+id and version). Without the link the build still succeeds, prints a warning,
+emits an empty values file, and Firebase stays uninitialized; the app must and
+does start normally in that state.
+
+Collection follows the `home_crash_reporting` bool (default `true`). Turn it
+off to keep Crashlytics initialized without uploads.
+
+**One-time console steps:**
+
+1. In the Firebase console for the existing project, open **Crashlytics** and
+   finish onboarding (the Android app `dev.proflyder.home` already exists in
+   the project).
+2. Wait for the first crash to appear; Crashlytics enables itself when the
+   first report arrives.
+
+**Verify a report manually.** On a connected debug device, crash the app
+process and relaunch it:
+
+```sh
+adb shell am crash dev.proflyder.home
+adb shell monkey -p dev.proflyder.home 1   # or tap the launcher icon
+```
+
+`am crash` throws a `RuntimeException` in the app process, which is exactly the
+uncaught exception Crashlytics records. If the device blocks `am crash`, use a
+temporary debug-only crash instead and remove it before committing. Reports
+usually appear in the console within a few minutes after the next launch.
+
+## App Distribution
+
+`projects/mobile/android/distribute.sh` builds, verifies, and uploads the APK
+to Firebase App Distribution. It is for local use only; CI never distributes.
+
+```sh
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+projects/mobile/android/distribute.sh --dry-run   # print the command, no auth
+projects/mobile/android/distribute.sh             # build + upload
+```
+
+The script requires both private links (`home-debug.keystore` and
+`google-services.json`), refuses to upload unless the APK signer is the
+personal key `88ef5d61…04ad`, and reads the Firebase app id from the JSON.
+Authentication uses an existing `npx firebase-tools@15.34.2 login` session or
+`GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account JSON under
+`secrets/android/`; credentials are never printed.
+
+Each upload gets `versionCode` = UTC epoch seconds and
+`versionName` = `0.1.0-<shortsha>`. Epoch seconds are strictly increasing per
+build and fit a 32-bit versionCode until 2038; a git commit count is not
+monotonic for dirty builds. Ordinary builds keep versionCode 1 / 0.1.0. Both
+are build settings (`--define home_version_code=… --define
+home_version_name=…`), so manual uploads can pass the same values.
+
+**One-time console steps:**
+
+1. Open **App Distribution** in the Firebase console and choose **Get
+   started**.
+2. Create the tester group `owner` (or set `HOME_TESTERS_GROUP`) and add your
+   own email address.
+3. Run `npx firebase-tools@15.34.2 login` once on the machine that distributes.
+
 ## Architecture
 
 ```text
@@ -206,7 +293,9 @@ catalog reads use `GET /v1/catalog`.
 
 ## App identity and permissions
 
-- Application ID `dev.proflyder.home`; version 0.1.0 (versionCode 1).
+- Application ID `dev.proflyder.home`; default version 0.1.0 (versionCode 1).
+  `home_android_binary` reads `home_version_code`/`home_version_name` from
+  `--define`; `distribute.sh` overrides them for App Distribution.
 - minSdk 26, target/compile SDK 36, Kotlin/JVM target 17.
 - Only `android.permission.INTERNET`.
 - Debug-signed with the personal debug key when present; debug APKs are not

@@ -4,6 +4,12 @@ build --announce_rc
 build --color=yes
 test --test_output=errors
 
+# Android app version defaults. `projects/mobile/android/distribute.sh`
+# overrides these with --define so each App Distribution build gets a higher
+# versionCode; ordinary builds stay 1 / 0.1.0.
+build --define=home_version_code=1
+build --define=home_version_name=0.1.0
+
 # Disk cache is machine-local, outside the checkout; output symlinks are ignored.
 common --disk_cache=~/.cache/bazel-disk
 

@@ -4,7 +4,7 @@
     "androidx.activity:activity-ktx": -1628131892,
     "androidx.appcompat:appcompat": 942538221,
     "androidx.core:core-ktx": 438051419,
-    "androidx.datastore:datastore-preferences": -1008894755,
+    "androidx.datastore:datastore-preferences": 1752472603,
     "androidx.emoji2:emoji2": 1129635293,
     "androidx.emoji2:emoji2-views-helper": 997655465,
     "androidx.fragment:fragment-ktx": -653644145,
@@ -22,10 +22,26 @@
     "androidx.recyclerview:recyclerview": -368968563,
     "androidx.swiperefreshlayout:swiperefreshlayout": 353460823,
     "com.github.chuckerteam.chucker:library": -874127186,
+    "com.google.android.datatransport:transport-api": -76155855,
+    "com.google.android.datatransport:transport-backend-cct": 363382865,
+    "com.google.android.datatransport:transport-runtime": 892611188,
+    "com.google.android.gms:play-services-basement": 1603054513,
+    "com.google.android.gms:play-services-tasks": -1391393812,
     "com.google.android.material:material": 607032841,
     "com.google.code.findbugs:jsr305": 495355163,
     "com.google.code.gson:gson": 597770368,
     "com.google.errorprone:error_prone_annotations": -1035138750,
+    "com.google.firebase:firebase-annotations": -270926660,
+    "com.google.firebase:firebase-common": -1231803625,
+    "com.google.firebase:firebase-components": -1590541644,
+    "com.google.firebase:firebase-config-interop": 1359513751,
+    "com.google.firebase:firebase-crashlytics": 1165487728,
+    "com.google.firebase:firebase-encoders": -109571118,
+    "com.google.firebase:firebase-encoders-json": -1977988925,
+    "com.google.firebase:firebase-installations": -646808633,
+    "com.google.firebase:firebase-installations-interop": 1751484376,
+    "com.google.firebase:firebase-measurement-connector": 679393724,
+    "com.google.firebase:firebase-sessions": -369966085,
     "com.google.guava:guava": 1943808618,
     "com.google.guava:listenablefuture": 50807205,
     "com.google.j2objc:j2objc-annotations": 2003271689,
@@ -38,6 +54,7 @@
     "junit:junit": -744267592,
     "org.jetbrains.kotlinx:kotlinx-coroutines-android": 1790404246,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core": -636748508,
+    "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": 1879570542,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test": -797019823,
     "org.jetbrains.kotlinx:kotlinx-serialization-json": -282635724,
     "org.robolectric:android-all-instrumented": -2059171972,
@@ -74,6 +91,7 @@
     "androidx.datastore:datastore-core-okio": 1176623292,
     "androidx.datastore:datastore-core-okio-jvm": 701142078,
     "androidx.datastore:datastore-core:aar": 1601865146,
+    "androidx.datastore:datastore-preferences": 1938750081,
     "androidx.datastore:datastore-preferences-android:aar": 132131097,
     "androidx.datastore:datastore-preferences-core": 1375568288,
     "androidx.datastore:datastore-preferences-core-jvm": 96090084,
@@ -132,11 +150,30 @@
     "androidx.viewpager:viewpager:aar": -1688688943,
     "com.almworks.sqlite4java:sqlite4java": 1585971300,
     "com.github.chuckerteam.chucker:library:aar": 100674601,
+    "com.google.android.datatransport:transport-api:aar": -539902214,
+    "com.google.android.datatransport:transport-backend-cct:aar": -1515708123,
+    "com.google.android.datatransport:transport-runtime:aar": -1232247827,
+    "com.google.android.gms:play-services-basement:aar": 1563560229,
+    "com.google.android.gms:play-services-tasks:aar": 1254876376,
     "com.google.android.material:material:aar": -1018859417,
     "com.google.auto.value:auto-value-annotations": 641752776,
     "com.google.code.findbugs:jsr305": 870839855,
     "com.google.code.gson:gson": -1575757252,
     "com.google.errorprone:error_prone_annotations": 967586345,
+    "com.google.firebase:firebase-annotations": -2057236433,
+    "com.google.firebase:firebase-common-ktx:aar": -215677137,
+    "com.google.firebase:firebase-common:aar": 1280495323,
+    "com.google.firebase:firebase-components:aar": 2116715906,
+    "com.google.firebase:firebase-config-interop:aar": -896453493,
+    "com.google.firebase:firebase-crashlytics:aar": -542328611,
+    "com.google.firebase:firebase-datatransport:aar": 528679375,
+    "com.google.firebase:firebase-encoders": -2123324682,
+    "com.google.firebase:firebase-encoders-json:aar": 696132611,
+    "com.google.firebase:firebase-encoders-proto": -1074739894,
+    "com.google.firebase:firebase-installations-interop:aar": 1645318894,
+    "com.google.firebase:firebase-installations:aar": -1467353814,
+    "com.google.firebase:firebase-measurement-connector:aar": 1980470536,
+    "com.google.firebase:firebase-sessions:aar": 2039932056,
     "com.google.guava:failureaccess": -1890754729,
     "com.google.guava:guava": 1451151182,
     "com.google.guava:listenablefuture": -1728764445,
@@ -170,6 +207,7 @@
     "org.jetbrains.kotlinx:kotlinx-coroutines-android": -1551650999,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core": -202158901,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": 272771419,
+    "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": 2075926176,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test": 639758943,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm": 81249123,
     "org.jetbrains.kotlinx:kotlinx-serialization-core": -2134210620,
@@ -371,6 +409,12 @@
     "androidx.datastore:datastore-core:aar": {
       "shasums": {
         "jar": "1033b479dbeac90932fc598155f0fe190cc116b9174182799c7dad291f4d5b9a"
+      },
+      "version": "1.1.1"
+    },
+    "androidx.datastore:datastore-preferences": {
+      "shasums": {
+        "jar": "7daf288a2f1efe727eac9fb75d9c8a773512c654740eb8381d443439c3d0c3a1"
       },
       "version": "1.1.1"
     },
@@ -722,6 +766,36 @@
       },
       "version": "4.0.0"
     },
+    "com.google.android.datatransport:transport-api:aar": {
+      "shasums": {
+        "jar": "e2552d1dc75c7280089c09febcaf2fee7287c59e38c547cd4a431edd5f4d3418"
+      },
+      "version": "3.2.0"
+    },
+    "com.google.android.datatransport:transport-backend-cct:aar": {
+      "shasums": {
+        "jar": "2a6a9d89f24ab7df0933983a8c486c216fb32747bea72b319936323a71964122"
+      },
+      "version": "3.3.0"
+    },
+    "com.google.android.datatransport:transport-runtime:aar": {
+      "shasums": {
+        "jar": "15f9c14fc07a8c92402b2e0656e8e94292b245e8d6395d2c096d10920d93cba0"
+      },
+      "version": "3.3.0"
+    },
+    "com.google.android.gms:play-services-basement:aar": {
+      "shasums": {
+        "jar": "6c11ae3eb2dd7f17373f919c4c557a70e4cf891bc0c9b66926a0a6445d654352"
+      },
+      "version": "18.3.0"
+    },
+    "com.google.android.gms:play-services-tasks:aar": {
+      "shasums": {
+        "jar": "d60575eae39350e6234858bc9d7d775375707ae82a684e6caf7f3e41a12e25a2"
+      },
+      "version": "18.1.0"
+    },
     "com.google.android.material:material:aar": {
       "shasums": {
         "jar": "4a672941b626b9ab91ae893ed22598ea53ad69125c858c0a59fa9b90daa5cb08"
@@ -751,6 +825,90 @@
         "jar": "ff80626baaf12a09342befd4e84cba9d50662f5fcd7f7a9b3490a6b7cf87e66c"
       },
       "version": "2.5.1"
+    },
+    "com.google.firebase:firebase-annotations": {
+      "shasums": {
+        "jar": "46f6d5dfdd2ccf3c40de897a14bd9779314c3319f44bfd31e7e0a20d935a5e3e"
+      },
+      "version": "16.2.0"
+    },
+    "com.google.firebase:firebase-common-ktx:aar": {
+      "shasums": {
+        "jar": "25fc80c9bb9ecb1672908718c294afcc4ac1e47473677be060c795e04f120066"
+      },
+      "version": "21.0.0"
+    },
+    "com.google.firebase:firebase-common:aar": {
+      "shasums": {
+        "jar": "379287d7171371512493681b398e78c341b333cf974ee81a18b1d56e7c2e385d"
+      },
+      "version": "21.0.0"
+    },
+    "com.google.firebase:firebase-components:aar": {
+      "shasums": {
+        "jar": "c7c48a3a80f44a499ebd6473bcfc7dd5a45ef523fabe2414a62515ff3c640972"
+      },
+      "version": "18.0.0"
+    },
+    "com.google.firebase:firebase-config-interop:aar": {
+      "shasums": {
+        "jar": "6dbb0cf1c46e45fdf03bfe672ba7483360bba700f00f0e64717f700f798a7f1f"
+      },
+      "version": "16.0.1"
+    },
+    "com.google.firebase:firebase-crashlytics:aar": {
+      "shasums": {
+        "jar": "eb22f63e089c2ecdc976715c466994c6dcf97524c9ba5fa05721e7c9ca062d17"
+      },
+      "version": "19.4.4"
+    },
+    "com.google.firebase:firebase-datatransport:aar": {
+      "shasums": {
+        "jar": "0503350ae311f382543a883843d5050ba39d35f33f92b3c9d7e6165288b0bb22"
+      },
+      "version": "19.0.0"
+    },
+    "com.google.firebase:firebase-encoders": {
+      "shasums": {
+        "jar": "282a5a703f9b7eb56508dde97ea918e95d73318b157050f457f7a86dca750150"
+      },
+      "version": "17.0.0"
+    },
+    "com.google.firebase:firebase-encoders-json:aar": {
+      "shasums": {
+        "jar": "4a742b9f3ef681cdd5367e0a07b6e676a08349c6e6e214c1851498879310b2f6"
+      },
+      "version": "18.0.1"
+    },
+    "com.google.firebase:firebase-encoders-proto": {
+      "shasums": {
+        "jar": "293db96a0d1d43f033167881b638d8fde844e4e5495f5101cf52295765295e0e"
+      },
+      "version": "16.0.0"
+    },
+    "com.google.firebase:firebase-installations-interop:aar": {
+      "shasums": {
+        "jar": "dd1b6208a36894e7d7effe2203b24475aeb50c4d3045a31810ae3ad5be43bb59"
+      },
+      "version": "17.2.0"
+    },
+    "com.google.firebase:firebase-installations:aar": {
+      "shasums": {
+        "jar": "95063adfb17ffe492b12f68e73020873814d8177aa553069cad64e11d8c79292"
+      },
+      "version": "18.0.0"
+    },
+    "com.google.firebase:firebase-measurement-connector:aar": {
+      "shasums": {
+        "jar": "b76be38da54f972bc376ff3659494eebc718339ee4334d426bb4f52e59f5eae4"
+      },
+      "version": "20.0.1"
+    },
+    "com.google.firebase:firebase-sessions:aar": {
+      "shasums": {
+        "jar": "ab7a198f601acfa0edb4f77b4847b80c00e2cba7dcd28e9429ad61d3ba093794"
+      },
+      "version": "2.1.2"
     },
     "com.google.guava:failureaccess": {
       "shasums": {
@@ -947,6 +1105,12 @@
     "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": {
       "shasums": {
         "jar": "5ca175b38df331fd64155b35cd8cae1251fa9ee369709b36d42e0a288ccce3fd"
+      },
+      "version": "1.10.2"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": {
+      "shasums": {
+        "jar": "a84469d683cffc4427270b7144c62047d2a71ece703e063a4880c8dcc42caf72"
       },
       "version": "1.10.2"
     },
@@ -1284,6 +1448,13 @@
       "org.jetbrains.kotlinx:atomicfu",
       "org.jetbrains.kotlinx:kotlinx-coroutines-core"
     ],
+    "androidx.datastore:datastore-preferences": [
+      "androidx.datastore:datastore-preferences-android:aar",
+      "androidx.datastore:datastore-preferences-core",
+      "androidx.datastore:datastore:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+    ],
     "androidx.datastore:datastore-preferences-android:aar": [
       "androidx.datastore:datastore-preferences-core",
       "androidx.datastore:datastore:aar",
@@ -1615,6 +1786,31 @@
       "org.jetbrains.kotlin:kotlin-stdlib",
       "org.jetbrains.kotlinx:kotlinx-coroutines-android"
     ],
+    "com.google.android.datatransport:transport-api:aar": [
+      "androidx.annotation:annotation"
+    ],
+    "com.google.android.datatransport:transport-backend-cct:aar": [
+      "androidx.annotation:annotation",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.android.datatransport:transport-runtime:aar",
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-json:aar"
+    ],
+    "com.google.android.datatransport:transport-runtime:aar": [
+      "androidx.annotation:annotation",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-proto",
+      "javax.inject:javax.inject"
+    ],
+    "com.google.android.gms:play-services-basement:aar": [
+      "androidx.collection:collection",
+      "androidx.core:core:aar",
+      "androidx.fragment:fragment:aar"
+    ],
+    "com.google.android.gms:play-services-tasks:aar": [
+      "com.google.android.gms:play-services-basement:aar"
+    ],
     "com.google.android.material:material:aar": [
       "androidx.activity:activity:aar",
       "androidx.annotation:annotation",
@@ -1634,6 +1830,105 @@
       "androidx.vectordrawable:vectordrawable:aar",
       "androidx.viewpager2:viewpager2:aar",
       "com.google.errorprone:error_prone_annotations"
+    ],
+    "com.google.firebase:firebase-annotations": [
+      "javax.inject:javax.inject"
+    ],
+    "com.google.firebase:firebase-common-ktx:aar": [
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
+    "com.google.firebase:firebase-common:aar": [
+      "androidx.annotation:annotation",
+      "androidx.concurrent:concurrent-futures",
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-components:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-play-services"
+    ],
+    "com.google.firebase:firebase-components:aar": [
+      "androidx.annotation:annotation",
+      "com.google.errorprone:error_prone_annotations",
+      "com.google.firebase:firebase-annotations"
+    ],
+    "com.google.firebase:firebase-config-interop:aar": [
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-json:aar"
+    ],
+    "com.google.firebase:firebase-crashlytics:aar": [
+      "androidx.annotation:annotation",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.android.datatransport:transport-backend-cct:aar",
+      "com.google.android.datatransport:transport-runtime:aar",
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-common-ktx:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-config-interop:aar",
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-json:aar",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "com.google.firebase:firebase-installations:aar",
+      "com.google.firebase:firebase-measurement-connector:aar",
+      "com.google.firebase:firebase-sessions:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
+    "com.google.firebase:firebase-datatransport:aar": [
+      "androidx.annotation:annotation",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.android.datatransport:transport-backend-cct:aar",
+      "com.google.android.datatransport:transport-runtime:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
+    "com.google.firebase:firebase-encoders": [
+      "androidx.annotation:annotation"
+    ],
+    "com.google.firebase:firebase-encoders-json:aar": [
+      "androidx.annotation:annotation",
+      "com.google.firebase:firebase-encoders",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    ],
+    "com.google.firebase:firebase-encoders-proto": [
+      "androidx.annotation:annotation",
+      "com.google.firebase:firebase-encoders"
+    ],
+    "com.google.firebase:firebase-installations-interop:aar": [
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.firebase:firebase-annotations"
+    ],
+    "com.google.firebase:firebase-installations:aar": [
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-common-ktx:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "com.google.firebase:firebase-measurement-connector:aar": [
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.firebase:firebase-annotations"
+    ],
+    "com.google.firebase:firebase-sessions:aar": [
+      "androidx.annotation:annotation",
+      "androidx.datastore:datastore-preferences",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-common-ktx:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-datatransport:aar",
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-json:aar",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "com.google.firebase:firebase-installations:aar",
+      "javax.inject:javax.inject",
+      "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     ],
     "com.google.guava:guava": [
       "com.google.code.findbugs:jsr305",
@@ -1706,6 +2001,11 @@
     "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": [
       "org.jetbrains.kotlin:kotlin-stdlib",
       "org.jetbrains:annotations"
+    ],
+    "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": [
+      "com.google.android.gms:play-services-tasks:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm"
     ],
     "org.jetbrains.kotlinx:kotlinx-coroutines-test": [
       "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm"
@@ -1913,6 +2213,18 @@
     "com.google.errorprone:error_prone_annotations": [
       "com.google.errorprone.annotations",
       "com.google.errorprone.annotations.concurrent"
+    ],
+    "com.google.firebase:firebase-annotations": [
+      "com.google.firebase.annotations",
+      "com.google.firebase.annotations.concurrent"
+    ],
+    "com.google.firebase:firebase-encoders": [
+      "com.google.firebase.encoders",
+      "com.google.firebase.encoders.annotations",
+      "com.google.firebase.encoders.config"
+    ],
+    "com.google.firebase:firebase-encoders-proto": [
+      "com.google.firebase.encoders.proto"
     ],
     "com.google.guava:failureaccess": [
       "com.google.common.util.concurrent.internal"
@@ -2469,6 +2781,9 @@
       "kotlinx.coroutines.stream",
       "kotlinx.coroutines.sync",
       "kotlinx.coroutines.time"
+    ],
+    "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": [
+      "kotlinx.coroutines.tasks"
     ],
     "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm": [
       "kotlinx.coroutines.test",
@@ -4318,6 +4633,7 @@
       "androidx.datastore:datastore-core-okio",
       "androidx.datastore:datastore-core-okio-jvm",
       "androidx.datastore:datastore-core:aar",
+      "androidx.datastore:datastore-preferences",
       "androidx.datastore:datastore-preferences-android:aar",
       "androidx.datastore:datastore-preferences-core",
       "androidx.datastore:datastore-preferences-core-jvm",
@@ -4376,11 +4692,30 @@
       "androidx.viewpager:viewpager:aar",
       "com.almworks.sqlite4java:sqlite4java",
       "com.github.chuckerteam.chucker:library:aar",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.android.datatransport:transport-backend-cct:aar",
+      "com.google.android.datatransport:transport-runtime:aar",
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-tasks:aar",
       "com.google.android.material:material:aar",
       "com.google.auto.value:auto-value-annotations",
       "com.google.code.findbugs:jsr305",
       "com.google.code.gson:gson",
       "com.google.errorprone:error_prone_annotations",
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-common-ktx:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-config-interop:aar",
+      "com.google.firebase:firebase-crashlytics:aar",
+      "com.google.firebase:firebase-datatransport:aar",
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-json:aar",
+      "com.google.firebase:firebase-encoders-proto",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "com.google.firebase:firebase-installations:aar",
+      "com.google.firebase:firebase-measurement-connector:aar",
+      "com.google.firebase:firebase-sessions:aar",
       "com.google.guava:failureaccess",
       "com.google.guava:guava",
       "com.google.guava:listenablefuture",
@@ -4414,6 +4749,7 @@
       "org.jetbrains.kotlinx:kotlinx-coroutines-android",
       "org.jetbrains.kotlinx:kotlinx-coroutines-core",
       "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-play-services",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm",
       "org.jetbrains.kotlinx:kotlinx-serialization-core",
@@ -4473,6 +4809,7 @@
       "androidx.datastore:datastore-core-okio",
       "androidx.datastore:datastore-core-okio-jvm",
       "androidx.datastore:datastore-core:aar",
+      "androidx.datastore:datastore-preferences",
       "androidx.datastore:datastore-preferences-android:aar",
       "androidx.datastore:datastore-preferences-core",
       "androidx.datastore:datastore-preferences-core-jvm",
@@ -4531,11 +4868,30 @@
       "androidx.viewpager:viewpager:aar",
       "com.almworks.sqlite4java:sqlite4java",
       "com.github.chuckerteam.chucker:library:aar",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.android.datatransport:transport-backend-cct:aar",
+      "com.google.android.datatransport:transport-runtime:aar",
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-tasks:aar",
       "com.google.android.material:material:aar",
       "com.google.auto.value:auto-value-annotations",
       "com.google.code.findbugs:jsr305",
       "com.google.code.gson:gson",
       "com.google.errorprone:error_prone_annotations",
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-common-ktx:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-config-interop:aar",
+      "com.google.firebase:firebase-crashlytics:aar",
+      "com.google.firebase:firebase-datatransport:aar",
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-json:aar",
+      "com.google.firebase:firebase-encoders-proto",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "com.google.firebase:firebase-installations:aar",
+      "com.google.firebase:firebase-measurement-connector:aar",
+      "com.google.firebase:firebase-sessions:aar",
       "com.google.guava:failureaccess",
       "com.google.guava:guava",
       "com.google.guava:listenablefuture",
@@ -4569,6 +4925,7 @@
       "org.jetbrains.kotlinx:kotlinx-coroutines-android",
       "org.jetbrains.kotlinx:kotlinx-coroutines-core",
       "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-play-services",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test",
       "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm",
       "org.jetbrains.kotlinx:kotlinx-serialization-core",

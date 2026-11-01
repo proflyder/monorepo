@@ -1,4 +1,5 @@
 load("@rules_kotlin//kotlin:core.bzl", "kt_compiler_plugin", "kt_kotlinc_options")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -60,4 +61,28 @@ exports_files([
     # Reusable artifact checker; the owning project declares the sh_test.
     "apk_runtime_closure.py",
     "apk_runtime_closure.sh",
+    "google_services.py",
 ])
+
+py_binary(
+    name = "google_services",
+    srcs = ["google_services.py"],
+    main = "google_services.py",
+    python_version = "3.12",
+)
+
+py_test(
+    name = "google_services_test",
+    srcs = ["google_services_test.py"],
+    main = "google_services_test.py",
+    python_version = "3.12",
+    deps = [":google_services"],
+)
+
+# The Firebase config is private and never committed. When the gitignored
+# symlink is present the genrule embeds its resources; otherwise the app still
+# builds and Firebase stays uninitialized.
+filegroup(
+    name = "google_services_json",
+    srcs = glob(["keys/google-services.json"], allow_empty = True),
+)
