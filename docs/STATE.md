@@ -50,6 +50,11 @@
   архив старого HA Container.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
+- Alertmanager шлёт warning/critical в личный чат владельца через бота
+  currency-bot (`telegram_configs`, resolved тоже). Конфиг — Secret
+  `alertmanager-telegram`, его рендерит ESO из `k8s/currency-bot/currency-bot`
+  (`BOT_TOKEN`, второй `CHAT_ID`); Watchdog и info не отправляются.
+  Доставка проверена тестовым алертом 2026-11-01.
 - Grafana: LAN `http://192.0.2.27:30300/` (корень), HTTPS
   `https://grafana.home.example.com/`.
 - HTTPS ingress `*.home.example.com` (Traefik `42.2.0` + cert-manager

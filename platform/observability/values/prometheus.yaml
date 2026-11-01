@@ -2,6 +2,9 @@ fullnameOverride: monitoring
 alertmanager:
   alertmanagerSpec:
     replicas: 1
+    # Rendered by External Secrets Operator (Telegram receiver); see
+    # projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml.
+    configSecret: alertmanager-telegram
     resources:
       requests: {cpu: 25m, memory: 64Mi}
       limits: {memory: 256Mi}
