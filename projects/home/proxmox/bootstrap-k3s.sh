@@ -25,6 +25,14 @@ kubelet-arg:
   - kube-reserved=memory=512Mi,cpu=500m
 CONFIG
 chmod 600 /etc/rancher/k3s/config.yaml
+# imageMaximumGCAge exists only in the kubelet config file, not as a kubelet flag.
+install -d -m 700 /srv/k3s/runtime/agent/etc/kubelet.conf.d
+cat > /srv/k3s/runtime/agent/etc/kubelet.conf.d/50-image-gc.conf <<'KUBELET'
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+imageMaximumGCAge: 48h
+KUBELET
+chmod 600 /srv/k3s/runtime/agent/etc/kubelet.conf.d/50-image-gc.conf
 curl -fsSL --retry 3 https://get.k3s.io -o /srv/k3s/recovery/install-k3s.sh
 INSTALL_K3S_VERSION="$K3S_VERSION" sh /srv/k3s/recovery/install-k3s.sh
 for attempt in $(seq 1 90); do
