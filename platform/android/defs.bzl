@@ -87,7 +87,14 @@ def home_android_binary(
         version_code = "1",
         version_name = "0.1.0",
         **kwargs):
-    """debug-signed application APK for the home client."""
+    """debug-signed application APK for the home client.
+
+    The APK is signed with //platform/android:home_debug_keystore, which uses
+    the personal key when it is present and the public rules_android debug
+    keystore otherwise. A caller can override this with `debug_key = ...`.
+    """
+    if "debug_key" not in kwargs:
+        kwargs["debug_key"] = "//platform/android:home_debug_keystore"
     android_binary(
         name = name,
         custom_package = application_id,
