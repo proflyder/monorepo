@@ -25,7 +25,7 @@ set -euo pipefail
 FIREBASE_TOOLS_VERSION="15.34.2"
 CERT_SHA256="88ef5d61a365afbf15d290168d4ee7fd20a80be13ea4d4667ef1e521a2a504ad"
 APP_ID_PACKAGE="dev.proflyder.home"
-TESTER_GROUP="${HOME_TESTERS_GROUP:-owner}"
+TESTER_GROUP="${HOME_TESTERS_GROUP:-admins}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ANDROID_DIR="$ROOT/projects/mobile/android"

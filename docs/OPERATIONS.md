@@ -569,7 +569,7 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 `android-distribute` в `.github/workflows/ci.yml`: Environment `Android`, VPN
 группа `ci`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`.
 Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
-(`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `owner`
+(`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `admins` («Admins»)
 и удаляет ключи. PR из форков пропускается: у них нет ни OIDC-токена, ни
 секретов Environment. Job не входит в `ci-ok` — неудачная загрузка видна на PR,
 но не блокирует merge; новый push в тот же PR отменяет предыдущую загрузку.

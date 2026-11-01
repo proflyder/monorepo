@@ -247,7 +247,7 @@ projects/mobile/android/distribute.sh --ci
 
 `--ci` formats release notes as `PR #<number>: <title>`, the short head SHA and
 the workflow run URL (number and title arrive as environment variables, never
-as script source). The APK, the signer check and the `owner` tester group are
+as script source). The APK, the signer check and the `admins` tester group are
 identical to a local run.
 
 Local:
@@ -276,7 +276,7 @@ home_version_name=…`), so manual uploads can pass the same values.
 
 1. Open **App Distribution** in the Firebase console and choose **Get
    started**.
-2. Create the tester group `owner` (or set `HOME_TESTERS_GROUP`) and add your
+2. Create the tester group `admins` (display name «Admins») (or set `HOME_TESTERS_GROUP`) and add your
    own email address.
 3. Run `npx firebase-tools@15.34.2 login` once on a local machine that
    distributes outside CI.
