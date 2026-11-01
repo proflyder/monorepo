@@ -156,10 +156,11 @@ Verify the signer of the APK you are about to install:
 ```
 
 That SHA-256 is the personal key's. The fallback key has a different digest, so
-**install only local builds**; CI artifacts and other machines' builds are
-signed with the public fallback key and will not update in place. Moving from
-the old debug key to this one requires one uninstall (app data, including the
-token, is cleared).
+**install only builds signed with the personal key**: local builds, and CI
+builds from `android-distribute` (which materialises the same key from
+OpenBao). Other machines' builds without the key use the public fallback and
+will not update in place. Moving from the old debug key to this one requires
+one uninstall (app data, including the token, is cleared).
 
 ## Firebase (Crashlytics)
 
@@ -217,7 +218,25 @@ usually appear in the console within a few minutes after the next launch.
 ## App Distribution
 
 `projects/mobile/android/distribute.sh` builds, verifies, and uploads the APK
-to Firebase App Distribution. It is for local use only; CI never distributes.
+to Firebase App Distribution. It runs both locally and from the
+`android-distribute` workflow on a push to `develop`.
+
+CI (`.github/workflows/android-distribute.yml`) uses the GitHub Environment
+`Android` and reads `secret/ci/android-distribute` from OpenBao through the
+`android-distribute` JWT role. It materialises the keystore and
+`google-services.json` into `platform/android/keys/` (mode 600) and the
+Firebase service account into `$RUNNER_TEMP/ci/firebase-sa.json`, disconnects
+the VPN, then runs:
+
+```sh
+projects/mobile/android/distribute.sh --ci
+```
+
+`--ci` formats release notes as the squash-merge commit subject, the short SHA
+and the workflow run URL. The APK and the signer check are identical to a local
+run, and every push uploads to the `owner` tester group.
+
+Local:
 
 ```sh
 export ANDROID_HOME="$HOME/Library/Android/sdk"
@@ -245,7 +264,12 @@ home_version_name=…`), so manual uploads can pass the same values.
    started**.
 2. Create the tester group `owner` (or set `HOME_TESTERS_GROUP`) and add your
    own email address.
-3. Run `npx firebase-tools@15.34.2 login` once on the machine that distributes.
+3. Run `npx firebase-tools@15.34.2 login` once on a local machine that
+   distributes outside CI.
+4. For CI, create a GCP service account with the **Firebase App Distribution
+   Admin** role and a JSON key, then store it (with the keystore and
+   `google-services.json`) in OpenBao `secret/ci/android-distribute` — see
+   [OpenBao](../../home/kubernetes/openbao/README.md).
 
 ## Architecture
 

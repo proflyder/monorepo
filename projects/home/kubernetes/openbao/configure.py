@@ -31,6 +31,7 @@ GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_ENVIRONMENT = "Home"
 GITHUB_REF = "refs/heads/develop"
 GITHUB_STATION_ENVIRONMENT = "Station"
+GITHUB_ANDROID_ENVIRONMENT = "Android"
 
 ADMIN_POLICY = """\
 # Full administration, minus operations that can destroy availability or
@@ -78,6 +79,16 @@ path "secret/metadata/ci/test" {
   capabilities = ["read"]
 }
 path "secret/metadata/ci/deploy-home" {
+  capabilities = ["read"]
+}
+"""
+
+CI_ANDROID_POLICY = """\
+# The Android App Distribution job reads exactly its own CI entry.
+path "secret/data/ci/android-distribute" {
+  capabilities = ["read"]
+}
+path "secret/metadata/ci/android-distribute" {
   capabilities = ["read"]
 }
 """
@@ -251,6 +262,24 @@ def ensure_github(bao: Bao, audience: str, repository: str,
         "clock_skew": 60,
     })
     print("role: auth/github/role/deploy-home (audience %s)" % audience)
+    # Android App Distribution runs on a push to develop from the `Android`
+    # Environment. It binds repository + environment + develop like
+    # deploy-home, but gets only the ci-android policy (its own KV record).
+    bao.expect("POST", "/v1/auth/github/role/android-distribute", {
+        "role_type": "jwt",
+        "user_claim": "job_workflow_ref",
+        "bound_audiences": [audience],
+        "bound_claims": {
+            "repository": repository,
+            "environment": GITHUB_ANDROID_ENVIRONMENT,
+            "ref": GITHUB_REF,
+        },
+        "token_policies": ["ci-android"],
+        "token_ttl": "10m",
+        "token_max_ttl": "15m",
+        "clock_skew": 60,
+    })
+    print("role: auth/github/role/android-distribute (audience %s)" % audience)
     if not station_repository:
         return
     # The station deploy runs from a tag through a reusable workflow, so it
@@ -417,6 +446,7 @@ def main() -> None:
     ensure_audit(bao)
     ensure_policy(bao, "admin", ADMIN_POLICY)
     ensure_policy(bao, "ci-deploy", CI_POLICY)
+    ensure_policy(bao, "ci-android", CI_ANDROID_POLICY)
     if station_repository:
         ensure_policy(bao, "ci-station", STATION_POLICY)
     ensure_policy(bao, "k8s-read", K8S_POLICY)
