@@ -230,14 +230,12 @@ cat >/etc/ocserv/config-per-group/lan <<EOF
 # Split tunnel: home LAN only.
 route = $LAN_CIDR
 dns = $DNS
-tunnel-all-dns = false
 EOF
 
 cat >/etc/ocserv/config-per-group/full <<EOF
 # Full tunnel: all client traffic exits through home.
 route = default
 dns = $DNS
-tunnel-all-dns = true
 EOF
 
 cp /etc/ocserv/config-per-group/lan /etc/ocserv/defaults/group.conf
@@ -252,7 +250,6 @@ if [[ -n $CI_HOST ]]; then
 ipv4-network = ${CI_CIDR%/*}
 ipv4-netmask = 255.255.255.0
 route = $CI_HOST/32
-tunnel-all-dns = false
 EOF
 fi
 
