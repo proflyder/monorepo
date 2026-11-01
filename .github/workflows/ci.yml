@@ -28,7 +28,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 env:
   PYTHON_VERSION: "3.13"
@@ -108,7 +108,7 @@ jobs:
   # alarm, ble-gateway or the shared packages.
   go:
     needs: changes
-    if: always() && needs.changes.result == 'success' && needs.changes.outputs.go_units != '[]'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.go_units != '[]' }}
     strategy:
       fail-fast: false
       matrix:
@@ -125,7 +125,7 @@ jobs:
   # One matrix entry per affected application or shared Kotlin library unit.
   android:
     needs: changes
-    if: always() && needs.changes.result == 'success' && needs.changes.outputs.android_units != '[]'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.android_units != '[]' }}
     strategy:
       fail-fast: false
       matrix:
@@ -161,7 +161,7 @@ jobs:
   android-distribute:
     needs: [changes, android]
     if: >-
-      always() &&
+      !cancelled() &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       needs.changes.result == 'success' &&
@@ -210,14 +210,18 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore-only: reuse the warm disk cache the `android` job (_android.yml)
+      # maintains on develop, so this rebuild only redoes the actions the
+      # personal key, google-services and versionCode change (resources,
+      # manifest, packaging, signing) instead of compiling from scratch.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # Action-output disk cache (.bazelrc); Bazelisk/repository caches come
-          # from setup-bazel above.
-          path: ~/.cache/bazel-disk
-          key: android-distribute-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          path: |
+            ~/.cache/bazel-disk
+            ~/.cache/target-determinator
+          key: bazel-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
-            android-distribute-${{ runner.os }}-
+            bazel-android-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the
       # platform/build-tools pinned in MODULE.bazel.
@@ -384,7 +388,7 @@ jobs:
   # One matrix entry per affected Python project suite.
   python:
     needs: changes
-    if: always() && needs.changes.result == 'success' && needs.changes.outputs.python_units != '[]'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.python_units != '[]' }}
     strategy:
       fail-fast: false
       matrix:
@@ -400,7 +404,7 @@ jobs:
   # the actual build+push+roll on develop.
   images:
     needs: changes
-    if: always() && needs.changes.result == 'success' && needs.changes.outputs.deploy_units != '[]'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.deploy_units != '[]' }}
     strategy:
       fail-fast: false
       matrix:
@@ -416,7 +420,7 @@ jobs:
   # scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.
   deploy-control:
     needs: changes
-    if: always() && needs.changes.result == 'success' && needs.changes.outputs.deploy_control == 'true'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.deploy_control == 'true' }}
     uses: ./.github/workflows/_go.yml
     with:
       unit: deploy-control
