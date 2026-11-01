@@ -53,6 +53,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
    (`sudo k3s ctr images import --platform linux/amd64 <archive>`).
 7. Восстановить OpenBao: PV raft/backups, Secret `openbao-seal`,
    recovery keys из `secrets/openbao/`; проверить auto-unseal и логин.
+   Если PV потерян — поднять пустой OpenBao, восстановить snapshot (§6).
 8. Применить Helm releases из репозитория/private values.
 9. Проверить pods, PV, Grafana, HTTPS ingress, ExternalSecrets и voice
    endpoints.
@@ -83,3 +84,69 @@ ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'
 Проверить reboot host/VM без Ethernet, HTTPS ingress, voice, alarm/stop/resume,
 Spotify/MA. Полный disaster restore на запасном железе ещё не выполнялся;
 это не заменяется обычным reboot-тестом.
+
+## 6. Restore OpenBao и scheduler (проверено 2026-11-02)
+
+Учения проводятся на временном локальном стенде (Docker/Colima на Mac) и
+ничего не меняют в live. Live только читается: snapshot, ExternalSecret,
+synced Secrets, `ListSchedules`.
+
+### OpenBao из raft snapshot
+
+```bash
+# при необходимости — свежий snapshot (иначе берётся последний ночной)
+kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
+
+projects/home/kubernetes/openbao/restore_drill.py \
+  --ssh-config secrets/proxmox-install/ssh_config --ssh-host k3s
+```
+
+Скрипт берёт тот же pinned image и `static` seal key, восстанавливает snapshot
+(`sys/storage/raft/snapshot-force`), проверяет auto-unseal после restore и
+после рестарта, выпускает root-токен стенда из recovery keys, сверяет по
+SHA-256 каждое поле ExternalSecret с live Secret и в конце отзывает токен и
+удаляет стенд. Значения не печатаются. Exit 0 — восстановление совпало.
+
+Вручную (для реального восстановления) важно:
+
+- `node_id = "openbao-0"`, конфиг как в `values/openbao.yaml`; иначе после
+  restore нет лидера (`cannot find peer`).
+- Каталог `/openbao/audit` должен быть доступен на запись, иначе post-unseal
+  падает на `failed to setup audit table`.
+- Пустой узел инициализировать временно (`recovery_shares=1`), его токеном
+  выполнить `snapshot-force`; после restore действуют старые recovery keys
+  (3 из 5) и auto-unseal тем же seal key.
+- В OpenBao 2.7 unauthenticated generate-root выключен по умолчанию. Если
+  нет admin-входа, временно добавить в listener
+  `disable_unauthed_generate_root_endpoints = false`, выпустить root по
+  recovery keys, сделать работу, отозвать токен и вернуть настройку.
+- Вне кластера `kubernetes` auth не стартует (нет SA CA) — для стенда это
+  ожидаемо.
+- RPO ночного snapshot — до 24 ч: 2026-11-02 ночной snapshot уже не содержал
+  изменений за 1 ноября. После изменения секретов снимать snapshot вручную.
+
+### Scheduler из SQLite
+
+Источник — каталог `backup.sh` (`secrets/local/backups/scheduler/<ts>`):
+
+```bash
+B=secrets/local/backups/scheduler/<ts>
+(cd "$B" && shasum -a 256 -c SHA256SUMS)
+sqlite3 -readonly "$B/scheduler-data/scheduler.db" 'pragma integrity_check'
+```
+
+Стенд: копия `scheduler.db` в отдельный каталог, live image по digest
+(`kubectl -n home-assistant get deploy scheduler`), тот же env, что в
+`manifests/scheduler.yaml`, свой временный token-файл, порт только на
+`127.0.0.1`. HA bridge не запускать: без consumer события не доставляются.
+Сравнить `GetStatus`, `ListSchedules`, `ListTimers` стенда и live
+(`POST /ricardo.v1.SchedulerService/<Method>`, `Authorization: Bearer`) по
+`id`, `revision`, `nextDueUnix`, `payloadJson`. Затем удалить контейнер и
+копию БД.
+
+В live восстановление — процедура из README scheduler: scale 0, файлы в PVC
+`scheduler-data`, scale 1, `GetStatus`. Правило в live не должно получить
+второй исполнитель.
+
+В бэкапах до 2026-11-02 `SHA256SUMS` содержит строку для самого себя;
+ошибка `shasum -c` только на `./SHA256SUMS` ложная.

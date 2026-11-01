@@ -103,7 +103,8 @@ $KUBECTL -n "$NS" wait --for=condition=Ready "pod/$HELPER" --timeout=120s
 echo "== copying state"
 $KUBECTL -n "$NS" cp "$HELPER:/scheduler-data" "$OUT/scheduler-data"
 $KUBECTL -n "$NS" cp "$HELPER:/bridge-data" "$OUT/bridge-data"
-( cd "$OUT" && find . -type f -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS )
+# The redirect creates SHA256SUMS before find runs: exclude it explicitly.
+( cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS )
 cat "$OUT/SHA256SUMS"
 
 echo "== restoring writers"

@@ -90,6 +90,8 @@
   `ci-deploy` — read только `secret/ci/test` и `secret/ci/deploy-home`.
 - Ночной CronJob raft snapshot в `/srv/k3s/volumes/openbao-backups`
   (7 файлов). Root-токен отозван, recovery keys — только `secrets/openbao/`.
+- Restore OpenBao snapshot и SQLite scheduler проверен на локальном стенде
+  2026-11-02 (`REBUILD.md` §6, `openbao/restore_drill.py`).
 - External Secrets Operator `2.14.0` (chart `2.14.0`, образ по digest) в
   namespace `external-secrets`: `ClusterSecretStore/openbao` через in-cluster
   Service (Kubernetes auth, роль `external-secrets`, KV v2). Источник правды
