@@ -91,8 +91,11 @@ jobs:
           path: |
             ~/.cache/bazel-disk
             ~/.cache/target-determinator
-          key: bazel-android-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          # Per unit: matrix entries share a run, and with one key only the first
+          # (often the small kotlin-shared) could save; the app's cache was lost.
+          key: bazel-android-${{ inputs.unit }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
+            bazel-android-${{ inputs.unit }}-${{ runner.os }}-
             bazel-android-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the

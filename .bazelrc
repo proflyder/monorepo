@@ -20,3 +20,13 @@ common --java_language_version=17
 common --tool_java_language_version=17
 common --java_runtime_version=remotejdk_21
 common --tool_java_runtime_version=remotejdk_21
+
+# Use the released protoc binary instead of compiling protoc from C++ sources:
+# on a cold CI runner that compile was ~40% of the Android app build (the app
+# itself has no protos; rules_android's tools need protoc).
+common --incompatible_enable_proto_toolchain_resolution
+common --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
+
+# Dex and desugar Android libraries in persistent workers instead of one JVM per
+# jar (~1200 actions for the Maven dependencies); output is unchanged.
+build --persistent_android_dex_desugar

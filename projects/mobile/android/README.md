@@ -218,23 +218,37 @@ usually appear in the console within a few minutes after the next launch.
 ## App Distribution
 
 `projects/mobile/android/distribute.sh` builds, verifies, and uploads the APK
-to Firebase App Distribution. It runs both locally and from the
-`android-distribute` workflow on a push to `develop`.
+to Firebase App Distribution. It runs both locally and from CI.
 
-CI (`.github/workflows/android-distribute.yml`) uses the GitHub Environment
-`Android` and reads `secret/ci/android-distribute` from OpenBao through the
-`android-distribute` JWT role. It materialises the keystore and
-`google-services.json` into `platform/android/keys/` (mode 600) and the
-Firebase service account into `$RUNNER_TEMP/ci/firebase-sa.json`, disconnects
-the VPN, then runs:
+CI runs on **every pull request that changes the Android app**:
+`.github/workflows/ci.yml` job `android-distribute` needs the `changes` routing
+and the `android` build, and starts only when `android-app` is among the
+affected units (a `projects/mobile/android/` change or any shared Kotlin/Bazel
+dependency it consumes). The job:
+
+- runs only for pull requests whose head branch lives in this repository: a
+  fork PR gets a read-only token without Environment secrets, so it can never
+  read the signing material;
+- uses the GitHub Environment `Android` and reads
+  `secret/ci/android-distribute` from OpenBao through the `android-distribute`
+  JWT role, whose claims are pinned to pull-request merge refs of `ci.yml`
+  (`refs/pull/*/merge`);
+- materialises the keystore and `google-services.json` into
+  `platform/android/keys/` (mode 600) and the Firebase service account into
+  `$RUNNER_TEMP/ci/firebase-sa.json`, disconnects the VPN, then runs:
 
 ```sh
 projects/mobile/android/distribute.sh --ci
 ```
 
-`--ci` formats release notes as the squash-merge commit subject, the short SHA
-and the workflow run URL. The APK and the signer check are identical to a local
-run, and every push uploads to the `owner` tester group.
+- is deliberately **not** part of `ci-ok`: a failed upload is visible on the PR
+  and in the run, but it does not block the merge. A newer push to the same PR
+  cancels the upload in flight.
+
+`--ci` formats release notes as `PR #<number>: <title>`, the short head SHA and
+the workflow run URL (number and title arrive as environment variables, never
+as script source). The APK, the signer check and the `admins` tester group are
+identical to a local run.
 
 Local:
 
@@ -262,7 +276,7 @@ home_version_name=…`), so manual uploads can pass the same values.
 
 1. Open **App Distribution** in the Firebase console and choose **Get
    started**.
-2. Create the tester group `owner` (or set `HOME_TESTERS_GROUP`) and add your
+2. Create the tester group `admins` (display name «Admins») (or set `HOME_TESTERS_GROUP`) and add your
    own email address.
 3. Run `npx firebase-tools@15.34.2 login` once on a local machine that
    distributes outside CI.

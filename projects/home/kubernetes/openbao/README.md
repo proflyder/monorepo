@@ -241,16 +241,28 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 идемпотентно обновляет роль.
 
 Роль `android-distribute` (`auth/github/role/android-distribute`) обслуживает
-сборку и загрузку Android APK в Firebase App Distribution:
+сборку и загрузку Android APK в Firebase App Distribution внутри PR CI
+(job `android-distribute` в `.github/workflows/ci.yml`):
 
 - `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
 - `bound_audiences` = тот же публичный URL OpenBao, что у `deploy-home`;
-- `bound_claims`: `repository=<owner>/<repo>` (как у `deploy-home`, из
-  `git remote origin` или `OPENBAO_GITHUB_REPOSITORY`), `environment=Android`
-  и `ref=refs/heads/develop`; workflow `.github/workflows/android-distribute.yml`
-  запускается только из `develop`;
+- `bound_claims_type=glob` (единственная роль с глобами): `repository=<owner>/<repo>`
+  (как у `deploy-home`, из `git remote origin` или
+  `OPENBAO_GITHUB_REPOSITORY`), `environment=Android`,
+  `ref=refs/pull/*/merge`, `job_workflow_ref=<owner>/<repo>/.github/workflows/ci.yml@refs/pull/*/merge`
+  и `event_name=pull_request`. Так токен может выпустить только job из самого
+  `ci.yml` на merge-ref конкретного PR;
 - `user_claim=job_workflow_ref`, `token_policies=["ci-android"]`, TTL 10 мин,
   max 15 мин, `clock_skew=60`.
+
+Модель доверия: OIDC получают только PR из веток этого же репозитория — у PR
+из форка прогон read-only, без Environment-секретов и без права на роль, поэтому
+подделать `repository`/`job_workflow_ref` нельзя. Остаточный риск осознан: тот,
+кто может пушить ветку в репозиторий, может изменить `ci.yml` и получить
+секреты сборки Android. Для репозитория с одним владельцем это приемлемо;
+роль даёт read ровно одной записи `secret/ci/android-distribute` и TTL 10 минут.
+Другие роли (`deploy-home`, `deploy-station`) остаются с точными claims и без
+глобов.
 
 Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}`,
 `secret/ci/deploy-home` → `{kubeconfig, scheduler_env, runtime_values}` (см.
@@ -354,10 +366,17 @@ SHA-256 прочитанного значения с локальным файл
 workflow: обновить ключ, при необходимости перезапустить `deploy-home`
 (токен роли живёт ≤15 мин и не хранится).
 
-Environment `Android` (workflow `android-distribute`) хранит те же четыре
-значения доступа: `VPN_SERVER`, `VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD`,
-`OPENBAO_ADDR`; роль выбирается в workflow (`android-distribute`), отдельного
-`OPENBAO_ROLE` нет.
+Environment `Android` (job `android-distribute` в PR CI, `ci.yml`) хранит те
+же четыре значения доступа: `VPN_SERVER`, `VPN_CERT_P12_B64`,
+`VPN_CERT_PASSWORD`, `OPENBAO_ADDR`; роль выбирается в workflow
+(`android-distribute`), отдельного `OPENBAO_ROLE` нет.
+
+Deployment branch policy этого Environment **должна разрешать PR-head-ветки**:
+правила вида `*` и `*/*` (protected branches и теги — как удобно). Ограничение
+ref'а делает роль OpenBao (`refs/pull/*/merge` + `job_workflow_ref`), а не
+Environment: если оставить политику только на `develop`, job упадёт ещё до
+получения OIDC-токена. Секреты и роль доступны и PR-прогонам, но только из
+этого репозитория: форки не получают ни секретов Environment, ни OIDC-токена.
 
 ### Android-секреты (App Distribution)
 
