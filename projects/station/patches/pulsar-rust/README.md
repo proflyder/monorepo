@@ -1,7 +1,7 @@
 # Локальные изменения Rust Pulsar
 
 `base.json` фиксирует pinned upstream base и текущий HEAD (сейчас
-`v0.5.3` = `504830d`, HEAD `ccef054`, тег `v0.5.1002`, ветка `main`; детали — в
+`v0.5.3` = `504830d`, HEAD `fc9ac70`, тег `v0.5.1002`, ветка `main`; детали — в
 самом `base.json`), `local.patch` —
 полный delta от базы до worktree: committed, staged, unstaged и новые
 исходники. Активный checkout `projects/station/upstream/pulsar-rust/` скрипт
