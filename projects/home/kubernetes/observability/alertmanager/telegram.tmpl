@@ -1,0 +1,50 @@
+{{/*
+  Telegram message (parse_mode HTML) for the home Alertmanager.
+  Header: status icon, alert name, severity and count; then up to five alerts
+  with summary, description, where and since when (Asia/Almaty), runbook link.
+  Every label/annotation value goes through `html` so <, > and & cannot break
+  Telegram's HTML parser.
+*/}}
+
+{{ define "home.time" }}{{ (.StartsAt | tz "Asia/Almaty").Format "02.01 15:04" }}{{ end }}
+
+{{ define "home.where" -}}
+{{ if or .Labels.namespace .Labels.pod .Labels.instance }}📍 <code>
+{{- with .Labels.namespace }}{{ . | html }}{{ end }}
+{{- if and .Labels.namespace (or .Labels.pod .Labels.instance) }} / {{ end }}
+{{- with .Labels.pod }}{{ . | html }}{{ else }}{{ with .Labels.instance }}{{ . | html }}{{ end }}{{ end -}}
+</code>   {{ end }}
+{{- end }}
+
+{{ define "home.alert" -}}
+▸ {{ if .Annotations.summary }}{{ .Annotations.summary | html }}{{ else }}{{ .Labels.alertname | html }}{{ end }}
+{{- with .Annotations.description }}
+<i>{{ . | html }}</i>
+{{- end }}
+{{ template "home.where" . }}🕒 с {{ template "home.time" . }}
+{{- with .Annotations.runbook_url }}   <a href="{{ . }}">runbook</a>{{ end }}
+{{- end }}
+
+{{ define "telegram.home.message" -}}
+{{- $severity := .CommonLabels.severity -}}
+{{- if eq .Status "firing" -}}
+{{ if eq $severity "critical" }}🔴{{ else }}🟠{{ end }} <b>{{ .CommonLabels.alertname | html }}</b>
+{{- with $severity }} · {{ . }}{{ end }}
+{{- if gt (len .Alerts.Firing) 1 }} · ×{{ len .Alerts.Firing }}{{ end }}
+{{ range $i, $a := .Alerts.Firing }}{{ if lt $i 5 }}
+{{ template "home.alert" $a }}
+{{ end }}{{ end }}
+{{- if gt (len .Alerts.Firing) 5 }}
+…всего {{ len .Alerts.Firing }}
+{{ end }}
+{{- if .Alerts.Resolved }}
+✅ решено: {{ len .Alerts.Resolved }}
+{{- end }}
+{{- else -}}
+✅ <b>{{ .CommonLabels.alertname | html }}</b> · решено
+{{ range $i, $a := .Alerts.Resolved }}{{ if lt $i 5 }}
+▸ {{ if $a.Annotations.summary }}{{ $a.Annotations.summary | html }}{{ else }}{{ $a.Labels.alertname | html }}{{ end }}
+{{ template "home.where" $a }}🕒 {{ template "home.time" $a }} → {{ ($a.EndsAt | tz "Asia/Almaty").Format "15:04" }}
+{{ end }}{{ end }}
+{{- end -}}
+{{- end }}

@@ -54,6 +54,8 @@
   currency-bot (`telegram_configs`, resolved тоже). Конфиг — Secret
   `alertmanager-telegram`, его рендерит ESO из `k8s/currency-bot/currency-bot`
   (`BOT_TOKEN`, второй `CHAT_ID`); Watchdog и info не отправляются.
+  Оформление — HTML-шаблон `observability/alertmanager/telegram.tmpl`
+  (ConfigMap `alertmanager-templates`, время Asia/Almaty).
   Доставка проверена тестовым алертом 2026-11-01.
 - Grafana: LAN `http://192.0.2.27:30300/` (корень), HTTPS
   `https://grafana.home.example.com/`.

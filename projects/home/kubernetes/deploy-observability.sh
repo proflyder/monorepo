@@ -12,6 +12,9 @@ kubectl -n monitoring wait --for=condition=Ready externalsecret/grafana-admin --
 # currency bot's OpenBao entry; the Alertmanager reads it via configSecret.
 kubectl apply -f "$ROOT/projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml"
 kubectl -n monitoring wait --for=condition=Ready externalsecret/alertmanager-telegram --timeout=120s
+kubectl -n monitoring create configmap alertmanager-templates \
+  --from-file="$ROOT/projects/home/kubernetes/observability/alertmanager/telegram.tmpl" \
+  --dry-run=client -o yaml | kubectl apply -f -
 # Real server URL overrides belong in a private values file, never in Git.
 extra=()
 if [[ -n "${PROMETHEUS_PRIVATE_VALUES:-}" ]]; then

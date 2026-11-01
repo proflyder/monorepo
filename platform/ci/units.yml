@@ -390,6 +390,7 @@ units:
       - projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml
       - projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml
       - projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml
+      - projects/home/kubernetes/observability/alertmanager/**
       - projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml
     python:
       suites:
