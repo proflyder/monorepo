@@ -155,7 +155,7 @@ func (d *Deps) infraReport(ctx context.Context, _ *mcp.CallToolRequest, in infra
 		}
 	}
 	detail.Verdict = reportVerdict(detail)
-	detail.Text = formatServiceReport(detail, cat, in.Verbose)
+	detail.Text = formatServiceReport(detail, cat, in.Verbose, d.location())
 	return respond(Result{Speech: detail.Verdict, Details: detail})
 }
 
@@ -322,9 +322,9 @@ func reportHeadline(detail infraReportDetail) string {
 	return fmt.Sprintf("⚠️ Есть проблемы: %d из %d", detail.Problems, detail.Total)
 }
 
-func formatServiceReport(detail infraReportDetail, cat *catalog.Catalog, verbose bool) string {
+func formatServiceReport(detail infraReportDetail, cat *catalog.Catalog, verbose bool, loc *time.Location) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Отчёт по инфраструктуре, %s\n", humanStamp(detail.CheckedAt))
+	fmt.Fprintf(&b, "Отчёт по инфраструктуре, %s\n", humanStamp(detail.CheckedAt, loc))
 	b.WriteString(reportHeadline(detail) + "\n")
 	if len(detail.Errors) > 0 {
 		fmt.Fprintf(&b, "⚠️ Проверка неполная: %s\n", detail.Errors[0])
@@ -661,10 +661,13 @@ func humanAge(d time.Duration) string {
 	}
 }
 
-func humanStamp(raw string) string {
+func humanStamp(raw string, loc *time.Location) string {
 	parsed, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
 		return raw
 	}
-	return parsed.Format("02.01 15:04")
+	if loc == nil {
+		loc = time.UTC
+	}
+	return parsed.In(loc).Format("02.01 15:04")
 }

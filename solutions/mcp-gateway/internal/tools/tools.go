@@ -96,6 +96,10 @@ type Deps struct {
 	Logger  *slog.Logger
 	Now     func() time.Time
 
+	// Location renders human-facing clock times (for example the report
+	// header). A nil Location means UTC.
+	Location *time.Location
+
 	// Cooldown is the minimum interval between restarts of one workload.
 	Cooldown time.Duration
 	// SelfRestartDelay defers a self-disrupting restart so the reply is spoken.
@@ -122,6 +126,14 @@ func (d *Deps) now() time.Time {
 		return d.Now()
 	}
 	return time.Now()
+}
+
+// location is the configured human-facing timezone; UTC when unset.
+func (d *Deps) location() *time.Location {
+	if d.Location != nil {
+		return d.Location
+	}
+	return time.UTC
 }
 
 func (d *Deps) logger() *slog.Logger {

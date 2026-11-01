@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	_ "time/tzdata" // embed IANA data: the image is distroless
 
 	"ricardo.local/monorepo/solutions/mcp-gateway/app"
 )

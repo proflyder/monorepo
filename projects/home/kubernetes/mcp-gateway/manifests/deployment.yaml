@@ -56,6 +56,10 @@ spec:
               value: infra.read,infra.fix,infra.report
             - name: MCP_HTTP_ADDR
               value: ":8080"
+            # Human-facing clock times in report/alert texts. IANA zone; the
+            # binary embeds tzdata because the image is distroless.
+            - name: MCP_TIMEZONE
+              value: Asia/Almaty
             - name: MCP_AUTH_TOKEN_FILE
               value: /run/secrets/mcp-gateway-auth/token
             - name: MCP_INFRA_CATALOG_FILE

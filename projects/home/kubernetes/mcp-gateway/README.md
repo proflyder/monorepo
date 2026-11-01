@@ -88,6 +88,10 @@ Tracked files contain only placeholders/TEST-NET values.
   `verbose: true` appends a compact «Версии» section. The text is capped at
   3500 characters. `title` replaces the first alias everywhere a human name is
   shown, and `group_order` fixes the section order.
+- Human-facing clock times use `MCP_TIMEZONE` (the Deployment sets
+  `Asia/Almaty`, matching the Alertmanager Telegram template); the header is
+  rendered in that zone, while `details.checkedAt` stays UTC RFC3339. The
+  binary embeds IANA tzdata, so the distroless image needs no zoneinfo files.
 - `containers[0]` names the container whose image represents a workload
   (`prometheus`, `alertmanager`, …), so a config-reloader sidecar cannot
   become the reported image. Without it the gateway matches the workload name

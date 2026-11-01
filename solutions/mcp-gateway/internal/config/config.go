@@ -26,6 +26,7 @@ const (
 	DefaultReportTimeout    = 9 * time.Second
 	DefaultLogByteCap       = 64 << 10
 	DefaultTelegramAPIURL   = "https://api.telegram.org"
+	DefaultTimezone         = "UTC"
 )
 
 // Config is a validated process configuration.
@@ -63,6 +64,11 @@ type Config struct {
 	StatusTimeout    time.Duration
 	ReportTimeout    time.Duration
 	LogByteCap       int
+
+	// Timezone is the IANA zone used for human-facing clock times in tool
+	// texts (for example the report header). Location is its loaded form.
+	Timezone string
+	Location *time.Location
 }
 
 // Load reads and validates the process environment.
@@ -83,7 +89,14 @@ func load(getenv func(string) string, readFile func(string) ([]byte, error)) (Co
 		TelegramAPIURL:    valueOr(getenv, "TELEGRAM_API_URL", DefaultTelegramAPIURL),
 		TelegramTokenFile: strings.TrimSpace(getenv("TELEGRAM_BOT_TOKEN_FILE")),
 		TelegramChatFile:  strings.TrimSpace(getenv("TELEGRAM_CHAT_ID_FILE")),
+		Timezone:          valueOr(getenv, "MCP_TIMEZONE", DefaultTimezone),
 	}
+
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return cfg, fmt.Errorf("MCP_TIMEZONE: unknown IANA timezone %q", cfg.Timezone)
+	}
+	cfg.Location = loc
 
 	cfg.Groups = splitList(valueOr(getenv, "MCP_GROUPS", DefaultGroups))
 	if len(cfg.Groups) == 0 {

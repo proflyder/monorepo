@@ -65,6 +65,7 @@ func Run(ctx context.Context) error {
 		Metrics:          m,
 		Logger:           logger,
 		Now:              time.Now,
+		Location:         cfg.Location,
 		Cooldown:         cfg.Cooldown,
 		SelfRestartDelay: cfg.SelfRestartDelay,
 		QueryTimeout:     cfg.QueryTimeout,
@@ -161,6 +162,7 @@ func Run(ctx context.Context) error {
 		"pending_ttl", cfg.PendingTTL.String(),
 		"cooldown", cfg.Cooldown.String(),
 		"self_restart_delay", cfg.SelfRestartDelay.String(),
+		"timezone", cfg.Timezone,
 	)
 
 	serveErr := make(chan error, 1)
