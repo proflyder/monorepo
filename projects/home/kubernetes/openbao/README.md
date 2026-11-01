@@ -42,6 +42,8 @@ projects/home/kubernetes/openbao/
   configure.py       KV v2, auth-методы, политики, роли, тестовые записи, TOTP
   test_configure.py  контракты ролей/политик (в т.ч. deploy-station)
   verify.sh          HTTPS/UI/логин/политики (+ --kubernetes: под-проба)
+  restore_drill.py   restore snapshot на локальном стенде и сверка с live
+                     (docs/REBUILD.md §6); test_restore_drill.py — его тесты
   values/openbao.yaml
   manifests/storage.yaml        PV data/backups
   manifests/ingressroute.yaml
