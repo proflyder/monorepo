@@ -413,6 +413,15 @@ class AndroidDistributionTests(unittest.TestCase):
         for changed in (".github/workflows/ci.yml", ".github/workflows/_android.yml", "docs/STATE.md"):
             self.assertFalse(self._route([changed]).android_distribute, changed)
 
+    def test_markdown_inside_android_tree_does_not_distribute(self):
+        for changed in ("projects/mobile/android/README.md", "packages/kotlin/core/README.md"):
+            self.assertFalse(self._route([changed]).android_distribute, changed)
+        self.assertTrue(
+            self._route(
+                ["projects/mobile/android/README.md", "projects/mobile/android/app/BUILD.bazel"]
+            ).android_distribute
+        )
+
     def test_distribution_paths_cover_android_units_and_platform_tooling(self):
         paths = affected.android_distribute_paths(self.config)
         for pattern in (

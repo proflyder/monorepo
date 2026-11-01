@@ -438,10 +438,15 @@ def android_distribute_paths(config: Config) -> list[str]:
 
 
 def android_distribution(config: Config, changed: list[str]) -> bool:
-    """Whether a changed path is an actual Android application input."""
-    if not changed:
+    """Whether a changed path is an actual Android application input.
+
+    Markdown is documentation even inside the app tree: it never reaches the
+    APK, so a README edit must not publish a build.
+    """
+    inputs = [path for path in changed if not path.lower().endswith(".md")]
+    if not inputs:
         return False
-    return any(path_matches(path, android_distribute_paths(config)) for path in changed)
+    return any(path_matches(path, android_distribute_paths(config)) for path in inputs)
 
 
 def _invalidated_platforms(
