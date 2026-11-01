@@ -22,7 +22,7 @@ JWT-метод обслуживает второй репозиторий (фо�
 | Storage | `raft` на локальном PV 10 GiB | встроенный snapshot/restore, без внешней БД; один узел, HA не заявляется |
 | Seal | `static` auto-unseal, ключ 32 байта в Secret `openbao-seal` | после перезагрузки узла сервер распечатывается сам; не нужен человек и внешний KMS |
 | TLS | терминируется в Traefik, listener `8200` без TLS | один wildcard-сертификат и allow-list, как у остальных сервисов |
-| Audit | декларативный `audit "file"` на PV 5 GiB | OpenBao 2.7 запрещает включать audit через API; конфиг переживает рестарт |
+| Audit | декларативный `audit "file" "stdout"` → Alloy → Loki | OpenBao 2.7 запрещает включать audit через API; kubelet ротирует лог, полный диск не блокирует запросы |
 | Человек | `userpass` + политика `admin`, пароль в `secrets/openbao/` | UI поддерживает логин/пароль; TOTP включается отдельно (см. ниже) |
 | CI | `jwt` mount `github`, GitHub OIDC, без статических токенов | role привязан к repository/environment/ref и короткому TTL |
 | Поды | `kubernetes` auth через TokenReview | SA-идентичность; используется External Secrets Operator |
@@ -43,7 +43,7 @@ projects/home/kubernetes/openbao/
   test_configure.py  контракты ролей/политик (в т.ч. deploy-station)
   verify.sh          HTTPS/UI/логин/политики (+ --kubernetes: под-проба)
   values/openbao.yaml
-  manifests/storage.yaml        PV data/audit/backups
+  manifests/storage.yaml        PV data/backups
   manifests/ingressroute.yaml
   manifests/backup.yaml         CronJob raft snapshot
   manifests/smoke-kubernetes.yaml
@@ -458,9 +458,15 @@ kubectl get externalsecret -A
 
 - `503` от Traefik: под не Ready (sealed/не инициализирован) или allow-list.
 - `error parsing 'audit'`: у `audit` два label — тип и путь
-  (`audit "file" "file" { options { file_path = … } }`).
+  (`audit "file" "stdout" { options { file_path = "stdout" } }`).
 - `invalid audience (aud) claim`: у k8s-роли остался `audience`; в
   `configure.py` он пустой, потому что подовый токен проецируется с
   audience API-сервера.
+- `failed to setup audit table` / `unable to open … for writing` в цикле
+  `post-unseal setup` → `pre-seal teardown`: в raft осталось устройство,
+  чей путь больше не смонтирован (так было при переходе `file/` → `stdout/`).
+  Временно смонтировать `emptyDir` в старый путь (`server.volumes` и
+  `volumeMounts`), перезапустить под: устройство откроется, декларативный
+  конфиг его отключит. Затем убрать `emptyDir` и перезапустить ещё раз.
 - `cannot enable audit device via API`: используйте декларативный `audit`
   в конфиге (2.7+).

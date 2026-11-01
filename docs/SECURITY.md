@@ -122,8 +122,9 @@
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
   `external-secrets` используется External Secrets Operator (namespace
   `external-secrets`), который создаёт Secrets приложений из OpenBao.
-- Audit — декларативный файловый девиз на отдельном PV; лог не публикуется и
-  может содержать пути/metadata запросов.
+- Audit — декларативный девайс `stdout/`: kubelet ротирует лог, Alloy
+  отправляет его в Loki (7 дней). Значения в записях HMAC-хэшированы, но пути
+  и metadata запросов видны — Loki доступен только из LAN/VPN.
 - Backup — raft snapshot в локальный PV на том же узле; offsite-копия пока
   открытый пункт, восстановление на отдельном стенде не проверялось.
 - Приложенческие Secrets (`scheduler-auth`, `ha-bridge-ha`,

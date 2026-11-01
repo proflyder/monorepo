@@ -120,6 +120,14 @@ class AlloyPrivacy(unittest.TestCase):
         )
         self.assertIn("currency-bot", keep.group(1).split("|"))
 
+    def test_openbao_audit_namespace_is_collected(self):
+        keep = re.search(
+            r'source_labels = \["__meta_kubernetes_namespace"\]\s*'
+            r'regex = "([^"]+)"',
+            self.content,
+        )
+        self.assertIn("openbao", keep.group(1).split("|"))
+
     def test_telegram_bot_token_is_redacted(self):
         secret = "TESTTESTTESTTESTTESTTESTTESTTESTTES"
         self.assertEqual(len(secret), 35)

@@ -54,9 +54,8 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 
 - `/srv/k3s/runtime` — K3s data, containerd, datastore.
 - `/srv/k3s/volumes/hermes` — Hermes home, в Pod `/opt/data`.
-- `/srv/k3s/volumes/openbao{, -audit, -backups}` — OpenBao raft, audit-лог и
-  raft snapshots (PV `openbao-data`/`openbao-audit`/`openbao-backups`,
-  `ricardo-existing`, `Retain`).
+- `/srv/k3s/volumes/openbao{, -backups}` — OpenBao raft и raft snapshots
+  (PV `openbao-data`/`openbao-backups`, `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
 - Host-дерева `/opt/ricardo` и запасных релизов нет: откат — только
   digest-pinned образы в GHCR/containerd, деплой — `converge.py`.
@@ -218,7 +217,7 @@ Traefik — не запускать там второй прокси без ос
 ## OpenBao
 
 `openbao` namespace: StatefulSet `openbao-0`, raft на PV, декларативный
-файловый audit, UI/API `https://vault.home.example.com/` через Traefik.
+audit в stdout (Loki: `{namespace="openbao"}`), UI/API `https://vault.home.example.com/` через Traefik.
 Auto-unseal — `static` seal (Secret `openbao-seal`), поэтому после рестарта
 пода распечатывание не требуется.
 

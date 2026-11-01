@@ -10,7 +10,7 @@
 #
 # Optional environment:
 #   OPENBAO_NODE_SSH  full ssh command for the K3s node, used to create
-#                     /srv/k3s/volumes/openbao{,-audit,-backups}
+#                     /srv/k3s/volumes/openbao{,-backups}
 #   OPENBAO_NODE_NAME node name for PV nodeAffinity (default: the only node)
 #   OPENBAO_SKIP_DNS=1  do not touch the Cloudflare A record
 #
@@ -79,7 +79,7 @@ kubectl -n "$OPENBAO_NS" create secret generic openbao-seal \
 # ----- local volume directories and PVs -----------------------------------
 NODE_NAME="${OPENBAO_NODE_NAME:-$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')}"
 if [[ -n "${OPENBAO_NODE_SSH:-}" ]]; then
-  $OPENBAO_NODE_SSH 'sudo install -d -m 700 /srv/k3s/volumes/openbao /srv/k3s/volumes/openbao-audit /srv/k3s/volumes/openbao-backups'
+  $OPENBAO_NODE_SSH 'sudo install -d -m 700 /srv/k3s/volumes/openbao /srv/k3s/volumes/openbao-backups'
 else
   echo "note: set OPENBAO_NODE_SSH to create /srv/k3s/volumes/openbao* on the node on first install" >&2
 fi
@@ -88,6 +88,15 @@ sed "s|__OPENBAO_NODE_NAME__|$NODE_NAME|g" "$MANIFESTS/storage.yaml" | kubectl a
 # ----- helm release --------------------------------------------------------
 sed "s|__OPENBAO_IMAGE_TAG__|$IMAGE_TAG|g" "$VALUES/openbao.yaml" > "$TMP/values.yaml"
 chmod 600 "$TMP/values.yaml"
+
+# StatefulSet volumeClaimTemplates are immutable. A release that still has the
+# old audit volume is removed with --cascade=orphan (the pod and data PVC stay)
+# so helm can recreate it without the audit claim.
+if kubectl -n "$OPENBAO_NS" get statefulset openbao \
+    -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null \
+    | tr ' ' '\n' | grep -qx audit; then
+  kubectl -n "$OPENBAO_NS" delete statefulset openbao --cascade=orphan
+fi
 
 helm repo add openbao https://openbao.github.io/openbao-helm --force-update >/dev/null
 helm repo update openbao >/dev/null

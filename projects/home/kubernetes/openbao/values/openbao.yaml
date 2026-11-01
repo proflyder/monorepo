@@ -67,10 +67,12 @@ server:
       }
 
       # Declarative audit device (OpenBao 2.7 refuses API enablement). The
-      # device is (re)created on start and SIGHUP; logs stay on the audit PV.
-      audit "file" "file" {
+      # device is (re)created on start and SIGHUP. It writes to stdout: kubelet
+      # rotates the container log and Alloy ships it to Loki, so a full audit
+      # disk can never block requests. Values in audit entries are HMACed.
+      audit "file" "stdout" {
         options {
-          file_path = "/openbao/audit/audit.log"
+          file_path = "stdout"
         }
       }
 
@@ -81,10 +83,7 @@ server:
     storageClass: ricardo-existing
 
   auditStorage:
-    enabled: true
-    size: 5Gi
-    mountPath: "/openbao/audit"
-    storageClass: ricardo-existing
+    enabled: false
 
   # The seal key is a Secret, not a ConfigMap: it is never rendered into the
   # Helm release or written to the repository.
