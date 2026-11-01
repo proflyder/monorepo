@@ -71,8 +71,13 @@ Pulsar пишет реальные события детектора в `/data/p
 Это тот же PCM, что слышит детектор, без усиления. Рядом `stats.json`:
 часы активного прослушивания, счётчики и `model_sha256`.
 
-Сущности HA: `button.wake_false_alarm` («ложное срабатывание»),
-`button.wake_missed`, `switch.wake_event_recording`, `switch.wake_dry_run`.
+Сущности HA (устройство «Яндекс Станция Миди»): кнопки «Wake: ложное
+срабатывание» (`button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie`) и
+«Wake: не услышала» (`button.iandeks_stantsiia_midi_wake_ne_uslyshala`),
+переключатели «Wake: запись событий» и «Wake: тестовый режим (без ответа)».
+«Ложное срабатывание» помечает последний hit за 10 минут как `false`;
+«не услышала» сохраняет последние 6 с как `miss` — жать сразу после
+неуслышанного «Рикардо».
 Запись выключена только явным переключателем; dry-run пишет `outcome=dry_run`
 и не запускает ассистента.
 
