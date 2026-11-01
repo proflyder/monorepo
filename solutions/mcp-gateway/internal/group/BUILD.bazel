@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "group",
+    srcs = ["group.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/group",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+    deps = ["@com_github_modelcontextprotocol_go_sdk//mcp"],
+)
+
+go_test(
+    name = "group_test",
+    srcs = ["group_test.go"],
+    embed = [":group"],
+    deps = ["@com_github_modelcontextprotocol_go_sdk//mcp"],
+)

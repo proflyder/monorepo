@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "app",
+    srcs = ["run.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/app",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//solutions/mcp-gateway/internal/alertmanager",
+        "//solutions/mcp-gateway/internal/catalog",
+        "//solutions/mcp-gateway/internal/config",
+        "//solutions/mcp-gateway/internal/group",
+        "//solutions/mcp-gateway/internal/kubernetes",
+        "//solutions/mcp-gateway/internal/loki",
+        "//solutions/mcp-gateway/internal/metrics",
+        "//solutions/mcp-gateway/internal/pending",
+        "//solutions/mcp-gateway/internal/prometheus",
+        "//solutions/mcp-gateway/internal/server",
+        "//solutions/mcp-gateway/internal/telegram",
+        "//solutions/mcp-gateway/internal/tools",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)

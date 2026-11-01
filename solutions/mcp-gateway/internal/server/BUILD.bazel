@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "server",
+    srcs = ["server.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/server",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+    deps = ["//solutions/mcp-gateway/internal/metrics"],
+)
+
+go_test(
+    name = "server_test",
+    srcs = ["server_test.go"],
+    embed = [":server"],
+    deps = ["@com_github_modelcontextprotocol_go_sdk//mcp"],
+)

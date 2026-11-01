@@ -139,6 +139,21 @@ units:
         - ./solutions/currency-bot/cmd/currency-bot
         - ./solutions/currency-bot/cmd/currency-bot-import
 
+  - id: mcp-gateway
+    platform: go
+    title: "solutions/mcp-gateway (MCP infra tool groups)"
+    paths:
+      - solutions/mcp-gateway/**
+    # No deploy block yet: the Kubernetes manifests, RBAC and catalog
+    # ConfigMap are owned by a separate project-side change.
+    go:
+      module: "."
+      packages:
+        - ./solutions/mcp-gateway/...
+      race: true
+      build:
+        - ./solutions/mcp-gateway/cmd/mcp-gateway
+
   - id: ha-bridge
     platform: go
     title: "solutions/ha-bridge (home executor + ha-control)"

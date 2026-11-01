@@ -1,0 +1,45 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tools",
+    srcs = [
+        "fix.go",
+        "read.go",
+        "report.go",
+        "tools.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/tools",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+    deps = [
+        "//solutions/mcp-gateway/internal/alertmanager",
+        "//solutions/mcp-gateway/internal/catalog",
+        "//solutions/mcp-gateway/internal/kubernetes",
+        "//solutions/mcp-gateway/internal/loki",
+        "//solutions/mcp-gateway/internal/metrics",
+        "//solutions/mcp-gateway/internal/pending",
+        "//solutions/mcp-gateway/internal/prometheus",
+        "//solutions/mcp-gateway/internal/redact",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)
+
+go_test(
+    name = "tools_test",
+    srcs = [
+        "fakes_test.go",
+        "fix_test.go",
+        "read_test.go",
+        "report_test.go",
+    ],
+    embed = [":tools"],
+    deps = [
+        "//solutions/mcp-gateway/internal/alertmanager",
+        "//solutions/mcp-gateway/internal/catalog",
+        "//solutions/mcp-gateway/internal/kubernetes",
+        "//solutions/mcp-gateway/internal/loki",
+        "//solutions/mcp-gateway/internal/metrics",
+        "//solutions/mcp-gateway/internal/pending",
+        "//solutions/mcp-gateway/internal/prometheus",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
+)

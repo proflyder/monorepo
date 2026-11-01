@@ -12,6 +12,7 @@ solutions/               переиспользуемые решения
   scheduler/             durable scheduler, SQLite queues, Connect/gRPC
   alarm/                 legacy AlarmService facade над тем же engine
   ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler (+ cmd/ha-control)
+  mcp-gateway/           MCP Streamable HTTP: infra.read / infra.fix / infra.report
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (+ checked-in Go stubs)

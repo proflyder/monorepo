@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "alertmanager",
+    srcs = ["client.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+)
+
+go_test(
+    name = "alertmanager_test",
+    srcs = ["client_test.go"],
+    embed = [":alertmanager"],
+)
