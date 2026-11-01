@@ -80,6 +80,87 @@ Run-каталог после обучения не переиспользует
 сохраняйте исходные результаты и создавайте новый run. Изменение исходных
 файлов/модели ASR требует нового cache/run, а не использования старых меток.
 
+## Wake-события со станции
+
+Pulsar записывает реальные срабатывания on-device «Рикардо» в
+`/data/pulsar/wake-events/` (контракт схемы 1): `hit` (подтверждённый детектор),
+`near` (пик ниже порога) и `miss` (кнопка «Wake: не услышала»). Боковые JSON
+содержат окно, `score_peak`, `outcome`, `model_sha256` и пользовательскую
+метку. Это единственный источник настоящих бытовых false positives; синтетика
+и короткие фоновые записи их не заменяют.
+
+Цикл: `collect → review/label → report → to-manifest → finetune → evaluate →
+calibrate → deploy`. Записи, метрики и манифесты остаются в `secrets/` и
+приватном run-каталоге, вне Git.
+
+```sh
+python station_events.py collect --host 192.0.2.13 --ssh-key PRIVATE_KEY \
+  --dest secrets/datasets/station-events
+python station_events.py review --events secrets/datasets/station-events
+python station_events.py label --events secrets/datasets/station-events \
+  --id EVENT_ID --label false        # false | true | missed
+python station_events.py report --events secrets/datasets/station-events \
+  --output PRIVATE_RUN/station-report.json
+python station_events.py to-manifest --events secrets/datasets/station-events \
+  --output PRIVATE_RUN/station-manifest.json
+```
+
+- `collect` тянет каталог одним потоком `ssh host tar -C … -cf - .` (busybox,
+  без rsync) в неизменяемый каталог-снимок по UTC с `SHA256SUMS`. Уже
+  полученные `id`+SHA256 пропускаются; снимок не перезаписывается. Схема
+  sidecar проверяется, неизвестная отклоняется. `stats.json` сохраняется в
+  `stats/` и служит источником часов прослушивания. `--prune-labeled` —
+  единственный путь удаления на устройстве: только файлы, уже проверенные
+  локально и имеющие метку (`false`/`true`/`missed`); без флага устройство
+  не меняется.
+- `label` пишет локальный `labels.json`; оригиналы снимка не меняются.
+- `review` печатает неразмеченные подозрительные `hit` с `outcome`
+  `empty_stt`/`cancelled` и путями к WAV.
+- `report` считает по `kind`/`label`/`outcome` и по `model_sha256`:
+  часы прослушивания (дельты кумулятивного `stats.json`), подтверждённые
+  false hits/час (`label=false`), подозрительные/час, near-miss/час и
+  отдельно dry-run FP/ч.
+- `to-manifest` копирует нужные WAV в `PRIVATE_RUN/recordings/` и пишет
+  записи, совместимые с `finetune.py`:
+  - `label=false` hits и `near` → отрицательные, `hard_negative=true`,
+    весь 4-секундный клип отрицателен; near можно исключить
+    `--no-near-negatives`;
+  - неразмеченные `empty_stt`/`cancelled` по умолчанию не используются;
+    `--include-suspected` добавляет их как hard negatives — риск: часть
+    таких клипов содержит настоящее обращение, это осознанный компромисс;
+  - `label=true`/`missed` → только `review_regions` (позиция слова внутри
+    клипа неизвестна), автоматических позитивов нет.
+  Дни UTC детерминированно делятся хешем на train/val/test (70/15/15), поэтому
+  соседние клипы не расходятся по сплитам. Нужно, чтобы среди собранных дней
+  были и train-, и val-дни (обычно не меньше трёх суток); при нехватке
+  `finetune.py` явно остановится.
+
+`finetune.py --extra-manifest PRIVATE_RUN/station-manifest.json` объединяет
+записи с основным manifest по уникальному `id`. Станция идёт отдельным
+bucket «station false positives» (12.5% батча вместе с личными hard negatives;
+25%, если личных hard negatives нет), чтобы не растворяться в обычном фоне.
+Без `--extra-manifest` прежние рецепты bucket'ов не меняются. Сочетание со
+`--extra-features` и `synthetic_hard_features` пока запрещено явной ошибкой.
+
+Калибровка порога и окна — на тех же replay-оценках, без дублирования
+потоковой симуляции:
+
+```sh
+python calibrate.py --model PRIVATE_MODEL_DIR/ru_ricardo_mww.tflite \
+  --positives PRIVATE_RUN/recordings --events secrets/datasets/station-events \
+  --output PRIVATE_RUN/calibration.json --manifest PRIVATE_MODEL_DIR/ru_ricardo_mww.json
+```
+
+Таблица `(cutoff, window)` показывает recall на позитивах и FP/ч на
+подтверждённых station false hits (часы — из `stats.json`). `--positives` —
+каталог положительных записей (фоновые дорожки и записи с `excluded`
+пропускаются по sidecar; id станционных событий исключаются, даже если
+`to-manifest` скопировал их в тот же `recordings/`). Рекомендуется
+настройка с наименьшим FP/ч, у которой recall не ниже текущей 0.9/10;
+`--manifest` обновляет только `micro.probability_cutoff` и
+`micro.sliding_window_size`, остальные поля модели сохраняются. Запись
+манифеста не заменяет живую приёмку и deploy.
+
 ## Обучение и приёмка
 
 Fine-tuning стартует с исходных `.weights.h5`, LR 3e-5, bounded 1000 steps,

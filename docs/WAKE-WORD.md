@@ -63,6 +63,26 @@ deploy из `projects/station/tools/wakeword-personalize/README.md`.
   `/data/pulsar/rollback-ricardo.sh`.
 - `ctl.sh disable` возвращает `maind`; `enable` — Pulsar.
 
+## Wake-события и FP/ч
+
+Pulsar пишет реальные события детектора в `/data/pulsar/wake-events/`
+(контракт схемы 1): `hit` — подтверждённое срабатывание (3 с до + 1 с после),
+`near` — пик ниже порога, `miss` — кнопка «Wake: не услышала» (6 с до).
+Это тот же PCM, что слышит детектор, без усиления. Рядом `stats.json`:
+часы активного прослушивания, счётчики и `model_sha256`.
+
+Сущности HA: `button.wake_false_alarm` («ложное срабатывание»),
+`button.wake_missed`, `switch.wake_event_recording`, `switch.wake_dry_run`.
+Запись выключена только явным переключателем; dry-run пишет `outcome=dry_run`
+и не запускает ассистента.
+
+Основная метрика — подтверждённые ложные срабатывания на час прослушивания
+(FP/ч), отдельно от подозрительных (пустой STT/отмена) и near-miss. Сбор,
+разметка, отчёт, manifest и калибровка порога — `station_events.py` и
+`calibrate.py`, цикл описан в
+`../projects/station/tools/wakeword-personalize/README.md`. Записи и отчёты
+остаются в `secrets/`, вне Git.
+
 ## Проверка
 
 - Wake → ответ HA; «Рикардо, стоп» доходит до HA и не глушит музыку локально.
