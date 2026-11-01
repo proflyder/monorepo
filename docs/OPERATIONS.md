@@ -449,6 +449,40 @@ python3 projects/station/tools/wakeword-personalize/deploy.py \
 `wakeword-v22.json` — отдельный откат на v22. Установка не заменяет живую
 голосовую приёмку: private `active.json` хранит `live_voice_acceptance=pending`.
 
+### Wake-события
+
+Pulsar пишет `/data/pulsar/wake-events/`; сбор и разметка — `station_events.py`,
+цикл и контракт — `../projects/station/tools/wakeword-personalize/README.md`.
+
+```bash
+# снимок новых событий + stats.json (busybox tar по ssh, без rsync)
+python3 projects/station/tools/wakeword-personalize/station_events.py collect \
+  --host 192.0.2.13 --ssh-key ~/.ssh/ricardo_station_ed25519 \
+  --dest secrets/datasets/station-events
+
+# разбор и метки (локальный labels.json, оригиналы не меняются)
+python3 projects/station/tools/wakeword-personalize/station_events.py report \
+  --events secrets/datasets/station-events
+python3 projects/station/tools/wakeword-personalize/station_events.py review \
+  --events secrets/datasets/station-events
+python3 projects/station/tools/wakeword-personalize/station_events.py label \
+  --events secrets/datasets/station-events --id EVENT_ID --label false
+
+# manifest для finetune.py --extra-manifest
+python3 projects/station/tools/wakeword-personalize/station_events.py to-manifest \
+  --events secrets/datasets/station-events \
+  --output PRIVATE_RUN/station-manifest.json
+
+# калибровка cutoff/window по replay и запись micro.* в манифест модели
+python3 projects/station/tools/wakeword-personalize/calibrate.py \
+  --model PRIVATE_MODEL/ru_ricardo_mww.tflite \
+  --positives PRIVATE_RUN/recordings --events secrets/datasets/station-events \
+  --manifest PRIVATE_MODEL/ru_ricardo_mww.json
+```
+
+`collect --prune-labeled` удаляет с устройства только локально проверенные и
+размеченные файлы; без флага устройство не меняется.
+
 После рестарта Pulsar MA переподключается сам: supervised `reload` завершает
 Sendspin-сессию goodbye-причиной `restart`, после чего MA делает redial (на
 `v0.5.2-3-gc57d521` измерено ~3 с) без рестарта add-on MA. Проверка: entity

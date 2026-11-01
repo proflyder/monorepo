@@ -25,6 +25,56 @@ def negative_partition(entry, start, end):
     return entry["partition"]
 
 
+def negative_key(entry, partition):
+    """Feature bucket for a negative window.
+
+    Station false positives keep a separate bucket so they are not diluted by
+    the rest of the hard negatives; other entries keep the existing keys.
+    """
+    if entry.get("station_false_positive"):
+        return "station_" + partition + "_neg"
+    return ("hard_" if entry.get("hard_negative") else "") + partition + "_neg"
+
+
+def merge_manifests(primary, extras):
+    """Merge extra manifests (e.g. station wake events) into the run manifest.
+
+    Identifiers must be unique so a recording can never be counted twice with
+    two different split decisions. The primary manifest keeps its metadata and
+    the merged sources are recorded for provenance.
+    """
+    if not isinstance(primary, dict) or primary.get("schema") != 1:
+        raise ValueError("Primary manifest schema must be 1")
+    records = list(primary.get("records") or [])
+    seen = {entry.get("id") for entry in records}
+    sources = []
+    for index, extra in enumerate(extras):
+        if not isinstance(extra, dict) or extra.get("schema") != 1:
+            raise ValueError(f"Extra manifest #{index + 1} schema must be 1")
+        if not isinstance(extra.get("records"), list):
+            raise ValueError(f"Extra manifest #{index + 1} has no records list")
+        for entry in extra["records"]:
+            identity = entry.get("id")
+            if not identity or not isinstance(identity, str):
+                raise ValueError("Manifest record without a string id")
+            if identity in seen:
+                raise ValueError("Duplicate manifest record id: " + identity)
+            if entry.get("source_split") not in {"train", "val", "test"}:
+                raise ValueError(f"{identity}: source_split must be train/val/test")
+            for field in ("block", "sha256", "seconds"):
+                if field not in entry:
+                    raise ValueError(f"{identity}: missing {field}")
+            seen.add(identity)
+            records.append(entry)
+        sources.append(extra.get("station_events") or {"records": len(extra["records"])})
+    merged = dict(primary)
+    merged["records"] = records
+    if extras:
+        merged["extra_manifests"] = sources
+        merged["annotation"] = (primary.get("annotation") or "") + "; merged station wake events"
+    return merged
+
+
 def protects_speech(reference, candidate, blocks, cutoff=.9):
     if not (len(reference) == len(candidate) == len(blocks)):
         raise ValueError("Protection labels and predictions do not align")
@@ -183,6 +233,8 @@ def main():
                         help="Random initialization; BatchNorm learns from the full mixture")
     parser.add_argument("--extra-features", type=Path,
                         help="Directory with positive/negative train/val .npy for an additional voice")
+    parser.add_argument("--extra-manifest", type=Path, action="append", default=[],
+                        help="Additional schema-1 manifest (e.g. station wake events); repeatable")
     parser.add_argument("--model-name", default="ru_ricardo_personal_v1")
     parser.add_argument("--manifest-version", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=3e-5)
@@ -236,6 +288,9 @@ def main():
     if (modeldir / "training-metrics.csv").exists():
         raise RuntimeError("Run already trained; use a new run directory instead of overwriting it")
     manifest = json.loads((run / "manifest.json").read_text())
+    if args.extra_manifest:
+        manifest = merge_manifests(
+            manifest, [json.loads(path.read_text()) for path in args.extra_manifest])
     data = {}
     for e in manifest["records"]:
         if (e["block"] == "background" and e["partition"] == "test") or e["source_split"] == "test":
@@ -246,12 +301,28 @@ def main():
     real = {key: [] for key in ["train_pos", "val_pos", "train_neg", "val_neg"]}
     val_pos_blocks = []
     train_pos_blocks = []
-    hard = any(e.get("hard_negative") and e["source_split"] == "train" for e in manifest["records"])
+    hard = any(e.get("hard_negative") and not e.get("station_false_positive")
+               and e["source_split"] == "train" for e in manifest["records"])
+    station_entries = [e for e in manifest["records"] if e.get("station_false_positive")]
+    station = bool(station_entries)
     synthetic_hard = manifest.get("synthetic_hard_features")
     if synthetic_hard and not hard:
         raise ValueError("Synthetic confusables require labelled real hard negatives")
+    if station:
+        if not all(entry.get("hard_negative") for entry in station_entries):
+            raise ValueError("Station negatives must be marked hard_negative")
+        for required in ("train", "val"):
+            if not any(entry["source_split"] == required for entry in station_entries):
+                raise ValueError("Station manifest has no " + required
+                                 + "-day events; collect more days or change --seed")
+    if station and synthetic_hard:
+        raise ValueError("Station negatives and synthetic_hard_features cannot share a mixture yet")
+    if station and args.extra_features:
+        raise ValueError("Station negatives and --extra-features cannot share a mixture yet")
     if hard:
         real.update(hard_train_neg=[], hard_val_neg=[])
+    if station:
+        real.update(station_train_neg=[], station_val_neg=[])
     counts = {key: 0 for key in real}
     for e in manifest["records"]:
         if e["id"] not in data:
@@ -309,7 +380,7 @@ def main():
                             clip = np.interp(np.arange(0, len(clip), ratio), np.arange(len(clip)), clip)
                         frames = trainer.extract_all_frames(np.clip(clip, -32768, 32767).astype(np.int16))
                         if len(frames) >= 204:
-                            key = "hard_" + partition + "_neg"
+                            key = negative_key(e, partition)
                             real[key].append(frames[-204:])
                             counts[key] += 1
                 continue
@@ -322,7 +393,7 @@ def main():
                 partition = negative_partition(e, a, b)
                 if partition not in {"train", "val"}:
                     continue
-                key = ("hard_" if e.get("hard_negative") else "") + partition + "_neg"
+                key = negative_key(e, partition)
                 real[key].append(frames[start:start + 204])
                 counts[key] += 1
         else:
@@ -409,16 +480,22 @@ def main():
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate), loss="binary_crossentropy", jit_compile=False,
                   metrics=[tf.keras.metrics.BinaryAccuracy(), tf.keras.metrics.Recall(), tf.keras.metrics.Precision()])
     batch = cfg["batch_size"]
-    if batch % (8 if hard else 4):
+    if batch % (8 if (hard or station) else 4):
         raise ValueError("Batch must divide into four source buckets")
     def batches():
         while True:
             xs, ys = [], []
             buckets = [(real, "train_pos", 1, batch // 4), (synthetic, "train_pos", 1, batch // 4),
-                       (real, "train_neg", 0, batch // (8 if hard else 4)),
-                       (synthetic, "train_neg", 0, batch // (8 if hard else 4))]
+                       (real, "train_neg", 0, batch // (8 if (hard or station) else 4)),
+                       (synthetic, "train_neg", 0, batch // (8 if (hard or station) else 4))]
             if hard:
-                buckets.append((real, "hard_train_neg", 0, batch // (8 if synthetic_hard else 4)))
+                buckets.append((real, "hard_train_neg", 0,
+                                batch // (8 if (synthetic_hard or station) else 4)))
+            if station:
+                # Station false positives get their own bucket; without personal
+                # hard negatives they take the whole hard-negative share.
+                buckets.append((real, "station_train_neg", 0,
+                                batch // (8 if hard else 4)))
             if synthetic_hard:
                 buckets.append((real, "hard_synth_train_neg", 0, batch // 8))
             if extra is not None:
@@ -456,6 +533,11 @@ def main():
         yval = np.concatenate([yval, np.zeros(len(hn))])
         valweights = np.concatenate([np.full(len(vp), 200 / len(vp)), np.full(len(vn), 100 / len(vn)),
                                      np.ones(200), np.full(200, .5), np.full(len(hn), 200 / len(hn))])
+    if station:
+        sn = real["station_val_neg"]
+        xval = np.concatenate([xval, sn])
+        yval = np.concatenate([yval, np.zeros(len(sn))])
+        valweights = np.concatenate([valweights, np.full(len(sn), 100 / len(sn))])
     if synthetic_hard:
         shn = real["hard_synth_val_neg"]
         xval = np.concatenate([xval, shn])
@@ -468,14 +550,44 @@ def main():
         xval = np.concatenate([xval, ep, en])
         yval = np.concatenate([yval, np.ones(len(ep)), np.zeros(len(en))])
         valweights = np.concatenate([valweights, np.ones(len(ep)), np.ones(len(en))])
+    if extra is not None:
+        bucket_recipe = ("12.5% personal-positive / 25% original-positive / "
+                         "12.5% extra-voice-positive / 12.5% personal-negative / "
+                         "12.5% real-hard-negative / 12.5% original-negative / "
+                         "12.5% extra-voice-negative")
+    elif synthetic_hard:
+        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
+                         "12.5% real-hard-negative / 12.5% synthetic-confusable / "
+                         "12.5% real-negative / 12.5% old-synthetic-negative")
+    elif station and hard:
+        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
+                         "12.5% real-negative / 12.5% old-synthetic-negative / "
+                         "12.5% personal-hard-negative / 12.5% station-false-positive")
+    elif station:
+        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
+                         "12.5% real-negative / 12.5% old-synthetic-negative / "
+                         "25% station-false-positive")
+    elif hard:
+        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
+                         "25% hard-negative / 12.5% real-negative / "
+                         "12.5% synthetic-negative")
+    else:
+        bucket_recipe = "25% real-positive / synthetic-positive / real-negative / synthetic-negative"
     best = modeldir / "best.weights.h5"
     selection = []
-    protected_selection = hard and not args.from_scratch
+    protected_selection = (hard or station) and not args.from_scratch
     if protected_selection:
         protected = np.asarray(val_pos_blocks)
         reference = model.predict(vp, batch_size=batch, verbose=0).reshape(-1)
         reference_counts = {block: int(np.sum(reference[protected == block] >= .9)) for block in set(val_pos_blocks)}
-        hard_val = np.concatenate([real["hard_val_neg"], real["hard_synth_val_neg"]]) if synthetic_hard else real["hard_val_neg"]
+        hard_val_parts = []
+        if hard:
+            hard_val_parts.append(real["hard_val_neg"])
+        if synthetic_hard:
+            hard_val_parts.append(real["hard_synth_val_neg"])
+        if station:
+            hard_val_parts.append(real["station_val_neg"])
+        hard_val = np.concatenate(hard_val_parts)
         reference_false = int(np.sum(model.predict(hard_val, batch_size=batch, verbose=0) >= .9))
         reference_loss = float(model.evaluate(xval, yval, sample_weight=valweights, batch_size=batch, verbose=0)[0])
         model.save_weights(str(best))
@@ -498,12 +610,13 @@ def main():
     (run / "training-provenance.json").write_text(json.dumps({
         "base_weights_sha256": origin_hash, "gpu": [str(g) for g in gpus], "seed": 42,
         "source_counts": counts, "learning_rate": args.learning_rate,
-        "training_buckets": ("12.5% personal-positive / 25% original-positive / 12.5% extra-voice-positive / 12.5% personal-negative / 12.5% real-hard-negative / 12.5% original-negative / 12.5% extra-voice-negative" if extra is not None else "25% real-positive / 25% synthetic-positive / 12.5% real-hard-negative / 12.5% synthetic-confusable / 12.5% real-negative / 12.5% old-synthetic-negative" if synthetic_hard else "25% real-positive / 25% synthetic-positive / 25% hard-negative / 12.5% real-negative / 12.5% synthetic-negative" if hard else "25% real-positive / synthetic-positive / real-negative / synthetic-negative"),
+        "training_buckets": bucket_recipe,
         "initialization": "random" if args.from_scratch else "checkpoint",
         "learning_rate_schedule": "cosine to 1%" if args.from_scratch else "constant",
         "spec_augment": args.from_scratch,
         "class_weights": {"0": cfg["negative_class_weight"], "1": cfg["positive_class_weight"]} if args.from_scratch else None,
         "additional_voice_features": str(args.extra_features) if args.extra_features else None,
+        "extra_manifests": [str(path) for path in args.extra_manifest],
         "mixture": {"real_positive": .125, "old_positive": .25, "extra_positive": .125,
                     "real_negative": .125, "hard_negative": .125, "old_negative": .125,
                     "extra_negative": .125} if extra is not None else None,
