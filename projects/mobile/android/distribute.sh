@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the Home Android app and distribute it to Firebase App Distribution.
 #
-# Runs locally and in the `android-distribute` workflow. Requires the private
-# files
+# Runs locally and in the `android-distribute` job of `.github/workflows/ci.yml`
+# (pull requests only). Requires the private files
 #   platform/android/keys/home-debug.keystore
 #   platform/android/keys/google-services.json
 # (see projects/mobile/android/README.md). CI materialises both from OpenBao;
@@ -17,8 +17,9 @@
 # Usage:
 #   projects/mobile/android/distribute.sh [--dry-run] [--ci]
 #
-# --ci formats release notes for a GitHub Actions push run (commit subject,
-# short SHA and run URL from the GitHub environment).
+# --ci formats release notes for a GitHub Actions run: for a pull request
+# `PR #<number>: <title>` (read from PR_NUMBER/PR_TITLE), otherwise the commit
+# subject; plus the short SHA and the run URL from the GitHub environment.
 set -euo pipefail
 
 FIREBASE_TOOLS_VERSION="15.34.2"
@@ -39,7 +40,7 @@ for argument in "$@"; do
     --dry-run) DRY_RUN=1 ;;
     --ci) CI_MODE=1 ;;
     -h|--help)
-      sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -131,15 +132,21 @@ if [[ -z "$APP_ID" ]]; then
 fi
 
 if [[ "$CI_MODE" -eq 1 ]]; then
-  # A push to develop is a squash merge: its subject is the PR title and the
-  # commit list of the merge itself is a single line.
-  COMMIT_SUBJECT="$(git -C "$ROOT" log -1 --pretty=%s)"
+  # Release notes for a GitHub Actions run. On a PR the job exports PR_NUMBER
+  # and PR_TITLE (the title is untrusted text, so it arrives through the
+  # environment, never as shell source). A push to develop is a squash merge:
+  # its commit subject is the PR title.
+  if [[ -n "${PR_NUMBER:-}" ]]; then
+    SUBJECT="PR #${PR_NUMBER}: ${PR_TITLE:-$(git -C "$ROOT" log -1 --pretty=%s)}"
+  else
+    SUBJECT="$(git -C "$ROOT" log -1 --pretty=%s)"
+  fi
   RUN_URL="${GITHUB_RUN_URL:-}"
   if [[ -z "$RUN_URL" && -n "${GITHUB_SERVER_URL:-}" && -n "${GITHUB_REPOSITORY:-}" \
         && -n "${GITHUB_RUN_ID:-}" ]]; then
     RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
   fi
-  RELEASE_NOTES="$COMMIT_SUBJECT"$'\n'"$SHORT_SHA"
+  RELEASE_NOTES="$SUBJECT"$'\n'"$SHORT_SHA"
   if [[ -n "$RUN_URL" ]]; then
     RELEASE_NOTES="$RELEASE_NOTES"$'\n'"$RUN_URL"
   fi

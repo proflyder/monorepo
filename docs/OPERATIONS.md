@@ -563,16 +563,20 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 
 ### Android / App Distribution
 
-Push в `develop`, затрагивающий `projects/mobile/android/`,
-`platform/android/`, `packages/kotlin/` или Bazel-контракт, запускает
-`.github/workflows/android-distribute.yml`: Environment `Android`, VPN группа
-`ci`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`.
+Каждый PR в `develop`, затрагивающий Android-приложение (`projects/mobile/android/`
+или общие Kotlin/Bazel-зависимости, из-за которых `android-app` попадает в
+`android_units`), после успешной сборки `android` запускает job
+`android-distribute` в `.github/workflows/ci.yml`: Environment `Android`, VPN
+группа `ci`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`.
 Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
 (`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `owner`
-и удаляет ключи. Локально — `projects/mobile/android/distribute.sh`
-(`--dry-run` печатает команду без загрузки). Секреты и запись KV — README
-`projects/home/kubernetes/openbao`; статус — вкладка Actions workflow
-`android-distribute`.
+и удаляет ключи. PR из форков пропускается: у них нет ни OIDC-токена, ни
+секретов Environment. Job не входит в `ci-ok` — неудачная загрузка видна на PR,
+но не блокирует merge; новый push в тот же PR отменяет предыдущую загрузку.
+Локально — `projects/mobile/android/distribute.sh` (`--dry-run` печатает
+команду без загрузки). Секреты и запись KV — README
+`projects/home/kubernetes/openbao`; статус — вкладка Actions прогона PR
+(`android-distribute`).
 
 ## Currency bot
 

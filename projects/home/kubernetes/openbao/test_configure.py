@@ -2,8 +2,9 @@
 
 `configure.py` must keep the existing deploy-home configuration untouched and
 add the `ci-station` policy plus the `deploy-station` JWT role only when a
-station repository is supplied. These tests record API calls, so no OpenBao is
-needed.
+station repository is supplied. The Android App Distribution role is bound to
+PR CI runs, so its claims use a glob and must not affect the other roles.
+These tests record API calls, so no OpenBao is needed.
 """
 import os
 import sys
@@ -89,10 +90,14 @@ class AndroidRole(unittest.TestCase):
             "role_type": "jwt",
             "user_claim": "job_workflow_ref",
             "bound_audiences": [AUDIENCE],
+            "bound_claims_type": "glob",
             "bound_claims": {
                 "repository": HOME_REPOSITORY,
                 "environment": "Android",
-                "ref": "refs/heads/develop",
+                "ref": "refs/pull/*/merge",
+                "job_workflow_ref":
+                    "example/home/.github/workflows/ci.yml@refs/pull/*/merge",
+                "event_name": "pull_request",
             },
             "token_policies": ["ci-android"],
             "token_ttl": "10m",
@@ -100,12 +105,47 @@ class AndroidRole(unittest.TestCase):
             "clock_skew": 60,
         })
 
+    def test_android_globs_only_match_pr_ci_runs(self):
+        """The bound globs must accept PR merge refs and nothing else."""
+        import fnmatch
+
+        claims = configure.ensure_github
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            claims(bao, AUDIENCE, HOME_REPOSITORY)
+        bound = bao.payload("/v1/auth/github/role/android-distribute")["bound_claims"]
+        ref, workflow = bound["ref"], bound["job_workflow_ref"]
+
+        self.assertTrue(fnmatch.fnmatch("refs/pull/42/merge", ref))
+        self.assertTrue(
+            fnmatch.fnmatch(
+                "example/home/.github/workflows/ci.yml@refs/pull/42/merge",
+                workflow))
+        for other in ("refs/heads/develop", "refs/heads/feature/x",
+                      "refs/pull/42/head", "refs/tags/v1"):
+            self.assertFalse(fnmatch.fnmatch(other, ref), other)
+        self.assertFalse(
+            fnmatch.fnmatch(
+                "example/home/.github/workflows/deploy-home.yml@refs/pull/42/merge",
+                workflow))
+        self.assertFalse(
+            fnmatch.fnmatch(
+                "example/other/.github/workflows/ci.yml@refs/pull/42/merge",
+                workflow))
+
     def test_android_role_does_not_change_deploy_home(self):
         bao = Recorder()
         with redirect_stdout(StringIO()):
             configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
-        self.assertEqual(bao.payload("/v1/auth/github/role/deploy-home")[
-            "token_policies"], ["ci-deploy"])
+        deploy_home = bao.payload("/v1/auth/github/role/deploy-home")
+        self.assertEqual(deploy_home["token_policies"], ["ci-deploy"])
+        # Only the Android role opts into glob matching and PR refs.
+        self.assertNotIn("bound_claims_type", deploy_home)
+        self.assertEqual(deploy_home["bound_claims"], {
+            "repository": HOME_REPOSITORY,
+            "environment": "Home",
+            "ref": "refs/heads/develop",
+        })
 
     def test_android_policy_is_scoped_to_its_entry(self):
         self.assertIn('path "secret/data/ci/android-distribute"',

@@ -32,6 +32,11 @@ GITHUB_ENVIRONMENT = "Home"
 GITHUB_REF = "refs/heads/develop"
 GITHUB_STATION_ENVIRONMENT = "Station"
 GITHUB_ANDROID_ENVIRONMENT = "Android"
+# Android App Distribution runs from PR CI, so every subject is the merge ref of
+# a pull request and the workflow that may mint the token is `ci.yml` there.
+GITHUB_ANDROID_REF = "refs/pull/*/merge"
+GITHUB_ANDROID_WORKFLOW = ".github/workflows/ci.yml"
+GITHUB_ANDROID_EVENT = "pull_request"
 
 ADMIN_POLICY = """\
 # Full administration, minus operations that can destroy availability or
@@ -262,17 +267,26 @@ def ensure_github(bao: Bao, audience: str, repository: str,
         "clock_skew": 60,
     })
     print("role: auth/github/role/deploy-home (audience %s)" % audience)
-    # Android App Distribution runs on a push to develop from the `Android`
-    # Environment. It binds repository + environment + develop like
-    # deploy-home, but gets only the ci-android policy (its own KV record).
+    # Android App Distribution runs inside PR CI (job `android-distribute` of
+    # ci.yml) from the `Android` Environment. Glob claims pin it to a PR merge
+    # ref and to that one workflow: `repository`, `environment`,
+    # `ref=refs/pull/*/merge`, `job_workflow_ref=<repo>/ci.yml@refs/pull/*/merge`
+    # and `event_name=pull_request`. A fork PR never receives an OIDC token
+    # (its run has read-only permissions and no Environment secrets), so only
+    # same-repository branches of collaborators can assume this role. The
+    # policy still exposes one KV record.
     bao.expect("POST", "/v1/auth/github/role/android-distribute", {
         "role_type": "jwt",
         "user_claim": "job_workflow_ref",
         "bound_audiences": [audience],
+        "bound_claims_type": "glob",
         "bound_claims": {
             "repository": repository,
             "environment": GITHUB_ANDROID_ENVIRONMENT,
-            "ref": GITHUB_REF,
+            "ref": GITHUB_ANDROID_REF,
+            "job_workflow_ref":
+                f"{repository}/{GITHUB_ANDROID_WORKFLOW}@{GITHUB_ANDROID_REF}",
+            "event_name": GITHUB_ANDROID_EVENT,
         },
         "token_policies": ["ci-android"],
         "token_ttl": "10m",

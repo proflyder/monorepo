@@ -100,16 +100,19 @@
       Следующий шаг: согласовать окно и проверить на реальном телефоне, не
       трогая production-устройства без согласования.
 - [ ] **Первый релиз в Firebase App Distribution и первый тестовый краш.**
-      Crashlytics, `distribute.sh`, workflow `android-distribute` и роль
-      OpenBao `android-distribute` готовы; реальной загрузки и отчёта о краше
-      ещё не было. Следующий шаг: включить Crashlytics/App Distribution в
-      консоли и создать группу `owner` (+ свой email), создать сервисный
-      аккаунт с ролью **Firebase App Distribution Admin** и JSON-ключом,
-      записать `secret/ci/android-distribute` (`keystore_b64`,
-      `keystore_password`, `google_services_json`,
-      `firebase_service_account_json`; рецепт — README OpenBao), проверить
-      первый CI-прогон `android-distribute` на push в `develop`, установить
-      сборку и проверить краш через `adb shell am crash dev.proflyder.home`.
+      Crashlytics, `distribute.sh`, job `android-distribute` в PR CI
+      (`.github/workflows/ci.yml`) и роль OpenBao `android-distribute` готовы;
+      реальной загрузки и отчёта о краше ещё не было. Следующий шаг: включить
+      Crashlytics/App Distribution в консоли и создать группу `owner` (+ свой
+      email), создать сервисный аккаунт с ролью **Firebase App Distribution
+      Admin** и JSON-ключом, записать `secret/ci/android-distribute`
+      (`keystore_b64`, `keystore_password`, `google_services_json`,
+      `firebase_service_account_json`; рецепт — README OpenBao), применить
+      конфигурацию OpenBao (`configure.py` — роль привязана к PR merge-ref) и
+      разрешить PR-head-ветки в deployment branch policy Environment
+      `Android`, проверить первый CI-прогон `android-distribute` на PR с
+      изменением Android, установить сборку и проверить краш через
+      `adb shell am crash dev.proflyder.home`.
 - [ ] **Android-приёмка.** Остальные экраны на реальном устройстве.
       Следующий шаг: пройти сценарии, затем решить по push/FCM, offline cache
       и generic task UI.
