@@ -50,10 +50,12 @@
   архив старого HA Container.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
-- Alertmanager шлёт warning/critical в личный чат владельца через бота
-  currency-bot (`telegram_configs`, resolved тоже). Конфиг — Secret
-  `alertmanager-telegram`, его рендерит ESO из `k8s/currency-bot/currency-bot`
-  (`BOT_TOKEN`, второй `CHAT_ID`); Watchdog и info не отправляются.
+- Alertmanager шлёт warning/critical в личный чат владельца через инфра-бот
+  Hermes (`telegram_configs`, resolved тоже). Конфиг — Secret
+  `alertmanager-telegram`, его рендерит ESO из
+  `k8s/home-assistant/hermes-environment` (`TELEGRAM_BOT_TOKEN`, первый
+  `TELEGRAM_ALLOWED_USERS`); Watchdog и info не отправляются. В каждом алерте
+  — отпечаток для `infra_alert`.
   Оформление — HTML-шаблон `observability/alertmanager/telegram.tmpl`
   (ConfigMap `alertmanager-templates`, время Asia/Almaty).
   Доставка проверена тестовым алертом 2026-11-01.
@@ -473,10 +475,10 @@
   `platforms.telegram.home_channel`. Skill `skills/report` даёт команду
   `/report` → `infra_report`, виден в меню (`command_menu`), отключён на
   `api_server`.
-- ExternalSecret `alertmanager-telegram` переведён на инфра-бот (живой
-  Secret обновится после раскатки); в каждом алерте — fingerprint для
-  `infra_alert`, ответ на алерт в Telegram передаёт его Hermes.
-- Статус: код и манифесты готовы, живой раскатки ещё не было (`PENDING.md`).
+- Алерты идут инфра-ботом (`alertmanager-telegram`); ответ на алерт в
+  Telegram передаёт отпечаток Hermes для `infra_alert`.
+- Статус: раскатано 2026-11-01; приёмка перезапуска и ответа на алерт —
+  `PENDING.md`.
 
 ## Приватное / backups
 

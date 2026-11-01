@@ -95,15 +95,12 @@
 
 ### MCP-шлюз
 
-- [ ] **MCP-шлюз, Hermes и Telegram: живая раскатка и приёмка.** Код,
-  манифесты, каталог, RBAC, overlay Hermes и шаблон алертов готовы; живой
-  раскатки не было.
-  Следующий шаг: одноразовые шаги оператора
-  (`projects/home/kubernetes/mcp-gateway/README.md`,
-  `projects/home-assistant/hermes/README.md`), проверить env-контракт Pod
-  Hermes (`HERMES_INFRA_TOKEN`, ключи Telegram), merge и `deploy-home`, рендер
-  overlay на PVC, затем приёмка: «проверь сервисы» голосом и в Telegram,
-  «перезапусти X» с подтверждением, ответ на алерт.
+- [ ] **MCP-шлюз: приёмка действий.** Раскатано (шлюз, Hermes `infra`,
+  Telegram-канал, `/report`, алерты через инфра-бота); «проверь сервисы» и
+  `/report` проверены голосом и в Telegram.
+  Следующий шаг: «перезапусти Piper» голосом и в Telegram (вопрос →
+  «да» → rollout, повтор в cooldown отклонён) и ответ в Telegram на
+  тестовый алерт (`infra_alert` по отпечатку).
 
 ### Планировщик / Android
 
