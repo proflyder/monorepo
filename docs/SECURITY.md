@@ -103,8 +103,8 @@
 - Auto-unseal — встроенный `static` seal: 32-байтный ключ в Kubernetes Secret
   `openbao-seal` на том же узле, что и raft-данные. Это компромисс ради
   перезагрузки без человека: компромисс узла даёт и ключ, и данные. Ключ не
-  копируется в snapshot; при появлении внешнего KMS/HSM/transit перейти на
-  него (`docs/PENDING.md`).
+  копируется в snapshot. Риск принят владельцем (2026-11-01), KMS не
+  планируется; в offsite-бэкапе ключ и raft-снапшоты хранятся раздельно.
 - Recovery keys (5/3) и начальный root-токен — только
   `secrets/openbao/init.json` (600). Root-токен после bootstrap отозван;
   новый выпускается процедурой `generate-root` из recovery keys. Recovery

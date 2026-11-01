@@ -57,7 +57,9 @@
     суффиксом через Traefik и общий allow-list. Raft на локальном Retain-PV,
     audit — файл на отдельном PV. Auto-unseal — встроенный `static` seal:
     ключ в Secret на том же узле, чтобы перезагрузка не требовала человека
-    (компромисс до внешнего KMS; ключ не входит в snapshot). Человек —
+    (осознанно принятый риск, решение владельца 2026-11-01: внешний
+    KMS/HSM/TPM не вводим; ключ не входит в snapshot и в offsite-бэкап
+    кладётся отдельно от raft-снапшотов). Человек —
     `userpass` + TOTP, политика `admin` без `sys/seal`/`raw`/`rekey`; CI —
     GitHub OIDC (repository, environment, ref `develop`, TTL ≤ 15 мин, только
     `secret/ci/{test,deploy-home}`); поды — Kubernetes auth (только
