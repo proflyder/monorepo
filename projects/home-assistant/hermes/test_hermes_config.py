@@ -91,7 +91,7 @@ class HermesConfigTests(unittest.TestCase):
     def test_telegram_report_command_is_visible_and_voice_safe(self):
         telegram = self.data["platforms"]["telegram"]
         menu = telegram["extra"]["command_menu"]
-        self.assertEqual(menu["max_commands"], 100)
+        self.assertEqual(menu["max_commands"], 60)
         self.assertEqual(menu["priority_mode"], "prepend")
         self.assertEqual(menu["priority"], ["report"])
         # The skill is a Telegram/CLI command only; the voice surface has no

@@ -159,7 +159,7 @@ from `platforms.telegram.channel_overrides[<chat_id>].system_prompt`.
   A skill directory becomes a slash command on messaging platforms, so
   `/report` starts a normal agent turn that calls `infra_report` (no shell
   `exec` command).  The fragment keeps the command visible with
-  `platforms.telegram.extra.command_menu` (100 slots, `report` prepended) and
+  `platforms.telegram.extra.command_menu` (60 slots — 100 exceeds Telegram's setMyCommands limit — `report` prepended) and
   disables it on the voice api_server surface
   (`skills.platform_disabled.api_server: [report]`).
 - Only our own skill directories are installed; any other skill already on the
