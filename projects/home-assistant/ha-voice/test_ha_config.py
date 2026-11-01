@@ -247,6 +247,19 @@ class EntityAndServiceTests(unittest.TestCase):
             self.assertIn("action", automation)
 
 
+class ScenarioScriptTests(unittest.TestCase):
+    def test_false_wake_scenario_presses_the_station_button(self):
+        script = SCRIPTS["wake_false_alarm"]
+        self.assertEqual(script["alias"], "Рикардо: ложное срабатывание")
+        self.assertEqual(script["mode"], "single")
+        self.assertEqual(services(script), ["button.press"])
+        self.assertEqual(
+            service_targets(script),
+            {"button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie"},
+        )
+        self.assertEqual(len(script["sequence"]), 1, "false-wake scenario must only press the button")
+
+
 class TemplateTests(unittest.TestCase):
     def test_every_template_parses(self):
         try:

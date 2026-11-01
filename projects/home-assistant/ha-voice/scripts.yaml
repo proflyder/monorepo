@@ -128,6 +128,22 @@ blackout:
           - light.yeelink_cn_827036414_bslamp2_s_2_light
           - light.yeelink_cn_919937191_lamp22_s_2
 
+wake_false_alarm:
+  alias: "Рикардо: ложное срабатывание"
+  # Display only. Being a personal scenario is declared with the HA label
+  # "scenario" (entity registry), see solutions/ha-bridge/README.md.
+  icon: mdi:ear-hearing-off
+  # No "missed wake" counterpart: its 6 s window is shorter than a phone tap.
+  description: >-
+    Mark the last Ricardo wake hit within the last 10 minutes as a false alarm.
+    The station applies the mark to Pulsar wake events, so a stray wake does not
+    pollute the wake-word statistics.
+  mode: single
+  sequence:
+    - service: button.press
+      target:
+        entity_id: button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie
+
 music_play_favorites:
   alias: "Music: play favorites by selected route"
   description: >-

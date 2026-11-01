@@ -18,6 +18,42 @@ kt_compiler_plugin(
     id = "dev.zacsweers.metro.compiler",
 )
 
+# Stable personal debug keystore for the Home Android app.
+#
+# rules_android signs debug APKs with `--ks <file> --ks-pass pass:android` and
+# no alias, so the file must contain exactly one entry whose password is
+# `android`. A local personal key lives in the gitignored
+# `platform/android/keys/home-debug.keystore` (a symlink to
+# `secrets/android/home-debug.keystore`). CI and clean checkouts have no such
+# file: they must still build, so the genrule falls back to the public
+# rules_android debug keystore and warns on stderr. Both are source files, so
+# the command stays hermetic and path-agnostic.
+genrule(
+    name = "home_debug_keystore",
+    srcs = glob(["keys/home-debug.keystore"], allow_empty = True) + [
+        "@rules_android//tools/android:debug_keystore",
+    ],
+    outs = ["home_debug.keystore"],
+    cmd = "\n".join([
+        "set -e",
+        "local_key=''",
+        "for candidate in $(SRCS); do",
+        "  case \"$$candidate\" in",
+        "    */keys/home-debug.keystore) local_key=\"$$candidate\" ;;",
+        "  esac",
+        "done",
+        "if [ -n \"$$local_key\" ]; then",
+        "  cp \"$$local_key\" $@",
+        "else",
+        "  cp $(location @rules_android//tools/android:debug_keystore) $@",
+        "  echo 'WARNING: platform/android/keys/home-debug.keystore is absent;' \\",
+        "       'signing the APK with the public rules_android debug keystore.' \\",
+        "       'Create the personal key (see projects/mobile/android/README.md)' \\",
+        "       'to get an install-updatable build.' >&2",
+        "fi",
+    ]),
+)
+
 exports_files([
     "gen_view_binding.py",
     "defs.bzl",

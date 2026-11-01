@@ -92,6 +92,10 @@ dist/
 # Private local compatibility links (targets live under secrets/local/).
 /projects/home-assistant/ha-voice/www/alarm_ringtone.wav
 
+# Personal Android debug keystore; the file lives under secrets/ and appears
+# here only as a symlink so Bazel can read it.
+/platform/android/keys/
+
 # Ignore directory symlinks as well as real private directories.
 /archive
 /backups
