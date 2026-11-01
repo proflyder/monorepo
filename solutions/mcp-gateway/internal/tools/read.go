@@ -12,6 +12,7 @@ import (
 
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/redact"
 )
@@ -60,6 +61,13 @@ func (g *ReadGroup) Register(r *mcp.Server) {
 		Description: "Topology overview and the service catalog (spoken aliases, workloads, restart policy) for model context.",
 		Annotations: readOnly(),
 	}, instrument(d, "infra_overview", d.infraOverview))
+
+	mcp.AddTool(r, &mcp.Tool{
+		Name: "infra_report",
+		Description: "Full infrastructure report across every catalog service: status, Kubernetes replicas, restarts in the last hour, image digest, age, external TCP/HTTP/Home Assistant checks, versions and active alerts. " +
+			"Returns a short Russian verdict plus a compact plain-text report suitable for Telegram. Read-only; use infra_send_report to deliver the text.",
+		Annotations: readOnly(),
+	}, instrument(d, "infra_report", d.infraReport))
 
 	r.AddResource(&mcp.Resource{
 		URI:         "infra://catalog",
@@ -141,7 +149,10 @@ type statusDetail struct {
 	Signals       []signalDetail   `json:"signals"`
 	Workloads     []workloadDetail `json:"workloads"`
 	Restarts      []podDetail      `json:"restarts"`
-	Errors        []string         `json:"errors,omitempty"`
+	// ExternalChecks are the typed catalog probes (TCP/HTTP/Home Assistant).
+	// Skipped checks mean "not configured", never a failure.
+	ExternalChecks []checks.Result `json:"externalChecks"`
+	Errors         []string        `json:"errors,omitempty"`
 }
 
 func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
@@ -154,13 +165,14 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 
 	var mu sync.Mutex
 	detail := statusDetail{
-		CheckedAt:     d.now().UTC().Format(time.RFC3339),
-		ServiceCount:  len(cat.Services),
-		Alerts:        []alertDetail{},
-		IgnoredAlerts: []alertDetail{},
-		Signals:       []signalDetail{},
-		Workloads:     []workloadDetail{},
-		Restarts:      []podDetail{},
+		CheckedAt:      d.now().UTC().Format(time.RFC3339),
+		ServiceCount:   len(cat.Services),
+		Alerts:         []alertDetail{},
+		IgnoredAlerts:  []alertDetail{},
+		Signals:        []signalDetail{},
+		Workloads:      []workloadDetail{},
+		Restarts:       []podDetail{},
+		ExternalChecks: []checks.Result{},
 	}
 	addError := func(msg string) {
 		mu.Lock()
@@ -202,6 +214,17 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 		}()
 	} else {
 		addError("алерты: Alertmanager не настроен")
+	}
+
+	if d.Checks != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results := d.Checks.RunAll(ctx, cat.Services)
+			mu.Lock()
+			detail.ExternalChecks = results
+			mu.Unlock()
+		}()
 	}
 
 	for _, service := range cat.Services {
@@ -356,6 +379,12 @@ func statusIssues(detail statusDetail) []string {
 	}
 	for _, p := range detail.Restarts {
 		issues = append(issues, p.Pod+": "+p.Reason)
+	}
+	for _, check := range detail.ExternalChecks {
+		if check.Skipped || check.OK {
+			continue
+		}
+		issues = append(issues, check.Label+": "+check.Error)
 	}
 	return issues
 }

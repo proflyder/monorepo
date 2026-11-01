@@ -266,6 +266,36 @@ ignore_alerts: [Watchdog, watchdog]
 services:
   - {id: a, aliases: {en: [a]}, kind: external}
 `,
+		"check without label": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+    checks: [{type: tcp, host: 192.0.2.1, port: 1}]
+`,
+		"unknown check type": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+    checks: [{type: ping, label: x}]
+`,
+		"tcp without port": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+    checks: [{type: tcp, label: x, host: 192.0.2.1}]
+`,
+		"bad http auth": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+    checks: [{type: http, label: x, url: http://192.0.2.1/, auth: basic}]
+`,
+		"ha_state without entity": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+    checks: [{type: ha_state, label: x}]
+`,
+		"ha_template without template": `
+services:
+  - {id: a, aliases: {en: [a]}, kind: external}
+    checks: [{type: ha_template, label: x}]
+`,
 	}
 	for name, raw := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -273,6 +303,35 @@ services:
 				t.Fatalf("Parse succeeded, want validation error")
 			}
 		})
+	}
+}
+
+func TestChecksParse(t *testing.T) {
+	raw := `
+services:
+  - id: ha
+    aliases: {en: [ha]}
+    kind: external
+    checks:
+      - {type: tcp, label: api, host: 192.0.2.10, port: 8123}
+      - {type: http, label: rest, url: "http://192.0.2.10:8123/api/", auth: ha}
+      - {type: ha_state, label: satellite, entity_id: assist_satellite.one}
+      - {type: ha_template, label: version, template: "{{ 1 }}", required: true}
+      - {type: ha_unavailable_summary, label: unavailable, domains: [media_player]}
+`
+	cat, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	checks := cat.Services[0].Checks
+	if len(checks) != 5 {
+		t.Fatalf("checks = %d", len(checks))
+	}
+	if checks[0].DisplayLabel() != "api" || checks[1].DisplayLabel() != "rest" {
+		t.Fatalf("labels = %q %q", checks[0].DisplayLabel(), checks[1].DisplayLabel())
+	}
+	if !checks[3].Required || checks[4].Domains[0] != "media_player" {
+		t.Fatalf("checks = %+v", checks)
 	}
 }
 

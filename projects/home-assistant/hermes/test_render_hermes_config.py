@@ -208,6 +208,7 @@ class PlanTests(unittest.TestCase):
 
     def test_second_render_is_a_no_op(self):
         for path, text in render_plan(self.home).items():
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8")
         self.assertEqual(render_plan(self.home), {})
 
@@ -220,6 +221,44 @@ class PlanTests(unittest.TestCase):
         self.config.write_text("- not\n- a mapping\n", encoding="utf-8")
         with self.assertRaises(SystemExit):
             render_plan(self.home)
+
+    def test_skill_directories_install_without_deleting_others(self):
+        existing = self.home / "skills" / "manual" / "SKILL.md"
+        existing.parent.mkdir(parents=True)
+        existing.write_text("manual skill\n", encoding="utf-8")
+        plan = render_plan(self.home)
+        skill = self.home / "skills" / "report" / "SKILL.md"
+        self.assertIn(skill, plan)
+        self.assertEqual(plan[skill], (HERE / "skills" / "report" / "SKILL.md").read_text(encoding="utf-8"))
+        # Other skills are not in the plan and are never removed.
+        self.assertNotIn(existing, plan)
+        self.assertEqual(existing.read_text(encoding="utf-8"), "manual skill\n")
+
+    def test_telegram_prompt_is_installed_as_a_channel_override(self):
+        private = self.home / "private.yaml"
+        private.write_text(PRIVATE_VALUES + 'telegram_owner_chat_id: "100000000"\n', encoding="utf-8")
+        merged = yaml.safe_load(render_plan(self.home, private=private)[self.config])
+        override = merged["platforms"]["telegram"]["channel_overrides"]["100000000"]
+        self.assertEqual(override["system_prompt"],
+                         (HERE / "telegram_prompt.txt").read_text(encoding="utf-8").strip())
+        # Home channel uses the HomeChannel shape expected by Hermes, otherwise
+        # the first message logs "No home channel is set for Telegram".
+        self.assertEqual(
+            merged["platforms"]["telegram"]["home_channel"],
+            {"platform": "telegram", "chat_id": "100000000", "name": "Home"},
+        )
+        # The renderer-only key is not part of the Hermes config.
+        self.assertNotIn("telegram_owner_chat_id", merged)
+        # display.personality still drives the voice path.
+        self.assertEqual(merged["display"]["personality"], "voice")
+
+    def test_no_owner_chat_id_leaves_existing_override_untouched(self):
+        self.config.write_text(
+            'platforms:\n  telegram:\n    channel_overrides:\n      "42":\n        system_prompt: "old"\n',
+            encoding="utf-8",
+        )
+        merged = yaml.safe_load(render_plan(self.home)[self.config])
+        self.assertEqual(merged["platforms"]["telegram"]["channel_overrides"]["42"]["system_prompt"], "old")
 
 
 class CliTests(unittest.TestCase):
@@ -292,7 +331,7 @@ class ContextFileTests(unittest.TestCase):
         text = CONTEXT.read_text(encoding="utf-8")
         for tool in ("infra_status", "infra_service", "infra_logs", "infra_alert",
                      "infra_prepare_restart", "infra_confirm", "infra_cancel",
-                     "infra_send_report"):
+                     "infra_report", "infra_send_report"):
             self.assertIn(tool, text)
         self.assertIn("kubectl", text)
         self.assertIn("90", text)
@@ -327,6 +366,23 @@ class PrivateExampleTests(unittest.TestCase):
                 self.assertEqual(set(example["mcp_servers"][name]), {"url"})
                 self.assertTrue(renderer._PLACEHOLDER.search(
                     example["mcp_servers"][name]["url"]))
+        # The renderer-only Telegram id is documented as a placeholder.
+        self.assertIn("telegram_owner_chat_id", example)
+        self.assertEqual(example["telegram_owner_chat_id"], "100000000")
+
+
+class SkillTests(unittest.TestCase):
+    def test_report_skill_frontmatter(self):
+        text = (HERE / "skills" / "report" / "SKILL.md").read_text(encoding="utf-8")
+        frontmatter, body = text.split("---", 2)[1:]
+        meta = yaml.safe_load(frontmatter)
+        self.assertEqual(meta["name"], "report")
+        self.assertLessEqual(len(meta["description"]), 40)
+        self.assertIn("infra_report", body)
+        self.assertIn("details.text", body)
+        # The skill must not ask for shell-like tools.
+        for forbidden in ("terminal", "shell", "kubectl"):
+            self.assertNotIn(forbidden, body.lower())
 
 
 if __name__ == "__main__":

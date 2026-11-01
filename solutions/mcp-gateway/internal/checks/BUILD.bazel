@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "checks",
+    srcs = ["checks.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/checks",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+    deps = ["//solutions/mcp-gateway/internal/catalog"],
+)
+
+go_test(
+    name = "checks_test",
+    srcs = ["checks_test.go"],
+    embed = [":checks"],
+    deps = ["//solutions/mcp-gateway/internal/catalog"],
+)

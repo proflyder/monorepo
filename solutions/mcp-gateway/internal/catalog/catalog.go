@@ -37,6 +37,45 @@ const (
 	LogsNone = "none"
 )
 
+// External check types. They are declared in the catalog and executed by the
+// optional external checker; the solution itself does not know any endpoint.
+const (
+	CheckTCP           = "tcp"
+	CheckHTTP          = "http"
+	CheckHAState       = "ha_state"
+	CheckHATemplate    = "ha_template"
+	CheckHAUnavailable = "ha_unavailable_summary"
+)
+
+// HTTP check authentication modes.
+const (
+	AuthNone = "none"
+	AuthHA   = "ha"
+)
+
+// Check is one typed external probe for a service. Only the fields relevant to
+// the selected Type are used; validation rejects everything else.
+type Check struct {
+	Type  string `yaml:"type"`
+	Label string `yaml:"label"`
+
+	// TCP.
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+
+	// HTTP.
+	URL          string `yaml:"url"`
+	ExpectStatus int    `yaml:"expect_status"`
+	Auth         string `yaml:"auth"`
+
+	// Home Assistant state/template probes.
+	EntityID  string   `yaml:"entity_id"`
+	BadStates []string `yaml:"bad_states"`
+	Template  string   `yaml:"template"`
+	Required  bool     `yaml:"required"`
+	Domains   []string `yaml:"domains"`
+}
+
 // Catalog is the whole catalog file.
 type Catalog struct {
 	// Overview is sanitized free-form markdown about the topology. It is served
@@ -104,6 +143,7 @@ type Service struct {
 	Workload    Workload  `yaml:"workload"`
 	Containers  []string  `yaml:"containers"`
 	Signals     []Signal  `yaml:"signals"`
+	Checks      []Check   `yaml:"checks"`
 	Logs        LogSource `yaml:"logs"`
 	Restart     Restart   `yaml:"restart"`
 	Description string    `yaml:"description"`
@@ -214,6 +254,9 @@ func (c *Catalog) Validate() error {
 				problems = append(problems, fmt.Sprintf("%s: signals[%d].meaning is required", prefix, j))
 			}
 		}
+		for j, check := range s.Checks {
+			problems = append(problems, validateCheck(prefix, j, check)...)
+		}
 		switch s.Logs.Source {
 		case "", LogsNone:
 		case LogsLoki:
@@ -236,6 +279,61 @@ func (c *Catalog) Validate() error {
 	}
 	sort.Strings(problems)
 	return errors.New("invalid catalog: " + strings.Join(problems, "; "))
+}
+
+func validateCheck(prefix string, index int, check Check) []string {
+	name := fmt.Sprintf("%s: checks[%d]", prefix, index)
+	var problems []string
+	if strings.TrimSpace(check.Label) == "" {
+		problems = append(problems, name+".label is required")
+	}
+	switch check.Type {
+	case CheckTCP:
+		if strings.TrimSpace(check.Host) == "" {
+			problems = append(problems, name+".host is required for type tcp")
+		}
+		if check.Port < 1 || check.Port > 65535 {
+			problems = append(problems, name+".port must be in 1..65535")
+		}
+	case CheckHTTP:
+		if strings.TrimSpace(check.URL) == "" {
+			problems = append(problems, name+".url is required for type http")
+		}
+		if check.ExpectStatus != 0 && (check.ExpectStatus < 100 || check.ExpectStatus > 599) {
+			problems = append(problems, name+".expect_status must be in 100..599")
+		}
+		switch check.Auth {
+		case "", AuthNone, AuthHA:
+		default:
+			problems = append(problems, fmt.Sprintf("%s.auth must be none or ha (got %q)", name, check.Auth))
+		}
+	case CheckHAState:
+		if strings.TrimSpace(check.EntityID) == "" {
+			problems = append(problems, name+".entity_id is required for type ha_state")
+		}
+		for _, state := range check.BadStates {
+			if strings.TrimSpace(state) == "" {
+				problems = append(problems, name+".bad_states must not contain empty entries")
+				break
+			}
+		}
+	case CheckHATemplate:
+		if strings.TrimSpace(check.Template) == "" {
+			problems = append(problems, name+".template is required for type ha_template")
+		}
+	case CheckHAUnavailable:
+		for _, domain := range check.Domains {
+			if strings.TrimSpace(domain) == "" {
+				problems = append(problems, name+".domains must not contain empty entries")
+				break
+			}
+		}
+	default:
+		problems = append(problems, fmt.Sprintf(
+			"%s.type must be tcp, http, ha_state, ha_template or ha_unavailable_summary (got %q)",
+			name, check.Type))
+	}
+	return problems
 }
 
 // prepare builds alias lookup structures. Call after Validate.
@@ -433,9 +531,36 @@ func (c *Catalog) CatalogText() string {
 		for _, sig := range s.Signals {
 			fmt.Fprintf(&b, "- signal (%s): %s\n", sig.Meaning, sig.PromQL)
 		}
+		for _, check := range s.Checks {
+			fmt.Fprintf(&b, "- check %s: %s\n", check.Type, checkLabel(check))
+		}
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// DisplayLabel returns the human label used in reports.
+func (check Check) DisplayLabel() string { return checkLabel(check) }
+
+func checkLabel(check Check) string {
+	label := strings.TrimSpace(check.Label)
+	if label == "" {
+		switch check.Type {
+		case CheckTCP:
+			label = fmt.Sprintf("%s:%d", check.Host, check.Port)
+		case CheckHTTP:
+			label = check.URL
+		case CheckHAState:
+			label = check.EntityID
+		case CheckHATemplate:
+			label = "шаблон Home Assistant"
+		case CheckHAUnavailable:
+			label = "недоступные сущности Home Assistant"
+		default:
+			label = check.Type
+		}
+	}
+	return label
 }
 
 // K8sServices returns only the Kubernetes-backed services.

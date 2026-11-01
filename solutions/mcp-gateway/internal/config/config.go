@@ -23,6 +23,7 @@ const (
 	DefaultSelfRestartDelay = 20 * time.Second
 	DefaultQueryTimeout     = 4 * time.Second
 	DefaultStatusTimeout    = 8 * time.Second
+	DefaultReportTimeout    = 9 * time.Second
 	DefaultLogByteCap       = 64 << 10
 	DefaultTelegramAPIURL   = "https://api.telegram.org"
 )
@@ -39,6 +40,12 @@ type Config struct {
 	AlertmanagerURL string
 	LokiURL         string
 
+	// Home Assistant REST endpoint for ha_* catalog checks. Empty disables
+	// them; they then report "not configured" instead of failing.
+	HAURL       string
+	HATokenFile string
+	HAToken     string
+
 	KubeAPIURL    string
 	KubeTokenFile string
 	KubeCAFile    string
@@ -54,6 +61,7 @@ type Config struct {
 	SelfRestartDelay time.Duration
 	QueryTimeout     time.Duration
 	StatusTimeout    time.Duration
+	ReportTimeout    time.Duration
 	LogByteCap       int
 }
 
@@ -67,6 +75,8 @@ func load(getenv func(string) string, readFile func(string) ([]byte, error)) (Co
 		PrometheusURL:     strings.TrimSpace(getenv("MCP_PROMETHEUS_URL")),
 		AlertmanagerURL:   strings.TrimSpace(getenv("MCP_ALERTMANAGER_URL")),
 		LokiURL:           strings.TrimSpace(getenv("MCP_LOKI_URL")),
+		HAURL:             strings.TrimSpace(getenv("MCP_HA_URL")),
+		HATokenFile:       strings.TrimSpace(getenv("MCP_HA_TOKEN_FILE")),
 		KubeAPIURL:        strings.TrimSpace(getenv("KUBERNETES_API_URL")),
 		KubeTokenFile:     strings.TrimSpace(getenv("KUBERNETES_TOKEN_FILE")),
 		KubeCAFile:        strings.TrimSpace(getenv("KUBERNETES_CA_FILE")),
@@ -105,6 +115,9 @@ func load(getenv func(string) string, readFile func(string) ([]byte, error)) (Co
 	if cfg.StatusTimeout, err = durationValue(getenv, "MCP_STATUS_TIMEOUT", DefaultStatusTimeout, time.Second, 60*time.Second); err != nil {
 		return cfg, err
 	}
+	if cfg.ReportTimeout, err = durationValue(getenv, "MCP_REPORT_TIMEOUT", DefaultReportTimeout, time.Second, 60*time.Second); err != nil {
+		return cfg, err
+	}
 	if cfg.LogByteCap, err = intValue(getenv, "MCP_LOG_BYTE_CAP", DefaultLogByteCap, 1024, 4<<20); err != nil {
 		return cfg, err
 	}
@@ -115,7 +128,25 @@ func load(getenv func(string) string, readFile func(string) ([]byte, error)) (Co
 	if err := loadTelegramFiles(&cfg, getenv, readFile); err != nil {
 		return cfg, err
 	}
+	if err := loadHAFiles(&cfg, readFile); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
+}
+
+func loadHAFiles(cfg *Config, readFile func(string) ([]byte, error)) error {
+	if cfg.HAURL == "" && cfg.HATokenFile == "" {
+		return nil
+	}
+	if cfg.HAURL == "" || cfg.HATokenFile == "" {
+		return fmt.Errorf("MCP_HA_URL and MCP_HA_TOKEN_FILE must be set together")
+	}
+	token, err := readSecret(readFile, cfg.HATokenFile, "MCP_HA_TOKEN_FILE")
+	if err != nil {
+		return err
+	}
+	cfg.HAToken = token
+	return nil
 }
 
 func validateGroups(cfg Config) error {

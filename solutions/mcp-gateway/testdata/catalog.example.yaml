@@ -127,6 +127,9 @@ services:
       - promql: probe_success{endpoint="ha"} == 0
         meaning: умный дом недоступен
         status: true
+    checks:
+      - {type: http, label: REST API, url: "http://192.0.2.10:8123/api/", expect_status: 200, auth: ha}
+      - {type: ha_unavailable_summary, label: недоступные, domains: [media_player]}
     restart:
       allowed: false
     description: Система умного дома вне Kubernetes; только чтение сигналов.

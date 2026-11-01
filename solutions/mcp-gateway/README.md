@@ -43,6 +43,7 @@ MCP client (Hermes, IDE, agent)
 | `infra_logs(name, since, grep, limit)` | Логи сервиса: Loki, если он там есть, иначе `pods/log` (все контейнеры каталога или выбранные). Секреты редактируются. Размер ограничен `MCP_LOG_BYTE_CAP`. |
 | `infra_query(promql)` | Один instant-запрос PromQL, только чтение, результат ограничен. |
 | `infra_overview()` | Топология и каталог для контекста модели. |
+| `infra_report()` | Полный отчёт по всем сервисам каталога: статус, готовые реплики, перезапуски за час, образ (digest сокращён), возраст, внешние проверки, версии HA и активные алерты. Возвращает короткий вердикт и компактный plain-text отчёт (≤ 3500 символов) для Telegram. |
 | ресурс `infra://catalog` | То же в виде markdown-ресурса. |
 
 ### `infra.fix` (`destructiveHint=true`)
@@ -90,6 +91,9 @@ MCP client (Hermes, IDE, agent)
 | `MCP_PROMETHEUS_URL` | нет | — | База Prometheus API, например `http://prometheus.example:9090`. |
 | `MCP_ALERTMANAGER_URL` | нет | — | База Alertmanager, без `/api/v2`. |
 | `MCP_LOKI_URL` | нет | — | База Loki, например `http://loki.example:3100`. |
+| `MCP_HA_URL` | нет | — | База Home Assistant REST для `ha_*`-проверок каталога. Вместе с токеном; если не задана, проверки честно сообщают «не настроено». |
+| `MCP_HA_TOKEN_FILE` | нет | — | Файл long-lived токена Home Assistant (Authorization: Bearer). |
+| `MCP_REPORT_TIMEOUT` | нет | `9s` | Общий бюджет `infra_report` (все проверки параллельно). |
 | `KUBERNETES_API_URL` | нет | in-cluster | Переопределение API-сервера (тесты, внешний кластер). |
 | `KUBERNETES_TOKEN_FILE` | нет | `/var/run/secrets/kubernetes.io/serviceaccount/token` | ServiceAccount-токен; перечитывается на каждый запрос. |
 | `KUBERNETES_CA_FILE` | нет | `/var/run/secrets/kubernetes.io/serviceaccount/ca.crt` | CA кластера. |
@@ -157,11 +161,38 @@ services:
 Логи из подов читаются максимум с трёх подов и всех контейнеров каталога
 (или выбранного списка), с ограничением `MCP_LOG_BYTE_CAP`.
 
+Проверки внешних (и любых других) сервисов объявляются в каталоге списком
+`checks:`; решение ничего не знает о конкретных адресах, host/URL приходят из
+каталога (в проекте — через плейсхолдеры, рендерятся при деплое):
+
+```yaml
+checks:
+  - {type: tcp, label: API, host: 192.0.2.10, port: 8123}
+  - {type: http, label: REST, url: "http://192.0.2.10:8123/api/",
+     expect_status: 200, auth: ha}
+  - {type: ha_state, label: спутник, entity_id: assist_satellite.example,
+     bad_states: [unavailable, unknown]}          # bad_states по умолчанию
+  - {type: ha_template, label: версия,
+     template: "{{ device_attr(device_id('assist_satellite.example'), 'sw_version') }}",
+     required: false}                              # справочно
+  - {type: ha_unavailable_summary, label: недоступные,
+     domains: [media_player]}                      # до 10 id в details
+```
+
+Правила проверок: `label` обязателен; `tcp` требует host и port 1..65535;
+`http` — url, `auth` из `none|ha`, `expect_status` 100..599 (по умолчанию 200),
+тело не возвращается; `ha_state` — entity_id; `ha_template` — template
+(пустой результат не ошибка, если не `required: true`);
+`ha_unavailable_summary` считает сущности в состоянии `unavailable`
+(опционально только указанные домены). Все проверки идут параллельно с
+таймаутом `MCP_QUERY_TIMEOUT`; при незаданных `MCP_HA_URL`/токене `ha_*`
+помечаются `skipped`, а не падают.
+
 Правила валидации: уникальный `id`, хотя бы один alias, `kind` из двух
 значений, для `k8s` обязательны namespace и workload поддерживаемого вида, для
 `external` запрещены workload/restart/pods-log, для `restart.allowed` обязателен
 `warning`, для `loki` обязателен selector, у каждого сигнала есть `promql` и
-`meaning`.
+`meaning`, у каждой проверки — известный тип и обязательные для типа поля.
 
 ## Безопасность
 

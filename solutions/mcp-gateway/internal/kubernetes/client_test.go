@@ -98,7 +98,7 @@ func TestListPods(t *testing.T) {
 			t.Errorf("selector = %q", got)
 		}
 		_, _ = io.WriteString(w, `{"items":[
- {"metadata":{"name":"hermes-2"},"spec":{"nodeName":"node1"},
+ {"metadata":{"name":"hermes-2"},"spec":{"nodeName":"node1","containers":[{"name":"hermes","image":"ghcr.io/example/hermes@sha256:aaaa"},{"name":"voice-proxy","image":"ghcr.io/example/proxy@sha256:bbbb"}]},
   "status":{"phase":"Running","startTime":"2026-11-01T09:00:00Z","containerStatuses":[
     {"name":"hermes","ready":true,"restartCount":2,
      "state":{"waiting":{"reason":""}},
@@ -129,6 +129,9 @@ func TestListPods(t *testing.T) {
 	}
 	if pods[1].Containers[0].LastTerminatedAt.IsZero() {
 		t.Fatal("last terminated time missing")
+	}
+	if pods[1].Containers[0].Image != "ghcr.io/example/hermes@sha256:aaaa" {
+		t.Fatalf("image = %q", pods[1].Containers[0].Image)
 	}
 }
 

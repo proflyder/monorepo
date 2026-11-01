@@ -69,6 +69,13 @@ spec:
             # KUBERNETES_API_URL/TOKEN_FILE/CA_FILE are left at their in-cluster
             # defaults: https://kubernetes.default.svc and the projected
             # ServiceAccount volume.
+            # Home Assistant REST for ha_* catalog checks. The token is the
+            # same long-lived token the scheduler's ha-bridge uses; the URL is
+            # rendered from the private deploy env (HAOS_IP).
+            - name: MCP_HA_URL
+              value: "http://${HAOS_IP}:8123"
+            - name: MCP_HA_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-ha/token
             - name: TELEGRAM_BOT_TOKEN_FILE
               value: /run/secrets/mcp-gateway-telegram/token
             - name: TELEGRAM_CHAT_ID_FILE
@@ -118,6 +125,9 @@ spec:
             - name: telegram
               mountPath: /run/secrets/mcp-gateway-telegram
               readOnly: true
+            - name: ha
+              mountPath: /run/secrets/mcp-gateway-ha
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -143,6 +153,13 @@ spec:
                 path: token
               - key: chat_id
                 path: chat_id
+        - name: ha
+          secret:
+            secretName: mcp-gateway-ha
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
         - name: tmp
           emptyDir:
             sizeLimit: 16Mi

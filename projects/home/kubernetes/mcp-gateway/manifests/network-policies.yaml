@@ -90,6 +90,23 @@ spec:
           port: 9093
         - protocol: TCP
           port: 3100
+    # External catalog checks on the LAN: HAOS REST/MA and the station's
+    # ESPHome, Sendspin and HTTP-control ports. The destinations are host IPs,
+    # so the rule uses the LAN CIDR from the private deploy env.
+    - to:
+        - ipBlock:
+            cidr: ${LAN_CIDR}
+      ports:
+        - protocol: TCP
+          port: 8123
+        - protocol: TCP
+          port: 8095
+        - protocol: TCP
+          port: 6053
+        - protocol: TCP
+          port: 8928
+        - protocol: TCP
+          port: 8099
     # Telegram Bot API for infra.report. Telegram publishes no stable address
     # range, so the destination cannot be narrowed to an ipBlock without
     # breaking quietly; only 443/tcp is opened.
