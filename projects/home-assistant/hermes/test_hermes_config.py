@@ -107,20 +107,27 @@ class HermesConfigTests(unittest.TestCase):
 
     def test_voice_layers_require_infra_confirmation(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
-        voice = self.data["agent"]["personalities"]["voice"]
-        for text in (prompt, voice):
-            with self.subTest(target=text[:20]):
-                assert "infra_status" in text
-                assert "infra_prepare_restart" in text
-                assert "infra_confirm" in text
-                assert "infra_cancel" in text
-                assert "подтвержд" in text.lower()
+        for marker in ("infra_status", "infra_prepare_restart", "infra_confirm",
+                       "infra_cancel"):
+            assert marker in prompt
+        assert "подтвержд" in prompt.lower()
+
+    def test_voice_personality_has_a_single_source(self):
+        # The stale copy in the fragment caused drift; the personality is now
+        # rendered from voice_prompt.txt and the fragment must not repeat it.
+        assert "agent" not in self.data or "personalities" not in self.data["agent"]
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        assert "Рикардо" in prompt
+        # The renderer wires that file into agent.personalities.voice.
+        renderer = (ROOT / "projects" / "home-assistant" / "hermes" /
+                    "render_hermes_config.py").read_text()
+        assert "DEFAULT_VOICE_PROMPT = HERE / \"voice_prompt.txt\"" in renderer
+        assert "agent.personalities.voice" in renderer
 
     def test_persona_is_ricardo_not_hermes(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         soul = (ROOT / "projects" / "home-assistant" / "hermes" / "SOUL.md").read_text()
-        voice = self.data["agent"]["personalities"]["voice"]
-        for text in (prompt, soul, voice):
+        for text in (prompt, soul):
             assert "Рикардо" in text
             assert "Гермес" in text or "Hermes" in text
         assert self.data["display"]["personality"] == "voice"

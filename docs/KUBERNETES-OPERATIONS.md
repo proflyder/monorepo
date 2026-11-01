@@ -53,7 +53,7 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 ## Данные
 
 - `/srv/k3s/runtime` — K3s data, containerd, datastore.
-- `/srv/k3s/volumes/hermes` — Hermes home, в Pod `/opt/data`.
+- `/srv/k3s/volumes/runtime-hermes` — Hermes home, в Pod `/opt/data`.
 - `/srv/k3s/volumes/openbao{, -backups}` — OpenBao raft и raft snapshots
   (PV `openbao-data`/`openbao-backups`, `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.

@@ -2,7 +2,7 @@
 
 **Deployment:** gateway and voice proxy run in one Kubernetes
 Pod; native user units are masked. [Current runbook](../../../docs/KUBERNETES-OPERATIONS.md).
-State is `/srv/k3s/volumes/hermes` on the host (`/opt/data` in the Pod);
+State is `/srv/k3s/volumes/runtime-hermes` on the host (`/opt/data` in the Pod);
 `~/.local/bin/hermes` is a kubectl wrapper. Native Install/Service commands below
 are retained for historical recovery and must not start a second production writer.
 
@@ -38,7 +38,7 @@ lives in [`HERMES.md`](HERMES.md); the TTS sanitizer lives in
 ## Render the overlay into the live home
 
 `config.yaml`, `.hermes.md` and `SOUL.md` live on the PVC
-(`/srv/k3s/volumes/hermes` on lab-host, `/opt/data` in the Pod) and are not
+(`/srv/k3s/volumes/runtime-hermes` on lab-host, `/opt/data` in the Pod) and are not
 watched by CI.  [`render_hermes_config.py`](render_hermes_config.py) is the
 only reviewed path from this directory to that volume:
 
@@ -46,28 +46,42 @@ only reviewed path from this directory to that volume:
 cd <repo>
 # 1. see what would change (prints a redacted diff, writes nothing)
 python3 projects/home-assistant/hermes/render_hermes_config.py \
-  --home /srv/k3s/volumes/hermes --dry-run
+  --home /srv/k3s/volumes/runtime-hermes \
+  --private-values secrets/home/hermes-private.yaml --dry-run
 
 # 2. render; a changed file keeps its previous version as <name>.prev (600)
 sudo python3 projects/home-assistant/hermes/render_hermes_config.py \
-  --home /srv/k3s/volumes/hermes
+  --home /srv/k3s/volumes/runtime-hermes \
+  --private-values secrets/home/hermes-private.yaml
 
 # 3. restart the gateway so it re-reads config.yaml and the context files
 kubectl -n home-assistant rollout restart deployment/hermes
 kubectl -n home-assistant rollout status deployment/hermes --timeout=180s
 ```
 
-The merge is deep: unrelated keys in the generated `config.yaml` survive, the
-fragment wins for the keys it declares, and lists are replaced.  Comments in a
-hand-edited `config.yaml` are not preserved — `config.yaml.prev` is the
-one-step rollback (`cp config.yaml.prev config.yaml` + restart).  A second run
-is a no-op, and `--check` exits `1` when a render is pending (pre-flight use).
+`--private-values` is required on a live home.  The tracked fragment carries
+TEST-NET placeholders for the Home Assistant and Music Assistant endpoints;
+the private file (copy [`hermes-private.example.yaml`](hermes-private.example.yaml),
+git-ignored under `secrets/`) is deep-merged **after** the fragment and keeps
+the real addresses.  The renderer refuses to write when a placeholder would
+replace a different live value, and lists the offending keys — the only escape
+hatch is `--allow-placeholders`, for throw-away test homes.
+
+The merge is deep: unrelated keys in the generated `config.yaml` survive
+(including MCP servers the fragment does not mention), the fragment wins for
+the keys it declares, private values win over both, and lists are replaced.
+`agent.personalities.voice` is not in the fragment: it is set from
+[`voice_prompt.txt`](voice_prompt.txt), the single source of truth for the
+Ricardo persona.  Comments in a hand-edited `config.yaml` are not preserved —
+`config.yaml.prev` is the one-step rollback (`cp config.yaml.prev config.yaml`
++ restart).  A second run is a no-op, and `--check` exits `1` when a render is
+pending (pre-flight use).
 
 Run it on lab-host against the host path, not inside the Pod: the Pod has no
 Python tooling guarantee, and the files are the same.  Stop the gateway first
 only when you need a consistent read; a restart after the render is enough
 because the gateway reads the config once at start.  Run as the user that owns
-`/srv/k3s/volumes/hermes`; if you had to use `sudo`, restore ownership of the
+`/srv/k3s/volumes/runtime-hermes`; if you had to use `sudo`, restore ownership of the
 rendered files to the Pod's uid (`kubectl -n home-assistant exec
 deploy/hermes -c hermes -- id`) and check `ls -l`, otherwise the gateway cannot
 open its own config.
@@ -150,20 +164,22 @@ The station assistant is **Рикардо**, the user's personal voice assistant
 1. `~/.hermes/SOUL.md` — primary identity (`SOUL.md` in this directory is the
    reviewed source).  It explicitly says not to call itself Hermes/Гермес.
 2. `agent.personalities.voice` in `~/.hermes/config.yaml` — the active
-   `voice` personality; the overlay in `config.fragment.yaml` contains the
-   reviewed text.
+   `voice` personality, rendered from [`voice_prompt.txt`](voice_prompt.txt)
+   (single source; the fragment does not repeat the text).
 3. HA `llama_cpp` conversation subentry — prompt from
    [`voice_prompt.txt`](voice_prompt.txt), title/entity `Рикардо`.
 
 Apply on lab-host after editing the repo files.  The renderer installs
-`SOUL.md` and `agent.personalities.voice` (from `config.fragment.yaml`) into
-the HERMES_HOME, so no hand edit of the PVC is needed:
+`SOUL.md` and `agent.personalities.voice` (from `voice_prompt.txt`) into the
+HERMES_HOME, so no hand edit of the PVC is needed:
 
 ```bash
 python3 projects/home-assistant/hermes/render_hermes_config.py \
-  --home /srv/k3s/volumes/hermes --dry-run
+  --home /srv/k3s/volumes/runtime-hermes \
+  --private-values secrets/home/hermes-private.yaml --dry-run
 sudo python3 projects/home-assistant/hermes/render_hermes_config.py \
-  --home /srv/k3s/volumes/hermes
+  --home /srv/k3s/volumes/runtime-hermes \
+  --private-values secrets/home/hermes-private.yaml
 kubectl -n home-assistant rollout restart deployment/hermes
 ```
 

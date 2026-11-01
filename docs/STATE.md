@@ -451,7 +451,9 @@
   home/music/web/mcp-infra, без terminal/file/browser. Telegram-канал Hermes —
   тот же инфра-бот, long polling, allow-list владельца. Контекст —
   `hermes/HERMES.md` → `/opt/data/.hermes.md`; overlay на PVC ставит
-  идемпотентный `hermes/render_hermes_config.py`.
+  идемпотентный `hermes/render_hermes_config.py` (реальные endpoint'ы — из
+  git-ignored `secrets/home/hermes-private.yaml`, `--private-values`;
+  `agent.personalities.voice` рендерится из `voice_prompt.txt`).
 - ExternalSecret `alertmanager-telegram` переведён на инфра-бот (живой
   Secret обновится после раскатки); в каждом алерте — fingerprint для
   `infra_alert`, ответ на алерт в Telegram передаёт его Hermes.

@@ -1,0 +1,25 @@
+# Example private values for render_hermes_config.py — copy, fill with the real
+# endpoints and keep the copy in secrets/ (for example
+# secrets/home/hermes-private.yaml). Never commit the filled file.
+#
+# The tracked config.fragment.yaml uses TEST-NET placeholders for the Home
+# Assistant and Music Assistant endpoints. This file is deep-merged AFTER the
+# fragment, so it wins for the keys it declares while everything else in the
+# fragment (toolsets, MCP servers, Telegram) stays as reviewed.
+#
+# Values below are placeholders from 192.0.2.0/24; keep them only in this
+# example file. Rendering with this file unchanged against a live home is
+# refused on purpose: the placeholders differ from the working endpoints.
+
+mcp_servers:
+  homeassistant:
+    url: "http://192.0.2.28:8123/api/mcp"
+  music-assistant:
+    url: "http://192.0.2.28:8095/mcp/v1"
+
+# Optional: any other live value that differs from the fragment, for example a
+# different model default or a private gateway address. Keys not listed here
+# are taken from the fragment or kept from the existing config.yaml.
+#
+# model:
+#   default: "gpt-5.6-luna"
