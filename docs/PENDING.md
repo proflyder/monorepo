@@ -6,11 +6,6 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **Ключи бэкапов вне дома.** restic password
-      (`secrets/home/offsite-restic.password`) и ключ шифрования HA backup
-      (`secrets/home/ha-backup.env`) лежат только на Mac и узле. Следующий шаг:
-      сохранить оба в password manager владельца; без них offsite-копия и
-      HA backup не расшифровываются.
 
 ## P3 — приёмка и развитие
 
