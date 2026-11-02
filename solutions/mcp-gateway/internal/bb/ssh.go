@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"time"
@@ -34,6 +35,9 @@ type SSHRunner struct {
 	KnownHostsFile string
 	// Timeout bounds one call; DefaultTimeout when zero.
 	Timeout time.Duration
+	// Logger receives one line per failed call with the error class. Nil
+	// means slog.Default().
+	Logger *slog.Logger
 }
 
 // Run implements Runner.
@@ -47,17 +51,23 @@ func (r *SSHRunner) Run(ctx context.Context, payload []byte) ([]byte, int, error
 
 	signer, err := loadSigner(r.KeyFile)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, r.fail("auth", err)
 	}
 	hostKey, err := knownhosts.New(r.KnownHostsFile)
 	if err != nil {
-		return nil, 0, fmt.Errorf("bb: load known_hosts: %w", err)
+		return nil, 0, r.fail("hostkey", fmt.Errorf("bb: load known_hosts: %w", err))
+	}
+	// Offer only host key types this host actually pins, so the server cannot
+	// pick a key we would always reject.
+	hostKeyAlgos, err := hostKeyAlgorithms(r.KnownHostsFile, r.Address)
+	if err != nil {
+		return nil, 0, r.fail("hostkey", err)
 	}
 
 	dialer := &net.Dialer{}
 	conn, err := dialer.DialContext(callCtx, "tcp", r.Address)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, r.fail("dial", err)
 	}
 	defer conn.Close()
 	if deadline, ok := callCtx.Deadline(); ok {
@@ -65,14 +75,15 @@ func (r *SSHRunner) Run(ctx context.Context, payload []byte) ([]byte, int, error
 	}
 
 	config := &ssh.ClientConfig{
-		User:            r.User,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: hostKey,
-		Timeout:         timeout,
+		User:              r.User,
+		Auth:              []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback:   hostKey,
+		HostKeyAlgorithms: hostKeyAlgos,
+		Timeout:           timeout,
 	}
 	clientConn, channels, requests, err := ssh.NewClientConn(conn, r.Address, config)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, r.fail(connectErrorClass(err), err)
 	}
 	defer clientConn.Close()
 	client := ssh.NewClient(clientConn, channels, requests)
@@ -80,7 +91,7 @@ func (r *SSHRunner) Run(ctx context.Context, payload []byte) ([]byte, int, error
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, r.fail("session", err)
 	}
 	defer session.Close()
 
@@ -95,11 +106,54 @@ func (r *SSHRunner) Run(ctx context.Context, payload []byte) ([]byte, int, error
 	if runErr != nil {
 		var exitErr *ssh.ExitError
 		if errors.As(runErr, &exitErr) {
+			// A non-zero exit still carries a JSON answer, so it is only a
+			// diagnostic, not a failed call.
+			r.logger().Debug("bb ssh bridge exited non-zero",
+				"event", "bb_ssh_error",
+				"class", "exit_status",
+				"address", r.Address,
+				"status", exitErr.ExitStatus(),
+			)
 			return stdout.Bytes(), exitErr.ExitStatus(), nil
 		}
-		return nil, 0, runErr
+		return nil, 0, r.fail("session", runErr)
 	}
 	return stdout.Bytes(), 0, nil
+}
+
+// logger returns the configured logger or the process default.
+func (r *SSHRunner) logger() *slog.Logger {
+	if r.Logger != nil {
+		return r.Logger
+	}
+	return slog.Default()
+}
+
+// fail logs one classified SSH failure and returns err unchanged. Only the
+// error class, address and error text are logged: never key material, request
+// bodies or answers.
+func (r *SSHRunner) fail(class string, err error) error {
+	attrs := []any{"event", "bb_ssh_error", "class", class}
+	if r.Address != "" {
+		attrs = append(attrs, "address", r.Address)
+	}
+	attrs = append(attrs, "error", err)
+	r.logger().Warn("bb ssh call failed", attrs...)
+	return err
+}
+
+// connectErrorClass names the phase that broke the connection setup.
+func connectErrorClass(err error) string {
+	var keyErr *knownhosts.KeyError
+	var revokedErr *knownhosts.RevokedError
+	if errors.As(err, &keyErr) || errors.As(err, &revokedErr) {
+		return "hostkey"
+	}
+	var authErr *ssh.ServerAuthError
+	if errors.As(err, &authErr) {
+		return "auth"
+	}
+	return "handshake"
 }
 
 func loadSigner(path string) (ssh.Signer, error) {

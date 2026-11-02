@@ -4,6 +4,7 @@ go_library(
     name = "bb",
     srcs = [
         "client.go",
+        "hostkey.go",
         "ssh.go",
         "targets.go",
     ],
@@ -20,6 +21,7 @@ go_test(
     name = "bb_test",
     srcs = [
         "client_test.go",
+        "ssh_test.go",
         "targets_test.go",
     ],
     embed = [":bb"],
