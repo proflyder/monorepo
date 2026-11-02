@@ -262,8 +262,9 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
 
 `Watchdog` уходит на Cloudflare Worker `solutions/heartbeat`: ping раз в
 5 минут, при тишине дольше `GRACE_SECONDS` Worker пишет в Telegram через тот
-же инфра-бот, при восстановлении — recovery. Подготовлено, но ещё не
-развёрнуто; полный список оставшихся шагов — `PENDING.md`.
+же инфра-бот, при восстановлении — recovery. Развёрнут как `home-heartbeat`
+на `workers.dev`; Cloudflare API token (Workers Scripts + KV edit) —
+`secrets/home/cloudflare-workers.env`, остальное — `secrets/home/heartbeat.env`.
 
 ```bash
 # тесты без сети и без Cloudflare
@@ -304,9 +305,16 @@ Secret, Alertmanager перечитает config. Смена Telegram-бота �
 Alertmanager и Hermes остались на том же боте. Cloudflare API token нужен
 только deploy.sh и в OpenBao/Kubernetes не попадает.
 
-Живой outage-тест (после развёртывания): остановить Alertmanager или
-перекрыть ему сеть, подождать `GRACE_SECONDS` + один cron-тик, получить
-сообщение «дом молчит», вернуть Alertmanager и получить recovery.
+Outage-тест без остановки остальных алертов — silence только на Watchdog:
+
+```bash
+kubectl -n monitoring exec alertmanager-monitoring-alertmanager-0 -c alertmanager -- \
+  amtool silence add alertname=Watchdog --duration=25m \
+  --comment="heartbeat outage test" --alertmanager.url=http://127.0.0.1:9093
+```
+
+Через `GRACE_SECONDS` + cron-тик (~16–20 мин) приходит «дом молчит»; после
+истечения silence первый ping даёт recovery.
 
 ## MCP-шлюз (голосовая диагностика)
 
