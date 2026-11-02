@@ -125,8 +125,10 @@
 - Audit — декларативный девайс `stdout/`: kubelet ротирует лог, Alloy
   отправляет его в Loki (7 дней). Значения в записях HMAC-хэшированы, но пути
   и metadata запросов видны — Loki доступен только из LAN/VPN.
-- Backup — raft snapshot в локальный PV на том же узле; offsite-копия пока
-  открытый пункт, восстановление на отдельном стенде не проверялось.
+- Backup — raft snapshot в локальный PV на том же узле; offsite-копия
+  (R2 + restic) подготовлена, но не установлена. Ключ auto-unseal и recovery
+  keys в offsite-архив не входят; восстановление на отдельном стенде пока не
+  проверялось.
 - Приложенческие Secrets (`scheduler-auth`, `ha-bridge-ha`,
   `hermes-environment`, `grafana-admin`, `cloudflare-api-token`,
   `currency-bot`, `cloudflared-tunnel`) перенесены в

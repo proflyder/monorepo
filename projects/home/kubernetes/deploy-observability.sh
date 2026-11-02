@@ -18,14 +18,19 @@ kubectl -n monitoring wait --for=condition=Ready externalsecret/alertmanager-tel
 kubectl -n monitoring create configmap alertmanager-templates \
   --from-file="$ROOT/projects/home/kubernetes/observability/alertmanager/telegram.tmpl" \
   --dry-run=client -o yaml | kubectl apply -f -
-# Real server URL overrides belong in a private values file, never in Git.
+# Real server URLs and scrape targets belong in a private values file, never in
+# Git (example: projects/home/kubernetes/observability/pve-scrape.values.example.yaml).
+private_values="${PROMETHEUS_PRIVATE_VALUES:-$ROOT/secrets/home/observability-values.yaml}"
 extra=()
-if [[ -n "${PROMETHEUS_PRIVATE_VALUES:-}" ]]; then
-  extra=(-f "$PROMETHEUS_PRIVATE_VALUES")
+if [[ -f "$private_values" ]]; then
+  extra=(-f "$private_values")
 fi
 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
   --version "$PROMETHEUS_CHART_VERSION" -n monitoring \
   -f "$ROOT/platform/observability/values/prometheus.yaml" "${extra[@]}" --wait --timeout 8m
+# Backup freshness alerts (PVE vzdump + K3s offsite). ruleSelector is open, so
+# no Helm release label is required.
+kubectl apply -f "$ROOT/projects/home/kubernetes/observability/manifests/prometheusrule-backups.yaml"
 helm upgrade --install loki grafana-community/loki --version "$LOKI_CHART_VERSION" \
   -n monitoring -f "$ROOT/platform/observability/values/loki.yaml" --wait --timeout 8m
 helm upgrade --install alloy grafana/alloy --version "$ALLOY_CHART_VERSION" \

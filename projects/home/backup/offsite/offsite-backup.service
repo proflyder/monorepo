@@ -1,0 +1,34 @@
+[Unit]
+Description=Encrypted offsite backup to Cloudflare R2 (restic)
+Documentation=file:///usr/local/lib/offsite-backup/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/offsite-backup/env
+ExecStart=/usr/bin/python3 /usr/local/lib/offsite-backup/offsite_backup.py --env /etc/offsite-backup/env
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=idle
+UMask=0077
+
+# The unit reads PVC/host state and writes only its state/metrics directories.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# Root must read files owned by pod users (openbao snapshots, PVC data):
+# keep only the DAC capabilities. SQLite's online backup of a WAL database
+# needs the -shm index writable, so the PVC storage stays read-write.
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
+AmbientCapabilities=
+ReadOnlyPaths=/srv/k3s/volumes
+ReadWritePaths=/var/lib/offsite-backup /var/lib/node-exporter-textfile /srv/k3s/runtime/storage

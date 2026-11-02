@@ -171,5 +171,6 @@ push тега v0.5.100N в форке
 - Один K3s node, без HA control plane/distributed storage.
 - Публичного HA/Grafana/OpenBao нет; только LAN/VPN, кроме webhook
   currency-bot `tg.example.com/telegram/webhook` через Cloudflare Tunnel.
-- Нет offsite backup, внешнего alerting и проверенного disaster restore.
+- Offsite backup и алерты подготовлены, но не live; внешний dead-man switch
+  есть, проверенного disaster restore с чистого железа пока нет.
 - Станция — единственный экземпляр; factory/recovery image отсутствует.

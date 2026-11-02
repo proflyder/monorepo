@@ -6,13 +6,19 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **Бэкапы: offsite с шифрованием.** Локально есть ночной vzdump всех
-      гостей на отдельный SATA SSD (`backup`), но он на том же узле; HA
-      automatic backup не настроен (`sensor.backup_*` = unknown); `secrets/`,
-      CA и recovery keys не вывозятся. Следующий шаг: включить HA backup по
-      расписанию, выбрать offsite-назначение и ключ, вывозить всё в
-      шифрованном архиве, добавить алерт на устаревший backup. Ключ `openbao-seal` не класть в один архив
-      с raft-снапшотами (иначе шифрование OpenBao теряет смысл).
+- [ ] **Бэкапы: offsite с шифрованием.** Код и алерты подготовлены:
+      `projects/home/backup/offsite` (restic → Cloudflare R2) и
+      `projects/home/backup/pve` (метрики возраста vzdump), правило
+      `prometheusrule-backups.yaml`, textfile-коллектор node-exporter.
+      HA automatic backup включён (03:30, 3 копии). Осталось выполнить live:
+      создать R2 bucket и API-токен (Object Read & Write), заполнить
+      `secrets/home/offsite-backup.env` и `secrets/home/offsite-restic.password`
+      (restic password и R2 credentials продублировать вне дома, в password
+      manager), установить оба `install.sh` на K3s и PVE, добавить private
+      values с реальным PVE target, применить `deploy-observability.sh`,
+      выполнить первый запуск и restore-тест из R2 на чистой машине. Ключ
+      `openbao-seal` и recovery keys не класть в один архив с raft-снапшотами;
+      они и restic password в offsite-копию не входят.
 
 ## P3 — приёмка и развитие
 

@@ -503,15 +503,22 @@
   SHA-256 проверены.
 - `secrets/kubernetes-research/` — kubeconfig, private values, Grafana
   password, recovery.
-- HA automatic backup не настроен: `sensor.backup_next_scheduled_automatic_backup`
-  и `last_successful` = `unknown`; CronJob/Velero для K3s нет.
-- Offsite encrypted backup, восстановление на запасном железе и power-loss
-  тест не выполнены (`PENDING.md`).
+- HA automatic encrypted backup включён: ежедневно 03:30, 3 копии, ~45 MB,
+  агент `hassio.local`.
+- Offsite backup подготовлен кодом, но **не установлен и не live**:
+  `projects/home/backup/offsite` (restic → Cloudflare R2, client-side
+  encryption) и `projects/home/backup/pve` (возраст vzdump). В архив входят
+  OpenBao raft snapshot, SQLite scheduler/currency-bot, ledger ha-bridge и
+  автоматический backup HA. Ключ `openbao-seal`, recovery keys и restic
+  password в архив не входят и хранятся отдельно. Осталось: bucket/token R2,
+  установка на K3s/PVE, private PVE target, первый запуск и restore-тест из R2
+  (`PENDING.md`).
 
 ## Ограничения
 
 - Один K3s node, без HA control plane и распределённого storage.
 - Публичного HA/Grafana нет; доступ только LAN/VPN. Единственный публичный
   путь — Telegram webhook `tg.example.com` через Cloudflare Tunnel.
-- Нет offsite backup, внешнего alerting и проверенного disaster restore.
+- Offsite backup и алерты подготовлены, но не live; внешний dead-man switch
+  есть, проверенного disaster restore с чистого железа пока нет.
 - Станция — единственный экземпляр; factory/recovery image отсутствует.

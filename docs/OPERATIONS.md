@@ -788,6 +788,52 @@ ssh pve 'qmrestore /mnt/pve/backup/dump/<archive> <new-vmid> --storage local-lvm
 ```
 
 Проверочный restore — в новый VMID без сети (`--unique`, отключить `net0`),
-не поверх живой VM. HA full backup — через HA UI/Supervisor. K3s recovery и private values —
-`KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не удалять:
+не поверх живой VM. HA full backup — через HA UI/Supervisor (automatic
+encrypted backup 03:30, 3 копии, агент `hassio.local`). K3s recovery и private
+values — `KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не удалять:
 `/srv/k3s/volumes/*`, `/srv/k3s/recovery`, `secrets/`, `backups/`.
+
+### Offsite backup (R2 + restic)
+
+Подготовлено в `projects/home/backup/`, но ещё не установлено на живые узлы
+(см. `PENDING.md`). Установка с Mac:
+
+```bash
+# 1. Private inputs, вне Git:
+#    secrets/home/offsite-backup.env
+#    secrets/home/offsite-restic.password
+#    (RESTIC_REPOSITORY, R2 keys, HA_URL, HA_TOKEN_FILE; password и R2 creds
+#     продублировать в password manager вне дома)
+
+# 2. K3s node: restic, units, env по stdin, restic init только при необходимости
+projects/home/backup/offsite/install.sh --dry-run root@192.0.2.27
+projects/home/backup/offsite/install.sh --run-now root@192.0.2.27
+
+# 3. PVE: prometheus-node-exporter + textfile metrics каждые 15 минут
+projects/home/backup/pve/install.sh root@192.0.2.26
+
+# 4. Private PVE scrape target (реальный адрес не в Git)
+cp projects/home/kubernetes/observability/pve-scrape.values.example.yaml \
+   secrets/home/observability-values.yaml
+$EDITOR secrets/home/observability-values.yaml
+KUBECONFIG=... projects/home/kubernetes/deploy-observability.sh
+```
+
+Проверки и обслуживание:
+
+```bash
+ssh root@192.0.2.27 'systemctl list-timers offsite-backup.timer'
+ssh root@192.0.2.27 'systemctl start offsite-backup.service'
+ssh root@192.0.2.27 'journalctl -u offsite-backup.service -n 100 --no-pager'
+ssh root@192.0.2.27 'cat /var/lib/node-exporter-textfile/offsite_backup.prom'
+ssh root@192.0.2.27 'set -a; . /etc/offsite-backup/env; set +a; restic snapshots'
+ssh root@192.0.2.26 'cat /var/lib/prometheus/node-exporter/vzdump.prom'
+```
+
+Retention: daily `restic forget --keep-daily 7 --keep-weekly 4
+--keep-monthly 6`; prune и `restic check --read-data-subset=5%` — по
+воскресеньям. Смена restic password: `restic key add`, затем удалить старый
+ключ, обновить `/etc/offsite-backup/restic.password` и копию вне дома.
+Восстановление — `projects/home/backup/offsite/README.md` и `REBUILD.md`.
+Ротация R2 токена — новый API token в Cloudflare, затем обновить env и
+следующий запуск; старый токен отозвать.

@@ -36,6 +36,31 @@ K3s — `KUBERNETES-OPERATIONS.md`.
    (старые `.p12` в `secrets/home/vpn/clients/`), проверить `443/tcp+udp`.
 8. Проверить HA/MA/Grafana/HTTPS ingress/voice/VPN.
 
+### 1a. Offsite-копия (R2 + restic)
+
+Если локальный backup SSD потерян вместе с PVE, источник — зашифрованная
+offsite-копия. Нужны одновременно restic password и R2 credentials из
+password manager вне дома; без них копия не читается.
+
+```bash
+export RESTIC_REPOSITORY='s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>'
+export AWS_ACCESS_KEY_ID='...'
+export AWS_SECRET_ACCESS_KEY='...'
+export AWS_DEFAULT_REGION=auto
+export RESTIC_PASSWORD='...'
+restic snapshots
+restic check --read-data-subset=5%
+restic restore latest --target /srv/offsite-restore
+cat /srv/offsite-restore/MANIFEST.json
+```
+
+Дальше: `openbao/*.snap` — в восстановление OpenBao (§3.7), но `openbao-seal`
+и recovery keys в offsite-копии **нет** — они только в отдельной offline-копии.
+`sqlite/scheduler.db` и `sqlite/currency_bot-*.db` — остановить writer, вернуть
+в PVC и выполнить `PRAGMA integrity_check`; `ha-bridge/ledger.json` — в PVC
+ha-bridge; `home-assistant/backup_*.tar` — в HA onboarding. Подробно —
+`projects/home/backup/offsite/README.md`.
+
 ## 2. HAOS
 
 1. Установить HAOS VM 100; UEFI, 2 vCPU/4 GiB/32 GiB.

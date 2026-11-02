@@ -120,4 +120,17 @@
     `secret/k8s/monitoring/heartbeat`. Worker остаётся reusable-решением,
     project-specific URL/ids — только в private env проекта.
 
+24. **Offsite backup — Cloudflare R2 + restic, ключи отдельно.** R2 выбран
+    как S3-совместимое offsite-хранилище в free tier (10 GB); restic шифрует
+    данные на K3s-узле до отправки. В offsite-копию входят только
+    восстановимые данные: raft snapshot OpenBao, online-копии SQLite
+    scheduler/currency-bot, ledger ha-bridge и уже зашифрованный
+    автоматический backup HA. Не вывозятся: `secrets/`, CA, VPN-ключи,
+    OpenBao seal/recovery keys — без них offsite-копия не должна давать
+    полный доступ. Скрипт явно отказывает файлам `*seal*`/`*recovery*`/`*.key`.
+    restic password и R2 credentials хранятся в password manager вне дома;
+    при потере любого из них копия бесполезна. Возраст источников и успех
+    запуска публикуются в node-exporter textfile и проверяются алертами;
+    PVE scrape target и R2 endpoint — только private values/env, не Git.
+
 Меняется решение — обновить этот файл и `STATE.md`.

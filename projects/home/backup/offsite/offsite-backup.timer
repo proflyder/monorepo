@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily encrypted offsite backup to Cloudflare R2
+Documentation=file:///usr/local/lib/offsite-backup/README.md
+
+[Timer]
+OnCalendar=*-*-* 04:45:00
+Persistent=true
+RandomizedDelaySec=15min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
