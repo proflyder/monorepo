@@ -5,9 +5,10 @@
 ## Текущее состояние
 
 PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
-2 vCPU/4 GiB/32 GiB), VM `101 lab-k3s` (`192.0.2.27`, 8 vCPU/12 GiB/200 GiB)
-и CT `102 vpn` (`192.0.2.29`, Debian 13, ocserv). Static IP в guests,
-startup order 1/2. HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`.
+2 vCPU/4 GiB/32 GiB), VM `101 lab-k3s` (`192.0.2.27`, 8 vCPU/12 GiB/200 GiB),
+CT `102 vpn` (`192.0.2.29`, Debian 13, ocserv) и CT `103 bb`
+(`192.0.2.30`, Debian 13, 2 vCPU/2 GiB/16 GiB). Static IP в guests,
+startup order 1/2/3. HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`.
 Terraform plan — no changes; state root-only на PVE и копия в `secrets/`.
 HAOS восстановлен, K3s runtime и HTTPS ingress приняты read-only E2E.
 HA-совместимый endpoint HAOS доступен напрямую `.28:8123`; compatibility
@@ -25,6 +26,14 @@ VPN-сервер (ocserv) разворачивается отдельным unpr
 продлевается автоматически (DNS-01 Cloudflare); группа `ci` — только до K3s.
 Проброс на роутере — только `443/tcp+udp`; подробности и откат — в
 [vpn/README.md](vpn/README.md).
+
+Сервер bb разворачивается отдельным unprivileged CT 103 `bb` (Debian 13,
+2 vCPU / 2 GiB / 16 GiB) скриптами [bb](bb/): фиксированный MAC и static IP,
+Node.js по checksum, пользователь `bb` с linger и проверкой systemd user bus.
+Внутри CT работает согласованный SQLite backup перед ночным vzdump; при
+недоступном user bus enrollment запрещён и нужна VM. Подробности и перенос —
+[bb/README.md](bb/README.md). `set-startup-order.sh` задаёт order 1/2/3 для
+HAOS, K3s и bb.
 
 Статический IP K3s задаётся приватными Terraform variables
 `k3s_ipv4_address` (CIDR) и `k3s_ipv4_gateway`; default DHCP — только для

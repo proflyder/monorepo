@@ -29,8 +29,10 @@
                  │      │      HA + MA + Matter add-ons
                  │      ├── VM 101  Ubuntu/K3s    192.0.2.27
                  │      │      STT/TTS, Hermes, currency-bot, observability
-                 │      └── CT 102  vpn           192.0.2.29
-                 │             ocserv, OpenConnect, TOTP
+                 │      ├── CT 102  vpn           192.0.2.29
+                 │      │      ocserv, OpenConnect, TOTP
+                 │      └── CT 103  bb            192.0.2.30
+                 │             bb server, SQLite, исходящий Connect
                  │
                  ├── Станция Midi                 192.0.2.13
                  │      Pulsar, ESPHome, Sendspin
@@ -44,6 +46,8 @@
 - **HAOS VM** — Home Assistant, Music Assistant и Matter Server add-ons.
 - **K3s VM** — STT/TTS, Hermes, currency-bot, наблюдаемость и Grafana.
 - **VPN CT** — ocserv для входа в домашнюю LAN снаружи (пароль + TOTP).
+- **BB CT** — сервер bb и SQLite; входящих портов не публикует, ходит
+  исходящим HTTPS к bb Connect.
 - **Cloudflare Tunnel** — единственный публичный HTTP-путь: только webhook
   currency-bot.
 - **Станция** — Pulsar/ESPHome-спутник и Sendspin-плеер.
@@ -58,6 +62,7 @@
 | HAOS VM 100 | `192.0.2.28` | HA Core/Supervisor |
 | K3s VM 101 | `192.0.2.27` | Ubuntu, K3s node |
 | VPN CT 102 | `192.0.2.29` | Debian 13, ocserv |
+| BB CT 103 | `192.0.2.30` | Debian 13, bb server |
 | Станция | `192.0.2.13` | Pulsar |
 | Mac | `192.0.2.11` | DHCP |
 
@@ -142,6 +147,18 @@ VPN → LAN/WAN. Профили `lan`/`full`; отдельная группа `c
 одновременных сессий. Наружу проброшен только `443/tcp+udp`; сертификат
 Let's Encrypt для `vpn.example.com` продлевается certbot-ом (DNS-01
 Cloudflare) автоматически.
+
+### BB CT 103
+
+| Порт | Назначение | Класс доступа |
+|---|---|---|
+| входящие | не публикуются | — |
+| `443/tcp` + DNS | исходящий bb Connect и enrollment | egress из CT |
+
+Сервер bb слушает loopback внутри CT; удалённый доступ идёт через
+исходящий канал `bb connect`, входящие порты на роутере не открываются.
+SSH в CT — только LAN, как у остальных гостей. SQLite-копия лежит в
+`/var/backups/bb`, ночной vzdump включает CT 103.
 
 ### Станция
 
@@ -249,6 +266,8 @@ Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
   VPN-CT остаётся LAN-only. HTTP наружу идёт только исходящим Cloudflare
   Tunnel и только на `tg.example.com/telegram/webhook`.
 - `6638` (Zigbee) не имеет auth; при включении не выставлять наружу.
+- Сервер bb (CT 103) не публикует входящих портов: доступ идёт через
+  исходящий Connect, SSH — только LAN.
 - Станция не должна получать публичный WAN: egress guard — часть дизайна.
 - Секреты и реальные адреса хранятся только в `secrets/`; в публичных
   документах — примеры и имена переменных.
