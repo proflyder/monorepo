@@ -331,8 +331,17 @@ func (s *Store) UpdateSchedule(ctx context.Context, in *ricardov1.Schedule, expe
 		}
 		prepared.NextDueUnix = next
 	}
-	// Editing a rule stops any active delivery window; sound control is a
-	// separate StopSchedule call.
+	// Editing a rule closes its active occurrence. closeOccurrence cancels the
+	// occurrence's FIRE deliveries and queues a durable STOP using the old
+	// label/payload, so the executor stops what is actually ringing.
+	if occ, active := s.occurrenceToClose(existing.schedule, now); active {
+		if _, err := s.closeOccurrence(ctx, tx, existing.schedule, occ, DetailRuleChanged, now); err != nil {
+			return nil, err
+		}
+		// closeOccurrence advances revision itself; account for it so the
+		// returned object matches the stored row.
+		prepared.Revision++
+	}
 	prepared.SnoozeUntilUnix = 0
 	prepared.SnoozeCount = 0
 	prepared.ActiveOccurrenceUnix = 0
@@ -395,6 +404,14 @@ func (s *Store) SetScheduleEnabled(ctx context.Context, id string, enabled bool,
 	cur.Revision++
 	cur.UpdatedUnix = now.Unix()
 	if enabled {
+		// Re-enabling during a still-open occurrence closes it with a durable
+		// STOP instead of silently dropping the ringing window.
+		if occ, active := s.occurrenceToClose(cur, now); active {
+			if _, err := s.closeOccurrence(ctx, tx, cur, occ, DetailRuleChanged, now); err != nil {
+				return nil, err
+			}
+			cur.Revision++
+		}
 		cur.SnoozeUntilUnix = 0
 		cur.SnoozeCount = 0
 		cur.ActiveOccurrenceUnix = 0
@@ -578,15 +595,15 @@ func (s *Store) StopSchedule(ctx context.Context, id string, now time.Time) (*ri
 	if !active {
 		// Repeated Stop on the same occurrence replays the existing STOP
 		// control event instead of creating a new one or failing. An
-		// occurrence closed by ring-window expiry (the scheduler emitted the
-		// STOP itself) is also already stopped, so the call stays idempotent
-		// inside the same ring window.
+		// occurrence closed by ring-window expiry or by a rule change (the
+		// scheduler emitted the STOP itself) is also already stopped, so the
+		// call stays idempotent inside the same ring window.
 		var prior int64
 		err := tx.QueryRowContext(ctx, `SELECT occurrence_unix FROM events
-			WHERE source_id=? AND action=? AND detail IN (?, ?) AND due_unix>=?
+			WHERE source_id=? AND action=? AND detail IN (?, ?, ?) AND due_unix>=?
 			ORDER BY created_unix DESC LIMIT 1`,
 			sch.Id, int32(ricardov1.EventAction_EVENT_ACTION_STOP),
-			"stopped", DetailRingWindowExpired,
+			"stopped", DetailRingWindowExpired, DetailRuleChanged,
 			now.Add(-s.cfg.RingWindow).Unix()).Scan(&prior)
 		if err == nil {
 			if err := tx.Commit(); err != nil {
@@ -655,6 +672,19 @@ func (s *Store) activeOccurrence(sch *ricardov1.Schedule, now time.Time) (int64,
 		return sch.ActiveOccurrenceUnix, true
 	}
 	if sch.SnoozeUntilUnix > now.Unix() {
+		return sch.ActiveOccurrenceUnix, true
+	}
+	return 0, false
+}
+
+// occurrenceToClose reports the occurrence that a rule change must close. It
+// covers a ringing window and a pending snooze, including a snooze whose due
+// time has passed but whose activation tick has not run yet.
+func (s *Store) occurrenceToClose(sch *ricardov1.Schedule, now time.Time) (int64, bool) {
+	if occ, active := s.activeOccurrence(sch, now); active {
+		return occ, true
+	}
+	if sch.ActiveOccurrenceUnix > 0 && sch.SnoozeUntilUnix > 0 {
 		return sch.ActiveOccurrenceUnix, true
 	}
 	return 0, false

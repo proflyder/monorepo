@@ -108,6 +108,12 @@ Reminder — `SCHEDULE_KIND_REMINDER`, обязательно `REPEAT_KIND_ONCE`
 - `Snooze` после `Stop` возвращает `FAILED_PRECONDITION`;
 - пока идёт snooze-ожидание, повторный snooze разрешён (active snooze
   semantics);
+- `UpdateSchedule` и `SetScheduleEnabled(true)` во время активного occurrence
+  (звонок или pending snooze) закрывают его durable STOP
+  (`detail=rule_changed`) со старым label/payload и отменяют pending `FIRE`
+  этого occurrence; `Stop` сразу после правки идемпотентен;
+- `SetScheduleEnabled(false)` окно не закрывает: STOP придёт по истечении
+  `RingWindow`;
 - recurrence не сдвигается snooze/stop.
 
 `DueEvent.action`: `FIRE` — начать occurrence, `STOP` — остановить звук.
