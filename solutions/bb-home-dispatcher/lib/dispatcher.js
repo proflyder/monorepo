@@ -1,5 +1,9 @@
 import { DispatchError } from "./errors.js";
-import { anyOutputSchema } from "./schema.js";
+import {
+  nullableStringList,
+  profilePolicyOutputSchema,
+  profileProjectsOutputSchema,
+} from "./schema.js";
 
 const ACTIVE_STATUSES = new Set(["active", "starting", "pending"]);
 const RUNNING_STATUSES = new Set(["active", "starting", "pending", "stopping"]);
@@ -60,7 +64,6 @@ export function createDispatcher({
         typeof raw.dispatcherThreadId === "string"
           ? raw.dispatcherThreadId.trim()
           : "",
-      profileProviders: parseProfileProviders(raw.profileProviders),
     };
   }
 
@@ -93,7 +96,7 @@ export function createDispatcher({
         pluginId: "profiles",
         method: "listProjects",
         input: null,
-        outputSchema: anyOutputSchema,
+        outputSchema: profileProjectsOutputSchema,
       });
       if (!isPlainObject(response) || !Array.isArray(response.projects)) {
         throw new Error("profiles RPC returned an unexpected shape");
@@ -118,6 +121,49 @@ export function createDispatcher({
         "Плагин профилей недоступен, профиль проекта неизвестен.",
       );
     }
+  }
+
+  async function readProfilePolicy(profile) {
+    try {
+      const response = await sdk().plugins.callRpc({
+        pluginId: "profiles",
+        method: "profilePolicy",
+        input: { profile },
+        outputSchema: profilePolicyOutputSchema,
+      });
+      if (
+        !isPlainObject(response) ||
+        !nullableStringList(response.providers) ||
+        !nullableStringList(response.machines)
+      ) {
+        throw new Error("profiles RPC returned an unexpected policy");
+      }
+      return {
+        providers: response.providers ?? null,
+        machines: response.machines ?? null,
+      };
+    } catch (cause) {
+      log.warn(`profiles policy unavailable: ${messageOf(cause)}`);
+      if (isNotFound(cause)) {
+        throw new DispatchError(
+          "profile_not_found",
+          `Профиль «${profile}» не найден в плагине профилей.`,
+        );
+      }
+      throw new DispatchError(
+        "profiles_unavailable",
+        "Плагин профилей недоступен, политика профиля неизвестна.",
+      );
+    }
+  }
+
+  // One profilePolicy call per profile per request, even though `targets`
+  // lists several projects of the same profile.
+  async function policyForProfile(profile, cache) {
+    if (cache.has(profile)) return cache.get(profile);
+    const policy = await readProfilePolicy(profile);
+    cache.set(profile, policy);
+    return policy;
   }
 
   async function readProjects() {
@@ -189,29 +235,16 @@ export function createDispatcher({
     return { profiles, profileRow, project, machine, hosts: hostMap };
   }
 
-  function allowedProviderIds(settings, profile) {
-    if (settings.profileProviders === null) return null;
-    const map = settings.profileProviders;
-    if (Object.prototype.hasOwnProperty.call(map, profile)) {
-      return map[profile];
-    }
-    if (Object.prototype.hasOwnProperty.call(map, "*")) {
-      return map["*"];
-    }
-    return null;
-  }
-
   async function providerModelsFor({
     projectId,
     hostId,
     profile,
-    settings,
+    providers: allowed,
     cache,
   }) {
     const key = `${projectId}\u0000${hostId}\u0000${profile}`;
     if (cache.has(key)) return cache.get(key);
     const promise = (async () => {
-      const allowed = allowedProviderIds(settings, profile);
       const [catalog, available] = await Promise.all([
         sdk().providers.catalog(),
         sdk().providers.list({ hostId }),
@@ -280,7 +313,6 @@ export function createDispatcher({
   // -------------------------------------------------------------- methods --
 
   async function targets() {
-    const settings = await readSettings();
     const [profiles, projects, hosts] = await Promise.all([
       readProfileProjects(),
       readProjects(),
@@ -289,11 +321,13 @@ export function createDispatcher({
     const hostMap = new Map(hosts.map((host) => [host.id, host]));
     const projectMap = new Map(projects.map((project) => [project.id, project]));
     const cache = new Map();
+    const policyCache = new Map();
     const rows = [];
     for (const profileProject of profiles) {
       const project = projectMap.get(profileProject.projectId);
       if (project === undefined) continue;
       const machine = machineOf(project, hostMap);
+      const policy = await policyForProfile(profileProject.profile, policyCache);
       const providers =
         machine === null
           ? []
@@ -301,13 +335,14 @@ export function createDispatcher({
               projectId: project.id,
               hostId: machine.hostId,
               profile: profileProject.profile,
-              settings,
+              providers: policy.providers,
               cache,
             });
       rows.push({
         projectId: project.id,
         name: profileProject.name,
         profile: profileProject.profile,
+        policy,
         machine:
           machine === null
             ? null
@@ -323,7 +358,6 @@ export function createDispatcher({
     rows.sort((a, b) => a.name.localeCompare(b.name, "ru"));
     return {
       projects: rows,
-      profileProvidersConfigured: settings.profileProviders !== null,
       speech: `Доступно проектов: ${rows.length}.`,
     };
   }
@@ -416,18 +450,30 @@ export function createDispatcher({
   async function validateSpawn(params) {
     const settings = await readSettings();
     const target = await resolveTarget(params);
-    const allowed = allowedProviderIds(settings, params.profile);
-    if (allowed !== null && !allowed.includes(params.providerId)) {
+    const policy = await readProfilePolicy(params.profile);
+    if (
+      policy.providers !== null &&
+      !policy.providers.includes(params.providerId)
+    ) {
       throw new DispatchError(
         "provider_not_allowed",
         `Провайдер «${params.providerId}» не разрешён профилю «${params.profile}».`,
+      );
+    }
+    if (
+      policy.machines !== null &&
+      !policy.machines.includes(target.machine.hostId)
+    ) {
+      throw new DispatchError(
+        "machine_not_allowed",
+        `Машина «${target.machine.name}» не разрешена профилю «${params.profile}».`,
       );
     }
     const providers = await providerModelsFor({
       projectId: params.projectId,
       hostId: target.machine.hostId,
       profile: params.profile,
-      settings,
+      providers: policy.providers,
       cache: new Map(),
     });
     const provider = providers.find(
@@ -961,40 +1007,6 @@ function normalizePermissionMode(value) {
   );
 }
 
-function parseProfileProviders(raw) {
-  if (raw === undefined || raw === null || String(raw).trim() === "") {
-    return null;
-  }
-  let value;
-  try {
-    value = JSON.parse(String(raw));
-  } catch {
-    throw new DispatchError(
-      "bad_settings",
-      "Настройка profileProviders должна быть JSON-объектом.",
-    );
-  }
-  if (!isPlainObject(value)) {
-    throw new DispatchError(
-      "bad_settings",
-      "Настройка profileProviders должна быть JSON-объектом.",
-    );
-  }
-  for (const [profile, list] of Object.entries(value)) {
-    if (list === null) continue;
-    if (
-      !Array.isArray(list) ||
-      list.some((item) => typeof item !== "string" || item === "")
-    ) {
-      throw new DispatchError(
-        "bad_settings",
-        `Настройка profileProviders для «${profile}» должна быть списком id или null.`,
-      );
-    }
-  }
-  return value;
-}
-
 function fingerprintOf(method, params) {
   return `${method}:${JSON.stringify(params)}`;
 }
@@ -1005,4 +1017,12 @@ function isPlainObject(value) {
 
 function messageOf(cause) {
   return cause instanceof Error ? cause.message : String(cause);
+}
+
+// bb turns a plugin RPC refusal into an error carrying the plugin's code.
+function isNotFound(cause) {
+  return (
+    isPlainObject(cause) &&
+    (cause.code === "not_found" || cause.code === "profile_not_found")
+  );
 }

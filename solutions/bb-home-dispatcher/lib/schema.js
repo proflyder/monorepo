@@ -173,18 +173,53 @@ function invalid(message) {
   return new DispatchError("invalid_request", message, { httpStatus: 400 });
 }
 
-// Standard Schema v1 validator used for cross-plugin RPC output. It checks
-// nothing on purpose: the dispatcher re-reads every field it needs and treats
-// the other plugin's answer as untrusted input.
-export const anyOutputSchema = {
-  "~standard": {
-    version: 1,
-    vendor: "home-dispatcher",
-    validate(value) {
-      return { value };
+// `bb.sdk.plugins.callRpc` accepts a zod schema and calls `outputSchema.parse`
+// on the other plugin's result. A Standard Schema object is not enough: it has
+// only `~standard.validate`, so `callRpc` fails before the dispatcher sees any
+// data. These are minimal parse-compatible schemas; like the rest of this
+// module they stay dependency-free and treat cross-plugin data as untrusted.
+export function outputSchema(validate) {
+  return {
+    parse(value) {
+      if (!validate(value)) {
+        throw new Error("RPC result has an unexpected shape");
+      }
+      return value;
     },
-  },
-};
+  };
+}
+
+export function nullableStringList(value) {
+  return (
+    value === null ||
+    (Array.isArray(value) &&
+      value.every((item) => typeof item === "string" && item !== ""))
+  );
+}
+
+export const profileProjectsOutputSchema = outputSchema(
+  (value) =>
+    isPlainObject(value) &&
+    Array.isArray(value.projects) &&
+    value.projects.every(
+      (row) =>
+        isPlainObject(row) &&
+        typeof row.id === "string" &&
+        typeof row.name === "string" &&
+        typeof row.profile === "string",
+    ),
+);
+
+export const profilePolicyOutputSchema = outputSchema(
+  (value) =>
+    isPlainObject(value) &&
+    nullableStringList(value.providers) &&
+    nullableStringList(value.machines),
+);
+
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export function standardSchema(validate) {
   return {

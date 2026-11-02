@@ -47,12 +47,6 @@ export default async function plugin(bb) {
       label: "Working dispatcher thread id (optional)",
       default: "",
     },
-    profileProviders: {
-      type: "string",
-      label: "Allowed providers per profile (JSON object, empty = all)",
-      experimental_multiline: true,
-      default: "",
-    },
   });
 
   const dispatcher = createDispatcher({

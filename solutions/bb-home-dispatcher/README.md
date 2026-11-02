@@ -26,8 +26,10 @@ bb plugin config home-dispatcher set hmacSecret <random-secret>
 `bb plugin token` выдаётся bb и ротируется через `--rotate`.
 
 Для работы метода `targets` должен быть установлен плагин `profiles`: профиль
-проекта читается через его RPC `listProjects`. Без него `targets` и
-`validate_spawn`/`spawn` отвечают `profiles_unavailable`.
+проекта читается через его RPC `listProjects`, а allowlist провайдеров и машин —
+через `profilePolicy({profile})`. Без него `targets` и
+`validate_spawn`/`spawn` отвечают `profiles_unavailable`; если профиль исчез из
+`profiles` — `profile_not_found`.
 
 ## Настройки
 
@@ -37,17 +39,11 @@ bb plugin config home-dispatcher set hmacSecret <random-secret>
 | `workerLimit` | `2` | Максимум одновременно `starting`/`active`/`pending` тредов, созданных этим плагином. |
 | `permissionMode` | `auto` | Режим разрешений для создаваемых тредов: только `auto` или `accept-edits`; `full` отклоняется схемой настройки. |
 | `dispatcherThreadId` | `""` | id «рабочего диспетчера», в который `send` разрешён всегда. |
-| `profileProviders` | `""` | JSON-объект `{"<profile>": ["<providerId>", ...]}`. Пусто = все провайдеры. |
 
-`profileProviders` нужен потому, что плагин `profiles` не публикует свой
-allowlist провайдеров через RPC (он лежит в его kv и меняется командой
-`bb profiles providers`). Если allowlist в `profiles` используется, зеркальте
-его здесь. Значение `null` для профиля означает «все провайдеры»; ключ `"*"`
-задаёт значение по умолчанию для профилей без своей записи:
-
-```json
-{ "work": ["claude-code"], "personal": null, "*": ["claude-code"] }
-```
+Отдельной настройки allowlist провайдеров больше нет: политика профиля живёт
+в плагине `profiles` (`bb profiles providers`, `bb profiles machines`) и
+читается через `profilePolicy`. `null` в ответе RPC означает «любой провайдер»
+или «любая машина».
 
 ## HTTP-маршрут
 
@@ -108,7 +104,8 @@ curl -sS -X POST \
 ### `targets`
 
 Без параметров. Отдаёт проекты из `profiles`, машину исходника, статус
-машины, разрешённых провайдеров и их модели с уровнями reasoning:
+машины, политику профиля и разрешённых провайдеров с моделями и уровнями
+reasoning:
 
 ```json
 {
@@ -117,6 +114,7 @@ curl -sS -X POST \
       "projectId": "proj_...",
       "name": "Project",
       "profile": "work",
+      "policy": { "providers": ["codex"], "machines": null },
       "machine": { "hostId": "host_...", "name": "Mac", "status": "connected", "online": true },
       "providers": [
         {
@@ -133,10 +131,12 @@ curl -sS -X POST \
         }
       ]
     }
-  ],
-  "profileProvidersConfigured": false
+  ]
 }
 ```
+
+Политика — эффективная, из `profiles`: `providers: null` или `machines: null`
+означает отсутствие ограничения.
 
 ### `status`
 
@@ -148,16 +148,17 @@ project, profile, machine, status, `runtimeSeconds` (для активных —
 
 `{ profile, projectId, providerId, model, reasoningLevel }`.
 
-Проверяет: проект принадлежит профилю; провайдер разрешён профилем (если
-задан `profileProviders`); провайдер доступен на машине; модель есть в
-каталоге; уровень reasoning поддерживается моделью; машина online; число
-активных тредов плагина меньше `workerLimit`. Возвращает `ok: true` и
-`result`, либо `ok: false` с кодом и `speech`.
+Проверяет: проект принадлежит профилю; провайдер разрешён профилем
+(`profilePolicy.providers`); машина проекта разрешена профилем
+(`profilePolicy.machines`, `null` = любая); провайдер доступен на машине;
+модель есть в каталоге; уровень reasoning поддерживается моделью; машина
+online; число активных тредов плагина меньше `workerLimit`. Возвращает
+`ok: true` и `result`, либо `ok: false` с кодом и `speech`.
 
-Коды: `profiles_unavailable`, `project_not_found`, `profile_mismatch`,
-`provider_not_allowed`, `machine_missing`, `machine_offline`,
-`provider_unavailable`, `model_not_found`, `reasoning_not_supported`,
-`thread_limit`, `bad_settings`.
+Коды: `profiles_unavailable`, `profile_not_found`, `project_not_found`,
+`profile_mismatch`, `provider_not_allowed`, `machine_not_allowed`,
+`machine_missing`, `machine_offline`, `provider_unavailable`,
+`model_not_found`, `reasoning_not_supported`, `thread_limit`, `bad_settings`.
 
 ### `spawn`
 
@@ -209,7 +210,8 @@ project, profile, machine, status, `runtimeSeconds` (для активных —
 - Нет методов для терминалов, файлов, удаления, архивации, установки
   плагинов, произвольных `bb`-команд.
 - `send` не может писать в произвольный тред; `spawn` не принимает
-  произвольную машину — только машину исходника проекта.
+  произвольную машину — только машину исходника проекта, и только если она
+  разрешена профилю в `profiles`.
 - Лимит одновременных тредов и лимит тела защищают от случайного «размножения»
   и раздутых запросов.
 - Prompt и текст сообщений не пишутся в лог; логируются только method,
@@ -229,9 +231,6 @@ pinned Node без npm-зависимостей. Сборка плагина в�
 
 ## Открытые вопросы к SDK
 
-- Плагин `profiles` не отдаёт allowlist провайдеров через RPC; приходится
-  зеркалить его в `profileProviders`. Если появится read-метод, настройку можно
-  заменить на прямой вызов.
 - `turn/completed` не содержит `turnId`/`requestId`, поэтому корреляция идёт по
   seq (`afterSeq` → `client/turn/requested` → `turn/completed`). При
   параллельных ходах в одном треде это работает для последовательных
