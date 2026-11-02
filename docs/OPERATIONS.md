@@ -796,8 +796,9 @@ values — `KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не удалять:
 ### Offsite backup (Google Drive + restic)
 
 Live с 2026-11-02: K3s node, таймер `offsite-backup.timer` 04:45 →
-restic-репозиторий `rclone:gdrive:home-offsite` (личный Google Drive, scope
-`drive.file`: rclone видит только свои файлы). Установка/обновление с Mac:
+restic-репозиторий `rclone:gdrive:home-offsite-v2` (личный Google Drive, scope
+`drive.file`: rclone видит только файлы своего OAuth client; свой client
+«Desktop app» в Google Cloud project `home-offsite-backup`). Установка/обновление с Mac:
 
 ```bash
 # Private inputs (вне Git):
@@ -811,10 +812,13 @@ SSH_CONFIG=secrets/proxmox-install/ssh_config projects/home/backup/pve/install.s
 KUBECONFIG=secrets/kubernetes-research/kubeconfig projects/home/kubernetes/deploy-observability.sh
 ```
 
-Новый OAuth-токен Google: `rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ"`
-(base64 `{"scope":"drive.file"}`), вывод — base64-JSON с полем `token`; собрать
-`[gdrive] type=drive scope=drive.file token=…` в `offsite-rclone.conf` и
-переустановить. Лимиты: `MAX_STAGING_BYTES` (2 GiB) и `MAX_REPO_BYTES`
+Новый OAuth-токен Google: `rclone authorize drive <base64 JSON
+{"client_id","client_secret","scope":"drive.file"}>` с client из
+`secrets/home/offsite-gdrive-client.env`; вывод — base64-JSON с полем `token`;
+собрать `[gdrive] type=drive client_id=… client_secret=… scope=drive.file
+token=…` в `offsite-rclone.conf` и переустановить. Смена client = новый
+репозиторий (drive.file не видит файлы другого client): новая папка, `restic
+init` выполнит установщик. Лимиты: `MAX_STAGING_BYTES` (2 GiB) и `MAX_REPO_BYTES`
 (5 GiB) — превышение = неуспешный запуск и алерт, не загрузка.
 
 Проверки и обслуживание:

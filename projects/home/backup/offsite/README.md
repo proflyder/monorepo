@@ -28,6 +28,9 @@ Root-only env file `/etc/offsite-backup/env` (never committed):
 RESTIC_REPOSITORY=rclone:gdrive:home-offsite
 RESTIC_PASSWORD_FILE=/etc/offsite-backup/restic.password
 # rclone rewrites its config on OAuth refresh: keep it in a writable path.
+# Use your own Google OAuth client (Desktop app, consent screen In production);
+# rclone's shared client is being retired. drive.file sees only files created
+# by that client, so changing the client means a new repository folder.
 RCLONE_CONFIG=/var/lib/offsite-backup/rclone.conf
 # S3-style alternative: RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket> +
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION

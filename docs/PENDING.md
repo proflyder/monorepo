@@ -6,13 +6,6 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **Offsite: свой OAuth client ID Google.** Offsite в Google Drive
-      работает через общий client ID rclone, который Google выводит из
-      обслуживания в 2026 — бэкап перестанет загружаться (алерт
-      `OffsiteBackupFailed`). Следующий шаг: Google Cloud project → OAuth
-      consent screen (External, In production, scope `drive.file`) → OAuth
-      client «Desktop app»; новый `rclone authorize` с этим client и
-      переустановка `offsite-rclone.conf`.
 - [ ] **Ключи бэкапов вне дома.** restic password
       (`secrets/home/offsite-restic.password`) и ключ шифрования HA backup
       (`secrets/home/ha-backup.env`) лежат только на Mac и узле. Следующий шаг:

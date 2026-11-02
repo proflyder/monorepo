@@ -509,12 +509,13 @@
 - HA automatic encrypted backup включён: ежедневно 03:30, 3 копии, ~45 MB,
   агент `hassio.local`.
 - Offsite backup live: K3s timer 04:45, restic → личный Google Drive
-  (`rclone:gdrive:home-offsite`, scope `drive.file`, client-side encryption),
+  (`rclone:gdrive:home-offsite-v2`, scope `drive.file`, client-side encryption),
   ~45 MB/день. Внутри: OpenBao raft snapshot, SQLite scheduler/currency-bot,
   ledger ha-bridge, автоматический backup HA. Ключ `openbao-seal`, recovery
   keys и restic password в архив не входят. Restore из Drive проверен
-  2026-11-02. OAuth — общий client ID rclone (Google его выводит из
-  обслуживания в 2026; см. `PENDING.md`).
+  2026-11-02. OAuth — собственный client «Desktop app» в Google Cloud
+  project `home-offsite-backup` (app `home-offsite`, In production, без
+  verification); репозиторий `rclone:gdrive:home-offsite-v2`.
 - Метрики/алерты бэкапов: PVE `prometheus-node-exporter` (+ vzdump/SMART/NVMe
   textfile), scrape job `pve-node`; K3s node-exporter textfile; PrometheusRule
   `home-backup-alerts` (vzdump > 30 ч, offsite failed/stale, HA backup > 36 ч,
