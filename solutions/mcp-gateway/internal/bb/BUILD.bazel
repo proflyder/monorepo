@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bb",
+    srcs = [
+        "client.go",
+        "ssh.go",
+        "targets.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/bb",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+    deps = [
+        "@in_yaml_go_yaml_v2//:yaml",
+        "@org_golang_x_crypto//ssh",
+        "@org_golang_x_crypto//ssh/knownhosts",
+    ],
+)
+
+go_test(
+    name = "bb_test",
+    srcs = [
+        "client_test.go",
+        "targets_test.go",
+    ],
+    embed = [":bb"],
+    deps = [
+        "@org_golang_x_crypto//ssh",
+        "@org_golang_x_crypto//ssh/knownhosts",
+    ],
+)

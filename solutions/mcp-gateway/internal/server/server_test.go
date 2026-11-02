@@ -110,6 +110,59 @@ func TestHealthAndReadiness(t *testing.T) {
 	}
 }
 
+func TestVoiceAndMCPTokensAreSeparate(t *testing.T) {
+	handler := New(Options{
+		AuthToken:  "mcp-token",
+		VoiceToken: "voice-token",
+		MCP: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		Voice: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+		Logger: discardLogger(),
+	}).Handler()
+
+	cases := []struct {
+		name   string
+		path   string
+		token  string
+		status int
+	}{
+		{"voice route with voice token", "/v1/voice/state", "voice-token", http.StatusOK},
+		{"voice route with mcp token", "/v1/voice/state", "mcp-token", http.StatusUnauthorized},
+		{"mcp route with voice token", "/mcp", "voice-token", http.StatusUnauthorized},
+		{"mcp route with mcp token", "/mcp", "mcp-token", http.StatusNoContent},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader("{}"))
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.status)
+			}
+		})
+	}
+}
+
+func TestVoiceRoutesAbsentWithoutToken(t *testing.T) {
+	handler := New(Options{
+		AuthToken: "mcp-token",
+		MCP:       http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Voice:     http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Logger:    discardLogger(),
+	}).Handler()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/voice/state", nil)
+	req.Header.Set("Authorization", "Bearer mcp-token")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
 func TestUnknownRoute(t *testing.T) {
 	handler := New(Options{Logger: discardLogger()}).Handler()
 	rec := httptest.NewRecorder()

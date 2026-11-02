@@ -27,6 +27,8 @@ const (
 	DefaultLogByteCap       = 64 << 10
 	DefaultTelegramAPIURL   = "https://api.telegram.org"
 	DefaultTimezone         = "UTC"
+	DefaultBBTimeout        = 15 * time.Second
+	DefaultBBUser           = "bb"
 )
 
 // Config is a validated process configuration.
@@ -65,6 +67,22 @@ type Config struct {
 	ReportTimeout    time.Duration
 	LogByteCap       int
 
+	// bb home-dispatcher bridge. The gateway owns only the restricted SSH key
+	// and the pinned known_hosts; the bridge on the bb host owns the plugin
+	// token and HMAC secret.
+	BBAddress            string
+	BBUser               string
+	BBKeyFile            string
+	BBKnownHostsFile     string
+	BBTimeout            time.Duration
+	BBTargetsFile        string
+	BBDispatcherThreadID string
+
+	// VoiceTokenFile enables the /v1/voice/* routes when set. The token is
+	// deliberately separate from the MCP bearer token.
+	VoiceTokenFile string
+	VoiceToken     string
+
 	// Timezone is the IANA zone used for human-facing clock times in tool
 	// texts (for example the report header). Location is its loaded form.
 	Timezone string
@@ -90,6 +108,14 @@ func load(getenv func(string) string, readFile func(string) ([]byte, error)) (Co
 		TelegramTokenFile: strings.TrimSpace(getenv("TELEGRAM_BOT_TOKEN_FILE")),
 		TelegramChatFile:  strings.TrimSpace(getenv("TELEGRAM_CHAT_ID_FILE")),
 		Timezone:          valueOr(getenv, "MCP_TIMEZONE", DefaultTimezone),
+
+		BBAddress:            strings.TrimSpace(getenv("MCP_BB_SSH_ADDR")),
+		BBUser:               valueOr(getenv, "MCP_BB_SSH_USER", DefaultBBUser),
+		BBKeyFile:            strings.TrimSpace(getenv("MCP_BB_SSH_KEY_FILE")),
+		BBKnownHostsFile:     strings.TrimSpace(getenv("MCP_BB_KNOWN_HOSTS_FILE")),
+		BBTargetsFile:        strings.TrimSpace(getenv("MCP_BB_TARGETS_FILE")),
+		BBDispatcherThreadID: strings.TrimSpace(getenv("MCP_BB_DISPATCHER_THREAD_ID")),
+		VoiceTokenFile:       strings.TrimSpace(getenv("MCP_VOICE_TOKEN_FILE")),
 	}
 
 	loc, err := time.LoadLocation(cfg.Timezone)
@@ -134,6 +160,9 @@ func load(getenv func(string) string, readFile func(string) ([]byte, error)) (Co
 	if cfg.LogByteCap, err = intValue(getenv, "MCP_LOG_BYTE_CAP", DefaultLogByteCap, 1024, 4<<20); err != nil {
 		return cfg, err
 	}
+	if cfg.BBTimeout, err = durationValue(getenv, "MCP_BB_TIMEOUT", DefaultBBTimeout, time.Second, 60*time.Second); err != nil {
+		return cfg, err
+	}
 
 	if err := validateGroups(cfg); err != nil {
 		return cfg, err
@@ -144,7 +173,58 @@ func load(getenv func(string) string, readFile func(string) ([]byte, error)) (Co
 	if err := loadHAFiles(&cfg, readFile); err != nil {
 		return cfg, err
 	}
+	if err := loadBBFiles(&cfg, readFile); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
+}
+
+// loadBBFiles reads the SSH key, pinned host key and voice token when any bb
+// or voice capability is enabled. The key material is validated (non-empty) at
+// startup and again by the SSH client on every call.
+func loadBBFiles(cfg *Config, readFile func(string) ([]byte, error)) error {
+	needBB := false
+	needTargets := false
+	for _, name := range cfg.Groups {
+		if name == "bb.read" || name == "bb.act" {
+			needBB = true
+		}
+		if name == "bb.act" {
+			needTargets = true
+		}
+	}
+	if cfg.VoiceTokenFile != "" {
+		needBB = true
+	}
+	if !needBB {
+		return nil
+	}
+	if cfg.BBAddress == "" || cfg.BBKeyFile == "" || cfg.BBKnownHostsFile == "" {
+		return fmt.Errorf("groups bb.read/bb.act and the voice route require MCP_BB_SSH_ADDR, MCP_BB_SSH_KEY_FILE and MCP_BB_KNOWN_HOSTS_FILE")
+	}
+	if needTargets && cfg.BBTargetsFile == "" {
+		return fmt.Errorf("MCP_BB_TARGETS_FILE is required for group bb.act")
+	}
+	if _, err := readSecret(readFile, cfg.BBKeyFile, "MCP_BB_SSH_KEY_FILE"); err != nil {
+		return err
+	}
+	if _, err := readSecret(readFile, cfg.BBKnownHostsFile, "MCP_BB_KNOWN_HOSTS_FILE"); err != nil {
+		return err
+	}
+	if cfg.VoiceTokenFile != "" {
+		if cfg.BBDispatcherThreadID == "" {
+			return fmt.Errorf("MCP_BB_DISPATCHER_THREAD_ID is required when MCP_VOICE_TOKEN_FILE is set")
+		}
+		token, err := readSecret(readFile, cfg.VoiceTokenFile, "MCP_VOICE_TOKEN_FILE")
+		if err != nil {
+			return err
+		}
+		if token == cfg.AuthToken {
+			return fmt.Errorf("MCP_VOICE_TOKEN_FILE must differ from MCP_AUTH_TOKEN_FILE")
+		}
+		cfg.VoiceToken = token
+	}
+	return nil
 }
 
 func loadHAFiles(cfg *Config, readFile func(string) ([]byte, error)) error {
@@ -174,6 +254,8 @@ func validateGroups(cfg Config) error {
 			if cfg.TelegramTokenFile == "" || cfg.TelegramChatFile == "" {
 				return fmt.Errorf("group infra.report requires TELEGRAM_BOT_TOKEN_FILE and TELEGRAM_CHAT_ID_FILE")
 			}
+		case "bb.read", "bb.act":
+			// Validated by loadBBFiles, which needs the file contents.
 		default:
 			return fmt.Errorf("unknown tool group %q", name)
 		}

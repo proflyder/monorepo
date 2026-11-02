@@ -53,7 +53,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: MCP_GROUPS
-              value: infra.read,infra.fix,infra.report
+              value: infra.read,infra.fix,infra.report,bb.read,bb.act
             - name: MCP_HTTP_ADDR
               value: ":8080"
             # Human-facing clock times in report/alert texts. IANA zone; the
@@ -84,6 +84,25 @@ spec:
               value: /run/secrets/mcp-gateway-telegram/token
             - name: TELEGRAM_CHAT_ID_FILE
               value: /run/secrets/mcp-gateway-telegram/chat_id
+            # bb home-dispatcher: one SSH session per call through the
+            # forced-command bridge. The gateway owns only the restricted key
+            # and the pinned host key; the plugin token and HMAC secret stay on
+            # the bb host.
+            - name: MCP_BB_SSH_ADDR
+              value: "${BB_CT_IP}:22"
+            - name: MCP_BB_SSH_USER
+              value: bb
+            - name: MCP_BB_SSH_KEY_FILE
+              value: /run/secrets/mcp-gateway-bb-ssh/id_ed25519
+            - name: MCP_BB_KNOWN_HOSTS_FILE
+              value: /run/secrets/mcp-gateway-bb-ssh/known_hosts
+            - name: MCP_BB_TARGETS_FILE
+              value: /etc/mcp-gateway/bb-targets.yaml
+            - name: MCP_BB_DISPATCHER_THREAD_ID
+              value: "${BB_DISPATCHER_THREAD_ID}"
+            # Voice entry point: a separate bearer token, never the MCP token.
+            - name: MCP_VOICE_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-voice/token
             - name: LOG_LEVEL
               value: info
           ports:
@@ -132,6 +151,12 @@ spec:
             - name: ha
               mountPath: /run/secrets/mcp-gateway-ha
               readOnly: true
+            - name: bb-ssh
+              mountPath: /run/secrets/mcp-gateway-bb-ssh
+              readOnly: true
+            - name: voice
+              mountPath: /run/secrets/mcp-gateway-voice
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -141,6 +166,8 @@ spec:
             items:
               - key: catalog.yaml
                 path: catalog.yaml
+              - key: bb-targets.yaml
+                path: bb-targets.yaml
         - name: auth
           secret:
             secretName: mcp-gateway-auth
@@ -160,6 +187,22 @@ spec:
         - name: ha
           secret:
             secretName: mcp-gateway-ha
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        - name: bb-ssh
+          secret:
+            secretName: mcp-gateway-bb-ssh
+            defaultMode: 0400
+            items:
+              - key: id_ed25519
+                path: id_ed25519
+              - key: known_hosts
+                path: known_hosts
+        - name: voice
+          secret:
+            secretName: mcp-gateway-voice
             defaultMode: 0440
             items:
               - key: token

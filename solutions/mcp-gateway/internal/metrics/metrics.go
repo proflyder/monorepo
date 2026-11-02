@@ -18,6 +18,7 @@ type Metrics struct {
 	toolCalls  *prometheus.CounterVec
 	toolTime   *prometheus.HistogramVec
 	httpCount  *prometheus.CounterVec
+	voiceCount *prometheus.CounterVec
 	backendsUp *prometheus.GaugeVec
 }
 
@@ -43,13 +44,17 @@ func New() *Metrics {
 			Name: "mcp_gateway_http_requests_total",
 			Help: "HTTP requests by route and status.",
 		}, []string{"route", "status"}),
+		voiceCount: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "mcp_gateway_voice_utterances_total",
+			Help: "Voice utterances by route and outcome.",
+		}, []string{"route", "outcome"}),
 		backendsUp: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "mcp_gateway_backend_up",
 			Help: "Last observed backend reachability by backend name.",
 		}, []string{"backend"}),
 	}
 	registry.MustRegister(
-		m.actions, m.toolCalls, m.toolTime, m.httpCount, m.backendsUp,
+		m.actions, m.toolCalls, m.toolTime, m.httpCount, m.voiceCount, m.backendsUp,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
@@ -78,6 +83,11 @@ func (m *Metrics) ObserveTool(tool, outcome string, duration time.Duration) {
 // ObserveHTTP counts one HTTP request.
 func (m *Metrics) ObserveHTTP(route string, status int) {
 	m.httpCount.WithLabelValues(route, strconv.Itoa(status)).Inc()
+}
+
+// ObserveVoice counts one routed voice utterance.
+func (m *Metrics) ObserveVoice(route, outcome string) {
+	m.voiceCount.WithLabelValues(route, outcome).Inc()
 }
 
 // SetBackendUp records backend reachability.

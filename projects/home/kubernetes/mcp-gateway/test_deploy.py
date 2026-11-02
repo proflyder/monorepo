@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "deploy.sh"
 MANIFESTS = HERE / "manifests"
 CATALOG = MANIFESTS / "catalog.yaml"
+BB_TARGETS = MANIFESTS / "bb-targets.yaml"
 RBAC = MANIFESTS / "rbac.yaml"
 CI_RBAC = HERE / "ci" / "rbac.yaml"
 DEPLOYMENT = MANIFESTS / "deployment.yaml"
@@ -36,9 +37,14 @@ LAN_CIDR=192.0.2.0/24
 NODE_LAN_IP="192.0.2.27"
 HAOS_IP=192.0.2.28
 STATION_IP=192.0.2.13
+BB_CT_IP=192.0.2.30
+BB_PROJECT_STATION_LAB=proj_0000000000000001
+BB_PROJECT_ENGLISH_NOTES=proj_0000000000000003
+BB_DISPATCHER_THREAD_ID=thr_0000000000000002
 """
 
 ALLOWED_CATALOG_PLACEHOLDERS = {"HAOS_IP", "STATION_IP"}
+ALLOWED_BB_TARGET_PLACEHOLDERS = {"BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES"}
 
 # Namespaces the gateway may look into. kube-system is read-only, so it is not
 # derived from the catalog (which only lists repository-managed workloads).
@@ -62,6 +68,10 @@ def load_docs(path: Path) -> list[dict]:
 
 def load_catalog() -> dict:
     return yaml.safe_load(CATALOG.read_text())
+
+
+def load_bb_targets() -> dict:
+    return yaml.safe_load(BB_TARGETS.read_text())
 
 
 def normalize(name: str) -> str:
@@ -245,6 +255,38 @@ class CatalogTests(unittest.TestCase):
             self.assertIn("оператор", service["restart"]["warning"].lower(), service_id)
 
 
+class BBTargetTests(unittest.TestCase):
+    def test_only_renderable_placeholders(self):
+        found = set(re.findall(r"\$\{([A-Z0-9_]+)\}", BB_TARGETS.read_text()))
+        self.assertEqual(found, ALLOWED_BB_TARGET_PLACEHOLDERS)
+
+    def test_targets_have_aliases_and_a_provider(self):
+        targets = load_bb_targets()["targets"]
+        self.assertTrue(targets)
+        seen = set()
+        for entry in targets:
+            self.assertTrue(entry["project"].startswith("${"))
+            self.assertTrue(entry["aliases"], entry["project"])
+            for alias in entry["aliases"]:
+                key = normalize(alias)
+                self.assertTrue(key, f"{entry['project']}: empty alias")
+                self.assertNotIn(key, seen, f"duplicate alias {alias}")
+                seen.add(key)
+            # The personal profile is fixed; a provider pin must be explicit so
+            # the gateway never silently picks a Pro model.
+            self.assertEqual(entry.get("provider"), "claude-code")
+            self.assertTrue(entry.get("title_prefix", "").strip())
+
+    def test_aliases_do_not_name_work_projects(self):
+        # The allowlist must not expose work project names: Hermes resolves
+        # names only among personal targets, and a work alias would be
+        # misleading.
+        aliases = [alias.lower() for entry in load_bb_targets()["targets"] for alias in entry["aliases"]]
+        for alias in aliases:
+            self.assertNotIn("work", alias)
+            self.assertNotIn("рабоч", alias)
+
+
 class RbacTests(unittest.TestCase):
     def setUp(self) -> None:
         self.catalog = load_catalog()
@@ -409,7 +451,7 @@ class ManifestTests(unittest.TestCase):
             "spec"
         ]["containers"][0]
         env = {entry["name"]: entry.get("value") for entry in container["env"]}
-        self.assertEqual(env["MCP_GROUPS"], "infra.read,infra.fix,infra.report")
+        self.assertEqual(env["MCP_GROUPS"], "infra.read,infra.fix,infra.report,bb.read,bb.act")
         self.assertEqual(env["MCP_TIMEZONE"], "Asia/Almaty")
         self.assertEqual(env["MCP_AUTH_TOKEN_FILE"], "/run/secrets/mcp-gateway-auth/token")
         self.assertEqual(env["MCP_INFRA_CATALOG_FILE"], "/etc/mcp-gateway/catalog.yaml")
@@ -420,18 +462,33 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(env["MCP_HA_TOKEN_FILE"], "/run/secrets/mcp-gateway-ha/token")
         self.assertEqual(env["TELEGRAM_BOT_TOKEN_FILE"], "/run/secrets/mcp-gateway-telegram/token")
         self.assertEqual(env["TELEGRAM_CHAT_ID_FILE"], "/run/secrets/mcp-gateway-telegram/chat_id")
+        self.assertEqual(env["MCP_BB_SSH_ADDR"], "${BB_CT_IP}:22")
+        self.assertEqual(env["MCP_BB_SSH_USER"], "bb")
+        self.assertEqual(env["MCP_BB_SSH_KEY_FILE"], "/run/secrets/mcp-gateway-bb-ssh/id_ed25519")
+        self.assertEqual(env["MCP_BB_KNOWN_HOSTS_FILE"], "/run/secrets/mcp-gateway-bb-ssh/known_hosts")
+        self.assertEqual(env["MCP_BB_TARGETS_FILE"], "/etc/mcp-gateway/bb-targets.yaml")
+        self.assertEqual(env["MCP_BB_DISPATCHER_THREAD_ID"], "${BB_DISPATCHER_THREAD_ID}")
+        self.assertEqual(env["MCP_VOICE_TOKEN_FILE"], "/run/secrets/mcp-gateway-voice/token")
         # Secrets only as files; no secret value and no *_TOKEN env.
         self.assertNotIn("TELEGRAM_BOT_TOKEN", env)
         self.assertNotIn("MCP_AUTH_TOKEN", env)
         self.assertNotIn("MCP_HA_TOKEN", env)
+        self.assertNotIn("MCP_VOICE_TOKEN", env)
         volumes = {volume["name"]: volume for volume in container_volumes(docs)}
         self.assertEqual(volumes["catalog"]["configMap"]["name"], "mcp-gateway-catalog")
+        catalog_items = {(item["key"], item["path"]) for item in volumes["catalog"]["configMap"]["items"]}
+        self.assertEqual(catalog_items, {("catalog.yaml", "catalog.yaml"), ("bb-targets.yaml", "bb-targets.yaml")})
         auth_items = volumes["auth"]["secret"]["items"]
         self.assertEqual(auth_items, [{"key": "token", "path": "token"}])
         telegram_items = {(item["key"], item["path"]) for item in volumes["telegram"]["secret"]["items"]}
         self.assertEqual(telegram_items, {("token", "token"), ("chat_id", "chat_id")})
         ha_items = volumes["ha"]["secret"]["items"]
         self.assertEqual(ha_items, [{"key": "token", "path": "token"}])
+        bb_items = {(item["key"], item["path"]) for item in volumes["bb-ssh"]["secret"]["items"]}
+        self.assertEqual(bb_items, {("id_ed25519", "id_ed25519"), ("known_hosts", "known_hosts")})
+        self.assertEqual(volumes["bb-ssh"]["secret"]["defaultMode"], 0o400)
+        voice_items = volumes["voice"]["secret"]["items"]
+        self.assertEqual(voice_items, [{"key": "token", "path": "token"}])
 
     def test_service_is_cluster_ip_only(self):
         docs = load_docs(DEPLOYMENT)
@@ -460,10 +517,16 @@ class ManifestTests(unittest.TestCase):
             for rule in egress["spec"]["egress"]
             for port in rule["ports"]
         }
-        self.assertTrue({6443, 9090, 9093, 3100, 443, 53} <= ports)
+        self.assertTrue({6443, 9090, 9093, 3100, 443, 53, 22} <= ports)
         # External catalog checks: HA REST/MA and the station's ports, all on
         # the LAN CIDR (host IPs are rendered at deploy time).
         self.assertTrue({8123, 8095, 6053, 8928, 8099} <= ports)
+        bb_rule = next(
+            rule
+            for rule in egress["spec"]["egress"]
+            if {"ipBlock": {"cidr": "${BB_CT_IP}/32"}} in rule["to"]
+        )
+        self.assertEqual({port["port"] for port in bb_rule["ports"]}, {22})
         lan_rule = next(
             rule
             for rule in egress["spec"]["egress"]
@@ -509,6 +572,23 @@ class ManifestTests(unittest.TestCase):
                 }
             ],
         )
+        bb_ssh = {
+            entry["secretKey"]: entry["remoteRef"]
+            for entry in by_name["mcp-gateway-bb-ssh"]["spec"]["data"]
+        }
+        self.assertEqual(bb_ssh["id_ed25519"]["key"], "k8s/home-assistant/mcp-gateway-bb-ssh")
+        self.assertEqual(bb_ssh["id_ed25519"]["property"], "id_ed25519")
+        self.assertEqual(bb_ssh["known_hosts"]["property"], "known_hosts")
+        voice = by_name["mcp-gateway-voice"]["spec"]["data"]
+        self.assertEqual(
+            voice,
+            [
+                {
+                    "secretKey": "token",
+                    "remoteRef": {"key": "k8s/home-assistant/mcp-gateway-voice", "property": "token"},
+                }
+            ],
+        )
         for doc in docs:
             self.assertEqual(doc["spec"]["target"]["creationPolicy"], "Owner")
             self.assertEqual(doc["spec"]["target"]["deletionPolicy"], "Retain")
@@ -520,18 +600,34 @@ class ManifestTests(unittest.TestCase):
             for line in example.splitlines()
             if line.strip() and not line.startswith("#")
         }
-        self.assertEqual(keys, {"LAN_CIDR", "NODE_LAN_IP", "HAOS_IP", "STATION_IP"})
+        self.assertEqual(
+            keys,
+            {
+                "LAN_CIDR",
+                "NODE_LAN_IP",
+                "HAOS_IP",
+                "STATION_IP",
+                "BB_CT_IP",
+                "BB_PROJECT_STATION_LAB",
+                "BB_PROJECT_ENGLISH_NOTES",
+                "BB_DISPATCHER_THREAD_ID",
+            },
+        )
         values = dict(
             line.split("=", 1)
             for line in example.splitlines()
             if line.strip() and not line.startswith("#")
         )
-        # Placeholder values only: TEST-NET addresses, never a real LAN.
-        for value in values.values():
-            self.assertTrue(
-                value.strip().strip('"').startswith(("192.0.2.",)),
-                f"example value is not a TEST-NET placeholder: {value}",
-            )
+        # Placeholder values only: TEST-NET addresses and zero-filled ids,
+        # never a real LAN, project or thread.
+        for key, value in values.items():
+            cleaned = value.strip().strip('"')
+            if key == "LAN_CIDR":
+                self.assertTrue(cleaned.startswith("192.0.2."), cleaned)
+            elif key in {"BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES", "BB_DISPATCHER_THREAD_ID"}:
+                self.assertRegex(cleaned, r"^(proj|thr)_[0-9]+$")
+            else:
+                self.assertTrue(cleaned.startswith("192.0.2."), cleaned)
 
 
 def container_volumes(docs: list[dict]) -> list[dict]:
@@ -558,10 +654,19 @@ class RenderTests(unittest.TestCase):
                 "BUILD_ID=test-build",
                 "--set",
                 f"MCP_GATEWAY_IMAGE={image}",
+                "--set",
+                "BB_CT_IP=192.0.2.30",
+                "--set",
+                "BB_PROJECT_STATION_LAB=proj_0000000000000001",
+                "--set",
+                "BB_PROJECT_ENGLISH_NOTES=proj_0000000000000003",
+                "--set",
+                "BB_DISPATCHER_THREAD_ID=thr_0000000000000002",
                 str(DEPLOYMENT),
                 str(NETWORK),
                 str(SERVICEMONITOR),
                 str(CATALOG),
+                str(BB_TARGETS),
             ],
             text=True,
             capture_output=True,
@@ -581,6 +686,18 @@ class RenderTests(unittest.TestCase):
         self.assertIn("http://192.0.2.28:8123/api/", catalog)
         self.assertIn("192.0.2.13", catalog)
         self.assertNotIn("${", catalog)
+        rendered_network = (out / "network-policies.yaml").read_text()
+        self.assertIn("192.0.2.30/32", rendered_network)
+        self.assertNotIn("${BB_CT_IP}", rendered_network)
+        rendered_deployment = (out / "deployment.yaml").read_text()
+        self.assertIn("192.0.2.30:22", rendered_deployment)
+        self.assertIn("thr_0000000000000002", rendered_deployment)
+        self.assertNotIn("${BB_DISPATCHER_THREAD_ID}", rendered_deployment)
+        bb_targets = (out / "bb-targets.yaml").read_text()
+        self.assertIn("proj_0000000000000001", bb_targets)
+        self.assertIn("proj_0000000000000003", bb_targets)
+        self.assertIn("английские заметки", bb_targets)
+        self.assertNotIn("${", bb_targets)
 
     def test_unknown_placeholder_is_rejected(self):
         tmp = Path(tempfile.mkdtemp(prefix="mcp-render-bad-"))
@@ -650,6 +767,17 @@ class DeployScriptTests(unittest.TestCase):
         res = self.run_deploy("LAN_CIDR=192.0.2.0/24\n")
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("LAN_CIDR, NODE_LAN_IP, HAOS_IP and STATION_IP are required", res.stderr)
+        self.assertFalse(res.kubectl_log.exists())
+
+    def test_missing_bb_values_are_rejected_before_kubectl(self):
+        env = "\n".join(
+            line
+            for line in GOOD_ENV.splitlines()
+            if not line.startswith("BB_")
+        )
+        res = self.run_deploy(env)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("BB_CT_IP, BB_PROJECT_STATION_LAB, BB_PROJECT_ENGLISH_NOTES and BB_DISPATCHER_THREAD_ID are required", res.stderr)
         self.assertFalse(res.kubectl_log.exists())
 
     def test_unknown_only_group_is_rejected(self):

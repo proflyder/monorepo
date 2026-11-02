@@ -2,13 +2,19 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "pending",
-    srcs = ["pending.go"],
+    srcs = [
+        "keyed.go",
+        "pending.go",
+    ],
     importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/pending",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
 )
 
 go_test(
     name = "pending_test",
-    srcs = ["pending_test.go"],
+    srcs = [
+        "keyed_test.go",
+        "pending_test.go",
+    ],
     embed = [":pending"],
 )

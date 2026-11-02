@@ -15,7 +15,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/agentmode"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/bb"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
@@ -95,6 +97,16 @@ type Deps struct {
 	Metrics *metrics.Metrics
 	Logger  *slog.Logger
 	Now     func() time.Time
+
+	// BB is the bb home-dispatcher client. BBTargets is the personal-only
+	// spoken allowlist. BBPending is a keyed store separate from the restart
+	// pending action, so the two groups never overwrite each other. BBMode is
+	// the shared agent-conversation switch of the voice path.
+	BB                   bb.API
+	BBTargets            *bb.Resolver
+	BBDispatcherThreadID string
+	BBPending            *pending.Keyed[bb.SpawnAction]
+	BBMode               *agentmode.State
 
 	// Location renders human-facing clock times (for example the report
 	// header). A nil Location means UTC.

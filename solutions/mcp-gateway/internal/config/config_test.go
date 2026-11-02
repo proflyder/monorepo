@@ -110,6 +110,33 @@ func TestLoadOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadBBAndVoice(t *testing.T) {
+	env := withGroup("infra.read,bb.read,bb.act")
+	env["MCP_BB_SSH_ADDR"] = "192.0.2.30:22"
+	env["MCP_BB_SSH_KEY_FILE"] = "/run/secrets/bb-key"
+	env["MCP_BB_KNOWN_HOSTS_FILE"] = "/run/secrets/bb-known"
+	env["MCP_BB_TARGETS_FILE"] = "/etc/mcp-gateway/bb-targets.yaml"
+	env["MCP_BB_DISPATCHER_THREAD_ID"] = "thr_work"
+	env["MCP_VOICE_TOKEN_FILE"] = "/run/secrets/voice-token"
+	files := baseFiles()
+	files["/run/secrets/bb-key"] = "fake-ed25519-key\n"
+	files["/run/secrets/bb-known"] = "bb.example ssh-ed25519 AAAA\n"
+	files["/run/secrets/voice-token"] = "voice-token\n"
+	cfg, err := loader(env, files)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.BBUser != DefaultBBUser || cfg.BBTimeout != DefaultBBTimeout {
+		t.Fatalf("bb defaults = %q %v", cfg.BBUser, cfg.BBTimeout)
+	}
+	if cfg.BBAddress != "192.0.2.30:22" || cfg.BBDispatcherThreadID != "thr_work" {
+		t.Fatalf("bb = %q %q", cfg.BBAddress, cfg.BBDispatcherThreadID)
+	}
+	if cfg.VoiceToken != "voice-token" {
+		t.Fatalf("voice token = %q", cfg.VoiceToken)
+	}
+}
+
 func TestLoadErrors(t *testing.T) {
 	tests := map[string]struct {
 		env   map[string]string
@@ -170,6 +197,45 @@ func TestLoadErrors(t *testing.T) {
 			env:   withEnv(baseEnv(), "MCP_TIMEZONE", "Nowhere/Nope"),
 			files: baseFiles(),
 			want:  "MCP_TIMEZONE",
+		},
+		"bb group without ssh": {
+			env:   withGroup("infra.read,bb.read"),
+			files: baseFiles(),
+			want:  "MCP_BB_SSH_ADDR",
+		},
+		"bb.act without targets": {
+			env: func() map[string]string {
+				env := withGroup("infra.read,bb.act")
+				env["MCP_BB_SSH_ADDR"] = "192.0.2.30:22"
+				env["MCP_BB_SSH_KEY_FILE"] = "/run/secrets/bb-key"
+				env["MCP_BB_KNOWN_HOSTS_FILE"] = "/run/secrets/bb-known"
+				return env
+			}(),
+			files: func() map[string]string {
+				files := baseFiles()
+				files["/run/secrets/bb-key"] = "key\n"
+				files["/run/secrets/bb-known"] = "host key\n"
+				return files
+			}(),
+			want: "MCP_BB_TARGETS_FILE",
+		},
+		"voice token equals mcp token": {
+			env: func() map[string]string {
+				env := withEnv(baseEnv(), "MCP_VOICE_TOKEN_FILE", "/run/secrets/voice-token")
+				env["MCP_BB_SSH_ADDR"] = "192.0.2.30:22"
+				env["MCP_BB_SSH_KEY_FILE"] = "/run/secrets/bb-key"
+				env["MCP_BB_KNOWN_HOSTS_FILE"] = "/run/secrets/bb-known"
+				env["MCP_BB_DISPATCHER_THREAD_ID"] = "thr_work"
+				return env
+			}(),
+			files: func() map[string]string {
+				files := baseFiles()
+				files["/run/secrets/bb-key"] = "key\n"
+				files["/run/secrets/bb-known"] = "host key\n"
+				files["/run/secrets/voice-token"] = "s3cret-token\n"
+				return files
+			}(),
+			want: "must differ",
 		},
 	}
 	for name, tc := range tests {

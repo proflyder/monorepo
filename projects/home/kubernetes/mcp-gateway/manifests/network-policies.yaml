@@ -6,7 +6,7 @@
 #   Prometheus (namespace monitoring)      -> mcp-gateway:8080/metrics
 #   kubelet probes                         -> mcp-gateway:8080/healthz (node)
 #   mcp-gateway -> kube-API :6443, Prometheus/Alertmanager/Loki,
-#                  api.telegram.org:443, CoreDNS:53
+#                  api.telegram.org:443, bb host :22, CoreDNS:53
 #
 # Hermes runs with hostNetwork, so its packets arrive with the node address as
 # the source and there is no per-pod identity to select: a podSelector would
@@ -116,6 +116,14 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    # bb host: the forced-command bridge listens on SSH. The address is a
+    # private deploy value; only port 22 is reachable.
+    - to:
+        - ipBlock:
+            cidr: ${BB_CT_IP}/32
+      ports:
+        - protocol: TCP
+          port: 22
     # DNS: CoreDNS in kube-system, plus any resolver reachable on port 53.
     - to:
         - namespaceSelector:
