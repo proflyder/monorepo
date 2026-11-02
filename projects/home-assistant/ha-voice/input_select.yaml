@@ -5,3 +5,10 @@ music_route:
     - "Spotify Connect"
   initial: "Spotify Connect"
   icon: mdi:music
+ricardo_voice_profile:
+  name: "Профиль Рикардо"
+  options:
+    - "Личный"
+    - "Рабочий"
+  initial: "Личный"
+  icon: mdi:account-voice

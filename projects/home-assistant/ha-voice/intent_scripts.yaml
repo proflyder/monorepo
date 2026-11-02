@@ -8,6 +8,33 @@ StationBlackout:
     text: "Выключаю всё освещение в спальне."
   action:
     - service: script.blackout
+StationVoiceProfileWork:
+  speech:
+    text: "Рабочий профиль."
+  action:
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.ricardo_voice_profile
+      data:
+        option: "Рабочий"
+StationVoiceProfilePersonal:
+  speech:
+    text: "Личный профиль."
+  action:
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.ricardo_voice_profile
+      data:
+        option: "Личный"
+StationVoiceProfileQuery:
+  speech:
+    text: >-
+      {% if is_state('input_select.ricardo_voice_profile', 'Рабочий') %}
+      Сейчас рабочий профиль.
+      {% else %}
+      Сейчас личный профиль.
+      {% endif %}
+  action: []
 StationLightOn:
   speech:
     text: >-

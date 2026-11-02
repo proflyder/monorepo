@@ -111,6 +111,25 @@ intents:
           - "выключи весь свет"
           - "выключи свет в спальне"
           - "погаси свет в спальне"
+  StationVoiceProfileWork:
+    data:
+      - sentences:
+          - "рабочий профиль"
+          - "включи рабочий профиль"
+          - "переключи на рабочий профиль"
+  StationVoiceProfilePersonal:
+    data:
+      - sentences:
+          - "личный профиль"
+          - "включи личный профиль"
+          - "переключи на личный профиль"
+  StationVoiceProfileQuery:
+    data:
+      - sentences:
+          - "какой профиль"
+          - "какой сейчас профиль"
+          - "какой профиль включён"
+          - "какой профиль включен"
   StationLightOn:
     data:
       - sentences:

@@ -1,0 +1,24 @@
+# Home Assistant template entities.
+#
+# `switch.ricardo_work_profile` is a catalogue/Android-friendly wrapper over
+# `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный. The
+# input_select stays the single source of truth; the switch only maps it to
+# the switch domain understood by the device catalogue.
+- switch:
+    - name: "Рабочий профиль"
+      unique_id: ricardo_work_profile
+      default_entity_id: switch.ricardo_work_profile
+      icon: mdi:account-tie-voice
+      state: "{{ is_state('input_select.ricardo_voice_profile', 'Рабочий') }}"
+      turn_on:
+        - service: input_select.select_option
+          target:
+            entity_id: input_select.ricardo_voice_profile
+          data:
+            option: "Рабочий"
+      turn_off:
+        - service: input_select.select_option
+          target:
+            entity_id: input_select.ricardo_voice_profile
+          data:
+            option: "Личный"

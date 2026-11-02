@@ -69,3 +69,27 @@ views:
         title: Заметки
         hide_completed: false
         item_tap_action: edit
+
+  - title: Голос
+    path: voice
+    icon: mdi:account-voice
+    cards:
+      - type: entities
+        title: Профиль Рикардо
+        entities:
+          - entity: input_select.ricardo_voice_profile
+            name: Профиль
+      - type: markdown
+        content: |
+          ## Голос
+          Профиль меняет только свободную речь. Бытовые локальные команды
+          (свет, музыка, таймеры, будильники, заметки, курсы) работают
+          одинаково в любом профиле.
+
+          - **Личный** — свободные вопросы идут в Hermes.
+          - **Рабочий** — свободная речь уходит в рабочий тред.
+
+          Источник истины — `input_select.ricardo_voice_profile`; он
+          восстанавливается после перезапуска Home Assistant. Голосом:
+          «какой профиль», «включи рабочий профиль», «переключи на личный
+          профиль».
