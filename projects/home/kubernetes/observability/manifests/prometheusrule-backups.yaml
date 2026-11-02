@@ -61,7 +61,7 @@ spec:
             description: >-
               Последний запуск offsite-бэкапа на K3s-узле неуспешен больше
               10 минут. Смотреть `journalctl -u offsite-backup.service` и
-              доступность Cloudflare R2.
+              доступность хранилища (Google Drive / OAuth-токен rclone).
 
         - alert: OffsiteBackupStale
           expr: time() - home_offsite_backup_last_success_timestamp_seconds > 30 * 3600
@@ -73,7 +73,7 @@ spec:
             summary: "Offsite-бэкап устарел"
             description: >-
               Успешного offsite-бэкапа не было больше 30 часов. Проверить
-              таймер, restic и R2.
+              таймер, restic и Google Drive.
 
         - alert: OffsiteBackupStale
           expr: absent(home_offsite_backup_last_success_timestamp_seconds)

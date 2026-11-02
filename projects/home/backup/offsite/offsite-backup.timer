@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily encrypted offsite backup to Cloudflare R2
+Description=Daily encrypted offsite backup (restic)
 Documentation=file:///usr/local/lib/offsite-backup/README.md
 
 [Timer]

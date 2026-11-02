@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Encrypted offsite backup of the home state to Cloudflare R2 via restic.
+"""Encrypted offsite backup of the home state via restic (any restic backend).
 
 Run as root by ``offsite-backup.service`` on the K3s node. The script:
 
@@ -12,13 +12,13 @@ Run as root by ``offsite-backup.service`` on the K3s node. The script:
    API and the REST download endpoint;
 6. writes a secret-free ``MANIFEST.json`` with names, sizes, SHA-256 and source
    timestamps;
-7. runs ``restic backup`` against R2, performs retention (prune weekly) and a
+7. runs ``restic backup`` against the repository, performs retention (prune weekly) and a
    weekly ``restic check --read-data-subset=5%``;
 8. writes Prometheus textfile metrics atomically and removes the staging dir.
 
 Configuration comes only from a root-only env file (``/etc/offsite-backup/env``
 by default). Values are never printed and never passed on a command line, so a
-failure report cannot leak the restic password or R2 credentials.
+failure report cannot leak the restic password or backend credentials.
 
 The HA backup is already encrypted by Home Assistant and is stored as-is.
 OpenBao seal/recovery keys are deliberately *not* part of this backup: a guard
@@ -76,6 +76,9 @@ class Config:
     sqlite_bin: str = "sqlite3"
     max_source_age_hours: float = 36.0
     maintenance_weekday: int = 6  # Sunday
+    # Guard rails against a runaway upload filling the (free) remote quota.
+    max_staging_bytes: int = 2 * 1024**3
+    max_repo_bytes: int = 5 * 1024**3
     restic_env: dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -95,17 +98,25 @@ class Config:
         try:
             weekday = int(values.get("RESTIC_MAINTENANCE_WEEKDAY", "6"))
             max_age = float(values.get("MAX_SOURCE_AGE_HOURS", "36"))
+            max_staging = int(values.get("MAX_STAGING_BYTES", str(2 * 1024**3)))
+            max_repo = int(values.get("MAX_REPO_BYTES", str(5 * 1024**3)))
         except ValueError as exc:
             raise BackupError("invalid numeric setting") from exc
         if not 0 <= weekday <= 6:
             raise BackupError("RESTIC_MAINTENANCE_WEEKDAY must be 0..6")
         if max_age <= 0:
             raise BackupError("MAX_SOURCE_AGE_HOURS must be positive")
+        if max_staging <= 0 or max_repo <= 0:
+            raise BackupError("MAX_STAGING_BYTES/MAX_REPO_BYTES must be positive")
 
+        # S3-style credentials or an rclone backend (RESTIC_REPOSITORY=rclone:...,
+        # RCLONE_CONFIG pointing at a root-only, writable rclone.conf).
         credentials = {
             key: values[key]
-            for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION")
+            for key in values
             if values.get(key)
+            and (key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION")
+                 or key.startswith("RCLONE_"))
         }
         return cls(
             restic_repository=required("RESTIC_REPOSITORY"),
@@ -124,6 +135,8 @@ class Config:
             sqlite_bin=values.get("SQLITE3_BIN", "sqlite3").strip() or "sqlite3",
             max_source_age_hours=max_age,
             maintenance_weekday=weekday,
+            max_staging_bytes=max_staging,
+            max_repo_bytes=max_repo,
             restic_env=credentials,
         )
 
@@ -657,6 +670,22 @@ def restic_command(cfg: Config, args: list[str], step: str) -> None:
         raise BackupError(f"{step} failed with exit status {result.returncode}")
 
 
+def restic_repo_bytes(cfg: Config) -> int:
+    try:
+        result = subprocess.run(
+            [cfg.restic_bin, "stats", "--mode", "raw-data", "--json"],
+            env=restic_environment(cfg), capture_output=True, text=True,
+        )
+    except FileNotFoundError as exc:
+        raise BackupError("restic stats: restic is not installed") from exc
+    if result.returncode != 0:
+        raise BackupError(f"restic stats failed with exit status {result.returncode}")
+    try:
+        return int(json.loads(result.stdout).get("total_size", 0))
+    except (ValueError, AttributeError) as exc:
+        raise BackupError("restic stats returned unexpected output") from exc
+
+
 def restic_backup(cfg: Config, staging: Path) -> None:
     restic_command(
         cfg,
@@ -728,6 +757,9 @@ def render_metrics(last_run: float, success: bool, state: dict) -> str:
         "# HELP home_offsite_backup_bytes Size of the last successful staging snapshot in bytes.",
         "# TYPE home_offsite_backup_bytes gauge",
         f"home_offsite_backup_bytes {state['last_bytes']}",
+        "# HELP home_offsite_backup_repo_bytes Raw size of the remote restic repository in bytes.",
+        "# TYPE home_offsite_backup_repo_bytes gauge",
+        f"home_offsite_backup_repo_bytes {int(state.get('repo_bytes', 0))}",
         "# HELP home_backup_source_timestamp_seconds Source data timestamp in the last successful backup.",
         "# TYPE home_backup_source_timestamp_seconds gauge",
     ]
@@ -770,8 +802,18 @@ def execute(cfg: Config, now: dt.datetime) -> dict:
     try:
         staging, _records, timestamps = build_staging(cfg, now)
         total = staging_bytes(staging)
+        if total > cfg.max_staging_bytes:
+            raise BackupError(
+                f"staging is {total} bytes, above MAX_STAGING_BYTES={cfg.max_staging_bytes}; refusing upload"
+            )
         restic_backup(cfg, staging)
         restic_maintenance(cfg, now)
+        repo = restic_repo_bytes(cfg)
+        state["repo_bytes"] = repo
+        if repo > cfg.max_repo_bytes:
+            raise BackupError(
+                f"repository is {repo} bytes, above MAX_REPO_BYTES={cfg.max_repo_bytes}"
+            )
         success = True
     finally:
         if staging is not None:

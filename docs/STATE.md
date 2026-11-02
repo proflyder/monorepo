@@ -505,14 +505,17 @@
   password, recovery.
 - HA automatic encrypted backup включён: ежедневно 03:30, 3 копии, ~45 MB,
   агент `hassio.local`.
-- Offsite backup подготовлен кодом, но **не установлен и не live**:
-  `projects/home/backup/offsite` (restic → Cloudflare R2, client-side
-  encryption) и `projects/home/backup/pve` (возраст vzdump). В архив входят
-  OpenBao raft snapshot, SQLite scheduler/currency-bot, ledger ha-bridge и
-  автоматический backup HA. Ключ `openbao-seal`, recovery keys и restic
-  password в архив не входят и хранятся отдельно. Осталось: bucket/token R2,
-  установка на K3s/PVE, private PVE target, первый запуск и restore-тест из R2
-  (`PENDING.md`).
+- Offsite backup live: K3s timer 04:45, restic → личный Google Drive
+  (`rclone:gdrive:home-offsite`, scope `drive.file`, client-side encryption),
+  ~45 MB/день. Внутри: OpenBao raft snapshot, SQLite scheduler/currency-bot,
+  ledger ha-bridge, автоматический backup HA. Ключ `openbao-seal`, recovery
+  keys и restic password в архив не входят. Restore из Drive проверен
+  2026-11-02. OAuth — общий client ID rclone (Google его выводит из
+  обслуживания в 2026; см. `PENDING.md`).
+- Метрики/алерты бэкапов: PVE `prometheus-node-exporter` (+ vzdump/SMART/NVMe
+  textfile), scrape job `pve-node`; K3s node-exporter textfile; PrometheusRule
+  `home-backup-alerts` (vzdump > 30 ч, offsite failed/stale, HA backup > 36 ч,
+  PVE exporter down) → Telegram.
 
 ## Ограничения
 

@@ -1,4 +1,8 @@
-# Encrypted offsite backup (restic → Cloudflare R2)
+# Encrypted offsite backup (restic → Google Drive via rclone)
+
+Any restic backend works (S3, B2, rclone); the home deployment uses a
+Google Drive remote with scope `drive.file`, so rclone only sees files it
+created and a free account cannot be overcharged.
 
 Daily copy of the state that only lives at home, encrypted client-side by
 restic before it leaves the K3s node:
@@ -21,11 +25,12 @@ without them the offsite copy cannot be decrypted.
 Root-only env file `/etc/offsite-backup/env` (never committed):
 
 ```sh
-RESTIC_REPOSITORY=s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>
+RESTIC_REPOSITORY=rclone:gdrive:home-offsite
 RESTIC_PASSWORD_FILE=/etc/offsite-backup/restic.password
-AWS_ACCESS_KEY_ID=<r2-access-key>
-AWS_SECRET_ACCESS_KEY=<r2-secret-key>
-AWS_DEFAULT_REGION=auto
+# rclone rewrites its config on OAuth refresh: keep it in a writable path.
+RCLONE_CONFIG=/var/lib/offsite-backup/rclone.conf
+# S3-style alternative: RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket> +
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION
 HA_URL=http://192.0.2.28:8123
 HA_TOKEN_FILE=/etc/offsite-backup/ha.token
 # optional overrides:
@@ -37,6 +42,8 @@ HA_TOKEN_FILE=/etc/offsite-backup/ha.token
 # HA_AGENT_ID=hassio.local
 # MAX_SOURCE_AGE_HOURS=36
 # RESTIC_MAINTENANCE_WEEKDAY=6
+# MAX_STAGING_BYTES=2147483648   # refuse uploads above this
+# MAX_REPO_BYTES=5368709120      # fail (and alert) when the repository grows past this
 ```
 
 PVC paths are resolved at runtime by the `_<namespace>_<pvc>` suffix; the
@@ -74,18 +81,16 @@ set -a; . /etc/offsite-backup/env; set +a; restic snapshots
 
 ## Restore on a fresh machine
 
-The offsite copy is useless without **both** the restic password and the R2
-credentials. Keep them outside the home (password manager, plus an offline
-copy of the password).
+The offsite copy is useless without the restic password. Keep it outside the
+home (password manager, plus an offline copy). Drive access is recovered by a
+new `rclone authorize` on the same Google account.
 
-1. Install restic on any machine with network access to R2.
+1. Install restic and rclone on any machine with internet access.
 2. Export the repository settings (do not save them in the repository):
 
    ```sh
-   export RESTIC_REPOSITORY='s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>'
-   export AWS_ACCESS_KEY_ID='...'
-   export AWS_SECRET_ACCESS_KEY='...'
-   export AWS_DEFAULT_REGION=auto
+   export RCLONE_CONFIG=/path/to/rclone.conf   # remote [gdrive], type drive, scope drive.file
+   export RESTIC_REPOSITORY='rclone:gdrive:home-offsite'
    export RESTIC_PASSWORD='...'   # or RESTIC_PASSWORD_FILE
    ```
 

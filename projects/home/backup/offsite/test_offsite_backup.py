@@ -169,6 +169,10 @@ def make_restic_stub(directory: Path) -> Path:
         "  for last do :; done\n"
         '  cp "$last/MANIFEST.json" "$RESTIC_LOG.manifest"\n'
         "fi\n"
+        'if [ "$1" = "stats" ]; then\n'
+        '  printf \'{"total_size": %s}\\n\' "${RESTIC_STUB_REPO_BYTES:-1000}"\n'
+        "fi\n"
+        'if [ -n "$RCLONE_CONFIG" ]; then printf "RCLONE_CONFIG=%s\\n" "$RCLONE_CONFIG" >> "$RESTIC_LOG.env"; fi\n'
         "exit 0\n",
         encoding="utf-8",
     )
@@ -371,6 +375,35 @@ class OffsiteBackupTests(unittest.TestCase):
         self.assertIn("pvc-abc_home-assistant_scheduler-data", str(scheduler))
         currency = backup.find_pvc_files(self.storage, "_currency-bot_currency-bot-data")
         self.assertEqual([item.name for item in currency], ["currency.db"])
+
+
+    def test_staging_above_limit_is_not_uploaded(self) -> None:
+        cfg, _stub = self.config(MAX_STAGING_BYTES="1")
+        with patch.dict(os.environ, {"RESTIC_LOG": str(self.restic_log)}):
+            with self.assertRaises(backup.BackupError) as raised:
+                backup.execute(cfg, self.now)
+        self.assertIn("MAX_STAGING_BYTES", str(raised.exception))
+        self.assertFalse(self.restic_log.exists())
+        self.assertIn("home_offsite_backup_last_run_success 0", self.metrics.read_text(encoding="utf-8"))
+
+    def test_repository_above_limit_fails_the_run(self) -> None:
+        cfg, _stub = self.config(MAX_REPO_BYTES="500")
+        with patch.dict(os.environ, {"RESTIC_LOG": str(self.restic_log), "RESTIC_STUB_REPO_BYTES": "999"}):
+            with self.assertRaises(backup.BackupError) as raised:
+                backup.execute(cfg, self.now)
+        self.assertIn("MAX_REPO_BYTES", str(raised.exception))
+        metrics = self.metrics.read_text(encoding="utf-8")
+        self.assertIn("home_offsite_backup_last_run_success 0", metrics)
+        self.assertIn("home_offsite_backup_repo_bytes 999", metrics)
+
+    def test_rclone_settings_reach_restic(self) -> None:
+        cfg, _stub = self.config(RESTIC_REPOSITORY="rclone:gdrive:home-offsite",
+                                 RCLONE_CONFIG="/var/lib/offsite-backup/rclone.conf")
+        with patch.dict(os.environ, {"RESTIC_LOG": str(self.restic_log)}):
+            backup.execute(cfg, self.now)
+        env_log = Path(str(self.restic_log) + ".env").read_text(encoding="utf-8")
+        self.assertIn("RCLONE_CONFIG=/var/lib/offsite-backup/rclone.conf", env_log)
+        self.assertIn("home_offsite_backup_repo_bytes 1000", self.metrics.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

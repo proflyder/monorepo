@@ -4,7 +4,7 @@
 #   ./install.sh [--dry-run] [--run-now] <ssh-target>
 #
 # Private inputs (git-ignored, never committed):
-#   secrets/home/offsite-backup.env        RESTIC_REPOSITORY, R2 credentials,
+#   secrets/home/offsite-backup.env        RESTIC_REPOSITORY, backend settings,
 #                                          HA_URL, HA_TOKEN_FILE, paths
 #   secrets/home/offsite-restic.password   restic repository password
 #
@@ -18,6 +18,9 @@ HERE="$ROOT/projects/home/backup/offsite"
 LOCAL_ENV="${OFFSITE_ENV_FILE:-$ROOT/secrets/home/offsite-backup.env}"
 LOCAL_PASSWORD="${OFFSITE_RESTIC_PASSWORD_FILE:-$ROOT/secrets/home/offsite-restic.password}"
 LOCAL_HA_TOKEN="${OFFSITE_HA_TOKEN_FILE:-$ROOT/secrets/home/offsite-ha.token}"
+# Optional rclone backend config (e.g. Google Drive, scope drive.file). It is
+# placed under /var/lib/offsite-backup because rclone rewrites it on token refresh.
+LOCAL_RCLONE_CONF="${OFFSITE_RCLONE_CONF:-$ROOT/secrets/home/offsite-rclone.conf}"
 DRY_RUN=false
 RUN_NOW=false
 TARGET=""
@@ -88,7 +91,7 @@ else
 fi
 [[ -f "$LOCAL_HA_TOKEN" ]] || echo "warning: $LOCAL_HA_TOKEN does not exist; upload HA token separately" >&2
 
-remote "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y restic sqlite3 python3"
+remote "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y restic rclone sqlite3 python3"
 remote "install -d -m 0700 /etc/offsite-backup /var/lib/offsite-backup && install -d -m 0755 /usr/local/lib/offsite-backup /var/lib/node-exporter-textfile"
 
 upload "$HERE/offsite_backup.py" /usr/local/lib/offsite-backup/offsite_backup.py 0755
@@ -101,6 +104,9 @@ upload "$LOCAL_ENV" /etc/offsite-backup/env 0600
 upload "$LOCAL_PASSWORD" /etc/offsite-backup/restic.password 0600
 if [[ -f "$LOCAL_HA_TOKEN" ]]; then
   upload "$LOCAL_HA_TOKEN" /etc/offsite-backup/ha.token 0600
+fi
+if [[ -f "$LOCAL_RCLONE_CONF" ]]; then
+  upload "$LOCAL_RCLONE_CONF" /var/lib/offsite-backup/rclone.conf 0600
 fi
 
 remote "chown root:root /etc/offsite-backup/env /etc/offsite-backup/restic.password; if [ -f /etc/offsite-backup/ha.token ]; then chown root:root /etc/offsite-backup/ha.token; fi"

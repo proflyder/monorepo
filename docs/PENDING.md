@@ -6,19 +6,18 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **Бэкапы: offsite с шифрованием.** Код и алерты подготовлены:
-      `projects/home/backup/offsite` (restic → Cloudflare R2) и
-      `projects/home/backup/pve` (метрики возраста vzdump), правило
-      `prometheusrule-backups.yaml`, textfile-коллектор node-exporter.
-      HA automatic backup включён (03:30, 3 копии). Осталось выполнить live:
-      создать R2 bucket и API-токен (Object Read & Write), заполнить
-      `secrets/home/offsite-backup.env` и `secrets/home/offsite-restic.password`
-      (restic password и R2 credentials продублировать вне дома, в password
-      manager), установить оба `install.sh` на K3s и PVE, добавить private
-      values с реальным PVE target, применить `deploy-observability.sh`,
-      выполнить первый запуск и restore-тест из R2 на чистой машине. Ключ
-      `openbao-seal` и recovery keys не класть в один архив с raft-снапшотами;
-      они и restic password в offsite-копию не входят.
+- [ ] **Offsite: свой OAuth client ID Google.** Offsite в Google Drive
+      работает через общий client ID rclone, который Google выводит из
+      обслуживания в 2026 — бэкап перестанет загружаться (алерт
+      `OffsiteBackupFailed`). Следующий шаг: Google Cloud project → OAuth
+      consent screen (External, In production, scope `drive.file`) → OAuth
+      client «Desktop app»; новый `rclone authorize` с этим client и
+      переустановка `offsite-rclone.conf`.
+- [ ] **Ключи бэкапов вне дома.** restic password
+      (`secrets/home/offsite-restic.password`) и ключ шифрования HA backup
+      (`secrets/home/ha-backup.env`) лежат только на Mac и узле. Следующий шаг:
+      сохранить оба в password manager владельца; без них offsite-копия и
+      HA backup не расшифровываются.
 
 ## P3 — приёмка и развитие
 
