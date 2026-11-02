@@ -68,16 +68,32 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertNotIn("dataFrom", spec)
         refs = {(d["remoteRef"]["key"], d["remoteRef"]["property"]) for d in spec["data"]}
         self.assertEqual(refs, {("k8s/home-assistant/hermes-environment", "TELEGRAM_BOT_TOKEN"),
-                                ("k8s/home-assistant/hermes-environment", "TELEGRAM_ALLOWED_USERS")})
+                                ("k8s/home-assistant/hermes-environment", "TELEGRAM_ALLOWED_USERS"),
+                                ("k8s/monitoring/heartbeat", "url"),
+                                ("k8s/monitoring/heartbeat", "token")})
         config = yaml.safe_load(spec["target"]["template"]["data"]["alertmanager.yaml"]
                                 .replace("{{", "").replace("}}", ""))
         routes = config["route"]["routes"]
         self.assertEqual(config["route"]["receiver"], "null")
-        self.assertIn('alertname =~ "Watchdog|InfoInhibitor"', routes[0]["matchers"])
-        self.assertEqual(routes[0]["receiver"], "null")
-        self.assertEqual(routes[1]["receiver"], "telegram")
-        # The message layout comes from the mounted template file.
+        # Watchdog goes to the external dead-man switch, not to Telegram.
+        self.assertEqual(routes[0]["receiver"], "heartbeat")
+        self.assertEqual(routes[0]["matchers"], ['alertname = "Watchdog"'])
+        self.assertEqual(routes[0]["group_wait"], "0s")
+        self.assertEqual(routes[0]["group_interval"], "1m")
+        self.assertEqual(routes[0]["repeat_interval"], "5m")
+        # InfoInhibitor stays suppressed; it must not reach the heartbeat.
+        self.assertEqual(routes[1]["receiver"], "null")
+        self.assertEqual(routes[1]["matchers"], ['alertname = "InfoInhibitor"'])
+        self.assertEqual(routes[2]["receiver"], "telegram")
+        receivers = {receiver["name"]: receiver for receiver in config["receivers"]}
+        webhook = receivers["heartbeat"]["webhook_configs"][0]
+        self.assertIs(webhook["send_resolved"], False)
+        self.assertEqual(webhook["http_config"]["authorization"]["type"], "Bearer")
         raw = spec["target"]["template"]["data"]["alertmanager.yaml"]
+        self.assertIn("{{ .heartbeat_url | trim }}", raw)
+        self.assertIn("{{ .heartbeat_token | trim }}", raw)
+        self.assertNotIn('Watchdog|InfoInhibitor', raw)
+        # The message layout comes from the mounted template file.
         self.assertIn('{{ `{{ template "telegram.home.message" . }}` }}', raw)
         self.assertIn("/etc/alertmanager/configmaps/alertmanager-templates/*.tmpl", raw)
         # The owner id is the first allow-list entry and doubles as the chat id.

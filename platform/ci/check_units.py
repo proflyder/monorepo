@@ -22,11 +22,11 @@ from pathlib import Path
 from affected import Config, load_config, path_matches
 
 DEFAULT_UNITS = Path(__file__).resolve().with_name("units.yml")
-KNOWN_PLATFORMS = {"go", "android", "python", "quality"}
+KNOWN_PLATFORMS = {"go", "android", "python", "js", "quality"}
 
 # Suffixes/names that must be routed somewhere: compiled sources, tests, build
 # files and shell entry points.
-OWNED_SUFFIXES = (".go", ".py", ".kt", ".kts", ".sh", ".bzl")
+OWNED_SUFFIXES = (".go", ".py", ".kt", ".kts", ".sh", ".bzl", ".js")
 OWNED_NAMES = ("BUILD.bazel",)
 
 
@@ -130,6 +130,16 @@ def validate_schema(config: Config, root: Path | None = None) -> list[str]:
             for directory in unit.compile_dirs:
                 if not (root / directory).is_dir():
                     problems.append(f"{prefix}: compile directory missing: {directory}")
+        elif unit.platform == "js":
+            if not unit.js_tests:
+                problems.append(f"{prefix}: js unit without test directories")
+            for directory in unit.js_tests:
+                if not (root / directory).is_dir():
+                    problems.append(f"{prefix}: js test directory missing: {directory}")
+                elif not list((root / directory).glob("*.test.js")):
+                    problems.append(
+                        f"{prefix}: js test directory {directory} has no *.test.js"
+                    )
     return problems
 
 

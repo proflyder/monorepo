@@ -258,6 +258,64 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
 не создают и не перезаписывают эти Secrets. `--bootstrap-secrets` у
 `ingress/deploy.sh` — только для первой установки без OpenBao/ESO.
 
+## Внешний heartbeat (dead-man switch)
+
+`Watchdog` уходит на Cloudflare Worker `solutions/heartbeat`: ping раз в
+5 минут, при тишине дольше `GRACE_SECONDS` Worker пишет в Telegram через тот
+же инфра-бот, при восстановлении — recovery. Развёрнут как `home-heartbeat`
+на `workers.dev`; Cloudflare API token (Workers Scripts + KV edit) —
+`secrets/home/cloudflare-workers.env`, остальное — `secrets/home/heartbeat.env`.
+
+```bash
+# тесты без сети и без Cloudflare
+node --test solutions/heartbeat/src/*.test.js
+
+# приватные значения: secrets/home/heartbeat.env (в .gitignore)
+# CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, KV_NAMESPACE_ID,
+# PING_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+./projects/home/cloudflare/heartbeat/deploy.sh
+./projects/home/cloudflare/heartbeat/deploy.sh --secrets
+
+# liveness, затем ping без токена и с токеном (значение не печатать)
+curl -fsS "https://<worker>.<account-subdomain>.workers.dev/health"
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
+  "https://<worker>.<account-subdomain>.workers.dev/ping"        # 401
+set -a; . secrets/home/heartbeat.env; set +a
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
+  -H "Authorization: Bearer $PING_TOKEN" -H 'content-type: application/json' \
+  -d '{"status":"firing"}' \
+  "https://<worker>.<account-subdomain>.workers.dev/ping"        # 200
+
+# OpenBao: те же URL и PING_TOKEN для Alertmanager
+bao kv put secret/k8s/monitoring/heartbeat \
+  url="https://<worker>.<account-subdomain>.workers.dev/ping" \
+  token="$PING_TOKEN"
+unset PING_TOKEN
+
+# применить Alertmanager (ESO рендерит webhook_configs из этой записи)
+./projects/home/kubernetes/deploy-observability.sh
+kubectl -n monitoring get externalsecret alertmanager-telegram
+```
+
+Ротация: новый `PING_TOKEN` — обновить private env, выполнить
+`deploy.sh --secrets`, затем `bao kv put` с новым значением; ESO обновит
+Secret, Alertmanager перечитает config. Смена Telegram-бота — обновить
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` в env Worker, выполнить
+`--secrets` и обновить `k8s/home-assistant/hermes-environment`, чтобы
+Alertmanager и Hermes остались на том же боте. Cloudflare API token нужен
+только deploy.sh и в OpenBao/Kubernetes не попадает.
+
+Outage-тест без остановки остальных алертов — silence только на Watchdog:
+
+```bash
+kubectl -n monitoring exec alertmanager-monitoring-alertmanager-0 -c alertmanager -- \
+  amtool silence add alertname=Watchdog --duration=25m \
+  --comment="heartbeat outage test" --alertmanager.url=http://127.0.0.1:9093
+```
+
+Через `GRACE_SECONDS` + cron-тик (~16–20 мин) приходит «дом молчит»; после
+истечения silence первый ping даёт recovery.
+
 ## MCP-шлюз (голосовая диагностика)
 
 Голосом: «проверь сервисы», «что с гермесом», «почему не работает X»,

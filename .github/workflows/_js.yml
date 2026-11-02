@@ -1,0 +1,46 @@
+name: _js
+
+# Reusable JavaScript platform workflow: one matrix entry per unit. Edge
+# Workers in this repository have no package manager and no build step, so the
+# job only needs an official Node distribution and the built-in test runner.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.yml
+        required: true
+        type: string
+      tests:
+        description: Space separated directories containing *.test.js
+        required: false
+        default: ""
+        type: string
+      node_version:
+        required: false
+        default: "22"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  js:
+    name: js / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Test ${{ inputs.unit }}
+        if: inputs.tests != ''
+        run: |
+          read -r -a directories <<< "${{ inputs.tests }}"
+          for directory in "${directories[@]}"; do
+            echo "== node --test: ${directory} =="
+            node --test "${directory}"/*.test.js
+          done

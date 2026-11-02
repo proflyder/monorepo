@@ -12,6 +12,7 @@ based for code:
   applications that actually depend on it. This needs no JDK and no Android
   SDK because it never analyses targets.
 * **python** - path rules plus optional declarative `depends_on`.
+* **js** - path rules for dependency-free edge Workers (runs `node --test`).
 * **quality** - always runs.
 
 Any failure to compute a dependency closure degrades to "every unit of that
@@ -39,7 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_UNITS = Path(__file__).resolve().with_name("units.yml")
-PLATFORMS = ("go", "android", "python", "quality")
+PLATFORMS = ("go", "android", "python", "js", "quality")
 
 
 # --------------------------------------------------------------------------
@@ -62,6 +63,7 @@ class Unit:
     go_race: bool = False
     suites: list[str] = field(default_factory=list)
     compile_dirs: list[str] = field(default_factory=list)
+    js_tests: list[str] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
     # Deployable units own container images and Kubernetes workloads. An empty
     # `deploy_images` means "this unit is not deployed by deploy-home".
@@ -118,6 +120,7 @@ def load_config(path: Path) -> Config:
         bazel = raw.get("bazel") or {}
         go = raw.get("go") or {}
         python = raw.get("python") or {}
+        js = raw.get("js") or {}
         deploy = raw.get("deploy") or {}
         units.append(
             Unit(
@@ -136,6 +139,7 @@ def load_config(path: Path) -> Config:
                 go_race=bool(go.get("race", False)),
                 suites=list(python.get("suites") or []),
                 compile_dirs=list(python.get("compile") or []),
+                js_tests=list(js.get("tests") or []),
                 depends_on=list(raw.get("depends_on") or []),
                 deploy_images=list(deploy.get("images") or []),
                 deploy_workloads=list(deploy.get("workloads") or []),
@@ -575,6 +579,17 @@ def _route_platforms(
     python_route.units = _expand_depends_on(config, python_route.units)
     routes["python"] = python_route
 
+    # --- js: declarative path rules for dependency-free edge Workers ------
+    js_route = PlatformRoute("js", "paths")
+    for unit in config.by_platform("js"):
+        if GLOBAL in invalidated or "js" in invalidated:
+            js_route.units.append(unit)
+            js_route.mode = "all"
+        elif any(path_matches(path, unit.paths) for path in changed):
+            js_route.units.append(unit)
+    js_route.units = _expand_depends_on(config, js_route.units)
+    routes["js"] = js_route
+
     # --- quality: always --------------------------------------------------
     quality_route = PlatformRoute("quality", "always", list(config.by_platform("quality")))
     routes["quality"] = quality_route
@@ -681,7 +696,14 @@ def matrix_entries(route_: Route, config: Config) -> dict[str, list[dict[str, ob
         }
         for unit in route_.routes["python"].units
     ]
-    return {"go": go, "android": android, "python": python}
+    js = [
+        {
+            "id": unit.id,
+            "tests": _space(unit.js_tests),
+        }
+        for unit in route_.routes["js"].units
+    ]
+    return {"go": go, "android": android, "python": python, "js": js}
 
 
 def deploy_entries(route_: Route, config: Config) -> list[dict[str, object]]:
@@ -843,6 +865,7 @@ def main(argv: list[str] | None = None) -> int:
                 "go_units": json.dumps(entries["go"]),
                 "android_units": json.dumps(entries["android"]),
                 "python_units": json.dumps(entries["python"]),
+                "js_units": json.dumps(entries["js"]),
                 "quality": "true",
                 "docs_only": str(result.docs_only).lower(),
                 "deploy_control": str(result.deploy_control).lower(),

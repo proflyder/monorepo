@@ -39,6 +39,7 @@ teardown восстанавливает source/volume.
 | Audit scanner | approved public domain/namespace allowances and lookalikes |
 | Pairing | WAV/OGG, token redaction |
 | BLE gateway | token, Wi-Fi validation/rollback, WPA, GATT, HTTP auth/status |
+| Heartbeat Worker | grace-логика, auth, KV transitions, Telegram-доставка (моки) |
 | HA live | API, entities, text intents, optional mutation/alarm |
 | Gateway live | bearer auth, status shape, method guards |
 | Pulsar installer | upstream Go tests (только при наличии nested checkout) |
@@ -76,6 +77,12 @@ HA и Connect-клиенты — через `httptest`/фейки; живые HA
 устройство не используются. Scheduler API отдаёт Connect JSON на
 `/ricardo.v1.SchedulerService/<Method>`; bridge проверяется как настоящий
 клиент этого контракта.
+
+Heartbeat Worker тестируется встроенным Node-раннером без npm:
+
+```bash
+node --test solutions/heartbeat/src/*.test.js
+```
 
 Локальный процессный E2E (настоящие бинарники scheduler + bridge, fake HA на
 loopback, временные SQLite/ledger, dummy-токены):
@@ -178,6 +185,7 @@ matrix одного платформенного workflow.
 | go | `_go.yml` | `go vet`, `go test` (`-race` где объявлено), `go build` бинарей |
 | android | `_android.yml` | JDK 21 + SDK 36, `bazel test`/`build`, APK в artifact |
 | python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
+| js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
 `ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
@@ -192,9 +200,9 @@ Firebase. Этот output true только когда изменился реа
 блокирует merge.
 
 `changes` выдаёт outputs `go_units`, `android_units`, `python_units`,
-`deploy_control`, `android_distribute`, `base_sha`, `docs_only`; каждый output —
-JSON-массив записей matrix (`android_distribute` — `true`/`false`). Пустой
-массив означает «пропустить job» (законный skip для `ci-ok`).
+`js_units`, `deploy_control`, `android_distribute`, `base_sha`, `docs_only`;
+каждый output — JSON-массив записей matrix (`android_distribute` — `true`/`false`).
+Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
 
 ### Карта юнитов
 
@@ -258,7 +266,7 @@ SDK, поэтому маршрутизация дешёвая и не может
 * `depends_on` ссылается на несуществующий юнит;
 * объявленный python-suite не содержит `test_*.py` (для каталогов без
   герметичных тестов есть `python.compile`: только `compileall`);
-* **любой tracked `*.go`/`*.py`/`*.kt`/`*.sh`/`*.bzl`/`BUILD.bazel` не
+* **любой tracked `*.go`/`*.py`/`*.kt`/`*.js`/`*.sh`/`*.bzl`/`BUILD.bazel` не
   принадлежит ни одному юниту** — новый тест не может молча выпасть из CI.
 
 Тесты маршрутизатора: `platform/ci/test_affected.py` (включая фикстуру

@@ -59,6 +59,13 @@
   Оформление — HTML-шаблон `observability/alertmanager/telegram.tmpl`
   (ConfigMap `alertmanager-templates`, время Asia/Almaty).
   Доставка проверена тестовым алертом 2026-11-01.
+  Внешний dead-man switch: `Watchdog` раз в 5 минут уходит webhook-ом на
+  Cloudflare Worker `home-heartbeat` (`solutions/heartbeat`, деплой
+  `projects/home/cloudflare/heartbeat`, URL/token — OpenBao
+  `k8s/monitoring/heartbeat`). Тишина > 15 минут → «дом молчит» через тот же
+  инфра-бот, повтор раз в 6 ч, затем recovery. Outage-тест 2026-11-02
+  (silence на Watchdog): «молчит» через ~16 минут, recovery через 5 с после
+  первого пинга.
 - Grafana: LAN `http://192.0.2.27:30300/` (корень), HTTPS
   `https://grafana.home.example.com/`.
 - HTTPS ingress `*.home.example.com` (Traefik `42.2.0` + cert-manager
