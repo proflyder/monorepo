@@ -31,8 +31,17 @@
   onboot `order=3`, Node.js 26 из tarball; `install-bb.sh` прошёл живьём —
   linger и systemd user bus под `bb` работают, контейнер переживает reboot,
   добавлен в vzdump `nightly` (04:00, согласованная SQLite-копия в 03:30).
-  Сервер bb пока остаётся на Mac: `bb server move --to bb` ещё не выполнялся.
-  Runbook — `projects/home/proxmox/bb/`.
+- Сервер bb `0.48.1` перенесён на CT 103 2026-11-03 (`bb server move --to bb`,
+  проверено primary): работает под пользователем `bb` как systemd
+  user-сервис, данные — `/home/bb/.bb-machines/<server-host>`, клиенты
+  подключаются через bb Connect (адрес не менялся). Mac остаётся машиной bb
+  (launchd-агент, Node из Homebrew): проекты и их треды выполняются там.
+  Перенесены все 125 тредов и 43 плагина (37 включены); плагин `profiles`
+  (изоляция work/personal) запускается на сервере из локального
+  path-источника, скопированного в CT. На CT не залогинены `gh` и Codex — для
+  тредов на Mac это не важно (PR-статус считается на машине окружения,
+  ИИ-сервисы bb идут через bb cloud), для агентов на самом CT нужно позже.
+  Offsite-копии `bb.db` пока нет. Runbook — `projects/home/proxmox/bb/`.
 - Terraform: provider `bpg/proxmox 0.118.1`, plan — No changes; state
   root-only на PVE, копия в `secrets/`.
 - Wi-Fi/Ethernet uplink runbook: `projects/home/proxmox/wifi-uplink/`.
