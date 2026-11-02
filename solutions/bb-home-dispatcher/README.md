@@ -39,6 +39,10 @@ bb plugin config home-dispatcher set hmacSecret <random-secret>
 | `workerLimit` | `2` | Максимум одновременно `starting`/`active`/`pending` тредов, созданных этим плагином. |
 | `permissionMode` | `auto` | Режим разрешений для создаваемых тредов: только `auto` или `accept-edits`; `full` отклоняется схемой настройки. |
 | `dispatcherThreadId` | `""` | id «рабочего диспетчера», в который `send` разрешён всегда. |
+| `compactAt` | `04:30` | Время ночного сжатия `HH:MM` по локальному времени сервера; пустая строка отключает ночное сжатие. |
+| `compactAfterTurns` | `30` | Сжать при следующем idle-`send`, если с последней компакции прошло столько отправок. |
+| `compactAtContextPercent` | `70` | Порог заполнения контекста в процентах; при наличии данных он приоритетнее счётчика реплик. |
+| `dispatcherReminder` | текст роли диспетчера | Напоминание, один раз добавляемое к первому сообщению после успешной компакции; пустая строка отключает его. |
 
 Отдельной настройки allowlist провайдеров больше нет: политика профиля живёт
 в плагине `profiles` (`bb profiles providers`, `bb profiles machines`) и
@@ -144,6 +148,13 @@ reasoning:
 project, profile, machine, status, `runtimeSeconds` (для активных — от
 последнего `turn/started`, иначе `null`). Работающие идут первыми.
 
+У каждого треда есть `compact` — состояние автосжатия для отладки:
+`turnsSinceCompaction`, `lastCompactionAt`, `lastCompactionReason`
+(`nightly`/`turns`/`context`), `lastCompactionStatus`
+(`requested`/`completed`/`failed`), `pendingReminder`, `compactionPending`.
+Рядом, на верхнем уровне, `compaction` повторяет действующие настройки
+(`at`, `afterTurns`, `atContextPercent`, `dispatcherThreadId`).
+
 ### `validate_spawn`
 
 `{ profile, projectId, providerId, model, reasoningLevel }`.
@@ -187,8 +198,45 @@ online; число активных тредов плагина меньше `wo
 
 Разрешён только в треды, созданные плагином, и в `dispatcherThreadId`.
 Возвращает `afterSeq` (последний seq перед отправкой), `requestSeq`/`requestId`
-события `client/turn/requested` (если ход уже начался) и `delivery`.
-`afterSeq` — курсор для `turn_result`.
+события `client/turn/requested` (если ход уже начался), `delivery`,
+`compactFirst`, `compactTrigger` (`turns`/`context`, иначе `null`) и
+`reminder: true`, если к тексту добавлено напоминание роли. `afterSeq` —
+курсор для `turn_result`. Решение о сжатии принимается до отправки; состояние
+счётчика сохраняется только после успешного `threads.send`.
+
+### Автосжатие диспетчера
+
+Постоянный тред-диспетчер живёт неделями, и встроенное автосжатие провайдера
+может сработать посреди голосового хода. Плагин сжимает контекст заранее и
+только в простое.
+
+**Ночью.** Плагин регистрирует расписание bb `dispatcher-compaction` с cron
+`* * * * *`; на каждом тике `backgroundTick` проверяет, что локальное время
+достигло `compactAt`, и что за текущие сутки сжатие ещё не запрашивалось.
+Если тред `idle` (или `error`) и не ждёт ответа на interaction, плагин
+вызывает `threads.compact` и запоминает seq запроса. Занятый тред
+пропускается без прерывания хода и повторяется на следующем тике. Сервер,
+простоявший всю ночь, догоняет сжатие на первом тике после запуска. После
+запроса ожидается событие `thread/compacted`; только оно считается успехом и
+сбрасывает счётчик реплик.
+
+**По порогу.** Каждый `send` в тред увеличивает счётчик в `kv`. Если тред
+простаивает, следующий `send` при `turnsSinceCompaction >= compactAfterTurns`
+уходит с `compactFirst: true` и `mode: "auto"` (SDK запрещает `compactFirst`
+вместе с `mode: "steer"`). Если SDK отдаёт замер контекста
+(`threads.context` → `usage.usedTokens` / `modelContextWindow`), решение
+принимается по `compactAtContextPercent`, а счётчик используется только как
+запасной вариант. Занятый тред получает обычную отправку без компакции, а
+счётчик сохраняется.
+
+**Напоминание.** После успешной компакции ровно одно следующее сообщение
+дополняется `dispatcherReminder`. При `compactFirst` компакция выполняется до
+доставки этого же сообщения, поэтому напоминание добавляется к нему.
+
+**Пока компакция идёт**, новый prompt отправляется с `mode: "queue"`, чтобы не
+вклиниться в ход сжатия; если событие `thread/compacted` не пришло за 15
+минут, ожидание снимается. После свежей компакции действует 10-минутный
+cooldown, чтобы устаревший замер контекста не вызвал повторное сжатие.
 
 ### `turn_result`
 
@@ -228,6 +276,21 @@ bb plugin build solutions/bb-home-dispatcher
 CI-юнит `bb-home-dispatcher` в `platform/ci/units.yml` запускает тесты на
 pinned Node без npm-зависимостей. Сборка плагина выполняется `bb plugin build`
 (сборщик bb), `dist/` в Git не коммитится.
+
+## Использованные API bb
+
+- `bb.background.schedule(name, cron, fn)` — расписания плагина; cron
+  разбирается `cron-parser` в локальной зоне сервера, статус и следующий
+  запуск видны в `bb plugin list`.
+- `threads.compact({ threadId })` — ставит тот же `/compact`-ход, что
+  `bb thread compact`; требует `idle`/`error` и провайдера с ручной
+  компакцией, иначе 409 `invalid_request`.
+- `threads.send({ compactFirst: true, mode })` — сжатие перед доставкой;
+  несовместимо с `mode: "steer"` и `sendAt`.
+- `threads.context({ threadId })` → `{ usage: { usedTokens,
+  modelContextWindow, estimated } | null }` — последний сохранённый замер
+  контекста без запуска запроса к провайдеру.
+- Событие `thread/compacted` — подтверждение завершённой компакции.
 
 ## Открытые вопросы к SDK
 

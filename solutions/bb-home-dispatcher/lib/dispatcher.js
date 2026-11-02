@@ -12,6 +12,23 @@ const SPAWN_INSTRUCTION =
   "В конце каждого ответа добавляй отдельной строкой: " +
   "🔊 <1–2 фразы для озвучивания по-русски>.";
 
+const DEFAULT_COMPACT_AT = "04:30";
+const DEFAULT_COMPACT_AFTER_TURNS = 30;
+const DEFAULT_COMPACT_AT_CONTEXT_PERCENT = 70;
+const DEFAULT_DISPATCHER_REMINDER =
+  "Напоминание: ты рабочий голосовой диспетчер; отвечай коротко по-русски " +
+  "и заканчивай строкой 🔊 с 1–2 фразами для озвучивания.";
+// A requested compaction that never produces `thread/compacted` must not keep
+// sends in queue mode forever.
+const COMPACTION_PENDING_TIMEOUT_MS = 15 * 60 * 1000;
+// Do not compact again right after a compaction: the recorded usage can still
+// describe the pre-compaction context until the provider reports a new one.
+const COMPACTION_COOLDOWN_MS = 10 * 60 * 1000;
+// The plugin schedule fires on every server scheduler tick. Back off from
+// repeated thread lookups while busy or waiting for the compaction event.
+const NIGHTLY_BUSY_RETRY_MS = 60 * 1000;
+const NIGHTLY_REFRESH_MS = 30 * 1000;
+
 export function createDispatcher({
   getSdk,
   kv,
@@ -37,6 +54,10 @@ export function createDispatcher({
   // together: bb may deliver them concurrently, and a check-then-spawn race
   // would otherwise create two threads for one key.
   const locks = new Map();
+  // In-process backoff for the minute-level schedule; durability comes from
+  // the daily kv marker, not from these timestamps.
+  let nextNightlyAttemptAt = 0;
+  let nextNightlyRefreshAt = 0;
   async function withLock(key, run) {
     const previous = locks.get(key) ?? Promise.resolve();
     let release;
@@ -60,10 +81,217 @@ export function createDispatcher({
       hmacSecret: raw.hmacSecret,
       workerLimit: clampLimit(raw.workerLimit),
       permissionMode: normalizePermissionMode(raw.permissionMode),
-      dispatcherThreadId:
-        typeof raw.dispatcherThreadId === "string"
-          ? raw.dispatcherThreadId.trim()
-          : "",
+      ...compactionSettingsFrom(raw),
+    };
+  }
+
+  // `status` must stay readable even when another setting is invalid, so it
+  // reads the compaction fields without normalizing permissionMode.
+  async function readCompactionSettings() {
+    return compactionSettingsFrom((await getSettings()) ?? {});
+  }
+
+  // ---------------------------------------------------------- compaction --
+
+  function compactStateKey(threadId) {
+    return `compact:${threadId}`;
+  }
+
+  async function readCompactState(threadId) {
+    const stored = await kv.get(compactStateKey(threadId));
+    const state = isPlainObject(stored) ? stored : {};
+    return {
+      turns:
+        Number.isSafeInteger(state.turns) && state.turns >= 0 ? state.turns : 0,
+      pendingReminder: state.pendingReminder === true,
+      lastCompactionAt:
+        typeof state.lastCompactionAt === "number"
+          ? state.lastCompactionAt
+          : null,
+      lastCompactionReason:
+        typeof state.lastCompactionReason === "string"
+          ? state.lastCompactionReason
+          : null,
+      lastCompactionStatus:
+        typeof state.lastCompactionStatus === "string"
+          ? state.lastCompactionStatus
+          : null,
+      pending:
+        isPlainObject(state.pending) &&
+        Number.isSafeInteger(state.pending.afterSeq) &&
+        typeof state.pending.requestedAt === "number"
+          ? {
+              afterSeq: state.pending.afterSeq,
+              requestedAt: state.pending.requestedAt,
+              reason:
+                typeof state.pending.reason === "string"
+                  ? state.pending.reason
+                  : "nightly",
+            }
+          : null,
+    };
+  }
+
+  async function writeCompactState(threadId, state) {
+    await kv.set(compactStateKey(threadId), state);
+  }
+
+  // bb records a completed manual compaction as `thread/compacted`. Looking it
+  // up lazily avoids holding the nightly schedule open for the whole turn.
+  async function refreshCompactionState(threadId, state, settings) {
+    if (state.pending === null) return state;
+    const pending = state.pending;
+    if (now() - pending.requestedAt > COMPACTION_PENDING_TIMEOUT_MS) {
+      state.pending = null;
+      state.lastCompactionStatus = "failed";
+      state.lastCompactionReason = pending.reason;
+      await writeCompactState(threadId, state);
+      return state;
+    }
+    try {
+      const rows = await sdk().threads.events.list({
+        threadId,
+        afterSeq: String(pending.afterSeq),
+        order: "asc",
+        limit: "5",
+        types: ["thread/compacted"],
+      });
+      if (Array.isArray(rows) && rows.length > 0) {
+        state.pending = null;
+        state.turns = 0;
+        state.pendingReminder = settings.dispatcherReminder !== "";
+        state.lastCompactionAt = now();
+        state.lastCompactionStatus = "completed";
+        state.lastCompactionReason = pending.reason;
+        await writeCompactState(threadId, state);
+      }
+    } catch (cause) {
+      log.warn(
+        `compaction state unavailable for ${threadId}: ${messageOf(cause)}`,
+      );
+    }
+    return state;
+  }
+
+  async function contextPercent(threadId) {
+    if (typeof sdk().threads.context !== "function") return null;
+    try {
+      const response = await sdk().threads.context({ threadId });
+      const usage = response?.usage;
+      if (
+        !isPlainObject(usage) ||
+        !Number.isFinite(usage.usedTokens) ||
+        !Number.isFinite(usage.modelContextWindow) ||
+        usage.modelContextWindow <= 0
+      ) {
+        return null;
+      }
+      return (usage.usedTokens / usage.modelContextWindow) * 100;
+    } catch {
+      return null;
+    }
+  }
+
+  async function idleForCompaction(thread) {
+    if (thread.status !== "idle" && thread.status !== "error") return false;
+    return !(await hasPendingInteraction(thread.id));
+  }
+
+  function reminderOnce(state, settings, compactFirst) {
+    if (settings.dispatcherReminder === "") {
+      // Disabling the reminder still consumes a pending one.
+      return { text: "", used: state.pendingReminder };
+    }
+    // A compact-first send runs the compaction before delivering this very
+    // message, so the reminder belongs here. Otherwise it rides the first send
+    // after a nightly compaction completed.
+    if (!compactFirst && !state.pendingReminder) {
+      return { text: "", used: false };
+    }
+    return { text: settings.dispatcherReminder, used: true };
+  }
+
+  function appendReminder(text, reminder) {
+    return reminder === "" ? text : `${text}\n\n${reminder}`;
+  }
+
+  // One schedule tick: run at most once per local calendar day, after
+  // `compactAt`. A busy dispatcher is retried on the next tick, and a server
+  // that was off overnight catches up on its first tick of the day.
+  async function backgroundTick() {
+    const settings = await readCompactionSettings();
+    if (settings.compactAt === "" || settings.dispatcherThreadId === "") {
+      return { ran: false, reason: "not_configured" };
+    }
+    const current = new Date(now());
+    if (!nightlyDue(current, settings.compactAt)) {
+      return { ran: false, reason: "not_due" };
+    }
+    if (now() < nextNightlyAttemptAt) {
+      return { ran: false, reason: "throttled" };
+    }
+    const threadId = settings.dispatcherThreadId;
+    const markerKey = `nightly:${localDateKey(current)}`;
+    const marker = await kv.get(markerKey);
+    if (isPlainObject(marker) && marker.status === "requested") {
+      if (now() >= nextNightlyRefreshAt) {
+        nextNightlyRefreshAt = now() + NIGHTLY_REFRESH_MS;
+        const state = await readCompactState(threadId);
+        await refreshCompactionState(threadId, state, settings);
+      }
+      return { ran: false, reason: "already_requested", threadId };
+    }
+    if (isPlainObject(marker) && marker.status === "failed") {
+      return { ran: false, reason: "failed_today", threadId };
+    }
+
+    const state = await readCompactState(threadId);
+    await refreshCompactionState(threadId, state, settings);
+    const dueSince = startOfClock(current, settings.compactAt);
+    if (
+      state.lastCompactionAt !== null &&
+      state.lastCompactionAt >= dueSince.getTime()
+    ) {
+      await kv.set(markerKey, { status: "ok", at: now(), reason: "recent" });
+      return { ran: false, reason: "recent_compaction", threadId };
+    }
+
+    let thread;
+    try {
+      thread = await getThread(threadId);
+    } catch {
+      nextNightlyAttemptAt = now() + NIGHTLY_BUSY_RETRY_MS;
+      return { ran: false, reason: "thread_not_found", threadId };
+    }
+    if (!(await idleForCompaction(thread))) {
+      nextNightlyAttemptAt = now() + NIGHTLY_BUSY_RETRY_MS;
+      return { ran: false, reason: "busy", threadId };
+    }
+
+    let afterSeq;
+    try {
+      afterSeq = await lastEventSeq(threadId);
+      await sdk().threads.compact({ threadId });
+    } catch (cause) {
+      log.warn(`nightly compaction refused for ${threadId}: ${messageOf(cause)}`);
+      await kv.set(markerKey, {
+        status: "failed",
+        at: now(),
+        error: messageOf(cause),
+      });
+      nextNightlyAttemptAt = now() + NIGHTLY_BUSY_RETRY_MS;
+      return { ran: false, reason: "compaction_failed", threadId };
+    }
+    state.pending = { afterSeq, requestedAt: now(), reason: "nightly" };
+    state.lastCompactionReason = "nightly";
+    state.lastCompactionStatus = "requested";
+    await writeCompactState(threadId, state);
+    await kv.set(markerKey, { status: "requested", at: now() });
+    return {
+      ran: true,
+      threadId,
+      compactAt: settings.compactAt,
+      afterSeq,
     };
   }
 
@@ -389,6 +617,7 @@ export function createDispatcher({
       })
       .slice(0, params.limit);
 
+    const compactionSettings = await readCompactionSettings();
     const result = [];
     for (const thread of rows) {
       const project = projectMap.get(thread.projectId);
@@ -420,12 +649,19 @@ export function createDispatcher({
         status: thread.status,
         runtimeSeconds: runningSeconds,
         updatedAt: thread.updatedAt ?? null,
+        compact: compactSummary(await readCompactState(thread.id)),
       });
     }
     const running = result.filter((row) => ACTIVE_STATUSES.has(row.status)).length;
     return {
       threads: result,
       limit: params.limit,
+      compaction: {
+        at: compactionSettings.compactAt,
+        afterTurns: compactionSettings.compactAfterTurns,
+        atContextPercent: compactionSettings.compactAtContextPercent,
+        dispatcherThreadId: compactionSettings.dispatcherThreadId,
+      },
       speech:
         running === 0
           ? "Работающих тредов нет."
@@ -656,18 +892,62 @@ export function createDispatcher({
           "Писать можно только в треды диспетчера.",
         );
       }
+      // Compaction is decided before the send and persisted after it: a
+      // failed send must not advance the counter or consume the reminder.
+      const state = await readCompactState(params.threadId);
+      await refreshCompactionState(params.threadId, state, settings);
+
+      const idle = await idleForCompaction(thread);
+      const recentlyCompacted =
+        state.lastCompactionAt !== null &&
+        now() - state.lastCompactionAt < COMPACTION_COOLDOWN_MS;
+      let compactFirst = false;
+      let compactTrigger = null;
+      if (idle && state.pending === null && !recentlyCompacted) {
+        const percent = await contextPercent(params.threadId);
+        if (percent !== null) {
+          if (percent >= settings.compactAtContextPercent) {
+            compactFirst = true;
+            compactTrigger = "context";
+          }
+        } else if (state.turns >= settings.compactAfterTurns) {
+          compactFirst = true;
+          compactTrigger = "turns";
+        }
+      }
+
+      // While a nightly compaction runs, a new prompt must not steer into it.
+      const mode = state.pending === null ? "auto" : "queue";
+      const reminder = reminderOnce(state, settings, compactFirst);
+      const text = appendReminder(params.text, reminder.text);
+
       const afterSeq = await lastEventSeq(params.threadId);
       let response;
       try {
         response = await sdk().threads.send({
           threadId: params.threadId,
-          mode: "auto",
-          input: [{ type: "text", text: params.text, mentions: [] }],
+          mode,
+          // The SDK rejects `compactFirst` together with `mode: "steer"`.
+          ...(compactFirst ? { compactFirst: true } : {}),
+          input: [{ type: "text", text, mentions: [] }],
         });
       } catch (cause) {
         log.error(`send failed for ${params.threadId}: ${messageOf(cause)}`);
         throw new DispatchError("send_failed", "Не удалось отправить сообщение.");
       }
+
+      state.turns += 1;
+      if (reminder.used) state.pendingReminder = false;
+      if (compactFirst) {
+        state.turns = 0;
+        state.pendingReminder = false;
+        state.pending = null;
+        state.lastCompactionAt = now();
+        state.lastCompactionReason = compactTrigger;
+        state.lastCompactionStatus = "requested";
+      }
+      await writeCompactState(params.threadId, state);
+
       const request = await waitForTurnRequest(params.threadId, afterSeq);
       const result = {
         threadId: params.threadId,
@@ -675,6 +955,9 @@ export function createDispatcher({
         requestSeq: request?.seq ?? null,
         requestId: request?.data?.requestId ?? null,
         delivery: response?.delivery ?? "sent",
+        compactFirst,
+        compactTrigger,
+        ...(reminder.used ? { reminder: true } : {}),
         ref: `thread:${params.threadId}`,
         speech: "Передал агенту.",
       };
@@ -947,7 +1230,84 @@ export function createDispatcher({
     };
   }
 
-  return { call };
+  return { call, backgroundTick };
+}
+
+function compactSummary(state) {
+  return {
+    turnsSinceCompaction: state.turns,
+    lastCompactionAt: state.lastCompactionAt,
+    lastCompactionReason: state.lastCompactionReason,
+    lastCompactionStatus: state.lastCompactionStatus,
+    pendingReminder: state.pendingReminder,
+    compactionPending: state.pending !== null,
+  };
+}
+
+function compactionSettingsFrom(raw) {
+  return {
+    compactAt: normalizeClock(raw.compactAt),
+    compactAfterTurns: clampInteger(
+      raw.compactAfterTurns,
+      1,
+      500,
+      DEFAULT_COMPACT_AFTER_TURNS,
+    ),
+    compactAtContextPercent: clampInteger(
+      raw.compactAtContextPercent,
+      1,
+      100,
+      DEFAULT_COMPACT_AT_CONTEXT_PERCENT,
+    ),
+    dispatcherReminder:
+      typeof raw.dispatcherReminder === "string"
+        ? raw.dispatcherReminder.trim()
+        : DEFAULT_DISPATCHER_REMINDER,
+    dispatcherThreadId:
+      typeof raw.dispatcherThreadId === "string"
+        ? raw.dispatcherThreadId.trim()
+        : "",
+  };
+}
+
+function normalizeClock(value) {
+  if (value === undefined || value === null) return DEFAULT_COMPACT_AT;
+  if (typeof value !== "string") return DEFAULT_COMPACT_AT;
+  const text = value.trim();
+  if (text === "") return "";
+  return /^([01]\d|2[0-3]):[0-5]\d$/u.test(text) ? text : DEFAULT_COMPACT_AT;
+}
+
+function clampInteger(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function clockMinutes(value) {
+  const [hours, minutes] = value.split(":").map((part) => Number(part));
+  return hours * 60 + minutes;
+}
+
+function minutesOfDay(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function nightlyDue(date, compactAt) {
+  return minutesOfDay(date) >= clockMinutes(compactAt);
+}
+
+function startOfClock(date, compactAt) {
+  const [hours, minutes] = compactAt.split(":").map((part) => Number(part));
+  const start = new Date(date);
+  start.setHours(hours, minutes, 0, 0);
+  return start;
+}
+
+function localDateKey(date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function reasoningSupported(model, level) {
