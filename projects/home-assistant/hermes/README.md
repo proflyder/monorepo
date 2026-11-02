@@ -187,7 +187,73 @@ the guard sends a single space. The pipeline strips it, skips TTS and keeps
 `continue_conversation=false`; the intent response is `action_done` with
 whitespace-only speech and `processed_locally=false` (the response came through
 the conversation agent, not the local intent path). The proxy image is
-`docker.io/ricardo/voice-proxy:v6` in `projects/home/kubernetes/versions.sh`.
+digest-pinned in `projects/home/kubernetes/versions.sh`.
+
+## Profile routing (proxy v7)
+
+The proxy is the only place that decides whether a phrase belongs to Hermes or
+to an agent. It is disabled unless the full path is configured, so a build
+without the new deployment values behaves exactly like v6.
+
+Per `/v1/chat/completions` request, in this order:
+
+1. the cancel guard (unchanged, v6) — never reads the profile;
+2. the HA voice profile
+   (`GET {HA_URL}/api/states/input_select.ricardo_voice_profile`, Bearer HA
+   token, a ≤2 s cache that is only filled by a fresh successful read);
+3. `POST {VOICE_GATEWAY_URL}/v1/voice/utterance {text, profile}` with the last
+   user message, using the dedicated voice token.
+
+| Gateway `route` | Action |
+|---|---|
+| `hermes` | forward to Hermes exactly as before |
+| `local` | answer immediately with `speech`; nothing reaches Hermes |
+| `bb` with `ok:true`, `threadId`, `afterSeq` | answer immediately with `speech`, then announce the turn result later |
+| anything else, `ok:false`, or a gateway error | fail-closed short phrase, nothing reaches Hermes in the work profile |
+
+Fail-closed:
+
+- profile unreadable, unknown value, HA unavailable → «Не могу подтвердить
+  профиль.»;
+- gateway unavailable in the **work** profile → «Сервер агентов недоступен.»;
+- gateway unavailable in the **personal** profile → Hermes, because personal
+  speech always went there before this change.
+
+`local`/`bb` replies use the same completion shape as the cancel guard (JSON or
+SSE with `role`, `content`, `finish_reason=stop`, `[DONE]`), and their speech
+never ends with a question so HA does not enable continued conversation.
+
+For `bb`, a daemon thread long-polls `POST /v1/voice/result` (25 s per call,
+about 15 min overall) and, on a final answer, calls
+`POST {HA_URL}/api/services/script/turn_on` with
+`entity_id: script.schedule_announce` and `variables: {message, chime: false}`.
+The text is sanitized with the same `sanitize_text` and limited to ~200
+characters. A timeout or a gateway error announces nothing; the thread never
+writes speech to the log.
+
+Environment (routing is off until all four of URL+token for HA and gateway are
+present):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_HA_URL` | — | HA base URL, for the profile state and the announce service call |
+| `HERMES_HA_TOKEN_FILE` / `HERMES_HA_TOKEN` | — | HA long-lived token; the existing `hermes-environment` Secret key can be reused |
+| `HERMES_VOICE_GATEWAY_URL` | — | mcp-gateway base, `http://mcp-gateway.home-assistant.svc.cluster.local:8080` |
+| `HERMES_VOICE_GATEWAY_TOKEN_FILE` / `HERMES_VOICE_GATEWAY_TOKEN` | — | voice token from Secret `mcp-gateway-voice` |
+| `HERMES_VOICE_PROFILE_ENTITY` | `input_select.ricardo_voice_profile` | profile entity |
+| `HERMES_VOICE_PROFILE_CACHE_MS` | `2000` | successful-read cache |
+| `HERMES_HA_TIMEOUT` | `3` | HA request timeout, seconds |
+| `HERMES_VOICE_GATEWAY_TIMEOUT` | `5` | gateway request timeout, seconds |
+| `HERMES_VOICE_RESULT_TIMEOUT` | `900` | overall late-answer budget, seconds |
+| `HERMES_VOICE_RESULT_RETRY` | `2` | pause after a failed result poll |
+| `HERMES_VOICE_RESULT_WAIT` | `25` | long-poll seconds per request |
+| `HERMES_VOICE_ANNOUNCE_MAX_CHARS` | `200` | announced text limit |
+| `HERMES_VOICE_ANNOUNCE_SCRIPT` | `script.schedule_announce` | HA script that speaks the late answer |
+
+Logs carry the route outcome, profile name, character count and thread id —
+never the spoken text. `_route_counts` keeps per-outcome counters for tests and
+future metrics; the proxy has no metrics endpoint.
+
 
 ## Persona — Ricardo
 

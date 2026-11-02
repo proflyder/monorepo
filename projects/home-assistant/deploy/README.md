@@ -40,6 +40,43 @@ Proxy image собирается из Dockerfile `images/voice-proxy/` и акт
 откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
 перезапускает контур.
 
+## Voice routing: приватные values
+
+Маршрутизация профиля включается только переменными контейнера
+`voice-proxy` (`workloads.hermes.containers[1]`). Пока их нет, прокси работает
+как раньше, поэтому новый образ раскатывается безопасно и до настройки
+маршрутов.
+
+В `runtime_values` (OpenBao `secret/ci/deploy-home`) нужны адреса и ссылки на
+секреты; значения токенов остаются в Kubernetes Secrets:
+
+```yaml
+workloads:
+  hermes:
+    containers:
+      - name: gateway   # без изменений
+        # ...
+      - name: voice-proxy
+        env:
+          - {name: HERMES_HA_URL, value: "http://192.0.2.28:8123"}
+          - name: HERMES_HA_TOKEN
+            valueFrom: {secretKeyRef: {name: hermes-environment, key: HERMES_HA_TOKEN}}
+          - {name: HERMES_VOICE_GATEWAY_URL,
+             value: "http://mcp-gateway.home-assistant.svc.cluster.local:8080"}
+          - name: HERMES_VOICE_GATEWAY_TOKEN
+            valueFrom: {secretKeyRef: {name: mcp-gateway-voice, key: token}}
+        volumeMounts: []   # *_FILE не нужен, если токены приходят через env
+```
+
+`Secret/mcp-gateway-voice` уже создаётся ESO в namespace `home-assistant`;
+`HERMES_HA_TOKEN` уже есть в `Secret/hermes-environment`. Pod Hermes работает с
+`hostNetwork`, поэтому NetworkPolicy на него не действует, а egress к
+`mcp-gateway:8080` и HA `:8123` разрешён политикой шлюза по адресу узла; новых
+правил не требуется. Полный контракт переменных — в
+`projects/home-assistant/hermes/README.md`. Если позже понадобится файловый
+вариант, используйте `HERMES_HA_TOKEN_FILE` и
+`HERMES_VOICE_GATEWAY_TOKEN_FILE` с тем же Secret в volume.
+
 ## Storage и CI
 
 `apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а workloads —
