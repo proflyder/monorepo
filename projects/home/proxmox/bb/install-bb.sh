@@ -7,6 +7,13 @@
 # or written to logs.
 set -euo pipefail
 
+# `pct exec` starts with a minimal PATH (/usr/sbin:/usr/bin:/sbin:/bin), so npm's
+# `#!/usr/bin/env node` shebang cannot find the Node.js installed under
+# /usr/local/bin. Set the full PATH here, not just for individual commands.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Avoid `perl: warning: Setting locale failed` noise from apt/dpkg under pct exec.
+export LC_ALL=C.UTF-8
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../versions.sh
 # shellcheck disable=SC1091
@@ -52,8 +59,11 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
+# libatomic1 is required by the Node.js 26 tarball; the Debian 13 container
+# template does not ship it, and node then fails with
+# `libatomic.so.1: cannot open shared object file`.
 apt-get install -y --no-install-recommends \
-  ca-certificates curl git sqlite3 xz-utils
+  ca-certificates curl git libatomic1 sqlite3 xz-utils
 
 # ----- Node.js from the official tarball -----------------------------------
 NODE_ROOT=/usr/local/lib/nodejs/node-v$NODE_VERSION-linux-x64

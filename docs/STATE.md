@@ -9,7 +9,7 @@
 - Железо: DEXP Jupiter JU01CY, i7-12650H, 32 GiB RAM (2×16 GiB DDR4-3200),
   NVMe 512 GB (система, `local-lvm`), SATA SSD Apacer AS350 512 GB — только
   бэкапы (storage `backup`, `/mnt/pve/backup`, ext4, `nofail`).
-- Ночной vzdump `nightly` 04:00: VM 100/101 и CT 102, snapshot + zstd,
+- Ночной vzdump `nightly` 04:00: VM 100/101 и CT 102/103, snapshot + zstd,
   retention `keep-daily=1,keep-monthly=2` (свежий + последний
   прошлого месяца). Копия на том же узле; vzdump
   VM 101 содержит и raft OpenBao, и Secret `openbao-seal` — не вывозить
@@ -27,6 +27,12 @@
   `192.0.2.27`; startup order 1/2.
 - CT `102 vpn`: unprivileged Debian 13, 1 vCPU / 512 MiB / 4 GiB,
   `192.0.2.29`, onboot, ocserv `443/tcp+udp`, пул `10.77.0.0/24`.
+- CT `103 bb`: unprivileged Debian 13, 2 vCPU / 2048 MiB / swap 1024 / 16 GiB,
+  onboot `order=3`, Node.js 26 из tarball; `install-bb.sh` прошёл живьём —
+  linger и systemd user bus под `bb` работают, контейнер переживает reboot,
+  добавлен в vzdump `nightly` (04:00, согласованная SQLite-копия в 03:30).
+  Сервер bb пока остаётся на Mac: `bb server move --to bb` ещё не выполнялся.
+  Runbook — `projects/home/proxmox/bb/`.
 - Terraform: provider `bpg/proxmox 0.118.1`, plan — No changes; state
   root-only на PVE, копия в `secrets/`.
 - Wi-Fi/Ethernet uplink runbook: `projects/home/proxmox/wifi-uplink/`.

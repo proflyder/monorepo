@@ -51,19 +51,30 @@ ssh root@192.0.2.26 \
 
 ## 2. Установка внутри CT
 
-`install-bb.sh` должен видеть рядом `versions.sh` и `bb-db-backup.sh`:
+`install-bb.sh` ищет `versions.sh` на уровень выше своего каталога
+(`../versions.sh`), поэтому live-раскладка такая: `versions.sh` лежит в
+`/root/bb-setup/`, а `install-bb.sh` и `bb-db-backup.sh` — в
+`/root/bb-setup/bb/`.
 
 ```bash
+ssh root@192.0.2.26 'mkdir -p /root/bb-setup/bb'
 scp projects/home/proxmox/bb/install-bb.sh \
     projects/home/proxmox/bb/bb-db-backup.sh \
-    projects/home/proxmox/versions.sh \
-    root@192.0.2.26:/root/bb-setup/
+    root@192.0.2.26:/root/bb-setup/bb/
+scp projects/home/proxmox/versions.sh root@192.0.2.26:/root/bb-setup/
 ssh root@192.0.2.26 \
-  'pct push 103 /root/bb-setup/install-bb.sh /root/install-bb.sh --perms 755 &&
-   pct push 103 /root/bb-setup/bb-db-backup.sh /root/bb-db-backup.sh --perms 755 &&
-   pct push 103 /root/bb-setup/versions.sh /root/versions.sh --perms 644 &&
-   pct exec 103 -- /root/install-bb.sh'
+  'pct push 103 /root/bb-setup/bb/install-bb.sh /root/bb-setup/bb/install-bb.sh --perms 755 &&
+   pct push 103 /root/bb-setup/bb/bb-db-backup.sh /root/bb-setup/bb/bb-db-backup.sh --perms 755 &&
+   pct push 103 /root/bb-setup/versions.sh /root/bb-setup/versions.sh --perms 644 &&
+   pct exec 103 -- bash /root/bb-setup/bb/install-bb.sh'
 ```
+
+`pct exec` запускает команду с урезанным `PATH`
+(`/usr/sbin:/usr/bin:/sbin:/bin`), поэтому `install-bb.sh` сам выставляет
+`PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` и
+`LC_ALL=C.UTF-8` в начале. Пакет `libatomic1` ставится вместе с остальными:
+без него Node.js 26 из tarball падает с
+`libatomic.so.1: cannot open shared object file`.
 
 Скрипт идемпотентен: повторный запуск не меняет данные bb и существующий
 `/etc/bb-backup/env`.
