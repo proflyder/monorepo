@@ -92,7 +92,8 @@ curl -sS http://127.0.0.1:8098/ricardo.v1.SchedulerService/CreateSchedule \
   истёкшее окно и в той же транзакции ставит durable `STOP` для этого
   occurrence (alarm), отменяя pending `FIRE` того же occurrence. executor
   обязан идемпотентно принять такой STOP и не затрагивать более новый
-  occurrence.
+  occurrence. Правка правила или повторное включение во время активного
+  occurrence закрывает его тем же durable STOP (`detail=rule_changed`).
 - **Control events:** `SnoozeSchedule` ставит немедленный `STOP` + отложенный
   `FIRE`; `StopSchedule` — немедленный `STOP`. `DueEvent.action`:
   `FIRE`/`STOP`; `UNSPECIFIED` от старых строк трактуется как `FIRE`.

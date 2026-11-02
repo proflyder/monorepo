@@ -148,6 +148,10 @@ func (s *Store) insertEvent(ctx context.Context, tx *sql.Tx, in eventInsert) (*r
 // of an occurrence ends.
 const DetailRingWindowExpired = "ring_window_expired"
 
+// DetailRuleChanged marks the durable STOP emitted when editing or re-enabling
+// a rule closes its still-active occurrence.
+const DetailRuleChanged = "rule_changed"
+
 func (s *Store) skipFireEvents(ctx context.Context, tx *sql.Tx, sourceID string, now time.Time, detail string) error {
 	return s.skipFireEventsForOccurrence(ctx, tx, sourceID, 0, now, detail)
 }

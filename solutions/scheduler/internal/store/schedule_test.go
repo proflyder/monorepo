@@ -369,3 +369,224 @@ func mustLoc(t *testing.T, name string) *time.Location {
 	}
 	return loc
 }
+
+func countStops(t *testing.T, events []*ricardov1.DueEvent, sourceID string) int {
+	t.Helper()
+	n := 0
+	for _, ev := range events {
+		if ev.GetSourceId() == sourceID && ev.GetAction() == ricardov1.EventAction_EVENT_ACTION_STOP {
+			n++
+		}
+	}
+	return n
+}
+
+func TestUpdateScheduleDuringRingClosesWithDurableStop(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	sch := createAlarm(t, st, 7, 30, testBase)
+	due := time.Unix(sch.GetNextDueUnix(), 0)
+	if _, err := st.Tick(ctx, due.Add(time.Second)); err != nil {
+		t.Fatalf("fire tick: %v", err)
+	}
+	ringing, err := st.GetSchedule(ctx, sch.GetId())
+	if err != nil {
+		t.Fatalf("get ringing: %v", err)
+	}
+
+	edited := dailyAlarm(8, 0)
+	edited.Id = sch.GetId()
+	now := due.Add(2 * time.Second)
+	updated, err := st.UpdateSchedule(ctx, edited, ringing.GetRevision(), now)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.GetRevision() <= ringing.GetRevision() {
+		t.Fatalf("revision did not increase: %d -> %d", ringing.GetRevision(), updated.GetRevision())
+	}
+	stored, err := st.GetSchedule(ctx, sch.GetId())
+	if err != nil {
+		t.Fatalf("get updated: %v", err)
+	}
+	if stored.GetRevision() != updated.GetRevision() {
+		t.Fatalf("returned revision %d, stored %d", updated.GetRevision(), stored.GetRevision())
+	}
+	if stored.GetActiveOccurrenceUnix() != 0 || stored.GetActiveUntilUnix() != 0 || stored.GetSnoozeUntilUnix() != 0 {
+		t.Fatalf("window not cleared: %+v", stored)
+	}
+	wantNext := time.Date(2026, 1, 2, 8, 0, 0, 0, time.UTC).Unix()
+	if stored.GetNextDueUnix() != wantNext {
+		t.Fatalf("next due = %d, want %d", stored.GetNextDueUnix(), wantNext)
+	}
+
+	events := allEvents(t, st)
+	stop := findEventDetail(t, events, sch.GetId(), ricardov1.EventAction_EVENT_ACTION_STOP, DetailRuleChanged)
+	if stop == nil {
+		t.Fatalf("no rule_changed STOP: %+v", events)
+	}
+	if stop.GetOccurrenceUnix() != due.Unix() || stop.GetState() != ricardov1.EventState_EVENT_STATE_PENDING {
+		t.Fatalf("stop = %+v", stop)
+	}
+	fire := findEvent(t, events, sch.GetId(), ricardov1.EventAction_EVENT_ACTION_FIRE)
+	if fire == nil || fire.GetState() != ricardov1.EventState_EVENT_STATE_SKIPPED {
+		t.Fatalf("fire after rule change = %+v", fire)
+	}
+
+	// A repeated tick must not emit a second STOP.
+	before := len(allEvents(t, st))
+	if _, err := st.Tick(ctx, now.Add(time.Second)); err != nil {
+		t.Fatalf("tick after update: %v", err)
+	}
+	if after := len(allEvents(t, st)); after != before {
+		t.Fatalf("tick after rule change created events: %d -> %d", before, after)
+	}
+	if got := countStops(t, allEvents(t, st), sch.GetId()); got != 1 {
+		t.Fatalf("stop events = %d, want 1", got)
+	}
+}
+
+func TestRuleChangeWithoutRingEmitsNoStop(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	sch := createAlarm(t, st, 7, 30, testBase)
+
+	edited := dailyAlarm(8, 0)
+	edited.Id = sch.GetId()
+	if _, err := st.UpdateSchedule(ctx, edited, sch.GetRevision(), testBase.Add(time.Minute)); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got := countStops(t, allEvents(t, st), sch.GetId()); got != 0 {
+		t.Fatalf("stop events = %d, want 0", got)
+	}
+}
+
+func TestSetEnabledDuringRingStopsOnlyOnEnable(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	sch := createAlarm(t, st, 7, 30, testBase)
+	due := time.Unix(sch.GetNextDueUnix(), 0)
+	if _, err := st.Tick(ctx, due.Add(time.Second)); err != nil {
+		t.Fatalf("fire tick: %v", err)
+	}
+	before := len(allEvents(t, st))
+
+	// Disabling keeps the window and does not queue a STOP by itself.
+	disabled, err := st.SetScheduleEnabled(ctx, sch.GetId(), false, due.Add(2*time.Second))
+	if err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	if got := countStops(t, allEvents(t, st), sch.GetId()); got != 0 {
+		t.Fatalf("disable queued %d STOP events", got)
+	}
+	if disabled.GetActiveOccurrenceUnix() != due.Unix() {
+		t.Fatalf("disable dropped the window: %+v", disabled)
+	}
+
+	enabled, err := st.SetScheduleEnabled(ctx, sch.GetId(), true, due.Add(3*time.Second))
+	if err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if enabled.GetRevision() <= disabled.GetRevision() {
+		t.Fatalf("revision did not increase: %d -> %d", disabled.GetRevision(), enabled.GetRevision())
+	}
+	stored, err := st.GetSchedule(ctx, sch.GetId())
+	if err != nil || stored.GetRevision() != enabled.GetRevision() {
+		t.Fatalf("stored = %+v, %v", stored, err)
+	}
+	if stored.GetActiveOccurrenceUnix() != 0 || stored.GetActiveUntilUnix() != 0 {
+		t.Fatalf("enable did not close the window: %+v", stored)
+	}
+	stop := findEventDetail(t, allEvents(t, st), sch.GetId(), ricardov1.EventAction_EVENT_ACTION_STOP, DetailRuleChanged)
+	if stop == nil || stop.GetOccurrenceUnix() != due.Unix() {
+		t.Fatalf("rule_changed stop = %+v, events after %d", stop, before)
+	}
+}
+
+func TestSnoozedRuleChangeCancelsSnoozeFire(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	sch := createAlarm(t, st, 7, 30, testBase)
+	due := time.Unix(sch.GetNextDueUnix(), 0)
+	if _, err := st.Tick(ctx, due.Add(time.Second)); err != nil {
+		t.Fatalf("fire tick: %v", err)
+	}
+	snoozed, snoozeFire, err := st.SnoozeSchedule(ctx, sch.GetId(), 9, due.Add(2*time.Second))
+	if err != nil {
+		t.Fatalf("snooze: %v", err)
+	}
+
+	edited := dailyAlarm(9, 0)
+	edited.Id = sch.GetId()
+	updated, err := st.UpdateSchedule(ctx, edited, snoozed.GetRevision(), due.Add(3*time.Second))
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.GetSnoozeUntilUnix() != 0 || updated.GetSnoozeCount() != 0 {
+		t.Fatalf("snooze state not cleared: %+v", updated)
+	}
+	var cancelled *ricardov1.DueEvent
+	for _, ev := range allEvents(t, st) {
+		if ev.GetId() == snoozeFire.GetId() {
+			cancelled = ev
+		}
+	}
+	if cancelled == nil || cancelled.GetState() != ricardov1.EventState_EVENT_STATE_SKIPPED {
+		t.Fatalf("snooze FIRE not cancelled: %+v", cancelled)
+	}
+	stop := findEventDetail(t, allEvents(t, st), sch.GetId(), ricardov1.EventAction_EVENT_ACTION_STOP, DetailRuleChanged)
+	if stop == nil || stop.GetOccurrenceUnix() != due.Unix() {
+		t.Fatalf("rule_changed stop = %+v", stop)
+	}
+
+	// Past the old snooze time the window must stay closed and no FIRE may be
+	// delivered for the closed occurrence.
+	at := time.Unix(snoozed.GetSnoozeUntilUnix(), 0).Add(time.Second)
+	if _, err := st.Tick(ctx, at); err != nil {
+		t.Fatalf("post-snooze tick: %v", err)
+	}
+	live, err := st.GetSchedule(ctx, sch.GetId())
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if live.GetActiveOccurrenceUnix() != 0 || live.GetSnoozeUntilUnix() != 0 {
+		t.Fatalf("snooze reactivated after rule change: %+v", live)
+	}
+	leased, err := st.ListDueEvents(ctx, "home-1", 60, 10, QueueHome, at)
+	if err != nil {
+		t.Fatalf("lease: %v", err)
+	}
+	for _, ev := range leased {
+		if ev.GetAction() == ricardov1.EventAction_EVENT_ACTION_FIRE {
+			t.Fatalf("stale FIRE delivered after rule change: %+v", ev)
+		}
+	}
+}
+
+func TestStopAfterRuleChangeIsIdempotent(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	sch := createAlarm(t, st, 7, 30, testBase)
+	due := time.Unix(sch.GetNextDueUnix(), 0)
+	if _, err := st.Tick(ctx, due.Add(time.Second)); err != nil {
+		t.Fatalf("fire tick: %v", err)
+	}
+	ringing, err := st.GetSchedule(ctx, sch.GetId())
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	edited := dailyAlarm(8, 0)
+	edited.Id = sch.GetId()
+	if _, err := st.UpdateSchedule(ctx, edited, ringing.GetRevision(), due.Add(2*time.Second)); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if _, err := st.StopSchedule(ctx, sch.GetId(), due.Add(3*time.Second)); err != nil {
+		t.Fatalf("stop after rule change = %v, want idempotent success", err)
+	}
+	if got := countStops(t, allEvents(t, st), sch.GetId()); got != 1 {
+		t.Fatalf("stop events = %d, want 1", got)
+	}
+	// Snoozing the closed occurrence stays a precondition failure.
+	if _, _, err := st.SnoozeSchedule(ctx, sch.GetId(), 5, due.Add(4*time.Second)); !errors.Is(err, ErrPrecondition) {
+		t.Fatalf("snooze after rule change = %v, want ErrPrecondition", err)
+	}
+}
