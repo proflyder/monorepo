@@ -1,0 +1,22 @@
+{
+  "name": "bb-plugin-home-dispatcher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic bb thread dispatcher for the home voice path",
+  "engines": {
+    "bb": ">=0.48"
+  },
+  "bb": {
+    "name": "Home dispatcher",
+    "description": "Token and HMAC protected executor for spawning, messaging and reading bb threads from the home voice path.",
+    "branding": {
+      "icon": "Zap"
+    },
+    "server": "./server.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "bb plugin build"
+  }
+}

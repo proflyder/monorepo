@@ -480,6 +480,18 @@ units:
       tests:
         - solutions/heartbeat/src
 
+  # bb server plugin. It runs inside bb (not an edge Worker), but the test
+  # surface is the same: plain ES modules, Node built-ins only, `node --test`
+  # and no npm install step in CI.
+  - id: bb-home-dispatcher
+    platform: js
+    title: "solutions/bb-home-dispatcher (bb home dispatcher plugin)"
+    paths:
+      - solutions/bb-home-dispatcher/**
+    js:
+      tests:
+        - solutions/bb-home-dispatcher/tests
+
   # ----------------------------------------------------------- Quality --------
   # Always runs: repository audit, static gates, shellcheck, secret scan and
   # the CI unit-map invariant check.
