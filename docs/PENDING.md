@@ -6,10 +6,11 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **Бэкапы: расписание и offsite с шифрованием.** Raft snapshots лежат на
-      том же узле; HA automatic backup не настроен (`sensor.backup_*` =
-      unknown); SQLite scheduler/currency-bot, `secrets/`, CA и recovery keys
-      не вывозятся. Следующий шаг: включить HA backup по расписанию, выбрать
+- [ ] **Бэкапы: offsite с шифрованием.** Локально есть ночной vzdump всех
+      гостей на отдельный SATA SSD (`backup`), но он на том же узле; HA
+      automatic backup не настроен (`sensor.backup_*` = unknown); `secrets/`,
+      CA и recovery keys не вывозятся. Следующий шаг: включить HA backup по
+      расписанию, выбрать
       offsite-назначение и ключ, вывозить всё в шифрованном архиве, добавить
       алерт на устаревший backup. Ключ `openbao-seal` не класть в один архив
       с raft-снапшотами (иначе шифрование OpenBao теряет смысл).

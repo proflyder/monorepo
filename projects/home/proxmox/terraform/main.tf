@@ -94,7 +94,7 @@ resource "proxmox_virtual_environment_vm" "k3s" {
     cores = 8
     type  = "host"
   }
-  memory { dedicated = 8192 }
+  memory { dedicated = 12288 }
   agent {
     enabled = true
     wait_for_ip { disabled = true }

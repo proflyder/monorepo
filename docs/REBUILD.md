@@ -19,6 +19,12 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 
 ## 1. Потеря PVE / диска
 
+Если уцелел backup SSD: после установки PVE смонтировать `/dev/sda1`
+(`pve-backup`) в `/mnt/pve/backup`, добавить storage `backup` и восстановить
+гостей целиком: `qmrestore <vzdump-qemu-100-…> 100`, `… 101`,
+`pct restore 102 <vzdump-lxc-102-…>`. Это быстрее пунктов 4–7 ниже; затем
+проверка §5.
+
 1. Установить PVE по `INSTALL-PROXMOX.md`; диск будет стёрт.
 2. Восстановить SSH-ключи, сеть, timezone, storage, `vmbr0`.
 3. Восстановить terraform state/private tfvars; `terraform plan` → apply.
@@ -42,7 +48,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 
 ## 3. K3s
 
-1. VM 101: Ubuntu 24.04, 8 GiB/200 GiB, static IP, MAC из private tfvars.
+1. VM 101: Ubuntu 24.04, 12 GiB/200 GiB, static IP, MAC из private tfvars.
 2. Установить **ту же** K3s version; data-dir `/srv/k3s/runtime`.
 3. Остановить K3s перед восстановлением datastore.
 4. Вернуть SQLite cluster snapshot, token, TLS/cred, config.
