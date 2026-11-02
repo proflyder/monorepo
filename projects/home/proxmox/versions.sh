@@ -4,3 +4,10 @@ HAOS_VERSION=18.4
 HAOS_COMPRESSED_SHA256=756ec485b1b153099ca53e88a5eebd63a801d56b791afe5c6d63ef94a35dc02d
 UBUNTU_RELEASE=noble
 UBUNTU_IMAGE_SHA256=04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94
+
+# Debian 13 LXC template used by the bb server container (CT 103).
+DEBIAN_LXC_TEMPLATE=debian-13-standard_13.6-1_amd64.tar.zst
+
+# Node.js installed from the official linux-x64 tarball in projects/home/proxmox/bb.
+NODE_VERSION=26.13.0
+NODE_LINUX_X64_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997

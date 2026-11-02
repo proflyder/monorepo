@@ -156,6 +156,37 @@ TOTP или отозванный сертификат — отказ. Один �
 использовать (ocserv считает это replay), несколько неудач подряд банят IP
 на `min-reauth-time`; свой IP разбанить: `pct exec 102 -- occtl unban ip <IP>`.
 
+## BB server (CT 103)
+
+Создание и установка — `projects/home/proxmox/bb/README.md`. Основные
+команды (реальные IP/MAC — `secrets/NETWORK.md`):
+
+```bash
+# состояние CT, Node и user-сервиса bb
+ssh root@192.0.2.26 'pct status 103'
+ssh root@192.0.2.26 'pct exec 103 -- node --version'
+ssh root@192.0.2.26 \
+  "pct exec 103 -- bash -lc 'uid=\$(id -u bb); \
+     runuser -u bb -- env XDG_RUNTIME_DIR=/run/user/\$uid \
+       systemctl --user list-units \"bb-host-daemon-*\" --no-pager'"
+
+# согласованный SQLite backup и ночной vzdump
+ssh root@192.0.2.26 'pct exec 103 -- systemctl list-timers bb-db-backup.timer'
+ssh root@192.0.2.26 'pct exec 103 -- systemctl start bb-db-backup.service'
+ssh root@192.0.2.26 \
+  'pct exec 103 -- sqlite3 /var/backups/bb/bb.db "PRAGMA integrity_check;"'
+ssh root@192.0.2.26 'pvesh get /cluster/backup/nightly'
+
+# перенос сервера: только после подтверждения владельца
+bb settings experiment serverMove true
+bb server move --to bb --check
+```
+
+`/etc/bb-backup/env` содержит `BB_DATA_DIR`; после enrollment путь берётся из
+`bb machine show bb`. Если файла базы нет, таймер завершается успешно с
+предупреждением. Enrollment-команда из UI одноразовая: выполнять её в shell
+пользователя `bb`, не сохранять в репозитории и логах.
+
 ## Проверка
 
 ```bash

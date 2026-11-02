@@ -22,8 +22,8 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 Если уцелел backup SSD: после установки PVE смонтировать `/dev/sda1`
 (`pve-backup`) в `/mnt/pve/backup`, добавить storage `backup` и восстановить
 гостей целиком: `qmrestore <vzdump-qemu-100-…> 100`, `… 101`,
-`pct restore 102 <vzdump-lxc-102-…>`. Это быстрее пунктов 4–7 ниже; затем
-проверка §5.
+`pct restore 102 <vzdump-lxc-102-…>`, `pct restore 103 <vzdump-lxc-103-…>`.
+Это быстрее пунктов 4–7 ниже; затем проверка §5.
 
 1. Установить PVE по `INSTALL-PROXMOX.md`; диск будет стёрт.
 2. Восстановить SSH-ключи, сеть, timezone, storage, `vmbr0`.
@@ -34,7 +34,9 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 7. Пересоздать CT 102 `vpn` скриптами `projects/home/proxmox/vpn/`;
    восстановить пользователей/клиентские сертификаты или выпустить новые
    (старые `.p12` в `secrets/home/vpn/clients/`), проверить `443/tcp+udp`.
-8. Проверить HA/MA/Grafana/HTTPS ingress/voice/VPN.
+8. Восстановить CT 103 `bb` из vzdump либо пересоздать скриптами
+   `projects/home/proxmox/bb/` (см. §4a).
+9. Проверить HA/MA/Grafana/HTTPS ingress/voice/VPN/bb.
 
 ### 1a. Offsite-копия (Google Drive + restic)
 
@@ -101,6 +103,32 @@ Hermes auth старой копией.
   согласованием и запасной станцией.
 - После восстановления: ESPHome entities, wake word, HA pipeline, Sendspin,
   MA/Spotify, egress guard, BLE gateway.
+
+## 4a. BB server (CT 103)
+
+Полная установка — `projects/home/proxmox/bb/README.md`; факты — `STATE.md`,
+сеть — `NETWORK.md`.
+
+1. Если есть vzdump CT 103, восстановить его в тот же CTID:
+   `pct restore 103 <vzdump-lxc-103-…> --storage local-lvm --unprivileged 1`,
+   затем `pct start 103`. Проверить `pct config 103`: static IP, MAC из
+   `secrets/NETWORK.md`, `startup order=3,up=30,down=60`, timezone
+   `Asia/Almaty`.
+2. Пересоздание без дампа: `create-lxc.sh` с адресом/MAC из приватной карты,
+   затем `install-bb.sh`. Enrollment выполнить заново только если данные bb
+   потеряны; одноразовую команду из UI не сохранять.
+3. Проверить user bus и user-unit:
+   `loginctl show-user bb -p Linger`,
+   `systemctl --user` под `bb` должен видеть `bb-host-daemon-*`.
+4. SQLite: `/var/backups/bb/bb.db` — согласованная копия перед vzdump;
+   live-база — по `BB_DATA_DIR` в `/etc/bb-backup/env`. Для обеих:
+   `sqlite3 <db> 'PRAGMA integrity_check;'` → `ok`.
+5. Проверить `bb machine list`, доступ к `<handle>.getbb.app`, threads и
+   plugins. Если host key/identity не совпал, enrollment откажется перезаписать
+   чужой data dir — не удалять каталог вслепую, сначала сверить `host-id`.
+6. Откат на VM: если LXC не даёт working user bus или сервис не переживает
+   reboot, поднять Debian 13 VM, повторить `install-bb.sh` и перенести сервер
+   через `bb server move --to <vm> --check` с подтверждением владельца.
 
 ## 5. Проверка
 
