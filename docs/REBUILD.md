@@ -39,14 +39,14 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 ### 1a. Offsite-копия (Google Drive + restic)
 
 Если локальный backup SSD потерян вместе с PVE, источник — зашифрованная
-offsite-копия в Google Drive владельца (папка `home-offsite`). Нужны restic
+offsite-копия в Google Drive владельца (папка `home-offsite-v2`). Нужны restic
 password из password manager и доступ к Google-аккаунту (новый
 `rclone authorize`, см. `OPERATIONS.md`); без пароля копия не читается.
 Проверено 2026-11-02: restore на Mac, все файлы совпали с `MANIFEST.json`.
 
 ```bash
 export RCLONE_CONFIG=/path/to/rclone.conf     # remote [gdrive], scope drive.file
-export RESTIC_REPOSITORY='rclone:gdrive:home-offsite'
+export RESTIC_REPOSITORY='rclone:gdrive:home-offsite-v2'
 export RESTIC_PASSWORD='...'
 restic snapshots
 restic check --read-data-subset=5%
