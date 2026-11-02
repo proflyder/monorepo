@@ -6,14 +6,20 @@
 ## Host / VM
 
 - Proxmox VE `9.2.24`, kernel `7.0.14-26-pve`, host `pve`.
-- Железо: DEXP Jupiter JU01CY, i7-12650H, 16 GiB RAM, NVMe 512 GB.
+- Железо: DEXP Jupiter JU01CY, i7-12650H, 32 GiB RAM (2×16 GiB DDR4-3200),
+  NVMe 512 GB (система, `local-lvm`), SATA SSD Apacer AS350 512 GB — только
+  бэкапы (storage `backup`, `/mnt/pve/backup`, ext4, `nofail`).
+- Ночной vzdump `nightly` 04:00: VM 100/101 и CT 102, snapshot + zstd,
+  retention 3 daily / 2 weekly / 1 monthly. Копия на том же узле; vzdump
+  VM 101 содержит и raft OpenBao, и Secret `openbao-seal` — не вывозить
+  без шифрования.
 - Management `vmbr0`: `192.0.2.26/24`; uplink — Wi-Fi `RTL8821CE` в
   4-address/WDS к `vmbr0`, Ethernet — резерв по carrier. NAT/PCI passthrough
   не используются; VM сохраняют L2-адреса и IPv6 multicast.
 - `ricardo-uplink` держит ровно один physical uplink; полные перезагрузки PVE
   без Ethernet проходят.
 - VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, HAOS `2026.10.4`, `192.0.2.28`.
-- VM `101 lab-k3s`: 8 vCPU / 8 GiB / 200 GiB, Ubuntu 24.04.5, K3s,
+- VM `101 lab-k3s`: 8 vCPU / 12 GiB / 200 GiB, Ubuntu 24.04.5, K3s,
   `192.0.2.27`; startup order 1/2.
 - CT `102 vpn`: unprivileged Debian 13, 1 vCPU / 512 MiB / 4 GiB,
   `192.0.2.29`, onboot, ocserv `443/tcp+udp`, пул `10.77.0.0/24`.

@@ -5,7 +5,7 @@
 ## Текущее состояние
 
 PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
-2 vCPU/4 GiB/32 GiB), VM `101 lab-k3s` (`192.0.2.27`, 8 vCPU/8 GiB/200 GiB)
+2 vCPU/4 GiB/32 GiB), VM `101 lab-k3s` (`192.0.2.27`, 8 vCPU/12 GiB/200 GiB)
 и CT `102 vpn` (`192.0.2.29`, Debian 13, ocserv). Static IP в guests,
 startup order 1/2. HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`.
 Terraform plan — no changes; state root-only на PVE и копия в `secrets/`.
@@ -50,7 +50,7 @@ PVE: добавляет отдельный ключ через ssh-copy-id и п
 Показывает upgrade simulation; само обновление и reboot выполняются отдельно.
 
 `terraform/main.tf` закрепляет версии CLI/provider и описывает VM 100 (HAOS,
-4 GiB / 32 GiB) и 101 (Ubuntu 24.04 LTS, 8 GiB / 200 GiB). `prevent_destroy`
+4 GiB / 32 GiB) и 101 (Ubuntu 24.04 LTS, 12 GiB / 200 GiB). `prevent_destroy`
 защищает от случайного удаления через Terraform. Образы и private cloud-init
 snippet загружаются bootstrap-этапом; Terraform использует их storage IDs.
 `cloud-init.yaml` — публичная часть, приватная добавляет SSH public key.

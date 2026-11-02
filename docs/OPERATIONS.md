@@ -779,6 +779,15 @@ Pulsar. Аварийный доступ к PVE — LAN/Wi-Fi.
 
 ## Backup
 
-HA full backup — через HA UI/Supervisor. K3s recovery и private values —
+Proxmox: ночной vzdump `nightly` (04:00) на SATA SSD, storage `backup`.
+
+```bash
+ssh pve 'pvesh get /cluster/backup; pvesm list backup | tail'
+ssh pve 'vzdump 101 --storage backup --mode snapshot --compress zstd'  # вручную
+ssh pve 'qmrestore /mnt/pve/backup/dump/<archive> <new-vmid> --storage local-lvm'
+```
+
+Проверочный restore — в новый VMID без сети (`--unique`, отключить `net0`),
+не поверх живой VM. HA full backup — через HA UI/Supervisor. K3s recovery и private values —
 `KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не удалять:
 `/srv/k3s/volumes/*`, `/srv/k3s/recovery`, `secrets/`, `backups/`.
