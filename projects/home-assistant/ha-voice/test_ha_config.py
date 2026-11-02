@@ -776,6 +776,122 @@ class InputContractTests(unittest.TestCase):
         self.assertEqual(dates, {})
 
 
+class VoiceProfileTests(unittest.TestCase):
+    """Pin the voice-profile state, its catalogue switch and local intents."""
+
+    PROFILE = "input_select.ricardo_voice_profile"
+    SWITCH = "switch.ricardo_work_profile"
+
+    def _sentences(self) -> dict[str, list[str]]:
+        control = yaml.safe_load(
+            (HA / "custom_sentences" / "ru" / "station_control.yaml").read_text()
+        )
+        return {
+            intent: [phrase for item in body.get("data", []) for phrase in item.get("sentences", [])]
+            for intent, body in control["intents"].items()
+        }
+
+    def test_profile_input_is_the_single_source_of_truth(self):
+        selects = yaml.safe_load((HA / "input_select.yaml").read_text())
+        profile = selects["ricardo_voice_profile"]
+        self.assertEqual(profile["options"], ["Личный", "Рабочий"])
+        self.assertEqual(profile["initial"], "Личный")
+        self.assertTrue(profile["name"])
+
+    def test_work_profile_switch_wraps_the_input_select(self):
+        templates = load_yaml(HA / "templates.yaml")
+        switches = [item for group in templates for item in group.get("switch", [])]
+        switch = next(s for s in switches if s.get("default_entity_id") == self.SWITCH)
+        self.assertEqual(switch["unique_id"], "ricardo_work_profile")
+        self.assertIn(self.PROFILE, switch["state"])
+        self.assertIn("Рабочий", switch["state"])
+
+        def options(step_list):
+            return [step.get("data", {}).get("option") for step in step_list]
+
+        self.assertEqual(options(switch["turn_on"]), ["Рабочий"])
+        self.assertEqual(options(switch["turn_off"]), ["Личный"])
+        for steps in (switch["turn_on"], switch["turn_off"]):
+            self.assertEqual(services(steps), ["input_select.select_option"])
+            self.assertEqual(service_targets(steps), {self.PROFILE})
+
+    def test_voice_profile_intents_are_local_and_short(self):
+        for intent, option in (
+            ("StationVoiceProfileWork", "Рабочий"),
+            ("StationVoiceProfilePersonal", "Личный"),
+        ):
+            body = INTENTS[intent]
+            self.assertEqual(services(body), ["input_select.select_option"])
+            self.assertEqual(service_targets(body), {self.PROFILE})
+            self.assertIn(option, yaml.safe_dump(body, allow_unicode=True))
+            self.assertNotIn("conversation.hermes", yaml.safe_dump(body, allow_unicode=True))
+
+        query = INTENTS["StationVoiceProfileQuery"]
+        self.assertEqual(services(query), [])
+        self.assertIn(self.PROFILE, yaml.safe_dump(query, allow_unicode=True))
+
+        for intent in (
+            "StationVoiceProfileWork",
+            "StationVoiceProfilePersonal",
+            "StationVoiceProfileQuery",
+        ):
+            text = INTENTS[intent]["speech"]["text"].strip()
+            self.assertTrue(text)
+            self.assertFalse(text.endswith("?"), f"{intent}: answer must not ask a question")
+
+        try:
+            from jinja2 import Environment
+        except ImportError:  # pragma: no cover - optional local dependency
+            self.skipTest("jinja2 is not installed")
+        env = Environment()
+        env.globals["is_state"] = lambda entity, value: entity == self.PROFILE and value == "Рабочий"
+        rendered = env.from_string(
+            INTENTS["StationVoiceProfileQuery"]["speech"]["text"]
+        ).render().strip()
+        self.assertLessEqual(len(rendered), 40, "profile query answer should be short")
+
+    def test_profile_sentences_cover_phrases_and_do_not_collide_with_work_mode(self):
+        sentences = self._sentences()
+        expected = {
+            "StationVoiceProfileWork": {
+                "рабочий профиль",
+                "включи рабочий профиль",
+                "переключи на рабочий профиль",
+            },
+            "StationVoiceProfilePersonal": {
+                "личный профиль",
+                "включи личный профиль",
+                "переключи на личный профиль",
+            },
+            "StationVoiceProfileQuery": {
+                "какой профиль",
+                "какой сейчас профиль",
+                "какой профиль включён",
+            },
+        }
+        for intent, phrases_wanted in expected.items():
+            self.assertTrue(phrases_wanted.issubset(set(sentences[intent])), intent)
+
+        work_mode = set(sentences["StationWorkMode"])
+        for intent in expected:
+            self.assertFalse(work_mode & set(sentences[intent]), f"{intent} overlaps StationWorkMode")
+
+    def test_profile_query_answer_reflects_the_current_option(self):
+        try:
+            from jinja2 import Environment
+        except ImportError:  # pragma: no cover - optional local dependency
+            self.skipTest("jinja2 is not installed")
+        template = INTENTS["StationVoiceProfileQuery"]["speech"]["text"]
+        cases = (
+            ("Рабочий", "Сейчас рабочий профиль."),
+            ("Личный", "Сейчас личный профиль."),
+        )
+        for state, expected in cases:
+            env = Environment()
+            env.globals["is_state"] = lambda entity, value, state=state: entity == self.PROFILE and value == state
+            self.assertEqual(env.from_string(template).render().strip(), expected)
+
+
 class CurrencyRateTests(unittest.TestCase):
     """Pin the currency-bot API field mapping and the Russian TTS text.
 

@@ -20,6 +20,15 @@
 - «black out» / «blackout» / «блэкаут» / «блэк аут» — `StationBlackout` →
   `script.blackout`: выключает те же три светильника. ASR-варианты
   «блок аут», «блок-аут», «блак аут» тоже распознаются;
+- «рабочий профиль» / «включи рабочий профиль» / «переключи на рабочий
+  профиль» — локальный `StationVoiceProfileWork` → `Рабочий` в
+  `input_select.ricardo_voice_profile`; «личный профиль» и аналоги —
+  `StationVoiceProfilePersonal`; «какой профиль» / «какой сейчас профиль» /
+  «какой профиль включён» — локальный `StationVoiceProfileQuery`. Профиль
+  влияет только на свободную речь (Hermes или рабочий тред), локальные
+  бытовые команды работают в обоих профилях. Автовозврата нет; HA
+  восстанавливает последнее значение после перезапуска, первый старт —
+  «Личный»;
 - «Рикардо: ложное срабатывание» — сценарий `script.wake_false_alarm`
   (метка HA `scenario`, запуск из приложения): нажимает
   `button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie` и помечает
@@ -162,7 +171,7 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `automations.yaml` — music route follows source, action-button stop,
   assist-satellite watchdog
 - `schedules_dashboard.yaml` — dashboard «Помощник» (read-only pointers;
-  notes remain editable)
+  notes remain editable; отдельный view «Голос» с профилем)
 - `test_ha_config.py` — static audio/entity/template invariants
 - `test_scheduler_contract.py` — Connect JSON request/response, resolution and
   truthful-speech contract tests (fake clock/timezone, no live calls)
@@ -170,7 +179,10 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `custom_sentences/ru/station_alarm.yaml`
 - `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
 - `custom_sentences/ru/station_currency.yaml` — курсы валют
-- `input_select.yaml` — `music_route`
+- `input_select.yaml` — `music_route`, `ricardo_voice_profile`
+- `templates.yaml` — `switch.ricardo_work_profile` (обёртка над
+  `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный; источник
+  истины — `input_select`)
 - `input_datetime.yaml` — empty mapping (kept so an existing include stays valid)
 - `input_boolean.yaml` — `alarm_ringing`, `alarm_music_was_playing`
 - `input_number.yaml` — `alarm_volume`, `alarm_previous_volume`
@@ -205,6 +217,7 @@ input_datetime: !include input_datetime.yaml
 input_boolean: !include input_boolean.yaml
 input_number: !include input_number.yaml
 input_text: !include input_text.yaml
+template: !include templates.yaml
 ```
 
 Для dashboard добавьте в `configuration.yaml`:
@@ -223,6 +236,12 @@ lovelace:
 
 Скопируйте `schedules_dashboard.yaml` в config; после restart появится раздел
 «Помощник».
+
+Цвет кольца Pulsar по профилю (Violet = личный, Blue = рабочий) **пока не
+настроен**: select цвета появится только после этапа Pulsar. Тогда цвет
+добавится автоматизацией на изменение `input_select.ricardo_voice_profile`;
+сейчас менять `light.ring`/`led_show` бессмысленно — во время LISTENING их
+перекрывает voice state прошивки.
 
 Секрет (не коммитить):
 
