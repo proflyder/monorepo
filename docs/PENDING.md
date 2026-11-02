@@ -6,10 +6,15 @@
 
 ## Следующее (согласовано 2026-11-01)
 
-- [ ] **Внешний heartbeat (dead-man switch).** Алерты уже уходят в Telegram,
-      но если упадёт весь узел/Alertmanager, сообщать некому. Следующий шаг:
-      выбрать внешний приёмник, слать ему `Watchdog` (webhook раз в N минут),
-      он сам пишет в Telegram при пропуске.
+- [ ] **Внешний heartbeat (dead-man switch).** Подготовлены reusable Worker
+      `solutions/heartbeat`, деплой `projects/home/cloudflare/heartbeat` и
+      маршрут `Watchdog → heartbeat` в Alertmanager; живой контур ещё не
+      включён. Следующий шаг: создать Cloudflare API token и KV namespace,
+      развернуть Worker и положить его secrets (`deploy.sh`,
+      `deploy.sh --secrets`), записать `url`/`token` в OpenBao
+      `k8s/monitoring/heartbeat`, применить Alertmanager, затем провести
+      outage-тест (остановить Alertmanager/сеть → сообщение о тишине →
+      восстановление).
 
 ## P1 — безопасность и надёжность
 

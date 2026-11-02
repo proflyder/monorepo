@@ -72,6 +72,10 @@ invalidations:
     platforms: [python]
     deploy: false
   - paths:
+      - .github/workflows/_js.yml
+    platforms: [js]
+    deploy: false
+  - paths:
       - .github/workflows/**
       - platform/ci/**
     platforms: [quality]
@@ -443,6 +447,19 @@ units:
     python:
       suites:
         - projects/home/kubernetes/external-secrets
+
+  # ---------------------------------------------------------------- JS --------
+  # Edge Workers only: Cloudflare runtime, plain ES modules, no npm
+  # dependencies and no build step. Tests use the built-in `node --test`.
+  - id: heartbeat
+    platform: js
+    title: "solutions/heartbeat (Cloudflare Worker dead-man switch)"
+    paths:
+      - solutions/heartbeat/**
+      - projects/home/cloudflare/heartbeat/**
+    js:
+      tests:
+        - solutions/heartbeat/src
 
   # ----------------------------------------------------------- Quality --------
   # Always runs: repository audit, static gates, shellcheck, secret scan and

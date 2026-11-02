@@ -59,6 +59,9 @@
   Оформление — HTML-шаблон `observability/alertmanager/telegram.tmpl`
   (ConfigMap `alertmanager-templates`, время Asia/Almaty).
   Доставка проверена тестовым алертом 2026-11-01.
+  Внешний dead-man switch подготовлен (`solutions/heartbeat`, Worker
+  `projects/home/cloudflare/heartbeat`), но **не развёрнут**: Watchdog ещё
+  идёт в `null`, OpenBao `k8s/monitoring/heartbeat` не создан.
 - Grafana: LAN `http://192.0.2.27:30300/` (корень), HTTPS
   `https://grafana.home.example.com/`.
 - HTTPS ingress `*.home.example.com` (Traefik `42.2.0` + cert-manager

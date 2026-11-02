@@ -106,7 +106,7 @@ class AndroidFixtureRoutingTests(unittest.TestCase):
     def test_docs_only_change_runs_nothing_but_quality(self):
         result = self.route(["docs/ARCHITECTURE.md"])
         self.assertTrue(result.docs_only)
-        for platform in ("go", "android", "python"):
+        for platform in ("go", "android", "python", "js"):
             self.assertEqual(result.routes[platform].units, [], platform)
         self.assertEqual([u.id for u in result.routes["quality"].units], ["repository"])
 
@@ -252,8 +252,16 @@ class RealRepositoryTests(unittest.TestCase):
         self.assertEqual(check_units.coverage_problems(self.config, files), [])
 
     def test_every_known_platform_has_a_unit(self):
-        for platform in ("go", "android", "python", "quality"):
+        for platform in ("go", "android", "python", "js", "quality"):
             self.assertTrue(self.config.by_platform(platform), platform)
+
+    def test_js_worker_change_routes_to_its_unit(self):
+        result = affected.route(
+            self.config, ["solutions/heartbeat/src/decide.js"], root=REPO, base="b"
+        )
+        self.assertEqual([unit.id for unit in result.routes["js"].units], ["heartbeat"])
+        entries = affected.matrix_entries(result, self.config)
+        self.assertEqual(entries["js"], [{"id": "heartbeat", "tests": "solutions/heartbeat/src"}])
 
     def test_real_graph_routes_shared_kotlin_to_the_application(self):
         graph_file = HERE / "testdata" / "graph-two-apps.xml"
@@ -361,7 +369,7 @@ class DeployRoutingTests(unittest.TestCase):
     def test_ci_workflow_change_runs_checks_but_deploys_nothing(self):
         result = self._route([".github/workflows/ci.yml"])
         # CI must still exercise every platform the workflow entrypoint covers.
-        for platform in ("go", "android", "python"):
+        for platform in ("go", "android", "python", "js"):
             self.assertTrue(result.routes[platform].units, platform)
         # ...but deploy-home must not roll units for a workflow-only change.
         self.assertEqual(affected.deploy_entries(result, self.config), [])

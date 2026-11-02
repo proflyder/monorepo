@@ -46,6 +46,7 @@ jobs:
       go_units: ${{ steps.route.outputs.go_units }}
       android_units: ${{ steps.route.outputs.android_units }}
       python_units: ${{ steps.route.outputs.python_units }}
+      js_units: ${{ steps.route.outputs.js_units }}
       base_sha: ${{ steps.route.outputs.base_sha }}
       docs_only: ${{ steps.route.outputs.docs_only }}
       deploy_control: ${{ steps.route.outputs.deploy_control }}
@@ -405,6 +406,19 @@ jobs:
       suites: ${{ matrix.suites }}
       compile: ${{ matrix.compile }}
 
+  # One matrix entry per affected JavaScript edge Worker unit.
+  js:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.js_units != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.js_units) }}
+    uses: ./.github/workflows/_js.yml
+    with:
+      unit: ${{ matrix.id }}
+      tests: ${{ matrix.tests }}
+
   # Container-image build for the affected deployable units. Build only: no
   # registry credentials and no push on pull requests. `deploy-home` performs
   # the actual build+push+roll on develop.
@@ -437,7 +451,7 @@ jobs:
   # dispatched job succeeded or was legitimately skipped.
   ci-ok:
     if: always()
-    needs: [changes, quality, go, android, python, images, deploy-control]
+    needs: [changes, quality, go, android, python, js, images, deploy-control]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

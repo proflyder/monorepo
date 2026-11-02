@@ -109,5 +109,15 @@
     совпадать с ним (contract-тест). Логи — Loki там, где Alloy шипит
     namespace, иначе `pods/log`; отчёты и алерты — отдельный инфра-бот,
     бот currency-bot остаётся только у currency-bot.
+23. **Внешний dead-man switch — Cloudflare Worker и тот же инфра-бот.**
+    Alertmanager маршрутизирует всегда горящий `Watchdog` на
+    `solutions/heartbeat` (Cloudflare Worker, KV, Cron `*/5`). Тишина дольше
+    grace-периода и восстановление связи уходят в Telegram через существующего
+    инфра-бота, без нового бота и стороннего мониторинга. Компромисс:
+    тот же `TELEGRAM_BOT_TOKEN` инфра-бота (полные права бота) хранится ещё и
+    в Cloudflare Worker secrets вне дома; при ротации бота обновлять оба места;
+    `PING_TOKEN` ограничивает приём heartbeat и хранится также в OpenBao
+    `secret/k8s/monitoring/heartbeat`. Worker остаётся reusable-решением,
+    project-specific URL/ids — только в private env проекта.
 
 Меняется решение — обновить этот файл и `STATE.md`.

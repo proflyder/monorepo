@@ -1,0 +1,28 @@
+# Example Cloudflare Worker configuration for the home dead-man switch.
+#
+# The real file is rendered by deploy.sh into wrangler.generated.toml (ignored
+# by Git) from secrets/home/heartbeat.env. Replace every <PLACEHOLDER> only in
+# the private env file, never here.
+#
+# `main` is relative to this file: the Worker source is the reusable solution
+# under solutions/heartbeat, not a project-local copy.
+
+name = "<WORKER_NAME>"
+main = "../../../../solutions/heartbeat/src/worker.js"
+compatibility_date = "2025-11-01"
+# Public HTTPS endpoint with bearer auth; Alertmanager must reach it from home.
+workers_dev = true
+account_id = "<CLOUDFLARE_ACCOUNT_ID>"
+
+[triggers]
+# Alertmanager sends Watchdog every 5 minutes through the matching route.
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "HEARTBEAT"
+id = "<KV_NAMESPACE_ID>"
+
+[vars]
+GRACE_SECONDS = "900"
+REMIND_SECONDS = "21600"
+SITE_NAME = "дом"

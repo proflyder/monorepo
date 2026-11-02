@@ -13,6 +13,7 @@ solutions/               переиспользуемые решения
   alarm/                 legacy AlarmService facade над тем же engine
   ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler (+ cmd/ha-control)
   mcp-gateway/           MCP Streamable HTTP: infra.read / infra.fix / infra.report
+  heartbeat/             внешний dead-man switch (Cloudflare Worker)
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (+ checked-in Go stubs)
@@ -63,9 +64,12 @@ engine, два entrypoint-а для совместимости.
 | MCP/HA bridge | Go | сетевые адаптеры, простой деплой, общий код |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
+| `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
 | HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
 
-Go — для control plane и durable state, Rust — для тяжёлых вычислений.
+Go — для control plane и durable state, Rust — для тяжёлых вычислений,
+JavaScript — только для edge Worker, которому нужен runtime Cloudflare, а не
+общий backend-стек.
 Mobile не владеет расписанием и не заменяет серверные будильники.
 
 ## Bazel

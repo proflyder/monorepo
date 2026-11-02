@@ -11,7 +11,8 @@ kubectl -n monitoring wait --for=condition=Ready externalsecret/grafana-admin --
 # alertmanager-telegram renders alertmanager.yaml (Telegram receiver) from
 # k8s/home-assistant/hermes-environment (TELEGRAM_BOT_TOKEN /
 # TELEGRAM_ALLOWED_USERS, the dedicated infra bot); Alertmanager reads it via
-# configSecret.
+# configSecret. The always-firing Watchdog is routed to the external heartbeat
+# Worker with url/token from k8s/monitoring/heartbeat.
 kubectl apply -f "$ROOT/projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml"
 kubectl -n monitoring wait --for=condition=Ready externalsecret/alertmanager-telegram --timeout=120s
 kubectl -n monitoring create configmap alertmanager-templates \

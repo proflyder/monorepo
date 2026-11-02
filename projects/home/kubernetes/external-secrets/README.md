@@ -30,6 +30,7 @@ ExternalSecret-манифесты лежат рядом с проектами:
 | `projects/home-assistant/deploy/manifests/external-secrets.yaml` | `home-assistant/hermes-environment` | `k8s/home-assistant/hermes-environment` |
 | `projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml` | `cert-manager/cloudflare-api-token` | `k8s/cert-manager/cloudflare-api-token` |
 | `projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml` | `monitoring/grafana-admin` | `k8s/monitoring/grafana-admin` |
+| `projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml` | `monitoring/alertmanager-telegram` | `k8s/home-assistant/hermes-environment` + `k8s/monitoring/heartbeat` (template data) |
 | `projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml` | `currency-bot/currency-bot` | `k8s/currency-bot/currency-bot` |
 | то же | `currency-bot/cloudflared-tunnel` | `k8s/currency-bot/cloudflared-tunnel` |
 

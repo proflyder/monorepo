@@ -357,7 +357,9 @@ Disaster restore на запасном железе ещё не выполнял
 ## Ограничения
 
 - Один узел, без HA control plane и распределённого storage.
-- Алерты уходят в Telegram, но внешнего heartbeat (dead-man switch) нет.
+- Алерты уходят в Telegram, но внешний heartbeat (dead-man switch) ещё не
+  развёрнут: Worker и маршрут `Watchdog` подготовлены в `solutions/heartbeat`
+  и `projects/home/cloudflare/heartbeat`.
 - Нет полной latency instrumentation voice pipeline.
 - Scheduler/bridge/control и Hermes/voice-proxy собираются в CI и
   публикуются в GHCR; runtime ссылается на них по digest.

@@ -82,6 +82,8 @@ dist/
 
 # Reproducible generated configuration
 *.generated
+# Rendered Cloudflare Worker config contains private account/KV ids.
+/projects/home/cloudflare/heartbeat/wrangler.generated.toml
 
 # Station upstream checkouts and built binaries
 /projects/station/upstream/

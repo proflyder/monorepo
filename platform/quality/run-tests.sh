@@ -17,6 +17,14 @@ for suite in projects/home-assistant/ha-voice projects/home-assistant/hermes pro
   python3 -m unittest discover -s "$suite" -p 'test_*.py' -v
 done
 
+# Dependency-free edge Workers use Node's built-in runner, not npm.
+if command -v node >/dev/null 2>&1; then
+  echo "== JS: solutions/heartbeat =="
+  node --test solutions/heartbeat/src/*.test.js
+else
+  skip "Node.js is not installed: solutions/heartbeat tests need node --test"
+fi
+
 # Scheduler deployment helpers: real preflight regression and the mocked-kubectl
 # control-mode test (the shell test is not covered by unittest discovery).
 echo "== Scheduler deployment: preflight =="
