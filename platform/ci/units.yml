@@ -492,6 +492,18 @@ units:
       tests:
         - solutions/bb-home-dispatcher/tests
 
+  # bb profiles plugin: TypeScript server/UI with a dependency-free policy
+  # module. CI runs the same `node --test` suite as production, so no npm
+  # install or external secret is needed.
+  - id: bb-profiles
+    platform: js
+    title: "solutions/bb-profiles (bb work/personal profiles plugin)"
+    paths:
+      - solutions/bb-profiles/**
+    js:
+      tests:
+        - solutions/bb-profiles/tests
+
   # ----------------------------------------------------------- Quality --------
   # Always runs: repository audit, static gates, shellcheck, secret scan and
   # the CI unit-map invariant check.
