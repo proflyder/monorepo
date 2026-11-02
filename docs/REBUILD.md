@@ -36,6 +36,31 @@ K3s — `KUBERNETES-OPERATIONS.md`.
    (старые `.p12` в `secrets/home/vpn/clients/`), проверить `443/tcp+udp`.
 8. Проверить HA/MA/Grafana/HTTPS ingress/voice/VPN.
 
+### 1a. Offsite-копия (Google Drive + restic)
+
+Если локальный backup SSD потерян вместе с PVE, источник — зашифрованная
+offsite-копия в Google Drive владельца (папка `home-offsite`). Нужны restic
+password из password manager и доступ к Google-аккаунту (новый
+`rclone authorize`, см. `OPERATIONS.md`); без пароля копия не читается.
+Проверено 2026-11-02: restore на Mac, все файлы совпали с `MANIFEST.json`.
+
+```bash
+export RCLONE_CONFIG=/path/to/rclone.conf     # remote [gdrive], scope drive.file
+export RESTIC_REPOSITORY='rclone:gdrive:home-offsite'
+export RESTIC_PASSWORD='...'
+restic snapshots
+restic check --read-data-subset=5%
+restic restore latest --target /srv/offsite-restore
+cat /srv/offsite-restore/MANIFEST.json
+```
+
+Дальше: `openbao/*.snap` — в восстановление OpenBao (§3.7), но `openbao-seal`
+и recovery keys в offsite-копии **нет** — они только в отдельной offline-копии.
+`sqlite/scheduler.db` и `sqlite/currency_bot-*.db` — остановить writer, вернуть
+в PVC и выполнить `PRAGMA integrity_check`; `ha-bridge/ledger.json` — в PVC
+ha-bridge; `home-assistant/backup_*.tar` — в HA onboarding. Подробно —
+`projects/home/backup/offsite/README.md`.
+
 ## 2. HAOS
 
 1. Установить HAOS VM 100; UEFI, 2 vCPU/4 GiB/32 GiB.

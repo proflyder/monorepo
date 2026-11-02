@@ -788,6 +788,50 @@ ssh pve 'qmrestore /mnt/pve/backup/dump/<archive> <new-vmid> --storage local-lvm
 ```
 
 Проверочный restore — в новый VMID без сети (`--unique`, отключить `net0`),
-не поверх живой VM. HA full backup — через HA UI/Supervisor. K3s recovery и private values —
-`KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не удалять:
+не поверх живой VM. HA full backup — через HA UI/Supervisor (automatic
+encrypted backup 03:30, 3 копии, агент `hassio.local`). K3s recovery и private
+values — `KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не удалять:
 `/srv/k3s/volumes/*`, `/srv/k3s/recovery`, `secrets/`, `backups/`.
+
+### Offsite backup (Google Drive + restic)
+
+Live с 2026-11-02: K3s node, таймер `offsite-backup.timer` 04:45 →
+restic-репозиторий `rclone:gdrive:home-offsite` (личный Google Drive, scope
+`drive.file`: rclone видит только свои файлы). Установка/обновление с Mac:
+
+```bash
+# Private inputs (вне Git):
+#   secrets/home/offsite-backup.env      RESTIC_REPOSITORY, RCLONE_CONFIG, HA_URL, лимиты
+#   secrets/home/offsite-restic.password restic password (копия — password manager)
+#   secrets/home/offsite-rclone.conf     rclone remote `gdrive` (OAuth token)
+#   secrets/home/offsite-ha.token        отдельный HA long-lived token
+SSH_CONFIG=secrets/proxmox-install/ssh_config projects/home/backup/offsite/install.sh k3s
+SSH_CONFIG=secrets/proxmox-install/ssh_config projects/home/backup/pve/install.sh pve
+# PVE scrape target и Grafana server — secrets/home/observability-values.yaml
+KUBECONFIG=secrets/kubernetes-research/kubeconfig projects/home/kubernetes/deploy-observability.sh
+```
+
+Новый OAuth-токен Google: `rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ"`
+(base64 `{"scope":"drive.file"}`), вывод — base64-JSON с полем `token`; собрать
+`[gdrive] type=drive scope=drive.file token=…` в `offsite-rclone.conf` и
+переустановить. Лимиты: `MAX_STAGING_BYTES` (2 GiB) и `MAX_REPO_BYTES`
+(5 GiB) — превышение = неуспешный запуск и алерт, не загрузка.
+
+Проверки и обслуживание:
+
+```bash
+ssh root@192.0.2.27 'systemctl list-timers offsite-backup.timer'
+ssh root@192.0.2.27 'systemctl start offsite-backup.service'
+ssh root@192.0.2.27 'journalctl -u offsite-backup.service -n 100 --no-pager'
+ssh root@192.0.2.27 'cat /var/lib/node-exporter-textfile/offsite_backup.prom'
+ssh root@192.0.2.27 'set -a; . /etc/offsite-backup/env; set +a; restic snapshots'  # нужен rclone
+ssh root@192.0.2.26 'cat /var/lib/prometheus/node-exporter/vzdump.prom'
+```
+
+Retention: daily `restic forget --keep-daily 7 --keep-weekly 4
+--keep-monthly 6`; prune и `restic check --read-data-subset=5%` — по
+воскресеньям. Смена restic password: `restic key add`, затем удалить старый
+ключ, обновить `/etc/offsite-backup/restic.password` и копию вне дома.
+Восстановление — `projects/home/backup/offsite/README.md` и `REBUILD.md`.
+Отзыв доступа к Drive — Google Account → Безопасность → сторонние приложения
+→ rclone (отзывает и рабочий токен: затем новый `rclone authorize`).

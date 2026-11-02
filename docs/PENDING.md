@@ -6,13 +6,18 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **Бэкапы: offsite с шифрованием.** Локально есть ночной vzdump всех
-      гостей на отдельный SATA SSD (`backup`), но он на том же узле; HA
-      automatic backup не настроен (`sensor.backup_*` = unknown); `secrets/`,
-      CA и recovery keys не вывозятся. Следующий шаг: включить HA backup по
-      расписанию, выбрать offsite-назначение и ключ, вывозить всё в
-      шифрованном архиве, добавить алерт на устаревший backup. Ключ `openbao-seal` не класть в один архив
-      с raft-снапшотами (иначе шифрование OpenBao теряет смысл).
+- [ ] **Offsite: свой OAuth client ID Google.** Offsite в Google Drive
+      работает через общий client ID rclone, который Google выводит из
+      обслуживания в 2026 — бэкап перестанет загружаться (алерт
+      `OffsiteBackupFailed`). Следующий шаг: Google Cloud project → OAuth
+      consent screen (External, In production, scope `drive.file`) → OAuth
+      client «Desktop app»; новый `rclone authorize` с этим client и
+      переустановка `offsite-rclone.conf`.
+- [ ] **Ключи бэкапов вне дома.** restic password
+      (`secrets/home/offsite-restic.password`) и ключ шифрования HA backup
+      (`secrets/home/ha-backup.env`) лежат только на Mac и узле. Следующий шаг:
+      сохранить оба в password manager владельца; без них offsite-копия и
+      HA backup не расшифровываются.
 
 ## P3 — приёмка и развитие
 

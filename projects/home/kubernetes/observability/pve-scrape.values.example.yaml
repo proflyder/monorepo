@@ -1,0 +1,22 @@
+# Example private values overlay for deploy-observability.sh.
+#
+# Copy to secrets/home/observability-values.yaml (git-ignored), replace the
+# TEST-NET address with the real PVE node-exporter target and deploy with:
+#
+#   PROMETHEUS_PRIVATE_VALUES=secrets/home/observability-values.yaml \
+#     projects/home/kubernetes/deploy-observability.sh
+#
+# deploy-observability.sh also picks up
+# secrets/home/observability-values.yaml automatically when the environment
+# variable is unset.
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs:
+      - job_name: pve-node
+        scrape_interval: 30s
+        static_configs:
+          - targets:
+              - 192.0.2.26:9100
+            labels:
+              instance: pve
+              role: proxmox

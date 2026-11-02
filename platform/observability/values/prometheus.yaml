@@ -89,3 +89,13 @@ prometheus-node-exporter:
   resources:
     requests: {cpu: 25m, memory: 32Mi}
     limits: {memory: 128Mi}
+  # offsite_backup.py writes home_offsite_backup_* metrics as a textfile here.
+  # The directory must exist on the node; projects/home/backup/offsite/install.sh
+  # creates it before the next Helm upgrade.
+  extraArgs:
+    - --collector.textfile.directory=/var/lib/node-exporter-textfile
+  extraHostVolumeMounts:
+    - name: textfile
+      hostPath: /var/lib/node-exporter-textfile
+      mountPath: /var/lib/node-exporter-textfile
+      readOnly: true

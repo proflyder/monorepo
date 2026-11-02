@@ -333,6 +333,25 @@ units:
         - projects/home/proxmox/vpn
         - projects/home/proxmox/wifi-uplink
 
+  - id: home-backup
+    platform: python
+    title: "projects/home/backup (offsite restic + PVE vzdump metrics)"
+    paths:
+      - projects/home/backup/**
+    python:
+      suites:
+        - projects/home/backup/offsite
+        - projects/home/backup/pve
+
+  - id: home-observability
+    platform: python
+    title: "projects/home/kubernetes/observability (backup alerts)"
+    paths:
+      - projects/home/kubernetes/observability/**
+    python:
+      suites:
+        - projects/home/kubernetes/observability
+
   - id: station-scripts
     platform: python
     title: "projects/station/scripts"

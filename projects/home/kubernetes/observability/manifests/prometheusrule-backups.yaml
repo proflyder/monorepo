@@ -1,0 +1,115 @@
+# Backup freshness alerts.
+#
+# Sources of the metrics:
+#   home_vzdump_*              PVE node-exporter textfile (projects/home/backup/pve)
+#   home_offsite_backup_*      K3s node-exporter textfile (projects/home/backup/offsite)
+#   home_backup_source_*       home_offsite_backup.py MANIFEST timestamps
+#
+# Alertmanager routes severity warning|critical to Telegram (see
+# projects/home/kubernetes/observability/alertmanager/telegram.tmpl); Russian
+# summary/description match the template annotations.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: home-backup-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: home-observability
+spec:
+  groups:
+    - name: home-backups
+      rules:
+        - alert: VzdumpBackupStale
+          expr: time() - home_vzdump_last_backup_timestamp_seconds > 30 * 3600
+          for: 10m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Устарел vzdump гостя {{ $labels.guest }}"
+            description: >-
+              Последний vzdump VM/CT {{ $labels.vmid }} ({{ $labels.guest }})
+              старше 30 часов. Проверить задание `nightly` и место на storage
+              `backup` на PVE.
+
+        # A guest that disappears from the metric entirely is also stale: the
+        # exporter may have stopped before the archive aged past 30 h.
+        - alert: VzdumpBackupStale
+          expr: >-
+            absent(home_vzdump_last_backup_timestamp_seconds{vmid="100"})
+            or absent(home_vzdump_last_backup_timestamp_seconds{vmid="101"})
+            or absent(home_vzdump_last_backup_timestamp_seconds{vmid="102"})
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Нет метрики vzdump для VM/CT {{ $labels.vmid }}"
+            description: >-
+              Ожидаемая метрика vzdump для гостя {{ $labels.vmid }} отсутствует
+              больше часа. Проверить vzdump-metrics.timer и
+              prometheus-node-exporter на PVE, затем job `pve-node`.
+
+        - alert: OffsiteBackupFailed
+          expr: home_offsite_backup_last_run_success == 0
+          for: 10m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Offsite-бэкап завершился ошибкой"
+            description: >-
+              Последний запуск offsite-бэкапа на K3s-узле неуспешен больше
+              10 минут. Смотреть `journalctl -u offsite-backup.service` и
+              доступность хранилища (Google Drive / OAuth-токен rclone).
+
+        - alert: OffsiteBackupStale
+          expr: time() - home_offsite_backup_last_success_timestamp_seconds > 30 * 3600
+          for: 10m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Offsite-бэкап устарел"
+            description: >-
+              Успешного offsite-бэкапа не было больше 30 часов. Проверить
+              таймер, restic и Google Drive.
+
+        - alert: OffsiteBackupStale
+          expr: absent(home_offsite_backup_last_success_timestamp_seconds)
+          for: 2h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Нет метрики offsite-бэкапа"
+            description: >-
+              Метрика успешного offsite-бэкапа отсутствует больше двух часов.
+              Проверить textfile-коллектор node-exporter и первый запуск
+              offsite-backup.service.
+
+        - alert: HaBackupStale
+          expr: time() - home_backup_source_timestamp_seconds{source="ha"} > 36 * 3600
+          for: 10m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Устарел автоматический backup Home Assistant"
+            description: >-
+              Самый свежий backup HA в last successful offsite-снимке старше
+              36 часов. Проверить расписание automatic backup в HA и
+              доступность агента `hassio.local`.
+
+        - alert: PveNodeExporterDown
+          expr: up{job="pve-node"} == 0 or absent(up{job="pve-node"})
+          for: 15m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "PVE node-exporter недоступен"
+            description: >-
+              Prometheus не может scrape `pve-node` больше 15 минут. Проверить
+              prometheus-node-exporter на PVE, порт 9100 и private target в
+              values Prometheus.
