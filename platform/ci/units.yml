@@ -161,7 +161,7 @@ units:
       script: projects/home/kubernetes/mcp-gateway/deploy.sh
       env_key: mcp_gateway_env
       env_file: mcp-gateway.env
-      externalsecrets: [mcp-gateway-auth, mcp-gateway-telegram, mcp-gateway-ha]
+      externalsecrets: [mcp-gateway-auth, mcp-gateway-telegram, mcp-gateway-ha, mcp-gateway-bb-ssh, mcp-gateway-voice]
     go:
       module: "."
       packages:

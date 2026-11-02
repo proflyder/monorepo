@@ -14,7 +14,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/agentmode"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/bb"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/config"
@@ -27,6 +29,7 @@ import (
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/server"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/telegram"
 	"ricardo.local/monorepo/solutions/mcp-gateway/internal/tools"
+	"ricardo.local/monorepo/solutions/mcp-gateway/internal/voice"
 )
 
 // Version is the reported implementation version.
@@ -38,6 +41,9 @@ infra_service или infra_logs по имени сервиса из катало
 Перезапуск выполняется только в два шага: infra_prepare_restart, затем
 infra_confirm после подтверждения человеком. Никогда не выдумывай имена:
 бери их из infra_overview или ресурса infra://catalog.
+Агенты bb: bb_status показывает только личные треды; запуск — только в личные
+проекты, в два шага bb_prepare_spawn → bb_confirm, отмена — bb_cancel.
+Рабочие проекты и треды недоступны и не обсуждаются.
 Отвечай коротко; длинные отчёты отправляй через infra_send_report.`
 
 // Run starts the gateway and blocks until ctx is cancelled or a listener fails.
@@ -58,9 +64,12 @@ func Run(ctx context.Context) error {
 	}
 
 	m := metrics.New()
+	mode := agentmode.New()
 	deps := &tools.Deps{
 		Catalog:          cat,
 		Pending:          pending.New(cfg.PendingTTL, nil),
+		BBPending:        pending.NewKeyed[bb.SpawnAction](cfg.PendingTTL, nil),
+		BBMode:           mode,
 		Timers:           tools.TimerScheduler{},
 		Metrics:          m,
 		Logger:           logger,
@@ -73,6 +82,23 @@ func Run(ctx context.Context) error {
 		ReportTimeout:    cfg.ReportTimeout,
 		LogByteCap:       cfg.LogByteCap,
 	}
+	if cfg.BBAddress != "" {
+		deps.BB = bb.NewDispatcher(&bb.SSHRunner{
+			Address:        cfg.BBAddress,
+			User:           cfg.BBUser,
+			KeyFile:        cfg.BBKeyFile,
+			KnownHostsFile: cfg.BBKnownHostsFile,
+			Timeout:        cfg.BBTimeout,
+		}, cfg.BBTimeout)
+	}
+	if cfg.BBTargetsFile != "" {
+		resolver, err := bb.LoadTargetsFile(cfg.BBTargetsFile)
+		if err != nil {
+			return err
+		}
+		deps.BBTargets = resolver
+	}
+	deps.BBDispatcherThreadID = cfg.BBDispatcherThreadID
 	deps.Checks = checks.New(cfg.HAURL, cfg.HAToken, nil).WithTimeout(cfg.QueryTimeout)
 	if cfg.PrometheusURL != "" {
 		deps.Prom = prometheus.New(cfg.PrometheusURL, nil)
@@ -100,6 +126,8 @@ func Run(ctx context.Context) error {
 		&tools.ReadGroup{Deps: deps},
 		&tools.FixGroup{Deps: deps},
 		&tools.ReportGroup{Deps: deps},
+		&tools.BBReadGroup{Deps: deps},
+		&tools.BBActGroup{Deps: deps},
 	)
 	selected, err := registry.Select(cfg.Groups)
 	if err != nil {
@@ -124,9 +152,23 @@ func Run(ctx context.Context) error {
 		},
 	)
 
+	var voiceHandler http.Handler
+	if cfg.VoiceToken != "" {
+		voiceHandler = voice.New(voice.Options{
+			Dispatcher:   deps.BB,
+			WorkThreadID: cfg.BBDispatcherThreadID,
+			Mode:         mode,
+			Metrics:      m,
+			Logger:       logger,
+			Now:          time.Now,
+		}).Handler()
+	}
+
 	handler := server.New(server.Options{
-		AuthToken: cfg.AuthToken,
-		MCP:       streamable,
+		AuthToken:  cfg.AuthToken,
+		VoiceToken: cfg.VoiceToken,
+		MCP:        streamable,
+		Voice:      voiceHandler,
 		Ready: func(context.Context) error {
 			if cat == nil {
 				return errors.New("catalog is not loaded")
@@ -159,6 +201,9 @@ func Run(ctx context.Context) error {
 		"loki", cfg.LokiURL != "",
 		"home_assistant", cfg.HAURL != "",
 		"telegram", deps.Report != nil,
+		"bb", deps.BB != nil,
+		"bb_targets", bbTargetCount(deps.BBTargets),
+		"voice", voiceHandler != nil,
 		"pending_ttl", cfg.PendingTTL.String(),
 		"cooldown", cfg.Cooldown.String(),
 		"self_restart_delay", cfg.SelfRestartDelay.String(),
@@ -186,6 +231,13 @@ func Run(ctx context.Context) error {
 	}
 	logger.Info("mcp-gateway stopped", "event", "stopped")
 	return runErr
+}
+
+func bbTargetCount(resolver *bb.Resolver) int {
+	if resolver == nil {
+		return 0
+	}
+	return len(resolver.Entries())
 }
 
 func logLevel() slog.Level {

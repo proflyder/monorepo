@@ -7,7 +7,9 @@
 #
 # Environment:
 #   PRIVATE_ENV    private values file (default secrets/home/mcp-gateway.env)
-#                  keys: LAN_CIDR, NODE_LAN_IP, HAOS_IP, STATION_IP
+#                  keys: LAN_CIDR, NODE_LAN_IP, HAOS_IP, STATION_IP, BB_CT_IP,
+#                  BB_PROJECT_STATION_LAB, BB_PROJECT_ENGLISH_NOTES,
+#                  BB_DISPATCHER_THREAD_ID
 #   PUSH_IMAGES=1  push the image to GHCR (CI path)
 #   NODE_SSH       import the image into the node's containerd (manual path)
 #   IMAGE_TAG      tag used for the push/import (default HEAD sha)
@@ -74,11 +76,19 @@ LAN_CIDR=$(env_value LAN_CIDR)
 NODE_LAN_IP=$(env_value NODE_LAN_IP)
 HAOS_IP=$(env_value HAOS_IP)
 STATION_IP=$(env_value STATION_IP)
+BB_CT_IP=$(env_value BB_CT_IP)
+BB_PROJECT_STATION_LAB=$(env_value BB_PROJECT_STATION_LAB)
+BB_PROJECT_ENGLISH_NOTES=$(env_value BB_PROJECT_ENGLISH_NOTES)
+BB_DISPATCHER_THREAD_ID=$(env_value BB_DISPATCHER_THREAD_ID)
 # The NetworkPolicy admits Hermes (hostNetwork -> node address) and kubelet
 # probes explicitly; the external checks need the HAOS and station host
-# addresses. All four values are required.
+# addresses, and the bb group needs the bridge host and the personal projects.
 [[ -n "$LAN_CIDR" && -n "$NODE_LAN_IP" && -n "$HAOS_IP" && -n "$STATION_IP" ]] || {
   echo "LAN_CIDR, NODE_LAN_IP, HAOS_IP and STATION_IP are required in $PRIVATE_ENV" >&2
+  exit 1
+}
+[[ -n "$BB_CT_IP" && -n "$BB_PROJECT_STATION_LAB" && -n "$BB_PROJECT_ENGLISH_NOTES" && -n "$BB_DISPATCHER_THREAD_ID" ]] || {
+  echo "BB_CT_IP, BB_PROJECT_STATION_LAB, BB_PROJECT_ENGLISH_NOTES and BB_DISPATCHER_THREAD_ID are required in $PRIVATE_ENV" >&2
   exit 1
 }
 
@@ -150,10 +160,15 @@ python3 "$DIR/render.py" \
   --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
   --set "MCP_GATEWAY_IMAGE=$IMAGE_REF" \
+  --set "BB_CT_IP=$BB_CT_IP" \
+  --set "BB_PROJECT_STATION_LAB=$BB_PROJECT_STATION_LAB" \
+  --set "BB_PROJECT_ENGLISH_NOTES=$BB_PROJECT_ENGLISH_NOTES" \
+  --set "BB_DISPATCHER_THREAD_ID=$BB_DISPATCHER_THREAD_ID" \
   "$DIR/manifests/deployment.yaml" \
   "$DIR/manifests/network-policies.yaml" \
   "$DIR/manifests/servicemonitor.yaml" \
-  "$DIR/manifests/catalog.yaml"
+  "$DIR/manifests/catalog.yaml" \
+  "$DIR/manifests/bb-targets.yaml"
 
 echo "== namespace $NS"
 # The namespace is cluster-scoped and admin-applied. CI's ServiceAccount may
@@ -188,7 +203,7 @@ else
 fi
 
 echo "== verifying ExternalSecrets (ESO-owned; CI never applies them)"
-for es in mcp-gateway-auth mcp-gateway-telegram mcp-gateway-ha; do
+for es in mcp-gateway-auth mcp-gateway-telegram mcp-gateway-ha mcp-gateway-bb-ssh mcp-gateway-voice; do
   if ! $KUBECTL -n "$NS" get externalsecret "$es" >/dev/null 2>&1; then
     echo "missing ExternalSecret $NS/$es; apply it with" >&2
     echo "  kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml" >&2
@@ -196,19 +211,21 @@ for es in mcp-gateway-auth mcp-gateway-telegram mcp-gateway-ha; do
   fi
   $KUBECTL -n "$NS" wait --for=condition=Ready "externalsecret/$es" --timeout=120s
 done
-for secret in mcp-gateway-auth mcp-gateway-telegram mcp-gateway-ha; do
+for secret in mcp-gateway-auth mcp-gateway-telegram mcp-gateway-ha mcp-gateway-bb-ssh mcp-gateway-voice; do
   if ! $KUBECTL -n "$NS" get secret "$secret" >/dev/null 2>&1; then
     echo "missing secret $NS/$secret; apply the ExternalSecrets and wait for Ready" >&2
     exit 1
   fi
 done
 
-echo "== catalog ConfigMap"
-# External check hosts are rendered from the private env, so the ConfigMap is
-# built from the rendered copy. render.py refuses an unknown or unset
-# placeholder, which keeps a half-rendered catalog out of the cluster.
+echo "== catalog and bb-targets ConfigMaps"
+# External check hosts and the personal project id are rendered from the
+# private env, so the ConfigMaps are built from the rendered copies. render.py
+# refuses an unknown or unset placeholder, which keeps a half-rendered
+# manifest out of the cluster.
 $KUBECTL -n "$NS" create configmap mcp-gateway-catalog \
   --from-file=catalog.yaml="$RENDER_DIR/catalog.yaml" \
+  --from-file=bb-targets.yaml="$RENDER_DIR/bb-targets.yaml" \
   --dry-run=client -o yaml | $KUBECTL apply -f -
 
 echo "== NetworkPolicies and ServiceMonitor"

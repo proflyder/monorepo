@@ -12,15 +12,16 @@ Telegram reports.
   (catalog/RBAC/deploy contract).
 
 ```text
-Hermes (hostNetwork, no kubectl)
-   │  POST /mcp  Bearer (HERMES_INFRA_TOKEN)
-   ▼
+Hermes (hostNetwork, no kubectl)          voice proxy (in-cluster)
+   │  POST /mcp  Bearer (HERMES_INFRA_TOKEN)  │  POST /v1/voice/*  Bearer (voice)
+   ▼                                         ▼
 Service mcp-gateway:8080 ──► Deployment mcp-gateway
    │                          ├─ Prometheus  monitoring-prometheus:9090
    │                          ├─ Alertmanager monitoring-alertmanager:9093
    │                          ├─ Loki         loki:3100
    │                          ├─ Kubernetes API (ServiceAccount + RBAC)
-   │                          └─ Telegram Bot API (fixed recipient)
+   │                          ├─ Telegram Bot API (fixed recipient)
+   │                          └─ SSH :22 ──► bb host forced command ──► bb plugin
    └─ /healthz /readyz /metrics (cluster-local only)
 ```
 
@@ -29,14 +30,15 @@ Service mcp-gateway:8080 ──► Deployment mcp-gateway
 ```text
 manifests/deployment.yaml         Deployment + ClusterIP Service (template)
 manifests/catalog.yaml            service catalog + sanitized topology overview
+manifests/bb-targets.yaml         personal-only spoken allowlist for bb spawns
 manifests/rbac.yaml               ServiceAccount + per-namespace read/restart Roles
-manifests/external-secrets.yaml   mcp-gateway-auth, mcp-gateway-telegram, mcp-gateway-ha
+manifests/external-secrets.yaml   auth, telegram, ha, bb-ssh, voice secrets
 manifests/network-policies.yaml   ingress from Hermes/monitoring, narrow egress
 manifests/servicemonitor.yaml     Prometheus scrape of /metrics
 ci/rbac.yaml                      extra ci-deploy verbs (NetworkPolicy, ServiceMonitor)
 deploy.sh                         build/push/import image, render, apply, roll out
-render.py                         shared scheduler renderer + MCP_GATEWAY_IMAGE
-mcp-gateway.env.example           LAN_CIDR / NODE_LAN_IP placeholders
+render.py                         shared scheduler renderer + gateway placeholders
+mcp-gateway.env.example           LAN/host/bb placeholders
 test_deploy.py                    catalog↔RBAC, manifests, render, deploy contract
 catalog_contract_test.go          loads the tracked catalog with the real loader
 ```
@@ -158,9 +160,9 @@ catalog loads (and that an invalid one refuses to start).
   `/mcp` still requires the bearer token.
 - Egress: kube-API 6443 (service CIDR `10.43.0.0/16` and the node), monitoring
   9090/9093/3100, external checks on the `${LAN_CIDR}` (HAOS 8123/8095, station
-  6053/8928/8099), DNS 53 (UDP/TCP), Telegram 443. Telegram publishes no
-  stable ranges, so 443 is any-destination — the same trade-off as
-  currency-bot.
+  6053/8928/8099), bb host `${BB_CT_IP}:22` only, DNS 53 (UDP/TCP), Telegram
+  443. Telegram publishes no stable ranges, so 443 is any-destination — the
+  same trade-off as currency-bot.
 - K3s (kube-router) enforces NetworkPolicies. Prefer allowing over breaking:
   if the CNI ever stops attributing hostNetwork sources to the node address,
   the ingress rules still cover the pod CIDR.
@@ -221,7 +223,35 @@ Never paste secret values into chat or a commit. Use the private paths below.
    (`HA_TOKEN_FILE` in `ha-bridge`). Rotating the HA token means patching that
    one key and restarting `ha-bridge` and `mcp-gateway`.
 
-4. **Admin manifests** (cluster/namespace objects, applied once):
+4. **bb bridge key pair and pinned host key** — generate an ed25519 key that
+   the bb host accepts **only** for the forced command, and pin the host key:
+
+   ```bash
+   ssh-keygen -t ed25519 -N '' -C mcp-gateway-bb \
+     -f secrets/local/mcp-gateway-bb_ed25519
+   # On the bb host, install the public key with the forced command and the
+   # source restriction (see projects/home/proxmox/bb/README.md), then:
+   ssh-keyscan -t ed25519 <BB_CT_IP> > secrets/local/mcp-gateway-bb_known_hosts
+   bao kv put secret/k8s/home-assistant/mcp-gateway-bb-ssh \
+     id_ed25519=@secrets/local/mcp-gateway-bb_ed25519 \
+     known_hosts=@secrets/local/mcp-gateway-bb_known_hosts
+   ```
+
+   Never reuse the workstation key, and never grant a shell. `ssh-keyscan`
+   output must be verified against the host once before it is pinned; after
+   that the pinned file is the only trust anchor.
+
+5. **Voice token** — a dedicated bearer token, different from the MCP token:
+
+   ```bash
+   bao kv put secret/k8s/home-assistant/mcp-gateway-voice \
+     token="$(openssl rand -hex 32)"
+   ```
+
+   The value goes to the voice proxy's `WORK_MCP_TOKEN_FILE`; it is rejected on
+   `/mcp`. The MCP token is rejected on `/v1/voice/*`.
+
+6. **Admin manifests** (cluster/namespace objects, applied once):
 
    ```bash
    kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
@@ -229,20 +259,25 @@ Never paste secret values into chat or a commit. Use the private paths below.
    kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
    kubectl -n home-assistant wait --for=condition=Ready \
      externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram \
-     externalsecret/mcp-gateway-ha --timeout=120s
+     externalsecret/mcp-gateway-ha externalsecret/mcp-gateway-bb-ssh \
+     externalsecret/mcp-gateway-voice --timeout=120s
    ```
 
    `ci/rbac.yaml` only adds what the scheduler Role for `home-assistant`
    lacks: NetworkPolicy and ServiceMonitor, plus `get` on `services/proxy` for
    the gateway's Service so the post-deploy smoke can read `/readyz`.
 
-5. **Deploy-time env** in `secrets/home/mcp-gateway.env` (copy the example):
+7. **Deploy-time env** in `secrets/home/mcp-gateway.env` (copy the example):
 
    ```bash
    LAN_CIDR=<LAN CIDR>
    NODE_LAN_IP=<K3s node address>
    HAOS_IP=<HAOS VM address>
    STATION_IP=<station address>
+   BB_CT_IP=<bb host address>
+   BB_PROJECT_STATION_LAB=<station-lab projectId or exact name>
+   BB_PROJECT_ENGLISH_NOTES=<english-learning-notes projectId or exact name>
+   BB_DISPATCHER_THREAD_ID=<permanent work dispatcher thread id>
    ```
 
    CI reads the same text from `secret/ci/deploy-home` key
@@ -254,7 +289,7 @@ Never paste secret values into chat or a commit. Use the private paths below.
      mcp_gateway_env="$(cat secrets/home/mcp-gateway.env)"
    ```
 
-6. **ExternalSecrets in the ESO apply set.** `external-secrets/deploy.sh`
+8. **ExternalSecrets in the ESO apply set.** `external-secrets/deploy.sh`
    keeps an explicit list of ExternalSecret manifests. Until
    `projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml` is
    added to that list (a separate change outside this unit), apply it with the
@@ -279,9 +314,9 @@ runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/mcp-gateway.env`.
 1. builds `//solutions/mcp-gateway:mcp-gateway_image` and resolves the digest
    (never a moving tag);
 2. renders the manifests (no half-rendered input is possible);
-3. verifies the ServiceAccount and all three ExternalSecrets exist and are Ready;
-4. renders `manifests/catalog.yaml` (host placeholders) and applies it as the
-   catalog ConfigMap;
+3. verifies the ServiceAccount and all five ExternalSecrets exist and are Ready;
+4. renders `manifests/catalog.yaml` and `manifests/bb-targets.yaml` (host and
+   project placeholders) and applies both as the catalog ConfigMap;
 5. applies NetworkPolicies and the ServiceMonitor;
 6. converges the Deployment and waits for the rollout;
 7. runs the binary's `-healthcheck` through `kubectl exec`, which loads the
@@ -309,6 +344,44 @@ kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
   is the rollout-restart annotation patch.
 - `mcp-gateway` restarting itself is expected to interrupt the current reply —
   that is why the warning says so and the patch is deferred.
+
+## bb group and voice entry point
+
+Rollout order (never partially enabled):
+
+1. On the bb host, install/refresh the bridge config and the restricted key
+   (`projects/home/proxmox/bb/README.md`), then verify from the K3s node:
+   `ssh -i <key> -o UserKnownHostsFile=<known_hosts> bb@<BB_CT_IP>` prints one
+   JSON refusal only (no shell).
+2. Put the OpenBao keys from prerequisites 4–5; wait for
+   `externalsecret/mcp-gateway-bb-ssh` and `mcp-gateway-voice` to be Ready.
+3. Deploy with `BB_CT_IP`, `BB_PROJECT_STATION_LAB`,
+   `BB_PROJECT_ENGLISH_NOTES`, `BB_DISPATCHER_THREAD_ID`
+   present. The gateway starts with `bb.read,bb.act` enabled and the voice
+   routes mounted only when the voice token exists.
+4. Point the voice proxy at the Service with the voice token; the MCP token is
+   not accepted there.
+
+Checks:
+
+```bash
+kubectl -n home-assistant get secret mcp-gateway-bb-ssh mcp-gateway-voice
+kubectl -n home-assistant log deploy/mcp-gateway | grep -E '"bb"|"voice"'
+# voice state (cluster-local only; token from the voice Secret, never printed)
+kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
+  sh -c 'curl -fsS -H "Authorization: Bearer $(cat /run/secrets/voice/token)" \
+  http://mcp-gateway:8080/v1/voice/state'
+```
+
+- `bb_status` and `bb_prepare_spawn` only ever expose `profile == personal`.
+  Threads with a null/unknown profile are dropped before the answer is built,
+  so work titles, keys and topics cannot reach Hermes.
+- `profile=work` speech goes to `MCP_BB_DISPATCHER_THREAD_ID`; a bb failure
+  stays on `route:"bb"` and never falls back to Hermes.
+- Agent conversation mode is in-memory and disappears on rollout; the next
+  phrase routes normally (personal → Hermes, work → dispatcher).
+- Egress to the bb host is exactly `${BB_CT_IP}:22`; no plugin HTTP route is
+  reachable from the cluster.
 
 ## Rollback
 

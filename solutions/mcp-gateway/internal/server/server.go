@@ -19,8 +19,13 @@ import (
 type Options struct {
 	// AuthToken is the bearer token required on /mcp.
 	AuthToken string
+	// VoiceToken is the separate bearer token required on /v1/voice/*. It
+	// never authorises /mcp and AuthToken never authorises the voice routes.
+	VoiceToken string
 	// MCP is the Streamable HTTP handler from the MCP SDK.
 	MCP http.Handler
+	// Voice is the voice-proxy handler; nil disables the routes.
+	Voice http.Handler
 	// Ready reports readiness; nil means always ready.
 	Ready func(context.Context) error
 	// Metrics and Logger are optional.
@@ -53,7 +58,10 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /metrics", s.opts.Metrics.Handler())
 	}
 	if s.opts.MCP != nil {
-		mux.Handle("/mcp", s.auth(s.opts.MCP))
+		mux.Handle("/mcp", s.auth(s.opts.AuthToken, "mcp-gateway", s.opts.MCP))
+	}
+	if s.opts.Voice != nil && s.opts.VoiceToken != "" {
+		mux.Handle("/v1/voice/", s.auth(s.opts.VoiceToken, "mcp-gateway-voice", s.opts.Voice))
 	}
 	return s.observe(mux)
 }
@@ -76,14 +84,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 // auth validates "Authorization: Bearer <token>" with a constant-time compare.
-func (s *Server) auth(next http.Handler) http.Handler {
+func (s *Server) auth(token, realm string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := strings.TrimSpace(r.Header.Get("Authorization"))
-		token, hasBearer := strings.CutPrefix(header, "Bearer ")
-		token = strings.TrimSpace(token)
-		if !hasBearer || token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.opts.AuthToken)) != 1 {
-			s.opts.Logger.Warn("missing or invalid bearer token", "path", r.URL.Path)
-			w.Header().Set("WWW-Authenticate", `Bearer realm="mcp-gateway"`)
+		presented, hasBearer := strings.CutPrefix(header, "Bearer ")
+		presented = strings.TrimSpace(presented)
+		if !hasBearer || presented == "" || subtle.ConstantTimeCompare([]byte(presented), []byte(token)) != 1 {
+			s.opts.Logger.Warn("missing or invalid bearer token", "path", r.URL.Path, "realm", realm)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="`+realm+`"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}
@@ -150,6 +158,8 @@ func routeOf(path string) string {
 	switch {
 	case path == "/mcp":
 		return "/mcp"
+	case path == "/v1/voice/utterance", path == "/v1/voice/result", path == "/v1/voice/state":
+		return path
 	case path == "/healthz", path == "/readyz", path == "/metrics":
 		return path
 	default:

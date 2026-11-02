@@ -6,22 +6,34 @@
 окружения или смонтированных файлов.
 
 ```
-MCP client (Hermes, IDE, agent)
-        │  Streamable HTTP + Bearer
-        ▼
+MCP client (Hermes, IDE, agent)          voice proxy
+        │  Streamable HTTP + Bearer        │  HTTP + voice Bearer
+        ▼                                  ▼
    mcp-gateway ── infra.read   → Prometheus / Alertmanager / Loki / Kubernetes REST
         │      ── infra.fix    → rollout restart (единственная мутация)
         │      ── infra.report → Telegram Bot API (фиксированный получатель)
+        │      ── bb.read      → bb home-dispatcher: status тредов (личный профиль)
+        │      ── bb.act       → bb home-dispatcher: prepare/confirm/cancel spawn
+        │      ── /v1/voice/*  → маршрутизация речи: Hermes, рабочий тред, агент
         ▼
   /healthz  /readyz  /metrics
+
+  mcp-gateway ── SSH (одна сессия на вызов, JSON в stdin) ──► forced command
+       на CT 103 ──► HTTP loopback ──► плагин bb home-dispatcher
 ```
+
+Шлюз не знает plugin-token и HMAC-секрет bb: их держит мост на хосте bb.
+Шлюз владеет только ограниченным ed25519-ключом и pinned `known_hosts`.
 
 ## Транспорт и аутентификация
 
 - MCP Streamable HTTP: `POST /mcp` (официальный Go SDK
   `github.com/modelcontextprotocol/go-sdk`).
-- `Authorization: Bearer <token>`. Токен читается из `MCP_AUTH_TOKEN_FILE`,
+- `Authorization: Bearer <token>`. Токен MCP читается из `MCP_AUTH_TOKEN_FILE`,
   сравнивается в постоянное время. Без токена — `401`.
+- `/v1/voice/*` защищён **отдельным** токеном `MCP_VOICE_TOKEN_FILE`: голосовой
+  токен не даёт `/mcp`, а MCP-токен не даёт voice-маршруты. Оба сравниваются в
+  постоянное время и обязаны различаться (проверяется при старте).
 - `/healthz`, `/readyz`, `/metrics` не требуют токена и предназначены только
   для кластерной сети (ServiceMonitor и kubelet probes). Наружу не публиковать.
 - `-healthcheck` — самопроверка без shell (distroless): читает конфигурацию и
@@ -63,6 +75,51 @@ MCP client (Hermes, IDE, agent)
 |---|---|
 | `infra_send_report(title, text)` | Отправляет отчёт в Telegram: HTML-экранирование, разбиение по 4096 символов, редактирование секретов. Получатель фиксирован конфигурацией; модель не может его выбрать. |
 
+### `bb.read` и `bb.act` (Hermes — только личный профиль)
+
+| Инструмент | Что делает |
+|---|---|
+| `bb_status()` | Короткая сводка работающих тредов. Возвращает только треды профиля `personal`; рабочие треды не попадают ни в `speech`, ни в `details`. |
+| `bb_prepare_spawn(project, model?, effort?, task)` | Резолвит проект по имени/алиасу **только среди `targets` с профилем `personal`** из allowlist `bb-targets.yaml`. Провайдер по умолчанию `claude-code`; модель и reasoning-уровень берутся из живого ответа плагина и проверяются им же. Вызывает `validate_spawn`, кладёт **один** pending на 90 с (ключ `bb.spawn`, отдельно от restart) и возвращает вопрос «Запустить агента …? Скажи: подтверди». |
+| `bb_confirm()` | Забирает pending и вызывает `spawn` с сохранённым `idempotencyKey`, затем включает режим агента на созданный тред. Аргументов нет. |
+| `bb_cancel()` | Удаляет pending без запуска. |
+
+Рабочий проект для Hermes неотличим от несуществующего: тот же ответ «не
+нашёл», без кода `profile_mismatch` и без имени проекта. Запуск всегда
+двухшаговый; свободный текст проекта не принимается.
+
+### Голосовой вход (`/v1/voice/*`)
+
+Отдельный Bearer-токен, только для voice proxy в том же namespace.
+
+| Маршрут | Назначение |
+|---|---|
+| `POST /v1/voice/utterance {text, profile}` | Маршрутизация одной фразы. |
+| `POST /v1/voice/result {threadId, afterSeq, waitSeconds}` | Long-poll `turn_result` (≤25 с), ответ `{status, speech}` или `{status:"running"}`. |
+| `GET /v1/voice/state` | `{agentMode, threadId?}` для отладки. |
+
+Маршруты utterance, по порядку:
+
+1. фраза выхода («выйди из режима агента», «выключи режим агента», «закончи
+   разговор с агентом») — целиком, не подстрокой — выключает режим и отвечает
+   `{route:"local", speech:"Выключил режим агента."}`; прокси не форвардит её;
+2. `profile == work` → `send` в постоянный рабочий тред
+   (`MCP_BB_DISPATCHER_THREAD_ID`), `speech:"Передал в рабочий тред."` — даже
+   если режим агента включён; режим при этом не сбрасывается и продолжит
+   действовать при возврате в личный профиль;
+3. `profile == personal` и включён режим агента → `send` в активный тред,
+   `{route:"bb", threadId, afterSeq, speech:"Передал агенту."}`;
+4. иначе → `{route:"hermes"}` (proxy сам зовёт Hermes).
+
+Ошибка bb всегда остаётся на `route:"bb"` с `ok:false` и короткой фразой.
+Для `profile == work` возврат `hermes` при ошибке запрещён (fail-closed), как и
+работа без настроенного рабочего треда. Режим агента — только возможность
+личного профиля; фраза выхода из него работает в любом профиле. Состояние
+режима — in-memory, один активный тред, исчезает при рестарте (это routing
+hint, не конфигурация).
+Текст ограничен 2000 символами; действует rate-limit; в slog пишутся маршрут,
+профиль, id треда и длина текста, **никогда** сам текст речи.
+
 ## Контракт ответа
 
 Каждый инструмент возвращает JSON:
@@ -85,7 +142,7 @@ MCP client (Hermes, IDE, agent)
 | Переменная | Обязательна | По умолчанию | Назначение |
 |---|---|---|---|
 | `MCP_AUTH_TOKEN_FILE` | да | — | Bearer-токен для `/mcp`. |
-| `MCP_GROUPS` | нет | `infra.read` | Включённые группы: `infra.read`, `infra.fix`, `infra.report`. |
+| `MCP_GROUPS` | нет | `infra.read` | Включённые группы: `infra.read`, `infra.fix`, `infra.report`, `bb.read`, `bb.act`. |
 | `MCP_INFRA_CATALOG_FILE` | для read/fix | — | YAML-каталог сервисов. |
 | `MCP_HTTP_ADDR` | нет | `:8080` | Адрес HTTP-сервера. |
 | `MCP_TIMEZONE` | нет | `UTC` | IANA-зона для человекочитаемого времени в текстах инструментов (заголовок отчёта). Проверяется при загрузке; для distroless-образа IANA tzdata встроена в бинарник. |
@@ -101,6 +158,14 @@ MCP client (Hermes, IDE, agent)
 | `TELEGRAM_API_URL` | нет | `https://api.telegram.org` | База Bot API. |
 | `TELEGRAM_BOT_TOKEN_FILE` | для report | — | Токен бота. |
 | `TELEGRAM_CHAT_ID_FILE` | для report | — | Chat id получателя; если в файле список через запятую, берётся первый элемент. |
+| `MCP_BB_SSH_ADDR` | для bb/voice | — | `host:port` моста bb (forced command). |
+| `MCP_BB_SSH_USER` | нет | `bb` | Пользователь ограниченного ключа. |
+| `MCP_BB_SSH_KEY_FILE` | для bb/voice | — | Файл ed25519-ключа; ключ принимается только forced command'ом. |
+| `MCP_BB_KNOWN_HOSTS_FILE` | для bb/voice | — | Pinned host key bb-хоста. |
+| `MCP_BB_TIMEOUT` | нет | `15s` | Таймаут одного SSH-вызова (1s–60s). |
+| `MCP_BB_TARGETS_FILE` | для `bb.act` | — | Allowlist личных проектов и spoken-алиасов. |
+| `MCP_BB_DISPATCHER_THREAD_ID` | для voice | — | Постоянный рабочий тред для `profile=work`. |
+| `MCP_VOICE_TOKEN_FILE` | нет | — | Включает `/v1/voice/*`; токен обязан отличаться от MCP-токена. |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
 | `MCP_RESTART_COOLDOWN` | нет | `5m` | Минимальный интервал между перезапусками одного workload'а. |
 | `MCP_SELF_RESTART_DELAY` | нет | `20s` | Задержка перезапуска `self_disrupting` сервиса. |
@@ -111,6 +176,27 @@ MCP client (Hermes, IDE, agent)
 
 Незаданный бэкенд не роняет процесс: инструмент честно сообщает, что бэкенд не
 настроен, а `infra_status` помечает проверку как неполную.
+
+## Allowlist личных проектов bb
+
+`MCP_BB_TARGETS_FILE` — deployment data, по образцу каталога:
+
+```yaml
+targets:
+  - project: proj_example        # projectId или точное имя проекта из плагина
+    aliases: ["стан лэб", "station lab"]
+    provider: claude-code        # необязательный pin
+    model: ""                    # пусто = первая разрешённая модель
+    effort: ""                   # пусто = defaultReasoningLevel модели
+    title_prefix: "Голос"
+```
+
+- Резолвинг идёт только по проектам с `profile: personal` из живого ответа
+  `targets`; проект из другого профиля даёт тот же отказ, что неизвестное имя.
+- Явно заданные `model`/`effort` всё равно проверяются по списку моделей и
+  reasoning-уровней плагина; неподдерживаемое значение — отказ до pending.
+- Pending spawn лежит в `pending.Keyed` под ключом `bb.spawn`, restart — в
+  отдельном `pending.Store`, поэтому группы не перезаписывают друг друга.
 
 ## Каталог сервисов
 
@@ -214,6 +300,12 @@ checks:
 - Cooldown читается из аннотации объекта `mcp-gateway/last-restart` (5 минут по
   умолчанию), поэтому он переживает перезапуск процесса.
 - `self_disrupting` откладывает патч на 20 секунд: сначала озвучивается ответ.
+- bb: SSH только ключом к forced command, один JSON в stdin, без shell и без
+  произвольных методов. Plugin-token и HMAC-секрет на хосте bb шлюзу не видны.
+  Список проектов — только `bb-targets.yaml` и только `personal`; рабочие
+  проекты неотличимы от несуществующих.
+- voice: отдельный токен, только `/v1/voice/*`; ошибки bb для `work` не
+  откатываются в Hermes; текст речи никогда не пишется в лог.
 - Логи и отчёты проходят через redaction (bearer/Authorization, `token=`,
   `password=`, JWT, длинные hex/base64).
 - Секреты не логируются; аудит — структурированный slog (`event=action`,
@@ -228,6 +320,7 @@ checks:
 - `mcp_gateway_tool_calls_total{tool,outcome}` и
   `mcp_gateway_tool_duration_seconds{tool}` — вызовы инструментов.
 - `mcp_gateway_http_requests_total{route,status}` — HTTP-запросы.
+- `mcp_gateway_voice_utterances_total{route,outcome}` — маршруты голосовых фраз.
 - Стандартные Go/process-метрики.
 
 ## Сборка и тесты
@@ -244,3 +337,7 @@ bazel build //solutions/mcp-gateway:mcp-gateway_image \
 Тесты герметичны: `httptest`-фейки для Prometheus, Alertmanager, Loki,
 Kubernetes REST и Telegram; сеть и кластер не используются. MCP-транспорт
 проверяется настоящим SDK-клиентом через Streamable HTTP с bearer-токеном.
+bb проверяется на уровне интерфейса `Runner` и встроенного фейкового SSH-сервера
+(реальные key/known_hosts пути), голос — на фейковом dispatcher'е: prepare/
+confirm/cancel/TTL, маршруты utterance, выход из режима, fail-closed для work и
+long-poll результата.

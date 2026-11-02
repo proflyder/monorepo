@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "voice",
+    srcs = ["voice.go"],
+    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/voice",
+    visibility = ["//solutions/mcp-gateway:__subpackages__"],
+    deps = [
+        "//solutions/mcp-gateway/internal/agentmode",
+        "//solutions/mcp-gateway/internal/bb",
+        "//solutions/mcp-gateway/internal/metrics",
+        "@org_golang_x_time//rate",
+    ],
+)
+
+go_test(
+    name = "voice_test",
+    srcs = ["voice_test.go"],
+    embed = [":voice"],
+    deps = [
+        "//solutions/mcp-gateway/internal/agentmode",
+        "//solutions/mcp-gateway/internal/bb",
+        "@org_golang_x_time//rate",
+    ],
+)
