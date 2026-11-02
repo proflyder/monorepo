@@ -10,7 +10,8 @@
   NVMe 512 GB (система, `local-lvm`), SATA SSD Apacer AS350 512 GB — только
   бэкапы (storage `backup`, `/mnt/pve/backup`, ext4, `nofail`).
 - Ночной vzdump `nightly` 04:00: VM 100/101 и CT 102, snapshot + zstd,
-  retention 3 daily / 2 weekly / 1 monthly. Копия на том же узле; vzdump
+  retention `keep-daily=1,keep-monthly=2` (свежий + последний
+  прошлого месяца). Копия на том же узле; vzdump
   VM 101 содержит и raft OpenBao, и Secret `openbao-seal` — не вывозить
   без шифрования.
 - Management `vmbr0`: `192.0.2.26/24`; uplink — Wi-Fi `RTL8821CE` в
