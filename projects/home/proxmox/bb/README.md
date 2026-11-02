@@ -14,9 +14,16 @@ systemd-таймер внутри CT заранее делает согласо�
 | Файл | Назначение |
 |---|---|
 | `create-lxc.sh` | создаёт CT 103: Debian 13, 2 vCPU / 2048 MiB / swap 1024 / 16 GiB, static IP + фиксированный MAC, `nesting=1`, timezone `Asia/Almaty`, `onboot=1` |
-| `install-bb.sh` | внутри CT: пакеты, Node.js по SHA-256, пользователь `bb`, linger, проверка user bus, backup timer; enrollment не выполняет |
-| `bb-db-backup.sh` | `sqlite3 .backup` + `PRAGMA integrity_check` копии в `/var/backups/bb` |
+| `install-bb.sh` | внутри CT: пакеты, Node.js по SHA-256, пользователь `bb`, linger, проверка user bus, backup timer, опциональный offsite-ключ; enrollment не выполняет |
+| `bb-db-backup.sh` | `sqlite3 .backup` + `PRAGMA integrity_check` копии в `/var/backups/bb` и полный `bb server export` в `bb-server-export.tgz` |
 | `test_bb.py` | герметичные проверки dry-run и backup без Proxmox/сети |
+
+Параметры `install-bb.sh`: `--data-dir PATH` и
+`--offsite-pubkey FILE --offsite-from ADDRESS`. Второй добавляет в
+`/root/.ssh/authorized_keys` ключ с `from="ADDRESS"` и forced command
+`tar -C /var/backups/bb -cf - bb-server-export.tgz` (только чтение одного
+архива, без tty и проброса). Повторный запуск не создаёт дубль. Скрипт
+проверяет, что `ssh.service` запущен, но не меняет конфигурацию sshd.
 
 ## 1. Создание CT
 
@@ -77,7 +84,16 @@ ssh root@192.0.2.26 \
 `libatomic.so.1: cannot open shared object file`.
 
 Скрипт идемпотентен: повторный запуск не меняет данные bb и существующий
-`/etc/bb-backup/env`.
+`/etc/bb-backup/env`. Для offsite-доступа передать публичный ключ (приватный
+лежит вне Git, на K3s-узле):
+
+```bash
+pct exec 103 -- bash /root/bb-setup/bb/install-bb.sh \
+  --offsite-pubkey /root/bb-setup/offsite-bb.pub --offsite-from 192.0.2.27
+```
+
+`--offsite-from` — адрес K3s-узла; ключ разрешает только
+`tar -C /var/backups/bb -cf - bb-server-export.tgz`.
 
 Обязательная проверка systemd user bus до enrollment:
 
@@ -171,6 +187,17 @@ bb server move --to bb --check
 `PRAGMA integrity_check`. Каталог `0700`, файл `0600`; при отсутствии
 `BB_DATA_DIR` или базы таймер завершается успешно с предупреждением.
 
+Тот же таймер делает `bb server export` от пользователя `bb` во временный
+файл и атомарно кладёт `/var/backups/bb/bb-server-export.tgz` (`0600`,
+root). Архив проверяется `gzip -t` и наличием `files/bb.db`; если export
+не удался, sqlite-копия всё равно остаётся, а сервис завершается с ошибкой,
+чтобы таймер показал failure. Это официальный восстанавливаемый артефакт
+(`bb server import`): внутри `bb.db`, auth secret, данные плагинов и
+вложения. Одна sqlite-копия для восстановления недостаточна.
+
+Offsite-источник `bb` на K3s-узле забирает только этот архив по ssh с
+forced command; подробности — `projects/home/backup/offsite/README.md`.
+
 Добавить CT 103 в существующий job `nightly` (04:00), чтобы vzdump содержал
 согласованную копию:
 
@@ -193,6 +220,18 @@ ssh root@192.0.2.26 \
 Проверить live-базу по пути из `/etc/bb-backup/env`, ownership `/home/bb` и
 статус user-unit после reboot. Для проверки restore можно восстановить копию
 в другой CTID без сети и сравнить `integrity_check`, не трогая живой сервер.
+
+Восстановление из offsite-копии (когда vzdump нет): достать
+`bb/bb-server-export.tar` из restic, затем
+
+```bash
+gzip -c bb-server-export.tar > bb-server-export.tgz
+bb server import bb-server-export.tgz --data-dir <data-dir>
+bb server allow-connect
+```
+
+Старый сервер остановить до импорта; после запуска проверить threads,
+plugins и доступ через `<handle>.getbb.app`.
 
 ## 6. Откат на VM
 

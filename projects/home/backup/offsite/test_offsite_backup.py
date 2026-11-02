@@ -6,8 +6,11 @@ HA is a local fake WebSocket/HTTP server, and every source is a temporary file.
 from __future__ import annotations
 
 import base64
+import contextlib
+import gzip
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -17,6 +20,7 @@ import socketserver
 import sys
 import sqlite3
 import struct
+import tarfile
 import tempfile
 import threading
 import unittest
@@ -191,6 +195,49 @@ def make_sqlite(path: Path, value: str) -> None:
         connection.close()
 
 
+def make_ssh_stub(directory: Path) -> Path:
+    """Stub ssh: emit the prepared tar stream and ignore all options."""
+    stub = directory / "ssh-stub"
+    stub.write_text(
+        "#!/bin/sh\n"
+        'cat "$BB_FAKE_TAR"\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    return stub
+
+
+def make_bb_export(
+    directory: Path,
+    timestamp: float,
+    *,
+    corrupt: bool = False,
+    include_db: bool = True,
+) -> Path:
+    """Build the forced-command tar stream containing bb-server-export.tgz."""
+    tgz = directory / "bb-server-export.tgz"
+    if corrupt:
+        tgz.write_bytes(b"this is not gzip")
+    else:
+        inner = io.BytesIO()
+        entries = [("auth-secret", b"secret")]
+        if include_db:
+            entries.insert(0, ("files/bb.db", b"sqlite-database"))
+        with tarfile.open(fileobj=inner, mode="w") as archive:
+            for name, payload in entries:
+                info = tarfile.TarInfo(name)
+                info.size = len(payload)
+                info.mtime = int(timestamp)
+                archive.addfile(info, io.BytesIO(payload))
+        tgz.write_bytes(gzip.compress(inner.getvalue()))
+    os.utime(tgz, (timestamp, timestamp))
+
+    outer = directory / "download.tar"
+    with tarfile.open(outer, mode="w") as archive:
+        archive.add(tgz, arcname="bb-server-export.tgz")
+    return outer
+
+
 class OffsiteBackupTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -206,6 +253,12 @@ class OffsiteBackupTests(unittest.TestCase):
         self.restic_log = self.root / "restic.log"
         self.token.write_text("test-token", encoding="utf-8")
         self.password.write_text("restic-password", encoding="utf-8")
+        self.bb_key = self.root / "bb_ssh_key"
+        self.bb_known_hosts = self.root / "bb_known_hosts"
+        self.bb_key.write_text("private-key-placeholder", encoding="utf-8")
+        self.bb_known_hosts.write_text(
+            "192.0.2.30 ssh-ed25519 AAAA\n", encoding="utf-8"
+        )
 
         self.openbao.mkdir()
         self.snapshot = self.openbao / "openbao-20261102T040000Z.snap"
@@ -255,6 +308,10 @@ class OffsiteBackupTests(unittest.TestCase):
             "HA_TOKEN_FILE": str(self.token),
             "RESTIC_BIN": str(stub),
             "RESTIC_MAINTENANCE_WEEKDAY": str(self.now.weekday()),
+            "SSH_BIN": str(make_ssh_stub(self.root)),
+            "BB_SSH_KEY_FILE": str(self.bb_key),
+            "BB_SSH_KNOWN_HOSTS": str(self.bb_known_hosts),
+            "BB_SSH_TIMEOUT_SECONDS": "10",
         }
         values.update(overrides)
         return backup.Config.from_mapping(values), stub
@@ -291,8 +348,11 @@ class OffsiteBackupTests(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT value FROM sample").fetchone()[0], "value")
 
     def test_full_run_collects_all_sources_and_writes_metrics(self) -> None:
-        cfg, _stub = self.config()
-        with patch.dict(os.environ, {"RESTIC_LOG": str(self.restic_log)}):
+        outer = make_bb_export(self.root, self.now.timestamp() - 1800)
+        cfg, _stub = self.config(BB_SSH_TARGET="root@192.0.2.30")
+        with patch.dict(
+            os.environ, {"RESTIC_LOG": str(self.restic_log), "BB_FAKE_TAR": str(outer)}
+        ):
             backup.execute(cfg, self.now)
 
         calls = self.restic_log.read_text(encoding="utf-8").splitlines()
@@ -404,6 +464,60 @@ class OffsiteBackupTests(unittest.TestCase):
         env_log = Path(str(self.restic_log) + ".env").read_text(encoding="utf-8")
         self.assertIn("RCLONE_CONFIG=/var/lib/offsite-backup/rclone.conf", env_log)
         self.assertIn("home_offsite_backup_repo_bytes 1000", self.metrics.read_text(encoding="utf-8"))
+
+    def test_bb_source_is_skipped_without_target(self) -> None:
+        outer = self.root / "download.tar"
+        outer.write_bytes(b"must not be read")
+        cfg, _stub = self.config()
+        stderr = io.StringIO()
+        with patch.dict(
+            os.environ, {"RESTIC_LOG": str(self.restic_log), "BB_FAKE_TAR": str(outer)}
+        ), contextlib.redirect_stderr(stderr):
+            backup.execute(cfg, self.now)
+        self.assertIn("BB_SSH_TARGET is not set", stderr.getvalue())
+        manifest = self._last_staged_manifest()
+        self.assertNotIn("bb", {item["source"] for item in manifest["files"]})
+        state = json.loads(self.state_file.read_text(encoding="utf-8"))
+        self.assertNotIn("bb", state["sources"])
+
+    def test_bb_source_downloads_and_uncompresses_the_export(self) -> None:
+        timestamp = self.now.timestamp() - 1800
+        outer = make_bb_export(self.root, timestamp)
+        cfg, _stub = self.config(BB_SSH_TARGET="root@192.0.2.30")
+        staging = self.root / "bb-staging"
+        staging.mkdir()
+        with patch.dict(os.environ, {"BB_FAKE_TAR": str(outer)}):
+            record = backup.fetch_bb(cfg, staging, self.now)
+        dest = staging / "bb" / "bb-server-export.tar"
+        self.assertEqual(record.source, "bb")
+        self.assertEqual(record.path, "bb/bb-server-export.tar")
+        self.assertEqual(record.size, dest.stat().st_size)
+        self.assertEqual(int(record.source_timestamp), int(timestamp))
+        self.assertEqual(dest.stat().st_mode & 0o777, 0o600)
+        with tarfile.open(dest, mode="r:") as archive:
+            self.assertIn("files/bb.db", archive.getnames())
+
+    def test_bb_source_rejects_a_corrupt_gzip_archive(self) -> None:
+        outer = make_bb_export(self.root, self.now.timestamp() - 60, corrupt=True)
+        cfg, _stub = self.config(BB_SSH_TARGET="root@192.0.2.30")
+        staging = self.root / "bb-staging"
+        staging.mkdir()
+        with patch.dict(os.environ, {"BB_FAKE_TAR": str(outer)}):
+            with self.assertRaises(backup.BackupError) as raised:
+                backup.fetch_bb(cfg, staging, self.now)
+        self.assertIn("gzip", str(raised.exception))
+        self.assertFalse((staging / "bb" / "bb-server-export.tar").exists())
+
+    def test_bb_source_age_uses_the_tar_member_mtime(self) -> None:
+        old = self.now.timestamp() - 48 * 3600
+        outer = make_bb_export(self.root, old)
+        cfg, _stub = self.config(BB_SSH_TARGET="root@192.0.2.30")
+        staging = self.root / "bb-staging"
+        staging.mkdir()
+        with patch.dict(os.environ, {"BB_FAKE_TAR": str(outer)}):
+            with self.assertRaises(backup.BackupError) as raised:
+                backup.fetch_bb(cfg, staging, self.now)
+        self.assertIn("bb source is stale", str(raised.exception))
 
 
 if __name__ == "__main__":

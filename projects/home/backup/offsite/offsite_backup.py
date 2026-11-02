@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime as dt
+import gzip
 import hashlib
 import json
 import os
@@ -39,6 +40,7 @@ import ssl
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
 import urllib.parse
 import urllib.request
@@ -47,7 +49,7 @@ from pathlib import Path
 
 UTC = dt.timezone.utc
 DEFAULT_ENV = Path("/etc/offsite-backup/env")
-SOURCES = ("openbao", "ha", "scheduler", "currency_bot", "ha_bridge")
+SOURCES = ("openbao", "ha", "scheduler", "currency_bot", "ha_bridge", "bb")
 FORBIDDEN_NAME = re.compile(r"(seal|recovery|\.key$)", re.IGNORECASE)
 OPENBAO_NAME = re.compile(r"openbao-(\d{8}T\d{6}Z)\.snap$")
 UTC_TIMESTAMP = "%Y%m%dT%H%M%SZ"
@@ -74,6 +76,14 @@ class Config:
     ha_agent_id: str = "hassio.local"
     restic_bin: str = "restic"
     sqlite_bin: str = "sqlite3"
+    # Optional bb server export pulled over ssh. Without BB_SSH_TARGET the
+    # source is skipped; a configured target must expose only the export file.
+    bb_ssh_target: str | None = None
+    bb_ssh_key_file: Path = Path("/etc/offsite-backup/bb_ssh_key")
+    bb_ssh_known_hosts: Path = Path("/etc/offsite-backup/bb_known_hosts")
+    bb_ssh_timeout: float = 900.0
+    ssh_bin: str = "ssh"
+    gzip_bin: str = "gzip"
     max_source_age_hours: float = 36.0
     maintenance_weekday: int = 6  # Sunday
     # Guard rails against a runaway upload filling the (free) remote quota.
@@ -100,6 +110,7 @@ class Config:
             max_age = float(values.get("MAX_SOURCE_AGE_HOURS", "36"))
             max_staging = int(values.get("MAX_STAGING_BYTES", str(2 * 1024**3)))
             max_repo = int(values.get("MAX_REPO_BYTES", str(5 * 1024**3)))
+            bb_timeout = float(values.get("BB_SSH_TIMEOUT_SECONDS", "900"))
         except ValueError as exc:
             raise BackupError("invalid numeric setting") from exc
         if not 0 <= weekday <= 6:
@@ -108,6 +119,8 @@ class Config:
             raise BackupError("MAX_SOURCE_AGE_HOURS must be positive")
         if max_staging <= 0 or max_repo <= 0:
             raise BackupError("MAX_STAGING_BYTES/MAX_REPO_BYTES must be positive")
+        if bb_timeout <= 0:
+            raise BackupError("BB_SSH_TIMEOUT_SECONDS must be positive")
 
         # S3-style credentials or an rclone backend (RESTIC_REPOSITORY=rclone:...,
         # RCLONE_CONFIG pointing at a root-only, writable rclone.conf).
@@ -133,6 +146,16 @@ class Config:
             ha_agent_id=values.get("HA_AGENT_ID", "hassio.local").strip() or "hassio.local",
             restic_bin=values.get("RESTIC_BIN", "restic").strip() or "restic",
             sqlite_bin=values.get("SQLITE3_BIN", "sqlite3").strip() or "sqlite3",
+            bb_ssh_target=values.get("BB_SSH_TARGET", "").strip() or None,
+            bb_ssh_key_file=path(
+                "BB_SSH_KEY_FILE", "/etc/offsite-backup/bb_ssh_key"
+            ),
+            bb_ssh_known_hosts=path(
+                "BB_SSH_KNOWN_HOSTS", "/etc/offsite-backup/bb_known_hosts"
+            ),
+            bb_ssh_timeout=bb_timeout,
+            ssh_bin=values.get("SSH_BIN", "ssh").strip() or "ssh",
+            gzip_bin=values.get("GZIP_BIN", "gzip").strip() or "gzip",
             max_source_age_hours=max_age,
             maintenance_weekday=weekday,
             max_staging_bytes=max_staging,
@@ -572,6 +595,119 @@ def fetch_ha(cfg: Config, token: str, staging: Path, now: dt.datetime) -> FileRe
 
 
 # ---------------------------------------------------------------------------
+# bb server export over ssh
+# ---------------------------------------------------------------------------
+BB_EXPORT_MEMBER = "bb-server-export.tgz"
+
+
+def fetch_bb(cfg: Config, staging: Path, now: dt.datetime) -> FileRecord:
+    """Pull the forced-command tar stream with the bb server export.
+
+    The remote side runs ``tar -C /var/backups/bb -cf - bb-server-export.tgz``;
+    the member is gzip, so it is checked with ``gzip -t`` and stored as an
+    uncompressed tar for better restic deduplication.
+    """
+    if not cfg.bb_ssh_target:
+        raise BackupError("bb source is not configured")
+    for label, path in (
+        ("bb ssh key", cfg.bb_ssh_key_file),
+        ("bb known_hosts", cfg.bb_ssh_known_hosts),
+    ):
+        if not path.is_file():
+            raise BackupError(f"{label} is missing")
+
+    command = [
+        cfg.ssh_bin,
+        "-T",
+        "-i",
+        str(cfg.bb_ssh_key_file),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        f"UserKnownHostsFile={cfg.bb_ssh_known_hosts}",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "ConnectTimeout=15",
+        cfg.bb_ssh_target,
+    ]
+    dest = staging / "bb" / "bb-server-export.tar"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="bb-", dir=staging) as work:
+        stream = Path(work) / "download.tar"
+        try:
+            with stream.open("wb") as handle:
+                result = subprocess.run(
+                    command,
+                    stdout=handle,
+                    stderr=subprocess.PIPE,
+                    timeout=cfg.bb_ssh_timeout,
+                )
+        except FileNotFoundError as exc:
+            raise BackupError("bb export download failed: ssh is not installed") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise BackupError("bb export download timed out") from exc
+        if result.returncode != 0:
+            # Do not echo ssh stderr: it may contain host names from the config.
+            raise BackupError(
+                f"bb export download failed (ssh exit status {result.returncode})"
+            )
+
+        try:
+            with tarfile.open(stream, mode="r:*") as outer:
+                member = next(
+                    (
+                        item
+                        for item in outer.getmembers()
+                        if item.isfile() and Path(item.name).name == BB_EXPORT_MEMBER
+                    ),
+                    None,
+                )
+                if member is None:
+                    raise BackupError(
+                        f"bb export archive does not contain {BB_EXPORT_MEMBER}"
+                    )
+                timestamp = float(member.mtime)
+                check_source_age("bb", timestamp, now, cfg.max_source_age_hours)
+                extracted = outer.extractfile(member)
+                if extracted is None:
+                    raise BackupError("bb export member cannot be read")
+                tgz = Path(work) / BB_EXPORT_MEMBER
+                with tgz.open("wb") as handle:
+                    shutil.copyfileobj(extracted, handle, length=1024 * 1024)
+        except (tarfile.TarError, OSError) as exc:
+            raise BackupError("bb export archive is not a valid tar") from exc
+        os.chmod(tgz, 0o600)
+
+        try:
+            verified = subprocess.run(
+                [cfg.gzip_bin, "-t", str(tgz)], capture_output=True, text=True
+            )
+        except FileNotFoundError as exc:
+            raise BackupError("bb export check failed: gzip is not installed") from exc
+        if verified.returncode != 0:
+            raise BackupError("bb export is not a valid gzip archive")
+
+        try:
+            with gzip.open(tgz, "rb") as source, dest.open("wb") as handle:
+                shutil.copyfileobj(source, handle, length=1024 * 1024)
+        except (OSError, EOFError) as exc:
+            raise BackupError("bb export could not be decompressed") from exc
+        os.chmod(dest, 0o600)
+
+    return FileRecord(
+        source="bb",
+        path=str(dest.relative_to(staging)),
+        size=dest.stat().st_size,
+        sha256=sha256_file(dest),
+        source_timestamp=timestamp,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Staging, manifest, restic and metrics
 # ---------------------------------------------------------------------------
 def build_staging(cfg: Config, now: dt.datetime) -> tuple[Path, list[FileRecord], dict[str, float]]:
@@ -617,6 +753,16 @@ def build_staging(cfg: Config, now: dt.datetime) -> tuple[Path, list[FileRecord]
         record = fetch_ha(cfg, token, staging, now)
         records.append(record)
         timestamps["ha"] = record.source_timestamp
+
+        if cfg.bb_ssh_target:
+            record = fetch_bb(cfg, staging, now)
+            records.append(record)
+            timestamps["bb"] = record.source_timestamp
+        else:
+            print(
+                "bb: BB_SSH_TARGET is not set; skipping bb server export",
+                file=sys.stderr,
+            )
 
         for path in staging.rglob("*"):
             if path.is_file():

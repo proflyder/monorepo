@@ -21,6 +21,9 @@ LOCAL_HA_TOKEN="${OFFSITE_HA_TOKEN_FILE:-$ROOT/secrets/home/offsite-ha.token}"
 # Optional rclone backend config (e.g. Google Drive, scope drive.file). It is
 # placed under /var/lib/offsite-backup because rclone rewrites it on token refresh.
 LOCAL_RCLONE_CONF="${OFFSITE_RCLONE_CONF:-$ROOT/secrets/home/offsite-rclone.conf}"
+# Optional ssh material for pulling the bb server export from CT 103.
+LOCAL_BB_KEY="${OFFSITE_BB_KEY_FILE:-$ROOT/secrets/home/offsite-bb.key}"
+LOCAL_BB_KNOWN_HOSTS="${OFFSITE_BB_KNOWN_HOSTS_FILE:-$ROOT/secrets/home/offsite-bb.known_hosts}"
 DRY_RUN=false
 RUN_NOW=false
 TARGET=""
@@ -90,6 +93,8 @@ else
   [[ -f "$LOCAL_PASSWORD" ]] || echo "warning: $LOCAL_PASSWORD does not exist (dry run)" >&2
 fi
 [[ -f "$LOCAL_HA_TOKEN" ]] || echo "warning: $LOCAL_HA_TOKEN does not exist; upload HA token separately" >&2
+[[ -f "$LOCAL_BB_KEY" ]] || echo "warning: $LOCAL_BB_KEY does not exist; bb source stays disabled" >&2
+[[ -f "$LOCAL_BB_KNOWN_HOSTS" ]] || echo "warning: $LOCAL_BB_KNOWN_HOSTS does not exist; bb source stays disabled" >&2
 
 remote "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y restic rclone sqlite3 python3"
 remote "install -d -m 0700 /etc/offsite-backup /var/lib/offsite-backup && install -d -m 0755 /usr/local/lib/offsite-backup /var/lib/node-exporter-textfile"
@@ -108,8 +113,14 @@ fi
 if [[ -f "$LOCAL_RCLONE_CONF" ]]; then
   upload "$LOCAL_RCLONE_CONF" /var/lib/offsite-backup/rclone.conf 0600
 fi
+if [[ -f "$LOCAL_BB_KEY" ]]; then
+  upload "$LOCAL_BB_KEY" /etc/offsite-backup/bb_ssh_key 0600
+fi
+if [[ -f "$LOCAL_BB_KNOWN_HOSTS" ]]; then
+  upload "$LOCAL_BB_KNOWN_HOSTS" /etc/offsite-backup/bb_known_hosts 0600
+fi
 
-remote "chown root:root /etc/offsite-backup/env /etc/offsite-backup/restic.password; if [ -f /etc/offsite-backup/ha.token ]; then chown root:root /etc/offsite-backup/ha.token; fi"
+remote "chown root:root /etc/offsite-backup/env /etc/offsite-backup/restic.password; for f in ha.token bb_ssh_key bb_known_hosts; do if [ -f /etc/offsite-backup/\$f ]; then chown root:root /etc/offsite-backup/\$f; fi; done"
 
 # Initialise the repository only once. The env file is sourced on the remote
 # host, so credentials never travel on a command line.

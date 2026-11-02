@@ -41,7 +41,10 @@
   path-источника, скопированного в CT. На CT не залогинены `gh` и Codex — для
   тредов на Mac это не важно (PR-статус считается на машине окружения,
   ИИ-сервисы bb идут через bb cloud), для агентов на самом CT нужно позже.
-  Offsite-копии `bb.db` пока нет. Runbook — `projects/home/proxmox/bb/`.
+  Бэкап: 03:30 в CT — `sqlite3 .backup` и полный `bb server export`
+  (`/var/backups/bb`), offsite забирает экспорт по SSH-ключу с forced command
+  (только чтение архива, без проброса портов); restore через
+  `bb server import` из Drive проверен 2026-11-03. Runbook — `projects/home/proxmox/bb/`.
 - Terraform: provider `bpg/proxmox 0.118.1`, plan — No changes; state
   root-only на PVE, копия в `secrets/`.
 - Wi-Fi/Ethernet uplink runbook: `projects/home/proxmox/wifi-uplink/`.
@@ -534,7 +537,8 @@
 - Offsite backup live: K3s timer 04:45, restic → личный Google Drive
   (`rclone:gdrive:home-offsite-v2`, scope `drive.file`, client-side encryption),
   ~45 MB/день. Внутри: OpenBao raft snapshot, SQLite scheduler/currency-bot,
-  ledger ha-bridge, автоматический backup HA. Ключ `openbao-seal`, recovery
+  ledger ha-bridge, автоматический backup HA, `bb server export` с CT 103
+  (с 2026-11-03; staging ~375 MB, в репозитории после restic ~70 MB). Ключ `openbao-seal`, recovery
   keys и restic password в архив не входят; restic password и ключ HA
   backup сохранены владельцем в password manager (2026-11-02). Restore из Drive проверен
   2026-11-02. OAuth — собственный client «Desktop app» в Google Cloud

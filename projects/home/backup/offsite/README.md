@@ -14,6 +14,7 @@ restic before it leaves the K3s node:
 | `currency_bot` | online SQLite copies from the currency-bot PVC |
 | `ha_bridge` | `ledger.json` from the ha-bridge PVC |
 | `ha` | newest automatic HA backup, already encrypted by Home Assistant |
+| `bb` | full `bb server export` from CT 103 (bb.db, auth secret, plugins, attachments), optional |
 
 OpenBao seal/recovery keys are **not** in this backup. The script refuses any
 file whose name matches `*seal*`, `*recovery*` or `*.key`. Recovery keys and the
@@ -36,6 +37,12 @@ RCLONE_CONFIG=/var/lib/offsite-backup/rclone.conf
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION
 HA_URL=http://192.0.2.28:8123
 HA_TOKEN_FILE=/etc/offsite-backup/ha.token
+# bb server export pulled over ssh (optional; without BB_SSH_TARGET the
+# source is skipped). The key is restricted on CT 103 to one forced command:
+#   tar -C /var/backups/bb -cf - bb-server-export.tgz
+BB_SSH_TARGET=root@192.0.2.30
+BB_SSH_KEY_FILE=/etc/offsite-backup/bb_ssh_key
+BB_SSH_KNOWN_HOSTS=/etc/offsite-backup/bb_known_hosts
 # optional overrides:
 # OPENBAO_SNAPSHOT_DIR=/srv/k3s/volumes/openbao-backups
 # K3S_STORAGE_DIR=/srv/k3s/runtime/storage
@@ -47,7 +54,16 @@ HA_TOKEN_FILE=/etc/offsite-backup/ha.token
 # RESTIC_MAINTENANCE_WEEKDAY=6
 # MAX_STAGING_BYTES=2147483648   # refuse uploads above this
 # MAX_REPO_BYTES=5368709120      # fail (and alert) when the repository grows past this
+# BB_SSH_TIMEOUT_SECONDS=900     # ssh pull timeout
 ```
+
+When `BB_SSH_TARGET` is empty, the `bb` source is skipped and a message is
+written to the journal; the other sources are unaffected. The remote archive is
+downloaded as a tar stream, the inner file is checked with `gzip -t`, and the
+gzip is unpacked before upload: restic deduplicates the uncompressed
+`bb/bb-server-export.tar` better across days. The source age comes from the
+tar member mtime and is checked with `MAX_SOURCE_AGE_HOURS` like every other
+source.
 
 PVC paths are resolved at runtime by the `_<namespace>_<pvc>` suffix; the
 generated `pvc-<uid>_...` name is never hard-coded. The HA backup list is read
@@ -68,6 +84,13 @@ The installer copies `secrets/home/offsite-backup.env`,
 `restic cat config` fails, and enables `offsite-backup.timer` (daily 04:45
 local, `Persistent=true`). Put the HA token at `/etc/offsite-backup/ha.token`
 or point `HA_TOKEN_FILE` at another root-only path.
+
+For the `bb` source, put the private key in `secrets/home/offsite-bb.key` and
+the pinned host key in `secrets/home/offsite-bb.known_hosts`; the installer
+copies them to `/etc/offsite-backup/bb_ssh_key` and
+`/etc/offsite-backup/bb_known_hosts` (0600). The key itself is installed on
+CT 103 with `install-bb.sh --offsite-pubkey FILE --offsite-from ADDRESS`
+(see `projects/home/proxmox/bb/README.md`).
 
 Manual checks on the node:
 
@@ -122,6 +145,12 @@ new `rclone authorize` on the same Google account.
      the database into its PVC, run `PRAGMA integrity_check`.
    - `ha-bridge/ledger.json` → stop ha-bridge, copy into its PVC.
    - `home-assistant/backup_*.tar` → HA onboarding "restore from backup".
+   - `bb/bb-server-export.tar` → bb server restore:
+     `gzip -c bb-server-export.tar > bb-server-export.tgz`, then
+     `bb server import bb-server-export.tgz --data-dir <dir>`; stop the old
+     server first, run `bb server allow-connect`, and verify threads/plugins.
+     The export contains bb.db, the auth secret, plugin data and attachments,
+     so a bare `bb.db` is not enough for a full restore.
 
 6. Rotate the restic password (`restic key add`, then remove the old key) and
    update `/etc/offsite-backup/restic.password` plus the offline copy.
