@@ -218,6 +218,18 @@ kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manu
 kubectl -n openbao logs job/snapshot-manual
 ```
 
+Операторский токен для KV (без входа человека): `secrets/openbao/operator.token`,
+политика `operator-kv` (`configure.py`), orphan, period 30 дней.
+
+```bash
+export BAO_ADDR=https://vault.<home-domain> BAO_TOKEN=$(cat secrets/openbao/operator.token)
+bao token lookup            # ttl; любое использование продлевает period
+bao token renew             # если долго не использовался
+bao kv get secret/ci/deploy-home   # запись — GET → merge → POST с cas
+# отзыв: bao token revoke -self; новый — admin: auth/token/create-orphan
+#   policies=operator-kv period=720h
+```
+
 Пароль человека задаёт сам пользователь и меняет через UI
 (`Access → Authentication methods → userpass → <user> → Edit`) или API
 `bao write auth/userpass/users/<user> password=…`; файла `human.pass` в

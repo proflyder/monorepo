@@ -113,6 +113,12 @@
   `sys/seal`, `sys/step-down`, `sys/raw/*`, `sys/replication/*`,
   `sys/rotate`, `sys/rekey*`. Вход человека — пароль + обязательный
   TOTP (enforcement на `auth/userpass` с 2026-10-31).
+- Операторская автоматизация (агент на Mac владельца): orphan periodic token
+  (period 30 дней, продлевается при использовании) с политикой `operator-kv` —
+  только create/read/update/patch KV `secret/{ci,k8s}/*`, без delete/destroy,
+  `sys/*`, auth и политик. Файл `secrets/openbao/operator.token` (600, только
+  Mac). Компромисс Mac даёт чтение/изменение секретов приложений и CI —
+  принято владельцем 2026-11-02; отзыв — `bao token revoke` или UI.
 - CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
   OpenBao, claims `repository`, `environment=Home`, `ref=refs/heads/develop`,
