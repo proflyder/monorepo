@@ -47,6 +47,51 @@ export default async function plugin(bb) {
       label: "Working dispatcher thread id (optional)",
       default: "",
     },
+    compactAt: {
+      type: "string",
+      label: "Nightly dispatcher compaction time, HH:MM local (empty disables)",
+      default: "04:30",
+      experimental_schema: standardSchema((value) =>
+        value === "" || /^([01]\d|2[0-3]):[0-5]\d$/u.test(value)
+          ? { value }
+          : { issues: [{ message: "Expected HH:MM in 24-hour local time" }] },
+      ),
+    },
+    compactAfterTurns: {
+      type: "number",
+      label: "Compact after this many idle dispatcher sends",
+      default: 30,
+      experimental_schema: standardSchema((value) =>
+        Number.isInteger(value) && value >= 1 && value <= 500
+          ? { value }
+          : { issues: [{ message: "Expected an integer from 1 to 500" }] },
+      ),
+    },
+    compactAtContextPercent: {
+      type: "number",
+      label: "Compact when recorded context usage reaches this percent",
+      default: 70,
+      experimental_schema: standardSchema((value) =>
+        Number.isInteger(value) && value >= 1 && value <= 100
+          ? { value }
+          : { issues: [{ message: "Expected an integer from 1 to 100" }] },
+      ),
+    },
+    dispatcherReminder: {
+      type: "string",
+      label: "Role reminder appended once after each successful compaction",
+      default:
+        "Напоминание: ты рабочий голосовой диспетчер; отвечай коротко по-русски и заканчивай строкой 🔊 с 1–2 фразами для озвучивания.",
+      experimental_schema: standardSchema((value) =>
+        typeof value === "string" && value.length <= 1000
+          ? { value: value.trim() }
+          : {
+              issues: [
+                { message: "Expected a string of at most 1000 characters" },
+              ],
+            },
+      ),
+    },
   });
 
   const dispatcher = createDispatcher({
@@ -62,6 +107,28 @@ export default async function plugin(bb) {
     bb.status.needsConfiguration(
       `Set a secret with \`bb plugin config ${bb.pluginId} set hmacSecret <value>\`.`,
     );
+  }
+
+  // The cron fires every minute; the dispatcher decides whether the configured
+  // local wall-clock time has been reached. A cron built from `compactAt`
+  // would be fixed at activation and could not follow a live setting change.
+  if (typeof bb.background?.schedule === "function") {
+    bb.background.schedule("dispatcher-compaction", "* * * * *", async () => {
+      try {
+        const outcome = await dispatcher.backgroundTick();
+        if (outcome?.ran) {
+          bb.log.info(
+            `nightly compaction requested for ${outcome.threadId} at ${outcome.compactAt}`,
+          );
+        } else {
+          bb.log.debug(
+            `nightly compaction skipped: ${outcome?.reason ?? "unknown"}`,
+          );
+        }
+      } catch (cause) {
+        bb.log.error(`nightly compaction tick failed: ${String(cause)}`);
+      }
+    });
   }
 
   bb.http.route(

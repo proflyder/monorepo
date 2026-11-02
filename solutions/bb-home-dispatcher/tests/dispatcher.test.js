@@ -133,6 +133,7 @@ function makeWorld() {
   const threads = new Map();
   const events = new Map();
   const pending = new Map();
+  const contextUsage = new Map();
   const calls = [];
   let threadCounter = 0;
   let requestCounter = 0;
@@ -301,6 +302,9 @@ function makeWorld() {
       async send(args) {
         record("threads.send", args);
         if (!threads.has(args.threadId)) throw new Error("not found");
+        if (args.compactFirst === true && args.mode === "steer") {
+          throw new Error("compactFirst cannot be combined with mode steer");
+        }
         requestCounter += 1;
         pushEvent(args.threadId, "client/turn/requested", {
           requestId: `req_${requestCounter}`,
@@ -308,6 +312,24 @@ function makeWorld() {
         });
         setThreadStatus(args.threadId, "active");
         return { ok: true, delivery: "sent" };
+      },
+      async context({ threadId }) {
+        record("threads.context", { threadId });
+        return { usage: structuredClone(contextUsage.get(threadId) ?? null) };
+      },
+      async compact({ threadId }) {
+        record("threads.compact", { threadId });
+        const thread = threads.get(threadId);
+        if (thread === undefined) throw new Error("not found");
+        if (thread.status !== "idle" && thread.status !== "error") {
+          const error = new Error(
+            "Context can only be compacted while the thread is idle or errored",
+          );
+          error.code = "invalid_request";
+          throw error;
+        }
+        setThreadStatus(threadId, "active");
+        return { ok: true };
       },
       async output({ threadId }) {
         record("threads.output", { threadId });
@@ -359,6 +381,7 @@ function makeWorld() {
     threads,
     events,
     pending,
+    contextUsage,
     policies,
     pushEvent,
     setThreadStatus,
@@ -377,6 +400,7 @@ function makeWorld() {
 async function makePlugin({ settings = {}, world = makeWorld() } = {}) {
   const routes = [];
   const needsConfiguration = [];
+  const schedules = [];
   const kv = fakeKv();
   let descriptors = {};
   const effective = {
@@ -410,6 +434,11 @@ async function makePlugin({ settings = {}, world = makeWorld() } = {}) {
         routes.push({ method, path, handler, options });
       },
     },
+    background: {
+      schedule(name, cron, fn) {
+        schedules.push({ name, cron, fn });
+      },
+    },
     sdk: world.sdk,
   };
   await plugin(bb);
@@ -420,6 +449,7 @@ async function makePlugin({ settings = {}, world = makeWorld() } = {}) {
     kv,
     world,
     needsConfiguration,
+    schedules,
     descriptors,
     settings: effective,
   };
@@ -1088,4 +1118,354 @@ test("status includes running threads with profiles and machine", async () => {
   assert.equal(row.projectName, "Alpha");
   assert.equal(row.status, "starting");
   assert.equal(typeof row.runtimeSeconds, "number");
+});
+
+// ------------------------------------------------------------ compaction --
+
+function addDispatcherThread(world, status = "idle") {
+  world.threads.set("thr_dispatcher", {
+    id: "thr_dispatcher",
+    title: "Dispatcher",
+    projectId: "proj_alpha",
+    status,
+    originPluginId: null,
+    environmentHostId: "host_mac",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+}
+
+function makeCompactionDispatcher({ world, settings = {}, nowRef }) {
+  const kv = fakeKv();
+  const dispatcher = createDispatcher({
+    getSdk: () => world.sdk,
+    kv,
+    pluginId: PLUGIN_ID,
+    getSettings: async () => ({
+      hmacSecret: SECRET,
+      workerLimit: 2,
+      permissionMode: "auto",
+      dispatcherThreadId: "thr_dispatcher",
+      ...settings,
+    }),
+    now: () => nowRef.value,
+    sendWaitMs: 0,
+  });
+  return { dispatcher, kv };
+}
+
+async function idleSend(dispatcher, world, text, key) {
+  world.setThreadStatus("thr_dispatcher", "idle");
+  return dispatcher.call("send", {
+    threadId: "thr_dispatcher",
+    text,
+    idempotencyKey: key,
+  });
+}
+
+test("plugin registers the nightly compaction schedule", async () => {
+  const { schedules } = await makePlugin();
+  assert.equal(schedules.length, 1);
+  assert.equal(schedules[0].name, "dispatcher-compaction");
+  assert.equal(schedules[0].cron, "* * * * *");
+  assert.equal(typeof schedules[0].fn, "function");
+});
+
+test("nightly compaction waits for compactAt, is daily and catches up", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  const nowRef = { value: new Date(2026, 10, 3, 4, 29, 0).getTime() };
+  const { dispatcher, kv } = makeCompactionDispatcher({
+    world,
+    settings: { compactAt: "04:30" },
+    nowRef,
+  });
+
+  const early = await dispatcher.backgroundTick();
+  assert.equal(early.ran, false);
+  assert.equal(early.reason, "not_due");
+  assert.equal(world.countCalls("threads.compact"), 0);
+
+  nowRef.value = new Date(2026, 10, 3, 4, 30, 0).getTime();
+  const due = await dispatcher.backgroundTick();
+  assert.equal(due.ran, true);
+  assert.equal(due.threadId, "thr_dispatcher");
+  assert.equal(world.countCalls("threads.compact"), 1);
+  const state = await kv.get("compact:thr_dispatcher");
+  assert.equal(state.lastCompactionStatus, "requested");
+  assert.equal(state.lastCompactionReason, "nightly");
+  assert.equal(state.pending.reason, "nightly");
+
+  const repeat = await dispatcher.backgroundTick();
+  assert.equal(repeat.ran, false);
+  assert.equal(repeat.reason, "already_requested");
+  assert.equal(world.countCalls("threads.compact"), 1);
+});
+
+test("nightly compaction skips a busy thread and retries on the next tick", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "active");
+  const nowRef = { value: new Date(2026, 10, 3, 4, 30, 0).getTime() };
+  const { dispatcher } = makeCompactionDispatcher({
+    world,
+    settings: { compactAt: "04:30" },
+    nowRef,
+  });
+
+  const busy = await dispatcher.backgroundTick();
+  assert.equal(busy.ran, false);
+  assert.equal(busy.reason, "busy");
+  assert.equal(world.countCalls("threads.compact"), 0);
+
+  // A busy retry is throttled so the minute-level schedule does not look the
+  // thread up on every server tick.
+  world.setThreadStatus("thr_dispatcher", "idle");
+  const throttled = await dispatcher.backgroundTick();
+  assert.equal(throttled.reason, "throttled");
+
+  nowRef.value += 60_000;
+  const retry = await dispatcher.backgroundTick();
+  assert.equal(retry.ran, true);
+  assert.equal(world.countCalls("threads.compact"), 1);
+});
+
+test("nightly compaction catches up after a late server start", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  const nowRef = { value: new Date(2026, 10, 3, 9, 15, 0).getTime() };
+  const { dispatcher } = makeCompactionDispatcher({
+    world,
+    settings: { compactAt: "04:30" },
+    nowRef,
+  });
+
+  const outcome = await dispatcher.backgroundTick();
+  assert.equal(outcome.ran, true);
+  assert.equal(world.countCalls("threads.compact"), 1);
+});
+
+test("nightly compaction is disabled by an empty compactAt", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  const nowRef = { value: new Date(2026, 10, 3, 12, 0, 0).getTime() };
+  const { dispatcher } = makeCompactionDispatcher({
+    world,
+    settings: { compactAt: "" },
+    nowRef,
+  });
+
+  const outcome = await dispatcher.backgroundTick();
+  assert.equal(outcome.ran, false);
+  assert.equal(outcome.reason, "not_configured");
+  assert.equal(world.countCalls("threads.compact"), 0);
+});
+
+test("after a completed nightly compaction the reminder rides the next send once", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  const nowRef = { value: new Date(2026, 10, 3, 4, 30, 0).getTime() };
+  const { dispatcher, kv } = makeCompactionDispatcher({
+    world,
+    settings: { compactAt: "04:30", dispatcherReminder: "ROLE REMINDER" },
+    nowRef,
+  });
+
+  await dispatcher.backgroundTick();
+
+  // While the compaction turn runs, a prompt waits in the queue instead of
+  // steering into the compaction.
+  const during = await dispatcher.call("send", {
+    threadId: "thr_dispatcher",
+    text: "during compaction",
+    idempotencyKey: "during-1",
+  });
+  const duringCall = world.callsTo("threads.send")[0].args;
+  assert.equal(duringCall.mode, "queue");
+  assert.equal(duringCall.input[0].text, "during compaction");
+  assert.equal(duringCall.compactFirst, undefined);
+
+  world.pushEvent("thr_dispatcher", "thread/compacted", {});
+  world.setThreadStatus("thr_dispatcher", "idle");
+
+  const first = await idleSend(
+    dispatcher,
+    world,
+    "after compaction",
+    "after-1",
+  );
+  assert.equal(first.compactFirst, false);
+  assert.equal(first.reminder, true);
+  assert.match(
+    world.callsTo("threads.send")[1].args.input[0].text,
+    /after compaction\n\nROLE REMINDER$/u,
+  );
+  const state = await kv.get("compact:thr_dispatcher");
+  assert.equal(state.turns, 1);
+  assert.equal(state.pendingReminder, false);
+  assert.equal(state.lastCompactionStatus, "completed");
+  assert.equal(state.turns, 1);
+
+  const second = await idleSend(dispatcher, world, "next message", "after-2");
+  assert.equal(second.reminder, undefined);
+  assert.equal(
+    world.callsTo("threads.send")[2].args.input[0].text,
+    "next message",
+  );
+});
+
+test("send compacts after compactAfterTurns idle sends, never with steer", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  const nowRef = { value: new Date(2026, 10, 3, 12, 0, 0).getTime() };
+  const { dispatcher, kv } = makeCompactionDispatcher({
+    world,
+    settings: {
+      compactAt: "",
+      compactAfterTurns: 2,
+      dispatcherReminder: "ROLE REMINDER",
+    },
+    nowRef,
+  });
+
+  const first = await idleSend(dispatcher, world, "one", "t-1");
+  const second = await idleSend(dispatcher, world, "two", "t-2");
+  assert.equal(first.compactFirst, false);
+  assert.equal(second.compactFirst, false);
+  const before = await kv.get("compact:thr_dispatcher");
+  assert.equal(before.turns, 2);
+
+  const third = await idleSend(dispatcher, world, "three", "t-3");
+  assert.equal(third.compactFirst, true);
+  assert.equal(third.compactTrigger, "turns");
+  const compactCall = world.callsTo("threads.send")[2].args;
+  assert.equal(compactCall.compactFirst, true);
+  assert.notEqual(compactCall.mode, "steer");
+  assert.equal(compactCall.mode, "auto");
+  // The compaction runs before this message, so the reminder belongs here.
+  assert.match(compactCall.input[0].text, /three\n\nROLE REMINDER$/u);
+
+  const after = await kv.get("compact:thr_dispatcher");
+  assert.equal(after.turns, 0);
+  assert.equal(after.lastCompactionStatus, "requested");
+  assert.equal(after.lastCompactionReason, "turns");
+
+  for (const call of world.callsTo("threads.send")) {
+    assert.notEqual(call.args.mode, "steer");
+  }
+});
+
+test("a busy thread is sent without compaction and keeps the turn count", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "active");
+  const nowRef = { value: new Date(2026, 10, 3, 12, 0, 0).getTime() };
+  const { dispatcher, kv } = makeCompactionDispatcher({
+    world,
+    settings: { compactAt: "", compactAfterTurns: 1 },
+    nowRef,
+  });
+
+  const busy = await dispatcher.call("send", {
+    threadId: "thr_dispatcher",
+    text: "busy",
+    idempotencyKey: "b-1",
+  });
+  assert.equal(busy.compactFirst, false);
+  assert.equal(world.callsTo("threads.send")[0].args.compactFirst, undefined);
+  const busyState = await kv.get("compact:thr_dispatcher");
+  assert.equal(busyState.turns, 1);
+
+  const next = await idleSend(dispatcher, world, "idle again", "b-2");
+  assert.equal(next.compactFirst, true);
+  assert.equal(world.callsTo("threads.send")[1].args.compactFirst, true);
+});
+
+test("context usage takes priority over the turn counter", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  world.contextUsage.set("thr_dispatcher", {
+    usedTokens: 75000,
+    modelContextWindow: 100000,
+    estimated: false,
+  });
+  const nowRef = { value: new Date(2026, 10, 3, 12, 0, 0).getTime() };
+  const { dispatcher } = makeCompactionDispatcher({
+    world,
+    settings: {
+      compactAt: "",
+      compactAfterTurns: 30,
+      compactAtContextPercent: 70,
+      dispatcherReminder: "",
+    },
+    nowRef,
+  });
+
+  const first = await idleSend(dispatcher, world, "high usage", "c-1");
+  assert.equal(first.compactFirst, true);
+  assert.equal(first.compactTrigger, "context");
+  assert.equal(world.callsTo("threads.send")[0].args.compactFirst, true);
+});
+
+test("usage below the context threshold falls back to the turn counter", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  world.contextUsage.set("thr_dispatcher", {
+    usedTokens: 20000,
+    modelContextWindow: 100000,
+    estimated: false,
+  });
+  const nowRef = { value: new Date(2026, 10, 3, 12, 0, 0).getTime() };
+  const { dispatcher } = makeCompactionDispatcher({
+    world,
+    settings: {
+      compactAt: "",
+      compactAfterTurns: 1,
+      compactAtContextPercent: 70,
+      dispatcherReminder: "",
+    },
+    nowRef,
+  });
+
+  const below = await idleSend(dispatcher, world, "below usage", "c-2");
+  assert.equal(below.compactFirst, false);
+
+  world.contextUsage.delete("thr_dispatcher");
+  const fallback = await idleSend(dispatcher, world, "no usage", "c-3");
+  assert.equal(fallback.compactFirst, true);
+  assert.equal(fallback.compactTrigger, "turns");
+});
+
+test("status reports compaction state and settings", async () => {
+  const { route, world } = await makePlugin({
+    settings: {
+      compactAt: "05:15",
+      compactAfterTurns: 12,
+      compactAtContextPercent: 65,
+    },
+  });
+  addDispatcherThread(world, "idle");
+  const sent = await callRoute(route, {
+    method: "send",
+    params: { threadId: "thr_dispatcher", text: "hi", idempotencyKey: "st-1" },
+  });
+  assert.equal(sent.body.ok, true);
+
+  const response = await callRoute(route, {
+    method: "status",
+    params: { limit: 5 },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.result.compaction, {
+    at: "05:15",
+    afterTurns: 12,
+    atContextPercent: 65,
+    dispatcherThreadId: "thr_dispatcher",
+  });
+  const row = response.body.result.threads.find(
+    (item) => item.threadId === "thr_dispatcher",
+  );
+  assert.equal(row.compact.turnsSinceCompaction, 1);
+  assert.equal(row.compact.lastCompactionAt, null);
+  assert.equal(row.compact.lastCompactionStatus, null);
+  assert.equal(row.compact.pendingReminder, false);
+  assert.equal(row.compact.compactionPending, false);
 });
