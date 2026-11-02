@@ -121,6 +121,31 @@ path "secret/metadata/k8s" {
 }
 """
 
+OPERATOR_KV_POLICY = """\
+# Operator automation (a periodic orphan token kept only on the owner's Mac):
+# create/update application and CI secrets, never delete them, and nothing
+# outside KV (no sys/*, auth, policies, unseal, users). Token self-renew,
+# lookup and revoke come from the default policy.
+path "secret/data/ci/*" {
+  capabilities = ["create", "read", "update", "patch"]
+}
+path "secret/data/k8s/*" {
+  capabilities = ["create", "read", "update", "patch"]
+}
+path "secret/metadata/ci/*" {
+  capabilities = ["read", "list"]
+}
+path "secret/metadata/k8s/*" {
+  capabilities = ["read", "list"]
+}
+path "secret/metadata/ci" {
+  capabilities = ["list"]
+}
+path "secret/metadata/k8s" {
+  capabilities = ["list"]
+}
+"""
+
 BACKUP_POLICY = """\
 # Only raft snapshots for the nightly CronJob.
 path "sys/storage/raft/snapshot" {
@@ -465,6 +490,7 @@ def main() -> None:
         ensure_policy(bao, "ci-station", STATION_POLICY)
     ensure_policy(bao, "k8s-read", K8S_POLICY)
     ensure_policy(bao, "backup", BACKUP_POLICY)
+    ensure_policy(bao, "operator-kv", OPERATOR_KV_POLICY)
     ensure_userpass(bao, args.user)
     ensure_github(bao, audience, args.repository, station_repository)
     if not station_repository:

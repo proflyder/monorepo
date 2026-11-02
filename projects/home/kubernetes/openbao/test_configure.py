@@ -8,6 +8,7 @@ These tests record API calls, so no OpenBao is needed.
 """
 import os
 import sys
+import re
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -193,7 +194,7 @@ class MainGating(unittest.TestCase):
         names, _, github = run_main()
         self.assertNotIn("ci-station", names)
         self.assertEqual(names, ["admin", "ci-deploy", "ci-android",
-                                 "k8s-read", "backup"])
+                                 "k8s-read", "backup", "operator-kv"])
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
 
     def test_flag_adds_policy_and_role(self):
@@ -213,6 +214,20 @@ class MainGating(unittest.TestCase):
         names, _, github = run_main("--station-repository", "  ")
         self.assertNotIn("ci-station", names)
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
+
+
+class OperatorPolicyTests(unittest.TestCase):
+    def test_operator_policy_is_kv_only_and_cannot_delete(self):
+        policy = configure.OPERATOR_KV_POLICY
+        paths = re.findall(r'path "([^"]+)"', policy)
+        self.assertTrue(all(p.startswith("secret/") for p in paths), paths)
+        rules = "\n".join(l for l in policy.splitlines() if not l.lstrip().startswith("#"))
+        self.assertNotIn("sys/", rules)
+        self.assertNotIn("auth/", rules)
+        for forbidden in ("delete", "destroy", "sudo", "deny"):
+            self.assertNotIn(f'"{forbidden}"', policy)
+        self.assertIn('path "secret/data/ci/*"', policy)
+        self.assertIn('path "secret/data/k8s/*"', policy)
 
 
 if __name__ == "__main__":
