@@ -14,6 +14,14 @@ API directly.  The proxy forwards requests and sanitizes assistant text:
 It is not an authentication boundary. The default bind is loopback; the K3s
 deployment binds the K3s node address so HAOS can reach it directly and uses
 an nftables rule to allow only HAOS and the node itself.
+
+When the voice-routing variables are configured, every chat request first
+reads the HA voice profile (``input_select.ricardo_voice_profile``) and asks
+the ``mcp-gateway`` voice route where the phrase belongs.  A phrase routed to
+bb or answered locally never reaches Hermes; the answer is spoken immediately
+and, for bb, the eventual turn result is announced later through HA.  Any
+routing uncertainty is fail-closed: nothing reaches Hermes in the work
+profile.
 """
 from __future__ import annotations
 
@@ -21,10 +29,14 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from unicodedata import normalize as unicode_normalize
 
@@ -35,6 +47,40 @@ BIND = os.environ.get("HERMES_PROXY_BIND", "127.0.0.1")
 PORT = int(os.environ.get("HERMES_PROXY_PORT", "8643"))
 MAX_BODY = 10 * 1024 * 1024
 VOICE_REASONING_EFFORT = os.environ.get("HERMES_VOICE_REASONING_EFFORT", "low")
+
+# --- voice routing (profile -> mcp-gateway) -------------------------------
+#
+# Routing stays off until all four values are present, so an image without the
+# new deployment values behaves exactly like the previous version.  Secrets are
+# read from a mounted file when *_FILE is set; the inline variable is only a
+# fallback for the existing Hermes environment Secret.
+HA_URL = os.environ.get("HERMES_HA_URL", "").rstrip("/")
+HA_TOKEN_FILE = os.environ.get("HERMES_HA_TOKEN_FILE", "")
+HA_TOKEN = os.environ.get("HERMES_HA_TOKEN", "")
+VOICE_GATEWAY_URL = os.environ.get("HERMES_VOICE_GATEWAY_URL", "").rstrip("/")
+VOICE_GATEWAY_TOKEN_FILE = os.environ.get("HERMES_VOICE_GATEWAY_TOKEN_FILE", "")
+VOICE_GATEWAY_TOKEN = os.environ.get("HERMES_VOICE_GATEWAY_TOKEN", "")
+VOICE_PROFILE_ENTITY = os.environ.get(
+    "HERMES_VOICE_PROFILE_ENTITY", "input_select.ricardo_voice_profile"
+)
+PROFILE_CACHE_MS = int(os.environ.get("HERMES_VOICE_PROFILE_CACHE_MS", "2000"))
+HA_TIMEOUT = float(os.environ.get("HERMES_HA_TIMEOUT", "3"))
+VOICE_GATEWAY_TIMEOUT = float(os.environ.get("HERMES_VOICE_GATEWAY_TIMEOUT", "5"))
+VOICE_RESULT_TIMEOUT = float(os.environ.get("HERMES_VOICE_RESULT_TIMEOUT", "900"))
+VOICE_RESULT_RETRY = float(os.environ.get("HERMES_VOICE_RESULT_RETRY", "2"))
+VOICE_RESULT_WAIT = int(os.environ.get("HERMES_VOICE_RESULT_WAIT", "25"))
+ANNOUNCE_MAX_CHARS = int(os.environ.get("HERMES_VOICE_ANNOUNCE_MAX_CHARS", "200"))
+ANNOUNCE_SCRIPT = os.environ.get("HERMES_VOICE_ANNOUNCE_SCRIPT", "script.schedule_announce")
+
+PROFILE_PERSONAL = "personal"
+PROFILE_WORK = "work"
+
+# Fail-closed phrases.  None ends with a question: HA's pipeline enables
+# continued conversation when the assistant reply ends with one.
+SPEECH_PROFILE_UNKNOWN = "Не могу подтвердить профиль."
+SPEECH_AGENTS_DOWN = "Сервер агентов недоступен."
+SPEECH_TURN_FAILED = "Агент завершил работу с ошибкой."
+SPEECH_DONE = "Готово."
 
 # Order matters: remove whole citation parentheses before unwrapping links.
 _CITATION = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\)")
@@ -75,6 +121,286 @@ CANCEL_PHRASES = frozenset(
 CANCEL_SILENCE = " "
 
 _cancel_total = 0
+
+# Per-outcome counters.  Logs carry the outcome only, never the speech text.
+_route_counts: Counter[str] = Counter()
+_profile_lock = threading.Lock()
+_profile_cache: tuple[str, float] | None = None
+_background_lock = threading.Lock()
+_background_threads: set[threading.Thread] = set()
+
+
+def _read_secret(path: str, inline: str) -> str:
+    """Read a Bearer token from a mounted file, falling back to env."""
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return (inline or "").strip()
+
+
+def ha_token() -> str:
+    return _read_secret(HA_TOKEN_FILE, HA_TOKEN)
+
+
+def voice_token() -> str:
+    return _read_secret(VOICE_GATEWAY_TOKEN_FILE, VOICE_GATEWAY_TOKEN)
+
+
+def routing_enabled() -> bool:
+    """True only when the full profile -> gateway path is configured.
+
+    A partially configured image (for example the gateway URL without the HA
+    token) keeps the previous behaviour; runtime failures after this check are
+    handled fail-closed per request.
+    """
+    return bool(
+        VOICE_GATEWAY_URL
+        and voice_token()
+        and HA_URL
+        and ha_token()
+    )
+
+
+def profile_from_state(state: str | None) -> str | None:
+    """Map the HA input_select state onto a routing profile."""
+    if not isinstance(state, str):
+        return None
+    normalized = " ".join(unicode_normalize("NFKC", state).casefold().split())
+    if normalized in ("work", "рабочий", "рабочий профиль"):
+        return PROFILE_WORK
+    if normalized in ("personal", "личный", "личный профиль"):
+        return PROFILE_PERSONAL
+    return None
+
+
+def read_profile() -> str | None:
+    """Read the HA voice profile, caching only a fresh successful result."""
+    global _profile_cache
+    now = time.monotonic()
+    with _profile_lock:
+        if _profile_cache is not None and _profile_cache[1] > now:
+            return _profile_cache[0]
+        # A stale cache is never used: a read error makes the profile unknown.
+        _profile_cache = None
+        profile = _fetch_profile()
+        if profile is not None:
+            _profile_cache = (profile, now + PROFILE_CACHE_MS / 1000)
+        return profile
+
+
+def _fetch_profile() -> str | None:
+    request = urllib.request.Request(
+        f"{HA_URL}/api/states/{VOICE_PROFILE_ENTITY}",
+        headers={"Authorization": "Bearer " + ha_token()},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=HA_TIMEOUT) as response:
+            data = json.loads(response.read() or b"{}")
+    except (urllib.error.URLError, ValueError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return profile_from_state(data.get("state"))
+
+
+def _post_json(url: str, body: dict[str, Any], token: str, timeout: float,
+               empty: dict[str, Any]) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url, data=json.dumps(body).encode(), method="POST",
+        headers={"Authorization": "Bearer " + token,
+                 "Content-Type": "application/json", "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = json.loads(response.read() or b"{}")
+    return data if isinstance(data, dict) else empty
+
+
+def call_utterance(text: str, profile: str) -> dict[str, Any]:
+    return _post_json(
+        VOICE_GATEWAY_URL + "/v1/voice/utterance",
+        {"text": text, "profile": profile},
+        voice_token(), VOICE_GATEWAY_TIMEOUT, {},
+    )
+
+
+def call_result(thread_id: str, after_seq: int, wait_seconds: int) -> dict[str, Any]:
+    return _post_json(
+        VOICE_GATEWAY_URL + "/v1/voice/result",
+        {"threadId": thread_id, "afterSeq": after_seq,
+         "waitSeconds": max(1, wait_seconds)},
+        voice_token(), VOICE_GATEWAY_TIMEOUT + wait_seconds, {},
+    )
+
+
+def ensure_not_question(text: str) -> str:
+    """Return a short spoken phrase that cannot trigger continued conversation."""
+    text = " ".join(text.split())
+    while text.endswith(("?", "？")):
+        text = text[:-1].rstrip()
+    if not text:
+        return SPEECH_AGENTS_DOWN
+    if text[-1] not in ".!…":
+        text += "."
+    return text
+
+
+def announce_text(speech: str) -> str:
+    """Sanitize and shorten a late answer for the station announcement."""
+    text = sanitize_text(speech)
+    if len(text) <= ANNOUNCE_MAX_CHARS:
+        return text
+    cut = text[:ANNOUNCE_MAX_CHARS]
+    if " " in cut:
+        cut = cut[:cut.rfind(" ")]
+    return cut.rstrip(" ,;:—-") + "…"
+
+
+def announce(text: str) -> bool:
+    """Speak a late answer through the existing HA announcement script."""
+    if not text:
+        return False
+    try:
+        _post_json(
+            HA_URL + "/api/services/script/turn_on",
+            {"entity_id": ANNOUNCE_SCRIPT,
+             "variables": {"message": text, "chime": False}},
+            ha_token(), HA_TIMEOUT, {},
+        )
+        return True
+    except (urllib.error.URLError, ValueError, OSError):
+        return False
+
+
+def start_result_announcer(thread_id: str, after_seq: int) -> threading.Thread:
+    """Poll the bb turn in the background and announce its final speech."""
+    thread = threading.Thread(
+        target=_result_announcer, args=(thread_id, after_seq),
+        name="voice-result-announcer", daemon=True,
+    )
+    with _background_lock:
+        thread.start()
+        _background_threads.add(thread)
+    return thread
+
+
+def _result_announcer(thread_id: str, after_seq: int) -> None:
+    deadline = time.monotonic() + VOICE_RESULT_TIMEOUT
+    speech = ""
+    status = "timeout"
+    try:
+        while time.monotonic() < deadline:
+            remaining = max(1, int(min(VOICE_RESULT_WAIT, deadline - time.monotonic())))
+            try:
+                response = call_result(thread_id, after_seq, remaining)
+            except (urllib.error.URLError, ValueError, OSError):
+                status = "gateway_error"
+                if time.monotonic() + VOICE_RESULT_RETRY >= deadline:
+                    break
+                time.sleep(VOICE_RESULT_RETRY)
+                continue
+            status = response.get("status") if isinstance(response.get("status"), str) else ""
+            if status in ("running", "starting"):
+                status = "running"
+                continue
+            answer = response.get("speech")
+            speech = answer if isinstance(answer, str) else ""
+            break
+        else:
+            status = "timeout"
+        if status in ("running", "gateway_error", ""):
+            # The overall budget ran out; do not invent speech.
+            speech = ""
+        if not speech.strip() and status not in ("running", "gateway_error", "", "timeout"):
+            speech = SPEECH_TURN_FAILED if status == "failed" else SPEECH_DONE
+        text = announce_text(speech)
+        if text:
+            announced = announce(text)
+            sys.stderr.write(
+                "voice-proxy: announce thread=%s outcome=%s announced=%s\n"
+                % (thread_id, status or "unknown", announced)
+            )
+        else:
+            sys.stderr.write(
+                "voice-proxy: announce thread=%s outcome=%s announced=false\n"
+                % (thread_id, status or "unknown")
+            )
+    finally:
+        with _background_lock:
+            _background_threads.discard(threading.current_thread())
+
+
+def wait_background_tasks(timeout: float = 5.0) -> None:
+    """Join the announce threads (tests and graceful shutdown)."""
+    deadline = time.monotonic() + timeout
+    with _background_lock:
+        threads = list(_background_threads)
+    for thread in threads:
+        thread.join(max(0.0, deadline - time.monotonic()))
+
+
+@dataclass(frozen=True)
+class RouteDecision:
+    """Where one utterance goes and what is spoken immediately."""
+
+    to_hermes: bool
+    profile: str | None = None
+    speech: str = ""
+    thread_id: str = ""
+    after_seq: int | None = None
+    announce: bool = False
+    outcome: str = ""
+
+
+def route_utterance(text: str) -> RouteDecision:
+    """Resolve profile and route for the last user utterance.
+
+    Never raises: every failure becomes an explicit decision so the caller can
+    keep the fail-closed contract without a fallback to Hermes in work profile.
+    """
+    profile = read_profile()
+    if profile is None:
+        return RouteDecision(False, None, SPEECH_PROFILE_UNKNOWN, outcome="profile_unknown")
+    try:
+        response = call_utterance(text, profile)
+    except (urllib.error.URLError, ValueError, OSError):
+        if profile == PROFILE_PERSONAL:
+            # Personal speech already went to Hermes before this change.
+            return RouteDecision(True, profile, outcome="gateway_down_personal")
+        return RouteDecision(False, profile, SPEECH_AGENTS_DOWN, outcome="gateway_down")
+    route = response.get("route")
+    if route == "hermes":
+        return RouteDecision(True, profile, outcome="hermes")
+    speech = response.get("speech")
+    speech = speech if isinstance(speech, str) and speech.strip() else SPEECH_AGENTS_DOWN
+    if route not in ("bb", "local"):
+        return RouteDecision(False, profile, SPEECH_AGENTS_DOWN, outcome="gateway_failed")
+    if response.get("ok") is False:
+        return RouteDecision(False, profile, ensure_not_question(speech), outcome="gateway_failed")
+    thread_id = response.get("threadId")
+    after_seq = response.get("afterSeq")
+    if route == "bb" and isinstance(thread_id, str) and thread_id.strip() \
+            and isinstance(after_seq, int) and not isinstance(after_seq, bool):
+        return RouteDecision(
+            False, profile, ensure_not_question(speech), thread_id, after_seq, True, "bb",
+        )
+    return RouteDecision(False, profile, ensure_not_question(speech),
+                         outcome="local" if route == "local" else "bb")
+
+
+def last_user_text(payload: dict[str, Any]) -> str | None:
+    """Return the text of the final message when it is a plain user turn."""
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return None
+    last = messages[-1]
+    if not isinstance(last, dict) or last.get("role") != "user":
+        return None
+    content = last.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return None
+    return content
 
 
 def normalize_utterance(text: str) -> str:
@@ -267,16 +593,6 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self._send(503, error_body("Hermes upstream is unavailable"), "application/json")
 
-    def _cancel_chunk(self, payload: dict[str, Any], *, delta: dict[str, Any],
-                      finish_reason: str | None = None) -> dict[str, Any]:
-        return {
-            "id": "chatcmpl-ricardo-cancel",
-            "object": "chat.completion.chunk",
-            "created": int(time.time()),
-            "model": payload.get("model") or "hermes-agent",
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
-        }
-
     def _send_cancel_completion(self, payload: dict[str, Any]) -> None:
         """Answer a local cancel without any upstream Hermes model turn."""
         global _cancel_total
@@ -287,6 +603,11 @@ class Handler(BaseHTTPRequestHandler):
             _cancel_total,
             bool(payload.get("stream")),
         )
+        self._send_local_completion(payload, CANCEL_SILENCE, completion_id="chatcmpl-ricardo-cancel")
+
+    def _send_local_completion(self, payload: dict[str, Any], speech: str, *,
+                               completion_id: str = "chatcmpl-ricardo-local") -> None:
+        """Return a proxy-generated reply in the same shape as Hermes."""
         if payload.get("stream") is True:
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -294,24 +615,36 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.end_headers()
             self._stream_started = self.close_connection = True
-            self._write_event(self._cancel_chunk(
-                payload, delta={"role": "assistant", "content": CANCEL_SILENCE}))
-            self._write_event(self._cancel_chunk(payload, delta={}, finish_reason="stop"))
+            self._write_event(self._local_chunk(
+                payload, {"role": "assistant", "content": speech}, completion_id=completion_id))
+            self._write_event(self._local_chunk(
+                payload, {}, finish_reason="stop", completion_id=completion_id))
             self._write_event("[DONE]")
             return
         body = {
-            "id": "chatcmpl-ricardo-cancel",
+            "id": completion_id,
             "object": "chat.completion",
             "created": int(time.time()),
             "model": payload.get("model") or "hermes-agent",
             "choices": [{
                 "index": 0,
-                "message": {"role": "assistant", "content": CANCEL_SILENCE},
+                "message": {"role": "assistant", "content": speech},
                 "finish_reason": "stop",
             }],
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         }
         self._send(200, json.dumps(body).encode(), "application/json")
+
+    def _local_chunk(self, payload: dict[str, Any], delta: dict[str, Any], *,
+                     finish_reason: str | None = None,
+                     completion_id: str = "chatcmpl-ricardo-local") -> dict[str, Any]:
+        return {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": payload.get("model") or "hermes-agent",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
 
     def do_POST(self) -> None:  # noqa: N802
         self._stream_started = False
@@ -319,9 +652,24 @@ class Handler(BaseHTTPRequestHandler):
             raw = self._read_body()
             payload = json.loads(raw or b"{}")
             if self.path.startswith("/v1/chat/completions"):
+                # The cancel guard runs before any profile read or routing call.
                 if cancel_short_circuit(payload) is not None:
                     self._send_cancel_completion(payload)
                     return
+                utterance = last_user_text(payload)
+                if utterance is not None and routing_enabled():
+                    decision = route_utterance(utterance)
+                    _route_counts[decision.outcome] += 1
+                    self.log_message(
+                        "voice route outcome=%s profile=%s chars=%d stream=%s",
+                        decision.outcome, decision.profile or "unknown",
+                        len(utterance), bool(payload.get("stream")),
+                    )
+                    if not decision.to_hermes and decision.speech:
+                        self._send_local_completion(payload, decision.speech)
+                        if decision.announce:
+                            start_result_announcer(decision.thread_id, decision.after_seq or 0)
+                        return
                 payload = prepare_chat_request(payload)
                 if payload.get("stream") is True:
                     self._stream_chat(payload)
