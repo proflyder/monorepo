@@ -71,6 +71,10 @@ function makeWorld() {
     { id: "proj_beta", name: "Beta", profile: "personal" },
     { id: "proj_gamma", name: "Gamma", profile: "work" },
   ];
+  const policies = new Map([
+    ["work", { providers: null, machines: null }],
+    ["personal", { providers: null, machines: null }],
+  ]);
   const hosts = [
     { id: "host_mac", name: "Mac", status: "connected" },
     { id: "host_off", name: "Offline", status: "disconnected" },
@@ -132,6 +136,7 @@ function makeWorld() {
   const calls = [];
   let threadCounter = 0;
   let requestCounter = 0;
+  let parseCalls = 0;
 
   function record(path, args) {
     calls.push({ path, args });
@@ -222,12 +227,30 @@ function makeWorld() {
       },
     },
     plugins: {
-      async callRpc({ pluginId, method }) {
-        record("plugins.callRpc", { pluginId, method });
-        if (pluginId === "profiles" && method === "listProjects") {
-          return { projects: structuredClone(profiles) };
+      // Strict fake: real callRpc calls outputSchema.parse before returning.
+      // A Standard Schema object (only ~standard.validate) fails here, so the
+      // tests reproduce the live `outputSchema.parse is not a function` bug.
+      async callRpc({ pluginId, method, input, outputSchema }) {
+        record("plugins.callRpc", { pluginId, method, input });
+        if (typeof outputSchema?.parse !== "function") {
+          throw new TypeError("outputSchema.parse is not a function");
         }
-        throw new Error(`unexpected rpc ${pluginId}/${method}`);
+        let result;
+        if (pluginId === "profiles" && method === "listProjects") {
+          result = { projects: structuredClone(profiles) };
+        } else if (pluginId === "profiles" && method === "profilePolicy") {
+          const policy = policies.get(input?.profile);
+          if (policy === undefined) {
+            const error = new Error(`No profile named "${input?.profile}"`);
+            error.code = "not_found";
+            throw error;
+          }
+          result = structuredClone(policy);
+        } else {
+          throw new Error(`unexpected rpc ${pluginId}/${method}`);
+        }
+        parseCalls += 1;
+        return outputSchema.parse(result);
       },
     },
     threads: {
@@ -336,8 +359,12 @@ function makeWorld() {
     threads,
     events,
     pending,
+    policies,
     pushEvent,
     setThreadStatus,
+    parseCount() {
+      return parseCalls;
+    },
     countCalls(path) {
       return calls.filter((call) => call.path === path).length;
     },
@@ -357,7 +384,6 @@ async function makePlugin({ settings = {}, world = makeWorld() } = {}) {
     workerLimit: 2,
     permissionMode: "auto",
     dispatcherThreadId: "thr_dispatcher",
-    profileProviders: "",
     ...settings,
   };
   const bb = {
@@ -597,9 +623,9 @@ test("validate_spawn accepts a known target", async () => {
 });
 
 test("validate_spawn refuses a foreign profile and a disallowed provider", async () => {
-  const { route } = await makePlugin({
-    settings: { profileProviders: JSON.stringify({ work: ["codex"] }) },
-  });
+  const world = makeWorld();
+  world.policies.set("work", { providers: ["codex"], machines: null });
+  const { route } = await makePlugin({ world });
   const foreign = await callRoute(route, {
     method: "validate_spawn",
     params: targetParams({ projectId: "proj_beta" }),
@@ -617,6 +643,83 @@ test("validate_spawn refuses a foreign profile and a disallowed provider", async
   });
   assert.equal(provider.body.ok, false);
   assert.equal(provider.body.code, "provider_not_allowed");
+});
+
+test("validate_spawn enforces the profile machine allowlist", async () => {
+  const world = makeWorld();
+  world.policies.set("work", {
+    providers: null,
+    machines: ["host_other"],
+  });
+  const { route } = await makePlugin({ world });
+
+  const refused = await callRoute(route, {
+    method: "validate_spawn",
+    params: targetParams(),
+  });
+  assert.equal(refused.body.ok, false);
+  assert.equal(refused.body.code, "machine_not_allowed");
+  assert.match(refused.body.speech, /не разрешена профилю/u);
+
+  world.policies.set("work", { providers: null, machines: ["host_mac"] });
+  const allowed = await callRoute(route, {
+    method: "validate_spawn",
+    params: targetParams(),
+  });
+  assert.equal(allowed.body.ok, true);
+  assert.equal(allowed.body.result.machine.hostId, "host_mac");
+
+  world.policies.set("work", { providers: null, machines: null });
+  const unrestricted = await callRoute(route, {
+    method: "validate_spawn",
+    params: targetParams({ projectId: "proj_gamma" }),
+  });
+  // The machine policy no longer blocks it; `proj_gamma` is offline instead.
+  assert.equal(unrestricted.body.code, "machine_offline");
+});
+
+test("a profile missing from the profiles plugin is refused", async () => {
+  const world = makeWorld();
+  world.policies.delete("work");
+  const { route } = await makePlugin({ world });
+
+  const response = await callRoute(route, {
+    method: "validate_spawn",
+    params: targetParams(),
+  });
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.code, "profile_not_found");
+  assert.match(response.body.speech, /Профиль «work» не найден/u);
+});
+
+test("targets reports the profile policy and uses it for providers", async () => {
+  const world = makeWorld();
+  world.policies.set("work", {
+    providers: ["codex"],
+    machines: ["host_mac"],
+  });
+  const { route, world: used } = await makePlugin({ world });
+
+  const response = await callRoute(route, { method: "targets", params: {} });
+  assert.equal(response.status, 200);
+  const alpha = response.body.result.projects.find(
+    (row) => row.projectId === "proj_alpha",
+  );
+  assert.deepEqual(alpha.policy, {
+    providers: ["codex"],
+    machines: ["host_mac"],
+  });
+  assert.deepEqual(
+    alpha.providers.map((row) => row.providerId),
+    ["codex"],
+  );
+  const beta = response.body.result.projects.find(
+    (row) => row.projectId === "proj_beta",
+  );
+  assert.deepEqual(beta.policy, { providers: null, machines: null });
+  assert.equal(response.body.result.profileProvidersConfigured, undefined);
+  // One strict outputSchema.parse per RPC (listProjects + one per profile).
+  assert.equal(used.parseCount(), 3);
 });
 
 test("validate_spawn refuses unknown model, unsupported reasoning and offline machine", async () => {
@@ -933,7 +1036,6 @@ test("send returns requestSeq null when the turn has not started yet", async () 
     hmacSecret: SECRET,
     workerLimit: 2,
     dispatcherThreadId: "thr_dispatcher",
-    profileProviders: null,
   };
   const dispatcher = createDispatcher({
     getSdk: () => world.sdk,
