@@ -512,7 +512,8 @@
   (`rclone:gdrive:home-offsite-v2`, scope `drive.file`, client-side encryption),
   ~45 MB/день. Внутри: OpenBao raft snapshot, SQLite scheduler/currency-bot,
   ledger ha-bridge, автоматический backup HA. Ключ `openbao-seal`, recovery
-  keys и restic password в архив не входят. Restore из Drive проверен
+  keys и restic password в архив не входят; restic password и ключ HA
+  backup сохранены владельцем в password manager (2026-11-02). Restore из Drive проверен
   2026-11-02. OAuth — собственный client «Desktop app» в Google Cloud
   project `home-offsite-backup` (app `home-offsite`, In production, без
   verification); репозиторий `rclone:gdrive:home-offsite-v2`.
