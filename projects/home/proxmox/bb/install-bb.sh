@@ -22,16 +22,22 @@ source "$SCRIPT_DIR/../versions.sh"
 DATA_DIR=${BB_DATA_DIR:-}
 USER_NAME=bb
 USER_HOME=/home/bb
+OFFSITE_PUBKEY=
+OFFSITE_FROM=
 
 usage() {
   cat <<'EOF'
 Usage: install-bb.sh [options]
 
 Options:
-  --data-dir PATH   bb data directory for the backup timer. Set it after
-                    enrollment when `bb machine show` reports the real path;
-                    when omitted, an existing /etc/bb-backup/env is preserved.
-  -h, --help        show this help
+  --data-dir PATH          bb data directory for the backup timer. Set it after
+                           enrollment when `bb machine show` reports the real
+                           path; when omitted, an existing /etc/bb-backup/env is
+                           preserved.
+  --offsite-pubkey FILE    public key allowed to fetch only
+                           /var/backups/bb/bb-server-export.tgz over ssh
+  --offsite-from ADDRESS   source address restriction for that key
+  -h, --help               show this help
 
 Node.js version and SHA-256 come from the adjacent versions.sh (push it along
 with this script). BB_DATA_DIR may also be exported instead of using --data-dir.
@@ -40,13 +46,57 @@ EOF
 
 die() { echo "error: $*" >&2; exit 1; }
 
+# Debian 13 standard containers ship openssh-server, but the offsite puller is
+# only reachable when sshd is actually running. Check it without touching the
+# sshd configuration.
+sshd_active() {
+  systemctl is-active --quiet ssh.service 2>/dev/null ||
+    systemctl is-active --quiet sshd.service 2>/dev/null
+}
+
+install_offsite_key() {
+  local key body line
+  key=$(tr -d '\r' <"$OFFSITE_PUBKEY")
+  key=${key%$'\n'}
+  [[ -n $key && $key != *$'\n'* ]] ||
+    die "offsite public key must contain exactly one non-empty line"
+  [[ $key == ssh-* || $key == ecdsa-* || $key == sk-* ]] ||
+    die "offsite public key does not look like an OpenSSH public key"
+  body=$(printf '%s\n' "$key" | awk '{print $2}')
+  [[ -n $body ]] || die "offsite public key has no key body"
+  [[ $OFFSITE_FROM != *'"'* && $OFFSITE_FROM != *$'\n'* ]] ||
+    die "--offsite-from must not contain quotes or newlines"
+
+  line='from="'"$OFFSITE_FROM"'",command="tar -C /var/backups/bb -cf - bb-server-export.tgz",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding,restrict '"$key"
+
+  install -d -o root -g root -m 700 /root/.ssh
+  touch /root/.ssh/authorized_keys
+  chmod 600 /root/.ssh/authorized_keys
+  # Idempotent by key body: re-running with a different `from` does not add a
+  # second copy of the same key.
+  if ! grep -qF -- "$body" /root/.ssh/authorized_keys; then
+    printf '%s\n' "$line" >>/root/.ssh/authorized_keys
+    echo "offsite key installed in /root/.ssh/authorized_keys"
+  else
+    echo "offsite key already present in /root/.ssh/authorized_keys"
+  fi
+}
+
 while (($#)); do
   case "$1" in
     --data-dir) DATA_DIR=$2; shift 2 ;;
+    --offsite-pubkey) OFFSITE_PUBKEY=$2; shift 2 ;;
+    --offsite-from) OFFSITE_FROM=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
 done
+
+if [[ -n $OFFSITE_PUBKEY || -n $OFFSITE_FROM ]]; then
+  [[ -n $OFFSITE_PUBKEY && -n $OFFSITE_FROM ]] ||
+    die "--offsite-pubkey and --offsite-from must be used together"
+  [[ -f $OFFSITE_PUBKEY ]] || die "offsite public key not found: $OFFSITE_PUBKEY"
+fi
 
 [[ $(id -u) == 0 ]] || die "run inside the container as root"
 : "${NODE_VERSION:?versions.sh did not define NODE_VERSION}"
@@ -175,13 +225,24 @@ EOF
 systemctl daemon-reload
 systemctl enable --now bb-db-backup.timer
 
+# ----- offsite pull endpoint ------------------------------------------------
+if ! sshd_active; then
+  echo "warning: sshd (ssh.service) is not running; the offsite key would not work until it is started" >&2
+  if [[ -n $OFFSITE_PUBKEY ]]; then
+    die "sshd is not running, so --offsite-pubkey cannot be used on this container"
+  fi
+fi
+if [[ -n $OFFSITE_PUBKEY ]]; then
+  install_offsite_key
+fi
+
 cat <<EOF
 
 bb prerequisites installed:
   Node.js  $(/usr/local/bin/node --version)
   npm      $(/usr/local/bin/npm --version)
   user     $USER_NAME (linger enabled)
-  backup   /var/backups/bb/bb.db, timer 03:30
+  backup   /var/backups/bb/bb.db + bb-server-export.tgz, timer 03:30
 
 Next: enrollment.
   1. In the bb UI open Settings -> Machines -> Add machine (manual provider).

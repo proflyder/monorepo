@@ -60,7 +60,8 @@ cat /srv/offsite-restore/MANIFEST.json
 и recovery keys в offsite-копии **нет** — они только в отдельной offline-копии.
 `sqlite/scheduler.db` и `sqlite/currency_bot-*.db` — остановить writer, вернуть
 в PVC и выполнить `PRAGMA integrity_check`; `ha-bridge/ledger.json` — в PVC
-ha-bridge; `home-assistant/backup_*.tar` — в HA onboarding. Подробно —
+ha-bridge; `home-assistant/backup_*.tar` — в HA onboarding;
+`bb/bb-server-export.tar` — в bb server (см. §4a). Подробно —
 `projects/home/backup/offsite/README.md`.
 
 ## 2. HAOS
@@ -122,11 +123,19 @@ Hermes auth старой копией.
    `systemctl --user` под `bb` должен видеть `bb-host-daemon-*`.
 4. SQLite: `/var/backups/bb/bb.db` — согласованная копия перед vzdump;
    live-база — по `BB_DATA_DIR` в `/etc/bb-backup/env`. Для обеих:
-   `sqlite3 <db> 'PRAGMA integrity_check;'` → `ok`.
-5. Проверить `bb machine list`, доступ к `<handle>.getbb.app`, threads и
+   `sqlite3 <db> 'PRAGMA integrity_check;'` → `ok`. Там же лежит
+   `bb-server-export.tgz` — полный `bb server export` (bb.db, auth secret,
+   plugins, attachments), который делает тот же таймер 03:30.
+5. Если vzdump и `/var/backups/bb` потеряны, восстановить bb из
+   offsite-копии (§1a): `restic restore` → `bb/bb-server-export.tar` →
+   `gzip -c bb-server-export.tar > bb-server-export.tgz` →
+   `bb server import bb-server-export.tgz --data-dir <dir>` →
+   `bb server allow-connect`. Останавливать старый сервер до импорта.
+   Одной `bb.db` для восстановления недостаточно.
+6. Проверить `bb machine list`, доступ к `<handle>.getbb.app`, threads и
    plugins. Если host key/identity не совпал, enrollment откажется перезаписать
    чужой data dir — не удалять каталог вслепую, сначала сверить `host-id`.
-6. Откат на VM: если LXC не даёт working user bus или сервис не переживает
+7. Откат на VM: если LXC не даёт working user bus или сервис не переживает
    reboot, поднять Debian 13 VM, повторить `install-bb.sh` и перенести сервер
    через `bb server move --to <vm> --check` с подтверждением владельца.
 
