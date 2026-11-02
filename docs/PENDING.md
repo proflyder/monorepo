@@ -109,11 +109,6 @@
       Следующий шаг: собрать read-only диагностику
       (`projects/station/scripts/NETWORK-DIAGNOSTIC.md`), прошивку без
       диагностики не менять.
-- [ ] **Power-loss тест host/VM.** После штатного `shutdown` PVE (2026-11-02,
-      дважды) автозапуск HAOS → K3s → VPN, все поды и HA проверены; жёсткого
-      отключения питания ещё не было. Следующий шаг: согласовать окно и
-      проверить автозапуск VM, HA, K3s, Sendspin и Pulsar после выдёргивания
-      питания.
 - [ ] **Latency instrumentation voice pipeline.** Полных измерений нет.
       Следующий шаг: добавить метрики по этапам wake→STT→intent→TTS.
 - [ ] **Secure Boot PK `DO NOT TRUST - AMI Test PK`.** Следующий шаг: решать

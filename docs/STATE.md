@@ -19,6 +19,9 @@
   не используются; VM сохраняют L2-адреса и IPv6 multicast.
 - `ricardo-uplink` держит ровно один physical uplink; полные перезагрузки PVE
   без Ethernet проходят.
+- Power-loss тест 2026-11-02 (выдернуто питание): PVE, HAOS, K3s (30/30 подов),
+  VPN, OpenBao auto-unseal, scheduler с обоими consumer, backup SSD и таймеры
+  поднялись сами за ~4 минуты; станция видна в HA.
 - VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, HAOS `2026.10.4`, `192.0.2.28`.
 - VM `101 lab-k3s`: 8 vCPU / 12 GiB / 200 GiB, Ubuntu 24.04.5, K3s,
   `192.0.2.27`; startup order 1/2.
