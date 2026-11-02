@@ -36,6 +36,17 @@ scheduler_rpc:
   content_type: "application/json"
   timeout: 10
 
+# Currency bot LAN NodePort. The endpoint is a non-secret base URL kept in
+# input_text.currency_bot_endpoint; the bearer value (including "Bearer ")
+# stays in secrets.yaml.
+currency_latest:
+  url: "{{ states('input_text.currency_bot_endpoint') | trim | regex_replace('/+$', '') }}/api/latest"
+  method: GET
+  headers:
+    Authorization: !secret currency_bot_bearer
+    Accept: "application/json"
+  timeout: 10
+
 spotify_token:
   url: "https://accounts.spotify.com/api/token"
   method: POST

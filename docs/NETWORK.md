@@ -99,6 +99,7 @@ HAOS и K3s используют статические адреса внутр�
 | `80/tcp` | Traefik, редирект на HTTPS | LAN/VPN, IP allow-list |
 | `443/tcp` | Traefik, TLS для `*.home.example.com` | LAN/VPN, IP allow-list |
 | `30300/tcp` | Grafana NodePort | LAN, login required |
+| `30100/tcp` | currency-bot API NodePort | LAN, Bearer, nft LAN/pod allow-list |
 | `10200/tcp` | Piper TTS | LAN/HA |
 | `10300/tcp` | Whisper fallback | LAN/HA |
 | `10305/tcp` | GigaAM STT | LAN/HA |
@@ -116,9 +117,14 @@ K3s management/metrics-порты закрыты firewall от обычных LA
 
 ### Currency bot
 
-`currency-bot` не публикует порт на узле: webhook Service `:8081` доступен
-только подам `cloudflared`, API и `/metrics` `:8080` — из кластера, узла,
-LAN CIDR через Traefik и Prometheus. Наружу API выходит только как
+`currency-bot` webhook Service `:8081` доступен только подам
+`cloudflared`; API и `/metrics` `:8080` — из кластера, узла, LAN CIDR через
+Traefik и Prometheus. Для голосового intent «курс валют» тот же API Service
+дополнительно публикуется как NodePort (пример `30100`, реальное значение —
+`CURRENCY_BOT_NODE_PORT` в `secrets/home/currency-bot.env`) только в LAN:
+host-nftables фильтр `table inet ricardo_currency_bot` разрешает источник
+`LAN_CIDR` и pod CIDR и дропает IPv6/остальные источники до kube-proxy
+DNAT. Запросы всё равно требуют Bearer. Наружу API выходит только как
 `https://currency.home.example.com/api/*` (LAN/VPN, Bearer); публичный
 webhook — `tg.example.com/telegram/webhook` через Cloudflare Tunnel.
 
@@ -235,6 +241,8 @@ Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
 - `6443/10250/9100/9116/8472` не публикуются в обычный LAN.
 - `8643` voice proxy доступен только HAOS, K3s и loopback.
 - `8123/8095/8099/6053/6638` не пробрасываются в интернет.
+- Currency API NodePort (пример `30100`) — только LAN, Bearer и nft
+  allow-list; в интернет не пробрасывается.
 - `80/443` на узле K3s обслуживает только Traefik с IP allow-list; роутер их
   не пробрасывает, имена `*.home.example.com` работают только из LAN/VPN.
 - VPN `443/tcp+udp` — единственный входящий порт из интернета; SSH в

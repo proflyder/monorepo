@@ -35,6 +35,9 @@ ALLOWED = {
     "CURRENCY_BOT_IMAGE",
     "CLOUDFLARED_IMAGE",
     "CURRENCY_WEBHOOK_URL",
+    # LAN NodePort for HA Assist (GET /api/latest). Rendered from private env,
+    # exactly like SCHEDULER_NODE_PORT.
+    "CURRENCY_BOT_NODE_PORT",
 }
 
 PLACEHOLDER = re.compile(r"\$\{([A-Z0-9_]+)\}")

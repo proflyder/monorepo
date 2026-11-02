@@ -698,6 +698,17 @@ kubectl -n currency-bot get deploy,pod,svc,pvc,externalsecret
 kubectl -n currency-bot get --raw \
   "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
 
+# LAN NodePort для голосового intent «курс доллара/рубля» (HA Assist).
+# CURRENCY_BOT_NODE_PORT — приватное значение из secrets/home/currency-bot.env;
+# наружу порт не пробрасывается, на узле его фильтрует nft.
+curl -fsS "http://192.0.2.27:<CURRENCY_BOT_NODE_PORT>/api/latest" \
+  -H "Authorization: Bearer <API_TOKEN>"
+
+# однократно на K3s-узле: тот же LAN/pod allowlist, что у scheduler NodePort
+ssh root@192.0.2.27 \
+  env PRIVATE_ENV=/path/to/currency-bot.env \
+  bash projects/home/kubernetes/currency-bot/nft/apply.sh
+
 # логи: JSON в stdout; Alloy шипит их в Loki
 kubectl -n currency-bot logs deploy/currency-bot --tail=100
 kubectl -n currency-bot logs deploy/cloudflared --tail=50
@@ -763,6 +774,18 @@ PSK `…4c02`, token `…4c03`, commit `…4c04`, status `…4c05`.
 Проверка pipeline и фраз — `projects/home-assistant/ha-voice/README.md`.
 Расписания и таймеры — canonical scheduler (см. `STATE.md`); старые
 `todo`/`timer` helpers и legacy single-slot не использовать.
+
+Курс валют (подготовлено, не live): «курс доллара», «курс рубля»,
+«курс валют». HA читает `GET /api/latest` с LAN NodePort currency-bot.
+В `secrets.yaml` нужны `currency_bot_endpoint` (base URL без `/api`) и
+`currency_bot_bearer` (`Bearer <API_TOKEN>` — тот же токен, что у API).
+Проверка без колонки:
+
+```bash
+python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
+```
+
+После применения ha-voice в HA: `conversation.process: "курс доллара"`.
 
 Hermes:
 

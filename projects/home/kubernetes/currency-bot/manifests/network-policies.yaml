@@ -2,16 +2,20 @@
 #
 #   Telegram -> Cloudflare -> cloudflared pod -> currency-bot-webhook:8081
 #   LAN/VPN -> Traefik (hostNetwork on the node) -> currency-bot:8080
+#   HAOS -> K3s node NodePort (${CURRENCY_BOT_NODE_PORT}) -> currency-bot:8080
 #   Prometheus (namespace monitoring) -> currency-bot:8080/metrics
 #   kubelet probes originate from the node address
 #
 # Traefik is hostNetwork, so its packets reach the ClusterIP Service with the
 # source rewritten to the node (or kept as the LAN client) depending on the
-# kube-proxy conntrack path. There is no per-pod identity to select, so the
-# 8080 rule allows the node address, the pod CIDR and the LAN CIDR. That also
-# covers kubelet probes and the API-server Service proxy used by CI smoke.
+# kube-proxy conntrack path. NodePort traffic from HAOS keeps the HAOS LAN
+# source address. There is no per-pod identity to select, so the 8080 rule
+# allows the node address, the pod CIDR and the LAN CIDR. That also covers
+# kubelet probes, the HAOS NodePort path and the API-server Service proxy used
+# by CI smoke. The NodePort itself is further restricted on the host by the
+# nftables filter in nft/ (only LAN CIDR + pod CIDR).
 # The cost is that any host-network process on the node may reach 8080; the
-# Service is still ClusterIP, so nothing outside the node/VPN can.
+# Service is still gated by its bearer token.
 #
 # TEMPLATE: LAN_CIDR and NODE_LAN_IP come from the private deploy env.
 ---

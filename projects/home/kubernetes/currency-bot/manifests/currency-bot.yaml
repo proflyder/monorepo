@@ -142,7 +142,12 @@ metadata:
     app.kubernetes.io/name: currency-bot
     app.kubernetes.io/part-of: ricardo-home
 spec:
-  type: ClusterIP
+  # NodePort is the LAN path for HA Assist (`GET /api/latest`). The port is a
+  # private deploy value; the K3s node nftables filter
+  # (projects/home/kubernetes/currency-bot/nft) admits only the home LAN and
+  # pod CIDR, like the scheduler NodePort. The same Service still backs the
+  # Traefik IngressRoute and in-cluster clients as a normal ClusterIP.
+  type: NodePort
   selector:
     app.kubernetes.io/name: currency-bot
   ports:
@@ -150,6 +155,7 @@ spec:
       port: 8080
       targetPort: http
       protocol: TCP
+      nodePort: ${CURRENCY_BOT_NODE_PORT}
 ---
 # Separate Service for the Telegram webhook: the Cloudflare Tunnel ingress
 # targets http://currency-bot-webhook.currency-bot.svc.cluster.local:8081 and

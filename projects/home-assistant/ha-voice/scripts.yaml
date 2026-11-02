@@ -1254,6 +1254,81 @@ music_play_candidate:
     - stop: "music_play_candidate"
       response_variable: result
 
+# --- Currency: kurs.kz rates for voice (currency-bot LAN NodePort) ---
+currency_rates:
+  alias: "Currency: latest KZT rates text"
+  description: >-
+    Reads GET /api/latest from the LAN currency-bot NodePort and returns a
+    Russian TTS sentence. Model mapping is deliberately inverted from the
+    API field names: kurs.kz `sell` is the rate when YOU BUY currency and
+    `buy` is the rate when YOU SELL currency, so speech says
+    «купить — sell», «продать — buy». Never speaks URLs, tokens or raw errors.
+  mode: parallel
+  max: 5
+  fields:
+    currency:
+      default: "both"
+      description: "usd, rub, or both"
+  sequence:
+    - variables:
+        currency_endpoint_value: "{{ states('input_text.currency_bot_endpoint') | trim | regex_replace('/+$', '') }}"
+    - if:
+        - condition: template
+          value_template: "{{ currency_endpoint_value in ['', 'unknown', 'unavailable', 'None'] or not (currency_endpoint_value.startswith('http://') or currency_endpoint_value.startswith('https://')) }}"
+      then:
+        - variables:
+            currency_result: "{{ {'status': 'error', 'text': 'Не удалось получить курс.'} }}"
+        - stop: "currency endpoint missing"
+          response_variable: currency_result
+    - service: rest_command.currency_latest
+      response_variable: currency_http
+      continue_on_error: true
+    - variables:
+        currency_kind: "{{ currency | default('both') | string | lower }}"
+        currency_need_usd: "{{ 'true' if currency_kind in ['usd', 'both'] else 'false' }}"
+        currency_need_rub: "{{ 'true' if currency_kind in ['rub', 'both'] else 'false' }}"
+        currency_http_status: "{{ currency_http.status | int(0) if currency_http is mapping and currency_http.status is defined else 0 }}"
+        currency_raw: >-
+          {{ currency_http.content if (currency_http is mapping and currency_http.content is defined) else '' }}
+        currency_data: >-
+          {%- set raw = currency_raw -%}
+          {%- set parsed = raw if raw is mapping else ((raw | trim | from_json(default={})) if (raw is string and (raw | trim) != '') else {}) -%}
+          {{ parsed if parsed is mapping else {} }}
+        currency_status: >-
+          {%- set rates = currency_data.get('rates', {}) if currency_data is mapping and currency_data.get('rates') is mapping else {} -%}
+          {%- set usd = rates.get('usdToKzt', {}) if rates.get('usdToKzt') is mapping else {} -%}
+          {%- set rub = rates.get('rubToKzt', {}) if rates.get('rubToKzt') is mapping else {} -%}
+          {%- set ok = currency_http_status >= 200 and currency_http_status < 300
+              and (currency_need_usd != 'true' or (usd and 'buy' in usd and 'sell' in usd))
+              and (currency_need_rub != 'true' or (rub and 'buy' in rub and 'sell' in rub)) -%}
+          {{ 'ok' if ok else 'error' }}
+        currency_text: >-
+          {%- if currency_status != 'ok' -%}
+          Не удалось получить курс.
+          {%- else -%}
+          {%- set rates = currency_data.get('rates', {}) -%}
+          {%- set usd = rates.get('usdToKzt', {}) -%}
+          {%- set rub = rates.get('rubToKzt', {}) -%}
+          {%- set usd_sell = ('%.1f' | format(usd.get('sell') | float(0))).rstrip('0').rstrip('.') | replace('.', ',') -%}
+          {%- set usd_buy = ('%.1f' | format(usd.get('buy') | float(0))).rstrip('0').rstrip('.') | replace('.', ',') -%}
+          {%- set rub_sell = ('%.2f' | format(rub.get('sell') | float(0))).rstrip('0').rstrip('.') | replace('.', ',') -%}
+          {%- set rub_buy = ('%.2f' | format(rub.get('buy') | float(0))).rstrip('0').rstrip('.') | replace('.', ',') -%}
+          {%- set parts = [] -%}
+          {%- if currency_need_usd == 'true' -%}
+            {%- set parts = parts + ['Доллар: купить — ' ~ usd_sell ~ ', продать — ' ~ usd_buy ~ ' тенге.'] -%}
+          {%- endif -%}
+          {%- if currency_need_rub == 'true' -%}
+            {%- set parts = parts + ['Рубль: купить — ' ~ rub_sell ~ ', продать — ' ~ rub_buy ~ ' тенге.'] -%}
+          {%- endif -%}
+          {%- set ts_raw = currency_data.get('timestamp') -%}
+          {%- set ts_unix = (ts_raw | as_timestamp(0)) if ts_raw else 0 -%}
+          {%- set stale = ts_unix > 0 and (now().timestamp() - ts_unix) > 10800 -%}
+          {{ parts | join(' ') }}{% if stale %} Данные от {{ ts_unix | timestamp_custom('%H:%M', true) }}.{% endif %}
+          {%- endif -%}
+        currency_result: "{{ {'status': currency_status, 'text': currency_text | trim | replace('\\n', ' ') | replace('  ', ' ')} }}"
+    - stop: "currency rates"
+      response_variable: currency_result
+
 # --- Schedules: canonical ricardo.v1.SchedulerService client (2026-10-29) ---
 # Authoritative alarm/reminder/timer state lives in the durable scheduler.
 # Home Assistant only speaks, executes audio through ha-bridge, and calls the

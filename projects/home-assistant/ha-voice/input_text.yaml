@@ -39,3 +39,10 @@ station_base_url:
   name: "Station HTTP control base URL"
   max: 255
   initial: !secret station_base_url
+
+# Currency bot LAN NodePort base URL (no trailing slash, no /api path).
+# Non-secret but deployment-specific, so it is kept in secrets.yaml.
+currency_bot_endpoint:
+  name: "Currency bot API endpoint"
+  max: 255
+  initial: !secret currency_bot_endpoint

@@ -31,6 +31,14 @@
 - «включи песню/трек/альбом/плейлист/группу …» — поиск и top-1;
 - «второй» / «третий» — выбрать сохранённый кандидат;
 - «что играет» — текущий трек/состояние;
+- «курс доллара», «курс рубля», «какой курс доллара», «сколько стоит
+  доллар/рубль», «курс валют» (оба), «доллар/рубль к тенге» — локальный
+  `StationCurrencyRate` → `script.currency_rates` → `GET /api/latest`
+  currency-bot по LAN NodePort. Ответ в тенге: «купить» озвучивает поле
+  `sell` (курс, по которому валюту покупаете вы), «продать» — поле `buy`
+  (курс, по которому вы продаёте). USD — 1 знак, RUB — 2, десятичная запятая;
+  если снимок старше 3 ч, добавляется «Данные от HH:MM» (Asia/Almaty).
+  Ошибка API — только «Не удалось получить курс.», без деталей;
 - «поставь таймер на 5 минут», «поставь таймер пицца на 10 минут»,
   «какие таймеры», «поставь на паузу», «продолжи», «отмени» — durable
   таймеры `SchedulerService`; выполнение — ha-bridge;
@@ -143,8 +151,9 @@ so voice snooze/stop target the correct schedule id without guessing.
 
 ## Файлы
 
-- `rest_commands.yaml` — station HTTP и `scheduler_rpc` Connect JSON
-- `intent_scripts.yaml` — station, music, schedule intents
+- `rest_commands.yaml` — station HTTP, `scheduler_rpc` Connect JSON,
+  `currency_latest` (Bearer)
+- `intent_scripts.yaml` — station, music, schedule, currency intents
 - `scripts.yaml` — Music, audio executor (`alarm_start` /
   `alarm_announce` / `alarm_loop` / `alarm_ramp` / `alarm_stop` /
   `alarm_restore` / `alarm_resume`), canonical `scheduler_*` /
@@ -160,6 +169,7 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `custom_sentences/ru/station_control.yaml`
 - `custom_sentences/ru/station_alarm.yaml`
 - `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
+- `custom_sentences/ru/station_currency.yaml` — курсы валют
 - `input_select.yaml` — `music_route`
 - `input_datetime.yaml` — empty mapping (kept so an existing include stays valid)
 - `input_boolean.yaml` — `alarm_ringing`, `alarm_music_was_playing`
@@ -256,6 +266,8 @@ conversation.process: "отмени таймер"
 conversation.process: "поставь будильник на 7:30 по будням"
 conversation.process: "какой будильник"
 conversation.process: "отмени будильник"
+conversation.process: "курс доллара"
+conversation.process: "курс валют"
 conversation.process: "стоп"
 ```
 
@@ -340,6 +352,20 @@ scheduler_bearer: "Bearer <scheduler-token>"
 `rest_commands.yaml` → `scheduler_rpc` подставляет endpoint из input_text и
 берёт токен только из `!secret scheduler_bearer`. URL/токен не попадают в
 речь, шаблоны ответов и документацию.
+
+Курс валют использует ту же схему: `input_text.currency_bot_endpoint` —
+LAN base URL currency-bot NodePort без `/api`, токен — только из `!secret`.
+В `secrets.yaml` (не коммитить):
+
+```yaml
+currency_bot_endpoint: "http://<k3s-node>:<CURRENCY_BOT_NODE_PORT>"
+currency_bot_bearer: "Bearer <currency-bot API_TOKEN>"
+```
+
+`script.currency_rates` парсит JSON `GET /api/latest`, форматирует речь и не
+показывает технические ошибки. Порядок полей и число знаков закреплены
+тестами `test_ha_config.py`; NodePort и nft-фильтр — в
+`projects/home/kubernetes/currency-bot/`.
 
 `alarm_start` принимает от bridge `source_id`, `event_id`, `label`, `kind`;
 `alarm_stop` очищает эти поля. Если bridge ещё не передал id, snooze/stop

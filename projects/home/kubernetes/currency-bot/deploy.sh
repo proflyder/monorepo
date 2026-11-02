@@ -7,7 +7,8 @@
 #
 # Environment:
 #   PRIVATE_ENV       private values file (default secrets/home/currency-bot.env)
-#                     keys: WEBHOOK_URL, LAN_CIDR, NODE_LAN_IP
+#                     keys: WEBHOOK_URL, LAN_CIDR, NODE_LAN_IP,
+#                     CURRENCY_BOT_NODE_PORT
 #   PUSH_IMAGES=1     push the image to GHCR (CI path)
 #   NODE_SSH          import the image into the node's containerd (manual path)
 #   IMAGE_TAG         tag used for the push/import (default HEAD sha)
@@ -70,12 +71,17 @@ PY
 WEBHOOK_URL=$(env_value WEBHOOK_URL)
 LAN_CIDR=$(env_value LAN_CIDR)
 NODE_LAN_IP=$(env_value NODE_LAN_IP)
+CURRENCY_BOT_NODE_PORT=$(env_value CURRENCY_BOT_NODE_PORT)
 [[ "$WEBHOOK_URL" == https://*/telegram/webhook ]] || {
   echo "WEBHOOK_URL must be https://<public host>/telegram/webhook" >&2
   exit 1
 }
 [[ -n "$LAN_CIDR" && -n "$NODE_LAN_IP" ]] || {
   echo "LAN_CIDR and NODE_LAN_IP are required in $PRIVATE_ENV" >&2
+  exit 1
+}
+[[ "$CURRENCY_BOT_NODE_PORT" =~ ^[0-9]+$ ]] && (( 10#$CURRENCY_BOT_NODE_PORT >= 30000 && 10#$CURRENCY_BOT_NODE_PORT <= 32767 )) || {
+  echo "CURRENCY_BOT_NODE_PORT must be a NodePort in 30000..32767 in $PRIVATE_ENV" >&2
   exit 1
 }
 
@@ -149,6 +155,7 @@ python3 "$ROOT/projects/home/kubernetes/scheduler/render.py" \
   --set "CURRENCY_BOT_IMAGE=$IMAGE_REF" \
   --set "CLOUDFLARED_IMAGE=$CLOUDFLARED_IMAGE" \
   --set "CURRENCY_WEBHOOK_URL=$WEBHOOK_URL" \
+  --set "CURRENCY_BOT_NODE_PORT=$CURRENCY_BOT_NODE_PORT" \
   "$DIR/manifests/currency-bot.yaml" \
   "$DIR/manifests/cloudflared.yaml" \
   "$DIR/manifests/network-policies.yaml" \
