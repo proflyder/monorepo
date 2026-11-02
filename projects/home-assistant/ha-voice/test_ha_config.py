@@ -8,11 +8,14 @@ alarm/music state machine.
 """
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -771,6 +774,183 @@ class InputContractTests(unittest.TestCase):
         self.assertEqual(selects["music_route"]["options"], ["Music Assistant", "Spotify Connect"])
         self.assertNotIn("alarm_repeat", selects)
         self.assertEqual(dates, {})
+
+
+class CurrencyRateTests(unittest.TestCase):
+    """Pin the currency-bot API field mapping and the Russian TTS text.
+
+    currency-bot stores kurs.kz `sell` as the rate when YOU BUY currency and
+    `buy` as the rate when YOU SELL. The API keeps those names, so the voice
+    text must say «купить — sell», «продать — buy». The JSON shapes here match
+    `GET /api/latest` from solutions/currency-bot/internal/server/history.go.
+    """
+
+    NOW = datetime(2026, 10, 31, 17, 0, 0, tzinfo=ZoneInfo("Asia/Almaty"))  # 12:00Z
+
+    SAMPLE = {
+        "timestamp": "2026-10-31T12:00:00Z",
+        "rates": {
+            "usdToKzt": {"buy": 509.8, "sell": 512.4},
+            "rubToKzt": {"buy": 6.21, "sell": 6.35},
+        },
+    }
+
+    @staticmethod
+    def _as_timestamp(value, default=0):
+        try:
+            if isinstance(value, (int, float)):
+                return float(value)
+            text = str(value).strip()
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            return datetime.fromisoformat(text).timestamp()
+        except (TypeError, ValueError):
+            return default
+
+    def _timestamp_custom(self, value, fmt="%Y-%m-%d", local=True, default=""):
+        try:
+            tz = self.NOW.tzinfo if local else timezone.utc
+            return datetime.fromtimestamp(int(float(value)), tz=tz).strftime(fmt)
+        except (TypeError, ValueError, OSError):
+            return default
+
+    @staticmethod
+    def _from_json(value, default=None):
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return default
+
+    def _environment(self):
+        from jinja2.nativetypes import NativeEnvironment
+
+        env = NativeEnvironment()
+        env.filters.update(
+            as_timestamp=self._as_timestamp,
+            timestamp_custom=self._timestamp_custom,
+            from_json=self._from_json,
+            regex_replace=lambda value, find, repl="", ignorecase=False: re.sub(
+                find, repl, str(value), flags=re.I if ignorecase else 0
+            ),
+        )
+        env.globals.update(now=lambda: self.NOW)
+        return env
+
+    def render_currency(self, content, status=200, currency="both"):
+        script = SCRIPTS["currency_rates"]
+        variables = next(
+            step["variables"]
+            for step in script["sequence"]
+            if isinstance(step.get("variables"), dict) and "currency_result" in step["variables"]
+        )
+        env = self._environment()
+        context = {
+            "currency": currency,
+            "currency_http": {"status": status, "content": content},
+        }
+        for name, value in variables.items():
+            rendered = env.from_string(value).render(**context) if isinstance(value, str) else value
+            context[name] = rendered
+        return context["currency_result"]
+
+    def test_usd_speech_uses_sell_for_buy_and_buy_for_sell(self):
+        result = self.render_currency(self.SAMPLE, currency="usd")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["text"], "Доллар: купить — 512,4, продать — 509,8 тенге.")
+
+    def test_rub_speech_uses_two_decimals_and_the_same_mapping(self):
+        result = self.render_currency(self.SAMPLE, currency="rub")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["text"], "Рубль: купить — 6,35, продать — 6,21 тенге.")
+
+    def test_both_currencies_in_one_phrase(self):
+        result = self.render_currency(self.SAMPLE, currency="both")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(
+            result["text"],
+            "Доллар: купить — 512,4, продать — 509,8 тенге. "
+            "Рубль: купить — 6,35, продать — 6,21 тенге.",
+        )
+
+    def test_number_formatting_has_no_trailing_zero_noise(self):
+        content = {
+            "timestamp": "2026-10-31T12:00:00Z",
+            "rates": {
+                "usdToKzt": {"buy": 509.0, "sell": 512.0},
+                "rubToKzt": {"buy": 6.20, "sell": 6.35},
+            },
+        }
+        result = self.render_currency(content, currency="both")
+        self.assertIn("Доллар: купить — 512, продать — 509 тенге.", result["text"])
+        self.assertIn("Рубль: купить — 6,35, продать — 6,2 тенге.", result["text"])
+
+    def test_json_string_content_is_parsed(self):
+        result = self.render_currency(json.dumps(self.SAMPLE), currency="usd")
+        self.assertEqual(result["text"], "Доллар: купить — 512,4, продать — 509,8 тенге.")
+
+    def test_fresh_data_has_no_staleness_note(self):
+        result = self.render_currency(self.SAMPLE, currency="usd")
+        self.assertNotIn("Данные от", result["text"])
+
+    def test_old_data_appends_almaty_time(self):
+        content = dict(self.SAMPLE, timestamp="2026-10-31T08:00:00Z")  # 13:00 Almaty
+        result = self.render_currency(content, currency="usd")
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["text"].endswith(" Данные от 13:00."), result["text"])
+
+    def test_api_error_is_short_and_has_no_technical_details(self):
+        result = self.render_currency({}, status=503, currency="both")
+        self.assertEqual(result, {"status": "error", "text": "Не удалось получить курс."})
+
+    def test_missing_requested_currency_is_an_error(self):
+        content = {
+            "timestamp": "2026-10-31T12:00:00Z",
+            "rates": {"usdToKzt": {"buy": 509.8, "sell": 512.4}},
+        }
+        result = self.render_currency(content, currency="rub")
+        self.assertEqual(result, {"status": "error", "text": "Не удалось получить курс."})
+
+    def test_incomplete_rate_fields_are_an_error(self):
+        content = {
+            "timestamp": "2026-10-31T12:00:00Z",
+            "rates": {"usdToKzt": {"buy": 509.8}},
+        }
+        result = self.render_currency(content, currency="usd")
+        self.assertEqual(result, {"status": "error", "text": "Не удалось получить курс."})
+
+    def test_intent_is_local_and_sentences_cover_all_phrases(self):
+        self.assertIn("StationCurrencyRate", INTENTS)
+        dump = yaml.safe_dump(INTENTS["StationCurrencyRate"], allow_unicode=True)
+        self.assertIn("script.currency_rates", dump)
+        self.assertNotIn("conversation.hermes", dump)
+
+        sentences = yaml.safe_load(
+            (HA / "custom_sentences" / "ru" / "station_currency.yaml").read_text()
+        )
+        phrases = {
+            phrase
+            for item in sentences["intents"]["StationCurrencyRate"]["data"]
+            for phrase in item["sentences"]
+        }
+        for template in (
+            "курс {currency_target:currency}",
+            "какой курс {currency_target:currency}",
+            "курс {currency_target:currency} к тенге",
+            "сколько стоит {currency_target:currency}",
+        ):
+            self.assertIn(template, phrases)
+        targets = {value["in"]: value["out"] for value in sentences["lists"]["currency_target"]["values"]}
+        self.assertEqual(targets["доллара"], "usd")
+        self.assertEqual(targets["рубля"], "rub")
+        self.assertEqual(targets["валют"], "both")
+        self.assertEqual(targets["доллара и рубля"], "both")
+
+        rest = REST["currency_latest"]
+        self.assertIn("/api/latest", rest["url"])
+        self.assertEqual(rest["method"], "GET")
+        self.assertEqual(rest["headers"]["Authorization"], "__SECRET__")
+        inputs = load_yaml(HA / "input_text.yaml")
+        self.assertEqual(inputs["currency_bot_endpoint"]["initial"], "__SECRET__")
 
 
 if __name__ == "__main__":

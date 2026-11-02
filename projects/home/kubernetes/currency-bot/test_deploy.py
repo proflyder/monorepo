@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "deploy.sh"
 
@@ -20,6 +22,7 @@ GOOD_ENV = """# private values
 WEBHOOK_URL=https://bot.example.com/telegram/webhook
 LAN_CIDR=192.0.2.0/24
 NODE_LAN_IP="192.0.2.27"
+CURRENCY_BOT_NODE_PORT=30100
 """
 
 
@@ -53,6 +56,7 @@ class DeployEnvTests(unittest.TestCase):
                              text=True, capture_output=True, timeout=60)
         res.kubectl_log = str(tmp / "kubectl.log")
         res.bazel_log = tmp / "bazel.log"
+        res.render_dir = tmp / "rendered"
         res.kubectl_called = (tmp / "kubectl.log").exists()
         return res
 
@@ -73,6 +77,67 @@ class DeployEnvTests(unittest.TestCase):
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("are required", res.stderr)
         self.assertFalse(res.kubectl_called)
+
+    def test_missing_or_invalid_node_port_is_rejected(self):
+        for value in ("", "8080", "40000", "abc"):
+            with self.subTest(value=value):
+                env_text = GOOD_ENV.replace(
+                    "CURRENCY_BOT_NODE_PORT=30100",
+                    f"CURRENCY_BOT_NODE_PORT={value}",
+                )
+                res = self.run_deploy(env_text)
+                self.assertNotEqual(res.returncode, 0)
+                self.assertIn("CURRENCY_BOT_NODE_PORT", res.stderr)
+                self.assertFalse(res.kubectl_called)
+
+    def test_render_exposes_api_nodeport_and_nft_template_matches(self):
+        res = self.run_deploy(GOOD_ENV)
+        self.assertTrue(res.kubectl_called, res.stderr)
+
+        services = [
+            obj
+            for obj in yaml.safe_load_all((res.render_dir / "currency-bot.yaml").read_text())
+            if obj and obj.get("kind") == "Service" and obj["metadata"]["name"] == "currency-bot"
+        ]
+        self.assertEqual(len(services), 1)
+        service = services[0]
+        self.assertEqual(service["spec"]["type"], "NodePort")
+        ports = {p["name"]: p for p in service["spec"]["ports"]}
+        self.assertEqual(ports["http"]["port"], 8080)
+        self.assertEqual(ports["http"]["nodePort"], 30100)
+        self.assertNotIn("CURRENCY_BOT_NODE_PORT", (res.render_dir / "currency-bot.yaml").read_text())
+
+        policies = {
+            obj["metadata"]["name"]: obj
+            for obj in yaml.safe_load_all((res.render_dir / "network-policies.yaml").read_text())
+            if obj and obj.get("kind") == "NetworkPolicy"
+        }
+        ingress = policies["currency-bot-ingress"]["spec"]["ingress"]
+        api_sources = set()
+        for rule in ingress:
+            if any(p.get("port") == 8080 for p in rule.get("ports", [])):
+                api_sources.update(block["ipBlock"]["cidr"] for block in rule.get("from", []) if "ipBlock" in block)
+        self.assertIn("192.0.2.27/32", api_sources)
+        self.assertIn("192.0.2.0/24", api_sources)
+
+    def test_nft_template_renders_private_allowlist(self):
+        tmp = Path(tempfile.mkdtemp(prefix="currency-nft-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
+        env_file = tmp / "currency-bot.env"
+        env_file.write_text(GOOD_ENV)
+        render = HERE.parent / "scheduler" / "render.py"
+        res = subprocess.run(
+            ["python3", str(render), "--env", str(env_file), "--out", str(tmp / "out"),
+             str(HERE / "nft" / "currency-bot-nodeport.nft")],
+            text=True, capture_output=True, timeout=30,
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        rendered = (tmp / "out" / "currency-bot-nodeport.nft").read_text()
+        self.assertIn("table inet ricardo_currency_bot", rendered)
+        self.assertIn("tcp dport { 30100 }", rendered)
+        self.assertIn("192.0.2.0/24", rendered)
+        self.assertIn("192.0.2.27", rendered)
+        self.assertNotIn("${", rendered)
 
     def test_forbidden_namespace_read_is_not_an_apply(self):
         # CI's ServiceAccount cannot read cluster-scoped namespaces; that must

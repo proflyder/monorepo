@@ -42,6 +42,8 @@ manifests/cloudflared.yaml      Cloudflare Tunnel Deployment (template)
 manifests/external-secrets.yaml ExternalSecrets for currency-bot/cloudflared-tunnel
 manifests/network-policies.yaml ingress/egress policies (template, LAN_CIDR)
 manifests/servicemonitor.yaml   Prometheus scrape of /metrics
+nft/currency-bot-nodeport.nft   API NodePort source filter (host config, template)
+nft/apply.sh                    install/refresh that filter as root on the node
 ci/rbac.yaml                    Role/RoleBinding for home-assistant/ci-deploy
 deploy.sh                       build/push/import image, render, apply, roll out
 currency-bot.env.example        placeholders for secrets/home/currency-bot.env
@@ -77,6 +79,11 @@ K3s enforces NetworkPolicies (kube-router). The shapes are:
   (Prometheus), from the node address and LAN CIDR (Traefik is `hostNetwork`,
   so its packets are seen as node/LAN traffic), and from the pod CIDR
   (API-server proxy used by CI smoke, in-cluster clients, kubelet probes).
+  The same Service is a `NodePort` for HA Assist: HAOS keeps its LAN source
+  address, which the LAN CIDR rule admits. The host nftables filter
+  (`nft/currency-bot-nodeport.nft`, installed by `nft/apply.sh`) narrows the
+  NodePort itself to `LAN_CIDR` + pod CIDR and drops IPv6 before kube-proxy
+  DNAT, exactly like the scheduler NodePort filter.
 - **Egress:** 443/TCP to any destination plus DNS 53/UDP+TCP. Telegram and
   kurs.kz do not publish fixed ranges, so pinning ipBlocks would break silently.
 - **cloudflared:** egress 7844/UDP (QUIC) and 443/TCP (fallback) plus DNS;
@@ -131,11 +138,26 @@ Trade-offs:
    WEBHOOK_URL=https://tg.example.com/telegram/webhook
    LAN_CIDR=<LAN CIDR>
    NODE_LAN_IP=<K3s node address>
+   CURRENCY_BOT_NODE_PORT=<unused NodePort, e.g. 30100>
    ```
 
    `WEBHOOK_URL` is not secret but it is deployment-specific, so it is never
-   committed. CI reads it from the `currency_bot_env` key of
-   `secret/ci/deploy-home` (same file text); that key is already provisioned.
+   committed. `CURRENCY_BOT_NODE_PORT` is the LAN NodePort for
+   `GET /api/latest` used by HA Assist; it must be free on the node (scheduler
+   uses `30098/30099`) and is also rendered into the host nftables filter.
+   CI reads it from the `currency_bot_env` key of `secret/ci/deploy-home`
+   (same file text); that key is already provisioned.
+
+4b. **Host nftables filter** (root on the K3s node, once and after a CIDR or
+   port change, not part of CI):
+
+   ```bash
+   ssh <node> sudo env PRIVATE_ENV=/path/to/currency-bot.env \
+     bash projects/home/kubernetes/currency-bot/nft/apply.sh
+   ```
+
+   It installs `table inet ricardo_currency_bot` and leaves the Kubernetes and
+   scheduler tables untouched.
 
 5. **Cloudflare side:** create/confirm the tunnel `home-k3s`, its credentials
    token and a public hostname route `tg.example.com → http://currency-bot-webhook.currency-bot.svc.cluster.local:8081`
@@ -182,6 +204,10 @@ Checks:
 kubectl -n currency-bot get deploy,pod,svc,externalsecret
 kubectl -n currency-bot get endpointslices
 kubectl -n currency-bot logs deploy/cloudflared --tail=50
+
+# LAN NodePort used by HA Assist (Bearer; token never printed)
+curl -fsS "http://<K3s node>:<CURRENCY_BOT_NODE_PORT>/api/latest" \
+  -H "Authorization: Bearer $API_TOKEN"
 kubectl -n currency-bot get --raw \
   "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
 ```

@@ -411,8 +411,16 @@
   `POST /api/trigger` по-прежнему всегда отправляют.
 - CI: юниты `currency-bot` (go + образ + deploy) и `currency-bot-deploy`
   (contract-тест `deploy.sh`); deploy-env — `secret/ci/deploy-home`,
-  ключ `currency_bot_env` (`WEBHOOK_URL`, `LAN_CIDR`, `NODE_LAN_IP`).
+  ключ `currency_bot_env` (в нём должен появиться `CURRENCY_BOT_NODE_PORT`
+  рядом с `WEBHOOK_URL`, `LAN_CIDR`, `NODE_LAN_IP`).
   Деплой `currency-bot` зелёный.
+- Голосовой intent «курс рубля/доллара/валют» (`StationCurrencyRate`,
+  `projects/home-assistant/ha-voice`) live с 2026-11-02: HA читает
+  `GET /api/latest` currency-bot через NodePort `CURRENCY_BOT_NODE_PORT`
+  (host-nftables `ricardo_currency_bot`, LAN/pod CIDR, persistent unit
+  `ricardo-currency-bot-firewall.service`) bearer-токеном из `secrets.yaml`.
+  Ответ: «купить» = поле `sell`, «продать» = `buy`. Проверено через
+  `conversation/process`; живой голос — за владельцем.
 - Наблюдаемость: Alloy шипит логи namespace `currency-bot` (редакция
   Telegram bot tokens, Bearer и key=value/JSON секретов); дашборд Grafana
   `currency-bot` (uid `currency-bot`). VPS-дашборд node не переносился.

@@ -283,6 +283,32 @@ func TestLatestAndDelete(t *testing.T) {
 	}
 }
 
+func TestLatestPinsSpeechFieldMapping(t *testing.T) {
+	// kurs.kz/sell is the rate when YOU BUY currency; kurs.kz/buy is the rate
+	// when YOU SELL. The HTTP DTO keeps those model names unchanged, and the HA
+	// voice script maps «купить» to sell and «продать» to buy. Pinning the JSON
+	// here stops a future rename from silently swapping the spoken rates.
+	record := model.Record{Timestamp: testNow, Rates: model.Rates{
+		USDToKZT: model.ExchangeRate{Buy: 509.8, Sell: 512.4},
+		RUBToKZT: model.ExchangeRate{Buy: 6.21, Sell: 6.35},
+	}}
+	h := newHarness(record)
+	rec := h.api(http.MethodGet, "/api/latest", nil, "test-api-key")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("latest = %d", rec.Code)
+	}
+	var latest latestResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &latest); err != nil {
+		t.Fatal(err)
+	}
+	if latest.Rates.USDToKZT.Sell != 512.4 || latest.Rates.USDToKZT.Buy != 509.8 {
+		t.Fatalf("usd mapping changed: %+v", latest.Rates.USDToKZT)
+	}
+	if latest.Rates.RUBToKZT.Sell != 6.35 || latest.Rates.RUBToKZT.Buy != 6.21 {
+		t.Fatalf("rub mapping changed: %+v", latest.Rates.RUBToKZT)
+	}
+}
+
 func TestTriggerForcesSendAndUsesBodyChat(t *testing.T) {
 	h := newHarness()
 	rec := h.api(http.MethodPost, "/api/trigger", []byte(`{"chatId":"-100999"}`), "test-api-key")

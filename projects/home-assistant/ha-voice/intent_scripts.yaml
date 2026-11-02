@@ -344,6 +344,19 @@ StationMusicStatus:
     - stop: "station_music_status"
       response_variable: music_result
 
+StationCurrencyRate:
+  speech:
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {{ result.get('text', 'Не удалось получить курс.') }}
+  action:
+    - service: script.currency_rates
+      data:
+        currency: "{{ currency | default('both') }}"
+      response_variable: currency_result
+    - stop: "station_currency_rate"
+      response_variable: currency_result
+
 StationAlarmSet:
   speech:
     text: >-
