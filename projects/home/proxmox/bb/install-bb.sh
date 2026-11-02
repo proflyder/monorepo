@@ -18,12 +18,19 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../versions.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../versions.sh"
+# shellcheck source=authorized-key.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/authorized-key.sh"
 
 DATA_DIR=${BB_DATA_DIR:-}
 USER_NAME=bb
 USER_HOME=/home/bb
 OFFSITE_PUBKEY=
 OFFSITE_FROM=
+DISPATCH_PUBKEY=
+DISPATCH_FROM=
+DISPATCH_COMMAND=/usr/local/bin/bb-dispatch
+DISPATCH_CONFIG_DIR=$USER_HOME/.config/home-dispatcher
 
 usage() {
   cat <<'EOF'
@@ -37,10 +44,14 @@ Options:
   --offsite-pubkey FILE    public key allowed to fetch only
                            /var/backups/bb/bb-server-export.tgz over ssh
   --offsite-from ADDRESS   source address restriction for that key
+  --dispatch-pubkey FILE   public key allowed to run only /usr/local/bin/bb-dispatch
+                           as user bb (the SSH bridge from mcp-gateway)
+  --dispatch-from ADDRESS  source address restriction for that key (K3s node)
   -h, --help               show this help
 
 Node.js version and SHA-256 come from the adjacent versions.sh (push it along
-with this script). BB_DATA_DIR may also be exported instead of using --data-dir.
+with this script, bb-dispatch and authorized-key.sh). BB_DATA_DIR may also be
+exported instead of using --data-dir.
 EOF
 }
 
@@ -55,30 +66,21 @@ sshd_active() {
 }
 
 install_offsite_key() {
-  local key body line
-  key=$(tr -d '\r' <"$OFFSITE_PUBKEY")
-  key=${key%$'\n'}
-  [[ -n $key && $key != *$'\n'* ]] ||
-    die "offsite public key must contain exactly one non-empty line"
-  [[ $key == ssh-* || $key == ecdsa-* || $key == sk-* ]] ||
-    die "offsite public key does not look like an OpenSSH public key"
-  body=$(printf '%s\n' "$key" | awk '{print $2}')
-  [[ -n $body ]] || die "offsite public key has no key body"
-  [[ $OFFSITE_FROM != *'"'* && $OFFSITE_FROM != *$'\n'* ]] ||
-    die "--offsite-from must not contain quotes or newlines"
+  install_authorized_key /root/.ssh/authorized_keys root "$OFFSITE_PUBKEY" \
+    "$OFFSITE_FROM" 'tar -C /var/backups/bb -cf - bb-server-export.tgz'
+}
 
-  line='from="'"$OFFSITE_FROM"'",command="tar -C /var/backups/bb -cf - bb-server-export.tgz",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding,restrict '"$key"
-
-  install -d -o root -g root -m 700 /root/.ssh
-  touch /root/.ssh/authorized_keys
-  chmod 600 /root/.ssh/authorized_keys
-  # Idempotent by key body: re-running with a different `from` does not add a
-  # second copy of the same key.
-  if ! grep -qF -- "$body" /root/.ssh/authorized_keys; then
-    printf '%s\n' "$line" >>/root/.ssh/authorized_keys
-    echo "offsite key installed in /root/.ssh/authorized_keys"
-  else
-    echo "offsite key already present in /root/.ssh/authorized_keys"
+# The bridge runs as user bb, never root: the key may only execute the forced
+# command that reads one JSON request from stdin. The plugin token and HMAC
+# secret are not created here; they are written after `bb plugin token` and
+# `bb plugin config ... set hmacSecret` (see README).
+install_dispatch() {
+  install -m 755 "$SCRIPT_DIR/bb-dispatch" "$DISPATCH_COMMAND"
+  install -d -o "$USER_NAME" -g "$USER_NAME" -m 700 "$DISPATCH_CONFIG_DIR"
+  echo "bb-dispatch installed as $DISPATCH_COMMAND"
+  if [[ -n $DISPATCH_PUBKEY ]]; then
+    install_authorized_key "$USER_HOME/.ssh/authorized_keys" "$USER_NAME" \
+      "$DISPATCH_PUBKEY" "$DISPATCH_FROM" "$DISPATCH_COMMAND"
   fi
 }
 
@@ -87,6 +89,8 @@ while (($#)); do
     --data-dir) DATA_DIR=$2; shift 2 ;;
     --offsite-pubkey) OFFSITE_PUBKEY=$2; shift 2 ;;
     --offsite-from) OFFSITE_FROM=$2; shift 2 ;;
+    --dispatch-pubkey) DISPATCH_PUBKEY=$2; shift 2 ;;
+    --dispatch-from) DISPATCH_FROM=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
@@ -96,6 +100,12 @@ if [[ -n $OFFSITE_PUBKEY || -n $OFFSITE_FROM ]]; then
   [[ -n $OFFSITE_PUBKEY && -n $OFFSITE_FROM ]] ||
     die "--offsite-pubkey and --offsite-from must be used together"
   [[ -f $OFFSITE_PUBKEY ]] || die "offsite public key not found: $OFFSITE_PUBKEY"
+fi
+
+if [[ -n $DISPATCH_PUBKEY || -n $DISPATCH_FROM ]]; then
+  [[ -n $DISPATCH_PUBKEY && -n $DISPATCH_FROM ]] ||
+    die "--dispatch-pubkey and --dispatch-from must be used together"
+  [[ -f $DISPATCH_PUBKEY ]] || die "dispatch public key not found: $DISPATCH_PUBKEY"
 fi
 
 [[ $(id -u) == 0 ]] || die "run inside the container as root"
@@ -113,7 +123,7 @@ apt-get update
 # template does not ship it, and node then fails with
 # `libatomic.so.1: cannot open shared object file`.
 apt-get install -y --no-install-recommends \
-  ca-certificates curl git libatomic1 sqlite3 xz-utils
+  ca-certificates curl git libatomic1 python3 sqlite3 xz-utils
 
 # ----- Node.js from the official tarball -----------------------------------
 NODE_ROOT=/usr/local/lib/nodejs/node-v$NODE_VERSION-linux-x64
@@ -176,6 +186,21 @@ EOF
 fi
 echo "systemd user bus for $USER_NAME: ok (linger enabled)"
 
+# ----- sshd guard for both forced-command keys -----------------------------
+if ! sshd_active; then
+  echo "warning: sshd (ssh.service) is not running; ssh keys would not work until it is started" >&2
+  if [[ -n $OFFSITE_PUBKEY || -n $DISPATCH_PUBKEY ]]; then
+    die "sshd is not running, so --offsite-pubkey/--dispatch-pubkey cannot be used on this container"
+  fi
+fi
+
+# ----- SSH bridge for mcp-gateway -------------------------------------------
+if [[ -f $SCRIPT_DIR/bb-dispatch ]]; then
+  install_dispatch
+elif [[ -n $DISPATCH_PUBKEY ]]; then
+  die "bb-dispatch is missing next to install-bb.sh; push it along with this script"
+fi
+
 # ----- consistent SQLite backup before the nightly vzdump -------------------
 install -d -m 700 /etc/bb-backup /var/backups/bb
 ENV_FILE=/etc/bb-backup/env
@@ -226,12 +251,6 @@ systemctl daemon-reload
 systemctl enable --now bb-db-backup.timer
 
 # ----- offsite pull endpoint ------------------------------------------------
-if ! sshd_active; then
-  echo "warning: sshd (ssh.service) is not running; the offsite key would not work until it is started" >&2
-  if [[ -n $OFFSITE_PUBKEY ]]; then
-    die "sshd is not running, so --offsite-pubkey cannot be used on this container"
-  fi
-fi
 if [[ -n $OFFSITE_PUBKEY ]]; then
   install_offsite_key
 fi
@@ -243,6 +262,8 @@ bb prerequisites installed:
   npm      $(/usr/local/bin/npm --version)
   user     $USER_NAME (linger enabled)
   backup   /var/backups/bb/bb.db + bb-server-export.tgz, timer 03:30
+  bridge   $DISPATCH_COMMAND (forced command for mcp-gateway)
+           config dir $DISPATCH_CONFIG_DIR (0700, no token/hmac yet)
 
 Next: enrollment.
   1. In the bb UI open Settings -> Machines -> Add machine (manual provider).

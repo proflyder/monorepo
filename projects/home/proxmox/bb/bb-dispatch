@@ -1,0 +1,319 @@
+#!/usr/bin/python3
+"""SSH forced-command bridge from mcp-gateway (K3s) to the home-dispatcher plugin.
+
+The gateway owns the SSH key; this bridge owns the bb plugin token and the HMAC
+secret. It reads exactly one JSON request from stdin, signs it, POSTs it to the
+plugin route on the bb server loopback and prints the plugin's answer.
+
+    gateway (K3s) --ssh bb@CT103--> /usr/local/bin/bb-dispatch
+      -> POST http://127.0.0.1:<bb-port>/api/v1/plugins/home-dispatcher/http/rpc
+
+Contract:
+
+* stdin: one JSON object with `method` from the six allowed methods, at most
+  16 KiB. Anything else is refused locally without contacting bb.
+* stdout: the plugin's JSON answer, or
+  `{"ok": false, "code": ..., "speech": ...}` for a local refusal or a
+  transport failure.
+* exit 0   the plugin answered (even with HTTP 4xx/5xx and `ok: false`)
+  exit 1   transport/config failure, code `bridge_error`
+  exit 2   bad request (size, JSON, method), refused without contacting bb
+  exit 3   bridge not configured (missing token/secret, unsafe permissions)
+
+The token and the HMAC secret are read from /home/bb/.config/home-dispatcher/
+({token,hmac}, 0600, owner bb). They are never printed, and request/response
+bodies are never logged. `SSH_ORIGINAL_COMMAND` is ignored by design: the key is
+restricted to this binary and has no other capability.
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import ipaddress
+import json
+import os
+import stat
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+BODY_LIMIT_BYTES = 16 * 1024
+RESPONSE_LIMIT_BYTES = 1024 * 1024
+ROUTE = "/api/v1/plugins/home-dispatcher/http/rpc"
+DEFAULT_URL = "http://127.0.0.1:38886"
+DEFAULT_TIMEOUT_SECONDS = 15
+METHODS = frozenset(
+    {"targets", "status", "validate_spawn", "spawn", "send", "turn_result"}
+)
+LOOPBACK_HOSTS = frozenset({"localhost"})
+CONFIG_DIR = "/home/bb/.config/home-dispatcher"
+ENV_FILE_NAME = "env"
+TOKEN_FILE_NAME = "token"
+SECRET_FILE_NAME = "hmac"
+MAX_CREDENTIAL_BYTES = 1024
+
+EXIT_OK = 0
+EXIT_BRIDGE = 1
+EXIT_INVALID = 2
+EXIT_NOT_CONFIGURED = 3
+
+SPEECH_UNAVAILABLE = "Сервер агентов недоступен."
+SPEECH_NOT_CONFIGURED = "Мост не настроен."
+SPEECH_TOO_LARGE = "Слишком большой запрос."
+SPEECH_UNKNOWN_METHOD = "Неизвестная операция."
+SPEECH_INVALID = "Некорректный запрос."
+
+
+class Refusal(Exception):
+    """A local refusal that maps to one exit code and one JSON answer."""
+
+    def __init__(self, code: str, speech: str, exit_code: int):
+        super().__init__(code)
+        self.code = code
+        self.speech = speech
+        self.exit_code = exit_code
+
+
+def emit(payload: dict) -> None:
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def fail(code: str, speech: str, exit_code: int) -> int:
+    emit({"ok": False, "code": code, "speech": speech})
+    return exit_code
+
+
+def warn(message: str) -> None:
+    # Diagnostics only: never the body, never a secret.
+    sys.stderr.write(f"bb-dispatch: {message}\n")
+    sys.stderr.flush()
+
+
+def read_stdin_request() -> bytes:
+    # One byte past the limit is enough to detect an oversized body without
+    # buffering an attacker-controlled stream in memory.
+    body = sys.stdin.buffer.read(BODY_LIMIT_BYTES + 1)
+    if len(body) > BODY_LIMIT_BYTES:
+        raise Refusal("body_too_large", SPEECH_TOO_LARGE, EXIT_INVALID)
+    return body
+
+
+def parse_request(body: bytes) -> dict:
+    if not body.strip():
+        raise Refusal("invalid_request", SPEECH_INVALID, EXIT_INVALID)
+    try:
+        request = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise Refusal("invalid_request", SPEECH_INVALID, EXIT_INVALID) from None
+    if not isinstance(request, dict):
+        raise Refusal("invalid_request", SPEECH_INVALID, EXIT_INVALID)
+    method = request.get("method")
+    if not isinstance(method, str) or method not in METHODS:
+        raise Refusal("unknown_method", SPEECH_UNKNOWN_METHOD, EXIT_INVALID)
+    params = request.get("params")
+    if params is not None and not isinstance(params, dict):
+        raise Refusal("invalid_request", SPEECH_INVALID, EXIT_INVALID)
+    return request
+
+
+def read_config_file(directory: str, name: str) -> str:
+    path = os.path.join(directory, name)
+    try:
+        info = os.stat(path)
+    except OSError:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED) from None
+    if not stat.S_ISREG(info.st_mode):
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    if info.st_mode & 0o077:
+        warn(f"{path} is readable by group/others; expected 0600")
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    if info.st_size > MAX_CREDENTIAL_BYTES:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    try:
+        with open(path, "rb") as handle:
+            raw = handle.read(MAX_CREDENTIAL_BYTES + 1)
+    except OSError:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED) from None
+    if len(raw) > MAX_CREDENTIAL_BYTES:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    try:
+        value = raw.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED) from None
+    if not value or any(not 0x21 <= ord(char) <= 0x7E for char in value):
+        # Printable ASCII without spaces keeps the value safe as an HTTP header
+        # and rejects accidental newlines or truncated files.
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    return value
+
+
+def read_env_file(directory: str) -> dict[str, str]:
+    path = os.path.join(directory, ENV_FILE_NAME)
+    try:
+        with open(path, "rb") as handle:
+            raw = handle.read(4096 + 1)
+    except OSError:
+        return {}
+    if len(raw) > 4096:
+        warn(f"{path} is larger than 4096 bytes; ignoring it")
+        return {}
+    values: dict[str, str] = {}
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        warn(f"{path} is not valid UTF-8; ignoring it")
+        return {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, separator, value = stripped.partition("=")
+        if not separator:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
+def is_loopback(host: str) -> bool:
+    if not host:
+        return False
+    if host.lower() in LOOPBACK_HOSTS:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def resolve_url(values: dict[str, str]) -> str:
+    raw = os.environ.get("BB_DISPATCH_URL") or values.get("BB_DISPATCH_URL") or DEFAULT_URL
+    parsed = urllib.parse.urlsplit(raw.strip())
+    if parsed.scheme not in ("http", "https"):
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    if parsed.username or parsed.password:
+        # Credentials in the URL would end up in diagnostics and are not needed:
+        # the token and secret have dedicated files.
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    if not is_loopback(parsed.hostname or ""):
+        warn("BB_DISPATCH_URL must point at the loopback interface")
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    if parsed.query or parsed.fragment:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    base = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
+    return base + ROUTE
+
+
+def resolve_timeout(values: dict[str, str]) -> float:
+    raw = os.environ.get("BB_DISPATCH_TIMEOUT") or values.get("BB_DISPATCH_TIMEOUT")
+    if raw is None or raw.strip() == "":
+        return float(DEFAULT_TIMEOUT_SECONDS)
+    try:
+        seconds = float(raw.strip())
+    except ValueError:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED) from None
+    if not 1 <= seconds <= 120:
+        raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
+    return seconds
+
+
+def sign(secret: str, timestamp: str, body: bytes) -> str:
+    payload = timestamp.encode("ascii") + b"\n" + body
+    return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+def read_response_body(handle) -> bytes:
+    body = handle.read(RESPONSE_LIMIT_BYTES + 1)
+    if len(body) > RESPONSE_LIMIT_BYTES:
+        raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE)
+    return body
+
+
+def check_plugin_answer(body: bytes) -> bytes:
+    """Pass the plugin answer through only when it is its documented shape."""
+    if not body:
+        raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE)
+    try:
+        answer = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE) from None
+    if not isinstance(answer, dict) or not isinstance(answer.get("ok"), bool):
+        raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE)
+    return body
+
+
+def post(url: str, body: bytes, token: str, secret: str, timeout: float) -> bytes:
+    timestamp = str(int(time.time()))
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "content-type": "application/json",
+            "x-bb-plugin-token": token,
+            "x-bb-dispatch-timestamp": timestamp,
+            "x-bb-dispatch-signature": sign(secret, timestamp, body),
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return read_response_body(response)
+    except urllib.error.HTTPError as error:
+        # The plugin refuses malformed or unauthenticated requests with a JSON
+        # body and ok: false; that is still a valid answer for the gateway.
+        try:
+            return read_response_body(error)
+        except Refusal:
+            raise
+        except OSError:
+            raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE) from None
+        finally:
+            error.close()
+    except Refusal:
+        raise
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        # Exception text never contains the token or the body. The URL is
+        # loopback-only and has no credentials.
+        warn(f"transport error: {error.__class__.__name__}: {error}")
+        raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE) from None
+
+
+def run() -> int:
+    directory = os.environ.get("BB_DISPATCH_CONFIG_DIR", CONFIG_DIR)
+    body = read_stdin_request()
+    parse_request(body)
+    values = read_env_file(directory)
+    token = read_config_file(directory, TOKEN_FILE_NAME)
+    secret = read_config_file(directory, SECRET_FILE_NAME)
+    url = resolve_url(values)
+    timeout = resolve_timeout(values)
+    answer = check_plugin_answer(post(url, body, token, secret, timeout))
+    sys.stdout.write(answer.decode("utf-8").rstrip("\n") + "\n")
+    sys.stdout.flush()
+    return EXIT_OK
+
+
+def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+        sys.stderr.reconfigure(encoding="utf-8", newline="\n")
+    except (AttributeError, ValueError):
+        pass
+    try:
+        return run()
+    except Refusal as refusal:
+        return fail(refusal.code, refusal.speech, refusal.exit_code)
+    except BrokenPipeError:
+        return EXIT_BRIDGE
+    except Exception as error:  # noqa: BLE001 - never leak internals to stdout
+        warn(f"unexpected error: {error.__class__.__name__}")
+        return fail("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
