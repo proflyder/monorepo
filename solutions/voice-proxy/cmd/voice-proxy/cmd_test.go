@@ -95,3 +95,18 @@ func TestHealthcheckFailsWhenUpstreamIsDown(t *testing.T) {
 		t.Fatal("probeUpstream succeeded against a closed listener")
 	}
 }
+
+func TestHealthcheckAcceptsAuthRequiredUpstream(t *testing.T) {
+	for _, code := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "" {
+				t.Error("healthcheck must not send credentials")
+			}
+			http.Error(w, "auth required", code)
+		}))
+		if err := probeUpstream(context.Background(), upstream.URL); err != nil {
+			t.Errorf("HTTP %d: probeUpstream = %v, want healthy", code, err)
+		}
+		upstream.Close()
+	}
+}

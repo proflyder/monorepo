@@ -35,6 +35,9 @@ func runHealthcheck() int {
 }
 
 // probeUpstream is the liveness assertion: Hermes must answer its model list.
+// The probe carries no credentials (real requests forward the caller's
+// Authorization), so 401/403 from an API-key-protected Hermes still proves the
+// gateway is up; only a transport error or a 5xx is unhealthy.
 func probeUpstream(ctx context.Context, baseURL string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/models", nil)
 	if err != nil {
@@ -46,7 +49,7 @@ func probeUpstream(ctx context.Context, baseURL string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode >= http.StatusInternalServerError {
 		return fmt.Errorf("upstream returned HTTP %d", resp.StatusCode)
 	}
 	return nil
