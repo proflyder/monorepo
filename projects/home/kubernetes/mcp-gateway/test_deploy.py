@@ -722,6 +722,7 @@ class DeployScriptTests(unittest.TestCase):
         env_text: str,
         kubectl_script: str | None = None,
         build: bool = False,
+        extra_env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
         tmp = Path(tempfile.mkdtemp(prefix="mcp-deploy-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
@@ -750,6 +751,8 @@ class DeployScriptTests(unittest.TestCase):
         )
         if not build:
             env["MCP_GATEWAY_IMAGE"] = "ghcr.io/example/mcp-gateway@sha256:" + "0" * 64
+        if extra_env:
+            env.update(extra_env)
         args = ["bash", str(SCRIPT)] + ([] if build else ["--skip-build"])
         res = subprocess.run(args, env=env, text=True, capture_output=True, timeout=60)
         res.kubectl_log = tmp / "kubectl.log"
@@ -848,6 +851,35 @@ exit 3
             "build //solutions/mcp-gateway:mcp-gateway_image",
             res.bazel_log.read_text(),
         )
+
+    def test_prebuilt_digest_skips_the_build_and_is_rendered(self):
+        # deploy-home passes the digest promoted from the pull request
+        # (DECISIONS 36): no Bazel, no push, the digest goes into the manifest.
+        digest = "sha256:" + "d" * 64
+        res = self.run_deploy(
+            GOOD_ENV,
+            build=True,
+            extra_env={"PREBUILT_DIGESTS": f"mcp-gateway={digest}"},
+        )
+        self.assertTrue(res.kubectl_log.exists(), res.stderr)
+        self.assertFalse(
+            res.bazel_log.exists() and res.bazel_log.read_text().strip(),
+            "prebuilt digest must not trigger a build",
+        )
+        self.assertIn(
+            f"ghcr.io/proflyder/mcp-gateway@{digest}",
+            (res.rendered / "deployment.yaml").read_text(),
+        )
+
+    def test_malformed_prebuilt_digest_fails_closed(self):
+        res = self.run_deploy(
+            GOOD_ENV,
+            build=True,
+            extra_env={"PREBUILT_DIGESTS": "mcp-gateway=sha256:abc"},
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("malformed prebuilt digest", res.stderr)
+        self.assertFalse(res.kubectl_log.exists())
 
 
 if __name__ == "__main__":

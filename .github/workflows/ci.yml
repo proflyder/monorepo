@@ -440,12 +440,22 @@ jobs:
       toolchain_sha256: ${{ matrix.toolchain_sha256 }}
       toolchain_root: ${{ matrix.toolchain_root }}
 
-  # Container-image build for the affected deployable units. Build only: no
-  # registry credentials and no push on pull requests. `deploy-home` performs
-  # the actual build+push+roll on develop.
+  # Container-image build for the affected deployable units. On a pull request
+  # from this repository, `_images.yml` also publishes the built images as
+  # `ghcr.io/proflyder/<image>:tree-<hash>` and attests their provenance, so the
+  # squash merge deploys the same bytes instead of rebuilding them (DECISIONS
+  # 36). Fork PRs get a read-only token and only build.
+  #
+  # Registry/OIDC/attestation permissions are granted to this job alone; every
+  # other job stays `contents: read`.
   images:
     needs: changes
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.deploy_units != '[]' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -456,6 +466,7 @@ jobs:
       images: ${{ matrix.images }}
       builder: ${{ matrix.builder }}
       target_root: ${{ matrix.target_root }}
+      push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
   # Expensive regression with real linux/amd64 release binaries. Only when the
   # scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.

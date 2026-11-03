@@ -36,10 +36,14 @@
 #   HA_TOKEN_FILE, SCHEDULER_TOKEN_FILE  local preflight tokens
 #   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE  pre-resolved refs
 #                   (skip building that image; used by the regression test)
+#   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
+#                   pull-request build (DECISIONS 36); an explicit *_IMAGE wins
 #   SKIP_FIREWALL=1 no longer needed: the NodePort filter is host configuration
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# shellcheck source=platform/ci/prebuilt-digests.sh
+source "$ROOT/platform/ci/prebuilt-digests.sh"
 NS=home-assistant
 DIR="$ROOT/projects/home/kubernetes/scheduler"
 KUBECTL=${KUBECTL:-kubectl}
@@ -166,13 +170,6 @@ if [[ -z "${IMAGE_TAG:-}" ]]; then
   IMAGE_TAG=$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 fi
 
-if $BUILD; then
-  echo "== building container images with Bazel"
-  ( cd "$ROOT" && "$(bazel_bin)" build \
-      //projects/home/kubernetes/scheduler:images \
-      --platforms=@rules_go//go/toolchain:linux_amd64 )
-fi
-
 # Plain variables instead of an associative array: macOS ships bash 3.2 and the
 # manual flow must run there too.
 IMAGE_REF_SCHEDULER=
@@ -200,6 +197,29 @@ image_var() {
   esac
 }
 
+# Build only the images that are not already resolved. CI promotes the digests a
+# green pull request already built (PREBUILT_DIGESTS) and the regression test
+# pins them via the *_IMAGE variables, so neither path runs Bazel here.
+if $BUILD; then
+  build_needed=false
+  for image in scheduler ha-bridge ha-control; do
+    var=$(image_var "$image")
+    if [[ -n "${!var:-}" || -n "$(prebuilt_digest "$image")" ]]; then
+      continue
+    fi
+    build_needed=true
+    break
+  done
+  if $build_needed; then
+    echo "== building container images with Bazel"
+    ( cd "$ROOT" && "$(bazel_bin)" build \
+        //projects/home/kubernetes/scheduler:images \
+        --platforms=@rules_go//go/toolchain:linux_amd64 )
+  else
+    echo "== all scheduler images are pre-resolved/prebuilt; skipping Bazel build"
+  fi
+fi
+
 push_tag() {
   local name=$1 digest=$2 tag=$3 repo="${IMAGE_REGISTRY}/${name}"
   local bin out pushed
@@ -226,7 +246,7 @@ push_tag() {
 }
 
 resolve_image() {
-  local name=$1 var override layout digest tag repo
+  local name=$1 var override prebuilt layout digest tag repo
   var=$(image_var "$name")
   override=${!var:-}
   layout="$ROOT/bazel-bin/projects/home/kubernetes/scheduler/${name}_image"
@@ -234,6 +254,14 @@ resolve_image() {
   if [[ -n "$override" ]]; then
     set_image_ref "$name" "$override"
     echo "== image ${name}: ${override} (pre-resolved)"
+    return
+  fi
+  prebuilt=$(prebuilt_digest "$name")
+  if [[ -n "$prebuilt" ]]; then
+    # Promoted from the PR build: never build, push or re-tag here. deploy-home
+    # already attached the commit/develop tags to this exact digest.
+    set_image_ref "$name" "${IMAGE_REGISTRY}/${name}@${prebuilt}"
+    echo "== image ${name}: prebuilt ${IMAGE_REGISTRY}/${name}@${prebuilt}"
     return
   fi
   [[ -d "$layout" ]] || {

@@ -873,6 +873,49 @@ projects/station/scripts/restore-ota-fortress.sh   # осторожно, отк�
 ```
 
 
+## Образы GHCR: сборка на PR и продвижение
+
+Образ деплой-юнита собирается один раз на PR и после merge не пересобирается
+(решение 36). PR публикует его как
+`ghcr.io/proflyder/<image>:tree-<git tree hash>` с build provenance;
+`deploy-home` проверяет тег и provenance и ставит на тот же digest обычные теги
+(`<commit sha>`, `develop`).
+
+Как понять, что использовал деплой:
+
+* вкладка Actions → прогон `deploy-home` → summary job'а
+  `deploy <unit>`: строка `image path: prebuilt` (взят проверенный PR-образ)
+  или `build` (обычная сборка; причина — в блоке `image promotion`);
+* там же видны digest'ы образов и `runtime revision` Helm-релиза.
+
+Если PR-образ не найден или provenance не проверяется, юнит автоматически
+собирается как раньше — это штатный fallback, а не ошибка.
+
+Локально путь продвижения можно повторить, передав проверенные digest'ы
+(без них скрипты собирают и пушат как обычно):
+
+```bash
+PREBUILT_DIGESTS="scheduler=sha256:…,ha-bridge=sha256:…,ha-control=sha256:…" \
+  NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh
+```
+
+Чистка старых `tree-*` версий — `.github/workflows/ghcr-cleanup.yml`:
+ежедневно по расписанию удаляет только версии старше 7 дней, у которых все теги
+`tree-*` (или тегов нет), кроме новейшей версии пакета. Версии с `develop`,
+commit sha и semver не удаляются.
+
+```bash
+# локальный dry-run политики на фикстуре (в GitHub не ходит, ничего не удаляет)
+node platform/ci/ghcr_cleanup.mjs \
+  --fixture platform/ci/testdata/ghcr-versions.json --now 2026-11-04T00:00:00Z
+```
+
+Реальный ручной прогон: Actions → `ghcr-cleanup` → Run workflow,
+`dry_run` по умолчанию `true` (снять галочку — удалять). Если `GITHUB_TOKEN`
+не может удалять версии user-owned пакетов, job падает с подсказкой: нужен
+секрет `GHCR_CLEANUP_TOKEN` (токен с правом удаления пакетов и доступом к
+репозиторию).
+
 ## Планировщик / HA bridge
 
 Deploy, пауза и запуск исполнителя — `projects/home/kubernetes/scheduler/README.md`.

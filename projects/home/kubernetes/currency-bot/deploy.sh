@@ -13,6 +13,8 @@
 #   NODE_SSH          import the image into the node's containerd (manual path)
 #   IMAGE_TAG         tag used for the push/import (default HEAD sha)
 #   CURRENCY_BOT_IMAGE  pre-resolved digest reference (skips build/push)
+#   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
+#                     pull-request build (DECISIONS 36); CURRENCY_BOT_IMAGE wins
 #   DEPLOY_STATE_DIR  rollback bookkeeping directory
 #   KUBECTL           kubectl binary (default kubectl)
 #   ONLY              CI passes the unit workload list; only `currency-bot`
@@ -23,6 +25,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# shellcheck source=platform/ci/prebuilt-digests.sh
+source "$ROOT/platform/ci/prebuilt-digests.sh"
 # shellcheck disable=SC1091
 source "$ROOT/projects/home/kubernetes/versions.sh"
 
@@ -99,7 +103,15 @@ if [[ -z "${IMAGE_TAG:-}" ]]; then
   IMAGE_TAG=$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 fi
 
-if $BUILD; then
+# A verified digest promoted from the pull-request build replaces the local
+# build (DECISIONS 36). An explicit CURRENCY_BOT_IMAGE stays authoritative.
+prebuilt=$(prebuilt_digest currency-bot)
+if [[ -z "${CURRENCY_BOT_IMAGE:-}" && -n "$prebuilt" ]]; then
+  CURRENCY_BOT_IMAGE="${IMAGE_REGISTRY}/currency-bot@${prebuilt}"
+  echo "== image currency-bot: prebuilt ${CURRENCY_BOT_IMAGE}"
+fi
+
+if $BUILD && [[ -z "${CURRENCY_BOT_IMAGE:-}" ]]; then
   echo "== building the currency-bot image with Bazel"
   ( cd "$ROOT" && "$(bazel_bin)" build \
       //solutions/currency-bot:currency-bot_image \

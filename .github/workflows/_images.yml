@@ -1,14 +1,25 @@
 name: _images
 
 # Reusable container-image build for one deployable CI unit. Called once per
-# affected deployable unit from ci.yml; this workflow only builds (no push, no
-# registry credentials), so it is safe on pull requests.
+# affected deployable unit from ci.yml.
 #
 #   bazel  - hermetic distroless images assembled by rules_oci from the Go
 #            binaries (//projects/home/kubernetes/scheduler:<image>_image)
 #   docker - Dockerfile-based images (the Hermes gateway)
 #   mixed  - one deploy unit with both kinds (the Hermes unit: `hermes` from a
 #            Dockerfile, `voice-proxy` from //solutions/voice-proxy)
+#
+# Build once, deploy the same bytes (DECISIONS 36): for a pull request from this
+# repository (never a fork) the built images are also pushed to
+# `ghcr.io/proflyder/<image>:tree-<git tree hash>` and their digests are attested
+# with build provenance. The squash merge of that PR keeps the tree, so
+# `deploy-home` deploys exactly these images instead of rebuilding them.
+#
+# Fork pull requests and manual `workflow_dispatch` runs build only: their token
+# is read-only, so they never receive registry credentials and never push.
+#
+# Only the `images`/`attest` jobs of this file need registry, OIDC and
+# attestation permissions; the caller grants them to this job alone.
 
 on:
   workflow_call:
@@ -31,6 +42,11 @@ on:
         required: false
         default: ""
         type: string
+      push_tree_tag:
+        description: Publish the built images under tree-<hash> and attest them
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -40,8 +56,31 @@ jobs:
     name: images / ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      # Push the tree-tagged images (`_push` targets / `docker push`).
+      packages: write
+    outputs:
+      pushed: ${{ steps.collect.outputs.pushed }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # The image identity is the git *tree*, not the commit: a pull request
+      # builds its merge ref, whose tree equals the squash commit's tree as long
+      # as `develop` did not move in between. `deploy-home` recomputes the same
+      # tag from the deployed commit.
+      - name: Compute the tree tag
+        id: tree
+        if: inputs.push_tree_tag
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse 'HEAD^{tree}')
+          if [[ ! "$tree" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "could not resolve HEAD^{tree}: '$tree'" >&2
+            exit 1
+          fi
+          echo "tag=tree-${tree}" >> "$GITHUB_OUTPUT"
+          echo "- image identity: \`tree-${tree}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         if: inputs.builder == 'bazel' || inputs.builder == 'mixed'
@@ -53,6 +92,9 @@ jobs:
 
       - name: Build distroless images with Bazel
         if: inputs.builder == 'bazel'
+        env:
+          PUSH: ${{ inputs.push_tree_tag }}
+          TREE_TAG: ${{ steps.tree.outputs.tag }}
         run: |
           set -euo pipefail
           read -r -a images <<< "${{ inputs.images }}"
@@ -71,11 +113,28 @@ jobs:
           for image in "${images[@]}"; do
             layout="bazel-bin/${package}/${image}_image"
             digest=$(python3 platform/ci/oci_image.py digest "$layout")
-            echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+            repo="ghcr.io/proflyder/${image}"
+            if [[ "$PUSH" == "true" ]]; then
+              # The existing oci_push target stores the manifest byte-for-byte;
+              # the helper fails unless the registry kept the built digest.
+              platform/ci/push-image.sh bazel \
+                --repository "$repo" \
+                --target "${target_root}:${image}_push" \
+                --digest "$digest" \
+                --tag "$TREE_TAG"
+              printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
+              echo "- \`${image}\`: \`${repo}@${digest}\` (\`${TREE_TAG}\`)" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- \`${image}\`: \`${repo}@${digest}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
           done
 
       - name: Build Dockerfile images
         if: inputs.builder == 'docker'
+        env:
+          PUSH: ${{ inputs.push_tree_tag }}
+          TREE_TAG: ${{ steps.tree.outputs.tag }}
         run: |
           set -euo pipefail
           read -r -a images <<< "${{ inputs.images }}"
@@ -99,6 +158,15 @@ jobs:
                 ;;
             esac
             echo "built ghcr.io/proflyder/${image}" | tee -a "$GITHUB_STEP_SUMMARY"
+            if [[ "$PUSH" == "true" ]]; then
+              digest=$(platform/ci/push-image.sh docker \
+                --repository "ghcr.io/proflyder/${image}" \
+                --source "ghcr.io/proflyder/${image}:${revision:0:12}" \
+                --tag "$TREE_TAG")
+              printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
+              echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
           done
 
       # One deploy unit can own both image kinds. The image named after the
@@ -107,6 +175,9 @@ jobs:
       # //solutions/voice-proxy, `hermes` from the upstream revision.
       - name: Build mixed images (Bazel + Dockerfile)
         if: inputs.builder == 'mixed'
+        env:
+          PUSH: ${{ inputs.push_tree_tag }}
+          TREE_TAG: ${{ steps.tree.outputs.tag }}
         run: |
           set -euo pipefail
           read -r -a images <<< "${{ inputs.images }}"
@@ -124,7 +195,19 @@ jobs:
                 --platforms=@rules_go//go/toolchain:linux_amd64
               layout="bazel-bin/${package}/${image}_image"
               digest=$(python3 platform/ci/oci_image.py digest "$layout")
-              echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+              repo="ghcr.io/proflyder/${image}"
+              if [[ "$PUSH" == "true" ]]; then
+                platform/ci/push-image.sh bazel \
+                  --repository "$repo" \
+                  --target "${target_root}:${image}_push" \
+                  --digest "$digest" \
+                  --tag "$TREE_TAG"
+                printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
+                echo "- \`${image}\`: \`${repo}@${digest}\` (\`${TREE_TAG}\`)" \
+                  | tee -a "$GITHUB_STEP_SUMMARY"
+              else
+                echo "- \`${image}\`: \`${repo}@${digest}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+              fi
               continue
             fi
             case "$image" in
@@ -145,4 +228,61 @@ jobs:
                 ;;
             esac
             echo "built ghcr.io/proflyder/${image}" | tee -a "$GITHUB_STEP_SUMMARY"
+            if [[ "$PUSH" == "true" ]]; then
+              digest=$(platform/ci/push-image.sh docker \
+                --repository "ghcr.io/proflyder/${image}" \
+                --source "ghcr.io/proflyder/${image}:${revision:0:12}" \
+                --tag "$TREE_TAG")
+              printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
+              echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
           done
+
+      # JSON list for the attestation matrix: [{"image":…, "digest":…}].
+      - name: Collect pushed image digests
+        id: collect
+        if: inputs.push_tree_tag
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/pushed.txt"
+          if [[ ! -s "$file" ]]; then
+            echo "pushed=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          json=$(jq -Rsc 'split("\n") | map(select(length > 0) | capture("^(?<image>[^=]+)=(?<digest>.+)$"))' "$file")
+          echo "pushed=${json}" >> "$GITHUB_OUTPUT"
+
+  # Build provenance for every pushed digest, stored in the registry next to the
+  # image (push-to-registry). `deploy-home` refuses a promoted digest whose
+  # provenance does not verify against this repository and these workflows.
+  #
+  # A matrix job because the action attests exactly one subject per invocation.
+  attest:
+    name: attest / ${{ inputs.unit }}
+    needs: images
+    if: >-
+      inputs.push_tree_tag &&
+      needs.images.result == 'success' &&
+      needs.images.outputs.pushed != '' &&
+      needs.images.outputs.pushed != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.images.outputs.pushed) }}
+    steps:
+      - name: Attest ${{ matrix.image }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/proflyder/${{ matrix.image }}
+          subject-digest: ${{ matrix.digest }}
+          push-to-registry: true
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ github.token }}

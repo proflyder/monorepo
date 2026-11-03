@@ -169,6 +169,10 @@
   пушимый байт-в-байт через `oci_push`. `deploy-home` (builder `mixed`)
   собирает и пушит оба, `hermes_rollout.py` подставляет digest'ы, проверяет
   `-healthcheck`/health/Assist/логи и делает `helm rollback` при провале.
+  Go-voice-proxy работает с 2026-11-04 (#99, #101) и принят вживую на
+  станции: оба профиля, подтверждение с открытым микрофоном, отмена, поздние
+  ответы. Контейнер health exporter пока запущен из последнего Python-образа
+  voice-proxy (digest закреплён в приватных values) до перевода exporter на Go.
 - Деплой — `converge.py`: полная замена Deployment, сохранение env/режима и
   replicas; откат восстанавливает только применённый объект целиком.
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только

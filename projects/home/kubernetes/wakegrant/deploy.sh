@@ -12,6 +12,8 @@
 #   NODE_SSH           import the image into the node's containerd (manual path)
 #   IMAGE_TAG          tag used for the push/import (default HEAD sha)
 #   WAKE_GRANT_IMAGE   pre-resolved digest reference (skips build/push)
+#   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
+#                      pull-request build (DECISIONS 36); WAKE_GRANT_IMAGE wins
 #   DEPLOY_STATE_DIR   rollback bookkeeping directory
 #   KUBECTL            kubectl binary (default kubectl)
 #   ONLY               CI passes the unit workload list; only `wakegrant`
@@ -26,6 +28,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# shellcheck source=platform/ci/prebuilt-digests.sh
+source "$ROOT/platform/ci/prebuilt-digests.sh"
 
 NS=home-assistant
 DIR="$ROOT/projects/home/kubernetes/wakegrant"
@@ -89,7 +93,15 @@ if [[ -z "${IMAGE_TAG:-}" ]]; then
   IMAGE_TAG=$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 fi
 
-if $BUILD; then
+# A verified digest promoted from the pull-request build replaces the local
+# build (DECISIONS 36). An explicit WAKE_GRANT_IMAGE stays authoritative.
+prebuilt=$(prebuilt_digest wakegrant)
+if [[ -z "${WAKE_GRANT_IMAGE:-}" && -n "$prebuilt" ]]; then
+  WAKE_GRANT_IMAGE="${IMAGE_REGISTRY}/wakegrant@${prebuilt}"
+  echo "== image wakegrant: prebuilt ${WAKE_GRANT_IMAGE}"
+fi
+
+if $BUILD && [[ -z "${WAKE_GRANT_IMAGE:-}" ]]; then
   echo "== building the wakegrant image with Bazel"
   ( cd "$ROOT" && "$(bazel_bin)" build \
       //solutions/wakegrant:wakegrant_image \
