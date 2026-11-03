@@ -37,14 +37,10 @@ def _lint_aspect_impl(target, ctx):
             manifest = manifest_files[0]
 
     deps = getattr(ctx.rule.attr, "deps", [])
-    dep_labels = []
-    transitive = []
+    dep_labels = [str(dep.label) for dep in deps]
     for dep in deps:
         if LintModuleInfo in dep:
             modules.extend(dep[LintModuleInfo].modules)
-            dep_labels.append(str(dep.label))
-        else:
-            dep_labels.append(str(dep.label))
 
     # Only real modules (sources or an Android manifest) get a descriptor;
     # Maven aar_import/jar targets only contribute classpath entries.
