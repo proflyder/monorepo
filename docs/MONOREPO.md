@@ -88,6 +88,13 @@ go.mod             Go module для новых решений
 go.work            workspace корня и отслеживаемого BLE-модуля
 ```
 
+`MODULE.bazel` — глобальная CI/deploy-инвалидация. Исключение: если его diff
+затрагивает только Maven-расширение rules_jvm_external
+(`maven.install(...)`/`maven.<tag>(...)`, `use_repo(maven, ...)`) и
+комментарии, `affected.py` маршрутизирует изменение как `MODULE.bazel#maven`
+только в android (меняется Maven/APK-замыкание). Остальные правки —
+`bazel_dep`, toolchain, `go_deps`, `oci`, python — остаются глобальными.
+
 Чистый checkout поддерживает `go test ./solutions/scheduler/... ./solutions/alarm/... ./packages/...`;
 игнорируемый Pulsar installer проверяется отдельно с `GOWORK=off`.
 `make test` требует локальных upstream checkout’ов и Python-зависимостей
