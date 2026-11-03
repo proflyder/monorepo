@@ -13,10 +13,40 @@
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким
       запуском.
 
+- [ ] **Решение 35: остаток перевода Python.** CI-обвязка (#97),
+      Android-инструменты сборки (#98) и voice-proxy (#99) уже переведены.
+      Осталось по исследованию: (1) Go-утилита `platform/deploy`
+      (`home-deploy`): `render`/`converge`/`rollback`/`preflight` (Job без
+      `python:3.13-slim`), `oci digest/pack` вместо `platform/ci/oci_image.py`,
+      inline-Python в `deploy.sh`, `apply-runtime.sh`, external-secrets,
+      ingress, `hermes_rollout.py`, `render_hermes_config.py`; health
+      exporter — Go-образ (сейчас он запущен из последнего Python-образа
+      voice-proxy, закреплённого digest в приватных values). Проверка —
+      побайтный рендер и разобранные объекты kubectl против Python, затем
+      ручной `workflow_dispatch` каждого юнита. (2) Хосты и оператор:
+      `offsite_backup.py` → Go-бинарник из GHCR по digest (как решение 34),
+      `vpncerts.py`/`vpnusers.py` → `vpn-pki`, `openbao configure/drill`.
+      Python остаётся: короткие хост-скрипты (`backup_metrics`,
+      `restore-volumes`, `wifi-uplink`, `backup-before-install`), ML
+      wake-word, dev-утилиты станции, проверки YAML, live e2e.
+- [ ] **CI: правка документации внутри юнита не должна деплоить.** После
+      #97 перевыкатились mcp-gateway/currency-bot/wakegrant только из-за
+      README в их папках. Следующий шаг: в `affected.mjs` не выбирать юнит
+      для деплоя, если все его изменённые файлы — `*.md`.
+
 ## P3 — приёмка и развитие
 
 ### Станция и голос
 
+- [ ] **voice-proxy на Go: рефакторинг после переноса (#99).** Порт
+      сделан один-в-один с Python, поэтому код (~4 тыс. строк) и тесты
+      (~4,5 тыс.) объёмнее нужного. Следующий шаг: убрать дубли (повторные
+      HA/gateway-клиенты внутри `announce`/`profile`/`result`, общая
+      тестовая обвязка `httptest`-фейков в один `internal/testfake`),
+      сократить эталонный корпус `testdata/parity` (~4,2 тыс. строк JSON) до
+      показательных случаев, когда Python-версия уже не нужна для отката;
+      удалить «port of voice_proxy.py»-комментарии. Поведение и покрытие не
+      менять; `go test -race` и живая проверка голоса после.
 - [ ] **Ricardo pre-roll 256 ms.** Поставлен `Fixed(8)` в релизе
       `v0.5.1002` (база upstream `v0.5.3`; сейчас стоит `v0.5.1004`) с
       `PULSAR_LOCAL_ENDPOINTING=1`; база n=3, риск среза первого слога.
