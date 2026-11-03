@@ -220,7 +220,7 @@ The container has no shell, so the two former `kubectl exec … sh -c 'curl …'
 checks are subcommands:
 
 ```text
-voice-proxy -healthcheck   # load config, then GET <upstream>/v1/models
+voice-proxy -healthcheck   # load config, then GET <upstream>/v1/models (any status below 500 = up; 401 from an API-key Hermes is fine)
 voice-proxy -status        # redacted JSON summary; never a token value
 ```
 
