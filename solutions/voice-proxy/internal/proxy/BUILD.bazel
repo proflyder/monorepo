@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "proxy",
+    srcs = [
+        "completion.go",
+        "handler.go",
+        "json.go",
+        "logger.go",
+        "stream.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/proxy",
+    deps = [
+        "//solutions/voice-proxy/internal/hermes",
+        "//solutions/voice-proxy/internal/sanitize",
+        "//solutions/voice-proxy/internal/sse",
+    ],
+)
+
+go_test(
+    name = "proxy_test",
+    srcs = ["proxy_test.go"],
+    embed = [":proxy"],
+    deps = [
+        "//solutions/voice-proxy/internal/hermes",
+        "//solutions/voice-proxy/internal/sanitize",
+        "//solutions/voice-proxy/internal/sse",
+    ],
+)

@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "app",
+    srcs = ["run.go"],
+    importpath = "ricardo.local/monorepo/solutions/voice-proxy/app",
+    deps = [
+        "//solutions/voice-proxy/internal/config",
+        "//solutions/voice-proxy/internal/hermes",
+        "//solutions/voice-proxy/internal/proxy",
+    ],
+)
