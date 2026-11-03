@@ -11,6 +11,9 @@ based for code:
   `bazel.roots`, so a change in `packages/kotlin` selects only the
   applications that actually depend on it. This needs no JDK and no Android
   SDK because it never analyses targets.
+* **MODULE.bazel** - global, unless the diff only touches the
+  rules_jvm_external Maven extension; then it becomes `MODULE.bazel#maven` and
+  invalidates only android.
 * **python** - path rules plus optional declarative `depends_on`.
 * **js** - path rules for dependency-free edge Workers (runs `node --test`).
 * **native** - path rules for non-Bazel C/C++ repository-script builds.
@@ -259,6 +262,19 @@ def changed_files(root: Path, base: str, head: str) -> list[str]:
     return sorted({line.strip() for line in out.splitlines() if line.strip()})
 
 
+def git_file_text(root: Path, revision: str, path: str) -> str | None:
+    """Content of `path` at `revision`, or None when it does not exist there."""
+    result = subprocess.run(
+        ["git", "-C", str(root), "show", f"{revision}:{path}"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
 def resolve_base(root: Path, requested: str | None) -> str | None:
     """Pick a base revision, or None when the whole tree must run."""
     if requested:
@@ -276,6 +292,207 @@ def resolve_base(root: Path, requested: str | None) -> str | None:
         except RuntimeError:
             continue
     return None
+
+
+# --------------------------------------------------------------------------
+# MODULE.bazel scoping
+# --------------------------------------------------------------------------
+MODULE_BAZEL = "MODULE.bazel"
+# Virtual changed path for a MODULE.bazel edit that only touches the
+# rules_jvm_external Maven extension. `units.yml` maps it to the android
+# platform, so the Maven/APK closure is retested without invalidating Go,
+# native, Python or JS units.
+MODULE_BAZEL_MAVEN = "MODULE.bazel#maven"
+MAVEN_EXTENSION = "@rules_jvm_external//:extensions.bzl"
+
+
+def _tokens(text: str) -> list[tuple[str, str]]:
+    """Small Starlark-aware tokenizer: comments, strings and punctuation.
+
+    Only what is needed to compare MODULE.bazel files structurally. Strings
+    are kept as single tokens, so a `#`, `(` or `)` inside one cannot start a
+    comment or change the parenthesis nesting.
+    """
+    tokens: list[tuple[str, str]] = []
+    index = 0
+    length = len(text)
+    while index < length:
+        char = text[index]
+        if char in " \t\r\n":
+            index += 1
+        elif char == "#":
+            while index < length and text[index] != "\n":
+                index += 1
+        elif text.startswith(("'''", '"""'), index):
+            quote = text[index : index + 3]
+            end = index + 3
+            while end < length:
+                if text[end] == "\\":
+                    end += 2
+                    continue
+                if text.startswith(quote, end):
+                    end += 3
+                    break
+                end += 1
+            tokens.append(("string", text[index:end]))
+            index = end
+        elif char in "'\"":
+            end = index + 1
+            while end < length:
+                if text[end] == "\\":
+                    end += 2
+                    continue
+                if text[end] == char:
+                    end += 1
+                    break
+                end += 1
+            tokens.append(("string", text[index:end]))
+            index = end
+        elif char.isalnum() or char == "_":
+            end = index
+            while end < length and (text[end].isalnum() or text[end] == "_"):
+                end += 1
+            tokens.append(("ident", text[index:end]))
+            index = end
+        else:
+            tokens.append(("punct", char))
+            index += 1
+    return tokens
+
+
+def _balanced(tokens: list[tuple[str, str]]) -> bool:
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: list[str] = []
+    for kind, value in tokens:
+        if kind != "punct":
+            continue
+        if value in "([{":
+            stack.append(value)
+        elif value in pairs:
+            if not stack or stack.pop() != pairs[value]:
+                return False
+    return not stack
+
+
+def _match_paren(tokens: list[tuple[str, str]], open_index: int) -> int | None:
+    depth = 0
+    for index in range(open_index, len(tokens)):
+        if tokens[index] == ("punct", "("):
+            depth += 1
+        elif tokens[index] == ("punct", ")"):
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _string_value(token: tuple[str, str]) -> str | None:
+    kind, value = token
+    if kind != "string" or len(value) < 2:
+        return None
+    for quote in ("'''", '"""', "'", '"'):
+        if value.startswith(quote) and value.endswith(quote):
+            return value[len(quote) : -len(quote)]
+    return None
+
+
+def _maven_proxy(tokens: list[tuple[str, str]]) -> str | None:
+    """Name bound by `<name> = use_extension(MAVEN_EXTENSION, "maven")`."""
+    for index in range(len(tokens) - 3):
+        if tokens[index][0] != "ident":
+            continue
+        if (
+            tokens[index + 1] != ("punct", "=")
+            or tokens[index + 2] != ("ident", "use_extension")
+            or tokens[index + 3] != ("punct", "(")
+        ):
+            continue
+        end = _match_paren(tokens, index + 3)
+        if end is None:
+            continue
+        values = {
+            _string_value(token)
+            for token in tokens[index + 4 : end]
+            if token[0] == "string"
+        }
+        if MAVEN_EXTENSION in values and "maven" in values:
+            return tokens[index][1]
+    return None
+
+
+def _strip_maven(tokens: list[tuple[str, str]], proxy: str) -> list[tuple[str, str]]:
+    """Drop `<proxy>.<tag>(...)` calls and `use_repo(<proxy>, ...)`."""
+    rest: list[tuple[str, str]] = []
+    index = 0
+    while index < len(tokens):
+        if (
+            tokens[index] == ("ident", proxy)
+            and index + 3 < len(tokens)
+            and tokens[index + 1] == ("punct", ".")
+            and tokens[index + 2][0] == "ident"
+            and tokens[index + 3] == ("punct", "(")
+        ):
+            end = _match_paren(tokens, index + 3)
+            if end is not None:
+                index = end + 1
+                continue
+        if (
+            tokens[index] == ("ident", "use_repo")
+            and index + 2 < len(tokens)
+            and tokens[index + 1] == ("punct", "(")
+            and tokens[index + 2] == ("ident", proxy)
+        ):
+            end = _match_paren(tokens, index + 1)
+            if end is not None:
+                index = end + 1
+                continue
+        rest.append(tokens[index])
+        index += 1
+    return rest
+
+
+def module_bazel_is_maven_only(old_text: str, new_text: str) -> bool:
+    """Whether the only real change is inside the rules_jvm_external Maven use.
+
+    Comments and whitespace never count, and neither does anything inside
+    `maven.install(...)`/`maven.<tag>(...)` or `use_repo(maven, ...)` where
+    `maven` is the proxy bound by `use_extension("@rules_jvm_external//:
+    extensions.bzl", "maven")`.
+
+    Everything else is deliberately *not* scoped: a `bazel_dep`, toolchain,
+    `go_deps`, `oci` or Python change keeps the global invalidation. A missing
+    proxy binding or unbalanced input also keeps it: the fail-safe direction is
+    "run everything".
+    """
+    old_tokens = _tokens(old_text)
+    new_tokens = _tokens(new_text)
+    if not _balanced(old_tokens) or not _balanced(new_tokens):
+        return False
+    old_proxy = _maven_proxy(old_tokens)
+    new_proxy = _maven_proxy(new_tokens)
+    if old_proxy is None or new_proxy is None:
+        return False
+    return _strip_maven(old_tokens, old_proxy) == _strip_maven(new_tokens, new_proxy)
+
+
+def _scope_module_bazel(
+    changed: list[str], root: Path, base: str | None, head: str
+) -> tuple[list[str], str | None]:
+    """Replace a Maven-only `MODULE.bazel` edit with the virtual android path."""
+    if MODULE_BAZEL not in changed or not base:
+        return changed, None
+    old_text = git_file_text(root, base, MODULE_BAZEL)
+    new_text = git_file_text(root, head, MODULE_BAZEL)
+    # Added/deleted MODULE.bazel (or an unknown revision): keep it global.
+    if old_text is None or new_text is None:
+        return changed, None
+    if not module_bazel_is_maven_only(old_text, new_text):
+        return changed, None
+    scoped = [MODULE_BAZEL_MAVEN if path == MODULE_BAZEL else path for path in changed]
+    return scoped, (
+        "MODULE.bazel changed only inside the rules_jvm_external Maven extension; "
+        "scoping it to the android platform"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -644,8 +861,9 @@ def route(
     graph_loader=None,
 ) -> Route:
     """Route changed paths onto units. Exposed for tests."""
+    changed, scope_warning = _scope_module_bazel(changed, root, base, head)
     invalidated = _invalidated_platforms(config, changed)
-    warnings: list[str] = []
+    warnings: list[str] = [scope_warning] if scope_warning else []
     routes = _route_platforms(
         config, changed, root, invalidated, graph, graph_loader, warnings
     )

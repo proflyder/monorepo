@@ -8,6 +8,9 @@ invalidations:
       - MODULE.bazel
       - .bazelrc
     platforms: ["*"]
+  - paths:
+      - MODULE.bazel#maven
+    platforms: [android]
 
 deploy_control:
   units: [sched]

@@ -942,7 +942,9 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 `.github/workflows/ci.yml`: Environment `Android`, VPN группа `ci`, роль OpenBao
 `android-distribute` → `secret/ci/android-distribute`. Глобальная инвалидация
 (например `MODULE.bazel`) по-прежнему прогоняет проверки `android`, но APK не
-публикует. Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
+публикует. Исключение — правка `MODULE.bazel` только внутри Maven-расширения
+(`maven.install(...)`, `use_repo(maven, ...)`): она меняет состав APK, поэтому
+маршрутизируется как `MODULE.bazel#maven` только на `android` и публикует APK. Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
 (`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `admins` («Admins»)
 и удаляет ключи. PR из форков пропускается: у них нет ни OIDC-токена, ни
 секретов Environment. Job не входит в `ci-ok` — неудачная загрузка видна на PR,

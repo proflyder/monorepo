@@ -103,6 +103,13 @@ class AndroidFixtureRoutingTests(unittest.TestCase):
         self.assertEqual(result.routes["android"].mode, "all")
         self.assertEqual(result.routes["go"].mode, "all")
 
+    def test_maven_virtual_path_only_reaches_android(self):
+        result = self.route([affected.MODULE_BAZEL_MAVEN])
+        ids = [unit.id for unit in result.routes["android"].units]
+        self.assertEqual(ids, ["app-one", "app-two", "shared-kotlin"])
+        self.assertEqual(result.routes["android"].mode, "all")
+        self.assertEqual(result.routes["go"].units, [])
+
     def test_docs_only_change_runs_nothing_but_quality(self):
         result = self.route(["docs/ARCHITECTURE.md"])
         self.assertTrue(result.docs_only)
@@ -567,3 +574,193 @@ class WorkflowInvalidationTests(unittest.TestCase):
         result = self._route([".github/workflows/ci.yml"])
         for platform in ("go", "android", "python", "js", "native"):
             self.assertTrue(result.routes[platform].units, platform)
+
+
+# Modelled on the real 49937f5..54a0fe3 diff (PR #90): two Firebase artifacts
+# and a comment were added inside `maven.install(...)`; everything else stayed.
+MODULE_BAZEL_MAVEN_OLD = '''\
+module(name = "home")
+
+bazel_dep(name = "rules_jvm_external", version = "6.6")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "maven",
+    artifacts = [
+        "com.google.firebase:firebase-common:21.0.0",
+        "com.google.firebase:firebase-config-interop:16.0.1",
+        "com.google.firebase:firebase-crashlytics:19.4.4",
+    ],
+    repositories = ["https://maven.google.com"],
+)
+use_repo(maven, "maven")
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")
+use_repo(go_deps, "com_github_example")
+
+# A `#` and parentheses in a string must not confuse the tokenizer.
+MARKER = "value (with # parens)"
+'''
+
+MODULE_BAZEL_MAVEN_NEW = '''\
+module(name = "home")
+
+bazel_dep(name = "rules_jvm_external", version = "6.6")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "maven",
+    artifacts = [
+        "com.google.firebase:firebase-common:21.0.0",
+        "com.google.firebase:firebase-config-interop:16.0.1",
+        # Remote Config (endpoints/timeouts): abt is its A/B-testing runtime
+        # dependency (from the firebase-config POM).
+        "com.google.firebase:firebase-abt:21.1.1",
+        "com.google.firebase:firebase-config:22.1.2",
+        "com.google.firebase:firebase-crashlytics:19.4.4",
+    ],
+    repositories = ["https://maven.google.com"],
+)
+use_repo(maven, "maven")
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")
+use_repo(go_deps, "com_github_example")
+
+# A `#` and parentheses in a string must not confuse the tokenizer.
+MARKER = "value (with # parens)"
+'''
+
+
+class ModuleBazelClassifierTests(unittest.TestCase):
+    """MODULE.bazel is global unless only the Maven extension changed."""
+
+    def test_maven_only_edit_is_scoped(self):
+        self.assertTrue(
+            affected.module_bazel_is_maven_only(
+                MODULE_BAZEL_MAVEN_OLD, MODULE_BAZEL_MAVEN_NEW
+            )
+        )
+
+    def test_use_repo_maven_edit_is_scoped(self):
+        new = MODULE_BAZEL_MAVEN_OLD.replace(
+            'use_repo(maven, "maven")', 'use_repo(maven, "maven", "maven_extra")'
+        )
+        self.assertTrue(affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD, new))
+
+    def test_bazel_dep_edit_is_global(self):
+        new = MODULE_BAZEL_MAVEN_OLD.replace('version = "6.6"', 'version = "7.0"')
+        self.assertFalse(affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD, new))
+
+    def test_mixed_maven_and_bazel_dep_edit_is_global(self):
+        new = MODULE_BAZEL_MAVEN_NEW.replace('version = "6.6"', 'version = "7.0"')
+        self.assertFalse(affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD, new))
+
+    def test_other_extension_use_repo_edit_is_global(self):
+        new = MODULE_BAZEL_MAVEN_OLD.replace(
+            'use_repo(go_deps, "com_github_example")',
+            'use_repo(go_deps, "com_github_example", "com_github_other")',
+        )
+        self.assertFalse(affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD, new))
+
+    def test_string_change_outside_maven_is_global(self):
+        new = MODULE_BAZEL_MAVEN_OLD.replace(
+            'MARKER = "value (with # parens)"', 'MARKER = "value (with # parens)!"'
+        )
+        self.assertFalse(affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD, new))
+
+    def test_comment_change_outside_maven_is_scoped(self):
+        # Comments never reach the build, so a comment-only edit is Maven-safe.
+        new = MODULE_BAZEL_MAVEN_OLD.replace(
+            "# A `#` and parentheses in a string",
+            "# A comment mentioning maven.install( outside the call",
+        )
+        self.assertTrue(affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD, new))
+
+    def test_missing_maven_proxy_is_global(self):
+        new = MODULE_BAZEL_MAVEN_NEW.replace(
+            'maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")',
+            "maven = object()",
+        )
+        self.assertFalse(affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD, new))
+
+    def test_unbalanced_input_is_global(self):
+        self.assertFalse(
+            affected.module_bazel_is_maven_only(MODULE_BAZEL_MAVEN_OLD + "(\n", MODULE_BAZEL_MAVEN_NEW)
+        )
+
+
+class ModuleBazelRoutingTests(unittest.TestCase):
+    """The scoped path invalidates only android for CI and deploy."""
+
+    def setUp(self):
+        self.config = affected.load_config(HERE / "units.yml")
+        self.android_ids = [unit.id for unit in self.config.by_platform("android")]
+
+    def _route(self, old, new):
+        def fake_text(_root, revision, _path):
+            return old if revision == "base-sha" else new
+
+        with mock.patch.object(affected, "go_package_dirs", return_value=set()):
+            with mock.patch.object(affected, "git_file_text", side_effect=fake_text):
+                return affected.route(
+                    self.config,
+                    ["MODULE.bazel"],
+                    root=REPO,
+                    base="base-sha",
+                    head="head-sha",
+                )
+
+    def test_maven_only_edit_runs_android_checks_and_no_other_platform(self):
+        result = self._route(MODULE_BAZEL_MAVEN_OLD, MODULE_BAZEL_MAVEN_NEW)
+        self.assertEqual(result.changed, [affected.MODULE_BAZEL_MAVEN])
+        self.assertEqual(result.routes["android"].mode, "all")
+        self.assertEqual([unit.id for unit in result.routes["android"].units], self.android_ids)
+        for platform in ("go", "python", "js", "native"):
+            self.assertEqual(result.routes[platform].units, [], platform)
+        self.assertEqual(result.routes["quality"].mode, "always")
+        self.assertFalse(result.docs_only)
+        self.assertFalse(result.deploy_control)
+
+    def test_maven_only_edit_distributes_the_apk_but_deploys_no_service(self):
+        result = self._route(MODULE_BAZEL_MAVEN_OLD, MODULE_BAZEL_MAVEN_NEW)
+        self.assertTrue(result.android_distribute)
+        # The deploy selection contains the android units (they are not
+        # deployable) and the always-on quality unit, never a service.
+        self.assertEqual(
+            result.deploy_selected, set(self.android_ids) | {"repository"}
+        )
+        self.assertEqual(affected.deploy_entries(result, self.config), [])
+
+    def test_bazel_dep_change_keeps_the_global_invalidation(self):
+        new = MODULE_BAZEL_MAVEN_OLD.replace('version = "6.6"', 'version = "7.0"')
+        result = self._route(MODULE_BAZEL_MAVEN_OLD, new)
+        self.assertEqual(result.changed, ["MODULE.bazel"])
+        self.assertEqual(result.routes["go"].mode, "all")
+        self.assertEqual(result.routes["python"].mode, "all")
+        expected = [unit.id for unit in self.config.units if unit.deploy_images]
+        self.assertEqual(
+            [entry["id"] for entry in affected.deploy_entries(result, self.config)], expected
+        )
+
+    def test_mixed_edit_keeps_the_global_invalidation(self):
+        new = MODULE_BAZEL_MAVEN_NEW.replace('version = "6.6"', 'version = "7.0"')
+        result = self._route(MODULE_BAZEL_MAVEN_OLD, new)
+        self.assertEqual(result.routes["go"].mode, "all")
+
+    def test_missing_revision_keeps_the_global_invalidation(self):
+        def fake_text(_root, revision, _path):
+            return None if revision == "base-sha" else MODULE_BAZEL_MAVEN_NEW
+
+        with mock.patch.object(affected, "go_package_dirs", return_value=set()):
+            with mock.patch.object(affected, "git_file_text", side_effect=fake_text):
+                result = affected.route(
+                    self.config,
+                    ["MODULE.bazel"],
+                    root=REPO,
+                    base="base-sha",
+                    head="head-sha",
+                )
+        self.assertEqual(result.changed, ["MODULE.bazel"])
+        self.assertEqual(result.routes["go"].mode, "all")

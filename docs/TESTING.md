@@ -254,11 +254,14 @@ workflow → `ci-ok`. Отдельного generic Bazel-workflow нет: Bazel 
 инструмент `_android.yml` и deploy-control регрессии, а не платформа.
 Единственное исключение — job `android-distribute`: он ждёт `android` и при
 PR (не из форка) с `android_distribute` = true собирает и загружает APK в
-Firebase. Этот output true только когда изменился реальный вход приложения
-(`projects/mobile/android/**`, `packages/kotlin/**` или `platform/android/**`);
-глобальная инвалидация вроде `MODULE.bazel` прогоняет проверки `android`, но не
-публикует сборку. Job намеренно не входит в `ci-ok`, поэтому его падение не
-блокирует merge.
+Firebase. Этот output true, когда изменился реальный вход приложения
+(`projects/mobile/android/**`, `packages/kotlin/**` или `platform/android/**`)
+либо `MODULE.bazel` изменился только внутри Maven-расширения
+rules_jvm_external (виртуальный путь `MODULE.bazel#maven`): тогда меняется
+Maven/APK-замыкание. Прочие глобальные инвалидации (остальной `MODULE.bazel`,
+`.bazelrc`, toolchain-файлы) и правка CI-workflow прогоняют проверки
+`android`, но APK не публикуют. Job намеренно не входит в `ci-ok`, поэтому его
+падение не блокирует merge.
 
 `changes` выдаёт outputs `go_units`, `android_units`, `python_units`,
 `js_units`, `native_units`, `deploy_control`, `android_distribute`, `base_sha`,
@@ -273,12 +276,24 @@ Firebase. Этот output true только когда изменился реа
 и Bazel-корни для сопоставления графа с юнитами. Рядом:
 
 * `invalidations` — пути, которые валят больше юнитов, чем совпало по `paths`
-  (`MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `BUILD.bazel`, toolchain-файлы
-  → все платформы; `go.mod/go.sum/go.work` → все go-юниты; `platform/android/**`
-  → все android-юниты; `requirements-test.txt` → python+quality). Флаг
-  `deploy: false` оставляет правило только для CI: правка workflow или
-  `platform/ci/**` перезапускает проверки, но `deploy-home` не выкатывает
-  юнит, выбранный лишь таким правилом.
+  (`MODULE.bazel`, `MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
+  `BUILD.bazel`, toolchain-файлы → все платформы; `go.mod/go.sum/go.work` →
+  все go-юниты; `platform/android/**` → все android-юниты;
+  `requirements-test.txt` → python+quality). Флаг `deploy: false` оставляет
+  правило только для CI: правка workflow или `platform/ci/**` перезапускает
+  проверки, но `deploy-home` не выкатывает юнит, выбранный лишь таким
+  правилом.
+* `MODULE.bazel` — глобальная инвалидация с одним исключением. Если diff
+  между base и head меняет только использование Maven-расширения
+  rules_jvm_external (`maven.install(...)` и любые `maven.<tag>(...)` вызовы,
+  `use_repo(maven, ...)`, где `maven` — переменная из
+  `use_extension("@rules_jvm_external//:extensions.bzl", "maven")`) и/или
+  комментарии с пробелами, `affected.py` подменяет путь на
+  `MODULE.bazel#maven`; это правило валит только `android` (CI и deploy), но
+  не `*`. Любое другое изменение (`bazel_dep`, toolchain, `go_deps`, `oci`,
+  python), неразбираемый файл, отсутствующая base-ревизия или
+  добавление/удаление `MODULE.bazel` оставляют глобальную инвалидацию:
+  fail safe — «больше», не «меньше».
 * `deploy_control` — какие go-юниты и пути включают дорогую регрессию
   `make test-deploy-control` (scheduler, ha-bridge/ha-control,
   `projects/home/kubernetes/scheduler/**`).
@@ -305,8 +320,10 @@ SDK, поэтому маршрутизация дешёвая и не может
 
 ### Fallback: только «больше», никогда «ничего»
 
-* `MODULE.bazel*`, `.bazelrc`, `.bazelversion`, `.bazelignore`, `BUILD.bazel`,
-  `platform/bazel/**` → все платформы и все юниты;
+* `MODULE.bazel`/`MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
+  `.bazelignore`, `BUILD.bazel`, `platform/bazel/**` → все платформы и все
+  юниты; исключение — Maven-only diff `MODULE.bazel`, который даёт
+  `MODULE.bazel#maven` и только android;
 * `go list` упал → все go-юниты; `bazel query` упал → все android-юниты;
 * база не определена (новый push, `workflow_dispatch`) → все юниты
   (`affected.py --all`);
