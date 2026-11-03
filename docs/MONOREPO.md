@@ -70,6 +70,7 @@ engine, два entrypoint-а для совместимости.
 | Windows logon provider | C++17 | in-proc COM DLL для LogonUI; кросс-сборка llvm-mingw с macOS/CI без Visual Studio, переносимые host-тесты |
 | HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
+| Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
 | задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
 | ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 
@@ -91,6 +92,11 @@ BUILD.bazel        //:gazelle
 go.mod             Go module для новых решений
 go.work            workspace корня и отслеживаемого BLE-модуля
 ```
+
+Инструменты Android-сборки в `platform/android/tools` — Go-программы
+(`go_binary` в exec-конфигурации), а их тесты — `go_test`; genrule'ы
+ViewBinding/google-services и `android_lint` запускают их по `$(execpath)`, не
+требуя `python3` в песочнице. Python в Android-сборке не используется.
 
 `MODULE.bazel` — глобальная CI/deploy-инвалидация. Исключение: если его diff
 затрагивает только Maven-расширение rules_jvm_external

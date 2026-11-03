@@ -107,18 +107,6 @@ def _android_lint_impl(ctx):
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         "cd \"$TEST_SRCDIR/$TEST_WORKSPACE\"",
-        # rules_python's bootstrap stub selects its hermetic runtime, but the
-        # stub itself needs a working `python3` on PATH. A broken version-manager
-        # shim must not hide a usable system interpreter.
-        "if ! python3 -c '' >/dev/null 2>&1; then",
-        "  for prefix in /opt/homebrew/bin /usr/local/bin /usr/bin /bin; do",
-        "    if \"$prefix/python3\" -c '' >/dev/null 2>&1; then",
-        "      PATH=\"$prefix:$PATH\"",
-        "      export PATH",
-        "      break",
-        "    fi",
-        "  done",
-        "fi",
         "exec \"$TEST_SRCDIR/$TEST_WORKSPACE/%s\" \"$TEST_SRCDIR/$TEST_WORKSPACE/%s\" \"$TEST_SRCDIR/$TEST_WORKSPACE/%s\"" % (
             ctx.executable._runner.short_path,
             records_file.short_path,
@@ -158,7 +146,7 @@ _android_lint_test = rule(
             allow_single_file = True,
         ),
         "_runner": attr.label(
-            default = "//platform/android:lint_runner",
+            default = "//platform/android/tools/lint_runner",
             executable = True,
             cfg = "exec",
         ),

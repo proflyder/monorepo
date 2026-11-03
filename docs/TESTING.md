@@ -163,6 +163,12 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 
 # Android Lint (also part of android_tests) needs cmdline-tools 23.0.
 ./secrets/local-tools/bazelisk test //projects/mobile/android:android_lint
+
+# Bazel-инструменты Android (Go, exec-конфигурация): генераторы
+# ViewBinding/google-services, lint runner и APK closure; их тесты входят
+# в android_tests.
+./secrets/local-tools/bazelisk test //platform/android/...
+go vet ./platform/android/...
 ```
 
 Android-гейты и их актуальный состав перечислены в

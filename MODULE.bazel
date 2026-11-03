@@ -83,17 +83,6 @@ bazel_dep(name = "rules_jvm_external", version = "7.1")
 # Packaging gate (platform/android) is a shell test; Bazel 9 no longer ships
 # native sh_test.
 bazel_dep(name = "rules_shell", version = "0.6.1")
-# Bazel 9 no longer ships native py_binary/py_test; platform tools and their
-# unit tests use rules_python with a hermetic interpreter.
-bazel_dep(name = "rules_python", version = "2.4.6")
-
-python = use_extension("@rules_python//python/extensions:python.bzl", "python")
-python.toolchain(
-    python_version = "3.12",
-    is_default = True,
-)
-use_repo(python, "python_3_12")
-register_toolchains("@python_3_12//:all")
 
 remote_android_extensions = use_extension(
     "@rules_android//bzlmod_extensions:android_extensions.bzl",

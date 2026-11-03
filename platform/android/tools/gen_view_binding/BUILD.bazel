@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "gen_view_binding",
+    embed = [":gen_view_binding_lib"],
+)
+
+go_library(
+    name = "gen_view_binding_lib",
+    srcs = ["main.go"],
+    importpath = "ricardo.local/monorepo/platform/android/tools/gen_view_binding",
+    visibility = ["//visibility:private"],
+)
+
+go_test(
+    name = "gen_view_binding_test",
+    srcs = ["main_test.go"],
+    embed = [":gen_view_binding_lib"],
+)
