@@ -742,6 +742,15 @@ kubectl -n home-assistant exec deployment/scheduler -- \
 kubectl -n home-assistant logs deploy/ha-bridge --tail=50
 ```
 
+Очередь озвучивания агента: `-status` печатает raw GetStatus, в `queues`
+смотрите `voice-work` / `voice-personal` (`pending`, `leased`) и consumer
+`voice-proxy-home` в `consumers` (`alive` после первого цикла). Растущий
+`leased` без `pending` означает, что станция занята или ответ не подтверждён;
+`FAILED` после `SCHEDULER_EVENT_MAX_ATTEMPTS` пишется в `detail` (без текста).
+Логи — `kubectl -n home-assistant logs deploy/hermes -c voice-proxy`: строки
+`queue enqueued|delivered|stale|announce failed` содержат только структуру.
+`HERMES_VOICE_QUEUE=0` возвращает прямой announce без consumer'а.
+
 Сценарии Home control — это HA-метка `scenario` (`CONTROL_SCENARIO_LABEL`,
 default `scenario`): назначьте её скриптам в Settings → Automations & scenes →
 Scripts. Иконки/комнаты/имена — только отображение. `CONTROL_LABEL` удалена.

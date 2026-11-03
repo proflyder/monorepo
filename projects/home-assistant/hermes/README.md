@@ -259,9 +259,11 @@ SSE with `role`, `content`, `finish_reason=stop`, `[DONE]`), and their speech
 never ends with a question so HA does not enable continued conversation.
 
 For `bb`, a daemon thread long-polls `POST /v1/voice/result` (25 s per call,
-about 15 min overall) and, on a final answer, speaks it. The text is sanitized
-with the same `sanitize_text` and limited to ~200 characters. A timeout or a
-gateway error announces nothing; the thread never writes speech to the log.
+about 15 min overall). A timeout or a gateway error announces nothing; the
+thread never writes speech to the log. When the durable queue is enabled the
+sanitized final answer is not spoken here but enqueued (see «Durable
+announcement queue»); otherwise it is spoken directly: the text is sanitized
+with the same `sanitize_text` and limited to ~200 characters.
 
 - A final answer ending with `?` (or `？`) calls
   `POST {HA_URL}/api/services/assist_satellite/start_conversation` with
@@ -277,23 +279,75 @@ without logging speech.
 ### Dispatcher updates
 
 Turns the owner did not start by voice — `child-completed` system messages and
-`[bb message from thread:…]` agent messages — are announced too, but only while
-the profile is work. A daemon poller bootstraps `POST /v1/voice/updates`
-without `afterSeq` (cursor only, no history), then long-polls with the returned
-`cursor`. Each batch re-reads the profile from HA without the cache:
+`[bb message from thread:…]` agent messages — are announced too. A daemon
+poller bootstraps `POST /v1/voice/updates` without `afterSeq` (cursor only),
+then long-polls with the returned cursor. Each update item carries `seq`,
+`spoken` and `completedAt` (ms epoch of `turn/completed`).
 
-- work: join the `spoken` lines of the batch with a space, sanitize with
-  `announce_text`, and speak through `announce` — a question calls
-  `assist_satellite.start_conversation`, otherwise `script.schedule_announce`;
-- personal or unknown: drop the batch and log only the count and profile.
+With the durable queue enabled, the poller enqueues every `spoken` line into
+`voice-work` regardless of the current column profile; the queue consumer
+speaks it only while the work profile is active. On bootstrap it rescans
+`HERMES_VOICE_UPDATES_RESCAN` events (default 300) instead of starting at
+"now": a proxy restart therefore does not lose completions, and items older
+than `HERMES_VOICE_ANNOUNCE_TTL` are not enqueued. Duplicates are rejected by
+the scheduler idempotency key. Without the queue, the old behaviour remains:
+re-read the profile from HA, speak only in work profile, drop the batch
+otherwise.
 
 Owner turns (`initiator: "user"`, including typed UI messages) are never
 returned by the gateway. Errors back off 2 s → 60 s; the poller never speaks on
 an error and never calls Hermes. The log line is
-`voice-proxy: updates items=N announced=… listen=… profile=…` without text.
+`voice-proxy: updates items=N queued=… stale=…` (queue) or
+`voice-proxy: updates items=N announced=… listen=… profile=…` (direct) without
+text.
 
 `HERMES_VOICE_UPDATES=0` disables the poller; it is otherwise on whenever
 profile routing is enabled.
+
+### Durable announcement queue
+
+Late answers are spoken by the station, not by the request thread. With
+`scheduler` configured, the proxy enqueues a task instead of calling HA:
+
+- `POST {HERMES_SCHEDULER_URL}/ricardo.v1.SchedulerService/EnqueueTask`
+  `{taskType: "voice.announce", payloadJson, runAtUnix, queue,
+  idempotencyKey}`;
+- queue `voice-work` or `voice-personal`, chosen by the profile of the answer;
+- `payloadJson` = `{text, profile, thread_id, seq, created_unix}`;
+- idempotency key `voice:<thread_id>:<seq>` (`done:<completedSeq>` when the
+  result route returns one, otherwise `after:<afterSeq>`; dispatcher updates
+  use the update `seq`).
+
+If `EnqueueTask` fails (scheduler down or misconfigured), the producer falls
+back to the previous direct `announce`, so an answer is never lost; the log
+line is `voice-proxy: queue enqueue failed … fallback=direct`.
+
+A single daemon consumer (`HERMES_VOICE_CONSUMER`, default `voice-proxy-home`)
+loops about once a second:
+
+1. read the profile fresh from HA and the station state:
+   `{HERMES_VOICE_SATELLITE}` must be `idle` and `{HERMES_VOICE_MEDIA_PLAYER}`
+   must not be `announcing`; unknown/unavailable is treated as busy, music
+   `playing` is fine;
+2. only then lease one event from `voice-<profile>`
+   (`ListDueEvents`, lease 120 s);
+3. an event older than `HERMES_VOICE_ANNOUNCE_TTL` is acknowledged as
+   `ACK_OUTCOME_SKIPPED` without speaking; an empty text is skipped the same
+   way;
+4. an answer that waited more than 120 s is prefixed «Пока вас не было: »;
+5. speak through the same `announce` (question →
+   `assist_satellite.start_conversation`, statement →
+   `script.schedule_announce`), wait up to ~10 s for the station to become
+   busy and then up to 180 s for `idle`/not `announcing`, then `AckEvent`;
+6. if the announce call failed the event is not acknowledged — lease expiry
+   returns it to `PENDING`, up to `SCHEDULER_EVENT_MAX_ATTEMPTS`.
+
+Errors back off 2 s → 60 s and never crash the thread. Logs carry structure
+only: `voice-proxy: queue delivered queue=… age=… listen=… idle=…`. Only one
+answer is spoken at a time because the consumer leases only after the station
+is free. `HERMES_VOICE_QUEUE=0` disables the queue: producers announce
+directly and the consumer is not started; the queue is enabled only when both
+`HERMES_SCHEDULER_URL` and its token are present.
 
 Environment (routing is off until all four of URL+token for HA and gateway are
 present):
@@ -315,6 +369,13 @@ present):
 | `HERMES_VOICE_ANNOUNCE_MAX_CHARS` | `200` | announced text limit |
 | `HERMES_VOICE_ANNOUNCE_SCRIPT` | `script.schedule_announce` | HA script that speaks a late statement |
 | `HERMES_VOICE_SATELLITE` | `assist_satellite.iandeks_stantsiia_midi_assist_satellite` | satellite for `start_conversation` when a late answer is a question |
+| `HERMES_VOICE_MEDIA_PLAYER` | `media_player.iandeks_stantsiia_midi_media_player` | media player that must not be `announcing` |
+| `HERMES_SCHEDULER_URL` | — | scheduler base, `http://scheduler.home-assistant.svc.cluster.local:8098` |
+| `HERMES_SCHEDULER_TOKEN_FILE` / `HERMES_SCHEDULER_TOKEN` | — | scheduler bearer from Secret `scheduler-auth` (`key: token`) |
+| `HERMES_VOICE_QUEUE` | `1` | durable announcement queue; `0` = direct announce, no consumer |
+| `HERMES_VOICE_CONSUMER` | `voice-proxy-home` | consumer id in the scheduler allowlist |
+| `HERMES_VOICE_ANNOUNCE_TTL` | `10800` | answers older than this are acknowledged without speech |
+| `HERMES_VOICE_UPDATES_RESCAN` | `300` | updates events replayed once on bootstrap |
 
 Logs carry the route outcome, profile name, character count and thread id —
 never the spoken text. `_route_counts` keeps per-outcome counters for tests and

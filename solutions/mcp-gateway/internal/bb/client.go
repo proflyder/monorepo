@@ -330,6 +330,9 @@ type UpdatesRequest struct {
 type UpdateItem struct {
 	Seq    int64  `json:"seq"`
 	Spoken string `json:"spoken"`
+	// CompletedAt is the turn/completed event time in epoch milliseconds. The
+	// voice proxy uses it to skip answers older than its announce TTL.
+	CompletedAt int64 `json:"completedAt,omitempty"`
 }
 
 // UpdatesResult is the dispatcher-updates answer. Cursor is the latest event

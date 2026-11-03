@@ -1530,6 +1530,13 @@ test("updates returns system and agent turns, never owner turns", async () => {
   );
   assert.ok(items.every((item) => item.seq !== owner.completion.seq));
   assert.ok(items.every((item) => item.seq !== ownerSilent.completion.seq));
+  assert.ok(
+    items.every(
+      (item) =>
+        typeof item.completedAt === "number" && item.completedAt > 0,
+    ),
+    "every updates item must carry its completion time for the voice TTL",
+  );
   assert.equal(response.body.result.cursor, systemSilent.completion.seq);
 });
 

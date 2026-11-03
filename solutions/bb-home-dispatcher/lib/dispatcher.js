@@ -1157,7 +1157,13 @@ export function createDispatcher({
       const text = await lastAgentMessage(threadId, request.seq, completion.seq);
       const spoken = extractSpoken(text);
       if (spoken === null) continue;
-      items.push({ seq: completion.seq, spoken });
+      // Completion time lets the voice proxy drop answers older than its TTL
+      // on a restart rescan instead of speaking them hours late.
+      items.push({
+        seq: completion.seq,
+        spoken,
+        completedAt: completion.createdAt,
+      });
     }
     return items;
   }

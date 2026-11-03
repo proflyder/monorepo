@@ -552,9 +552,19 @@
   профиль — постоянный тред `BB_DISPATCHER_THREAD_ID`; личный в режиме
   агента — активный тред), `hermes` (иначе). `/v1/voice/result` — long-poll
   `turn_result` для позднего ответа, `/v1/voice/updates` — завершённые ходы
-  диспетчера с `initiator` `system`/`agent` для озвучивания в рабочем профиле
-  (ходы владельца не возвращаются), `/v1/voice/state` — отладочное состояние
-  режима.
+  диспетчера с `initiator` `system`/`agent` (`spoken` + `completedAt`) для
+  озвучивания (ходы владельца не возвращаются), `/v1/voice/state` — отладочное
+  состояние режима.
+- **Очередь озвучивания.** Поздние ответы агентов не звучат из потока
+  запроса: voice-proxy ставит `EnqueueTask` `voice.announce` в durable очередь
+  `voice-work`/`voice-personal` (idempotency key `voice:<thread>:<seq>`), а
+  один consumer `voice-proxy-home` арендует событие только когда спутник
+  `idle`, а media player не `announcing`. Ответы старше
+  `HERMES_VOICE_ANNOUNCE_TTL` (3 ч) подтверждаются без звука; ожидавшие >2 мин
+  получают префикс «Пока вас не было: ». Ошибка `EnqueueTask` откатывается на
+  прямой announce. `HERMES_VOICE_QUEUE=0` выключает очередь. Дубли после
+  рестарта отсекает idempotency key; TTL хранения ключей scheduler — 30 дней,
+  больше TTL ответов.
 - Секреты — ESO: `mcp-gateway-auth` (OpenBao
   `k8s/home-assistant/mcp-gateway-auth`, ключ `token`, тот же токен Hermes
   получает как `HERMES_INFRA_TOKEN`), `mcp-gateway-telegram`

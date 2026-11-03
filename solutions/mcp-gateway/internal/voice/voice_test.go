@@ -349,7 +349,7 @@ func TestUpdatesBootstrapReturnsCursorWithoutHistory(t *testing.T) {
 func TestUpdatesForwardsCursorAndReturnsItems(t *testing.T) {
 	dispatcher := &fakeDispatcher{updates: []bb.UpdatesResult{{
 		Cursor: 14,
-		Items:  []bb.UpdateItem{{Seq: 13, Spoken: "Готово, ребёнок закончил."}},
+		Items:  []bb.UpdateItem{{Seq: 13, Spoken: "Готово, ребёнок закончил.", CompletedAt: 1730000000123}},
 	}}}
 	handler := newUpdatesHandler(dispatcher)
 	afterSeq, wait := int64(4), 5
@@ -368,6 +368,9 @@ func TestUpdatesForwardsCursorAndReturnsItems(t *testing.T) {
 	item := items[0].(map[string]any)
 	if item["seq"] != float64(13) || item["spoken"] != "Готово, ребёнок закончил." {
 		t.Fatalf("item = %v", item)
+	}
+	if item["completedAt"] != float64(1730000000123) {
+		t.Fatalf("completedAt = %v", item["completedAt"])
 	}
 	call := dispatcher.updateCalls[0]
 	if call.AfterSeq == nil || *call.AfterSeq != 4 {
