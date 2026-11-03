@@ -149,7 +149,7 @@
 
 ## CI/CD и образы
 
-- GitHub-hosted runners. Карта юнитов — `platform/ci/units.yml`, запуск —
+- GitHub-hosted runners. Карта юнитов — `platform/ci/units.mjs`, запуск —
   платформенные reusable workflows (`.github/workflows/_*.yml`),
   обязательный итог — `ci-ok`. Прямой push в `develop` запрещён; `develop`
   обновляется только squash-merge PR.

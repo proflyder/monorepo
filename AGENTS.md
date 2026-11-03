@@ -157,7 +157,7 @@ duck/resume и передачу wake-команд в HA. Текущая верс
 - Не обходить hook через `--no-verify`, смену hooksPath или mirror push.
 - В публичных документах и примерах использовать обезличенные пути/имена
   и TEST-NET `192.0.2.0/24`. Оригинальные deployment-конфиги — только secrets/.
-- После правок запускайте `python3 platform/quality/audit_repository.py` и Gitleaks.
+- После правок запускайте `node platform/quality/audit_repository.mjs` и Gitleaks.
   Не добавлять широкие исключения сканера; каждое исключение проверять.
 
 ## Размещение тестов

@@ -26,10 +26,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install test dependencies
+      # Python is kept only for the static gate that parses first-party Python
+      # product scripts (platform/quality/test_static.py); all CI/repo-quality
+      # glue is dependency-free Node ESM.
+      - name: Install shellcheck
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements-test.txt
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends shellcheck
 
@@ -39,16 +40,29 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Repository audit (private data, links, gitlinks)
-        run: python3 platform/quality/audit_repository.py
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const audit = await import(`${process.env.GITHUB_WORKSPACE}/platform/quality/audit_repository.mjs`);
+            audit.runGithubScript({ core });
 
-      - name: Static gates (shell/Python syntax, shellcheck, secret patterns)
-        run: python3 -m unittest discover -s platform/quality -p 'test_*.py' -v
+      # Python remains only for first-party Python product checks: the static
+      # gate (platform/quality/test_static.py) and the out-of-scope container
+      # helper (platform/ci/oci_image.py) tests.
+      - name: Python product gates (syntax, shellcheck, secret patterns, oci helper)
+        run: |
+          python3 -m unittest discover -s platform/quality -p 'test_static.py' -v
+          python3 -m unittest discover -s platform/ci -p 'test_oci_image.py' -v
 
       - name: CI unit map is valid and every source/test file is routed
-        run: python3 platform/ci/check_units.py
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const check = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/check_units.mjs`);
+            await check.runGithubScript({ core });
 
       - name: CI routing and gate tests
-        run: python3 -m unittest discover -s platform/ci -p 'test_*.py' -v
+        run: node --test platform/ci/*.test.mjs platform/quality/*.test.mjs
 
       - name: Shellcheck (harness, CI scripts and deployment scripts)
         run: |

@@ -307,7 +307,7 @@ NODE_SSH=labuser@node ./projects/home/kubernetes/mcp-gateway/deploy.sh
 ```
 
 CI (`deploy-home`, push to `develop`): the `mcp-gateway` unit comes from
-`platform/ci/units.yml`; the image is built/pushed by Bazel, then `deploy.sh`
+`platform/ci/units.mjs`; the image is built/pushed by Bazel, then `deploy.sh`
 runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/mcp-gateway.env`.
 
 `deploy.sh` is idempotent and:

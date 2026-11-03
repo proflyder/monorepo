@@ -205,7 +205,7 @@ touches one service, use `--only`:
 kubectl only — no SSH and no root helper.
 
 - `plan` routes the pushed range (`before..sha`) through the CI unit map
-  (`platform/ci/units.yml`) and produces the affected **deployable** units
+  (`platform/ci/units.mjs`) and produces the affected **deployable** units
   (`deploy.images` / `deploy.workloads`). A documentation-only push deploys
   nothing; a shared Go package change deploys every importer; an unknown or
   zero `before` falls back to every deployable unit.

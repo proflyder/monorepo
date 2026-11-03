@@ -12,7 +12,7 @@ on:
   workflow_call:
     inputs:
       unit:
-        description: Unit id from platform/ci/units.yml
+        description: Unit id from platform/ci/units.mjs
         required: true
         type: string
       images:

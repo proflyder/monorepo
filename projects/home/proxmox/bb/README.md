@@ -431,7 +431,7 @@ bash -n projects/home/proxmox/bb/create-lxc.sh \
 shellcheck projects/home/proxmox/bb/*.sh
 python3 -m unittest projects/home/proxmox/test_bb.py -v
 python3 -m unittest projects/home/proxmox/test_bb_dispatch.py -v
-python3 platform/quality/audit_repository.py
+node platform/quality/audit_repository.mjs
 ```
 
 `test_bb_dispatch.py` поднимает локальный HTTP-double маршрута плагина и

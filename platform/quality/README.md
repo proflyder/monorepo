@@ -6,5 +6,7 @@
 
 Полные команды и ограничения — [TESTING.md](../../docs/TESTING.md).
 
-`audit_repository.py` запускается также из pre-push hook.
-`run-tests.sh` не включает live E2E.
+`audit_repository.mjs` запускается также из pre-push hook.
+`run-tests.sh` не включает live E2E. Проверки в `platform/ci/` и
+`platform/quality/` — Node ESM без npm-зависимостей: `node --test platform/ci
+platform/quality` (или `make test`).

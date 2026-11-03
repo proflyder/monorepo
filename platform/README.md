@@ -4,7 +4,7 @@
 кросс-компиляция и правила для мобильных платформ.
 
 - `platform/bazel/` — toolchains и общие Bazel-настройки.
-- `platform/ci/` — карта юнитов (`units.yml`), маршрутизация затронутых
+- `platform/ci/` — карта юнитов (`units.mjs`), маршрутизация затронутых
   юнитов и `ci-ok` gate.
 - `platform/quality/` — аудит репозитория, статические проверки, Gitleaks.
 - `platform/deploy/` — общие шаблоны деплоя (не project-specific).

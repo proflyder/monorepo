@@ -47,7 +47,7 @@ kubectl -n home-assistant wait --for=condition=Ready externalsecret/wakegrant --
 ## Deploy
 
 CI deploys the unit after a merge to `develop` (see
-`platform/ci/units.yml`, unit `wakegrant`). Manual flow:
+`platform/ci/units.mjs`, unit `wakegrant`). Manual flow:
 
 ```bash
 cp projects/home/kubernetes/wakegrant/wakegrant.env.example secrets/home/wakegrant.env

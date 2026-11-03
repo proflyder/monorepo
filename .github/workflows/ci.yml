@@ -2,7 +2,7 @@ name: ci
 
 # Smart CI: only the platforms and units a change actually touches.
 #
-# `changes` routes the diff onto units from platform/ci/units.yml (Go: `go list`
+# `changes` routes the diff onto units from platform/ci/units.mjs (Go: `go list`
 # dependency closure, Android: Bazel reverse dependencies, Python/JS/native:
 # path rules) and each platform then fans out a matrix of reusable workflows.
 # `ci-ok` is the single required check: green when every job succeeded or was
@@ -29,9 +29,6 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  PYTHON_VERSION: "3.13"
 
 jobs:
   # Computes the affected units. Cheap: no toolchains, only a Bazel loading
@@ -65,15 +62,6 @@ jobs:
           BASE_REF: ${{ github.base_ref || 'develop' }}
         run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install routing dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements-test.txt
-
       # Pinned Bazelisk on PATH plus its own Bzlmod/repository caches: the
       # routing query only needs the external repositories, not action outputs.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
@@ -86,19 +74,18 @@ jobs:
       # `workflow_dispatch` intentionally runs every unit.
       - name: Route affected units
         id: route
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          base="${PR_BASE_SHA:-${PUSH_BEFORE_SHA}}"
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            python3 platform/ci/affected.py --all --format github \
-              | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            python3 platform/ci/affected.py --base "$base" \
-              --format github | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
+        with:
+          script: |
+            const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
+            const argv = process.env.EVENT_NAME === 'workflow_dispatch'
+              ? ['--all', '--format', 'github']
+              : ['--base', process.env.PR_BASE_SHA || process.env.PUSH_BEFORE_SHA || '', '--format', 'github'];
+            await affected.runGithubScript({ core, argv });
 
   # Repository-wide gates: audit, static checks, unit-map invariants, Gitleaks.
   # Cheap and always worth running, even for documentation-only changes.
@@ -483,10 +470,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           sparse-checkout: platform/ci
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
       - name: Verify every required job succeeded or was skipped
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           NEEDS: ${{ toJSON(needs) }}
-        run: python3 platform/ci/ci_gate.py
+        with:
+          script: |
+            const gate = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/ci_gate.mjs`);
+            gate.runGithubScript({ core, needs: JSON.parse(process.env.NEEDS) });

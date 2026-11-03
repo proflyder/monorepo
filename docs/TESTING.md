@@ -13,6 +13,7 @@ make test-e2e      # live HA/BLE read-only; нужны токены
 
 `make test` — gate. `make test-e2e` требует `HA_TOKEN`, опционально
 `STATION_CONTROL_TOKEN`/`HERMES_API_KEY`; токены не коммитить.
+CI/repo-quality проверки — Node 20+ (`node --test`), без npm-зависимостей.
 
 ```bash
 export HA_URL=http://192.0.2.28:8123
@@ -271,7 +272,7 @@ Maven/APK-замыкание. Прочие глобальные инвалида
 
 ### Карта юнитов
 
-`platform/ci/units.yml` — единственный источник правды: `id`, `platform`,
+`platform/ci/units.mjs` (ES-модуль, без npm) — единственный источник правды: `id`, `platform`,
 `paths`, способ запуска (`go.packages`, `bazel.test_targets`, `python.suites`)
 и Bazel-корни для сопоставления графа с юнитами. Рядом:
 
@@ -288,7 +289,7 @@ Maven/APK-замыкание. Прочие глобальные инвалида
   rules_jvm_external (`maven.install(...)` и любые `maven.<tag>(...)` вызовы,
   `use_repo(maven, ...)`, где `maven` — переменная из
   `use_extension("@rules_jvm_external//:extensions.bzl", "maven")`) и/или
-  комментарии с пробелами, `affected.py` подменяет путь на
+  комментарии с пробелами, `affected.mjs` подменяет путь на
   `MODULE.bazel#maven`; это правило валит только `android` (CI и deploy), но
   не `*`. Любое другое изменение (`bazel_dep`, toolchain, `go_deps`, `oci`,
   python), неразбираемый файл, отсутствующая base-ревизия или
@@ -326,7 +327,7 @@ SDK, поэтому маршрутизация дешёвая и не может
   `MODULE.bazel#maven` и только android;
 * `go list` упал → все go-юниты; `bazel query` упал → все android-юниты;
 * база не определена (новый push, `workflow_dispatch`) → все юниты
-  (`affected.py --all`);
+  (`affected.mjs --all`);
 * база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
 
 Внутри android-юнита список целей дополнительно сужается
@@ -338,7 +339,7 @@ SDK, поэтому маршрутизация дешёвая и не может
 
 ### Инварианты и проверки
 
-`platform/ci/check_units.py` падает, если:
+`platform/ci/check_units.mjs` падает, если:
 
 * в карте дубли id, неизвестная платформа, пустые `paths` или слишком широкий
   шаблон (`**`);
@@ -346,20 +347,20 @@ SDK, поэтому маршрутизация дешёвая и не может
 * `depends_on` ссылается на несуществующий юнит;
 * объявленный python-suite не содержит `test_*.py` (для каталогов без
   герметичных тестов есть `python.compile`: только `compileall`);
-* **любой tracked `*.go`/`*.py`/`*.kt`/`*.js`/`*.sh`/`*.bzl`/`BUILD.bazel` не
+* **любой tracked `*.go`/`*.py`/`*.kt`/`*.js`/`*.mjs`/`*.sh`/`*.bzl`/`BUILD.bazel` не
   принадлежит ни одному юниту** — новый тест не может молча выпасть из CI.
 
-Тесты маршрутизатора: `platform/ci/test_affected.py` (включая фикстуру
-`testdata/units-two-apps.yml` с двумя Android-приложениями и общим
+Тесты маршрутизатора: `platform/ci/affected.test.mjs` (включая фикстуру
+`testdata/units-two-apps.mjs` с двумя Android-приложениями и общим
 Kotlin-юнитом).
 
 ### Расширение
 
 Новая платформа (например Rust): добавить reusable workflow `_rust.yml` с
-inputs юнита, добавить `platform: rust` в `units.yml` (`cargo`-поля), научить
-`affected.py` считать затронутые юниты (для Cargo — `cargo metadata`/
+inputs юнита, добавить `platform: rust` в `units.mjs` (`cargo`-поля), научить
+`affected.mjs` считать затронутые юниты (для Cargo — `cargo metadata`/
 `cargo tree`, для Bazel-целей — `bazel.roots`, как у android) и добавить job с
-matrix в `ci.yml`. Новый юнит — это новая запись в `units.yml` и путь в
+matrix в `ci.yml`. Новый юнит — это новая запись в `units.mjs` и путь в
 `paths`; отдельный job не нужен.
 
 ### Локальное воспроизведение
@@ -378,7 +379,7 @@ platform/ci/affected.sh --changed-file packages/kotlin/core/src/main/kotlin/.../
 platform/ci/affected.sh --all
 
 make ci-units                                   # инварианты карты юнитов
-python3 -m unittest discover -s platform/ci -p 'test_*.py' -v
+node --test platform/ci/*.test.mjs platform/quality/*.test.mjs        # маршрутизатор, gate и аудит
 make test                                       # герметичный gate (включает CI-тесты)
 make test-deploy-control BAZEL=bazelisk         # регрессия deploy control
 actionlint .github/workflows/*.yml
@@ -406,12 +407,12 @@ digest-пины образов, поэтому `make test` и `make test-deploy-
 `ci-ok` (`if: always()`) — единственный required status check для ruleset
 ветки `develop`. Он зелёный только если все зависимые job'ы завершились
 `success` или законно `skipped`; любой `failure`/`cancelled` (включая упавший
-`changes`) делает его красным. Логика вынесена в `platform/ci/ci_gate.py`.
+`changes`) делает его красным. Логика вынесена в `platform/ci/ci_gate.mjs`.
 
 ### Деплой (`deploy-home`)
 
 Push в `develop` — это squash-merge PR, поэтому workflow получает секреты
-Environment `Home`. `plan` прогоняет тот же `units.yml` по диапазону
+Environment `Home`. `plan` прогоняет тот же `units.mjs` по диапазону
 `before..sha` и деплоит только затронутые деплоимые юниты параллельно:
 VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
 роль `deploy-home`) → `secret/ci/deploy-home` → kubectl/helm к K3s `6443`
@@ -431,18 +432,18 @@ Pulsar собирается и релизится в своём репозито
 ## Публикация
 
 ```bash
-python3 platform/quality/audit_repository.py
-python3 -m unittest discover -s platform/quality -p 'test_*.py' -v
+node platform/quality/audit_repository.mjs
+node --test platform/ci/*.test.mjs platform/quality/*.test.mjs
 make test
 ```
 
 Проверить локальные Markdown-ссылки, приватные пути, историю Git и
 `SENSITIVE-DATA.md`. Эвристика не заменяет ручной аудит.
 
-`audit_repository.py` содержит два узких публичных исключения, одобренных
+`audit_repository.mjs` содержит два узких публичных исключения, одобренных
 пользователем: точный домен `proflyder.dev` и Android namespace
 `dev.proflyder.home` с подпакетами/путём `dev/proflyder/home`. Исключения
 удаляются только как целые токены с границами; другие TLD, username,
 поддомены, длинные хосты/пути и смешанные строки по-прежнему дают ошибку.
-Границы закреплены `platform/quality/test_audit_repository.py`. Общих
+Границы закреплены `platform/quality/audit_repository.test.mjs`. Общих
 исключений Gitleaks нет.

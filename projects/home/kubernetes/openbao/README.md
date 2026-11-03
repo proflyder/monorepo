@@ -461,7 +461,7 @@ bao kv put -mount=secret ci/deploy-station \
    `secret/ci/deploy-home`; action маскирует каждую строку значения и отдаёт
    его только как step output (`exportEnv: false`);
 4. минимальный shell-шаг пишет из outputs нужные юниту файлы (kubeconfig и
-   env из `units.yml`) в `$RUNNER_TEMP/ci` с правами 600; сами значения в лог
+   env из `units.mjs`) в `$RUNNER_TEMP/ci` с правами 600; сами значения в лог
    не печатаются;
 5. отдельного шага отзыва токена нет: роль выдаёт токен с коротким TTL, он
    живёт только до конца job;

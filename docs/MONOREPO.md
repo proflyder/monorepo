@@ -95,7 +95,7 @@ go.work            workspace корня и отслеживаемого BLE-мо
 `MODULE.bazel` — глобальная CI/deploy-инвалидация. Исключение: если его diff
 затрагивает только Maven-расширение rules_jvm_external
 (`maven.install(...)`/`maven.<tag>(...)`, `use_repo(maven, ...)`) и
-комментарии, `affected.py` маршрутизирует изменение как `MODULE.bazel#maven`
+комментарии, `affected.mjs` маршрутизирует изменение как `MODULE.bazel#maven`
 только в android (меняется Maven/APK-замыкание). Остальные правки —
 `bazel_dep`, toolchain, `go_deps`, `oci`, python — остаются глобальными.
 

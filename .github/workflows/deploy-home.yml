@@ -2,7 +2,7 @@ name: deploy-home
 
 # Home K3s deploy (scheduler, ha-bridge/ha-control, currency-bot, mcp-gateway,
 # Hermes) from `develop`. Per-unit namespace, workload list, deploy script,
-# OpenBao env key and ExternalSecret set come from `platform/ci/units.yml`
+# OpenBao env key and ExternalSecret set come from `platform/ci/units.mjs`
 # (matrix payload), so adding a deployable unit does not need a workflow edit.
 #
 # A push also publishes affected `native` units (today the Windows logon
@@ -175,22 +175,13 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      units: ${{ steps.route.outputs.units }}
+      units: ${{ steps.filter.outputs.units }}
       native_units: ${{ steps.route.outputs.native_units }}
       pr_url: ${{ steps.pr.outputs.url }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version: "3.13"
-
-      - name: Install routing dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements-test.txt
 
       # Pinned Bazelisk on PATH (`bazel`) plus its Bzlmod/repository caches.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
@@ -205,43 +196,61 @@ jobs:
 
       - name: Route affected deployable units
         id: route
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          DISPATCH_UNITS: ${{ github.event_name == 'workflow_dispatch' && inputs.units || '' }}
+          EVENT_NAME: ${{ github.event_name }}
           BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          out="$RUNNER_TEMP/route.out"
-          : > "$out"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            python3 platform/ci/affected.py --all \
-              --format github --out "$out" >/dev/null
-          else
-            if ! python3 platform/ci/affected.py --base "$BEFORE_SHA" --head "$GITHUB_SHA" \
-                 --format github --out "$out" >/dev/null; then
-              echo "routing failed; falling back to every deployable unit" >&2
-              : > "$out"
-              python3 platform/ci/affected.py --all \
-                --format github --out "$out" >/dev/null
-            fi
-          fi
-          units=$(sed -n 's/^deploy_units=//p' "$out" | tail -1)
-          # A dispatch may narrow the list explicitly (comma separated ids).
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "$DISPATCH_UNITS" && "$DISPATCH_UNITS" != "all" ]]; then
-            units=$(UNITS="$units" WANTED="$DISPATCH_UNITS" python3 -c '
-          import json, os
-          units = json.loads(os.environ["UNITS"] or "[]")
-          wanted = {item.strip() for item in os.environ["WANTED"].split(",") if item.strip()}
-          unknown = wanted - {entry["id"] for entry in units}
-          if unknown:
-              raise SystemExit(f"unknown deployable unit(s): {sorted(unknown)}")
-          print(json.dumps([entry for entry in units if entry["id"] in wanted]))
-          ')
-          fi
-          echo "units=$units" >> "$GITHUB_OUTPUT"
-          native=$(sed -n 's/^native_units=//p' "$out" | tail -1)
-          echo "native_units=${native:-[]}" >> "$GITHUB_OUTPUT"
-          { echo "### deploy-home plan"; echo; echo '```json'; echo "$units"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          { echo; echo "native units: \`${native:-[]}\`"; } >> "$GITHUB_STEP_SUMMARY"
+          HEAD_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
+            let computed;
+            if (process.env.EVENT_NAME === 'workflow_dispatch') {
+              computed = await affected.compute(['--all', '--format', 'github']);
+            } else {
+              try {
+                computed = await affected.compute([
+                  '--base', process.env.BEFORE_SHA,
+                  '--head', process.env.HEAD_SHA,
+                  '--format', 'github',
+                ]);
+              } catch (error) {
+                core.warning(`routing failed; falling back to every deployable unit: ${error.message}`);
+                computed = await affected.compute(['--all', '--format', 'github']);
+              }
+            }
+            const outputs = affected.githubOutputs(computed);
+            core.setOutput('deploy_units', outputs.deploy_units);
+            core.setOutput('native_units', outputs.native_units);
+
+      # A dispatch may narrow the list explicitly (comma separated ids); a push
+      # always deploys exactly the routed set.
+      - name: Filter dispatched deployable units
+        id: filter
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DEPLOY_UNITS: ${{ steps.route.outputs.deploy_units }}
+          NATIVE_UNITS: ${{ steps.route.outputs.native_units }}
+          WANTED: ${{ github.event_name == 'workflow_dispatch' && inputs.units || '' }}
+        with:
+          script: |
+            const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
+            const units = JSON.parse(process.env.DEPLOY_UNITS || '[]');
+            const wantedRaw = (process.env.WANTED || '').trim();
+            let selected = units;
+            if (process.env.EVENT_NAME === 'workflow_dispatch' && wantedRaw && wantedRaw !== 'all') {
+              const wanted = new Set(wantedRaw.split(',').map((item) => item.trim()).filter(Boolean));
+              const unknown = [...wanted].filter((id) => !units.some((entry) => entry.id === id)).sort();
+              if (unknown.length) {
+                throw new Error(`unknown deployable unit(s): [${unknown.map((id) => `'${id}'`).join(', ')}]`);
+              }
+              selected = units.filter((entry) => wanted.has(entry.id));
+            }
+            const json = affected.jsonDumps(selected);
+            core.setOutput('units', json);
+            core.summary.addRaw(`### deploy-home plan\n\n\`\`\`json\n${json}\n\`\`\`\n`);
+            await core.summary.addRaw(`\nnative units: \`${process.env.NATIVE_UNITS || '[]'}\`\n`).write();
 
       - name: Resolve pull request link
         id: pr
@@ -514,7 +523,7 @@ jobs:
             secret/data/ci/deploy-home ${{ matrix.env_key }} | DEPLOY_ENV_CONTENT
 
       # Each unit materialises only the files it consumes: the kubeconfig plus
-      # the private deploy-time env named by units.yml (scheduler.env,
+      # the private deploy-time env named by units.mjs (scheduler.env,
       # currency-bot.env or runtime-values.yaml).
       - name: Write deploy files
         env:
@@ -593,7 +602,7 @@ jobs:
           # Application Secrets are owned by External Secrets Operator and
           # sourced from OpenBao. A deploy must fail closed if ESO is unhealthy
           # rather than let a script recreate a stale value. The list is
-          # per-unit, from units.yml.
+          # per-unit, from units.mjs.
           NS="${{ matrix.namespace }}"
           for es in ${{ matrix.externalsecrets }}; do
             kubectl -n "$NS" wait --for=condition=Ready \
@@ -669,12 +678,11 @@ jobs:
                 kubectl -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
                 kubectl -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -status \
                   | tee "$CI_DIR/status.json"
-                python3 - "$CI_DIR/status.json" <<'PY'
-          import json, sys
-          status = json.load(open(sys.argv[1]))
-          assert status.get("ready") is True, "scheduler reports ready=false"
-          print("GetStatus ready:", status.get("ready"))
-          PY
+                if ! jq -e '.ready == true' "$CI_DIR/status.json" >/dev/null; then
+                  echo "scheduler reports ready=false" >&2
+                  exit 1
+                fi
+                echo "GetStatus ready: $(jq -r '.ready' "$CI_DIR/status.json")"
                 ;;
               ha-bridge)
                 kubectl -n "$NS" exec deployment/ha-bridge -- /usr/local/bin/ha-bridge -healthcheck
@@ -691,12 +699,11 @@ jobs:
                 kubectl -n "$NS" get --raw \
                   "/api/v1/namespaces/$NS/services/http:currency-bot:8080/proxy/readyz" \
                   | tee "$CI_DIR/readyz.json"
-                python3 - "$CI_DIR/readyz.json" <<'PY'
-          import json, sys
-          status = json.load(open(sys.argv[1]))
-          assert status.get("status") == "ready", "currency-bot reports not ready"
-          print("currency-bot /readyz:", status.get("status"))
-          PY
+                if ! jq -e '.status == "ready"' "$CI_DIR/readyz.json" >/dev/null; then
+                  echo "currency-bot reports not ready" >&2
+                  exit 1
+                fi
+                echo "currency-bot /readyz: $(jq -r '.status' "$CI_DIR/readyz.json")"
                 webhook_ready=$(kubectl -n "$NS" get endpointslices \
                   -l "kubernetes.io/service-name=currency-bot-webhook" \
                   -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
@@ -714,12 +721,11 @@ jobs:
                 kubectl -n "$NS" get --raw \
                   "/api/v1/namespaces/$NS/services/http:mcp-gateway:8080/proxy/readyz" \
                   | tee "$CI_DIR/mcp-readyz.json"
-                python3 - "$CI_DIR/mcp-readyz.json" <<'PY'
-          import json, sys
-          status = json.load(open(sys.argv[1]))
-          assert status.get("status") == "ready", "mcp-gateway reports not ready"
-          print("mcp-gateway /readyz:", status.get("status"))
-          PY
+                if ! jq -e '.status == "ready"' "$CI_DIR/mcp-readyz.json" >/dev/null; then
+                  echo "mcp-gateway reports not ready" >&2
+                  exit 1
+                fi
+                echo "mcp-gateway /readyz: $(jq -r '.status' "$CI_DIR/mcp-readyz.json")"
                 ;;
             esac
           done
@@ -792,7 +798,7 @@ jobs:
             fi
             if helm -n home-assistant status runtime >/dev/null 2>&1; then
               echo "- runtime revision: \`$(helm -n home-assistant list -o json \
-                | python3 -c 'import json,sys; print(next((r["revision"] for r in json.load(sys.stdin) if r["name"]=="runtime"), "unknown"))')\`"
+                | jq -r 'map(select(.name == "runtime"))[0].revision // "unknown"')\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 

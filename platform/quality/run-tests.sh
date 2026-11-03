@@ -12,10 +12,25 @@ skip() {
   echo "SKIP: $*"
 }
 
-for suite in projects/home-assistant/ha-voice projects/home-assistant/hermes projects/home-assistant/stack projects/home-assistant/deploy projects/home/proxmox projects/home/windows-pc solutions/windows-logon-provider projects/home/kubernetes/openbao projects/station/scripts projects/station/tools/voice-recorder projects/station/tools/wakeword-personalize platform/quality platform/ci; do
+for suite in projects/home-assistant/ha-voice projects/home-assistant/hermes projects/home-assistant/stack projects/home-assistant/deploy projects/home/proxmox projects/home/windows-pc solutions/windows-logon-provider projects/home/kubernetes/openbao projects/station/scripts projects/station/tools/voice-recorder projects/station/tools/wakeword-personalize; do
   echo "== Python: $suite =="
   python3 -m unittest discover -s "$suite" -p 'test_*.py' -v
 done
+
+# CI/repo-quality glue is dependency-free Node ESM with the built-in runner.
+if command -v node >/dev/null 2>&1; then
+  echo "== Node: platform/ci and platform/quality =="
+  node --test platform/ci/*.test.mjs platform/quality/*.test.mjs
+else
+  skip "Node.js is not installed: platform CI/quality tests need node --test"
+fi
+
+# Python checks that outlive the CI-glue migration: first-party Python product
+# syntax/secret gates and the out-of-scope oci_image.py helper tests.
+echo "== Python: platform/quality static gate =="
+python3 -m unittest discover -s platform/quality -p 'test_static.py' -v
+echo "== Python: platform/ci oci helper =="
+python3 -m unittest discover -s platform/ci -p 'test_oci_image.py' -v
 
 # Dependency-free edge Workers use Node's built-in runner, not npm.
 if command -v node >/dev/null 2>&1; then

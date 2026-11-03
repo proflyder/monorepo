@@ -1,66 +1,136 @@
-#!/usr/bin/env python3
-"""Fail closed: publish only work branches, never develop, the archive or tags.
+#!/usr/bin/env node
+/**
+ * Fail closed: publish only work branches, never develop, the archive or tags.
+ *
+ * `develop` changes only through pull requests (squash merge); the remote
+ * ruleset enforces that too. Locally this guard allows pushing the checked-out
+ * work branch `<type>/<name>` to the same name, after checking that its history
+ * has no private ancestry, the working tree is clean, Gitleaks finds nothing in
+ * the outgoing commits and the repository audit passes.
+ */
 
-`develop` changes only through pull requests (squash merge); the remote ruleset
-enforces that too. Locally this guard allows pushing the checked-out work
-branch `<type>/<name>` to the same name, after checking that its history has
-no private ancestry, the working tree is clean, Gitleaks finds nothing in the
-outgoing commits and the repository audit passes.
-"""
-import re
-import shutil
-import subprocess
-import sys
-from pathlib import Path
+"use strict";
 
-root = Path(__file__).resolve().parents[1]
-WORK_BRANCH = re.compile(
-    r"refs/heads/(feat|fix|chore|docs|ci|refactor|test|perf)/[a-z0-9][a-z0-9._-]*"
-)
+const { execFileSync, spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const process = require("node:process");
 
+const root = path.resolve(__dirname, "..");
+const WORK_BRANCH =
+  /^refs\/heads\/(feat|fix|chore|docs|ci|refactor|test|perf)\/[a-z0-9][a-z0-9._-]*$/;
 
-def git(*args: str) -> str:
-    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+function git(...args) {
+  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+}
 
+function which(command) {
+  for (const directory of (process.env.PATH || "").split(path.delimiter)) {
+    const candidate = path.join(directory, command);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
 
-head = git("rev-parse", "HEAD")
-pushed = []
-for line in sys.stdin:
-    local_ref, local_sha, remote_ref, remote_sha = line.split()
-    if set(local_sha) == {"0"}:
-        sys.exit("Push blocked: branch deletion is not permitted by this guard.")
-    if local_ref != remote_ref or not WORK_BRANCH.fullmatch(local_ref):
-        sys.exit(
-            "Push blocked: push a work branch <type>/<name> to the same name "
-            "and open a pull request; develop, archive refs and tags stay local."
-        )
-    if local_sha != head:
-        sys.exit("Push blocked: check out the branch you are publishing.")
-    private = subprocess.run(
-        ["git", "merge-base", "local-history", local_sha], cwd=root, capture_output=True
-    )
-    if private.returncode not in (0, 1):
-        sys.exit("Push blocked: cannot verify private history isolation.")
-    if private.returncode == 0:
-        sys.exit("Push blocked: outgoing history includes private historical ancestry.")
-    pushed.append(local_sha)
+const head = git("rev-parse", "HEAD");
+const pushed = [];
+const stdin = fs.readFileSync(0, "utf8");
+for (const line of stdin.split("\n")) {
+  if (!line.trim()) {
+    continue;
+  }
+  const fields = line.trim().split(/\s+/);
+  const [localRef, localSha, remoteRef] = fields;
+  if (/^0+$/.test(localSha)) {
+    process.stderr.write("Push blocked: branch deletion is not permitted by this guard.\n");
+    process.exit(1);
+  }
+  if (localRef !== remoteRef || !WORK_BRANCH.test(localRef)) {
+    process.stderr.write(
+      "Push blocked: push a work branch <type>/<name> to the same name " +
+        "and open a pull request; develop, archive refs and tags stay local.\n",
+    );
+    process.exit(1);
+  }
+  if (localSha !== head) {
+    process.stderr.write("Push blocked: check out the branch you are publishing.\n");
+    process.exit(1);
+  }
+  const privateHistory = spawnSync("git", ["merge-base", "local-history", localSha], {
+    cwd: root,
+    stdio: "ignore",
+  });
+  if (
+    privateHistory.error ||
+    privateHistory.status === null ||
+    ![0, 1].includes(privateHistory.status)
+  ) {
+    process.stderr.write("Push blocked: cannot verify private history isolation.\n");
+    process.exit(1);
+  }
+  if (privateHistory.status === 0) {
+    process.stderr.write(
+      "Push blocked: outgoing history includes private historical ancestry.\n",
+    );
+    process.exit(1);
+  }
+  pushed.push(localSha);
+}
 
-if not pushed:
-    sys.exit(0)
-if git("status", "--porcelain"):
-    sys.exit("Push blocked: commit or stash changes before the publication audit.")
-scanner = shutil.which("gitleaks") or str(root / "secrets/local-tools/gitleaks")
-if not Path(scanner).is_file():
-    sys.exit("Push blocked: install gitleaks before publishing.")
-for sha in pushed:
-    scan = subprocess.run(
-        [scanner, "git", ".", f"--log-opts={sha}", "--redact=100", "--no-banner",
-         "--config=.gitleaks.toml"],
-        cwd=root,
-    )
-    if scan.returncode:
-        sys.exit("Push blocked: secret scan failed; inspect locally with redaction.")
-result = subprocess.run(
-    [sys.executable, str(root / "platform/quality/audit_repository.py")], cwd=root
-)
-sys.exit(result.returncode)
+if (!pushed.length) {
+  process.exit(0);
+}
+if (git("status", "--porcelain")) {
+  process.stderr.write("Push blocked: commit or stash changes before the publication audit.\n");
+  process.exit(1);
+}
+// `secrets/` is ignored, so a linked worktree has no copy of it: also look in
+// the main checkout that owns the shared Git directory.
+const mainRoot = path.dirname(git("rev-parse", "--path-format=absolute", "--git-common-dir"));
+const isFile = (candidate) => {
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+};
+const scanner = [
+  which("gitleaks"),
+  path.join(root, "secrets", "local-tools", "gitleaks"),
+  path.join(mainRoot, "secrets", "local-tools", "gitleaks"),
+].find((candidate) => candidate && isFile(candidate));
+if (!scanner) {
+  process.stderr.write("Push blocked: install gitleaks before publishing.\n");
+  process.exit(1);
+}
+for (const sha of pushed) {
+  const scan = spawnSync(
+    scanner,
+    [
+      "git",
+      ".",
+      `--log-opts=${sha}`,
+      "--redact=100",
+      "--no-banner",
+      "--config=.gitleaks.toml",
+    ],
+    { cwd: root, stdio: "inherit" },
+  );
+  if (scan.error || scan.status !== 0) {
+    process.stderr.write(
+      "Push blocked: secret scan failed; inspect locally with redaction.\n",
+    );
+    process.exit(1);
+  }
+}
+const audit = spawnSync(
+  process.execPath,
+  [path.join(root, "platform", "quality", "audit_repository.mjs")],
+  { cwd: root, stdio: "inherit" },
+);
+process.exit(audit.error ? 1 : (audit.status ?? 1));
