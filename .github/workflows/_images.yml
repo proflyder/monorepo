@@ -65,6 +65,16 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
+      # Pushing a manifest needs credentials even for a public package (blobs
+      # are readable anonymously, so a missing login only fails at the PUT).
+      - name: Log in to GHCR
+        if: inputs.push_tree_tag
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       # The image identity is the git *tree*, not the commit: a pull request
       # builds its merge ref, whose tree equals the squash commit's tree as long
       # as `develop` did not move in between. `deploy-home` recomputes the same
