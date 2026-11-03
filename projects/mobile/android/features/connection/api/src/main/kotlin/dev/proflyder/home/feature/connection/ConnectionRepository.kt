@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.connection
 
 import dev.proflyder.home.core.config.ConnectionConfig
+import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.SchedulerStatus
@@ -8,23 +9,20 @@ import kotlinx.coroutines.flow.StateFlow
 
 /** Domain contract for connection settings and a real GetStatus check. */
 interface ConnectionRepository {
+    /** Effective endpoints/timeouts (Remote Config) plus the device-local token. */
     val config: StateFlow<ConnectionConfig>
     val tokenStatus: StateFlow<TokenStatus>
+    val remoteConfig: StateFlow<RemoteConnectionState>
 
-    suspend fun save(draft: ConnectionDraft): Outcome<ConnectionConfig>
+    /** Persists only the token; endpoints and timeouts come from Remote Config. */
+    suspend fun saveToken(update: TokenUpdate): Outcome<ConnectionConfig>
+
+    /** Fetches and activates the latest Remote Config values. */
+    suspend fun refreshRemoteConfig()
 
     /** Calls ricardo.v1.SchedulerService/GetStatus; never uses mock data. */
     suspend fun testConnection(): Outcome<SchedulerStatus>
 }
-
-data class ConnectionDraft(
-    val endpointText: String,
-    val tokenUpdate: TokenUpdate,
-    val connectTimeoutSeconds: Int,
-    val readTimeoutSeconds: Int,
-    /** Blank means "no home control service". */
-    val controlEndpointText: String = "",
-)
 
 /** The token is never displayed; blank input means "keep what is stored". */
 sealed interface TokenUpdate {

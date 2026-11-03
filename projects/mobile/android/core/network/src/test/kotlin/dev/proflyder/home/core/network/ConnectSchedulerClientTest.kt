@@ -423,8 +423,8 @@ class ConnectSchedulerClientTest {
             mutable.value = config
         }
 
-        override suspend fun update(config: ConnectionConfig): Outcome<Unit> {
-            mutable.value = config
+        override suspend fun updateToken(bearerToken: String?): Outcome<Unit> {
+            mutable.value = mutable.value.copy(bearerToken = bearerToken)
             return Outcome.Success(Unit)
         }
     }

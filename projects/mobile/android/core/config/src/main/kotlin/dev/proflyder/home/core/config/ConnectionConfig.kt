@@ -94,9 +94,17 @@ enum class TokenStatus {
 }
 
 interface ConnectionSettingsStore {
+    /**
+     * Synchronous snapshot composed from the Remote Config endpoints/timeouts
+     * and the device-local token. Interceptors read [StateFlow.value] on I/O
+     * threads.
+     */
     val config: StateFlow<ConnectionConfig>
     val tokenStatus: StateFlow<TokenStatus>
 
-    /** Persists settings; the token is never written in plaintext. */
-    suspend fun update(config: ConnectionConfig): Outcome<Unit>
+    /**
+     * Persists only the bearer token (`null` clears it); the token is never
+     * written in plaintext. Endpoints and timeouts are owned by Remote Config.
+     */
+    suspend fun updateToken(bearerToken: String?): Outcome<Unit>
 }

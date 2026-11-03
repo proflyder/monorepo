@@ -36,6 +36,9 @@ interface AppGraph {
     val featureRegistry: FeatureRegistry
     val viewModelFactories: ViewModelFactoryRegistry
 
+    /** Resolved at launch so Remote Config starts fetching on app start. */
+    val connectionSettings: ConnectionSettingsStore
+
     @DependencyGraph.Factory
     fun interface Factory {
         fun create(@Provides context: Context): AppGraph

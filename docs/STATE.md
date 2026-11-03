@@ -477,11 +477,12 @@
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
   `INTERNET`, debug-signed). Вкладки **Home**, Alarms, Timers, Reminders,
   Connection; Home читает `GET /v1/catalog`, команды идут через
-  `home.control`/очередь `control`. Bearer token в Keystore AES-GCM,
-  настройки и фильтр Home — Jetpack DataStore с миграцией из
-  SharedPreferences; idempotency keys, redirects выключены. Debug APK
-  установлен на телефон; холодный запуск и каталог проверены, интерактивные
-  фильтры/сценарии/toggle ещё не приняты.
+  `home.control`/очередь `control`. Bearer token в Keystore AES-GCM;
+  адреса scheduler/control и таймауты — Firebase Remote Config
+  (`home_connection`), фильтр Home и зашифрованный токен — Jetpack DataStore
+  с миграцией из SharedPreferences; idempotency keys, redirects выключены.
+  Debug APK установлен на телефон; холодный запуск и каталог проверены,
+  интерактивные фильтры/сценарии/toggle ещё не приняты.
 
 ## Currency bot
 

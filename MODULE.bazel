@@ -156,6 +156,11 @@ maven.install(
         "com.google.firebase:firebase-common:21.0.0",
         "com.google.firebase:firebase-components:18.0.0",
         "com.google.firebase:firebase-config-interop:16.0.1",
+        # Remote Config (endpoints/timeouts): firebase-config is pinned from the
+        # same BoM; abt is its A/B-testing runtime dependency (from the
+        # firebase-config POM) and must ship in the APK closure.
+        "com.google.firebase:firebase-abt:21.1.1",
+        "com.google.firebase:firebase-config:22.1.2",
         "com.google.firebase:firebase-crashlytics:19.4.4",
         "com.google.firebase:firebase-encoders:17.0.0",
         "com.google.firebase:firebase-encoders-json:18.0.1",

@@ -26,10 +26,13 @@ acceptance and remaining work are tracked in [STATE](../../../docs/STATE.md) and
 - Alarm multi-select: long-press enters selection; bulk enable/disable/delete
   run sequentially and stop on first failure, keeping unprocessed alarms
   selected.
-- Connection: scheduler base URL, optional Home control base URL, required
-  bearer token, connect/read timeouts, **Save and test connection**
-  (`GetStatus`), explicit offline/auth/TLS/validation states. Settings persist
-  across failures and are never cleared by a failed request.
+- Connection: scheduler and optional Home control base URLs plus connect/read
+  timeouts come from Firebase Remote Config (`home_connection`); the bearer
+  token is entered on the phone, **Save and test connection** (`GetStatus`)
+  verifies the server, and a read-only section shows the active Remote Config
+  values with their state and a **Refresh config** action. Explicit
+  offline/auth/TLS/validation states. Settings persist across failures and are
+  never cleared by a failed request.
 - Loading/empty/error/content states; existing data stays visible during refresh
   or transient errors. Lists never silently become empty.
 
@@ -76,15 +79,21 @@ English-only.
 
 ## Connection and networking
 
-- Two base URLs, no paths:
+- Two base URLs, no paths, supplied by Remote Config:
   - **Server address** (scheduler): LAN `http://<node>:30098` or the home
     HTTPS name `https://alarms.<HOME_DOMAIN>` reached over the VPN.
-  - **Home control address** (catalog): LAN `http://<node>:30099` or the home
-    HTTPS name `https://control.<HOME_DOMAIN>` reached over the VPN.
-  - The app appends the Connect RPC path or `/v1/catalog` itself. Do not paste
-    `/v1/catalog` into the field.
-- The same bearer token is used for scheduler and control. Endpoints and tokens
-  are deployment-specific; none are embedded in the app.
+  - **Home control address** (catalog, optional): LAN
+    `http://<node>:30099` or the home HTTPS name
+    `https://control.<HOME_DOMAIN>` reached over the VPN.
+  - The app appends the Connect RPC path or `/v1/catalog` itself. Do not put
+    `/v1/catalog` into the configured URL.
+- Connect and read timeouts also come from Remote Config. Invalid URLs,
+  malformed JSON, or out-of-range timeouts are shown as an explicit invalid
+  state; the app never crashes and no request is attempted.
+- The same bearer token is used for scheduler and control. Endpoints and
+  timeouts are deployment-specific and are set only in the Firebase console;
+  none are embedded in the app or the repository. The token remains
+  device-local and is never part of Remote Config.
 - Transport: Retrofit on OkHttp, Connect unary JSON
   (`POST {endpoint}/ricardo.v1.SchedulerService/{RPC}`), protobuf JSON field
   names, `int64` as decimal strings. `Authorization: Bearer` is sent in the
@@ -98,14 +107,18 @@ English-only.
 
 - The bearer token is encrypted with a non-exportable Android Keystore
   AES-256/GCM key (`AES/GCM/NoPadding`, random IV, AAD). Only ciphertext is
-  stored; the plaintext token never is.
-- Endpoint/timeouts/token and UI preferences (Home filter) live in one Jetpack
-  Preferences DataStore (`HomeDataStore`). On the first launch after the
-  upgrade, `SharedPreferencesMigration` imports the legacy `home_connection`
-  file, so saved endpoints and the encrypted token survive. Keep this migration
-  until no supported install can predate DataStore.
-- Readers use a synchronous in-memory snapshot loaded once at startup because
-  interceptors read settings on I/O threads.
+  stored; the plaintext token never is. The token is entered on the phone and
+  is never read from Remote Config.
+- The encrypted token and UI preferences (Home filter) live in one Jetpack
+  Preferences DataStore (`HomeDataStore`). Endpoints and timeouts are no longer
+  read from or written to DataStore: Remote Config is authoritative. On the
+  first launch after the upgrade, `SharedPreferencesMigration` imports the
+  legacy `home_connection` file, so the encrypted token survives; the old
+  endpoint/timeout keys remain only for that migration and are otherwise
+  unused.
+- Readers use a synchronous in-memory snapshot because interceptors read
+  settings on I/O threads. The snapshot composes the Remote Config values with
+  the device-local token and is replaced immediately when either changes.
 - `android:allowBackup="false"`; backup/data-extraction rules exclude prefs,
   databases, and files. Tokens are never placed in URLs, `SavedState`, Fragment
   arguments, or logs. Diagnostics redact `Authorization`.
@@ -188,17 +201,53 @@ OpenBao). Other machines' builds without the key use the public fallback and
 will not update in place. Moving from the old debug key to this one requires
 one uninstall (app data, including the token, is cleared).
 
-## Firebase (Crashlytics)
+## Firebase (Crashlytics and Remote Config)
 
-Crash reporting is the only Firebase service. There is no FCM, Analytics,
-Remote Config, or phone-side scheduling.
+Firebase provides crash reporting and Remote Config. There is no FCM,
+Analytics, or phone-side scheduling. Remote Config supplies only connection
+settings; it never supplies the bearer token.
 
-**What is sent to Google:** crash stack traces, device model and OS version,
-and the app version. The app does not send the bearer token, scheduler or
-control endpoints, Home catalog contents, or any custom keys. Crashlytics uses
-its own Firebase installation id, not the app's Home credentials.
+**What is sent to Google:** Crashlytics sends crash stack traces, device model
+and OS version, and the app version. Remote Config requests carry the app's
+Firebase installation id and app metadata. The app does not send the bearer
+token, Home catalog contents, or any custom keys; the scheduler/control
+addresses arrive in the Remote Config response and are not reported back.
+Firebase uses its own installation id, not the app's Home credentials.
 
-**Build wiring without Gradle.** `google-services.json` is private and lives in
+### Remote Config connection document
+
+The app reads one string parameter, `home_connection`. Its in-app default is
+empty, which means "not configured". The value is a JSON object; unknown keys
+are ignored so a future field does not break older clients.
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `schedulerBaseUrl` | string | yes | Scheduler base URL, no RPC path. |
+| `controlBaseUrl` | string | no | Home control base URL; absent/empty disables the Home tab. |
+| `connectTimeoutMs` | number | no | Connect timeout, default 5000, valid 1000–120000. |
+| `readTimeoutMs` | number | no | Read timeout, default 20000, valid 1000–120000. |
+
+Example value (illustrative only; use your own private deployment values):
+
+```json
+{
+  "schedulerBaseUrl": "https://alarms.example.test",
+  "controlBaseUrl": "http://192.0.2.28:8099",
+  "connectTimeoutMs": 5000,
+  "readTimeoutMs": 20000
+}
+```
+
+Malformed JSON, a missing `schedulerBaseUrl`, an invalid URL, or an
+out-of-range timeout produces an explicit invalid state on the Connection
+screen; nothing crashes and no request is attempted. The Connection screen
+shows the loaded addresses/timeouts read-only with a **Refresh config** action.
+The app fetches on start, activates pushed real-time updates, and keeps the last
+loaded values usable if a later fetch fails.
+
+### Build wiring without Gradle
+
+`google-services.json` is private and lives in
 `secrets/android/`; Bazel reads it through the gitignored symlink
 `platform/android/keys/google-services.json`:
 
@@ -220,13 +269,21 @@ does start normally in that state.
 Collection follows the `home_crash_reporting` bool (default `true`). Turn it
 off to keep Crashlytics initialized without uploads.
 
-**One-time console steps:**
+**One-time console steps (Crashlytics):**
 
 1. In the Firebase console for the existing project, open **Crashlytics** and
    finish onboarding (the Android app `dev.proflyder.home` already exists in
    the project).
 2. Wait for the first crash to appear; Crashlytics enables itself when the
    first report arrives.
+
+**One-time console step (Remote Config):**
+
+1. Open **Remote Config**, create a parameter named `home_connection` of type
+   **String**, keep the in-app default empty, set the deployment value to the
+   JSON document above (with private hostnames), and click **Publish**. The four
+   values are deployment-specific: set them only in the console, never in the
+   repository or in committed examples.
 
 **Verify a report manually.** On a connected debug device, crash the app
 process and relaunch it:
@@ -319,7 +376,8 @@ projects/mobile/android/
   app/                    single Activity, app graph, tabs, diagnostics
   core/
     model/                Android-free scheduler domain + server clock
-    config/               connection settings contract + redaction
+    config/               remote connection contract/JSON parser + redaction
+    remoteconfig/         Firebase Remote Config endpoint/timeout source
     settings/             DataStore + Keystore token + legacy migration
     network/              Retrofit/OkHttp Connect + control catalog + errors
     navigation/           typed destinations, FeatureEntry, FragmentRouter
