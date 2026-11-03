@@ -87,8 +87,8 @@ export function verifyArgs({ repository, reference }) {
     `oci://${reference}`,
     "--repo",
     repository,
-    "--signer-repo",
-    repository,
+    // gh refuses --signer-repo together with --cert-identity-regex; the regex
+    // already pins both the repository and the signing workflow.
     "--cert-identity-regex",
     signerIdentityPattern(repository),
   ];
