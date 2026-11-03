@@ -150,6 +150,7 @@ EXTERNAL_ENTITIES = {
     "media_player.iandeks_stantsiia_midi",
     "media_player.iandeks_stantsiia_midi_media_player",
     "event.iandeks_stantsiia_midi_button",
+    "select.iandeks_stantsiia_midi_voice_color",
     "tts.piper",
 }
 SCRIPT_SERVICES = {"turn_on", "turn_off", "reload", "toggle"}
@@ -781,6 +782,7 @@ class VoiceProfileTests(unittest.TestCase):
 
     PROFILE = "input_select.ricardo_voice_profile"
     SWITCH = "switch.ricardo_work_profile"
+    STATION_COLOR = "select.iandeks_stantsiia_midi_voice_color"
 
     def _sentences(self) -> dict[str, list[str]]:
         control = yaml.safe_load(
@@ -797,6 +799,30 @@ class VoiceProfileTests(unittest.TestCase):
         self.assertEqual(profile["options"], ["Личный", "Рабочий"])
         self.assertEqual(profile["initial"], "Личный")
         self.assertTrue(profile["name"])
+
+    def test_profile_drives_the_station_listening_colour(self):
+        automation = next(
+            a for a in AUTOMATIONS if a["id"] == "voice_profile_station_color"
+        )
+        trigger_states = [
+            t for t in automation["trigger"] if t.get("platform") == "state"
+        ]
+        self.assertIn(self.PROFILE, [t.get("entity_id") for t in trigger_states])
+        self.assertIn(
+            {"platform": "homeassistant", "event": "start"}, automation["trigger"]
+        )
+        # The station select may not exist yet: the condition skips the call instead of
+        # failing the run.
+        cond = automation["condition"][0]["value_template"]
+        self.assertIn(self.STATION_COLOR, cond)
+        self.assertIn("'unknown', 'unavailable'", cond)
+        step = automation["action"][0]
+        self.assertEqual(step["service"], "select.select_option")
+        self.assertEqual(step["target"]["entity_id"], self.STATION_COLOR)
+        self.assertEqual(
+            step["data"]["option"],
+            "{{ 'Blue' if is_state('input_select.ricardo_voice_profile', 'Рабочий') else 'Violet' }}",
+        )
 
     def test_work_profile_switch_wraps_the_input_select(self):
         templates = load_yaml(HA / "templates.yaml")

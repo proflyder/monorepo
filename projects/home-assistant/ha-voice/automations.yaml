@@ -28,6 +28,33 @@
           entity_id: input_select.music_route
         data:
           option: Music Assistant
+- id: voice_profile_station_color
+  alias: 'Voice profile: station listening colour'
+  description: >-
+    Ring colour of the station's listening / thinking / speaking animation follows the
+    voice profile: Blue for the work profile, Violet for the personal one. The station
+    select appears with the pulsar release that adds it; while the entity is missing or
+    unavailable the automation does nothing.
+  trigger:
+  - platform: state
+    entity_id: input_select.ricardo_voice_profile
+  - platform: homeassistant
+    event: start
+  - platform: state
+    entity_id: select.iandeks_stantsiia_midi_voice_color
+    from:
+    - unknown
+    - unavailable
+  condition:
+  - condition: template
+    value_template: "{{ states('select.iandeks_stantsiia_midi_voice_color') not in ['unknown', 'unavailable'] }}"
+  action:
+  - service: select.select_option
+    target:
+      entity_id: select.iandeks_stantsiia_midi_voice_color
+    data:
+      option: "{{ 'Blue' if is_state('input_select.ricardo_voice_profile', 'Рабочий') else 'Violet' }}"
+  mode: single
 - id: alarm_button_stop
   alias: 'Alarm: stop with Pulsar action button'
   description: Short action click stops the scheduler occurrence first, then stops the local audio executor.
