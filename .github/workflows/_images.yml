@@ -100,6 +100,18 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
+      # Build the deploy CLI once per job: the digest step below calls it instead
+      # of spawning Python. The binary path is rules_go's conventional
+      # `<target>_/<target>` output directory.
+      - name: Build deploy tooling
+        if: inputs.builder == 'bazel' || inputs.builder == 'mixed'
+        run: |
+          set -euo pipefail
+          bazel build //platform/deploy/cmd/home-deploy
+          binary="bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy"
+          test -x "$binary" || { echo "missing $binary" >&2; exit 1; }
+          echo "HOME_DEPLOY=$PWD/$binary" >> "$GITHUB_ENV"
+
       - name: Build distroless images with Bazel
         if: inputs.builder == 'bazel'
         env:
@@ -122,7 +134,7 @@ jobs:
             --platforms=@rules_go//go/toolchain:linux_amd64
           for image in "${images[@]}"; do
             layout="bazel-bin/${package}/${image}_image"
-            digest=$(python3 platform/ci/oci_image.py digest "$layout")
+            digest=$("$HOME_DEPLOY" oci digest "$layout")
             repo="ghcr.io/proflyder/${image}"
             if [[ "$PUSH" == "true" ]]; then
               # The existing oci_push target stores the manifest byte-for-byte;
@@ -204,7 +216,7 @@ jobs:
               bazel build "${target_root}:${image}_image" \
                 --platforms=@rules_go//go/toolchain:linux_amd64
               layout="bazel-bin/${package}/${image}_image"
-              digest=$(python3 platform/ci/oci_image.py digest "$layout")
+              digest=$("$HOME_DEPLOY" oci digest "$layout")
               repo="ghcr.io/proflyder/${image}"
               if [[ "$PUSH" == "true" ]]; then
                 platform/ci/push-image.sh bazel \

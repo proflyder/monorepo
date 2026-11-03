@@ -71,6 +71,8 @@ export class Unit {
         goRace: false,
         suites: [],
         compileDirs: [],
+        // Python units whose suites exec the Go deploy binary.
+        pythonDeployTool: false,
         jsTests: [],
         // Native (non-Bazel) build units: a repository script that produces
         // host- or cross-built artifacts, plus the pinned toolchain it needs.
@@ -171,6 +173,9 @@ export function normalizeConfig(data, label = "units") {
       goRace: Boolean(go.race),
       suites: list(python.suites),
       compileDirs: list(python.compile),
+      // The suite drives a deploy script that execs the Go deploy binary; the
+      // workflow builds it once and exports HOME_DEPLOY.
+      pythonDeployTool: Boolean(python.deploy_tool),
       jsTests: list(js.tests),
       nativeWorkdir: String(native.workdir ?? ""),
       nativeBuild: String(native.build ?? ""),
@@ -1216,6 +1221,7 @@ export function matrixEntries(route_, config) {
     id: unit.id,
     suites: space(unit.suites),
     compile: space(unit.compileDirs),
+    deploy_tool: unit.pythonDeployTool,
   }));
   const js = route_.routes.js.units.map((unit) => ({
     id: unit.id,

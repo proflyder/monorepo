@@ -33,12 +33,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck source=platform/ci/prebuilt-digests.sh
 source "$ROOT/platform/ci/prebuilt-digests.sh"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 IMAGES_DIR="$ROOT/projects/home-assistant/deploy/images"
 REGISTRY=${REGISTRY:-"ghcr.io/proflyder"}
 IMAGE_TAG=${IMAGE_TAG:-$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)}
 UPSTREAM=${HERMES_UPSTREAM:-https://github.com/NousResearch/hermes-agent.git}
 PLATFORM="--platforms=@rules_go//go/toolchain:linux_amd64"
-OCI="$ROOT/platform/ci/oci_image.py"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -119,7 +120,7 @@ for image in "$@"; do
       ( cd "$ROOT" && "$bin" build //solutions/voice-proxy:voice-proxy_image "$PLATFORM" )
       layout="$ROOT/bazel-bin/solutions/voice-proxy/voice-proxy_image"
       [[ -d "$layout" ]] || { echo "missing image layout $layout; build it first" >&2; exit 1; }
-      digest=$(python3 "$OCI" digest "$layout")
+      digest=$(home_deploy oci digest "$layout")
       repo="${REGISTRY}/voice-proxy"
       push_bazel_tag "$digest" "$IMAGE_TAG" "$repo"
       if [[ "$IMAGE_TAG" != develop ]]; then

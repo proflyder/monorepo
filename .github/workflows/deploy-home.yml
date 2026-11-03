@@ -458,6 +458,16 @@ jobs:
           bazelisk-cache: true
           repository-cache: true
 
+      # Build the deploy CLI once per job; every deploy.sh and build-and-push.sh
+      # in this job runs it through platform/deploy/resolve.sh.
+      - name: Build deploy tooling
+        run: |
+          set -euo pipefail
+          bazel build //platform/deploy/cmd/home-deploy
+          binary="bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy"
+          test -x "$binary" || { echo "missing $binary" >&2; exit 1; }
+          echo "HOME_DEPLOY=$PWD/$binary" >> "$GITHUB_ENV"
+
       - name: Install VPN client
         # No official action exists for openconnect; the runner image has none.
         run: |

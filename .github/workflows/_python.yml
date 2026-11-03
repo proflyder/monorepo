@@ -20,6 +20,11 @@ on:
         required: false
         default: ""
         type: string
+      deploy_tool:
+        description: Build platform/deploy/cmd/home-deploy and export HOME_DEPLOY
+        required: false
+        default: false
+        type: boolean
       python_version:
         required: false
         default: "3.13"
@@ -39,6 +44,22 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ inputs.python_version }}
+
+      # Units whose suites drive a deploy script need the Go deploy binary the
+      # script execs (deploy.sh sources platform/deploy/resolve.sh). Built once
+      # per job; `go build` is enough here and keeps the job small.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        if: inputs.deploy_tool
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: go.sum
+
+      - name: Build deploy tooling
+        if: inputs.deploy_tool
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/home-deploy" ./platform/deploy/cmd/home-deploy
+          echo "HOME_DEPLOY=$RUNNER_TEMP/home-deploy" >> "$GITHUB_ENV"
 
       - name: Install test dependencies
         run: |

@@ -44,6 +44,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck source=platform/ci/prebuilt-digests.sh
 source "$ROOT/platform/ci/prebuilt-digests.sh"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 NS=home-assistant
 DIR="$ROOT/projects/home/kubernetes/scheduler"
 KUBECTL=${KUBECTL:-kubectl}
@@ -61,7 +63,6 @@ IMAGE_REGISTRY=${IMAGE_REGISTRY:-"ghcr.io/proflyder"}
 PUSH_ONLY=${PUSH_ONLY:-0}
 PREFLIGHT_IN_CLUSTER=${PREFLIGHT_IN_CLUSTER:-0}
 SCHEDULER_TOKEN_FILE=${SCHEDULER_TOKEN_FILE:-"$ROOT/secrets/home/scheduler.token"}
-OCI="$ROOT/platform/ci/oci_image.py"
 PREFLIGHT_JOB=scheduler-preflight
 # Pre-deploy state for a safe rollback: deploy.sh records each Deployment it is
 # about to change and marks it only after a successful apply. CI restores from
@@ -145,15 +146,7 @@ $WANT_SCHEDULER || $WANT_BRIDGE || $WANT_CONTROL || {
 }
 
 env_value() {
-  python3 - "$PRIVATE_ENV" "$1" <<'PY'
-import sys, pathlib
-path, key = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
-for line in path.read_text().splitlines():
-    line = line.strip()
-    if line and not line.startswith("#") and line.split("=", 1)[0] == key:
-        print(line.split("=", 1)[1].strip().strip('"').strip("'"))
-        break
-PY
+  home_deploy env get "$PRIVATE_ENV" "$1"
 }
 
 # Not named `bazel`: a function of that name would shadow the binary and
@@ -268,7 +261,7 @@ resolve_image() {
     echo "missing image layout $layout; build it or set $var" >&2
     exit 1
   }
-  digest=$(python3 "$OCI" digest "$layout")
+  digest=$(home_deploy oci digest "$layout")
 
   if [[ "$PUSH_IMAGES" == 1 ]]; then
     repo="${IMAGE_REGISTRY}/${name}"
@@ -282,7 +275,7 @@ resolve_image() {
     fi
     echo "== image ${name}: pushed ${repo}@${digest} (tags ${IMAGE_TAG}, develop)"
   elif [[ -n "${NODE_SSH:-}" ]]; then
-    python3 "$OCI" pack "$layout" --ref "${IMAGE_REGISTRY}/${name}:${IMAGE_TAG}" \
+    home_deploy oci pack "$layout" --ref "${IMAGE_REGISTRY}/${name}:${IMAGE_TAG}" \
       --out "$TMP_IMAGES/${name}.tar" >/dev/null
     remote_scp -q "$TMP_IMAGES/${name}.tar" "$NODE_SSH:/tmp/${name}-${IMAGE_TAG}.tar"
     remote_ssh "sudo -n k3s ctr -n k8s.io images import '/tmp/${name}-${IMAGE_TAG}.tar' >/dev/null && rm -f '/tmp/${name}-${IMAGE_TAG}.tar'"
@@ -311,11 +304,13 @@ if [[ "$PUSH_ONLY" == 1 ]]; then
 fi
 
 IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)"
-BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(printf '%s' "$IMAGE_FINGERPRINT" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:12])')"
+BUILD_ID="$(home_deploy build-id \
+  --revision "$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)" \
+  --fingerprint "$IMAGE_FINGERPRINT")"
 echo "== build id: $BUILD_ID"
 
 echo "== rendering manifests into $RENDER_DIR"
-python3 "$DIR/render.py" --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
+home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
   --set "SCHEDULER_IMAGE=$(get_image_ref scheduler)" \
   --set "HA_BRIDGE_IMAGE=$(get_image_ref ha-bridge)" \

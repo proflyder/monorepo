@@ -124,6 +124,21 @@ export const config = {
   units: [
     // ---------------------------------------------------------------- Go --------
     {
+      id: "platform-deploy",
+      platform: "go",
+      title: "platform/deploy (home-deploy CLI: render, env, build-id, oci)",
+      // Every deploy script and the image build in CI call this binary, so a
+      // change is both tested here and routed to the units that deploy through
+      // it (their `paths` include platform/deploy/**).
+      paths: ["platform/deploy/**"],
+      go: {
+        module: ".",
+        packages: ["./platform/deploy/..."],
+        race: true,
+        build: ["./platform/deploy/cmd/home-deploy"],
+      },
+    },
+    {
       id: "voice-proxy",
       platform: "go",
       title: "solutions/voice-proxy (TTS-safe OpenAI passthrough)",
@@ -142,7 +157,11 @@ export const config = {
       id: "scheduler",
       platform: "go",
       title: "solutions/scheduler (scheduler service)",
-      paths: ["solutions/scheduler/**"],
+      paths: [
+        "solutions/scheduler/**",
+        // The deploy tooling that renders this unit's manifests.
+        "platform/deploy/**",
+      ],
       // deploy-home rolls exactly these container images and Deployments when the
       // unit is affected. Infrastructure (ingress, observability, runtime chart)
       // has no deploy block on purpose: it is not auto-deployed.
@@ -169,7 +188,12 @@ export const config = {
       id: "wakegrant",
       platform: "go",
       title: "solutions/wakegrant (one-time logon grants) + home deployment",
-      paths: ["solutions/wakegrant/**", "projects/home/kubernetes/wakegrant/**"],
+      paths: [
+        "solutions/wakegrant/**",
+        "projects/home/kubernetes/wakegrant/**",
+        // The deploy tooling that renders this unit's manifests.
+        "platform/deploy/**",
+      ],
       // One image and one Deployment with a durable SQLite grant on a PVC; the
       // ESO Secret (issuer token + per-machine keys) is part of the same unit
       // because the service is unusable without it.
@@ -196,7 +220,12 @@ export const config = {
       id: "currency-bot",
       platform: "go",
       title: "solutions/currency-bot (Telegram currency bot)",
-      paths: ["solutions/currency-bot/**", "projects/home/kubernetes/currency-bot/**"],
+      paths: [
+        "solutions/currency-bot/**",
+        "projects/home/kubernetes/currency-bot/**",
+        // The deploy tooling that renders this unit's manifests.
+        "platform/deploy/**",
+      ],
       // One image and one Deployment; the Cloudflare Tunnel sidecar is part of the
       // same unit because the webhook is unusable without it.
       deploy: {
@@ -231,6 +260,8 @@ export const config = {
         // contract: a fixture change must retest the serializing side too.
         "solutions/bb-home-dispatcher/contract/params.json",
         "projects/home/kubernetes/mcp-gateway/**",
+        // The deploy tooling that renders this unit's manifests.
+        "platform/deploy/**",
       ],
       // One image and one Deployment in home-assistant. The catalog ConfigMap,
       // RBAC, ExternalSecrets and NetworkPolicy are part of the same unit because
@@ -269,7 +300,11 @@ export const config = {
       id: "ha-bridge",
       platform: "go",
       title: "solutions/ha-bridge (home executor + ha-control)",
-      paths: ["solutions/ha-bridge/**"],
+      paths: [
+        "solutions/ha-bridge/**",
+        // The deploy tooling that renders the shared scheduler manifests.
+        "platform/deploy/**",
+      ],
       // The bridge unit owns ha-control too: they share the executor code.
       deploy: {
         builder: "bazel",
@@ -414,6 +449,8 @@ export const config = {
         // no `go list` closure), so the shared-client closure never reaches it.
         "solutions/voice-proxy/**",
         "packages/go/**",
+        // build-and-push.sh reads image digests with `home-deploy oci digest`.
+        "platform/deploy/**",
       ],
       // Hermes/voice-proxy: build+push, then promote both digests into the
       // runtime Helm release (hermes_rollout.py). `hermes` is a Docker build,
@@ -592,6 +629,8 @@ export const config = {
       paths: ["projects/home/kubernetes/currency-bot/**"],
       python: {
         suites: ["projects/home/kubernetes/currency-bot"],
+        // The suite drives deploy.sh, which runs the home-deploy binary.
+        deploy_tool: true,
       },
     },
 
@@ -602,6 +641,8 @@ export const config = {
       paths: ["projects/home/kubernetes/wakegrant/**"],
       python: {
         suites: ["projects/home/kubernetes/wakegrant"],
+        // The suite drives deploy.sh, which runs the home-deploy binary.
+        deploy_tool: true,
       },
     },
 
@@ -617,6 +658,18 @@ export const config = {
       ],
       python: {
         suites: ["projects/home/kubernetes/mcp-gateway"],
+        // The suite drives deploy.sh, which runs the home-deploy binary.
+        deploy_tool: true,
+      },
+    },
+
+    {
+      id: "kubernetes-ingress",
+      platform: "python",
+      title: "projects/home/kubernetes/ingress (Traefik/cert-manager templates)",
+      paths: ["projects/home/kubernetes/ingress/**"],
+      python: {
+        compile: ["projects/home/kubernetes/ingress"],
       },
     },
 

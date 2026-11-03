@@ -16,10 +16,14 @@
 - [ ] **Решение 35: остаток перевода Python.** CI-обвязка (#97),
       Android-инструменты сборки (#98) и voice-proxy (#99) уже переведены.
       Осталось по исследованию: (1) Go-утилита `platform/deploy`
-      (`home-deploy`): `render`/`converge`/`rollback`/`preflight` (Job без
-      `python:3.13-slim`), `oci digest/pack` вместо `platform/ci/oci_image.py`,
-      inline-Python в `deploy.sh`, `apply-runtime.sh`, external-secrets,
-      ingress, `hermes_rollout.py`, `render_hermes_config.py`; health
+      (`home-deploy`): шаг 1 (`feat/home-deploy-go`) добавил `render`,
+      `env get`, `build-id` и `oci digest/pack/docker` и переключил на них
+      `deploy.sh` юнитов, `nft/apply.sh`, ingress-render и сборку образов в CI
+      (Python-рендерер и `platform/ci/oci_image.py` удалены, parity
+      зафиксирован в `platform/deploy/testdata/`); осталось
+      `converge`/`rollback`/`preflight` (Job без `python:3.13-slim`),
+      inline-Python в `apply-runtime.sh`, external-secrets, `hermes_rollout.py`,
+      `render_hermes_config.py`; health
       exporter — Go-образ (сейчас он запущен из последнего Python-образа
       voice-proxy, закреплённого digest в приватных values; пока это так, этот
       digest защищён записью `PROTECTED_DIGESTS` в

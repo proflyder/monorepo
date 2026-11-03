@@ -36,3 +36,14 @@ filegroup(
     ],
     visibility = ["//visibility:public"],
 )
+
+# Templates rendered by the deploy scripts and the deployment tooling tests
+# (platform/deploy/internal/render golden parity).
+filegroup(
+    name = "deploy_templates",
+    srcs = glob([
+        "manifests/*.yaml",
+        "nft/*.nft",
+    ]),
+    visibility = ["//visibility:public"],
+)

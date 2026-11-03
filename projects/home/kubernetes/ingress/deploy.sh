@@ -14,6 +14,8 @@
 # Secret once from the private file; normal runs verify it and never overwrite.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 # shellcheck disable=SC1091
 source "$ROOT/projects/home/kubernetes/versions.sh"
 
@@ -62,20 +64,24 @@ CONTROL_HOST="control.$HOME_DOMAIN"
 CURRENCY_HOST="currency.$HOME_DOMAIN"
 export HOME_DOMAIN LAN_CIDR HAOS_ADDRESS HA_HOST GRAFANA_HOST ALARMS_HOST CONTROL_HOST CURRENCY_HOST
 
+# Render one template with the private values and print it to stdout.
+# `home-deploy render --unit ingress` owns the fixed key set and refuses any
+# leftover `${`, exactly like the heredoc this replaced.
 render() {
-  python3 - "$1" <<'PY'
-import os
-import sys
-
-text = open(sys.argv[1], encoding="utf-8").read()
-for key in ("HOME_DOMAIN", "LAN_CIDR", "HAOS_ADDRESS",
-            "HA_HOST", "GRAFANA_HOST", "ALARMS_HOST", "CONTROL_HOST",
-            "CURRENCY_HOST"):
-    text = text.replace("${%s}" % key, os.environ[key])
-if "${" in text:
-    sys.exit("unrendered placeholder in %s" % sys.argv[1])
-sys.stdout.write(text)
-PY
+  local source=$1 out
+  out=$(mktemp -d)
+  home_deploy render --unit ingress --out "$out" \
+    --set "HOME_DOMAIN=$HOME_DOMAIN" \
+    --set "LAN_CIDR=$LAN_CIDR" \
+    --set "HAOS_ADDRESS=$HAOS_ADDRESS" \
+    --set "HA_HOST=$HA_HOST" \
+    --set "GRAFANA_HOST=$GRAFANA_HOST" \
+    --set "ALARMS_HOST=$ALARMS_HOST" \
+    --set "CONTROL_HOST=$CONTROL_HOST" \
+    --set "CURRENCY_HOST=$CURRENCY_HOST" \
+    "$source" >/dev/null
+  cat "$out/$(basename "$source")"
+  rm -rf "$out"
 }
 
 apply_cloudflare_secret() {

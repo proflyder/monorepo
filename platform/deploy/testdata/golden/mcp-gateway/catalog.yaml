@@ -1,0 +1,827 @@
+# Infra service catalog for the home cluster.
+#
+# This file is deployment data, not code: it is mounted into the gateway from
+# the ConfigMap `mcp-gateway-catalog` (key `catalog.yaml`). It contains only
+# allow-listed namespaces, workload names, spoken aliases and public PromQL;
+# no secret values, no real addresses.
+#
+# Contract (see solutions/mcp-gateway/README.md):
+#   * a signal with `status: true` is evaluated inside infra_status, and its
+#     PromQL must describe the BAD state: any non-empty result is a problem;
+#   * `ignore_alerts` names alerts that always fire by design; infra_status
+#     counts them separately as ignored and never speaks them as a problem;
+#   * `restart.allowed` is exactly what infra.fix may patch, and RBAC
+#     (manifests/rbac.yaml) restricts `patch` to the same workload names;
+#   * `restart.self_disrupting` defers the patch so the spoken reply survives;
+#   * logs: `loki` where Alloy ingests the namespace, otherwise `pods`
+#     (pods/log through the Kubernetes API), `none` for external targets.
+#
+# tests enforce the catalog/RBAC correspondence:
+#   go test ./projects/home/kubernetes/mcp-gateway/
+#   python3 projects/home/kubernetes/mcp-gateway/test_deploy.py
+overview: |
+  # Домашний стенд
+
+  Один гипервизор Proxmox с двумя виртуальными машинами и станцией:
+
+  - **HAOS VM** — Home Assistant, Music Assistant и Matter как add-ons.
+    В Kubernetes это не workload: доступность видна только TCP-проверкой
+    (`ricardo_endpoint_up{endpoint="ha"}` и `"music_assistant"`).
+  - **K3s VM** (один узел) — все приложения ниже, observability и секреты.
+  - **Станция** — колонка с Pulsar/ESPHome; метрик и логов в кластере нет,
+    поэтому доступность проверяется TCP-портами и сущностями Home Assistant
+    (перезапуск не поддержан).
+
+  Внешние проверки объявлены в каталоге (`checks:`) и выполняются шлюзом:
+  TCP, HTTP и Home Assistant REST (`ha_state`, `ha_template`,
+  `ha_unavailable_summary`). Адреса подставляются при деплое из
+  `mcp-gateway.env`, в публичном файле только плейсхолдеры.
+
+  ## Пространства имён K3s
+
+  - `home-assistant` — голосовой контур и планировщик: Hermes + voice-proxy,
+    GigaAM/Whisper/Piper, health exporter, scheduler, ha-bridge, ha-control,
+    а также сам mcp-gateway.
+  - `monitoring` — Prometheus, Alertmanager, Grafana, kube-state-metrics,
+    node-exporter, Prometheus Operator, Loki и Alloy.
+  - `currency-bot` — бот курсов и Cloudflare Tunnel для его webhook.
+  - `openbao` — единственный сервер секретов (raft, auto-unseal).
+  - `external-secrets` — оператор, который материализует секреты из OpenBao.
+  - `traefik` — HTTPS-ingress всего домашнего суффикса (hostNetwork).
+  - `cert-manager` — выпуск сертификатов Let's Encrypt (ACME DNS-01).
+  - `kube-system` — системные компоненты K3s.
+
+  ## Что важно знать
+
+  - Hermes **не имеет** доступа к kubectl и Kubernetes API
+    (`automountServiceAccountToken: false`); весь доступ к кластеру идёт
+    только через этот шлюз.
+  - Шлюз умеет ровно одно изменение: rollout restart Deployment/StatefulSet/
+    DaemonSet из каталога. Нет delete, scale, exec и apply.
+  - Перезапуск всегда двухшаговый: сначала вопрос с предупреждением, затем
+    подтверждение. Список целей — только каталог, свободный текст не
+    принимается.
+  - Prometheus, Alertmanager и Loki доступны без аутентификации внутри
+    кластера; шлюз не публикуется наружу (ClusterIP, без ingress).
+  - Внешние цели (HAOS, Music Assistant, станция) только читаются; их
+    перезапуск выполняется вручную вне шлюза.
+
+# Alerts that always fire by design and must never be spoken as a problem:
+# Watchdog proves the alerting pipeline is alive; InfoInhibitor is its
+# alertmanager-side suppressor. Both stay reachable through infra_alert.
+ignore_alerts:
+  - Watchdog
+  - InfoInhibitor
+
+# Report section order. Each service selects one of these with `group`.
+group_order: [Голос, Дом, Планировщик, Мониторинг, Секреты и сеть, Приложения]
+
+services:
+  # ------------------------------------------------------ home-assistant ----
+  - id: hermes
+    title: Hermes
+    group: Голос
+    aliases:
+      ru: [гермес, ассистент, голосовой прокси, войс прокси]
+      en: [hermes, voice-proxy, voice proxy, agent]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: hermes
+    containers: [gateway, voice-proxy]
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="hermes"} == 0
+        meaning: шлюз Hermes не отвечает
+        status: true
+      - promql: ricardo_endpoint_up{endpoint="voice_proxy"} == 0
+        meaning: голосовой прокси не отвечает
+        status: true
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="hermes"} < 1
+        meaning: под Hermes недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      self_disrupting: true
+      warning: "Текущий разговор и озвучка прервутся, голосовой ассистент будет недоступен около тридцати секунд."
+    description: Hermes (LLM-агент) и voice-proxy в одном Deployment.
+
+  - id: gigaam
+    title: GigaAM
+    group: Голос
+    aliases:
+      ru: [гигаам, распознавание речи, стт]
+      en: [gigaam, stt, speech-to-text]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: gigaam
+    containers: [gigaam]
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="gigaam"} == 0
+        meaning: основное распознавание речи не отвечает
+        status: true
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="gigaam"} < 1
+        meaning: под GigaAM недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Распознавание речи не будет работать около тридцати секунд, текущий ответ может оборваться."
+    description: Основная модель распознавания речи (GigaAM).
+
+  - id: whisper
+    title: Whisper
+    group: Голос
+    aliases:
+      ru: [виспер, резервное распознавание]
+      en: [whisper, fallback stt]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: whisper
+    containers: [whisper]
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="whisper"} == 0
+        meaning: резервное распознавание речи не отвечает
+        status: false
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="whisper"} < 1
+        meaning: под Whisper недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Резервное распознавание речи не будет работать около тридцати секунд; основное распознавание продолжит работу."
+    description: Резервная модель распознавания речи (Whisper).
+
+  - id: piper
+    title: Piper
+    group: Голос
+    aliases:
+      ru: [пайпер, синтез речи, ттс]
+      en: [piper, tts, text-to-speech]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: piper
+    containers: [piper]
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="piper"} == 0
+        meaning: синтез речи не отвечает
+        status: true
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="piper"} < 1
+        meaning: под Piper недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Озвучка ответов и будильников не будет работать около тридцати секунд."
+    description: Синтез речи Piper.
+
+  - id: runtime-health-exporter
+    title: Runtime Health Exporter
+    group: Голос
+    aliases:
+      ru: [экспортер здоровья, проверка доступности]
+      en: [health-exporter, runtime-health-exporter]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: runtime-health-exporter
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="runtime-health-exporter"} < 1
+        meaning: экспортер проверок доступности недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Проверки доступности сервисов исчезнут на время перезапуска, алерт об упавшем сервисе может не прийти."
+    description: TCP-проверки HAOS, MA, STT/TTS, Hermes и voice-proxy.
+
+  - id: scheduler
+    title: Scheduler
+    group: Планировщик
+    aliases:
+      ru: [планировщик, будильники, напоминания, таймеры]
+      en: [scheduler, alarms, reminders, timers]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: scheduler
+    containers: [scheduler]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="scheduler"} < 1
+        meaning: планировщик недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Будильники и напоминания в ближайшие минуты могут не сработать."
+    description: Единственный владелец расписаний, таймеров и очередей (SQLite).
+
+  - id: ha-bridge
+    title: HA Bridge
+    group: Планировщик
+    aliases:
+      ru: [мост, исполнитель будильников, ha bridge]
+      en: [ha-bridge, bridge, executor]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: ha-bridge
+    containers: [ha-bridge]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="ha-bridge"} < 1
+        meaning: исполнитель будильников недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Исполнение будильников и напоминаний приостановится на время перезапуска, событие может быть пропущено."
+    description: Исполнитель очереди Home Assistant (звонки, TTS, громкость).
+
+  - id: ha-control
+    title: HA Control
+    group: Планировщик
+    aliases:
+      ru: [контроль, управление домом, ha control]
+      en: [ha-control, control]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: ha-control
+    containers: [ha-control]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="ha-control"} < 1
+        meaning: исполнитель команд управления недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Команды управления домом из приложения не будут выполняться около тридцати секунд."
+    description: Исполнитель каталога Home и очереди control.
+
+  - id: mcp-gateway
+    title: MCP Gateway
+    group: Приложения
+    aliases:
+      ru: [шлюз, mcp шлюз, инфраструктурный шлюз]
+      en: [mcp-gateway, gateway, infra gateway]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: mcp-gateway
+    containers: [mcp-gateway]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="mcp-gateway"} < 1
+        meaning: инфраструктурный шлюз недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      self_disrupting: true
+      warning: "Это сам шлюз: ответ на текущий запрос может не дойти до голосового ассистента."
+    description: Этот MCP-шлюз (диагностика, перезапуск, отчёты).
+
+  # ---------------------------------------------------------- monitoring ----
+  - id: prometheus
+    title: Prometheus
+    group: Мониторинг
+    aliases:
+      ru: [прометеус, метрики]
+      en: [prometheus, metrics]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: StatefulSet
+      name: prometheus-monitoring-prometheus
+    containers: [prometheus]
+    signals:
+      - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="prometheus-monitoring-prometheus"} < 1
+        meaning: Prometheus недоступен
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="prometheus"}'
+    restart:
+      allowed: true
+      warning: "Метрики и алерты не будут собираться несколько минут, данные за это время потеряются. StatefulSet принадлежит Prometheus Operator: после патча оператор может перезапустить поды ещё раз."
+    description: Prometheus kube-prometheus-stack (7 дней retention).
+
+  - id: alertmanager
+    title: Alertmanager
+    group: Мониторинг
+    aliases:
+      ru: [алертменеджер, алерты, уведомления]
+      en: [alertmanager, alerts]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: StatefulSet
+      name: alertmanager-monitoring-alertmanager
+    containers: [alertmanager]
+    signals:
+      - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="alertmanager-monitoring-alertmanager"} < 1
+        meaning: Alertmanager недоступен
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="alertmanager"}'
+    restart:
+      allowed: true
+      warning: "Уведомления об алертах в Telegram не будут доставляться, пока он не поднимется. StatefulSet принадлежит Prometheus Operator: после патча оператор может перезапустить поды ещё раз."
+    description: Alertmanager (Telegram-уведомления, тишины).
+
+  - id: grafana
+    title: Grafana
+    group: Мониторинг
+    aliases:
+      ru: [графана, графики]
+      en: [grafana, dashboards]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: Deployment
+      name: monitoring-grafana
+    containers: [grafana]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="monitoring",deployment="monitoring-grafana"} < 1
+        meaning: Grafana недоступна
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="grafana"}'
+    restart:
+      allowed: true
+      warning: "Интерфейс Grafana будет недоступен около минуты."
+    description: Витрина метрик и логов.
+
+  - id: kube-state-metrics
+    title: kube-state-metrics
+    group: Мониторинг
+    aliases:
+      ru: [метрики кубернетеса]
+      en: [kube-state-metrics, ksm]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: Deployment
+      name: monitoring-kube-state-metrics
+    containers: [kube-state-metrics]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="monitoring",deployment="monitoring-kube-state-metrics"} < 1
+        meaning: kube-state-metrics недоступен
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="kube-state-metrics"}'
+    restart:
+      allowed: true
+      warning: "Состояние объектов Kubernetes временно исчезнет из метрик, алерты по ним могут сработать ложно."
+    description: Метрики состояния Deployment/Pod/Node.
+
+  - id: prometheus-operator
+    title: Prometheus Operator
+    group: Мониторинг
+    aliases:
+      ru: [оператор прометеуса]
+      en: [prometheus-operator, operator]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: Deployment
+      name: monitoring-operator
+    containers: [kube-prometheus-stack]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="monitoring",deployment="monitoring-operator"} < 1
+        meaning: Prometheus Operator недоступен
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="prometheus-operator"}'
+    restart:
+      allowed: true
+      warning: "Изменения ServiceMonitor и PrometheusRule не будут применяться, пока оператор не поднимется."
+    description: Оператор kube-prometheus-stack.
+
+  - id: node-exporter
+    title: Node Exporter
+    group: Мониторинг
+    aliases:
+      ru: [экспортер узла, метрики узла]
+      en: [node-exporter]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: DaemonSet
+      name: monitoring-prometheus-node-exporter
+    containers: [node-exporter]
+    signals:
+      - promql: kube_daemonset_status_number_unavailable{namespace="monitoring",daemonset="monitoring-prometheus-node-exporter"} > 0
+        meaning: node-exporter недоступен
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="node-exporter"}'
+    restart:
+      allowed: true
+      warning: "Метрики процессора, памяти и диска узла пропадут на время перезапуска."
+    description: Метрики узла K3s.
+
+  - id: loki
+    title: Loki
+    group: Мониторинг
+    aliases:
+      ru: [локи, логи]
+      en: [loki, logs]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: StatefulSet
+      name: loki
+    containers: [loki]
+    signals:
+      - promql: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="loki"} < 1
+        meaning: Loki недоступен
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="loki"}'
+    restart:
+      allowed: true
+      warning: "Логи не будут приниматься несколько минут и за это время потеряются."
+    description: Хранилище логов (7 дней, только разрешённые namespace).
+
+  - id: alloy
+    title: Alloy
+    group: Мониторинг
+    aliases:
+      ru: [аллой, сборщик логов]
+      en: [alloy, log collector]
+    kind: k8s
+    namespace: monitoring
+    workload:
+      kind: DaemonSet
+      name: alloy
+    containers: [alloy]
+    signals:
+      - promql: kube_daemonset_status_number_unavailable{namespace="monitoring",daemonset="alloy"} > 0
+        meaning: Alloy не собирает логи
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="monitoring",container="alloy"}'
+    restart:
+      allowed: true
+      warning: "Сбор логов приостановится на время перезапуска, часть строк потеряется."
+    description: DaemonSet Alloy, отправляет логи в Loki с редактированием секретов.
+
+  # --------------------------------------------------------- currency-bot ----
+  - id: currency-bot
+    title: Currency Bot
+    group: Приложения
+    aliases:
+      ru: [валютный бот, бот курсов, валюта]
+      en: [currency-bot, currency]
+    kind: k8s
+    namespace: currency-bot
+    workload:
+      kind: Deployment
+      name: currency-bot
+    containers: [currency-bot]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="currency-bot",deployment="currency-bot"} < 1
+        meaning: валютный бот недоступен
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="currency-bot",container="currency-bot"}'
+    restart:
+      allowed: true
+      warning: "Алерты о курсе в Telegram приостановятся примерно на десять секунд."
+    description: Бот курсов kurs.kz с SQLite на PVC и JSON API.
+
+  - id: cloudflared
+    title: Cloudflared
+    group: Приложения
+    aliases:
+      ru: [туннель, клаудфлер]
+      en: [cloudflared, tunnel]
+    kind: k8s
+    namespace: currency-bot
+    workload:
+      kind: Deployment
+      name: cloudflared
+    containers: [cloudflared]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="currency-bot",deployment="cloudflared"} < 1
+        meaning: Cloudflare Tunnel недоступен
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="currency-bot",container="cloudflared"}'
+    restart:
+      allowed: true
+      warning: "Telegram-webhook валютного бота будет недоступен около десяти секунд."
+    description: Cloudflare Tunnel home-k3s (публичный webhook валютного бота).
+
+  # --------------------------------------------------------------- openbao ----
+  - id: openbao
+    title: OpenBao
+    group: Секреты и сеть
+    aliases:
+      ru: [опенбао, сейф, хранилище секретов]
+      en: [openbao, vault, secrets]
+    kind: k8s
+    namespace: openbao
+    workload:
+      kind: StatefulSet
+      name: openbao
+    containers: [openbao]
+    signals:
+      - promql: kube_statefulset_status_replicas_ready{namespace="openbao",statefulset="openbao"} < 1
+        meaning: OpenBao недоступен
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="openbao"}'
+    restart:
+      allowed: true
+      warning: "Синхронизация секретов через ESO приостановится; если auto-unseal не сработает, потребуется распечатать OpenBao вручную."
+    description: Сервер секретов (raft, auto-unseal, audit в stdout).
+
+  # ------------------------------------------------------ external-secrets ----
+  - id: external-secrets
+    title: External Secrets
+    group: Секреты и сеть
+    aliases:
+      ru: [внешние секреты, синхронизация секретов]
+      en: [external-secrets, eso]
+    kind: k8s
+    namespace: external-secrets
+    workload:
+      kind: Deployment
+      name: external-secrets
+    containers: [external-secrets]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="external-secrets",deployment="external-secrets"} < 1
+        meaning: External Secrets Operator недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Секреты перестанут обновляться из OpenBao на время перезапуска."
+    description: Оператор, материализующий Secrets из OpenBao.
+
+  - id: external-secrets-webhook
+    title: External Secrets Webhook
+    group: Секреты и сеть
+    aliases:
+      ru: [вебхук секретов]
+      en: [eso webhook, external-secrets webhook]
+    kind: k8s
+    namespace: external-secrets
+    workload:
+      kind: Deployment
+      name: external-secrets-webhook
+    containers: [webhook]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="external-secrets",deployment="external-secrets-webhook"} < 1
+        meaning: webhook ESO недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Создание и изменение ресурсов ExternalSecret будет блокироваться, пока webhook не поднимется."
+    description: Admission webhook External Secrets Operator.
+
+  - id: external-secrets-cert-controller
+    title: External Secrets Cert Controller
+    group: Секреты и сеть
+    aliases:
+      ru: [сертификаты секретов]
+      en: [eso cert controller]
+    kind: k8s
+    namespace: external-secrets
+    workload:
+      kind: Deployment
+      name: external-secrets-cert-controller
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="external-secrets",deployment="external-secrets-cert-controller"} < 1
+        meaning: cert-controller ESO недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Сертификаты webhook'а ESO не будут обновляться во время перезапуска."
+    description: Обновляет сертификаты webhook'а ESO.
+
+  # --------------------------------------------------------------- traefik ----
+  - id: traefik
+    title: Traefik
+    group: Секреты и сеть
+    aliases:
+      ru: [траефик, ингресс, https]
+      en: [traefik, ingress]
+    kind: k8s
+    namespace: traefik
+    workload:
+      kind: Deployment
+      name: traefik
+    containers: [traefik]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="traefik",deployment="traefik"} < 1
+        meaning: Traefik недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Все HTTPS-сервисы дома, включая Home Assistant и Grafana, будут недоступны около тридцати секунд."
+    description: HTTPS-ingress домашнего суффикса (hostNetwork 80/443).
+
+  # ---------------------------------------------------------- cert-manager ----
+  - id: cert-manager
+    title: cert-manager
+    group: Секреты и сеть
+    aliases:
+      ru: [сертификаты, cert manager]
+      en: [cert-manager]
+    kind: k8s
+    namespace: cert-manager
+    workload:
+      kind: Deployment
+      name: cert-manager
+    containers: [cert-manager-controller]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager"} < 1
+        meaning: cert-manager недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Выпуск и продление сертификатов приостановятся на время перезапуска."
+    description: Выпуск сертификатов Let's Encrypt (ACME DNS-01).
+
+  - id: cert-manager-webhook
+    title: cert-manager Webhook
+    group: Секреты и сеть
+    aliases:
+      ru: [вебхук сертификатов]
+      en: [cert-manager webhook]
+    kind: k8s
+    namespace: cert-manager
+    workload:
+      kind: Deployment
+      name: cert-manager-webhook
+    containers: [cert-manager-webhook]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager-webhook"} < 1
+        meaning: webhook cert-manager недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Выпуск сертификатов будет блокироваться, пока webhook не поднимется."
+    description: Admission webhook cert-manager.
+
+  - id: cert-manager-cainjector
+    title: cert-manager cainjector
+    group: Секреты и сеть
+    aliases:
+      ru: [инжектор ca]
+      en: [cert-manager cainjector, cainjector]
+    kind: k8s
+    namespace: cert-manager
+    workload:
+      kind: Deployment
+      name: cert-manager-cainjector
+    containers: [cert-manager-cainjector]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager-cainjector"} < 1
+        meaning: cainjector cert-manager недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "CA в webhook-конфигурациях не будет обновляться во время перезапуска."
+    description: Раскладывает CA-бандлы в webhook-конфигурации.
+
+  # -------------------------------------------------------------- external ----
+  - id: home-assistant
+    title: Home Assistant
+    group: Дом
+    host_title: HAOS VM
+    aliases:
+      ru: [home assistant, ха, дом, хом ассистент]
+      en: [home-assistant, ha, home]
+    kind: external
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="ha"} == 0
+        meaning: Home Assistant не отвечает
+        status: true
+    checks:
+      - type: http
+        label: REST API
+        url: "http://192.0.2.28:8123/api/"
+        expect_status: 200
+        auth: ha
+      - type: ha_unavailable_summary
+        label: недоступные сущности
+        # Только голосовой спутник и медиаплееры: диагностические сенсоры и
+        # отключённые устройства не должны делать отчёт «проблемным».
+        domains: [assist_satellite, media_player]
+    logs:
+      source: none
+    restart:
+      allowed: false
+    description: HAOS VM (add-ons MA и Matter). Перезапуск — только вручную в Proxmox/HA.
+
+  - id: music-assistant
+    title: Music Assistant
+    group: Дом
+    host_title: HAOS VM
+    aliases:
+      ru: [музыка, музыкальный ассистент, ма]
+      en: [music-assistant, ma, music]
+    kind: external
+    signals:
+      - promql: ricardo_endpoint_up{endpoint="music_assistant"} == 0
+        meaning: Music Assistant не отвечает
+        status: true
+    checks:
+      - type: tcp
+        label: API
+        host: 192.0.2.28
+        port: 8095
+      # Отдельного health-endpoint у MA нет; корень UI отвечает 200.
+      - type: http
+        label: веб-интерфейс
+        url: "http://192.0.2.28:8095/"
+        expect_status: 200
+    logs:
+      source: none
+    restart:
+      allowed: false
+    description: Music Assistant — add-on в HAOS. Перезапуск только вручную.
+
+  - id: station
+    title: Станция Midi (Pulsar)
+    group: Дом
+    host_title: Станция
+    aliases:
+      ru: [станция, колонка, рикардо]
+      en: [station, speaker, pulsar]
+    kind: external
+    checks:
+      - type: tcp
+        label: ESPHome
+        host: 192.0.2.13
+        port: 6053
+      - type: tcp
+        label: Sendspin
+        host: 192.0.2.13
+        port: 8928
+      - type: tcp
+        label: HTTP control
+        host: 192.0.2.13
+        port: 8099
+      - type: ha_state
+        label: Assist-спутник
+        entity_id: assist_satellite.iandeks_stantsiia_midi_assist_satellite
+      - type: ha_state
+        label: ESPHome media player
+        entity_id: media_player.iandeks_stantsiia_midi_media_player
+      # Версия прошивки Pulsar из Device Registry: справочно, не влияет на статус.
+      - type: ha_template
+        label: Версия Pulsar
+        template: "{{ device_attr(device_id('assist_satellite.iandeks_stantsiia_midi_assist_satellite'), 'sw_version') }}"
+    logs:
+      source: none
+    restart:
+      allowed: false
+    description: Колонка Midi с Pulsar/ESPHome. Метрик и логов в кластере нет; доступность — TCP и сущности HA.

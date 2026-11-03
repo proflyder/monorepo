@@ -37,7 +37,7 @@ manifests/network-policies.yaml   ingress from Hermes/monitoring, narrow egress
 manifests/servicemonitor.yaml     Prometheus scrape of /metrics
 ci/rbac.yaml                      extra ci-deploy verbs (NetworkPolicy, ServiceMonitor)
 deploy.sh                         build/push/import image, render, apply, roll out
-render.py                         shared scheduler renderer + gateway placeholders
+                                  (`home-deploy render --unit mcp-gateway`)
 mcp-gateway.env.example           LAN/host/bb placeholders
 test_deploy.py                    catalog↔RBAC, manifests, render, deploy contract
 catalog_contract_test.go          loads the tracked catalog with the real loader

@@ -1,0 +1,32 @@
+# Personal-only agent targets for the bb tool group and the voice path.
+#
+# This file is deployment data, not code. It maps spoken project names onto the
+# projects listed by the bb home-dispatcher plugin. The gateway resolves a name
+# only among projects whose profile is `personal`; a work project is reported
+# exactly like an unknown name, so Hermes can never learn it exists.
+#
+# `project` is the plugin projectId or its exact name and is rendered from the
+# private deploy env. `aliases` are the spoken forms; GigaAM often hears Latin
+# words phonetically, so several Russian spellings are listed on purpose.
+#
+# `provider`, `model` and `effort` are optional pins. Empty values mean "the
+# first provider/model the plugin allows"; an explicit value is still validated
+# against the plugin's live target list and refused when not allowed.
+targets:
+  - project: "proj_0000000000000001"
+    aliases:
+      - "стан лэб"
+      - "станция лаб"
+      - "стан лаб"
+      - "station lab"
+    provider: claude-code
+    title_prefix: "Голос"
+
+  - project: "proj_0000000000000003"
+    aliases:
+      - "инглиш нотс"
+      - "английские заметки"
+      - "english notes"
+      - "инглиш"
+    provider: claude-code
+    title_prefix: "Инглиш"

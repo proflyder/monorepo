@@ -402,6 +402,7 @@ jobs:
       unit: ${{ matrix.id }}
       suites: ${{ matrix.suites }}
       compile: ${{ matrix.compile }}
+      deploy_tool: ${{ matrix.deploy_tool }}
 
   # One matrix entry per affected JavaScript edge Worker unit.
   js:

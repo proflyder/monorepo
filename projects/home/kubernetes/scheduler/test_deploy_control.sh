@@ -15,6 +15,19 @@ DIR="$ROOT/projects/home/kubernetes/scheduler"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# deploy.sh renders manifests and reads digests with the Go `home-deploy` CLI
+# (platform/deploy/resolve.sh). Build it once here unless the caller supplied
+# one; this job has the Go toolchain, the regression needs no Bazel.
+if [[ -z "${HOME_DEPLOY:-}" ]] && command -v go >/dev/null 2>&1; then
+  HOME_DEPLOY="$TMP/home-deploy"
+  ( cd "$ROOT" && go build -o "$HOME_DEPLOY" ./platform/deploy/cmd/home-deploy )
+  export HOME_DEPLOY
+fi
+[[ -n "${HOME_DEPLOY:-}" && -x "${HOME_DEPLOY:-}" ]] || {
+  echo "home-deploy is required: build //platform/deploy/cmd/home-deploy or set HOME_DEPLOY" >&2
+  exit 1
+}
+
 cat > "$TMP/env" <<'EOF'
 HA_URL=http://192.0.2.28:8123
 LAN_CIDR=192.0.2.0/24

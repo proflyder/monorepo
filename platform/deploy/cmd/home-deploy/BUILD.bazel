@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "home-deploy_lib",
+    srcs = ["main.go"],
+    importpath = "ricardo.local/monorepo/platform/deploy/cmd/home-deploy",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//platform/deploy/internal/buildid",
+        "//platform/deploy/internal/envfile",
+        "//platform/deploy/internal/oci",
+        "//platform/deploy/internal/render",
+    ],
+)
+
+go_binary(
+    name = "home-deploy",
+    embed = [":home-deploy_lib"],
+)
+
+go_test(
+    name = "home-deploy_test",
+    srcs = ["main_test.go"],
+    embed = [":home-deploy_lib"],
+)
