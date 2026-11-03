@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scheduler",
+    srcs = [
+        "client.go",
+        "decode.go",
+        "event.go",
+    ],
+    importpath = "ricardo.local/monorepo/packages/go/scheduler",
+    visibility = ["//visibility:public"],
+    deps = ["//packages/go/httpapi"],
+)
+
+go_test(
+    name = "scheduler_test",
+    srcs = ["client_test.go"],
+    embed = [":scheduler"],
+    deps = ["//packages/go/httpapi"],
+)

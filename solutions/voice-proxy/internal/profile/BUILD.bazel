@@ -1,0 +1,20 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "profile",
+    srcs = ["profile.go"],
+    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/profile",
+    deps = [
+        "//solutions/voice-proxy/internal/sanitize",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//unicode/norm",
+    ],
+)
+
+go_test(
+    name = "profile_test",
+    srcs = ["profile_test.go"],
+    deps = [":profile"],
+)

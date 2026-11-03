@@ -590,10 +590,27 @@ test("deploy: shared go package deploys every importer", () => {
 
 test("deploy: hermes change selects its images", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["projects/home-assistant/hermes/voice_proxy.py"]);
+  const result = routeReal(["projects/home-assistant/hermes/README.md"]);
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
   assert.equal(entries[0].images, "hermes voice-proxy");
+  assert.equal(entries[0].builder, "mixed");
+  assert.equal(entries[0].target_root, "//solutions/voice-proxy");
+});
+
+test("deploy: voice-proxy solution change runs its go unit and deploys hermes", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["solutions/voice-proxy/app/run.go"]);
+  assert.deepEqual(result.routes.go.units.map((unit) => unit.id), ["voice-proxy"]);
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
+});
+
+test("deploy: shared go package change reaches the hermes deploy unit", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["packages/go/ha/ha.go"]);
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
 });
 
 test("deploy: ci workflow change runs checks but deploys nothing", () => {

@@ -124,6 +124,21 @@ export const config = {
   units: [
     // ---------------------------------------------------------------- Go --------
     {
+      id: "voice-proxy",
+      platform: "go",
+      title: "solutions/voice-proxy (TTS-safe OpenAI passthrough)",
+      paths: ["solutions/voice-proxy/**"],
+      // Tests and the Bazel image targets only. The image is deployed by the
+      // `hermes` unit below: both containers share one Helm release, one smoke
+      // and one rollback, so a second deploy unit would race on `runtime`.
+      go: {
+        module: ".",
+        packages: ["./solutions/voice-proxy/..."],
+        race: true,
+        build: ["./solutions/voice-proxy/cmd/voice-proxy"],
+      },
+    },
+    {
       id: "scheduler",
       platform: "go",
       title: "solutions/scheduler (scheduler service)",
@@ -370,13 +385,27 @@ export const config = {
       id: "hermes",
       platform: "python",
       title: "projects/home-assistant/hermes",
-      paths: ["projects/home-assistant/hermes/**"],
+      paths: [
+        "projects/home-assistant/hermes/**",
+        // The voice-proxy Go solution and the shared clients it compiles into
+        // the deployed binary. The `voice-proxy` go unit runs the tests; this
+        // unit owns the deploy. `packages/go/**` is explicit because a deploy
+        // unit is selected only from its own platform route (a python unit has
+        // no `go list` closure), so the shared-client closure never reaches it.
+        "solutions/voice-proxy/**",
+        "packages/go/**",
+      ],
       // Hermes/voice-proxy: build+push, then promote both digests into the
-      // runtime Helm release (hermes_rollout.py). The upgrade is skipped when the
-      // digests did not change; the smoke checks must pass or the job rolls the
-      // release back to the previous revision.
+      // runtime Helm release (hermes_rollout.py). `hermes` is a Docker build,
+      // `voice-proxy` is a Bazel/rules_oci image; build-and-push.sh owns the
+      // split, so the workflow keeps one deploy branch. The upgrade is skipped
+      // when the digests did not change; the smoke checks must pass or the job
+      // rolls the release back to the previous revision.
       deploy: {
-        builder: "docker",
+        builder: "mixed",
+        // Bazel package of the `<image>_image`/`<image>_push` targets used by
+        // the mixed builder (hermes is built from Dockerfile).
+        target_root: "//solutions/voice-proxy",
         images: ["hermes", "voice-proxy"],
         workloads: ["hermes"],
         namespace: "home-assistant",

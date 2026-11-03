@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "hermes",
+    srcs = ["upstream.go"],
+    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/hermes",
+)
+
+go_test(
+    name = "hermes_test",
+    srcs = ["hermes_test.go"],
+    embed = [":hermes"],
+)

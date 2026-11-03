@@ -6,7 +6,9 @@ name: _images
 #
 #   bazel  - hermetic distroless images assembled by rules_oci from the Go
 #            binaries (//projects/home/kubernetes/scheduler:<image>_image)
-#   docker - Dockerfile-based images (Hermes gateway and its voice proxy)
+#   docker - Dockerfile-based images (the Hermes gateway)
+#   mixed  - one deploy unit with both kinds (the Hermes unit: `hermes` from a
+#            Dockerfile, `voice-proxy` from //solutions/voice-proxy)
 
 on:
   workflow_call:
@@ -20,12 +22,12 @@ on:
         required: true
         type: string
       builder:
-        description: Image builder (bazel or docker)
+        description: Image builder (bazel, docker or mixed)
         required: false
         default: bazel
         type: string
       target_root:
-        description: Bazel package owning the <image>_image targets (bazel only)
+        description: Bazel package owning the <image>_image targets (bazel/mixed)
         required: false
         default: ""
         type: string
@@ -42,7 +44,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
-        if: inputs.builder == 'bazel'
+        if: inputs.builder == 'bazel' || inputs.builder == 'mixed'
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
@@ -80,12 +82,6 @@ jobs:
           revision=$(sed -n 's/^HERMES_REVISION=//p' projects/home/kubernetes/versions.sh)
           for image in "${images[@]}"; do
             case "$image" in
-              voice-proxy)
-                docker build \
-                  -f projects/home-assistant/deploy/images/voice-proxy/Dockerfile \
-                  -t "ghcr.io/proflyder/voice-proxy:ci" \
-                  projects/home-assistant/hermes
-                ;;
               hermes)
                 git clone --quiet --filter=blob:none \
                   https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-src"
@@ -99,6 +95,52 @@ jobs:
                 ;;
               *)
                 echo "unknown docker image: $image" >&2
+                exit 2
+                ;;
+            esac
+            echo "built ghcr.io/proflyder/${image}" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+      # One deploy unit can own both image kinds. The image named after the
+      # `target_root` package is the Bazel/rules_oci one; the rest are
+      # Dockerfile builds. Today that is the Hermes unit: `voice-proxy` from
+      # //solutions/voice-proxy, `hermes` from the upstream revision.
+      - name: Build mixed images (Bazel + Dockerfile)
+        if: inputs.builder == 'mixed'
+        run: |
+          set -euo pipefail
+          read -r -a images <<< "${{ inputs.images }}"
+          target_root="${{ inputs.target_root }}"
+          if [[ "$target_root" != //* ]]; then
+            echo "mixed unit without a //target_root: '$target_root'" >&2
+            exit 2
+          fi
+          package="${target_root#//}"
+          bazel_image="${package##*/}"
+          revision=$(sed -n 's/^HERMES_REVISION=//p' projects/home/kubernetes/versions.sh)
+          for image in "${images[@]}"; do
+            if [[ "$image" == "$bazel_image" ]]; then
+              bazel build "${target_root}:${image}_image" \
+                --platforms=@rules_go//go/toolchain:linux_amd64
+              layout="bazel-bin/${package}/${image}_image"
+              digest=$(python3 platform/ci/oci_image.py digest "$layout")
+              echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            case "$image" in
+              hermes)
+                git clone --quiet --filter=blob:none \
+                  https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-src"
+                mkdir -p "$RUNNER_TEMP/hermes"
+                git -C "$RUNNER_TEMP/hermes-src" archive "$revision" \
+                  | tar -x -C "$RUNNER_TEMP/hermes"
+                docker build \
+                  -f projects/home-assistant/deploy/images/hermes/Dockerfile \
+                  -t "ghcr.io/proflyder/hermes:${revision:0:12}" \
+                  "$RUNNER_TEMP/hermes"
+                ;;
+              *)
+                echo "unknown mixed image: $image" >&2
                 exit 2
                 ;;
             esac

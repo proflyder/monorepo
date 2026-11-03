@@ -18,7 +18,7 @@ solutions/               переиспользуемые решения
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (+ checked-in Go stubs)
-  go/                    shared Go
+  go/                    shared Go: httpapi, ha (HA REST), scheduler (Connect-JSON)
 
 projects/                композиции и deployment
   station/               Pulsar/ADB/BLE/provisioning
@@ -63,6 +63,7 @@ engine, два entrypoint-а для совместимости.
 |---|---|---|
 | `solutions/scheduler` | Go | always-on scheduler/queue, один бинарник, low memory, pure-Go SQLite |
 | MCP/HA bridge | Go | сетевые адаптеры, простой деплой, общий код |
+| `solutions/voice-proxy` | Go | OpenAI-совместимый streaming-прокси с маршрутизацией и durable-очередью; один distroless-бинарник рядом с Hermes |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
@@ -153,6 +154,8 @@ gRPC-Web; отдельного REST API нет. Go stubs лежат в репо�
 - `solutions/alarm`: legacy `AlarmService` view над тем же engine.
 - `solutions/ha-bridge`: executor adapter; арендует `queue=home`, вызывает HA
   scripts, подтверждает события. Не владеет расписанием.
+- `packages/go`: общие клиенты (`httpapi`, `ha`, `scheduler`) без проектной
+  привязки; endpoints, очереди и entity id задаёт потребитель, а не пакет.
 - `solutions/bb-home-dispatcher` и `solutions/bb-profiles`: плагины bb, а не
   сервисы. Диспетчер ничего не знает о проектах, кроме ответов `profiles`;
   профиль и allowlist провайдеров/машин живут только в `profiles`, голосовой

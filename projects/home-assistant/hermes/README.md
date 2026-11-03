@@ -32,8 +32,9 @@ contains the reviewed overlay for the three MCP servers, model provider, web
 search, platform toolsets and the Telegram channel.  The HA voice prompt lives
 in `voice_prompt.txt`; the canonical Hermes identity lives
 in [`SOUL.md`](SOUL.md); the infra context that becomes `/opt/data/.hermes.md`
-lives in [`HERMES.md`](HERMES.md); the TTS sanitizer lives in
-[`voice_proxy.py`](voice_proxy.py).  Do not copy secrets into this directory.
+lives in [`HERMES.md`](HERMES.md); the TTS sanitizer is the
+[`solutions/voice-proxy`](../../../solutions/voice-proxy/README.md) service.
+Do not copy secrets into this directory.
 
 ## Render the overlay into the live home
 
@@ -204,183 +205,30 @@ After rendering, restart the gateway; `/report` appears in the bot menu on the
 next Telegram connect.  Verify with a `/report` message from the owner account
 and check the reply length (it must exceed 180 characters for a real report).
 
-## Cancel guard (proxy v6)
+## Voice proxy (Go)
 
-HA's `prefer_local_intents` is skipped for the next utterance when the previous
-assistant reply ended with a question (`continue_conversation=true`,
-`_intent_agent_only`). During that follow-up turn a spoken «отмена» used to
-reach the Hermes model. `voice_proxy.py` now checks only the last message when
-its role is `user`, normalizes NFKC/case/whitespace and strips only sentence-
-final `.!?…`, then matches the exact existing `StationCancel` phrases. Quotes,
-hyphens, internal commas and phrases with extra meaning are forwarded unchanged.
-On a match the proxy returns an empty chat completion (JSON or SSE with
-`role`, `finish_reason=stop`, `[DONE]`) and never opens the Hermes upstream.
-It logs only `cancel guarded count=N stream=... upstream=skipped`.
+The TTS sanitizer, cancel guard, profile routing, late answers, dispatcher
+updates and durable announcement queue are now the reusable
+[`solutions/voice-proxy`](../../../solutions/voice-proxy/README.md) service
+(Go, `rules_oci`/distroless image), not `voice_proxy.py`. Behaviour,
+environment names/defaults, log lines and the scheduler payload/idempotency
+contract are unchanged; that README is the single contract for every
+`HERMES_*` variable and for `-healthcheck` / `-status`.
 
-HA's llama_cpp adapter drops an assistant message whose content is empty, so
-the guard sends a single space. The pipeline strips it, skips TTS and keeps
-`continue_conversation=false`; the intent response is `action_done` with
-whitespace-only speech and `processed_locally=false` (the response came through
-the conversation agent, not the local intent path). The proxy image is
-digest-pinned in `projects/home/kubernetes/versions.sh`.
+Hermes-specific notes:
 
-## Profile routing (proxy v7)
+- HA calls the proxy at `http://192.0.2.27:8643/v1`; the proxy forwards to
+  `127.0.0.1:8642`. The nftables rule in
+  `projects/home/kubernetes/voice-firewall/` still limits clients to HAOS
+  `.28`, the K3s node `.27` and loopback.
+- The proxy sets `model_options.reasoning_effort=low` (or
+  `HERMES_VOICE_REASONING_EFFORT`) only for voice requests.
+- The container is distroless: diagnostics use
+  `kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- /usr/local/bin/voice-proxy -status`
+  (or `-healthcheck`); there is no shell or `curl`.
 
-The proxy is the only place that decides whether a phrase belongs to Hermes or
-to an agent. It is disabled unless the full path is configured, so a build
-without the new deployment values behaves exactly like v6.
-
-Per `/v1/chat/completions` request, in this order:
-
-1. the cancel guard (unchanged, v6) — never reads the profile;
-2. the HA voice profile
-   (`GET {HA_URL}/api/states/input_select.ricardo_voice_profile`, Bearer HA
-   token, a ≤2 s cache that is only filled by a fresh successful read);
-3. `POST {VOICE_GATEWAY_URL}/v1/voice/utterance {text, profile}` with the last
-   user message, using the dedicated voice token.
-
-| Gateway `route` | Action |
-|---|---|
-| `hermes` | forward to Hermes exactly as before |
-| `local` | answer immediately with `speech`; nothing reaches Hermes |
-| `bb` with `ok:true`, `threadId`, `afterSeq` | answer immediately with `speech`, then announce the turn result later |
-| anything else, `ok:false`, or a gateway error | fail-closed short phrase, nothing reaches Hermes in the work profile |
-
-Fail-closed:
-
-- profile unreadable, unknown value, HA unavailable → «Не могу подтвердить
-  профиль.»;
-- gateway unavailable in the **work** profile → «Сервер агентов недоступен.»;
-- gateway unavailable in the **personal** profile → Hermes, because personal
-  speech always went there before this change.
-
-`local`/`bb` replies use the same completion shape as the cancel guard (JSON or
-SSE with `role`, `content`, `finish_reason=stop`, `[DONE]`), and their speech
-never ends with a question so HA does not enable continued conversation.
-
-For `bb`, a daemon thread long-polls `POST /v1/voice/result` (25 s per call,
-about 15 min overall). A timeout or a gateway error announces nothing; the
-thread never writes speech to the log. When the durable queue is enabled the
-sanitized final answer is not spoken here but enqueued (see «Durable
-announcement queue»); otherwise it is spoken directly: the text is sanitized
-with the same `sanitize_text` and limited to ~200 characters.
-
-- A final answer ending with `?` (or `？`) calls
-  `POST {HA_URL}/api/services/assist_satellite/start_conversation` with
-  `entity_id: {HERMES_VOICE_SATELLITE}`, `start_message: text`,
-  `preannounce: false`. The satellite speaks the question and keeps listening.
-- Otherwise, or when that call fails, it calls
-  `POST {HA_URL}/api/services/script/turn_on` with
-  `entity_id: script.schedule_announce` and `variables: {message, chime: false}`.
-
-The announce log line carries `listen=true/false` so the chosen path is visible
-without logging speech.
-
-### Dispatcher updates
-
-Turns the owner did not start by voice — `child-completed` system messages and
-`[bb message from thread:…]` agent messages — are announced too. A daemon
-poller bootstraps `POST /v1/voice/updates` without `afterSeq` (cursor only),
-then long-polls with the returned cursor. Each update item carries `seq`,
-`spoken` and `completedAt` (ms epoch of `turn/completed`).
-
-With the durable queue enabled, the poller enqueues every `spoken` line into
-`voice-work` regardless of the current column profile; the queue consumer
-speaks it only while the work profile is active. On bootstrap it rescans
-`HERMES_VOICE_UPDATES_RESCAN` events (default 300) instead of starting at
-"now": a proxy restart therefore does not lose completions, and items older
-than `HERMES_VOICE_ANNOUNCE_TTL` are not enqueued. Duplicates are rejected by
-the scheduler idempotency key. Without the queue, the old behaviour remains:
-re-read the profile from HA, speak only in work profile, drop the batch
-otherwise.
-
-Owner turns (`initiator: "user"`, including typed UI messages) are never
-returned by the gateway. Errors back off 2 s → 60 s; the poller never speaks on
-an error and never calls Hermes. The log line is
-`voice-proxy: updates items=N queued=… stale=…` (queue) or
-`voice-proxy: updates items=N announced=… listen=… profile=…` (direct) without
-text.
-
-`HERMES_VOICE_UPDATES=0` disables the poller; it is otherwise on whenever
-profile routing is enabled.
-
-### Durable announcement queue
-
-Late answers are spoken by the station, not by the request thread. With
-`scheduler` configured, the proxy enqueues a task instead of calling HA:
-
-- `POST {HERMES_SCHEDULER_URL}/ricardo.v1.SchedulerService/EnqueueTask`
-  `{taskType: "voice.announce", payloadJson, runAtUnix, queue,
-  idempotencyKey}`;
-- queue `voice-work` or `voice-personal`, chosen by the profile of the answer;
-- `payloadJson` = `{text, profile, thread_id, seq, created_unix}`;
-- idempotency key `voice:<thread_id>:<seq>` (`done:<completedSeq>` when the
-  result route returns one, otherwise `after:<afterSeq>`; dispatcher updates
-  use the update `seq`).
-
-If `EnqueueTask` fails (scheduler down or misconfigured), the producer falls
-back to the previous direct `announce`, so an answer is never lost; the log
-line is `voice-proxy: queue enqueue failed … fallback=direct`.
-
-A single daemon consumer (`HERMES_VOICE_CONSUMER`, default `voice-proxy-home`)
-loops about once a second:
-
-1. read the profile fresh from HA and the station state:
-   `{HERMES_VOICE_SATELLITE}` must be `idle` and `{HERMES_VOICE_MEDIA_PLAYER}`
-   must not be `announcing`; unknown/unavailable is treated as busy, music
-   `playing` is fine;
-2. only then lease one event from `voice-<profile>`
-   (`ListDueEvents`, lease 120 s);
-3. an event older than `HERMES_VOICE_ANNOUNCE_TTL` is acknowledged as
-   `ACK_OUTCOME_SKIPPED` without speaking; an empty text is skipped the same
-   way;
-4. an answer that waited more than 120 s is prefixed «Пока вас не было: »;
-5. speak through the same `announce` (question →
-   `assist_satellite.start_conversation`, statement →
-   `script.schedule_announce`), wait up to ~10 s for the station to become
-   busy and then up to 180 s for `idle`/not `announcing`, then `AckEvent`;
-6. if the announce call failed the event is not acknowledged — lease expiry
-   returns it to `PENDING`, up to `SCHEDULER_EVENT_MAX_ATTEMPTS`.
-
-Errors back off 2 s → 60 s and never crash the thread. Logs carry structure
-only: `voice-proxy: queue delivered queue=… age=… listen=… idle=…`. Only one
-answer is spoken at a time because the consumer leases only after the station
-is free. `HERMES_VOICE_QUEUE=0` disables the queue: producers announce
-directly and the consumer is not started; the queue is enabled only when both
-`HERMES_SCHEDULER_URL` and its token are present.
-
-Environment (routing is off until all four of URL+token for HA and gateway are
-present):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `HERMES_HA_URL` | — | HA base URL, for the profile state and the announce service call |
-| `HERMES_HA_TOKEN_FILE` / `HERMES_HA_TOKEN` | — | HA long-lived token; the existing `hermes-environment` Secret key can be reused |
-| `HERMES_VOICE_GATEWAY_URL` | — | mcp-gateway base, `http://mcp-gateway.home-assistant.svc.cluster.local:8080` |
-| `HERMES_VOICE_GATEWAY_TOKEN_FILE` / `HERMES_VOICE_GATEWAY_TOKEN` | — | voice token from Secret `mcp-gateway-voice` |
-| `HERMES_VOICE_UPDATES` | `1` | Dispatcher updates poller; `0` disables it |
-| `HERMES_VOICE_PROFILE_ENTITY` | `input_select.ricardo_voice_profile` | profile entity |
-| `HERMES_VOICE_PROFILE_CACHE_MS` | `2000` | successful-read cache |
-| `HERMES_HA_TIMEOUT` | `3` | HA request timeout, seconds |
-| `HERMES_VOICE_GATEWAY_TIMEOUT` | `5` | gateway request timeout, seconds |
-| `HERMES_VOICE_RESULT_TIMEOUT` | `900` | overall late-answer budget, seconds |
-| `HERMES_VOICE_RESULT_RETRY` | `2` | pause after a failed result poll |
-| `HERMES_VOICE_RESULT_WAIT` | `25` | long-poll seconds per request |
-| `HERMES_VOICE_ANNOUNCE_MAX_CHARS` | `200` | announced text limit |
-| `HERMES_VOICE_ANNOUNCE_SCRIPT` | `script.schedule_announce` | HA script that speaks a late statement |
-| `HERMES_VOICE_SATELLITE` | `assist_satellite.iandeks_stantsiia_midi_assist_satellite` | satellite for `start_conversation` when a late answer is a question |
-| `HERMES_VOICE_MEDIA_PLAYER` | `media_player.iandeks_stantsiia_midi_media_player` | media player that must not be `announcing` |
-| `HERMES_SCHEDULER_URL` | — | scheduler base, `http://scheduler.home-assistant.svc.cluster.local:8098` |
-| `HERMES_SCHEDULER_TOKEN_FILE` / `HERMES_SCHEDULER_TOKEN` | — | scheduler bearer from Secret `scheduler-auth` (`key: token`) |
-| `HERMES_VOICE_QUEUE` | `1` | durable announcement queue; `0` = direct announce, no consumer |
-| `HERMES_VOICE_CONSUMER` | `voice-proxy-home` | consumer id in the scheduler allowlist |
-| `HERMES_VOICE_ANNOUNCE_TTL` | `10800` | answers older than this are acknowledged without speech |
-| `HERMES_VOICE_UPDATES_RESCAN` | `300` | updates events replayed once on bootstrap |
-
-Logs carry the route outcome, profile name, character count and thread id —
-never the spoken text. `_route_counts` keeps per-outcome counters for tests and
-future metrics; the proxy has no metrics endpoint.
-
+Deployment values and the readiness probe are described in
+[`deploy/README.md`](../deploy/README.md).
 
 ## Persona — Ricardo
 
@@ -491,48 +339,18 @@ Voice uses this only after the local HA intent path fails.  A question such as
 
 ## Voice proxy (TTS sanitizer)
 
-HA does not call the Hermes API directly.  It calls the K3s
-`hermes-voice-proxy` on the node address:
+HA does not call the Hermes API directly. It calls the K3s `hermes-voice-proxy`
+on the node address:
 
 ```text
 HA llama_cpp -> http://192.0.2.27:8643/v1 -> Hermes 127.0.0.1:8642
 ```
 
-The proxy binds `0.0.0.0:8643` in the hostNetwork Hermes Pod. An nftables
-rule on the K3s VM allows only HAOS `.28`, the K3s node `.27` and loopback;
-other LAN clients are dropped.
-
-The proxy forwards the OpenAI-compatible request using the same bearer key and
-sanitizes assistant text before Piper TTS:
-
-- removes `[text](https://...)` and bare URLs;
-- removes `([domain](https://...))` source citations;
-- strips Markdown headings, emphasis, code ticks and list markers;
-- collapses whitespace.
-
-It is a presentation layer, not an authentication boundary; the K3s
-nftables rule limits it to HAOS/K3s/loopback.
-The HA entry supports streaming through the proxy. Streaming requests receive
-cleaned complete sentences as SSE; links split across chunks stay buffered.
-Paragraph separators let Piper synthesize each sentence without waiting for
-the next one. Reasoning and Hermes tool/status events are never forwarded as
-speech. Non-streaming clients still receive sanitized JSON.
-
-The proxy sets `model_options.reasoning_effort=low` for voice requests only
-(default controlled by `HERMES_VOICE_REASONING_EFFORT`). Other Hermes clients
-keep their configured reasoning. Current runtime facts: [`../../../docs/STATE.md`](../../../docs/STATE.md).
-The service is
-`~/.config/systemd/user/hermes-voice-proxy.service`:
-
-```bash
-systemctl --user enable --now hermes-voice-proxy.service
-systemctl --user status hermes-voice-proxy
-journalctl --user -u hermes-voice-proxy -n 50 --no-pager
-```
-
-Voice answers therefore do not read links aloud.  If the user explicitly asks
-for a URL, the proxy still removes it by design; the source name can remain as
-plain text.
+The proxy binds `0.0.0.0:8643` in the hostNetwork Hermes Pod. An nftables rule
+on the K3s VM allows only HAOS `.28`, the K3s node `.27` and loopback; other
+LAN clients are dropped. Sanitising, routing, announcements and diagnostics
+are documented in [`solutions/voice-proxy/README.md`](../../../solutions/voice-proxy/README.md).
+It is a presentation layer, not an authentication boundary.
 
 ## MCP contract
 

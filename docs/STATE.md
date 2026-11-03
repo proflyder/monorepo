@@ -164,8 +164,11 @@
   `GITHUB_TOKEN`, живой узел импортирует те же digest'ы в containerd.
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), без pull-secret.
-  `deploy-home` собирает и пушит их, `hermes_rollout.py` подставляет digest'ы,
-  проверяет health/Assist/логи и делает `helm rollback` при провале.
+  `hermes` собирается Docker из upstream revision, `voice-proxy` — Go-сервис
+  `solutions/voice-proxy`, собираемый Bazel `rules_oci` (distroless) и
+  пушимый байт-в-байт через `oci_push`. `deploy-home` (builder `mixed`)
+  собирает и пушит оба, `hermes_rollout.py` подставляет digest'ы, проверяет
+  `-healthcheck`/health/Assist/логи и делает `helm rollback` при провале.
 - Деплой — `converge.py`: полная замена Deployment, сохранение env/режима и
   replicas; откат восстанавливает только применённый объект целиком.
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
@@ -328,8 +331,8 @@
   восстанавливает последнее значение, первый старт — «Личный». Профиль влияет
   только на свободную речь: локальные бытовые команды работают в обоих.
 - **Маршрут речи.** Локальные intents остаются в HA. Остальное идёт в
-  `hermes-voice-proxy`, который читает профиль из HA и вызывает
-  `mcp-gateway` `POST /v1/voice/utterance`:
+  `voice-proxy` (Go, `solutions/voice-proxy`, distroless), который читает
+  профиль из HA и вызывает `mcp-gateway` `POST /v1/voice/utterance`:
   - профиль не прочитан/неизвестен → «Не могу подтвердить профиль.»,
     Hermes не вызывается;
   - рабочий профиль → `send` в постоянный тред-диспетчер Claude Code
@@ -598,7 +601,8 @@
   озвучивания (ходы владельца не возвращаются), `/v1/voice/state` — отладочное
   состояние режима.
 - **Очередь озвучивания.** Поздние ответы агентов не звучат из потока
-  запроса: voice-proxy ставит `EnqueueTask` `voice.announce` в durable очередь
+  запроса: Go-voice-proxy (`solutions/voice-proxy`) ставит `EnqueueTask`
+  `voice.announce` в durable очередь
   `voice-work`/`voice-personal` (idempotency key `voice:<thread>:<seq>`), а
   один consumer `voice-proxy-home` арендует событие только когда спутник
   `idle`, а media player не `announcing`. Ответы старше

@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"ricardo.local/monorepo/packages/go/httpapi"
+	"ricardo.local/monorepo/packages/go/scheduler"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/config"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/ledger"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler"
 )
 
 // SchedulerAPI is the subset of SchedulerService used by the bridge.

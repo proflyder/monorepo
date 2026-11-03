@@ -46,7 +46,7 @@ teardown восстанавливает source/volume.
 | Gateway live | bearer auth, status shape, method guards |
 | MCP gateway | Go unit (фейки backend'ов), каталог↔RBAC, contract `deploy.sh`, fake SSH |
 | bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
-| Voice routing | `test_voice_proxy.py`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
+| Voice routing | Go-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
 | Pulsar installer | upstream Go tests (только при наличии nested checkout) |
 
 ## Hermes
@@ -132,8 +132,8 @@ python3 -m unittest projects/home/kubernetes/mcp-gateway/test_deploy.py -v
 # мост и authorized_keys на локальном HTTP-double плагина
 python3 -m unittest projects/home/proxmox/test_bb_dispatch.py -v
 
-# голос: маршрут по профилю, fail-closed, cancel guard, announce
-python3 -m unittest projects/home-assistant/hermes/test_voice_proxy.py -v
+# голос: маршрут по профилю, fail-closed, cancel guard, announce, очередь
+go test -race ./solutions/voice-proxy/...
 python3 -m unittest projects/home-assistant/deploy/test_voice_routing_contract.py -v
 ```
 
@@ -308,9 +308,10 @@ Maven/APK-замыкание. Прочие глобальные инвалида
   `make test-deploy-control` (scheduler, ha-bridge/ha-control,
   `projects/home/kubernetes/scheduler/**`).
 * `deploy` (у деплоимых юнитов) — `images`, `workloads` и `builder`
-  (`bazel`/`docker`). По нему `deploy-home` и job `images` в `ci.yml`
+  (`bazel`/`docker`/`mixed`). По нему `deploy-home` и job `images` в `ci.yml`
   выбирают, что именно собирать и раскатывать; инфраструктурные юниты этой
-  секции не имеют.
+  секции не имеют. `mixed` — один юнит с обоими типами образов: сегодня
+  `hermes` (Docker) и `voice-proxy` (Bazel `//solutions/voice-proxy`).
 
 ### Как считается затронутость
 
@@ -324,6 +325,11 @@ Maven/APK-замыкание. Прочие глобальные инвалида
 
 Android-граф берётся из loading-фазы намеренно: он не требует JDK и Android
 SDK, поэтому маршрутизация дешёвая и не может «сломаться из-за toolchain».
+
+Замыкание `go list` работает только внутри go-юнитов. Деплой-юнит `hermes`
+имеет платформу `python` и собственных go-пакетов, поэтому изменения
+`packages/go/**` не доходят до него через зависимость; путь добавлен в
+`hermes.paths` явно (тесты при этом остаются у go-юнита `voice-proxy`).
 Изменённый файл сопоставляется с `rule-input` (source file); для нового,
 удалённого файла или правки `BUILD.bazel`/`.bzl` берётся весь пакет — это
 безопасное over-approximation.
@@ -430,8 +436,9 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
 
 - Смена режима (`preserve`, `execute`, `shadow`, `control-*`) — только
   `workflow_dispatch`; push всегда conservative preserve.
-- Hermes/voice-proxy: build+push → digest в релиз `runtime` →
-  health/Assist-проверка → `helm rollback` при провале.
+- Hermes/voice-proxy (builder `mixed`): `hermes` — Docker, `voice-proxy` —
+  Bazel/rules_oci; build+push → digest в релиз `runtime` →
+  `-healthcheck`/health/Assist-проверка → `helm rollback` при провале.
 - Откат — только применённого объекта; изменение целиком откатывается новым
   PR с `git revert`.
 

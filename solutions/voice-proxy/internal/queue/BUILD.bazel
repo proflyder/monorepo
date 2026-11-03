@@ -1,0 +1,29 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "queue",
+    srcs = [
+        "consumer.go",
+        "producer.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/queue",
+    deps = [
+        "//packages/go/scheduler",
+        "//solutions/voice-proxy/internal/profile",
+    ],
+)
+
+go_test(
+    name = "queue_test",
+    srcs = [
+        "consumer_test.go",
+        "created_internal_test.go",
+        "crossimpl_test.go",
+        "producer_test.go",
+    ],
+    embed = [":queue"],
+    embedsrcs = ["testdata/voice_announce_python.json"],
+    deps = ["//packages/go/scheduler"],
+)

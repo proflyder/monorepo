@@ -419,22 +419,31 @@ kubectl -n home-assistant port-forward svc/mcp-gateway 18080:8080
 kubectl -n home-assistant get externalsecret mcp-gateway-bb-ssh mcp-gateway-voice
 kubectl -n home-assistant logs deploy/mcp-gateway --tail=100 | grep -E '"bb"|"voice"'
 
-# состояние голосового маршрута (только из кластера; токен не печатать)
+# самодиагностика distroless-образа: shell/curl/python внутри нет
 kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
-  sh -c 'curl -fsS -H "Authorization: Bearer $(cat /run/secrets/voice/token)" \
-  http://mcp-gateway:8080/v1/voice/state'
+  /usr/local/bin/voice-proxy -healthcheck
+kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
+  /usr/local/bin/voice-proxy -status
 
-# bootstrap обновлений диспетчера (рабочий профиль): только cursor, без истории
-kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
-  sh -c 'curl -fsS -H "Authorization: Bearer $(cat /run/secrets/voice/token)" \
+# состояние голосового маршрута и bootstrap обновлений диспетчера:
+# kubectl-side port-forward вместо exec в контейнер, токен не печатается
+kubectl -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
+VOICE_TOKEN=$(kubectl -n home-assistant get secret mcp-gateway-voice \
+  -o jsonpath='{.data.token}' | base64 -d)
+curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
+  http://127.0.0.1:18081/v1/voice/state
+# рабочий профиль: только cursor, без истории
+curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
   -H "Content-Type: application/json" -d "{}" \
-  http://mcp-gateway:8080/v1/voice/updates'
+  http://127.0.0.1:18081/v1/voice/updates
+kill %1 2>/dev/null || true
+unset VOICE_TOKEN
 ```
 
 Голосовой прокси сам опрашивает `/v1/voice/updates` и озвучивает завершённые
 ходы диспетчера, которые начал не владелец (`system`/`agent`), только пока
 профиль «Рабочий». Выключается `HERMES_VOICE_UPDATES=0`; подробности —
-`projects/home-assistant/hermes/README.md`.
+`solutions/voice-proxy/README.md`.
 
 # профиль и цвет кольца станции
 #   HA: input_select.ricardo_voice_profile, switch.ricardo_work_profile

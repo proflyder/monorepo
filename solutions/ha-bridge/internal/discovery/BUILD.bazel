@@ -6,8 +6,8 @@ go_library(
     importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/discovery",
     visibility = ["//solutions/ha-bridge:__subpackages__"],
     deps = [
+        "//packages/go/ha",
         "//solutions/ha-bridge/internal/catalog",
-        "//solutions/ha-bridge/internal/ha",
     ],
 )
 
@@ -16,7 +16,7 @@ go_test(
     srcs = ["discovery_test.go"],
     embed = [":discovery"],
     deps = [
+        "//packages/go/ha",
         "//solutions/ha-bridge/internal/catalog",
-        "//solutions/ha-bridge/internal/ha",
     ],
 )

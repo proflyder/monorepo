@@ -1,0 +1,18 @@
+load(":images.bzl", "service_image")
+
+package(default_visibility = ["//visibility:public"])
+
+# One static linux/amd64 binary on the digest-pinned distroless base, built
+# hermetically without a Docker daemon. Distroless has no shell, so the
+# container is diagnosed with `voice-proxy -healthcheck` / `-status`.
+service_image(
+    name = "voice-proxy",
+    binary = "//solutions/voice-proxy/cmd/voice-proxy",
+    repo = "ghcr.io/proflyder/voice-proxy",
+)
+
+filegroup(
+    name = "images",
+    srcs = [":voice-proxy_image"],
+    visibility = ["//visibility:public"],
+)

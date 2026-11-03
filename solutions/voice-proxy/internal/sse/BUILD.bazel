@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "sse",
+    srcs = [
+        "reader.go",
+        "writer.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/sse",
+)
+
+go_test(
+    name = "sse_test",
+    srcs = ["sse_test.go"],
+    embed = [":sse"],
+)

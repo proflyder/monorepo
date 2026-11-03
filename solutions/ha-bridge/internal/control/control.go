@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"ricardo.local/monorepo/packages/go/httpapi"
+	"ricardo.local/monorepo/packages/go/scheduler"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/discovery"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler"
 )
 
 // DefaultQueue is the scheduler queue carrying control commands.

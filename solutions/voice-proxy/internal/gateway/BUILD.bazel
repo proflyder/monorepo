@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "gateway",
+    srcs = ["client.go"],
+    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/gateway",
+)
+
+go_test(
+    name = "gateway_test",
+    srcs = ["client_test.go"],
+    deps = [":gateway"],
+)

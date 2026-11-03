@@ -126,7 +126,8 @@ Helm при удалении объекта из релиза делает GET �
 
 ## Автодеплой Hermes / voice-proxy
 
-`deploy-home` для юнита `hermes` (builder `docker`) после build+push вызывает
+`deploy-home` для юнита `hermes` (builder `mixed`: `hermes` — Docker,
+`voice-proxy` — Bazel/rules_oci) после build+push вызывает
 `projects/home-assistant/deploy/hermes_rollout.py`:
 
 1. значения берутся из OpenBao `secret/ci/deploy-home` (key `runtime_values`,
@@ -136,10 +137,12 @@ Helm при удалении объекта из релиза делает GET �
 3. `helm upgrade runtime` получает только `--set` образов (без
    `--reuse-values`), `storage` вырезается;
 4. запоминается ревизия до upgrade, затем проверяются rollout, health exporter
-   (все endpoint'ы = 1), Assist-запрос через `conversation.hermes_agent` и
-   отсутствие ошибок в логах voice-proxy. HA-токен читается Job'ом из Secret
-   `ha-bridge-ha`, HA вызывается по cluster-internal Service, поэтому в GitHub
-   он не попадает;
+   (все endpoint'ы = 1), Assist-запрос через `conversation.hermes_agent`,
+   `kubectl exec deploy/hermes -c voice-proxy -- /usr/local/bin/voice-proxy
+   -healthcheck` и отсутствие ошибок в логах voice-proxy. Assist Job работает
+   на отдельном pinned python-образе (voice-proxy теперь distroless, без
+   python/shell); HA-токен читается Job'ом из Secret `ha-bridge-ha`, HA
+   вызывается по cluster-internal Service, поэтому в GitHub он не попадает;
 5. при провале — `helm rollback runtime <прежняя ревизия>`, повторная проверка;
    если upgrade не создал ревизию, откат не выполняется.
 
@@ -348,7 +351,9 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
   `projects/home/kubernetes/currency-bot/README.md`.
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
-  IfNotPresent`, без pull-secret. deploy-home собирает и пушит их, затем
+  IfNotPresent`, без pull-secret. `hermes` собирается Docker, `voice-proxy` —
+  Bazel `rules_oci` (distroless, `oci_push` без переписывания digest).
+  deploy-home собирает и пушит их, затем
   `hermes_rollout.py` подставляет digest'и в релиз `runtime`, прогоняет
   голосовую проверку и откатывается на предыдущую ревизию при провале.
   Текущие пины — `versions.sh`; ручной откат — `helm rollback`.
@@ -369,5 +374,5 @@ Disaster restore на запасном железе ещё не выполнял
 - Внешний dead-man switch (Cloudflare Worker `home-heartbeat`) сообщает только
   о полной тишине Alertmanager; отдельные сервисы покрывают обычные алерты.
 - Нет полной latency instrumentation voice pipeline.
-- Scheduler/bridge/control и Hermes/voice-proxy собираются в CI и
-  публикуются в GHCR; runtime ссылается на них по digest.
+- Scheduler/bridge/control/voice-proxy собираются Bazel в CI, Hermes — Docker;
+  все публикуются в GHCR, runtime ссылается на них по digest.
