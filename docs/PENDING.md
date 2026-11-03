@@ -21,7 +21,10 @@
       inline-Python в `deploy.sh`, `apply-runtime.sh`, external-secrets,
       ingress, `hermes_rollout.py`, `render_hermes_config.py`; health
       exporter — Go-образ (сейчас он запущен из последнего Python-образа
-      voice-proxy, закреплённого digest в приватных values). Проверка —
+      voice-proxy, закреплённого digest в приватных values; пока это так, этот
+      digest защищён записью `PROTECTED_DIGESTS` в
+      `platform/ci/ghcr_cleanup.mjs` — удалить запись вместе с миграцией
+      exporter'а). Проверка —
       побайтный рендер и разобранные объекты kubectl против Python, затем
       ручной `workflow_dispatch` каждого юнита. (2) Хосты и оператор:
       `offsite_backup.py` → Go-бинарник из GHCR по digest (как решение 34),

@@ -1,19 +1,22 @@
 {
-  "_comment": "Realistic GHCR container-package fixture for the cleanup dry run. Dates are relative to --now 2026-11-04T00:00:00Z. Only tree-* and untagged versions older than 7 days and not newest should be selected.",
+  "_comment": "Realistic GHCR container-package fixture for the cleanup dry run. Dates are relative to --now 2026-11-04T00:00:00Z. Deletes: stale tree-* and untagged versions, stale deploy versions beyond the five newest, referrers whose subject is deleted, and nothing protected by develop/semver/latest/newest/PROTECTED_DIGESTS.",
   "packages": {
     "scheduler": [
       {
         "id": 101,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
         "created_at": "2026-11-03T12:00:00Z",
         "metadata": { "container": { "tags": ["tree-1111111111111111111111111111111111111111"] } }
       },
       {
         "id": 102,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
         "created_at": "2026-10-20T09:00:00Z",
         "metadata": { "container": { "tags": ["tree-2222222222222222222222222222222222222222"] } }
       },
       {
         "id": 103,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000003",
         "created_at": "2026-09-01T09:00:00Z",
         "metadata": {
           "container": { "tags": ["develop", "tree-3333333333333333333333333333333333333333"] }
@@ -21,6 +24,7 @@
       },
       {
         "id": 104,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000004",
         "created_at": "2026-08-01T09:00:00Z",
         "metadata": {
           "container": { "tags": ["0123456789abcdef0123456789abcdef01234567"] }
@@ -28,23 +32,89 @@
       },
       {
         "id": 105,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000005",
         "created_at": "2026-07-01T09:00:00Z",
         "metadata": { "container": { "tags": ["v1.2.3"] } }
       },
       {
         "id": 106,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000006",
         "created_at": "2026-09-15T09:00:00Z",
         "metadata": { "container": { "tags": [] } }
+      },
+      {
+        "id": 107,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000007",
+        "created_at": "2026-10-27T09:00:00Z",
+        "metadata": { "container": { "tags": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] } }
+      },
+      {
+        "id": 108,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000008",
+        "created_at": "2026-10-20T09:00:00Z",
+        "metadata": { "container": { "tags": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] } }
+      },
+      {
+        "id": 109,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000009",
+        "created_at": "2026-10-10T09:00:00Z",
+        "metadata": { "container": { "tags": ["cccccccccccccccccccccccccccccccccccccccc"] } }
+      },
+      {
+        "id": 110,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000010",
+        "created_at": "2026-10-05T09:00:00Z",
+        "metadata": { "container": { "tags": ["dddddddddddddddddddddddddddddddddddddddd"] } }
+      },
+      {
+        "id": 111,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000011",
+        "created_at": "2026-09-20T09:00:00Z",
+        "metadata": { "container": { "tags": ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"] } }
+      },
+      {
+        "id": 112,
+        "name": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "created_at": "2026-09-10T09:00:00Z",
+        "metadata": { "container": { "tags": ["tree-4444444444444444444444444444444444444444"] } }
+      },
+      {
+        "id": 113,
+        "name": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "created_at": "2026-09-10T09:05:00Z",
+        "metadata": {
+          "container": {
+            "tags": ["sha256-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]
+          }
+        }
+      },
+      {
+        "id": 114,
+        "name": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "created_at": "2026-08-15T09:00:00Z",
+        "metadata": { "container": { "tags": ["develop"] } }
+      },
+      {
+        "id": 115,
+        "name": "sha256:abababababababababababababababababababababababababababababababab",
+        "created_at": "2026-08-15T09:05:00Z",
+        "metadata": {
+          "container": {
+            "tags": ["sha256-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.att"]
+          }
+        }
       }
     ],
     "hermes": [
       {
         "id": 201,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000201",
         "created_at": "2026-11-02T10:00:00Z",
         "metadata": { "container": { "tags": ["tree-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] } }
       },
       {
         "id": 202,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000202",
         "created_at": "2026-10-01T10:00:00Z",
         "metadata": { "container": { "tags": ["latest", "tree-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] } }
       }
@@ -52,13 +122,31 @@
     "voice-proxy": [
       {
         "id": 301,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000301",
         "created_at": "2026-10-28T10:00:00Z",
         "metadata": { "container": { "tags": ["tree-cccccccccccccccccccccccccccccccccccccccc"] } }
       },
       {
         "id": 302,
+        "name": "sha256:0000000000000000000000000000000000000000000000000000000000000302",
         "created_at": "2026-10-21T10:00:00Z",
         "metadata": { "container": { "tags": ["tree-dddddddddddddddddddddddddddddddddddddddd"] } }
+      },
+      {
+        "id": 303,
+        "name": "sha256:238e0a0f3afe5f152e3d8b1de7a35452c016d68368e3bac24c5fde882869fca9",
+        "created_at": "2026-09-01T10:00:00Z",
+        "metadata": { "container": { "tags": ["tree-5555555555555555555555555555555555555555"] } }
+      },
+      {
+        "id": 304,
+        "name": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "created_at": "2026-09-01T10:05:00Z",
+        "metadata": {
+          "container": {
+            "tags": ["sha256-238e0a0f3afe5f152e3d8b1de7a35452c016d68368e3bac24c5fde882869fca9"]
+          }
+        }
       }
     ]
   }

@@ -899,10 +899,15 @@ PREBUILT_DIGESTS="scheduler=sha256:…,ha-bridge=sha256:…,ha-control=sha256:�
   NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh
 ```
 
-Чистка старых `tree-*` версий — `.github/workflows/ghcr-cleanup.yml`:
-ежедневно по расписанию удаляет только версии старше 7 дней, у которых все теги
-`tree-*` (или тегов нет), кроме новейшей версии пакета. Версии с `develop`,
-commit sha и semver не удаляются.
+Чистка GHCR — `.github/workflows/ghcr-cleanup.yml`, ежедневно по расписанию.
+Политика по каждому пакету: не удаляются новейшая версия, теги `develop`,
+`latest` и semver, digest'ы из `PROTECTED_DIGESTS` (сейчас — последний
+Python-образ `voice-proxy` для health-exporter'а Hermes) и версии моложе
+7 дней. Deploy-версии (40-hex commit-sha тег) сохраняют пять новейших, более
+старые старше 7 дней удаляются. Устаревшие версии только с `tree-*` или без
+тегов удаляются. Referrer-версии с тегами `sha256-<hex>` удаляются вместе со
+своим digest'ом или если его уже нет в пакете; в окно пяти deploy-версий они
+не входят. Каждое решение с причиной пишется в job summary.
 
 ```bash
 # локальный dry-run политики на фикстуре (в GitHub не ходит, ничего не удаляет)
