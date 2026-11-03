@@ -89,15 +89,22 @@ if (git("status", "--porcelain")) {
   process.stderr.write("Push blocked: commit or stash changes before the publication audit.\n");
   process.exit(1);
 }
-const scanner =
-  which("gitleaks") || path.join(root, "secrets", "local-tools", "gitleaks");
-let scannerIsFile = false;
-try {
-  scannerIsFile = fs.statSync(scanner).isFile();
-} catch {
-  scannerIsFile = false;
-}
-if (!scannerIsFile) {
+// `secrets/` is ignored, so a linked worktree has no copy of it: also look in
+// the main checkout that owns the shared Git directory.
+const mainRoot = path.dirname(git("rev-parse", "--path-format=absolute", "--git-common-dir"));
+const isFile = (candidate) => {
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+};
+const scanner = [
+  which("gitleaks"),
+  path.join(root, "secrets", "local-tools", "gitleaks"),
+  path.join(mainRoot, "secrets", "local-tools", "gitleaks"),
+].find((candidate) => candidate && isFile(candidate));
+if (!scanner) {
   process.stderr.write("Push blocked: install gitleaks before publishing.\n");
   process.exit(1);
 }
