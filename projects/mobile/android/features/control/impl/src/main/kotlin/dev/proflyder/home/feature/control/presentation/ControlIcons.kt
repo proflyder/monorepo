@@ -29,6 +29,7 @@ internal object ControlIcons {
         return when (entry.kind) {
             ControlKind.LIGHT -> R.drawable.control_ic_bulb
             ControlKind.SWITCH -> R.drawable.control_ic_plug
+            ControlKind.PROFILE -> R.drawable.control_ic_work
             else -> R.drawable.control_ic_play
         }
     }

@@ -47,11 +47,14 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 is ControlItem.Device ->
                     if (item.entry.light != null && item.entry.available) openLightSheet(item.entry)
                     else viewModel.setPower(item.entry, !item.entry.isOn())
-                is ControlItem.Header -> Unit
+                // The profile is a mode: only its segmented buttons act.
+                is ControlItem.Header, is ControlItem.Profile -> Unit
             }
         }
 
         override fun onPowerChanged(entry: ControlEntry, on: Boolean) = viewModel.setPower(entry, on)
+
+        override fun onProfileChanged(entry: ControlEntry, work: Boolean) = viewModel.setProfile(entry, work)
     }
 
     override fun onBindingCreated(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
@@ -154,6 +157,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         otherDevices = getString(R.string.control_section_other),
         scenarios = getString(R.string.control_section_scenarios),
         unavailable = getString(R.string.control_section_unavailable),
+        profile = getString(R.string.control_section_profile),
         onSummary = { on, total -> getString(R.string.control_on_summary, on, total) },
     )
 

@@ -20,19 +20,33 @@ type Raw struct {
 	// Scenario is true when the entity carries the scenario role label
 	// (Rules.ScenarioLabel), i.e. the user declared it a personal scenario.
 	Scenario bool
+	// Profile is true when the entity carries the profile role label
+	// (Rules.ProfileLabel), i.e. the user declared it the voice profile selector.
+	Profile bool
 	// Light is the derived light capability (nil for non-lights / on-off lights).
 	Light *Light
 }
 
-// DefaultScenarioLabel is the Home Assistant label id that marks a script as a
-// scenario the user runs personally. It names a domain role, not a client: any
-// consumer (phone app, voice, a future MCP gateway) can share the same meaning.
-const DefaultScenarioLabel = "scenario"
+const (
+	// DefaultScenarioLabel is the Home Assistant label id that marks a script as
+	// a scenario the user runs personally. It names a domain role, not a client:
+	// any consumer (phone app, voice, a future MCP gateway) can share the same
+	// meaning.
+	DefaultScenarioLabel = "scenario"
+	// DefaultProfileLabel is the Home Assistant label id that marks the entity
+	// holding a named profile of the assistant (for example "personal" vs
+	// "work" voice/profile routing). The role is about *what the entity means*,
+	// not about the current option names: the entity stays a plain switch in
+	// Home Assistant (on = the second/named profile, off = the default one), so
+	// the catalog can drive it with the standard turn_on/turn_off actions.
+	DefaultProfileLabel = "voice_profile"
+)
 
 // Rules decide what discovery exposes. There is no entity list anywhere: the
 // source of truth is Home Assistant (areas, names, hidden flags, labels).
 //
-//   - light, switch: every one that is not hidden or excluded;
+//   - light, switch: every one that is not hidden or excluded; a switch that
+//     carries the profile label is exposed as the single profile selector;
 //   - scene: every one that is not hidden or excluded (a scene is a user preset
 //     by definition);
 //   - script: only when it carries the scenario label. Scripts also hold
@@ -45,6 +59,8 @@ const DefaultScenarioLabel = "scenario"
 type Rules struct {
 	// ScenarioLabel is the HA label id of the scenario role.
 	ScenarioLabel string
+	// ProfileLabel is the HA label id of the profile role.
+	ProfileLabel string
 	// Exclude are path.Match globs on the entity id (e.g. "switch.*_child_lock").
 	Exclude []string
 }
@@ -64,6 +80,9 @@ var (
 func (r Rules) Validate() error {
 	if !labelPattern.MatchString(r.ScenarioLabel) {
 		return errors.New("scenario label must be an HA label id: [a-z0-9_-]{1,64}")
+	}
+	if !labelPattern.MatchString(r.ProfileLabel) {
+		return errors.New("profile label must be an HA label id: [a-z0-9_-]{1,64}")
 	}
 	for _, g := range r.Exclude {
 		if _, err := path.Match(g, ""); err != nil {
@@ -95,7 +114,8 @@ func (r Rules) excluded(entity string) bool {
 }
 
 // Build applies the rules to discovered entities. Output order is stable:
-// scenarios, then devices; within each, by room (unassigned last), title, id.
+// profile, then scenarios, then devices; within each, by room (unassigned
+// last), title, id.
 func Build(raws []Raw, rules Rules) []Entry {
 	entries := make([]Entry, 0, len(raws))
 	for _, raw := range raws {
@@ -110,6 +130,12 @@ func Build(raws []Raw, rules Rules) []Entry {
 		// Scripts are exposed only as declared scenarios; see Rules.
 		if domain == "script" && !raw.Scenario {
 			continue
+		}
+		// A switch carrying the profile label is the profile selector, not a
+		// device. Other domains keep their own kind: a label is a role, and the
+		// profile role only means something for an on/off entity.
+		if raw.Profile && domain == "switch" {
+			kind = KindProfile
 		}
 
 		state := strings.ToLower(strings.TrimSpace(raw.State))
@@ -134,8 +160,8 @@ func Build(raws []Raw, rules Rules) []Entry {
 
 	sort.SliceStable(entries, func(i, j int) bool {
 		a, b := entries[i], entries[j]
-		if (a.Kind == KindScenario) != (b.Kind == KindScenario) {
-			return a.Kind == KindScenario
+		if ra, rb := rank(a.Kind), rank(b.Kind); ra != rb {
+			return ra < rb
 		}
 		if (a.Room == "") != (b.Room == "") {
 			return b.Room == ""
@@ -152,6 +178,18 @@ func Build(raws []Raw, rules Rules) []Entry {
 		entries = entries[:maxEntries]
 	}
 	return entries
+}
+
+// rank orders kinds in the catalog: the profile selector first (it is a global
+// mode, not content), then scenarios, then devices.
+func rank(kind Kind) int {
+	switch kind {
+	case KindProfile:
+		return 0
+	case KindScenario:
+		return 1
+	}
+	return 2
 }
 
 func titleOf(raw Raw) string {

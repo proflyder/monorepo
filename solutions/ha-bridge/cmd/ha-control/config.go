@@ -21,6 +21,7 @@ type settings struct {
 	HAURL, HAToken, HACAFile              string
 	SchedulerURL, SchedulerToken, SchedCA string
 	ScenarioLabel                         string
+	ProfileLabel                          string
 	Exclude                               []string
 	CacheTTL                              time.Duration
 	Listen                                string
@@ -64,13 +65,17 @@ func loadSettings(getenv func(string) string) (*settings, error) {
 	if s.ScenarioLabel == "" {
 		s.ScenarioLabel = catalog.DefaultScenarioLabel
 	}
+	s.ProfileLabel = strings.TrimSpace(getenv("CONTROL_PROFILE_LABEL"))
+	if s.ProfileLabel == "" {
+		s.ProfileLabel = catalog.DefaultProfileLabel
+	}
 	for _, g := range strings.Split(getenv("CONTROL_EXCLUDE"), ",") {
 		if g = strings.TrimSpace(g); g != "" {
 			s.Exclude = append(s.Exclude, g)
 		}
 	}
-	if err := (catalog.Rules{ScenarioLabel: s.ScenarioLabel, Exclude: s.Exclude}).Validate(); err != nil {
-		return nil, fmt.Errorf("config: CONTROL_SCENARIO_LABEL/CONTROL_EXCLUDE: %w", err)
+	if err := (catalog.Rules{ScenarioLabel: s.ScenarioLabel, ProfileLabel: s.ProfileLabel, Exclude: s.Exclude}).Validate(); err != nil {
+		return nil, fmt.Errorf("config: CONTROL_SCENARIO_LABEL/CONTROL_PROFILE_LABEL/CONTROL_EXCLUDE: %w", err)
 	}
 	if s.Listen = strings.TrimSpace(getenv("CONTROL_LISTEN")); s.Listen == "" {
 		s.Listen = "127.0.0.1:8099"

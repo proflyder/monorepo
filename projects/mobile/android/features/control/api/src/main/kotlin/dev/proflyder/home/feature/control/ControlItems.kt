@@ -9,7 +9,10 @@ import dev.proflyder.home.core.model.PowerState
  * is unit-tested: which filter chips exist and how entries become list rows.
  */
 
-/** Rows of the Home screen: section headers, scenario tiles and device rows. */
+/**
+ * Rows of the Home screen: a section header, the profile selector, scenario
+ * tiles and device rows.
+ */
 sealed interface ControlItem {
     /** Stable identity for DiffUtil; unique across item types and sections. */
     val key: String
@@ -21,6 +24,15 @@ sealed interface ControlItem {
      */
     data class Header(val section: String, val title: String, val summary: String? = null) : ControlItem {
         override val key: String get() = "header:$section"
+    }
+
+    /**
+     * The assistant profile selector, pinned above everything else. It is a
+     * global mode (`on`/`off` as reported by the server: work / personal), so it
+     * gets its own segmented row instead of a device switch.
+     */
+    data class Profile(val entry: ControlEntry, val busy: Boolean, val statesKnown: Boolean) : ControlItem {
+        override val key: String get() = "entry:${entry.id}"
     }
 
     data class Scenario(val entry: ControlEntry, val busy: Boolean) : ControlItem {
@@ -40,10 +52,12 @@ class ControlTexts(
     val otherDevices: String,
     val scenarios: String,
     val unavailable: String,
+    val profile: String,
     val onSummary: (on: Int, total: Int) -> String,
 )
 
 object ControlItems {
+    private const val SECTION_PROFILE = "profile"
     private const val SECTION_SCENARIOS = "scenarios"
     private const val SECTION_UNAVAILABLE = "unavailable"
     private const val SECTION_OTHER = "other"
@@ -59,19 +73,22 @@ object ControlItems {
 
     /**
      * The chips: All, then the categories that exist, then each room (only when
-     * there is more than one, otherwise rooms add nothing).
+     * there is more than one, otherwise rooms add nothing). The profile selector
+     * is pinned and always shown, so it is never a chip and never counted: the
+     * counts describe filterable content only.
      */
     fun options(entries: List<ControlEntry>): List<ControlFilterOption> {
         if (entries.isEmpty()) return emptyList()
-        val options = mutableListOf(ControlFilterOption(ControlFilter.All, entries.size))
+        val filterable = entries.filterNot { it.isProfile }
+        val options = mutableListOf(ControlFilterOption(ControlFilter.All, filterable.size))
         listOf(ControlFilter.Scenarios, ControlFilter.Lights, ControlFilter.Switches).forEach { filter ->
-            val count = entries.count { it.matches(filter) }
+            val count = filterable.count { it.matches(filter) }
             if (count > 0) options += ControlFilterOption(filter, count)
         }
-        val rooms = entries.map { it.room }.filter { it.isNotBlank() }.distinct()
+        val rooms = filterable.map { it.room }.filter { it.isNotBlank() }.distinct()
         if (rooms.size > 1) {
             rooms.forEach { room ->
-                options += ControlFilterOption(ControlFilter.Room(room), entries.count { it.room == room })
+                options += ControlFilterOption(ControlFilter.Room(room), filterable.count { it.room == room })
             }
         }
         return options
@@ -87,9 +104,11 @@ object ControlItems {
         if (entries.isEmpty() || options(entries).any { it.filter == filter }) filter else ControlFilter.All
 
     /**
-     * Scenarios first (one section, headed unless that is the only thing shown),
-     * then available devices grouped by room, then unavailable devices in their
-     * own trailing section so dead entries do not interleave with working ones.
+     * The profile first (one pinned section: it is a mode, not content and is
+     * shown whatever the filter is), then scenarios in one section (headed
+     * unless that is the only thing shown), then available devices grouped by
+     * room, then unavailable devices in their own trailing section so dead
+     * entries do not interleave with working ones.
      */
     fun build(
         entries: List<ControlEntry>,
@@ -99,8 +118,14 @@ object ControlItems {
         texts: ControlTexts,
     ): List<ControlItem> {
         val applied = effectiveFilter(entries, filter)
-        val visible = entries.filter { it.matches(applied) }
+        val profiles = entries.filter { it.isProfile }
+        val visible = entries.filter { !it.isProfile && it.matches(applied) }
         val items = mutableListOf<ControlItem>()
+
+        if (profiles.isNotEmpty()) {
+            items += ControlItem.Header(SECTION_PROFILE, texts.profile)
+            profiles.mapTo(items) { ControlItem.Profile(it, it.id in pending, statesOk) }
+        }
 
         val scenarios = visible.filter { it.kind == ControlKind.SCENARIO }
         if (scenarios.isNotEmpty()) {

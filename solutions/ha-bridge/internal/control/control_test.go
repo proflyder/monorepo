@@ -50,11 +50,12 @@ func (f *fakeHA) CallService(_ context.Context, d, s, e string, data map[string]
 
 func testCatalog() *catalog.Catalog {
 	return catalog.New(catalog.Build([]catalog.Raw{
+		{Entity: "switch.voice_profile", State: "off", Name: "Voice profile", Profile: true},
 		{Entity: "scene.focus", State: "x", Name: "Focus"},
 		{Entity: "light.lamp", State: "on", Name: "Lamp"},
 		{Entity: "light.strip", State: "on", Name: "Strip", Light: catalog.NewLight(catalog.LightInput{
 			ColorModes: []string{"color_temp"}, MinKelvin: 2700, MaxKelvin: 6500, Brightness: -1})},
-	}, catalog.Rules{}))
+	}, catalog.Rules{ScenarioLabel: "scenario", ProfileLabel: "voice_profile"}))
 }
 
 func testExecutor(t *testing.T, events []scheduler.Event, ha *fakeHA) (*Executor, *fakeSched) {
@@ -78,6 +79,7 @@ func TestRunsScenarioAndDevice(t *testing.T) {
 	ex, sched := testExecutor(t, []scheduler.Event{
 		task("e1", `{"entry":"scene.focus","action":"run"}`),
 		task("e2", `{"entry":"light.lamp","action":"turn_off"}`),
+		task("e3", `{"entry":"switch.voice_profile","action":"turn_on"}`),
 	}, ha)
 	if err := ex.cycle(context.Background()); err != nil {
 		t.Fatal(err)
@@ -88,8 +90,10 @@ func TestRunsScenarioAndDevice(t *testing.T) {
 	want := []catalog.ServiceCall{
 		{Domain: "scene", Service: "turn_on", Entity: "scene.focus"},
 		{Domain: "light", Service: "turn_off", Entity: "light.lamp"},
+		// on = the named (work) profile, off = the default one.
+		{Domain: "switch", Service: "turn_on", Entity: "switch.voice_profile"},
 	}
-	if len(ha.calls) != 2 || !reflect.DeepEqual(ha.calls, want) {
+	if len(ha.calls) != 3 || !reflect.DeepEqual(ha.calls, want) {
 		t.Fatalf("calls = %+v", ha.calls)
 	}
 	for _, a := range sched.acks {
@@ -106,6 +110,8 @@ func TestRejectsBadCommandsWithoutCallingHA(t *testing.T) {
 		"wrong action":   task("c", `{"entry":"light.lamp","action":"run"}`),
 		"toggle":         task("d", `{"entry":"light.lamp","action":"toggle"}`),
 		"unknown entity": task("e", `{"entry":"light.other","action":"turn_on"}`),
+		"profile run":    task("i", `{"entry":"switch.voice_profile","action":"run"}`),
+		"profile set":    task("j", `{"entry":"switch.voice_profile","action":"set","brightness":10}`),
 		"wrong type":     {ID: "f", SourceKind: scheduler.SourceKindTask, TaskType: "other", Queue: "control", Payload: `{"entry":"scene.focus","action":"run"}`},
 		"wrong queue":    {ID: "g", SourceKind: scheduler.SourceKindTask, TaskType: catalog.TaskType, Queue: "home", Payload: `{"entry":"scene.focus","action":"run"}`},
 		"alarm kind":     {ID: "h", SourceKind: scheduler.SourceKindAlarm, Queue: "control"},

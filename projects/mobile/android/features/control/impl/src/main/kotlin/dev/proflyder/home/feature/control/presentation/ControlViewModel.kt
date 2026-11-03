@@ -17,6 +17,7 @@ import dev.proflyder.home.feature.control.domain.AdjustLight
 import dev.proflyder.home.feature.control.domain.LoadControlCatalog
 import dev.proflyder.home.feature.control.domain.RunScenario
 import dev.proflyder.home.feature.control.domain.SetDevicePower
+import dev.proflyder.home.feature.control.domain.SetVoiceProfile
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
@@ -46,6 +47,7 @@ class ControlViewModel(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
     private val setDevicePower: SetDevicePower,
+    private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
     private val preferences: ControlPreferences,
 ) : BaseViewModel<ControlUiState>(ControlUiState(configured = loadCatalog.isConfigured)) {
@@ -110,7 +112,22 @@ class ControlViewModel(
      * (see [expectedPower]) until the server confirms it or [EXPECT_TTL_MS] passes;
      * the switch never flickers back, and it is not disabled while the command is in flight.
      */
-    fun setPower(entry: ControlEntry, on: Boolean) {
+    fun setPower(entry: ControlEntry, on: Boolean) =
+        changePower(entry, on) { target, value -> setDevicePower(target, value) }
+
+    /**
+     * Switches the assistant profile. It is the profile switch entity's on/off,
+     * so it reuses the device path: optimistic update, then re-read until the
+     * server agrees. `work = true` sends turn_on (the named profile).
+     */
+    fun setProfile(entry: ControlEntry, work: Boolean) =
+        changePower(entry, work) { target, value -> setVoiceProfile(target, value) }
+
+    private fun changePower(
+        entry: ControlEntry,
+        on: Boolean,
+        send: suspend (ControlEntry, Boolean) -> Outcome<Unit>,
+    ) {
         if (!entry.available) return
         val target = if (on) PowerState.ON else PowerState.OFF
         expectedPower[entry.id] = target to SystemClock.elapsedRealtime() + EXPECT_TTL_MS
@@ -118,7 +135,7 @@ class ControlViewModel(
             copy(actionError = null, entries = entries.map { if (it.id == entry.id) it.copy(power = target) else it })
         }
         launch {
-            when (val result = setDevicePower(entry, on)) {
+            when (val result = send(entry, on)) {
                 is Outcome.Success -> reconcile(entry.id)
                 is Outcome.Failure -> {
                     expectedPower.remove(entry.id)
@@ -203,13 +220,14 @@ class ControlViewModelFactoryContributor(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
     private val setDevicePower: SetDevicePower,
+    private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
     private val preferences: ControlPreferences,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
 
     override fun createFactory() = SimpleViewModelFactory {
-        ControlViewModel(loadCatalog, runScenario, setDevicePower, adjustLight, preferences)
+        ControlViewModel(loadCatalog, runScenario, setDevicePower, setVoiceProfile, adjustLight, preferences)
     }
 }
 

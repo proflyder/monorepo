@@ -40,14 +40,39 @@ acceptance and remaining work are tracked in [STATE](../../../docs/STATE.md) and
   Assistant.
 - Scenarios are HA scripts carrying the native `scenario` label. Devices are
   lights/switches. Icons and rooms are display metadata only.
+- The **voice profile** is one HA switch carrying the native `voice_profile`
+  label. The server reports it as `kind: "profile"`: the app pins it above the
+  scenarios in its own section, keeps it out of the device filters and counters
+  (it is a mode, not content) and renders two segmented buttons — **Personal**
+  (`turn_off`) and **Work** (`turn_on`) — instead of a device switch. A row tap
+  does nothing: only an explicit side sends a command.
 - Tapping a scenario or toggling a device enqueues a scheduler task
   `home.control` on the `control` queue (`EnqueueTask`). The phone only queues;
   the server executor owns execution. Device switches are optimistic and then
-  re-read from the server. Delivery is at-least-once, not exactly-once.
+  re-read from the server; the profile uses the same optimistic update and
+  re-read. Delivery is at-least-once, not exactly-once.
 - Filter chips (All / Scenarios / Lights / Switches, plus room filters) are
   persisted in DataStore and restored on launch.
 - Without a Home control address the tab explains what to configure; it does not
   fail silently.
+
+### Marking the profile entity in Home Assistant
+
+Nothing in the app or the server lists entity ids, so the profile switch is
+selected by a label in Home Assistant:
+
+1. Create the switch that holds the mode (for example a template switch over
+   `input_select.ricardo_voice_profile`: on = Work, off = Personal). Its
+   `on`/`off` must mean "the named profile" / "the default profile".
+2. Home Assistant → **Settings → Areas, labels & zones → Labels → Create
+   label**, id `voice_profile` (name "Voice profile").
+3. Open the switch's settings → **Labels** and add `voice_profile`.
+4. The next catalog read reports the entity as `kind: "profile"`; removing the
+   label turns it back into an ordinary switch row. A different label id is set
+   with `CONTROL_PROFILE_LABEL` on `ha-control`.
+
+Only the profile strings are translated (`values-ru`); the rest of the app is
+English-only.
 
 ## Connection and networking
 
@@ -110,11 +135,12 @@ adb install -r bazel-bin/projects/mobile/android/app/app.apk
 
 `android_tests` covers endpoint/security rules, time/duration parsing, Connect
 JSON mapping and failures, idempotency, navigation queue/restoration, the real
-Metro graph via a Robolectric cold launch, and an APK packaging gate that
-verifies required runtime classes are **defined** in DEX and that the deploy jar
-has no unresolved non-platform references. The gate also self-tests that a
-referenced-but-undefined class is rejected. Tests do not replace interactive
-device acceptance.
+Metro graph via a Robolectric cold launch, a Robolectric smoke of the real
+profile row (`//projects/mobile/android/features/control/impl:profile_row_test`),
+and an APK packaging gate that verifies required runtime classes are **defined**
+in DEX and that the deploy jar has no unresolved non-platform references. The
+gate also self-tests that a referenced-but-undefined class is rejected. Tests do
+not replace interactive device acceptance.
 
 ## Signing
 
@@ -302,7 +328,7 @@ projects/mobile/android/
     alarms/{api,impl}     domain contract / use cases + repository + UI
     reminders/{api,impl}
     timers/{api,impl}
-    control/{api,impl}    Home catalog, filters, scenario/device actions
+    control/{api,impl}    Home catalog, filters, scenario/device/profile actions
     connection/{api,impl}
 packages/kotlin/core/     shared Kotlin utilities (endpoint/time/nav state)
 platform/android/         Bazel macros, Metro wiring, APK gate, ViewBinding gen

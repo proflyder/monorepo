@@ -2,6 +2,7 @@
 <resources>
     <string name="control_title">Home</string>
     <string name="control_section_scenarios">Scenarios</string>
+    <string name="control_section_profile">Voice profile</string>
     <string name="control_section_other">Other devices</string>
     <string name="control_section_unavailable">Unavailable</string>
     <string name="control_on_summary">%1$d of %2$d on</string>
@@ -19,6 +20,9 @@
     <string name="control_state_unknown">State unknown</string>
     <string name="control_state_unavailable">Unavailable</string>
     <string name="control_state_on_brightness">On · %1$d%%</string>
+    <string name="control_profile_personal">Personal</string>
+    <string name="control_profile_work">Work</string>
+    <string name="control_profile_states_unknown">State unknown</string>
     <string name="control_light_brightness">Brightness</string>
     <string name="control_light_temperature">Color temperature</string>
     <string name="control_light_color">Color</string>

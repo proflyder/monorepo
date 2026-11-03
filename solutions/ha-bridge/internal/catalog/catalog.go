@@ -20,6 +20,11 @@ const (
 	// KindLight and KindSwitch are stateful devices with on/off.
 	KindLight  Kind = "light"
 	KindSwitch Kind = "switch"
+	// KindProfile is the named profile of the assistant (for example personal
+	// vs work). It is one global mode rather than content: clients pin it above
+	// scenarios, and it uses the same on/off actions as a switch, where on
+	// means the non-default profile. The entity is a plain HA switch.
+	KindProfile Kind = "profile"
 )
 
 // Actions understood by the executor.
@@ -101,6 +106,7 @@ func (e Entry) Actions() []string {
 	if e.Light != nil {
 		return []string{ActionTurnOn, ActionTurnOff, ActionSet}
 	}
+	// Switch, light and profile: on/off is enough.
 	return []string{ActionTurnOn, ActionTurnOff}
 }
 
@@ -131,6 +137,9 @@ func (e Entry) Resolve(action string, params Params) (ServiceCall, error) {
 		// script.turn_on and scene.turn_on both start the entity.
 		return ServiceCall{Domain: domain, Service: "turn_on", Entity: e.Entity}, nil
 	case e.Kind != KindScenario && (action == ActionTurnOn || action == ActionTurnOff):
+		// Devices and the profile entity are plain on/off services; "on" is
+		// whatever Home Assistant defines it to be (for a profile switch: the
+		// named, non-default profile).
 		return ServiceCall{Domain: domain, Service: action, Entity: e.Entity}, nil
 	}
 	return ServiceCall{}, fmt.Errorf("action %q is not supported for %s %q", action, e.Kind, e.ID)

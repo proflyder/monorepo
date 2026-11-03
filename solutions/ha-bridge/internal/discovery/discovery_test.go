@@ -20,7 +20,12 @@ type fakeHA struct {
 	hiddenErr   error
 	label       string
 	labelErr    error
-	calls       int
+	// profile is the answer to the profile label query. A nil map means "the
+	// same as the scenario label", which is what a single-label HA would do.
+	profile    string
+	profileErr error
+	labels     []string
+	calls      int
 }
 
 func (f *fakeHA) Entities(context.Context) ([]ha.Entity, error) {
@@ -35,6 +40,15 @@ func (f *fakeHA) RenderTemplate(_ context.Context, t string) (string, error) {
 	case strings.Contains(t, "is_hidden_entity"):
 		return f.hidden, f.hiddenErr
 	case strings.Contains(t, "label_entities"):
+		label := "scenario"
+		if i := strings.Index(t, "label_entities('"); i >= 0 {
+			label = strings.TrimPrefix(t[i:], "label_entities('")
+			label = label[:strings.IndexByte(label, '\'')]
+		}
+		f.labels = append(f.labels, label)
+		if label == "voice_profile" {
+			return f.profile, f.profileErr
+		}
 		return f.label, f.labelErr
 	}
 	return "", errors.New("unexpected template")
@@ -49,11 +63,17 @@ func base() *fakeHA {
 			{ID: "script.cleaner", State: "off", Name: "Cleaner", Icon: "robot-vacuum"},
 			{ID: "script.alarm_stop", State: "off", Name: "Alarm stop"},
 			{ID: "scene.movie", State: "scening", Name: "Movie"},
+			{ID: "switch.voice_profile", State: "off", Name: "Voice profile"},
 		},
-		rooms:  "light.lamp|Bedroom\nlight.noise|\nscript.work_mode|None\nscene.movie|Living\n",
-		hidden: "light.noise\n",
-		label:  "script.work_mode\nscript.cleaner\n",
+		rooms:   "light.lamp|Bedroom\nlight.noise|\nscript.work_mode|None\nscene.movie|Living\n",
+		hidden:  "light.noise\n",
+		label:   "script.work_mode\nscript.cleaner\n",
+		profile: "switch.voice_profile\n",
 	}
+}
+
+func rules() catalog.Rules {
+	return catalog.Rules{ScenarioLabel: "scenario", ProfileLabel: "voice_profile"}
 }
 
 func ids(s Snapshot) string {
@@ -65,30 +85,57 @@ func ids(s Snapshot) string {
 }
 
 func TestDiscoversFromHomeAssistant(t *testing.T) {
-	p := New(base(), catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil)
+	f := base()
+	p := New(f, rules(), time.Second, nil)
 	snap, err := p.Get(context.Background())
 	if err != nil || !snap.StatesOK {
 		t.Fatalf("snap=%+v err=%v", snap, err)
 	}
 	// scene + scripts that carry the scenario label (cleaner has an icon but so
 	// does nothing else; alarm_stop has neither); hidden light.noise is out.
-	if got := ids(snap); got != "scene.movie,script.cleaner,script.work_mode,light.lamp" {
+	// The profile switch carries the profile label and comes first.
+	if got := ids(snap); got != "switch.voice_profile,scene.movie,script.cleaner,script.work_mode,light.lamp" {
 		t.Fatalf("got %s", got)
 	}
 	lamp, _ := snap.Catalog.Lookup("light.lamp")
 	if lamp.Room != "Bedroom" || lamp.Title != "Lamp" || lamp.State != "on" {
 		t.Fatalf("lamp = %+v", lamp)
 	}
+	profile, _ := snap.Catalog.Lookup("switch.voice_profile")
+	if profile.Kind != catalog.KindProfile || profile.State != "off" {
+		t.Fatalf("profile = %+v", profile)
+	}
+	if strings.Join(f.labels, ",") != "scenario,voice_profile" {
+		t.Fatalf("both role labels must be read once, got %v", f.labels)
+	}
+}
+
+// The profile role is a convenience: losing it must not lose the switch, and it
+// must not affect scripts or scenes.
+func TestProfileLabelOutageKeepsTheSwitchAsADevice(t *testing.T) {
+	f := base()
+	f.profileErr = errors.New("no labels in this HA")
+	snap, err := New(f, rules(), time.Second, nil).Get(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, ok := snap.Catalog.Lookup("switch.voice_profile")
+	if !ok || profile.Kind != catalog.KindSwitch {
+		t.Fatalf("without the profile label the switch stays a device: %+v", profile)
+	}
+	if got := ids(snap); got != "scene.movie,script.cleaner,script.work_mode,light.lamp,switch.voice_profile" {
+		t.Fatalf("got %s", got)
+	}
 }
 
 func TestScenarioLabelOutageExposesNoScripts(t *testing.T) {
 	f := base()
 	f.labelErr = errors.New("no labels in this HA")
-	snap, err := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil).Get(context.Background())
+	snap, err := New(f, rules(), time.Second, nil).Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(snap); got != "scene.movie,light.lamp" {
+	if got := ids(snap); got != "switch.voice_profile,scene.movie,light.lamp" {
 		t.Fatalf("an unreadable scenario label must fail closed for scripts only, got %s", got)
 	}
 }
@@ -97,7 +144,7 @@ func TestAreasAndHiddenAreBestEffort(t *testing.T) {
 	f := base()
 	f.roomsErr = errors.New("boom")
 	f.hiddenErr = errors.New("boom")
-	snap, err := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil).Get(context.Background())
+	snap, err := New(f, rules(), time.Second, nil).Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +159,7 @@ func TestAreasAndHiddenAreBestEffort(t *testing.T) {
 
 func TestCachesWithinTTLAndRefreshesAfter(t *testing.T) {
 	f := base()
-	p := New(f, catalog.Rules{ScenarioLabel: "scenario"}, 10*time.Second, nil)
+	p := New(f, rules(), 10*time.Second, nil)
 	now := time.Unix(1000, 0)
 	p.now = func() time.Time { return now }
 	for i := 0; i < 3; i++ {
@@ -133,7 +180,7 @@ func TestCachesWithinTTLAndRefreshesAfter(t *testing.T) {
 
 func TestServesStaleCatalogWhenHAIsDown(t *testing.T) {
 	f := base()
-	p := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil)
+	p := New(f, rules(), time.Second, nil)
 	now := time.Unix(1000, 0)
 	p.now = func() time.Time { return now }
 	if _, err := p.Get(context.Background()); err != nil {
@@ -155,7 +202,7 @@ func TestServesStaleCatalogWhenHAIsDown(t *testing.T) {
 func TestFirstReadFailureIsAnError(t *testing.T) {
 	f := base()
 	f.entitiesErr = errors.New("down")
-	if _, err := New(f, catalog.Rules{ScenarioLabel: "scenario"}, time.Second, nil).Get(context.Background()); err == nil {
+	if _, err := New(f, rules(), time.Second, nil).Get(context.Background()); err == nil {
 		t.Fatal("no catalog can be invented without HA")
 	}
 }

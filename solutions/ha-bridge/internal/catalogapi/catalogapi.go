@@ -22,6 +22,10 @@ type Source interface {
 }
 
 // EntryView is the wire shape of one catalog entry.
+//
+// Kind is "scenario", "light", "switch" or "profile". A profile entry is the
+// assistant's named profile (personal/work) and always comes first; clients pin
+// it above the scenarios and drive it with turn_on/turn_off.
 type EntryView struct {
 	ID      string   `json:"id"`
 	Kind    string   `json:"kind"`
@@ -29,7 +33,7 @@ type EntryView struct {
 	Room    string   `json:"room,omitempty"`
 	Icon    string   `json:"icon,omitempty"`
 	Actions []string `json:"actions"`
-	// State is "on"/"off" for devices; "" for scenarios.
+	// State is "on"/"off" for devices and the profile; "" for scenarios.
 	State string `json:"state,omitempty"`
 	// Available is false when Home Assistant reports the entity missing or
 	// unavailable, or could not be reached.

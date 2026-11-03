@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the voice-profile strings are translated today; the rest of the app is
+  English-only (see the README). Add the remaining control_* keys here when the
+  whole Home screen is localized.
+-->
+<resources>
+    <string name="control_section_profile">Профиль голоса</string>
+    <string name="control_profile_personal">Личный</string>
+    <string name="control_profile_work">Рабочий</string>
+    <string name="control_profile_states_unknown">Состояние неизвестно</string>
+</resources>
