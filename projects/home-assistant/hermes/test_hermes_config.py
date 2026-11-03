@@ -138,8 +138,12 @@ class HermesConfigTests(unittest.TestCase):
             assert marker in prompt, marker
         # The confirmation is always explicit and in this conversation.
         assert "этом же разговоре" in prompt
-        # Nothing is invented: projects, models and efforts come from the gateway.
-        assert "не подставляй проект" in prompt
+        # Nothing is invented, but the spoken project goes to the gateway as is:
+        # the gateway owns the alias matching, so Hermes must not re-ask first.
+        assert "Не выдумывай проект" in prompt
+        assert "дословно, как услышал" in prompt
+        assert "без переспроса" in prompt
+        assert "проект не найден" in prompt
 
     def test_telegram_prompt_covers_bb_agent_spawn(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
@@ -148,6 +152,10 @@ class HermesConfigTests(unittest.TestCase):
             assert marker in prompt, marker
         assert "двухшаговый" in prompt
         assert "без подтверждения" in prompt
+        # The project name is forwarded verbatim; aliases belong to the gateway.
+        assert "дословно, как услышал" in prompt
+        assert "без переспроса" in prompt
+        assert "проект не найден" in prompt
 
     def test_voice_personality_has_a_single_source(self):
         # The stale copy in the fragment caused drift; the personality is now

@@ -343,6 +343,8 @@ class ContextFileTests(unittest.TestCase):
         # Hermes is the personal profile only: work projects are not described.
         self.assertIn("личный профиль", text)
         self.assertIn("Рабочих проектов нет", text)
+        # The spoken project name is forwarded verbatim; the gateway matches aliases.
+        self.assertIn("дословно", text)
 
     def test_context_has_no_injection_markers(self):
         # The context file is injected into the system prompt; Hermes blocks a
