@@ -21,9 +21,13 @@ go_test(
     name = "bb_test",
     srcs = [
         "client_test.go",
+        "contract_test.go",
         "ssh_test.go",
         "targets_test.go",
     ],
+    # The gateway must serialize only the params the bb home-dispatcher plugin
+    # schema accepts; the fixture is shared with the plugin's JS test.
+    data = ["//solutions/bb-home-dispatcher:contract_params"],
     embed = [":bb"],
     deps = [
         "@org_golang_x_crypto//ssh",

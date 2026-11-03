@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "methods": {
+    "targets": {
+      "required": [],
+      "optional": []
+    },
+    "status": {
+      "required": [],
+      "optional": ["limit"]
+    },
+    "validate_spawn": {
+      "required": [
+        "profile",
+        "projectId",
+        "providerId",
+        "model",
+        "reasoningLevel"
+      ],
+      "optional": []
+    },
+    "spawn": {
+      "required": [
+        "profile",
+        "projectId",
+        "providerId",
+        "model",
+        "reasoningLevel",
+        "title",
+        "prompt",
+        "idempotencyKey"
+      ],
+      "optional": []
+    },
+    "send": {
+      "required": ["threadId", "text", "idempotencyKey"],
+      "optional": []
+    },
+    "turn_result": {
+      "required": ["threadId", "afterSeq"],
+      "optional": []
+    }
+  }
+}

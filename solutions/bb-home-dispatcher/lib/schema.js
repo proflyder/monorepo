@@ -3,14 +3,42 @@ import { DispatchError } from "./errors.js";
 // Strict, dependency-free boundary validation. The plugin runs inside the bb
 // server and must not pull an npm dependency only to reject malformed JSON;
 // the rules below are intentionally small and explicit.
-const METHODS = new Set([
-  "targets",
-  "status",
-  "validate_spawn",
-  "spawn",
-  "send",
-  "turn_result",
-]);
+
+// The exact params each method accepts, split into required and optional.
+// `contract/params.json` pins the same table: the gateway's Go contract test
+// and the plugin's JS test both read it, so a field added on one side alone
+// fails on the other. Keep the two in sync in the same change.
+export const METHOD_PARAMS = {
+  targets: { required: [], optional: [] },
+  status: { required: [], optional: ["limit"] },
+  validate_spawn: {
+    required: ["profile", "projectId", "providerId", "model", "reasoningLevel"],
+    optional: [],
+  },
+  spawn: {
+    required: [
+      "profile",
+      "projectId",
+      "providerId",
+      "model",
+      "reasoningLevel",
+      "title",
+      "prompt",
+      "idempotencyKey",
+    ],
+    optional: [],
+  },
+  send: {
+    required: ["threadId", "text", "idempotencyKey"],
+    optional: [],
+  },
+  turn_result: {
+    required: ["threadId", "afterSeq"],
+    optional: [],
+  },
+};
+
+const METHODS = new Set(Object.keys(METHOD_PARAMS));
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u;
 const PROFILE_PATTERN = /^[a-z0-9][a-z0-9_-]{0,31}$/u;
@@ -34,42 +62,20 @@ export function parseRpcRequest(value) {
 }
 
 function parseParams(method, params) {
+  expectParams(params, method);
   switch (method) {
-    case "targets": {
-      expectOnlyKeys(params, [], "params");
+    case "targets":
       return {};
-    }
     case "status": {
-      expectOnlyKeys(params, ["limit"], "params");
       const limit =
         params.limit === undefined
           ? 10
           : expectInteger(params.limit, "limit", 1, 50);
       return { limit };
     }
-    case "validate_spawn": {
-      expectOnlyKeys(
-        params,
-        ["profile", "projectId", "providerId", "model", "reasoningLevel"],
-        "params",
-      );
+    case "validate_spawn":
       return parseSpawnTarget(params);
-    }
-    case "spawn": {
-      expectOnlyKeys(
-        params,
-        [
-          "profile",
-          "projectId",
-          "providerId",
-          "model",
-          "reasoningLevel",
-          "title",
-          "prompt",
-          "idempotencyKey",
-        ],
-        "params",
-      );
+    case "spawn":
       return {
         ...parseSpawnTarget(params),
         title: expectString(params.title, "title", 1, 200),
@@ -81,9 +87,7 @@ function parseParams(method, params) {
           128,
         ),
       };
-    }
-    case "send": {
-      expectOnlyKeys(params, ["threadId", "text", "idempotencyKey"], "params");
+    case "send":
       return {
         threadId: expectPattern(params.threadId, "threadId", ID_PATTERN),
         text: expectString(params.text, "text", 1, 8000),
@@ -94,9 +98,7 @@ function parseParams(method, params) {
           128,
         ),
       };
-    }
-    case "turn_result": {
-      expectOnlyKeys(params, ["threadId", "afterSeq"], "params");
+    case "turn_result":
       return {
         threadId: expectPattern(params.threadId, "threadId", ID_PATTERN),
         afterSeq: expectInteger(
@@ -106,7 +108,6 @@ function parseParams(method, params) {
           Number.MAX_SAFE_INTEGER,
         ),
       };
-    }
     default:
       throw new DispatchError("unknown_method", "Неизвестная операция.", {
         httpStatus: 400,
@@ -135,6 +136,21 @@ function expectObject(value, name) {
   return value;
 }
 
+function expectParams(value, method) {
+  const { required, optional } = METHOD_PARAMS[method];
+  for (const key of Object.keys(value)) {
+    if (!required.includes(key) && !optional.includes(key)) {
+      throw invalid(`Поле params.${key} не поддерживается.`);
+    }
+  }
+  for (const key of required) {
+    if (!Object.hasOwn(value, key)) {
+      throw invalid(`Поле params.${key} обязательно.`);
+    }
+  }
+}
+
+// The request envelope is fixed: exactly `method` and `params`.
 function expectOnlyKeys(value, allowed, name) {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {

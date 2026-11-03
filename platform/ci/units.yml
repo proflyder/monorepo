@@ -148,6 +148,9 @@ units:
     title: "solutions/mcp-gateway (MCP infra tool groups + home deployment)"
     paths:
       - solutions/mcp-gateway/**
+      # The plugin's strict per-method params schema is the gateway's wire
+      # contract: a fixture change must retest the serializing side too.
+      - solutions/bb-home-dispatcher/contract/params.json
       - projects/home/kubernetes/mcp-gateway/**
     # One image and one Deployment in home-assistant. The catalog ConfigMap,
     # RBAC, ExternalSecrets and NetworkPolicy are part of the same unit because
