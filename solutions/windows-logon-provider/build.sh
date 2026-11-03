@@ -14,7 +14,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-ROOT="$(cd ../../../.. && pwd)"
+ROOT="$(cd ../.. && pwd)"
 VERSION="${LLVM_MINGW_VERSION:-20261020}"
 
 find_toolchain() {
@@ -85,6 +85,10 @@ COMMON_FLAGS=(
 )
 
 LINK_FLAGS=(
+  # Reproducible output: no link-time TimeDateStamp in the PE header and the
+  # export table, so the same sources always produce the same bytes. The OCI
+  # publisher relies on this (same VERSION + different bytes = hard fail).
+  -Wl,--no-insert-timestamp
   -Wl,--dynamicbase
   -Wl,--nxcompat
   -Wl,--high-entropy-va

@@ -509,22 +509,55 @@ PVC), но сбрасывает выданные nonce — ПК просто з�
 
 ### Модуль входа (logon provider)
 
-Провайдер входа — `projects/home/windows-pc/logon-provider` (C++17,
-llvm-mingw, без Visual Studio). CI на каждый PR с его изменениями собирает
-`RicardoKompLogon.dll`, `cp-selftest.exe`, `hmac-selftest.exe` и `SHA256SUMS`
-в artifact `logon-provider` (30 дней). На ПК CI ничего не ставит; скачать
-можно из Actions → нужный run → Artifacts. Перед установкой сверить хеш:
+Провайдер входа — переиспользуемое решение `solutions/windows-logon-provider`
+(C++17, llvm-mingw, без Visual Studio). Значения `ServiceUrl`, `Machine` и
+`UserName` в решении не хранятся: их передаёт проект при установке (для этого
+ПК — параметры ниже).
 
-```powershell
-Get-FileHash .\RicardoKompLogon.dll -Algorithm SHA256
-# сравнить с out\SHA256SUMS из artifact
+Распространение — публичный OCI-артефакт GHCR, а не artifact Actions. На push
+в `develop`, когда затронут юнит `logon-provider`, `deploy-home` собирает его
+тем же `_native.yml`, что и PR, и публикует через ORAS:
+
+```text
+ghcr.io/proflyder/windows-logon-provider:<VERSION>
+ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 ```
 
-Установка (PowerShell от администратора; `out` — распакованный artifact):
+Файлы артефакта: `RicardoKompLogon.dll`, `cp-selftest.exe`,
+`hmac-selftest.exe`, `SHA256SUMS`. Тег `<VERSION>` неизменяем: повторная
+публикация с тем же содержимым — no-op, с другим — ошибка, поэтому релиз
+делается сменой `VERSION`. Provenance attestation создаётся для digest
+артефакта и для DLL. PR ничего не публикует; сборка PR остаётся artifact'ом
+для проверки.
+
+Один раз новый пакет GHCR может оказаться приватным: **профиль владельца →
+Packages → `windows-logon-provider` → Package settings → Danger Zone →
+Change visibility → Public**. После этого `oras pull` работает без токена.
+
+Получение (Mac/Linux оператора; нужны `oras` и авторизованный `gh`; `oras`
+можно положить в `secrets/local-tools/`):
+
+```bash
+cd solutions/windows-logon-provider
+./fetch.sh <VERSION>                 # или
+./fetch.sh sha256:<digest>           # рекомендуемый pin
+```
+
+`fetch.sh` тянет артефакт в временный каталог, проверяет `SHA256SUMS` и
+`gh attestation verify` для DLL, печатает разрешённый digest. Любое
+расхождение — ошибка. Затем скопировать файлы на ПК по SSH, запустить
+self-tests, установить/заменить DLL и записать digest в `docs/STATE.md`.
+Текущий установленный DLL — sha256
+`4481ae77f91411e5ceffe410c8b934f983a544fccfa70493e545e81177627c0b`
+(из CI artifact); после первого GHCR publish оператор записывает digest
+артефакта.
+
+Установка (PowerShell от администратора; `out` — распакованный артефакт):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 `
-  -ServiceUrl 'http://192.0.2.27:30130' -SourceDir 'C:\path\to\out'
+  -ServiceUrl 'http://192.0.2.27:30130' `
+  -Machine 'komp' -UserName '<user>' -SourceDir 'C:\path\to\out'
 
 # пароль — SecureString (интерактивно), ключ — одной строкой в stdin
 'BASE64KEY' | powershell -NoProfile -ExecutionPolicy Bypass -File set-secret.ps1
@@ -532,7 +565,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 `
 powershell -NoProfile -ExecutionPolicy Bypass -File status.ps1
 ```
 
-`install.ps1` сбрасывает `FailCount=0` и `Disabled=0`. Обновление DLL:
+`install.ps1` требует `-ServiceUrl`, `-Machine` и `-UserName` (домашние
+значения — только в команде проекта, не в решении) и сбрасывает
+`FailCount=0` и `Disabled=0`. Обновление DLL:
 LogonUI держит файл, поэтому `Copy-Item -Force` падает — сначала переименовать
 старый, затем скопировать новый, старый удалить после выхода из системы или
 перезагрузки:

@@ -6,7 +6,7 @@ one fixed CLSID everywhere, registration of exactly one credential provider and
 of no filters, exact-key removal on uninstall, machine-scope DPAPI with the same
 entropy as the C++ code, and no secret ever printed.
 
-Run: python3 -m unittest discover -s projects/home/windows-pc/logon-provider
+Run: python3 -m unittest discover -s solutions/windows-logon-provider
 """
 from __future__ import annotations
 

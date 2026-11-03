@@ -5,7 +5,9 @@ name: _native
 # working directory, host-test and cross-build commands, the artifacts it owns
 # and the pinned toolchain archive. The archive is cached by version + sha256,
 # and its digest is verified before extraction. Nothing is deployed: the
-# Windows PC is not reachable from CI, so the result is an artifact only.
+# Windows PC is not reachable from CI. A push to `develop` reuses this same
+# workflow in deploy-home and publishes the resulting artifact as an OCI
+# artifact; this reusable workflow itself stays read-only.
 
 on:
   workflow_call:

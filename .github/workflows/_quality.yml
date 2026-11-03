@@ -59,7 +59,8 @@ jobs:
             projects/home/kubernetes/scheduler/nft/*.sh \
             projects/home/kubernetes/currency-bot/*.sh \
             projects/station/scripts/*.sh \
-            projects/home-assistant/stack/*.sh
+            projects/home-assistant/stack/*.sh \
+            solutions/windows-logon-provider/*.sh
 
       - name: actionlint (all workflows)
         run: actionlint -color .github/workflows/*.yml

@@ -308,7 +308,7 @@ class RealRepositoryTests(unittest.TestCase):
     def test_native_provider_change_routes_to_its_unit(self):
         result = affected.route(
             self.config,
-            ["projects/home/windows-pc/logon-provider/src/worker.cpp"],
+            ["solutions/windows-logon-provider/src/worker.cpp"],
             root=REPO,
             base="b",
         )
@@ -321,7 +321,7 @@ class RealRepositoryTests(unittest.TestCase):
             [
                 {
                     "id": "logon-provider",
-                    "workdir": "projects/home/windows-pc/logon-provider",
+                    "workdir": "solutions/windows-logon-provider",
                     "build": "./build.sh",
                     "test": "./run-tests.sh",
                     "artifacts": (
