@@ -121,7 +121,7 @@ class HermesConfigTests(unittest.TestCase):
 
     def test_voice_prompt_keeps_answers_tts_safe(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
-        for marker in ("Рикардо", "Никогда не называй", "URL", "web_search", "music_search", "Будильники", "искажённым", "Похоже", "180"):
+        for marker in ("Рикардо", "Никогда не называй", "URL", "web_search", "music_search", "Будильники", "искажённым", "Похоже", "180", "Комп включается 1–2 минуты"):
             assert marker in prompt
 
     def test_voice_layers_require_infra_confirmation(self):

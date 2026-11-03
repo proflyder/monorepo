@@ -6,7 +6,7 @@
 # sha256 e9c13e4ede38e715003ffc674d4d00a1088df8235439d1f0c16188ff0704c17e.
 # Override the location with LLVM_MINGW_BIN=/path/to/bin.
 #
-# Outputs: out/RicardoKompLogon.dll, out/cp-selftest.exe
+# Outputs: out/RicardoKompLogon.dll, out/cp-selftest.exe, out/hmac-selftest.exe
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -113,6 +113,15 @@ echo "== self-test executable =="
   -I src \
   -o out/cp-selftest.exe \
   src/selftest/cp_selftest.cpp \
+  "${LIBRARIES[@]}"
+
+echo "== CNG HMAC self-test executable =="
+"$CXX" "${COMMON_FLAGS[@]}" "${LINK_FLAGS[@]}" \
+  -I src \
+  -o out/hmac-selftest.exe \
+  src/selftest/hmac_selftest.cpp \
+  src/hmac_bcrypt.cpp \
+  src/protocol/protocol.cpp \
   "${LIBRARIES[@]}"
 
 echo "== verification =="

@@ -393,8 +393,12 @@
   MAC только в `secrets.yaml`), выключение — SSH с forced command
   (`komp-power.ps1`, только слова `shutdown`/`cancel`) → Windows
   `shutdown /s /t 60` с отменой, состояние — `binary_sensor.komp_v_seti`
-  (`command_line` ping каждые 30 с). Локальные intents `KompOn`/`KompOff`/
-  `KompCancelOff`/`KompStatus` работают в обоих профилях без Hermes. IP,
+  (`command_line` ping каждые 10 с). Локальные intents `KompOn`/`KompOff`/
+  `KompCancelOff`/`KompStatus` работают в обоих профилях без Hermes.
+  `script.komp_shutdown` пишет `input_datetime.komp_off_requested` до SSH:
+  ping отстаёт на 1–2 минуты, поэтому недавний запрос значит «выключается»,
+  а голосовое включение идёт через `switch.turn_on switch.komp` (выдаёт
+  пропуск) и не отвечает «уже включён» сразу после выключения. IP,
   MAC и пользователь — только в HA secrets; настройка Windows —
   `projects/home/windows-pc/README.md`. Живая приёмка — в `PENDING.md`.
 - **Вход по пропуску (wakegrant).** `solutions/wakegrant` в K3s
@@ -407,7 +411,9 @@
   Секреты — ESO `wakegrant` из `secret/k8s/home-assistant/wakegrant`
   (`issuer_token`, `machines`), в HA — `wakegrant_endpoint`/
   `wakegrant_bearer`. Деплой — `projects/home/kubernetes/wakegrant`.
-  Живая приёмка — в `PENDING.md`.
+  Логин-компонент запрашивает грант только в `CPUS_LOGON`; разблокировка
+  (`CPUS_UNLOCK_WORKSTATION`) ничего не делает — грант никогда не должен
+  разблокировать уже работающий ПК. Живая приёмка — в `PENDING.md`.
 
 ## Планировщик, HA bridge, Android
 

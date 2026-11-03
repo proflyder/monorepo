@@ -32,6 +32,7 @@ class HashHandle {
         if (handle_ != nullptr) BCryptDestroyHash(handle_);
     }
     BCRYPT_HASH_HANDLE* out() { return &handle_; }
+    BCRYPT_HASH_HANDLE get() const { return handle_; }
 
   private:
     BCRYPT_HASH_HANDLE handle_ = nullptr;
@@ -63,14 +64,14 @@ std::string hmac_sha256_b64(const Bytes& key, std::string_view message) {
     }
 
     if (!message.empty() &&
-        !BCRYPT_SUCCESS(BCryptHashData(hash.out(), reinterpret_cast<PUCHAR>(
+        !BCRYPT_SUCCESS(BCryptHashData(hash.get(), reinterpret_cast<PUCHAR>(
                                                      const_cast<char*>(message.data())),
                                       static_cast<ULONG>(message.size()), 0))) {
         return std::string();
     }
 
     unsigned char digest[32] = {};
-    if (!BCRYPT_SUCCESS(BCryptFinishHash(*hash.out(), digest, sizeof(digest), 0))) {
+    if (!BCRYPT_SUCCESS(BCryptFinishHash(hash.get(), digest, sizeof(digest), 0))) {
         return std::string();
     }
 

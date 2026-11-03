@@ -62,9 +62,9 @@
 - «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
   (заметки остаются в Home Assistant без изменений);
 - «включи комп» / «включи мой комп» / «включи компьютер» — локальный
-  `KompOn` → одноразовый пропуск wakegrant (best-effort) и Wake-on-LAN
-  magic packet (`switch.komp`, MAC только из
-  `!secret komp_mac`); «выключи комп» и варианты — `KompOff` →
+  `KompOn` → `switch.turn_on` `switch.komp` (одноразовый пропуск wakegrant,
+  best-effort, и Wake-on-LAN; MAC только из `!secret komp_mac`); «выключи
+  комп» и варианты — `KompOff` →
   `script.komp_shutdown` (SSH → Windows `shutdown /s /t 60`); «отмени
   выключение компа» / «не выключай комп» — `KompCancelOff`; «комп включён»,
   «включён ли комп», «комп работает» — `KompStatus` (ping-сенсор). Команды
@@ -172,7 +172,7 @@ so voice snooze/stop target the correct schedule id without guessing.
   `currency_latest` (Bearer)
 - `shell_commands.yaml` — `komp_shutdown` / `komp_cancel_shutdown`
   (ограниченный SSH на Windows-ПК; адрес из `input_text.komp_ssh_target`)
-- `command_line.yaml` — `binary_sensor.komp_v_seti` (ping компа каждые 30 с)
+- `command_line.yaml` — `binary_sensor.komp_v_seti` (ping компа каждые 10 с)
 - `intent_scripts.yaml` — station, music, schedule, currency intents
 - `scripts.yaml` — Music, audio executor (`alarm_start` /
   `alarm_announce` / `alarm_loop` / `alarm_ramp` / `alarm_stop` /
@@ -195,7 +195,7 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `templates.yaml` — `switch.ricardo_work_profile` (обёртка над
   `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный; источник
   истины — `input_select`)
-- `input_datetime.yaml` — empty mapping (kept so an existing include stays valid)
+- `input_datetime.yaml` — `komp_off_requested` (когда запрошено выключение компа)
 - `input_boolean.yaml` — `alarm_ringing`, `alarm_music_was_playing`
 - `input_number.yaml` — `alarm_volume`, `alarm_previous_volume`
 - `input_text.yaml` — `alarm_previous_source`, scheduler endpoint/active-*
@@ -345,14 +345,32 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 проверка — `projects/home/windows-pc/README.md`.
 
 ```text
-binary_sensor.komp_v_seti   command_line: busybox ping -c 1 -W 1, 30 с
+binary_sensor.komp_v_seti   command_line: busybox ping -c 1 -W 1, 10 с
 switch.komp                 template switch, state = binary_sensor
   turn_on  → rest_command.wakegrant_issue (best-effort, continue_on_error)
              → wake_on_lan.send_magic_packet (mac из !secret komp_mac)
   turn_off → script.komp_shutdown
-script.komp_shutdown        → shell_command.komp_shutdown  (SSH: shutdown)
+script.komp_shutdown        → input_datetime.komp_off_requested = now()
+                            → shell_command.komp_shutdown  (SSH: shutdown)
 script.komp_cancel_shutdown → shell_command.komp_cancel_shutdown (SSH: cancel)
 ```
+
+```text
+KompOn      sensor off или выключение запрошено < 5 мин
+            → switch.turn_on switch.komp, «Включаю комп. Он загрузится примерно за минуту.»
+            иначе «Комп уже включён.», без действий
+KompOff     выключение уже запрошено < 2 мин → «Комп уже выключается.», без повторного SSH
+            иначе sensor on → script.komp_shutdown; sensor off → «Комп уже выключен.»
+KompStatus  sensor on и выключение запрошено < 5 мин → «Комп выключается.»
+```
+
+Ping остаётся `on` ещё 1–2 минуты после `shutdown /s /t 60`, поэтому одного
+сенсора недостаточно: `script.komp_shutdown` пишет метку времени в
+`input_datetime.komp_off_requested` до SSH, а intents считают недавний запрос
+признаком «выключается». Так «выключи комп», а сразу за ним «включи комп»
+снова включают ПК, а не отвечают «уже включён». Голосовое включение идёт
+только через `switch.komp.turn_on`, чтобы выдавался пропуск wakegrant;
+прямой `wake_on_lan` из intent этого не делал.
 
 `command_line` не умеет склеивать `!secret` с текстом, поэтому целиком
 команда ping (с адресом) лежит в `secrets.yaml` как `komp_ping_command`:

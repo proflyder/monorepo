@@ -238,22 +238,46 @@ class ProviderSourceTests(unittest.TestCase):
         sources = [
             path.relative_to(HERE).as_posix()
             for path in sorted(SRC.rglob("*.cpp"))
-            if path.name not in {"cp_selftest.cpp", "hmac_sha256_reference.cpp"}
+            if path.name not in {"cp_selftest.cpp", "hmac_selftest.cpp", "hmac_sha256_reference.cpp"}
         ]
+        # The DLL links each source once; the CNG HMAC self-test reuses
+        # hmac_bcrypt.cpp and protocol.cpp in its own executable.
+        dll_block = build.split('echo "== DLL =="', 1)[1].split(
+            'echo "== self-test executable =="', 1
+        )[0]
+        selftest_blocks = build.split('echo "== self-test executable =="', 1)[1]
         for source in sources:
             with self.subTest(source=source):
-                self.assertEqual(build.count(source), 1, f"{source} must be compiled exactly once")
+                self.assertEqual(dll_block.count(source), 1, f"{source} must be compiled exactly once into the DLL")
+                self.assertLessEqual(
+                    selftest_blocks.count(source), 1, f"{source} must be linked at most once into self-tests"
+                )
         # The portable reference HMAC must never be linked into the DLL.
         self.assertNotIn("hmac_sha256_reference.cpp", build)
 
-    def test_provider_supports_only_logon_and_unlock(self):
+    def test_only_logon_claims_grants(self):
         provider = (SRC / "provider.cpp").read_text(encoding="utf-8")
         scenario = provider.split("HRESULT Provider::SetUsageScenario", 1)[1].split("\n}", 1)[0]
-        self.assertIn("case CPUS_LOGON:", scenario)
-        self.assertIn("case CPUS_UNLOCK_WORKSTATION:", scenario)
+        self.assertIn("cpus != CPUS_LOGON && cpus != CPUS_UNLOCK_WORKSTATION", scenario)
         self.assertIn("return E_NOTIMPL;", scenario)
+        # An unlock must be inert: the logon branch is the only one that starts
+        # the challenge/claim worker.
+        unlock_branch, logon_tail = scenario.split("if (cpus != CPUS_LOGON) {", 1)[1].split("\n    }", 1)
+        self.assertIn("claims=0", unlock_branch)
+        self.assertIn("session_->armed = false;", scenario)
+        self.assertNotIn("StartWorkerOnce", unlock_branch)
+        self.assertIn("StartWorkerOnce", logon_tail)
+        self.assertIn('"cpus=logon"', logon_tail)
+
+    def test_worker_and_credentials_are_logon_only(self):
+        provider = (SRC / "provider.cpp").read_text(encoding="utf-8")
+        start = provider.split("void Provider::StartWorkerOnce", 1)[1].split("\n}", 1)[0]
+        self.assertIn("SessionScenario(session_) != CPUS_LOGON", start)
+        count = provider.split("HRESULT Provider::GetCredentialCount", 1)[1].split("\n}", 1)[0]
+        self.assertIn("SessionScenario(session_) != CPUS_LOGON", count)
+        self.assertIn("*pdwCount = 0;", count)
         for unsupported in ("CPUS_CHANGE_PASSWORD", "CPUS_CREDUI", "CPUS_PLAP"):
-            self.assertNotIn(f"case {unsupported}:", scenario.split("default:", 1)[0])
+            self.assertNotIn(f"case {unsupported}:", provider)
 
     def test_log_and_data_paths_match_the_documentation(self):
         log_cpp = (SRC / "log.cpp").read_text(encoding="utf-8")

@@ -1,3 +1,9 @@
-# No legacy alarm input_datetime helpers remain after the scheduler cutover.
-# Kept as an empty mapping so an existing `input_datetime: !include` stays valid.
-{}
+# Timestamp of the last voice/app shutdown request for the wired desktop.
+# The ping sensor stays `on` for 1–2 minutes after Windows accepts
+# `shutdown /s /t 60`, so «включи комп» must treat a recent request as
+# «выключается» instead of «уже включён». `script.komp_shutdown` writes the
+# value right before the SSH call; the intents read it.
+komp_off_requested:
+  name: "Комп: запрошено выключение"
+  has_date: true
+  has_time: true

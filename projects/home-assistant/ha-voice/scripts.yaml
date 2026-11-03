@@ -134,7 +134,9 @@ komp_shutdown:
   description: >-
     Ask the wired desktop to shut down in 60 seconds through the restricted
     SSH forced-command wrapper. Windows schedules the shutdown and `shutdown /a`
-    can still cancel it. Does nothing when the SSH target secret is missing.
+    can still cancel it. The request timestamp is written before SSH so voice
+    intents know the PC is going off while ping still reports it online. Does
+    nothing when the SSH target secret is missing.
   mode: single
   sequence:
     - if:
@@ -143,6 +145,11 @@ komp_shutdown:
             {{ states('input_text.komp_ssh_target')
                not in ['', 'unknown', 'unavailable'] }}
       then:
+        - service: input_datetime.set_datetime
+          target:
+            entity_id: input_datetime.komp_off_requested
+          data:
+            datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
         - service: shell_command.komp_shutdown
 
 komp_cancel_shutdown:
@@ -160,6 +167,13 @@ komp_cancel_shutdown:
                not in ['', 'unknown', 'unavailable'] }}
       then:
         - service: shell_command.komp_cancel_shutdown
+    # The PC stays on: forget the off request so KompOn/KompStatus stop
+    # treating it as «выключается».
+    - service: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.komp_off_requested
+      data:
+        datetime: "2000-01-01 00:00:00"
 
 wake_false_alarm:
   alias: "Рикардо: ложное срабатывание"
