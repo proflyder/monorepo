@@ -136,8 +136,12 @@ toolset change is needed: `bb_status` (running personal threads),
 `bb_cancel()`.  Both prompts and `HERMES.md` describe the flow:
 
 1. «запусти агента в <проект>[, модель …][, усилие …]: <задача>» →
-   `bb_prepare_spawn` resolves the spoken project; the gateway answers with a
-   confirmation question and stores **one** pending spawn for 90 s;
+   `bb_prepare_spawn` is called straight away with the project name **verbatim**
+   as heard: alias matching (and any transliteration tolerance) belongs to the
+   gateway, so Hermes never re-asks or rewrites the name first. The gateway
+   answers with a confirmation question and stores **one** pending spawn for
+   90 s. Only a «project not found» answer is repeated to the owner, followed by
+   one clarifying question;
 2. Hermes repeats that question verbatim and stops;
 3. «подтверди»/«да» in the next exchange → `bb_confirm` (it also switches the
    voice path into agent mode for the new thread); «отмена»/«не надо» →
