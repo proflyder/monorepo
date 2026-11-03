@@ -1,0 +1,32 @@
+# Restricted SSH into the wired Windows desktop («комп»).
+#
+# The remote side runs a forced-command wrapper (projects/home/windows-pc/
+# komp-power.ps1) that accepts only the two words `shutdown` and `cancel`;
+# the local key is restricted too, so this is not a general-purpose shell.
+#
+# Destination (`user@host`) is not tracked: it lives in secrets.yaml as
+# `komp_ssh_target` and reaches this template through
+# `input_text.komp_ssh_target` (the same `initial: !secret` pattern as
+# `scheduler_endpoint`). `!secret` cannot be spliced into a longer command,
+# and shell_command templates cannot read secrets directly.
+#
+# Commands are templated, so Home Assistant executes them without a shell
+# (no pipes/redirection). Every argument is a plain word; that is why the
+# `-o key=value` options are spelled out instead of relying on ssh_config.
+komp_shutdown: >-
+  ssh -i /config/.ssh/komp_ed25519
+  -o BatchMode=yes
+  -o ConnectTimeout=5
+  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts
+  -o StrictHostKeyChecking=accept-new
+  {{ states('input_text.komp_ssh_target') }}
+  shutdown
+
+komp_cancel_shutdown: >-
+  ssh -i /config/.ssh/komp_ed25519
+  -o BatchMode=yes
+  -o ConnectTimeout=5
+  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts
+  -o StrictHostKeyChecking=accept-new
+  {{ states('input_text.komp_ssh_target') }}
+  cancel

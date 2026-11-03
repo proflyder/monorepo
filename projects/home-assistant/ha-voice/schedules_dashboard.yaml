@@ -93,3 +93,27 @@ views:
           восстанавливается после перезапуска Home Assistant. Голосом:
           «какой профиль», «включи рабочий профиль», «переключи на личный
           профиль».
+
+  - title: Комп
+    path: komp
+    icon: mdi:desktop-tower
+    cards:
+      - type: entities
+        title: Комп
+        entities:
+          - entity: switch.komp
+            name: Питание
+          - entity: binary_sensor.komp_v_seti
+            name: В сети
+      - type: button
+        name: Отменить выключение
+        icon: mdi:cancel
+        tap_action:
+          action: call-service
+          service: script.komp_cancel_shutdown
+      - type: markdown
+        content: |
+          ## Комп
+          Включение — Wake-on-LAN по проводу; выключение — Windows-таймер
+          на 60 секунд через ограниченный SSH. Голосом: «включи комп»,
+          «выключи комп», «отмени выключение компа», «комп включён».

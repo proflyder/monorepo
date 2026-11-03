@@ -17,6 +17,16 @@
 
 ### Станция и голос
 
+- [ ] **Комп: живая проверка после настройки Windows.** HA-часть и
+      `projects/home/windows-pc/` готовы; IP/MAC/пользователь ещё не заданы.
+      Следующий шаг: после настройки BIOS WoL, OpenSSH и ICMP на Windows
+      прописать `komp_ping_command`, `komp_mac`, `komp_ssh_target` в HA
+      `secrets.yaml`, положить ключ и known_hosts в `/config/.ssh`, добавить
+      `wake_on_lan:` и includes `command_line`/`shell_command`, затем проверить
+      ping, включение (`switch.komp`/«включи комп»), выключение через минуту и
+      отмену, состояние в приложении и что любая другая SSH-команда
+      отклоняется.
+
 - [ ] **Ricardo pre-roll 256 ms.** Поставлен `Fixed(8)` в релизе
       `v0.5.1002` (база upstream `v0.5.3`; сейчас стоит `v0.5.1004`) с
       `PULSAR_LOCAL_ENDPOINTING=1`; база n=3, риск среза первого слога.

@@ -128,6 +128,39 @@ blackout:
           - light.yeelink_cn_827036414_bslamp2_s_2_light
           - light.yeelink_cn_919937191_lamp22_s_2
 
+komp_shutdown:
+  alias: "Комп: выключение через минуту"
+  icon: mdi:power
+  description: >-
+    Ask the wired desktop to shut down in 60 seconds through the restricted
+    SSH forced-command wrapper. Windows schedules the shutdown and `shutdown /a`
+    can still cancel it. Does nothing when the SSH target secret is missing.
+  mode: single
+  sequence:
+    - if:
+        - condition: template
+          value_template: >-
+            {{ states('input_text.komp_ssh_target')
+               not in ['', 'unknown', 'unavailable'] }}
+      then:
+        - service: shell_command.komp_shutdown
+
+komp_cancel_shutdown:
+  alias: "Комп: отмена выключения"
+  icon: mdi:power-off
+  description: >-
+    Cancel the pending 60 s shutdown of the wired desktop through the same
+    restricted SSH wrapper. Fails silently when nothing is scheduled.
+  mode: single
+  sequence:
+    - if:
+        - condition: template
+          value_template: >-
+            {{ states('input_text.komp_ssh_target')
+               not in ['', 'unknown', 'unavailable'] }}
+      then:
+        - service: shell_command.komp_cancel_shutdown
+
 wake_false_alarm:
   alias: "Рикардо: ложное срабатывание"
   # Display only. Being a personal scenario is declared with the HA label

@@ -684,3 +684,51 @@ StationAlarmEnableOne:
       response_variable: alarm_result
     - stop: "station_alarm_enable_one"
       response_variable: alarm_result
+
+KompOn:
+  speech:
+    text: >-
+      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      Комп уже включён.
+      {% else %}
+      Включаю комп.
+      {% endif %}
+  action:
+    - if:
+        - condition: template
+          value_template: "{{ not is_state('binary_sensor.komp_v_seti', 'on') }}"
+      then:
+        - service: wake_on_lan.send_magic_packet
+          data:
+            mac: !secret komp_mac
+
+KompOff:
+  speech:
+    text: >-
+      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      Выключу комп через минуту. Скажите «отмени выключение компа», если передумали.
+      {% else %}
+      Комп уже выключен.
+      {% endif %}
+  action:
+    - if:
+        - condition: template
+          value_template: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
+      then:
+        - service: script.komp_shutdown
+
+KompCancelOff:
+  speech:
+    text: "Отменил выключение компа."
+  action:
+    - service: script.komp_cancel_shutdown
+
+KompStatus:
+  speech:
+    text: >-
+      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      Комп включён.
+      {% else %}
+      Комп выключен.
+      {% endif %}
+  action: []

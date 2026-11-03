@@ -4,6 +4,11 @@
 # `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный. The
 # input_select stays the single source of truth; the switch only maps it to
 # the switch domain understood by the device catalogue.
+#
+# `switch.komp` wraps the wired desktop: its state mirrors the ping binary
+# sensor, turning on sends Wake-on-LAN, turning off schedules the restricted
+# SSH shutdown. See the comment above the second switch.
+
 - switch:
     - name: "Рабочий профиль"
       unique_id: ricardo_work_profile
@@ -22,3 +27,22 @@
             entity_id: input_select.ricardo_voice_profile
           data:
             option: "Личный"
+
+# `switch.komp` is the wired Windows desktop as a normal on/off control:
+# state mirrors the ping binary sensor, turn_on sends Wake-on-LAN, turn_off
+# asks the restricted SSH wrapper to schedule a 60 s shutdown (cancellable
+# from voice or the dashboard). It is a plain `switch` domain entity without a
+# role label, so the ha-control catalogue exposes it as a device (kind
+# "switch").
+- switch:
+    - name: "Комп"
+      unique_id: komp
+      default_entity_id: switch.komp
+      icon: mdi:desktop-tower
+      state: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
+      turn_on:
+        - service: wake_on_lan.send_magic_packet
+          data:
+            mac: !secret komp_mac
+      turn_off:
+        - service: script.komp_shutdown

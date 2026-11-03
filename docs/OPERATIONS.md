@@ -451,6 +451,30 @@ kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
 OpenBao одновременно. Список личных целей — `manifests/bb-targets.yaml`,
 рендерится `deploy.sh` из `BB_PROJECT_*`.
 
+## Комп (Windows-ПК)
+
+Адрес, MAC и пользователь — только в HA `secrets.yaml`
+(`komp_ping_command`, `komp_mac`, `komp_ssh_target`); не печатать их.
+
+```bash
+# из HA: Terminal & SSH add-on — состояние по ping
+ping -c 1 -W 1 <host>
+
+# из HA Terminal & SSH — ограниченный SSH (только shutdown|cancel)
+ssh -i /config/.ssh/komp_ed25519 \
+  -o BatchMode=yes -o ConnectTimeout=5 \
+  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
+  -o StrictHostKeyChecking=accept-new <user>@<host> shutdown
+
+# ключ и known_hosts вне Git, но персистентны внутри HAOS
+ls -l /config/.ssh/komp_ed25519 /config/.ssh/komp_known_hosts
+```
+
+В HA: Actions `shell_command.komp_shutdown` / `shell_command.komp_cancel_shutdown`,
+`wake_on_lan.send_magic_packet` (mac из секрета), сущность `switch.komp`.
+Голосом: «включи комп», «выключи комп», «отмени выключение компа»,
+«комп включён». Выключение откладывается на 60 с, отмена — в этом окне.
+
 ## K3s
 
 ```bash

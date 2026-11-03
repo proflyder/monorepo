@@ -61,6 +61,13 @@
   `SCHEDULE_KIND_REMINDER` в `SchedulerService`;
 - «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
   (заметки остаются в Home Assistant без изменений);
+- «включи комп» / «включи мой комп» / «включи компьютер» — локальный
+  `KompOn` → Wake-on-LAN magic packet (`switch.komp`, MAC только из
+  `!secret komp_mac`); «выключи комп» и варианты — `KompOff` →
+  `script.komp_shutdown` (SSH → Windows `shutdown /s /t 60`); «отмени
+  выключение компа» / «не выключай комп» — `KompCancelOff`; «комп включён»,
+  «включён ли комп», «комп работает» — `KompStatus` (ping-сенсор). Команды
+  локальные, работают в обоих профилях и без Hermes; подробности ниже;
 - «отмена» / «отмени» / «передумал» — локальный `StationCancel`: распознанный
   запрос завершается без озвучки и без Hermes. Слова «отмена» нет в штатной
   command-модели станции, поэтому посреди уже идущего вызова без повторного
@@ -162,6 +169,9 @@ so voice snooze/stop target the correct schedule id without guessing.
 
 - `rest_commands.yaml` — station HTTP, `scheduler_rpc` Connect JSON,
   `currency_latest` (Bearer)
+- `shell_commands.yaml` — `komp_shutdown` / `komp_cancel_shutdown`
+  (ограниченный SSH на Windows-ПК; адрес из `input_text.komp_ssh_target`)
+- `command_line.yaml` — `binary_sensor.komp_v_seti` (ping компа каждые 30 с)
 - `intent_scripts.yaml` — station, music, schedule, currency intents
 - `scripts.yaml` — Music, audio executor (`alarm_start` /
   `alarm_announce` / `alarm_loop` / `alarm_ramp` / `alarm_stop` /
@@ -179,6 +189,7 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `custom_sentences/ru/station_alarm.yaml`
 - `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
 - `custom_sentences/ru/station_currency.yaml` — курсы валют
+- `custom_sentences/ru/station_komp.yaml` — включение/выключение/статус компа
 - `input_select.yaml` — `music_route`, `ricardo_voice_profile`
 - `templates.yaml` — `switch.ricardo_work_profile` (обёртка над
   `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный; источник
@@ -207,6 +218,9 @@ Editor, Samba или HAOS SSH add-on; не писать в HAOS из host. По�
 проверить `configuration.yaml` includes и выполнить **Developer Tools → YAML →
 Check configuration → Restart**.
 
+В репозитории нет копии `configuration.yaml`: он живёт только внутри HAOS,
+поэтому includes ниже добавляются вручную один раз.
+
 В `configuration.yaml`:
 
 ```yaml
@@ -218,6 +232,10 @@ input_boolean: !include input_boolean.yaml
 input_number: !include input_number.yaml
 input_text: !include input_text.yaml
 template: !include templates.yaml
+# Комп (Wake-on-LAN + ping + ограниченный SSH):
+wake_on_lan:
+command_line: !include command_line.yaml
+shell_command: !include shell_commands.yaml
 ```
 
 Для dashboard добавьте в `configuration.yaml`:
@@ -291,6 +309,10 @@ conversation.process: "какой будильник"
 conversation.process: "отмени будильник"
 conversation.process: "курс доллара"
 conversation.process: "курс валют"
+conversation.process: "включи комп"
+conversation.process: "комп включён"
+conversation.process: "выключи комп"
+conversation.process: "отмени выключение компа"
 conversation.process: "стоп"
 ```
 
@@ -314,6 +336,52 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 в `secrets.yaml`, не в документации.
 
 
+
+## Комп (Windows-ПК)
+
+Проводной Windows-десктоп «комп» (алиас «мой комп»): включение Wake-on-LAN,
+выключение через ограниченный SSH, состояние по ping. Настройка Windows и
+проверка — `projects/home/windows-pc/README.md`.
+
+```text
+binary_sensor.komp_v_seti   command_line: busybox ping -c 1 -W 1, 30 с
+switch.komp                 template switch, state = binary_sensor
+  turn_on  → wake_on_lan.send_magic_packet (mac из !secret komp_mac)
+  turn_off → script.komp_shutdown
+script.komp_shutdown        → shell_command.komp_shutdown  (SSH: shutdown)
+script.komp_cancel_shutdown → shell_command.komp_cancel_shutdown (SSH: cancel)
+```
+
+`command_line` не умеет склеивать `!secret` с текстом, поэтому целиком
+команда ping (с адресом) лежит в `secrets.yaml` как `komp_ping_command`:
+`ping -c 1 -W 1 <host> >/dev/null 2>&1 && echo 1 || echo 0`. Обёртка нужна,
+иначе при недоступном хосте ping возвращает ненулевой код и сенсор остался бы `unknown`.
+`shell_command`-шаблоны секретов не читают, поэтому `user@host` приходит из
+`input_text.komp_ssh_target` (`initial: !secret komp_ssh_target`) — та же
+схема, что у `scheduler_endpoint`. SSH-ключ и known_hosts лежат вне Git в
+`/config/.ssh/komp_ed25519` и `/config/.ssh/komp_known_hosts`.
+
+Секреты (`secrets.yaml`, не коммитить):
+
+```yaml
+komp_mac: "AA:BB:CC:DD:EE:FF"
+komp_ssh_target: "<user>@<host>"
+komp_ping_command: "ping -c 1 -W 1 <host> >/dev/null 2>&1 && echo 1 || echo 0"
+```
+
+Все три ключа обязательны: `!secret` с отсутствующим ключом не даёт HA
+загрузить конфигурацию, поэтому сначала добавьте секреты, потом includes.
+
+`switch.komp` — обычная `switch`-сущность без ролевых меток. Каталог
+ha-control берёт все не скрытые switch'и (`solutions/ha-bridge/internal/catalog/rules.go`),
+поэтому «Комп» появляется в каталоге ha-control и на вкладке «Дом» в Android
+как штатный on/off без изменений Go-кода. `on` = сенсор ping'а `on`. В
+шаблонной сущности задан `default_entity_id: switch.komp`: кириллическое имя
+не даёт стабильный slug.
+
+Отмена выключения должна успеть за 60 секунд (`shutdown /s /t 60` на Windows);
+`shutdown /a` при отсутствии запланированного выключения просто возвращает
+ошибку, HA это не озвучивает.
 
 ## Будильники, таймеры, напоминания, заметки
 

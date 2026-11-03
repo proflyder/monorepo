@@ -46,3 +46,12 @@ currency_bot_endpoint:
   name: "Currency bot API endpoint"
   max: 255
   initial: !secret currency_bot_endpoint
+
+# SSH destination for the wired desktop: `user@host`. Non-secret in meaning but
+# deployment-specific, so the tracked tree only holds the `!secret` reference.
+# `shell_command` templates cannot read secrets.yaml directly; they read this
+# helper, which Home Assistant resets to the secret after every restart.
+komp_ssh_target:
+  name: "Комп: SSH-адрес"
+  max: 128
+  initial: !secret komp_ssh_target
