@@ -116,6 +116,33 @@ units:
       build:
         - ./solutions/scheduler/cmd/scheduler
 
+  - id: wakegrant
+    platform: go
+    title: "solutions/wakegrant (one-time logon grants) + home deployment"
+    paths:
+      - solutions/wakegrant/**
+      - projects/home/kubernetes/wakegrant/**
+    # One image and one Deployment with a durable SQLite grant on a PVC; the
+    # ESO Secret (issuer token + per-machine keys) is part of the same unit
+    # because the service is unusable without it.
+    deploy:
+      builder: bazel
+      target_root: //solutions/wakegrant
+      images: [wakegrant]
+      workloads: [wakegrant]
+      namespace: home-assistant
+      script: projects/home/kubernetes/wakegrant/deploy.sh
+      env_key: wakegrant_env
+      env_file: wakegrant.env
+      externalsecrets: [wakegrant]
+    go:
+      module: "."
+      packages:
+        - ./solutions/wakegrant/...
+      race: true
+      build:
+        - ./solutions/wakegrant/cmd/wakegrant
+
   - id: currency-bot
     platform: go
     title: "solutions/currency-bot (Telegram currency bot)"
@@ -338,12 +365,15 @@ units:
 
   - id: windows-pc
     platform: python
-    title: "projects/home/windows-pc (komp forced-command wrapper)"
+    title: "projects/home/windows-pc (komp power + logon provider contracts)"
     paths:
       - projects/home/windows-pc/**
     python:
+      # logon-provider holds its own hermetic suite (static contract checks for
+      # the elevated install/set-secret/uninstall/status scripts).
       suites:
         - projects/home/windows-pc
+        - projects/home/windows-pc/logon-provider
 
   - id: home-backup
     platform: python
@@ -441,6 +471,15 @@ units:
       suites:
         - projects/home/kubernetes/currency-bot
 
+  - id: wakegrant-deploy
+    platform: python
+    title: "projects/home/kubernetes/wakegrant (deploy/manifest contract)"
+    paths:
+      - projects/home/kubernetes/wakegrant/**
+    python:
+      suites:
+        - projects/home/kubernetes/wakegrant
+
   - id: mcp-gateway-deploy
     platform: python
     title: "projects/home/kubernetes/mcp-gateway (catalog/RBAC/deploy contract)"
@@ -475,6 +514,7 @@ units:
       - projects/home/kubernetes/observability/alertmanager/**
       - projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml
       - projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
+      - projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml
     python:
       suites:
         - projects/home/kubernetes/external-secrets

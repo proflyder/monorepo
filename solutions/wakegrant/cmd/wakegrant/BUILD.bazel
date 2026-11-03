@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "wakegrant_lib",
+    srcs = [
+        "healthcheck.go",
+        "main.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/wakegrant/cmd/wakegrant",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//solutions/wakegrant/app",
+        "//solutions/wakegrant/internal/config",
+    ],
+)
+
+go_binary(
+    name = "wakegrant",
+    embed = [":wakegrant_lib"],
+    visibility = ["//visibility:public"],
+)

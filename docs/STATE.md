@@ -139,7 +139,7 @@
   namespace `external-secrets`: `ClusterSecretStore/openbao` через in-cluster
   Service (Kubernetes auth, роль `external-secrets`, KV v2). Источник правды
   для `secret/k8s/*`: `scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
-  `grafana-admin`, `cloudflare-api-token`. Kubernetes Secrets с теми же
+  `grafana-admin`, `cloudflare-api-token`, `wakegrant`. Kubernetes Secrets с теми же
   именами/ключами создаёт ESO (`creationPolicy: Owner`,
   `deletionPolicy: Retain`, `refreshInterval: 1h`); deploy-скрипты и CI их не
   перезаписывают. Не переносятся: `openbao-seal`, helm release/SA token
@@ -397,6 +397,17 @@
   `KompCancelOff`/`KompStatus` работают в обоих профилях без Hermes. IP,
   MAC и пользователь — только в HA secrets; настройка Windows —
   `projects/home/windows-pc/README.md`. Живая приёмка — в `PENDING.md`.
+- **Вход по пропуску (wakegrant).** `solutions/wakegrant` в K3s
+  `home-assistant`: один под, SQLite на PVC `wakegrant-data`
+  (`local-retain`), LAN NodePort `30130`, /healthz. `switch.komp.turn_on`
+  сначала выдаёт одноразовый пропуск (`rest_command.wakegrant_issue`,
+  best-effort: `continue_on_error: true`), затем WoL; логин-компонент ПК
+  обменивает nonce и HMAC на `/v1/claim` (протокол
+  `packages/contracts/wakegrant/PROTOCOL.md`, тест-вектор закреплён).
+  Секреты — ESO `wakegrant` из `secret/k8s/home-assistant/wakegrant`
+  (`issuer_token`, `machines`), в HA — `wakegrant_endpoint`/
+  `wakegrant_bearer`. Деплой — `projects/home/kubernetes/wakegrant`.
+  Живая приёмка — в `PENDING.md`.
 
 ## Планировщик, HA bridge, Android
 

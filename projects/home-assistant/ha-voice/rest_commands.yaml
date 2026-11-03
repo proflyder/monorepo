@@ -36,6 +36,20 @@ scheduler_rpc:
   content_type: "application/json"
   timeout: 10
 
+# wakegrant issuer (packages/contracts/wakegrant/PROTOCOL.md). Called right
+# before Wake-on-LAN so the machine can sign the owner in once. The endpoint is
+# a non-secret LAN base URL in input_text.wakegrant_endpoint; the bearer value
+# (including the "Bearer " prefix) stays in secrets.yaml.
+wakegrant_issue:
+  url: "{{ states('input_text.wakegrant_endpoint') | trim | regex_replace('/+$', '') }}/v1/grants"
+  method: POST
+  headers:
+    Authorization: !secret wakegrant_bearer
+    Content-Type: "application/json"
+  payload: '{"machine":"komp","ttlSeconds":180}'
+  content_type: "application/json"
+  timeout: 5
+
 # Currency bot LAN NodePort. The endpoint is a non-secret base URL kept in
 # input_text.currency_bot_endpoint; the bearer value (including "Bearer ")
 # stays in secrets.yaml.

@@ -82,6 +82,10 @@ dist/
 
 # Reproducible generated configuration
 *.generated
+
+# Windows logon provider build outputs (llvm-mingw artifacts stay on disk).
+/projects/home/windows-pc/logon-provider/out/
+/projects/home/windows-pc/logon-provider/build/
 # Rendered Cloudflare Worker config contains private account/KV ids.
 /projects/home/cloudflare/heartbeat/wrangler.generated.toml
 

@@ -1159,12 +1159,28 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(switch["unique_id"], "komp")
         self.assertEqual(switch["state"], "{{ is_state('binary_sensor.komp_v_seti', 'on') }}")
 
-        self.assertEqual(services(switch["turn_on"]), ["wake_on_lan.send_magic_packet"])
-        mac = switch["turn_on"][0]["data"]["mac"]
+        # A one-time logon grant is issued first, then WoL. The grant step is
+        # best-effort: a wakegrant outage must still wake the machine.
+        self.assertEqual(services(switch["turn_on"]),
+                         ["rest_command.wakegrant_issue", "wake_on_lan.send_magic_packet"])
+        self.assertIs(switch["turn_on"][0].get("continue_on_error"), True)
+        mac = switch["turn_on"][1]["data"]["mac"]
         self.assertEqual(mac, "__SECRET__", "MAC must come from secrets.yaml")
         # Compact catalogue/Android control: no role label, plain switch.
         self.assertNotIn("label", yaml.safe_dump(switch, allow_unicode=True))
         self.assertEqual(services(switch["turn_off"]), ["script.komp_shutdown"])
+
+    def test_wakegrant_issue_uses_the_lan_endpoint_and_a_secret_bearer(self):
+        rest = REST["wakegrant_issue"]
+        self.assertEqual(rest["method"], "POST")
+        self.assertIn("input_text.wakegrant_endpoint", rest["url"])
+        self.assertTrue(rest["url"].endswith("/v1/grants"))
+        self.assertEqual(rest["headers"]["Authorization"], "__SECRET__")
+        self.assertEqual(rest["content_type"], "application/json")
+        self.assertEqual(json.loads(rest["payload"]), {"machine": "komp", "ttlSeconds": 180})
+        inputs = load_yaml(HA / "input_text.yaml")
+        self.assertEqual(inputs["wakegrant_endpoint"]["initial"], "__SECRET__")
+        self.assertTrue(inputs["wakegrant_endpoint"]["name"])
 
     def test_shutdown_shell_commands_keep_the_host_in_secrets(self):
         commands = load_yaml(HA / "shell_commands.yaml")

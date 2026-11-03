@@ -1,0 +1,5 @@
+LIBRARY RicardoKompLogon.dll
+
+EXPORTS
+    DllCanUnloadNow   PRIVATE
+    DllGetClassObject PRIVATE

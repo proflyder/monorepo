@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "wakegrant",
+    srcs = [
+        "limiter.go",
+        "mac.go",
+        "machines.go",
+        "nonce.go",
+        "service.go",
+        "store.go",
+    ],
+    importpath = "ricardo.local/monorepo/solutions/wakegrant/internal/wakegrant",
+    deps = ["@org_modernc_sqlite//:sqlite"],
+)
+
+go_test(
+    name = "wakegrant_test",
+    srcs = [
+        "mac_test.go",
+        "machines_test.go",
+        "service_test.go",
+    ],
+    embed = [":wakegrant"],
+    deps = ["@org_modernc_sqlite//:sqlite"],
+)
