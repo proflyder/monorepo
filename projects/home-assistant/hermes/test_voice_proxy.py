@@ -917,5 +917,308 @@ class UpdatesPollerTests(unittest.TestCase):
             self.assertFalse(voice_proxy.updates_enabled())
 
 
+class AnnounceQueueTests(unittest.TestCase):
+    """Producer side of the durable announcement queue."""
+
+    def setUp(self):
+        case = self
+        self.requests = []
+
+        class Scheduler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length) or b"{}")
+                case.requests.append((self.path, body))
+                payload = json.dumps({"event": {"id": "ev_test"}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Scheduler)
+        threading.Thread(target=self.server.serve_forever,
+                         kwargs={"poll_interval": 0.05}, daemon=True).start()
+        self.overrides = [
+            patch.object(voice_proxy, "SCHEDULER_URL",
+                         f"http://127.0.0.1:{self.server.server_port}"),
+            patch.object(voice_proxy, "SCHEDULER_TOKEN", "test-scheduler-token"),
+            patch.object(voice_proxy, "SCHEDULER_TOKEN_FILE", ""),
+            patch.object(voice_proxy, "VOICE_QUEUE_DISABLED", False),
+        ]
+        for override in self.overrides:
+            override.start()
+
+    def tearDown(self):
+        for override in self.overrides:
+            override.stop()
+        self.server.shutdown()
+        self.server.server_close()
+
+    def test_enqueue_posts_a_durable_task_with_the_idempotency_key(self):
+        self.assertTrue(voice_proxy.enqueue_announce(
+            "Готово.", "work", "thr_example", "after:7", 1_700_000_000))
+        self.assertEqual(len(self.requests), 1)
+        path, body = self.requests[0]
+        self.assertTrue(path.endswith("/ricardo.v1.SchedulerService/EnqueueTask"))
+        self.assertEqual(body["taskType"], "voice.announce")
+        self.assertEqual(body["queue"], "voice-work")
+        self.assertEqual(body["idempotencyKey"], "voice:thr_example:after:7")
+        payload = json.loads(body["payloadJson"])
+        self.assertEqual(payload, {
+            "text": "Готово.", "profile": "work", "thread_id": "thr_example",
+            "seq": "after:7", "created_unix": 1_700_000_000,
+        })
+
+    def test_personal_profile_uses_its_own_queue(self):
+        voice_proxy.enqueue_announce("Ответ.", "personal", "thr_p", "done:12")
+        self.assertEqual(self.requests[0][1]["queue"], "voice-personal")
+        self.assertEqual(self.requests[0][1]["idempotencyKey"],
+                         "voice:thr_p:done:12")
+
+    def test_scheduler_error_returns_false(self):
+        with patch.object(voice_proxy, "_scheduler_rpc",
+                          side_effect=urllib.error.URLError("down")):
+            self.assertFalse(voice_proxy.enqueue_announce(
+                "Готово.", "work", "thr_example", "after:1"))
+
+    def test_result_announcer_enqueues_instead_of_speaking(self):
+        enqueued, announced = [], []
+        with patch.object(voice_proxy, "call_result", return_value={
+                "status": "done", "speech": "**Готово**.", "completedSeq": 42,
+            }), patch.object(voice_proxy, "enqueue_announce",
+                             side_effect=lambda *a: enqueued.append(a) or True), \
+                patch.object(voice_proxy, "announce",
+                             side_effect=lambda text: announced.append(text) or (True, False)):
+            voice_proxy._result_announcer("thr_example", 7, "personal")
+        self.assertEqual(announced, [])
+        self.assertEqual(enqueued, [("Готово.", "personal", "thr_example", "done:42")])
+
+    def test_result_announcer_falls_back_when_enqueue_fails(self):
+        announced = []
+        with patch.object(voice_proxy, "call_result", return_value={
+                "status": "done", "speech": "Готово."}), \
+                patch.object(voice_proxy, "enqueue_announce", return_value=False), \
+                patch.object(voice_proxy, "announce",
+                             side_effect=lambda text: announced.append(text) or (True, False)):
+            voice_proxy._result_announcer("thr_example", 7, "work")
+        self.assertEqual(announced, ["Готово."])
+
+    def test_queue_disabled_keeps_the_direct_announce(self):
+        announced = []
+        with patch.object(voice_proxy, "queue_enabled", return_value=False), \
+                patch.object(voice_proxy, "call_result", return_value={
+                    "status": "done", "speech": "Готово."}), \
+                patch.object(voice_proxy, "announce",
+                             side_effect=lambda text: announced.append(text) or (True, False)):
+            voice_proxy._result_announcer("thr_example", 7, "work")
+        self.assertEqual(announced, ["Готово."])
+
+    def test_queue_switch_needs_url_and_token(self):
+        with patch.object(voice_proxy, "VOICE_QUEUE_DISABLED", False):
+            self.assertTrue(voice_proxy.queue_enabled())
+        with patch.object(voice_proxy, "SCHEDULER_URL", ""):
+            self.assertFalse(voice_proxy.queue_enabled())
+        with patch.object(voice_proxy, "SCHEDULER_TOKEN", ""):
+            self.assertFalse(voice_proxy.queue_enabled())
+        with patch.object(voice_proxy, "VOICE_QUEUE_DISABLED", True):
+            self.assertFalse(voice_proxy.queue_enabled())
+
+
+class UpdatesQueueTests(unittest.TestCase):
+    """The updates poller enqueues for the work profile and rescans on restart."""
+
+    def setUp(self):
+        voice_proxy.stop_updates_poller(1.0)
+
+    def tearDown(self):
+        voice_proxy.stop_updates_poller(1.0)
+
+    def run_poller(self, fetch, *, enqueue, profile="personal", limit=4):
+        stop = threading.Event()
+        sleeps = []
+
+        def sleeper(seconds):
+            sleeps.append(seconds)
+            if len(sleeps) >= limit:
+                stop.set()
+
+        voice_proxy.start_updates_poller(
+            stop=stop, fetch=fetch, profile_reader=lambda: profile,
+            announcer=lambda text: (True, False), sleeper=sleeper,
+            enqueue=enqueue)
+        thread = voice_proxy._updates_thread
+        if thread is not None:
+            thread.join(2.0)
+
+    def test_bootstrap_rescans_a_recent_window(self):
+        calls = []
+
+        def fetch(after_seq, wait_seconds):
+            calls.append(after_seq)
+            return {"cursor": 500, "items": []}
+
+        with patch.object(voice_proxy, "queue_enabled", return_value=True), \
+                patch.object(voice_proxy, "VOICE_UPDATES_RESCAN", 300):
+            self.run_poller(fetch, enqueue=lambda *a: True, limit=3)
+        self.assertIsNone(calls[0])
+        self.assertEqual(calls[1], 200)
+
+    def test_bootstrap_without_queue_starts_at_the_cursor(self):
+        calls = []
+
+        def fetch(after_seq, wait_seconds):
+            calls.append(after_seq)
+            return {"cursor": 500, "items": []}
+
+        with patch.object(voice_proxy, "queue_enabled", return_value=False):
+            self.run_poller(fetch, enqueue=lambda *a: True, limit=3)
+        self.assertEqual(calls[1], 500)
+
+    def test_personal_profile_does_not_drop_the_work_answer(self):
+        events = [{"seq": 9, "spoken": "Готово.", "completedAt": 1_700_000_000_000}]
+        calls = []
+
+        def fetch(after_seq, wait_seconds):
+            calls.append(after_seq)
+            if len(calls) == 1:
+                return {"cursor": 10, "items": []}
+            return {"cursor": 10, "items": events}
+
+        enqueued = []
+        with patch.object(voice_proxy, "queue_enabled", return_value=True), \
+                patch.object(voice_proxy, "time") as fake_time:
+            fake_time.time.return_value = 1_700_000_010
+            self.run_poller(fetch, enqueue=lambda *a: enqueued.append(a) or True,
+                            profile="personal", limit=3)
+        self.assertTrue(enqueued)
+        self.assertEqual(enqueued[0],
+                         ("Готово.", "work", "dispatcher", "9", 1_700_000_000))
+
+    def test_stale_update_is_not_enqueued(self):
+        enqueued = []
+        with patch.object(voice_proxy, "queue_enabled", return_value=True):
+            queued, stale = voice_proxy._enqueue_updates(
+                [{"seq": 1, "spoken": "Старое.", "completedAt": 1_000_000}],
+                lambda *a: enqueued.append(a) or True, 1_700_000_000)
+        self.assertEqual((queued, stale), (0, 1))
+        self.assertEqual(enqueued, [])
+
+
+class QueueConsumerTests(unittest.TestCase):
+    """Consumer side: lease only when idle, ack only after the answer finished."""
+
+    def drive(self, *, profile="work", state_reader=None, events=None,
+              announce_result=(True, False), limit=6):
+        calls = {"calls": [], "leases": [], "acks": [], "announced": [],
+                 "states": 0}
+        clock = [1_700_000_000.0]
+        stop = threading.Event()
+        sleeps = [0]
+        queue = list(events or [])
+
+        def sleeper(seconds):
+            sleeps[0] += 1
+            clock[0] += seconds
+            if sleeps[0] >= limit:
+                stop.set()
+
+        def lister(queue_name, consumer, lease, count):
+            calls["leases"].append((queue_name, consumer, lease, count))
+            return [queue.pop(0)] if queue else []
+
+        def acker(event_id, consumer, outcome="ACK_OUTCOME_DELIVERED", detail=""):
+            calls["acks"].append((event_id, outcome, detail))
+
+        def announcer(text):
+            calls["announced"].append(text)
+            return announce_result
+
+        def reader(entity_id):
+            calls["states"] += 1
+            if state_reader is None:
+                return "idle" if entity_id == voice_proxy.VOICE_SATELLITE else "playing"
+            return state_reader(entity_id, calls["states"])
+
+        voice_proxy._queue_consumer(
+            stop, profile_reader=lambda: profile, state_reader=reader,
+            lister=lister, acker=acker, announcer=announcer,
+            clock=lambda: clock[0], sleeper=sleeper)
+        return calls
+
+    def event(self, *, created=None, text="Готово."):
+        payload = {"text": text, "profile": "work",
+                   "thread_id": "thr_example", "seq": "1"}
+        if created is not None:
+            payload["created_unix"] = created
+        return {"id": "ev_1", "payloadJson": json.dumps(payload),
+                "createdUnix": str(created or 0)}
+
+    def test_busy_or_unknown_station_never_leases(self):
+        for states in [("listening", "playing"), ("processing", "playing"),
+                       (None, "playing"), ("idle", None),
+                       ("idle", "announcing")]:
+            with self.subTest(states=states):
+                calls = self.drive(
+                    state_reader=lambda entity, _n, s=states: s[0]
+                    if entity == voice_proxy.VOICE_SATELLITE else s[1],
+                    events=[self.event(created=1_700_000_000)], limit=2)
+                self.assertEqual(calls["leases"], [])
+                self.assertEqual(calls["acks"], [])
+
+    def test_leases_only_the_current_profile_queue_for_this_consumer(self):
+        calls = self.drive(profile="personal")
+        self.assertTrue(calls["leases"])
+        self.assertEqual(calls["leases"][0][0], "voice-personal")
+        self.assertEqual(calls["leases"][0][1], "voice-proxy-home")
+        self.assertEqual(calls["leases"][0][2], 120)
+
+    def test_stale_answer_is_acked_without_speaking(self):
+        calls = self.drive(events=[self.event(created=1_699_000_000)], limit=3)
+        self.assertEqual(calls["announced"], [])
+        self.assertEqual(calls["acks"], [("ev_1", "ACK_OUTCOME_SKIPPED", "stale")])
+
+    def test_answer_waited_over_two_minutes_is_prefixed_and_acked(self):
+        with patch.object(voice_proxy, "VOICE_QUEUE_BUSY_GRACE", 0.0):
+            calls = self.drive(events=[self.event(created=1_699_999_870)], limit=3)
+        self.assertEqual(calls["announced"], ["Пока вас не было: Готово."])
+        self.assertEqual(calls["acks"][0][0], "ev_1")
+        self.assertEqual(calls["acks"][0][1], "ACK_OUTCOME_DELIVERED")
+
+    def test_ack_waits_for_the_station_to_finish(self):
+        sequence = ["busy", "busy", "idle"]
+
+        def state_reader(entity, _n):
+            value = sequence.pop(0) if sequence else "idle"
+            if entity == voice_proxy.VOICE_SATELLITE:
+                return "listening" if value == "busy" else "idle"
+            return "playing"
+
+        calls = self.drive(state_reader=state_reader,
+                           events=[self.event(created=1_700_000_000)], limit=8)
+        self.assertEqual(calls["announced"], ["Готово."])
+        self.assertEqual(len(calls["acks"]), 1)
+        # The first two pre-lease reads plus the busy waiter read happened
+        # before the ack; the ack is not issued while the station is busy.
+        self.assertGreaterEqual(calls["states"], 8)
+
+    def test_announce_failure_is_not_acked(self):
+        calls = self.drive(announce_result=(False, False),
+                           events=[self.event(created=1_700_000_000)], limit=3)
+        self.assertEqual(calls["announced"], ["Готово."])
+        self.assertEqual(calls["acks"], [])
+
+    def test_station_idle_rules(self):
+        self.assertTrue(voice_proxy.station_idle("idle", "playing"))
+        self.assertTrue(voice_proxy.station_idle("idle", "idle"))
+        self.assertFalse(voice_proxy.station_idle("idle", "announcing"))
+        self.assertFalse(voice_proxy.station_idle(None, "playing"))
+        self.assertFalse(voice_proxy.station_idle("idle", None))
+        self.assertFalse(voice_proxy.station_idle("unknown", "playing"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

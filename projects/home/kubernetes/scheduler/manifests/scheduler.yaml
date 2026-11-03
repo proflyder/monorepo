@@ -73,9 +73,10 @@ spec:
             - name: SCHEDULER_TOKEN_FILE
               value: /run/secrets/scheduler/token
             # Consumer allowlist for ListDueEvents (global, not a per-queue ACL):
-            # the alarm bridge and the control executor.
+            # the alarm bridge, the control executor and the voice-proxy
+            # announcement consumer.
             - name: SCHEDULER_CONSUMERS
-              value: ha-bridge-home,ha-control-home
+              value: ha-bridge-home,ha-control-home,voice-proxy-home
             - name: SCHEDULER_RING_WINDOW_SECONDS
               value: "900"
             - name: SCHEDULER_MISSED_GRACE_SECONDS

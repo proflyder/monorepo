@@ -88,6 +88,39 @@ VOICE_SATELLITE = os.environ.get(
     "HERMES_VOICE_SATELLITE",
     "assist_satellite.iandeks_stantsiia_midi_assist_satellite",
 )
+# Pulsar reports ANNOUNCING only for HA announcements (music is "playing"),
+# so this state is what tells the queue not to talk over another announcement.
+VOICE_MEDIA_PLAYER = os.environ.get(
+    "HERMES_VOICE_MEDIA_PLAYER",
+    "media_player.iandeks_stantsiia_midi_media_player",
+)
+
+# --- durable announcement queue (scheduler) -------------------------------
+#
+# Late answers are not spoken from the request/announcer thread any more: the
+# producer enqueues a `voice.announce` task into `voice-work` / `voice-personal`
+# and a single consumer speaks it when the station is idle. "0" keeps the old
+# direct-announce behaviour and does not start the consumer.
+SCHEDULER_URL = os.environ.get("HERMES_SCHEDULER_URL", "").rstrip("/")
+SCHEDULER_TOKEN_FILE = os.environ.get("HERMES_SCHEDULER_TOKEN_FILE", "")
+SCHEDULER_TOKEN = os.environ.get("HERMES_SCHEDULER_TOKEN", "")
+VOICE_QUEUE_DISABLED = os.environ.get("HERMES_VOICE_QUEUE", "1").strip().lower() \
+    in ("0", "false", "no", "off")
+VOICE_QUEUE_CONSUMER = os.environ.get("HERMES_VOICE_CONSUMER", "voice-proxy-home")
+VOICE_QUEUE_TTL = int(os.environ.get("HERMES_VOICE_ANNOUNCE_TTL", "10800"))
+VOICE_QUEUE_LEASE = 120
+VOICE_QUEUE_POLL = 1.0
+VOICE_QUEUE_RETRY_MIN = 2.0
+VOICE_QUEUE_RETRY_MAX = 60.0
+# An answer that waited longer than this is prefixed, so the owner knows it is
+# not a reaction to what just happened.
+VOICE_QUEUE_STALE_AFTER = 120
+VOICE_QUEUE_STALE_PREFIX = "Пока вас не было: "
+VOICE_QUEUE_BUSY_GRACE = 10.0
+VOICE_QUEUE_IDLE_TIMEOUT = 180.0
+# Bootstrap rescan of the dispatcher updates: enqueue recent completions again
+# after a restart; the scheduler idempotency key drops the duplicates.
+VOICE_UPDATES_RESCAN = int(os.environ.get("HERMES_VOICE_UPDATES_RESCAN", "300"))
 
 _QUESTION_END = ("?", "？")
 
@@ -150,6 +183,9 @@ _background_threads: set[threading.Thread] = set()
 _updates_lock = threading.Lock()
 _updates_thread: threading.Thread | None = None
 _updates_stop: threading.Event | None = None
+_queue_lock = threading.Lock()
+_queue_thread: threading.Thread | None = None
+_queue_stop: threading.Event | None = None
 
 
 def _read_secret(path: str, inline: str) -> str:
@@ -170,6 +206,10 @@ def voice_token() -> str:
     return _read_secret(VOICE_GATEWAY_TOKEN_FILE, VOICE_GATEWAY_TOKEN)
 
 
+def scheduler_token() -> str:
+    return _read_secret(SCHEDULER_TOKEN_FILE, SCHEDULER_TOKEN)
+
+
 def routing_enabled() -> bool:
     """True only when the full profile -> gateway path is configured.
 
@@ -188,6 +228,120 @@ def routing_enabled() -> bool:
 def updates_enabled() -> bool:
     """Dispatcher updates ride the same profile routing and can be switched off."""
     return routing_enabled() and not VOICE_UPDATES_DISABLED
+
+
+def queue_enabled() -> bool:
+    """True only when the durable announcement queue is fully configured.
+
+    The queue needs its own scheduler URL and token; a partially configured
+    image (or ``HERMES_VOICE_QUEUE=0``) keeps the previous direct announce.
+    """
+    return bool(SCHEDULER_URL and scheduler_token() and not VOICE_QUEUE_DISABLED)
+
+
+def queue_name(profile: str) -> str:
+    return "voice-" + profile
+
+
+def _scheduler_rpc(method: str, body: dict[str, Any],
+                   timeout: float | None = None) -> dict[str, Any]:
+    return _post_json(
+        f"{SCHEDULER_URL}/ricardo.v1.SchedulerService/{method}",
+        body, scheduler_token(),
+        VOICE_GATEWAY_TIMEOUT if timeout is None else timeout,
+        {},
+    )
+
+
+def enqueue_announce(speech: str, profile: str, thread_id: str, seq: str,
+                     created_unix: int | None = None) -> bool:
+    """Enqueue one spoken answer; return False when the scheduler is unavailable.
+
+    The idempotency key makes restarts and rescans safe: a replayed task with
+    the same key is accepted by the scheduler as the same event, not as a
+    second announcement. The payload carries the already-sanitized text only.
+    """
+    if not queue_enabled() or not speech or profile not in (PROFILE_WORK, PROFILE_PERSONAL):
+        return False
+    created = int(created_unix if created_unix is not None else time.time())
+    payload = json.dumps({
+        "text": speech,
+        "profile": profile,
+        "thread_id": thread_id,
+        "seq": seq,
+        "created_unix": created,
+    }, ensure_ascii=False)
+    try:
+        _scheduler_rpc("EnqueueTask", {
+            "taskType": "voice.announce",
+            "payloadJson": payload,
+            "runAtUnix": str(int(time.time())),
+            "queue": queue_name(profile),
+            "idempotencyKey": f"voice:{thread_id}:{seq}",
+        })
+        return True
+    except (urllib.error.URLError, ValueError, OSError):
+        return False
+
+
+def read_entity_state(entity_id: str) -> str | None:
+    """Read one HA entity state; None means unknown/unavailable/error."""
+    request = urllib.request.Request(
+        f"{HA_URL}/api/states/{entity_id}",
+        headers={"Authorization": "Bearer " + ha_token()},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=HA_TIMEOUT) as response:
+            data = json.loads(response.read() or b"{}")
+    except (urllib.error.URLError, ValueError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    state = data.get("state")
+    return state if isinstance(state, str) else None
+
+
+def station_idle(satellite: str | None, media: str | None) -> bool:
+    """True only when the speaker is free for a queued announcement.
+
+    Unknown/unavailable state is treated as busy: speaking into an unknown
+    station would interrupt a dialog or another announcement.
+    """
+    if not satellite or satellite in ("unknown", "unavailable"):
+        return False
+    if satellite != "idle":
+        return False
+    if not media or media in ("unknown", "unavailable"):
+        return False
+    # "announcing" is the HA announcement channel; music "playing" may stay.
+    return media != "announcing"
+
+
+def list_due_announcements(queue: str, consumer_id: str,
+                           lease_seconds: int = VOICE_QUEUE_LEASE,
+                           limit: int = 1) -> list[dict[str, Any]]:
+    data = _scheduler_rpc("ListDueEvents", {
+        "consumerId": consumer_id,
+        "leaseSeconds": lease_seconds,
+        "limit": limit,
+        "queue": queue,
+    })
+    events = data.get("events")
+    return [item for item in events if isinstance(item, dict)] \
+        if isinstance(events, list) else []
+
+
+def ack_announcement(event_id: str, consumer_id: str,
+                     outcome: str = "ACK_OUTCOME_DELIVERED",
+                     detail: str = "") -> None:
+    body: dict[str, Any] = {
+        "eventId": event_id,
+        "consumerId": consumer_id,
+        "outcome": outcome,
+    }
+    if detail:
+        body["detail"] = detail[:1024]
+    _scheduler_rpc("AckEvent", body)
 
 
 def profile_from_state(state: str | None) -> str | None:
@@ -355,10 +509,11 @@ def announce(text: str) -> tuple[bool, bool]:
     return _announce_via_script(text), False
 
 
-def start_result_announcer(thread_id: str, after_seq: int) -> threading.Thread:
-    """Poll the bb turn in the background and announce its final speech."""
+def start_result_announcer(thread_id: str, after_seq: int,
+                           profile: str | None = None) -> threading.Thread:
+    """Poll the bb turn in the background and queue its final speech."""
     thread = threading.Thread(
-        target=_result_announcer, args=(thread_id, after_seq),
+        target=_result_announcer, args=(thread_id, after_seq, profile),
         name="voice-result-announcer", daemon=True,
     )
     with _background_lock:
@@ -367,10 +522,12 @@ def start_result_announcer(thread_id: str, after_seq: int) -> threading.Thread:
     return thread
 
 
-def _result_announcer(thread_id: str, after_seq: int) -> None:
+def _result_announcer(thread_id: str, after_seq: int,
+                      profile: str | None = None) -> None:
     deadline = time.monotonic() + VOICE_RESULT_TIMEOUT
     speech = ""
     status = "timeout"
+    completed_seq: int | None = None
     try:
         while time.monotonic() < deadline:
             remaining = max(1, int(min(VOICE_RESULT_WAIT, deadline - time.monotonic())))
@@ -388,6 +545,9 @@ def _result_announcer(thread_id: str, after_seq: int) -> None:
                 continue
             answer = response.get("speech")
             speech = answer if isinstance(answer, str) else ""
+            seq = response.get("completedSeq")
+            if isinstance(seq, int) and not isinstance(seq, bool):
+                completed_seq = seq
             break
         else:
             status = "timeout"
@@ -397,17 +557,31 @@ def _result_announcer(thread_id: str, after_seq: int) -> None:
         if not speech.strip() and status not in ("running", "gateway_error", "", "timeout"):
             speech = SPEECH_TURN_FAILED if status == "failed" else SPEECH_DONE
         text = announce_text(speech)
-        if text:
-            announced, listening = announce(text)
-            sys.stderr.write(
-                "voice-proxy: announce thread=%s outcome=%s announced=%s listen=%s\n"
-                % (thread_id, status or "unknown", announced, listening)
-            )
-        else:
+        if not text:
             sys.stderr.write(
                 "voice-proxy: announce thread=%s outcome=%s announced=false listen=false\n"
                 % (thread_id, status or "unknown")
             )
+            return
+        if queue_enabled() and profile in (PROFILE_WORK, PROFILE_PERSONAL):
+            seq_key = ("done:%d" % completed_seq) if completed_seq is not None \
+                else ("after:%d" % after_seq)
+            if enqueue_announce(text, profile, thread_id, seq_key):
+                sys.stderr.write(
+                    "voice-proxy: queue enqueued thread=%s profile=%s outcome=%s\n"
+                    % (thread_id, profile, status or "unknown")
+                )
+                return
+            # The scheduler is down or misconfigured: never lose the answer.
+            sys.stderr.write(
+                "voice-proxy: queue enqueue failed thread=%s fallback=direct\n"
+                % thread_id
+            )
+        announced, listening = announce(text)
+        sys.stderr.write(
+            "voice-proxy: announce thread=%s outcome=%s announced=%s listen=%s\n"
+            % (thread_id, status or "unknown", announced, listening)
+        )
     finally:
         with _background_lock:
             _background_threads.discard(threading.current_thread())
@@ -444,13 +618,49 @@ def _updates_spoken(items: Any) -> list[str]:
     return spoken
 
 
+def _update_created_unix(item: dict[str, Any]) -> int | None:
+    """Completion time of one updates item in epoch seconds, if known."""
+    completed_at = item.get("completedAt")
+    if isinstance(completed_at, bool) or not isinstance(completed_at, (int, float)):
+        return None
+    if completed_at <= 0:
+        return None
+    return int(completed_at / 1000) if completed_at > 1_000_000_000_000 else int(completed_at)
+
+
+def _enqueue_updates(items: list[Any], enqueue, now: float) -> tuple[int, int]:
+    """Enqueue each non-owner update; return ``(queued, skipped_stale)``."""
+    queued = skipped = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        speech = item.get("spoken")
+        if not isinstance(speech, str) or not speech.strip():
+            continue
+        created = _update_created_unix(item)
+        if created is not None and now - created > VOICE_QUEUE_TTL:
+            skipped += 1
+            continue
+        text = announce_text(speech.strip())
+        if not text:
+            continue
+        seq = item.get("seq")
+        seq_key = str(seq) if isinstance(seq, int) and not isinstance(seq, bool) else "unknown"
+        if enqueue(text, PROFILE_WORK, "dispatcher", seq_key, created):
+            queued += 1
+    return queued, skipped
+
+
 def _updates_poller(stop: threading.Event, fetch, profile_reader, announcer,
-                    sleeper) -> None:
+                    sleeper, enqueue=None) -> None:
     """Announce completed dispatcher turns that the owner did not start.
 
-    The cursor is always advanced, so skipped batches are not replayed. A work
-    profile re-reads HA for every batch; personal and unknown profiles drop the
-    batch. Errors back off 2 s -> 60 s and never speak or reach Hermes.
+    With the durable queue enabled, every non-owner turn is enqueued for the
+    work profile instead of being spoken immediately; the queue consumer waits
+    for the work profile and an idle station. A restart rescans a recent window
+    and the idempotency key drops duplicates. Without the queue the previous
+    behaviour is unchanged: advance the cursor, speak only in work profile.
+    Errors back off 2 s -> 60 s and never speak or reach Hermes.
     """
     def pause(seconds: float) -> None:
         if sleeper is not None:
@@ -458,6 +668,8 @@ def _updates_poller(stop: threading.Event, fetch, profile_reader, announcer,
         else:
             stop.wait(seconds)
 
+    queued = queue_enabled()
+    enqueue_fn = enqueue or enqueue_announce
     cursor: int | None = None
     retry = UPDATES_RETRY_MIN
     while not stop.is_set():
@@ -467,10 +679,17 @@ def _updates_poller(stop: threading.Event, fetch, profile_reader, announcer,
                 next_cursor = _updates_cursor(response)
                 if next_cursor is None:
                     raise ValueError("updates bootstrap has no cursor")
-                cursor = next_cursor
+                if queued:
+                    cursor = max(0, next_cursor - VOICE_UPDATES_RESCAN)
+                    sys.stderr.write(
+                        "voice-proxy: updates bootstrap cursor=%d rescan_from=%d\n"
+                        % (next_cursor, cursor)
+                    )
+                else:
+                    cursor = next_cursor
+                    sys.stderr.write(
+                        "voice-proxy: updates bootstrap cursor=%d\n" % cursor)
                 retry = UPDATES_RETRY_MIN
-                sys.stderr.write(
-                    "voice-proxy: updates bootstrap cursor=%d\n" % cursor)
                 pause(UPDATES_IDLE_PAUSE)
                 continue
             response = fetch(cursor, VOICE_RESULT_WAIT)
@@ -480,21 +699,28 @@ def _updates_poller(stop: threading.Event, fetch, profile_reader, announcer,
             cursor = next_cursor
             retry = UPDATES_RETRY_MIN
             items = response.get("items")
-            spoken = _updates_spoken(items)
             if isinstance(items, list) and items:
-                # Work profile only: read fresh from HA, no cache.
-                profile = profile_reader()
-                announced = listening = False
-                if profile == PROFILE_WORK and spoken:
-                    text = announce_text(" ".join(spoken))
-                    if text:
-                        announced, listening = announcer(text)
-                sys.stderr.write(
-                    "voice-proxy: updates items=%d announced=%s listen=%s "
-                    "profile=%s cursor=%d\n"
-                    % (len(items), announced, listening,
-                       profile or "unknown", cursor)
-                )
+                if queued:
+                    enqueued, stale = _enqueue_updates(items, enqueue_fn, time.time())
+                    sys.stderr.write(
+                        "voice-proxy: updates items=%d queued=%d stale=%d cursor=%d\n"
+                        % (len(items), enqueued, stale, cursor)
+                    )
+                else:
+                    # Work profile only: read fresh from HA, no cache.
+                    profile = profile_reader()
+                    spoken = _updates_spoken(items)
+                    announced = listening = False
+                    if profile == PROFILE_WORK and spoken:
+                        text = announce_text(" ".join(spoken))
+                        if text:
+                            announced, listening = announcer(text)
+                    sys.stderr.write(
+                        "voice-proxy: updates items=%d announced=%s listen=%s "
+                        "profile=%s cursor=%d\n"
+                        % (len(items), announced, listening,
+                           profile or "unknown", cursor)
+                    )
             pause(UPDATES_IDLE_PAUSE)
         except Exception as exc:  # noqa: BLE001 - the poller must never die
             # Only structural data; spoken text never goes to the log.
@@ -508,7 +734,7 @@ def _updates_poller(stop: threading.Event, fetch, profile_reader, announcer,
 
 def start_updates_poller(*, stop: threading.Event | None = None,
                          fetch=None, profile_reader=None, announcer=None,
-                         sleeper=None) -> threading.Thread:
+                         sleeper=None, enqueue=None) -> threading.Thread:
     """Start the daemon poller once; repeated calls return the live thread."""
     global _updates_thread, _updates_stop
     with _updates_lock:
@@ -518,7 +744,7 @@ def start_updates_poller(*, stop: threading.Event | None = None,
         thread = threading.Thread(
             target=_updates_poller,
             args=(event, fetch or call_updates, profile_reader or _fetch_profile,
-                  announcer or announce, sleeper),
+                  announcer or announce, sleeper, enqueue),
             name="voice-updates-poller", daemon=True,
         )
         _updates_thread = thread
@@ -533,6 +759,173 @@ def stop_updates_poller(timeout: float = 2.0) -> None:
         thread, event = _updates_thread, _updates_stop
         _updates_thread = None
         _updates_stop = None
+    if event is not None:
+        event.set()
+    if thread is not None and thread is not threading.current_thread():
+        thread.join(timeout)
+
+
+def _event_payload(event: dict[str, Any]) -> dict[str, Any]:
+    raw = event.get("payloadJson")
+    if not isinstance(raw, str):
+        return {}
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _event_created_unix(event: dict[str, Any], payload: dict[str, Any]) -> int | None:
+    for value in (payload.get("created_unix"), event.get("createdUnix")):
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+    return None
+
+
+def _wait_until_station_idle(stop: threading.Event, state_reader, clock,
+                             sleeper) -> bool:
+    """Wait for an issued announcement to finish; True when idle again.
+
+    First gives the station up to ``VOICE_QUEUE_BUSY_GRACE`` seconds to report
+    busy (HA service calls are asynchronous), then waits for idle with the
+    overall ``VOICE_QUEUE_IDLE_TIMEOUT`` budget.
+    """
+    start = clock()
+    busy_seen = False
+    while not stop.is_set():
+        elapsed = clock() - start
+        if elapsed >= VOICE_QUEUE_IDLE_TIMEOUT:
+            return False
+        idle = station_idle(state_reader(VOICE_SATELLITE),
+                            state_reader(VOICE_MEDIA_PLAYER))
+        if not idle:
+            busy_seen = True
+        elif busy_seen or elapsed >= VOICE_QUEUE_BUSY_GRACE:
+            return True
+        sleeper(VOICE_QUEUE_POLL)
+    return False
+
+
+def _queue_consumer(stop: threading.Event, *, profile_reader=None,
+                    state_reader=None, lister=None, acker=None, announcer=None,
+                    clock=None, sleeper=None) -> None:
+    """Speak queued answers one at a time, only when the station is idle."""
+    profile_reader = profile_reader or _fetch_profile
+    state_reader = state_reader or read_entity_state
+    lister = lister or list_due_announcements
+    acker = acker or ack_announcement
+    announcer = announcer or announce
+    clock = clock or time.time
+
+    def pause(seconds: float) -> None:
+        if sleeper is not None:
+            sleeper(seconds)
+        else:
+            stop.wait(seconds)
+
+    retry = VOICE_QUEUE_RETRY_MIN
+    while not stop.is_set():
+        try:
+            profile = profile_reader()
+            if profile not in (PROFILE_WORK, PROFILE_PERSONAL):
+                # Unknown profile: never guess which queue to lease.
+                pause(VOICE_QUEUE_POLL)
+                continue
+            satellite = state_reader(VOICE_SATELLITE)
+            media = state_reader(VOICE_MEDIA_PLAYER)
+            if not station_idle(satellite, media):
+                pause(VOICE_QUEUE_POLL)
+                continue
+            events = lister(queue_name(profile), VOICE_QUEUE_CONSUMER,
+                            VOICE_QUEUE_LEASE, 1)
+            if not events:
+                pause(VOICE_QUEUE_POLL)
+                continue
+            event = events[0]
+            event_id = event.get("id")
+            if not isinstance(event_id, str) or not event_id:
+                pause(VOICE_QUEUE_POLL)
+                continue
+            payload = _event_payload(event)
+            speech = payload.get("text")
+            speech = speech if isinstance(speech, str) else ""
+            created = _event_created_unix(event, payload)
+            age = max(0, int(clock() - created)) if created is not None else 0
+            if not speech.strip():
+                acker(event_id, VOICE_QUEUE_CONSUMER, "ACK_OUTCOME_SKIPPED",
+                      "empty_text")
+                sys.stderr.write(
+                    "voice-proxy: queue skipped queue=%s reason=empty id=%s\n"
+                    % (queue_name(profile), event_id)
+                )
+                retry = VOICE_QUEUE_RETRY_MIN
+                continue
+            if created is not None and age > VOICE_QUEUE_TTL:
+                acker(event_id, VOICE_QUEUE_CONSUMER, "ACK_OUTCOME_SKIPPED", "stale")
+                sys.stderr.write(
+                    "voice-proxy: queue stale queue=%s age=%d id=%s\n"
+                    % (queue_name(profile), age, event_id)
+                )
+                retry = VOICE_QUEUE_RETRY_MIN
+                continue
+            if age > VOICE_QUEUE_STALE_AFTER:
+                speech = VOICE_QUEUE_STALE_PREFIX + speech
+            announced, listening = announcer(speech)
+            if not announced:
+                # Leave the event leased: expiry returns it to PENDING.
+                sys.stderr.write(
+                    "voice-proxy: queue announce failed queue=%s retry=%.1fs\n"
+                    % (queue_name(profile), retry)
+                )
+                pause(retry)
+                retry = min(VOICE_QUEUE_RETRY_MAX, retry * 2)
+                continue
+            idle = _wait_until_station_idle(stop, state_reader, clock, pause)
+            acker(event_id, VOICE_QUEUE_CONSUMER, "ACK_OUTCOME_DELIVERED",
+                  "" if idle else "idle_timeout")
+            sys.stderr.write(
+                "voice-proxy: queue delivered queue=%s age=%d listen=%s idle=%s\n"
+                % (queue_name(profile), age, listening, idle)
+            )
+            retry = VOICE_QUEUE_RETRY_MIN
+        except Exception as exc:  # noqa: BLE001 - the consumer must never die
+            sys.stderr.write(
+                "voice-proxy: queue error=%s backoff=%.1fs\n"
+                % (type(exc).__name__, retry)
+            )
+            pause(retry)
+            retry = min(VOICE_QUEUE_RETRY_MAX, retry * 2)
+
+
+def start_queue_consumer(*, stop: threading.Event | None = None,
+                         **fakes) -> threading.Thread:
+    """Start the daemon queue consumer once; repeated calls return the thread."""
+    global _queue_thread, _queue_stop
+    with _queue_lock:
+        if _queue_thread is not None and _queue_thread.is_alive():
+            return _queue_thread
+        event = stop if stop is not None else threading.Event()
+        thread = threading.Thread(
+            target=_queue_consumer, args=(event,), kwargs=fakes,
+            name="voice-queue-consumer", daemon=True,
+        )
+        _queue_thread = thread
+        _queue_stop = event
+        thread.start()
+        return thread
+
+
+def stop_queue_consumer(timeout: float = 2.0) -> None:
+    global _queue_thread, _queue_stop
+    with _queue_lock:
+        thread, event = _queue_thread, _queue_stop
+        _queue_thread = None
+        _queue_stop = None
     if event is not None:
         event.set()
     if thread is not None and thread is not threading.current_thread():
@@ -867,7 +1260,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not decision.to_hermes and decision.speech:
                         self._send_local_completion(payload, decision.speech)
                         if decision.announce:
-                            start_result_announcer(decision.thread_id, decision.after_seq or 0)
+                            start_result_announcer(
+                                decision.thread_id, decision.after_seq or 0,
+                                decision.profile,
+                            )
                         return
                 payload = prepare_chat_request(payload)
                 if payload.get("stream") is True:
@@ -993,11 +1389,14 @@ def main() -> int:
     print(f"hermes voice proxy on http://{BIND}:{PORT} -> {UPSTREAM}", flush=True)
     if updates_enabled():
         start_updates_poller()
+    if queue_enabled() and routing_enabled():
+        start_queue_consumer()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        stop_queue_consumer()
         stop_updates_poller()
         server.server_close()
     return 0

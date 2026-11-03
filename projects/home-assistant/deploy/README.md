@@ -65,17 +65,27 @@ workloads:
              value: "http://mcp-gateway.home-assistant.svc.cluster.local:8080"}
           - name: HERMES_VOICE_GATEWAY_TOKEN
             valueFrom: {secretKeyRef: {name: mcp-gateway-voice, key: token}}
+          - {name: HERMES_SCHEDULER_URL,
+             value: "http://scheduler.home-assistant.svc.cluster.local:8098"}
+          - name: HERMES_SCHEDULER_TOKEN
+            valueFrom: {secretKeyRef: {name: scheduler-auth, key: token}}
+          - {name: HERMES_VOICE_QUEUE, value: "1"}
+          - {name: HERMES_VOICE_MEDIA_PLAYER,
+             value: "media_player.iandeks_stantsiia_midi_media_player"}
         volumeMounts: []   # *_FILE не нужен, если токены приходят через env
 ```
 
 `Secret/mcp-gateway-voice` уже создаётся ESO в namespace `home-assistant`;
-`HERMES_HA_TOKEN` уже есть в `Secret/hermes-environment`. Pod Hermes работает с
-`hostNetwork`, поэтому NetworkPolicy на него не действует, а egress к
-`mcp-gateway:8080` и HA `:8123` разрешён политикой шлюза по адресу узла; новых
-правил не требуется. Полный контракт переменных — в
+`Secret/scheduler-auth` (`key: token`) создаётся ESO для scheduler и уже
+используется его же healthcheck. `HERMES_HA_TOKEN` уже есть в
+`Secret/hermes-environment`. Pod Hermes работает с `hostNetwork`, поэтому
+NetworkPolicy на него не действует; scheduler тоже не имеет ingress-policy,
+a egress к `mcp-gateway:8080`, `scheduler:8098` и HA `:8123` разрешён. Новых
+сетевых правил для очереди не требуется. Полный контракт переменных — в
 `projects/home-assistant/hermes/README.md`. Если позже понадобится файловый
-вариант, используйте `HERMES_HA_TOKEN_FILE` и
-`HERMES_VOICE_GATEWAY_TOKEN_FILE` с тем же Secret в volume.
+вариант, используйте `HERMES_HA_TOKEN_FILE`,
+`HERMES_VOICE_GATEWAY_TOKEN_FILE` и `HERMES_SCHEDULER_TOKEN_FILE` с тем же
+Secret в volume.
 
 ## Storage и CI
 
