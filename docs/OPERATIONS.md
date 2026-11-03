@@ -475,6 +475,38 @@ ls -l /config/.ssh/komp_ed25519 /config/.ssh/komp_known_hosts
 Голосом: «включи комп», «выключи комп», «отмени выключение компа»,
 «комп включён». Выключение откладывается на 60 с, отмена — в этом окне.
 
+### wakegrant — пропуск входа компа
+
+`switch.komp.turn_on` сначала выдаёт одноразовый пропуск
+(`rest_command.wakegrant_issue`), затем отправляет WoL. Сервис —
+`projects/home/kubernetes/wakegrant`, LAN NodePort `30130`
+(`WAKE_GRANT_NODE_PORT`), протокол —
+`packages/contracts/wakegrant/PROTOCOL.md`. Секреты: OpenBao
+`secret/k8s/home-assistant/wakegrant` (`issuer_token`, `machines`), в HA —
+`wakegrant_endpoint` и `wakegrant_bearer` в `secrets.yaml`.
+
+```bash
+# здоровье
+curl -sS http://<k3s-node>:30130/healthz
+
+# журнал: только machine/outcome/grantId, без nonce/MAC/токенов
+kubectl -n home-assistant logs deploy/wakegrant --tail=50
+
+# тестовый пропуск; токен читается из приватного файла, не печатается
+curl -sS -X POST http://<k3s-node>:30130/v1/grants \
+  -H "Authorization: Bearer $(<secrets/home/wakegrant.token)" \
+  -H 'Content-Type: application/json' \
+  -d '{"machine":"komp","ttlSeconds":60}'
+# ожидаемо: 201 {"grantId":"…","expiresAt":"…"};
+# 401 — не совпал issuer_token, 400 — нет machine в Secret `machines`
+```
+
+Если сервис недоступен, включение компа продолжает работать:
+`rest_command.wakegrant_issue` помечен `continue_on_error: true`, и ПК
+показывает обычный вход. Пропуск одноразовый, живёт 180 с, повторная выдача
+заменяет предыдущий. Перезапуск пода не теряет выданный пропуск (SQLite на
+PVC), но сбрасывает выданные nonce — ПК просто запросит новый.
+
 ## K3s
 
 ```bash

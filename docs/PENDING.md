@@ -27,6 +27,16 @@
       отмену, состояние в приложении и что любая другая SSH-команда
       отклоняется.
 
+- [ ] **Комп: вход по пропуску HA — живая проверка.** HA-часть готова:
+      `switch.komp.turn_on` выдаёт пропуск `wakegrant` и затем WoL.
+      Следующий шаг: задать `wakegrant_endpoint`/`wakegrant_bearer` в HA
+      `secrets.yaml`, создать в OpenBao `secret/k8s/home-assistant/wakegrant`
+      (`issuer_token`, `machines` с ключом `komp`), задеплоить
+      `projects/home/kubernetes/wakegrant`, затем проверить: «включи комп» →
+      в журнале `outcome=granted`, вход без пароля один раз, повторный claim
+      отклонён, при остановленном wakegrant комп всё равно включается и
+      показывает обычный вход.
+
 - [ ] **Ricardo pre-roll 256 ms.** Поставлен `Fixed(8)` в релизе
       `v0.5.1002` (база upstream `v0.5.3`; сейчас стоит `v0.5.1004`) с
       `PULSAR_LOCAL_ENDPOINTING=1`; база n=3, риск среза первого слога.

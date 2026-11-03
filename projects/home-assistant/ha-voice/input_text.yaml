@@ -13,6 +13,13 @@ scheduler_endpoint:
   max: 255
   initial: !secret scheduler_endpoint
 
+# wakegrant LAN NodePort base URL (no trailing slash). Non-secret value, but
+# deployment-specific, so the tracked tree holds only the `!secret` reference.
+wakegrant_endpoint:
+  name: "wakegrant endpoint"
+  max: 255
+  initial: !secret wakegrant_endpoint
+
 scheduler_active_schedule_id:
   name: "Scheduler: active schedule id"
   max: 64

@@ -13,6 +13,7 @@ solutions/               переиспользуемые решения
   alarm/                 legacy AlarmService facade над тем же engine
   ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler (+ cmd/ha-control)
   mcp-gateway/           MCP Streamable HTTP: infra.read / infra.fix / infra.report
+  wakegrant/             one-time logon grants for a WoL machine (PROTOCOL.md)
   heartbeat/             внешний dead-man switch (Cloudflare Worker)
 
 packages/                общий код и контракты

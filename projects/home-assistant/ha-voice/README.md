@@ -62,7 +62,8 @@
 - «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
   (заметки остаются в Home Assistant без изменений);
 - «включи комп» / «включи мой комп» / «включи компьютер» — локальный
-  `KompOn` → Wake-on-LAN magic packet (`switch.komp`, MAC только из
+  `KompOn` → одноразовый пропуск wakegrant (best-effort) и Wake-on-LAN
+  magic packet (`switch.komp`, MAC только из
   `!secret komp_mac`); «выключи комп» и варианты — `KompOff` →
   `script.komp_shutdown` (SSH → Windows `shutdown /s /t 60`); «отмени
   выключение компа» / «не выключай комп» — `KompCancelOff`; «комп включён»,
@@ -346,7 +347,8 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 ```text
 binary_sensor.komp_v_seti   command_line: busybox ping -c 1 -W 1, 30 с
 switch.komp                 template switch, state = binary_sensor
-  turn_on  → wake_on_lan.send_magic_packet (mac из !secret komp_mac)
+  turn_on  → rest_command.wakegrant_issue (best-effort, continue_on_error)
+             → wake_on_lan.send_magic_packet (mac из !secret komp_mac)
   turn_off → script.komp_shutdown
 script.komp_shutdown        → shell_command.komp_shutdown  (SSH: shutdown)
 script.komp_cancel_shutdown → shell_command.komp_cancel_shutdown (SSH: cancel)
@@ -367,10 +369,30 @@ script.komp_cancel_shutdown → shell_command.komp_cancel_shutdown (SSH: cancel)
 komp_mac: "AA:BB:CC:DD:EE:FF"
 komp_ssh_target: "<user>@<host>"
 komp_ping_command: "ping -c 1 -W 1 <host> >/dev/null 2>&1 && echo 1 || echo 0"
+wakegrant_endpoint: "http://<k3s-node>:30130"
+wakegrant_bearer: "Bearer <issuer_token>"
 ```
 
-Все три ключа обязательны: `!secret` с отсутствующим ключом не даёт HA
+Все ключи обязательны: `!secret` с отсутствующим ключом не даёт HA
 загрузить конфигурацию, поэтому сначала добавьте секреты, потом includes.
+
+### Вход по одноразовому пропуску (wakegrant)
+
+`switch.komp.turn_on` сначала вызывает `rest_command.wakegrant_issue`
+(`POST {wakegrant_endpoint}/v1/grants`, тело
+`{"machine":"komp","ttlSeconds":180}`), затем отправляет Wake-on-LAN.
+Шаг пропуска помечен `continue_on_error: true`: если сервис пропусков
+недоступен, ПК всё равно включается и показывает обычный экран входа
+(fail closed). Пропуск одноразовый и живёт 180 с; логин-компонент на ПК
+обменивает его через `/v1/challenge` и `/v1/claim` по
+`packages/contracts/wakegrant/PROTOCOL.md`.
+
+`wakegrant_endpoint` — LAN base URL NodePort без завершающего слэша
+(в текущем deployment `30130`), токен-издатель — только из
+`!secret wakegrant_bearer` (значение с префиксом `Bearer `). Endpoint
+задан через `input_text` с `initial: !secret`, как `scheduler_endpoint`,
+поэтому после restart HA не возвращается к заглушке и в трекнутых файлах
+нет реального адреса.
 
 `switch.komp` — обычная `switch`-сущность без ролевых меток. Каталог
 ha-control берёт все не скрытые switch'и (`solutions/ha-bridge/internal/catalog/rules.go`),

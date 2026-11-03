@@ -29,11 +29,11 @@
             option: "Личный"
 
 # `switch.komp` is the wired Windows desktop as a normal on/off control:
-# state mirrors the ping binary sensor, turn_on sends Wake-on-LAN, turn_off
-# asks the restricted SSH wrapper to schedule a 60 s shutdown (cancellable
-# from voice or the dashboard). It is a plain `switch` domain entity without a
-# role label, so the ha-control catalogue exposes it as a device (kind
-# "switch").
+# state mirrors the ping binary sensor; turn_on issues a one-time wakegrant
+# logon grant (best-effort) and sends Wake-on-LAN; turn_off asks the restricted
+# SSH wrapper to schedule a 60 s shutdown (cancellable from voice or the
+# dashboard). It is a plain `switch` domain entity without a role label, so the
+# ha-control catalogue exposes it as a device (kind "switch").
 - switch:
     - name: "Комп"
       unique_id: komp
@@ -41,6 +41,11 @@
       icon: mdi:desktop-tower
       state: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
       turn_on:
+        # Issue a one-time logon grant before waking the machine. The grant
+        # service must never block Wake-on-LAN: if it is down the PC still
+        # boots and shows its normal sign-in screen (fail closed).
+        - service: rest_command.wakegrant_issue
+          continue_on_error: true
         - service: wake_on_lan.send_magic_packet
           data:
             mac: !secret komp_mac
