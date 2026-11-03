@@ -69,8 +69,12 @@ engine, два entrypoint-а для совместимости.
 | `solutions/bb-home-dispatcher`, `solutions/bb-profiles` | JavaScript/TypeScript (плагины bb) | исполняются внутри bb как path-источник; `node --test` без внешних сервисов |
 | Windows logon provider | C++17 | in-proc COM DLL для LogonUI; кросс-сборка llvm-mingw с macOS/CI без Visual Studio, переносимые host-тесты |
 | HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
+| CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
+| задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
+| ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 
-Go — для control plane и durable state, Rust — для тяжёлых вычислений,
+Go — для control plane, durable state и всего, что исполняется в k3s (включая
+CronJob и инструменты деплоя; решение 35), Rust — для тяжёлых вычислений,
 JavaScript — только для edge Worker, которому нужен runtime Cloudflare, а не
 общий backend-стек.
 Mobile не владеет расписанием и не заменяет серверные будильники.
