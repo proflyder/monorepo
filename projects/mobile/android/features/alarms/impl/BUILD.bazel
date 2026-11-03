@@ -1,3 +1,4 @@
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
 load("//platform/android:defs.bzl", "metro_android_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -26,5 +27,19 @@ metro_android_library(
         "@maven//:com_google_android_material_material",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)
+
+# Selection motion decision: whether a bind should animate or snap to the end
+# state. Plain JUnit, no Android runtime needed.
+kt_android_local_test(
+    name = "selection_animation_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.alarms.impl",
+    manifest = "src/test/AndroidManifest.xml",
+    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmSelectionAnimationTest",
+    deps = [
+        "@maven//:junit_junit",
     ],
 )

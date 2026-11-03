@@ -8,6 +8,16 @@
     android:clickable="true"
     android:focusable="true">
 
+    <!-- Selection tint: behind the content, crossfaded when the row is picked. -->
+    <View
+        android:id="@+id/alarm_selection_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:background="?attr/colorSecondaryContainer"
+        android:clickable="false"
+        android:focusable="false" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

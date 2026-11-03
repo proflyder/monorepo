@@ -1,55 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
-
-    <!-- Multi-select header: visible only while alarms are selected. -->
-    <LinearLayout
-        android:id="@+id/alarms_selection_bar"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:background="?attr/colorSecondaryContainer"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="@dimen/alarms_screen_margin"
-        android:visibility="gone">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/alarms_selection_close"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/alarms_selection_close"
-            app:icon="@drawable/alarms_ic_close"
-            app:iconTint="?attr/colorOnSecondaryContainer" />
-
-        <TextView
-            android:id="@+id/alarms_selection_count"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:textAppearance="?attr/textAppearanceTitleMedium"
-            android:textColor="?attr/colorOnSecondaryContainer" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/alarms_selection_all"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/alarms_select_all"
-            android:textColor="?attr/colorOnSecondaryContainer" />
-    </LinearLayout>
+    android:layout_height="match_parent">
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/alarms_refresh"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent">
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -137,11 +95,54 @@
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <!-- Bulk actions: replace the FAB while alarms are selected. -->
+    <!-- Multi-select header: overlaid on the list, slides down from above. -->
+    <LinearLayout
+        android:id="@+id/alarms_selection_bar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="top"
+        android:background="?attr/colorSecondaryContainer"
+        android:elevation="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="@dimen/alarms_screen_margin"
+        android:visibility="gone">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/alarms_selection_close"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/alarms_selection_close"
+            app:icon="@drawable/alarms_ic_close"
+            app:iconTint="?attr/colorOnSecondaryContainer" />
+
+        <TextView
+            android:id="@+id/alarms_selection_count"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/colorOnSecondaryContainer" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/alarms_selection_all"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/alarms_select_all"
+            android:textColor="?attr/colorOnSecondaryContainer" />
+    </LinearLayout>
+
+    <!-- Bulk actions: overlaid on the list, slides up from below. -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/alarms_action_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
         android:visibility="gone"
         app:cardCornerRadius="0dp"
         app:cardElevation="8dp">
@@ -189,4 +190,4 @@
                 app:icon="@drawable/alarms_ic_delete" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
-</LinearLayout>
+</FrameLayout>

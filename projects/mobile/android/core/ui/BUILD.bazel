@@ -1,3 +1,5 @@
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
+load(":robolectric_android_all.bzl", "android_all_dir")
 load("//platform/android:defs.bzl", "metro_android_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -20,5 +22,46 @@ metro_android_library(
         "@maven//:com_google_android_material_material",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)
+
+# Robolectric resolves SDK 35 to this pinned preinstrumented jar. Keeping it as
+# a data dependency avoids a runtime Maven download.
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+# Bar motion is real View/animator behavior, so only an inflated View can prove
+# the interrupt and end-state contract.
+kt_android_local_test(
+    name = "motion_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.core.ui",
+    manifest = "src/test/AndroidManifest.xml",
+    test_class = "dev.proflyder.home.core.ui.BarMotionTest",
+    robolectric_properties_file = "robolectric-deps.properties",
+    data = [
+        ":robolectric_android_all_sdk35",
+        "robolectric-deps.properties",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    deps = [
+        ":ui",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
     ],
 )
