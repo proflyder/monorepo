@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
+	"ricardo.local/monorepo/packages/go/httpapi"
 )
 
 // maxResponseBytes bounds how much of a scheduler response is read.
@@ -57,6 +57,7 @@ type eventWire struct {
 	State          protoEnum  `json:"state"`
 	Attempts       protoInt32 `json:"attempts"`
 	SnoozeSeq      protoInt32 `json:"snoozeSeq"`
+	CreatedUnix    protoInt64 `json:"createdUnix"`
 	LeaseUntilUnix protoInt64 `json:"leaseUntilUnix"`
 	Detail         string     `json:"detail"`
 	Action         protoEnum  `json:"action"`
@@ -65,6 +66,27 @@ type eventWire struct {
 
 type listDueEventsResponse struct {
 	Events []eventWire `json:"events"`
+}
+
+func eventOf(wire eventWire) Event {
+	return Event{
+		ID:             wire.ID,
+		SourceID:       wire.SourceID,
+		SourceKind:     sourceKindOf(wire.SourceKind),
+		TaskType:       wire.TaskType,
+		Queue:          wire.Queue,
+		DueUnix:        int64(wire.DueUnix),
+		OccurrenceUnix: int64(wire.OccurrenceUnix),
+		Label:          wire.Label,
+		State:          enumValue(wire.State, "EVENT_STATE_", nil),
+		Attempts:       int(wire.Attempts),
+		SnoozeSeq:      int(wire.SnoozeSeq),
+		CreatedUnix:    int64(wire.CreatedUnix),
+		LeaseUntilUnix: int64(wire.LeaseUntilUnix),
+		Action:         actionOf(wire.Action),
+		Detail:         wire.Detail,
+		Payload:        wire.PayloadJSON,
+	}
 }
 
 // ListDueEvents leases due events for consumerID. It is never called in
@@ -82,25 +104,47 @@ func (c *Client) ListDueEvents(ctx context.Context, req ListRequest) ([]Event, e
 	}
 	events := make([]Event, 0, len(resp.Events))
 	for _, wire := range resp.Events {
-		events = append(events, Event{
-			ID:             wire.ID,
-			SourceID:       wire.SourceID,
-			SourceKind:     sourceKindOf(wire.SourceKind),
-			TaskType:       wire.TaskType,
-			Queue:          wire.Queue,
-			DueUnix:        int64(wire.DueUnix),
-			OccurrenceUnix: int64(wire.OccurrenceUnix),
-			Label:          wire.Label,
-			State:          enumValue(wire.State, "EVENT_STATE_", nil),
-			Attempts:       int(wire.Attempts),
-			SnoozeSeq:      int(wire.SnoozeSeq),
-			LeaseUntilUnix: int64(wire.LeaseUntilUnix),
-			Action:         actionOf(wire.Action),
-			Detail:         wire.Detail,
-			Payload:        wire.PayloadJSON,
-		})
+		events = append(events, eventOf(wire))
 	}
 	return events, nil
+}
+
+type enqueueTaskRequest struct {
+	TaskType       string     `json:"taskType"`
+	PayloadJSON    string     `json:"payloadJson,omitempty"`
+	RunAtUnix      protoInt64 `json:"runAtUnix,omitempty"`
+	Queue          string     `json:"queue,omitempty"`
+	IdempotencyKey string     `json:"idempotencyKey,omitempty"`
+}
+
+type enqueueTaskResponse struct {
+	Event eventWire `json:"event"`
+}
+
+// EnqueueTask stores one durable generic task event (SOURCE_KIND_TASK) and
+// returns the stored event with its deterministic id and creation time. An
+// empty Queue keeps the server default ("tasks"): unlike ListDueEvents, the
+// queue is a routing hint, not an authorization boundary. RunAtUnix 0 means
+// "now".
+func (c *Client) EnqueueTask(ctx context.Context, req EnqueueRequest) (Event, error) {
+	if strings.TrimSpace(req.TaskType) == "" {
+		return Event{}, &httpapi.Error{Op: "EnqueueTask", Err: errors.New("empty task type")}
+	}
+	body := enqueueTaskRequest{
+		TaskType:       req.TaskType,
+		PayloadJSON:    req.PayloadJSON,
+		RunAtUnix:      protoInt64(req.RunAtUnix),
+		Queue:          req.Queue,
+		IdempotencyKey: req.IdempotencyKey,
+	}
+	var resp enqueueTaskResponse
+	if err := c.do(ctx, "EnqueueTask", body, &resp); err != nil {
+		return Event{}, err
+	}
+	if resp.Event.ID == "" {
+		return Event{}, &httpapi.Error{Op: "EnqueueTask", Err: errors.New("empty response event")}
+	}
+	return eventOf(resp.Event), nil
 }
 
 type ackEventRequest struct {

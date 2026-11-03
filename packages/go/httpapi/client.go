@@ -1,7 +1,10 @@
-// Package httpapi holds the shared HTTP plumbing for the ha-bridge API clients:
-// a transport that keeps TLS verification enabled, an API error type that
-// classifies transient failures and never renders credentials, and a small
+// Package httpapi holds the shared HTTP plumbing for the home services' API
+// clients: a transport that keeps TLS verification enabled, an API error type
+// that classifies transient failures and never renders credentials, and a small
 // sanitizer for server-provided messages.
+//
+// The package is project-agnostic: it must not embed endpoints, credentials,
+// entity ids or deployment detail.
 package httpapi
 
 import (

@@ -7,14 +7,14 @@ go_library(
         "decode.go",
         "event.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler",
-    visibility = ["//solutions/ha-bridge:__subpackages__"],
-    deps = ["//solutions/ha-bridge/internal/httpapi"],
+    importpath = "ricardo.local/monorepo/packages/go/scheduler",
+    visibility = ["//visibility:public"],
+    deps = ["//packages/go/httpapi"],
 )
 
 go_test(
     name = "scheduler_test",
     srcs = ["client_test.go"],
-    deps = ["//solutions/ha-bridge/internal/httpapi"],
     embed = [":scheduler"],
+    deps = ["//packages/go/httpapi"],
 )

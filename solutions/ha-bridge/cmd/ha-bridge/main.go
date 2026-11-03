@@ -15,12 +15,12 @@ import (
 
 	"log/slog"
 
+	"ricardo.local/monorepo/packages/go/ha"
+	"ricardo.local/monorepo/packages/go/httpapi"
+	"ricardo.local/monorepo/packages/go/scheduler"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/bridge"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/config"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/ha"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/ledger"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler"
 )
 
 func main() {

@@ -18,7 +18,7 @@ solutions/               переиспользуемые решения
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (+ checked-in Go stubs)
-  go/                    shared Go
+  go/                    shared Go: httpapi, ha (HA REST), scheduler (Connect-JSON)
 
 projects/                композиции и deployment
   station/               Pulsar/ADB/BLE/provisioning
@@ -147,6 +147,8 @@ gRPC-Web; отдельного REST API нет. Go stubs лежат в репо�
 - `solutions/alarm`: legacy `AlarmService` view над тем же engine.
 - `solutions/ha-bridge`: executor adapter; арендует `queue=home`, вызывает HA
   scripts, подтверждает события. Не владеет расписанием.
+- `packages/go`: общие клиенты (`httpapi`, `ha`, `scheduler`) без проектной
+  привязки; endpoints, очереди и entity id задаёт потребитель, а не пакет.
 - `solutions/bb-home-dispatcher` и `solutions/bb-profiles`: плагины bb, а не
   сервисы. Диспетчер ничего не знает о проектах, кроме ответов `profiles`;
   профиль и allowlist провайдеров/машин живут только в `profiles`, голосовой

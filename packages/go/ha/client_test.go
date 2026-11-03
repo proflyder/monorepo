@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
+	"ricardo.local/monorepo/packages/go/httpapi"
 )
 
 const testToken = "ha-secret-token"

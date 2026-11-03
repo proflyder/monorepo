@@ -13,9 +13,9 @@ import (
 	"io"
 	"time"
 
+	"ricardo.local/monorepo/packages/go/httpapi"
+	"ricardo.local/monorepo/packages/go/scheduler"
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/config"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/scheduler"
 )
 
 const healthcheckTimeout = 5 * time.Second

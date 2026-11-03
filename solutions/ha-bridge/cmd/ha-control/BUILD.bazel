@@ -16,13 +16,13 @@ go_library(
     importpath = "ricardo.local/monorepo/solutions/ha-bridge/cmd/ha-control",
     visibility = ["//visibility:private"],
     deps = [
+        "//packages/go/ha",
+        "//packages/go/httpapi",
+        "//packages/go/scheduler",
         "//solutions/ha-bridge/internal/catalog",
         "//solutions/ha-bridge/internal/catalogapi",
         "//solutions/ha-bridge/internal/control",
         "//solutions/ha-bridge/internal/discovery",
-        "//solutions/ha-bridge/internal/ha",
-        "//solutions/ha-bridge/internal/httpapi",
-        "//solutions/ha-bridge/internal/scheduler",
     ],
 )
 

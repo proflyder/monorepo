@@ -1,7 +1,11 @@
-// Package ha is a narrow Home Assistant REST client: it can call
-// /api/services/script/turn_on and probe /api/. It deliberately has no
-// schedule, entity-discovery or MCP surface. The scheduler owns schedule state;
-// Home Assistant only performs the side effect.
+// Package ha is a narrow Home Assistant REST client shared by the home
+// services: it calls script/service actions, reads states and renders
+// templates, and probes /api/. It deliberately has no schedule, catalog or MCP
+// surface. The scheduler owns schedule state; Home Assistant only performs the
+// side effect.
+//
+// The package is project-agnostic: it must not embed endpoints, script or
+// entity ids, queue names or deployment detail. Callers pass those in.
 package ha
 
 import (
@@ -15,7 +19,7 @@ import (
 	"net/url"
 	"strings"
 
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
+	"ricardo.local/monorepo/packages/go/httpapi"
 )
 
 const (
@@ -130,8 +134,8 @@ type serviceCallRequest struct {
 	EntityID string `json:"entity_id"`
 }
 
-// CallService invokes <domain>.<service> on one entity. The control executor
-// resolves the call from the catalog; no caller-supplied service is accepted.
+// CallService invokes <domain>.<service> on one entity. The caller decides
+// which call is allowed; this client performs no allowlisting of its own.
 func (c *Client) CallService(ctx context.Context, domain, service, entity string, data map[string]any) error {
 	const op = "call service"
 	if domain == "" || service == "" || entity == "" {
@@ -243,7 +247,7 @@ type templateRequest struct {
 
 // RenderTemplate renders a Home Assistant template and returns the text. It is
 // read-only discovery (areas, labels, hidden flags); the template is always
-// built by this program, never taken from a client.
+// built by the caller, never taken from an untrusted client.
 func (c *Client) RenderTemplate(ctx context.Context, template string) (string, error) {
 	const op = "render template"
 	payload, err := json.Marshal(templateRequest{Template: template})

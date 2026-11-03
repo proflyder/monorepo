@@ -2,9 +2,13 @@
 // ricardo.v1.SchedulerService contract in
 // packages/proto/ricardo/v1/scheduler.proto.
 //
-// Only the executor surface is implemented: ListDueEvents, AckEvent and
-// GetStatus. The bridge never creates, snoozes or stops schedules itself; the
-// scheduler owns all schedule state.
+// It covers the durable event surface: ListDueEvents, AckEvent, EnqueueTask and
+// GetStatus. It never owns schedule state, never mutates a due event itself and
+// never interprets a payload; the scheduler is the only authority for
+// schedules, timers and queues.
+//
+// The package is project-agnostic: it must not embed endpoints, queue names,
+// task types, entity ids or deployment detail. Callers pass those in.
 package scheduler
 
 // ServicePath is the Connect route prefix for SchedulerService.
@@ -19,9 +23,10 @@ const (
 	SourceKindReminder    SourceKind = "reminder"
 	SourceKindTimer       SourceKind = "timer"
 	SourceKindScenario    SourceKind = "scenario"
-	// SourceKindTask is a generic task event. It is not an HA action: the
-	// bridge must never lease the generic task queue and must fail such an
-	// event safely if one is ever delivered.
+	// SourceKindTask is a generic task event produced by EnqueueTask. It is
+	// not a domain occurrence: an executor that leases a domain queue must
+	// never lease the generic task queue, and must fail such an event safely
+	// if one is ever delivered to it.
 	SourceKindTask SourceKind = "task"
 )
 
@@ -43,9 +48,9 @@ const (
 	AckSkipped   = "ACK_OUTCOME_SKIPPED"
 )
 
-// Event is one delivered DueEvent. Only the fields the executor needs are
-// decoded. The alarm bridge ignores Payload; the control executor reads it only
-// as data (a catalog id and an action), never as an HA service or entity.
+// Event is one delivered DueEvent. Only the fields an executor or producer
+// needs are decoded. Payload is opaque data: callers must treat it as data
+// only, never as a service call or entity identifier.
 type Event struct {
 	ID             string
 	SourceID       string
@@ -58,6 +63,8 @@ type Event struct {
 	State          string
 	Attempts       int
 	SnoozeSeq      int
+	// CreatedUnix is when the scheduler durably queued the event.
+	CreatedUnix    int64
 	LeaseUntilUnix int64
 	Action         Action
 	Detail         string
@@ -66,13 +73,25 @@ type Event struct {
 }
 
 // ListRequest mirrors ListDueEventsRequest. Queue must always be set: an empty
-// queue means "all queues" on the server, and the HA executor may only lease
-// its own queue.
+// queue means "all queues" on the server, and an executor may only lease its
+// own queue.
 type ListRequest struct {
 	ConsumerID   string
 	Queue        string
 	LeaseSeconds int
 	Limit        int
+}
+
+// EnqueueRequest mirrors EnqueueTaskRequest. TaskType and PayloadJSON are sent
+// as-is; an empty Queue keeps the server default ("tasks") and RunAtUnix 0
+// means "now". IdempotencyKey is optional: replaying the same key with an
+// identical request returns the original event.
+type EnqueueRequest struct {
+	TaskType       string
+	PayloadJSON    string
+	RunAtUnix      int64
+	Queue          string
+	IdempotencyKey string
 }
 
 // QueueInfo mirrors QueueInfo in GetStatusResponse.

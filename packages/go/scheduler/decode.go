@@ -38,6 +38,11 @@ func (p *protoInt64) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
+// MarshalJSON encodes a protobuf-JSON int64 as a decimal string.
+func (p protoInt64) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + strconv.FormatInt(int64(p), 10) + `"`), nil
+}
+
 // protoInt32 is the same for int32 fields.
 type protoInt32 int32
 

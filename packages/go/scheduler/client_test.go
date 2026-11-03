@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi"
+	"ricardo.local/monorepo/packages/go/httpapi"
 )
 
 const testToken = "scheduler-secret-token"
@@ -44,8 +44,8 @@ func newTestClient(t *testing.T, handler func(http.ResponseWriter, *http.Request
 func TestListDueEventsRequestShape(t *testing.T) {
 	client, seen := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"events":[
-			{"id":"evt-1","sourceId":"alarm-1","sourceKind":"SOURCE_KIND_ALARM","dueUnix":"1700000000","occurrenceUnix":"1699999900","label":"Wake up","state":"EVENT_STATE_LEASED","attempts":"1","snoozeSeq":"0","leaseUntilUnix":"1700000120","action":"EVENT_ACTION_FIRE","queue":"home","taskType":"alarm.fire"},
-			{"id":"evt-2","sourceId":"alarm-1","sourceKind":2,"dueUnix":1700000001,"label":"","state":2,"attempts":0,"leaseUntilUnix":1700000120,"action":2,"queue":"home"},
+			{"id":"evt-1","sourceId":"alarm-1","sourceKind":"SOURCE_KIND_ALARM","dueUnix":"1700000000","occurrenceUnix":"1699999900","label":"Wake up","state":"EVENT_STATE_LEASED","attempts":"1","snoozeSeq":"0","createdUnix":"1699998000","leaseUntilUnix":"1700000120","action":"EVENT_ACTION_FIRE","queue":"home","taskType":"alarm.fire"},
+			{"id":"evt-2","sourceId":"alarm-1","sourceKind":2,"dueUnix":1700000001,"label":"","state":2,"attempts":0,"createdUnix":null,"leaseUntilUnix":1700000120,"action":2,"queue":"home"},
 			{"id":"evt-3","sourceId":"task-1","sourceKind":5,"dueUnix":"1700000002","action":1,"queue":"home","taskType":"generic.ping"}
 		]}`)
 	})
@@ -105,6 +105,9 @@ func TestListDueEventsRequestShape(t *testing.T) {
 	if alarm.Attempts != 1 || alarm.LeaseUntilUnix != 1700000120 || alarm.Queue != "home" {
 		t.Errorf("event 1 metadata = attempts %d lease %d queue %q", alarm.Attempts, alarm.LeaseUntilUnix, alarm.Queue)
 	}
+	if alarm.CreatedUnix != 1699998000 {
+		t.Errorf("event 1 createdUnix = %d", alarm.CreatedUnix)
+	}
 	if alarm.TaskType != "alarm.fire" {
 		t.Errorf("taskType = %q", alarm.TaskType)
 	}
@@ -112,6 +115,9 @@ func TestListDueEventsRequestShape(t *testing.T) {
 	reminder := events[1]
 	if reminder.SourceKind != SourceKindReminder || reminder.Action != ActionStop {
 		t.Errorf("numeric enums decoded as %q/%q, want reminder/STOP", reminder.SourceKind, reminder.Action)
+	}
+	if reminder.CreatedUnix != 0 {
+		t.Errorf("null createdUnix = %d, want 0", reminder.CreatedUnix)
 	}
 
 	task := events[2]
@@ -133,6 +139,126 @@ func TestListDueEventsLegacyUnspecifiedActionIsFire(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Action != ActionFire {
 		t.Fatalf("legacy action = %+v, want FIRE", events)
+	}
+}
+
+func TestListDueEventsEmptyQueueStaysExplicit(t *testing.T) {
+	client, seen := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"events":null}`)
+	})
+	events, err := client.ListDueEvents(context.Background(), ListRequest{ConsumerID: "c", LeaseSeconds: 60, Limit: 1})
+	if err != nil {
+		t.Fatalf("ListDueEvents: %v", err)
+	}
+	if events == nil || len(events) != 0 {
+		t.Errorf("null events = %#v, want an empty non-nil slice", events)
+	}
+	queue, ok := (*seen)[0].body["queue"]
+	if !ok {
+		t.Fatal("queue must always be sent: an omitted queue leases every queue on the server")
+	}
+	if queue != "" {
+		t.Errorf("queue = %v, want an explicit empty value", queue)
+	}
+}
+
+func TestEnqueueTaskRequestShape(t *testing.T) {
+	client, seen := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"event":{
+			"id":"evt-task-1","sourceId":"evt-task-1","sourceKind":"SOURCE_KIND_TASK",
+			"taskType":"voice.announce","queue":"tasks","dueUnix":"1700000100",
+			"state":"EVENT_STATE_PENDING","attempts":"0","createdUnix":"1700000000",
+			"action":"EVENT_ACTION_FIRE","payloadJson":"{\"text\":\"hello\"}"
+		}}`)
+	})
+
+	event, err := client.EnqueueTask(context.Background(), EnqueueRequest{
+		TaskType:       "voice.announce",
+		PayloadJSON:    `{"text":"hello"}`,
+		RunAtUnix:      1700000100,
+		Queue:          "tasks",
+		IdempotencyKey: "announce-1",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueTask: %v", err)
+	}
+
+	req := (*seen)[0]
+	if req.method != http.MethodPost {
+		t.Errorf("method = %s, want POST", req.method)
+	}
+	if req.path != ServicePath+"EnqueueTask" {
+		t.Errorf("path = %s, want %s", req.path, ServicePath+"EnqueueTask")
+	}
+	if got := req.header.Get("Connect-Protocol-Version"); got != "1" {
+		t.Errorf("Connect-Protocol-Version = %q, want 1", got)
+	}
+	if got := req.body["taskType"]; got != "voice.announce" {
+		t.Errorf("taskType = %v", got)
+	}
+	if got := req.body["payloadJson"]; got != `{"text":"hello"}` {
+		t.Errorf("payloadJson = %v", got)
+	}
+	// int64 fields use the protobuf-JSON decimal string mapping.
+	if got := req.body["runAtUnix"]; got != "1700000100" {
+		t.Errorf("runAtUnix = %#v, want the decimal string \"1700000100\"", got)
+	}
+	if got := req.body["queue"]; got != "tasks" {
+		t.Errorf("queue = %v", got)
+	}
+	if got := req.body["idempotencyKey"]; got != "announce-1" {
+		t.Errorf("idempotencyKey = %v", got)
+	}
+
+	if event.ID != "evt-task-1" || event.SourceKind != SourceKindTask {
+		t.Errorf("event = %+v", event)
+	}
+	if event.TaskType != "voice.announce" || event.Queue != "tasks" || event.DueUnix != 1700000100 {
+		t.Errorf("event routing = %+v", event)
+	}
+	if event.CreatedUnix != 1700000000 {
+		t.Errorf("createdUnix = %d, want 1700000000", event.CreatedUnix)
+	}
+	if event.State != "pending" || event.Action != ActionFire {
+		t.Errorf("event state/action = %q/%q", event.State, event.Action)
+	}
+	if event.Payload != `{"text":"hello"}` {
+		t.Errorf("payload = %q", event.Payload)
+	}
+}
+
+func TestEnqueueTaskOmitsEmptyOptionalFields(t *testing.T) {
+	client, seen := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"event":{"id":"evt-task-2","sourceKind":"SOURCE_KIND_TASK","queue":null,"createdUnix":null}}`)
+	})
+
+	event, err := client.EnqueueTask(context.Background(), EnqueueRequest{TaskType: "generic.ping"})
+	if err != nil {
+		t.Fatalf("EnqueueTask: %v", err)
+	}
+	body := (*seen)[0].body
+	if body["taskType"] != "generic.ping" {
+		t.Errorf("taskType = %v", body["taskType"])
+	}
+	for _, field := range []string{"payloadJson", "runAtUnix", "queue", "idempotencyKey"} {
+		if value, ok := body[field]; ok {
+			t.Errorf("%s = %#v, want the field omitted so the server default applies", field, value)
+		}
+	}
+	if event.ID != "evt-task-2" || event.Queue != "" || event.CreatedUnix != 0 {
+		t.Errorf("event = %+v", event)
+	}
+}
+
+func TestEnqueueTaskRejectsEmptyTaskTypeAndMissingEvent(t *testing.T) {
+	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{}`)
+	})
+	if _, err := client.EnqueueTask(context.Background(), EnqueueRequest{TaskType: "  "}); err == nil {
+		t.Error("an empty task type must be rejected locally")
+	}
+	if _, err := client.EnqueueTask(context.Background(), EnqueueRequest{TaskType: "generic.ping"}); err == nil {
+		t.Error("a response without an event must not be reported as success")
 	}
 }
 
@@ -338,6 +464,14 @@ func TestDecodeHelpers(t *testing.T) {
 		t.Errorf("unspecified kind = %q", got)
 	}
 	if got := actionOf(protoEnum("EVENT_ACTION_BOGUS")); got != Action("BOGUS") {
-		t.Errorf("unknown action = %q, want BOGUS so the bridge can fail it", got)
+		t.Errorf("unknown action = %q, want BOGUS so the caller can fail it", got)
+	}
+	raw, err := protoInt64(1700000000).MarshalJSON()
+	if err != nil || string(raw) != `"1700000000"` {
+		t.Errorf("int64 marshals as %s, %v; want the decimal string", raw, err)
+	}
+	zero, err := protoInt64(0).MarshalJSON()
+	if err != nil || string(zero) != `"0"` {
+		t.Errorf("zero int64 marshals as %s, %v", zero, err)
 	}
 }

@@ -6,8 +6,8 @@ go_library(
         "client.go",
         "error.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/httpapi",
-    visibility = ["//solutions/ha-bridge:__subpackages__"],
+    importpath = "ricardo.local/monorepo/packages/go/httpapi",
+    visibility = ["//visibility:public"],
 )
 
 go_test(
