@@ -82,6 +82,14 @@ type Config struct {
 	QueueConsumer      string
 	AnnounceTTL        int
 	UpdatesRescan      int
+
+	// Secret sources are kept so a caller can re-read a mounted token on every
+	// use, exactly like ha_token()/voice_token()/scheduler_token() in
+	// voice_proxy.py. Python never caches a *_FILE secret.
+	haTokenInline        string
+	gatewayTokenInline   string
+	schedulerTokenInline string
+	readFile             ReadFile
 }
 
 // LookupEnv is the environment accessor used by Load; tests inject a map.
@@ -159,7 +167,39 @@ func load(lookup LookupEnv, readFile ReadFile) (Config, error) {
 	cfg.HAToken = readSecret(cfg.HATokenFile, stringEnv(lookup, "HERMES_HA_TOKEN", ""), readFile)
 	cfg.GatewayToken = readSecret(cfg.GatewayTokenFile, stringEnv(lookup, "HERMES_VOICE_GATEWAY_TOKEN", ""), readFile)
 	cfg.SchedulerToken = readSecret(cfg.SchedulerTokenFile, stringEnv(lookup, "HERMES_SCHEDULER_TOKEN", ""), readFile)
+	cfg.haTokenInline = stringEnv(lookup, "HERMES_HA_TOKEN", "")
+	cfg.gatewayTokenInline = stringEnv(lookup, "HERMES_VOICE_GATEWAY_TOKEN", "")
+	cfg.schedulerTokenInline = stringEnv(lookup, "HERMES_SCHEDULER_TOKEN", "")
+	cfg.readFile = readFile
 	return cfg, nil
+}
+
+// HATokenValue returns the Home Assistant token, re-reading a mounted file on
+// every call so a rotated secret is picked up without a restart.
+func (c Config) HATokenValue() string {
+	return readSecret(c.HATokenFile, inlineOr(c.haTokenInline, c.HAToken), c.readFile)
+}
+
+// GatewayTokenValue returns the mcp-gateway token with the same lazy file
+// semantics as HATokenValue.
+func (c Config) GatewayTokenValue() string {
+	return readSecret(c.GatewayTokenFile, inlineOr(c.gatewayTokenInline, c.GatewayToken), c.readFile)
+}
+
+// SchedulerTokenValue returns the scheduler token with the same lazy file
+// semantics as HATokenValue.
+func (c Config) SchedulerTokenValue() string {
+	return readSecret(c.SchedulerTokenFile, inlineOr(c.schedulerTokenInline, c.SchedulerToken), c.readFile)
+}
+
+// inlineOr keeps a hand-built Config (tests, -status) working: Load always
+// records the inline environment value, so the fallback only matters when a
+// caller constructed Config directly.
+func inlineOr(value, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
 }
 
 // Listen is the TCP address the HTTP server binds.
@@ -169,7 +209,7 @@ func (c Config) Listen() string { return net.JoinHostPort(c.Bind, strconv.Itoa(c
 // configured. A partially configured deployment keeps the previous sanitiser
 // behaviour instead of failing at startup.
 func (c Config) RoutingEnabled() bool {
-	return c.GatewayURL != "" && c.GatewayToken != "" && c.HAURL != "" && c.HAToken != ""
+	return c.GatewayURL != "" && c.GatewayTokenValue() != "" && c.HAURL != "" && c.HATokenValue() != ""
 }
 
 // UpdatesEnabled reports whether the dispatcher updates poller should run.
@@ -178,7 +218,7 @@ func (c Config) UpdatesEnabled() bool { return c.RoutingEnabled() && !c.UpdatesD
 // QueueEnabled is true only when the durable announcement queue is fully
 // configured; the URL and token are its own, not the gateway's.
 func (c Config) QueueEnabled() bool {
-	return c.SchedulerURL != "" && c.SchedulerToken != "" && !c.QueueDisabled
+	return c.SchedulerURL != "" && c.SchedulerTokenValue() != "" && !c.QueueDisabled
 }
 
 // QueueEnabledAndRouted mirrors main(): the consumer needs both switches.
@@ -190,51 +230,69 @@ func (c Config) QueueName(profile string) string { return "voice-" + profile }
 // Redacted is the JSON-safe summary printed by -status. It never carries a
 // token or any other secret, only whether one is configured.
 type Redacted struct {
-	Listen            string `json:"listen"`
-	Upstream          string `json:"upstream"`
-	ReasoningEffort   string `json:"reasoning_effort"`
-	RoutingEnabled    bool   `json:"routing_enabled"`
-	UpdatesEnabled    bool   `json:"updates_enabled"`
-	QueueEnabled      bool   `json:"queue_enabled"`
-	ProfileEntity     string `json:"profile_entity"`
-	AnnounceScript    string `json:"announce_script"`
-	Satellite         string `json:"satellite"`
-	MediaPlayer       string `json:"media_player"`
-	AnnounceMaxChars  int    `json:"announce_max_chars"`
-	QueueConsumer     string `json:"queue_consumer"`
-	SchedulerURL      string `json:"scheduler_url"`
-	HAConfigured      bool   `json:"ha_configured"`
-	GatewayConfigured bool   `json:"gateway_configured"`
-	SchedulerAuth     bool   `json:"scheduler_configured"`
+	Listen               string `json:"listen"`
+	Upstream             string `json:"upstream"`
+	ReasoningEffort      string `json:"reasoning_effort"`
+	RoutingEnabled       bool   `json:"routing_enabled"`
+	UpdatesEnabled       bool   `json:"updates_enabled"`
+	QueueEnabled         bool   `json:"queue_enabled"`
+	QueueConsumerEnabled bool   `json:"queue_consumer_enabled"`
+	ProfileEntity        string `json:"profile_entity"`
+	AnnounceScript       string `json:"announce_script"`
+	Satellite            string `json:"satellite"`
+	MediaPlayer          string `json:"media_player"`
+	AnnounceMaxChars     int    `json:"announce_max_chars"`
+	QueueConsumer        string `json:"queue_consumer"`
+	SchedulerURL         string `json:"scheduler_url"`
+	HAConfigured         bool   `json:"ha_configured"`
+	GatewayConfigured    bool   `json:"gateway_configured"`
+	SchedulerAuth        bool   `json:"scheduler_configured"`
+	AnnounceTTL          int    `json:"announce_ttl"`
+	UpdatesRescan        int    `json:"updates_rescan"`
+	UpdatesRetryMS       int64  `json:"updates_retry_ms"`
+	ResultTimeoutMS      int64  `json:"result_timeout_ms"`
+	ResultRetryMS        int64  `json:"result_retry_ms"`
+	ResultWait           int    `json:"result_wait"`
 }
 
 // Redact summarises the configuration without any secret value.
 func (c Config) Redact() Redacted {
 	return Redacted{
-		Listen:            c.Listen(),
-		Upstream:          c.Upstream,
-		ReasoningEffort:   c.ReasoningEffort,
-		RoutingEnabled:    c.RoutingEnabled(),
-		UpdatesEnabled:    c.UpdatesEnabled(),
-		QueueEnabled:      c.QueueEnabled(),
-		ProfileEntity:     c.ProfileEntity,
-		AnnounceScript:    c.AnnounceScript,
-		Satellite:         c.Satellite,
-		MediaPlayer:       c.MediaPlayer,
-		AnnounceMaxChars:  c.AnnounceMaxChars,
-		QueueConsumer:     c.QueueConsumer,
-		SchedulerURL:      c.SchedulerURL,
-		HAConfigured:      c.HAURL != "" && c.HAToken != "",
-		GatewayConfigured: c.GatewayURL != "" && c.GatewayToken != "",
-		SchedulerAuth:     c.SchedulerURL != "" && c.SchedulerToken != "",
+		Listen:               c.Listen(),
+		Upstream:             c.Upstream,
+		ReasoningEffort:      c.ReasoningEffort,
+		RoutingEnabled:       c.RoutingEnabled(),
+		UpdatesEnabled:       c.UpdatesEnabled(),
+		QueueEnabled:         c.QueueEnabled(),
+		QueueConsumerEnabled: c.QueueEnabledAndRouted(),
+		ProfileEntity:        c.ProfileEntity,
+		AnnounceScript:       c.AnnounceScript,
+		Satellite:            c.Satellite,
+		MediaPlayer:          c.MediaPlayer,
+		AnnounceMaxChars:     c.AnnounceMaxChars,
+		QueueConsumer:        c.QueueConsumer,
+		SchedulerURL:         c.SchedulerURL,
+		HAConfigured:         c.HAURL != "" && c.HAToken != "",
+		GatewayConfigured:    c.GatewayURL != "" && c.GatewayToken != "",
+		SchedulerAuth:        c.SchedulerURL != "" && c.SchedulerToken != "",
+		AnnounceTTL:          c.AnnounceTTL,
+		UpdatesRescan:        c.UpdatesRescan,
+		UpdatesRetryMS:       c.UpdatesRetry.Milliseconds(),
+		ResultTimeoutMS:      c.ResultTimeout.Milliseconds(),
+		ResultRetryMS:        c.ResultRetry.Milliseconds(),
+		ResultWait:           c.ResultWait,
 	}
 }
 
 // readSecret reads a Bearer token from a mounted file, falling back to the
 // inline environment value. A configured but unreadable file is empty and does
-// not fall back, exactly like _read_secret() in voice_proxy.py.
+// not fall back, exactly like _read_secret() in voice_proxy.py. A nil accessor
+// (a zero Config in a test) falls back to os.ReadFile.
 func readSecret(path, inline string, readFile ReadFile) string {
 	if path != "" {
+		if readFile == nil {
+			readFile = os.ReadFile
+		}
 		data, err := readFile(path)
 		if err != nil {
 			return ""

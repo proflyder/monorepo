@@ -1,0 +1,32 @@
+{
+  "generated_by": "projects/home-assistant/hermes/voice_proxy.py enqueue_announce",
+  "method": "EnqueueTask",
+  "request": {
+    "taskType": "voice.announce",
+    "payloadJson": "{\"text\": \"Готово.\", \"profile\": \"work\", \"thread_id\": \"thr_fixture\", \"seq\": \"done:42\", \"created_unix\": 1700000000}",
+    "runAtUnix": "1793740873",
+    "queue": "voice-work",
+    "idempotencyKey": "voice:thr_fixture:done:42"
+  },
+  "payload": {
+    "text": "Готово.",
+    "profile": "work",
+    "thread_id": "thr_fixture",
+    "seq": "done:42",
+    "created_unix": 1700000000
+  },
+  "payload_key_order": [
+    "text",
+    "profile",
+    "thread_id",
+    "seq",
+    "created_unix"
+  ],
+  "payload_types": {
+    "text": "str",
+    "profile": "str",
+    "thread_id": "str",
+    "seq": "str",
+    "created_unix": "int"
+  }
+}

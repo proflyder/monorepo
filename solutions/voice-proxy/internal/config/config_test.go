@@ -212,6 +212,74 @@ func TestSwitches(t *testing.T) {
 	}
 }
 
+// TestUpdatesSwitchIsDefaultOnAndZeroDisables mirrors
+// test_updates_switch_is_default_on_and_zero_disables.
+func TestUpdatesSwitchIsDefaultOnAndZeroDisables(t *testing.T) {
+	routed := map[string]string{
+		"HERMES_HA_URL":              "http://ha.example",
+		"HERMES_HA_TOKEN":            "ha",
+		"HERMES_VOICE_GATEWAY_URL":   "http://gateway.example",
+		"HERMES_VOICE_GATEWAY_TOKEN": "gateway",
+	}
+	if !load(t, routed).UpdatesEnabled() {
+		t.Fatal("updates must be on by default")
+	}
+	if load(t, with(routed, "HERMES_VOICE_UPDATES", "0")).UpdatesEnabled() {
+		t.Fatal("HERMES_VOICE_UPDATES=0 must disable updates")
+	}
+	unrouted := map[string]string{"HERMES_VOICE_UPDATES": "1"}
+	if load(t, unrouted).UpdatesEnabled() {
+		t.Fatal("updates must not run without routing")
+	}
+}
+
+// TestQueueSwitchNeedsURLAndToken mirrors test_queue_switch_needs_url_and_token.
+func TestQueueSwitchNeedsURLAndToken(t *testing.T) {
+	base := map[string]string{
+		"HERMES_SCHEDULER_URL":   "http://scheduler.example",
+		"HERMES_SCHEDULER_TOKEN": "scheduler",
+	}
+	if !load(t, base).QueueEnabled() {
+		t.Fatal("a fully configured queue must be enabled")
+	}
+	if load(t, map[string]string{"HERMES_SCHEDULER_TOKEN": "scheduler"}).QueueEnabled() {
+		t.Fatal("the queue must need a URL")
+	}
+	if load(t, map[string]string{"HERMES_SCHEDULER_URL": "http://scheduler.example"}).QueueEnabled() {
+		t.Fatal("the queue must need a token")
+	}
+	if load(t, with(base, "HERMES_VOICE_QUEUE", "0")).QueueEnabled() {
+		t.Fatal("HERMES_VOICE_QUEUE=0 must disable the queue")
+	}
+}
+
+// TestSecretFilesAreReadOnEveryUse pins the lazy *_FILE semantics: Python's
+// ha_token()/voice_token()/scheduler_token() re-read the mounted file, so a
+// rotated token needs no restart.
+func TestSecretFilesAreReadOnEveryUse(t *testing.T) {
+	token := "first-token"
+	readFile := func(string) ([]byte, error) { return []byte(token + "\n"), nil }
+	cfg, err := config.LoadFrom(env(map[string]string{
+		"HERMES_HA_TOKEN_FILE": "/run/secrets/ha",
+		"HERMES_HA_TOKEN":      "inline",
+	}), readFile)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := cfg.HAToken; got != "first-token" {
+		t.Fatalf("token = %q", got)
+	}
+	token = "rotated-token"
+	if got := cfg.HATokenValue(); got != "rotated-token" {
+		t.Fatalf("token after rotation = %q", got)
+	}
+	// The inline fallback is only used without a *_FILE, exactly like Python.
+	inline := load(t, map[string]string{"HERMES_HA_TOKEN": "inline-token"})
+	if got := inline.HATokenValue(); got != "inline-token" {
+		t.Fatalf("inline token = %q", got)
+	}
+}
+
 func TestNumericParsing(t *testing.T) {
 	cfg := load(t, map[string]string{
 		"HERMES_PROXY_PORT":               "9000",

@@ -62,6 +62,12 @@ type RouteResult struct {
 	// Announce, when non-nil, runs after the local reply was written; it starts
 	// the background result poller for a routed bb turn.
 	Announce func()
+	// Outcome is the structural routing outcome used for the counter and the
+	// log line ("hermes", "bb", "local", "profile_unknown", …). It is never the
+	// recognised speech.
+	Outcome string
+	// Profile is the resolved profile, or "" when unknown.
+	Profile string
 }
 
 // Router resolves profile routing for the last user utterance. It is the
@@ -199,6 +205,9 @@ func (h *Handler) processPost(w http.ResponseWriter, r *http.Request, state *pos
 		if h.router != nil {
 			if utterance, ok := LastUserText(payload); ok {
 				result := h.router.Route(r.Context(), payload, utterance)
+				h.logger.Infof("voice route outcome=%s profile=%s chars=%d stream=%t",
+					result.Outcome, profileOrUnknown(result.Profile),
+					len([]rune(utterance)), truthy(payload["stream"]))
 				if result.Handled && result.Speech != "" {
 					h.sendLocalCompletion(w, payload, result.Speech, result.CompletionID)
 					if result.Announce != nil {
@@ -288,6 +297,14 @@ func truthy(value any) bool {
 		return len(typed) > 0
 	}
 	return true
+}
+
+// profileOrUnknown renders the profile for a structural log line.
+func profileOrUnknown(profile string) string {
+	if profile == "" {
+		return "unknown"
+	}
+	return profile
 }
 
 func modelName(payload map[string]any) string {

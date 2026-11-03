@@ -7,8 +7,17 @@ go_library(
     srcs = ["run.go"],
     importpath = "ricardo.local/monorepo/solutions/voice-proxy/app",
     deps = [
+        "//packages/go/httpapi",
+        "//packages/go/scheduler",
+        "//solutions/voice-proxy/internal/announce",
         "//solutions/voice-proxy/internal/config",
+        "//solutions/voice-proxy/internal/gateway",
         "//solutions/voice-proxy/internal/hermes",
+        "//solutions/voice-proxy/internal/profile",
         "//solutions/voice-proxy/internal/proxy",
+        "//solutions/voice-proxy/internal/queue",
+        "//solutions/voice-proxy/internal/result",
+        "//solutions/voice-proxy/internal/router",
+        "//solutions/voice-proxy/internal/updates",
     ],
 )

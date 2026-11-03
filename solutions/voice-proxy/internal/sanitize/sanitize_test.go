@@ -374,3 +374,36 @@ func readJSON(t *testing.T, path string, target any) {
 		t.Fatalf("decode %s: %v", path, err)
 	}
 }
+
+// TestAnnounceTextSanitizesAndShortens mirrors
+// test_announce_text_sanitizes_and_shortens.
+func TestAnnounceTextSanitizesAndShortens(t *testing.T) {
+	if got := sanitize.AnnounceText(strings.Repeat("слово ", 80), 200); len([]rune(got)) > 201 {
+		t.Fatalf("len = %d, want <= 201", len([]rune(got)))
+	}
+	if got := sanitize.AnnounceText("Смотри https://example.com/x и **готово**.", 200); got != "Смотри и готово." {
+		t.Fatalf("AnnounceText = %q", got)
+	}
+	if got := sanitize.AnnounceText("", 200); got != "" {
+		t.Fatalf("AnnounceText(\"\") = %q", got)
+	}
+}
+
+// TestLongQuestionTruncationKeepsTheQuestionMark mirrors
+// test_long_question_truncation_keeps_the_question_mark.
+func TestLongQuestionTruncationKeepsTheQuestionMark(t *testing.T) {
+	// Prefer the final question sentence when it fits.
+	if got := sanitize.AnnounceText("Первый факт. "+strings.Repeat("слово ", 80)+". Подтверждаете?", 200); got != "Подтверждаете?" {
+		t.Fatalf("kept question = %q", got)
+	}
+	// If even the question is too long, cut it but keep the trailing "?".
+	got := sanitize.AnnounceText(strings.Repeat("слово ", 80)+"Подтверждаете?", 200)
+	if !strings.HasSuffix(got, "?") || len([]rune(got)) > 201 {
+		t.Fatalf("long question = %q", got)
+	}
+	// A statement keeps the previous ellipsis truncation and no "?".
+	got = sanitize.AnnounceText(strings.Repeat("слово ", 80), 200)
+	if !strings.HasSuffix(got, "…") || strings.HasSuffix(got, "?") {
+		t.Fatalf("long statement = %q", got)
+	}
+}
