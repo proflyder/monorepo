@@ -336,6 +336,14 @@ class ContextFileTests(unittest.TestCase):
         self.assertIn("kubectl", text)
         self.assertIn("90", text)
 
+    def test_context_names_the_bb_agent_contract(self):
+        text = CONTEXT.read_text(encoding="utf-8")
+        for tool in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel"):
+            self.assertIn(tool, text)
+        # Hermes is the personal profile only: work projects are not described.
+        self.assertIn("личный профиль", text)
+        self.assertIn("Рабочих проектов нет", text)
+
     def test_context_has_no_injection_markers(self):
         # The context file is injected into the system prompt; Hermes blocks a
         # file that matches its threat patterns, so keep the wording neutral.

@@ -131,6 +131,24 @@ class HermesConfigTests(unittest.TestCase):
             assert marker in prompt
         assert "подтвержд" in prompt.lower()
 
+    def test_voice_prompt_covers_bb_agent_spawn(self):
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        for marker in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel",
+                       "подтверди", "режима агента", "рабочий профиль"):
+            assert marker in prompt, marker
+        # The confirmation is always explicit and in this conversation.
+        assert "этом же разговоре" in prompt
+        # Nothing is invented: projects, models and efforts come from the gateway.
+        assert "не подставляй проект" in prompt
+
+    def test_telegram_prompt_covers_bb_agent_spawn(self):
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
+        for marker in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel",
+                       "тред", "режима агента", "рабочий профиль"):
+            assert marker in prompt, marker
+        assert "двухшаговый" in prompt
+        assert "без подтверждения" in prompt
+
     def test_voice_personality_has_a_single_source(self):
         # The stale copy in the fragment caused drift; the personality is now
         # rendered from voice_prompt.txt and the fragment must not repeat it.
