@@ -137,7 +137,7 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 ### CI/CD
 
 ```text
-ветка <type>/<name> → PR → CI (units.yml, reusable workflows) → ci-ok
+ветка <type>/<name> → PR → CI (units.mjs, reusable workflows) → ci-ok
    → squash merge в develop
    → deploy-home: затронутые юниты параллельно
         → VPN группа ci → OIDC в OpenBao → kubectl/helm
@@ -149,7 +149,7 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 - Образы scheduler/ha-bridge/ha-control/currency-bot собираются Bazel
   `rules_oci` (distroless) и адресуются по digest в GHCR; Hermes/voice-proxy —
   тоже digest-pinned GHCR.
-- currency-bot — data-driven юнит `platform/ci/units.yml`: свой namespace,
+- currency-bot — data-driven юнит `platform/ci/units.mjs`: свой namespace,
   script, `externalsecrets`, `env_key`/`env_file`; contract-тест
   `currency-bot-deploy`. `converge.py` заменяет Deployment целиком и сохраняет
   env/режим/replicas; откат восстанавливает ровно тот объект, который применил

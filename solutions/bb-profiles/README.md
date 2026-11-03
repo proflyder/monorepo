@@ -104,7 +104,7 @@ bb plugin build      # dist/ собирается локально и не ко�
 ```
 
 Тесты — чистые ES-модули из `lib/policy.js`, без bb SDK и npm-зависимостей.
-CI-юнит `bb-profiles` (`platform/ci/units.yml`) запускает те же
+CI-юнит `bb-profiles` (`platform/ci/units.mjs`) запускает те же
 `tests/*.test.js` через `node --test`.
 
 ## Раскатка на сервер bb

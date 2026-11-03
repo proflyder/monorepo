@@ -319,7 +319,7 @@ node --test solutions/bb-home-dispatcher/tests/*.test.js
 bb plugin build solutions/bb-home-dispatcher
 ```
 
-CI-юнит `bb-home-dispatcher` в `platform/ci/units.yml` запускает тесты на
+CI-юнит `bb-home-dispatcher` в `platform/ci/units.mjs` запускает тесты на
 pinned Node без npm-зависимостей. Сборка плагина выполняется `bb plugin build`
 (сборщик bb), `dist/` в Git не коммитится.
 

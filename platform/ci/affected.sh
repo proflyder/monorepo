@@ -9,4 +9,4 @@
 # deploys or touches a device.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-exec python3 "$ROOT/platform/ci/affected.py" --root "$ROOT" "$@"
+exec node "$ROOT/platform/ci/affected.mjs" --root "$ROOT" "$@"

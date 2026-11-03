@@ -59,7 +59,7 @@ Ruleset ветки по умолчанию (`develop`):
 - удаление веток через push заблокировано (ветки удаляет GitHub после merge);
 - исходящая история не должна иметь общих предков с `local-history`;
 - рабочее дерево чистое, Gitleaks по исходящим коммитам без находок,
-  `platform/quality/audit_repository.py` без замечаний.
+  `platform/quality/audit_repository.mjs` без замечаний.
 
 Не обходить guard (`--no-verify`, смена `hooksPath`, mirror push). Если в
 основном checkout есть чужие незакоммиченные изменения, публиковать из

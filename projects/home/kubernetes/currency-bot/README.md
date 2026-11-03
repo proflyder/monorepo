@@ -178,7 +178,7 @@ NODE_SSH=labuser@node ./projects/home/kubernetes/currency-bot/deploy.sh
 ```
 
 CI (`deploy-home`, push to `develop`): the `currency-bot` unit is routed from
-`platform/ci/units.yml`, the image is built/pushed by Bazel, then `deploy.sh`
+`platform/ci/units.mjs`, the image is built/pushed by Bazel, then `deploy.sh`
 runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/currency-bot.env`.
 
 `deploy.sh` is idempotent and:

@@ -30,4 +30,4 @@ ci-affected:
 
 # Validate the unit map and prove every tracked source/test file is routed.
 ci-units:
-	python3 platform/ci/check_units.py
+	node platform/ci/check_units.mjs
