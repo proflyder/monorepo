@@ -122,4 +122,50 @@ do
   grep -q "set env deployment/ha-control CONTROL_EXECUTE=true" "$CALL_LOG" && fail "enabled despite malformed status: $bad"
 done
 
+# 6. Prebuilt digests from deploy-home (DECISIONS 36) replace the local build.
+#    The Bazel stub fails, so any build attempt is a hard failure.
+mkdir -p "$TMP/bin"
+cat > "$TMP/bin/bazel" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$BAZEL_LOG"
+exit 1
+EOF
+chmod +x "$TMP/bin/bazel"
+export BAZEL_LOG="$TMP/bazel.log"
+: > "$BAZEL_LOG"
+unset SCHEDULER_IMAGE HA_BRIDGE_IMAGE HA_CONTROL_IMAGE MOCK_CONTROL_EXISTS CONTROL_QUEUE_STATUS || true
+export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64})"
+: > "$CALL_LOG"
+PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
+  cat "$TMP/out"
+  fail "deploy.sh failed with prebuilt digests"
+}
+[[ ! -s "$BAZEL_LOG" ]] || fail "prebuilt digests did not skip the Bazel build"
+grep -q "image scheduler: prebuilt ghcr.io/proflyder/scheduler@sha256:dddd" "$TMP/out" \
+  || fail "scheduler did not use the prebuilt digest"
+grep -q "image ha-bridge: prebuilt ghcr.io/proflyder/ha-bridge@sha256:eeee" "$TMP/out" \
+  || fail "ha-bridge did not use the prebuilt digest"
+grep -q "image ha-control: prebuilt ghcr.io/proflyder/ha-control@sha256:ffff" "$TMP/out" \
+  || fail "ha-control did not use the prebuilt digest"
+grep -q "push" "$BAZEL_LOG" && fail "prebuilt images were pushed again"
+unset PREBUILT_DIGESTS
+
+# 7. A malformed or duplicated value must fail closed, before any cluster call.
+for bad in \
+  "scheduler=sha256:short" \
+  "scheduler=$(printf 'a%.0s' {1..64})" \
+  "scheduler=sha256:$(printf 'a%.0s' {1..64}),scheduler=sha256:$(printf 'b%.0s' {1..64})"
+do
+  : > "$CALL_LOG"
+  set +e
+  PREBUILT_DIGESTS="$bad" PATH="$TMP/bin:$PATH" \
+    "$DIR/deploy.sh" --skip-build >"$TMP/out" 2>&1
+  rc=$?
+  set -e
+  [[ $rc -ne 0 ]] || fail "malformed prebuilt digest was accepted: $bad"
+  grep -Eq "malformed prebuilt digest|duplicate prebuilt digest" "$TMP/out" \
+    || fail "no clear error for: $bad"
+  grep -q "prebuilt" "$CALL_LOG" && fail "malformed prebuilt digest reached the cluster: $bad"
+done
+
 echo "deploy control regression: ok"

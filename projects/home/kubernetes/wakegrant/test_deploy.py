@@ -32,7 +32,8 @@ def load_docs(path: Path) -> list[dict]:
 
 class DeployEnvTests(unittest.TestCase):
     def run_deploy(self, env_text: str, kubectl_script: str | None = None,
-                   build: bool = False) -> subprocess.CompletedProcess:
+                   build: bool = False,
+                   extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         tmp = Path(tempfile.mkdtemp(prefix="wakegrant-deploy-"))
         self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
         env_file = tmp / "wakegrant.env"
@@ -55,6 +56,8 @@ class DeployEnvTests(unittest.TestCase):
         })
         if not build:
             env["WAKE_GRANT_IMAGE"] = "ghcr.io/example/wakegrant@sha256:" + "0" * 64
+        if extra_env:
+            env.update(extra_env)
         args = ["bash", str(SCRIPT)] + ([] if build else ["--skip-build"])
         res = subprocess.run(args, env=env, text=True, capture_output=True, timeout=60)
         res.kubectl_log = tmp / "kubectl.log"
@@ -129,6 +132,51 @@ class DeployEnvTests(unittest.TestCase):
         self.assertTrue(res.bazel_log.exists(), res.stderr)
         self.assertIn("build //solutions/wakegrant:wakegrant_image",
                       res.bazel_log.read_text())
+
+    def test_prebuilt_digest_skips_the_build_and_is_rendered(self):
+        # deploy-home passes the digest it promoted from the pull request
+        # (DECISIONS 36): no Bazel, no push, the verified digest goes straight
+        # into the rendered Deployment.
+        digest = "sha256:" + "d" * 64
+        res = self.run_deploy(
+            GOOD_ENV,
+            build=True,
+            extra_env={"PREBUILT_DIGESTS": f"wakegrant={digest}"},
+        )
+        # The stub kubectl fails at the namespace check, which is after the
+        # render: the assertion is that the prebuilt digest reached the render.
+        self.assertTrue(res.kubectl_called, res.stderr)
+        self.assertFalse(
+            res.bazel_log.exists() and res.bazel_log.read_text().strip(),
+            "prebuilt digest must not trigger a build",
+        )
+        rendered = (res.render_dir / "wakegrant.yaml").read_text()
+        self.assertIn(f"ghcr.io/proflyder/wakegrant@{digest}", rendered)
+
+    def test_prebuilt_digest_file_is_accepted(self):
+        digest = "sha256:" + "e" * 64
+        tmp = Path(tempfile.mkdtemp(prefix="wakegrant-digests-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        digests = tmp / "digests"
+        digests.write_text(f"# promoted by deploy-home\nwakegrant={digest}\n")
+        res = self.run_deploy(
+            GOOD_ENV, build=True, extra_env={"PREBUILT_DIGESTS_FILE": str(digests)}
+        )
+        self.assertTrue(res.kubectl_called, res.stderr)
+        self.assertIn(
+            f"ghcr.io/proflyder/wakegrant@{digest}",
+            (res.render_dir / "wakegrant.yaml").read_text(),
+        )
+
+    def test_malformed_prebuilt_digest_fails_closed(self):
+        res = self.run_deploy(
+            GOOD_ENV,
+            build=True,
+            extra_env={"PREBUILT_DIGESTS": "wakegrant=sha256:short"},
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("malformed prebuilt digest", res.stderr)
+        self.assertFalse(res.kubectl_called)
 
     def test_external_secret_targets_openbao_with_safe_ownership(self):
         docs = load_docs(EXTERNAL_SECRETS)

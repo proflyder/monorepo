@@ -1,0 +1,69 @@
+name: ghcr-cleanup
+
+# Delete stale `tree-<hash>` images from GHCR (DECISIONS 36).
+#
+# A pull request publishes every built deploy image as
+# `ghcr.io/proflyder/<image>:tree-<git tree hash>`. Once the PR is merged (the
+# digest is promoted to `develop` and the commit sha) or abandoned, that tag is
+# dead weight. This workflow keeps the account from growing without bound.
+#
+# Only the deploy images listed in `platform/ci/units.mjs` are considered; other
+# GHCR packages of the account (for example the Windows logon provider release
+# artifact) are never touched.
+#
+# A version is deleted only when ALL hold:
+#   * it is older than 7 days;
+#   * every tag it has is `tree-<hash>` (or it has no tags);
+#   * it is not the newest version of its package.
+# Versions tagged `develop`, a commit sha or a semver release are always kept:
+# Helm rollbacks and the digests pinned in private values depend on them.
+#
+# Scheduled runs delete; a manual run defaults to a dry run and only reports.
+# The token is GITHUB_TOKEN when it may delete these user-owned package
+# versions. If it cannot, provision a `GHCR_CLEANUP_TOKEN` secret (a token with
+# package delete permission, granted access to this repository) — the job fails
+# with an explicit message in that case instead of silently deleting nothing.
+
+on:
+  schedule:
+    # Daily, off the deploy hours.
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report what would be deleted without deleting anything
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  # Delete package versions; also required when the default token is used.
+  packages: write
+
+concurrency:
+  group: ghcr-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Only the unit map and this cleanup module are needed.
+          sparse-checkout: platform/ci
+
+      - name: Select and delete stale tree-tagged versions
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          # A scheduled run is always real; a manual run defaults to a dry run.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          TOKEN_SOURCE: ${{ secrets.GHCR_CLEANUP_TOKEN != '' && 'GHCR_CLEANUP_TOKEN' || 'github.token' }}
+        with:
+          # A failure to delete fails the job with a provisioning hint, so a
+          # green run means the policy actually ran.
+          github-token: ${{ secrets.GHCR_CLEANUP_TOKEN || github.token }}
+          script: |
+            const cleanup = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/ghcr_cleanup.mjs`);
+            await cleanup.runGithubScript({ core, github, context, env: process.env });

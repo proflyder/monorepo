@@ -14,6 +14,8 @@
 #   NODE_SSH       import the image into the node's containerd (manual path)
 #   IMAGE_TAG      tag used for the push/import (default HEAD sha)
 #   MCP_GATEWAY_IMAGE  pre-resolved digest reference (skips build/push)
+#   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
+#                  pull-request build (DECISIONS 36); MCP_GATEWAY_IMAGE wins
 #   DEPLOY_STATE_DIR   rollback bookkeeping directory
 #   KUBECTL        kubectl binary (default kubectl)
 #   ONLY           CI passes the unit workload list; only `mcp-gateway`
@@ -29,6 +31,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# shellcheck source=platform/ci/prebuilt-digests.sh
+source "$ROOT/platform/ci/prebuilt-digests.sh"
 
 NS=home-assistant
 DIR="$ROOT/projects/home/kubernetes/mcp-gateway"
@@ -106,7 +110,15 @@ if [[ -z "${IMAGE_TAG:-}" ]]; then
   IMAGE_TAG=$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 fi
 
-if $BUILD; then
+# A verified digest promoted from the pull-request build replaces the local
+# build (DECISIONS 36). An explicit MCP_GATEWAY_IMAGE stays authoritative.
+prebuilt=$(prebuilt_digest mcp-gateway)
+if [[ -z "${MCP_GATEWAY_IMAGE:-}" && -n "$prebuilt" ]]; then
+  MCP_GATEWAY_IMAGE="${IMAGE_REGISTRY}/mcp-gateway@${prebuilt}"
+  echo "== image mcp-gateway: prebuilt ${MCP_GATEWAY_IMAGE}"
+fi
+
+if $BUILD && [[ -z "${MCP_GATEWAY_IMAGE:-}" ]]; then
   echo "== building the mcp-gateway image with Bazel"
   ( cd "$ROOT" && "$(bazel_bin)" build \
       //solutions/mcp-gateway:mcp-gateway_image \

@@ -292,6 +292,12 @@ lint также пропускает публикацию APK. `_android.yml` с
 `true`/`false`).
 Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
 
+Образы (`images` → `_images.yml`) собираются на PR и, если PR не из форка,
+сразу публикуются как `tree-<git tree hash>` с build provenance (решение 36).
+Форки и `workflow_dispatch` только собирают: у них нет прав на registry.
+Отдельный job `attest` матрицей по опубликованным digest'ам создаёт
+attestation; `ci-ok` не меняется.
+
 ### Карта юнитов
 
 `platform/ci/units.mjs` (ES-модуль, без npm) — единственный источник правды: `id`, `platform`,
@@ -408,6 +414,12 @@ platform/ci/affected.sh --all
 
 make ci-units                                   # инварианты карты юнитов
 node --test platform/ci/*.test.mjs platform/quality/*.test.mjs        # маршрутизатор, gate и аудит
+# продвижение по tree hash: теги, digest, fallback — без registry
+node --test platform/ci/promote.test.mjs
+# политика чистки GHCR: pure-функция + локальный dry-run по фикстуре
+node --test platform/ci/ghcr_cleanup.test.mjs
+node platform/ci/ghcr_cleanup.mjs --fixture platform/ci/testdata/ghcr-versions.json \
+  --now 2026-11-04T00:00:00Z
 make test                                       # герметичный gate (включает CI-тесты)
 make test-deploy-control BAZEL=bazelisk         # регрессия deploy control
 actionlint .github/workflows/*.yml
@@ -428,7 +440,13 @@ commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.
 есть, те же тесты выполняются. `test_deploy_control.sh` больше не требует
 собранных бинарников: он передаёт deploy.sh заранее разрешённые
 digest-пины образов, поэтому `make test` и `make test-deploy-control`
-запускают его без Bazel.
+запускают его без Bazel. Путь продвижения (`PREBUILT_DIGESTS`,
+`PREBUILT_DIGESTS_FILE`, решение 36) покрыт там же и в `test_deploy.py`
+юнитов `scheduler`/`currency-bot`/`mcp-gateway`/`wakegrant`:
+образ не собирается и не пушится, digest попадает в отрендеренный манифест,
+а кривое/дублирующее значение падает fail-closed до обращения к кластеру.
+`projects/home-assistant/deploy/test_build_and_push.py` проверяет то же для
+`build-and-push.sh` (`hermes` + `voice-proxy`) с заглушками docker/bazel/git.
 
 ### Required check
 
@@ -455,6 +473,11 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
 - Hermes/voice-proxy (builder `mixed`): `hermes` — Docker, `voice-proxy` —
   Bazel/rules_oci; build+push → digest в релиз `runtime` →
   `-healthcheck`/health/Assist-проверка → `helm rollback` при провале.
+- Build once (решение 36): перед сборкой job считает tree деплоимого коммита
+  и пробует продвинуть digest'ы PR-сборки (`tree-<hash>` + проверенный
+  provenance). Если все образы юнита прошли проверку, скрипт получает
+  `PREBUILT_DIGESTS` и не собирает/push'ит их; иначе — обычная сборка.
+  Выбранный путь виден в job summary (`image path: prebuilt|build`).
 - Откат — только применённого объекта; изменение целиком откатывается новым
   PR с `git revert`.
 

@@ -28,7 +28,8 @@ CURRENCY_BOT_NODE_PORT=30100
 
 class DeployEnvTests(unittest.TestCase):
     def run_deploy(self, env_text: str, kubectl_script: str | None = None,
-                   build: bool = False) -> subprocess.CompletedProcess:
+                   build: bool = False,
+                   extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         tmp = Path(tempfile.mkdtemp(prefix="currency-deploy-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
         env_file = tmp / "currency-bot.env"
@@ -51,6 +52,8 @@ class DeployEnvTests(unittest.TestCase):
         })
         if not build:
             env["CURRENCY_BOT_IMAGE"] = "ghcr.io/example/currency-bot@sha256:" + "0" * 64
+        if extra_env:
+            env.update(extra_env)
         args = ["bash", str(SCRIPT)] + ([] if build else ["--skip-build"])
         res = subprocess.run(args, env=env,
                              text=True, capture_output=True, timeout=60)
@@ -176,6 +179,35 @@ exit 3
         self.assertTrue(res.bazel_log.exists(), res.stderr)
         self.assertIn("build //solutions/currency-bot:currency-bot_image",
                       res.bazel_log.read_text())
+
+    def test_prebuilt_digest_skips_the_build_and_is_rendered(self):
+        # deploy-home passes the digest promoted from the pull request
+        # (DECISIONS 36): no Bazel, no push, the digest goes into the manifest.
+        digest = "sha256:" + "d" * 64
+        res = self.run_deploy(
+            GOOD_ENV,
+            build=True,
+            extra_env={"PREBUILT_DIGESTS": f"currency-bot={digest}"},
+        )
+        self.assertTrue(res.kubectl_called, res.stderr)
+        self.assertFalse(
+            res.bazel_log.exists() and res.bazel_log.read_text().strip(),
+            "prebuilt digest must not trigger a build",
+        )
+        self.assertIn(
+            f"ghcr.io/proflyder/currency-bot@{digest}",
+            (Path(res.render_dir) / "currency-bot.yaml").read_text(),
+        )
+
+    def test_malformed_prebuilt_digest_fails_closed(self):
+        res = self.run_deploy(
+            GOOD_ENV,
+            build=True,
+            extra_env={"PREBUILT_DIGESTS": "currency-bot=latest"},
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("malformed prebuilt digest", res.stderr)
+        self.assertFalse(res.kubectl_called)
 
 
 if __name__ == "__main__":

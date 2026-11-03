@@ -23,9 +23,16 @@
 # Authentication is the job-scoped GITHUB_TOKEN already logged in by the
 # caller (`docker login ghcr.io`); the Bazel push target reads the same Docker
 # config.
+#
+# `PREBUILT_DIGESTS` / `PREBUILT_DIGESTS_FILE` carry the digests `deploy-home`
+# verified and promoted from the pull-request build (DECISIONS 36). Those images
+# are neither rebuilt nor pushed here; the digest is only recorded for the
+# rollout. Local/manual runs set nothing and behave exactly as before.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# shellcheck source=platform/ci/prebuilt-digests.sh
+source "$ROOT/platform/ci/prebuilt-digests.sh"
 IMAGES_DIR="$ROOT/projects/home-assistant/deploy/images"
 REGISTRY=${REGISTRY:-"ghcr.io/proflyder"}
 IMAGE_TAG=${IMAGE_TAG:-$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)}
@@ -90,6 +97,22 @@ push_bazel_tag() {
 
 for image in "$@"; do
   case "$image" in
+    voice-proxy|hermes) ;;
+    *)
+      echo "unknown image: $image" >&2
+      exit 2
+      ;;
+  esac
+  prebuilt=$(prebuilt_digest "$image")
+  if [[ -n "$prebuilt" ]]; then
+    # deploy-home already verified the provenance and attached the commit and
+    # develop tags to this exact digest; rebuilding could only produce a
+    # different image than the one that passed PR CI.
+    record_digest "$image" "$prebuilt"
+    echo "using prebuilt ${REGISTRY}/${image}@${prebuilt} (tags already promoted)"
+    continue
+  fi
+  case "$image" in
     voice-proxy)
       echo "== building voice-proxy with Bazel"
       bin=$(bazel_bin)
@@ -119,10 +142,6 @@ for image in "$@"; do
         "$WORK/hermes"
       docker image inspect "${REGISTRY}/hermes:build" >/dev/null
       push_image "${REGISTRY}/hermes"
-      ;;
-    *)
-      echo "unknown image: $image" >&2
-      exit 2
       ;;
   esac
 done

@@ -16,6 +16,13 @@ name: deploy-home
 # range (`before..sha`) through the same unit map as CI and deploys exactly the
 # affected deployable units; documentation-only pushes deploy nothing.
 #
+# Build once (DECISIONS 36): each deploy job first tries to promote the digests
+# the merged PR built and attested under `tree-<hash>`. Their provenance must
+# verify against this repository's CI workflows; only then are the usual tags
+# attached and the digest handed to the deploy script. Any missing or
+# unverified image falls back to building exactly as before, and the chosen
+# path is recorded in the job summary.
+#
 # The push also runs `warm-caches`, which saves the shared setup-go/setup-bazel
 # caches under the keys PR jobs restore (CI itself no longer runs on develop).
 #
@@ -70,6 +77,11 @@ env:
   # sha256 is the GitHub release asset digest for linux_amd64.
   ORAS_VERSION: "1.3.6"
   ORAS_SHA256: "66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0"
+  # Official crane (google/go-containerregistry): resolves and re-tags a digest
+  # without pulling it. sha256 is the GitHub release asset digest for
+  # Linux_x86_64.
+  CRANE_VERSION: "v0.22.1"
+  CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
   KUBECTL_VERSION: "v1.35.0"
   KUBECTL_SHA256: "a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989"
   HELM_VERSION: "v4.1.4"
@@ -392,6 +404,9 @@ jobs:
       # Request the OIDC token that OpenBao's auth/github role trusts. Only
       # this job needs it; `plan` runs without any secret access.
       id-token: write
+      # Read the build provenance of a PR-built image before promoting its
+      # digest (DECISIONS 36). Reading never grants the right to sign.
+      attestations: read
     env:
       OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
       OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE || 'deploy-home' }}
@@ -611,6 +626,18 @@ jobs:
           done
           echo "ESO-managed Secrets are Ready in $NS"
 
+      # Official crane release, pinned by sha256 like oras/kubectl/helm. It reads
+      # the Docker config written by the login step below.
+      - name: Install pinned crane
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/crane_${CRANE_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" \
+            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+          echo "${CRANE_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" crane
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
       - name: Log in to GHCR
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -618,7 +645,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build once, deploy the same bytes: promote the digests the merged PR
+      # already built and attested under `tree-<hash>`. Each image must exist AND
+      # its provenance must verify against this repository's CI workflows;
+      # otherwise the whole unit falls back to the normal build below.
+      #
+      # This is the correctness gate: a wrong-tree image can never be deployed,
+      # because the tree tag, the verified provenance and the digest read-back
+      # all have to agree before a digest is passed to the deploy script.
+      - name: Promote PR-built images by tree hash
+        id: promote
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGES: ${{ matrix.images }}
+          DEPLOY_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! tree=$(git rev-parse "${DEPLOY_COMMIT}^{tree}" 2>/dev/null); then
+            echo "::warning::cannot resolve the tree of ${DEPLOY_COMMIT}; building images"
+            echo "prebuilt_digests=" >> "$GITHUB_OUTPUT"
+            echo "IMAGE_PROMOTION=build" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if ! node platform/ci/promote.mjs \
+            --images "$IMAGES" \
+            --tree "$tree" \
+            --commit "$DEPLOY_COMMIT" \
+            --repository "${GITHUB_REPOSITORY}"; then
+            # A promotion bug must not block a deploy: fall back to building.
+            echo "image promotion failed; building images as before" >&2
+            echo "prebuilt_digests=" >> "$GITHUB_OUTPUT"
+            echo "IMAGE_PROMOTION=build" >> "$GITHUB_ENV"
+          fi
+
       - name: Build, push and deploy ${{ matrix.id }}
+        env:
+          # Empty means "build exactly as before"; the deploy entrypoints read
+          # this shared value (platform/ci/prebuilt-digests.sh).
+          PREBUILT_DIGESTS: ${{ steps.promote.outputs.prebuilt_digests }}
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -789,6 +853,8 @@ jobs:
             echo "- event: \`$GITHUB_EVENT_NAME\`"
             echo "- workloads: \`${{ matrix.workloads }}\`"
             echo "- images: \`${{ matrix.images }}\`"
+            # Which path the unit took: promoted PR build or a fresh build.
+            echo "- image path: \`${IMAGE_PROMOTION:-unknown}\`"
             echo "- pull request: ${{ needs.plan.outputs.pr_url }}"
             if kubectl -n "${{ matrix.namespace }}" get deployment scheduler >/dev/null 2>&1; then
               STATUS=$(kubectl -n "${{ matrix.namespace }}" exec deployment/scheduler -- \

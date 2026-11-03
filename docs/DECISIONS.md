@@ -248,4 +248,35 @@
     Существующий код переводится по этому правилу поэтапно, отдельными PR;
     рабочее поведение и тестовое покрытие при переводе сохраняются.
 
+36. **Образ собирается один раз на PR; деплой — по git tree hash и provenance.**
+    * Идентичность образа — git tree собираемого коммита. PR собирает merge-ref,
+      и его `git rev-parse HEAD^{tree}` совпадает с tree squash-коммита, пока
+      `develop` не ушёл вперёд. Поэтому тег — `tree-<полный tree hash>`, а не
+      sha коммита.
+    * `ci.yml` → `_images.yml` для PR из этого репозитория (форки — только
+      сборка) после сборки публикует каждый образ затронутых деплой-юнитов в
+      `ghcr.io/proflyder/<image>:tree-<hash>` и создаёт build provenance для
+      digest официальным `actions/attest-build-provenance`
+      (`push-to-registry`). Bazel-образы пушатся существующими `<image>_push`
+      побайтно (digest после push обязан совпасть со собранным), Docker-образы
+      — `docker push`. Права `packages: write`, `id-token: write`,
+      `attestations: write` выданы только job `images` в `ci.yml`.
+    * `deploy-home` считает tree деплоимого коммита. Digest из
+      `tree-<hash>` используется, только если тег существует, а provenance
+      проверяется `gh attestation verify oci://… --repo <owner>/<repo>` с
+      signer, ограниченным `ci.yml`/`_images.yml` этого репозитория. Обычные
+      теги (`<commit sha>`, `develop`) ставятся на тот же digest pinned-`crane`,
+      digest передаётся существующему deploy-скрипту через
+      `PREBUILT_DIGESTS`; скрипт пропускает сборку/push только для этих
+      образов. Любой отсутствующий или непроверенный образ деплой-юнита —
+      откат на обычную сборку; выбранный путь пишется в job summary. Неверный
+      tree не может быть задеплоен.
+    * `ghcr-cleanup.yml` (ежедневно по расписанию; ручной запуск — dry-run по
+      умолчанию) через REST API удаляет версию пакета только если она старше
+      7 дней, все её теги `tree-*` (или тегов нет), и это не новейшая версия
+      пакета. Версии с `develop`, commit sha и semver не удаляются: на них
+      опираются Helm rollback и digest-пины в приватных values. Пакеты — только
+      образы деплой-юнитов из `units.mjs`; `windows-logon-provider` и прочие
+      пакеты аккаунта не рассматриваются.
+
 Меняется решение — обновить этот файл и `STATE.md`.
