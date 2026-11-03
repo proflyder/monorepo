@@ -166,9 +166,13 @@ func (d *Dispatcher) Status(ctx context.Context, limit int) (StatusResult, error
 }
 
 // ValidateSpawn asks the plugin to validate a spawn without creating a thread.
+// Its params are the spawn *target* only: the plugin's `validate_spawn` schema
+// deliberately rejects `title`, `prompt` and `idempotencyKey` (they belong to
+// `spawn`), so the request cannot reuse SpawnRequest. See
+// solutions/bb-home-dispatcher/contract/params.json.
 func (d *Dispatcher) ValidateSpawn(ctx context.Context, req SpawnRequest) error {
 	var out struct{}
-	return d.decode(ctx, MethodValidateSpawn, req, &out)
+	return d.decode(ctx, MethodValidateSpawn, req.target(), &out)
 }
 
 // Spawn creates a visible thread. It is idempotent on IdempotencyKey.
@@ -243,7 +247,8 @@ type Model struct {
 	ReasoningLevels       []string `json:"reasoningLevels"`
 }
 
-// SpawnRequest is accepted by validate_spawn and spawn.
+// SpawnRequest is the `spawn` params. ValidateSpawn narrows it to the target
+// fields before sending.
 type SpawnRequest struct {
 	Profile        string `json:"profile"`
 	ProjectID      string `json:"projectId"`
@@ -253,6 +258,26 @@ type SpawnRequest struct {
 	Title          string `json:"title,omitempty"`
 	Prompt         string `json:"prompt,omitempty"`
 	IdempotencyKey string `json:"idempotencyKey,omitempty"`
+}
+
+// spawnTarget is the whole of `validate_spawn`'s params and the common subset
+// of `spawn`'s.
+type spawnTarget struct {
+	Profile        string `json:"profile"`
+	ProjectID      string `json:"projectId"`
+	ProviderID     string `json:"providerId"`
+	Model          string `json:"model"`
+	ReasoningLevel string `json:"reasoningLevel"`
+}
+
+func (r SpawnRequest) target() spawnTarget {
+	return spawnTarget{
+		Profile:        r.Profile,
+		ProjectID:      r.ProjectID,
+		ProviderID:     r.ProviderID,
+		Model:          r.Model,
+		ReasoningLevel: r.ReasoningLevel,
+	}
 }
 
 // SpawnResult is the spawned thread identity.

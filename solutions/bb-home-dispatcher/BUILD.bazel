@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+# The strict per-method params schema of this plugin, shared with the Go
+# gateway's contract test (solutions/mcp-gateway/internal/bb). Bazel exposes it
+# as data so the two suites check one hand-written source of truth.
+filegroup(
+    name = "contract_params",
+    srcs = ["contract/params.json"],
+)
