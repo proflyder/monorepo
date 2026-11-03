@@ -124,6 +124,20 @@ export const config = {
   units: [
     // ---------------------------------------------------------------- Go --------
     {
+      id: "voice-proxy",
+      platform: "go",
+      title: "solutions/voice-proxy (TTS-safe OpenAI passthrough)",
+      paths: ["solutions/voice-proxy/**"],
+      // No deploy block yet: the image is built and tested here, but the Hermes
+      // rollout still runs the Python proxy until the cutover step.
+      go: {
+        module: ".",
+        packages: ["./solutions/voice-proxy/..."],
+        race: true,
+        build: ["./solutions/voice-proxy/cmd/voice-proxy"],
+      },
+    },
+    {
       id: "scheduler",
       platform: "go",
       title: "solutions/scheduler (scheduler service)",
