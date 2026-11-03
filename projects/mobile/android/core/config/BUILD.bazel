@@ -9,6 +9,7 @@ kt_jvm_library(
         "//packages/kotlin/core:core",
         "//projects/mobile/android/core/model:model",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],
 )
 
@@ -20,5 +21,15 @@ kt_jvm_test(
         ":config",
         "@maven//:junit_junit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+    ],
+)
+
+kt_jvm_test(
+    name = "remote_connection_source_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/core/config/RemoteConnectionSourceTest.kt"],
+    test_class = "dev.proflyder.home.core.config.RemoteConnectionSourceTest",
+    deps = [
+        ":config",
+        "@maven//:junit_junit",
     ],
 )

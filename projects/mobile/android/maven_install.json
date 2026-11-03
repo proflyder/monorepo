@@ -31,9 +31,11 @@
     "com.google.code.findbugs:jsr305": 495355163,
     "com.google.code.gson:gson": 597770368,
     "com.google.errorprone:error_prone_annotations": -1035138750,
+    "com.google.firebase:firebase-abt": -1487293529,
     "com.google.firebase:firebase-annotations": -270926660,
     "com.google.firebase:firebase-common": -1231803625,
     "com.google.firebase:firebase-components": -1590541644,
+    "com.google.firebase:firebase-config": 2112683492,
     "com.google.firebase:firebase-config-interop": 1359513751,
     "com.google.firebase:firebase-crashlytics": 1165487728,
     "com.google.firebase:firebase-encoders": -109571118,
@@ -160,11 +162,13 @@
     "com.google.code.findbugs:jsr305": 870839855,
     "com.google.code.gson:gson": -1575757252,
     "com.google.errorprone:error_prone_annotations": 967586345,
+    "com.google.firebase:firebase-abt:aar": -1348031537,
     "com.google.firebase:firebase-annotations": -2057236433,
     "com.google.firebase:firebase-common-ktx:aar": -215677137,
     "com.google.firebase:firebase-common:aar": 1280495323,
     "com.google.firebase:firebase-components:aar": 2116715906,
     "com.google.firebase:firebase-config-interop:aar": -896453493,
+    "com.google.firebase:firebase-config:aar": -169391591,
     "com.google.firebase:firebase-crashlytics:aar": -542328611,
     "com.google.firebase:firebase-datatransport:aar": 528679375,
     "com.google.firebase:firebase-encoders": -2123324682,
@@ -826,6 +830,12 @@
       },
       "version": "2.5.1"
     },
+    "com.google.firebase:firebase-abt:aar": {
+      "shasums": {
+        "jar": "28d12e9e40c7a4930d784abde033831f7d17b7fb6c1e47eacd5a201391625e88"
+      },
+      "version": "21.1.1"
+    },
     "com.google.firebase:firebase-annotations": {
       "shasums": {
         "jar": "46f6d5dfdd2ccf3c40de897a14bd9779314c3319f44bfd31e7e0a20d935a5e3e"
@@ -855,6 +865,12 @@
         "jar": "6dbb0cf1c46e45fdf03bfe672ba7483360bba700f00f0e64717f700f798a7f1f"
       },
       "version": "16.0.1"
+    },
+    "com.google.firebase:firebase-config:aar": {
+      "shasums": {
+        "jar": "6fb69f35754f9645c504b8f9090050cbca5c83bf6dcca53d441cf81fb27ef6e5"
+      },
+      "version": "22.1.2"
     },
     "com.google.firebase:firebase-crashlytics:aar": {
       "shasums": {
@@ -1831,6 +1847,12 @@
       "androidx.viewpager2:viewpager2:aar",
       "com.google.errorprone:error_prone_annotations"
     ],
+    "com.google.firebase:firebase-abt:aar": [
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-measurement-connector:aar"
+    ],
     "com.google.firebase:firebase-annotations": [
       "javax.inject:javax.inject"
     ],
@@ -1858,6 +1880,20 @@
     "com.google.firebase:firebase-config-interop:aar": [
       "com.google.firebase:firebase-encoders",
       "com.google.firebase:firebase-encoders-json:aar"
+    ],
+    "com.google.firebase:firebase-config:aar": [
+      "androidx.annotation:annotation",
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.firebase:firebase-abt:aar",
+      "com.google.firebase:firebase-annotations",
+      "com.google.firebase:firebase-common-ktx:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-config-interop:aar",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "com.google.firebase:firebase-installations:aar",
+      "com.google.firebase:firebase-measurement-connector:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib"
     ],
     "com.google.firebase:firebase-crashlytics:aar": [
       "androidx.annotation:annotation",
@@ -4702,11 +4738,13 @@
       "com.google.code.findbugs:jsr305",
       "com.google.code.gson:gson",
       "com.google.errorprone:error_prone_annotations",
+      "com.google.firebase:firebase-abt:aar",
       "com.google.firebase:firebase-annotations",
       "com.google.firebase:firebase-common-ktx:aar",
       "com.google.firebase:firebase-common:aar",
       "com.google.firebase:firebase-components:aar",
       "com.google.firebase:firebase-config-interop:aar",
+      "com.google.firebase:firebase-config:aar",
       "com.google.firebase:firebase-crashlytics:aar",
       "com.google.firebase:firebase-datatransport:aar",
       "com.google.firebase:firebase-encoders",
@@ -4878,11 +4916,13 @@
       "com.google.code.findbugs:jsr305",
       "com.google.code.gson:gson",
       "com.google.errorprone:error_prone_annotations",
+      "com.google.firebase:firebase-abt:aar",
       "com.google.firebase:firebase-annotations",
       "com.google.firebase:firebase-common-ktx:aar",
       "com.google.firebase:firebase-common:aar",
       "com.google.firebase:firebase-components:aar",
       "com.google.firebase:firebase-config-interop:aar",
+      "com.google.firebase:firebase-config:aar",
       "com.google.firebase:firebase-crashlytics:aar",
       "com.google.firebase:firebase-datatransport:aar",
       "com.google.firebase:firebase-encoders",

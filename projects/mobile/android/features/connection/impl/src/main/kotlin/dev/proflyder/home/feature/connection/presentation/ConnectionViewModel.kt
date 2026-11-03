@@ -1,8 +1,8 @@
 package dev.proflyder.home.feature.connection.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.config.ConnectionConfig
+import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
@@ -10,85 +10,87 @@ import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
-import dev.proflyder.home.feature.connection.ConnectionDraft
 import dev.proflyder.home.feature.connection.ConnectionRepository
 import dev.proflyder.home.feature.connection.TokenUpdate
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
-import kotlinx.coroutines.launch
 
 enum class ConnectionNotice {
     SAVED,
     SAVED_AND_ONLINE,
+    CONFIG_REFRESHED,
 }
 
 data class ConnectionUiState(
-    val endpointText: String = "",
-    val controlEndpointText: String = "",
     val tokenInput: String = "",
     val clearTokenRequested: Boolean = false,
     val hasStoredToken: Boolean = false,
     val tokenStatus: TokenStatus = TokenStatus.ABSENT,
-    val connectSeconds: String = "5",
-    val readSeconds: String = "20",
+    val remote: RemoteConnectionState = RemoteConnectionState.Unavailable,
+    val refreshingConfig: Boolean = false,
     val saving: Boolean = false,
     val testing: Boolean = false,
     val error: RemoteFailure? = null,
     val status: SchedulerStatus? = null,
     val notice: ConnectionNotice? = null,
 ) {
-    val busy: Boolean get() = saving || testing
+    val busy: Boolean get() = saving || testing || refreshingConfig
 }
 
 class ConnectionViewModel(
     private val repository: ConnectionRepository,
 ) : BaseViewModel<ConnectionUiState>(initialState(repository)) {
 
-    fun setEndpoint(value: String) {
-        mutableState.value = mutableState.value.copy(endpointText = value, error = null, status = null)
-    }
-
-    fun setControlEndpoint(value: String) {
-        mutableState.value = mutableState.value.copy(controlEndpointText = value, error = null, status = null)
+    init {
+        launch {
+            repository.remoteConfig.collect { remote ->
+                updateState { copy(remote = remote) }
+            }
+        }
+        launch {
+            repository.tokenStatus.collect { tokenStatus ->
+                updateState { copy(tokenStatus = tokenStatus) }
+            }
+        }
     }
 
     fun setToken(value: String) {
-        mutableState.value = mutableState.value.copy(tokenInput = value, clearTokenRequested = false, error = null, status = null)
+        updateState { copy(tokenInput = value, clearTokenRequested = false, error = null, status = null) }
     }
 
     fun requestClearToken() {
-        mutableState.value = mutableState.value.copy(tokenInput = "", clearTokenRequested = true)
+        updateState { copy(tokenInput = "", clearTokenRequested = true) }
     }
-
-    fun setConnectSeconds(value: String) {
-        mutableState.value = mutableState.value.copy(connectSeconds = value, error = null, status = null)
-    }
-
-    fun setReadSeconds(value: String) {
-        mutableState.value = mutableState.value.copy(readSeconds = value, error = null, status = null)
-    }
-
-    fun save() = persist(testAfter = false)
 
     fun test() = persist(testAfter = true)
 
+    fun refreshConfig() {
+        val current = currentState
+        if (current.refreshingConfig) return
+        updateState { copy(refreshingConfig = true, error = null, notice = null) }
+        launch {
+            try {
+                repository.refreshRemoteConfig()
+                updateState { copy(refreshingConfig = false, notice = ConnectionNotice.CONFIG_REFRESHED) }
+            } catch (_: Exception) {
+                updateState {
+                    copy(
+                        refreshingConfig = false,
+                        error = RemoteFailure.Offline("Remote Config could not be refreshed."),
+                    )
+                }
+            }
+        }
+    }
+
     fun consumeNotice() {
-        mutableState.value = mutableState.value.copy(notice = null)
+        updateState { copy(notice = null) }
     }
 
     private fun persist(testAfter: Boolean) {
-        val current = mutableState.value
-        if (current.busy) return
-
-        val connect = current.connectSeconds.toIntOrNull()
-        val read = current.readSeconds.toIntOrNull()
-        if (connect == null || read == null || connect !in 1..120 || read !in 1..120) {
-            mutableState.value = current.copy(
-                error = RemoteFailure.Validation(dev.proflyder.home.core.model.Field.TIMEOUT),
-            )
-            return
-        }
+        val current = currentState
+        if (current.saving || current.testing) return
 
         val tokenUpdate = when {
             current.clearTokenRequested -> TokenUpdate.Clear
@@ -96,46 +98,47 @@ class ConnectionViewModel(
             else -> TokenUpdate.Keep
         }
 
-        mutableState.value = current.copy(
-            saving = true,
-            testing = testAfter,
-            error = null,
-            notice = null,
-            status = null,
-        )
+        updateState {
+            copy(
+                saving = true,
+                testing = testAfter,
+                error = null,
+                notice = null,
+                status = null,
+            )
+        }
 
-        viewModelScope.launch {
-            when (val saved = repository.save(ConnectionDraft(current.endpointText, tokenUpdate, connect, read, current.controlEndpointText))) {
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    saving = false,
-                    testing = false,
-                    error = saved.failure,
-                )
+        launch {
+            when (val saved = repository.saveToken(tokenUpdate)) {
+                is Outcome.Failure -> updateState {
+                    copy(saving = false, testing = false, error = saved.failure)
+                }
                 is Outcome.Success -> {
                     val config: ConnectionConfig = saved.value
-                    mutableState.value = mutableState.value.copy(
-                        endpointText = config.endpoint?.baseUrl().orEmpty(),
-                        controlEndpointText = config.controlEndpoint?.baseUrl().orEmpty(),
-                        tokenInput = "",
-                        clearTokenRequested = false,
-                        hasStoredToken = config.hasToken,
-                        tokenStatus = repository.tokenStatus.value,
-                        saving = false,
-                    )
+                    updateState {
+                        copy(
+                            tokenInput = "",
+                            clearTokenRequested = false,
+                            hasStoredToken = config.hasToken,
+                            tokenStatus = repository.tokenStatus.value,
+                            saving = false,
+                        )
+                    }
                     if (!testAfter) {
-                        mutableState.value = mutableState.value.copy(notice = ConnectionNotice.SAVED)
+                        updateState { copy(notice = ConnectionNotice.SAVED) }
                         return@launch
                     }
                     when (val status = repository.testConnection()) {
-                        is Outcome.Success -> mutableState.value = mutableState.value.copy(
-                            testing = false,
-                            status = status.value,
-                            notice = ConnectionNotice.SAVED_AND_ONLINE,
-                        )
-                        is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                            testing = false,
-                            error = status.failure,
-                        )
+                        is Outcome.Success -> updateState {
+                            copy(
+                                testing = false,
+                                status = status.value,
+                                notice = ConnectionNotice.SAVED_AND_ONLINE,
+                            )
+                        }
+                        is Outcome.Failure -> updateState {
+                            copy(testing = false, error = status.failure)
+                        }
                     }
                 }
             }
@@ -158,11 +161,8 @@ class ConnectionViewModelFactoryContributor(
 private fun initialState(repository: ConnectionRepository): ConnectionUiState {
     val config = repository.config.value
     return ConnectionUiState(
-        endpointText = config.endpoint?.baseUrl().orEmpty(),
-        controlEndpointText = config.controlEndpoint?.baseUrl().orEmpty(),
         hasStoredToken = config.hasToken,
         tokenStatus = repository.tokenStatus.value,
-        connectSeconds = (config.connectTimeoutMillis / 1000L).toString(),
-        readSeconds = (config.readTimeoutMillis / 1000L).toString(),
+        remote = repository.remoteConfig.value,
     )
 }

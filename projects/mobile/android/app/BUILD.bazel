@@ -22,6 +22,7 @@ metro_android_library(
         "//projects/mobile/android/core/model:model",
         "//projects/mobile/android/core/navigation:navigation",
         "//projects/mobile/android/core/network:network",
+        "//projects/mobile/android/core/remoteconfig:remoteconfig",
         "//projects/mobile/android/core/settings:settings",
         "//projects/mobile/android/core/ui:ui",
         "//projects/mobile/android/features/alarms/api:api",
