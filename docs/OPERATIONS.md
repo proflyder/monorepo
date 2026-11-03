@@ -424,6 +424,18 @@ kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
   sh -c 'curl -fsS -H "Authorization: Bearer $(cat /run/secrets/voice/token)" \
   http://mcp-gateway:8080/v1/voice/state'
 
+# bootstrap обновлений диспетчера (рабочий профиль): только cursor, без истории
+kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
+  sh -c 'curl -fsS -H "Authorization: Bearer $(cat /run/secrets/voice/token)" \
+  -H "Content-Type: application/json" -d "{}" \
+  http://mcp-gateway:8080/v1/voice/updates'
+```
+
+Голосовой прокси сам опрашивает `/v1/voice/updates` и озвучивает завершённые
+ходы диспетчера, которые начал не владелец (`system`/`agent`), только пока
+профиль «Рабочий». Выключается `HERMES_VOICE_UPDATES=0`; подробности —
+`projects/home-assistant/hermes/README.md`.
+
 # профиль и цвет кольца станции
 #   HA: input_select.ricardo_voice_profile, switch.ricardo_work_profile
 #   станция: select.iandeks_stantsiia_midi_voice_color (Blue = рабочий)

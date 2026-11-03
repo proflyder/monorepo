@@ -43,6 +43,9 @@ func (f *fakeBB) Send(_ context.Context, req bb.SendRequest) (bb.SendResult, err
 func (f *fakeBB) TurnResult(context.Context, bb.TurnResultRequest) (bb.TurnResultResult, error) {
 	return bb.TurnResultResult{Status: "idle"}, nil
 }
+func (f *fakeBB) Updates(context.Context, bb.UpdatesRequest) (bb.UpdatesResult, error) {
+	return bb.UpdatesResult{}, nil
+}
 
 func personalTargets() bb.Targets {
 	return bb.Targets{Projects: []bb.Target{

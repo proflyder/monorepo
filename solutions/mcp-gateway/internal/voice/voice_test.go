@@ -27,6 +27,10 @@ type fakeDispatcher struct {
 
 	turns []bb.TurnResultResult
 	err   error
+
+	updates     []bb.UpdatesResult
+	updatesErr  error
+	updateCalls []bb.UpdatesRequest
 }
 
 func (f *fakeDispatcher) Send(_ context.Context, req bb.SendRequest) (bb.SendResult, error) {
@@ -50,6 +54,21 @@ func (f *fakeDispatcher) TurnResult(_ context.Context, _ bb.TurnResultRequest) (
 	}
 	result := f.turns[0]
 	f.turns = f.turns[1:]
+	return result, nil
+}
+
+func (f *fakeDispatcher) Updates(_ context.Context, req bb.UpdatesRequest) (bb.UpdatesResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.updateCalls = append(f.updateCalls, req)
+	if f.updatesErr != nil {
+		return bb.UpdatesResult{}, f.updatesErr
+	}
+	if len(f.updates) == 0 {
+		return bb.UpdatesResult{Cursor: 0}, nil
+	}
+	result := f.updates[0]
+	f.updates = f.updates[1:]
 	return result, nil
 }
 
@@ -286,5 +305,114 @@ func TestRateLimit(t *testing.T) {
 	rec, body := post(t, handler, "/v1/voice/utterance", UtteranceRequest{Text: "два", Profile: "personal"})
 	if rec.Code != http.StatusTooManyRequests || body["speech"] != SpeechRateLimited {
 		t.Fatalf("status=%d body=%v", rec.Code, body)
+	}
+}
+
+func newUpdatesHandler(d Dispatcher) http.Handler {
+	return New(Options{
+		Dispatcher:   d,
+		Mode:         agentmode.New(),
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		PollInterval: time.Millisecond,
+		MaxWait:      25 * time.Second,
+		UpdatesWait:  10 * time.Second,
+	}).Handler()
+}
+
+func TestUpdatesBootstrapReturnsCursorWithoutHistory(t *testing.T) {
+	dispatcher := &fakeDispatcher{updates: []bb.UpdatesResult{{Cursor: 12}}}
+	handler := newUpdatesHandler(dispatcher)
+	rec, body := post(t, handler, "/v1/voice/updates", UpdatesRequest{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body["cursor"] != float64(12) {
+		t.Fatalf("cursor = %v", body["cursor"])
+	}
+	items, ok := body["items"].([]any)
+	if !ok || len(items) != 0 {
+		t.Fatalf("items = %v", body["items"])
+	}
+	if len(dispatcher.updateCalls) != 1 {
+		t.Fatalf("calls = %d", len(dispatcher.updateCalls))
+	}
+	call := dispatcher.updateCalls[0]
+	if call.AfterSeq != nil {
+		t.Fatalf("bootstrap sent afterSeq = %d", *call.AfterSeq)
+	}
+	if call.WaitSeconds == nil || *call.WaitSeconds != 10 {
+		t.Fatalf("waitSeconds = %v, want the bridge cap 10", call.WaitSeconds)
+	}
+}
+
+func TestUpdatesForwardsCursorAndReturnsItems(t *testing.T) {
+	dispatcher := &fakeDispatcher{updates: []bb.UpdatesResult{{
+		Cursor: 14,
+		Items:  []bb.UpdateItem{{Seq: 13, Spoken: "Готово, ребёнок закончил."}},
+	}}}
+	handler := newUpdatesHandler(dispatcher)
+	afterSeq, wait := int64(4), 5
+	rec, body := post(t, handler, "/v1/voice/updates", UpdatesRequest{
+		AfterSeq:    &afterSeq,
+		WaitSeconds: &wait,
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	items, ok := body["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("items = %v", body["items"])
+	}
+	item := items[0].(map[string]any)
+	if item["seq"] != float64(13) || item["spoken"] != "Готово, ребёнок закончил." {
+		t.Fatalf("item = %v", item)
+	}
+	call := dispatcher.updateCalls[0]
+	if call.AfterSeq == nil || *call.AfterSeq != 4 {
+		t.Fatalf("afterSeq = %v", call.AfterSeq)
+	}
+	if call.WaitSeconds == nil || *call.WaitSeconds != 5 {
+		t.Fatalf("waitSeconds = %v", call.WaitSeconds)
+	}
+}
+
+func TestUpdatesClampsWaitToTheBridgeCap(t *testing.T) {
+	dispatcher := &fakeDispatcher{updates: []bb.UpdatesResult{{Cursor: 1}}}
+	handler := newUpdatesHandler(dispatcher)
+	wait := 100
+	post(t, handler, "/v1/voice/updates", UpdatesRequest{WaitSeconds: &wait})
+	call := dispatcher.updateCalls[0]
+	if call.WaitSeconds == nil || *call.WaitSeconds != 10 {
+		t.Fatalf("waitSeconds = %v, want 10", call.WaitSeconds)
+	}
+}
+
+func TestUpdatesErrorMapsLikeResult(t *testing.T) {
+	dispatcher := &fakeDispatcher{updatesErr: &bb.Error{
+		Code:   "bridge_error",
+		Speech: "Сервер агентов недоступен.",
+	}}
+	handler := newUpdatesHandler(dispatcher)
+	rec, body := post(t, handler, "/v1/voice/updates", UpdatesRequest{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body["status"] != "failed" || body["speech"] != "Сервер агентов недоступен." {
+		t.Fatalf("body = %v", body)
+	}
+}
+
+func TestUpdatesRejectsNegativeAfterSeq(t *testing.T) {
+	dispatcher := &fakeDispatcher{}
+	handler := newUpdatesHandler(dispatcher)
+	afterSeq := int64(-1)
+	rec, body := post(t, handler, "/v1/voice/updates", UpdatesRequest{AfterSeq: &afterSeq})
+	if rec.Code != http.StatusBadRequest || body["speech"] != SpeechBadRequest {
+		t.Fatalf("status=%d body=%v", rec.Code, body)
+	}
+	if len(dispatcher.updateCalls) != 0 {
+		t.Fatal("invalid request reached the bridge")
 	}
 }

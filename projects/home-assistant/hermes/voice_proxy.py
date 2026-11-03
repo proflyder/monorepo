@@ -69,6 +69,16 @@ VOICE_GATEWAY_TIMEOUT = float(os.environ.get("HERMES_VOICE_GATEWAY_TIMEOUT", "5"
 VOICE_RESULT_TIMEOUT = float(os.environ.get("HERMES_VOICE_RESULT_TIMEOUT", "900"))
 VOICE_RESULT_RETRY = float(os.environ.get("HERMES_VOICE_RESULT_RETRY", "2"))
 VOICE_RESULT_WAIT = int(os.environ.get("HERMES_VOICE_RESULT_WAIT", "25"))
+# Dispatcher updates: turns the owner did not start by voice (child-completed
+# system messages, messages from other bb threads) are announced only while the
+# speaker profile is work. "0" disables the poller.
+VOICE_UPDATES_DISABLED = os.environ.get("HERMES_VOICE_UPDATES", "1").strip().lower() \
+    in ("0", "false", "no", "off")
+UPDATES_RETRY_MIN = float(os.environ.get("HERMES_VOICE_UPDATES_RETRY", "2"))
+UPDATES_RETRY_MAX = 60.0
+# The gateway may answer a long-poll early to stay under its SSH timeout; a
+# short pause avoids a hot loop without adding noticeable latency.
+UPDATES_IDLE_PAUSE = 0.1
 ANNOUNCE_MAX_CHARS = int(os.environ.get("HERMES_VOICE_ANNOUNCE_MAX_CHARS", "200"))
 ANNOUNCE_SCRIPT = os.environ.get("HERMES_VOICE_ANNOUNCE_SCRIPT", "script.schedule_announce")
 # A late answer that asks the owner something must leave the microphone open.
@@ -137,6 +147,9 @@ _profile_lock = threading.Lock()
 _profile_cache: tuple[str, float] | None = None
 _background_lock = threading.Lock()
 _background_threads: set[threading.Thread] = set()
+_updates_lock = threading.Lock()
+_updates_thread: threading.Thread | None = None
+_updates_stop: threading.Event | None = None
 
 
 def _read_secret(path: str, inline: str) -> str:
@@ -170,6 +183,11 @@ def routing_enabled() -> bool:
         and HA_URL
         and ha_token()
     )
+
+
+def updates_enabled() -> bool:
+    """Dispatcher updates ride the same profile routing and can be switched off."""
+    return routing_enabled() and not VOICE_UPDATES_DISABLED
 
 
 def profile_from_state(state: str | None) -> str | None:
@@ -239,6 +257,16 @@ def call_result(thread_id: str, after_seq: int, wait_seconds: int) -> dict[str, 
         VOICE_GATEWAY_URL + "/v1/voice/result",
         {"threadId": thread_id, "afterSeq": after_seq,
          "waitSeconds": max(1, wait_seconds)},
+        voice_token(), VOICE_GATEWAY_TIMEOUT + wait_seconds, {},
+    )
+
+
+def call_updates(after_seq: int | None, wait_seconds: int) -> dict[str, Any]:
+    body: dict[str, Any] = {"waitSeconds": max(1, wait_seconds)}
+    if after_seq is not None:
+        body["afterSeq"] = after_seq
+    return _post_json(
+        VOICE_GATEWAY_URL + "/v1/voice/updates", body,
         voice_token(), VOICE_GATEWAY_TIMEOUT + wait_seconds, {},
     )
 
@@ -392,6 +420,123 @@ def wait_background_tasks(timeout: float = 5.0) -> None:
         threads = list(_background_threads)
     for thread in threads:
         thread.join(max(0.0, deadline - time.monotonic()))
+
+
+def _updates_cursor(response: dict[str, Any]) -> int | None:
+    if not isinstance(response, dict):
+        return None
+    cursor = response.get("cursor")
+    if isinstance(cursor, bool) or not isinstance(cursor, int) or cursor < 0:
+        return None
+    return cursor
+
+
+def _updates_spoken(items: Any) -> list[str]:
+    if not isinstance(items, list):
+        return []
+    spoken: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("spoken")
+        if isinstance(text, str) and text.strip():
+            spoken.append(text.strip())
+    return spoken
+
+
+def _updates_poller(stop: threading.Event, fetch, profile_reader, announcer,
+                    sleeper) -> None:
+    """Announce completed dispatcher turns that the owner did not start.
+
+    The cursor is always advanced, so skipped batches are not replayed. A work
+    profile re-reads HA for every batch; personal and unknown profiles drop the
+    batch. Errors back off 2 s -> 60 s and never speak or reach Hermes.
+    """
+    def pause(seconds: float) -> None:
+        if sleeper is not None:
+            sleeper(seconds)
+        else:
+            stop.wait(seconds)
+
+    cursor: int | None = None
+    retry = UPDATES_RETRY_MIN
+    while not stop.is_set():
+        try:
+            if cursor is None:
+                response = fetch(None, 1)
+                next_cursor = _updates_cursor(response)
+                if next_cursor is None:
+                    raise ValueError("updates bootstrap has no cursor")
+                cursor = next_cursor
+                retry = UPDATES_RETRY_MIN
+                sys.stderr.write(
+                    "voice-proxy: updates bootstrap cursor=%d\n" % cursor)
+                pause(UPDATES_IDLE_PAUSE)
+                continue
+            response = fetch(cursor, VOICE_RESULT_WAIT)
+            next_cursor = _updates_cursor(response)
+            if next_cursor is None:
+                raise ValueError("updates response has no cursor")
+            cursor = next_cursor
+            retry = UPDATES_RETRY_MIN
+            items = response.get("items")
+            spoken = _updates_spoken(items)
+            if isinstance(items, list) and items:
+                # Work profile only: read fresh from HA, no cache.
+                profile = profile_reader()
+                announced = listening = False
+                if profile == PROFILE_WORK and spoken:
+                    text = announce_text(" ".join(spoken))
+                    if text:
+                        announced, listening = announcer(text)
+                sys.stderr.write(
+                    "voice-proxy: updates items=%d announced=%s listen=%s "
+                    "profile=%s cursor=%d\n"
+                    % (len(items), announced, listening,
+                       profile or "unknown", cursor)
+                )
+            pause(UPDATES_IDLE_PAUSE)
+        except Exception as exc:  # noqa: BLE001 - the poller must never die
+            # Only structural data; spoken text never goes to the log.
+            sys.stderr.write(
+                "voice-proxy: updates error=%s backoff=%.1fs\n"
+                % (type(exc).__name__, retry)
+            )
+            pause(retry)
+            retry = min(UPDATES_RETRY_MAX, retry * 2)
+
+
+def start_updates_poller(*, stop: threading.Event | None = None,
+                         fetch=None, profile_reader=None, announcer=None,
+                         sleeper=None) -> threading.Thread:
+    """Start the daemon poller once; repeated calls return the live thread."""
+    global _updates_thread, _updates_stop
+    with _updates_lock:
+        if _updates_thread is not None and _updates_thread.is_alive():
+            return _updates_thread
+        event = stop if stop is not None else threading.Event()
+        thread = threading.Thread(
+            target=_updates_poller,
+            args=(event, fetch or call_updates, profile_reader or _fetch_profile,
+                  announcer or announce, sleeper),
+            name="voice-updates-poller", daemon=True,
+        )
+        _updates_thread = thread
+        _updates_stop = event
+        thread.start()
+        return thread
+
+
+def stop_updates_poller(timeout: float = 2.0) -> None:
+    global _updates_thread, _updates_stop
+    with _updates_lock:
+        thread, event = _updates_thread, _updates_stop
+        _updates_thread = None
+        _updates_stop = None
+    if event is not None:
+        event.set()
+    if thread is not None and thread is not threading.current_thread():
+        thread.join(timeout)
 
 
 @dataclass(frozen=True)
@@ -846,11 +991,14 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     server = ThreadingHTTPServer((BIND, PORT), Handler)
     print(f"hermes voice proxy on http://{BIND}:{PORT} -> {UPSTREAM}", flush=True)
+    if updates_enabled():
+        start_updates_poller()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        stop_updates_poller()
         server.server_close()
     return 0
 

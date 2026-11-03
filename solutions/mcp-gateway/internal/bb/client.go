@@ -23,6 +23,7 @@ const (
 	MethodSpawn         = "spawn"
 	MethodSend          = "send"
 	MethodTurnResult    = "turn_result"
+	MethodUpdates       = "updates"
 )
 
 // Short Russian phrases used when the bridge or the plugin fails. They are
@@ -79,6 +80,7 @@ type API interface {
 	Spawn(ctx context.Context, req SpawnRequest) (SpawnResult, error)
 	Send(ctx context.Context, req SendRequest) (SendResult, error)
 	TurnResult(ctx context.Context, req TurnResultRequest) (TurnResultResult, error)
+	Updates(ctx context.Context, req UpdatesRequest) (UpdatesResult, error)
 }
 
 var _ API = (*Dispatcher)(nil)
@@ -203,6 +205,15 @@ func (d *Dispatcher) TurnResult(ctx context.Context, req TurnResultRequest) (Tur
 	return out, nil
 }
 
+// Updates polls completed dispatcher turns the owner did not start.
+func (d *Dispatcher) Updates(ctx context.Context, req UpdatesRequest) (UpdatesResult, error) {
+	var out UpdatesResult
+	if err := d.decode(ctx, MethodUpdates, req, &out); err != nil {
+		return UpdatesResult{}, err
+	}
+	return out, nil
+}
+
 // Targets is the `targets` result.
 type Targets struct {
 	Projects []Target `json:"projects"`
@@ -306,6 +317,26 @@ type SendResult struct {
 type TurnResultRequest struct {
 	ThreadID string `json:"threadId"`
 	AfterSeq int64  `json:"afterSeq"`
+}
+
+// UpdatesRequest polls completed dispatcher turns that the owner did not
+// start. AfterSeq nil is the bootstrap call (cursor only, no history).
+type UpdatesRequest struct {
+	AfterSeq    *int64 `json:"afterSeq,omitempty"`
+	WaitSeconds *int   `json:"waitSeconds,omitempty"`
+}
+
+// UpdateItem is one completed non-owner turn and its 🔊 line.
+type UpdateItem struct {
+	Seq    int64  `json:"seq"`
+	Spoken string `json:"spoken"`
+}
+
+// UpdatesResult is the dispatcher-updates answer. Cursor is the latest event
+// seq of the dispatcher thread.
+type UpdatesResult struct {
+	Cursor int64        `json:"cursor"`
+	Items  []UpdateItem `json:"items"`
 }
 
 // TurnResultResult is the turn outcome. Spoken is nil when the agent did not

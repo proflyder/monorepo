@@ -1139,7 +1139,7 @@ function addDispatcherThread(world, status = "idle") {
   });
 }
 
-function makeCompactionDispatcher({ world, settings = {}, nowRef }) {
+function makeCompactionDispatcher({ world, settings = {}, nowRef, delay }) {
   const kv = fakeKv();
   const dispatcher = createDispatcher({
     getSdk: () => world.sdk,
@@ -1153,6 +1153,7 @@ function makeCompactionDispatcher({ world, settings = {}, nowRef }) {
       ...settings,
     }),
     now: () => nowRef.value,
+    ...(delay === undefined ? {} : { delay }),
     sendWaitMs: 0,
   });
   return { dispatcher, kv };
@@ -1472,4 +1473,117 @@ test("status reports compaction state and settings", async () => {
   assert.equal(row.compact.lastCompactionStatus, null);
   assert.equal(row.compact.pendingReminder, false);
   assert.equal(row.compact.compactionPending, false);
+});
+
+// -------------------------------------------------------------- updates --
+
+function pushTurn(world, threadId, initiator, spoken, text) {
+  let counter = (pushTurn.counters ??= new Map());
+  const next = (counter.get(threadId) ?? 0) + 1;
+  counter.set(threadId, next);
+  const request = world.pushEvent(threadId, "client/turn/requested", {
+    requestId: `req_updates_${next}`,
+    target: { kind: "new-turn" },
+    initiator,
+  });
+  if (text !== undefined) {
+    world.pushEvent(threadId, "item/completed", {
+      item: { type: "agentMessage", text },
+    });
+  } else if (spoken !== null) {
+    world.pushEvent(threadId, "item/completed", {
+      item: { type: "agentMessage", text: `Ответ.\n🔊 ${spoken}` },
+    });
+  } else {
+    world.pushEvent(threadId, "item/completed", {
+      item: { type: "agentMessage", text: "Ответ без озвучки." },
+    });
+  }
+  const completion = world.pushEvent(threadId, "turn/completed", {
+    status: "completed",
+  });
+  return { request, completion };
+}
+
+test("updates returns system and agent turns, never owner turns", async () => {
+  const { route, world } = await makePlugin();
+  const owner = pushTurn(world, "thr_dispatcher", "user", "Владелец.");
+  const system = pushTurn(world, "thr_dispatcher", "system", "Система.");
+  const agent = pushTurn(world, "thr_dispatcher", "agent", "Агент.");
+  const ownerSilent = pushTurn(world, "thr_dispatcher", "user", null);
+  const systemSilent = pushTurn(world, "thr_dispatcher", "system", null);
+
+  const response = await callRoute(route, {
+    method: "updates",
+    params: { afterSeq: 0, waitSeconds: 5 },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+  const items = response.body.result.items;
+  assert.deepEqual(
+    items.map((item) => item.seq),
+    [system.completion.seq, agent.completion.seq],
+  );
+  assert.deepEqual(
+    items.map((item) => item.spoken),
+    ["Система.", "Агент."],
+  );
+  assert.ok(items.every((item) => item.seq !== owner.completion.seq));
+  assert.ok(items.every((item) => item.seq !== ownerSilent.completion.seq));
+  assert.equal(response.body.result.cursor, systemSilent.completion.seq);
+});
+
+test("updates bootstrap returns the cursor and no history", async () => {
+  const { route, world } = await makePlugin();
+  pushTurn(world, "thr_dispatcher", "system", "Старое обновление.");
+  const last = world.pushEvent("thr_dispatcher", "turn/started", {});
+
+  const response = await callRoute(route, { method: "updates", params: {} });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.result.items, []);
+  assert.equal(response.body.result.cursor, last.seq);
+});
+
+test("updates long-polls, advances the cursor and skips a silent turn", async () => {
+  const world = makeWorld();
+  addDispatcherThread(world, "idle");
+  pushTurn(world, "thr_dispatcher", "user", null);
+  const clock = { value: 1000 };
+  const delays = [];
+  const { dispatcher } = makeCompactionDispatcher({
+    world,
+    nowRef: clock,
+    delay: async (ms) => {
+      delays.push(ms);
+      clock.value += ms;
+    },
+  });
+
+  const result = await dispatcher.call("updates", {
+    afterSeq: 0,
+    waitSeconds: 4,
+  });
+  assert.deepEqual(result.items, []);
+  assert.deepEqual(delays, [1000, 1000, 1000, 1000]);
+  const cursor = result.cursor;
+  assert.ok(cursor > 0);
+
+  // The skipped turn is before the cursor, so a follow-up call returns at
+  // once instead of rescanning it for the whole wait window.
+  delays.length = 0;
+  const repeat = await dispatcher.call("updates", {
+    afterSeq: cursor,
+    waitSeconds: 4,
+  });
+  assert.deepEqual(repeat.items, []);
+  assert.equal(repeat.cursor, cursor);
+  assert.deepEqual(delays, [1000, 1000, 1000, 1000]);
+});
+
+test("updates refuses a plugin without a configured dispatcher", async () => {
+  const { route } = await makePlugin({ settings: { dispatcherThreadId: "" } });
+  const response = await callRoute(route, { method: "updates", params: {} });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.code, "dispatcher_not_configured");
 });

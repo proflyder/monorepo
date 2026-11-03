@@ -151,7 +151,7 @@ from="192.0.2.27",command="/usr/local/bin/bb-dispatch",restrict ssh-ed25519 AAAA
 
 | | |
 |---|---|
-| stdin | один JSON-объект ≤ 16 KiB с `method` из `targets`, `status`, `validate_spawn`, `spawn`, `send`, `turn_result`; `params`, если есть, — объект |
+| stdin | один JSON-объект ≤ 16 KiB с `method` из `targets`, `status`, `validate_spawn`, `spawn`, `send`, `turn_result`, `updates`; `params`, если есть, — объект |
 | stdout | ответ плагина как есть, либо `{"ok":false,"code":...,"speech":"..."}` |
 | exit 0 | плагин ответил (в том числе HTTP 4xx/5xx с `ok:false`) — шлюз читает `ok/code/speech` |
 | exit 1 | транспортная ошибка, `code: bridge_error`, «Сервер агентов недоступен.» |

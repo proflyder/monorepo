@@ -11,7 +11,7 @@ import {
 //
 //   voice / Hermes -> mcp-gateway -> SSH forced command -> curl -> this route
 //
-// There is no LLM here and no arbitrary operation: the six methods below are
+// There is no LLM here and no arbitrary operation: the seven methods below are
 // the whole surface. bb itself is never exposed; only this plugin route is,
 // with bb's per-plugin token plus an HMAC signature over the exact body.
 export default async function plugin(bb) {

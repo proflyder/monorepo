@@ -777,5 +777,145 @@ class VoiceRoutingTests(unittest.TestCase):
         self.assertEqual(voice_proxy._route_counts["hermes"], 1)
 
 
+
+class UpdatesPollerTests(unittest.TestCase):
+    """Dispatcher updates: announce only work-profile non-owner turns."""
+
+    def setUp(self):
+        voice_proxy.stop_updates_poller(1.0)
+
+    def tearDown(self):
+        voice_proxy.stop_updates_poller(1.0)
+
+    def wait_until(self, predicate, timeout=2.0, message="condition not met"):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate():
+                return
+            time.sleep(0.01)
+        self.fail(message)
+
+    def start(self, fetch, *, profile="work", profile_reader=None,
+              announcer=None, sleeper=None, stop=None):
+        stop = stop if stop is not None else threading.Event()
+        reader = profile_reader if profile_reader is not None else (lambda: profile)
+        voice_proxy.start_updates_poller(
+            stop=stop, fetch=fetch, profile_reader=reader,
+            announcer=announcer or voice_proxy.announce, sleeper=sleeper)
+        self.addCleanup(stop.set)
+        return stop
+
+    def test_bootstrap_has_no_history_and_next_call_uses_the_cursor(self):
+        calls = []
+
+        def fetch(after_seq, wait_seconds):
+            calls.append((after_seq, wait_seconds))
+            return {"cursor": 5, "items": []}
+
+        stop = self.start(fetch)
+        self.wait_until(lambda: len(calls) >= 2, message="poller did not bootstrap")
+        stop.set()
+        self.assertIsNone(calls[0][0])
+        self.assertEqual(calls[1][0], 5)
+        self.assertEqual(calls[0][1], 1)
+
+    def test_work_profile_announces_joined_spoken_text(self):
+        calls = []
+        announced = []
+
+        def fetch(after_seq, wait_seconds):
+            calls.append((after_seq, wait_seconds))
+            if len(calls) == 1:
+                return {"cursor": 5, "items": []}
+            if len(calls) == 2:
+                return {"cursor": 9, "items": [
+                    {"seq": 8, "spoken": "Первый."},
+                    {"seq": 9, "spoken": "Второй."},
+                ]}
+            return {"cursor": 9, "items": []}
+
+        def announcer(text):
+            announced.append(text)
+            return True, False
+
+        self.start(fetch, profile="work", announcer=announcer)
+        self.wait_until(lambda: announced, message="batch was not announced")
+        self.assertEqual(announced, ["Первый. Второй."])
+
+    def test_personal_profile_drops_the_batch_without_speaking(self):
+        calls = []
+        reads = []
+        announced = []
+
+        def fetch(after_seq, wait_seconds):
+            calls.append(after_seq)
+            if len(calls) == 1:
+                return {"cursor": 5, "items": []}
+            if len(calls) == 2:
+                return {"cursor": 6, "items": [{"seq": 6, "spoken": "Не озвучивать."}]}
+            return {"cursor": 6, "items": []}
+
+        def announcer(text):
+            announced.append(text)
+            return True, False
+
+        self.start(fetch, profile_reader=lambda: reads.append("read") or "personal",
+                   announcer=announcer)
+        self.wait_until(lambda: reads, message="profile was not read for the batch")
+        time.sleep(0.2)
+        self.assertEqual(announced, [])
+
+    def test_question_uses_start_conversation(self):
+        calls = []
+
+        def fetch(after_seq, wait_seconds):
+            calls.append(after_seq)
+            if len(calls) == 1:
+                return {"cursor": 5, "items": []}
+            if len(calls) == 2:
+                return {"cursor": 6, "items": [
+                    {"seq": 6, "spoken": "Готово. Подтверждаете?"}]}
+            return {"cursor": 6, "items": []}
+
+        with patch.object(voice_proxy, "_start_conversation",
+                          return_value=True) as start_conversation, \
+                patch.object(voice_proxy, "_announce_via_script",
+                             return_value=True) as script:
+            self.start(fetch, profile="work")
+            self.wait_until(lambda: start_conversation.called,
+                            message="question did not open the microphone")
+        start_conversation.assert_called_once_with("Готово. Подтверждаете?")
+        script.assert_not_called()
+
+    def test_errors_back_off_exponentially(self):
+        stop = threading.Event()
+        delays = []
+
+        def sleeper(seconds):
+            delays.append(seconds)
+            if len(delays) >= 4:
+                stop.set()
+
+        def fetch(after_seq, wait_seconds):
+            raise urllib.error.URLError("gateway down")
+
+        thread = voice_proxy.start_updates_poller(
+            stop=stop, fetch=fetch, sleeper=sleeper)
+        thread.join(2.0)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(delays, [2.0, 4.0, 8.0, 16.0])
+
+    def test_updates_switch_is_default_on_and_zero_disables(self):
+        with patch.object(voice_proxy, "VOICE_UPDATES_DISABLED", False), \
+                patch.object(voice_proxy, "routing_enabled", return_value=True):
+            self.assertTrue(voice_proxy.updates_enabled())
+        with patch.object(voice_proxy, "VOICE_UPDATES_DISABLED", True), \
+                patch.object(voice_proxy, "routing_enabled", return_value=True):
+            self.assertFalse(voice_proxy.updates_enabled())
+        with patch.object(voice_proxy, "VOICE_UPDATES_DISABLED", False), \
+                patch.object(voice_proxy, "routing_enabled", return_value=False):
+            self.assertFalse(voice_proxy.updates_enabled())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
