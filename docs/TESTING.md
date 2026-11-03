@@ -160,6 +160,9 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
   --nocache_test_results --test_output=errors
 ./secrets/local-tools/bazelisk build //projects/mobile/android:app
 # debug APK: bazel-bin/projects/mobile/android/app/app.apk
+
+# Android Lint (also part of android_tests) needs cmdline-tools 23.0.
+./secrets/local-tools/bazelisk test //projects/mobile/android:android_lint
 ```
 
 Android-гейты и их актуальный состав перечислены в

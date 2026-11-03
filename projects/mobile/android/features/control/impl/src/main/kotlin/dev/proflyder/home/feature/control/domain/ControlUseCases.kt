@@ -10,7 +10,7 @@ import dev.proflyder.home.feature.control.ControlRepository
 import dev.zacsweers.metro.Inject
 
 /** Loads the catalog; entries of kinds this app version cannot present are dropped. */
-class LoadControlCatalog @Inject constructor(
+@Inject class LoadControlCatalog(
     private val repository: ControlRepository,
 ) {
     val isConfigured: Boolean get() = repository.isConfigured
@@ -23,14 +23,14 @@ class LoadControlCatalog @Inject constructor(
     }
 }
 
-class RunScenario @Inject constructor(
+@Inject class RunScenario(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry): Outcome<Unit> =
         repository.send(entry.id, ControlAction.RUN)
 }
 
-class SetDevicePower @Inject constructor(
+@Inject class SetDevicePower(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, on: Boolean): Outcome<Unit> =
@@ -42,14 +42,14 @@ class SetDevicePower @Inject constructor(
  * the default (personal) one — the profile entity is a plain switch in Home
  * Assistant, so this is the same command as a device toggle.
  */
-class SetVoiceProfile @Inject constructor(
+@Inject class SetVoiceProfile(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, work: Boolean): Outcome<Unit> =
         repository.send(entry.id, if (work) ControlAction.TURN_ON else ControlAction.TURN_OFF)
 }
 
-class AdjustLight @Inject constructor(
+@Inject class AdjustLight(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, adjust: LightAdjust): Outcome<Unit> =

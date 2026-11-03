@@ -210,7 +210,9 @@ class FragmentRouter(
         // fallback for an old/corrupt bundle.
         titlesByRoute.putIfAbsent(currentTag, entry.titleRes)
         updateDerivedState()
-        Log.d(TAG, "restored ${routeState.currentStack()}")
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "restored ${routeState.currentStack()}")
+        }
         return true
     }
 

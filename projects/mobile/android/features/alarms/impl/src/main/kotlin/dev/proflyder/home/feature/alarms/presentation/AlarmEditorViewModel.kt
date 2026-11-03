@@ -303,7 +303,7 @@ class AlarmEditorViewModelFactoryContributor(
     }
 }
 
-private fun restoreState(savedState: SavedStateHandle): AlarmEditorUiState =
+internal fun restoreState(savedState: SavedStateHandle): AlarmEditorUiState =
     AlarmEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
         ?: AlarmEditorUiState()
 

@@ -7,19 +7,19 @@ import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.reminders.ReminderValidation
 import dev.zacsweers.metro.Inject
 
-class LoadReminders @Inject constructor(
+@Inject class LoadReminders(
     private val repository: ReminderRepository,
 ) {
     suspend operator fun invoke(): Outcome<List<Schedule>> = repository.list()
 }
 
-class LoadReminder @Inject constructor(
+@Inject class LoadReminder(
     private val repository: ReminderRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Schedule> = repository.get(id)
 }
 
-class SaveReminder @Inject constructor(
+@Inject class SaveReminder(
     private val repository: ReminderRepository,
 ) {
     suspend operator fun invoke(
@@ -32,14 +32,14 @@ class SaveReminder @Inject constructor(
     }
 }
 
-class SetReminderEnabled @Inject constructor(
+@Inject class SetReminderEnabled(
     private val repository: ReminderRepository,
 ) {
     suspend operator fun invoke(id: String, enabled: Boolean): Outcome<Schedule> =
         repository.setEnabled(id, enabled)
 }
 
-class DeleteReminder @Inject constructor(
+@Inject class DeleteReminder(
     private val repository: ReminderRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Boolean> = repository.delete(id)

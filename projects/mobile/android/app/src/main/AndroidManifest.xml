@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="dev.proflyder.home">
 
+    <!-- compileSdk/targetSdk are deliberately pinned to the SDK installed in CI;
+         lint 9.4 suggests a newer target than the repository supports yet. -->
     <uses-sdk
         android:minSdkVersion="26"
-        android:targetSdkVersion="36" />
+        android:targetSdkVersion="36"
+        tools:ignore="OldTargetApi" />
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- enableOnBackInvokedCallback is ignored on API levels below 33. -->
     <application
         android:name=".HomeApplication"
+        tools:targetApi="33"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"

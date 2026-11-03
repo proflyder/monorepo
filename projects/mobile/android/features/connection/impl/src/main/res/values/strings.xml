@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<!-- Feature modules are independent; shared UI labels are intentionally duplicated. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="connection_title">Connection</string>
     <string name="connection_intro">The phone manages alarms, reminders, and timers on your home server. The server owns execution; this app does not use AlarmManager, FCM, or a built-in VPN.</string>
     <string name="connection_remote_title">Connection from Remote Config</string>

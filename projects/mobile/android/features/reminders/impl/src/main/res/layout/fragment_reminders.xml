@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Display-only text; making every label selectable would change the UI. -->
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="SelectableText"
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/reminders_refresh"
     android:layout_width="match_parent"

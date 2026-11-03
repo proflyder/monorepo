@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<!-- Feature modules are independent; shared UI labels are intentionally duplicated. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="alarms_title">Alarms</string>
     <string name="alarms_add">Add alarm</string>
     <string name="alarms_empty">No alarms yet. Alarms are stored and run on the home server.</string>

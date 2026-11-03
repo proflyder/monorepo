@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Android Lint gate for the Home Android client.
+
+  The Bazel `android_lint` test also runs lint with `-Werror` and `--exitcode`,
+  so any finding fails `bazel test //projects/mobile/android:android_tests`.
+  This file is the shared config `--config` points at; issues added here must
+  stay narrow and carry a comment explaining why the finding is a false
+  positive (`tools:ignore`/`@Suppress` in source is equivalent). Do not add a
+  lint baseline and do not suppress whole categories.
+-->
+<lint>
+    <!-- Make every reported issue fatal, matching the -Werror CLI flag. -->
+    <issue id="all" severity="error" />
+</lint>

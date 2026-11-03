@@ -6,6 +6,9 @@ package(default_visibility = ["//visibility:public"])
 kt_kotlinc_options(
     name = "jvm17_options",
     jvm_target = "17",
+    # Compiler warnings are regressions: fail the build instead of letting them
+    # accumulate in the log. rules_kotlin also derives javac -Werror from this.
+    warn = "error",
 )
 
 # Metro is a compile-time DI framework: the generated graph implementation is
@@ -58,11 +61,20 @@ genrule(
 exports_files([
     "gen_view_binding.py",
     "defs.bzl",
+    "lint.bzl",
+    "lint_runner.py",
     # Reusable artifact checker; the owning project declares the sh_test.
     "apk_runtime_closure.py",
     "apk_runtime_closure.sh",
     "google_services.py",
 ])
+
+py_binary(
+    name = "lint_runner",
+    srcs = ["lint_runner.py"],
+    main = "lint_runner.py",
+    python_version = "3.12",
+)
 
 py_binary(
     name = "google_services",

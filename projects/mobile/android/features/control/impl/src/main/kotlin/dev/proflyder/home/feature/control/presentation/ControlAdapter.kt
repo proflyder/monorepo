@@ -57,10 +57,10 @@ internal enum class ControlChange {
 }
 
 /** Identity of the artwork an entry resolves to; see [ControlIcons]. */
-private fun ControlEntry.iconIdentity(): Pair<Any, String> = kind to icon.lowercase()
+internal fun ControlEntry.iconIdentity(): Pair<Any, String> = kind to icon.lowercase()
 
 /** Typed payloads delivered for one bind, merged into a single aspect set. */
-private fun controlChanges(payloads: List<Any>): PayloadSet<ControlChange>? =
+internal fun controlChanges(payloads: List<Any>): PayloadSet<ControlChange>? =
     PayloadSet.merge(payloads, ControlChange::class.java)
 
 internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {

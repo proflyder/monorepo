@@ -1,3 +1,5 @@
+load("//platform/android:defs.bzl", "home_android_lint")
+
 package(default_visibility = ["//visibility:public"])
 
 # Convenience entry points for the Android client.
@@ -6,9 +8,20 @@ alias(
     actual = "//projects/mobile/android/app:app",
 )
 
+# Android Lint over every module reachable from the application library: the
+# app module plus all core/feature API and implementation modules. The test
+# also passes -Werror and fails the `android` CI job on any finding.
+home_android_lint(
+    name = "android_lint",
+    deps = ["//projects/mobile/android/app:app_lib"],
+    app_module = "//projects/mobile/android/app:app_lib",
+    config = "//projects/mobile/android:lint.xml",
+)
+
 test_suite(
     name = "android_tests",
     tests = [
+        ":android_lint",
         "//packages/kotlin/core:core_test",
         "//packages/kotlin/core:operation_test",
         "//projects/mobile/android/app:apk_runtime_closure_test",
@@ -30,5 +43,6 @@ test_suite(
 
 exports_files([
     "README.md",
+    "lint.xml",
     "maven_install.json",
 ])

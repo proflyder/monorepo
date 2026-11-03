@@ -99,9 +99,12 @@ jobs:
             bazel-android-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the
-      # platform/build-tools pinned in MODULE.bazel.
+      # platform/build-tools pinned in MODULE.bazel plus the cmdline-tools
+      # release that provides the Android Lint CLI used by
+      # //projects/mobile/android:android_lint. Keep the version in sync with
+      # platform/android/lint_runner.py.
       - name: Install Android SDK packages
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "cmdline-tools;23.0"
 
       - name: Select affected targets
         id: select

@@ -7,19 +7,19 @@ import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.alarms.AlarmValidation
 import dev.zacsweers.metro.Inject
 
-class LoadAlarms @Inject constructor(
+@Inject class LoadAlarms(
     private val repository: AlarmRepository,
 ) {
     suspend operator fun invoke(): Outcome<List<Schedule>> = repository.list()
 }
 
-class LoadAlarm @Inject constructor(
+@Inject class LoadAlarm(
     private val repository: AlarmRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Schedule> = repository.get(id)
 }
 
-class SaveAlarm @Inject constructor(
+@Inject class SaveAlarm(
     private val repository: AlarmRepository,
 ) {
     suspend operator fun invoke(
@@ -32,20 +32,20 @@ class SaveAlarm @Inject constructor(
     }
 }
 
-class SetAlarmEnabled @Inject constructor(
+@Inject class SetAlarmEnabled(
     private val repository: AlarmRepository,
 ) {
     suspend operator fun invoke(id: String, enabled: Boolean): Outcome<Schedule> =
         repository.setEnabled(id, enabled)
 }
 
-class DeleteAlarm @Inject constructor(
+@Inject class DeleteAlarm(
     private val repository: AlarmRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Boolean> = repository.delete(id)
 }
 
-class SnoozeAlarm @Inject constructor(
+@Inject class SnoozeAlarm(
     private val repository: AlarmRepository,
 ) {
     suspend operator fun invoke(id: String, minutes: Int = DEFAULT_MINUTES): Outcome<Schedule> {
@@ -60,7 +60,7 @@ class SnoozeAlarm @Inject constructor(
     }
 }
 
-class StopAlarm @Inject constructor(
+@Inject class StopAlarm(
     private val repository: AlarmRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Schedule> = repository.stop(id)
