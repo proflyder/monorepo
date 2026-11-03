@@ -1,6 +1,6 @@
 name: ghcr-cleanup
 
-# Delete stale `tree-<hash>` images from GHCR (DECISIONS 36).
+# Delete stale images from GHCR (DECISIONS 36).
 #
 # A pull request publishes every built deploy image as
 # `ghcr.io/proflyder/<image>:tree-<git tree hash>`. Once the PR is merged (the
@@ -11,12 +11,12 @@ name: ghcr-cleanup
 # GHCR packages of the account (for example the Windows logon provider release
 # artifact) are never touched.
 #
-# A version is deleted only when ALL hold:
-#   * it is older than 7 days;
-#   * every tag it has is `tree-<hash>` (or it has no tags);
-#   * it is not the newest version of its package.
-# Versions tagged `develop`, a commit sha or a semver release are always kept:
-# Helm rollbacks and the digests pinned in private values depend on them.
+# Per package, never deleted: the newest version, `develop`/`latest` and semver
+# tags, digests in PROTECTED_DIGESTS, and anything younger than 7 days. Deploy
+# versions (40-hex commit-sha tags) keep the five newest; older ones are deleted.
+# Stale `tree-*`/untagged versions are deleted. Cosign-style referrers
+# (`sha256-<hex>` tags) follow the digest they point at: removed only when that
+# digest is deleted in the same run or is already gone.
 #
 # Scheduled runs delete; a manual run defaults to a dry run and only reports.
 # The token is GITHUB_TOKEN when it may delete these user-owned package
@@ -54,7 +54,7 @@ jobs:
           # Only the unit map and this cleanup module are needed.
           sparse-checkout: platform/ci
 
-      - name: Select and delete stale tree-tagged versions
+      - name: Select and delete stale image versions
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # A scheduled run is always real; a manual run defaults to a dry run.
