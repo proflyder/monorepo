@@ -383,6 +383,7 @@ class VoiceRoutingTests(unittest.TestCase):
         self.gateway_down = False
         self.gateway_reply = {"route": "hermes"}
         self.hermes_calls = []
+        self.start_conversation_fails = False
 
         class HA(BaseHTTPRequestHandler):
             def log_message(self, *args):
@@ -408,6 +409,10 @@ class VoiceRoutingTests(unittest.TestCase):
                 length = int(self.headers.get("Content-Length", "0"))
                 payload = json.loads(self.rfile.read(length) or b"{}")
                 case.announce_calls.append((self.path, payload))
+                if case.start_conversation_fails and \
+                        self.path.endswith("/api/services/assist_satellite/start_conversation"):
+                    self._json(503, {"error": "unavailable"})
+                    return
                 self._json(200, {"changed_states": []})
 
         class Gateway(BaseHTTPRequestHandler):
@@ -561,6 +566,50 @@ class VoiceRoutingTests(unittest.TestCase):
         self.assertEqual(payload["entity_id"], "script.schedule_announce")
         self.assertEqual(payload["variables"], {"message": "Готово: отчёт тут.", "chime": False})
 
+    def test_late_question_starts_conversation_and_keeps_microphone_open(self):
+        self.ha_state = "Рабочий"
+        self.gateway_reply = {"route": "bb", "ok": True, "threadId": "thr_example",
+                              "afterSeq": 2, "speech": "Передал в рабочий тред."}
+        self.results = [{"status": "done", "speech": "Готово. Подтверждаете?"}]
+        self.ask("проверь")
+        self.wait_until(lambda: len(self.announce_calls) >= 1, message="announce was not sent")
+        self.assertEqual(len(self.announce_calls), 1)
+        path, payload = self.announce_calls[0]
+        self.assertTrue(path.endswith("/api/services/assist_satellite/start_conversation"))
+        self.assertEqual(payload, {
+            "entity_id": "assist_satellite.iandeks_stantsiia_midi_assist_satellite",
+            "start_message": "Готово. Подтверждаете?",
+            "preannounce": False,
+        })
+
+    def test_late_statement_still_uses_the_announcement_script(self):
+        self.ha_state = "Рабочий"
+        self.gateway_reply = {"route": "bb", "ok": True, "threadId": "thr_example",
+                              "afterSeq": 2, "speech": "Передал в рабочий тред."}
+        self.results = [{"status": "done", "speech": "Готово."}]
+        self.ask("проверь")
+        self.wait_until(lambda: len(self.announce_calls) >= 1, message="announce was not sent")
+        self.assertEqual(len(self.announce_calls), 1)
+        path, payload = self.announce_calls[0]
+        self.assertTrue(path.endswith("/api/services/script/turn_on"))
+        self.assertEqual(payload["entity_id"], "script.schedule_announce")
+        self.assertEqual(payload["variables"], {"message": "Готово.", "chime": False})
+
+    def test_failed_start_conversation_falls_back_to_script_announce(self):
+        self.start_conversation_fails = True
+        self.ha_state = "Рабочий"
+        self.gateway_reply = {"route": "bb", "ok": True, "threadId": "thr_example",
+                              "afterSeq": 2, "speech": "Передал в рабочий тред."}
+        self.results = [{"status": "done", "speech": "Подтверждаете?"}]
+        self.ask("проверь")
+        self.wait_until(lambda: len(self.announce_calls) >= 2,
+                        message="fallback announce was not sent")
+        self.assertTrue(self.announce_calls[0][0].endswith(
+            "/api/services/assist_satellite/start_conversation"))
+        path, payload = self.announce_calls[1]
+        self.assertTrue(path.endswith("/api/services/script/turn_on"))
+        self.assertEqual(payload["variables"]["message"], "Подтверждаете?")
+
     def test_bb_route_streams_the_ack_and_never_calls_hermes(self):
         self.ha_state = "Рабочий"
         self.gateway_reply = {"route": "bb", "ok": True, "threadId": "thr_example",
@@ -708,6 +757,19 @@ class VoiceRoutingTests(unittest.TestCase):
         text = voice_proxy.announce_text("Смотри https://example.com/x и **готово**.")
         self.assertEqual(text, "Смотри и готово.")
         self.assertEqual(voice_proxy.announce_text(""), "")
+
+    def test_long_question_truncation_keeps_the_question_mark(self):
+        # Prefer the final question sentence when it fits.
+        text = voice_proxy.announce_text("Первый факт. " + "слово " * 80 + ". Подтверждаете?")
+        self.assertEqual(text, "Подтверждаете?")
+        # If even the question is too long, cut it but keep the trailing "?".
+        text = voice_proxy.announce_text("слово " * 80 + "Подтверждаете?")
+        self.assertTrue(text.endswith("?"), text)
+        self.assertLessEqual(len(text), 201)
+        # A statement keeps the previous ellipsis truncation and no "?".
+        text = voice_proxy.announce_text("слово " * 80)
+        self.assertTrue(text.endswith("…"), text)
+        self.assertFalse(text.endswith("?"))
 
     def test_route_counter_records_outcomes_without_text(self):
         self.gateway_reply = {"route": "hermes"}

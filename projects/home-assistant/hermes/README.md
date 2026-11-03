@@ -259,12 +259,20 @@ SSE with `role`, `content`, `finish_reason=stop`, `[DONE]`), and their speech
 never ends with a question so HA does not enable continued conversation.
 
 For `bb`, a daemon thread long-polls `POST /v1/voice/result` (25 s per call,
-about 15 min overall) and, on a final answer, calls
-`POST {HA_URL}/api/services/script/turn_on` with
-`entity_id: script.schedule_announce` and `variables: {message, chime: false}`.
-The text is sanitized with the same `sanitize_text` and limited to ~200
-characters. A timeout or a gateway error announces nothing; the thread never
-writes speech to the log.
+about 15 min overall) and, on a final answer, speaks it. The text is sanitized
+with the same `sanitize_text` and limited to ~200 characters. A timeout or a
+gateway error announces nothing; the thread never writes speech to the log.
+
+- A final answer ending with `?` (or `？`) calls
+  `POST {HA_URL}/api/services/assist_satellite/start_conversation` with
+  `entity_id: {HERMES_VOICE_SATELLITE}`, `start_message: text`,
+  `preannounce: false`. The satellite speaks the question and keeps listening.
+- Otherwise, or when that call fails, it calls
+  `POST {HA_URL}/api/services/script/turn_on` with
+  `entity_id: script.schedule_announce` and `variables: {message, chime: false}`.
+
+The announce log line carries `listen=true/false` so the chosen path is visible
+without logging speech.
 
 Environment (routing is off until all four of URL+token for HA and gateway are
 present):
@@ -283,7 +291,8 @@ present):
 | `HERMES_VOICE_RESULT_RETRY` | `2` | pause after a failed result poll |
 | `HERMES_VOICE_RESULT_WAIT` | `25` | long-poll seconds per request |
 | `HERMES_VOICE_ANNOUNCE_MAX_CHARS` | `200` | announced text limit |
-| `HERMES_VOICE_ANNOUNCE_SCRIPT` | `script.schedule_announce` | HA script that speaks the late answer |
+| `HERMES_VOICE_ANNOUNCE_SCRIPT` | `script.schedule_announce` | HA script that speaks a late statement |
+| `HERMES_VOICE_SATELLITE` | `assist_satellite.iandeks_stantsiia_midi_assist_satellite` | satellite for `start_conversation` when a late answer is a question |
 
 Logs carry the route outcome, profile name, character count and thread id —
 never the spoken text. `_route_counts` keeps per-outcome counters for tests and

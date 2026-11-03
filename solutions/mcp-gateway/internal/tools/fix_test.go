@@ -34,8 +34,8 @@ func TestPrepareRestartAllowed(t *testing.T) {
 	if !detail.Allowed {
 		t.Fatalf("detail = %+v", detail)
 	}
-	if !strings.Contains(speech, "?") {
-		t.Fatalf("speech is not a question: %q", speech)
+	if !strings.HasSuffix(speech, "Подтверждаете?") {
+		t.Fatalf("confirmation speech does not end with a question: %q", speech)
 	}
 	if !strings.Contains(speech, "Будильники в ближайшие минуты") {
 		t.Fatalf("warning missing: %q", speech)

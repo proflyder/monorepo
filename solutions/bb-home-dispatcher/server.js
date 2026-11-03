@@ -81,7 +81,8 @@ export default async function plugin(bb) {
       type: "string",
       label: "Role reminder appended once after each successful compaction",
       default:
-        "Напоминание: ты рабочий голосовой диспетчер; отвечай коротко по-русски и заканчивай строкой 🔊 с 1–2 фразами для озвучивания.",
+        "Напоминание: ты рабочий голосовой диспетчер; отвечай коротко по-русски и заканчивай строкой 🔊 с 1–2 фразами для озвучивания. " +
+        "Если ждёшь ответа владельца, 🔊-строка заканчивается вопросом со знаком «?»; если ответ не нужен — без вопросительного знака в конце.",
       experimental_schema: standardSchema((value) =>
         typeof value === "string" && value.length <= 1000
           ? { value: value.trim() }

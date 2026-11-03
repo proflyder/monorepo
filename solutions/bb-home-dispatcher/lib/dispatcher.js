@@ -8,16 +8,22 @@ import {
 const ACTIVE_STATUSES = new Set(["active", "starting", "pending"]);
 const RUNNING_STATUSES = new Set(["active", "starting", "pending", "stopping"]);
 
+const VOICE_ANSWER_RULE =
+  "Если ждёшь ответа владельца, 🔊-строка заканчивается вопросом со знаком «?»; " +
+  "если ответ не нужен — без вопросительного знака в конце.";
+
 const SPAWN_INSTRUCTION =
   "В конце каждого ответа добавляй отдельной строкой: " +
-  "🔊 <1–2 фразы для озвучивания по-русски>.";
+  "🔊 <1–2 фразы для озвучивания по-русски>. " +
+  VOICE_ANSWER_RULE;
 
 const DEFAULT_COMPACT_AT = "04:30";
 const DEFAULT_COMPACT_AFTER_TURNS = 30;
 const DEFAULT_COMPACT_AT_CONTEXT_PERCENT = 70;
 const DEFAULT_DISPATCHER_REMINDER =
   "Напоминание: ты рабочий голосовой диспетчер; отвечай коротко по-русски " +
-  "и заканчивай строкой 🔊 с 1–2 фразами для озвучивания.";
+  "и заканчивай строкой 🔊 с 1–2 фразами для озвучивания. " +
+  VOICE_ANSWER_RULE;
 // A requested compaction that never produces `thread/compacted` must not keep
 // sends in queue mode forever.
 const COMPACTION_PENDING_TIMEOUT_MS = 15 * 60 * 1000;

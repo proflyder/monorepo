@@ -187,7 +187,7 @@ func (d *Deps) bbPrepareSpawn(ctx context.Context, _ *mcp.CallToolRequest, in bb
 	}
 	d.logger().Info("bb spawn prepared", "event", "action_prepared", "action", "bb_spawn",
 		"target", resolved.ProjectID, "provider", resolved.ProviderID, "model", resolved.Model)
-	speech := fmt.Sprintf("Запустить агента в %s: %s? Скажи: подтверди.", resolved.Project, shorten(task, 90))
+	speech := fmt.Sprintf("Запустить агента в %s: %s. Подтверждаете?", resolved.Project, shorten(task, 90))
 	return respond(Result{Speech: speech, Details: detail})
 }
 

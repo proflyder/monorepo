@@ -131,6 +131,12 @@ class HermesConfigTests(unittest.TestCase):
             assert marker in prompt
         assert "подтвержд" in prompt.lower()
 
+    def test_voice_prompt_ends_confirmation_with_a_question(self):
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        # HA keeps listening only when the final assistant sentence ends with "?".
+        assert "последнее предложение ответа — сам вопрос" in prompt
+        assert "Подтверждаете?" in prompt
+
     def test_voice_prompt_covers_bb_agent_spawn(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         for marker in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel",
