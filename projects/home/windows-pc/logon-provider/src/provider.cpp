@@ -248,22 +248,28 @@ IFACEMETHODIMP_(ULONG) Provider::Release() {
 
 HRESULT Provider::SetUsageScenario(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus, DWORD flags) {
     (void)flags;
-    switch (cpus) {
-        case CPUS_LOGON:
-        case CPUS_UNLOCK_WORKSTATION:
-            break;
-        default:
-            // Every other scenario is deliberately unsupported.
-            return E_NOTIMPL;
+    if (cpus != CPUS_LOGON && cpus != CPUS_UNLOCK_WORKSTATION) {
+        // Every other scenario is deliberately unsupported.
+        return E_NOTIMPL;
     }
     // A scenario change invalidates any previous arming: LogonUI is asking for
     // a fresh tile set.
     AcquireSRWLockExclusive(&session_->lock);
     const bool changed = session_->cpus != cpus;
     session_->cpus = cpus;
+    if (cpus != CPUS_LOGON) session_->armed = false;
     ReleaseSRWLockExclusive(&session_->lock);
     if (changed) CancelSession(session_);
-    LogEvent("scenario", cpus == CPUS_LOGON ? "cpus=logon" : "cpus=unlock");
+
+    if (cpus != CPUS_LOGON) {
+        // A grant signs in only after a cold boot. Claiming one during an
+        // unlock could unlock an already running, locked PC, so the unlock
+        // scenario does nothing at all: no armed tile, no worker thread and no
+        // network. GetCredentialCount stays 0 and the normal PIN is used.
+        LogEvent("scenario", "cpus=unlock claims=0");
+        return S_OK;
+    }
+    LogEvent("scenario", "cpus=logon");
     StartWorkerOnce();
     return S_OK;
 }
@@ -319,6 +325,9 @@ HRESULT Provider::GetCredentialCount(DWORD* pdwCount, DWORD* pdwDefault,
     *pdwDefault = CREDENTIAL_PROVIDER_NO_DEFAULT;
     *pbAutoLogonWithDefault = FALSE;
     *pdwCount = 0;
+    // Only a cold-boot logon can show the one-time tile. An unlock never
+    // claims a grant, so it must never expose an auto-logon credential.
+    if (SessionScenario(session_) != CPUS_LOGON) return S_OK;
     if (!SessionIsArmed(session_)) return S_OK;
 
     *pdwCount = 1;
@@ -361,6 +370,12 @@ HRESULT Provider::SetUserArray(ICredentialProviderUserArray* users) {
 }
 
 void Provider::StartWorkerOnce() {
+    // Defense in depth: only the logon scenario may claim a grant. Advise()
+    // also calls this, so an unlock must be filtered here as well.
+    if (SessionScenario(session_) != CPUS_LOGON) {
+        LogEvent("worker", "skipped=scenario_not_logon");
+        return;
+    }
     if (session_->running.exchange(true)) return;
     if (GetTickCount64() - session_->load_tick >= kWorkerBudgetMs) {
         session_->running.store(false);

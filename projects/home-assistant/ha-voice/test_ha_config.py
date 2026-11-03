@@ -12,7 +12,7 @@ import json
 import re
 import unittest
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -774,7 +774,11 @@ class InputContractTests(unittest.TestCase):
         self.assertEqual(numbers["alarm_volume"]["max"], 1)
         self.assertEqual(selects["music_route"]["options"], ["Music Assistant", "Spotify Connect"])
         self.assertNotIn("alarm_repeat", selects)
-        self.assertEqual(dates, {})
+        # No legacy alarm datetimes remain; the only helper is the komp
+        # shutdown request marker.
+        self.assertEqual(set(dates), {"komp_off_requested"})
+        self.assertNotIn("alarm_next", dates)
+        self.assertNotIn("alarm_snooze_until", dates)
 
 
 class VoiceProfileTests(unittest.TestCase):
@@ -1105,6 +1109,7 @@ class KompPowerTests(unittest.TestCase):
     BINARY_SENSOR = "binary_sensor.komp_v_seti"
     SWITCH = "switch.komp"
     TARGET_INPUT = "input_text.komp_ssh_target"
+    OFF_INPUT = "input_datetime.komp_off_requested"
 
     @staticmethod
     def _squash(text: str) -> str:
@@ -1129,15 +1134,35 @@ class KompPowerTests(unittest.TestCase):
             for intent, body in komp["intents"].items()
         }
 
-    def _render(self, template: str, online: bool) -> str:
+    def _render(self, template: str, online: bool, off_requested_seconds: int | None = None) -> str:
         try:
             from jinja2 import Environment
         except ImportError:  # pragma: no cover - optional local dependency
             self.skipTest("jinja2 is not installed")
         env = Environment()
+        base = datetime(2026, 11, 3, 12, 0, 0, tzinfo=timezone.utc)
+        if off_requested_seconds is None:
+            off_value = "unknown"
+        else:
+            off_value = (base - timedelta(seconds=off_requested_seconds)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         env.globals["is_state"] = (
             lambda entity, value: entity == self.BINARY_SENSOR and value == ("on" if online else "off")
         )
+        env.globals["states"] = (
+            lambda entity: off_value if entity == self.OFF_INPUT else "unknown"
+        )
+        env.globals["now"] = lambda: base
+
+        def _as_timestamp(value):
+            if isinstance(value, datetime):
+                return value.timestamp()
+            return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(
+                tzinfo=timezone.utc
+            ).timestamp()
+
+        env.globals["as_timestamp"] = _as_timestamp
         return self._squash(env.from_string(template).render())
 
     def test_ping_binary_sensor_uses_a_secret_command(self):
@@ -1150,8 +1175,17 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(sensor["command"], "__SECRET__")
         self.assertEqual(sensor["payload_on"], "1")
         self.assertEqual(sensor["payload_off"], "0")
-        self.assertEqual(sensor["scan_interval"], 30)
+        # 10 s: Windows stays pingable for 1–2 minutes after shutdown, and a
+        # 30 s poll made «включи комп» answer «Комп уже включён».
+        self.assertEqual(sensor["scan_interval"], 10)
         self.assertNotIn("platform", sensor, "legacy platform YAML is not supported anymore")
+
+    def test_off_request_helper_is_a_date_time(self):
+        helpers = load_yaml(HA / "input_datetime.yaml")
+        helper = helpers["komp_off_requested"]
+        self.assertTrue(helper["has_date"])
+        self.assertTrue(helper["has_time"])
+        self.assertTrue(helper["name"])
 
     def test_switch_maps_state_and_actions_to_wol_and_ssh(self):
         switch = self._switch()
@@ -1210,8 +1244,19 @@ class KompPowerTests(unittest.TestCase):
     def test_scripts_call_the_restricted_commands(self):
         shutdown = SCRIPTS["komp_shutdown"]
         cancel = SCRIPTS["komp_cancel_shutdown"]
-        self.assertEqual(services(shutdown), ["shell_command.komp_shutdown"])
-        self.assertEqual(services(cancel), ["shell_command.komp_cancel_shutdown"])
+        # The request timestamp is written before SSH: the ping sensor lags, and
+        # voice intents rely on this value to answer «выключается».
+        self.assertEqual(
+            services(shutdown),
+            ["input_datetime.set_datetime", "shell_command.komp_shutdown"],
+        )
+        shutdown_dump = yaml.safe_dump(shutdown, allow_unicode=True)
+        self.assertIn(self.OFF_INPUT, shutdown_dump)
+        self.assertIn("now().strftime", shutdown_dump)
+        self.assertEqual(
+            services(cancel),
+            ["shell_command.komp_cancel_shutdown", "input_datetime.set_datetime"],
+        )
         # Empty/missing target secret must not launch a half-built ssh command.
         for script in (shutdown, cancel):
             dump = yaml.safe_dump(script, allow_unicode=True)
@@ -1230,20 +1275,44 @@ class KompPowerTests(unittest.TestCase):
             yaml.safe_dump(INTENTS["KompCancelOff"], allow_unicode=True),
         )
 
-        self.assertIn("wake_on_lan.send_magic_packet", services(INTENTS["KompOn"]))
-        self.assertIn("__SECRET__", yaml.safe_dump(INTENTS["KompOn"], allow_unicode=True))
+        self.assertEqual(services(INTENTS["KompOn"]), ["switch.turn_on"])
+        on_dump = yaml.safe_dump(INTENTS["KompOn"], allow_unicode=True)
+        self.assertIn(self.SWITCH, on_dump)
+        self.assertIn(self.OFF_INPUT, on_dump)
+        # Voice must go through the switch: direct WoL skipped the wakegrant.
+        self.assertNotIn("wake_on_lan.send_magic_packet", on_dump)
         self.assertEqual(services(INTENTS["KompOff"]), ["script.komp_shutdown"])
+        self.assertIn(self.OFF_INPUT, yaml.safe_dump(INTENTS["KompOff"], allow_unicode=True))
         self.assertEqual(services(INTENTS["KompCancelOff"]), ["script.komp_cancel_shutdown"])
         self.assertEqual(services(INTENTS["KompStatus"]), [])
 
     def test_speech_matches_the_confirmed_wording(self):
-        self.assertEqual(self._render(INTENTS["KompOn"]["speech"]["text"], False), "Включаю комп.")
-        self.assertEqual(self._render(INTENTS["KompOn"]["speech"]["text"], True), "Комп уже включён.")
-        self.assertEqual(self._render(INTENTS["KompStatus"]["speech"]["text"], True), "Комп включён.")
-        self.assertEqual(self._render(INTENTS["KompStatus"]["speech"]["text"], False), "Комп выключен.")
-        self.assertEqual(self._render(INTENTS["KompOff"]["speech"]["text"], False), "Комп уже выключен.")
+        on = INTENTS["KompOn"]["speech"]["text"]
+        off = INTENTS["KompOff"]["speech"]["text"]
+        status = INTENTS["KompStatus"]["speech"]["text"]
+
+        starting = "Включаю комп. Он загрузится примерно за минуту."
+        self.assertEqual(self._render(on, False), starting)
+        self.assertEqual(self._render(on, True), "Комп уже включён.")
+        # Sensor still on, but a shutdown was requested 2 minutes ago: the PC is
+        # going off, so wake it (the live «Комп уже включён» defect).
+        self.assertEqual(self._render(on, True, off_requested_seconds=120), starting)
+        self.assertEqual(self._render(on, True, off_requested_seconds=600), "Комп уже включён.")
+
+        self.assertEqual(self._render(status, True), "Комп включён.")
+        self.assertEqual(self._render(status, False), "Комп выключен.")
+        self.assertEqual(self._render(status, True, off_requested_seconds=60), "Комп выключается.")
+        self.assertEqual(self._render(status, True, off_requested_seconds=600), "Комп включён.")
+
+        self.assertEqual(self._render(off, False), "Комп уже выключен.")
         self.assertEqual(
-            self._render(INTENTS["KompOff"]["speech"]["text"], True),
+            self._render(off, True),
+            "Выключу комп через минуту. Скажите «отмени выключение компа», если передумали.",
+        )
+        # A second request inside the 60 s window must not reschedule shutdown.
+        self.assertEqual(self._render(off, True, off_requested_seconds=30), "Комп уже выключается.")
+        self.assertEqual(
+            self._render(off, True, off_requested_seconds=180),
             "Выключу комп через минуту. Скажите «отмени выключение компа», если передумали.",
         )
         self.assertEqual(

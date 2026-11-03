@@ -686,34 +686,62 @@ StationAlarmEnableOne:
       response_variable: alarm_result
 
 KompOn:
+  # The ping sensor lags 1–2 minutes behind Windows shutdown, so a recent
+  # `script.komp_shutdown` request means «выключается», not «уже включён».
+  # `switch.komp.turn_on` is the only path that issues the wakegrant and then
+  # Wake-on-LAN: sending WoL here directly skipped the one-time logon grant.
   speech:
     text: >-
-      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      {% set off_at = states('input_datetime.komp_off_requested') %}
+      {% set going_off = off_at not in ['', 'unknown', 'unavailable', 'None']
+         and (as_timestamp(now()) - as_timestamp(off_at)) < 300 %}
+      {% if is_state('binary_sensor.komp_v_seti', 'on') and not going_off %}
       Комп уже включён.
       {% else %}
-      Включаю комп.
+      Включаю комп. Он загрузится примерно за минуту.
       {% endif %}
   action:
+    - variables:
+        off_requested_at: "{{ states('input_datetime.komp_off_requested') }}"
+        komp_going_off: >-
+          {{ off_requested_at not in ['', 'unknown', 'unavailable', 'None']
+             and (as_timestamp(now()) - as_timestamp(off_requested_at)) < 300 }}
     - if:
         - condition: template
-          value_template: "{{ not is_state('binary_sensor.komp_v_seti', 'on') }}"
+          value_template: >-
+            {{ komp_going_off
+               or not is_state('binary_sensor.komp_v_seti', 'on') }}
       then:
-        - service: wake_on_lan.send_magic_packet
-          data:
-            mac: !secret komp_mac
+        - service: switch.turn_on
+          target:
+            entity_id: switch.komp
 
 KompOff:
+  # A second request inside the 60 s window would reschedule the Windows timer
+  # and restart the wait; answer it and leave the pending shutdown alone.
   speech:
     text: >-
-      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      {% set off_at = states('input_datetime.komp_off_requested') %}
+      {% set pending = off_at not in ['', 'unknown', 'unavailable', 'None']
+         and (as_timestamp(now()) - as_timestamp(off_at)) < 120 %}
+      {% if pending %}
+      Комп уже выключается.
+      {% elif is_state('binary_sensor.komp_v_seti', 'on') %}
       Выключу комп через минуту. Скажите «отмени выключение компа», если передумали.
       {% else %}
       Комп уже выключен.
       {% endif %}
   action:
+    - variables:
+        off_requested_at: "{{ states('input_datetime.komp_off_requested') }}"
+        komp_off_pending: >-
+          {{ off_requested_at not in ['', 'unknown', 'unavailable', 'None']
+             and (as_timestamp(now()) - as_timestamp(off_requested_at)) < 120 }}
     - if:
         - condition: template
-          value_template: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
+          value_template: >-
+            {{ not komp_off_pending
+               and is_state('binary_sensor.komp_v_seti', 'on') }}
       then:
         - service: script.komp_shutdown
 
@@ -726,7 +754,12 @@ KompCancelOff:
 KompStatus:
   speech:
     text: >-
-      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      {% set off_at = states('input_datetime.komp_off_requested') %}
+      {% set pending = off_at not in ['', 'unknown', 'unavailable', 'None']
+         and (as_timestamp(now()) - as_timestamp(off_at)) < 300 %}
+      {% if is_state('binary_sensor.komp_v_seti', 'on') and pending %}
+      Комп выключается.
+      {% elif is_state('binary_sensor.komp_v_seti', 'on') %}
       Комп включён.
       {% else %}
       Комп выключен.
