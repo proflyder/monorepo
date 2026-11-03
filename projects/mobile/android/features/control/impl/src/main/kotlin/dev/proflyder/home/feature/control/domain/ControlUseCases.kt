@@ -37,6 +37,18 @@ class SetDevicePower @Inject constructor(
         repository.send(entry.id, if (on) ControlAction.TURN_ON else ControlAction.TURN_OFF)
 }
 
+/**
+ * Switches the assistant profile. `on` means the named (work) profile, `off`
+ * the default (personal) one — the profile entity is a plain switch in Home
+ * Assistant, so this is the same command as a device toggle.
+ */
+class SetVoiceProfile @Inject constructor(
+    private val repository: ControlRepository,
+) {
+    suspend operator fun invoke(entry: ControlEntry, work: Boolean): Outcome<Unit> =
+        repository.send(entry.id, if (work) ControlAction.TURN_ON else ControlAction.TURN_OFF)
+}
+
 class AdjustLight @Inject constructor(
     private val repository: ControlRepository,
 ) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
@@ -21,10 +22,11 @@ func (f fakeSource) Get(context.Context) (discovery.Snapshot, error) { return f.
 
 func source() fakeSource {
 	entries := catalog.Build([]catalog.Raw{
+		{Entity: "switch.voice_profile", State: "off", Name: "Voice profile", Profile: true},
 		{Entity: "scene.focus", State: "x", Name: "Focus", Icon: "mdi:laptop"},
 		{Entity: "light.lamp", State: "on", Name: "Lamp", Room: "Bedroom"},
 		{Entity: "switch.plug", State: "unavailable", Name: "Plug"},
-	}, catalog.Rules{})
+	}, catalog.Rules{ScenarioLabel: "scenario", ProfileLabel: "voice_profile"})
 	return fakeSource{snap: discovery.Snapshot{Catalog: catalog.New(entries), StatesOK: true}}
 }
 
@@ -59,10 +61,14 @@ func TestServesDiscoveredEntries(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if !resp.StatesOK || len(resp.Entries) != 3 {
+	if !resp.StatesOK || len(resp.Entries) != 4 {
 		t.Fatalf("resp = %+v", resp)
 	}
-	focus, lamp, plug := resp.Entries[0], resp.Entries[1], resp.Entries[2]
+	profile, focus, lamp, plug := resp.Entries[0], resp.Entries[1], resp.Entries[2], resp.Entries[3]
+	if profile.ID != "switch.voice_profile" || profile.Kind != "profile" || profile.State != "off" ||
+		strings.Join(profile.Actions, ",") != "turn_on,turn_off" || profile.Room != "" {
+		t.Errorf("profile view = %+v", profile)
+	}
 	if focus.ID != "scene.focus" || focus.Kind != "scenario" || focus.Icon != "laptop" || focus.Actions[0] != "run" || focus.State != "" {
 		t.Errorf("scenario view = %+v", focus)
 	}

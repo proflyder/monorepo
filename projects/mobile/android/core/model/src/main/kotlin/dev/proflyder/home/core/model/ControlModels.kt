@@ -1,7 +1,14 @@
 package dev.proflyder.home.core.model
 
-/** What kind of thing a catalog entry controls. Unknown server kinds map to [OTHER] and are not shown. */
-enum class ControlKind { SCENARIO, LIGHT, SWITCH, OTHER }
+/**
+ * What kind of thing a catalog entry controls. Unknown server kinds map to [OTHER] and are not shown.
+ *
+ * [PROFILE] is the assistant's named profile (personal/work). It is one global
+ * mode rather than content: the Home screen pins it above the scenarios, keeps
+ * it out of the device filters and drives it with turn_on ("work") / turn_off
+ * ("personal").
+ */
+enum class ControlKind { SCENARIO, LIGHT, SWITCH, PROFILE, OTHER }
 
 /** Commands a catalog entry accepts; [wire] is the value sent to the server. */
 enum class ControlAction(val wire: String) {
@@ -63,6 +70,9 @@ data class ControlEntry(
     val light: LightControls? = null,
 ) {
     val isDevice: Boolean get() = kind == ControlKind.LIGHT || kind == ControlKind.SWITCH
+
+    /** The assistant profile selector: a global mode, not a device. */
+    val isProfile: Boolean get() = kind == ControlKind.PROFILE
 }
 
 data class ControlCatalog(

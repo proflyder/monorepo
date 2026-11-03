@@ -58,6 +58,7 @@ class ControlCatalogClientTest {
 
     private val body = """
         {"statesOk":true,"entries":[
+         {"id":"voice","kind":"profile","title":"Voice profile","actions":["turn_on","turn_off"],"state":"on","available":true},
          {"id":"focus","kind":"scenario","title":"Focus","icon":"work","actions":["run"],"available":true},
          {"id":"lamp","kind":"light","title":"Lamp","room":"Bedroom","actions":["turn_on","turn_off","bogus"],"state":"on","available":true},
          {"id":"odd","kind":"lock","title":"Odd","actions":[],"available":false}]}
@@ -69,8 +70,13 @@ class ControlCatalogClientTest {
         val result = client().fetch()
         val catalog = (result as Outcome.Success).value
         assertTrue(catalog.statesOk)
-        assertEquals(3, catalog.entries.size)
-        val (focus, lamp, odd) = catalog.entries
+        assertEquals(4, catalog.entries.size)
+        val (voice, focus, lamp, odd) = catalog.entries
+        assertEquals(ControlKind.PROFILE, voice.kind)
+        assertTrue(voice.isProfile)
+        assertFalse(voice.isDevice)
+        assertEquals(PowerState.ON, voice.power)
+        assertEquals(setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF), voice.actions)
         assertEquals(ControlKind.SCENARIO, focus.kind)
         assertEquals(setOf(ControlAction.RUN), focus.actions)
         assertNull(focus.power)

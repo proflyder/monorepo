@@ -72,6 +72,7 @@ object ControlJson {
             "scenario" -> ControlKind.SCENARIO
             "light" -> ControlKind.LIGHT
             "switch" -> ControlKind.SWITCH
+            "profile" -> ControlKind.PROFILE
             else -> ControlKind.OTHER
         }
         val actions = (o["actions"] as? JsonArray).orEmpty()

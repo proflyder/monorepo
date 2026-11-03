@@ -15,6 +15,7 @@ class ControlItemsTest {
         otherDevices = "Other devices",
         scenarios = "Scenarios",
         unavailable = "Unavailable",
+        profile = "Voice profile",
         onSummary = { on, total -> "$on of $total on" },
     )
 
@@ -54,6 +55,7 @@ class ControlItemsTest {
     private fun List<ControlItem>.describe(): List<String> = map {
         when (it) {
             is ControlItem.Header -> "# ${it.title}" + (it.summary?.let { s -> " ($s)" } ?: "")
+            is ControlItem.Profile -> "P ${it.entry.id}"
             is ControlItem.Scenario -> "S ${it.entry.id}"
             is ControlItem.Device -> "D ${it.entry.id}"
         }
@@ -158,5 +160,76 @@ class ControlItemsTest {
             listOf("scenarios", "room:Scenarios", "room:Unavailable", "room:Other devices", "other", "unavailable"),
             headers.map { it.section },
         )
+    }
+
+    // --- the voice profile selector -----------------------------------------
+
+    private val profile = entry("switch.voice_profile", ControlKind.PROFILE, power = PowerState.OFF)
+    private val withProfile = listOf(profile) + sample
+
+    @Test
+    fun profileIsPinnedAboveScenarios() {
+        assertEquals(
+            listOf(
+                "# Voice profile", "P switch.voice_profile",
+                "# Scenarios", "S scene.movie",
+                "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
+                "# Workspace (0 of 1 on)", "D switch.fan",
+                "# Other devices (1 of 1 on)", "D light.hall",
+                "# Unavailable (1)", "D light.dead",
+            ),
+            build(withProfile).describe(),
+        )
+        // Its section and key never collide with a room or another section.
+        val keys = build(withProfile).map { it.key }
+        assertEquals(keys.size, keys.toSet().size)
+        assertEquals(listOf("profile", "scenarios", "room:Bedroom", "room:Workspace", "other", "unavailable"),
+            build(withProfile).filterIsInstance<ControlItem.Header>().map { it.section })
+    }
+
+    @Test
+    fun profileIsNotAFilterableCategoryAndNotCounted() {
+        // Chips describe content only: the profile adds no chip and no count.
+        assertEquals(ControlItems.options(sample), ControlItems.options(withProfile))
+        // It stays visible whatever the filter is.
+        assertEquals(
+            listOf("# Voice profile", "P switch.voice_profile", "# Workspace (0 of 1 on)", "D switch.fan"),
+            build(withProfile, filter = ControlFilter.Switches).describe(),
+        )
+        assertEquals(
+            listOf(
+                "# Voice profile", "P switch.voice_profile",
+                "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
+                "# Unavailable (1)", "D light.dead",
+            ),
+            build(withProfile, filter = ControlFilter.Room("Bedroom")).describe(),
+        )
+        assertEquals(
+            listOf("# Voice profile", "P switch.voice_profile", "S scene.movie"),
+            build(withProfile, filter = ControlFilter.Scenarios).describe(),
+        )
+    }
+
+    @Test
+    fun profileAloneIsNotAnEmptyList() {
+        val items = build(listOf(profile))
+        assertEquals(listOf("# Voice profile", "P switch.voice_profile"), items.describe())
+        // Nothing filterable: only the "All" chip exists, with a zero count.
+        assertEquals(listOf(ControlFilterOption(ControlFilter.All, 0)), ControlItems.options(listOf(profile)))
+        // A stored category with nothing to show falls back to All; with no
+        // entries at all the stored choice is kept for validation later.
+        assertEquals(ControlFilter.All, ControlItems.effectiveFilter(listOf(profile), ControlFilter.Scenarios))
+        assertEquals(ControlFilter.Scenarios, ControlItems.effectiveFilter(emptyList(), ControlFilter.Scenarios))
+    }
+
+    @Test
+    fun profileCarriesBusyAndKnownStateFlags() {
+        val idle = build(withProfile).filterIsInstance<ControlItem.Profile>().single()
+        assertFalse(idle.busy)
+        assertTrue(idle.statesKnown)
+        assertTrue(build(withProfile, pending = setOf("switch.voice_profile")).filterIsInstance<ControlItem.Profile>().single().busy)
+        assertFalse(build(withProfile, statesOk = false).filterIsInstance<ControlItem.Profile>().single().statesKnown)
+        // Devices are unaffected by the profile entry.
+        assertTrue(build(withProfile).filterIsInstance<ControlItem.Device>().all { it.statesKnown })
     }
 }
