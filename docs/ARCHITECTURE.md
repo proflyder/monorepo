@@ -16,10 +16,11 @@
   │ LAN 192.0.2.0/24
   ├─ Proxmox PVE .26 — Ethernet / Wi-Fi 4addr uplink
   │    ├─ HAOS VM 100 .28 — HA + MA + Matter add-ons
-  │    └─ K3s VM 101 .27 — Traefik, OpenBao, ESO, STT/TTS,
-  │                         Hermes, scheduler, currency-bot, observability
+  │    ├─ K3s VM 101 .27 — Traefik, OpenBao, ESO, STT/TTS,
+  │    │                    Hermes, scheduler, currency-bot, observability
+  │    └─ CT 103 bb .30 — сервер bb, SQLite, плагины profiles/home-dispatcher
   ├─ Станция Midi .13 — Pulsar, ESPHome, Sendspin
-  └─ Mac .11 — DHCP, рабочая машина
+  └─ Mac .11 — DHCP, рабочая машина (треды bb, рабочий диспетчер)
 ```
 
 - **PVE** — гипервизор; VM получают L2 через `vmbr0`.
@@ -36,8 +37,15 @@
 - **MCP gateway** — единый MCP-сервер для инфраструктуры: чтение
   Prometheus/Alertmanager/Loki/Kubernetes и подтверждаемый rollout restart.
   Hermes сам не имеет доступа к Kubernetes API; весь доступ идёт через шлюз
-  (ClusterIP, Bearer, без ingress).
-- **Mac** — управление, тесты, recovery.
+  (ClusterIP, Bearer, без ingress). Там же группы `bb.read`/`bb.act` для
+  личных тредов и голосовой маршрут `/v1/voice/*`; до bb шлюз доходит только
+  SSH forced command'ом до CT 103.
+- **bb server (CT 103)** — сервер bb и его SQLite; входящих портов не
+  публикует. Домашние сервисы трогают bb только через плагины `profiles`
+  (изоляция work/personal и allowlist провайдеров/машин) и `home-dispatcher`
+  (шесть методов для голоса и Hermes). Треды и агенты выполняются на машинах
+  bb: рабочий диспетчер — Claude Code на рабочем Mac.
+- **Mac** — управление, тесты, recovery; рабочая машина bb.
 
 ## Потоки
 
@@ -47,11 +55,25 @@
 2. HA pipeline: GigaAM v3 primary / Whisper fallback.
 3. Локальные intents (свет, музыка, таймеры, будильники) — в HA и canonical
    SchedulerService; HA остаётся исполнителем звука.
-4. Свободная речь → Hermes `:8643` → LLM → Piper Puriso.
+4. Свободная речь → `hermes-voice-proxy`: сначала точный cancel guard, затем
+   профиль из `input_select.ricardo_voice_profile` и
+   `mcp-gateway /v1/voice/utterance`:
+
+   ```text
+   профиль не прочитан            → «Не могу подтвердить профиль.»
+   work                           → bb home-dispatcher → постоянный тред-диспетчер
+   personal + режим агента        → bb home-dispatcher → активный тред
+   иначе                          → Hermes → Piper Puriso
+   ```
+
+   В рабочем профиле откат в Hermes запрещён: ошибка остаётся на маршруте
+   `bb` с короткой фразой. Поздний ответ треда озвучивается
+   `script.schedule_announce`.
 5. Инфраструктурные вопросы («проверь сервисы», «почему не работает X»)
    Hermes решает через `mcp-gateway` (MCP Streamable HTTP, Bearer): только
    чтение, а перезапуск — лишь после голосового/Telegram-подтверждения, одним
-   двухшаговым действием.
+   двухшаговым действием. Запуск агента — `bb_prepare_spawn` → подтверждение →
+   `bb_confirm`, только личный профиль.
 6. TTS/announce/alarm → Pulsar; Pulsar не владеет alarm/timer state.
 
 ### Музыка
@@ -163,6 +185,10 @@ push тега v0.5.100N в форке
 - K3s data/PV — `/srv/k3s/runtime`, `/srv/k3s/volumes/*`; `Retain`.
 - OpenBao — raft/backups на отдельных PV, audit — stdout → Loki; recovery keys и seal key —
   только `secrets/openbao/`.
+- bb — SQLite и данные плагинов на CT 103 (`/home/bb/.bb-machines/<host>/`);
+  восстанавливаемый артефакт — `bb server export` (`/var/backups/bb`).
+  Плагины `profiles`/`home-dispatcher` — path-источники; их состояние в kv,
+  исходники копируются на CT вручную.
 - Секреты приложений — OpenBao → ESO; приватные копии в `secrets/` — backup.
 - Recovery — `REBUILD.md`, `KUBERNETES-OPERATIONS.md`.
 
@@ -171,6 +197,8 @@ push тега v0.5.100N в форке
 - Один K3s node, без HA control plane/distributed storage.
 - Публичного HA/Grafana/OpenBao нет; только LAN/VPN, кроме webhook
   currency-bot `tg.example.com/telegram/webhook` через Cloudflare Tunnel.
-- Offsite backup и алерты подготовлены, но не live; внешний dead-man switch
-  есть, проверенного disaster restore с чистого железа пока нет.
+- Offsite backup и внешний dead-man switch live; проверенного disaster
+  restore с чистого железа пока нет.
+- API bb не публикуется: дом ходит в него только плагином + SSH forced
+  command; профиль голоса переключается вручную и не выводится из речи.
 - Станция — единственный экземпляр; factory/recovery image отсутствует.

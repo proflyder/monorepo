@@ -36,9 +36,15 @@
   user-сервис, данные — `/home/bb/.bb-machines/<server-host>`, клиенты
   подключаются через bb Connect (адрес не менялся). Mac остаётся машиной bb
   (launchd-агент, Node из Homebrew): проекты и их треды выполняются там.
-  Перенесены все 125 тредов и 43 плагина (37 включены); плагин `profiles`
-  (изоляция work/personal) запускается на сервере из локального
-  path-источника, скопированного в CT. На CT не залогинены `gh` и Codex — для
+  Перенесены все 125 тредов и 43 плагина (37 включены). Два плагина работают
+  на CT из локальных path-источников, скопированных вручную:
+  `profiles` (`solutions/bb-profiles`; изоляция work/personal, политика
+  work = только `claude-code` и только рабочий Mac, `hostHomes` для путей
+  `~/.bb-profiles`) и `home-dispatcher` (`solutions/bb-home-dispatcher`;
+  шесть методов, `workerLimit=2`, `permissionMode=auto`, автосжатие
+  диспетчера 04:30 и по 70% контекста). Маршрут плагина `home-dispatcher`
+  снаружи через bb Connect закрыт (401); единственный путь — SSH-мост
+  `bb-dispatch` (см. «MCP gateway»). На CT не залогинены `gh` и Codex — для
   тредов на Mac это не важно (PR-статус считается на машине окружения,
   ИИ-сервисы bb идут через bb cloud), для агентов на самом CT нужно позже.
   Бэкап: 03:30 в CT — `sqlite3 .backup` и полный `bb server export`
@@ -205,7 +211,7 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.1003` — установленная armhf-сборка
+- Pulsar Rust `v0.5.1004` — установленная armhf-сборка
   (`/lib/ld-linux-armhf.so.3`; релиз форка Pulsar, origin вложенного checkout
   `projects/station/upstream/pulsar-rust`, линия `main` = Ricardo; база
   upstream `v0.5.3` = `504830d`). Включает повторный wake, заменяющий
@@ -218,8 +224,8 @@
   унаследованным supervisor'ом от `ctl.sh reload`; это не boot-persistent:
   после reboot или нового supervisor без env feature выключен.
   `--version` теперь различает сборки по тегу.
-- Теги форка — `v<upstream major.minor>.<1000+N>` (`v0.5.1003`, следующий
-  `v0.5.1004`):
+- Теги форка — `v<upstream major.minor>.<1000+N>` (`v0.5.1004`, следующий
+  `v0.5.1005`):
   updater демона ставит только строго большую `MAJOR.MINOR.PATCH`, а upstream
   уже имеет `v0.5.3`. Релиз — push тега → `build.yml` собирает и публикует
   GitHub release (latest) → `deploy-station.yml` после approve в Environment
@@ -227,9 +233,10 @@
   RICARDO.md «Релизы и деплой форка» в форке. Репозиторий обновлений —
   константа `pulsar_update::UPDATE_REPO` в форке (перенесена upstream),
   указывает на форк.
-- Установленный бинарник — SHA256 `0ee350f5…` (`v0.5.1003`, поставлен этим
-  flow 2026-11-01); `pulsar.prev` — `3a544979…` (`v0.5.1002`, без записи
-  wake-событий). Historical старше: `80aea2ec…` (`v0.5.1001`, база upstream
+- Установленный бинарник — `v0.5.1004` (раскатан тем же flow 2026-11-03);
+  `pulsar.prev` — `0ee350f5…` (`v0.5.1003`); historical старше:
+  `3a544979…` (`v0.5.1002`, без записи
+  wake-событий), `80aea2ec…` (`v0.5.1001`, база upstream
   `v0.5.2`), `7081ef8e…`
   (`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (endpointing 512 ms), `d2197f6a…`
   (`v0.5.2-3-gc57d521-dirty`, `pulsar.pre-endpoint-20261030`),
@@ -241,6 +248,13 @@
   `v0.5.1002` добавляет switch «Clock auto brightness» (включён): автояркость
   часов по датчику освещённости, при выключении — уровень «Clock brightness»;
   число сущностей после обновления не пересчитывалось.
+- `v0.5.1004` добавляет select «Voice color» — цвет анимации слушания
+  (`select.iandeks_stantsiia_midi_voice_color`, Violet/Blue). Автоматизация HA
+  `voice_profile_station_color` ставит Blue для рабочего профиля и Violet для
+  личного: при смене `input_select.ricardo_voice_profile`, при старте HA и когда
+  select появляется после недоступности; пока сущности нет — no-op. Прямое
+  управление `light.ring`/`led_show` во время LISTENING перекрывается voice
+  state прошивки, поэтому профиль задаётся только этим select.
 - После `v0.5.1003` проверено: модель Ricardo загружена с cutoff 0.90 /
   window 10 из manifest, `PULSAR_LOCAL_ENDPOINTING=1` сохранён, запись
   wake-событий включена (`state.conf`: `wake_event_recording=1`,
@@ -304,6 +318,29 @@
 
 - Pipeline «Рикардо»: GigaAM v3 CTC int8 primary, Whisper `medium-int8`
   fallback; локальные intents → Hermes только для свободной речи.
+- **Профиль голоса.** `input_select.ricardo_voice_profile` (Личный/Рабочий) —
+  единственный источник истины; переключается только вручную: голосом
+  («рабочий/личный профиль», «какой профиль»), на дашборде «Помощник» → view
+  «Голос», в Android карточкой «Личный | Рабочий». В HA это
+  `switch.ricardo_work_profile` (template switch над `input_select`) с нативной
+  меткой `voice_profile`; в каталоге ha-control он отдаётся как
+  `kind: "profile"`, `on` = Рабочий. Автовозврата нет; после рестарта HA
+  восстанавливает последнее значение, первый старт — «Личный». Профиль влияет
+  только на свободную речь: локальные бытовые команды работают в обоих.
+- **Маршрут речи.** Локальные intents остаются в HA. Остальное идёт в
+  `hermes-voice-proxy`, который читает профиль из HA и вызывает
+  `mcp-gateway` `POST /v1/voice/utterance`:
+  - профиль не прочитан/неизвестен → «Не могу подтвердить профиль.»,
+    Hermes не вызывается;
+  - рабочий профиль → `send` в постоянный тред-диспетчер Claude Code
+    (Sonnet 5.5, reasoning low) в рабочем bb-проекте на рабочем Mac;
+    ответ озвучивается `script.schedule_announce`; ошибка bb остаётся на
+    маршруте `bb`, в Hermes не откатывается (fail-closed);
+  - личный профиль + включённый режим агента → `send` в активный тред bb,
+    ответ так же озвучивается;
+  - иначе → Hermes.
+  Режим агента включается после `bb_confirm`/ручного запуска треда и
+  выключается фразой «выйди из режима агента»; состояние in-memory.
 - Локальный endpointing в Rust Pulsar: после VQE детектор конца фразы по
   энергии чанков (порог относительно уровня wake-слова и тихой части его
   окна, без абсолютных dBFS) шлёт ровно один graceful
@@ -321,8 +358,15 @@
   громкий earcon по энергии не гарантированно отличимы от речи.
 - TTS: Piper `2.5.2`, `ru_puriso2-medium`.
 - Hermes `v0.22.5`, модель `gpt-5.6-luna` через ChatGPT/Codex OAuth; low
-  reasoning + streaming; HA MCP 73 tools, MA MCP 86 tools.
-- Voice proxy `v6`: к v4-санитайзеру добавлен exact cancel guard. Если
+  reasoning + streaming; HA MCP 73 tools, MA MCP 86 tools. Третий MCP-сервер
+  `infra` (`mcp-gateway`) несёт группы `infra.*`, `bb.read`/`bb.act`:
+  `bb_status`, `bb_prepare_spawn` → `bb_confirm`/`bb_cancel`. Hermes видит
+  только личные проекты из `bb-targets.yaml`; рабочие и проекты с неизвестным
+  профилем отфильтрованы шлюзом и неотличимы от несуществующих. После запуска
+  включается режим агента, выход — «выйди из режима агента».
+- Voice proxy `v7`: к v6 добавлена маршрутизация по профилю (см. «Профиль
+  голоса»). Без всех четырёх значений URL+токен для HA и шлюза прокси работает
+  как v6. V6-часть: exact cancel guard. Если
   предыдущий ответ Hermes закончился вопросом, HA включает
   `continue_conversation` и обходит `prefer_local_intents`; распознанная
   «отмена» уходила в Hermes. Proxy перехватывает только точную
@@ -456,9 +500,11 @@
 
 - `solutions/mcp-gateway` (Go, distroless, один бинарник) — единый MCP-шлюз
   для инфраструктуры: группы `infra.read` (Prometheus, Alertmanager, Loki,
-  Kubernetes REST), `infra.fix` (только rollout restart, два шага) и
-  `infra.report` (Telegram с фиксированным получателем). Решение —
-  `DECISIONS.md`; деплой-контракт — `projects/home/kubernetes/mcp-gateway/`.
+  Kubernetes REST), `infra.fix` (только rollout restart, два шага),
+  `infra.report` (Telegram с фиксированным получателем) и `bb.read`/`bb.act`
+  (треды и запуск агентов bb, только личный профиль). Он же — точка входа
+  голосового маршрута `/v1/voice/*`. Решение — `DECISIONS.md`;
+  деплой-контракт — `projects/home/kubernetes/mcp-gateway/`.
 - `infra_report` — полный отчёт по всем сервисам каталога: статус, готовые
   реплики, перезапуски за час, digest-образ, возраст, внешние проверки, версии
   HA и алерты; короткий вердикт + plain-text ≤ 3500 символов. `infra_status`
@@ -488,14 +534,36 @@
 - NetworkPolicy: ingress на 8080 от адреса узла (Hermes в `hostNetwork`),
   LAN/pod CIDR и namespace `monitoring`; egress — kube-API 6443, monitoring
   9090/9093/3100, LAN-порты проверок (HAOS 8123/8095, станция
-  6053/8928/8099), DNS 53 и Telegram 443.
+  6053/8928/8099), CT 103 `:22` только, DNS 53 и Telegram 443.
+- **Мост в bb.** Кластер не открывает API bb: шлюз идёт по SSH с отдельным
+  ограниченным ed25519-ключом и pinned `known_hosts` (алгоритмы хоста — из
+  файла) к CT 103, пользователь `bb`, forced command `/usr/local/bin/bb-dispatch`.
+  Мост принимает один JSON ≤ 16 KiB (`targets`, `status`, `validate_spawn`,
+  `spawn`, `send`, `turn_result`), подписывает тело HMAC-SHA256 и вызывает
+  loopback-маршрут плагина `home-dispatcher` с токеном плагина. Токен и
+  HMAC-секрет есть только на CT; шлюз знает только свой SSH-ключ. Любая
+  другая команда по ключу тоже запускает мост, а не shell. Контракт полей
+  (`contract/params.json`) общий у плагина и шлюза и проверяется тестами с
+  обеих сторон.
+- **Голосовые цели и маршруты.** `bb-targets.yaml` — allowlist личных
+  проектов со spoken-алиасами (`BB_PROJECT_*` в private env); рабочие проекты
+  за его пределами. `/v1/voice/utterance` принимает `{text, profile}` и
+  отдаёт `{route}`: `local` (фраза выхода из режима агента), `bb` (рабочий
+  профиль — постоянный тред `BB_DISPATCHER_THREAD_ID`; личный в режиме
+  агента — активный тред), `hermes` (иначе). `/v1/voice/result` — long-poll
+  `turn_result` для позднего ответа, `/v1/voice/state` — отладочное состояние
+  режима.
 - Секреты — ESO: `mcp-gateway-auth` (OpenBao
   `k8s/home-assistant/mcp-gateway-auth`, ключ `token`, тот же токен Hermes
-  получает как `HERMES_INFRA_TOKEN`) и `mcp-gateway-telegram`
+  получает как `HERMES_INFRA_TOKEN`), `mcp-gateway-telegram`
   (`TELEGRAM_BOT_TOKEN` + первый элемент `TELEGRAM_ALLOWED_USERS` из
   `k8s/home-assistant/hermes-environment`), `mcp-gateway-ha` (HA REST-токен из
-  `k8s/home-assistant/ha-bridge-ha`, ключ `token`). Telegram — отдельный инфра-бот;
-  бот currency-bot остаётся только для currency-bot.
+  `k8s/home-assistant/ha-bridge-ha`, ключ `token`), `mcp-gateway-bb-ssh`
+  (`id_ed25519` + `known_hosts` из `k8s/home-assistant/mcp-gateway-bb-ssh`) и
+  `mcp-gateway-voice` (`token`, отдельный Bearer для `/v1/voice/*`; не
+  принимается на `/mcp`, MCP-токен не принимается на голосовых маршрутах).
+  Telegram — отдельный инфра-бот; бот currency-bot остаётся только для
+  currency-bot.
 - Перезапуск разрешён для всех repo-managed workload'ов после голосового или
   Telegram-подтверждения, у каждого — честное предупреждение; `hermes` и
   `mcp-gateway` помечены `self_disrupting` (патч откладывается на ~20 с, чтобы
@@ -523,7 +591,10 @@
 - Алерты идут инфра-ботом (`alertmanager-telegram`); ответ на алерт в
   Telegram передаёт отпечаток Hermes для `infra_alert`.
 - Статус: раскатано и принято 2026-11-01: статус и `/report` голосом и в
-  Telegram, перезапуск с подтверждением и cooldown, ответ на алерт.
+  Telegram, перезапуск с подтверждением и cooldown, ответ на алерт. Группы
+  `bb.read`/`bb.act`, SSH-мост и голосовые маршруты раскатаны 2026-11-02/03;
+  живая приёмка рабочего профиля через колонку ещё не пройдена
+  (`PENDING.md`).
 
 ## Приватное / backups
 
@@ -554,6 +625,6 @@
 - Один K3s node, без HA control plane и распределённого storage.
 - Публичного HA/Grafana нет; доступ только LAN/VPN. Единственный публичный
   путь — Telegram webhook `tg.example.com` через Cloudflare Tunnel.
-- Offsite backup и алерты подготовлены, но не live; внешний dead-man switch
-  есть, проверенного disaster restore с чистого железа пока нет.
+- Offsite backup и внешний dead-man switch live; проверенного disaster
+  restore с чистого железа пока нет.
 - Станция — единственный экземпляр; factory/recovery image отсутствует.

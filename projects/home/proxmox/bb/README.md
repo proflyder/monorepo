@@ -234,13 +234,16 @@ URL принимается только на loopback (`127.0.0.0/8`, `::1`, `lo
    ```
 
 5. Задать остальные настройки плагина: `permissionMode` (`auto` или
-   `accept-edits`, `full` отклоняется), `workerLimit`, `profileProviders`
-   (зеркало allowlist провайдеров из `bb profiles providers`) и
-   `dispatcherThreadId`:
+   `accept-edits`, `full` отклоняется), `workerLimit` и
+   `dispatcherThreadId`. Allowlist провайдеров и машин отдельной настройкой
+   плагина больше не задаётся: политика профиля живёт в плагине `profiles`
+   (`bb profiles providers`, `bb profiles machines`) и читается через его RPC
+   `profilePolicy`:
 
    ```bash
    bb plugin config home-dispatcher set permissionMode auto
-   bb plugin config home-dispatcher set profileProviders '{"work":["claude-code"],"personal":null}'
+   bb profiles providers work claude-code
+   bb profiles machines work <work-mac-host-id>
    bb plugin config home-dispatcher set dispatcherThreadId thr_...
    ```
 

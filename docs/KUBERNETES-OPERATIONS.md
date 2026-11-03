@@ -169,6 +169,13 @@ Deployment, `ServiceMonitor`. Hermes ходит в `/mcp` с Bearer-токено
 шлюз. Инструкция по каталогу и RBAC —
 `projects/home/kubernetes/mcp-gateway/README.md`.
 
+Кроме `infra.*`, шлюз несёт группы `bb.read`/`bb.act` (треды и запуск
+агентов, только личный профиль) и голосовой маршрут `/v1/voice/*` с отдельным
+токеном `mcp-gateway-voice`. До bb он доходит только по SSH к CT 103 с
+ограниченным ключом и forced command `bb-dispatch` (Secret
+`mcp-gateway-bb-ssh`); API bb наружу не открывается. Ротация ключей и токенов
+— в `OPERATIONS.md` (раздел «MCP-шлюз») и `projects/home/proxmox/bb/`.
+
 Одноразово (admin, до первого деплоя):
 
 ```bash
@@ -179,7 +186,9 @@ kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
 kubectl apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
 kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
 kubectl -n home-assistant wait --for=condition=Ready \
-  externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram --timeout=120s
+  externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram \
+  externalsecret/mcp-gateway-ha externalsecret/mcp-gateway-bb-ssh \
+  externalsecret/mcp-gateway-voice --timeout=120s
 ```
 
 `ci/rbac.yaml` добавляет `home-assistant/ci-deploy` только NetworkPolicy и

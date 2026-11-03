@@ -152,13 +152,21 @@ Cloudflare) автоматически.
 
 | Порт | Назначение | Класс доступа |
 |---|---|---|
-| входящие | не публикуются | — |
+| публичные входящие | не публикуются | — |
+| `22/tcp` | SSH; forced command `bb-dispatch` для моста | LAN; из кластера — только mcp-gateway с ограниченным ключом |
 | `443/tcp` + DNS | исходящий bb Connect и enrollment | egress из CT |
 
 Сервер bb слушает loopback внутри CT; удалённый доступ идёт через
 исходящий канал `bb connect`, входящие порты на роутере не открываются.
 SSH в CT — только LAN, как у остальных гостей. SQLite-копия лежит в
 `/var/backups/bb`, ночной vzdump включает CT 103.
+
+Голосовой путь не открывает в CT HTTP-порт: `mcp-gateway` в K3s ходит
+`ssh` на `CT 103:22` отдельным ed25519-ключом с pinned `known_hosts` и
+forced command `/usr/local/bin/bb-dispatch`; мост уже на CT обращается к
+loopback-маршруту плагина `home-dispatcher`. NetworkPolicy шлюза разрешает
+egress ровно на `${BB_CT_IP}:22`, публикации API bb наружу нет. Токен
+плагина и HMAC-секрет остаются на CT.
 
 ### Станция
 
@@ -267,7 +275,8 @@ Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
   Tunnel и только на `tg.example.com/telegram/webhook`.
 - `6638` (Zigbee) не имеет auth; при включении не выставлять наружу.
 - Сервер bb (CT 103) не публикует входящих портов: доступ идёт через
-  исходящий Connect, SSH — только LAN.
+  исходящий Connect, SSH — только LAN, а из кластера — только `mcp-gateway`
+  по SSH с ограниченным ключом и forced command.
 - Станция не должна получать публичный WAN: egress guard — часть дизайна.
 - Секреты и реальные адреса хранятся только в `secrets/`; в публичных
   документах — примеры и имена переменных.
