@@ -179,11 +179,11 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
 
 ## Windows logon provider
 
-`projects/home/windows-pc/logon-provider` — C++17-креденшел-провайдер,
-кросс-сборка llvm-mingw. Проверки:
+`solutions/windows-logon-provider` — C++17-креденшел-провайдер, кросс-сборка
+llvm-mingw. Проверки:
 
 ```bash
-cd projects/home/windows-pc/logon-provider
+cd solutions/windows-logon-provider
 ./run-tests.sh      # переносимые protocol/HMAC/config-векторы, host clang++ + ASan/UBSan
 ./build.sh          # кросс-сборка; objdump проверяет exports (DllGetClassObject/DllCanUnloadNow) и imports
 python3 -m unittest discover -s . -p 'test_*.py' -v   # статический контракт install/set-secret/uninstall/status
@@ -194,7 +194,11 @@ python3 -m unittest discover -s . -p 'test_*.py' -v   # статический �
 переопределяет toolchain — так CI использует Linux-архив того же релиза.
 CI (платформа `native`, `_native.yml`) проверяет sha256 архива, кеширует его,
 запускает оба скрипта и публикует DLL, `cp-selftest.exe`, `hmac-selftest.exe`
-и `SHA256SUMS` артефактом; ПК из CI недоступен.
+и `SHA256SUMS` артефактом; ПК из CI недоступен. На push в `develop`
+`deploy-home` переиспользует тот же сборщик, скачивает его artifact и
+публикует OCI-артефакт в GHCR через ORAS (`publish-oci.sh`): теги `VERSION` и
+`sha-<12>`, неизменяемость по содержимому, provenance attestation. PR не
+публикует; проверка получения и проверки digest — `fetch.sh`.
 
 На самом ПК — self-tests (когда грант не ожидается) и живая приёмка:
 
@@ -290,7 +294,7 @@ Firebase. Этот output true только когда изменился реа
 | go | `go list -deps` пакетов юнита | правка `packages/proto` выбирает все юниты, которые его импортируют |
 | android | обратные зависимости Bazel (`bazel query --output=xml`, loading phase) | правка `packages/kotlin/core` выбирает `kotlin-shared` и только те приложения, что от него зависят |
 | python | пути юнита (+ `depends_on`) | правка `projects/home/proxmox/**` выбирает `proxmox` |
-| native | пути юнита | правка `projects/home/windows-pc/logon-provider/**` выбирает `logon-provider` |
+| native | пути юнита | правка `solutions/windows-logon-provider/**` выбирает `logon-provider` |
 | quality | всегда | audit/Gitleaks/shellcheck идут на любом изменении |
 
 Android-граф берётся из loading-фазы намеренно: он не требует JDK и Android

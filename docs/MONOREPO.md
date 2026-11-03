@@ -108,11 +108,15 @@ bazel run //:gazelle
 рисковать станцией. Android собирается root-инструментами в
 `projects/mobile/android`.
 
-`projects/home/windows-pc/logon-provider` тоже вне Bazel: его контракт —
-`build.sh` (кросс-сборка pinned llvm-mingw `20261020`) и `run-tests.sh`
-(host clang++), без BUILD-целей и toolchain-правил. В CI это платформа
-`native` (`_native.yml`): проверка sha256 архива, host-тесты, кросс-сборка и
-artifact. Переход на Bazel — отдельная задача, а не текущее состояние.
+`solutions/windows-logon-provider` — переиспользуемый компонент, тоже вне
+Bazel: его контракт — `build.sh` (кросс-сборка pinned llvm-mingw `20261020`) и
+`run-tests.sh` (host clang++), без BUILD-целей и toolchain-правил. В CI это
+платформа `native` (`_native.yml`): проверка sha256 архива, host-тесты,
+кросс-сборка и artifact. Значения `ServiceUrl`/`Machine`/`UserName` приходят
+из проекта при установке. На push в `develop` `deploy-home` публикует файлы
+как публичный OCI-артефакт GHCR (ORAS, `VERSION`, digest и provenance);
+домашний ПК только читает готовый digest. Переход на Bazel — отдельная задача,
+а не текущее состояние.
 
 ## gRPC / Connect
 

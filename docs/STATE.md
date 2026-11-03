@@ -414,10 +414,15 @@
   `wakegrant_bearer`. Деплой — `projects/home/kubernetes/wakegrant`.
   Логин-компонент запрашивает грант только в `CPUS_LOGON`; разблокировка
   (`CPUS_UNLOCK_WORKSTATION`) ничего не делает — грант никогда не должен
-  разблокировать уже работающий ПК. Модуль входа установлен на ПК
-  (`projects/home/windows-pc/logon-provider`, CLSID
+  разблокировать уже работающий ПК. Модуль входа — переиспользуемое решение
+  `solutions/windows-logon-provider` (CLSID
   `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`, журнал
-  `C:\ProgramData\Ricardo\KompLogon\logon.log`). Принято вживую 2026-11-03:
+  `C:\ProgramData\Ricardo\KompLogon\logon.log`) — установлен на ПК из CI
+  artifact, sha256 DLL
+  `4481ae77f91411e5ceffe410c8b934f983a544fccfa70493e545e81177627c0b`.
+  Следующий шаг — установка из публичного OCI-артефакта GHCR по digest
+  (`ghcr.io/proflyder/windows-logon-provider`); после первого publish
+  оператор записывает здесь digest артефакта. Принято вживую 2026-11-03:
   «включи комп» → рабочий стол без PIN (grant с первой попытки, сеть готова
   к появлению экрана входа); включение кнопкой → обычный вход, сервис
   отказывает, модуль отступает при вводе PIN. Режим «только Windows Hello»

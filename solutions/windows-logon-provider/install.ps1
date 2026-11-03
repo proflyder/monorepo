@@ -11,15 +11,22 @@
 
     Пароль и ключ пишутся отдельно через set-secret.ps1.
 
+    ServiceUrl, Machine и UserName обязательны: значения задаёт проект при
+    установке, в самом решении их нет.
+
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 `
-        -ServiceUrl 'http://192.0.2.27:30130'
+        -ServiceUrl 'http://192.0.2.10:8080' `
+        -Machine '<machine>' -UserName '<user>'
 #>
 [CmdletBinding()]
 param(
-    [string]$ServiceUrl = 'http://192.0.2.27:30130',
-    [string]$Machine = 'komp',
-    [string]$UserName = 'pl',
+    [Parameter(Mandatory = $true)]
+    [string]$ServiceUrl,
+    [Parameter(Mandatory = $true)]
+    [string]$Machine,
+    [Parameter(Mandatory = $true)]
+    [string]$UserName,
     [string]$Domain = '.',
     [string]$SourceDir = (Join-Path $PSScriptRoot 'out')
 )

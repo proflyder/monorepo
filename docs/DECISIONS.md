@@ -184,7 +184,7 @@
     (`switch.komp.turn_on` выдаёт одноразовый грант до WoL), поэтому на
     экране входа появляется отдельная плитка только при действующем гранте;
     без него остаётся обычный вход по PIN. Провайдер —
-    `projects/home/windows-pc/logon-provider`, CLSID
+    `solutions/windows-logon-provider`, CLSID
     `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`.
 
 31. **Грант принимается только в `CPUS_LOGON`, никогда при разблокировке.**
@@ -206,7 +206,23 @@
     (`20261020`) с macOS и Linux CI, переносимые проверки — host clang++.
     Код основан на MIT-примерах Microsoft
     (`Windows-classic-samples`), GPL/unlicensed-код не используется;
-    уведомления — `THIRD-PARTY-NOTICES.md`. CI публикует DLL, self-tests и
-    `SHA256SUMS` артефактом и не трогает ПК (он недоступен из CI).
+    уведомления — `THIRD-PARTY-NOTICES.md`. CI собирает DLL, self-tests и
+    `SHA256SUMS` и не трогает ПК (он недоступен из CI); распространение —
+    решение 34.
+
+34. **Windows-бинарники — публичные OCI-артефакты в GHCR через ORAS.**
+    Провайдер входа — отдельный пакет
+    `ghcr.io/proflyder/windows-logon-provider` с семантической версией из
+    `VERSION` и тегом `sha-<12 hex>`. Тег версии неизменяем по содержимому:
+    тот же `SHA256SUMS` — no-op, другой — ошибка, поэтому релиз — смена
+    `VERSION`. Установка — по digest (`@sha256:…`) после `sha256sum -c` и
+    `gh attestation verify`; build provenance создаётся для digest артефакта
+    (`push-to-registry`) и для DLL. Публикует только push в `develop`
+    (`deploy-home`), переиспользуя сборку `_native.yml`; PR никогда не
+    публикует. GitHub Releases отклонены (монорепозиторий смешал бы продукты
+    в одном потоке релизов), Maven/NuGet — тоже (даже публичное чтение
+    требует авторизации). Новый пакет GHCR может создаться приватным:
+    публичность включается один раз в GitHub UI (Package settings → Change
+    visibility → Public), после чего `oras pull` анонимный.
 
 Меняется решение — обновить этот файл и `STATE.md`.

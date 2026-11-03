@@ -372,15 +372,17 @@ units:
 
   - id: windows-pc
     platform: python
-    title: "projects/home/windows-pc (komp power + logon provider contracts)"
+    title: "projects/home/windows-pc (komp power) + logon provider contracts"
     paths:
       - projects/home/windows-pc/**
+      # The reusable provider solution ships its own hermetic suite (static
+      # contract checks for the elevated install/set-secret/uninstall/status
+      # scripts); the native unit builds it, this unit checks the scripts.
+      - solutions/windows-logon-provider/**
     python:
-      # logon-provider holds its own hermetic suite (static contract checks for
-      # the elevated install/set-secret/uninstall/status scripts).
       suites:
         - projects/home/windows-pc
-        - projects/home/windows-pc/logon-provider
+        - solutions/windows-logon-provider
 
   - id: home-backup
     platform: python
@@ -564,17 +566,18 @@ units:
         - solutions/bb-profiles/tests
 
   # ----------------------------------------------------------- Native --------
-  # Non-Bazel C/C++ build with a pinned cross toolchain. The Windows logon
-  # provider is cross-built with llvm-mingw from macOS/CI without Visual Studio;
-  # CI verifies the toolchain digest, runs the portable host tests and publishes
-  # the binaries as an artifact (the PC itself is not reachable from CI).
+  # Non-Bazel C/C++ build with a pinned cross toolchain. The reusable Windows
+  # logon provider is cross-built with llvm-mingw from macOS/CI without Visual
+  # Studio; CI verifies the toolchain digest and runs the portable host tests.
+  # PRs upload the binaries as an artifact; a push to `develop` additionally
+  # publishes them as a public OCI artifact in GHCR (deploy-home, publish-native).
   - id: logon-provider
     platform: native
-    title: "projects/home/windows-pc/logon-provider (Windows credential provider)"
+    title: "solutions/windows-logon-provider (Windows credential provider)"
     paths:
-      - projects/home/windows-pc/logon-provider/**
+      - solutions/windows-logon-provider/**
     native:
-      workdir: projects/home/windows-pc/logon-provider
+      workdir: solutions/windows-logon-provider
       test: ./run-tests.sh
       build: ./build.sh
       artifacts:

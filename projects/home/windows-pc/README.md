@@ -11,6 +11,25 @@ HA-часть — `projects/home-assistant/ha-voice/` (см. её README). Ре�
 IP/MAC/имя пользователя живут только в HA `secrets.yaml`; в Git их нет, здесь
 используется TEST-NET `192.0.2.0/24` и плейсхолдеры.
 
+## Модуль входа (logon provider)
+
+Провайдер входа — переиспользуемое решение
+`solutions/windows-logon-provider` (сборка, публикация в GHCR, self-tests и
+инструкции по установке — в его README). В нём нет домашних значений: при
+установке на этот ПК передаются параметры проекта (адрес — TEST-NET
+плейсхолдер, заменить на реальный):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 `
+    -ServiceUrl 'http://192.0.2.27:30130' `
+    -Machine 'komp' -UserName '<user>'
+```
+
+`switch.komp.turn_on` выдаёт грант `wakegrant` до Wake-on-LAN; без гранта
+плитки нет и работает обычный вход по PIN. Порядок получения артефакта,
+проверки digest и замены DLL — `docs/OPERATIONS.md`, раздел «Модуль входа
+(logon provider)».
+
 ## Чеклист Windows
 
 1. **BIOS/UEFI.** Включить Wake-on-LAN / «Power On by PCI-E» (название зависит
