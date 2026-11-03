@@ -143,17 +143,25 @@ bazelisk test //projects/mobile/android:android_tests
 # Bazel build tools are Go: unit tests for the generators and lint runner.
 bazelisk test //platform/android/...
 
+# Android Lint over the whole app graph (separate CI job `android / android-lint`).
+bazelisk test //projects/mobile/android:android_lint
+
 # Optional: install on a connected device (keeps app data).
 adb install -r bazel-bin/projects/mobile/android/app/app.apk
 ```
 
-Android Lint is part of `android_tests` (`//projects/mobile/android:android_lint`)
-and can also be run alone. It uses the standalone Lint CLI from the Android SDK
+Android Lint is **not** part of `android_tests`: it runs as its own CI unit
+(`android / android-lint`) and must also be run explicitly with
+`bazelisk test //projects/mobile/android:android_lint`. Keeping it separate
+means a lint finding fails that job instead of aborting `bazel test` and hiding
+the unit tests' results. It uses the standalone Lint CLI from the Android SDK
 `cmdline-tools` package, version-pinned to `23.0` (`sdkmanager --install
 "cmdline-tools;23.0"`, or set `ANDROID_LINT` to the executable). The Bazel rule
 walks the app's dependency graph, writes lint's project model for every module
 (app, `core/*`, `features/*/{api,impl}`), and runs lint once with `-Werror`, so
-any lint error or warning fails the target and the `android` CI job.
+any lint error or warning fails the target and the lint job. The unit declares
+that SDK package in `platform/ci/units.mjs`, so `_android.yml` installs it only
+for this job.
 
 `lint.xml` is the shared config. It is deliberately **not** a baseline: every
 finding must be fixed at the source. `tools:ignore`/`@Suppress` is allowed only

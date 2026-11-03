@@ -1,9 +1,11 @@
 name: _android
 
 # Reusable Android platform workflow: one matrix entry per affected application
-# (or shared Kotlin library) unit. The unit is selected by the Bazel reverse
-# dependency graph in ci.yml; inside the unit target-determinator narrows the
-# target list further and falls back to every declared target on any failure.
+# (or shared Kotlin library) unit, plus the dedicated Android Lint unit. The unit
+# is selected by the Bazel reverse dependency graph in ci.yml; inside the unit
+# target-determinator narrows the target list further and falls back to every
+# declared target on any failure. Build runs before test, so a test failure
+# cannot hide a build error and a lint finding only fails the lint entry.
 
 on:
   workflow_call:
@@ -19,6 +21,11 @@ on:
         type: string
       build_targets:
         description: Space separated Bazel build targets owned by the unit
+        required: false
+        default: ""
+        type: string
+      sdk_packages:
+        description: Extra Android SDK packages (space separated) this unit needs
         required: false
         default: ""
         type: string
@@ -99,12 +106,20 @@ jobs:
             bazel-android-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the
-      # platform/build-tools pinned in MODULE.bazel plus the cmdline-tools
-      # release that provides the Android Lint CLI used by
-      # //projects/mobile/android:android_lint. Keep the version in sync with
+      # platform/build-tools pinned in MODULE.bazel plus the extra SDK packages
+      # the unit declares (for example the cmdline-tools release that provides
+      # the standalone Android Lint CLI). Keep the lint version in sync with
       # platform/android/tools/lint_runner.
       - name: Install Android SDK packages
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "cmdline-tools;23.0"
+        env:
+          SDK_PACKAGES: ${{ inputs.sdk_packages }}
+        run: |
+          packages=("platforms;android-36" "build-tools;36.0.0")
+          if [ -n "$SDK_PACKAGES" ]; then
+            read -r -a extra <<< "$SDK_PACKAGES"
+            packages+=("${extra[@]}")
+          fi
+          sdkmanager --install "${packages[@]}"
 
       - name: Select affected targets
         id: select
@@ -159,17 +174,17 @@ jobs:
             echo "build_targets=${builds}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: bazel test ${{ inputs.unit }}
-        if: steps.targets.outputs.test_targets != ''
-        run: |
-          read -r -a targets <<< "${{ steps.targets.outputs.test_targets }}"
-          bazel test "${targets[@]}" --test_output=errors
-
       - name: bazel build ${{ inputs.unit }}
         if: steps.targets.outputs.build_targets != ''
         run: |
           read -r -a targets <<< "${{ steps.targets.outputs.build_targets }}"
           bazel build "${targets[@]}"
+
+      - name: bazel test ${{ inputs.unit }}
+        if: steps.targets.outputs.test_targets != ''
+        run: |
+          read -r -a targets <<< "${{ steps.targets.outputs.test_targets }}"
+          bazel test "${targets[@]}" --test_output=errors
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.artifact != '' && steps.targets.outputs.build_targets != ''

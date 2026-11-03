@@ -356,6 +356,26 @@ export const config = {
       },
     },
 
+    // Android Lint over the whole application graph is its own unit so a lint
+    // finding fails only `android / android-lint` instead of aborting the app's
+    // `bazel test` before the other tests report. It shares the application's
+    // paths and Bazel root: every Android module source/resource change selects
+    // it together with `android-app`, and `platform/android/**` (the lint rule)
+    // invalidates it through the android platform rule. The unit declares the
+    // SDK package that provides the standalone Lint CLI, so `_android.yml` only
+    // installs it for jobs that need it.
+    {
+      id: "android-lint",
+      platform: "android",
+      title: "projects/mobile/android (Android Lint, whole app graph)",
+      paths: ["projects/mobile/android/**"],
+      bazel: {
+        roots: ["//projects/mobile/android"],
+        test_targets: ["//projects/mobile/android:android_lint"],
+        sdk_packages: ["cmdline-tools;23.0"],
+      },
+    },
+
     {
       id: "kotlin-shared",
       platform: "android",

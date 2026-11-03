@@ -210,6 +210,7 @@ test("android fixture: matrix entries are flat strings", () => {
     build_targets: "//apps/one:app",
     artifact: "bazel-bin/apps/one/app.apk",
     artifact_name: "app-one-debug",
+    sdk_packages: "",
     universe: "//apps/one/... + //apps/two/... + //libs/shared/...",
   });
 });
@@ -477,6 +478,71 @@ test("real repo: graph fixture exists and android roots cover the app", () => {
   assert.ok(fs.existsSync(graphFile));
   const app = config.get("android-app");
   assert.ok(app.bazelRoots.some((root) => root.startsWith("//projects/mobile/android")));
+});
+
+test("real repo: android lint unit is a separate job with the same paths", () => {
+  const config = affected.loadConfig();
+  const app = config.get("android-app");
+  const lint = config.get("android-lint");
+  assert.deepEqual(lint.paths, app.paths);
+  assert.deepEqual(lint.bazelRoots, app.bazelRoots);
+  assert.deepEqual(lint.testTargets, ["//projects/mobile/android:android_lint"]);
+  assert.deepEqual(lint.buildTargets, []);
+  assert.deepEqual(lint.bazelSdkPackages, ["cmdline-tools;23.0"]);
+});
+
+test("real repo: android module change selects the app and the lint unit", () => {
+  const config = affected.loadConfig();
+  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+    affected.route(config, ["projects/mobile/android/features/alarms/impl/AlarmsFragment.kt"], {
+      root: REPO,
+      base: "b",
+      graph: { affectedRules: () => new Set() },
+    }),
+  );
+  assert.deepEqual(
+    result.routes.android.units.map((unit) => unit.id),
+    ["android-app", "android-lint"],
+  );
+});
+
+test("real repo: shared kotlin change selects the lint unit through the graph", () => {
+  const config = affected.loadConfig();
+  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+    affected.route(config, ["packages/kotlin/core/src/main/A.kt"], {
+      root: REPO,
+      base: "b",
+      graph: {
+        affectedRules: () => new Set(["//projects/mobile/android/app:app_lib"]),
+      },
+    }),
+  );
+  assert.deepEqual(
+    result.routes.android.units.map((unit) => unit.id),
+    ["android-app", "android-lint", "kotlin-shared"],
+  );
+});
+
+test("real repo: lint rule change runs every android unit including lint", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["platform/android/lint.bzl"]);
+  assert.equal(result.routes.android.mode, "all");
+  assert.deepEqual(
+    result.routes.android.units.map((unit) => unit.id),
+    ["android-app", "android-lint", "kotlin-shared"],
+  );
+  const entry = affected
+    .matrixEntries(result, config)
+    .android.find((item) => item.id === "android-lint");
+  assert.deepEqual(entry, {
+    id: "android-lint",
+    test_targets: "//projects/mobile/android:android_lint",
+    build_targets: "",
+    artifact: "",
+    artifact_name: "",
+    sdk_packages: "cmdline-tools;23.0",
+    universe: "//packages/kotlin/... + //projects/mobile/android/...",
+  });
 });
 
 test("real repo: github format is a valid JSON payload", async () => {

@@ -9,8 +9,9 @@ alias(
 )
 
 # Android Lint over every module reachable from the application library: the
-# app module plus all core/feature API and implementation modules. The test
-# also passes -Werror and fails the `android` CI job on any finding.
+# app module plus all core/feature API and implementation modules. Runs as its
+# own CI unit (`android / android-lint`), with -Werror, so a finding fails that
+# job without aborting the app's tests.
 home_android_lint(
     name = "android_lint",
     deps = ["//projects/mobile/android/app:app_lib"],
@@ -18,10 +19,11 @@ home_android_lint(
     config = "//projects/mobile/android:lint.xml",
 )
 
+# Unit tests only. `//projects/mobile/android:android_lint` is intentionally
+# absent: it is a separate CI unit so its findings do not hide test results.
 test_suite(
     name = "android_tests",
     tests = [
-        ":android_lint",
         "//packages/kotlin/core:core_test",
         "//packages/kotlin/core:operation_test",
         "//projects/mobile/android/app:apk_runtime_closure_test",

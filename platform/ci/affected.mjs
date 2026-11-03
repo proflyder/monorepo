@@ -62,6 +62,9 @@ export class Unit {
         buildTargets: [],
         artifact: "",
         artifactName: "",
+        // Extra Android SDK packages a unit's Bazel actions need, beyond the
+        // platform/build-tools baseline installed by `_android.yml`.
+        bazelSdkPackages: [],
         goModule: ".",
         goPackages: [],
         goBuild: [],
@@ -161,6 +164,7 @@ export function normalizeConfig(data, label = "units") {
       buildTargets: list(bazel.build_targets),
       artifact: bazel.artifact ?? "",
       artifactName: bazel.artifact_name ?? "",
+      bazelSdkPackages: list(bazel.sdk_packages),
       goModule: go.module ?? ".",
       goPackages: list(go.packages),
       goBuild: list(go.build),
@@ -1205,6 +1209,7 @@ export function matrixEntries(route_, config) {
     build_targets: space(unit.buildTargets),
     artifact: unit.artifact,
     artifact_name: unit.artifactName,
+    sdk_packages: space(unit.bazelSdkPackages),
     universe,
   }));
   const python = route_.routes.python.units.map((unit) => ({
