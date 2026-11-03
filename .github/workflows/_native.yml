@@ -1,0 +1,185 @@
+name: _native
+
+# Reusable native platform workflow: one matrix entry per affected unit that
+# builds C/C++ with a repository script instead of Bazel. The unit supplies its
+# working directory, host-test and cross-build commands, the artifacts it owns
+# and the pinned toolchain archive. The archive is cached by version + sha256,
+# and its digest is verified before extraction. Nothing is deployed: the
+# Windows PC is not reachable from CI, so the result is an artifact only.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.yml
+        required: true
+        type: string
+      workdir:
+        description: Directory (relative to the repository root) that owns the scripts
+        required: true
+        type: string
+      build:
+        description: Build command, run from workdir
+        required: true
+        type: string
+      test:
+        description: Optional host-test command, run from workdir
+        required: false
+        default: ""
+        type: string
+      artifacts:
+        description: Space separated artifact paths, relative to workdir
+        required: false
+        default: ""
+        type: string
+      checksums:
+        description: Checksums file to generate over artifacts, relative to workdir
+        required: false
+        default: ""
+        type: string
+      toolchain_name:
+        description: Toolchain name (cache key and artifact metadata)
+        required: false
+        default: ""
+        type: string
+      toolchain_version:
+        required: false
+        default: ""
+        type: string
+      toolchain_url:
+        description: HTTPS archive URL; empty when no toolchain download is needed
+        required: false
+        default: ""
+        type: string
+      toolchain_sha256:
+        description: Expected sha256 (lowercase hex) of the archive
+        required: false
+        default: ""
+        type: string
+      toolchain_root:
+        description: Directory created by extracting the archive
+        required: false
+        default: ""
+        type: string
+      retention_days:
+        required: false
+        default: 30
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: native / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ${{ inputs.workdir }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # The portable tests build with the host compiler (clang++ by default).
+      # GitHub's Ubuntu image ships clang, but install it if the image changes.
+      - name: Host C++ compiler
+        run: |
+          if ! command -v clang++ >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends clang
+          fi
+          clang++ --version | head -n 1
+
+      - name: Cache ${{ inputs.toolchain_name }} ${{ inputs.toolchain_version }}
+        id: toolchain-cache
+        if: inputs.toolchain_url != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/toolchains/${{ inputs.toolchain_name }}-${{ inputs.toolchain_version }}
+          key: ${{ runner.os }}-${{ inputs.toolchain_name }}-${{ inputs.toolchain_version }}-${{ inputs.toolchain_sha256 }}
+
+      - name: Download and verify ${{ inputs.toolchain_name }}
+        if: inputs.toolchain_url != '' && steps.toolchain-cache.outputs.cache-hit != 'true'
+        env:
+          TOOLCHAIN_URL: ${{ inputs.toolchain_url }}
+          TOOLCHAIN_SHA256: ${{ inputs.toolchain_sha256 }}
+          TOOLCHAIN_NAME: ${{ inputs.toolchain_name }}
+          TOOLCHAIN_VERSION: ${{ inputs.toolchain_version }}
+        run: |
+          set -euo pipefail
+          destination="$RUNNER_TEMP/toolchains/${TOOLCHAIN_NAME}-${TOOLCHAIN_VERSION}"
+          archive="$RUNNER_TEMP/${TOOLCHAIN_NAME}-${TOOLCHAIN_VERSION}.tar.xz"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" "$TOOLCHAIN_URL"
+          echo "${TOOLCHAIN_SHA256}  ${archive}" | sha256sum -c -
+          rm -rf "$destination"
+          mkdir -p "$destination"
+          tar -xJf "$archive" -C "$destination"
+          rm -f "$archive"
+
+      - name: Expose ${{ inputs.toolchain_name }} root
+        if: inputs.toolchain_url != ''
+        run: |
+          echo "LLVM_MINGW=$RUNNER_TEMP/toolchains/${{ inputs.toolchain_name }}-${{ inputs.toolchain_version }}/${{ inputs.toolchain_root }}" >> "$GITHUB_ENV"
+
+      - name: Test ${{ inputs.unit }}
+        if: inputs.test != ''
+        env:
+          TEST_COMMAND: ${{ inputs.test }}
+        run: bash -eu -o pipefail -c "$TEST_COMMAND"
+
+      - name: Build ${{ inputs.unit }}
+        env:
+          BUILD_COMMAND: ${{ inputs.build }}
+        run: bash -eu -o pipefail -c "$BUILD_COMMAND"
+
+      - name: Checksums ${{ inputs.unit }}
+        if: inputs.checksums != ''
+        env:
+          ARTIFACTS: ${{ inputs.artifacts }}
+          CHECKSUMS: ${{ inputs.checksums }}
+        run: |
+          set -euo pipefail
+          read -r -a files <<< "$ARTIFACTS"
+          # `upload-artifact` preserves paths relative to the least common
+          # ancestor of the uploaded files (and flattens a single directory),
+          # so record names relative to that same directory. A consumer can
+          # then run `sha256sum -c SHA256SUMS` inside the unpacked artifact.
+          common="$(dirname "${files[0]}")"
+          for file in "${files[@]}"; do
+            while [[ "$file" != "$common"/* && "$common" != "." ]]; do
+              common="$(dirname "$common")"
+            done
+          done
+          checksums_abs="$PWD/$CHECKSUMS"
+          (
+            cd "$common"
+            sha256sum "${files[@]#"$common"/}" > "$checksums_abs"
+          )
+          cat "$CHECKSUMS"
+
+      - name: Collect artifact paths
+        id: artifact-paths
+        env:
+          ARTIFACTS: ${{ inputs.artifacts }}
+          CHECKSUMS: ${{ inputs.checksums }}
+          WORKDIR: ${{ inputs.workdir }}
+        run: |
+          set -euo pipefail
+          {
+            echo "paths<<EOF"
+            read -r -a files <<< "$ARTIFACTS"
+            for file in "${files[@]}"; do
+              echo "${GITHUB_WORKSPACE}/${WORKDIR}/${file}"
+            done
+            if [ -n "$CHECKSUMS" ]; then
+              echo "${GITHUB_WORKSPACE}/${WORKDIR}/${CHECKSUMS}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.unit }}
+          path: ${{ steps.artifact-paths.outputs.paths }}
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention_days }}

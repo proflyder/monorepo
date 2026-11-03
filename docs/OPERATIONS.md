@@ -507,6 +507,76 @@ curl -sS -X POST http://<k3s-node>:30130/v1/grants \
 заменяет предыдущий. Перезапуск пода не теряет выданный пропуск (SQLite на
 PVC), но сбрасывает выданные nonce — ПК просто запросит новый.
 
+### Модуль входа (logon provider)
+
+Провайдер входа — `projects/home/windows-pc/logon-provider` (C++17,
+llvm-mingw, без Visual Studio). CI на каждый PR с его изменениями собирает
+`RicardoKompLogon.dll`, `cp-selftest.exe`, `hmac-selftest.exe` и `SHA256SUMS`
+в artifact `logon-provider` (30 дней). На ПК CI ничего не ставит; скачать
+можно из Actions → нужный run → Artifacts. Перед установкой сверить хеш:
+
+```powershell
+Get-FileHash .\RicardoKompLogon.dll -Algorithm SHA256
+# сравнить с out\SHA256SUMS из artifact
+```
+
+Установка (PowerShell от администратора; `out` — распакованный artifact):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 `
+  -ServiceUrl 'http://192.0.2.27:30130' -SourceDir 'C:\path\to\out'
+
+# пароль — SecureString (интерактивно), ключ — одной строкой в stdin
+'BASE64KEY' | powershell -NoProfile -ExecutionPolicy Bypass -File set-secret.ps1
+
+powershell -NoProfile -ExecutionPolicy Bypass -File status.ps1
+```
+
+`install.ps1` сбрасывает `FailCount=0` и `Disabled=0`. Обновление DLL:
+LogonUI держит файл, поэтому `Copy-Item -Force` падает — сначала переименовать
+старый, затем скопировать новый, старый удалить после выхода из системы или
+перезагрузки:
+
+```powershell
+$dir = 'C:\Program Files\Ricardo\KompLogon'
+Move-Item "$dir\RicardoKompLogon.dll" "$dir\RicardoKompLogon.dll.old" -Force
+Copy-Item .\RicardoKompLogon.dll "$dir\RicardoKompLogon.dll" -Force
+# .old удалить позже, когда файл больше не занят
+```
+
+`set-secret.ps1` не печатает значения: пароль запрашивается как SecureString,
+ключ читается одной строкой из stdin; echo/историю не использовать.
+`status.ps1` показывает конфигурацию, регистрацию, DLL, `FailCount`/`Disabled`
+и последние строки журнала.
+
+Журнал: `C:\ProgramData\Ricardo\KompLogon\logon.log` (ротация в
+`logon.log.1` при 256 КиБ). Читать административной SSH-сессией; ключ HA
+ограничен только `shutdown`/`cancel` и журнал не покажет:
+
+```bash
+ssh <user>@<host> \
+  "powershell -NoProfile -Command \"Get-Content 'C:\\ProgramData\\Ricardo\\KompLogon\\logon.log' -Tail 50\""
+```
+
+Self-tests (запускать, когда грант не ожидается — `cp-selftest.exe` на
+мгновение поднимает фоновый поток):
+
+```powershell
+.\hmac-selftest.exe   # HMAC через BCrypt против тест-вектора PROTOCOL.md
+.\cp-selftest.exe     # загрузка провайдера по CLSID вне LogonUI
+```
+
+После трёх неудачных входов провайдер ставит `Disabled=1` и больше ничего не
+делает; снять latch — переустановить (`install.ps1` обнуляет
+`FailCount`/`Disabled`) или поправить значения в реестре.
+
+Удаление — без перезагрузки, регистрации снимаются сразу; журнал остаётся:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
+# -KeepSecret — не удалять secret.bin
+```
+
 ## K3s
 
 ```bash

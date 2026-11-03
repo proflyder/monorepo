@@ -82,10 +82,10 @@ System + Administrators полный доступ, больше никого.
 sha256 `e9c13e4ede38e715003ffc674d4d00a1088df8235439d1f0c16188ff0704c17e`
 (совпадает с digest из GitHub API релиза). Положить в
 `secrets/local-tools/llvm-mingw/` (каталог в Git не попадает) или задать
-`LLVM_MINGW_BIN=/path/to/bin`.
+`LLVM_MINGW=/path/to/root` (или `LLVM_MINGW_BIN=/path/to/bin`).
 
 ```bash
-projects/home/windows-pc/logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe
+projects/home/windows-pc/logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe, out/hmac-selftest.exe
 projects/home/windows-pc/logon-provider/run-tests.sh     # переносимые unit-тесты на clang++
 ```
 

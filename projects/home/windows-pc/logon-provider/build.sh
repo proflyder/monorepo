@@ -4,7 +4,10 @@
 # Toolchain (git-ignored): secrets/local-tools/llvm-mingw/, release 20261020,
 # asset llvm-mingw-20261020-ucrt-macos-universal.tar.xz,
 # sha256 e9c13e4ede38e715003ffc674d4d00a1088df8235439d1f0c16188ff0704c17e.
-# Override the location with LLVM_MINGW_BIN=/path/to/bin.
+# Override the toolchain root with LLVM_MINGW=/path/to/llvm-mingw (the
+# directory that contains bin/) or the bin directory directly with
+# LLVM_MINGW_BIN=/path/to/bin. CI extracts the Linux x86_64 release and sets
+# LLVM_MINGW, so the same script builds on macOS and on the runner.
 #
 # Outputs: out/RicardoKompLogon.dll, out/cp-selftest.exe, out/hmac-selftest.exe
 set -euo pipefail
@@ -15,6 +18,19 @@ ROOT="$(cd ../../../.. && pwd)"
 VERSION="${LLVM_MINGW_VERSION:-20261020}"
 
 find_toolchain() {
+  if [[ -n "${LLVM_MINGW:-}" ]]; then
+    local root="${LLVM_MINGW%/}"
+    if [[ -x "$root/bin/x86_64-w64-mingw32-clang++" ]]; then
+      printf '%s\n' "$root/bin"
+      return 0
+    fi
+    if [[ -x "$root/x86_64-w64-mingw32-clang++" ]]; then
+      printf '%s\n' "$root"
+      return 0
+    fi
+    echo "LLVM_MINGW=$LLVM_MINGW does not contain x86_64-w64-mingw32-clang++" >&2
+    return 1
+  fi
   if [[ -n "${LLVM_MINGW_BIN:-}" ]]; then
     printf '%s\n' "$LLVM_MINGW_BIN"
     return 0
@@ -42,7 +58,7 @@ find_toolchain() {
 
 if ! TOOLCHAIN_BIN="$(find_toolchain)"; then
   echo "llvm-mingw not found." >&2
-  echo "Install ${VERSION} under secrets/local-tools/llvm-mingw/ or set LLVM_MINGW_BIN." >&2
+  echo "Install ${VERSION} under secrets/local-tools/llvm-mingw/ or set LLVM_MINGW/LLVM_MINGW_BIN." >&2
   exit 1
 fi
 

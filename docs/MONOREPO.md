@@ -67,6 +67,7 @@ engine, два entrypoint-а для совместимости.
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
 | `solutions/bb-home-dispatcher`, `solutions/bb-profiles` | JavaScript/TypeScript (плагины bb) | исполняются внутри bb как path-источник; `node --test` без внешних сервисов |
+| Windows logon provider | C++17 | in-proc COM DLL для LogonUI; кросс-сборка llvm-mingw с macOS/CI без Visual Studio, переносимые host-тесты |
 | HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
 
 Go — для control plane и durable state, Rust — для тяжёлых вычислений,
@@ -106,6 +107,12 @@ bazel run //:gazelle
 собирается своим Go-модулем. Его перевод — отдельная миграция, чтобы не
 рисковать станцией. Android собирается root-инструментами в
 `projects/mobile/android`.
+
+`projects/home/windows-pc/logon-provider` тоже вне Bazel: его контракт —
+`build.sh` (кросс-сборка pinned llvm-mingw `20261020`) и `run-tests.sh`
+(host clang++), без BUILD-целей и toolchain-правил. В CI это платформа
+`native` (`_native.yml`): проверка sha256 архива, host-тесты, кросс-сборка и
+artifact. Переход на Bazel — отдельная задача, а не текущее состояние.
 
 ## gRPC / Connect
 

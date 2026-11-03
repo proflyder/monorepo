@@ -13,6 +13,7 @@ based for code:
   SDK because it never analyses targets.
 * **python** - path rules plus optional declarative `depends_on`.
 * **js** - path rules for dependency-free edge Workers (runs `node --test`).
+* **native** - path rules for non-Bazel C/C++ repository-script builds.
 * **quality** - always runs.
 
 Any failure to compute a dependency closure degrades to "every unit of that
@@ -40,7 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_UNITS = Path(__file__).resolve().with_name("units.yml")
-PLATFORMS = ("go", "android", "python", "js", "quality")
+PLATFORMS = ("go", "android", "python", "js", "native", "quality")
 
 
 # --------------------------------------------------------------------------
@@ -64,6 +65,18 @@ class Unit:
     suites: list[str] = field(default_factory=list)
     compile_dirs: list[str] = field(default_factory=list)
     js_tests: list[str] = field(default_factory=list)
+    # Native (non-Bazel) build units: a repository script that produces
+    # host- or cross-built artifacts, plus the pinned toolchain it needs.
+    native_workdir: str = ""
+    native_build: str = ""
+    native_test: str = ""
+    native_artifacts: list[str] = field(default_factory=list)
+    native_checksums: str = ""
+    native_toolchain_name: str = ""
+    native_toolchain_version: str = ""
+    native_toolchain_url: str = ""
+    native_toolchain_sha256: str = ""
+    native_toolchain_root: str = ""
     depends_on: list[str] = field(default_factory=list)
     # Deployable units own container images and Kubernetes workloads. An empty
     # `deploy_images` means "this unit is not deployed by deploy-home".
@@ -121,6 +134,8 @@ def load_config(path: Path) -> Config:
         go = raw.get("go") or {}
         python = raw.get("python") or {}
         js = raw.get("js") or {}
+        native = raw.get("native") or {}
+        native_toolchain = native.get("toolchain") or {}
         deploy = raw.get("deploy") or {}
         units.append(
             Unit(
@@ -140,6 +155,16 @@ def load_config(path: Path) -> Config:
                 suites=list(python.get("suites") or []),
                 compile_dirs=list(python.get("compile") or []),
                 js_tests=list(js.get("tests") or []),
+                native_workdir=str(native.get("workdir") or ""),
+                native_build=str(native.get("build") or ""),
+                native_test=str(native.get("test") or ""),
+                native_artifacts=list(native.get("artifacts") or []),
+                native_checksums=str(native.get("checksums") or ""),
+                native_toolchain_name=str(native_toolchain.get("name") or ""),
+                native_toolchain_version=str(native_toolchain.get("version") or ""),
+                native_toolchain_url=str(native_toolchain.get("url") or ""),
+                native_toolchain_sha256=str(native_toolchain.get("sha256") or ""),
+                native_toolchain_root=str(native_toolchain.get("root") or ""),
                 depends_on=list(raw.get("depends_on") or []),
                 deploy_images=list(deploy.get("images") or []),
                 deploy_workloads=list(deploy.get("workloads") or []),
@@ -590,6 +615,17 @@ def _route_platforms(
     js_route.units = _expand_depends_on(config, js_route.units)
     routes["js"] = js_route
 
+    # --- native: declarative path rules for non-Bazel C/C++ builds --------
+    native_route = PlatformRoute("native", "paths")
+    for unit in config.by_platform("native"):
+        if GLOBAL in invalidated or "native" in invalidated:
+            native_route.units.append(unit)
+            native_route.mode = "all"
+        elif any(path_matches(path, unit.paths) for path in changed):
+            native_route.units.append(unit)
+    native_route.units = _expand_depends_on(config, native_route.units)
+    routes["native"] = native_route
+
     # --- quality: always --------------------------------------------------
     quality_route = PlatformRoute("quality", "always", list(config.by_platform("quality")))
     routes["quality"] = quality_route
@@ -703,7 +739,23 @@ def matrix_entries(route_: Route, config: Config) -> dict[str, list[dict[str, ob
         }
         for unit in route_.routes["js"].units
     ]
-    return {"go": go, "android": android, "python": python, "js": js}
+    native = [
+        {
+            "id": unit.id,
+            "workdir": unit.native_workdir,
+            "build": unit.native_build,
+            "test": unit.native_test,
+            "artifacts": _space(unit.native_artifacts),
+            "checksums": unit.native_checksums,
+            "toolchain_name": unit.native_toolchain_name,
+            "toolchain_version": unit.native_toolchain_version,
+            "toolchain_url": unit.native_toolchain_url,
+            "toolchain_sha256": unit.native_toolchain_sha256,
+            "toolchain_root": unit.native_toolchain_root,
+        }
+        for unit in route_.routes["native"].units
+    ]
+    return {"go": go, "android": android, "python": python, "js": js, "native": native}
 
 
 def deploy_entries(route_: Route, config: Config) -> list[dict[str, object]]:
@@ -866,6 +918,7 @@ def main(argv: list[str] | None = None) -> int:
                 "android_units": json.dumps(entries["android"]),
                 "python_units": json.dumps(entries["python"]),
                 "js_units": json.dumps(entries["js"]),
+                "native_units": json.dumps(entries["native"]),
                 "quality": "true",
                 "docs_only": str(result.docs_only).lower(),
                 "deploy_control": str(result.deploy_control).lower(),
