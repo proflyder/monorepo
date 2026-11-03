@@ -2,4 +2,6 @@
 <resources>
     <!-- Put on the view notices should float above (the bottom navigation). -->
     <id name="home_notice_anchor" />
+    <!-- Tag holding the running vertical-padding animator of a scrolling view. -->
+    <id name="ui_motion_padding_animator" />
 </resources>

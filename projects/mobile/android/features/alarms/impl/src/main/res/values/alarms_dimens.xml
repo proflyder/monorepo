@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="alarms_screen_margin">16dp</dimen>
+    <!-- Fallback before the bottom bar is measured; matches its real height. -->
+    <dimen name="alarms_action_bar_height">64dp</dimen>
     <integer name="alarms_columns">1</integer>
 </resources>

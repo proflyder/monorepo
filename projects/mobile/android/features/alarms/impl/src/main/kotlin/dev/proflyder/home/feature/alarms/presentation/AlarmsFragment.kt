@@ -10,6 +10,8 @@ import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
+import dev.proflyder.home.core.ui.animateBar
+import dev.proflyder.home.core.ui.animateVerticalPadding
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -25,6 +27,12 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
 
     private lateinit var adapter: AlarmAdapter
     private lateinit var states: ListStateViews
+
+    /** List top padding without the selection bar; the inset animates from it. */
+    private var listBaseTopPadding = 0
+
+    /** Last shown state of the bars; null until the first render. */
+    private var selectionBarsShown: Boolean? = null
 
     /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<AlarmRow>(), AlarmAdapterCallback {
@@ -46,6 +54,11 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         binding.alarmsList.layoutManager =
             GridLayoutManager(requireContext(), resources.getInteger(R.integer.alarms_columns))
         binding.alarmsList.adapter = adapter
+        listBaseTopPadding = binding.alarmsList.paddingTop
+        // A recreated view starts from the XML end state (bars GONE). Forget
+        // the previous view's state so the first render snaps the bars to the
+        // current selection mode instead of assuming they are already there.
+        selectionBarsShown = null
 
         states = ListStateViews(
             progress = binding.alarmsProgress,
@@ -118,9 +131,40 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
     private fun renderSelection(state: AlarmsUiState) {
         val selecting = state.selectionMode
         exitSelection.isEnabled = selecting
-        binding.alarmsSelectionBar.setVisible(selecting)
-        binding.alarmsActionBar.setVisible(selecting)
-        if (selecting) binding.alarmsAdd.hide() else binding.alarmsAdd.show()
+
+        if (selectionBarsShown != selecting) {
+            // The first render (including one restored after rotation or
+            // process death) must land in the end state without animating.
+            val animate = selectionBarsShown != null
+            selectionBarsShown = selecting
+
+            val topBarHeight = binding.alarmsSelectionBar.layoutParams.height
+            binding.alarmsSelectionBar.animateBar(
+                visible = selecting,
+                hiddenTranslationY = -topBarHeight.toFloat(),
+                animate = animate,
+            )
+
+            val bottomBarHeight = binding.alarmsActionBar.height
+                .takeIf { it > 0 }
+                ?: resources.getDimensionPixelSize(R.dimen.alarms_action_bar_height)
+            binding.alarmsActionBar.animateBar(
+                visible = selecting,
+                hiddenTranslationY = bottomBarHeight.toFloat(),
+                animate = animate,
+            )
+
+            // Overlay the bars and grow the list inset instead of resizing the
+            // list, so content slides rather than jumping under the bar.
+            binding.alarmsList.animateVerticalPadding(
+                topPx = listBaseTopPadding + if (selecting) topBarHeight else 0,
+                bottomPx = binding.alarmsList.paddingBottom,
+                entering = selecting,
+                animate = animate,
+            )
+
+            if (selecting) binding.alarmsAdd.hide() else binding.alarmsAdd.show()
+        }
 
         val count = state.selectedIds.size
         binding.alarmsSelectionCount.text =
