@@ -128,6 +128,37 @@ A healthy `mcp test infra` reports the tool count; `401` means the token is
 missing or stale, `connection refused` means the gateway Service or its Pod is
 not ready.
 
+## Agents (bb tools)
+
+The same `infra` MCP server carries the `bb.read`/`bb.act` group, so no
+toolset change is needed: `bb_status` (running personal threads),
+`bb_prepare_spawn(project, model?, effort?, task)`, `bb_confirm()` and
+`bb_cancel()`.  Both prompts and `HERMES.md` describe the flow:
+
+1. «запусти агента в <проект>[, модель …][, усилие …]: <задача>» →
+   `bb_prepare_spawn` resolves the spoken project; the gateway answers with a
+   confirmation question and stores **one** pending spawn for 90 s;
+2. Hermes repeats that question verbatim and stops;
+3. «подтверди»/«да» in the next exchange → `bb_confirm` (it also switches the
+   voice path into agent mode for the new thread); «отмена»/«не надо» →
+   `bb_cancel`.
+
+Hermes is the **personal** profile only.  The allowlist
+(`projects/home/kubernetes/mcp-gateway/manifests/bb-targets.yaml`, rendered by
+`deploy.sh` from `BB_PROJECT_STATION_LAB` / `BB_PROJECT_ENGLISH_NOTES`) lists
+just the personal projects; a work project or an unknown alias produce the same
+«Не нашёл такой личный проект.», so Hermes cannot enumerate work projects.
+Asking «по работе» must be answered by switching the column profile
+(«Рикардо, рабочий профиль»), never by guessing a project.  Models and effort
+levels are only passed through when the owner names them, and the gateway still
+validates them against the dispatcher's live list.
+
+Rollout: prompts and context are installed by the renderer above (then restart
+`hermes`); the target list and the gateway tool group ship with
+`projects/home/kubernetes/mcp-gateway/deploy.sh`.  Verify with `hermes mcp test
+infra` (the tool count includes the four bb tools) and a spoken «что делают
+агенты?».
+
 ## Telegram channel
 
 The same bot carries Alertmanager alerts and the owner's chat; Hermes consumes
