@@ -336,6 +336,15 @@ units:
         - projects/home/proxmox/vpn
         - projects/home/proxmox/wifi-uplink
 
+  - id: windows-pc
+    platform: python
+    title: "projects/home/windows-pc (komp forced-command wrapper)"
+    paths:
+      - projects/home/windows-pc/**
+    python:
+      suites:
+        - projects/home/windows-pc
+
   - id: home-backup
     platform: python
     title: "projects/home/backup (offsite restic + PVE vzdump metrics)"
