@@ -15,7 +15,8 @@
 # DESTINATION (a mktemp directory when omitted).
 set -euo pipefail
 
-REPOSITORY="${OCI_REPOSITORY:-ghcr.io/proflyder/windows-logon-provider}"
+DEFAULT_REPOSITORY="ghcr.io/proflyder/windows-logon-provider"
+REPOSITORY="${OCI_REPOSITORY:-$DEFAULT_REPOSITORY}"
 
 die() {
   echo "fetch: $*" >&2

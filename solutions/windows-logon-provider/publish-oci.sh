@@ -20,7 +20,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPOSITORY="${OCI_REPOSITORY:-ghcr.io/proflyder/windows-logon-provider}"
+DEFAULT_REPOSITORY="ghcr.io/proflyder/windows-logon-provider"
+REPOSITORY="${OCI_REPOSITORY:-$DEFAULT_REPOSITORY}"
 VERSION_FILE="${VERSION_FILE:-$HERE/VERSION}"
 SOURCE_DIR=""
 OUTPUT_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
