@@ -140,6 +140,11 @@ func TestRequestsUseOnlyContractFields(t *testing.T) {
 			_, err := d.TurnResult(ctx, TurnResultRequest{ThreadID: "thr_1", AfterSeq: 3})
 			return err
 		},
+		MethodUpdates: func(ctx context.Context, d *Dispatcher) error {
+			afterSeq, waitSeconds := int64(3), 5
+			_, err := d.Updates(ctx, UpdatesRequest{AfterSeq: &afterSeq, WaitSeconds: &waitSeconds})
+			return err
+		},
 	}
 
 	if len(calls) != len(contract.Methods) {

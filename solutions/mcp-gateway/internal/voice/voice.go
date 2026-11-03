@@ -2,6 +2,7 @@
 //
 //	POST /v1/voice/utterance  route one spoken phrase
 //	POST /v1/voice/result     long-poll the answer of a bb turn
+//	POST /v1/voice/updates    poll dispatcher turns the owner did not start
 //	GET  /v1/voice/state      debug view of the agent-conversation switch
 //
 // It is authenticated by a dedicated voice token, never by the MCP token, and
@@ -40,6 +41,11 @@ const MaxTextRunes = 2000
 // satellite's responding watchdog.
 const DefaultMaxWait = 25 * time.Second
 
+// DefaultUpdatesWait keeps one bridge call below the default 15 s SSH timeout
+// (MCP_BB_TIMEOUT). The proxy simply calls again with the returned cursor, so
+// a shorter plugin wait does not shorten the overall long-poll.
+const DefaultUpdatesWait = 10 * time.Second
+
 // Short phrases spoken by the proxy path.
 const (
 	SpeechAgentSent    = "Передал агенту."
@@ -67,6 +73,7 @@ var exitPhrases = []string{
 type Dispatcher interface {
 	Send(ctx context.Context, req bb.SendRequest) (bb.SendResult, error)
 	TurnResult(ctx context.Context, req bb.TurnResultRequest) (bb.TurnResultResult, error)
+	Updates(ctx context.Context, req bb.UpdatesRequest) (bb.UpdatesResult, error)
 }
 
 // Options wires the voice handler.
@@ -82,6 +89,8 @@ type Options struct {
 	Limiter      *rate.Limiter
 	PollInterval time.Duration
 	MaxWait      time.Duration
+	// UpdatesWait caps one plugin `updates` call below the SSH bridge timeout.
+	UpdatesWait time.Duration
 }
 
 // Handler serves the voice routes.
@@ -111,6 +120,9 @@ func New(opts Options) *Handler {
 	if opts.MaxWait <= 0 {
 		opts.MaxWait = DefaultMaxWait
 	}
+	if opts.UpdatesWait <= 0 {
+		opts.UpdatesWait = DefaultUpdatesWait
+	}
 	return &Handler{opts: opts}
 }
 
@@ -119,6 +131,7 @@ func (h *Handler) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/voice/utterance", h.handleUtterance)
 	mux.HandleFunc("POST /v1/voice/result", h.handleResult)
+	mux.HandleFunc("POST /v1/voice/updates", h.handleUpdates)
 	mux.HandleFunc("GET /v1/voice/state", h.handleState)
 	return mux
 }
@@ -159,6 +172,22 @@ type ResultResponse struct {
 type StateResponse struct {
 	AgentMode bool   `json:"agentMode"`
 	ThreadID  string `json:"threadId,omitempty"`
+}
+
+// UpdatesRequest long-polls the dispatcher thread. AfterSeq nil is the
+// bootstrap call: the route returns the cursor and no history.
+type UpdatesRequest struct {
+	AfterSeq    *int64 `json:"afterSeq,omitempty"`
+	WaitSeconds *int   `json:"waitSeconds,omitempty"`
+}
+
+// UpdatesResponse is the dispatcher-updates answer. Status is only set on a
+// failure, mirroring the result route's {"status":"failed","speech":...}.
+type UpdatesResponse struct {
+	Cursor *int64          `json:"cursor,omitempty"`
+	Items  []bb.UpdateItem `json:"items"`
+	Status string          `json:"status,omitempty"`
+	Speech string          `json:"speech,omitempty"`
 }
 
 // --- handlers -------------------------------------------------------------
@@ -287,6 +316,56 @@ func (h *Handler) handleResult(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func (h *Handler) handleUpdates(w http.ResponseWriter, r *http.Request) {
+	var req UpdatesRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.AfterSeq != nil && *req.AfterSeq < 0 {
+		h.write(w, http.StatusBadRequest, UpdatesResponse{
+			Items:  []bb.UpdateItem{},
+			Status: "failed",
+			Speech: SpeechBadRequest,
+		})
+		return
+	}
+
+	wait := int(h.opts.MaxWait / time.Second)
+	if req.WaitSeconds != nil && *req.WaitSeconds > 0 {
+		wait = *req.WaitSeconds
+	}
+	if maxWait := int(h.opts.MaxWait / time.Second); wait > maxWait {
+		wait = maxWait
+	}
+	// The plugin long-polls, but one SSH bridge call must stay under the
+	// bridge timeout. A shorter answer is fine: the proxy uses the returned
+	// cursor and calls again.
+	if updatesWait := int(h.opts.UpdatesWait / time.Second); wait > updatesWait {
+		wait = updatesWait
+	}
+
+	result, err := h.opts.Dispatcher.Updates(r.Context(), bb.UpdatesRequest{
+		AfterSeq:    req.AfterSeq,
+		WaitSeconds: &wait,
+	})
+	if err != nil {
+		h.observe("updates", "", "failure", "", 0)
+		h.write(w, http.StatusOK, UpdatesResponse{
+			Items:  []bb.UpdateItem{},
+			Status: "failed",
+			Speech: bb.SpeechForErr(err),
+		})
+		return
+	}
+	items := result.Items
+	if items == nil {
+		items = []bb.UpdateItem{}
+	}
+	h.observe("updates", "", "ok", "", 0)
+	cursor := result.Cursor
+	h.write(w, http.StatusOK, UpdatesResponse{Cursor: &cursor, Items: items})
 }
 
 func (h *Handler) handleState(w http.ResponseWriter, _ *http.Request) {

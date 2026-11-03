@@ -96,6 +96,7 @@ MCP client (Hermes, IDE, agent)          voice proxy
 |---|---|
 | `POST /v1/voice/utterance {text, profile}` | Маршрутизация одной фразы. |
 | `POST /v1/voice/result {threadId, afterSeq, waitSeconds}` | Long-poll `turn_result` (≤25 с), ответ `{status, speech}` или `{status:"running"}`. |
+| `POST /v1/voice/updates {afterSeq?, waitSeconds?}` | Обновления тредa-диспетчера: завершённые ходы с `initiator` `system`/`agent`, ответ `{cursor, items:[{seq, spoken}]}`. Без `afterSeq` — только `cursor` для bootstrap. Один вызов bb ограничен 10 с (ниже SSH-таймаута); прокси продолжает с полученным `cursor`. |
 | `GET /v1/voice/state` | `{agentMode, threadId?}` для отладки. |
 
 Маршруты utterance, по порядку:

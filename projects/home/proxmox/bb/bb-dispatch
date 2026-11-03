@@ -10,7 +10,7 @@ plugin route on the bb server loopback and prints the plugin's answer.
 
 Contract:
 
-* stdin: one JSON object with `method` from the six allowed methods, at most
+* stdin: one JSON object with `method` from the seven allowed methods, at most
   16 KiB. Anything else is refused locally without contacting bb.
 * stdout: the plugin's JSON answer, or
   `{"ok": false, "code": ..., "speech": ...}` for a local refusal or a
@@ -45,7 +45,15 @@ ROUTE = "/api/v1/plugins/home-dispatcher/http/rpc"
 DEFAULT_URL = "http://127.0.0.1:38886"
 DEFAULT_TIMEOUT_SECONDS = 15
 METHODS = frozenset(
-    {"targets", "status", "validate_spawn", "spawn", "send", "turn_result"}
+    {
+        "targets",
+        "status",
+        "validate_spawn",
+        "spawn",
+        "send",
+        "turn_result",
+        "updates",
+    }
 )
 LOOPBACK_HOSTS = frozenset({"localhost"})
 CONFIG_DIR = "/home/bb/.config/home-dispatcher"

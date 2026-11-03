@@ -26,6 +26,7 @@ const SAMPLE_VALUES = {
   text: "hello",
   limit: 5,
   afterSeq: 0,
+  waitSeconds: 5,
 };
 
 function sorted(values) {

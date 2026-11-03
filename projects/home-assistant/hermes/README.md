@@ -274,6 +274,27 @@ gateway error announces nothing; the thread never writes speech to the log.
 The announce log line carries `listen=true/false` so the chosen path is visible
 without logging speech.
 
+### Dispatcher updates
+
+Turns the owner did not start by voice — `child-completed` system messages and
+`[bb message from thread:…]` agent messages — are announced too, but only while
+the profile is work. A daemon poller bootstraps `POST /v1/voice/updates`
+without `afterSeq` (cursor only, no history), then long-polls with the returned
+`cursor`. Each batch re-reads the profile from HA without the cache:
+
+- work: join the `spoken` lines of the batch with a space, sanitize with
+  `announce_text`, and speak through `announce` — a question calls
+  `assist_satellite.start_conversation`, otherwise `script.schedule_announce`;
+- personal or unknown: drop the batch and log only the count and profile.
+
+Owner turns (`initiator: "user"`, including typed UI messages) are never
+returned by the gateway. Errors back off 2 s → 60 s; the poller never speaks on
+an error and never calls Hermes. The log line is
+`voice-proxy: updates items=N announced=… listen=… profile=…` without text.
+
+`HERMES_VOICE_UPDATES=0` disables the poller; it is otherwise on whenever
+profile routing is enabled.
+
 Environment (routing is off until all four of URL+token for HA and gateway are
 present):
 
@@ -283,6 +304,7 @@ present):
 | `HERMES_HA_TOKEN_FILE` / `HERMES_HA_TOKEN` | — | HA long-lived token; the existing `hermes-environment` Secret key can be reused |
 | `HERMES_VOICE_GATEWAY_URL` | — | mcp-gateway base, `http://mcp-gateway.home-assistant.svc.cluster.local:8080` |
 | `HERMES_VOICE_GATEWAY_TOKEN_FILE` / `HERMES_VOICE_GATEWAY_TOKEN` | — | voice token from Secret `mcp-gateway-voice` |
+| `HERMES_VOICE_UPDATES` | `1` | Dispatcher updates poller; `0` disables it |
 | `HERMES_VOICE_PROFILE_ENTITY` | `input_select.ricardo_voice_profile` | profile entity |
 | `HERMES_VOICE_PROFILE_CACHE_MS` | `2000` | successful-read cache |
 | `HERMES_HA_TIMEOUT` | `3` | HA request timeout, seconds |

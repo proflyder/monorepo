@@ -36,6 +36,10 @@ export const METHOD_PARAMS = {
     required: ["threadId", "afterSeq"],
     optional: [],
   },
+  updates: {
+    required: [],
+    optional: ["afterSeq", "waitSeconds"],
+  },
 };
 
 const METHODS = new Set(Object.keys(METHOD_PARAMS));
@@ -108,6 +112,28 @@ function parseParams(method, params) {
           Number.MAX_SAFE_INTEGER,
         ),
       };
+    case "updates": {
+      // No afterSeq is the bootstrap call: only the current cursor is
+      // returned, never history. waitSeconds is capped at the 25 s budget of
+      // the voice long-poll.
+      const afterSeq =
+        params.afterSeq === undefined
+          ? undefined
+          : expectInteger(
+              params.afterSeq,
+              "afterSeq",
+              0,
+              Number.MAX_SAFE_INTEGER,
+            );
+      const waitSeconds =
+        params.waitSeconds === undefined
+          ? undefined
+          : expectInteger(params.waitSeconds, "waitSeconds", 1, 25);
+      return {
+        ...(afterSeq === undefined ? {} : { afterSeq }),
+        ...(waitSeconds === undefined ? {} : { waitSeconds }),
+      };
+    }
     default:
       throw new DispatchError("unknown_method", "Неизвестная операция.", {
         httpStatus: 400,

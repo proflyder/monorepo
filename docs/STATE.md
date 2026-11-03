@@ -539,8 +539,8 @@
   ограниченным ed25519-ключом и pinned `known_hosts` (алгоритмы хоста — из
   файла) к CT 103, пользователь `bb`, forced command `/usr/local/bin/bb-dispatch`.
   Мост принимает один JSON ≤ 16 KiB (`targets`, `status`, `validate_spawn`,
-  `spawn`, `send`, `turn_result`), подписывает тело HMAC-SHA256 и вызывает
-  loopback-маршрут плагина `home-dispatcher` с токеном плагина. Токен и
+  `spawn`, `send`, `turn_result`, `updates`), подписывает тело HMAC-SHA256 и
+  вызывает loopback-маршрут плагина `home-dispatcher` с токеном плагина. Токен и
   HMAC-секрет есть только на CT; шлюз знает только свой SSH-ключ. Любая
   другая команда по ключу тоже запускает мост, а не shell. Контракт полей
   (`contract/params.json`) общий у плагина и шлюза и проверяется тестами с
@@ -551,7 +551,9 @@
   отдаёт `{route}`: `local` (фраза выхода из режима агента), `bb` (рабочий
   профиль — постоянный тред `BB_DISPATCHER_THREAD_ID`; личный в режиме
   агента — активный тред), `hermes` (иначе). `/v1/voice/result` — long-poll
-  `turn_result` для позднего ответа, `/v1/voice/state` — отладочное состояние
+  `turn_result` для позднего ответа, `/v1/voice/updates` — завершённые ходы
+  диспетчера с `initiator` `system`/`agent` для озвучивания в рабочем профиле
+  (ходы владельца не возвращаются), `/v1/voice/state` — отладочное состояние
   режима.
 - Секреты — ESO: `mcp-gateway-auth` (OpenBao
   `k8s/home-assistant/mcp-gateway-auth`, ключ `token`, тот же токен Hermes

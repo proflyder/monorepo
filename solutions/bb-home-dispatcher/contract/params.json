@@ -39,6 +39,10 @@
     "turn_result": {
       "required": ["threadId", "afterSeq"],
       "optional": []
+    },
+    "updates": {
+      "required": [],
+      "optional": ["afterSeq", "waitSeconds"]
     }
   }
 }

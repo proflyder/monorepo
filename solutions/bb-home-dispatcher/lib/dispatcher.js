@@ -34,6 +34,10 @@ const COMPACTION_COOLDOWN_MS = 10 * 60 * 1000;
 // repeated thread lookups while busy or waiting for the compaction event.
 const NIGHTLY_BUSY_RETRY_MS = 60 * 1000;
 const NIGHTLY_REFRESH_MS = 30 * 1000;
+// `updates` scans completed dispatcher turns in a bounded loop. Skipped turns
+// (owner turns, turns without a 🔊 line) only advance the cursor.
+const UPDATES_POLL_INTERVAL_MS = 1000;
+const UPDATES_MAX_CYCLES = 5000;
 
 export function createDispatcher({
   getSdk,
@@ -315,6 +319,8 @@ export function createDispatcher({
         return send(params);
       case "turn_result":
         return turnResult(params);
+      case "updates":
+        return updates(params);
       default:
         throw new DispatchError("unknown_method", "Неизвестная операция.", {
           httpStatus: 400,
@@ -1082,6 +1088,78 @@ export function createDispatcher({
       requestSeq: request.seq,
       completedSeq: completion.seq,
     };
+  }
+
+  // ------------------------------------------------ dispatcher updates --
+
+  async function updates(params) {
+    const settings = await readCompactionSettings();
+    const threadId = settings.dispatcherThreadId;
+    if (threadId === "") {
+      throw new DispatchError(
+        "dispatcher_not_configured",
+        "Рабочий диспетчер не настроен.",
+      );
+    }
+    // Bootstrap: report where the caller should start. Never replay history,
+    // otherwise a fresh proxy would speak every old unanswered turn.
+    if (params.afterSeq === undefined) {
+      return {
+        cursor: await lastEventSeq(threadId),
+        items: [],
+        speech: "Готово.",
+      };
+    }
+    const deadline = now() + (params.waitSeconds ?? 0) * 1000;
+    // The cursor is read before the scan and raised to the newest returned
+    // item. A turn that completes during the scan is therefore picked up by
+    // the next call instead of being skipped.
+    let cursor = 0;
+    for (let cycle = 0; cycle < UPDATES_MAX_CYCLES; cycle += 1) {
+      cursor = await lastEventSeq(threadId);
+      const items = await collectUpdates(threadId, params.afterSeq);
+      if (items.length > 0) {
+        for (const item of items) {
+          if (item.seq > cursor) cursor = item.seq;
+        }
+        return { cursor, items, speech: "Готово." };
+      }
+      const remaining = deadline - now();
+      if (remaining <= 0) break;
+      await delay(Math.min(UPDATES_POLL_INTERVAL_MS, remaining));
+    }
+    // A skipped turn (owner turn, no 🔊 line) still advances the cursor, so
+    // the next call starts after it instead of rescanning it forever.
+    return { cursor, items: [], speech: "Готово." };
+  }
+
+  async function collectUpdates(threadId, afterSeq) {
+    const rows = await sdk().threads.events.list({
+      threadId,
+      afterSeq: String(afterSeq),
+      order: "asc",
+      limit: "50",
+      types: ["turn/completed"],
+    });
+    const items = [];
+    for (const completion of Array.isArray(rows) ? rows : []) {
+      // The request may precede afterSeq: it started before the caller's
+      // cursor while the turn itself completed after it.
+      const request = await lastEvent(threadId, 0, completion.seq, [
+        "client/turn/requested",
+      ]);
+      if (request === undefined) continue;
+      const initiator = request.data?.initiator;
+      // Only `system` (child-completed etc.) and `agent` (another thread's
+      // message) turns were not started by the owner. `user` covers both the
+      // voice phrase and text typed in the UI, which must stay silent here.
+      if (initiator !== "system" && initiator !== "agent") continue;
+      const text = await lastAgentMessage(threadId, request.seq, completion.seq);
+      const spoken = extractSpoken(text);
+      if (spoken === null) continue;
+      items.push({ seq: completion.seq, spoken });
+    }
+    return items;
   }
 
   async function firstEvent(threadId, afterSeq, types) {
