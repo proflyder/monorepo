@@ -65,6 +65,7 @@ engine, два entrypoint-а для совместимости.
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
+| `solutions/bb-home-dispatcher`, `solutions/bb-profiles` | JavaScript/TypeScript (плагины bb) | исполняются внутри bb как path-источник; `node --test` без внешних сервисов |
 | HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
 
 Go — для control plane и durable state, Rust — для тяжёлых вычислений,
@@ -123,6 +124,11 @@ gRPC-Web; отдельного REST API нет. Go stubs лежат в репо�
 - `solutions/alarm`: legacy `AlarmService` view над тем же engine.
 - `solutions/ha-bridge`: executor adapter; арендует `queue=home`, вызывает HA
   scripts, подтверждает события. Не владеет расписанием.
+- `solutions/bb-home-dispatcher` и `solutions/bb-profiles`: плагины bb, а не
+  сервисы. Диспетчер ничего не знает о проектах, кроме ответов `profiles`;
+  профиль и allowlist провайдеров/машин живут только в `profiles`, голосовой
+  шлюз видит их через RPC. HTTP-маршрут плагина — loopback, наружу его
+  публикует только SSH forced command.
 - `projects/mobile/android`: управление server state, Connect JSON; нативных
   phone alarm/push пока нет.
 - `projects/*`: композиция, env, compose, systemd.

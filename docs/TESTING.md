@@ -42,6 +42,9 @@ teardown восстанавливает source/volume.
 | Heartbeat Worker | grace-логика, auth, KV transitions, Telegram-доставка (моки) |
 | HA live | API, entities, text intents, optional mutation/alarm |
 | Gateway live | bearer auth, status shape, method guards |
+| MCP gateway | Go unit (фейки backend'ов), каталог↔RBAC, contract `deploy.sh`, fake SSH |
+| bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
+| Voice routing | `test_voice_proxy.py`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
 | Pulsar installer | upstream Go tests (только при наличии nested checkout) |
 
 ## Hermes
@@ -112,6 +115,28 @@ builtin-агент (`conversation.home_assistant`), не через Hermes: crea
 update/enable/disable/delete, timer start/pause/resume/cancel и reminder
 create/list. Результаты и scheduler state сверяются через
 `ListSchedules`/`ListTimers`; звук и микрофон этим не проверяются.
+
+### bb, шлюз и голосовой профиль
+
+```bash
+# плагины bb (без bb SDK и сети)
+node --test solutions/bb-home-dispatcher/tests/*.test.js
+(cd solutions/bb-profiles && npm test)
+
+# шлюз: Go-тесты, каталог↔RBAC, контракт полей и деплой
+go test ./solutions/mcp-gateway/...
+python3 -m unittest projects/home/kubernetes/mcp-gateway/test_deploy.py -v
+
+# мост и authorized_keys на локальном HTTP-double плагина
+python3 -m unittest projects/home/proxmox/test_bb_dispatch.py -v
+
+# голос: маршрут по профилю, fail-closed, cancel guard, announce
+python3 -m unittest projects/home-assistant/hermes/test_voice_proxy.py -v
+python3 -m unittest projects/home-assistant/deploy/test_voice_routing_contract.py -v
+```
+
+Тесты герметичны: SSH и плагин подменяются фейками, живой CT/кластер не
+нужны. Живая приёмка рабочего профиля через колонку — `PENDING.md`.
 
 Bazel-гейты отдельные:
 

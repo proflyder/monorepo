@@ -187,6 +187,29 @@ bb server move --to bb --check
 предупреждением. Enrollment-команда из UI одноразовая: выполнять её в shell
 пользователя `bb`, не сохранять в репозитории и логах.
 
+Плагины `profiles` и `home-dispatcher` — path-источники на CT; команды
+выполнять в shell пользователя `bb` (см. выше):
+
+```bash
+# плагины и их настройки
+bb plugin list
+bb plugin config home-dispatcher
+bb profiles list
+bb profiles show          # профиль, провайдеры и машины проекта
+
+# сжатие рабочего диспетчера: расписание и статус
+bb plugin list | grep -i home-dispatcher
+
+# проверка моста с K3s-узла (ключ шлюза; вывод — только JSON плагина)
+printf '%s' '{"method":"targets","params":{}}' |
+  ssh -i /etc/mcp-gateway/bb_dispatch_key -o BatchMode=yes bb@192.0.2.30
+```
+
+Ротация: `bb plugin token home-dispatcher --rotate` + перезаписать
+`/home/bb/.config/home-dispatcher/token` (0600); смена `hmacSecret` требует
+одновременно обновить `/home/bb/.config/home-dispatcher/hmac`, иначе плагин
+отвечает 401. Значения не печатать.
+
 ## Проверка
 
 ```bash
@@ -389,6 +412,33 @@ kubectl -n home-assistant get externalsecret mcp-gateway-auth mcp-gateway-telegr
 kubectl -n home-assistant port-forward svc/mcp-gateway 18080:8080
 ```
 
+Голос и агенты bb:
+
+```bash
+# маршруты включены и токены на месте
+kubectl -n home-assistant get externalsecret mcp-gateway-bb-ssh mcp-gateway-voice
+kubectl -n home-assistant logs deploy/mcp-gateway --tail=100 | grep -E '"bb"|"voice"'
+
+# состояние голосового маршрута (только из кластера; токен не печатать)
+kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
+  sh -c 'curl -fsS -H "Authorization: Bearer $(cat /run/secrets/voice/token)" \
+  http://mcp-gateway:8080/v1/voice/state'
+
+# профиль и цвет кольца станции
+#   HA: input_select.ricardo_voice_profile, switch.ricardo_work_profile
+#   станция: select.iandeks_stantsiia_midi_voice_color (Blue = рабочий)
+```
+
+Проверка моста и плагинов — в разделе «BB server (CT 103)». Ручной эквивалент
+для диагностики (обходит аудит шлюза): `printf` JSON в
+`ssh -i /etc/mcp-gateway/bb_dispatch_key bb@<BB_CT_IP>` с K3s-узла.
+
+Ротация: `mcp-gateway-auth` — перезапустить `mcp-gateway` и `hermes`;
+`mcp-gateway-voice` — перезапустить `mcp-gateway` и `hermes` (voice-proxy);
+`mcp-gateway-bb-ssh` — заменить ключ на CT (строка `authorized_keys`) и в
+OpenBao одновременно. Список личных целей — `manifests/bb-targets.yaml`,
+рендерится `deploy.sh` из `BB_PROJECT_*`.
+
 ## K3s
 
 ```bash
@@ -469,6 +519,12 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
+Цвет анимации слушания по профилю — HA select
+`select.iandeks_stantsiia_midi_voice_color` (Violet = личный, Blue = рабочий);
+его выставляет автоматизация `voice_profile_station_color`. Если сущности
+нет — на станции прошивка старше `v0.5.1004`; автоматизация тогда ничего не
+делает.
+
 Экспериментальный локальный endpointing (см. `PENDING.md`) включается только
 переменной окружения процесса Pulsar: `PULSAR_LOCAL_ENDPOINTING=1`; без неё
 работает прежний путь (HA VAD + 30-секундный watchdog). `ctl.sh reload`
@@ -503,7 +559,7 @@ Historical старше в `/data/pulsar/backups/` и private: `7081ef8e…`
 
 Откат на предыдущую сборку — только на станции, не через CI: updater
 предлагает лишь более новые версии. Команда ниже возвращает `pulsar.prev`
-(сейчас — `v0.5.1001`, `80aea2ec…`; более старые сборки лежат в
+(сейчас — `v0.5.1003`; более старые сборки лежат в
 `/data/pulsar/backups/`):
 
 ```bash
@@ -518,15 +574,15 @@ RICARDO.md «Релизы и деплой форка» в форке. Кратк
 
 ```bash
 # 1. в форке: аннотированный тег и push (v<major.minor>.<1000+N>)
-git tag -a v0.5.1003 -m 'pulsar v0.5.1003'
-git push origin v0.5.1003
+git tag -a v0.5.1005 -m 'pulsar v0.5.1005'
+git push origin v0.5.1005
 # build.yml собирает и публикует GitHub release (latest),
 # затем запускает deploy-station.yml
 
 # 2. approve в GitHub Environment `Station` (только теги v*)
 
 # 3. повторный деплой уже опубликованного релиза — вручную
-gh workflow run deploy-station.yml --ref v0.5.1003 -f tag=v0.5.1003
+gh workflow run deploy-station.yml --ref v0.5.1005 -f tag=v0.5.1005
 ```
 
 После approve job входит в VPN группой `ci` (отдельный клиентский сертификат
@@ -548,9 +604,11 @@ job. Если версия уже стоит, скрипт пишет `already i
 Повторное включение endpointing — reload с переменной; длина pre-roll при
 этом не меняется.
 
-Установленная версия — Rust `v0.5.1002` (armhf, релиз форка на базе upstream
-`v0.5.3`; повторный wake + endpointing + Ricardo pre-roll 256 ms, SHA256
-`3a544979…`); `pulsar.prev` — `80aea2ec…` (`v0.5.1001`, база `v0.5.2`, тот же
+Установленная версия — Rust `v0.5.1004` (armhf, релиз форка на базе upstream
+`v0.5.3`; повторный wake + endpointing + Ricardo pre-roll 256 ms + select
+«Voice color»); `pulsar.prev` — `0ee350f5…` (`v0.5.1003`; historical:
+`3a544979…` — `v0.5.1002`,
+`80aea2ec…` — `v0.5.1001`, база `v0.5.2`, тот же
 Ricardo-код). Historical known-good: `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
 `0b0c48e4…` (512 ms endpointing), `pulsar.pre-endpoint-20261030` — `d2197f6a…`
 (`v0.5.2-3-gc57d521-dirty`); `pulsar.prev.pre-endpoint-20261030` — более
@@ -806,10 +864,28 @@ PSK `…4c02`, token `…4c03`, commit `…4c04`, status `…4c05`.
 Расписания и таймеры — canonical scheduler (см. `STATE.md`); старые
 `todo`/`timer` helpers и legacy single-slot не использовать.
 
-Курс валют (подготовлено, не live): «курс доллара», «курс рубля»,
-«курс валют». HA читает `GET /api/latest` с LAN NodePort currency-bot.
-В `secrets.yaml` нужны `currency_bot_endpoint` (base URL без `/api`) и
-`currency_bot_bearer` (`Bearer <API_TOKEN>` — тот же токен, что у API).
+Профиль голоса (Личный/Рабочий) — `input_select.ricardo_voice_profile`;
+менять только вручную: голосом («рабочий профиль», «личный профиль», «какой
+профиль»), на дашборде «Помощник» → «Голос» или карточкой «Личный | Рабочий»
+в Android (`switch.ricardo_work_profile`, метка `voice_profile`). Проверка без
+колонки — тихим `conversation.process`:
+
+```text
+conversation.process: "рабочий профиль"
+conversation.process: "какой профиль"
+conversation.process: "личный профиль"
+```
+
+Свободная речь идёт по профилю: рабочий → постоянный тред-диспетчер через
+`mcp-gateway /v1/voice/utterance` (ответ озвучивает `script.schedule_announce`);
+личный + режим агента → активный тред bb; иначе Hermes. Профиль не читается —
+«Не могу подтвердить профиль», в Hermes ничего не уходит. Маршруты и мост
+bb — раздел «MCP-шлюз (голосовая диагностика)».
+
+Курс валют: «курс доллара», «курс рубля», «курс валют» — локальный intent
+`StationCurrencyRate`; HA читает `GET /api/latest` с LAN NodePort
+currency-bot. В `secrets.yaml` — `currency_bot_endpoint` (base URL без `/api`)
+и `currency_bot_bearer` (`Bearer <API_TOKEN>` — тот же токен, что у API).
 Проверка без колонки:
 
 ```bash

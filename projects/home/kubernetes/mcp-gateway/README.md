@@ -248,7 +248,8 @@ Never paste secret values into chat or a commit. Use the private paths below.
      token="$(openssl rand -hex 32)"
    ```
 
-   The value goes to the voice proxy's `WORK_MCP_TOKEN_FILE`; it is rejected on
+   The value goes to the voice proxy's `HERMES_VOICE_GATEWAY_TOKEN(_FILE)`;
+   it is rejected on
    `/mcp`. The MCP token is rejected on `/v1/voice/*`.
 
 6. **Admin manifests** (cluster/namespace objects, applied once):
