@@ -1,0 +1,42 @@
+# Voice control of the wired Windows desktop «комп» (alias «мой комп»).
+#
+# Local intents only: they work in both voice profiles and never call Hermes.
+# Custom sentences are matched before the built-in HassTurnOn/HassTurnOff
+# sentences, so «включи комп» does not depend on entity-name matching.
+#
+# Collision review:
+# - «выключи компьютер» is not in `light_target`, so StationLightOff
+#   («выключи {light_target}») never captures «комп»;
+# - StationCancel matches the bare word «отмена»/«отмени», not the longer
+#   «отмени выключение компа»;
+# - nothing here overlaps music/timers/alarms phrases (see
+#   test_no_duplicate_phrases_across_intents and the Komp tests).
+language: ru
+intents:
+  KompOn:
+    data:
+      - sentences:
+          - "включи комп"
+          - "включи мой комп"
+          - "включи компьютер"
+  KompOff:
+    data:
+      - sentences:
+          - "выключи комп"
+          - "выключи мой комп"
+          - "выключи компьютер"
+  KompCancelOff:
+    data:
+      - sentences:
+          - "отмени выключение компа"
+          - "не выключай комп"
+  KompStatus:
+    data:
+      - sentences:
+          - "комп включён"
+          - "комп включен"
+          - "мой комп включён"
+          - "мой комп включен"
+          - "включён ли комп"
+          - "включен ли комп"
+          - "комп работает"

@@ -1095,5 +1095,206 @@ class CurrencyRateTests(unittest.TestCase):
         self.assertEqual(inputs["currency_bot_endpoint"]["initial"], "__SECRET__")
 
 
+class KompPowerTests(unittest.TestCase):
+    """Pin the wired desktop «комп»: WoL, ping state and restricted SSH.
+
+    Real host/MAC/user never appear in tracked files: they only live in HA
+    `secrets.yaml`, so every assertion here uses the `__SECRET__` placeholder.
+    """
+
+    BINARY_SENSOR = "binary_sensor.komp_v_seti"
+    SWITCH = "switch.komp"
+    TARGET_INPUT = "input_text.komp_ssh_target"
+
+    @staticmethod
+    def _squash(text: str) -> str:
+        return " ".join(text.split())
+
+    def _command_line(self) -> dict[str, Any]:
+        groups = load_yaml(HA / "command_line.yaml")
+        for group in groups:
+            if "binary_sensor" in group:
+                return group["binary_sensor"]
+        self.fail("command_line.yaml has no binary_sensor group")
+
+    def _switch(self) -> dict[str, Any]:
+        templates = load_yaml(HA / "templates.yaml")
+        switches = [item for group in templates for item in group.get("switch", [])]
+        return next(s for s in switches if s.get("default_entity_id") == self.SWITCH)
+
+    def _sentences(self) -> dict[str, list[str]]:
+        komp = yaml.safe_load((HA / "custom_sentences" / "ru" / "station_komp.yaml").read_text())
+        return {
+            intent: [p for item in body.get("data", []) for p in item.get("sentences", [])]
+            for intent, body in komp["intents"].items()
+        }
+
+    def _render(self, template: str, online: bool) -> str:
+        try:
+            from jinja2 import Environment
+        except ImportError:  # pragma: no cover - optional local dependency
+            self.skipTest("jinja2 is not installed")
+        env = Environment()
+        env.globals["is_state"] = (
+            lambda entity, value: entity == self.BINARY_SENSOR and value == ("on" if online else "off")
+        )
+        return self._squash(env.from_string(template).render())
+
+    def test_ping_binary_sensor_uses_a_secret_command(self):
+        sensor = self._command_line()
+        self.assertEqual(sensor["name"], "Комп в сети")
+        self.assertEqual(sensor["unique_id"], "komp_online")
+        self.assertEqual(sensor["device_class"], "connectivity")
+        # The whole command (busybox ping + the 1/0 wrapper) comes from secrets:
+        # command_line has no way to splice `!secret` into a longer command.
+        self.assertEqual(sensor["command"], "__SECRET__")
+        self.assertEqual(sensor["payload_on"], "1")
+        self.assertEqual(sensor["payload_off"], "0")
+        self.assertEqual(sensor["scan_interval"], 30)
+        self.assertNotIn("platform", sensor, "legacy platform YAML is not supported anymore")
+
+    def test_switch_maps_state_and_actions_to_wol_and_ssh(self):
+        switch = self._switch()
+        self.assertEqual(switch["name"], "Комп")
+        self.assertEqual(switch["unique_id"], "komp")
+        self.assertEqual(switch["state"], "{{ is_state('binary_sensor.komp_v_seti', 'on') }}")
+
+        self.assertEqual(services(switch["turn_on"]), ["wake_on_lan.send_magic_packet"])
+        mac = switch["turn_on"][0]["data"]["mac"]
+        self.assertEqual(mac, "__SECRET__", "MAC must come from secrets.yaml")
+        # Compact catalogue/Android control: no role label, plain switch.
+        self.assertNotIn("label", yaml.safe_dump(switch, allow_unicode=True))
+        self.assertEqual(services(switch["turn_off"]), ["script.komp_shutdown"])
+
+    def test_shutdown_shell_commands_keep_the_host_in_secrets(self):
+        commands = load_yaml(HA / "shell_commands.yaml")
+        target = "{{ states('input_text.komp_ssh_target') }}"
+        for name, word in (("komp_shutdown", "shutdown"), ("komp_cancel_shutdown", "cancel")):
+            with self.subTest(command=name):
+                command = self._squash(commands[name])
+                for option in (
+                    "ssh -i /config/.ssh/komp_ed25519",
+                    "-o BatchMode=yes",
+                    "-o ConnectTimeout=5",
+                    "-o UserKnownHostsFile=/config/.ssh/komp_known_hosts",
+                    "-o StrictHostKeyChecking=accept-new",
+                    target,
+                ):
+                    self.assertIn(option, command)
+                self.assertTrue(command.endswith(" " + word), f"{name} must end with {word!r}")
+                self.assertNotIn("@", command, "user@host must come from the secret target")
+                # Only the two words the Windows wrapper accepts.
+                self.assertNotIn("shutdown", commands["komp_cancel_shutdown"].split(target)[-1])
+
+    def test_ssh_target_helper_is_initialised_from_secrets(self):
+        inputs = load_yaml(HA / "input_text.yaml")
+        self.assertEqual(inputs["komp_ssh_target"]["initial"], "__SECRET__")
+        self.assertTrue(inputs["komp_ssh_target"]["name"])
+
+    def test_scripts_call_the_restricted_commands(self):
+        shutdown = SCRIPTS["komp_shutdown"]
+        cancel = SCRIPTS["komp_cancel_shutdown"]
+        self.assertEqual(services(shutdown), ["shell_command.komp_shutdown"])
+        self.assertEqual(services(cancel), ["shell_command.komp_cancel_shutdown"])
+        # Empty/missing target secret must not launch a half-built ssh command.
+        for script in (shutdown, cancel):
+            dump = yaml.safe_dump(script, allow_unicode=True)
+            self.assertIn(self.TARGET_INPUT, dump)
+            self.assertIn("unavailable", dump)
+        self.assertEqual(shutdown["mode"], "single")
+        self.assertEqual(cancel["mode"], "single")
+
+    def test_intents_are_local_and_reference_the_switch_entities(self):
+        for intent in ("KompOn", "KompOff", "KompStatus"):
+            dump = yaml.safe_dump(INTENTS[intent], allow_unicode=True)
+            self.assertNotIn("conversation.hermes", dump)
+            self.assertIn(self.BINARY_SENSOR, dump)
+        self.assertNotIn(
+            "conversation.hermes",
+            yaml.safe_dump(INTENTS["KompCancelOff"], allow_unicode=True),
+        )
+
+        self.assertIn("wake_on_lan.send_magic_packet", services(INTENTS["KompOn"]))
+        self.assertIn("__SECRET__", yaml.safe_dump(INTENTS["KompOn"], allow_unicode=True))
+        self.assertEqual(services(INTENTS["KompOff"]), ["script.komp_shutdown"])
+        self.assertEqual(services(INTENTS["KompCancelOff"]), ["script.komp_cancel_shutdown"])
+        self.assertEqual(services(INTENTS["KompStatus"]), [])
+
+    def test_speech_matches_the_confirmed_wording(self):
+        self.assertEqual(self._render(INTENTS["KompOn"]["speech"]["text"], False), "Включаю комп.")
+        self.assertEqual(self._render(INTENTS["KompOn"]["speech"]["text"], True), "Комп уже включён.")
+        self.assertEqual(self._render(INTENTS["KompStatus"]["speech"]["text"], True), "Комп включён.")
+        self.assertEqual(self._render(INTENTS["KompStatus"]["speech"]["text"], False), "Комп выключен.")
+        self.assertEqual(self._render(INTENTS["KompOff"]["speech"]["text"], False), "Комп уже выключен.")
+        self.assertEqual(
+            self._render(INTENTS["KompOff"]["speech"]["text"], True),
+            "Выключу комп через минуту. Скажите «отмени выключение компа», если передумали.",
+        )
+        self.assertEqual(
+            self._render(INTENTS["KompCancelOff"]["speech"]["text"], False),
+            "Отменил выключение компа.",
+        )
+
+    def test_sentences_cover_the_required_phrases_without_collisions(self):
+        sentences = self._sentences()
+        self.assertEqual(
+            set(sentences["KompOn"]),
+            {"включи комп", "включи мой комп", "включи компьютер"},
+        )
+        self.assertEqual(
+            set(sentences["KompOff"]),
+            {"выключи комп", "выключи мой комп", "выключи компьютер"},
+        )
+        self.assertEqual(
+            set(sentences["KompCancelOff"]),
+            {"отмени выключение компа", "не выключай комп"},
+        )
+        self.assertTrue(
+            {"комп включён", "мой комп включён", "включён ли комп", "комп работает"}
+            <= set(sentences["KompStatus"])
+        )
+        self.assertEqual(set(sentences), {"KompOn", "KompOff", "KompCancelOff", "KompStatus"})
+
+        # No phrase is reused by another intent (duplicate detection also runs
+        # globally), and the light intents cannot swallow «комп».
+        others: dict[str, str] = {}
+        for data in self.sentence_files_data():
+            for intent, body in data.get("intents", {}).items():
+                if intent.startswith("Komp"):
+                    continue
+                for item in body.get("data", []):
+                    for phrase in item.get("sentences", []):
+                        others[self._squash(phrase).lower()] = intent
+        for phrases in sentences.values():
+            for phrase in phrases:
+                self.assertNotIn(phrase, others, f"{phrase!r} also belongs to {others.get(phrase)}")
+
+        light_targets = {
+            value["in"]
+            for value in yaml.safe_load(
+                (HA / "custom_sentences" / "ru" / "station_control.yaml").read_text()
+            )["lists"]["light_target"]["values"]
+        }
+        self.assertFalse({"комп", "мой комп", "компьютер"} & light_targets)
+
+    def sentence_files_data(self) -> list[dict[str, Any]]:
+        return [yaml.safe_load(p.read_text()) for p in sorted((HA / "custom_sentences").rglob("*.yaml"))]
+
+    def test_no_literal_ip_or_mac_in_tracked_ha_yaml(self):
+        ipv4 = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
+        mac = re.compile(r"\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b")
+        for path in sorted(HA.rglob("*.yaml")):
+            text = path.read_text()
+            for match in ipv4.finditer(text):
+                address = match.group(0)
+                with self.subTest(path=str(path), address=address):
+                    # Loopback (local media), wildcard bind and TEST-NET only.
+                    self.assertTrue(
+                        address.startswith(("127.", "192.0.2.")) or address == "0.0.0.0",
+                        f"unexpected literal address {address}",
+                    )
+            self.assertFalse(mac.search(text), f"literal MAC address in {path}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

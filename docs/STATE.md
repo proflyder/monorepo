@@ -388,6 +388,15 @@
   `xiaomi_home` (`Lamp` bsLamp2, `Lighter` lamp22): on/off, яркость и
   цвет/CT проверены.
 - Голосовые команды и точные entity/scripts — `projects/home-assistant/ha-voice/`.
+- **Комп (Windows-ПК).** Голос и приложение управляют проводным десктопом:
+  включение — Wake-on-LAN (`switch.komp` → `wake_on_lan.send_magic_packet`,
+  MAC только в `secrets.yaml`), выключение — SSH с forced command
+  (`komp-power.ps1`, только слова `shutdown`/`cancel`) → Windows
+  `shutdown /s /t 60` с отменой, состояние — `binary_sensor.komp_v_seti`
+  (`command_line` ping каждые 30 с). Локальные intents `KompOn`/`KompOff`/
+  `KompCancelOff`/`KompStatus` работают в обоих профилях без Hermes. IP,
+  MAC и пользователь — только в HA secrets; настройка Windows —
+  `projects/home/windows-pc/README.md`. Живая приёмка — в `PENDING.md`.
 
 ## Планировщик, HA bridge, Android
 

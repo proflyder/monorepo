@@ -16,6 +16,9 @@ solutions/alarm           legacy instance=home (AlarmService facade)
 solutions/ha-control      каталог Home + executor queue=control
 ```
 
+Windows-десктоп «комп» (WoL, OpenSSH forced command) настраивается в
+`windows-pc/README.md`; HA-часть — в `projects/home-assistant/ha-voice/`.
+
 ## Зачем отдельно
 
 - станция и HA развиваются независимо;
