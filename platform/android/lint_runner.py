@@ -209,6 +209,8 @@ def main():
 
     env = os.environ.copy()
     env.setdefault("ANDROID_USER_HOME", os.path.join(tmp, "android-user"))
+    # Keep lint's analytics settings inside the sandbox (user.home is read-only there).
+    env.setdefault("LINT_OPTS", "-Duser.home=" + tmp)
     result = subprocess.run(command, check=False, env=env)
     return result.returncode
 

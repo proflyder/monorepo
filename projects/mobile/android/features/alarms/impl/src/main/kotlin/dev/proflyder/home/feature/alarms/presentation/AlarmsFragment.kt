@@ -21,7 +21,7 @@ import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
 class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding.Companion::inflate) {
-    private val viewModel: AlarmsViewModel by activityViewModels {
+    internal val viewModel: AlarmsViewModel by activityViewModels {
         viewModelFactory(AlarmsViewModel::class.java)
     }
 
@@ -123,7 +123,7 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         state.actionError?.let { failure ->
             showFailure(failure)
             // A switch may have moved optimistically; re-render server-confirmed values.
-            adapter.notifyDataSetChanged()
+            adapter.notifyItemRangeChanged(0, adapter.itemCount)
             viewModel.consumeActionError()
         }
     }
@@ -178,7 +178,7 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         binding.alarmsSelectionDelete.isEnabled = actionsEnabled
     }
 
-    private fun onAlarmClick(alarm: Schedule) {
+    internal fun onAlarmClick(alarm: Schedule) {
         if (viewModel.state.value.selectionMode) {
             viewModel.toggleSelection(alarm.id)
         } else {
@@ -186,7 +186,7 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         }
     }
 
-    private fun confirmDelete(id: String) {
+    internal fun confirmDelete(id: String) {
         confirm(R.string.alarms_delete_confirm, R.string.alarms_delete_yes, R.string.alarms_cancel) {
             viewModel.state.value.alarms.firstOrNull { it.id == id }?.let(viewModel::delete)
         }

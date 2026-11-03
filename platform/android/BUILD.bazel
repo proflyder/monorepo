@@ -6,6 +6,9 @@ package(default_visibility = ["//visibility:public"])
 kt_kotlinc_options(
     name = "jvm17_options",
     jvm_target = "17",
+    # Compiler warnings are regressions: fail the build instead of letting them
+    # accumulate in the log. rules_kotlin also derives javac -Werror from this.
+    warn = "error",
 )
 
 # Metro is a compile-time DI framework: the generated graph implementation is

@@ -24,7 +24,7 @@ import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBindin
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
 
 class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBinding.Companion::inflate) {
-    private val viewModel: ControlViewModel by activityViewModels {
+    internal val viewModel: ControlViewModel by activityViewModels {
         viewModelFactory(ControlViewModel::class.java)
     }
 
@@ -92,7 +92,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         viewModel.state.observe { render(it) }
     }
 
-    private fun openLightSheet(entry: ControlEntry) {
+    internal fun openLightSheet(entry: ControlEntry) {
         lightSheet?.dismiss()
         lightSheet = LightSheet(requireContext(), entry) { adjust -> viewModel.adjust(entry, adjust) }
             .also { it.show() }
@@ -196,5 +196,5 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         return "$name · ${option.count}"
     }
 
-    private fun ControlEntry.isOn(): Boolean = power == dev.proflyder.home.core.model.PowerState.ON
+    internal fun ControlEntry.isOn(): Boolean = power == dev.proflyder.home.core.model.PowerState.ON
 }
