@@ -70,12 +70,12 @@ sh_test(
     name = "apk_runtime_closure_test",
     srcs = ["//platform/android:apk_runtime_closure.sh"],
     args = [
-        "$(location //platform/android:apk_runtime_closure.py)",
+        "$(location //platform/android/tools/apk_runtime_closure)",
         "$(location :app.apk)",
         "$(location :app_deploy.jar)",
     ],
     data = [
-        "//platform/android:apk_runtime_closure.py",
+        "//platform/android/tools/apk_runtime_closure",
         ":app.apk",
         ":app_deploy.jar",
     ],

@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "google_services",
+    embed = [":google_services_lib"],
+)
+
+go_library(
+    name = "google_services_lib",
+    srcs = ["main.go"],
+    importpath = "ricardo.local/monorepo/platform/android/tools/google_services",
+    visibility = ["//visibility:private"],
+)
+
+go_test(
+    name = "google_services_test",
+    srcs = ["main_test.go"],
+    embed = [":google_services_lib"],
+)

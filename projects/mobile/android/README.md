@@ -140,7 +140,8 @@ bazelisk build //projects/mobile/android:app
 # bazel-bin/projects/mobile/android/app/app.apk
 
 bazelisk test //projects/mobile/android:android_tests
-bazelisk test //platform/android:google_services_test
+# Bazel build tools are Go: unit tests for the generators and lint runner.
+bazelisk test //platform/android/...
 
 # Optional: install on a connected device (keeps app data).
 adb install -r bazel-bin/projects/mobile/android/app/app.apk
@@ -278,7 +279,7 @@ ln -s "$PWD/secrets/android/google-services.json" \
   platform/android/keys/google-services.json
 ```
 
-`platform/android/google_services.py` converts the JSON client for
+`platform/android/tools/google_services` (Go) converts the JSON client for
 `dev.proflyder.home` into `res/values/google_services.xml` (`google_app_id`,
 `gcm_defaultSenderId`, `google_api_key`, `google_crash_reporting_api_key`,
 `google_storage_bucket`, `project_id`) and the Crashlytics build id

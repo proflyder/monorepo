@@ -52,9 +52,9 @@ def metro_android_library(
             name = name + "_view_binding",
             srcs = layouts,
             outs = [name + "_view_binding/ViewBindings.kt"],
-            cmd = "python3 $(location //platform/android:gen_view_binding.py) " +
+            cmd = "$(execpath //platform/android/tools/gen_view_binding) " +
                   "--package " + custom_package + " --output $@ $(SRCS)",
-            tools = ["//platform/android:gen_view_binding.py"],
+            tools = ["//platform/android/tools/gen_view_binding"],
         )
         srcs = srcs + [":" + name + "_view_binding"]
     kt_android_library(
@@ -105,7 +105,7 @@ def home_google_services_resources(
     native.genrule(
         name = name,
         srcs = ["//platform/android:google_services_json"],
-        tools = ["//platform/android:google_services"],
+        tools = ["//platform/android/tools/google_services"],
         outs = ["res/values/google_services.xml"],
         cmd = "\n".join([
             "set -e",
@@ -116,14 +116,14 @@ def home_google_services_resources(
             "  esac",
             "done",
             "if [ -n \"$$input\" ]; then",
-            "  $(location //platform/android:google_services) \\",
+            "  $(execpath //platform/android/tools/google_services) \\",
             "    --input \"$$input\" \\",
             "    --package " + package_name + " \\",
             "    --version-name \"" + version_name + "\" \\",
             "    --version-code \"" + version_code + "\" \\",
             "    --output $@",
             "else",
-            "  $(location //platform/android:google_services) \\",
+            "  $(execpath //platform/android/tools/google_services) \\",
             "    --package " + package_name + " \\",
             "    --version-name \"" + version_name + "\" \\",
             "    --version-code \"" + version_code + "\" \\",

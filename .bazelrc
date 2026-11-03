@@ -21,10 +21,6 @@ common --tool_java_language_version=17
 common --java_runtime_version=remotejdk_21
 common --tool_java_runtime_version=remotejdk_21
 
-# Bazel 9 deprecates implicit `__init__.py` creation; all Python targets here
-# are single-file scripts or real packages.
-common --incompatible_default_to_explicit_init_py
-
 # Use the released protoc binary instead of compiling protoc from C++ sources:
 # on a cold CI runner that compile was ~40% of the Android app build (the app
 # itself has no protos; rules_android's tools need protoc).

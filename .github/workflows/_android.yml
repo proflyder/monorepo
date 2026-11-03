@@ -102,7 +102,7 @@ jobs:
       # platform/build-tools pinned in MODULE.bazel plus the cmdline-tools
       # release that provides the Android Lint CLI used by
       # //projects/mobile/android:android_lint. Keep the version in sync with
-      # platform/android/lint_runner.py.
+      # platform/android/tools/lint_runner.
       - name: Install Android SDK packages
         run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "cmdline-tools;23.0"
 

@@ -38,6 +38,13 @@ test_suite(
         "//projects/mobile/android/features/reminders/api:api_test",
         "//projects/mobile/android/app:main_activity_smoke_test",
         "//projects/mobile/android/core/navigation:navigation_test",
+        # Bazel build tools live under platform/android and are routed to the
+        # android platform by the units map; run their unit tests here so the
+        # android unit exercises the toolchain it executes.
+        "//platform/android/tools/apk_runtime_closure:apk_runtime_closure_test",
+        "//platform/android/tools/gen_view_binding:gen_view_binding_test",
+        "//platform/android/tools/google_services:google_services_test",
+        "//platform/android/tools/lint_runner:lint_runner_test",
     ],
 )
 
