@@ -161,7 +161,8 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ./secrets/local-tools/bazelisk build //projects/mobile/android:app
 # debug APK: bazel-bin/projects/mobile/android/app/app.apk
 
-# Android Lint (also part of android_tests) needs cmdline-tools 23.0.
+# Android Lint (separate CI unit `android / android-lint`, not in android_tests)
+# needs cmdline-tools 23.0.
 ./secrets/local-tools/bazelisk test //projects/mobile/android:android_lint
 
 # Bazel-инструменты Android (Go, exec-конфигурация): генераторы
@@ -253,7 +254,7 @@ matrix одного платформенного workflow.
 | Платформа | Reusable workflow | Что делает юнит |
 |---|---|---|
 | go | `_go.yml` | `go vet`, `go test` (`-race` где объявлено), `go build` бинарей |
-| android | `_android.yml` | JDK 21 + SDK 36, `bazel test`/`build`, APK в artifact |
+| android | `_android.yml` | JDK 21 + SDK 36, `bazel build` затем `bazel test`, APK в artifact |
 | python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
 | js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
 | native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact |
@@ -272,6 +273,18 @@ Maven/APK-замыкание. Прочие глобальные инвалида
 `.bazelrc`, toolchain-файлы) и правка CI-workflow прогоняют проверки
 `android`, но APK не публикуют. Job намеренно не входит в `ci-ok`, поэтому его
 падение не блокирует merge.
+
+Android-платформа состоит из двух юнитов с одними и теми же `paths` и
+Bazel-корнем: `android-app` (сборка APK и unit/UI-тесты) и `android-lint`
+(только `//projects/mobile/android:android_lint`). Любое изменение Android
+модуля, ресурса или `platform/android/**` выбирает оба, поэтому они видны как
+отдельные matrix-job'ы `android / android-app` и `android / android-lint`.
+Находка lint валит только lint-job и не обрывает `bazel test` приложения;
+`android-distribute` требует зелёный весь `android` matrix, поэтому находка
+lint также пропускает публикацию APK. `_android.yml` сначала выполняет
+`bazel build`, затем `bazel test`; дополнительные SDK-пакеты юнит объявляет
+полем `bazel.sdk_packages` (у lint — `cmdline-tools;23.0`), и workflow
+устанавливает их только для этого job.
 
 `changes` выдаёт outputs `go_units`, `android_units`, `python_units`,
 `js_units`, `native_units`, `deploy_control`, `android_distribute`, `base_sha`,
@@ -423,6 +436,9 @@ digest-пины образов, поэтому `make test` и `make test-deploy-
 ветки `develop`. Он зелёный только если все зависимые job'ы завершились
 `success` или законно `skipped`; любой `failure`/`cancelled` (включая упавший
 `changes`) делает его красным. Логика вынесена в `platform/ci/ci_gate.mjs`.
+Matrix-entry `android / android-lint` не требует отдельной записи в gate: он
+входит в job `android`, чей результат `ci-ok` уже проверяет, поэтому падение
+lint делает `ci-ok` красным как и любой другой android-юнит.
 
 ### Деплой (`deploy-home`)
 

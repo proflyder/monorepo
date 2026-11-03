@@ -112,7 +112,10 @@ jobs:
       build_packages: ${{ matrix.build_packages }}
       deploy_control: false
 
-  # One matrix entry per affected application or shared Kotlin library unit.
+  # One matrix entry per affected application or shared Kotlin library unit,
+  # plus the dedicated `android-lint` unit. Android Lint runs as its own job so
+  # a finding fails only that matrix entry instead of aborting the app's
+  # `bazel test` and hiding the other tests' results.
   android:
     needs: changes
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.android_units != '[]' }}
@@ -125,6 +128,7 @@ jobs:
       unit: ${{ matrix.id }}
       test_targets: ${{ matrix.test_targets }}
       build_targets: ${{ matrix.build_targets }}
+      sdk_packages: ${{ matrix.sdk_packages }}
       universe: ${{ matrix.universe }}
       artifact: ${{ matrix.artifact }}
       artifact_name: ${{ matrix.artifact_name }}
@@ -138,6 +142,11 @@ jobs:
   # shared Kotlin libraries it builds, or `platform/android/**`). A global
   # invalidation such as `MODULE.bazel` still runs the `android` checks but does
   # not change the app, so it must not publish a build.
+  #
+  # The whole `android` matrix must be green, so an `android-lint` finding also
+  # skips distribution. Lint gates the APK deliberately: a finding means the
+  # application code is not acceptable, and the PR still shows the exact
+  # `android / android-lint` failure.
   #
   # Deliberately NOT a dependency of `ci-ok`: distribution is a delivery
   # side effect, not a code gate. A failed upload stays visible on the PR (and
