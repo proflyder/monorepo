@@ -184,17 +184,16 @@ fi
 rm -rf "$DEPLOY_STATE_DIR"
 mkdir -p "$DEPLOY_STATE_DIR"
 
+# The marker contract (.before.json / .absent / .applied) is owned by
+# `home-deploy state`, so a mixed run with an older deploy.sh stays safe.
 record_before() {
-  local name=$1
-  if $KUBECTL -n "$NS" get deployment "$name" >/dev/null 2>&1; then
-    $KUBECTL -n "$NS" get deployment "$name" -o json >"$DEPLOY_STATE_DIR/$name.before.json"
-  else
-    : >"$DEPLOY_STATE_DIR/$name.absent"
-  fi
-  rm -f "$DEPLOY_STATE_DIR/$name.applied"
+  home_deploy state record --state-dir "$DEPLOY_STATE_DIR" \
+    --namespace "$NS" --name "$1" --kubectl "$KUBECTL"
 }
 
-mark_applied() { : >"$DEPLOY_STATE_DIR/$1.applied"; }
+mark_applied() {
+  home_deploy state mark --state-dir "$DEPLOY_STATE_DIR" --name "$1"
+}
 
 echo "== applying wakegrant"
 record_before wakegrant

@@ -193,7 +193,7 @@ runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/currency-bot.env`.
    for rollout;
 6. converges the `cloudflared` Deployment and waits for rollout.
 
-It reuses the scheduler's generic `converge.py`/`rollback.py` and the strict
+It reuses the generic `home-deploy converge`/`home-deploy state rollback` and the strict
 `home-deploy render --unit currency-bot` renderer (`platform/deploy`, decision
 35); support objects (PVC, Services, policies, ServiceMonitor, ExternalSecrets)
 are applied, Deployments are replaced so removed fields do not linger.
@@ -349,7 +349,7 @@ and is idempotent (existing timestamps are skipped). The production run moved
 with the generic scheduler script:
 
 ```bash
-python3 projects/home/kubernetes/scheduler/rollback.py \
+home-deploy state rollback \
   --state-dir secrets/local/rendered/currency-bot/state \
   --namespace currency-bot
 ```

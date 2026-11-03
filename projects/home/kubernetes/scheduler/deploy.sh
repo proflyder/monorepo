@@ -34,8 +34,10 @@
 #   SSH_KEY/SSH_OPTS  ssh transport for NODE_SSH
 #   PREFLIGHT_IN_CLUSTER=1  run the cutover preflight as an in-cluster Job
 #   HA_TOKEN_FILE, SCHEDULER_TOKEN_FILE  local preflight tokens
-#   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE  pre-resolved refs
-#                   (skip building that image; used by the regression test)
+#   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE/PREFLIGHT_IMAGE
+#                   pre-resolved refs (skip building that image; used by the
+#                   regression test). PREFLIGHT_IMAGE is the distroless
+#                   `home-deploy` image that runs the in-cluster preflight Job.
 #   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
 #                   pull-request build (DECISIONS 36); an explicit *_IMAGE wins
 #   SKIP_FIREWALL=1 no longer needed: the NodePort filter is host configuration
@@ -68,9 +70,10 @@ PREFLIGHT_JOB=scheduler-preflight
 # about to change and marks it only after a successful apply. CI restores from
 # this, never with a blind `kubectl rollout undo`.
 DEPLOY_STATE_DIR=${DEPLOY_STATE_DIR:-"$RENDER_DIR/state"}
-# Pinned python image for the in-cluster preflight Job (digest of the multi-arch
-# `3.13-slim` index). The node resolves the linux/amd64 child itself.
-PREFLIGHT_IMAGE=${PREFLIGHT_IMAGE:-"docker.io/library/python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb"}
+# Image for the in-cluster preflight Job: the `home-deploy` binary on
+# distroless. Resolved from an explicit PREFLIGHT_IMAGE, a promoted PR digest or
+# the Bazel build, exactly like the service images below.
+PREFLIGHT_IMAGE=${PREFLIGHT_IMAGE:-}
 
 # ssh/scp transport. CI passes a dedicated key and IdentityFile-only use; the
 # manual flow keeps using ssh-agent.
@@ -168,11 +171,13 @@ fi
 IMAGE_REF_SCHEDULER=
 IMAGE_REF_HA_BRIDGE=
 IMAGE_REF_HA_CONTROL=
+IMAGE_REF_HOME_DEPLOY=
 set_image_ref() {
   case "$1" in
     scheduler) IMAGE_REF_SCHEDULER=$2 ;;
     ha-bridge) IMAGE_REF_HA_BRIDGE=$2 ;;
     ha-control) IMAGE_REF_HA_CONTROL=$2 ;;
+    home-deploy) IMAGE_REF_HOME_DEPLOY=$2 ;;
   esac
 }
 get_image_ref() {
@@ -180,6 +185,7 @@ get_image_ref() {
     scheduler) echo "$IMAGE_REF_SCHEDULER" ;;
     ha-bridge) echo "$IMAGE_REF_HA_BRIDGE" ;;
     ha-control) echo "$IMAGE_REF_HA_CONTROL" ;;
+    home-deploy) echo "$IMAGE_REF_HOME_DEPLOY" ;;
   esac
 }
 image_var() {
@@ -187,6 +193,7 @@ image_var() {
     scheduler) echo SCHEDULER_IMAGE ;;
     ha-bridge) echo HA_BRIDGE_IMAGE ;;
     ha-control) echo HA_CONTROL_IMAGE ;;
+    home-deploy) echo PREFLIGHT_IMAGE ;;
   esac
 }
 
@@ -195,7 +202,7 @@ image_var() {
 # pins them via the *_IMAGE variables, so neither path runs Bazel here.
 if $BUILD; then
   build_needed=false
-  for image in scheduler ha-bridge ha-control; do
+  for image in scheduler ha-bridge ha-control home-deploy; do
     var=$(image_var "$image")
     if [[ -n "${!var:-}" || -n "$(prebuilt_digest "$image")" ]]; then
       continue
@@ -292,18 +299,20 @@ resolve_image() {
 
 TMP_IMAGES=$(mktemp -d)
 trap 'rm -rf "$TMP_IMAGES"' EXIT
-# All three images are always resolved: the manifests are rendered as one set
-# and a skipped workload still needs a valid reference for its template.
-for image in scheduler ha-bridge ha-control; do
+# Every image is always resolved: the manifests are rendered as one set and a
+# skipped workload (or the preflight Job) still needs a valid reference.
+for image in scheduler ha-bridge ha-control home-deploy; do
   resolve_image "$image"
 done
+# The rendered Job references the resolved preflight image by digest.
+PREFLIGHT_IMAGE=$(get_image_ref home-deploy)
 
 if [[ "$PUSH_ONLY" == 1 ]]; then
-  echo "push-only: $(get_image_ref scheduler) $(get_image_ref ha-bridge) $(get_image_ref ha-control)"
+  echo "push-only: $(get_image_ref scheduler) $(get_image_ref ha-bridge) $(get_image_ref ha-control) $(get_image_ref home-deploy)"
   exit 0
 fi
 
-IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)"
+IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)$(get_image_ref home-deploy)"
 BUILD_ID="$(home_deploy build-id \
   --revision "$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)" \
   --fingerprint "$IMAGE_FINGERPRINT")"
@@ -324,18 +333,15 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
 rm -rf "$DEPLOY_STATE_DIR"
 mkdir -p "$DEPLOY_STATE_DIR"
 
+# The marker contract (.before.json / .absent / .applied) is owned by
+# `home-deploy state`, so a mixed run with an older deploy.sh stays safe.
 record_before() {
-  local name=$1
-  if $KUBECTL -n "$NS" get deployment "$name" >/dev/null 2>&1; then
-    $KUBECTL -n "$NS" get deployment "$name" -o json >"$DEPLOY_STATE_DIR/$name.before.json"
-  else
-    : >"$DEPLOY_STATE_DIR/$name.absent"
-  fi
-  rm -f "$DEPLOY_STATE_DIR/$name.applied"
+  home_deploy state record --state-dir "$DEPLOY_STATE_DIR" \
+    --namespace "$NS" --name "$1" --kubectl "$KUBECTL"
 }
 
 mark_applied() {
-  : >"$DEPLOY_STATE_DIR/$1.applied"
+  home_deploy state mark --state-dir "$DEPLOY_STATE_DIR" --name "$1"
 }
 
 # Replace the live Deployment with the rendered object instead of patching it.
@@ -345,7 +351,7 @@ mark_applied() {
 converge_deployment() {
   local name=$1 file=$2
   shift 2
-  python3 "$DIR/converge.py" \
+  home_deploy converge \
     --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file" "$@"
 }
 
@@ -491,7 +497,7 @@ preflight_local() {
   local ha_url scheduler_url
   ha_url=$(env_value HA_URL)
   scheduler_url=$(env_value SCHEDULER_PUBLIC_URL)
-  python3 "$DIR/preflight.py" \
+  home_deploy preflight \
     --ha-url "$ha_url" \
     --ha-token-file "$HA_TOKEN_FILE" \
     --scheduler-url "$scheduler_url" \
@@ -500,10 +506,6 @@ preflight_local() {
 }
 
 preflight_cluster() {
-  echo "== creating the in-cluster preflight ConfigMap"
-  $KUBECTL -n "$NS" create configmap "$PREFLIGHT_JOB" \
-    --from-file=preflight.py="$DIR/preflight.py" \
-    --dry-run=client -o yaml | $KUBECTL apply -f -
   $KUBECTL -n "$NS" delete job "$PREFLIGHT_JOB" --ignore-not-found >/dev/null
   $KUBECTL apply -f "$RENDER_DIR/preflight-job.yaml" >/dev/null
   local rc=0

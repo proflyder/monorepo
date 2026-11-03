@@ -9,9 +9,13 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//platform/deploy/internal/buildid",
+        "//platform/deploy/internal/converge",
         "//platform/deploy/internal/envfile",
+        "//platform/deploy/internal/kube",
         "//platform/deploy/internal/oci",
+        "//platform/deploy/internal/preflight",
         "//platform/deploy/internal/render",
+        "//platform/deploy/internal/state",
     ],
 )
 

@@ -2,13 +2,12 @@
 #
 # The CI runner reaches the K3s API but neither Home Assistant nor the
 # scheduler NodePort, so the read-only preflight runs next to the scheduler
-# instead of on the deploy host. deploy.sh creates the ConfigMap with
-# preflight.py and applies this Job, then waits for completion and prints the
-# pod log.
+# instead of on the deploy host. deploy.sh applies this Job, waits for
+# completion and prints the pod log.
 #
 # TEMPLATE: rendered by deploy.sh with the private HA URL and the digest-pinned
-# python image. The script and both tokens are mounted, never passed on a
-# command line.
+# home-deploy image (the same Go binary the deploy scripts use; distroless, no
+# shell, no Python). Both tokens are mounted, never passed on a command line.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -40,8 +39,8 @@ spec:
           image: ${PREFLIGHT_IMAGE}
           imagePullPolicy: IfNotPresent
           command:
-            - python3
-            - /scripts/preflight.py
+            - /usr/local/bin/home-deploy
+            - preflight
             - --ha-url
             - ${HA_URL}
             - --ha-token-file
@@ -52,9 +51,6 @@ spec:
             - /run/secrets/scheduler/token
             - --expected-endpoint
             - ${SCHEDULER_PUBLIC_URL}
-          env:
-            - name: PYTHONDONTWRITEBYTECODE
-              value: "1"
           resources:
             requests:
               cpu: 10m
@@ -67,22 +63,13 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: script
-              mountPath: /scripts
-              readOnly: true
             - name: scheduler-token
               mountPath: /run/secrets/scheduler
               readOnly: true
             - name: ha-token
               mountPath: /run/secrets/ha
               readOnly: true
-            - name: tmp
-              mountPath: /tmp
       volumes:
-        - name: script
-          configMap:
-            name: scheduler-preflight
-            defaultMode: 0444
         - name: scheduler-token
           secret:
             secretName: scheduler-auth
@@ -91,6 +78,3 @@ spec:
           secret:
             secretName: ha-bridge-ha
             defaultMode: 0440
-        - name: tmp
-          emptyDir:
-            sizeLimit: 8Mi

@@ -1,0 +1,17 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "state",
+    srcs = ["state.go"],
+    importpath = "ricardo.local/monorepo/platform/deploy/internal/state",
+    deps = ["//platform/deploy/internal/kube"],
+)
+
+go_test(
+    name = "state_test",
+    srcs = ["state_test.go"],
+    embed = [":state"],
+    deps = ["//platform/deploy/internal/kube"],
+)

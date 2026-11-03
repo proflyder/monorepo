@@ -42,6 +42,7 @@ EOF
 export SCHEDULER_IMAGE="ghcr.io/proflyder/scheduler@sha256:$(printf 'a%.0s' {1..64})"
 export HA_BRIDGE_IMAGE="ghcr.io/proflyder/ha-bridge@sha256:$(printf 'b%.0s' {1..64})"
 export HA_CONTROL_IMAGE="ghcr.io/proflyder/ha-control@sha256:$(printf 'c%.0s' {1..64})"
+export PREFLIGHT_IMAGE="ghcr.io/proflyder/home-deploy@sha256:$(printf 'd%.0s' {1..64})"
 
 cat > "$TMP/kubectl" <<'EOF'
 #!/usr/bin/env bash
@@ -146,8 +147,8 @@ EOF
 chmod +x "$TMP/bin/bazel"
 export BAZEL_LOG="$TMP/bazel.log"
 : > "$BAZEL_LOG"
-unset SCHEDULER_IMAGE HA_BRIDGE_IMAGE HA_CONTROL_IMAGE MOCK_CONTROL_EXISTS CONTROL_QUEUE_STATUS || true
-export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64})"
+unset SCHEDULER_IMAGE HA_BRIDGE_IMAGE HA_CONTROL_IMAGE PREFLIGHT_IMAGE MOCK_CONTROL_EXISTS CONTROL_QUEUE_STATUS || true
+export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})"
 : > "$CALL_LOG"
 PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
   cat "$TMP/out"
@@ -160,6 +161,8 @@ grep -q "image ha-bridge: prebuilt ghcr.io/proflyder/ha-bridge@sha256:eeee" "$TM
   || fail "ha-bridge did not use the prebuilt digest"
 grep -q "image ha-control: prebuilt ghcr.io/proflyder/ha-control@sha256:ffff" "$TMP/out" \
   || fail "ha-control did not use the prebuilt digest"
+grep -q "image home-deploy: prebuilt ghcr.io/proflyder/home-deploy@sha256:1111" "$TMP/out" \
+  || fail "home-deploy did not use the prebuilt digest"
 grep -q "push" "$BAZEL_LOG" && fail "prebuilt images were pushed again"
 unset PREBUILT_DIGESTS
 

@@ -168,7 +168,7 @@ export const config = {
       deploy: {
         builder: "bazel",
         target_root: "//projects/home/kubernetes/scheduler",
-        images: ["scheduler"],
+        images: ["scheduler", "home-deploy"],
         workloads: ["scheduler"],
         namespace: "home-assistant",
         script: "projects/home/kubernetes/scheduler/deploy.sh",
@@ -615,10 +615,12 @@ export const config = {
     {
       id: "scheduler-deploy",
       platform: "python",
-      title: "projects/home/kubernetes/scheduler (deployment preflight)",
+      title: "projects/home/kubernetes/scheduler (deploy control regression)",
       paths: ["projects/home/kubernetes/scheduler/**"],
       python: {
-        suites: ["projects/home/kubernetes/scheduler"],
+        // The remaining Python contract test is the shell regression driver;
+        // converge/state/preflight live in platform/deploy (Go, unit above).
+        compile: ["projects/home/kubernetes/scheduler"],
       },
     },
 

@@ -831,7 +831,8 @@ jobs:
           # Restore only what this job actually applied, to the exact recorded
           # spec. A failure during build/push/render leaves no `.applied`
           # marker and must not touch the running Deployments.
-          python3 projects/home/kubernetes/scheduler/rollback.py \
+          HOME_DEPLOY_BIN="${HOME_DEPLOY:-$PWD/bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy}"
+          "$HOME_DEPLOY_BIN" state rollback \
             --state-dir "$CI_DIR/deploy-state" \
             --namespace "${{ matrix.namespace }}" \
             --kubectl kubectl | tee "$RUNNER_TEMP/rollback.log"

@@ -52,8 +52,7 @@ scheduler.env.example           placeholders; copy to secrets/home/scheduler.env
 deploy.sh                       build/push/import images, apply, mode transitions
                                 (templates rendered by `home-deploy render`)
 backup.sh                       quiesced SQLite + ledger backup with checksums
-preflight.py                    safety preflight (retired writers absent/off, scheduler ready)
-rollback.py                     restore exactly the Deployments this deploy applied
+                                (preflight/state/converge: `home-deploy`, platform/deploy)
 ci/rbac.yaml                    ServiceAccount/Role for CI kubectl
 ```
 
@@ -226,12 +225,13 @@ kubectl only — no SSH and no root helper.
 - Rollback is driven by recorded state, not `kubectl rollout undo`.
   `deploy.sh` captures each Deployment before it changes it
   (`<name>.before.json`, or `<name>.absent`) and writes `<name>.applied` only
-  after the converge succeeds. `rollback.py` replaces the Deployment with the
-  full remembered object, and only when the generation actually changed. A
+  after the converge succeeds. `home-deploy state rollback` replaces the
+  Deployment with the full remembered object, and only when the generation
+  actually changed. A
   failure during build, push, rendering or preflight leaves no marker, so the
   live Deployments are untouched.
-- Existing Deployments are converged with `converge.py` (a full replace of the
-  rendered object) instead of `kubectl apply`/`kubectl patch`. A patch cannot
+- Existing Deployments are converged with `home-deploy converge` (a full
+  replace of the rendered object) instead of `kubectl apply`/`kubectl patch`. A patch cannot
   remove a volume or mount that an earlier ad-hoc change added; the replace
   prunes such drift. `--preserve-env` keeps `BRIDGE_EXECUTE`/`CONTROL_EXECUTE`
   and `--preserve-replicas` keeps the current scale, so mode transitions stay

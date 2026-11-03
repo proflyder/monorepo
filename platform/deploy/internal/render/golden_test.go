@@ -82,7 +82,7 @@ var goldenCases = []goldenCase{
 			"SCHEDULER_IMAGE=" + image("ghcr.io/proflyder/scheduler", 0),
 			"HA_BRIDGE_IMAGE=" + image("ghcr.io/proflyder/ha-bridge", 1),
 			"HA_CONTROL_IMAGE=" + image("ghcr.io/proflyder/ha-control", 2),
-			"PREFLIGHT_IMAGE=" + image("docker.io/library/python:3.13-slim", 3),
+			"PREFLIGHT_IMAGE=" + image("ghcr.io/proflyder/home-deploy", 3),
 		},
 		files: []string{
 			"projects/home/kubernetes/scheduler/manifests/scheduler.yaml",
@@ -152,7 +152,7 @@ var goldenCases = []goldenCase{
 			"SCHEDULER_IMAGE=" + image("ghcr.io/proflyder/scheduler", 0),
 			"HA_BRIDGE_IMAGE=" + image("ghcr.io/proflyder/ha-bridge", 1),
 			"HA_CONTROL_IMAGE=" + image("ghcr.io/proflyder/ha-control", 2),
-			"PREFLIGHT_IMAGE=" + image("docker.io/library/python:3.13-slim", 3),
+			"PREFLIGHT_IMAGE=" + image("ghcr.io/proflyder/home-deploy", 3),
 		},
 		files: []string{
 			"projects/home/kubernetes/scheduler/nft/scheduler-nodeport.nft",

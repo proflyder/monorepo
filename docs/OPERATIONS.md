@@ -1059,7 +1059,7 @@ dashboard `currency-bot` (uid `currency-bot`).
 Откат Deployment из state последнего деплоя:
 
 ```bash
-python3 projects/home/kubernetes/scheduler/rollback.py \
+home-deploy state rollback \
   --state-dir secrets/local/rendered/currency-bot/state \
   --namespace currency-bot
 ```

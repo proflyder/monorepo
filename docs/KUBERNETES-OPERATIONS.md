@@ -58,7 +58,7 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
   (PV `openbao-data`/`openbao-backups`, `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
 - Host-дерева `/opt/ricardo` и запасных релизов нет: откат — только
-  digest-pinned образы в GHCR/containerd, деплой — `converge.py`.
+  digest-pinned образы в GHCR/containerd, деплой — `home-deploy converge`.
 - `runtime-ha` — архив старого HA Container, не активный writer.
 - `runtime-music`/`runtime-matter` удалены; tar-копии на Mac.
 

@@ -26,13 +26,24 @@ service_image(
     repo = "ghcr.io/proflyder/ha-control",
 )
 
-# Convenience alias for CI: one `bazel build` produces all three images.
+# The cutover preflight Job runs the same `home-deploy` binary as the deploy
+# scripts, so the cluster never needs a Python image. It is built with the
+# scheduler unit (the Job belongs to that deploy) and promoted by the same
+# DECISIONS 36 digest path as the three service images above.
+service_image(
+    name = "home-deploy",
+    binary = "//platform/deploy/cmd/home-deploy",
+    repo = "ghcr.io/proflyder/home-deploy",
+)
+
+# Convenience alias for CI: one `bazel build` produces all images.
 filegroup(
     name = "images",
     srcs = [
         ":scheduler_image",
         ":ha-bridge_image",
         ":ha-control_image",
+        ":home-deploy_image",
     ],
     visibility = ["//visibility:public"],
 )

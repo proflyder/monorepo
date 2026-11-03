@@ -50,13 +50,9 @@ else
   skip "Go is not installed: deploy scripts fall back to bazel/installed home-deploy"
 fi
 
-# Scheduler deployment helpers: real preflight regression and the mocked-kubectl
-# control-mode test (the shell test is not covered by unittest discovery).
-echo "== Scheduler deployment: preflight =="
-(cd projects/home/kubernetes/scheduler && python3 -m unittest test_preflight.py test_rollback.py -v)
-
 # The control-mode regression drives deploy.sh --skip-build with pre-resolved
 # image digests, so it needs neither Bazel nor release binaries in dist/.
+# converge/state/preflight are Go and covered by platform/deploy's go_test.
 echo "== Scheduler deployment: deploy control =="
 bash projects/home/kubernetes/scheduler/test_deploy_control.sh
 

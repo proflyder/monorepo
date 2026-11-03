@@ -395,7 +395,7 @@ unset VOICE_TOKEN
 marker after a successful apply. CI restores exactly those objects:
 
 ```bash
-python3 projects/home/kubernetes/scheduler/rollback.py \
+home-deploy state rollback \
   --state-dir secrets/local/rendered/mcp-gateway/state \
   --namespace home-assistant
 ```

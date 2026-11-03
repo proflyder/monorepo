@@ -20,8 +20,12 @@
       `env get`, `build-id` и `oci digest/pack/docker` и переключил на них
       `deploy.sh` юнитов, `nft/apply.sh`, ingress-render и сборку образов в CI
       (Python-рендерер и `platform/ci/oci_image.py` удалены, parity
-      зафиксирован в `platform/deploy/testdata/`); осталось
-      `converge`/`rollback`/`preflight` (Job без `python:3.13-slim`),
+      зафиксирован в `platform/deploy/testdata/`); шаг 2 добавил
+      `converge`, `state record|mark|rollback` и `preflight`, переключил
+      deploy-скрипты и rollback в `deploy-home.yml`, а preflight Job теперь
+      работает из distroless-образа `ghcr.io/proflyder/home-deploy`
+      (`python:3.13-slim` и ConfigMap удалены); Python `converge.py`,
+      `rollback.py`, `preflight.py` и их тесты удалены. Осталось
       inline-Python в `apply-runtime.sh`, external-secrets, `hermes_rollout.py`,
       `render_hermes_config.py`; health
       exporter — Go-образ (сейчас он запущен из последнего Python-образа

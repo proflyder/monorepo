@@ -173,7 +173,7 @@
   станции: оба профиля, подтверждение с открытым микрофоном, отмена, поздние
   ответы. Контейнер health exporter пока запущен из последнего Python-образа
   voice-proxy (digest закреплён в приватных values) до перевода exporter на Go.
-- Деплой — `converge.py`: полная замена Deployment, сохранение env/режима и
+- Деплой — `home-deploy converge` (Go): полная замена Deployment, сохранение env/режима и
   replicas; откат восстанавливает только применённый объект целиком.
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
   namespace-scoped workloads, поэтому `ci-deploy` не имеет cluster-scoped

@@ -74,8 +74,16 @@ Hermes `/health` и `/v1/models` не заменяют регистрацию а
 go test ./solutions/...
 go test ./packages/...
 go test -race ./solutions/ha-bridge/...
+go test -race ./platform/deploy/...   # converge, state, preflight, render, oci
 go vet ./solutions/...
 ```
+
+`platform/deploy/internal/converge` содержит parity-тест: fake kubectl
+записывает argv и payload, а тест сравнивает разобранные JSON-объекты с
+трассами, снятыми с Python `converge.py` до его удаления
+(`platform/deploy/testdata/converge/`). `state` покрывает все случаи
+`test_rollback.py`, `preflight` — legacy-writer проверки и HTTP-сценарии на
+`httptest`.
 
 Тесты scheduler/bridge герметичны: SQLite — во временном каталоге, scheduler,
 HA и Connect-клиенты — через `httptest`/фейки; живые HA, ADB и

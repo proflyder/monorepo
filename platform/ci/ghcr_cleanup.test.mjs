@@ -47,6 +47,7 @@ test("only the deploy images of units.mjs are considered", () => {
     "ha-bridge",
     "ha-control",
     "hermes",
+    "home-deploy",
     "mcp-gateway",
     "scheduler",
     "voice-proxy",
