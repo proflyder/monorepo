@@ -61,6 +61,60 @@ abstract class BaseViewHolder<T : Any, VB : ViewBinding, CB : AdapterCallback<T>
 }
 
 /**
+ * A typed DiffUtil change payload: the set of [A] aspects that changed on one
+ * row. A `getChangePayload` returning it makes the list animator reuse the
+ * existing holder (no crossfade) and lets [BaseViewHolder.bindPayloads] update
+ * only the affected views.
+ *
+ * The set is never empty: a payload without a changed aspect would describe no
+ * update, so build one only when there is a difference. DiffUtil may deliver
+ * several payloads for one bind; [merge] combines them into a single set.
+ */
+class PayloadSet<A : Enum<A>> private constructor(private val changed: Set<A>) {
+    /** The changed aspects. */
+    val aspects: Set<A> get() = changed
+
+    operator fun contains(aspect: A): Boolean = aspect in changed
+
+    override fun equals(other: Any?): Boolean = other is PayloadSet<*> && other.changed == changed
+
+    override fun hashCode(): Int = changed.hashCode()
+
+    override fun toString(): String = "PayloadSet(${changed.joinToString(",") { it.name }})"
+
+    companion object {
+        /** A payload carrying [aspects]; at least one is required. */
+        fun <A : Enum<A>> of(vararg aspects: A): PayloadSet<A> {
+            require(aspects.isNotEmpty()) { "A payload must carry at least one changed aspect" }
+            return PayloadSet(aspects.toSet())
+        }
+
+        /** A payload carrying [aspects]; at least one is required. */
+        fun <A : Enum<A>> of(aspects: Collection<A>): PayloadSet<A> {
+            require(aspects.isNotEmpty()) { "A payload must carry at least one changed aspect" }
+            return PayloadSet(aspects.toSet())
+        }
+
+        /**
+         * Union of every [PayloadSet] in [payloads] whose aspects are
+         * [aspectType]; null when none matched (the holder then performs a full
+         * bind). Requiring the aspect type keeps a shared adapter from mixing
+         * payloads of different rows.
+         */
+        fun <A : Enum<A>> merge(payloads: List<Any>, aspectType: Class<A>): PayloadSet<A>? {
+            val merged = LinkedHashSet<A>()
+            payloads.forEach { payload ->
+                if (payload !is PayloadSet<*>) return@forEach
+                payload.aspects.forEach { aspect ->
+                    if (aspectType.isInstance(aspect)) merged += aspectType.cast(aspect)
+                }
+            }
+            return if (merged.isEmpty()) null else PayloadSet(merged)
+        }
+    }
+}
+
+/**
  * Base for ListAdapter screens. The DiffUtil callback is a required
  * constructor argument (it must define item identity and content equality and
  * may provide payloads so changed rows are updated in place without a rebind).

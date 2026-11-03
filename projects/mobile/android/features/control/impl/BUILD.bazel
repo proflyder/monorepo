@@ -75,3 +75,22 @@ kt_android_local_test(
         "@maven//:org_robolectric_robolectric",
     ],
 )
+
+# Payload computation is pure Kotlin; no Robolectric runner is used, but the
+# test still lives in the same android_local_test toolchain as the impl.
+kt_android_local_test(
+    name = "control_payload_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlDiffPayloadTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.control.impl",
+    manifest = "src/test/AndroidManifest.xml",
+    test_class = "dev.proflyder.home.feature.control.presentation.ControlDiffPayloadTest",
+    deps = [
+        "//projects/mobile/android/core/model:model",
+        "//projects/mobile/android/core/ui:ui",
+        "//projects/mobile/android/features/control/api:api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+    ],
+)

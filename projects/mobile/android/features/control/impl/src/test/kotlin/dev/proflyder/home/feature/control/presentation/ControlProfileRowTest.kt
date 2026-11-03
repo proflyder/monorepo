@@ -6,6 +6,7 @@ import android.widget.FrameLayout
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.materialswitch.MaterialSwitch
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
@@ -31,6 +32,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class ControlProfileRowTest {
     private val changes = mutableListOf<Boolean>()
+    private val powerChanges = mutableListOf<Boolean>()
     private val rowClicks = mutableListOf<ControlItem>()
 
     private val callback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
@@ -38,7 +40,9 @@ class ControlProfileRowTest {
             rowClicks += item
         }
 
-        override fun onPowerChanged(entry: ControlEntry, on: Boolean) = Unit
+        override fun onPowerChanged(entry: ControlEntry, on: Boolean) {
+            powerChanges += on
+        }
 
         override fun onProfileChanged(entry: ControlEntry, work: Boolean) {
             changes += work
@@ -54,6 +58,17 @@ class ControlProfileRowTest {
         actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
         power = power,
         available = available,
+    )
+
+    private fun device(power: PowerState?) = ControlEntry(
+        id = "light.desk",
+        kind = ControlKind.LIGHT,
+        title = "Desk lamp",
+        room = "Office",
+        icon = "lightbulb-outline",
+        actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+        power = power,
+        available = true,
     )
 
     private class Row(
@@ -135,5 +150,36 @@ class ControlProfileRowTest {
         row.root.performClick()
         assertEquals(emptyList<ControlItem>(), rowClicks)
         assertEquals(emptyList<Boolean>(), changes)
+    }
+
+    @Test
+    fun powerChangeUpdatesTheSameHolderThroughThePayload() {
+        val themed = ContextThemeWrapper(
+            RuntimeEnvironment.getApplication(),
+            com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
+        )
+        val parent = FrameLayout(themed)
+        val off = ControlItem.Device(device(PowerState.OFF), busy = false, statesKnown = true)
+        val on = ControlItem.Device(device(PowerState.ON), busy = false, statesKnown = true)
+
+        val before = ControlAdapter(callback)
+        before.submitList(listOf(off))
+        val holder = before.onCreateViewHolder(parent, before.getItemViewType(0))
+        before.onBindViewHolder(holder, 0)
+        val switch = holder.itemView.findViewById<MaterialSwitch>(R.id.control_device_switch)
+        assertFalse(switch.isChecked)
+
+        // The diff reports a typed payload, so the list animator reuses this
+        // holder and only the changed views are rebound.
+        val payload = requireNotNull(ControlDiff.getChangePayload(off, on))
+        val after = ControlAdapter(callback)
+        after.submitList(listOf(on))
+        after.onBindViewHolder(holder, 0, mutableListOf(payload))
+
+        assertTrue(switch.isChecked)
+        val state = holder.itemView.findViewById<android.widget.TextView>(R.id.control_device_state)
+        assertEquals("On", state.text.toString())
+        // Payload binding is programmatic and must never look like a user toggle.
+        assertEquals(emptyList<Boolean>(), powerChanges)
     }
 }
