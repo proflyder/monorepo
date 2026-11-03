@@ -39,6 +39,7 @@ teardown восстанавливает source/volume.
 | Audit scanner | approved public domain/namespace allowances and lookalikes |
 | Pairing | WAV/OGG, token redaction |
 | BLE gateway | token, Wi-Fi validation/rollback, WPA, GATT, HTTP auth/status |
+| Windows logon provider | portable protocol/HMAC/config vectors, cross-build exports/imports, static install scripts, on-PC self-tests |
 | Heartbeat Worker | grace-логика, auth, KV transitions, Telegram-доставка (моки) |
 | HA live | API, entities, text intents, optional mutation/alarm |
 | Gateway live | bearer auth, status shape, method guards |
@@ -176,6 +177,36 @@ make test-e2e
 
 Read-only: 401 без токена, `/status`, 405 на неверные методы.
 
+## Windows logon provider
+
+`projects/home/windows-pc/logon-provider` — C++17-креденшел-провайдер,
+кросс-сборка llvm-mingw. Проверки:
+
+```bash
+cd projects/home/windows-pc/logon-provider
+./run-tests.sh      # переносимые protocol/HMAC/config-векторы, host clang++ + ASan/UBSan
+./build.sh          # кросс-сборка; objdump проверяет exports (DllGetClassObject/DllCanUnloadNow) и imports
+python3 -m unittest discover -s . -p 'test_*.py' -v   # статический контракт install/set-secret/uninstall/status
+```
+
+`build.sh` берёт локальный `secrets/local-tools/llvm-mingw/20261020` по
+умолчанию; `LLVM_MINGW=/path/to/root` (или `LLVM_MINGW_BIN=/path/to/bin`)
+переопределяет toolchain — так CI использует Linux-архив того же релиза.
+CI (платформа `native`, `_native.yml`) проверяет sha256 архива, кеширует его,
+запускает оба скрипта и публикует DLL, `cp-selftest.exe`, `hmac-selftest.exe`
+и `SHA256SUMS` артефактом; ПК из CI недоступен.
+
+На самом ПК — self-tests (когда грант не ожидается) и живая приёмка:
+
+```powershell
+.\hmac-selftest.exe   # CNG HMAC против тест-вектора
+.\cp-selftest.exe     # загрузка провайдера вне LogonUI
+```
+
+Живой чеклист: голос «включи комп» → экран входа → рабочий стол без PIN;
+включение кнопкой → обычный вход; wakegrant недоступен → обычный вход, без
+плитки и зависаний.
+
 ## Не автоматизировано
 
 - реальный BlueZ/ALSA/event2/Wi-Fi rollback на станции;
@@ -211,6 +242,7 @@ matrix одного платформенного workflow.
 | android | `_android.yml` | JDK 21 + SDK 36, `bazel test`/`build`, APK в artifact |
 | python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
 | js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
+| native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact |
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
 `ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
@@ -225,8 +257,9 @@ Firebase. Этот output true только когда изменился реа
 блокирует merge.
 
 `changes` выдаёт outputs `go_units`, `android_units`, `python_units`,
-`js_units`, `deploy_control`, `android_distribute`, `base_sha`, `docs_only`;
-каждый output — JSON-массив записей matrix (`android_distribute` — `true`/`false`).
+`js_units`, `native_units`, `deploy_control`, `android_distribute`, `base_sha`,
+`docs_only`; каждый output — JSON-массив записей matrix (`android_distribute` —
+`true`/`false`).
 Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
 
 ### Карта юнитов
@@ -257,6 +290,7 @@ Firebase. Этот output true только когда изменился реа
 | go | `go list -deps` пакетов юнита | правка `packages/proto` выбирает все юниты, которые его импортируют |
 | android | обратные зависимости Bazel (`bazel query --output=xml`, loading phase) | правка `packages/kotlin/core` выбирает `kotlin-shared` и только те приложения, что от него зависят |
 | python | пути юнита (+ `depends_on`) | правка `projects/home/proxmox/**` выбирает `proxmox` |
+| native | пути юнита | правка `projects/home/windows-pc/logon-provider/**` выбирает `logon-provider` |
 | quality | всегда | audit/Gitleaks/shellcheck идут на любом изменении |
 
 Android-граф берётся из loading-фазы намеренно: он не требует JDK и Android

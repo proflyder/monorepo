@@ -106,7 +106,7 @@ class AndroidFixtureRoutingTests(unittest.TestCase):
     def test_docs_only_change_runs_nothing_but_quality(self):
         result = self.route(["docs/ARCHITECTURE.md"])
         self.assertTrue(result.docs_only)
-        for platform in ("go", "android", "python", "js"):
+        for platform in ("go", "android", "python", "js", "native"):
             self.assertEqual(result.routes[platform].units, [], platform)
         self.assertEqual([u.id for u in result.routes["quality"].units], ["repository"])
 
@@ -226,6 +226,56 @@ class PythonUnitValidationTests(unittest.TestCase):
         self.assertEqual(entries["python"], [])
 
 
+class NativeUnitValidationTests(unittest.TestCase):
+    """Native units must declare a script, artifacts, a checksum file and a
+    pinned toolchain (name/version/url/sha256/root)."""
+
+    def _unit(self, **kwargs):
+        base = dict(
+            id="native",
+            platform="native",
+            title="native",
+            paths=["native/**"],
+            native_workdir="native",
+            native_build="./build.sh",
+            native_artifacts=["out/lib.dll"],
+            native_checksums="out/SHA256SUMS",
+            native_toolchain_name="llvm-mingw",
+            native_toolchain_version="1",
+            native_toolchain_url="https://example.test/toolchain.tar.xz",
+            native_toolchain_sha256="a" * 64,
+            native_toolchain_root="toolchain-1",
+        )
+        base.update(kwargs)
+        return affected.Unit(**base)
+
+    def _validate(self, unit):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "native").mkdir()
+            config = affected.Config(units=[unit], invalidations=[])
+            return check_units.validate_schema(config, root=Path(tmp))
+
+    def test_valid_native_unit_is_accepted(self):
+        self.assertEqual(self._validate(self._unit()), [])
+
+    def test_missing_artifacts_or_checksums_is_rejected(self):
+        problems = self._validate(self._unit(native_artifacts=[], native_checksums=""))
+        self.assertTrue(any("without artifacts" in problem for problem in problems), problems)
+        self.assertTrue(any("without a checksums file" in problem for problem in problems), problems)
+
+    def test_artifact_paths_must_stay_inside_workdir(self):
+        problems = self._validate(self._unit(native_artifacts=["/etc/passwd"]))
+        self.assertTrue(any("relative to workdir" in problem for problem in problems), problems)
+
+    def test_toolchain_digest_must_be_sha256(self):
+        problems = self._validate(self._unit(native_toolchain_sha256="deadbeef"))
+        self.assertTrue(any("sha256" in problem for problem in problems), problems)
+
+    def test_partial_toolchain_is_rejected(self):
+        problems = self._validate(self._unit(native_toolchain_root=""))
+        self.assertTrue(any("toolchain needs" in problem for problem in problems), problems)
+
+
 class GithubOutputTests(unittest.TestCase):
     def test_multiline_summary_is_written_as_heredoc(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -252,8 +302,55 @@ class RealRepositoryTests(unittest.TestCase):
         self.assertEqual(check_units.coverage_problems(self.config, files), [])
 
     def test_every_known_platform_has_a_unit(self):
-        for platform in ("go", "android", "python", "js", "quality"):
+        for platform in ("go", "android", "python", "js", "native", "quality"):
             self.assertTrue(self.config.by_platform(platform), platform)
+
+    def test_native_provider_change_routes_to_its_unit(self):
+        result = affected.route(
+            self.config,
+            ["projects/home/windows-pc/logon-provider/src/worker.cpp"],
+            root=REPO,
+            base="b",
+        )
+        self.assertEqual(
+            [unit.id for unit in result.routes["native"].units], ["logon-provider"]
+        )
+        entries = affected.matrix_entries(result, self.config)
+        self.assertEqual(
+            entries["native"],
+            [
+                {
+                    "id": "logon-provider",
+                    "workdir": "projects/home/windows-pc/logon-provider",
+                    "build": "./build.sh",
+                    "test": "./run-tests.sh",
+                    "artifacts": (
+                        "out/RicardoKompLogon.dll out/cp-selftest.exe "
+                        "out/hmac-selftest.exe"
+                    ),
+                    "checksums": "out/SHA256SUMS",
+                    "toolchain_name": "llvm-mingw",
+                    "toolchain_version": "20261020",
+                    "toolchain_url": (
+                        "https://github.com/mstorsjo/llvm-mingw/releases/download/"
+                        "20261020/llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64.tar.xz"
+                    ),
+                    "toolchain_sha256": (
+                        "55064b60b991a1e1e8090b8c2f84e82b22cfe5903d12c159d65064cf5e8ae335"
+                    ),
+                    "toolchain_root": "llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64",
+                }
+            ],
+        )
+
+    def test_native_workflow_change_runs_native_units(self):
+        result = affected.route(
+            self.config, [".github/workflows/_native.yml"], root=REPO, base="b"
+        )
+        self.assertEqual(result.routes["native"].mode, "all")
+        self.assertEqual(
+            [unit.id for unit in result.routes["native"].units], ["logon-provider"]
+        )
 
     def test_js_worker_change_routes_to_its_unit(self):
         result = affected.route(
@@ -461,7 +558,12 @@ class WorkflowInvalidationTests(unittest.TestCase):
         self.assertEqual(result.routes["android"].mode, "all")
         self.assertTrue(result.routes["android"].units)
 
+    def test_native_workflow_runs_native(self):
+        result = self._route([".github/workflows/_native.yml"])
+        self.assertEqual(result.routes["native"].mode, "all")
+        self.assertTrue(result.routes["native"].units)
+
     def test_ci_entrypoint_runs_everything(self):
         result = self._route([".github/workflows/ci.yml"])
-        for platform in ("go", "android", "python"):
+        for platform in ("go", "android", "python", "js", "native"):
             self.assertTrue(result.routes[platform].units, platform)

@@ -12,6 +12,9 @@
 #                `bazel.roots`, so a Kotlin library change selects only the
 #                applications that depend on it.
 #   * python   - path rules below plus optional declarative `depends_on`.
+#   * js       - path rules for dependency-free edge Workers (runs `node --test`).
+#   * native   - path rules for repository-script C/C++ builds (no Bazel):
+#                pinned toolchain download, host tests and cross-build.
 #   * quality  - always runs; owns repository-wide checks and every shell script.
 #
 # Adding a unit: copy a block, set unique `id`, `platform`, `paths` and the
@@ -74,6 +77,10 @@ invalidations:
   - paths:
       - .github/workflows/_js.yml
     platforms: [js]
+    deploy: false
+  - paths:
+      - .github/workflows/_native.yml
+    platforms: [native]
     deploy: false
   - paths:
       - .github/workflows/**
@@ -555,6 +562,34 @@ units:
     js:
       tests:
         - solutions/bb-profiles/tests
+
+  # ----------------------------------------------------------- Native --------
+  # Non-Bazel C/C++ build with a pinned cross toolchain. The Windows logon
+  # provider is cross-built with llvm-mingw from macOS/CI without Visual Studio;
+  # CI verifies the toolchain digest, runs the portable host tests and publishes
+  # the binaries as an artifact (the PC itself is not reachable from CI).
+  - id: logon-provider
+    platform: native
+    title: "projects/home/windows-pc/logon-provider (Windows credential provider)"
+    paths:
+      - projects/home/windows-pc/logon-provider/**
+    native:
+      workdir: projects/home/windows-pc/logon-provider
+      test: ./run-tests.sh
+      build: ./build.sh
+      artifacts:
+        - out/RicardoKompLogon.dll
+        - out/cp-selftest.exe
+        - out/hmac-selftest.exe
+      checksums: out/SHA256SUMS
+      toolchain:
+        name: llvm-mingw
+        version: "20261020"
+        # GitHub release API `digest` for this asset (Linux x86_64, same release
+        # as the owner's macOS toolchain). Pinned here, verified before use.
+        url: https://github.com/mstorsjo/llvm-mingw/releases/download/20261020/llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64.tar.xz
+        sha256: "55064b60b991a1e1e8090b8c2f84e82b22cfe5903d12c159d65064cf5e8ae335"
+        root: llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64
 
   # ----------------------------------------------------------- Quality --------
   # Always runs: repository audit, static gates, shellcheck, secret scan and

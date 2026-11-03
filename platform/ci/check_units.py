@@ -15,6 +15,7 @@ quality job and `make test` runs it through the unit tests.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -22,11 +23,11 @@ from pathlib import Path
 from affected import Config, load_config, path_matches
 
 DEFAULT_UNITS = Path(__file__).resolve().with_name("units.yml")
-KNOWN_PLATFORMS = {"go", "android", "python", "js", "quality"}
+KNOWN_PLATFORMS = {"go", "android", "python", "js", "native", "quality"}
 
 # Suffixes/names that must be routed somewhere: compiled sources, tests, build
 # files and shell entry points.
-OWNED_SUFFIXES = (".go", ".py", ".kt", ".kts", ".sh", ".bzl", ".js")
+OWNED_SUFFIXES = (".go", ".py", ".kt", ".kts", ".sh", ".bzl", ".js", ".cpp", ".h", ".hpp")
 OWNED_NAMES = ("BUILD.bazel",)
 
 
@@ -140,6 +141,48 @@ def validate_schema(config: Config, root: Path | None = None) -> list[str]:
                     problems.append(
                         f"{prefix}: js test directory {directory} has no *.test.js"
                     )
+        elif unit.platform == "native":
+            if not unit.native_workdir:
+                problems.append(f"{prefix}: native unit without workdir")
+            elif not (root / unit.native_workdir).is_dir():
+                problems.append(
+                    f"{prefix}: native workdir missing: {unit.native_workdir}"
+                )
+            if not unit.native_build:
+                problems.append(f"{prefix}: native unit without a build command")
+            if not unit.native_artifacts:
+                problems.append(f"{prefix}: native unit without artifacts")
+            for artifact in unit.native_artifacts + (
+                [unit.native_checksums] if unit.native_checksums else []
+            ):
+                if artifact.startswith("/") or ".." in Path(artifact).parts:
+                    problems.append(
+                        f"{prefix}: artifact must be relative to workdir: {artifact}"
+                    )
+            if not unit.native_checksums:
+                problems.append(f"{prefix}: native unit without a checksums file")
+            toolchain = (
+                unit.native_toolchain_name,
+                unit.native_toolchain_version,
+                unit.native_toolchain_url,
+                unit.native_toolchain_sha256,
+                unit.native_toolchain_root,
+            )
+            if any(toolchain) and not all(toolchain):
+                problems.append(
+                    f"{prefix}: native toolchain needs name, version, url, "
+                    "sha256 and root"
+                )
+            if unit.native_toolchain_sha256 and not re.fullmatch(
+                r"[0-9a-f]{64}", unit.native_toolchain_sha256
+            ):
+                problems.append(
+                    f"{prefix}: native toolchain sha256 must be 64 lowercase hex chars"
+                )
+            if unit.native_toolchain_url and not unit.native_toolchain_url.startswith(
+                "https://"
+            ):
+                problems.append(f"{prefix}: native toolchain url must be https")
     return problems
 
 
