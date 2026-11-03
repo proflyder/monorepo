@@ -31,14 +31,18 @@ mcp/web. SQLite 3.53.4 собирается по checksum из Dockerfile тог
 revision; tini reaps дочерние процессы. Изменение источника требует нового image
 и проверки API + реального модельного запроса, а не одного TCP health.
 
-Proxy image собирается из Dockerfile `images/voice-proxy/` и актуального
-`projects/home-assistant/hermes/voice_proxy.py` в build context.
-Оба образа публикуются в GHCR (`ghcr.io/proflyder/...`) по digest
-`imagePullPolicy: IfNotPresent`, без pull-secret. `deploy-home` собирает и
-пушит их, затем `hermes_rollout.py` подставляет digest'и в релиз `runtime`,
-проверяет rollout, health exporter, Assist через Hermes и логи voice-proxy и
-откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
-перезапускает контур.
+Voice proxy — Go-сервис `solutions/voice-proxy`, а не Dockerfile: образ
+собирается Bazel `rules_oci` из `//solutions/voice-proxy:voice-proxy_image`
+(distroless, без shell и python) и пушится байт-в-байт целью
+`//solutions/voice-proxy:voice-proxy_push`; `docker push` переписал бы
+media type и digest. Оба образа публикуются в GHCR (`ghcr.io/proflyder/...`)
+по digest `imagePullPolicy: IfNotPresent`, без pull-secret. Юнит `hermes`
+имеет `deploy.builder: mixed`: `hermes` собирается Docker, `voice-proxy` —
+Bazel; `deploy-home` вызывает один `build-and-push.sh`, затем
+`hermes_rollout.py` подставляет оба digest'а в релиз `runtime`, проверяет
+rollout, health exporter, `voice-proxy -healthcheck`, Assist через Hermes и
+логи voice-proxy и откатывается на прежнюю ревизию при провале. Сборка без
+новых digest'ов не перезапускает контур.
 
 ## Voice routing: приватные values
 
@@ -81,9 +85,22 @@ workloads:
 `Secret/hermes-environment`. Pod Hermes работает с `hostNetwork`, поэтому
 NetworkPolicy на него не действует; scheduler тоже не имеет ingress-policy,
 a egress к `mcp-gateway:8080`, `scheduler:8098` и HA `:8123` разрешён. Новых
-сетевых правил для очереди не требуется. Полный контракт переменных — в
-`projects/home-assistant/hermes/README.md`. Если позже понадобится файловый
-вариант, используйте `HERMES_HA_TOKEN_FILE`,
+сетевых правил для очереди не требуется. Имена переменных и их defaults не
+менялись при переходе на Go, поэтому приватным values нужна только одна
+правка — readiness/liveness probe контейнера `voice-proxy`:
+
+```yaml
+          - name: voice-proxy
+            # ...
+            readinessProbe:
+              tcpSocket: {port: 8643}
+```
+
+Exec-probe вида `python3 …` или `sh -c` в distroless-образе не работает;
+TCP-проверка порта 8643 — единственный корректный вариант (аналог прежнего
+health exporter). Обновляет приватные values оператор; в Git их нет. Полный
+контракт переменных — в `solutions/voice-proxy/README.md`. Если понадобится
+файловый вариант, используйте `HERMES_HA_TOKEN_FILE`,
 `HERMES_VOICE_GATEWAY_TOKEN_FILE` и `HERMES_SCHEDULER_TOKEN_FILE` с тем же
 Secret в volume.
 
@@ -110,6 +127,7 @@ backup. Выполнять только при остановленном gatewa
 
 ```bash
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
+go test -race ./solutions/voice-proxy/...
 helm lint projects/home-assistant/deploy/chart
 helm lint projects/home-assistant/observability/chart
 ```

@@ -128,19 +128,68 @@ class VoiceLogTests(unittest.TestCase):
 
 class SmokeJobTests(unittest.TestCase):
     def test_job_mounts_existing_secret_and_has_no_token(self):
-        job = rollout.smoke_job("hermes-smoke-1", "home-assistant", PROXY)
+        job = rollout.smoke_job("hermes-smoke-1", "home-assistant")
         pod = job["spec"]["template"]["spec"]
         self.assertEqual(pod["volumes"][0]["secret"]["secretName"], rollout.HA_SECRET)
         text = yaml.safe_dump(job)
         self.assertNotIn("HA_TOKEN", text)
         self.assertIn("conversation.hermes_agent", text)
 
+    def test_job_does_not_depend_on_the_voice_proxy_image(self):
+        # The proxy image is distroless; the smoke must run on its own pinned
+        # python image so a Go image without python/shell does not break it.
+        job = rollout.smoke_job("x", "home-assistant")
+        container = job["spec"]["template"]["spec"]["containers"][0]
+        self.assertEqual(container["image"], rollout.SMOKE_IMAGE)
+        self.assertNotIn("voice-proxy", container["image"])
+        self.assertRegex(rollout.SMOKE_IMAGE, r"@sha256:[0-9a-f]{64}$")
+        self.assertTrue(rollout.SMOKE_IMAGE.startswith("docker.io/library/python:"))
+
     def test_job_is_hardened(self):
-        pod = rollout.smoke_job("x", "home-assistant", PROXY)["spec"]["template"]["spec"]
+        pod = rollout.smoke_job("x", "home-assistant")["spec"]["template"]["spec"]
         self.assertFalse(pod["automountServiceAccountToken"])
         container = pod["containers"][0]
         self.assertFalse(container["securityContext"]["allowPrivilegeEscalation"])
         self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
+
+
+class VoiceProxyHealthcheckTests(unittest.TestCase):
+    def test_healthcheck_execs_the_distroless_subcommand(self):
+        with mock.patch.object(rollout, "_checked", return_value="") as checked:
+            rollout.voice_proxy_healthcheck("kubectl", "home-assistant")
+        checked.assert_called_once_with([
+            "kubectl", "-n", "home-assistant", "exec", "deployment/hermes",
+            "-c", "voice-proxy", "--", "/usr/local/bin/voice-proxy", "-healthcheck",
+        ])
+
+    def test_run_smoke_probes_the_proxy_after_the_rollout(self):
+        calls = []
+        with mock.patch.object(rollout, "_checked", side_effect=lambda command, **_: calls.append(command) or ""), \
+                mock.patch.object(rollout, "health_metrics", return_value=""), \
+                mock.patch.object(rollout, "check_health"), \
+                mock.patch.object(rollout, "assist_smoke", return_value="Готов."):
+            rollout.run_smoke("kubectl", "home-assistant")
+        healthcheck = [
+            "kubectl", "-n", "home-assistant", "exec", "deployment/hermes",
+            "-c", "voice-proxy", "--", "/usr/local/bin/voice-proxy", "-healthcheck",
+        ]
+        self.assertIn(healthcheck, calls)
+
+    def test_rollback_verification_skips_the_go_only_probe(self):
+        # A rollback may restore the previous Python proxy image, which has no
+        # /usr/local/bin/voice-proxy; the generic smoke must still run.
+        calls = []
+        with mock.patch.object(rollout, "_checked", side_effect=lambda command, **_: calls.append(command) or ""), \
+                mock.patch.object(rollout, "health_metrics", return_value=""), \
+                mock.patch.object(rollout, "check_health"), \
+                mock.patch.object(rollout, "assist_smoke", return_value="Готов."):
+            rollout.run_smoke("kubectl", "home-assistant", probe_proxy=False)
+        healthcheck = [
+            "kubectl", "-n", "home-assistant", "exec", "deployment/hermes",
+            "-c", "voice-proxy", "--", "/usr/local/bin/voice-proxy", "-healthcheck",
+        ]
+        self.assertNotIn(healthcheck, calls)
+        self.assertFalse(any("exec" in call for call in calls))
 
 
 class AssistSmokeRetryTests(unittest.TestCase):
@@ -157,7 +206,7 @@ class AssistSmokeRetryTests(unittest.TestCase):
 
         with mock.patch.object(rollout, "assist_attempt", side_effect=results) as attempt:
             speech = rollout.assist_smoke(
-                "kubectl", "home-assistant", PROXY,
+                "kubectl", "home-assistant",
                 retry_window=retry_window, retry_delay=retry_delay,
                 sleep=sleep, clock=clock,
             )
@@ -184,7 +233,7 @@ class AssistSmokeRetryTests(unittest.TestCase):
         with mock.patch.object(rollout, "assist_attempt",
                                return_value={"ok": False, "status": 401}) as attempt:
             with self.assertRaises(rollout.RolloutError):
-                rollout.assist_smoke("kubectl", "home-assistant", PROXY,
+                rollout.assist_smoke("kubectl", "home-assistant",
                                      retry_window=90, retry_delay=5, sleep=mock.Mock())
         self.assertEqual(attempt.call_count, 1)
 
@@ -192,7 +241,7 @@ class AssistSmokeRetryTests(unittest.TestCase):
         with mock.patch.object(rollout, "assist_attempt",
                                return_value={"ok": False, "status": 200, "speech": ""}) as attempt:
             with self.assertRaises(rollout.RolloutError):
-                rollout.assist_smoke("kubectl", "home-assistant", PROXY,
+                rollout.assist_smoke("kubectl", "home-assistant",
                                      retry_window=90, retry_delay=5, sleep=mock.Mock())
         self.assertEqual(attempt.call_count, 1)
 
@@ -210,7 +259,7 @@ class AssistSmokeRetryTests(unittest.TestCase):
         ) as attempt:
             with self.assertRaises(rollout.RolloutError) as caught:
                 rollout.assist_smoke(
-                    "kubectl", "home-assistant", PROXY,
+                    "kubectl", "home-assistant",
                     retry_window=10, retry_delay=5, sleep=sleep, clock=clock,
                 )
         self.assertIn("still failing after 10s", str(caught.exception))

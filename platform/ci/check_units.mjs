@@ -135,7 +135,7 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
     if (unit.deployWorkloads.length && !unit.deployImages.length) {
       problems.push(`${prefix}: deploy.workloads without deploy.images`);
     }
-    if (unit.deployImages.length && !["bazel", "docker"].includes(unit.deployBuilder)) {
+    if (unit.deployImages.length && !["bazel", "docker", "mixed"].includes(unit.deployBuilder)) {
       problems.push(`${prefix}: unknown deploy.builder '${unit.deployBuilder}'`);
     }
     if (unit.deployImages.length) {
@@ -157,7 +157,10 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
       if (!unit.deployExternalsecrets.length) {
         problems.push(`${prefix}: deploy.externalsecrets is required`);
       }
-      if (unit.deployBuilder === "bazel" && !unit.deployTargetRoot.startsWith("//")) {
+      if (
+        ["bazel", "mixed"].includes(unit.deployBuilder) &&
+        !unit.deployTargetRoot.startsWith("//")
+      ) {
         problems.push(`${prefix}: deploy.target_root must be a Bazel package (//pkg)`);
       }
     }

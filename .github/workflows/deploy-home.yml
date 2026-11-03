@@ -622,11 +622,12 @@ jobs:
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
-          if [[ "${{ matrix.builder }}" == "docker" ]]; then
-            # Hermes/voice-proxy: build+push, then promote the pushed digests
-            # into the runtime release. hermes_rollout.py skips the upgrade when
-            # the digests did not change, runs the voice smoke checks and rolls
-            # back to the previous revision on failure.
+          if [[ "${{ matrix.builder }}" == "docker" || "${{ matrix.builder }}" == "mixed" ]]; then
+            # Hermes/voice-proxy (builder `mixed`): build+push the Docker-built
+            # gateway and the Bazel-built proxy, then promote both digests into
+            # the runtime release. hermes_rollout.py skips the upgrade when the
+            # digests did not change, runs the voice smoke checks and rolls back
+            # to the previous revision on failure.
             DIGEST_FILE="$CI_DIR/digests" \
             IMAGE_TAG="$GITHUB_SHA" \
               projects/home-assistant/deploy/images/build-and-push.sh ${{ matrix.images }}
@@ -665,7 +666,7 @@ jobs:
             "${{ matrix.script }}" "${MODE_ARGS[@]}"
 
       - name: Post-deploy smoke
-        if: matrix.builder != 'docker'
+        if: matrix.builder == 'bazel'
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -748,7 +749,7 @@ jobs:
           done
 
       - name: Roll back on failure
-        if: failure() && matrix.builder != 'docker'
+        if: failure() && matrix.builder == 'bazel'
         run: |
           set +e
           CI_DIR="$RUNNER_TEMP/ci"
@@ -762,7 +763,7 @@ jobs:
             --kubectl kubectl | tee "$RUNNER_TEMP/rollback.log"
 
       - name: Roll back Hermes on failure
-        if: failure() && matrix.builder == 'docker'
+        if: failure() && matrix.builder != 'bazel'
         run: |
           set +e
           CI_DIR="$RUNNER_TEMP/ci"

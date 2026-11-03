@@ -82,8 +82,9 @@ ha-bridge; `home-assistant/backup_*.tar` — в HA onboarding;
 4. Вернуть SQLite cluster snapshot, token, TLS/cred, config.
 5. Вернуть `/srv/k3s/volumes/*` до старта Pods.
 6. Поднять образы: сначала попробовать pull из GHCR по digest
-   (`scheduler`, `ha-bridge`, `ha-control`, `hermes`, `voice-proxy`); если
-   пакеты недоступны — импортировать OCI-архивы
+   (`scheduler`, `ha-bridge`, `ha-control`, `hermes`, `voice-proxy`;
+   `hermes` — Docker, остальные — Bazel `rules_oci`); если пакеты
+   недоступны — импортировать OCI-архивы
    (`sudo k3s ctr images import --platform linux/amd64 <archive>`).
 7. Восстановить OpenBao: PV raft/backups, Secret `openbao-seal`,
    recovery keys из `secrets/openbao/`; проверить auto-unseal и логин.

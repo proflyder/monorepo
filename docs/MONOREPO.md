@@ -63,6 +63,7 @@ engine, два entrypoint-а для совместимости.
 |---|---|---|
 | `solutions/scheduler` | Go | always-on scheduler/queue, один бинарник, low memory, pure-Go SQLite |
 | MCP/HA bridge | Go | сетевые адаптеры, простой деплой, общий код |
+| `solutions/voice-proxy` | Go | OpenAI-совместимый streaming-прокси с маршрутизацией и durable-очередью; один distroless-бинарник рядом с Hermes |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |

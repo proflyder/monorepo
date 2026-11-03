@@ -55,7 +55,8 @@
 2. HA pipeline: GigaAM v3 primary / Whisper fallback.
 3. Локальные intents (свет, музыка, таймеры, будильники) — в HA и canonical
    SchedulerService; HA остаётся исполнителем звука.
-4. Свободная речь → `hermes-voice-proxy`: сначала точный cancel guard, затем
+4. Свободная речь → `voice-proxy` (Go, `solutions/voice-proxy`): сначала
+   точный cancel guard, затем
    профиль из `input_select.ricardo_voice_profile` и
    `mcp-gateway /v1/voice/utterance`:
 
@@ -146,9 +147,10 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 ```
 
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
-- Образы scheduler/ha-bridge/ha-control/currency-bot собираются Bazel
-  `rules_oci` (distroless) и адресуются по digest в GHCR; Hermes/voice-proxy —
-  тоже digest-pinned GHCR.
+- Образы scheduler/ha-bridge/ha-control/currency-bot/voice-proxy собираются
+  Bazel `rules_oci` (distroless) и адресуются по digest в GHCR. Hermes
+  собирается Docker из upstream revision; оба образа тоже digest-pinned GHCR,
+  а юнит `hermes` имеет builder `mixed` (Docker + Bazel).
 - currency-bot — data-driven юнит `platform/ci/units.mjs`: свой namespace,
   script, `externalsecrets`, `env_key`/`env_file`; contract-тест
   `currency-bot-deploy`. `converge.py` заменяет Deployment целиком и сохраняет

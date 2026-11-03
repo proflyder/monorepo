@@ -255,7 +255,9 @@ Hermes are `httptest` servers or injected functions).
 
 ## Status
 
-Behaviourally complete: config, sanitising, SSE, upstream passthrough, routing,
-the result announcer, the dispatcher updates poller, the durable queue producer
-and consumer, `-healthcheck` and `-status`. Until the cutover step the Hermes
-deployment still runs the Python proxy.
+Deployed: the Hermes unit runs this binary in the `voice-proxy` container as a
+Bazel `rules_oci`/distroless image. It covers config, sanitising, SSE, upstream
+passthrough, routing, the result announcer, the dispatcher updates poller, the
+durable queue producer and consumer, `-healthcheck` and `-status`. The Python
+proxy source and its Dockerfile were removed at cutover; the old digest stays
+in GHCR for rollback.

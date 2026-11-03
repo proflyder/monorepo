@@ -368,10 +368,15 @@ Checks:
 ```bash
 kubectl -n home-assistant get secret mcp-gateway-bb-ssh mcp-gateway-voice
 kubectl -n home-assistant log deploy/mcp-gateway | grep -E '"bb"|"voice"'
-# voice state (cluster-local only; token from the voice Secret, never printed)
-kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
-  sh -c 'curl -fsS -H "Authorization: Bearer $(cat /run/secrets/voice/token)" \
-  http://mcp-gateway:8080/v1/voice/state'
+# voice state (cluster-local only; the proxy image is distroless, so use a
+# kubectl-side port-forward instead of exec; the token is never printed)
+kubectl -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
+VOICE_TOKEN=$(kubectl -n home-assistant get secret mcp-gateway-voice \
+  -o jsonpath='{.data.token}' | base64 -d)
+curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
+  http://127.0.0.1:18081/v1/voice/state
+kill %1 2>/dev/null || true
+unset VOICE_TOKEN
 ```
 
 - `bb_status` and `bb_prepare_spawn` only ever expose `profile == personal`.

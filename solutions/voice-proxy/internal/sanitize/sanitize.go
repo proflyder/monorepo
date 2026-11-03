@@ -1,7 +1,7 @@
 // Package sanitize turns assistant replies into text that Piper TTS can speak.
 //
-// The rules are a line-by-line port of projects/home-assistant/hermes/
-// voice_proxy.py, which is the behavioural source of truth until cutover.
+// The rules are a line-by-line port of the former Python proxy
+// (projects/home-assistant/hermes/voice_proxy.py, removed at cutover).
 //
 // The important porting constraint is that Go's RE2 \s and \b are ASCII-only
 // while Python's are Unicode-aware. Every whitespace class below is therefore

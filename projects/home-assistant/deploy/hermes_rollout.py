@@ -14,10 +14,10 @@ pushed. The script owns the risky part of the rollout:
    `helm.sh/resource-policy: keep`;
 4. remember the deployed revision *before* the upgrade;
 5. wait for the rollout and run the smoke checks (health exporter, a Hermes
-   Assist turn through the in-cluster HA API, voice-proxy error log scan); the
-   Assist turn retries a bounded warm-up window (up to 90 s, 5 s backoff)
-   because a just-started Hermes can answer 500 `runtime_draining` before its
-   turn machinery is ready;
+   Assist turn through the in-cluster HA API, the `voice-proxy -healthcheck`
+   exec, voice-proxy error log scan); the Assist turn retries a bounded
+   warm-up window (up to 90 s, 5 s backoff) because a just-started Hermes can
+   answer 500 `runtime_draining` before its turn machinery is ready;
 6. on any failure after a revision was created, `helm rollback` to the
    remembered revision and re-check the voice circuit.
 
@@ -60,6 +60,13 @@ REPOS = {
     "voice-proxy": "ghcr.io/proflyder/voice-proxy",
 }
 ERROR_PATTERN = re.compile(r"(?im)\b(ERROR|CRITICAL|Traceback)\b")
+# Pinned python image for the Assist smoke Job. The voice-proxy image is
+# distroless (no shell, no python), so the Job no longer borrows it. Same
+# digest as the scheduler in-cluster preflight (multi-arch 3.13-slim index).
+SMOKE_IMAGE = (
+    "docker.io/library/python:3.13-slim"
+    "@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb"
+)
 
 
 class RolloutError(RuntimeError):
@@ -287,7 +294,7 @@ def transient_smoke_result(result: dict) -> bool:
     return any(marker in error for marker in _TRANSIENT_ERROR_MARKERS)
 
 
-def smoke_job(name: str, namespace: str, image: str) -> dict:
+def smoke_job(name: str, namespace: str) -> dict:
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -308,13 +315,13 @@ def smoke_job(name: str, namespace: str, image: str) -> dict:
                     "enableServiceLinks": False,
                     "securityContext": {
                         "runAsNonRoot": True,
-                        "runAsUser": 1000,
-                        "runAsGroup": 1000,
+                        "runAsUser": 65534,
+                        "runAsGroup": 65534,
                         "seccompProfile": {"type": "RuntimeDefault"},
                     },
                     "containers": [{
                         "name": "smoke",
-                        "image": image,
+                        "image": SMOKE_IMAGE,
                         "imagePullPolicy": "IfNotPresent",
                         "command": ["python3", "-c", SMOKE_SCRIPT],
                         "env": [
@@ -380,7 +387,7 @@ def _smoke_result(output: str) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def assist_attempt(kubectl: str, namespace: str, image: str) -> dict:
+def assist_attempt(kubectl: str, namespace: str) -> dict:
     """Run one smoke Job and return the JSON result it printed.
 
     Raises RolloutError only when the Job produced no parseable result (it did
@@ -388,7 +395,7 @@ def assist_attempt(kubectl: str, namespace: str, image: str) -> dict:
     can decide whether it is transient warm-up.
     """
     name = f"hermes-smoke-{time.time_ns() // 1_000_000}"
-    manifest = yaml.safe_dump(smoke_job(name, namespace, image), sort_keys=False)
+    manifest = yaml.safe_dump(smoke_job(name, namespace), sort_keys=False)
     _checked([kubectl, "-n", namespace, "apply", "-f", "-"], input_text=manifest)
     try:
         condition = wait_for_job(kubectl, namespace, name)
@@ -410,7 +417,6 @@ def assist_attempt(kubectl: str, namespace: str, image: str) -> dict:
 def assist_smoke(
     kubectl: str,
     namespace: str,
-    image: str,
     *,
     retry_window: int = SMOKE_RETRY_WINDOW,
     retry_delay: int = SMOKE_RETRY_DELAY,
@@ -427,7 +433,7 @@ def assist_smoke(
     """
     deadline = clock() + retry_window
     while True:
-        result = assist_attempt(kubectl, namespace, image)
+        result = assist_attempt(kubectl, namespace)
         if result.get("ok") and str(result.get("speech", "")).strip():
             return str(result["speech"]).strip()
         if not transient_smoke_result(result):
@@ -441,13 +447,39 @@ def assist_smoke(
         sleep(retry_delay)
 
 
-def run_smoke(kubectl: str, namespace: str, image: str, *, simulate_failure: bool = False) -> None:
+def voice_proxy_healthcheck(kubectl: str, namespace: str, deployment: str = "hermes") -> None:
+    """Run the distroless proxy's own probe inside the live container.
+
+    The image has no shell, so the former `kubectl exec … sh -c 'curl …'` check
+    is the `-healthcheck` subcommand: it loads the exact container environment
+    (including mounted secret files) and asks Hermes for /v1/models.
+    """
+    _checked([
+        kubectl, "-n", namespace, "exec", f"deployment/{deployment}",
+        "-c", "voice-proxy", "--", "/usr/local/bin/voice-proxy", "-healthcheck",
+    ])
+
+
+def run_smoke(
+    kubectl: str,
+    namespace: str,
+    *,
+    simulate_failure: bool = False,
+    probe_proxy: bool = True,
+) -> None:
     _checked([kubectl, "-n", namespace, "rollout", "status", "deployment/hermes", "--timeout=240s"])
     if simulate_failure:
         raise RolloutError("simulated smoke failure requested")
     check_health(health_metrics(kubectl, namespace))
-    speech = assist_smoke(kubectl, namespace, image)
+    # Run the Assist turn first: it waits out the gateway warm-up, so the
+    # proxy's upstream probe below cannot race the first seconds after restart.
+    speech = assist_smoke(kubectl, namespace)
     print(f"Assist reply: {speech}")
+    if probe_proxy:
+        # Not run by the rollback verification: a rollback can land on the old
+        # Python proxy image, which has no /usr/local/bin/voice-proxy.
+        voice_proxy_healthcheck(kubectl, namespace)
+        print("voice-proxy -healthcheck: ok")
     logs = _checked([kubectl, "-n", namespace, "logs", "deployment/hermes", "-c", "voice-proxy", "--since=10m"])
     check_voice_logs(logs)
     print("voice-proxy logs: no errors")
@@ -525,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
             raise RolloutError(f"helm upgrade failed: {result.stderr.strip() or result.stdout.strip()}")
 
         run_smoke(
-            args.kubectl, args.namespace, voice_proxy,
+            args.kubectl, args.namespace,
             simulate_failure=args.simulate_smoke_failure,
         )
     except (RolloutError, subprocess.TimeoutExpired) as exc:
@@ -534,7 +566,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"hermes rollout: rolling back to revision {previous}", file=sys.stderr)
             try:
                 rollback(args.helm, args.namespace, args.release, previous, args.timeout)
-                run_smoke(args.kubectl, args.namespace, current.get("voice-proxy", voice_proxy))
+                run_smoke(args.kubectl, args.namespace, probe_proxy=False)
                 print(f"hermes rollout: rollback to revision {previous} verified", file=sys.stderr)
             except (RolloutError, subprocess.TimeoutExpired) as rollback_exc:
                 print(f"hermes rollout: rollback verification failed: {rollback_exc}", file=sys.stderr)

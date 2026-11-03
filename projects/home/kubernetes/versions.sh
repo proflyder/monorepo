@@ -4,10 +4,12 @@ PVE_VERSION=9.2.24
 MATTER_ADDON_VERSION=9.2.0
 MUSIC_ASSISTANT_ADDON_VERSION=2.10.8
 # Hermes runtime images are built and pushed by the `hermes` CI unit
-# (`projects/home-assistant/deploy/images/build-and-push.sh`). deploy-home then
-# calls `hermes_rollout.py`, which sets the pushed digests on the `runtime`
-# release, runs the voice smoke checks and rolls back on failure. The values
-# below record the last reviewed pins; the live release is the source of truth.
+# (`projects/home-assistant/deploy/images/build-and-push.sh`). `hermes` is a
+# Docker build from HERMES_REVISION; `voice-proxy` is a Bazel/rules_oci image
+# from //solutions/voice-proxy (distroless). deploy-home then calls
+# `hermes_rollout.py`, which sets the pushed digests on the `runtime` release,
+# runs the voice smoke checks and rolls back on failure. The values below
+# record the last reviewed pins; the live release is the source of truth.
 VOICE_PROXY_IMAGE=ghcr.io/proflyder/voice-proxy@sha256:238e0a0f3afe5f152e3d8b1de7a35452c016d68368e3bac24c5fde882869fca9
 HERMES_IMAGE=ghcr.io/proflyder/hermes@sha256:09a542f3ae846026e466c0f0b4acf81522da12cf9cbb1bec22125ae068c9b7e6
 PROMETHEUS_CHART_VERSION=92.14.0
