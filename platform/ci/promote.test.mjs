@@ -91,13 +91,15 @@ test("signer pattern is bound to the caller repository and CI workflows", () => 
   assert.throws(() => signerIdentityPattern("nope"), /invalid GitHub repository/);
 });
 
-test("verify args pin repository, signer repo and workflow identity", () => {
+test("verify args pin repository and the signing workflow identity", () => {
   const args = verifyArgs({ repository: REPO, reference: `ghcr.io/proflyder/scheduler@${DIGEST_A}` });
   assert.deepEqual(args.slice(0, 2), ["attestation", "verify"]);
   assert.equal(args[2], `oci://ghcr.io/proflyder/scheduler@${DIGEST_A}`);
-  assert.deepEqual(args.slice(3, 7), ["--repo", REPO, "--signer-repo", REPO]);
-  assert.equal(args[7], "--cert-identity-regex");
-  assert.equal(args[8], signerIdentityPattern(REPO));
+  assert.deepEqual(args.slice(3, 5), ["--repo", REPO]);
+  assert.equal(args[5], "--cert-identity-regex");
+  assert.equal(args[6], signerIdentityPattern(REPO));
+  // gh rejects --signer-repo combined with --cert-identity-regex.
+  assert.ok(!args.includes("--signer-repo"));
 });
 
 test("an existing, attested tree image is promoted without rebuilding", () => {
