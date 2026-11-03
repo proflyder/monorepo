@@ -158,7 +158,7 @@ class ConnectionViewModelFactoryContributor(
     }
 }
 
-private fun initialState(repository: ConnectionRepository): ConnectionUiState {
+internal fun initialState(repository: ConnectionRepository): ConnectionUiState {
     val config = repository.config.value
     return ConnectionUiState(
         hasStoredToken = config.hasToken,

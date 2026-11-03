@@ -4,8 +4,9 @@
      allowed only because users may run the server without TLS on their own
      network; HTTPS is recommended and cleartext is never enabled for public
      hosts by this app. See README "Transport security". -->
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <!-- Cleartext is a documented private-LAN trade-off; see README "Transport security". -->
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

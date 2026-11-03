@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<!-- Feature modules are independent; shared UI labels are intentionally duplicated. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="reminders_title">Reminders</string>
     <string name="reminders_add">Add reminder</string>
     <string name="reminders_empty">No reminders yet. The home server delivers one-shot reminders.</string>

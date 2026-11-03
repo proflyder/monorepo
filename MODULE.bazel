@@ -46,19 +46,12 @@ go_deps.from_file(go_mod = "//:go.mod")
 use_repo(
     go_deps,
     "com_connectrpc_connect",
-    "com_github_google_jsonschema_go",
-    "com_github_kr_text",
     "com_github_modelcontextprotocol_go_sdk",
     "com_github_prometheus_client_golang",
-    "com_github_segmentio_asm",
-    "com_github_segmentio_encoding",
-    "com_github_yosida95_uritemplate_v3",
     "in_yaml_go_yaml_v2",
     "org_golang_google_protobuf",
     "org_golang_x_crypto",
     "org_golang_x_net",
-    "org_golang_x_oauth2",
-    "org_golang_x_sync",
     "org_golang_x_time",
     "org_modernc_sqlite",
 )
@@ -82,6 +75,9 @@ register_toolchains("@rust_toolchains//:all")
 # committed as a machine-specific path; see projects/mobile/android/README.md.
 # ---------------------------------------------------------------------------
 bazel_dep(name = "rules_android", version = "0.7.3")
+# Direct dep only to load `JavaInfo` in platform/android/lint.bzl; it is the
+# version rules_android already resolves.
+bazel_dep(name = "rules_java", version = "9.3.0")
 bazel_dep(name = "rules_kotlin", version = "2.4.20")
 bazel_dep(name = "rules_jvm_external", version = "7.1")
 # Packaging gate (platform/android) is a shell test; Bazel 9 no longer ships

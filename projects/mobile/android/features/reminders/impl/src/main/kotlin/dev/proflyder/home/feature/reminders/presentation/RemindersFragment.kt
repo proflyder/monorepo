@@ -17,7 +17,7 @@ import dev.proflyder.home.feature.reminders.impl.databinding.FragmentRemindersBi
 
 class RemindersFragment :
     BaseFragment<FragmentRemindersBinding>(FragmentRemindersBinding.Companion::inflate) {
-    private val viewModel: RemindersViewModel by activityViewModels {
+    internal val viewModel: RemindersViewModel by activityViewModels {
         viewModelFactory(RemindersViewModel::class.java)
     }
 
@@ -76,12 +76,12 @@ class RemindersFragment :
         state.actionError?.let { failure ->
             showFailure(failure)
             // A switch may have moved optimistically; re-render server-confirmed values.
-            adapter.notifyDataSetChanged()
+            adapter.notifyItemRangeChanged(0, adapter.itemCount)
             viewModel.consumeActionError()
         }
     }
 
-    private fun confirmDelete(id: String) {
+    internal fun confirmDelete(id: String) {
         confirm(R.string.reminders_delete_confirm, R.string.reminders_delete_yes, R.string.reminders_cancel) {
             viewModel.state.value.reminders.firstOrNull { it.id == id }?.let(viewModel::delete)
         }

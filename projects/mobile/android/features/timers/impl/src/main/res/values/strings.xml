@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<!-- Feature modules are independent; shared UI labels are intentionally duplicated. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="timers_title">Timers</string>
     <string name="timers_empty">No active timers. Countdowns run on the home server.</string>
     <string name="timers_label">Label</string>

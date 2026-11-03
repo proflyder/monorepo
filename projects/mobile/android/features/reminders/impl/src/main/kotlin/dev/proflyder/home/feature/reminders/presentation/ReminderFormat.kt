@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal object ReminderFormat {
-    private val dateFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
+    private fun dateFormat() = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 
     fun due(context: Context, schedule: Schedule): String {
         if (!schedule.enabled) return context.getString(R.string.reminders_off)
@@ -17,14 +17,14 @@ internal object ReminderFormat {
         val text = String.format(
             Locale.ROOT,
             "%s %02d:%02d",
-            date.format(dateFormat),
+            date.format(dateFormat()),
             schedule.at.hour,
             schedule.at.minute,
         )
         return context.getString(R.string.reminders_due, text)
     }
 
-    fun dateLabel(date: LocalDate): String = date.format(dateFormat)
+    fun dateLabel(date: LocalDate): String = date.format(dateFormat())
 
     fun timeLabel(hour: Int, minute: Int): String =
         String.format(Locale.ROOT, "%02d:%02d", hour, minute)

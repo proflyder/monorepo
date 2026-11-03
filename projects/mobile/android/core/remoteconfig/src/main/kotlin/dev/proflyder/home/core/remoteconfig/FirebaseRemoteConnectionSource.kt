@@ -125,7 +125,7 @@ class FirebaseRemoteConnectionSource(context: Context) : RemoteConnectionSource 
         }
     }
 
-    private fun publish(config: FirebaseRemoteConfig) {
+    internal fun publish(config: FirebaseRemoteConfig) {
         val next = parseRemoteConnection(config.getString(REMOTE_CONNECTION_KEY))
         lastLoaded = next as? RemoteConnectionState.Loaded
         mutableState.value = next

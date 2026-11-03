@@ -17,7 +17,7 @@ import dev.proflyder.home.feature.timers.impl.databinding.FragmentTimersBinding
 import kotlinx.coroutines.delay
 
 class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding.Companion::inflate) {
-    private val viewModel: TimersViewModel by activityViewModels {
+    internal val viewModel: TimersViewModel by activityViewModels {
         viewModelFactory(TimersViewModel::class.java)
     }
 
@@ -98,7 +98,7 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
         }
     }
 
-    private fun confirmCancel(timer: Timer) {
+    internal fun confirmCancel(timer: Timer) {
         confirm(R.string.timers_cancel_confirm, R.string.timers_cancel_yes, R.string.timers_keep) {
             viewModel.cancel(timer)
         }

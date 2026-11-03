@@ -12,7 +12,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal object AlarmFormat {
-    private val dayFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
+    private fun dayFormatter() = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 
     fun time(schedule: Schedule): String =
         String.format(Locale.ROOT, "%02d:%02d", schedule.at.hour, schedule.at.minute)
@@ -23,7 +23,7 @@ internal object AlarmFormat {
             if (date == null) {
                 context.getString(R.string.alarms_repeat_once)
             } else {
-                context.getString(R.string.alarms_repeat_once_on, date.format(dayFormatter))
+                context.getString(R.string.alarms_repeat_once_on, date.format(dayFormatter()))
             }
         }
         RepeatKind.DAILY -> context.getString(R.string.alarms_repeat_daily)
@@ -53,16 +53,16 @@ internal object AlarmFormat {
         val datePart = when (due.toLocalDate()) {
             today -> context.getString(R.string.alarms_today, due.format(timeOnly))
             today.plusDays(1) -> context.getString(R.string.alarms_tomorrow, due.format(timeOnly))
-            else -> due.format(dayFormatter) + " " + due.format(timeOnly)
+            else -> due.format(dayFormatter()) + " " + due.format(timeOnly)
         }
         return context.getString(R.string.alarms_next, datePart)
     }
 
     private fun instant(epochSeconds: Long, timezone: String): String {
         val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.systemDefault())
-        return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), zone).format(dayTime)
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), zone).format(dayTime())
     }
 
     private val timeOnly: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
-    private val dayTime: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.getDefault())
+    private fun dayTime() = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.getDefault())
 }

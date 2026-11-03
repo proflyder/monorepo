@@ -8,7 +8,7 @@ import dev.proflyder.home.core.time.DurationText
 import dev.proflyder.home.feature.timers.TimerRepository
 import dev.zacsweers.metro.Inject
 
-class LoadTimers @Inject constructor(
+@Inject class LoadTimers(
     private val repository: TimerRepository,
 ) {
     /** Syncs server time first so remaining values are not derived from a wrong phone clock. */
@@ -21,7 +21,7 @@ class LoadTimers @Inject constructor(
     }
 }
 
-class StartTimer @Inject constructor(
+@Inject class StartTimer(
     private val repository: TimerRepository,
 ) {
     suspend operator fun invoke(label: String, durationSeconds: Long, idempotencyKey: String): Outcome<Timer> {
@@ -32,19 +32,19 @@ class StartTimer @Inject constructor(
     }
 }
 
-class PauseTimer @Inject constructor(
+@Inject class PauseTimer(
     private val repository: TimerRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Timer> = repository.pause(id)
 }
 
-class ResumeTimer @Inject constructor(
+@Inject class ResumeTimer(
     private val repository: TimerRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Timer> = repository.resume(id)
 }
 
-class CancelTimer @Inject constructor(
+@Inject class CancelTimer(
     private val repository: TimerRepository,
 ) {
     suspend operator fun invoke(id: String): Outcome<Timer> = repository.cancel(id)

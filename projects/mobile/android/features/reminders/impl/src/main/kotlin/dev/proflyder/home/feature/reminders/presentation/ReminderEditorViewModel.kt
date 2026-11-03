@@ -268,7 +268,7 @@ class ReminderEditorViewModelFactoryContributor(
     }
 }
 
-private fun restoreState(savedState: SavedStateHandle): ReminderEditorUiState =
+internal fun restoreState(savedState: SavedStateHandle): ReminderEditorUiState =
     ReminderEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
         ?: ReminderEditorUiState()
 

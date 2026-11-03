@@ -11,6 +11,7 @@ A module can still pass extra plugins with `plugins = [...]`.
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
 load("@rules_android//android:rules.bzl", "android_binary")
+load(":lint.bzl", _android_lint = "android_lint")
 
 METRO_COMPILER_PLUGIN = "//platform/android:metro_compiler_plugin"
 JVM17_OPTIONS = "//platform/android:jvm17_options"
@@ -76,6 +77,16 @@ def metro_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
         deps = deps,
         kotlinc_opts = JVM17_OPTIONS,
         plugins = [METRO_COMPILER_PLUGIN] + plugins,
+        **kwargs
+    )
+
+def home_android_lint(name, deps, app_module, config, **kwargs):
+    """Android Lint over every module reachable from `deps` (one project)."""
+    _android_lint(
+        name = name,
+        deps = deps,
+        app_module = app_module,
+        config = config,
         **kwargs
     )
 
