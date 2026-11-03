@@ -17,29 +17,6 @@
 
 ### Станция и голос
 
-- [ ] **Комп: живая проверка после настройки Windows.** HA-часть и
-      `projects/home/windows-pc/` готовы; IP/MAC/пользователь ещё не заданы.
-      Следующий шаг: после настройки BIOS WoL, OpenSSH и ICMP на Windows
-      прописать `komp_ping_command`, `komp_mac`, `komp_ssh_target` в HA
-      `secrets.yaml`, положить ключ и known_hosts в `/config/.ssh`, добавить
-      `wake_on_lan:` и includes `command_line`/`shell_command`, затем проверить
-      ping, включение (`switch.komp`/«включи комп»), выключение через минуту и
-      отмену, состояние в приложении и что любая другая SSH-команда
-      отклоняется. Отдельно проверить сценарий live-дефекта: «выключи комп»,
-      сразу «включи комп» → «Включаю комп. Он загрузится примерно за минуту»
-      (не «уже включён»), и в журнале wakegrant `outcome=granted`.
-
-- [ ] **Комп: вход по пропуску HA — живая проверка.** HA-часть готова:
-      `switch.komp.turn_on` выдаёт пропуск `wakegrant` и затем WoL.
-      Следующий шаг: задать `wakegrant_endpoint`/`wakegrant_bearer` в HA
-      `secrets.yaml`, создать в OpenBao `secret/k8s/home-assistant/wakegrant`
-      (`issuer_token`, `machines` с ключом `komp`), задеплоить
-      `projects/home/kubernetes/wakegrant`, затем проверить: «включи комп» →
-      в журнале `outcome=granted`, вход без пароля один раз, повторный claim
-      отклонён, при остановленном wakegrant комп всё равно включается и
-      показывает обычный вход. Блокировка экрана (Win+L) грант не выдаёт и
-      плитку не показывает: вход только после холодной загрузки.
-
 - [ ] **Ricardo pre-roll 256 ms.** Поставлен `Fixed(8)` в релизе
       `v0.5.1002` (база upstream `v0.5.3`; сейчас стоит `v0.5.1004`) с
       `PULSAR_LOCAL_ENDPOINTING=1`; база n=3, риск среза первого слога.

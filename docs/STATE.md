@@ -400,7 +400,8 @@
   а голосовое включение идёт через `switch.turn_on switch.komp` (выдаёт
   пропуск) и не отвечает «уже включён» сразу после выключения. IP,
   MAC и пользователь — только в HA secrets; настройка Windows —
-  `projects/home/windows-pc/README.md`. Живая приёмка — в `PENDING.md`.
+  `projects/home/windows-pc/README.md`. Принято вживую 2026-11-03:
+  выключение голосом с отменой, WoL из полного выключения, ограниченный SSH.
 - **Вход по пропуску (wakegrant).** `solutions/wakegrant` в K3s
   `home-assistant`: один под, SQLite на PVC `wakegrant-data`
   (`local-retain`), LAN NodePort `30130`, /healthz. `switch.komp.turn_on`
@@ -413,7 +414,15 @@
   `wakegrant_bearer`. Деплой — `projects/home/kubernetes/wakegrant`.
   Логин-компонент запрашивает грант только в `CPUS_LOGON`; разблокировка
   (`CPUS_UNLOCK_WORKSTATION`) ничего не делает — грант никогда не должен
-  разблокировать уже работающий ПК. Живая приёмка — в `PENDING.md`.
+  разблокировать уже работающий ПК. Модуль входа установлен на ПК
+  (`projects/home/windows-pc/logon-provider`, CLSID
+  `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`, журнал
+  `C:\ProgramData\Ricardo\KompLogon\logon.log`). Принято вживую 2026-11-03:
+  «включи комп» → рабочий стол без PIN (grant с первой попытки, сеть готова
+  к появлению экрана входа); включение кнопкой → обычный вход, сервис
+  отказывает, модуль отступает при вводе PIN. Режим «только Windows Hello»
+  входу по пропуску не мешает. Сценарий «wakegrant недоступен» вживую не
+  проверялся (по коду — обычный вход).
 
 ## Планировщик, HA bridge, Android
 
