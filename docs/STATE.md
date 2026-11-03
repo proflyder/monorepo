@@ -417,12 +417,13 @@
   разблокировать уже работающий ПК. Модуль входа — переиспользуемое решение
   `solutions/windows-logon-provider` (CLSID
   `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`, журнал
-  `C:\ProgramData\Ricardo\KompLogon\logon.log`) — установлен на ПК из CI
-  artifact, sha256 DLL
-  `4481ae77f91411e5ceffe410c8b934f983a544fccfa70493e545e81177627c0b`.
-  Следующий шаг — установка из публичного OCI-артефакта GHCR по digest
-  (`ghcr.io/proflyder/windows-logon-provider`); после первого publish
-  оператор записывает здесь digest артефакта. Принято вживую 2026-11-03:
+  `C:\ProgramData\Ricardo\KompLogon\logon.log`). На ПК установлена
+  опубликованная версия `1.0.0` из GHCR по digest
+  `ghcr.io/proflyder/windows-logon-provider@sha256:e3a959586bacc4d92563fbfc61b79a4ea197e76d8f9a3bc51cf4698cac584108`
+  (sha256 DLL `d5ec9b629a0f83143543c907bc5b2068dc30cd6769a77f616d78c63cd3eac35b`;
+  пакет публичный, подтверждение сборки проверено `fetch.sh`). Сборка
+  воспроизводима (`--no-insert-timestamp`).
+  Принято вживую 2026-11-03:
   «включи комп» → рабочий стол без PIN (grant с первой попытки, сеть готова
   к появлению экрана входа); включение кнопкой → обычный вход, сервис
   отказывает, модуль отступает при вводе PIN. Режим «только Windows Hello»

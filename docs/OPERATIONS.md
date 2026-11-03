@@ -530,9 +530,10 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 артефакта и для DLL. PR ничего не публикует; сборка PR остаётся artifact'ом
 для проверки.
 
-Один раз новый пакет GHCR может оказаться приватным: **профиль владельца →
-Packages → `windows-logon-provider` → Package settings → Danger Zone →
-Change visibility → Public**. После этого `oras pull` работает без токена.
+Пакет публичный (унаследовал видимость публичного репозитория при первом
+publish), анонимный `oras pull` работает без токена. Если новый пакет другого
+решения окажется приватным: **профиль владельца → Packages → `<пакет>` →
+Package settings → Danger Zone → Change visibility → Public**.
 
 Получение (Mac/Linux оператора; нужны `oras` и авторизованный `gh`; `oras`
 можно положить в `secrets/local-tools/`):
