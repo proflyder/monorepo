@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,6 +125,9 @@ func TestBBPrepareConfirmEntersAgentMode(t *testing.T) {
 	result := decodeResult(t, res)
 	if result.Speech == "" {
 		t.Fatal("prepare has no speech")
+	}
+	if !strings.HasSuffix(result.Speech, "Подтверждаете?") {
+		t.Fatalf("confirmation speech does not end with a question: %q", result.Speech)
 	}
 	action, ok := deps.BBPending.Peek(BBPendingKey)
 	if !ok {

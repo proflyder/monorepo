@@ -786,6 +786,10 @@ test("spawn creates a visible attributed thread and is idempotent", async () => 
   assert.equal(call.visibility, "visible");
   assert.equal(call.permissionMode, "auto");
   assert.match(call.prompt, /🔊 <1–2 фразы для озвучивания по-русски>/u);
+  assert.match(
+    call.prompt,
+    /Если ждёшь ответа владельца, 🔊-строка заканчивается вопросом со знаком «\?»/u,
+  );
   assert.deepEqual(call.environment, { type: "project-default" });
   assert.equal(call.pluginMetadata.idempotencyKey, "spawn-1");
   assert.equal(call.pluginMetadata.profile, "work");

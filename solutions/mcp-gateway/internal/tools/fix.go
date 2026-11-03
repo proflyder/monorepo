@@ -127,7 +127,8 @@ func (d *Deps) infraPrepareRestart(ctx context.Context, _ *mcp.CallToolRequest, 
 
 	question := fmt.Sprintf("Перезапустить %s?", strings.ToLower(display))
 	if warning := strings.TrimSpace(service.Restart.Warning); warning != "" {
-		question += " " + warning
+		// HA continues the dialog only when the final sentence is a question.
+		question += " " + warning + " Подтверждаете?"
 	}
 	d.logger().Info("restart prepared", "event", "action_prepared", "action", ActionRolloutRestart,
 		"target", service.ID, "namespace", service.Namespace, "workload", service.Workload.Name)

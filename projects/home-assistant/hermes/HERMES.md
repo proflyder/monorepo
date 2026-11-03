@@ -15,8 +15,8 @@ Prometheus; `infra_alert(ref)` — алерт по отпечатку или и�
 
 Перезапуск: `infra_prepare_restart(name)` возвращает вопрос —
 задай и остановись; `infra_confirm()` — только после «да» в следующем
-сообщении (для hermes, voice-proxy, mcp-gateway ответ прозвучит до
-перезапуска), иначе `infra_cancel()`. Действие живёт 90 с.
+сообщении (ответ — до перезапуска), иначе `infra_cancel()`.
+TTL 90 с. Вопрос — последним, со знаком «?»: после ничего.
 
 Агенты bb — личный профиль: `bb_status` — треды; `bb_prepare_spawn(project,
 model?, effort?, task)` — вопрос на подтверждение; project — дословно,

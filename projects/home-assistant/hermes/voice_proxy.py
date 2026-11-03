@@ -71,6 +71,15 @@ VOICE_RESULT_RETRY = float(os.environ.get("HERMES_VOICE_RESULT_RETRY", "2"))
 VOICE_RESULT_WAIT = int(os.environ.get("HERMES_VOICE_RESULT_WAIT", "25"))
 ANNOUNCE_MAX_CHARS = int(os.environ.get("HERMES_VOICE_ANNOUNCE_MAX_CHARS", "200"))
 ANNOUNCE_SCRIPT = os.environ.get("HERMES_VOICE_ANNOUNCE_SCRIPT", "script.schedule_announce")
+# A late answer that asks the owner something must leave the microphone open.
+# assist_satellite.start_conversation speaks the question and then listens; the
+# announcement script only speaks, so the dialog would end silently.
+VOICE_SATELLITE = os.environ.get(
+    "HERMES_VOICE_SATELLITE",
+    "assist_satellite.iandeks_stantsiia_midi_assist_satellite",
+)
+
+_QUESTION_END = ("?", "？")
 
 PROFILE_PERSONAL = "personal"
 PROFILE_WORK = "work"
@@ -246,21 +255,38 @@ def ensure_not_question(text: str) -> str:
     return text
 
 
-def announce_text(speech: str) -> str:
-    """Sanitize and shorten a late answer for the station announcement."""
-    text = sanitize_text(speech)
-    if len(text) <= ANNOUNCE_MAX_CHARS:
-        return text
+def ends_with_question(text: str) -> bool:
+    return text.rstrip().endswith(_QUESTION_END)
+
+
+def _truncate_speech(text: str) -> str:
     cut = text[:ANNOUNCE_MAX_CHARS]
     if " " in cut:
         cut = cut[:cut.rfind(" ")]
-    return cut.rstrip(" ,;:—-") + "…"
+    return cut.rstrip(" ,;:—-")
 
 
-def announce(text: str) -> bool:
-    """Speak a late answer through the existing HA announcement script."""
-    if not text:
-        return False
+def announce_text(speech: str) -> str:
+    """Sanitize and shorten a late answer for the station announcement.
+
+    A question must keep its trailing ``?``: HA only continues the dialog when
+    the spoken text ends with one.  If the full answer is too long, prefer the
+    final question sentence; only cut inside it as a last resort.
+    """
+    text = sanitize_text(speech)
+    if len(text) <= ANNOUNCE_MAX_CHARS:
+        return text
+    if ends_with_question(text):
+        match = re.search(r"[^.!?…？]*[?？]\s*$", text)
+        last_question = match.group(0).strip() if match else text
+        if len(last_question) <= ANNOUNCE_MAX_CHARS:
+            return last_question
+        cut = _truncate_speech(last_question)
+        return cut + ("" if ends_with_question(cut) else text.rstrip()[-1])
+    return _truncate_speech(text) + "…"
+
+
+def _announce_via_script(text: str) -> bool:
     try:
         _post_json(
             HA_URL + "/api/services/script/turn_on",
@@ -271,6 +297,34 @@ def announce(text: str) -> bool:
         return True
     except (urllib.error.URLError, ValueError, OSError):
         return False
+
+
+def _start_conversation(text: str) -> bool:
+    """Speak a question and leave the satellite microphone open for the reply."""
+    try:
+        _post_json(
+            HA_URL + "/api/services/assist_satellite/start_conversation",
+            {"entity_id": VOICE_SATELLITE,
+             "start_message": text, "preannounce": False},
+            ha_token(), HA_TIMEOUT, {},
+        )
+        return True
+    except (urllib.error.URLError, ValueError, OSError):
+        return False
+
+
+def announce(text: str) -> tuple[bool, bool]:
+    """Speak a late answer; return ``(announced, listening)``.
+
+    Questions use ``assist_satellite.start_conversation`` so the station keeps
+    listening.  Statements, and a failed question attempt, use the existing
+    announcement script.
+    """
+    if not text:
+        return False, False
+    if ends_with_question(text) and _start_conversation(text):
+        return True, True
+    return _announce_via_script(text), False
 
 
 def start_result_announcer(thread_id: str, after_seq: int) -> threading.Thread:
@@ -316,14 +370,14 @@ def _result_announcer(thread_id: str, after_seq: int) -> None:
             speech = SPEECH_TURN_FAILED if status == "failed" else SPEECH_DONE
         text = announce_text(speech)
         if text:
-            announced = announce(text)
+            announced, listening = announce(text)
             sys.stderr.write(
-                "voice-proxy: announce thread=%s outcome=%s announced=%s\n"
-                % (thread_id, status or "unknown", announced)
+                "voice-proxy: announce thread=%s outcome=%s announced=%s listen=%s\n"
+                % (thread_id, status or "unknown", announced, listening)
             )
         else:
             sys.stderr.write(
-                "voice-proxy: announce thread=%s outcome=%s announced=false\n"
+                "voice-proxy: announce thread=%s outcome=%s announced=false listen=false\n"
                 % (thread_id, status or "unknown")
             )
     finally:
