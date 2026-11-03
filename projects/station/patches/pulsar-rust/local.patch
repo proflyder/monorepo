@@ -8079,6 +8079,26 @@ index 9cc093d..4b2adfa 100644
  ];
  // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
  // (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed. Chunks from
+diff --git a/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs b/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs
+index 2bc2cc6..17ac5f0 100644
+--- a/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs
++++ b/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs
+@@ -301,6 +301,7 @@ async fn run(port: u16, name: String, run_s: i64, key_path: Option<PathBuf>) ->
+         music_styles: strings(&["Off", "All styles", "Spectrum"]),
+         case_colors: strings(&["None", "blue"]),
+         clock_music_styles: strings(&["Off", "Levels"]),
++        voice_colors: strings(&["Violet", "Blue"]),
+         zigbee_modes: strings(&["Coordinator", "Router"]),
+         has_clock: true,
+         has_lux: true,
+@@ -321,6 +322,7 @@ async fn run(port: u16, name: String, run_s: i64, key_path: Option<PathBuf>) ->
+     api.publish_select(SelectId::MusicViz, "All styles");
+     api.publish_select(SelectId::CaseColor, "None");
+     api.publish_select(SelectId::ClockMusic, "Off");
++    api.publish_select(SelectId::VoiceColor, "Violet");
+     api.publish_binary_sensor(BinarySensorId::HwMicMute, false);
+     api.publish_number(NumberId::ClockBrightness, 50.0);
+     api.publish_light(&LightState {
 diff --git a/satellite/crates/pulsar-esphome/src/lib.rs b/satellite/crates/pulsar-esphome/src/lib.rs
 index 47a714b..0744ef7 100644
 --- a/satellite/crates/pulsar-esphome/src/lib.rs
@@ -8154,7 +8174,7 @@ index 1968139..7cf74be 100644
          let Some(vc) = self.voice_client() else {
              return;
 diff --git a/satellite/crates/pulsar-esphome/src/server/commands.rs b/satellite/crates/pulsar-esphome/src/server/commands.rs
-index 1171908..7b2c886 100644
+index 1171908..7e50617 100644
 --- a/satellite/crates/pulsar-esphome/src/server/commands.rs
 +++ b/satellite/crates/pulsar-esphome/src/server/commands.rs
 @@ -158,6 +158,16 @@ impl Server {
@@ -8183,11 +8203,21 @@ index 1171908..7b2c886 100644
              _ => return,
          };
          self.emit(ApiEvent::Switch(id, state));
+@@ -307,6 +319,9 @@ impl Server {
+                 "music visualization",
+             ),
+             key::SELECT_CASE_COLOR => (SelectId::CaseColor, &self.cfg.case_colors, "case color"),
++            key::SELECT_VOICE_COLOR => {
++                (SelectId::VoiceColor, &self.cfg.voice_colors, "voice color")
++            }
+             key::SELECT_CLOCK_FACE => (SelectId::ClockFace, &self.cfg.clock_faces, "clock face"),
+             _ => return,
+         };
 diff --git a/satellite/crates/pulsar-esphome/src/server/entities.rs b/satellite/crates/pulsar-esphome/src/server/entities.rs
-index cf6ad36..bf4ee25 100644
+index cf6ad36..21d7f2d 100644
 --- a/satellite/crates/pulsar-esphome/src/server/entities.rs
 +++ b/satellite/crates/pulsar-esphome/src/server/entities.rs
-@@ -47,6 +47,10 @@ pub(super) mod key {
+@@ -47,6 +47,11 @@ pub(super) mod key {
      pub const SELECT_CLOCK_MUSIC: u32 = 31;
      pub const SW_WAKE_PREROLL: u32 = 32;
      pub const SW_CLOCK_AUTO_BRI: u32 = 33;
@@ -8195,10 +8225,11 @@ index cf6ad36..bf4ee25 100644
 +    pub const BUTTON_WAKE_MISSED: u32 = 35;
 +    pub const SW_WAKE_EVENT_RECORDING: u32 = 36;
 +    pub const SW_WAKE_DRY_RUN: u32 = 37;
++    pub const SELECT_VOICE_COLOR: u32 = 38;
  }
  
  /// aioesphomeapi VoiceAssistantFeature: voice assistant, API audio, timers, announce, start
-@@ -124,6 +128,8 @@ pub(super) struct Cache {
+@@ -124,6 +129,8 @@ pub(super) struct Cache {
      sw_nearest_answers: BoolState,
      sw_voice_indication: BoolState,
      sw_wake_preroll: BoolState,
@@ -8207,7 +8238,15 @@ index cf6ad36..bf4ee25 100644
      bs_hw_mute: BoolState,
      update: UpdateState,
      update_has: bool,
-@@ -157,6 +163,8 @@ impl Cache {
+@@ -138,6 +145,7 @@ pub(super) struct Cache {
+     music_viz: StrState,
+     case_color: StrState,
+     clock_music: StrState,
++    voice_color: StrState,
+     pub(super) light: LightState,
+     rssi: FloatState,
+     ip: Option<Ipv4Addr>,
+@@ -157,6 +165,8 @@ impl Cache {
              sw_nearest_answers: BoolState::default(),
              sw_voice_indication: BoolState::default(),
              sw_wake_preroll: BoolState::default(),
@@ -8216,7 +8255,15 @@ index cf6ad36..bf4ee25 100644
              bs_hw_mute: BoolState::default(),
              update: UpdateState::default(),
              update_has: false,
-@@ -256,7 +264,9 @@ impl Server {
+@@ -171,6 +181,7 @@ impl Cache {
+             music_viz: StrState::default(),
+             case_color: StrState::default(),
+             clock_music: StrState::default(),
++            voice_color: StrState::default(),
+             light: LightState::default(),
+             rssi: FloatState::default(),
+             ip: None,
+@@ -256,7 +267,9 @@ impl Server {
              SwitchId::Microphones
              | SwitchId::AutoUpdate
              | SwitchId::NearestAnswers
@@ -8227,7 +8274,7 @@ index cf6ad36..bf4ee25 100644
          }
      }
  
-@@ -346,6 +356,20 @@ impl Server {
+@@ -346,6 +359,20 @@ impl Server {
                  cfg,
              ));
          }
@@ -8248,7 +8295,24 @@ index cf6ad36..bf4ee25 100644
          let number = |oid, key, name, icon, (min, max, step): (f32, f32, f32), unit| {
              let mut w = Writer::new();
              entity_head(&mut w, oid, key, name);
-@@ -466,6 +490,26 @@ impl Server {
+@@ -396,6 +423,16 @@ impl Server {
+                 cfg,
+             ));
+         }
++        if !self.cfg.voice_colors.is_empty() {
++            out.push(select(
++                "voice_color",
++                key::SELECT_VOICE_COLOR,
++                "Voice color",
++                "mdi:circle",
++                &self.cfg.voice_colors,
++                cfg,
++            ));
++        }
+         if self.cfg.has_clock {
+             out.push(select(
+                 "clock_music",
+@@ -466,6 +503,26 @@ impl Server {
          w.u32(7, ENTITY_CATEGORY_CONFIG, false);
          w.str(8, "restart", false);
          out.push((msg::LIST_BUTTON, w));
@@ -8275,7 +8339,7 @@ index cf6ad36..bf4ee25 100644
          let sensor = |oid, key, name, unit, class, state_class| {
              let mut w = Writer::new();
              entity_head(&mut w, oid, key, name);
-@@ -731,6 +775,7 @@ impl Server {
+@@ -731,6 +788,7 @@ impl Server {
              c.sw_wake_preroll,
              c.bs_hw_mute,
          );
@@ -8283,7 +8347,7 @@ index cf6ad36..bf4ee25 100644
          let (lux, bri, scroll, speed) = (c.lux, c.clock_bri, c.clock_scroll, c.led_speed);
          self.send_media(to);
          self.send_bool(msg::SWITCH_STATE, key::SW_MICROPHONES, mic, to);
-@@ -746,6 +791,13 @@ impl Server {
+@@ -746,6 +804,13 @@ impl Server {
          if self.cfg.has_wake_preroll {
              self.send_bool(msg::SWITCH_STATE, key::SW_WAKE_PREROLL, preroll, to);
          }
@@ -8297,7 +8361,22 @@ index cf6ad36..bf4ee25 100644
          self.send_update(to);
          if self.cfg.has_hw_mic_mute {
              self.send_bool(msg::BINARY_SENSOR_STATE, key::BS_HW_MIC_MUTE, hw, to);
-@@ -888,6 +940,10 @@ impl Server {
+@@ -794,6 +859,14 @@ impl Server {
+                 to,
+             );
+         }
++        if !self.cfg.voice_colors.is_empty() {
++            self.send_cached_str(
++                msg::SELECT_STATE,
++                key::SELECT_VOICE_COLOR,
++                |c| &c.voice_color,
++                to,
++            );
++        }
+         if has_clock {
+             self.send_cached_str(
+                 msg::SELECT_STATE,
+@@ -888,6 +961,10 @@ impl Server {
                          (&mut c.sw_voice_indication, key::SW_VOICE_INDICATION)
                      }
                      SwitchId::WakePreroll => (&mut c.sw_wake_preroll, key::SW_WAKE_PREROLL),
@@ -8308,6 +8387,31 @@ index cf6ad36..bf4ee25 100644
                  };
                  *s = BoolState { has: true, v };
                  let s = *s;
+@@ -948,12 +1025,16 @@ impl Server {
+                 if id == SelectId::ZigbeeMode && self.cfg.zigbee_modes.is_empty() {
+                     return;
+                 }
++                if id == SelectId::VoiceColor && self.cfg.voice_colors.is_empty() {
++                    return;
++                }
+                 let key = match id {
+                     SelectId::ClockFace => key::SELECT_CLOCK_FACE,
+                     SelectId::ZigbeeMode => key::SELECT_ZIGBEE_MODE,
+                     SelectId::MusicViz => key::SELECT_MUSIC_VIZ,
+                     SelectId::CaseColor => key::SELECT_CASE_COLOR,
+                     SelectId::ClockMusic => key::SELECT_CLOCK_MUSIC,
++                    SelectId::VoiceColor => key::SELECT_VOICE_COLOR,
+                 };
+                 if on && (has_clock || !matches!(id, SelectId::ClockFace | SelectId::ClockMusic)) {
+                     self.send_str(msg::SELECT_STATE, key, &v, true, None);
+@@ -965,6 +1046,7 @@ impl Server {
+                     SelectId::MusicViz => &mut c.music_viz,
+                     SelectId::CaseColor => &mut c.case_color,
+                     SelectId::ClockMusic => &mut c.clock_music,
++                    SelectId::VoiceColor => &mut c.voice_color,
+                 };
+                 *s = StrState { has: true, v };
+             }
 diff --git a/satellite/crates/pulsar-esphome/src/server/tests.rs b/satellite/crates/pulsar-esphome/src/server/tests.rs
 index 4cdaa99..96b56a6 100644
 --- a/satellite/crates/pulsar-esphome/src/server/tests.rs
@@ -8333,10 +8437,26 @@ index 4cdaa99..96b56a6 100644
              assert!(a.sync().await.is_empty());
  
 diff --git a/satellite/crates/pulsar-esphome/src/server/tests/entities.rs b/satellite/crates/pulsar-esphome/src/server/tests/entities.rs
-index 26654e7..0c54f36 100644
+index 26654e7..f4ab725 100644
 --- a/satellite/crates/pulsar-esphome/src/server/tests/entities.rs
 +++ b/satellite/crates/pulsar-esphome/src/server/tests/entities.rs
-@@ -88,6 +88,28 @@ fn state_key(m: &[u8]) -> Option<u32> {
+@@ -34,6 +34,7 @@ fn selftest(compilation_time: &str) -> (DeviceIdentity, ApiConfig) {
+         music_styles: s(&["Off", "All styles", "Spectrum"]),
+         case_colors: s(&["None", "blue"]),
+         clock_music_styles: s(&["Off", "Levels"]),
++        voice_colors: s(&["Violet", "Blue"]),
+         zigbee_modes: s(&["Coordinator", "Router"]),
+         has_clock: true,
+         has_lux: true,
+@@ -69,6 +70,7 @@ fn publish_selftest_states(h: &ApiHandle) {
+     h.publish_text(TextId::ClockText, "");
+     h.publish_select(SelectId::ClockFace, "None");
+     h.publish_select(SelectId::ZigbeeMode, "Coordinator");
++    h.publish_select(SelectId::VoiceColor, "Violet");
+     h.publish_text_sensor(TextSensorId::Zigbee, "coordinator: PAN 0x1234, channel 15");
+ }
+ 
+@@ -88,6 +90,31 @@ fn state_key(m: &[u8]) -> Option<u32> {
          .map(|f| f.u32())
  }
  
@@ -8347,17 +8467,20 @@ index 26654e7..0c54f36 100644
 +        .map(|f| f.u32())
 +}
 +
-+/// Entities and states this fork adds to the C++ reference (wake-event recording).
++/// Entities and states this fork adds to the C++ reference (wake-event recording, voice color).
 +fn fork_only(t: u32, m: &[u8]) -> bool {
-+    const KEYS: [u32; 4] = [
++    const KEYS: [u32; 5] = [
 +        key::SW_WAKE_EVENT_RECORDING,
 +        key::SW_WAKE_DRY_RUN,
 +        key::BUTTON_WAKE_FALSE_ALARM,
 +        key::BUTTON_WAKE_MISSED,
++        key::SELECT_VOICE_COLOR,
 +    ];
 +    match t {
-+        msg::LIST_SWITCH | msg::LIST_BUTTON => entity_key(m).is_some_and(|k| KEYS.contains(&k)),
-+        msg::SWITCH_STATE => state_key(m).is_some_and(|k| KEYS.contains(&k)),
++        msg::LIST_SWITCH | msg::LIST_BUTTON | msg::LIST_SELECT => {
++            entity_key(m).is_some_and(|k| KEYS.contains(&k))
++        }
++        msg::SWITCH_STATE | msg::SELECT_STATE => state_key(m).is_some_and(|k| KEYS.contains(&k)),
 +        _ => false,
 +    }
 +}
@@ -8365,7 +8488,7 @@ index 26654e7..0c54f36 100644
  #[tokio::test]
  async fn selftest_matches_cxx_golden_bytes() {
      let golden: Vec<(u32, Vec<u8>)> = RAW
-@@ -137,10 +159,10 @@ async fn selftest_matches_cxx_golden_bytes() {
+@@ -137,10 +164,10 @@ async fn selftest_matches_cxx_golden_bytes() {
                  }
              }
              p.send(msg::SUBSCRIBE_STATES_REQ, &Writer::new()).await;
@@ -8380,25 +8503,61 @@ index 26654e7..0c54f36 100644
              assert_eq!(got.len(), golden.len());
              for (i, (g, r)) in golden.iter().zip(&got).enumerate() {
                  assert_eq!(g.0, r.0, "message {i}");
-@@ -708,9 +730,10 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
+@@ -270,6 +297,10 @@ async fn commands_are_validated_like_cxx() {
+                 .await;
+             c.send(msg::SELECT_CMD, select(key::SELECT_CLOCK_MUSIC, "Levels"))
+                 .await;
++            c.send(msg::SELECT_CMD, select(key::SELECT_VOICE_COLOR, "Blue"))
++                .await;
++            c.send(msg::SELECT_CMD, select(key::SELECT_VOICE_COLOR, "Green"))
++                .await;
+             c.send(
+                 msg::SWITCH_CMD,
+                 kv(key::SW_NEAREST_ANSWERS, |w| w.boolean(2, true, true)),
+@@ -299,6 +330,7 @@ async fn commands_are_validated_like_cxx() {
+                     ApiEvent::Select(SelectId::MusicViz, "Spectrum".into()),
+                     ApiEvent::Select(SelectId::ZigbeeMode, "Router".into()),
+                     ApiEvent::Select(SelectId::ClockMusic, "Levels".into()),
++                    ApiEvent::Select(SelectId::VoiceColor, "Blue".into()),
+                     ApiEvent::Switch(SwitchId::NearestAnswers, true),
+                     ApiEvent::Switch(SwitchId::VoiceIndication, false),
+                     ApiEvent::Switch(SwitchId::WakePreroll, true),
+@@ -708,9 +740,10 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
                  }
                  keys.push(field(&m, 2).unwrap().u32());
              }
 -            // 14 entities plus the led_show service; no clock, Lux, wake pre-roll, hardware MUTE,
 -            // case colour or Button entities.
 -            assert_eq!(keys.len(), 15, "keys: {keys:?}");
-+            // 18 entities plus the led_show service; no clock, Lux, wake pre-roll, hardware
-+            // MUTE, case colour or Button entities. The two wake-event switches and two buttons
-+            // are always listed, even without the Ricardo detector.
-+            assert_eq!(keys.len(), 19, "keys: {keys:?}");
++            // 19 entities plus the led_show service; no clock, Lux, wake pre-roll, hardware
++            // MUTE, case colour or Button entities. The two wake-event switches, two buttons
++            // and the voice colour select are always listed, even without the Ricardo detector.
++            assert_eq!(keys.len(), 20, "keys: {keys:?}");
              assert!(keys.contains(&key::ACTION_LED_SHOW));
              let absent = [
                  key::SW_CLOCK,
 diff --git a/satellite/crates/pulsar-esphome/src/types.rs b/satellite/crates/pulsar-esphome/src/types.rs
-index ea6fc7f..447bdfe 100644
+index ea6fc7f..1fa4b1e 100644
 --- a/satellite/crates/pulsar-esphome/src/types.rs
 +++ b/satellite/crates/pulsar-esphome/src/types.rs
-@@ -268,6 +268,8 @@ pub enum SwitchId {
+@@ -52,6 +52,8 @@ pub struct ApiConfig {
+     pub case_colors: Vec<String>,
+     /// Select «Clock music» options.
+     pub clock_music_styles: Vec<String>,
++    /// Select «Voice color» options (Violet / Blue); empty: no entity.
++    pub voice_colors: Vec<String>,
+     /// Select «Zigbee role» options; empty: no Zigbee entities (no radio).
+     pub zigbee_modes: Vec<String>,
+     /// false: no Clock display / Clock brightness / Clock auto brightness / Clock text speed /
+@@ -86,6 +88,7 @@ impl Default for ApiConfig {
+             music_styles: Vec::new(),
+             case_colors: Vec::new(),
+             clock_music_styles: Vec::new(),
++            voice_colors: Vec::new(),
+             zigbee_modes: Vec::new(),
+             has_clock: true,
+             has_lux: true,
+@@ -268,6 +271,8 @@ pub enum SwitchId {
      VoiceIndication = 5,
      WakePreroll = 6,
      ClockAutoBrightness = 7,
@@ -8407,7 +8566,15 @@ index ea6fc7f..447bdfe 100644
  }
  
  #[repr(u32)]
-@@ -312,6 +314,10 @@ pub enum SelectId {
+@@ -305,6 +310,7 @@ pub enum SelectId {
+     MusicViz = 3,
+     CaseColor = 4,
+     ClockMusic = 5,
++    VoiceColor = 6,
+ }
+ 
+ #[repr(u32)]
+@@ -312,6 +318,10 @@ pub enum SelectId {
  pub enum ButtonId {
      ZigbeeJoin = 1,
      ZigbeeLeave = 2,
@@ -8418,6 +8585,431 @@ index ea6fc7f..447bdfe 100644
  }
  
  #[repr(u32)]
+diff --git a/satellite/crates/pulsar-hw/src/led_fx.rs b/satellite/crates/pulsar-hw/src/led_fx.rs
+index cbe977f..8295ddf 100644
+--- a/satellite/crates/pulsar-hw/src/led_fx.rs
++++ b/satellite/crates/pulsar-hw/src/led_fx.rs
+@@ -13,6 +13,10 @@
+ //! fmadd, armhf -mcpu=cortex_a53 vfma); those sites are `mul_add` here, everything else is
+ //! unfused. `mul_add` is the same single rounding: fmadd on aarch64, vfma on armhf (built with
+ //! `-C target-cpu=cortex-a53`, see the Makefile), a libm fma call on the x86_64 host.
++//!
++//! Listening, thinking and speaking use the stock violet by default; the «Voice color» select
++//! (`VoiceColor`) can move them to blue. The error pulse, the timer ring and the one-shots keep
++//! their own measured colours.
+ 
+ use std::ops::{Add, Mul};
+ 
+@@ -196,13 +200,86 @@ fn listen_k(t: f32) -> f32 {
+     0.30f32.mul_add((TAU * ((t - 420.0) % 1540.0 / 1540.0)).cos(), 0.70)
+ }
+ 
+-// Stock alice_* violets: Midi strip; Midi logo and Lite 2 ring. Timer green of ring / start.
+-const VIOLET: u32 = 0x370fff;
+-const VIOLET_SMALL: u32 = 0x6b0fff;
++// Timer green of the ring and of the «timer started» one-shot.
+ const TIMER_GREEN: u32 = 0x00dc00;
+ const TIMER_START_GREEN: u32 = 0x00e600;
+ const MUTE_RED: u32 = 0xd20000;
+ 
++/// Voice-state hue: the ESPHome select «Voice color». Violet is the stock look (what the
++/// station showed before the option existed); the error pulse and the timer ring keep their
++/// own colours.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub enum VoiceColor {
++    #[default]
++    Violet,
++    Blue,
++}
++
++/// Raw stock colours of the listening / thinking / speaking animations for one option.
++#[derive(Clone, Copy)]
++struct Palette {
++    /// Listening sweep and thinking band on the strip.
++    strip: u32,
++    /// Listening / thinking / speaking on the short ring and on the Midi logo.
++    small: u32,
++    /// Thinking on the short ring: dim background and the circling point.
++    thinking_bg: u32,
++    thinking: u32,
++    /// Speaking on the strip and on the short ring.
++    speaking: u32,
++    speaking_small: u32,
++}
++
++/// Stock alice_* violets: Midi strip; Midi logo and Lite 2 ring.
++const VIOLET: Palette = Palette {
++    strip: 0x370fff,
++    small: 0x6b0fff,
++    thinking_bg: 0x0a0219,
++    thinking: 0x640eee,
++    speaking: 0x7b0ee8,
++    speaking_small: 0x6c0fff,
++};
++
++/// Violet with the red and green channels exchanged: the same value and saturation, the hue
++/// of each state moved from blue-violet to blue. Spelled out so that a frame stays a constant
++/// (the swap itself is pinned by a test).
++const BLUE: Palette = Palette {
++    strip: 0x0f37ff,
++    small: 0x0f6bff,
++    thinking_bg: 0x020a19,
++    thinking: 0x0e64ee,
++    speaking: 0x0e7be8,
++    speaking_small: 0x0f6cff,
++};
++
++impl VoiceColor {
++    pub const ALL: [VoiceColor; 2] = [VoiceColor::Violet, VoiceColor::Blue];
++
++    /// `state.conf` (`voice_color=`) and the ESPHome option.
++    pub fn label(self) -> &'static str {
++        match self {
++            VoiceColor::Violet => "Violet",
++            VoiceColor::Blue => "Blue",
++        }
++    }
++
++    /// Anything but "Blue" is the stock violet: an unknown key in `state.conf` must not change
++    /// the look.
++    pub fn from_label(s: &str) -> VoiceColor {
++        match s {
++            "Blue" => VoiceColor::Blue,
++            _ => VoiceColor::Violet,
++        }
++    }
++
++    fn palette(self) -> Palette {
++        match self {
++            VoiceColor::Violet => VIOLET,
++            VoiceColor::Blue => BLUE,
++        }
++    }
++}
++
+ fn fill(out: &mut [Col], c: Col) {
+     out.fill(c);
+ }
+@@ -244,7 +321,8 @@ pub enum Voice {
+ pub const ERROR_MS: i64 = 3540;
+ 
+ /// t in ms since the state started.
+-pub fn voice(v: Voice, t: i64, out: &mut [Col]) {
++pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
++    let p = color.palette();
+     let n = out.len();
+     let nf = n as f32;
+     let ft = t as f32;
+@@ -252,7 +330,7 @@ pub fn voice(v: Voice, t: i64, out: &mut [Col]) {
+     match v {
+         Voice::Listening => {
+             if !wide(n) {
+-                fill(out, stock(VIOLET_SMALL, breathe(f64::from(ft), 1600.0)));
++                fill(out, stock(p.small, breathe(f64::from(ft), 1600.0)));
+                 return;
+             }
+             // Sweep from LED 0 both ways, meeting opposite in 420 ms; then breathe 100 % <-> 40 %.
+@@ -262,7 +340,7 @@ pub fn voice(v: Voice, t: i64, out: &mut [Col]) {
+                 } else {
+                     listen_k(ft)
+                 };
+-                *o = stock(VIOLET, k);
++                *o = stock(p.strip, k);
+             }
+         }
+         Voice::Thinking => {
+@@ -271,8 +349,8 @@ pub fn voice(v: Voice, t: i64, out: &mut [Col]) {
+                 let c = (t % 1620) as f32 / 1620.0 * nf;
+                 for (i, o) in out.iter_mut().enumerate() {
+                     *o = cmax(
+-                        stock(0x0a0219, 1.0),
+-                        stock(0x640eee, (1.0 - cdist(i as f32, c, nf)).max(0.0)),
++                        stock(p.thinking_bg, 1.0),
++                        stock(p.thinking, (1.0 - cdist(i as f32, c, nf)).max(0.0)),
+                     );
+                 }
+                 return;
+@@ -288,12 +366,12 @@ pub fn voice(v: Voice, t: i64, out: &mut [Col]) {
+                 } else {
+                     0.0
+                 };
+-                *o = stock(VIOLET, k);
++                *o = stock(p.strip, k);
+             }
+         }
+         Voice::Speaking => {
+             if !wide(n) {
+-                fill(out, stock(0x6c0fff, breathe(f64::from(ft), 1000.0)));
++                fill(out, stock(p.speaking_small, breathe(f64::from(ft), 1000.0)));
+                 return;
+             }
+             // Blob opposite LED 0 whose width flickers irregularly (two incommensurate periods).
+@@ -304,7 +382,7 @@ pub fn voice(v: Voice, t: i64, out: &mut [Col]) {
+             );
+             for (i, o) in out.iter_mut().enumerate() {
+                 *o = stock(
+-                    0x7b0ee8,
++                    p.speaking,
+                     smoothstep(w + 1.0, w - 1.0, cdist(i as f32, half, nf)),
+                 );
+             }
+@@ -343,16 +421,14 @@ pub fn voice(v: Voice, t: i64, out: &mut [Col]) {
+     }
+ }
+ 
+-pub fn voice_logo(v: Voice, t: i64, out: &mut [Col]) {
++pub fn voice_logo(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
++    let p = color.palette();
+     let nf = out.len() as f32;
+     let ft = t as f32;
+     match v {
+         Voice::Listening => fill(
+             out,
+-            stock(
+-                VIOLET_SMALL,
+-                if ft < 420.0 { ft / 420.0 } else { listen_k(ft) },
+-            ),
++            stock(p.small, if ft < 420.0 { ft / 420.0 } else { listen_k(ft) }),
+         ),
+         Voice::Thinking => {
+             let c = (t % 1500) as f32 / 1500.0 * nf;
+@@ -365,11 +441,11 @@ pub fn voice_logo(v: Voice, t: i64, out: &mut [Col]) {
+                 } else {
+                     0.0
+                 };
+-                *o = stock(VIOLET_SMALL, k);
++                *o = stock(p.small, k);
+             }
+         }
+-        Voice::Speaking => fill(out, stock(VIOLET_SMALL, breathe(f64::from(ft), 1240.0))),
+-        Voice::Error => voice(v, t, out),
++        Voice::Speaking => fill(out, stock(p.small, breathe(f64::from(ft), 1240.0))),
++        Voice::Error => voice(v, t, color, out),
+         Voice::TimerRing => fill(out, stock(TIMER_GREEN, breathe(f64::from(ft), 1300.0))),
+     }
+ }
+diff --git a/satellite/crates/pulsar-hw/src/led_fx/tests.rs b/satellite/crates/pulsar-hw/src/led_fx/tests.rs
+index ec61c5b..b86cba4 100644
+--- a/satellite/crates/pulsar-hw/src/led_fx/tests.rs
++++ b/satellite/crates/pulsar-hw/src/led_fx/tests.rs
+@@ -90,8 +90,8 @@ fn frames_match_the_cpp_renderer() {
+         let p: Vec<i64> = words.map(|v| v.parse().unwrap()).collect();
+         let mut out = vec![Col::default(); want.len() / 3];
+         match kind {
+-            "voice" => voice(voice_of(p[0]), p[2], &mut out),
+-            "voice_logo" => voice_logo(voice_of(p[0]), p[2], &mut out),
++            "voice" => voice(voice_of(p[0]), p[2], VoiceColor::Violet, &mut out),
++            "voice_logo" => voice_logo(voice_of(p[0]), p[2], VoiceColor::Violet, &mut out),
+             "timer_started" => timer_started(p[1], &mut out),
+             "mute_sweep" => mute_sweep(p[0] != 0, p[2], &mut out),
+             "volume" => volume(p[1] as f32 / 40.0, &mut out),
+@@ -152,3 +152,67 @@ fn hsv_wraps_hue_in_turns() {
+     assert_eq!(hsv(1.0, 1.0, 1.0), red);
+     assert_eq!(hsv(-0.5, 1.0, 1.0), hsv(0.5, 1.0, 1.0));
+ }
++
++/// The Blue table must stay the violet one with the red and green channels exchanged; a
++/// hand-edited entry would silently change the animation.
++#[test]
++fn blue_is_violet_with_red_and_green_exchanged() {
++    fn swap(c: u32) -> u32 {
++        let (r, g) = ((c >> 16) & 0xFF, (c >> 8) & 0xFF);
++        (g << 16) | (r << 8) | (c & 0xFF)
++    }
++    for (v, b) in [
++        (VIOLET.strip, BLUE.strip),
++        (VIOLET.small, BLUE.small),
++        (VIOLET.thinking_bg, BLUE.thinking_bg),
++        (VIOLET.thinking, BLUE.thinking),
++        (VIOLET.speaking, BLUE.speaking),
++        (VIOLET.speaking_small, BLUE.speaking_small),
++    ] {
++        assert_eq!(swap(v), b, "{v:06x} -> {b:06x}");
++    }
++}
++
++#[test]
++fn voice_color_labels_round_trip_and_default_to_the_stock_look() {
++    assert_eq!(VoiceColor::ALL.map(VoiceColor::label), ["Violet", "Blue"]);
++    for c in VoiceColor::ALL {
++        assert_eq!(VoiceColor::from_label(c.label()), c);
++    }
++    assert_eq!(VoiceColor::default(), VoiceColor::Violet);
++    // An unknown or absent state.conf value keeps the stock violet.
++    for s in ["", "violet", "Violet ", "red"] {
++        assert_eq!(VoiceColor::from_label(s), VoiceColor::Violet, "{s:?}");
++    }
++}
++
++#[test]
++fn only_listening_thinking_and_speaking_take_the_colour() {
++    for v in [Voice::Listening, Voice::Thinking, Voice::Speaking] {
++        for n in [3, 24] {
++            let mut violet = vec![Col::default(); n];
++            let mut blue = violet.clone();
++            voice(v, 900, VoiceColor::Violet, &mut violet);
++            voice(v, 900, VoiceColor::Blue, &mut blue);
++            assert_ne!(violet, blue, "{v:?} ring {n}");
++        }
++        let mut violet = vec![Col::default(); 6];
++        let mut blue = violet.clone();
++        voice_logo(v, 900, VoiceColor::Violet, &mut violet);
++        voice_logo(v, 900, VoiceColor::Blue, &mut blue);
++        assert_ne!(violet, blue, "{v:?} logo");
++    }
++    // The error pulse and the timer ring keep their own colours.
++    for v in [Voice::Error, Voice::TimerRing] {
++        let mut violet = vec![Col::default(); 24];
++        let mut blue = violet.clone();
++        voice(v, 900, VoiceColor::Violet, &mut violet);
++        voice(v, 900, VoiceColor::Blue, &mut blue);
++        assert_eq!(violet, blue, "{v:?}");
++        let mut violet = vec![Col::default(); 6];
++        let mut blue = violet.clone();
++        voice_logo(v, 900, VoiceColor::Violet, &mut violet);
++        voice_logo(v, 900, VoiceColor::Blue, &mut blue);
++        assert_eq!(violet, blue, "{v:?} logo");
++    }
++}
+diff --git a/satellite/crates/pulsar-hw/src/leds.rs b/satellite/crates/pulsar-hw/src/leds.rs
+index 4afe8f7..70b9128 100644
+--- a/satellite/crates/pulsar-hw/src/leds.rs
++++ b/satellite/crates/pulsar-hw/src/leds.rs
+@@ -274,6 +274,8 @@ enum Cmd {
+     },
+     ClearTemporary,
+     VoiceIndication(bool),
++    /// Select «Voice color»: the hue of the listening / thinking / speaking animation.
++    VoiceColor(fx::VoiceColor),
+     Speed(f32),
+     MusicStyle(String),
+     MediaPlaying(bool),
+@@ -354,6 +356,11 @@ impl LedsHandle {
+         self.send(Cmd::VoiceIndication(on));
+     }
+ 
++    /// Hue of the listening / thinking / speaking animation (Violet = the stock look).
++    pub fn set_voice_color(&self, color: fx::VoiceColor) {
++        self.send(Cmd::VoiceColor(color));
++    }
++
+     /// 0.25..4: motion of effects and music styles.
+     pub fn set_speed(&self, k: f32) {
+         self.send(Cmd::Speed(k));
+@@ -871,6 +878,7 @@ struct Compositor {
+     state: UiState,
+     state_t0: i64,
+     voice_indication: bool,
++    voice_color: fx::VoiceColor,
+     // one-shots
+     sweep: Sweep,
+     sweep_t0: i64,
+@@ -939,6 +947,7 @@ impl Compositor {
+             state: UiState::Idle,
+             state_t0: 0,
+             voice_indication: true,
++            voice_color: fx::VoiceColor::Violet,
+             sweep: Sweep::None,
+             sweep_t0: 0,
+             timer_shot: false,
+@@ -1062,6 +1071,12 @@ impl Compositor {
+                 }
+                 self.voice_indication = on;
+             }
++            Cmd::VoiceColor(color) => {
++                if color == self.voice_color {
++                    return false;
++                }
++                self.voice_color = color;
++            }
+             Cmd::Speed(k) => {
+                 self.speed = if k.is_finite() {
+                     k.clamp(0.25, 4.0)
+@@ -1199,7 +1214,12 @@ impl Compositor {
+                 fx::volume(self.volume, ring);
+                 animated = false;
+             }
+-            Layer::Voice => fx::voice(to_voice(self.state), now - self.state_t0, ring),
++            Layer::Voice => fx::voice(
++                to_voice(self.state),
++                now - self.state_t0,
++                self.voice_color,
++                ring,
++            ),
+             Layer::OneShot => {
+                 if self.sweep == Sweep::None {
+                     fx::timer_started(now - self.timer_t0, ring);
+@@ -1238,7 +1258,12 @@ impl Compositor {
+         }
+         if self.nlogo > 0 {
+             if self.voice_shown() {
+-                fx::voice_logo(to_voice(self.state), now - self.state_t0, logo);
++                fx::voice_logo(
++                    to_voice(self.state),
++                    now - self.state_t0,
++                    self.voice_color,
++                    logo,
++                );
+                 animated = true;
+             } else if self.muted {
+                 logo.fill(fx::mute_logo());
+diff --git a/satellite/crates/pulsar-hw/src/leds/tests.rs b/satellite/crates/pulsar-hw/src/leds/tests.rs
+index ae401e9..881907e 100644
+--- a/satellite/crates/pulsar-hw/src/leds/tests.rs
++++ b/satellite/crates/pulsar-hw/src/leds/tests.rs
+@@ -257,10 +257,39 @@ fn midi_logo_follows_voice_mute_or_ring_average() {
+     c.frame(2000);
+     c.frame(2300);
+     let mut logo = [Col::default(); 6];
+-    fx::voice_logo(fx::Voice::Listening, 1300, &mut logo);
++    fx::voice_logo(
++        fx::Voice::Listening,
++        1300,
++        fx::VoiceColor::Violet,
++        &mut logo,
++    );
+     assert_eq!(&c.px[24 * 3..24 * 3 + 3], &to_px(logo[0], c.dim(), None));
+ }
+ 
++#[test]
++fn voice_color_command_repaints_the_voice_layer_and_logo() {
++    let mut c = Compositor::new(24, 6);
++    ui(&mut c, UiState::Listening, 0);
++    c.frame(1000);
++    // Violet is the initial value: the command changes nothing.
++    assert!(!c.apply(Cmd::VoiceColor(fx::VoiceColor::Violet), 1000));
++    assert!(c.apply(Cmd::VoiceColor(fx::VoiceColor::Blue), 1000));
++    // The same option again is not a change.
++    assert!(!c.apply(Cmd::VoiceColor(fx::VoiceColor::Blue), 1000));
++    c.frame(1300);
++    let mut ring = [Col::default(); 24];
++    let mut logo = [Col::default(); 6];
++    fx::voice(fx::Voice::Listening, 1300, fx::VoiceColor::Blue, &mut ring);
++    fx::voice_logo(fx::Voice::Listening, 1300, fx::VoiceColor::Blue, &mut logo);
++    for (i, w) in ring.iter().chain(&logo).enumerate() {
++        assert_eq!(
++            &c.px[i * 3..i * 3 + 3],
++            &to_px(*w, c.dim(), None),
++            "LED {i}"
++        );
++    }
++}
++
+ #[test]
+ fn layer_changes_fade_but_volume_cuts_in() {
+     let mut c = Compositor::new(3, 0);
+diff --git a/satellite/crates/pulsar-hw/src/lib.rs b/satellite/crates/pulsar-hw/src/lib.rs
+index 155721c..bd1693b 100644
+--- a/satellite/crates/pulsar-hw/src/lib.rs
++++ b/satellite/crates/pulsar-hw/src/lib.rs
+@@ -11,6 +11,7 @@ mod leds;
+ mod sys;
+ 
+ pub use input::{Button, InputEvent, InputHandle, Press, spawn_input};
++pub use led_fx::VoiceColor;
+ pub use leds::{LedsHandle, Rgb, case_colors, effect_names, music_styles, spawn_leds};
+ 
+ /// strerror(3) text of an OS error, as the C++ daemon logged it (without " (os error N)").
 diff --git a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp b/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
 index 6369f73..d642457 100644
 --- a/satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp
@@ -8544,7 +9136,7 @@ index 878250e..2170722 100644
  pub use updater::{Release, UpdateEvent, UpdaterHandle, arch, spawn};
  pub use version::release_newer;
 diff --git a/satellite/crates/pulsar/src/controller/entities.rs b/satellite/crates/pulsar/src/controller/entities.rs
-index 896eb5f..43371d5 100644
+index 896eb5f..7561774 100644
 --- a/satellite/crates/pulsar/src/controller/entities.rs
 +++ b/satellite/crates/pulsar/src/controller/entities.rs
 @@ -72,6 +72,8 @@ impl Controller {
@@ -8556,7 +9148,15 @@ index 896eb5f..43371d5 100644
          self.publish_update();
          let api = &self.api;
          api.publish_binary_sensor(BinarySensorId::HwMicMute, self.hw_mic_muted);
-@@ -141,6 +143,7 @@ impl Controller {
+@@ -83,6 +85,7 @@ impl Controller {
+         api.publish_select(SelectId::MusicViz, &self.st.music_viz);
+         api.publish_select(SelectId::ClockMusic, &self.st.clock_music);
+         api.publish_select(SelectId::CaseColor, self.case_color_option());
++        api.publish_select(SelectId::VoiceColor, self.st.voice_color.label());
+         if let Some(z) = &self.zigbee {
+             api.publish_select(
+                 SelectId::ZigbeeMode,
+@@ -141,6 +144,7 @@ impl Controller {
                  if !state {
                      self.cancel_arbitration();
                      if self.phase == logic::Phase::Listening {
@@ -8564,7 +9164,7 @@ index 896eb5f..43371d5 100644
                          self.finish_interaction();
                      }
                  }
-@@ -173,6 +176,33 @@ impl Controller {
+@@ -173,6 +177,33 @@ impl Controller {
                  self.st.wake_preroll = state;
                  self.mic.set_preroll(state);
              }
@@ -8598,7 +9198,18 @@ index 896eb5f..43371d5 100644
          }
          self.api.publish_switch(id, state);
          self.persist();
-@@ -290,6 +320,17 @@ impl Controller {
+@@ -286,10 +317,28 @@ impl Controller {
+                     self.api.publish_text(TextId::ClockText, &self.clock_text);
+                 }
+             }
++            SelectId::VoiceColor => {
++                let color = pulsar_hw::VoiceColor::from_label(&option);
++                self.leds.set_voice_color(color);
++                self.api.publish_select(id, color.label());
++                self.st.voice_color = color;
++                self.persist();
++            }
+         }
      }
  
      fn on_button(&mut self, id: ButtonId) {
@@ -8616,7 +9227,7 @@ index 896eb5f..43371d5 100644
          let Some(z) = &self.zigbee else {
              return;
          };
-@@ -300,6 +341,7 @@ impl Controller {
+@@ -300,6 +349,7 @@ impl Controller {
          match id {
              ButtonId::ZigbeeJoin => z.join(),
              ButtonId::ZigbeeLeave => z.leave(),
@@ -8624,7 +9235,7 @@ index 896eb5f..43371d5 100644
          }
      }
  
-@@ -349,12 +391,19 @@ impl Controller {
+@@ -349,12 +399,19 @@ impl Controller {
          let Some(first) = ids.into_iter().next() else {
              return;
          };
@@ -8645,7 +9256,7 @@ index 896eb5f..43371d5 100644
          self.api
              .set_active_wake_words(vec![self.st.wake_word.clone()]);
          self.persist();
-@@ -380,6 +429,7 @@ impl Controller {
+@@ -380,6 +437,7 @@ impl Controller {
                  }
                  self.publish_microphones();
                  if m && self.phase == logic::Phase::Listening {
@@ -8653,7 +9264,7 @@ index 896eb5f..43371d5 100644
                      self.finish_interaction();
                  }
                  self.update_detection();
-@@ -395,6 +445,7 @@ impl Controller {
+@@ -395,6 +453,7 @@ impl Controller {
                  if muted {
                      self.cancel_arbitration();
                      if self.phase == logic::Phase::Listening {
@@ -8716,7 +9327,7 @@ index 665efb4..11dcc63 100644
  
      pub(super) fn update_music(&self) {
 diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
-index ba4e888..aaed948 100644
+index ba4e888..dbaee58 100644
 --- a/satellite/crates/pulsar/src/controller/mod.rs
 +++ b/satellite/crates/pulsar/src/controller/mod.rs
 @@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
@@ -8864,16 +9475,28 @@ index ba4e888..aaed948 100644
              ],
              active_wake_words: vec![st.wake_word.clone()],
              light_effects: strings(pulsar_hw::effect_names()),
-@@ -330,7 +393,7 @@ impl Controller {
+@@ -330,7 +393,11 @@ impl Controller {
              music_styles: strings(pulsar_hw::music_styles()),
              case_colors: with_none(case_colors.clone()),
              clock_music_styles: strings(pulsar_clock::music_styles()),
 -            zigbee_modes: if model.zigbee_tty.is_empty() {
++            voice_colors: pulsar_hw::VoiceColor::ALL
++                .iter()
++                .map(|c| c.label().to_owned())
++                .collect(),
 +            zigbee_modes: if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
                  Vec::new()
              } else {
                  pulsar_zigbee::ROLES
-@@ -438,12 +501,27 @@ impl Controller {
+@@ -367,6 +434,7 @@ impl Controller {
+         clock.set_music_style(st.clock_music.clone());
+         leds.set_speed(st.led_speed);
+         leds.set_voice_indication(st.voice_indication);
++        leds.set_voice_color(st.voice_color);
+         leds.set_music_style(st.music_viz.clone());
+         leds.set_user_light(
+             st.light.on,
+@@ -438,12 +506,27 @@ impl Controller {
              }
          };
          let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
@@ -8902,7 +9525,7 @@ index ba4e888..aaed948 100644
  
          let ss_cfg = SendspinConfig {
              name: id.friendly_name.clone(),
-@@ -498,7 +576,7 @@ impl Controller {
+@@ -498,7 +581,7 @@ impl Controller {
              None
          };
  
@@ -8911,7 +9534,7 @@ index ba4e888..aaed948 100644
              (None, None)
          } else {
              let zcfg = ZigbeeConfig {
-@@ -577,9 +655,11 @@ impl Controller {
+@@ -577,9 +660,11 @@ impl Controller {
              arb_phrase: String::new(),
              arb_level: -100.0,
              arb_audio: Vec::new(),
@@ -8924,7 +9547,7 @@ index ba4e888..aaed948 100644
              stop_sent: false,
              voice_run: 0,
              tts_url: String::new(),
-@@ -616,6 +696,8 @@ impl Controller {
+@@ -616,6 +701,8 @@ impl Controller {
              install_version: String::new(),
              zigbee_status: String::new(),
              sendspin_pairing_prompt: false,
@@ -8933,7 +9556,7 @@ index ba4e888..aaed948 100644
          };
          // The rest of the C++ start(), in its order: every call below only queues commands to
          // the services, which run once `run` is awaited.
-@@ -767,15 +849,17 @@ impl Controller {
+@@ -767,15 +854,17 @@ impl Controller {
                  phrase,
                  level_db,
                  preroll,
@@ -8954,7 +9577,7 @@ index ba4e888..aaed948 100644
                  } else if self.arbitrating {
                      // The request goes on with what was said right after the wake word.
                      self.arb_audio.extend_from_slice(&pcm);
-@@ -810,6 +894,15 @@ impl Controller {
+@@ -810,6 +899,15 @@ impl Controller {
          self.state.flush(&self.st);
      }
  
@@ -9587,10 +10210,10 @@ index 37a0bb9..d42e6d0 100644
 +    }
 +}
 diff --git a/satellite/crates/pulsar/src/settings.rs b/satellite/crates/pulsar/src/settings.rs
-index 862d92c..17cae91 100644
+index 862d92c..af9e2bc 100644
 --- a/satellite/crates/pulsar/src/settings.rs
 +++ b/satellite/crates/pulsar/src/settings.rs
-@@ -64,6 +64,10 @@ pub struct Settings {
+@@ -64,8 +64,14 @@ pub struct Settings {
      pub voice_indication: bool,
      /// Audio between the end of the wake word and its confirmation goes ahead of the request.
      pub wake_preroll: bool,
@@ -9600,8 +10223,12 @@ index 862d92c..17cae91 100644
 +    pub wake_dry_run: bool,
      /// Stem of `pulsar_hw::case_colors()`, "" = none.
      pub led_case_color: String,
++    /// Hue of the ring's listening / thinking / speaking animation (`voice_color=`).
++    pub voice_color: pulsar_hw::VoiceColor,
      /// Release being installed. Still set after a restart into another version: that release
-@@ -89,15 +93,18 @@ impl Default for Settings {
+     /// was rolled back by supervise.sh (crash loop), automatic updates skip it.
+     pub update_attempt: String,
+@@ -89,16 +95,20 @@ impl Default for Settings {
              clock_auto_brightness: true,
              clock_scroll_ms: 400,
              light: LightState::default(),
@@ -9620,28 +10247,38 @@ index 862d92c..17cae91 100644
 +            wake_recording: true,
 +            wake_dry_run: false,
              led_case_color: String::new(),
++            voice_color: pulsar_hw::VoiceColor::Violet,
              update_attempt: String::new(),
              zigbee_role: Mode::Off,
-@@ -171,6 +178,8 @@ impl Settings {
+             zigbee_flash_failed: 0,
+@@ -171,7 +181,10 @@ impl Settings {
                  }
                  b"voice_indication" => self.voice_indication = on,
                  b"wake_preroll" => self.wake_preroll = on,
 +                b"wake_event_recording" => self.wake_recording = on,
 +                b"wake_dry_run" => self.wake_dry_run = on,
                  b"led_case_color" => self.led_case_color = v,
++                b"voice_color" => self.voice_color = pulsar_hw::VoiceColor::from_label(&v),
                  _ => {}
              }
-@@ -194,7 +203,8 @@ impl Settings {
+         }
+@@ -193,8 +206,9 @@ impl Settings {
+              clock_scroll_ms={}\nlight_on={}\nlight_brightness={}\nlight_r={}\nlight_g={}\n\
               light_b={}\nlight_effect={}\nwake_word={}\ntz={}\nauto_update={}\nupdate_attempt={}\n\
               zigbee_role={}\nzigbee_flash_failed={:x}\nnearest_answers={}\nmusic_viz={}\n\
-              led_speed={}\nvoice_indication={}\nled_case_color={}\nclock_music={}\n\
+-             led_speed={}\nvoice_indication={}\nled_case_color={}\nclock_music={}\n\
 -             wake_preroll={}\nclock_auto_brightness={}\n",
++             led_speed={}\nvoice_indication={}\nled_case_color={}\nvoice_color={}\nclock_music={}\n\
 +             wake_preroll={}\nclock_auto_brightness={}\nwake_event_recording={}\n\
 +             wake_dry_run={}\n",
              f(self.volume),
              f(self.volume_legacy),
              b(self.muted),
-@@ -222,6 +232,8 @@ impl Settings {
+@@ -219,9 +233,12 @@ impl Settings {
+             f(self.led_speed),
+             b(self.voice_indication),
+             self.led_case_color,
++            self.voice_color.label(),
              self.clock_music,
              b(self.wake_preroll),
              b(self.clock_auto_brightness),
@@ -9651,7 +10288,7 @@ index 862d92c..17cae91 100644
      }
  
 diff --git a/satellite/crates/pulsar/src/settings/tests.rs b/satellite/crates/pulsar/src/settings/tests.rs
-index f573b05..4caff84 100644
+index f573b05..3a9f04a 100644
 --- a/satellite/crates/pulsar/src/settings/tests.rs
 +++ b/satellite/crates/pulsar/src/settings/tests.rs
 @@ -2,7 +2,8 @@
@@ -9659,8 +10296,8 @@ index f573b05..4caff84 100644
  // `zig c++ -std=c++20 -O2`. save_*.conf: `save` of the values below; load_*.out: `load` of
  // load_*.in, then `save`. Edited by hand since: `wake_preroll` (after `clock_music`; 0 in
 -// load_odd.in); `clock_auto_brightness` (after `wake_preroll`).
-+// load_odd.in); `clock_auto_brightness` (after `wake_preroll`), and this fork's defaults
-+// (`wake_word=ricardo`, `nearest_answers=0`).
++// load_odd.in); `clock_auto_brightness` (after `wake_preroll`); `voice_color` (after
++// `led_case_color`); and this fork's defaults (`wake_word=ricardo`, `nearest_answers=0`).
  
  use super::*;
  
@@ -9682,7 +10319,7 @@ index f573b05..4caff84 100644
      let mut s = Settings::default();
      s.parse(&golden("save_values.conf"));
      // Written with 6 significant digits: the values read back are those of the text.
-@@ -329,10 +330,23 @@ fn strtoul_hex_matches_libc() {
+@@ -329,10 +330,46 @@ fn strtoul_hex_matches_libc() {
  fn clock_auto_brightness_is_always_written() {
      let mut s = Settings::default();
      assert!(s.clock_auto_brightness);
@@ -9697,6 +10334,29 @@ index f573b05..4caff84 100644
  }
 +
 +#[test]
++fn voice_color_defaults_to_violet_and_round_trips() {
++    // The stock look; a `.prev` binary skips the unknown key, and an old file has none.
++    assert_eq!(
++        Settings::default().voice_color,
++        pulsar_hw::VoiceColor::Violet
++    );
++    assert!(
++        Settings::default()
++            .serialize()
++            .contains("\nvoice_color=Violet\n")
++    );
++    let mut s = Settings::default();
++    s.parse(b"voice_color=Blue\n");
++    assert_eq!(s.voice_color, pulsar_hw::VoiceColor::Blue);
++    assert!(s.serialize().contains("\nvoice_color=Blue\n"));
++    // Anything else is the stock violet, not an error.
++    s.parse(b"voice_color=blue\n");
++    assert_eq!(s.voice_color, pulsar_hw::VoiceColor::Violet);
++    s.parse(b"voice_color=\n");
++    assert_eq!(s.voice_color, pulsar_hw::VoiceColor::Violet);
++}
++
++#[test]
 +fn wake_event_switches_round_trip() {
 +    // Recording is on and dry run off by default; the `.prev` binary skips the unknown keys.
 +    let s = Settings::default();
@@ -9709,10 +10369,10 @@ index f573b05..4caff84 100644
 +    assert!(parsed.serialize().ends_with("wake_dry_run=1\n"));
 +}
 diff --git a/satellite/crates/pulsar/tests/golden/settings/load_edge.out b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-index 3180a40..9cfd82e 100644
+index 3180a40..8ab5f58 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/load_edge.out
 +++ b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-@@ -11,13 +11,13 @@ light_r=1
+@@ -11,17 +11,20 @@ light_r=1
  light_g=1
  light_b=inf
  light_effect=
@@ -9728,27 +10388,32 @@ index 3180a40..9cfd82e 100644
  music_viz=All styles
  led_speed=4
  voice_indication=1
-@@ -25,3 +25,5 @@ led_case_color=sky blue
+ led_case_color=sky blue
++voice_color=Violet
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/load_odd.out b/satellite/crates/pulsar/tests/golden/settings/load_odd.out
-index 4020990..e93f767 100644
+index 4020990..9445431 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/load_odd.out
 +++ b/satellite/crates/pulsar/tests/golden/settings/load_odd.out
-@@ -25,3 +25,5 @@ led_case_color=
+@@ -22,6 +22,9 @@ music_viz=All styles
+ led_speed=1
+ voice_indication=0
+ led_case_color=
++voice_color=Violet
  clock_music=Levels
  wake_preroll=0
  clock_auto_brightness=1
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_default.conf b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-index 0408207..0efa58a 100644
+index 0408207..0366ec8 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_default.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-@@ -11,13 +11,13 @@ light_r=1
+@@ -11,17 +11,20 @@ light_r=1
  light_g=1
  light_b=1
  light_effect=
@@ -9764,17 +10429,18 @@ index 0408207..0efa58a 100644
  music_viz=All styles
  led_speed=1
  voice_indication=1
-@@ -25,3 +25,5 @@ led_case_color=
+ led_case_color=
++voice_color=Violet
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-index b2058b0..db7ebd4 100644
+index b2058b0..56e3198 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-@@ -11,13 +11,13 @@ light_r=0
+@@ -11,17 +11,20 @@ light_r=0
  light_g=1
  light_b=0.5
  light_effect=
@@ -9790,17 +10456,18 @@ index b2058b0..db7ebd4 100644
  music_viz=All styles
  led_speed=4
  voice_indication=1
-@@ -25,3 +25,5 @@ led_case_color=
+ led_case_color=
++voice_color=Violet
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_values.conf b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-index 566543b..090bffc 100644
+index 566543b..e40a163 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_values.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-@@ -11,13 +11,13 @@ light_r=1e-05
+@@ -11,17 +11,20 @@ light_r=1e-05
  light_g=123457
  light_b=3.14159
  light_effect=Rainbow
@@ -9816,7 +10483,8 @@ index 566543b..090bffc 100644
  music_viz=All styles
  led_speed=0.25
  voice_indication=1
-@@ -25,3 +25,5 @@ led_case_color=white
+ led_case_color=white
++voice_color=Violet
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1

@@ -237,11 +237,15 @@ lovelace:
 Скопируйте `schedules_dashboard.yaml` в config; после restart появится раздел
 «Помощник».
 
-Цвет кольца Pulsar по профилю (Violet = личный, Blue = рабочий) **пока не
-настроен**: select цвета появится только после этапа Pulsar. Тогда цвет
-добавится автоматизацией на изменение `input_select.ricardo_voice_profile`;
-сейчас менять `light.ring`/`led_show` бессмысленно — во время LISTENING их
-перекрывает voice state прошивки.
+Цвет кольца Pulsar по профилю (Violet = личный, Blue = рабочий) задаёт
+автоматизация `voice_profile_station_color` в `automations.yaml`: при смене
+`input_select.ricardo_voice_profile`, при старте HA и когда select станции
+появляется после недоступности она выставляет
+`select.iandeks_stantsiia_midi_voice_color`. Select «Voice color» приходит с
+релизом Pulsar; по умолчанию станция показывает прежний фиолетовый, а пока
+сущности нет, автоматизация ничего не делает. Менять `light.ring`/`led_show`
+для этого бессмысленно — во время LISTENING их перекрывает voice state
+прошивки.
 
 Секрет (не коммитить):
 
