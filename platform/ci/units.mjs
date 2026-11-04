@@ -865,7 +865,7 @@ export const config = {
         publish_script: "projects/station/pulsar/publish-oci.sh",
         publish_repository: "ghcr.io/proflyder/pulsar-firmware",
         // `latest` moves with every promoted version; the version tag itself
-        // is immutable and promotion refuses a different digest.
+        // is immutable by content (identical layers are a no-op).
         publish_tags: ["{version}", "latest"],
         publish_attest_glob: "*",
       },

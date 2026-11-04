@@ -891,6 +891,9 @@ jobs:
   # succeeded through promotion; after a fallback build it points at the freshly
   # published digest. Either way `deploy-station` installs the VERSION tag and
   # the station updater verifies the layer digests, SHA256SUMS and --version.
+  # Promotion keeps an existing version tag when its content is identical
+  # (manifest annotations only), so `latest` is moved to that tag's digest and
+  # the version installed here always matches the digest that was kept/created.
   deploy-station:
     name: deploy station (${{ needs.plan.outputs.pulsar_version }})
     needs: [plan, native-release]

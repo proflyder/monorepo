@@ -306,10 +306,18 @@
       --native`: требует существующий `tree-<hash>`, проверяет provenance с
       signer `ci.yml`/`_native.yml` и ставит релизные теги из
       `native.publish_tags` (`{version}`, `latest`, `sha-{commit12}`) на тот же
-      digest pinned-`crane`. `<version>` неизменяем: тот же digest — no-op,
-      другой — отказ; двигается только `latest`. При отсутствии/непроверенном
-      tree — обычная сборка и публикация, путь `build` с пометкой fallback в
-      summary. `deploy-station` ставит версию и проверяет digest'ы слоёв.
+      digest pinned-`crane`. Неизменяемые теги (`<version>`, `sha-<commit>`)
+      неизменяемы по СОДЕРЖИМОМУ: `crane manifest` сравнивает `artifactType` и
+      упорядоченный список слоёв `(title, digest, mediaType)`; совпадающий
+      контент при другом digest манифеста (различаются только аннотации
+      `created`/`revision`) — no-op без перетегирования с пометкой «already
+      published with identical content», другой контент — отказ «bump
+      VERSION». `latest` двигается всегда, но на digest тега версии: если
+      версия сохранена, `latest` указывает на сохранённый digest, поэтому
+      `latest` и `<version>` согласованы, а `deploy-station` ставит именно
+      `<version>`. При отсутствии/непроверенном tree — обычная сборка и
+      публикация, путь `build` с пометкой fallback в summary. `deploy-station`
+      ставит версию и проверяет digest'ы слоёв.
     * `ghcr-cleanup.yml` (ежедневно по расписанию; ручной запуск — dry-run по
       умолчанию) через REST API применяет политику хранения по пакету:
       никогда не удаляются новейшая версия, версии с тегами `develop`/`latest`
