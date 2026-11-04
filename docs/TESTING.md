@@ -300,9 +300,10 @@ Firebase. Этот output true, когда изменился реальный �
 либо `MODULE.bazel` изменился только внутри Maven-расширения
 rules_jvm_external (виртуальный путь `MODULE.bazel#maven`): тогда меняется
 Maven/APK-замыкание. Прочие глобальные инвалидации (остальной `MODULE.bazel`,
-`.bazelrc`, toolchain-файлы) и правка CI-workflow прогоняют проверки
-`android`, но APK не публикуют. Job намеренно не входит в `ci-ok`, поэтому его
-падение не блокирует merge.
+`.bazelrc`, toolchain-файлы) прогоняют проверки `android`, но APK не
+публикуют; `.bazelrc` с диффом только cache/output-флагов
+(`.bazelrc#cache`) не выбирает `android` вовсе. Job намеренно не входит в
+`ci-ok`, поэтому его падение не блокирует merge.
 
 Android-платформа состоит из двух юнитов с одними и теми же `paths` и
 Bazel-корнем: `android-app` (сборка APK и unit/UI-тесты) и `android-lint`
@@ -349,14 +350,45 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
   правило только для CI: правка workflow или `platform/ci/**` перезапускает
   проверки, но `deploy-home` не выкатывает юнит, выбранный лишь таким
   правилом.
-* `MODULE.bazel` — глобальная инвалидация с одним исключением. Если diff
-  между base и head меняет только использование Maven-расширения
-  rules_jvm_external (`maven.install(...)` и любые `maven.<tag>(...)` вызовы,
-  `use_repo(maven, ...)`, где `maven` — переменная из
-  `use_extension("@rules_jvm_external//:extensions.bzl", "maven")`) и/или
-  комментарии с пробелами, `affected.mjs` подменяет путь на
-  `MODULE.bazel#maven`; это правило валит только `android` (CI и deploy), но
-  не `*`. Любое другое изменение (`bazel_dep`, toolchain, `go_deps`, `oci`,
+* `MODULE.bazel` — глобальная инвалидация с тремя исключениями
+  (fail safe — «больше», не «меньше»). `affected.mjs` сравнивает base/head
+  структурно и подменяет путь виртуальным, только если после снятия нужной
+  категории остальные токены совпадают:
+  * Maven-расширение rules_jvm_external (`maven.install(...)`, любые
+    `maven.<tag>(...)`, `use_repo(maven, ...)`, где `maven` — переменная из
+    `use_extension("@rules_jvm_external//:extensions.bzl", "maven")`) →
+    `MODULE.bazel#maven`, только `android` (меняется Maven/APK-замыкание);
+  * Rust/zig/native-входы станции: `rust.toolchain(...)`/`use_repo(rust, ...)`,
+    `crate.from_cargo(...)`/`use_repo(crate, ...)` (crate_universe),
+    `zig_sdk_repository(...)`, `register_toolchains(...)` только с аргументами
+    `@zig_0_14_1//...`, `single_version_override(module_name = "rules_rust", ...)`
+    и `http_archive(...)` сторонних C/C++ станции (build_file с
+    `_SENDSPIN_BAZEL`) → `MODULE.bazel#native`, платформы `native` и `bazel`
+    (хост-проверки Pulsar компилируют те же крейты, что и кросс-сборка);
+  * Maven и native вместе → оба виртуальных пути (объединение платформ).
+  Всё остальное (`bazel_dep` любого модуля, `go_deps`, `oci`, `rules_go`,
+  python, другая extension, неразбираемый файл, отсутствующая base или
+  добавление/удаление `MODULE.bazel`) оставляет глобальную инвалидацию.
+  `MODULE.bazel.lock` следует scope только вместе со scoped-изменением
+  `MODULE.bazel`; отдельно от него — глобальный.
+* `.bazelrc` — глобальная инвалидация, кроме диффа, который меняет только
+  cache/output-флаги и комментарии. Белый список — по имени опции после
+  префикса команды (`common`/`build`/`test`/...): `--disk_cache`,
+  `--experimental_disk_cache_gc_*`, `--repository_cache`,
+  `--repo_contents_cache*`, `--announce_rc`, `--color`, `--curses`,
+  `--show_progress*`, `--test_output`, `--test_summary`,
+  `--verbose_failures`. `--remote_cache` в белый список не входит. Такой
+  дифф становится `.bazelrc#cache`, не совпадает ни с одним юнитом и гоняет
+  только always-on `quality` (deploy ничего не катит). Строка, смешивающая
+  cache- и настоящий флаг, значима целиком; `import`/`try-import`,
+  неизвестный флаг, неразбираемая строка, отсутствующая base или
+  добавление/удаление файла — глобально.
+* `platform/bazel/zig/**` и `platform/bazel/windows/**` — только платформа
+  `native` (виртуальный `platform/bazel#native`): это target-constrained
+  zig cc-toolchain'ы и rules_rust-патчи для кросс-сборки станции и Windows
+  provider; хост-сборки Go/образов/Android их не выбирают. Остальной
+  `platform/bazel/**` остаётся глобальным.
+* Любое другое изменение (`bazel_dep`, toolchain, `go_deps`, `oci`,
   python), неразбираемый файл, отсутствующая base-ревизия или
   добавление/удаление `MODULE.bazel` оставляют глобальную инвалидацию:
   fail safe — «больше», не «меньше».
@@ -395,8 +427,9 @@ SDK, поэтому маршрутизация дешёвая и не может
 
 * `MODULE.bazel`/`MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
   `.bazelignore`, `BUILD.bazel`, `platform/bazel/**` → все платформы и все
-  юниты; исключение — Maven-only diff `MODULE.bazel`, который даёт
-  `MODULE.bazel#maven` и только android;
+  юниты; исключения — scoped-диффы, описанные выше: `MODULE.bazel#maven` →
+  только android, `MODULE.bazel#native` → native + pulsar-bazel,
+  `.bazelrc#cache` → ни одной платформы, `platform/bazel#native` → native;
 * `go list` упал → все go-юниты; `bazel query` упал → все android и bazel юниты;
 * база не определена (новый push, `workflow_dispatch`) → все юниты
   (`affected.mjs --all`);

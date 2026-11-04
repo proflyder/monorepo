@@ -39,14 +39,25 @@ export const config = {
   // and CI-harness edits must exercise the checks, but they do not change runtime
   // code and must not roll the home units.
   //
-  // `MODULE.bazel` is global by default, with one exception: when its diff only
-  // touches the rules_jvm_external Maven extension (`maven.install(...)`,
-  // `maven.<tag>(...)` and `use_repo(maven, ...)`, plus comments/whitespace),
-  // `affected.mjs` rewrites the changed path to `MODULE.bazel#maven`. That virtual
-  // path reaches only the android platform (the Maven/APK closure changed, no Go,
-  // Python, JS or native unit did). Anything else in MODULE.bazel - bazel_dep,
-  // toolchains, go_deps, oci, python - and an unparseable file, a missing base or
-  // an added/deleted file keep the global rule below. Fail safe is global.
+  // `MODULE.bazel` is global by default, with three scoped exceptions
+  // (`affected.mjs` rewrites the changed path, fail safe is global):
+  //   * Maven-only diff -> `MODULE.bazel#maven` -> android.
+  //   * rules_rust/crate_universe, zig toolchains, rules_rust Windows patches
+  //     and the station's `_SENDSPIN_BAZEL` http_archive()s ->
+  //     `MODULE.bazel#native` -> native units (station/provider cross-build)
+  //     plus the `pulsar-bazel` host checks (same Rust crates on the host).
+  //   * a mix of both -> both virtual paths (union of the platforms).
+  // Anything else in MODULE.bazel - bazel_dep, go_deps, oci, rules_go, python -
+  // and an unparseable file, a missing base or an added/deleted file keep the
+  // global rule below.
+  //
+  // `.bazelrc` is global unless its diff only changes cache/output flags
+  // (`--disk_cache`, the disk-cache GC, `--repository_cache`, console output);
+  // then `affected.mjs` rewrites it to `.bazelrc#cache`, which matches no unit
+  // and runs only the always-on quality job. `platform/bazel/zig/**` and
+  // `platform/bazel/windows/**` become `platform/bazel#native`: they are
+  // target-constrained toolchains/patches for the native station and the
+  // Windows provider, never for the host Go/images/Android builds.
   invalidations: [
     {
       paths: [
@@ -63,6 +74,14 @@ export const config = {
     {
       paths: ["MODULE.bazel#maven"],
       platforms: ["android"],
+    },
+    {
+      paths: ["MODULE.bazel#native"],
+      platforms: ["native", "bazel"],
+    },
+    {
+      paths: ["platform/bazel#native"],
+      platforms: ["native"],
     },
     {
       paths: ["platform/android/**"],

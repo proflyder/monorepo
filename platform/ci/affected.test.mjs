@@ -1071,3 +1071,431 @@ test("module routing: missing revision keeps the global invalidation", () => {
   assert.deepEqual(result.changed, ["MODULE.bazel"]);
   assert.equal(result.routes.go.mode, "all");
 });
+
+// --------------------------------------------------------------------------
+// .bazelrc scoping
+// --------------------------------------------------------------------------
+const BAZELRC_BASE = `common --enable_bzlmod
+
+build --announce_rc
+build --color=yes
+test --test_output=errors
+
+build --define=home_version_code=1
+build --define=home_version_name=0.1.0
+
+common --disk_cache=~/.cache/bazel-disk
+`;
+
+function withCacheFlags(text) {
+  return text.replace(
+    "common --disk_cache=~/.cache/bazel-disk",
+    "common --disk_cache=~/.cache/bazel-disk\n" +
+      "common --experimental_disk_cache_gc_max_size=15G\n" +
+      "common --experimental_disk_cache_gc_max_age=14d",
+  );
+}
+
+test("bazelrc: cache-flag diff is scoped", () => {
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, withCacheFlags(BAZELRC_BASE)), true);
+});
+
+test("bazelrc: comment-only diff is neutral", () => {
+  const updated = BAZELRC_BASE.replace(
+    "common --enable_bzlmod",
+    "# Bazel modules are on by default\ncommon --enable_bzlmod",
+  );
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, updated), true);
+});
+
+test("bazelrc: a real build flag is global", () => {
+  const updated = BAZELRC_BASE.replace(
+    "build --define=home_version_code=1",
+    "build --define=home_version_code=2",
+  );
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, updated), false);
+});
+
+test("bazelrc: adding a real build flag is global", () => {
+  const updated = `${BAZELRC_BASE}build --stamp\n`;
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, updated), false);
+});
+
+test("bazelrc: remote_cache is not in the cache whitelist", () => {
+  const updated = `${BAZELRC_BASE}build --remote_cache=grpc://cache:9092\n`;
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, updated), false);
+});
+
+test("bazelrc: an unknown flag is global", () => {
+  const updated = `${BAZELRC_BASE}common --unrecognized_thing=1\n`;
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, updated), false);
+});
+
+test("bazelrc: import lines are global", () => {
+  const updated = `import %workspace%/.bazelrc.local\n${BAZELRC_BASE}`;
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, updated), false);
+  const tryImport = `try-import %workspace%/.bazelrc.local\n${BAZELRC_BASE}`;
+  assert.equal(affected.bazelrcIsCacheOnly(BAZELRC_BASE, tryImport), false);
+});
+
+test("bazelrc: a line mixing cache and real flags is global when edited", () => {
+  const base = `${BAZELRC_BASE}common --disk_cache=~/.cache/bazel-disk --config=strict\n`;
+  const updated = base.replace("--config=strict", "--config=other");
+  assert.equal(affected.bazelrcIsCacheOnly(base, updated), false);
+  // Unchanged mixed lines do not block a cache-only edit elsewhere.
+  assert.equal(affected.bazelrcIsCacheOnly(base, withCacheFlags(base)), true);
+});
+
+test("bazelrc routing: cache-only edit runs no platform and deploys nothing", () => {
+  const config = affected.loadConfig();
+  const result = withDeps(
+    {
+      goPackageDirs: () => new Set(),
+      gitFileText: (_root, revision, filePath) => {
+        if (filePath !== affected.BAZELRC) {
+          return null;
+        }
+        return revision === "base-sha" ? BAZELRC_BASE : withCacheFlags(BAZELRC_BASE);
+      },
+    },
+    () =>
+      affected.route(config, [affected.BAZELRC], {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+  assert.deepEqual(result.changed, [affected.BAZELRC_CACHE]);
+  for (const platform of ["go", "android", "bazel", "python", "js", "native"]) {
+    assert.deepEqual(result.routes[platform].units, [], platform);
+  }
+  assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
+  assert.deepEqual(affected.deployEntries(result, config), []);
+  assert.equal(result.androidDistribute, false);
+});
+
+test("bazelrc routing: a real flag edit keeps the global invalidation", () => {
+  const updated = BAZELRC_BASE.replace("--define=home_version_code=1", "--define=home_version_code=2");
+  const config = affected.loadConfig();
+  const result = withDeps(
+    {
+      goPackageDirs: () => new Set(),
+      gitFileText: (_root, revision, filePath) => {
+        if (filePath !== affected.BAZELRC) {
+          return null;
+        }
+        return revision === "base-sha" ? BAZELRC_BASE : updated;
+      },
+    },
+    () =>
+      affected.route(config, [affected.BAZELRC], {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+  assert.deepEqual(result.changed, [affected.BAZELRC]);
+  assert.equal(result.routes.go.mode, "all");
+});
+
+test("bazelrc routing: a deleted file keeps the global invalidation", () => {
+  const config = affected.loadConfig();
+  const result = withDeps(
+    {
+      goPackageDirs: () => new Set(),
+      gitFileText: (_root, revision) => (revision === "base-sha" ? BAZELRC_BASE : null),
+    },
+    () =>
+      affected.route(config, [affected.BAZELRC], {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+  assert.deepEqual(result.changed, [affected.BAZELRC]);
+  assert.equal(result.routes.go.mode, "all");
+});
+
+// --------------------------------------------------------------------------
+// MODULE.bazel native scope
+// --------------------------------------------------------------------------
+const MODULE_BAZEL_NATIVE_OLD = `module(name = "home")
+
+bazel_dep(name = "rules_rust", version = "0.75.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    extra_target_triples = [
+        "aarch64-unknown-linux-gnu",
+        "armv7-unknown-linux-gnueabihf",
+    ],
+    versions = ["1.99.1"],
+)
+use_repo(rust, "rust_toolchains")
+register_toolchains("@rust_toolchains//:all")
+
+zig_sdk_repository = use_repo_rule("//platform/bazel/zig:repositories.bzl", "zig_sdk_repository")
+zig_sdk_repository(name = "zig_0_14_1")
+register_toolchains(
+    "@zig_0_14_1//:aarch64_toolchain",
+    "@zig_0_14_1//:armhf_toolchain",
+)
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "pulsar_crates",
+    manifests = ["//projects/station/pulsar/satellite:Cargo.toml"],
+)
+use_repo(crate, "pulsar_crates")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+_SENDSPIN_BAZEL = "//projects/station/pulsar/satellite/third_party/bazel"
+http_archive(
+    name = "sendspin_cpp",
+    build_file = _SENDSPIN_BAZEL + ":sendspin_cpp.BUILD.bazel",
+    sha256 = "a",
+    url = "https://example.test/sendspin.tar.gz",
+)
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "maven",
+    artifacts = ["junit:junit:4.13.2"],
+)
+use_repo(maven, "maven")
+`;
+
+const MODULE_BAZEL_NATIVE_NEW = `module(name = "home")
+
+bazel_dep(name = "rules_rust", version = "0.75.0")
+
+single_version_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = ["//platform/bazel/windows:rules_rust_windows_gnu_triples.patch"],
+)
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    extra_target_triples = [
+        "aarch64-unknown-linux-gnu",
+        "armv7-unknown-linux-gnueabihf",
+        "x86_64-pc-windows-gnu",
+    ],
+    versions = ["1.99.1"],
+)
+use_repo(rust, "rust_toolchains")
+register_toolchains("@rust_toolchains//:all")
+
+zig_sdk_repository = use_repo_rule("//platform/bazel/zig:repositories.bzl", "zig_sdk_repository")
+zig_sdk_repository(name = "zig_0_14_1")
+register_toolchains(
+    "@zig_0_14_1//:aarch64_toolchain",
+    "@zig_0_14_1//:armhf_toolchain",
+    "@zig_0_14_1//:windows_x86_64_toolchain",
+)
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "pulsar_crates",
+    manifests = ["//projects/station/pulsar/satellite:Cargo.toml"],
+)
+use_repo(crate, "pulsar_crates")
+crate.from_cargo(
+    name = "logon_crates",
+    manifests = ["//solutions/windows-logon-provider:Cargo.toml"],
+)
+use_repo(crate, "logon_crates")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+_SENDSPIN_BAZEL = "//projects/station/pulsar/satellite/third_party/bazel"
+http_archive(
+    name = "sendspin_cpp",
+    build_file = _SENDSPIN_BAZEL + ":sendspin_cpp.BUILD.bazel",
+    sha256 = "b",
+    url = "https://example.test/sendspin.tar.gz",
+)
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "maven",
+    artifacts = ["junit:junit:4.13.2"],
+)
+use_repo(maven, "maven")
+`;
+
+function moduleScope(oldText, newText) {
+  return affected.moduleBazelScope(oldText, newText);
+}
+
+test("module bazel: native toolchain edit is scoped to native", () => {
+  assert.equal(moduleScope(MODULE_BAZEL_NATIVE_OLD, MODULE_BAZEL_NATIVE_NEW), "native");
+});
+
+test("module bazel: a bazel_dep edit inside a native diff is global", () => {
+  const updated = MODULE_BAZEL_NATIVE_NEW.replace('version = "0.75.0"', 'version = "0.76.0"');
+  assert.equal(moduleScope(MODULE_BAZEL_NATIVE_OLD, updated), null);
+});
+
+test("module bazel: a maven artifact edit is android-scoped even with native inputs", () => {
+  const updated = MODULE_BAZEL_NATIVE_NEW.replace(
+    'artifacts = ["junit:junit:4.13.2"]',
+    'artifacts = ["junit:junit:4.13.2", "org.slf4j:slf4j-api:2.0.0"]',
+  );
+  assert.equal(moduleScope(MODULE_BAZEL_NATIVE_NEW, updated), "maven");
+});
+
+test("module bazel: mixed maven and native edit is the union of both", () => {
+  const updated = MODULE_BAZEL_NATIVE_NEW.replace(
+    'artifacts = ["junit:junit:4.13.2"]',
+    'artifacts = ["junit:junit:4.13.2", "org.slf4j:slf4j-api:2.0.0"]',
+  );
+  assert.equal(moduleScope(MODULE_BAZEL_NATIVE_OLD, updated), "maven+native");
+});
+
+test("module bazel: changing a non-zig register_toolchains stays global", () => {
+  const updated = MODULE_BAZEL_NATIVE_OLD.replace(
+    'register_toolchains("@rust_toolchains//:all")',
+    'register_toolchains("@rust_toolchains//:all")\nregister_toolchains("@other//:all")',
+  );
+  assert.equal(moduleScope(MODULE_BAZEL_NATIVE_OLD, updated), null);
+});
+
+test("module bazel: an http_archive without the station overlay is global", () => {
+  const updated = `${MODULE_BAZEL_NATIVE_OLD}\nhttp_archive(\n    name = "other",\n    sha256 = "c",\n    url = "https://example.test/x.tar.gz",\n)\n`;
+  assert.equal(moduleScope(MODULE_BAZEL_NATIVE_OLD, updated), null);
+});
+
+function routeModuleFiles(changed, oldText, newText) {
+  const config = affected.loadConfig();
+  return withDeps(
+    {
+      goPackageDirs: () => new Set(),
+      gitFileText: (_root, revision, filePath) =>
+        filePath === affected.MODULE_BAZEL
+          ? revision === "base-sha"
+            ? oldText
+            : newText
+          : null,
+    },
+    () =>
+      affected.route(config, changed, {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+}
+
+test("module routing: native-only edit reaches native and pulsar-bazel only", () => {
+  const config = affected.loadConfig();
+  const result = routeModuleFiles(
+    [affected.MODULE_BAZEL],
+    MODULE_BAZEL_NATIVE_OLD,
+    MODULE_BAZEL_NATIVE_NEW,
+  );
+  assert.deepEqual(result.changed, [affected.MODULE_BAZEL_NATIVE]);
+  for (const platform of ["go", "android", "python", "js"]) {
+    assert.deepEqual(result.routes[platform].units, [], platform);
+  }
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
+    "logon-provider",
+    "pulsar",
+  ]);
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["pulsar-bazel"]);
+  assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
+  assert.deepEqual(affected.deployEntries(result, config), []);
+  assert.equal(result.androidDistribute, false);
+});
+
+test("module routing: mixed maven+native edit unions android, native and bazel", () => {
+  const updated = MODULE_BAZEL_NATIVE_NEW.replace(
+    'artifacts = ["junit:junit:4.13.2"]',
+    'artifacts = ["junit:junit:4.13.2", "org.slf4j:slf4j-api:2.0.0"]',
+  );
+  const result = routeModuleFiles([affected.MODULE_BAZEL], MODULE_BAZEL_NATIVE_OLD, updated);
+  assert.deepEqual(result.changed, [
+    affected.MODULE_BAZEL_MAVEN,
+    affected.MODULE_BAZEL_NATIVE,
+  ]);
+  assert.equal(result.routes.android.mode, "all");
+  assert.equal(result.routes.native.mode, "all");
+  assert.equal(result.routes.bazel.mode, "all");
+  assert.deepEqual(result.routes.go.units, []);
+  assert.deepEqual(result.routes.python.units, []);
+  assert.deepEqual(result.routes.js.units, []);
+  assert.equal(result.androidDistribute, true);
+});
+
+test("module routing: a native edit with the lock follows the same scope", () => {
+  const result = routeModuleFiles(
+    [affected.MODULE_BAZEL, affected.MODULE_BAZEL_LOCK],
+    MODULE_BAZEL_NATIVE_OLD,
+    MODULE_BAZEL_NATIVE_NEW,
+  );
+  assert.deepEqual(result.changed, [affected.MODULE_BAZEL_NATIVE]);
+  assert.equal(result.routes.go.mode, "paths");
+  assert.deepEqual(result.routes.go.units, []);
+});
+
+test("module routing: the lock alone keeps the global invalidation", () => {
+  const result = routeModuleFiles(
+    [affected.MODULE_BAZEL_LOCK],
+    MODULE_BAZEL_NATIVE_OLD,
+    MODULE_BAZEL_NATIVE_NEW,
+  );
+  assert.deepEqual(result.changed, [affected.MODULE_BAZEL_LOCK]);
+  assert.equal(result.routes.go.mode, "all");
+  assert.equal(result.routes.android.mode, "all");
+});
+
+// --------------------------------------------------------------------------
+// platform/bazel toolchain scoping
+// --------------------------------------------------------------------------
+test("platform bazel routing: zig toolchain change reaches only native", () => {
+  const result = routeReal(["platform/bazel/zig/toolchain.bzl"]);
+  assert.deepEqual(result.changed, [affected.BAZEL_CONFIG_NATIVE]);
+  for (const platform of ["go", "android", "bazel", "python", "js"]) {
+    assert.deepEqual(result.routes[platform].units, [], platform);
+  }
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
+    "logon-provider",
+    "pulsar",
+  ]);
+  assert.equal(result.routes.quality.mode, "always");
+});
+
+test("platform bazel routing: windows patches reach only native", () => {
+  const result = routeReal(["platform/bazel/windows/BUILD.bazel"]);
+  assert.deepEqual(result.changed, [affected.BAZEL_CONFIG_NATIVE]);
+  assert.deepEqual(result.routes.go.units, []);
+  assert.deepEqual(result.routes.android.units, []);
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
+    "logon-provider",
+    "pulsar",
+  ]);
+});
+
+test("platform bazel routing: other files under platform/bazel stay global", () => {
+  const result = routeReal(["platform/bazel/README.md"]);
+  assert.deepEqual(result.changed, ["platform/bazel/README.md"]);
+  assert.equal(result.routes.go.mode, "all");
+  assert.equal(result.routes.android.mode, "all");
+});
+
+test("platform bazel routing: a native toolchain and a go change select both", () => {
+  const result = routeReal(["platform/bazel/zig/repositories.bzl", "solutions/scheduler/app/run.go"]);
+  assert.deepEqual(result.changed, [
+    "platform/bazel#native",
+    "solutions/scheduler/app/run.go",
+  ]);
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
+    "logon-provider",
+    "pulsar",
+  ]);
+  assert.deepEqual(result.routes.go.units.map((unit) => unit.id), ["scheduler"]);
+  assert.deepEqual(result.routes.android.units, []);
+});
+

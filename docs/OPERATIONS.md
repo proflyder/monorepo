@@ -1004,7 +1004,9 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 (например `MODULE.bazel`) по-прежнему прогоняет проверки `android`, но APK не
 публикует. Исключение — правка `MODULE.bazel` только внутри Maven-расширения
 (`maven.install(...)`, `use_repo(maven, ...)`): она меняет состав APK, поэтому
-маршрутизируется как `MODULE.bazel#maven` только на `android` и публикует APK. Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
+маршрутизируется как `MODULE.bazel#maven` только на `android` и публикует APK;
+scoped-изменения native-входов (`MODULE.bazel#native`, `.bazelrc#cache`) не
+выбирают `android` и APK не публикуют. Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
 (`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `admins` («Admins»)
 и удаляет ключи. PR из форков пропускается: у них нет ни OIDC-токена, ни
 секретов Environment. Job не входит в `ci-ok` — неудачная загрузка видна на PR,

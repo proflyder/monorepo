@@ -13,9 +13,13 @@
  *             names by `bazel.roots`, so a change in `packages/kotlin` selects
  *             only the applications that actually depend on it. This needs no
  *             JDK and no Android SDK because it never analyses targets.
- *   MODULE.bazel - global, unless the diff only touches the
- *             rules_jvm_external Maven extension; then it becomes
- *             `MODULE.bazel#maven` and invalidates only android.
+ *   MODULE.bazel - global, unless the diff only touches the Maven extension
+ *             (`MODULE.bazel#maven` -> android), the Rust/zig/native station
+ *             inputs (`MODULE.bazel#native` -> native + bazel) or both.
+ *   .bazelrc - global, unless the diff only changes cache/output flags
+ *             (`.bazelrc#cache` -> no platform).
+ *   platform/bazel/zig, platform/bazel/windows - the station/provider
+ *             toolchains (`platform/bazel#native` -> native only).
  *   python  - path rules plus optional declarative `depends_on`.
  *   js      - path rules for dependency-free edge Workers (runs `node --test`).
  *   native  - path rules for non-Bazel C/C++ repository-script builds.
@@ -385,12 +389,35 @@ export function resolveBase(root, requested) {
 // MODULE.bazel scoping
 // --------------------------------------------------------------------------
 export const MODULE_BAZEL = "MODULE.bazel";
-// Virtual changed path for a MODULE.bazel edit that only touches the
-// rules_jvm_external Maven extension. `units.mjs` maps it to the android
-// platform, so the Maven/APK closure is retested without invalidating Go,
-// native, Python or JS units.
+export const MODULE_BAZEL_LOCK = "MODULE.bazel.lock";
+// Virtual changed paths for a scoped MODULE.bazel edit. `units.mjs` maps them
+// to the platforms whose build closure changed, so a Maven artifact bump does
+// not invalidate Go/Python/JS/native units and a Rust/zig toolchain bump does
+// not invalidate Android/Go/images.
+//
+//   #maven  - rules_jvm_external Maven extension -> android only.
+//   #native - rules_rust (toolchains, crate_universe), the zig cc toolchains,
+//             rules_rust windows patches and the station's third-party
+//             C/C++ http_archive()s -> native units + the pulsar-bazel host
+//             checks (they compile the same Rust crates on the host).
 export const MODULE_BAZEL_MAVEN = "MODULE.bazel#maven";
+export const MODULE_BAZEL_NATIVE = "MODULE.bazel#native";
 export const MAVEN_EXTENSION = "@rules_jvm_external//:extensions.bzl";
+export const RUST_EXTENSION = "@rules_rust//rust:extensions.bzl";
+export const CRATE_EXTENSION = "@rules_rust//crate_universe:extensions.bzl";
+export const ZIG_TOOLCHAIN_PREFIX = "@zig_0_14_1//";
+export const SENDSPIN_BAZEL_MARKER = "satellite/third_party/bazel";
+
+// `.bazelrc` scoping: a diff that only changes cache or console flags cannot
+// change any build/test result. Its virtual path matches no unit, so PR CI
+// runs the always-on quality job and nothing else (no images/deploy).
+export const BAZELRC = ".bazelrc";
+export const BAZELRC_CACHE = ".bazelrc#cache";
+
+// The station's target-only toolchain inputs. They change how the native
+// station/provider are cross-built, never the host Go/images/Android builds.
+export const BAZEL_CONFIG_NATIVE = "platform/bazel#native";
+const NATIVE_BAZEL_CONFIG_DIRS = ["platform/bazel/zig/", "platform/bazel/windows/"];
 
 const IDENT = /[\p{L}\p{N}_]/u;
 
@@ -503,8 +530,8 @@ function stringValue(token) {
   return null;
 }
 
-function mavenProxy(list) {
-  // Name bound by `<name> = use_extension(MAVEN_EXTENSION, "maven")`.
+function extensionProxy(list, extension, tag) {
+  // Name bound by `<name> = use_extension(extension, tag)`.
   for (let index = 0; index < list.length - 3; index += 1) {
     if (list[index][0] !== "ident") {
       continue;
@@ -526,21 +553,22 @@ function mavenProxy(list) {
         .filter((token) => token[0] === "string")
         .map((token) => stringValue(token)),
     );
-    if (values.has(MAVEN_EXTENSION) && values.has("maven")) {
+    if (values.has(extension) && values.has(tag)) {
       return list[index][1];
     }
   }
   return null;
 }
 
-function stripMaven(list, proxy) {
-  // Drop `<proxy>.<tag>(...)` calls and `use_repo(<proxy>, ...)`.
+function stripProxyUse(list, proxies) {
+  // Drop `<proxy>.<tag>(...)` calls and `use_repo(<proxy>, ...)` for every
+  // proxy name in `proxies`. Used to peel one scoping category at a time.
   const rest = [];
   let index = 0;
   while (index < list.length) {
     if (
       list[index][0] === "ident" &&
-      list[index][1] === proxy &&
+      proxies.has(list[index][1]) &&
       index + 3 < list.length &&
       list[index + 1][0] === "punct" &&
       list[index + 1][1] === "." &&
@@ -561,7 +589,7 @@ function stripMaven(list, proxy) {
       list[index + 1][0] === "punct" &&
       list[index + 1][1] === "(" &&
       list[index + 2][0] === "ident" &&
-      list[index + 2][1] === proxy
+      proxies.has(list[index + 2][1])
     ) {
       const end = matchParen(list, index + 1);
       if (end !== null) {
@@ -575,6 +603,112 @@ function stripMaven(list, proxy) {
   return rest;
 }
 
+function stripMaven(list, proxy) {
+  return stripProxyUse(list, new Set([proxy]));
+}
+
+function callArguments(list, openIndex) {
+  const end = matchParen(list, openIndex);
+  if (end === null) {
+    return null;
+  }
+  return { args: list.slice(openIndex + 1, end), end };
+}
+
+function onlyStrings(args, predicate) {
+  // Every argument is a string matching `predicate`; at least one.
+  let seen = false;
+  for (const token of args) {
+    if (token[0] === "punct" && token[1] === ",") {
+      continue;
+    }
+    if (token[0] !== "string") {
+      return false;
+    }
+    const value = stringValue(token);
+    if (value === null || !predicate(value)) {
+      return false;
+    }
+    seen = true;
+  }
+  return seen;
+}
+
+function isZigRegisterToolchains(args) {
+  // `register_toolchains("@zig_0_14_1//:...")`: only the target-constrained
+  // station/provider cc toolchains. Any other register_toolchains stays global.
+  return onlyStrings(args, (value) => value.startsWith(ZIG_TOOLCHAIN_PREFIX));
+}
+
+function isRulesRustOverride(args) {
+  for (let index = 0; index + 2 < args.length; index += 1) {
+    if (
+      args[index][0] === "ident" &&
+      args[index][1] === "module_name" &&
+      args[index + 1][0] === "punct" &&
+      args[index + 1][1] === "=" &&
+      args[index + 2][0] === "string"
+    ) {
+      if (stringValue(args[index + 2]) === "rules_rust") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function isSendspinArchive(args) {
+  // Third-party C/C++ of the station's Sendspin player: identified by the
+  // `_SENDSPIN_BAZEL` BUILD-overlay prefix. Other http_archive()s stay global.
+  return args.some(
+    (token) =>
+      (token[0] === "ident" && token[1] === "_SENDSPIN_BAZEL") ||
+      (token[0] === "string" && String(stringValue(token)).includes(SENDSPIN_BAZEL_MARKER)),
+  );
+}
+
+function stripNative(list) {
+  // Drop the Rust/zig/C++ station and Windows-provider toolchain inputs:
+  //   * `rust.<tag>(...)`, `use_repo(rust, ...)` (rules_rust toolchains)
+  //   * `crate.<tag>(...)`, `use_repo(crate, ...)` (crate_universe workspaces)
+  //   * `zig_sdk_repository(...)`
+  //   * `register_toolchains(...)` that only registers `@zig_0_14_1//...`
+  //   * `single_version_override(module_name = "rules_rust", ...)`
+  //   * `http_archive(...)` with the station's `_SENDSPIN_BAZEL` overlays
+  //
+  // A missing proxy binding leaves its calls in the residual, so the diff
+  // degrades to global rather than being scoped by accident.
+  const proxies = new Set(
+    [
+      extensionProxy(list, RUST_EXTENSION, "rust"),
+      extensionProxy(list, CRATE_EXTENSION, "crate"),
+    ].filter((proxy) => proxy !== null),
+  );
+  const rest = [];
+  let index = 0;
+  while (index < list.length) {
+    const token = list[index];
+    if (token[0] === "ident" && list[index + 1]?.[0] === "punct" && list[index + 1][1] === "(") {
+      const call = callArguments(list, index + 1);
+      if (call !== null) {
+        const name = token[1];
+        const scoped =
+          name === "zig_sdk_repository" ||
+          (name === "register_toolchains" && isZigRegisterToolchains(call.args)) ||
+          (name === "single_version_override" && isRulesRustOverride(call.args)) ||
+          (name === "http_archive" && isSendspinArchive(call.args));
+        if (scoped) {
+          index = call.end + 1;
+          continue;
+        }
+      }
+    }
+    rest.push(token);
+    index += 1;
+  }
+  return stripProxyUse(rest, proxies);
+}
+
 function sameTokens(left, right) {
   if (left.length !== right.length) {
     return false;
@@ -584,55 +718,251 @@ function sameTokens(left, right) {
   );
 }
 
-export function moduleBazelIsMavenOnly(oldText, newText) {
+export function moduleBazelScope(oldText, newText) {
   /**
-   * Whether the only real change is inside the rules_jvm_external Maven use.
+   * Scope of a MODULE.bazel diff: "maven", "native", "maven+native" or null.
    *
-   * Comments and whitespace never count, and neither does anything inside
-   * `maven.install(...)`/`maven.<tag>(...)` or `use_repo(maven, ...)` where
-   * `maven` is the proxy bound by `use_extension("@rules_jvm_external//:
-   * extensions.bzl", "maven")`.
+   * Comments and whitespace never count. A diff is scoped only when the
+   * residual tokens after peeling that category are identical:
    *
-   * Everything else is deliberately *not* scoped: a `bazel_dep`, toolchain,
-   * `go_deps`, `oci` or Python change keeps the global invalidation. A missing
-   * proxy binding or unbalanced input also keeps it: the fail-safe direction is
-   * "run everything".
+   *   maven  - rules_jvm_external (`maven.install(...)`, `maven.<tag>(...)`,
+   *            `use_repo(maven, ...)` where `maven` is the proxy bound by
+   *            `use_extension("@rules_jvm_external//:extensions.bzl", "maven")`).
+   *   native - `rust.toolchain(...)`/`use_repo(rust, ...)`,
+   *            `crate.from_cargo(...)`/`use_repo(crate, ...)`,
+   *            `zig_sdk_repository(...)`, `register_toolchains("@zig_0_14_1//...")`,
+   *            `single_version_override(module_name = "rules_rust", ...)` and the
+   *            station's `_SENDSPIN_BAZEL` http_archive()s.
+   *
+   * Everything else (any bazel_dep, go_deps, oci, python, rules_go, another
+   * extension, an unbalanced or unparseable file, a missing proxy) returns
+   * null: the fail-safe direction is "run everything".
    */
   const oldTokens = tokens(oldText);
   const newTokens = tokens(newText);
   if (!balanced(oldTokens) || !balanced(newTokens)) {
-    return false;
+    return null;
   }
-  const oldProxy = mavenProxy(oldTokens);
-  const newProxy = mavenProxy(newTokens);
-  if (oldProxy === null || newProxy === null) {
-    return false;
+  const oldMavenProxy = extensionProxy(oldTokens, MAVEN_EXTENSION, "maven");
+  const newMavenProxy = extensionProxy(newTokens, MAVEN_EXTENSION, "maven");
+  const mavenScoped =
+    oldMavenProxy !== null &&
+    newMavenProxy !== null &&
+    sameTokens(stripMaven(oldTokens, oldMavenProxy), stripMaven(newTokens, newMavenProxy));
+  if (mavenScoped) {
+    return "maven";
   }
-  return sameTokens(stripMaven(oldTokens, oldProxy), stripMaven(newTokens, newProxy));
+  const oldNoNative = stripNative(oldTokens);
+  const newNoNative = stripNative(newTokens);
+  if (sameTokens(oldNoNative, newNoNative)) {
+    return "native";
+  }
+  if (
+    oldMavenProxy !== null &&
+    newMavenProxy !== null &&
+    sameTokens(
+      stripNative(stripMaven(oldTokens, oldMavenProxy)),
+      stripNative(stripMaven(newTokens, newMavenProxy)),
+    )
+  ) {
+    return "maven+native";
+  }
+  return null;
 }
 
-function scopeModuleBazel(changed, root, base, head) {
-  // Replace a Maven-only `MODULE.bazel` edit with the virtual android path.
-  if (!changed.includes(MODULE_BAZEL) || !base) {
-    return { changed, warning: null };
-  }
-  const oldText = internals.gitFileText(root, base, MODULE_BAZEL);
-  const newText = internals.gitFileText(root, head, MODULE_BAZEL);
-  // Added/deleted MODULE.bazel (or an unknown revision): keep it global.
-  if (oldText === null || newText === null) {
-    return { changed, warning: null };
-  }
-  if (!moduleBazelIsMavenOnly(oldText, newText)) {
-    return { changed, warning: null };
-  }
-  const scoped = changed.map((item) => (item === MODULE_BAZEL ? MODULE_BAZEL_MAVEN : item));
-  return {
-    changed: scoped,
-    warning:
-      "MODULE.bazel changed only inside the rules_jvm_external Maven extension; " +
-      "scoping it to the android platform",
-  };
+export function moduleBazelIsMavenOnly(oldText, newText) {
+  // Kept as the narrow predicate used by the Maven-only regression tests.
+  return moduleBazelScope(oldText, newText) === "maven";
 }
+
+// --------------------------------------------------------------------------
+// .bazelrc scoping
+// --------------------------------------------------------------------------
+// Flags that only choose a cache location or change console output: they
+// cannot change the bytes any build or test produces. Matched by option name
+// after the command prefix (`common`, `build`, `test`, ...).
+const BAZELRC_CACHE_FLAGS = new Set([
+  "disk_cache",
+  "experimental_disk_cache_gc_max_size",
+  "experimental_disk_cache_gc_max_age",
+  "experimental_disk_cache_gc_idle_delay",
+  "repository_cache",
+  "announce_rc",
+  "color",
+  "curses",
+  "test_output",
+  "test_summary",
+  "verbose_failures",
+]);
+const BAZELRC_CACHE_FLAG_PREFIXES = ["repo_contents_cache", "show_progress"];
+
+function isCacheFlagName(name) {
+  return (
+    BAZELRC_CACHE_FLAGS.has(name) ||
+    BAZELRC_CACHE_FLAG_PREFIXES.some((prefix) => name.startsWith(prefix))
+  );
+}
+
+function bazelrcStructuralLines(text) {
+  // Lines that can affect a build. Returns null for anything unparseable so
+  // the caller keeps the global invalidation.
+  const structural = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    // `import`/`try-import` pull in another file this comparison cannot see.
+    if (/^(?:try-import|import)\b/.test(line)) {
+      return null;
+    }
+    const parts = line.split(/\s+/);
+    const command = parts[0];
+    if (!/^[a-z][a-z0-9_-]*$/.test(command)) {
+      return null;
+    }
+    const flags = parts.slice(1);
+    if (!flags.length) {
+      return null;
+    }
+    let cacheOnly = true;
+    for (const flag of flags) {
+      if (!flag.startsWith("--")) {
+        // A bare value, a short option or a `#` we did not classify.
+        return null;
+      }
+      const name = flag.slice(2).split("=")[0];
+      if (!name) {
+        return null;
+      }
+      if (!isCacheFlagName(name)) {
+        cacheOnly = false;
+      }
+    }
+    // A line mixing whitelisted and real flags stays significant as a whole:
+    // any edit to it (including its cache part) keeps the global invalidation.
+    if (!cacheOnly) {
+      structural.push(line);
+    }
+  }
+  return structural;
+}
+
+export function bazelrcIsCacheOnly(oldText, newText) {
+  /**
+   * Whether a `.bazelrc` diff only adds/changes/removes cache/output flags.
+   *
+   * Comments and blank lines are neutral. Any other line is compared verbatim,
+   * so a real flag change, an added/removed line with a real flag, an `import`,
+   * or a line the parser does not understand returns false (global). A missing
+   * base or head is handled by the caller.
+   */
+  const oldLines = bazelrcStructuralLines(oldText);
+  const newLines = bazelrcStructuralLines(newText);
+  if (oldLines === null || newLines === null) {
+    return false;
+  }
+  return sameTokens(
+    oldLines.map((line) => ["line", line]),
+    newLines.map((line) => ["line", line]),
+  );
+}
+
+function isNativeBazelConfigPath(item) {
+  return NATIVE_BAZEL_CONFIG_DIRS.some((prefix) => item.startsWith(prefix));
+}
+
+function scopeChanges(changed, root, base, head) {
+  // Rewrite globally-invalidating Bazel infrastructure paths to the narrowest
+  // virtual path that still covers their real build closure. Every branch
+  // fails safe: a missing revision, an added/deleted file or an unrecognized
+  // diff keeps the original global path.
+  const warnings = [];
+  const scoped = [];
+  const push = (item) => {
+    if (!scoped.includes(item)) {
+      scoped.push(item);
+    }
+  };
+
+  let moduleVirtual = null;
+  let moduleScope = null;
+  if (changed.includes(MODULE_BAZEL) && base) {
+    const oldText = internals.gitFileText(root, base, MODULE_BAZEL);
+    const newText = internals.gitFileText(root, head, MODULE_BAZEL);
+    if (oldText !== null && newText !== null) {
+      moduleScope = moduleBazelScope(oldText, newText);
+      if (moduleScope !== null) {
+        moduleVirtual =
+          moduleScope === "maven"
+            ? [MODULE_BAZEL_MAVEN]
+            : moduleScope === "native"
+              ? [MODULE_BAZEL_NATIVE]
+              : [MODULE_BAZEL_MAVEN, MODULE_BAZEL_NATIVE];
+      }
+    }
+  }
+  // The lock accompanies a scoped MODULE.bazel edit (Maven resolution or
+  // crate_universe/toolchain pins) and follows that same scope. Changed on its
+  // own it stays global: nothing in the diff explains which platform moved.
+  const lockFollows = moduleVirtual !== null && changed.includes(MODULE_BAZEL_LOCK);
+
+  let cacheOnly = false;
+  let sawNativeBazel = false;
+  for (const item of changed) {
+    if (item === MODULE_BAZEL && moduleVirtual) {
+      for (const path of moduleVirtual) {
+        push(path);
+      }
+      continue;
+    }
+    if (item === MODULE_BAZEL_LOCK && lockFollows) {
+      for (const path of moduleVirtual) {
+        push(path);
+      }
+      continue;
+    }
+    if (item === BAZELRC && base) {
+      const oldText = internals.gitFileText(root, base, BAZELRC);
+      const newText = internals.gitFileText(root, head, BAZELRC);
+      if (oldText !== null && newText !== null && bazelrcIsCacheOnly(oldText, newText)) {
+        push(BAZELRC_CACHE);
+        cacheOnly = true;
+        continue;
+      }
+    }
+    if (isNativeBazelConfigPath(item)) {
+      push(BAZEL_CONFIG_NATIVE);
+      sawNativeBazel = true;
+      continue;
+    }
+    push(item);
+  }
+
+  if (moduleVirtual !== null) {
+    warnings.push(
+      `MODULE.bazel changed only in the ${moduleScope} inputs; ` +
+        `scoping it to ${moduleVirtual.join(", ")}`,
+    );
+    if (lockFollows) {
+      warnings.push("MODULE.bazel.lock follows the scoped MODULE.bazel change");
+    }
+  }
+  if (cacheOnly) {
+    warnings.push(
+      ".bazelrc changed only in cache/output flags; scoping it out of every " +
+        "build platform",
+    );
+  }
+  if (sawNativeBazel) {
+    warnings.push(
+      "platform/bazel/zig and platform/bazel/windows only affect the native " +
+        "station/provider toolchains; scoping them to the native platform",
+    );
+  }
+  return { changed: scoped, warnings };
+}
+
 
 // --------------------------------------------------------------------------
 // Go dependency closure
@@ -1144,10 +1474,10 @@ export function route(
   } = {},
 ) {
   // Route changed paths onto units. Exposed for tests.
-  const scoped = scopeModuleBazel(changed, root, base, head);
+  const scoped = scopeChanges(changed, root, base, head);
   changed = scoped.changed;
   const invalidated = invalidatedPlatforms(config, changed);
-  const warnings = scoped.warning ? [scoped.warning] : [];
+  const warnings = [...scoped.warnings];
   const routes = routePlatforms(
     config,
     changed,
