@@ -40,10 +40,10 @@ service_image(
 filegroup(
     name = "images",
     srcs = [
-        ":scheduler_image",
         ":ha-bridge_image",
         ":ha-control_image",
         ":home-deploy_image",
+        ":scheduler_image",
     ],
     visibility = ["//visibility:public"],
 )

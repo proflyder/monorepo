@@ -17,8 +17,8 @@ kt_kotlinc_options(
 kt_compiler_plugin(
     name = "metro_compiler_plugin",
     compile_phase = True,
-    deps = ["@maven//:dev_zacsweers_metro_compiler"],
     id = "dev.zacsweers.metro.compiler",
+    deps = ["@maven//:dev_zacsweers_metro_compiler"],
 )
 
 # Stable personal debug keystore for the Home Android app.
@@ -33,7 +33,10 @@ kt_compiler_plugin(
 # the command stays hermetic and path-agnostic.
 genrule(
     name = "home_debug_keystore",
-    srcs = glob(["keys/home-debug.keystore"], allow_empty = True) + [
+    srcs = glob(
+        ["keys/home-debug.keystore"],
+        allow_empty = True,
+    ) + [
         "@rules_android//tools/android:debug_keystore",
     ],
     outs = ["home_debug.keystore"],
@@ -70,5 +73,8 @@ exports_files([
 # builds and Firebase stays uninitialized.
 filegroup(
     name = "google_services_json",
-    srcs = glob(["keys/google-services.json"], allow_empty = True),
+    srcs = glob(
+        ["keys/google-services.json"],
+        allow_empty = True,
+    ),
 )

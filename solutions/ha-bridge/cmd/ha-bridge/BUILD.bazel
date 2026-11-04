@@ -2,12 +2,12 @@ load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_binary(
     name = "ha-bridge",
-    embed = [":ha_bridge_lib"],
+    embed = [":ha-bridge_lib"],
     visibility = ["//visibility:public"],
 )
 
 go_library(
-    name = "ha_bridge_lib",
+    name = "ha-bridge_lib",
     srcs = [
         "healthcheck.go",
         "main.go",
@@ -25,10 +25,10 @@ go_library(
 )
 
 go_test(
-    name = "ha_bridge_test",
+    name = "ha-bridge_test",
     srcs = [
         "healthcheck_test.go",
         "main_test.go",
     ],
-    embed = [":ha_bridge_lib"],
+    embed = [":ha-bridge_lib"],
 )

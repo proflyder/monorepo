@@ -8,9 +8,9 @@ metro_android_library(
     custom_package = "dev.proflyder.home.core.settings",
     manifest = "src/main/AndroidManifest.xml",
     deps = [
-        "//packages/kotlin/core:core",
-        "//projects/mobile/android/core/config:config",
-        "//projects/mobile/android/core/model:model",
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
         "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",

@@ -6,9 +6,9 @@ kt_jvm_library(
     name = "network",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     deps = [
-        "//packages/kotlin/core:core",
-        "//projects/mobile/android/core/config:config",
-        "//projects/mobile/android/core/model:model",
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:com_squareup_retrofit2_retrofit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
@@ -22,8 +22,8 @@ kt_jvm_test(
     test_class = "dev.proflyder.home.core.network.AllNetworkTests",
     deps = [
         ":network",
-        "//projects/mobile/android/core/config:config",
-        "//projects/mobile/android/core/model:model",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
         "@maven//:com_squareup_okhttp3_mockwebserver",
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:junit_junit",

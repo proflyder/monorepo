@@ -8,7 +8,7 @@ metro_android_library(
     custom_package = "dev.proflyder.home.core.remoteconfig",
     manifest = "src/main/AndroidManifest.xml",
     deps = [
-        "//projects/mobile/android/core/config:config",
+        "//projects/mobile/android/core/config",
         "@maven//:com_google_firebase_firebase_common",
         "@maven//:com_google_firebase_firebase_config",
         "@maven//:dev_zacsweers_metro_runtime_jvm",

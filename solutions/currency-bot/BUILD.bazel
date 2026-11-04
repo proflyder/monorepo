@@ -21,6 +21,9 @@ service_image(
 
 filegroup(
     name = "images",
-    srcs = [":currency-bot_image", ":currency-bot-import_image"],
+    srcs = [
+        ":currency-bot-import_image",
+        ":currency-bot_image",
+    ],
     visibility = ["//visibility:public"],
 )
