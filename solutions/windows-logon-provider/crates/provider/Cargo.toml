@@ -19,3 +19,4 @@ logon_protocol = { path = "../protocol" }
 # `x86_64-pc-windows-gnu`.
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true }
+windows-core = { workspace = true }

@@ -1,5 +1,5 @@
 {
-  "checksum": "bb96fbcc731a5a62c55dbbb80d12c0772df3f233dd6af0967ee09f61115a57d6",
+  "checksum": "fba335e055e9c49451b01313ba7ae3652e20fd68f7472a76054e89d024ba8032",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -157,6 +157,30 @@
         }
       ],
       "version": "0.10.2"
+    },
+    "cp_selftest 0.1.0": {
+      "common_attrs": {
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "windows 0.62.2",
+                "target": "windows"
+              }
+            ]
+          }
+        },
+        "edition": "2024"
+      },
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "cp_selftest",
+      "repository": null,
+      "targets": [],
+      "version": "0.1.0"
     },
     "cpufeatures 0.3.1": {
       "common_attrs": {
@@ -498,6 +522,10 @@
               {
                 "id": "windows 0.62.2",
                 "target": "windows"
+              },
+              {
+                "id": "windows-core 0.62.2",
+                "target": "windows_core"
               }
             ]
           }
@@ -819,8 +847,29 @@
         "crate_features": [
           "Win32",
           "Win32_Foundation",
+          "Win32_Globalization",
+          "Win32_Graphics",
+          "Win32_Graphics_Gdi",
+          "Win32_Networking",
+          "Win32_Networking_WinHttp",
+          "Win32_Security",
+          "Win32_Security_Authentication",
+          "Win32_Security_Authentication_Identity",
+          "Win32_Security_Authorization",
+          "Win32_Security_Credentials",
+          "Win32_Security_Cryptography",
+          "Win32_Storage",
+          "Win32_Storage_FileSystem",
           "Win32_System",
           "Win32_System_Com",
+          "Win32_System_IO",
+          "Win32_System_LibraryLoader",
+          "Win32_System_Registry",
+          "Win32_System_SystemInformation",
+          "Win32_System_Threading",
+          "Win32_System_WindowsProgramming",
+          "Win32_UI",
+          "Win32_UI_Shell",
           "default",
           "std"
         ],
@@ -910,6 +959,7 @@
     "windows-core 0.62.2": {
       "common_attrs": {
         "crate_features": [
+          "default",
           "std"
         ],
         "deps": [
@@ -1367,10 +1417,12 @@
     "sha2 0.11.1",
     "subtle 2.6.1",
     "windows 0.62.2",
+    "windows-core 0.62.2",
     "zeroize 1.9.1"
   ],
   "direct_dev_deps": [],
   "workspace_members": {
+    "cp_selftest 0.1.0": "solutions/windows-logon-provider/crates/cp-selftest",
     "logon_protocol 0.1.0": "solutions/windows-logon-provider/crates/protocol",
     "logon_provider 0.1.0": "solutions/windows-logon-provider/crates/provider"
   }

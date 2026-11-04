@@ -1,20 +1,14 @@
-rules_rust fixes for the x86_64-pc-windows-gnu credential provider target.
+rules_rust fix: declare the x86_64-pc-windows-gnu triple.
 
-1. `rust/platform/triple_mappings.bzl`: rules_rust deliberately omits the
-   *-windows-gnu triples because they map to the same Bazel constraints
-   (@platforms//os:windows + @platforms//cpu:x86_64) as *-windows-msvc, so a
-   single select cannot distinguish them. This repository builds only the gnu
-   variant (the Windows credential provider links with the hermetic zig
-   cc_toolchain, no Visual Studio), and its crate_universe lock lists only the
-   gnu triple, so declaring it is unambiguous here. Without the entry
-   `@rules_rust//rust/platform:x86_64-pc-windows-gnu` does not exist and every
-   generated crate select fails to resolve.
-2. `rust/private/rustc.bzl`: rules_rust declares an MSVC-style
-   `<name>.dll.lib` import library as an output of every Windows cdylib. On
-   windows-gnu rustc writes `<name>.dll.a` instead and never the declared
-   path, so the action would fail with "output was not created". The extra
-   output is only meaningful for MSVC consumers, so it is gated on
-   `target_abi == "msvc"`.
+`rust/platform/triple_mappings.bzl`: rules_rust deliberately omits the
+*-windows-gnu triples because they map to the same Bazel constraints
+(@platforms//os:windows + @platforms//cpu:x86_64) as *-windows-msvc, so a single
+select cannot distinguish them. This repository builds only the gnu variant (the
+Windows credential provider links with the hermetic zig cc_toolchain, no Visual
+Studio), and its crate_universe lock lists only the gnu triple, so declaring it
+is unambiguous here. Without the entry
+`@rules_rust//rust/platform:x86_64-pc-windows-gnu` does not exist and every
+generated crate select fails to resolve.
 
 --- a/rust/platform/triple_mappings.bzl
 +++ b/rust/platform/triple_mappings.bzl

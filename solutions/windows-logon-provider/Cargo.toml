@@ -14,9 +14,29 @@ hmac = "=0.13.0"
 sha2 = "=0.11.1"
 subtle = "=2.6.1"
 zeroize = { version = "=1.9.1", features = ["derive"] }
+# Features are the exact set the provider and cp-selftest use; crate-universe.lock
+# records them for Bazel. Keep this list in sync with the modules in
+# crates/provider/src (`cfg(windows)` code) and crates/cp-selftest.
+windows-core = "=0.62.2"
 windows = { version = "=0.62.2", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Gdi",
+    "Win32_Networking_WinHttp",
+    "Win32_Security",
+    "Win32_Security_Authentication_Identity",
+    "Win32_Security_Authorization",
+    "Win32_Security_Credentials",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
     "Win32_System_Com",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+    "Win32_UI_Shell",
 ] }
 
 # The credential provider is loaded into LogonUI, so the release profile stays
