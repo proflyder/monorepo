@@ -1,8 +1,8 @@
 //! Standard COM in-proc server entry points.
 //!
-//! Exports are exactly `DllGetClassObject` and `DllCanUnloadNow` (the `.def`
-//! file of the C++ build is no longer needed: only `#[unsafe(no_mangle)]`
-//! functions become PE exports).
+//! Exports are exactly `DllGetClassObject` and `DllCanUnloadNow`: only the
+//! `#[unsafe(no_mangle)]` functions below become PE exports, so no `.def` file
+//! is involved.
 //!
 //! `DllCanUnloadNow` returns `S_FALSE` while a provider object is alive
 //! (`DLL_REFS`) or a worker thread is still running (`ACTIVE_WORKERS`). A live
@@ -58,8 +58,7 @@ impl Drop for DllRef {
     }
 }
 
-/// Class factory: one live object per `DllGetClassObject` call, exactly like the
-/// C++ `ClassFactory`.
+/// Class factory: one live object per `DllGetClassObject` call.
 #[implement(IClassFactory)]
 struct ClassFactory {}
 

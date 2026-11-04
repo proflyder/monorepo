@@ -1,8 +1,8 @@
 //! Provider configuration: `HKLM` registry values and the DPAPI-protected
 //! secret file.
 //!
-//! The C++ `config.cpp` is the source of truth: the same value names, types,
-//! size limits and error phrases. All reads are cheap (one registry key and one
+//! Value names, types, size limits and error phrases are the install contract
+//! documented in `README.md`. All reads are cheap (one registry key and one
 //! small file) and happen on the worker thread or in `GetSerialization`.
 //!
 //! The arithmetic that can be tested without Windows (`FailCount` increment,
@@ -219,7 +219,7 @@ mod imp {
 
     /// Reads one required `REG_SZ` value, recording
     /// `registry_value_invalid:<field>` on a missing or malformed value (the
-    /// C++ ladder keeps the name of the first failing field).
+    /// validation ladder keeps the name of the first failing field).
     fn required_string(
         key: HKEY,
         name: PCWSTR,
@@ -356,7 +356,7 @@ mod imp {
         };
         let mut output = CRYPT_INTEGER_BLOB::default();
         // SAFETY: both blobs point to live buffers; `output` is a valid
-        // out-parameter. No prompt and no reserved pointer, like the C++ call.
+        // out-parameter. No prompt and no reserved pointer, as documented for `CryptUnprotectData`.
         let decrypted = unsafe {
             CryptUnprotectData(&input, None, Some(&entropy), None, None, 0, &raw mut output)
         };

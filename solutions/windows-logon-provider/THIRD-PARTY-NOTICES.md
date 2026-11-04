@@ -15,8 +15,10 @@ repository:
   (the `Advise` / `ICredentialProviderEvents::CredentialsChanged`
   re-enumeration pattern).
 
-The code was reduced to what this provider needs and substantially rewritten;
-files that contain adapted code keep the original copyright header.
+The C++ sources are gone; the provider is Rust. The Kerberos logon packing
+adapted from `helpers.cpp` lives in `crates/provider/src/kerb.rs`, which keeps
+the original copyright header. The remaining files were reduced to the
+behaviour this provider needs and substantially rewritten.
 
 ```
 The MIT License (MIT)
@@ -42,9 +44,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  THE SOFTWARE.
 ```
 
-## llvm-mingw
+## zig
 
-The Windows build uses [llvm-mingw](https://github.com/mstorsjo/llvm-mingw),
-which is installed locally under `secrets/local-tools/` and is not distributed
-with this repository. See that project for its licences (LLVM Apache-2.0 with
-LLVM exceptions, mingw-w64 and the UCRT runtime components).
+The Windows cross-build links with the hermetic [zig](https://ziglang.org/)
+toolchain fetched by Bazel (`platform/bazel/zig/`); it is not distributed with
+this repository. Zig ships the mingw-w64/UCRT runtime components under their
+own licences, and its compiler is MIT licensed.

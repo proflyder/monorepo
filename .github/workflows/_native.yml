@@ -2,11 +2,12 @@ name: _native
 
 # Reusable native platform workflow. Two kinds of non-Bazel build share it:
 #
-#   * `script` (default) — one repository-script C/C++ build with a pinned
-#     cross toolchain (the Windows logon provider). The unit supplies its
-#     working directory, host-test and cross-build commands, the artifacts it
-#     owns and the pinned toolchain archive. The archive is cached by version +
-#     sha256, and its digest is verified before extraction.
+#   * `script` (default) — one repository-script build (the Windows logon
+#     provider). The unit supplies its working directory, host-test and
+#     cross-build commands and the artifacts it owns. The scripts drive Bazel
+#     themselves: the Rust toolchain comes from rules_rust and the Windows
+#     linker/libc from the hermetic zig cc_toolchain pinned in MODULE.bazel,
+#     so there is no extra toolchain download or host compiler setup here.
 #
 #   * `pulsar` — the Rust station daemon in `projects/station/pulsar`. Its host
 #     fmt/clippy/tests are the `pulsar-bazel` unit (`_bazel.yml`); this workflow
@@ -57,30 +58,6 @@ on:
         type: string
       checksums:
         description: Checksums file to generate over artifacts, relative to workdir (script kind)
-        required: false
-        default: ""
-        type: string
-      toolchain_name:
-        description: Toolchain name (cache key and artifact metadata)
-        required: false
-        default: ""
-        type: string
-      toolchain_version:
-        required: false
-        default: ""
-        type: string
-      toolchain_url:
-        description: HTTPS archive URL; empty when no toolchain download is needed
-        required: false
-        default: ""
-        type: string
-      toolchain_sha256:
-        description: Expected sha256 (lowercase hex) of the archive
-        required: false
-        default: ""
-        type: string
-      toolchain_root:
-        description: Directory created by extracting the archive
         required: false
         default: ""
         type: string
@@ -244,46 +221,24 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      # The portable tests build with the host compiler (clang++ by default).
-      # GitHub's Ubuntu image ships clang, but install it if the image changes.
-      - name: Host C++ compiler
-        run: |
-          if ! command -v clang++ >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install --yes --no-install-recommends clang
-          fi
-          clang++ --version | head -n 1
-
-      - name: Cache ${{ inputs.toolchain_name }} ${{ inputs.toolchain_version }}
-        id: toolchain-cache
-        if: inputs.toolchain_url != ''
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
+      # `pulsar` kind and the `_bazel.yml` unit the Rust host checks use.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
-          path: ${{ runner.temp }}/toolchains/${{ inputs.toolchain_name }}-${{ inputs.toolchain_version }}
-          key: ${{ runner.os }}-${{ inputs.toolchain_name }}-${{ inputs.toolchain_version }}-${{ inputs.toolchain_sha256 }}
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - name: Download and verify ${{ inputs.toolchain_name }}
-        if: inputs.toolchain_url != '' && steps.toolchain-cache.outputs.cache-hit != 'true'
-        env:
-          TOOLCHAIN_URL: ${{ inputs.toolchain_url }}
-          TOOLCHAIN_SHA256: ${{ inputs.toolchain_sha256 }}
-          TOOLCHAIN_NAME: ${{ inputs.toolchain_name }}
-          TOOLCHAIN_VERSION: ${{ inputs.toolchain_version }}
-        run: |
-          set -euo pipefail
-          destination="$RUNNER_TEMP/toolchains/${TOOLCHAIN_NAME}-${TOOLCHAIN_VERSION}"
-          archive="$RUNNER_TEMP/${TOOLCHAIN_NAME}-${TOOLCHAIN_VERSION}.tar.xz"
-          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" "$TOOLCHAIN_URL"
-          echo "${TOOLCHAIN_SHA256}  ${archive}" | sha256sum -c -
-          rm -rf "$destination"
-          mkdir -p "$destination"
-          tar -xJf "$archive" -C "$destination"
-          rm -f "$archive"
-
-      - name: Expose ${{ inputs.toolchain_name }} root
-        if: inputs.toolchain_url != ''
-        run: |
-          echo "LLVM_MINGW=$RUNNER_TEMP/toolchains/${{ inputs.toolchain_name }}-${{ inputs.toolchain_version }}/${{ inputs.toolchain_root }}" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Action-output disk cache (.bazelrc only); the key tracks both the
+          # Rust workspace and the pinned zig/Windows toolchain platform.
+          path: ~/.cache/bazel-disk
+          key: bazel-logon-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'solutions/windows-logon-provider/Cargo.lock', 'solutions/windows-logon-provider/crate-universe.lock', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
+          restore-keys: |
+            bazel-logon-${{ runner.os }}-
+            bazel-${{ runner.os }}-
 
       - name: Test ${{ inputs.unit }}
         if: inputs.test != ''

@@ -435,10 +435,11 @@ jobs:
       tests: ${{ matrix.tests }}
 
   # One matrix entry per affected native build: the Windows logon provider
-  # cross-built with the pinned llvm-mingw toolchain, and the Rust Pulsar tree
-  # (Bazel for both arches, installer, radio, ssh; host fmt/clippy/tests are
-  # the pulsar-bazel unit). Build, checksums and artifact upload; on a PR from
-  # this repository (never a fork) `_native.yml` also publishes the
+  # (Bazel + rules_rust, hermetic zig toolchain for x86_64-pc-windows-gnu) and
+  # the Rust Pulsar tree (Bazel for both arches, installer, radio, ssh; host
+  # fmt/clippy/tests are the pulsar-bazel unit). Build, checksums and artifact
+  # upload; on a PR from this repository (never a fork) `_native.yml` also
+  # publishes the
   # release-shaped artifact as `tree-<hash>` with build provenance, so the merge
   # deploys the bytes this PR tested (DECISIONS 36). Fork PRs only build.
   #
@@ -465,11 +466,6 @@ jobs:
       test: ${{ matrix.test }}
       artifacts: ${{ matrix.artifacts }}
       checksums: ${{ matrix.checksums }}
-      toolchain_name: ${{ matrix.toolchain_name }}
-      toolchain_version: ${{ matrix.toolchain_version }}
-      toolchain_url: ${{ matrix.toolchain_url }}
-      toolchain_sha256: ${{ matrix.toolchain_sha256 }}
-      toolchain_root: ${{ matrix.toolchain_root }}
       publish_repository: ${{ matrix.publish_repository }}
       publish_tags: ${{ matrix.publish_tags }}
       publish_script: ${{ matrix.publish_script }}

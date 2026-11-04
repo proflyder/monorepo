@@ -1,6 +1,6 @@
 //! `cp-selftest.exe`: loads the credential provider outside LogonUI.
 //!
-//! Port of `src/selftest/cp_selftest.cpp`. It changes nothing on the machine,
+//! It changes nothing on the machine:
 //! but `SetUsageScenario(CPUS_LOGON)` starts the single poller for a moment:
 //! run it only when no wake grant is pending.
 //!

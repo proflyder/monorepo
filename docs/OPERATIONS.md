@@ -519,7 +519,8 @@ PVC), но сбрасывает выданные nonce — ПК просто з�
 ### Модуль входа (logon provider)
 
 Провайдер входа — переиспользуемое решение `solutions/windows-logon-provider`
-(C++17, llvm-mingw, без Visual Studio). Значения `ServiceUrl`, `Machine` и
+(Rust, Bazel/rules_rust + zig под `x86_64-pc-windows-gnu`, без Visual Studio).
+Значения `ServiceUrl`, `Machine` и
 `UserName` в решении не хранятся: их передаёт проект при установке (для этого
 ПК — параметры ниже).
 
@@ -532,9 +533,9 @@ ghcr.io/proflyder/windows-logon-provider:<VERSION>
 ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 ```
 
-Файлы артефакта: `RicardoKompLogon.dll`, `cp-selftest.exe`,
-`hmac-selftest.exe`, `SHA256SUMS`. Тег `<VERSION>` неизменяем: повторная
-публикация с тем же содержимым — no-op, с другим — ошибка, поэтому релиз
+Файлы артефакта: `RicardoKompLogon.dll`, `cp-selftest.exe`, `SHA256SUMS`.
+Тег `<VERSION>` неизменяем: повторная публикация с тем же содержимым — no-op,
+с другим — ошибка, поэтому релиз
 делается сменой `VERSION`. Provenance attestation создаётся для digest
 артефакта и для DLL. PR ничего не публикует; сборка PR остаётся artifact'ом
 для проверки.
@@ -556,7 +557,7 @@ cd solutions/windows-logon-provider
 `fetch.sh` тянет артефакт в временный каталог, проверяет `SHA256SUMS` и
 `gh attestation verify` для DLL, печатает разрешённый digest. Любое
 расхождение — ошибка. Затем скопировать файлы на ПК по SSH, запустить
-self-tests, установить/заменить DLL и записать digest в `docs/STATE.md`.
+self-test, установить/заменить DLL и записать digest в `docs/STATE.md`.
 Текущий установленный DLL — sha256
 `4481ae77f91411e5ceffe410c8b934f983a544fccfa70493e545e81177627c0b`
 (из CI artifact); после первого GHCR publish оператор записывает digest
@@ -603,11 +604,10 @@ ssh <user>@<host> \
   "powershell -NoProfile -Command \"Get-Content 'C:\\ProgramData\\Ricardo\\KompLogon\\logon.log' -Tail 50\""
 ```
 
-Self-tests (запускать, когда грант не ожидается — `cp-selftest.exe` на
+Self-test (запускать, когда грант не ожидается — `cp-selftest.exe` на
 мгновение поднимает фоновый поток):
 
 ```powershell
-.\hmac-selftest.exe   # HMAC через BCrypt против тест-вектора PROTOCOL.md
 .\cp-selftest.exe     # загрузка провайдера по CLSID вне LogonUI
 ```
 

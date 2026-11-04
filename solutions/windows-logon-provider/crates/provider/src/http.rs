@@ -67,7 +67,7 @@ fn post_json_inner(
     }
 
     // SAFETY: all arguments are valid; WINHTTP_ACCESS_TYPE_NO_PROXY forbids a
-    // proxy, matching the C++ client.
+    // proxy, as documented in `README.md`.
     let session = WinHttpHandle(unsafe {
         WinHttpOpen(
             PCWSTR(widen_nul(USER_AGENT).as_ptr()),

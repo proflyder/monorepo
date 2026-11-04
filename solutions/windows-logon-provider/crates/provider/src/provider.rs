@@ -7,8 +7,8 @@
 //!
 //! [`Session`] is reference-counted and is the *only* thing the credential and
 //! the worker touch, so the provider object may be destroyed at any time without
-//! leaving a dangling reference behind (the C++ code uses the same
-//! `std::shared_ptr<Session>` design).
+//! leaving a dangling reference behind (the shared reference-counted session
+//! design).
 
 /// Budget from provider load to the last challenge attempt: 90 s.
 pub const WORKER_BUDGET_MS: u64 = 90 * 1000;
@@ -88,8 +88,8 @@ mod windows_impl {
 
     // SAFETY: the COM interface pointer in `SessionState` is only accessed
     // while the mutex is held, and the worker thread calls
-    // `CredentialsChanged` on it exactly like the C++ worker does. The other
-    // fields are atomics. This mirrors the C++ design where the worker thread
+    // `CredentialsChanged` on it as described in `README.md`. The other
+    // fields are atomics. This mirrors the design where the worker thread
     // owns a `std::shared_ptr<Session>` and calls LogonUI from that thread.
     unsafe impl Send for Session {}
     unsafe impl Sync for Session {}
@@ -161,7 +161,7 @@ mod windows_impl {
             (events, state.context)
         };
         // Cloning the interface added a reference; it is released when `events`
-        // is dropped, after the callback (same as AddRef/Release in C++).
+        // is dropped, after the callback (same as AddRef/Release).
         let _ = unsafe { events.CredentialsChanged(context) };
         ArmResult::Armed
     }
@@ -238,7 +238,7 @@ mod windows_impl {
         }
     }
 
-    /// UTF-16 conversion without a terminating NUL (the C++ `Widen`).
+    /// UTF-16 conversion without a terminating NUL.
     pub fn widen(text: &str) -> Vec<u16> {
         if text.is_empty() {
             return Vec::new();
@@ -272,7 +272,7 @@ mod windows_impl {
         wide
     }
 
-    /// UTF-8 from a NUL-terminated UTF-16 string (the C++ `Narrow`).
+    /// UTF-8 from a NUL-terminated UTF-16 string.
     ///
     /// # Safety
     ///

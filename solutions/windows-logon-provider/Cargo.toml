@@ -39,9 +39,9 @@ windows = { version = "=0.62.2", features = [
     "Win32_UI_Shell",
 ] }
 
-# The credential provider is loaded into LogonUI, so the release profile stays
-# close to the former C++ build (-O2/-O3) but keeps unwinding: panics cross the
-# COM boundary through catch_unwind and must not abort the logon UI.
+# The credential provider is loaded into LogonUI, so the release profile is
+# optimized but keeps unwinding: panics cross the COM boundary through
+# catch_unwind and must not abort the logon UI.
 [profile.release]
 opt-level = 3
 lto = "thin"

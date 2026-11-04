@@ -32,7 +32,7 @@ pub const TILE_SUBTITLE_UTF16: &[u16] = &[
     0x0410, 0x0432, 0x0442, 0x043e, 0x0432, 0x0445, 0x043e, 0x0434, 0x0000,
 ];
 
-/// `0x<lowercase hex>` of the NTSTATUS, like the C++ `HexStatus`.
+/// `0x<lowercase hex>` of the NTSTATUS, as logged by `ReportResult`.
 pub fn hex_status(status: i32) -> String {
     format!("0x{:x}", status as u32)
 }
@@ -266,7 +266,7 @@ mod windows_impl {
         drop(secret); // `MachineSecret` zeroizes the key and password on drop.
 
         if domain.is_empty() || user.is_empty() || password.is_empty() {
-            // The C++ code leaves `hr` at E_FAIL and still logs this branch.
+            // This branch leaves `hr` at E_FAIL and still logs it.
             log_event("serialization_secret", "error=protect_failed");
             return Err(E_FAIL);
         }

@@ -1,8 +1,8 @@
 //! Windows Credential Provider (in-proc COM server) for Ricardo Komp Logon.
 //!
-//! This is the Rust port of the C++ provider in `solutions/windows-logon-provider/src`.
-//! The C++ tree stays the reference implementation; behaviour, log lines,
-//! registry/secret formats, CLSID and the two DLL exports are the same.
+//! The provider is pure Rust. Behaviour, log lines, registry/secret formats,
+//! CLSID and the two DLL exports are defined by `README.md`,
+//! `packages/contracts/wakegrant/PROTOCOL.md` and the install scripts.
 //!
 //! # Layout
 //!

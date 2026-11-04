@@ -2,7 +2,7 @@
 
 /// Escapes a string for embedding in a JSON string literal. Only the
 /// characters the protocol can produce are escaped; control bytes become
-/// lowercase `\u00XX`, byte for byte like the C++ helper.
+/// lowercase `\u00XX`, byte for byte as documented.
 fn json_escape(text: &str) -> String {
     let mut out: Vec<u8> = Vec::with_capacity(text.len() + 2);
     for &c in text.as_bytes() {

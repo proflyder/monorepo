@@ -4,7 +4,7 @@
 The scripts run elevated on the owner's PC, so what matters here is the shape:
 one fixed CLSID everywhere, registration of exactly one credential provider and
 of no filters, exact-key removal on uninstall, machine-scope DPAPI with the same
-entropy as the C++ code, and no secret ever printed.
+entropy as the Rust code, and no secret ever printed.
 
 Run: python3 -m unittest discover -s solutions/windows-logon-provider
 """
@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SRC = HERE / "src"
+PROVIDER = HERE / "crates" / "provider" / "src"
 
 CLSID_FIXED = "{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}"
 DLL_NAME = "RicardoKompLogon.dll"
@@ -33,18 +33,18 @@ def read_ps1(name: str) -> tuple[bytes, str]:
     return raw, raw.decode("utf-8-sig")
 
 
-def assignment(text: str, name: str) -> str:
-    match = re.search(rf"^\s*\${re.escape(name)}\s*=\s*(.+)$", text, re.MULTILINE)
-    return match.group(1).strip() if match else ""
-
-
-def clsid_from_header() -> str:
-    text = (SRC / "provider_guid.h").read_text(encoding="utf-8")
-    values = [int(value, 16) for value in re.findall(r"0x([0-9a-fA-F]+)", text.split("kProviderClsid")[1])]
-    if len(values) != 11:
-        raise AssertionError(f"expected 11 GUID components, got {values}")
-    head = f"{{{values[0]:08X}-{values[1]:04X}-{values[2]:04X}-{values[3]:02X}{values[4]:02X}"
-    tail = "".join(f"{value:02X}" for value in values[5:])
+def clsid_from_source() -> str:
+    text = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
+    block = text.split("pub const PROVIDER_CLSID: GUID = GUID {", 1)[1].split("};", 1)[0]
+    data1 = int(re.search(r"data1:\s*(0x[0-9a-fA-F_]+)", block).group(1).replace("_", ""), 0)
+    data2 = int(re.search(r"data2:\s*(0x[0-9a-fA-F_]+)", block).group(1).replace("_", ""), 0)
+    data3 = int(re.search(r"data3:\s*(0x[0-9a-fA-F_]+)", block).group(1).replace("_", ""), 0)
+    data4_block = re.search(r"data4:\s*\[([^\]]+)\]", block).group(1)
+    data4 = [int(value, 0) for value in re.findall(r"0x[0-9a-fA-F]+", data4_block)]
+    if len(data4) != 8:
+        raise AssertionError(f"expected 8 data4 bytes, got {data4}")
+    head = f"{{{data1:08X}-{data2:04X}-{data3:04X}-{data4[0]:02X}{data4[1]:02X}"
+    tail = "".join(f"{value:02X}" for value in data4[2:])
     return f"{head}-{tail}}}"
 
 
@@ -66,8 +66,8 @@ class ScriptBasicsTests(unittest.TestCase):
 
 
 class ClsidTests(unittest.TestCase):
-    def test_header_clsid_matches_the_documented_value(self):
-        self.assertEqual(clsid_from_header(), CLSID_FIXED)
+    def test_provider_clsid_matches_the_documented_value(self):
+        self.assertEqual(clsid_from_source(), CLSID_FIXED)
 
     def test_all_scripts_use_the_same_clsid(self):
         for name in ("install.ps1", "uninstall.ps1", "status.ps1"):
@@ -110,11 +110,11 @@ class InstallScriptTests(unittest.TestCase):
                 self.assertNotIn("CredentialProviderFilter", text)
                 self.assertNotIn("FilterProviders", text)
 
-    def test_configuration_values_written_match_the_cpp_reader(self):
-        config_cpp = (SRC / "config.cpp").read_text(encoding="utf-8")
+    def test_configuration_values_written_match_the_rust_reader(self):
+        config_rs = (PROVIDER / "config.rs").read_text(encoding="utf-8")
         for value in ("ServiceUrl", "Machine", "UserName", "Domain", "Disabled", "FailCount"):
             with self.subTest(value=value):
-                self.assertIn(f'L"{value}"', config_cpp)
+                self.assertIn(f'w!("{value}")', config_rs)
                 self.assertIn(f"-Name '{value}'", self.text)
         self.assertIn(f"$ConfigKey = '{CONFIG_KEY}'", self.text)
         # Reinstall resets the disable latch.
@@ -124,8 +124,11 @@ class InstallScriptTests(unittest.TestCase):
     def test_dll_is_copied_and_declared_consistently(self):
         self.assertIn(f"$DllName = '{DLL_NAME}'", self.text)
         self.assertIn("Copy-Item -LiteralPath $sourceDll -Destination $installedDll -Force", self.text)
-        self.assertIn(f"LIBRARY {DLL_NAME}", (SRC / "ricardo_logon.def").read_text(encoding="utf-8"))
-        self.assertIn(DLL_NAME, (HERE / "build.sh").read_text(encoding="utf-8"))
+        build = (HERE / "build.sh").read_text(encoding="utf-8")
+        self.assertIn(DLL_NAME, build)
+        # The exported names are the COM contract; the PE verifier enforces
+        # exactly these two exports.
+        self.assertIn('"DllGetClassObject", "DllCanUnloadNow"', (HERE / "pe_artifacts.py").read_text(encoding="utf-8"))
 
     def test_directory_acls_are_system_and_administrators_only(self):
         # Program Files: SYSTEM + Administrators write, Users read/execute.
@@ -183,18 +186,18 @@ class SecretScriptTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.raw, cls.text = read_ps1("set-secret.ps1")
 
-    def test_uses_machine_scope_dpapi_with_the_cpp_entropy(self):
-        config_h = (SRC / "config.h").read_text(encoding="utf-8")
-        self.assertIn('kSecretEntropy[] = "ricardo-komp-logon-v1"', config_h)
+    def test_uses_machine_scope_dpapi_with_the_rust_entropy(self):
+        config_rs = (PROVIDER / "config.rs").read_text(encoding="utf-8")
+        self.assertIn('SECRET_ENTROPY: &[u8] = b"ricardo-komp-logon-v1"', config_rs)
         self.assertIn("$Entropy = 'ricardo-komp-logon-v1'", self.text)
         self.assertIn("DataProtectionScope]::LocalMachine", self.text)
         self.assertIn("ProtectedData]::Protect", self.text)
 
     def test_writes_the_documented_secret_path(self):
-        self.assertIn(f"$SecretPath = Join-Path $DataDir 'secret.bin'", self.text)
+        self.assertIn("$SecretPath = Join-Path $DataDir 'secret.bin'", self.text)
         self.assertIn(r"$DataDir = 'C:\ProgramData\Ricardo\KompLogon'", self.text)
-        config_h = (SRC / "config.h").read_text(encoding="utf-8")
-        self.assertIn(r'kSecretPath[] = L"C:\\ProgramData\\Ricardo\\KompLogon\\secret.bin"', config_h)
+        config_rs = (PROVIDER / "config.rs").read_text(encoding="utf-8")
+        self.assertIn(r'SECRET_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\secret.bin"', config_rs)
 
     def test_secret_never_printed(self):
         self.assertNotIn("Write-Host", self.text)
@@ -227,74 +230,62 @@ class SecretScriptTests(unittest.TestCase):
 
 
 class ProviderSourceTests(unittest.TestCase):
-    def test_def_exports_only_the_two_com_entry_points(self):
+    def test_dll_exports_only_the_two_com_entry_points(self):
         exports = re.findall(
-            r"^\s+(Dll\w+)\s+PRIVATE", (SRC / "ricardo_logon.def").read_text(encoding="utf-8"), re.MULTILINE
+            r'#\[unsafe\(no_mangle\)\]\s*\npub (?:unsafe )?extern "system" fn (Dll\w+)',
+            (PROVIDER / "dll.rs").read_text(encoding="utf-8"),
         )
         self.assertEqual(sorted(exports), ["DllCanUnloadNow", "DllGetClassObject"])
 
-    def test_build_script_compiles_every_source_once(self):
+    def test_build_script_uses_bazel_and_verifies_the_pe(self):
         build = (HERE / "build.sh").read_text(encoding="utf-8")
-        sources = [
-            path.relative_to(HERE).as_posix()
-            for path in sorted(SRC.rglob("*.cpp"))
-            if path.name not in {"cp_selftest.cpp", "hmac_selftest.cpp", "hmac_sha256_reference.cpp"}
-        ]
-        # The DLL links each source once; the CNG HMAC self-test reuses
-        # hmac_bcrypt.cpp and protocol.cpp in its own executable.
-        dll_block = build.split('echo "== DLL =="', 1)[1].split(
-            'echo "== self-test executable =="', 1
-        )[0]
-        selftest_blocks = build.split('echo "== self-test executable =="', 1)[1]
-        for source in sources:
-            with self.subTest(source=source):
-                self.assertEqual(dll_block.count(source), 1, f"{source} must be compiled exactly once into the DLL")
-                self.assertLessEqual(
-                    selftest_blocks.count(source), 1, f"{source} must be linked at most once into self-tests"
-                )
-        # The portable reference HMAC must never be linked into the DLL.
-        self.assertNotIn("hmac_sha256_reference.cpp", build)
+        self.assertIn("--platforms=\"$WINDOWS_PLATFORM\"", build)
+        self.assertIn("//solutions/windows-logon-provider/crates/provider:provider", build)
+        self.assertIn("//solutions/windows-logon-provider/crates/cp-selftest:cp-selftest", build)
+        self.assertIn("pe_artifacts.py normalize", build)
+        self.assertIn("pe_artifacts.py verify", build)
 
     def test_only_logon_claims_grants(self):
-        provider = (SRC / "provider.cpp").read_text(encoding="utf-8")
-        scenario = provider.split("HRESULT Provider::SetUsageScenario", 1)[1].split("\n}", 1)[0]
+        provider = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
+        scenario = provider.split("fn set_usage_scenario(", 1)[1].split("\n        fn advise", 1)[0]
         self.assertIn("cpus != CPUS_LOGON && cpus != CPUS_UNLOCK_WORKSTATION", scenario)
-        self.assertIn("return E_NOTIMPL;", scenario)
+        self.assertIn("return Err(E_NOTIMPL.into());", scenario)
         # An unlock must be inert: the logon branch is the only one that starts
         # the challenge/claim worker.
-        unlock_branch, logon_tail = scenario.split("if (cpus != CPUS_LOGON) {", 1)[1].split("\n    }", 1)
+        unlock_branch, logon_tail = scenario.split("if cpus != CPUS_LOGON {", 1)[1].split(
+            "            log_event(\"scenario\", \"cpus=logon\");", 1
+        )
         self.assertIn("claims=0", unlock_branch)
-        self.assertIn("session_->armed = false;", scenario)
-        self.assertNotIn("StartWorkerOnce", unlock_branch)
-        self.assertIn("StartWorkerOnce", logon_tail)
-        self.assertIn('"cpus=logon"', logon_tail)
+        self.assertIn("state.armed = false;", scenario)
+        self.assertNotIn("start_worker_once", unlock_branch)
+        self.assertIn("start_worker_once", logon_tail)
 
     def test_worker_and_credentials_are_logon_only(self):
-        provider = (SRC / "provider.cpp").read_text(encoding="utf-8")
-        start = provider.split("void Provider::StartWorkerOnce", 1)[1].split("\n}", 1)[0]
-        self.assertIn("SessionScenario(session_) != CPUS_LOGON", start)
-        count = provider.split("HRESULT Provider::GetCredentialCount", 1)[1].split("\n}", 1)[0]
-        self.assertIn("SessionScenario(session_) != CPUS_LOGON", count)
-        self.assertIn("*pdwCount = 0;", count)
+        provider = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
+        start = provider.split("fn start_worker_once(", 1)[1].split("\n        fn set_usage_scenario", 1)[0]
+        self.assertIn("session_scenario(&self.session) != CPUS_LOGON", start)
+        count = provider.split("fn get_credential_count(", 1)[1].split("\n        fn get_credential_at", 1)[0]
+        self.assertIn("session_scenario(&self.session) != CPUS_LOGON", count)
+        self.assertIn("pdwcount.write(0)", count)
         for unsupported in ("CPUS_CHANGE_PASSWORD", "CPUS_CREDUI", "CPUS_PLAP"):
-            self.assertNotIn(f"case {unsupported}:", provider)
+            self.assertNotIn(f"if cpus == {unsupported}", provider)
 
     def test_log_and_data_paths_match_the_documentation(self):
-        log_cpp = (SRC / "log.cpp").read_text(encoding="utf-8")
-        self.assertIn(r'"C:\\ProgramData\\Ricardo\\KompLogon\\logon.log"', log_cpp)
-        self.assertIn("256ull * 1024ull", log_cpp)
+        log_rs = (PROVIDER / "log.rs").read_text(encoding="utf-8")
+        self.assertIn(r'LOG_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\logon.log"', log_rs)
+        self.assertIn("MAX_LOG_BYTES: u64 = 256 * 1024", log_rs)
         self.assertIn(DATA_DIR, read_ps1("status.ps1")[1])
         self.assertIn("logon.log", read_ps1("status.ps1")[1])
         self.assertIn("-Tail $Tail", read_ps1("status.ps1")[1])
 
     def test_provider_never_blocks_with_unbounded_waits(self):
-        worker = (SRC / "worker.cpp").read_text(encoding="utf-8")
-        self.assertIn("kWorkerBudgetMs", worker)
-        self.assertNotIn("Sleep(2000)", worker)
-        self.assertIn("SleepInterruptible", worker)
+        worker = (PROVIDER / "worker.rs").read_text(encoding="utf-8")
+        self.assertIn("WORKER_BUDGET_MS", worker)
+        self.assertNotIn("thread::sleep(Duration::from_millis(2000))", worker)
+        self.assertIn("sleep_interruptible", worker)
         self.assertIn("CreateThread", worker)
         # The DLL must stay mapped while the worker runs.
-        self.assertIn("g_active_workers", (SRC / "dll.cpp").read_text(encoding="utf-8"))
+        self.assertIn("ACTIVE_WORKERS", (PROVIDER / "dll.rs").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

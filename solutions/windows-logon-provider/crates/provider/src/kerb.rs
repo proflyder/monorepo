@@ -44,7 +44,7 @@ pub const KERB_INTERACTIVE_LOGON: i32 = 2;
 pub const KERB_WORKSTATION_UNLOCK_LOGON: i32 = 7;
 
 /// Total size of the packed buffer, or `None` when a string does not fit the
-/// `USHORT` byte length of `UNICODE_STRING` (the C++ code fails with
+/// `USHORT` byte length of `UNICODE_STRING` (the packer fails with
 /// `HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW)`).
 pub fn packed_len(domain: &[u16], user: &[u16], password: &[u16]) -> Option<usize> {
     let domain_bytes = utf16_bytes(domain)?;

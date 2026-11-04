@@ -1,12 +1,11 @@
 //! Standard base64 with padding.
 //!
-//! This is a line-by-line port of the C++ `b64_encode`/`b64_decode`. The
-//! decoder is deliberately hand-written instead of using the `base64` crate:
-//! the C++ reference accepts non-canonical trailing bits (`"ZZ=="` decodes to
-//! `0x65`), while `base64`'s `STANDARD` engine rejects them. Keeping the port
-//! verbatim keeps the wire behaviour identical and testable with the same
-//! vectors. The decoder rejects non-canonical padding, embedded whitespace and
-//! any character outside the alphabet.
+//! The decoder is deliberately hand-written instead of using the `base64`
+//! crate: the PROTOCOL.md contract accepts non-canonical trailing bits
+//! (`"ZZ=="` decodes to `0x65`), while `base64`'s `STANDARD` engine rejects
+//! them. Keeping the behaviour explicit keeps the wire format identical and
+//! testable with the documented vectors. The decoder rejects non-canonical
+//! padding, embedded whitespace and any character outside the alphabet.
 
 use crate::Error;
 

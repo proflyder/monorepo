@@ -4,7 +4,7 @@
 //! loads `RicardoKompLogon.dll` from the directory of this executable and asks
 //! the DLL for its class factory, so a build can be smoke-tested before install.
 //!
-//! Output and exit codes match `cp_selftest.cpp`: `PASS`/`FAIL`, and 0/1.
+//! Output is `PASS`/`FAIL`; exit codes are 0/1.
 
 use std::ffi::c_void;
 use std::ptr;

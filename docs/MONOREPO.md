@@ -68,7 +68,7 @@ engine, два entrypoint-а для совместимости.
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
 | `solutions/bb-home-dispatcher`, `solutions/bb-profiles` | JavaScript/TypeScript (плагины bb) | исполняются внутри bb как path-источник; `node --test` без внешних сервисов |
-| Windows logon provider | C++17 | in-proc COM DLL для LogonUI; кросс-сборка llvm-mingw с macOS/CI без Visual Studio, переносимые host-тесты |
+| Windows logon provider | Rust (`windows-rs`) | in-proc COM DLL для LogonUI; `rules_rust` + герметичный zig (`x86_64-pc-windows-gnu`) через Bazel, без Visual Studio; переносимые host-тесты и clippy под Windows |
 | HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
 | Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
@@ -138,15 +138,19 @@ sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'
 скриптами. Цели Linux-only; на macOS `bazel build //...` их пропускает.
 `.bazelignore` держит только сгенерированные каталоги `satellite/`.
 
-`solutions/windows-logon-provider` — переиспользуемый компонент, тоже вне
-Bazel: его контракт — `build.sh` (кросс-сборка pinned llvm-mingw `20261020`) и
-`run-tests.sh` (host clang++), без BUILD-целей и toolchain-правил. В CI это
-платформа `native` (`_native.yml`): проверка sha256 архива, host-тесты,
-кросс-сборка и artifact. Значения `ServiceUrl`/`Machine`/`UserName` приходят
-из проекта при установке. На push в `develop` `deploy-home` публикует файлы
-как публичный OCI-артефакт GHCR (ORAS, `VERSION`, digest и provenance);
-домашний ПК только читает готовый digest. Переход на Bazel — отдельная задача,
-а не текущее состояние.
+`solutions/windows-logon-provider` — Rust-компонент на том же Bazel:
+`crates/protocol` (переносимый слой), `crates/provider` (COM DLL) и
+`crates/cp-selftest` (self-test). `MODULE.bazel` добавляет
+`x86_64-pc-windows-gnu` в Rust-тулчейн и регистрирует zig cc_toolchain
+(`platform/bazel/windows:x86_64_windows`), поэтому DLL линкуется без Visual
+Studio и Windows SDK. Два патча rules_rust добавляют gnu-трипль и убирают
+MSVC-only import library; при обновлении rules_rust их надо перепроверить.
+`build.sh`/`run-tests.sh` — тонкие обёртки над `bazel build`/`bazel test`
+(host-тесты + rustfmt/clippy, включая Windows-цели); CI — платформа `native`
+(`_native.yml`) с pinned Bazelisk. Значения `ServiceUrl`/`Machine`/`UserName`
+приходят из проекта при установке. На push в `develop` `deploy-home`
+публикует файлы как публичный OCI-артефакт GHCR (ORAS, `VERSION`, digest и
+provenance); домашний ПК только читает готовый digest.
 
 ## gRPC / Connect
 

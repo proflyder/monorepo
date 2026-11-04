@@ -10,7 +10,7 @@
 //!
 //! - [`b64_encode`]/[`b64_decode`] — standard base64 with padding; the decoder
 //!   is strict (canonical padding placement, no whitespace, no foreign
-//!   characters) and keeps the C++ reference implementation's tolerance of
+//!   characters) and keeps the contract's tolerance of
 //!   non-canonical trailing bits (`"ZZ=="` decodes to `0x65`).
 //! - [`hmac_sha256_b64`], [`claim_mac_message`], [`grant_mac_message`] — the
 //!   authenticated message shapes.

@@ -3,7 +3,7 @@
 //! The protocol only exchanges flat objects with string, integer and boolean
 //! values. Anything else (nested objects, arrays, floats, exponents, `null`)
 //! is a protocol violation and is rejected instead of being tolerated, exactly
-//! like the C++ reader. Duplicate keys and bodies over 64 KiB are rejected
+//! as documented. Duplicate keys and bodies over 64 KiB are rejected
 //! too. `serde_json` accepts all of those, so this hand-written reader is the
 //! faithful port.
 
@@ -250,7 +250,7 @@ fn append_utf8(out: &mut Vec<u8>, code_point: u32) {
         }
         // Surrogates were rejected before this point, so the code point is
         // always a scalar value. Keeping the fallback non-panicking matches
-        // the C++ helper, which never rejects an already-validated scalar.
+        // the helper, which never rejects an already-validated scalar.
         None => out.push(b'?'),
     }
 }

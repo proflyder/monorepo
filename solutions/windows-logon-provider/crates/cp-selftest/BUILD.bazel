@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # `cp-selftest.exe`: loads the provider by CLSID (or from the DLL next to the
 # executable when it is not registered), prints the field/credential counts and
-# stops the background thread immediately. Port of `src/selftest/cp_selftest.cpp`.
+# stops the background thread immediately.
 rust_binary(
     name = "cp-selftest",
     srcs = glob(["src/**/*.rs"]),

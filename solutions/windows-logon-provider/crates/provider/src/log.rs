@@ -1,7 +1,7 @@
 //! Append-only diagnostic log for the logon provider.
 //!
 //! Every line is `<UTC ISO8601> pid=<pid> tid=<tid> <event> key=value...`,
-//! exactly like the C++ `log.cpp`. Secrets never reach this module; every field
+//! as documented in `README.md`. Secrets never reach this module; every field
 //! is sanitised (control characters replaced by spaces, at most 240 bytes) so
 //! remote data cannot forge log lines.
 //!

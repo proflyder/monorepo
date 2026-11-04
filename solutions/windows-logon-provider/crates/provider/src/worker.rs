@@ -10,7 +10,7 @@
 
 /// Poll interval between rounds.
 pub const POLL_INTERVAL_MS: u32 = 2000;
-/// Back-off for `429`/`5xx`, matching the C++ worker.
+/// Back-off for `429`/`5xx`, as documented in `README.md`.
 pub const BACKOFF_INTERVAL_MS: u32 = 4000;
 
 /// How a round ended.
@@ -55,7 +55,7 @@ impl RoundOutcome {
 }
 
 /// A non-200 status is a back-off only for 429 and 5xx; every other status is
-/// fatal (`None`), exactly like the C++ switch.
+/// fatal (`None`), as documented in `README.md`.
 pub fn retry_delay_for_status(status: i32) -> Option<u32> {
     if status == 429 || status >= 500 {
         Some(BACKOFF_INTERVAL_MS)

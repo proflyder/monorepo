@@ -1,6 +1,5 @@
-//! Port of `solutions/windows-logon-provider/tests/test_protocol.cpp`.
-//!
-//! Every assertion from the C++ suite is kept, including the golden HMAC
+//! Protocol vectors and fail-closed branches from
+//! `packages/contracts/wakegrant/PROTOCOL.md`, including the golden HMAC
 //! vectors pinned by `packages/contracts/wakegrant/PROTOCOL.md`.
 
 use logon_protocol::{
@@ -200,7 +199,7 @@ fn base64() {
         assert!(b64_decode(rejected).is_err(), "accepted {rejected:?}");
     }
     // Valid base64 that is not canonical: trailing bits are ignored, exactly
-    // like the C++ decoder.
+    // as the decoder contract requires.
     assert_eq!(b64_decode("ZZ=="), Ok(vec![0x65]));
 }
 

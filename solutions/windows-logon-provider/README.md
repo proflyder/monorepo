@@ -46,16 +46,17 @@ Service URL, имя машины и учётная запись задаёт п�
 
 | файл | назначение |
 |---|---|
-| `src/protocol/` | переносимый слой: base64, HMAC-сообщения, разбор JSON, проверка MAC, конфиг |
-| `src/provider.cpp` | `ICredentialProvider`, общее состояние `Session`, бюджет |
-| `src/credential.cpp` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |
-| `src/worker.cpp` | единственный фоновый поток challenge/claim |
-| `src/config.cpp` | реестр, DPAPI, `FailCount`/`Disabled` |
-| `src/http.cpp`, `src/log.cpp`, `src/hmac_bcrypt.cpp` | WinHTTP, журнал, HMAC через BCrypt |
-| `src/helpers.cpp` | упаковка `KERB_INTERACTIVE_UNLOCK_LOGON` (MIT, см. `THIRD-PARTY-NOTICES.md`) |
-| `src/selftest/cp_selftest.cpp` | `cp-selftest.exe`: загрузка провайдера вне LogonUI |
+| `crates/protocol/` | переносимый слой: base64, HMAC-сообщения, разбор JSON, проверка MAC, конфиг |
+| `crates/provider/src/provider.rs` | `ICredentialProvider`, общее состояние `Session`, бюджет |
+| `crates/provider/src/credential.rs` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |
+| `crates/provider/src/worker.rs` | единственный фоновый поток challenge/claim |
+| `crates/provider/src/config.rs` | реестр, DPAPI, `FailCount`/`Disabled` |
+| `crates/provider/src/http.rs`, `log.rs` | WinHTTP, журнал; HMAC — из crates.io |
+| `crates/provider/src/kerb.rs` | упаковка `KERB_INTERACTIVE_UNLOCK_LOGON` (MIT, см. `THIRD-PARTY-NOTICES.md`) |
+| `crates/provider/src/dll.rs` | `DllGetClassObject`, `DllCanUnloadNow` |
+| `crates/cp-selftest/` | `cp-selftest.exe`: загрузка провайдера вне LogonUI |
 | `install.ps1`, `set-secret.ps1`, `uninstall.ps1`, `status.ps1` | установка и обслуживание |
-| `build.sh`, `run-tests.sh`, `tests/` | сборка и переносимые тесты |
+| `build.sh`, `run-tests.sh`, `pe_artifacts.py` | сборка Bazel, host-тесты и проверка PE |
 | `VERSION`, `publish-oci.sh`, `fetch.sh` | версия и публикация/получение OCI-артефакта |
 
 CLSID провайдера (зафиксирован, менять нельзя без правки всех скриптов и
@@ -80,25 +81,34 @@ CLSID провайдера (зафиксирован, менять нельзя 
 `{"version":1,"password":"…","key":"<base64 32 байта>"}`. Каталог и файл:
 System + Administrators полный доступ, больше никого.
 
-## Сборка (macOS, без Visual Studio)
+## Сборка (macOS/Linux, без Visual Studio)
 
-Нужен [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) `20261020`
-(LLVM 23.1.4), архив `llvm-mingw-20261020-ucrt-macos-universal.tar.xz`,
-sha256 `e9c13e4ede38e715003ffc674d4d00a1088df8235439d1f0c16188ff0704c17e`
-(совпадает с digest из GitHub API релиза). Положить в
-`secrets/local-tools/llvm-mingw/` (каталог в Git не попадает) или задать
-`LLVM_MINGW=/path/to/root` (или `LLVM_MINGW_BIN=/path/to/bin`).
+Провайдер — Rust: `rules_rust` собирает `x86_64-pc-windows-gnu`, линкует
+герметичный zig 0.14.1 `cc_toolchain` из `MODULE.bazel` (mingw-w64/UCRT,
+статический CRT). Windows SDK, Visual Studio и отдельный mingw-тулчейн не
+нужны; Bazel и Bazelisk — корневой build contract репозитория. Локально Bazelisk лежит в
+`secrets/local-tools/bazelisk` (скрипты находят его сами), либо `bazel` на
+`PATH`/`BAZELISK`.
 
 ```bash
-solutions/windows-logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe, out/hmac-selftest.exe
-solutions/windows-logon-provider/run-tests.sh     # переносимые unit-тесты на clang++
+solutions/windows-logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe
+solutions/windows-logon-provider/run-tests.sh     # host-тесты, rustfmt/clippy (host и Windows)
 ```
 
-`build.sh` собирает x86_64 с `-static -static-libgcc -O2`, ASLR (`--dynamicbase`,
-`--high-entropy-va`) и NX, экспортирует только `DllGetClassObject` и
-`DllCanUnloadNow` и проверяет, что DLL импортирует только системные
-библиотеки (WinHTTP, crypt32, bcrypt, secur32, advapi32, shlwapi, ole32,
-KERNEL32 и api-ms-win-crt-*).
+`build.sh` собирает цель
+`//solutions/windows-logon-provider/crates/provider:provider` под платформой
+`//platform/bazel/windows:x86_64_windows`, копирует артефакты и делает PE
+воспроизводимым (обнуляет TimeDateStamp). Затем `pe_artifacts.py` проверяет,
+что DLL экспортирует ровно `DllGetClassObject` и `DllCanUnloadNow` и
+импортирует только системные библиотеки (KERNEL32, ntdll, advapi32,
+combase, ole32, oleaut32, rpcrt4, crypt32, secur32, shlwapi, userenv,
+winhttp, ws2_32, bcryptprimitives и api-ms-win-*); всё остальное — ошибка.
+Проверка не требует Windows-тулчейна на хосте.
+
+`run-tests.sh` запускает `bazel test //solutions/windows-logon-provider/...`:
+переносимые protocol-векторы и безопасное ядро провайдера на host, плюс
+rustfmt/clippy для host- и Windows-целей (aspect переключается на Windows
+платформу, поэтому проверяется настоящий `#[cfg(windows)]`-код).
 
 `out/cp-selftest.exe` загружает провайдера по CLSID (или из DLL рядом с exe,
 если он ещё не зарегистрирован) и печатает число полей и плиток. Он запускает
@@ -117,8 +127,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 ```
 
 Тип артефакта — `application/vnd.<owner>.windows-logon-provider.v1`; файлы:
-`RicardoKompLogon.dll`, `cp-selftest.exe`, `hmac-selftest.exe` и
-`SHA256SUMS`. Тег `<VERSION>` неизменяем по содержимому: повторная публикация
+`RicardoKompLogon.dll`, `cp-selftest.exe` и `SHA256SUMS`. Тег `<VERSION>` неизменяем по содержимому: повторная публикация
 с тем же `SHA256SUMS` — успешный no-op, с другим — ошибка. Поэтому релиз
 делается сменой `VERSION`. Provenance attestation создаётся для digest
 опубликованного артефакта (`push-to-registry`) и для файла DLL.
@@ -127,7 +136,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 
 ```bash
 # нужны oras и авторизованный gh; oras можно положить в secrets/local-tools/
-solutions/windows-logon-provider/fetch.sh 1.0.0
+solutions/windows-logon-provider/fetch.sh 1.1.0
 solutions/windows-logon-provider/fetch.sh sha256:<digest>   # рекомендуемый pin
 ```
 
