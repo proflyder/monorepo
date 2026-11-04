@@ -76,7 +76,7 @@ var goldenCases = []goldenCase{
 	{
 		unit:   "scheduler",
 		preset: "scheduler",
-		env:    "platform/deploy/testdata/env/scheduler.env",
+		env:    "platform/deploy/testdata/env/scheduler.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
 			"SCHEDULER_IMAGE=" + image("ghcr.io/proflyder/scheduler", 0),
@@ -95,7 +95,7 @@ var goldenCases = []goldenCase{
 	{
 		unit:   "currency-bot",
 		preset: "currency-bot",
-		env:    "platform/deploy/testdata/env/currency-bot.env",
+		env:    "platform/deploy/testdata/env/currency-bot.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
 			"CURRENCY_BOT_IMAGE=" + image("ghcr.io/proflyder/currency-bot", 4),
@@ -113,7 +113,7 @@ var goldenCases = []goldenCase{
 	{
 		unit:   "mcp-gateway",
 		preset: "mcp-gateway",
-		env:    "platform/deploy/testdata/env/mcp-gateway.env",
+		env:    "platform/deploy/testdata/env/mcp-gateway.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
 			"MCP_GATEWAY_IMAGE=" + image("ghcr.io/proflyder/mcp-gateway", 6),
@@ -133,7 +133,7 @@ var goldenCases = []goldenCase{
 	{
 		unit:   "wakegrant",
 		preset: "wakegrant",
-		env:    "platform/deploy/testdata/env/wakegrant.env",
+		env:    "platform/deploy/testdata/env/wakegrant.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
 			"WAKE_GRANT_IMAGE=" + image("ghcr.io/proflyder/wakegrant", 7),
@@ -146,7 +146,7 @@ var goldenCases = []goldenCase{
 	{
 		unit:   "nft",
 		preset: "scheduler",
-		env:    "platform/deploy/testdata/env/scheduler.env",
+		env:    "platform/deploy/testdata/env/scheduler.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
 			"SCHEDULER_IMAGE=" + image("ghcr.io/proflyder/scheduler", 0),

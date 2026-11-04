@@ -4,7 +4,7 @@
 `oci-layout` + three `blobs/sha256/*` files) with a gzipped layer that contains
 one `hello.txt`.
 
-`pack.tar` and `docker.tar` are the archives the **Python** helper
+`pack.tar.golden` and `docker.tar.golden` are the archives the **Python** helper
 `platform/ci/oci_image.py` produced from this layout with the reference
 `ghcr.io/proflyder/golden:test`. The Go `oci` package must reproduce both
 **byte for byte** and print the same manifest digest:

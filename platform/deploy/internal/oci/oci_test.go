@@ -76,7 +76,7 @@ func TestPackMatchesPythonBytes(t *testing.T) {
 	if digest != goldenManifestDigest {
 		t.Fatalf("digest = %q, want %q", digest, goldenManifestDigest)
 	}
-	assertSameBytes(t, fixture(t, "platform/deploy/testdata/oci/pack.tar"), output)
+	assertSameBytes(t, fixture(t, "platform/deploy/testdata/oci/pack.tar.golden"), output)
 
 	// The archive must stay `ctr images import` compatible: the layout files
 	// first, then the sorted blobs, each with mode 0644 and mtime 0.
@@ -124,7 +124,7 @@ func TestDockerArchiveMatchesPythonBytes(t *testing.T) {
 	if digest != goldenManifestDigest {
 		t.Fatalf("digest = %q, want %q", digest, goldenManifestDigest)
 	}
-	assertSameBytes(t, fixture(t, "platform/deploy/testdata/oci/docker.tar"), output)
+	assertSameBytes(t, fixture(t, "platform/deploy/testdata/oci/docker.tar.golden"), output)
 
 	entries := readTar(t, output)
 	if got := entries[len(entries)-1].Name; got != "manifest.json" {

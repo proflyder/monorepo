@@ -22,11 +22,11 @@ digests, `*.example.test` hostnames. Never capture a real private env.
 
 | Unit | Env | `--set` |
 |---|---|---|
-| scheduler | `env/scheduler.env` | `BUILD_ID=0123456789ab`, `SCHEDULER_IMAGE`, `HA_BRIDGE_IMAGE`, `HA_CONTROL_IMAGE`, `PREFLIGHT_IMAGE` |
-| currency-bot | `env/currency-bot.env` | `BUILD_ID=0123456789ab`, `CURRENCY_BOT_IMAGE`, `CLOUDFLARED_IMAGE`, `CURRENCY_WEBHOOK_URL=https://bot.example.test/telegram/webhook`, `CURRENCY_BOT_NODE_PORT=30100` |
-| mcp-gateway | `env/mcp-gateway.env` | `BUILD_ID=0123456789ab`, `MCP_GATEWAY_IMAGE`, `BB_CT_IP=192.0.2.30`, `BB_PROJECT_STATION_LAB`, `BB_PROJECT_ENGLISH_NOTES`, `BB_DISPATCHER_THREAD_ID` |
-| wakegrant | `env/wakegrant.env` | `BUILD_ID=0123456789ab`, `WAKE_GRANT_IMAGE`, `WAKE_GRANT_NODE_PORT=30101` |
-| nft | `env/scheduler.env` | same as scheduler |
+| scheduler | `env/scheduler.env.example` | `BUILD_ID=0123456789ab`, `SCHEDULER_IMAGE`, `HA_BRIDGE_IMAGE`, `HA_CONTROL_IMAGE`, `PREFLIGHT_IMAGE` |
+| currency-bot | `env/currency-bot.env.example` | `BUILD_ID=0123456789ab`, `CURRENCY_BOT_IMAGE`, `CLOUDFLARED_IMAGE`, `CURRENCY_WEBHOOK_URL=https://bot.example.test/telegram/webhook`, `CURRENCY_BOT_NODE_PORT=30100` |
+| mcp-gateway | `env/mcp-gateway.env.example` | `BUILD_ID=0123456789ab`, `MCP_GATEWAY_IMAGE`, `BB_CT_IP=192.0.2.30`, `BB_PROJECT_STATION_LAB`, `BB_PROJECT_ENGLISH_NOTES`, `BB_DISPATCHER_THREAD_ID` |
+| wakegrant | `env/wakegrant.env.example` | `BUILD_ID=0123456789ab`, `WAKE_GRANT_IMAGE`, `WAKE_GRANT_NODE_PORT=30101` |
+| nft | `env/scheduler.env.example` | same as scheduler |
 | ingress | (none; fixed key set) | `HOME_DOMAIN=home.example.test`, `LAN_CIDR=192.0.2.0/24`, `HAOS_ADDRESS=192.0.2.28` and the five derived `*_HOST` values |
 
 Image references are `ghcr.io/proflyder/<name>@sha256:<64 × digit>`, where the
