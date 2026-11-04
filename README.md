@@ -62,7 +62,7 @@ LAN/VPN. Публично доступны только VPN `443/tcp+udp` и web
 
 - PVE `9.2.24`; HAOS `2026.10.4`; K3s `v1.35.9`.
 - Wi-Fi 4addr/WDS + Ethernet fallback; VM IP не меняются.
-- Pulsar Rust `v0.5.1002` (armhf, база upstream `v0.5.3`, Ricardo pre-roll
+- Pulsar Rust `v0.5.1005` (armhf, база upstream `v0.5.4`, Ricardo pre-roll
   256 ms), wake word «Рикардо», BLE gateway.
 - HAOS add-ons: MA `2.10.8`, Matter `9.2.0`; K3s: STT/TTS/Hermes/
   scheduler/currency-bot/observability.

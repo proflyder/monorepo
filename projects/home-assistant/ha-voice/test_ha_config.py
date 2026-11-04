@@ -263,6 +263,17 @@ class ScenarioScriptTests(unittest.TestCase):
         )
         self.assertEqual(len(script["sequence"]), 1, "false-wake scenario must only press the button")
 
+    def test_missed_wake_scenario_presses_the_station_button(self):
+        script = SCRIPTS["wake_missed"]
+        self.assertEqual(script["alias"], "Рикардо: не услышала")
+        self.assertEqual(script["mode"], "single")
+        self.assertEqual(services(script), ["button.press"])
+        self.assertEqual(
+            service_targets(script),
+            {"button.iandeks_stantsiia_midi_wake_ne_uslyshala"},
+        )
+        self.assertEqual(len(script["sequence"]), 1, "missed-wake scenario must only press the button")
+
 
 class TemplateTests(unittest.TestCase):
     def test_every_template_parses(self):

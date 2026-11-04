@@ -180,7 +180,6 @@ wake_false_alarm:
   # Display only. Being a personal scenario is declared with the HA label
   # "scenario" (entity registry), see solutions/ha-bridge/README.md.
   icon: mdi:ear-hearing-off
-  # No "missed wake" counterpart: its 6 s window is shorter than a phone tap.
   description: >-
     Mark the last Ricardo wake hit within the last 10 minutes as a false alarm.
     The station applies the mark to Pulsar wake events, so a stray wake does not
@@ -190,6 +189,21 @@ wake_false_alarm:
     - service: button.press
       target:
         entity_id: button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie
+
+wake_missed:
+  alias: "Рикардо: не услышала"
+  # Display only. Being a personal scenario is declared with the HA label
+  # "scenario" (entity registry), see solutions/ha-bridge/README.md.
+  icon: mdi:ear-hearing
+  description: >-
+    Save the last 30 seconds of the station microphone as a missed wake for
+    training. Press within ~20 seconds after an unanswered "Рикардо", while the
+    wake moment is still inside that window.
+  mode: single
+  sequence:
+    - service: button.press
+      target:
+        entity_id: button.iandeks_stantsiia_midi_wake_ne_uslyshala
 
 music_play_favorites:
   alias: "Music: play favorites by selected route"

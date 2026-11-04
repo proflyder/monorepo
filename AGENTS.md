@@ -84,8 +84,10 @@ PR со squash-merge и зелёным `ci-ok`; merge в `develop` = депло�
 Существующие upstream remote не означают разрешения публиковать наши изменения.
 
 Активный Pulsar: Rust-форк `projects/station/upstream/pulsar-rust/` (ветка
-`main`, база upstream `v0.5.3` = `504830d`; `feat/ricardo-rust` — только
-история). База и текущие локальные изменения фиксируются в корневой истории через
+`main`, база upstream `v0.5.4` = `f1f5b17`; `feat/ricardo-rust` — только
+история). GitHub `proflyder/pulsar` — отдельный публичный репозиторий, не
+GitHub-fork: upstream вливается вручную `git merge` из remote `upstream`,
+PR сливается merge-коммитом; имя репозитория зашито в обновлятор станции. База и текущие локальные изменения фиксируются в корневой истории через
 `projects/station/patches/pulsar-rust/`:
 
 ```bash

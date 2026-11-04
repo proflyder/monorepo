@@ -1,5 +1,5 @@
 diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
-index 4143658..b4ec95e 100644
+index 4143658..e85db4e 100644
 --- a/.github/workflows/build.yml
 +++ b/.github/workflows/build.yml
 @@ -2,7 +2,7 @@ name: build
@@ -11,7 +11,47 @@ index 4143658..b4ec95e 100644
      tags: ['v*']
    pull_request:
    workflow_dispatch:
-@@ -200,5 +200,19 @@ jobs:
+@@ -28,6 +28,7 @@ jobs:
+         with:
+           fetch-depth: 0 # `git describe` is the version reported to Home Assistant
+       - uses: mlugg/setup-zig@v2
++        timeout-minutes: 5 # a stalled Zig download fails fast instead of eating the job
+         with:
+           version: 0.14.1 # 0.13 builds armhf C++ binaries that crash before main
+       - run: sudo apt-get update -q && sudo apt-get install -yq ninja-build
+@@ -72,6 +73,7 @@ jobs:
+     steps:
+       - uses: actions/checkout@v7
+       - uses: mlugg/setup-zig@v2
++        timeout-minutes: 5 # a stalled Zig download fails fast instead of eating the job
+         with:
+           version: 0.14.1
+       - name: rust toolchain (rust-toolchain.toml)
+@@ -101,6 +103,7 @@ jobs:
+     steps:
+       - uses: actions/checkout@v7
+       - uses: mlugg/setup-zig@v2
++        timeout-minutes: 5 # a stalled Zig download fails fast instead of eating the job
+         with:
+           version: 0.14.1
+       - name: i386 C library (the Telink toolchain is 32-bit x86)
+@@ -128,6 +131,7 @@ jobs:
+     steps:
+       - uses: actions/checkout@v7
+       - uses: mlugg/setup-zig@v2
++        timeout-minutes: 5 # a stalled Zig download fails fast instead of eating the job
+         with:
+           version: 0.14.1
+       - run: ssh/build.sh
+@@ -171,6 +175,7 @@ jobs:
+     if: startsWith(github.ref, 'refs/tags/v')
+     needs: [build, ssh, radio, installer]
+     runs-on: ubuntu-24.04
++    timeout-minutes: 15
+     permissions:
+       contents: write
+     steps:
+@@ -200,5 +205,19 @@ jobs:
              satellite/deploy/dist.sh "pulsar-${t%%:*}.tar.gz" "artifacts/installer/${t#*:}/pulsar-install"
            done
            sha256sum pulsar-*.bin zigbee-*.ybl pulsar-*.zip pulsar-*.tar.gz > SHA256SUMS
@@ -234,62 +274,99 @@ index 0000000..6f04bef
 +          rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
 +          echo "temporary deploy files removed"
 diff --git a/README.md b/README.md
-index 37dfb16..761b96c 100644
+index fe09862..6a5bf8f 100644
 --- a/README.md
 +++ b/README.md
-@@ -9,6 +9,11 @@
- 
- > Поддержка Мини 3 экспериментальная, см. [Мини 3](docs/mini3.md).
+@@ -11,6 +11,10 @@
+ | Станция Мини 3 | `bergamot` | экспериментально, см. [профиль](https://github.com/Morvex885/pulsar/blob/main/docs/mini3.md) | контрибьютор: [#30](https://github.com/Morvex885/pulsar/pull/30) |
+ | Станция Мини | `yandexmini` | по данным контрибьютора, см. [Мини](#мини) | контрибьютор: [#35](https://github.com/Morvex885/pulsar/pull/35) |
  
 +> **Ricardo fork:** этот checkout — отдельный Rust-профиль для нашей Midi.
-+> На колонке сейчас стоит предыдущая Rust-сборка (`v0.5.0-1-g908a027`); слияние с
-+> upstream `v0.5.3` в этом checkout ещё не устанавливалось и не проходило живую
-+> приёмку. Отличия, сборка и границы приёмки — [`RICARDO.md`](RICARDO.md).
++> База — upstream `v0.5.4`; на колонке стоят релизы форка `v0.5.10NN`.
++> Отличия, сборка и границы приёмки — [`RICARDO.md`](RICARDO.md).
 +
  Вместо штатного стека Яндекса (`maind`) на колонке работает небольшой нативный демон. Он говорит с
  Home Assistant по протоколу ESPHome Native API и выглядит в HA как обычное ESPHome-устройство.
  Для [Music Assistant](https://music-assistant.io/) он дополнительно является нативным
-@@ -423,9 +428,9 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
-   Мини 2, Мини 3 и образы Миди с 32-битным userspace, у которых glibc 2.30). zig 0.13 не подходит:
-   собранные им 32-битные программы падают при запуске. Другой zig можно указать как
-   `ZIG=/путь/к/zig`;
--- `make`, `git`, `curl`, `patch`, компилятор C для хоста (`cc`), а для библиотеки Sendspin
--  (sendspin-cpp, единственная C++-часть сборки) — `cmake` ≥ 3.16 и `ninja`
--  (их можно поставить через `uv tool install cmake ninja`);
+@@ -427,6 +431,63 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
+ В роли роутера колонка подключается к первой найденной открытой сети: держите подключение
+ открытым только в своей сети.
+ 
++## Сборка из исходников
++
++Демон написан на Rust и собирается на Linux или WSL2 (кросс-компиляция через
++[cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild)); установщику из копии репозитория
++нужен ещё [Go](https://go.dev/dl/) 1.27+:
++
++- [rustup](https://rustup.rs/) — сам ставит нужную версию Rust и обе цели из
++  `satellite/rust-toolchain.toml`;
++- cargo-zigbuild 0.24.0: `cargo install cargo-zigbuild --locked --version 0.24.0`;
++- [zig 0.14.1](https://ziglang.org/download/) — компоновщик и C/C++-компилятор для колонок
++  (aarch64/glibc 2.36 — обычный userspace Миди; 32-битный armhf/glibc 2.23 — Мини, а также Лайт 2,
++  Мини 2, Мини 3 и образы Миди с 32-битным userspace, у которых glibc 2.30). zig 0.13 не подходит:
++  собранные им 32-битные программы падают при запуске. Другой zig можно указать как
++  `ZIG=/путь/к/zig`;
 +- `make`, `git`, `curl`, `patch`, компилятор C/C++ для хоста (`cc`/`c++`), а для библиотеки Sendspin
 +  (sendspin-cpp) и on-device детектора «Рикардо» из `crates/pulsar-audio/ricardo/` — `cmake` ≥ 3.16
 +  и `ninja` (их можно поставить через `uv tool install cmake ninja`);
- - `adb` из Android platform-tools.
- 
- ```sh
-@@ -436,6 +441,10 @@ make -C satellite check                              # проверки на к
- go -C installer run . 192.168.1.50                  # установщик из копии репозитория; сам вызывает make
- ```
- 
++- `adb` из Android platform-tools.
++
++```sh
++make -C satellite -j"$(nproc)"                       # zig 0.14.1 в PATH
++make -C satellite -j"$(nproc)" ZIG=~/opt/zig/zig     # или явно
++make -C satellite ARCH=armhf tools                   # диагностические утилиты → satellite/build/armhf/tools/
++make -C satellite check                              # проверки на компьютере: rustfmt, clippy, тесты
++go -C installer run . 192.168.1.50                  # установщик из копии репозитория; сам вызывает make
++```
++
 +Для профиля Ricardo положите модель в `satellite/wakewords/ru_ricardo_mww.tflite`
 +(инструкция и SHA-256 — `satellite/wakewords/README.md`). Установщик скопирует её
 +в `/data/pulsar/wakewords/` с проверкой хеша.
 +
- Makefile отказывается работать с zig 0.13 и более ранними. Результат: `satellite/build/<arch>/pulsar`
- (без отладочной информации — его и ставит установщик) и рядом `pulsar.debug` с
- символами для разбора отчётов о падениях. Версия берётся из `git describe` и видна в
++Makefile отказывается работать с zig 0.13 и более ранними. Результат: `satellite/build/<arch>/pulsar`
++(без отладочной информации — его и ставит установщик) и рядом `pulsar.debug` с
++символами для разбора отчётов о падениях. Версия берётся из `git describe` и видна в
++`pulsar --version` и в HA (сущность «Version»).
++
++При первой сборке скачиваются зависимости: крейты Rust (версии зафиксированы в
++`satellite/Cargo.lock`) и sendspin-cpp с его библиотеками (`satellite/third_party/fetch.sh`, тоже
++закреплены), которые собираются для каждой архитектуры. alsa-lib не линкуется: демон загружает
++её с колонки при запуске. Собираются обе версии: `satellite/build/aarch64/`
++и `satellite/build/armhf/`. Установщик смотрит, какой из загрузчиков `/lib/ld-linux-aarch64.so.1`
++и `/lib/ld-linux-armhf.so.3` есть на станции, и ставит эту сборку. Для Миди обычен aarch64; если
++его нет, а armhf есть, ставится armhf (образы с 32-битным userspace). Лайт 2, Мини 2, Мини 3 и
++Мини — только armhf. С `--ssh` установщик дополнительно собирает dropbear (`ssh/build.sh`).
++
++Прошивки координатора и роутера для Zigbee-модуля Миди собирает `radio/build.sh` (нужны `unzip` и 32-битная
++библиотека C: `sudo dpkg --add-architecture i386 && sudo apt-get install libc6:i386`, потому что
++тулчейн Telink — 32-битные программы x86). Он скачивает закреплённую версию Telink Zigbee SDK и
++тулчейн (проверяется sha256) и кладёт результат в `radio/out/zigbee-coordinator.ybl` и
++`radio/out/zigbee-router.ybl`; установщик копирует их на Миди, если они собраны. В архивах релиза
++они уже есть.
++
++Каждый pull request и каждый push в `main` собираются в GitHub Actions (обе архитектуры и прошивки
++Zigbee-модуля); готовые бинарники лежат в артефактах сборки, а для версий (теги `v*`) — в Releases:
++архивы `pulsar-<ОС>-<arch>` для установки, бинарники обеих архитектур, `zigbee-*.ybl`,
++`.debug`-файлы и `SHA256SUMS` (архивы собирает `satellite/deploy/dist.sh`).
++
+ ## Управление
+ 
+ На колонке (`adb shell` или ssh):
 diff --git a/RICARDO.md b/RICARDO.md
 new file mode 100644
-index 0000000..3a62f10
+index 0000000..0d038f7
 --- /dev/null
 +++ b/RICARDO.md
-@@ -0,0 +1,217 @@
+@@ -0,0 +1,224 @@
 +# Ricardo profile of the Rust Pulsar fork
 +
 +This fork is the Ricardo Rust profile of Pulsar for the Station Midi
-+installation. The station currently runs the earlier Rust build
-+`v0.5.0-1-g908a027`; the upstream `v0.5.2` / `v0.5.3` merges in this checkout
-+have only passed host-side checks and are not installed until live acceptance.
++installation. Fork releases are tagged `v0.5.10NN` (see «Релизы и деплой форка»); the
++station runs the latest such release, the current one is recorded in the monorepo
++`docs/STATE.md`.
 +
-+Base: `Morvex885/pulsar` `v0.5.3` (`504830d`), merged into `feat/ricardo-rust`
-+(the upstream `v0.5.2` merge stays in history), branch `feat/ricardo-rust`.
-+The upstream `v0.5.3` merge itself is on `feat/merge-upstream-v0.5.3` and has not
-+been installed or accepted on the station yet.
++Base: `Morvex885/pulsar` `v0.5.4`, merged with the earlier upstream merges kept in history.
++Deliberate deviations from upstream are listed below.
 +
 +## What this profile keeps
 +
@@ -319,6 +396,15 @@ index 0000000..3a62f10
 +| Updates | `UPDATE_REPO=proflyder/pulsar`, `auto_update=false` by default. The upstream repository is never an update source. |
 +| Hardware | Midi remains the tested target. Lite 2 / Mini 2 code is still compiled by upstream but is not part of this profile's acceptance. |
 +
++### Отличие от upstream #44 (стоп-слово в тексте STT)
++
++Upstream разбирает готовый текст STT: если в нём только стоп-слова, диалог, открытый
++wake word, завершается, а музыка ставится на паузу. В форке для такого диалога
++локального действия нет: «Рикардо, стоп» уходит в Home Assistant, который
++останавливает будильник и возвращает музыку (см. строку «`стоп`» выше). Для диалогов,
++открытых кнопкой, продолжением разговора или `start_conversation`, поведение upstream
++сохранено: выключить звонок таймера, иначе отменить диалог. Решение — `logic::stt_stop_action`.
++
 +The custom detector lives in `satellite/crates/pulsar-audio/ricardo/` and is
 +linked through a small C ABI. It uses the firmware's `libtflite.so` and the
 +vendored TensorFlow Lite microfrontend; the model is not committed (see
@@ -336,7 +422,7 @@ index 0000000..3a62f10
 +  `id` = `<UTC yyyymmddTHHMMSSZ>-<kind>-<seq>`, `seq` — счётчик запуска.
 +- Виды: `hit` — подтверждение детектора (3 с до + 1 с после), `near` — локальный максимум
 +  среднего вероятности в полосе 0.5..cutoff (3 с до пика + 1 с после, не чаще раза в 3 с и не
-+  раньше 2 с после hit), `miss` — кнопка «Wake: не услышала» (последние 6 с кольца).
++  раньше 2 с после hit), `miss` — кнопка «Wake: не услышала» (последние 30 с кольца; кольцо 31 с, ~1 МБ).
 +- Сайдкар: `schema`, `id`, `kind`, `utc`, `sample_rate`, `pre_ms`, `post_ms`, `score_peak`,
 +  `cutoff`, `window`, `model_sha256`, `pulsar_version`, `dry_run`, `outcome`, `stt_text`,
 +  `label`, `label_source`, `labeled_utc`. `outcome` заполняется, когда диалог, начатый hit,
@@ -497,13 +583,79 @@ index 0000000..3a62f10
 +and restore `pulsar.prev` with `ctl.sh restart`. The previous Rust build also
 +accepts the same `wake_word=ricardo` state and model path.
 diff --git a/docs/architecture.md b/docs/architecture.md
-index 6fcf3c4..6dd1ae2 100644
+index 211972d..92a0529 100644
 --- a/docs/architecture.md
 +++ b/docs/architecture.md
-@@ -322,6 +322,15 @@ println!("cargo:rustc-link-lib=c++");
- - Ошибка dlopen / VQE / спотера логируется, handle деградированный (событий нет). PCM, который не
-   открылся, не считается ошибкой старта: поток захвата пишет ошибку и повторяет открытие каждые
-   2 с. Потоки останавливаются в `Drop` последнего клона handle.
+@@ -182,6 +182,213 @@ flowchart LR
+   должен пережить рестарт, падение или замену бинаря сразу после изменения, пишется через
+   `persist_now()`.
+ 
++Запись (`Settings::save`, `StateFile`): весь файл пишется в `<path>.tmp`, затем fsync, rename
++поверх `state.conf` и fsync каталога. На Лайт 2 `/data` — ubifs, где rename доходит до флеша
++раньше несинхронизированных данных, и без fsync отключение питания могло оставить пустой файл.
++Неудачная запись логируется, временный файл удаляется, прежний `state.conf` остаётся, а изменение
++считается несохранённым до следующего изменения или flush.
++
++- `Controller::persist()` откладывает запись: файл пишется через 1 с (`SAVE_DELAY_MS`) после
++  последнего изменения, так что ползунок или зажатая клавиша громкости дают одну запись. Ветка
++  `state.due()` стоит в `select!` контроллера сразу после таймеров.
++- `Controller::persist_now()` пишет сразу, отменяет отложенную запись и возвращает, лёг ли файл
++  на диск. Так пишутся `update_attempt` (установка начинается; сброс после несмертельной ошибки
++  установки), `zigbee_role` вместе со сбросом `zigbee_flash_failed` (перед рестартом),
++  `zigbee_flash_failed` после отвергнутого радио образа и выключатель `mic_muted`. Если метку
++  `update_attempt` записать не удалось, установка не начинается: прежнее значение возвращается в
++  памяти, HA видит её как неудачную, в лог идёт предупреждение.
++- Исправления при старте (миграция громкости, неизвестный цвет корпуса, сброс `update_attempt`
++  новой версией) и сброс `update_attempt` при выходе посреди установки идут через `persist()`.
++- `main` после `run()` один раз вызывает `flush_settings()`, уже под watchdog teardown: зависший
++  fsync не мешает выходу, а оборванная запись оставляет прежний файл. Падение или SIGKILL теряют
++  изменения последней секунды.
++- Новый ключ, который должен пережить рестарт, падение или замену бинаря сразу после изменения,
++  пишется через `persist_now()`.
++
++### `pulsar-alsa`
++
++- `init(model)` зовётся в `main` до старта рантайма, потоков и библиотек (`pulsar-alsa` нельзя
++  грузить до этого): `Model::apply_env` задаёт `ALSA_CONFIG_PATH` (только Мини —
++  `/data/pulsar/asound.conf`, и только если файл есть; иначе ошибка в логе), а путь к libasound —
++  из `Model::alsa_lib`; у Мини это абсолютный `/system/vendor/quasar/libs/libasound.so.2`, потому
++  что каталог прошивки вне путей поиска загрузчика. С таким путём `init` сразу загружает
++  библиотеку (RTLD_GLOBAL), до GStreamer: `NEEDED libasound.so.2` у `libquasar_gstreamer.so`
++  тогда разрешается в эту копию по SONAME, есть у неё RUNPATH или нет (на Мини не проверено).
++  Остальные модели грузят libasound лениво по SONAME. `supervise.sh` и станционные скрипты
++  окружение для Мини не задают.
++- Для `hw_params` `set_rate_near` / `set_period_size_near` / `set_buffer_size_near` /
++  `get_period_size` / `get_buffer_size` сначала ищется `__snd_pcm_hw_params_*`, затем обычное имя:
++  в версионированной alsa-lib (образы Миди с armhf userland) обычное имя может привязаться к
++  compat-записи ALSA_0.9, которая принимает значения вместо указателей (period/buffer читаются
++  как 0, активационная фраза не работает).
++- `load()` идемпотентна; первая неудача один раз пишет error с текстом dlerror, дальше `open`
++  отдаёт `-ENOENT`.
++- `quiet_error_handler()` пишет шум alsa-lib в `log::debug` только при уровне stderr Debug.
++
++### `pulsar-esphome`
++
++- mDNS вынесен из ApiServer: респондер создаёт контроллер, ApiServer только отдаёт `mdns_txt()` и
++  событие `MdnsTxtChanged`. IP для сенсора «IP address» берётся из
++  `pulsar_core::net::best_interface()`.
++
++### `pulsar-lan`
++
++- mDNS: если 5353 занят без `SO_REUSEADDR`/`SO_REUSEPORT`, респондер берёт эфемерный порт и только
++  анонсирует. `add_service`/`set_txt` сразу после `spawn` (до первого запуска актора) уходят в
++  стартовый анонс; `ipv4()` они не меняют.
++- Арбитр: сокет не открылся → warn, `ok() = false`, `claim(decide = true)` сразу даёт
++  `Decided { won: true, peers: 0 }`. `decide = false` — только рассылка (busy-claim при звонке
++  таймера). Уже отправленный `Decided` может прийти и после `cancel()`: контроллер забывает свой
++  `claim_id` при cancel и сопоставляет события по id.
++- `spawn_traced` (только для `lan_probe`): тот же сервис плюс канал отвеченных вопросов mDNS /
++  принятых чужих claims.
++
++### `pulsar-audio`
++
++- Ошибка dlopen / VQE / спотера логируется, handle деградированный (событий нет). PCM, который не
++  открылся, не считается ошибкой старта: поток захвата пишет ошибку и повторяет открытие каждые
++  2 с. Потоки останавливаются в `Drop` последнего клона handle.
 +- `ricardo/` — C++ bridge к тому же microWakeWord, что и в C++-сборке: вендоренный
 +  microfrontend, `libtflite.so` с Yandex FULL resolver, модель
 +  `/data/pulsar/wakewords/ru_ricardo_mww.tflite`. Rust-сторона (`src/ricardo.rs`)
@@ -513,19 +665,23 @@ index 6fcf3c4..6dd1ae2 100644
 +  sweep 2026-10-30 на v27/Midi, n=3; эмпирика, не гарантия для других команд). Без
 +  модели или `libtflite.so` детектор логирует ошибку и не даёт wake-событий; остальной
 +  фронтенд не падает.
- - `stats()` / `frame()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков, размер
-   аудиочанка и сырой захват для `--record`. Формат захвата задаёт
-   `pulsar_core::model::CaptureFormat` (`S16`, либо `S32 { shift }` — S32_LE с right-justified 24
-@@ -339,12 +348,14 @@ println!("cargo:rustc-link-lib=c++");
-   `Fixed`. Поток обработки держит кольцо последних 1,024 с `VQE_OMNI_WITH_GAIN` (32 чанка по
-   32 мс, на Мини 3 и Мини — 64 по 16 мс) и кладёт в `FrontendEvent::Wake { preroll }` звук от конца
-   слова до подтверждающего чанка включительно. Длина — правило из `Model::wake_preroll` для id
--  модели (имя каталога, `alisa` / `yandex`): чанки после 1-й стадии плюс смещение или фиксированное
--  число; id без правила — пустой пре-ролл (у Мини правил нет). Значения берутся с недолётом, чтобы
--  само слово не попало в STT (HA его из текста не убирает): на Лайт 2 — самый короткий замер по
--  громким словам, на Миди все слова у шумового пола и замер не отличает артефакт от короткой
--  задержки, поэтому взято типичное значение; окончательно все значения выставлены приёмкой через
--  HA. Мини 3 не замерялась: её значения — длины Лайт 2 во времени. Каждое срабатывание пишет
++- `stats()` / `frame()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков, размер
++  аудиочанка и сырой захват для `--record`. Формат захвата задаёт
++  `pulsar_core::model::CaptureFormat` (`S16`, либо `S32 { shift }` — S32_LE с right-justified 24
++  битами, Мини: `shift=8`); перед VQE сэмпл приводится к i16 со сдвигом и насыщением.
++- Уровень wake word для арбитража и FFT светомузыки считаются блоками по 512 сэмплов (32 мс при
++  16 кГц) независимо от чанка VQE: `LevelHistory` и `SpectrumAnalyzer` копят 16-мс чанки Мини 3 и
++  Мини до полного блока, так что окно уровня (47 × 32 мс) и темп кадров музыки у всех моделей одни.
++- Пре-ролл wake word (switch «Command right after wake word», `wake_preroll=` в `state.conf`, по
++  умолчанию включён; `FrontendHandle::set_preroll`, выключенный даёт пустой `preroll`, удержание
++  стрима остаётся): спотер подтверждает слово на несколько чанков позже, чем оно кончилось.
++  Библиотека описывает и двухстадийный путь (событие 3 `1ST_STAGE_HIT`, верификатор ждёт данных,
++  5 — подтверждение, 6 — отказ), на нём держится правило `FirstStage`. Сейчас его не использует
++  ни одна модель: обе модели Лайт 2 и «Яндекс» Миди события 3 не выдают (только 2), а у «Алисы»
++  Миди событие 3 приходит в одном чанке с подтверждением 5 и ничего не отсчитывает; у всех
++  `Fixed`. Поток обработки держит кольцо последних 1,024 с `VQE_OMNI_WITH_GAIN` (32 чанка по
++  32 мс, на Мини 3 и Мини — 64 по 16 мс) и кладёт в `FrontendEvent::Wake { preroll }` звук от конца
++  слова до подтверждающего чанка включительно. Длина — правило из `Model::wake_preroll` для id
 +  модели (имя каталога, `alisa` / `yandex`) или для `ricardo`, когда активен кастомный детектор (его
 +  нативный каталог остаётся `alisa` как путь отката): чанки после 1-й стадии плюс смещение или
 +  фиксированное число; id без правила — пустой пре-ролл (у Мини правил нет). Значения берутся с
@@ -534,18 +690,19 @@ index 6fcf3c4..6dd1ae2 100644
 +  от короткой задержки, поэтому взято типичное значение; окончательно все значения выставлены
 +  приёмкой через HA. Мини 3 не замерялась: её значения — длины Лайт 2 во времени.
 +  Каждое срабатывание пишет
-   `wake timing: first_stage=<чанки> speech_end=<чанки> preroll=<чанки>` (`speech_end` — сколько
-   чанков назад уровень `VQE_OMNI` был не ниже −20 дБ от пика окна). Если имена событий 3 / 6 в
-   библиотеке не те (`spotter event table differs` в логе), якорь отключён и действует запасное
-@@ -353,6 +364,21 @@ println!("cargo:rustc-link-lib=c++");
-   `set_streaming` его не трогает): чанки между подтверждением и `set_streaming(true)` контроллера
-   продолжают пре-ролл без дыры. Контроллер вызывает `wake_handled()` ровно раз на `Wake`, после
-   `on_wake`; пре-ролл уходит в `start_pipeline` или в `arb_audio` арбитража.
++  `wake timing: first_stage=<чанки> speech_end=<чанки> preroll=<чанки>` (`speech_end` — сколько
++  чанков назад уровень `VQE_OMNI` был не ниже −20 дБ от пика окна). Если имена событий 3 / 6 в
++  библиотеке не те (`spotter event table differs` в логе), якорь отключён и действует запасное
++  значение правила.
++- После `Wake` поток обработки шлёт `Audio`, пока владелец не вызовет `wake_handled()` (счётчик,
++  `set_streaming` его не трогает): чанки между подтверждением и `set_streaming(true)` контроллера
++  продолжают пре-ролл без дыры. Контроллер вызывает `wake_handled()` ровно раз на `Wake`, после
++  `on_wake`; пре-ролл уходит в `start_pipeline` или в `arb_audio` арбитража.
 +- Запись wake-событий (`wake_events/`, контракт v1, раздел RICARDO.md «Запись wake-событий»):
-+  поток обработки дополнительно держит 7-секундное кольцо того же `VQE_OMNI_WITH_GAIN` и копит
++  поток обработки дополнительно держит 31-секундное кольцо того же `VQE_OMNI_WITH_GAIN` (~1 МБ) и копит
 +  окна подтверждённых срабатываний (`hit`, 3 с до + 1 с после), локальных максимумов
 +  windowed mean в полосе 0.5..cutoff (`near`) и нажатия «Wake: не услышала» (`miss`, последние
-+  6 с). Готовые буферы уходят в поток `wake-events` через ограниченный канал (`try_send`;
++  30 с). Готовые буферы уходят в поток `wake-events` через ограниченный канал (`try_send`;
 +  переполнение считается в `dropped`), файловый ввод-вывод и ретеншн — только на нём. Порог и
 +  окно детектора читаются из манифеста модели `<stem>.json` (`micro.probability_cutoff`,
 +  `micro.sliding_window_size`), иначе 0.9 / 10, и передаются в C++ через `mww_configure`;
@@ -556,23 +713,95 @@ index 6fcf3c4..6dd1ae2 100644
 +  `arbiter_lost` — проигранный арбитраж, `cancelled` — повторный wake/локальная отмена/мьют,
 +  `error` — ошибка пайплайна, `empty_stt` — пустой STT), и ставит метку `false` по кнопке
 +  ложного срабатывания. `stats.json` пишется не чаще раза в 60 с и при остановке потока.
- 
- ### `pulsar-media`
- 
-@@ -406,6 +432,11 @@ println!("cargo:rustc-link-lib=c++");
-   перезапуск потока сервером (seek / skip) не дёргает состояние медиаплеера в HA и музыкальные
-   дисплеи. `stopped` завершает удерживаемый конец сразу.
- - `yield_to_local()` только шлёт `client/leave`, `streaming` синхронно не меняет.
++
++### `pulsar-media`
++
++- `PlayerEvent::Done` приходит ровно один раз на каждый `play()`. Список, закончившийся на потоке
++  GLib до `stop()`/`play()`, получает фактический `ok`; вытесненный `stop()`/`play()` список
++  получает `false` синхронно из этого вызова.
++- Ошибка dlopen / `gst_init` логируется («player init failed»); handle деградированный: каждый
++  `play()` → `Done { ok: false }`, `state()` = Idle. Плеер один на процесс: повторный `spawn()`
++  логирует ошибку и отдаёт деградированный handle. При старте плеер ставит
++  `pulsar_alsa::quiet_error_handler()`.
++- ANNOUNCE не играет через alsasink: playbin декодирует в `fdsink` на socketpair (S16LE 48 кГц
++  стерео), поток-читатель на каждый url складывает PCM в очередь (до 1 с, дальше декодер ждёт),
++  один поток-писатель (`pcm_out.rs`) пишет его в `Model::playback_pcm`. Писатель начинает, когда
++  набралось 200 мс (или пришёл конец url); сообщения буферизации ANNOUNCE не ставят на паузу.
++  Если очередь пуста, а в устройстве меньше двух периодов, писатель подкладывает тишину и снова
++  ждёт 200 мс: устройство не опустевает (dmix, перезапущенный после опустения, терял ~60 мс
++  следующих семплов на Midi). Поток, который встал, даёт тишину на время остановки, ничего не
++  выбрасывается. EOS пайплайна не заканчивает url: после последнего семпла пишется 100 мс тишины,
++  следующий url и `Done` идут, когда `snd_pcm_delay` дошёл до 0 (на Midi задержка занижена на
++  ~70 мс, ожидание до задержки последнего семпла обрезало конец), потом PCM закрывается. PLAYING
++  ANNOUNCE означает «первые семплы ушли в устройство». Усиление канала ANNOUNCE (приглушение,
++  mute) применяет писатель к тому, что пишет в устройство: громкость playbin действовала бы на
++  PCM, который уже в очереди (до ~2 с). `pause`/`resume` на ANNOUNCE ничего не делают. Почему
++  так: alsasink в GStreamer 1.14 на паузе делает `snd_pcm_drop` (~200 мс речи пропадало на каждой
++  паузе по буферизации, пауза длилась ~1,8 с), а с `sync=true` опоздавшие семплы выбрасываются;
++  appsink API в библиотеке Midi не экспортирован. fd у `fdsink` меняется только в NULL.
++- `Mixer::open` берёт raw, только если чтение удалось и raw > 0, иначе громкость 0.5 (0.1 у модели
++  с `software_volume`); без контрола
++  у модели с `software_volume` (Мини) громкость хранится в памяти, `available() = true`, а
++  контроллер применяет её к каналам игрока и Sendspin. На остальных моделях без контрола
++  `available() = false`. `set_volume`/`set_muted` сразу пишут контрол и поля, геттеры читают поля.
++  Программная громкость идёт по той же 60-дБ кривой, что softvol остальных моделей
++  (`pulsar_core::volume::master_gain`: ступень 5 % = 2,55 дБ). Кривая Мини — та же штатная карта
++  `STOCK_VOLUME` с `volume_min_step=true`; `mixer.rs` берёт кривую из `pulsar_core::volume`.
++- На Мини затворы усилителя включаются вокруг каждого открытия PCM:
++  Sendspin-sink и писатель ANNOUNCE открывают устройство через общий
++  `pulsar_alsa::open_playback(model)` — `amp_table`/`aux_amp` = 1 и снятие ALSA `SPK mute` до и
++  после открытия (dmix выключает `amp_table`, когда закрывается последний клиент, само открытие
++  может их сбросить, а драйвер обнуляет `amp_table` при закрытии PCM); MUSIC-конвейер, чей
++  alsasink открывает устройство внутри GStreamer, вместо этого вызывает
++  `pulsar_alsa::enable_output(model)` перед запуском конвейера и ещё раз, когда он сообщает
++  PLAYING (к этому моменту alsasink уже открыл устройство). Idle остаётся запертым
++  (`aux_amp` остаётся 1), поэтому включение стоит перед каждым стартом. Sink — `mini` из
++  `/data/pulsar/asound.conf` (dmix).
++
++### `pulsar-sendspin`
++
++- Без sendspin-cpp (host-сборка, cfg `sendspin_ffi` не задан) `spawn` отдаёт
++  `Err("sendspin: built without sendspin-cpp")`.
++- Конец потока без `stopped` в состоянии группы удерживается 1 с (sink освобождается сразу):
++  перезапуск потока сервером (seek / skip) не дёргает состояние медиаплеера в HA и музыкальные
++  дисплеи. `stopped` завершает удерживаемый конец сразу.
++- `yield_to_local()` только шлёт `client/leave`, `streaming` синхронно не меняет.
 +- Выход по рестарту (`enabled` существует: `ctl.sh restart|reload`, HA Restart, обновление)
 +  отправляет `client/goodbye` с причиной `restart` до остановки клиента: по протоколу только
 +  `restart` разрешает серверу (Music Assistant) переподключиться. Библиотечный `stop()` иначе
 +  шлёт `shutdown`, после которого MA сознательно не набирает этот URL до перезапуска своего
 +  провайдера. `ctl.sh disable` сначала удаляет `enabled`, поэтому там остаётся `shutdown`.
- 
- ### `pulsar-hw` и `pulsar-clock`
- 
++
++### `pulsar-hw` и `pulsar-clock`
++
++- Ошибка открытия framebuffer / sysfs логируется («LEDs unavailable», «clock unavailable»), вывод
++  становится no-op, состояние работает. `set_case_color` синхронно грузит матрицу из
++  `/system/vendor/quasar/ledconfigs/<stem>.json` и работает и без открытых LED.
++- `spawn_input` отдаёт `Err`, если не открылось ни одно устройство.
++- `spawn_light_sensor` отдаёт первое значение сразу.
++
++### `pulsar-zigbee`
++
++- `join()`: актор проверяет фазу Running и роль роутера, затем `ready && !joined && !joining`,
++  ставит `joining`, очищает error, шлёт steering, взводит таймер 90 с и отправляет `Changed`.
++  `leave()`: при тех же условиях (Running, роутер, ready) сбрасывает `joining` и очищает error,
++  без `Changed`.
++- Внутренний API (link, coordinator, router, flasher) описан в rustdoc крейта.
++
++### `pulsar-update`
++
++- `check()`/`install()`: `None` = занят, запрос не принят, события не будет; `Some(id)` — id из
++  общего счётчика с 1. `busy` ставится CAS в handle до отправки команды; актор сбрасывает его
++  непосредственно перед отправкой `Checked`/`Installed`. Окно, когда `busy()` уже false, а событие
++  ещё в очереди: для `Installed` его закрывает флаг установки контроллера; для `Checked` —
++  контроллер, который не начинает установку, пока id проверки не обработан.
++- Когда закрыты все handle (выход демона), установка в процессе отменяется: до `--version` и
++  замены бинаря она прерывается (`pulsar.new` удаляется), уже идущая замена завершается.
+ Смысл отдельных ключей: `zigbee_role` / `zigbee_flash_failed` —
+ [zigbee.md, «Роли и state.conf»](zigbee.md#роли-и-stateconf); `update_attempt` —
+ [development.md, «Обновления из HA»](development.md#обновления-из-ha).
 diff --git a/installer/deploy.go b/installer/deploy.go
-index 3f2d39b..af4feb0 100644
+index 3abc979..a244749 100644
 --- a/installer/deploy.go
 +++ b/installer/deploy.go
 @@ -173,6 +173,12 @@ func deployFiles(s, bin, arch, code string, zigbee bool) (changed, supChanged, o
@@ -5150,7 +5379,7 @@ index 0000000..5cbae37
 +    }
 +}
 diff --git a/satellite/crates/pulsar-audio/src/engine/mod.rs b/satellite/crates/pulsar-audio/src/engine/mod.rs
-index 963411a..8b6d6fe 100644
+index 44cf1ca..fd9495c 100644
 --- a/satellite/crates/pulsar-audio/src/engine/mod.rs
 +++ b/satellite/crates/pulsar-audio/src/engine/mod.rs
 @@ -11,6 +11,8 @@ use std::path::Path;
@@ -5162,7 +5391,7 @@ index 963411a..8b6d6fe 100644
  pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
  
  pub const VQE_MODELS: &str = "/system/vendor/quasar/vqe_models";
-@@ -255,6 +257,9 @@ pub(crate) struct Engine {
+@@ -256,6 +258,9 @@ pub(crate) struct Engine {
      // config), as the C++ engine's destructor freed them.
      wake: Slot,
      cmd: Slot,
@@ -5172,7 +5401,7 @@ index 963411a..8b6d6fe 100644
      vqe: Vqe,
      lib: Lib,
      /// Capture frames per VQE chunk.
-@@ -279,7 +284,9 @@ impl Engine {
+@@ -280,7 +285,9 @@ impl Engine {
      pub fn start(
          model: &pulsar_core::model::Model,
          wake_dir: &Path,
@@ -5182,7 +5411,7 @@ index 963411a..8b6d6fe 100644
      ) -> Option<Engine> {
          if let Err(e) = preload_deps() {
              warn!("libtflite: {e}");
-@@ -317,6 +324,17 @@ impl Engine {
+@@ -318,6 +325,17 @@ impl Engine {
              return None;
          };
          info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
@@ -5200,7 +5429,7 @@ index 963411a..8b6d6fe 100644
          let (hit, rej) = (
              lib.event_name(EV_FIRST_STAGE_HIT),
              lib.event_name(EV_REJECTION_2ND),
-@@ -335,6 +353,7 @@ impl Engine {
+@@ -336,6 +354,7 @@ impl Engine {
          let mut eng = Engine {
              wake: Slot::new("wake word"),
              cmd: Slot::new("command"),
@@ -5208,7 +5437,7 @@ index 963411a..8b6d6fe 100644
              vqe,
              lib,
              chunk: chunk_n,
-@@ -395,6 +414,12 @@ impl Engine {
+@@ -396,6 +415,12 @@ impl Engine {
          s
      }
  
@@ -5222,7 +5451,7 @@ index 963411a..8b6d6fe 100644
      pub fn feed_command(&mut self) -> Vec<String> {
          feed(&self.vqe, self.frame, &mut self.cmd).phrases
 diff --git a/satellite/crates/pulsar-audio/src/frontend.rs b/satellite/crates/pulsar-audio/src/frontend.rs
-index 74d4680..6446f44 100644
+index 74d4680..e9c5496 100644
 --- a/satellite/crates/pulsar-audio/src/frontend.rs
 +++ b/satellite/crates/pulsar-audio/src/frontend.rs
 @@ -1,7 +1,8 @@
@@ -5375,7 +5604,7 @@ index 74d4680..6446f44 100644
 +        self.inner.shared.dry_run.store(on, Relaxed);
 +    }
 +
-+    /// «Wake: не услышала»: records the last 6 s of the ring. Ignored while the detector is off
++    /// «Wake: не услышала»: records the last 30 s of the ring. Ignored while the detector is off
 +    /// (muted), without the Ricardo model, or with recording off.
 +    pub fn wake_missed(&self) {
 +        self.inner.shared.wake_miss.store(true, Relaxed);
@@ -5645,8 +5874,8 @@ index 74d4680..6446f44 100644
 +                            }
 +                        }
 +                    }
-+                    // The same detector input, in a 7 s ring: a hit keeps 3 s before and 1 s
-+                    // after, a miss the last 6 s. Off when muted or without the Ricardo model.
++                    // The same detector input, in a 31 s ring: a hit keeps 3 s before and 1 s
++                    // after, a miss the last 30 s. Off when muted or without the Ricardo model.
 +                    let recording = wake.is_some()
 +                        && shared.recording.load(Relaxed)
 +                        && custom_active
@@ -5967,7 +6196,7 @@ index 0000000..9cd6eb7
 +}
 diff --git a/satellite/crates/pulsar-audio/src/wake_events/capture.rs b/satellite/crates/pulsar-audio/src/wake_events/capture.rs
 new file mode 100644
-index 0000000..a753ccb
+index 0000000..8f842ae
 --- /dev/null
 +++ b/satellite/crates/pulsar-audio/src/wake_events/capture.rs
 @@ -0,0 +1,378 @@
@@ -6319,7 +6548,7 @@ index 0000000..a753ccb
 +    }
 +
 +    #[test]
-+    fn miss_is_the_last_six_seconds_and_labeled() {
++    fn miss_is_the_last_thirty_seconds_and_labeled() {
 +        let mut c = Capture::new(FRAME, 0.9);
 +        assert!(c.miss(0).is_none());
 +        for k in 0..chunks(u64::from(RING_MS)) {
@@ -7281,7 +7510,7 @@ index 0000000..363af44
 +}
 diff --git a/satellite/crates/pulsar-audio/src/wake_events/mod.rs b/satellite/crates/pulsar-audio/src/wake_events/mod.rs
 new file mode 100644
-index 0000000..e202e3a
+index 0000000..d3adc26
 --- /dev/null
 +++ b/satellite/crates/pulsar-audio/src/wake_events/mod.rs
 @@ -0,0 +1,220 @@
@@ -7311,11 +7540,11 @@ index 0000000..e202e3a
 +
 +use log::{error, info, warn};
 +
-+/// Ring of the detector's input stream: the 6 s of a miss plus the 3 s before a hit.
-+pub(crate) const RING_MS: u32 = 7000;
++/// Ring of the detector's input stream: the 30 s of a miss plus the 3 s before a hit.
++pub(crate) const RING_MS: u32 = 31_000;
 +pub(crate) const HIT_PRE_MS: u32 = 3000;
 +pub(crate) const POST_MS: u32 = 1000;
-+pub(crate) const MISS_MS: u32 = 6000;
++pub(crate) const MISS_MS: u32 = 30_000;
 +
 +/// Finished windows waiting for the writer thread.
 +const JOB_QUEUE: usize = 8;
@@ -8061,7 +8290,7 @@ index 0000000..943ca9c
 +    }
 +}
 diff --git a/satellite/crates/pulsar-core/src/model.rs b/satellite/crates/pulsar-core/src/model.rs
-index 9cc093d..4b2adfa 100644
+index 95898c3..f8b9fff 100644
 --- a/satellite/crates/pulsar-core/src/model.rs
 +++ b/satellite/crates/pulsar-core/src/model.rs
 @@ -193,6 +193,14 @@ const CUCUMBER_PREROLL: &[WakePreroll] = &[
@@ -8080,7 +8309,7 @@ index 9cc093d..4b2adfa 100644
  // Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2
  // (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed. Chunks from
 diff --git a/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs b/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs
-index 2bc2cc6..17ac5f0 100644
+index 1e17a11..81be99b 100644
 --- a/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs
 +++ b/satellite/crates/pulsar-esphome/src/bin/api_selftest.rs
 @@ -301,6 +301,7 @@ async fn run(port: u16, name: String, run_s: i64, key_path: Option<PathBuf>) ->
@@ -8174,7 +8403,7 @@ index 1968139..7cf74be 100644
          let Some(vc) = self.voice_client() else {
              return;
 diff --git a/satellite/crates/pulsar-esphome/src/server/commands.rs b/satellite/crates/pulsar-esphome/src/server/commands.rs
-index 1171908..7e50617 100644
+index e497801..a8652ab 100644
 --- a/satellite/crates/pulsar-esphome/src/server/commands.rs
 +++ b/satellite/crates/pulsar-esphome/src/server/commands.rs
 @@ -158,6 +158,16 @@ impl Server {
@@ -8203,7 +8432,7 @@ index 1171908..7e50617 100644
              _ => return,
          };
          self.emit(ApiEvent::Switch(id, state));
-@@ -307,6 +319,9 @@ impl Server {
+@@ -313,6 +325,9 @@ impl Server {
                  "music visualization",
              ),
              key::SELECT_CASE_COLOR => (SelectId::CaseColor, &self.cfg.case_colors, "case color"),
@@ -8214,22 +8443,24 @@ index 1171908..7e50617 100644
              _ => return,
          };
 diff --git a/satellite/crates/pulsar-esphome/src/server/entities.rs b/satellite/crates/pulsar-esphome/src/server/entities.rs
-index cf6ad36..21d7f2d 100644
+index ae04b21..70b5487 100644
 --- a/satellite/crates/pulsar-esphome/src/server/entities.rs
 +++ b/satellite/crates/pulsar-esphome/src/server/entities.rs
-@@ -47,6 +47,11 @@ pub(super) mod key {
+@@ -47,7 +47,12 @@ pub(super) mod key {
      pub const SELECT_CLOCK_MUSIC: u32 = 31;
      pub const SW_WAKE_PREROLL: u32 = 32;
      pub const SW_CLOCK_AUTO_BRI: u32 = 33;
+-    pub const NUMBER_FOLLOWUP_DURATION: u32 = 34;
 +    pub const BUTTON_WAKE_FALSE_ALARM: u32 = 34;
 +    pub const BUTTON_WAKE_MISSED: u32 = 35;
 +    pub const SW_WAKE_EVENT_RECORDING: u32 = 36;
 +    pub const SW_WAKE_DRY_RUN: u32 = 37;
 +    pub const SELECT_VOICE_COLOR: u32 = 38;
++    pub const NUMBER_FOLLOWUP_DURATION: u32 = 39;
  }
  
  /// aioesphomeapi VoiceAssistantFeature: voice assistant, API audio, timers, announce, start
-@@ -124,6 +129,8 @@ pub(super) struct Cache {
+@@ -125,6 +130,8 @@ pub(super) struct Cache {
      sw_nearest_answers: BoolState,
      sw_voice_indication: BoolState,
      sw_wake_preroll: BoolState,
@@ -8238,7 +8469,7 @@ index cf6ad36..21d7f2d 100644
      bs_hw_mute: BoolState,
      update: UpdateState,
      update_has: bool,
-@@ -138,6 +145,7 @@ pub(super) struct Cache {
+@@ -140,6 +147,7 @@ pub(super) struct Cache {
      music_viz: StrState,
      case_color: StrState,
      clock_music: StrState,
@@ -8246,7 +8477,7 @@ index cf6ad36..21d7f2d 100644
      pub(super) light: LightState,
      rssi: FloatState,
      ip: Option<Ipv4Addr>,
-@@ -157,6 +165,8 @@ impl Cache {
+@@ -159,6 +167,8 @@ impl Cache {
              sw_nearest_answers: BoolState::default(),
              sw_voice_indication: BoolState::default(),
              sw_wake_preroll: BoolState::default(),
@@ -8255,7 +8486,7 @@ index cf6ad36..21d7f2d 100644
              bs_hw_mute: BoolState::default(),
              update: UpdateState::default(),
              update_has: false,
-@@ -171,6 +181,7 @@ impl Cache {
+@@ -174,6 +184,7 @@ impl Cache {
              music_viz: StrState::default(),
              case_color: StrState::default(),
              clock_music: StrState::default(),
@@ -8263,7 +8494,7 @@ index cf6ad36..21d7f2d 100644
              light: LightState::default(),
              rssi: FloatState::default(),
              ip: None,
-@@ -256,7 +267,9 @@ impl Server {
+@@ -259,7 +270,9 @@ impl Server {
              SwitchId::Microphones
              | SwitchId::AutoUpdate
              | SwitchId::NearestAnswers
@@ -8274,7 +8505,7 @@ index cf6ad36..21d7f2d 100644
          }
      }
  
-@@ -346,6 +359,20 @@ impl Server {
+@@ -349,6 +362,20 @@ impl Server {
                  cfg,
              ));
          }
@@ -8295,7 +8526,7 @@ index cf6ad36..21d7f2d 100644
          let number = |oid, key, name, icon, (min, max, step): (f32, f32, f32), unit| {
              let mut w = Writer::new();
              entity_head(&mut w, oid, key, name);
-@@ -396,6 +423,16 @@ impl Server {
+@@ -407,6 +434,16 @@ impl Server {
                  cfg,
              ));
          }
@@ -8312,7 +8543,7 @@ index cf6ad36..21d7f2d 100644
          if self.cfg.has_clock {
              out.push(select(
                  "clock_music",
-@@ -466,6 +503,26 @@ impl Server {
+@@ -477,6 +514,26 @@ impl Server {
          w.u32(7, ENTITY_CATEGORY_CONFIG, false);
          w.str(8, "restart", false);
          out.push((msg::LIST_BUTTON, w));
@@ -8339,7 +8570,7 @@ index cf6ad36..21d7f2d 100644
          let sensor = |oid, key, name, unit, class, state_class| {
              let mut w = Writer::new();
              entity_head(&mut w, oid, key, name);
-@@ -731,6 +788,7 @@ impl Server {
+@@ -742,6 +799,7 @@ impl Server {
              c.sw_wake_preroll,
              c.bs_hw_mute,
          );
@@ -8347,7 +8578,7 @@ index cf6ad36..21d7f2d 100644
          let (lux, bri, scroll, speed) = (c.lux, c.clock_bri, c.clock_scroll, c.led_speed);
          self.send_media(to);
          self.send_bool(msg::SWITCH_STATE, key::SW_MICROPHONES, mic, to);
-@@ -746,6 +804,13 @@ impl Server {
+@@ -757,6 +815,13 @@ impl Server {
          if self.cfg.has_wake_preroll {
              self.send_bool(msg::SWITCH_STATE, key::SW_WAKE_PREROLL, preroll, to);
          }
@@ -8361,7 +8592,7 @@ index cf6ad36..21d7f2d 100644
          self.send_update(to);
          if self.cfg.has_hw_mic_mute {
              self.send_bool(msg::BINARY_SENSOR_STATE, key::BS_HW_MIC_MUTE, hw, to);
-@@ -794,6 +859,14 @@ impl Server {
+@@ -811,6 +876,14 @@ impl Server {
                  to,
              );
          }
@@ -8376,7 +8607,7 @@ index cf6ad36..21d7f2d 100644
          if has_clock {
              self.send_cached_str(
                  msg::SELECT_STATE,
-@@ -888,6 +961,10 @@ impl Server {
+@@ -905,6 +978,10 @@ impl Server {
                          (&mut c.sw_voice_indication, key::SW_VOICE_INDICATION)
                      }
                      SwitchId::WakePreroll => (&mut c.sw_wake_preroll, key::SW_WAKE_PREROLL),
@@ -8387,7 +8618,7 @@ index cf6ad36..21d7f2d 100644
                  };
                  *s = BoolState { has: true, v };
                  let s = *s;
-@@ -948,12 +1025,16 @@ impl Server {
+@@ -970,12 +1047,16 @@ impl Server {
                  if id == SelectId::ZigbeeMode && self.cfg.zigbee_modes.is_empty() {
                      return;
                  }
@@ -8404,7 +8635,7 @@ index cf6ad36..21d7f2d 100644
                  };
                  if on && (has_clock || !matches!(id, SelectId::ClockFace | SelectId::ClockMusic)) {
                      self.send_str(msg::SELECT_STATE, key, &v, true, None);
-@@ -965,6 +1046,7 @@ impl Server {
+@@ -987,6 +1068,7 @@ impl Server {
                      SelectId::MusicViz => &mut c.music_viz,
                      SelectId::CaseColor => &mut c.case_color,
                      SelectId::ClockMusic => &mut c.clock_music,
@@ -8437,7 +8668,7 @@ index 4cdaa99..96b56a6 100644
              assert!(a.sync().await.is_empty());
  
 diff --git a/satellite/crates/pulsar-esphome/src/server/tests/entities.rs b/satellite/crates/pulsar-esphome/src/server/tests/entities.rs
-index 26654e7..f4ab725 100644
+index b7b0da5..22914cf 100644
 --- a/satellite/crates/pulsar-esphome/src/server/tests/entities.rs
 +++ b/satellite/crates/pulsar-esphome/src/server/tests/entities.rs
 @@ -34,6 +34,7 @@ fn selftest(compilation_time: &str) -> (DeviceIdentity, ApiConfig) {
@@ -8522,22 +8753,23 @@ index 26654e7..f4ab725 100644
                      ApiEvent::Switch(SwitchId::NearestAnswers, true),
                      ApiEvent::Switch(SwitchId::VoiceIndication, false),
                      ApiEvent::Switch(SwitchId::WakePreroll, true),
-@@ -708,9 +740,10 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
+@@ -708,9 +740,11 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
                  }
                  keys.push(field(&m, 2).unwrap().u32());
              }
--            // 14 entities plus the led_show service; no clock, Lux, wake pre-roll, hardware MUTE,
--            // case colour or Button entities.
--            assert_eq!(keys.len(), 15, "keys: {keys:?}");
-+            // 19 entities plus the led_show service; no clock, Lux, wake pre-roll, hardware
-+            // MUTE, case colour or Button entities. The two wake-event switches, two buttons
-+            // and the voice colour select are always listed, even without the Ricardo detector.
-+            assert_eq!(keys.len(), 20, "keys: {keys:?}");
+-            // 15 сущностей и сервис led_show; нет часов, Lux, пре-ролла wake word, аппаратного
+-            // MUTE, цвета корпуса и Button.
+-            assert_eq!(keys.len(), 16, "keys: {keys:?}");
++            // 20 entities plus the led_show service; no clock, Lux, wake pre-roll, hardware
++            // MUTE, case colour or Button entities, but with the follow-up duration. The two
++            // wake-event switches, two buttons and the voice colour select are always listed,
++            // even without the Ricardo detector.
++            assert_eq!(keys.len(), 21, "keys: {keys:?}");
+             assert!(keys.contains(&key::NUMBER_FOLLOWUP_DURATION));
              assert!(keys.contains(&key::ACTION_LED_SHOW));
              let absent = [
-                 key::SW_CLOCK,
 diff --git a/satellite/crates/pulsar-esphome/src/types.rs b/satellite/crates/pulsar-esphome/src/types.rs
-index ea6fc7f..1fa4b1e 100644
+index f52b48b..551d4ad 100644
 --- a/satellite/crates/pulsar-esphome/src/types.rs
 +++ b/satellite/crates/pulsar-esphome/src/types.rs
 @@ -52,6 +52,8 @@ pub struct ApiConfig {
@@ -8566,7 +8798,7 @@ index ea6fc7f..1fa4b1e 100644
  }
  
  #[repr(u32)]
-@@ -305,6 +310,7 @@ pub enum SelectId {
+@@ -318,6 +323,7 @@ pub enum SelectId {
      MusicViz = 3,
      CaseColor = 4,
      ClockMusic = 5,
@@ -8574,7 +8806,7 @@ index ea6fc7f..1fa4b1e 100644
  }
  
  #[repr(u32)]
-@@ -312,6 +318,10 @@ pub enum SelectId {
+@@ -325,6 +331,10 @@ pub enum SelectId {
  pub enum ButtonId {
      ZigbeeJoin = 1,
      ZigbeeLeave = 2,
@@ -8585,6 +8817,99 @@ index ea6fc7f..1fa4b1e 100644
  }
  
  #[repr(u32)]
+diff --git a/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_noise.txt b/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_noise.txt
+index 167c75a..dabdef9 100644
+--- a/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_noise.txt
++++ b/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_noise.txt
+@@ -2,7 +2,7 @@
+ # Edited by hand since: switch key 2 is "Microphones" (object_id microphones, icon mdi:microphone), published on.
+ # Switch key 32 "Command right after wake word" added after key 28, not published.
+ # Switch key 33 "Clock auto brightness" added after key 3 (clock and light sensor present), not published.
+-# Number key 34 "Follow-up duration" added after "LED speed", not published.
++# Number key 39 "Follow-up duration" (34..38 are this fork's wake-event and voice-colour keys) added after "LED speed", not published.
+ DeviceInfo api_encryption_provisionable=False api_encryption_supported=True api_outgoing_connection_supported=False area={area_id=0, name=''} areas=[] bluetooth_mac_address='' bluetooth_proxy_feature_flags=0 compilation_time=* devices=[] esphome_version='2026.9.0' friendly_name='Яндекс Станция Миди (selftest)' has_deep_sleep=False legacy_bluetooth_proxy_version=0 legacy_voice_assistant_version=0 mac_address=* manufacturer='Yandex' model='Yandex Station Midi' name='pulsar-selftest' project_name='pulsar.satellite' project_version=* serial_proxies=[] suggested_area='' uses_password=False voice_assistant_feature_flags=61 webserver_port=0 zwave_home_id=0 zwave_proxy_feature_flags=0
+ MediaPlayerInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.NONE feature_flags=1070605 icon='' key=1 name='Media Player' object_id='media_player' supported_formats=[{bitrate=0, format='flac', num_channels=2, purpose=MediaPlayerFormatPurpose.DEFAULT, sample_bytes=2, sample_rate=48000}, {bitrate=0, format='flac', num_channels=1, purpose=MediaPlayerFormatPurpose.ANNOUNCEMENT, sample_bytes=2, sample_rate=48000}] supports_pause=True
+ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.NONE icon='mdi:microphone' key=2 name='Microphones' object_id='microphones'
+@@ -13,7 +13,7 @@ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=F
+ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:led-on' key=28 name='Voice indication' object_id='voice_indication'
+ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:skip-backward' key=32 name='Command right after wake word' object_id='command_right_after_wake_word'
+ NumberInfo device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:speedometer' key=27 max_value=4 min_value=0.25 mode=NumberMode.SLIDER name='LED speed' object_id='led_speed' step=0.05 unit_of_measurement='×'
+-NumberInfo device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:microphone-message' key=34 max_value=10 min_value=0 mode=NumberMode.SLIDER name='Follow-up duration' object_id='followup_duration' step=1 unit_of_measurement='s'
++NumberInfo device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:microphone-message' key=39 max_value=10 min_value=0 mode=NumberMode.SLIDER name='Follow-up duration' object_id='followup_duration' step=1 unit_of_measurement='s'
+ SelectInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:equalizer' key=26 name='Music visualization' object_id='music_visualization' options=['Off', 'All styles', 'Spectrum']
+ SelectInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:palette' key=29 name='Case color' object_id='case_color' options=['None', 'blue']
+ SelectInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:equalizer-outline' key=31 name='Clock music' object_id='clock_music' options=['Off', 'Levels']
+@@ -59,7 +59,7 @@ clock_text_speed: NumberState device_id=0 key=16 missing_state=False state=400
+ clock_text: TextState device_id=0 key=14 missing_state=False state=''
+ clock_face: SelectState device_id=0 key=15 missing_state=False state='None'
+ led_speed: NumberState device_id=0 key=27 missing_state=False state=1
+-followup_duration: NumberState device_id=0 key=34 missing_state=True state=0
++followup_duration: NumberState device_id=0 key=39 missing_state=True state=0
+ music_visualization: SelectState device_id=0 key=26 missing_state=False state='All styles'
+ case_color: SelectState device_id=0 key=29 missing_state=False state='None'
+ clock_music: SelectState device_id=0 key=31 missing_state=False state='Off'
+diff --git a/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_plain.txt b/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_plain.txt
+index 48f89c8..70a15af 100644
+--- a/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_plain.txt
++++ b/satellite/crates/pulsar-esphome/tests/golden/selftest_dump_plain.txt
+@@ -2,7 +2,7 @@
+ # Edited by hand since: switch key 2 is "Microphones" (object_id microphones, icon mdi:microphone), published on.
+ # Switch key 32 "Command right after wake word" added after key 28, not published.
+ # Switch key 33 "Clock auto brightness" added after key 3 (clock and light sensor present), not published.
+-# Number key 34 "Follow-up duration" added after "LED speed", not published.
++# Number key 39 "Follow-up duration" (34..38 are this fork's wake-event and voice-colour keys) added after "LED speed", not published.
+ DeviceInfo api_encryption_provisionable=False api_encryption_supported=False api_outgoing_connection_supported=False area={area_id=0, name=''} areas=[] bluetooth_mac_address='' bluetooth_proxy_feature_flags=0 compilation_time=* devices=[] esphome_version='2026.9.0' friendly_name='Яндекс Станция Миди (selftest)' has_deep_sleep=False legacy_bluetooth_proxy_version=0 legacy_voice_assistant_version=0 mac_address=* manufacturer='Yandex' model='Yandex Station Midi' name='pulsar-selftest' project_name='pulsar.satellite' project_version=* serial_proxies=[] suggested_area='' uses_password=False voice_assistant_feature_flags=61 webserver_port=0 zwave_home_id=0 zwave_proxy_feature_flags=0
+ MediaPlayerInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.NONE feature_flags=1070605 icon='' key=1 name='Media Player' object_id='media_player' supported_formats=[{bitrate=0, format='flac', num_channels=2, purpose=MediaPlayerFormatPurpose.DEFAULT, sample_bytes=2, sample_rate=48000}, {bitrate=0, format='flac', num_channels=1, purpose=MediaPlayerFormatPurpose.ANNOUNCEMENT, sample_bytes=2, sample_rate=48000}] supports_pause=True
+ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.NONE icon='mdi:microphone' key=2 name='Microphones' object_id='microphones'
+@@ -13,7 +13,7 @@ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=F
+ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:led-on' key=28 name='Voice indication' object_id='voice_indication'
+ SwitchInfo assumed_state=False device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:skip-backward' key=32 name='Command right after wake word' object_id='command_right_after_wake_word'
+ NumberInfo device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:speedometer' key=27 max_value=4 min_value=0.25 mode=NumberMode.SLIDER name='LED speed' object_id='led_speed' step=0.05 unit_of_measurement='×'
+-NumberInfo device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:microphone-message' key=34 max_value=10 min_value=0 mode=NumberMode.SLIDER name='Follow-up duration' object_id='followup_duration' step=1 unit_of_measurement='s'
++NumberInfo device_class='' device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:microphone-message' key=39 max_value=10 min_value=0 mode=NumberMode.SLIDER name='Follow-up duration' object_id='followup_duration' step=1 unit_of_measurement='s'
+ SelectInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:equalizer' key=26 name='Music visualization' object_id='music_visualization' options=['Off', 'All styles', 'Spectrum']
+ SelectInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:palette' key=29 name='Case color' object_id='case_color' options=['None', 'blue']
+ SelectInfo device_id=0 disabled_by_default=False entity_category=EntityCategory.CONFIG icon='mdi:equalizer-outline' key=31 name='Clock music' object_id='clock_music' options=['Off', 'Levels']
+@@ -59,7 +59,7 @@ clock_text_speed: NumberState device_id=0 key=16 missing_state=False state=400
+ clock_text: TextState device_id=0 key=14 missing_state=False state=''
+ clock_face: SelectState device_id=0 key=15 missing_state=False state='None'
+ led_speed: NumberState device_id=0 key=27 missing_state=False state=1
+-followup_duration: NumberState device_id=0 key=34 missing_state=True state=0
++followup_duration: NumberState device_id=0 key=39 missing_state=True state=0
+ music_visualization: SelectState device_id=0 key=26 missing_state=False state='All styles'
+ case_color: SelectState device_id=0 key=29 missing_state=False state='None'
+ clock_music: SelectState device_id=0 key=31 missing_state=False state='Off'
+diff --git a/satellite/crates/pulsar-esphome/tests/golden/selftest_raw.txt b/satellite/crates/pulsar-esphome/tests/golden/selftest_raw.txt
+index 7a7b4fb..a3f3e9d 100644
+--- a/satellite/crates/pulsar-esphome/tests/golden/selftest_raw.txt
++++ b/satellite/crates/pulsar-esphome/tests/golden/selftest_raw.txt
+@@ -13,7 +13,7 @@
+ # Edited by hand since: switch key 2 is "Microphones" (object_id microphones, icon mdi:microphone), published on.
+ # Switch key 32 "Command right after wake word" (object_id command_right_after_wake_word, icon mdi:skip-backward) added after key 28, not published.
+ # Switch key 33 "Clock auto brightness" (config, mdi:brightness-auto) after "Clock display" when the clock and the light sensor are there; not published by the selftest, so its state is missing.
+-# Number key 34 "Follow-up duration" (config, mdi:microphone-message, 0..10 s, step 1) after "LED speed" on every model; not published by the selftest, so its state is missing.
++# Number key 39 "Follow-up duration" (34..38 are this fork's wake-event and voice-colour keys) (config, mdi:microphone-message, 0..10 s, step 1) after "LED speed" on every model; not published by the selftest, so its state is missing.
+ 2 0801100f1a0c70756c73617220302e312e30220f70756c7361722d73656c6674657374
+ 36 -
+ 10 120f70756c7361722d73656c66746573741a1130323a30303a30303a43303a46463a45452208323032362e392e302a154f637420323420323032362c2031393a33363a3536321359616e6465782053746174696f6e204d696469421070756c7361722e736174656c6c6974654a05302e312e30620659616e6465786a2fd0afd0bdd0b4d0b5d0bad18120d0a1d182d0b0d0bdd186d0b8d18f20d09cd0b8d0b4d0b8202873656c66746573742988013d
+@@ -28,7 +28,7 @@
+ 17 0a10766f6963655f696e6469636174696f6e151c0000001a10566f69636520696e6469636174696f6e2a0a6d64693a6c65642d6f6e4001
+ 17 0a1d636f6d6d616e645f72696768745f61667465725f77616b655f776f726415200000001a1d436f6d6d616e642072696768742061667465722077616b6520776f72642a116d64693a736b69702d6261636b776172644001
+ 49 0a096c65645f7370656564151b0000001a094c45442073706565642a0f6d64693a73706565646f6d65746572350000803e3d0000804045cdcc4c3d50015a02c3976002
+-49 0a11666f6c6c6f7775705f6475726174696f6e15220000001a12466f6c6c6f772d7570206475726174696f6e2a166d64693a6d6963726f70686f6e652d6d6573736167653d00002041450000803f50015a01736002
++49 0a11666f6c6c6f7775705f6475726174696f6e15270000001a12466f6c6c6f772d7570206475726174696f6e2a166d64693a6d6963726f70686f6e652d6d6573736167653d00002041450000803f50015a01736002
+ 52 0a136d757369635f76697375616c697a6174696f6e151a0000001a134d757369632076697375616c697a6174696f6e2a0d6d64693a657175616c697a657232034f6666320a416c6c207374796c65733208537065637472756d4001
+ 52 0a0a636173655f636f6c6f72151d0000001a0a4361736520636f6c6f722a0b6d64693a70616c6574746532044e6f6e653204626c75654001
+ 52 0a0b636c6f636b5f6d75736963151f0000001a0b436c6f636b206d757369632a156d64693a657175616c697a65722d6f75746c696e6532034f666632064c6576656c734001
+@@ -75,7 +75,7 @@
+ 98 0d0e000000
+ 53 0d0f00000012044e6f6e65
+ 50 0d1b000000150000803f
+-50 0d220000001801
++50 0d270000001801
+ 53 0d1a000000120a416c6c207374796c6573
+ 53 0d1d00000012044e6f6e65
+ 53 0d1f00000012034f6666
 diff --git a/satellite/crates/pulsar-hw/src/led_fx.rs b/satellite/crates/pulsar-hw/src/led_fx.rs
 index cbe977f..8295ddf 100644
 --- a/satellite/crates/pulsar-hw/src/led_fx.rs
@@ -8872,10 +9197,10 @@ index ec61c5b..b86cba4 100644
 +    }
 +}
 diff --git a/satellite/crates/pulsar-hw/src/leds.rs b/satellite/crates/pulsar-hw/src/leds.rs
-index 4afe8f7..70b9128 100644
+index b00e52a..a80b583 100644
 --- a/satellite/crates/pulsar-hw/src/leds.rs
 +++ b/satellite/crates/pulsar-hw/src/leds.rs
-@@ -274,6 +274,8 @@ enum Cmd {
+@@ -275,6 +275,8 @@ enum Cmd {
      },
      ClearTemporary,
      VoiceIndication(bool),
@@ -8884,7 +9209,7 @@ index 4afe8f7..70b9128 100644
      Speed(f32),
      MusicStyle(String),
      MediaPlaying(bool),
-@@ -354,6 +356,11 @@ impl LedsHandle {
+@@ -355,6 +357,11 @@ impl LedsHandle {
          self.send(Cmd::VoiceIndication(on));
      }
  
@@ -8896,7 +9221,7 @@ index 4afe8f7..70b9128 100644
      /// 0.25..4: motion of effects and music styles.
      pub fn set_speed(&self, k: f32) {
          self.send(Cmd::Speed(k));
-@@ -871,6 +878,7 @@ struct Compositor {
+@@ -872,6 +879,7 @@ struct Compositor {
      state: UiState,
      state_t0: i64,
      voice_indication: bool,
@@ -8904,7 +9229,7 @@ index 4afe8f7..70b9128 100644
      // one-shots
      sweep: Sweep,
      sweep_t0: i64,
-@@ -939,6 +947,7 @@ impl Compositor {
+@@ -940,6 +948,7 @@ impl Compositor {
              state: UiState::Idle,
              state_t0: 0,
              voice_indication: true,
@@ -8912,7 +9237,7 @@ index 4afe8f7..70b9128 100644
              sweep: Sweep::None,
              sweep_t0: 0,
              timer_shot: false,
-@@ -1062,6 +1071,12 @@ impl Compositor {
+@@ -1063,6 +1072,12 @@ impl Compositor {
                  }
                  self.voice_indication = on;
              }
@@ -8925,7 +9250,7 @@ index 4afe8f7..70b9128 100644
              Cmd::Speed(k) => {
                  self.speed = if k.is_finite() {
                      k.clamp(0.25, 4.0)
-@@ -1199,7 +1214,12 @@ impl Compositor {
+@@ -1200,7 +1215,12 @@ impl Compositor {
                  fx::volume(self.volume, ring);
                  animated = false;
              }
@@ -8939,7 +9264,7 @@ index 4afe8f7..70b9128 100644
              Layer::OneShot => {
                  if self.sweep == Sweep::None {
                      fx::timer_started(now - self.timer_t0, ring);
-@@ -1238,7 +1258,12 @@ impl Compositor {
+@@ -1239,7 +1259,12 @@ impl Compositor {
          }
          if self.nlogo > 0 {
              if self.voice_shown() {
@@ -9072,10 +9397,10 @@ index 1151792..a4d0811 100644
          // SAFETY: as `start`.
          unsafe { ss_confirm_pairing_window(self.raw.as_ptr()) }
 diff --git a/satellite/crates/pulsar-sendspin/src/service.rs b/satellite/crates/pulsar-sendspin/src/service.rs
-index 7518f36..3338b9b 100644
+index 14a16ee..f20722b 100644
 --- a/satellite/crates/pulsar-sendspin/src/service.rs
 +++ b/satellite/crates/pulsar-sendspin/src/service.rs
-@@ -160,6 +160,16 @@ impl SendspinHandle {
+@@ -162,6 +162,16 @@ impl SendspinHandle {
          self.client.is_connected()
      }
  
@@ -9136,7 +9461,7 @@ index 878250e..2170722 100644
  pub use updater::{Release, UpdateEvent, UpdaterHandle, arch, spawn};
  pub use version::release_newer;
 diff --git a/satellite/crates/pulsar/src/controller/entities.rs b/satellite/crates/pulsar/src/controller/entities.rs
-index 896eb5f..7561774 100644
+index 878b528..9f40f2f 100644
 --- a/satellite/crates/pulsar/src/controller/entities.rs
 +++ b/satellite/crates/pulsar/src/controller/entities.rs
 @@ -72,6 +72,8 @@ impl Controller {
@@ -9148,7 +9473,7 @@ index 896eb5f..7561774 100644
          self.publish_update();
          let api = &self.api;
          api.publish_binary_sensor(BinarySensorId::HwMicMute, self.hw_mic_muted);
-@@ -83,6 +85,7 @@ impl Controller {
+@@ -87,6 +89,7 @@ impl Controller {
          api.publish_select(SelectId::MusicViz, &self.st.music_viz);
          api.publish_select(SelectId::ClockMusic, &self.st.clock_music);
          api.publish_select(SelectId::CaseColor, self.case_color_option());
@@ -9156,7 +9481,7 @@ index 896eb5f..7561774 100644
          if let Some(z) = &self.zigbee {
              api.publish_select(
                  SelectId::ZigbeeMode,
-@@ -141,6 +144,7 @@ impl Controller {
+@@ -145,6 +148,7 @@ impl Controller {
                  if !state {
                      self.cancel_arbitration();
                      if self.phase == logic::Phase::Listening {
@@ -9164,7 +9489,7 @@ index 896eb5f..7561774 100644
                          self.finish_interaction();
                      }
                  }
-@@ -173,6 +177,33 @@ impl Controller {
+@@ -177,6 +181,33 @@ impl Controller {
                  self.st.wake_preroll = state;
                  self.mic.set_preroll(state);
              }
@@ -9198,7 +9523,7 @@ index 896eb5f..7561774 100644
          }
          self.api.publish_switch(id, state);
          self.persist();
-@@ -286,10 +317,28 @@ impl Controller {
+@@ -305,10 +336,28 @@ impl Controller {
                      self.api.publish_text(TextId::ClockText, &self.clock_text);
                  }
              }
@@ -9227,7 +9552,7 @@ index 896eb5f..7561774 100644
          let Some(z) = &self.zigbee else {
              return;
          };
-@@ -300,6 +349,7 @@ impl Controller {
+@@ -319,6 +368,7 @@ impl Controller {
          match id {
              ButtonId::ZigbeeJoin => z.join(),
              ButtonId::ZigbeeLeave => z.leave(),
@@ -9235,7 +9560,7 @@ index 896eb5f..7561774 100644
          }
      }
  
-@@ -349,12 +399,19 @@ impl Controller {
+@@ -368,12 +418,19 @@ impl Controller {
          let Some(first) = ids.into_iter().next() else {
              return;
          };
@@ -9256,7 +9581,7 @@ index 896eb5f..7561774 100644
          self.api
              .set_active_wake_words(vec![self.st.wake_word.clone()]);
          self.persist();
-@@ -380,6 +437,7 @@ impl Controller {
+@@ -399,6 +456,7 @@ impl Controller {
                  }
                  self.publish_microphones();
                  if m && self.phase == logic::Phase::Listening {
@@ -9264,7 +9589,7 @@ index 896eb5f..7561774 100644
                      self.finish_interaction();
                  }
                  self.update_detection();
-@@ -395,6 +453,7 @@ impl Controller {
+@@ -414,6 +472,7 @@ impl Controller {
                  if muted {
                      self.cancel_arbitration();
                      if self.phase == logic::Phase::Listening {
@@ -9273,45 +9598,66 @@ index 896eb5f..7561774 100644
                      }
                  }
 diff --git a/satellite/crates/pulsar/src/controller/logic.rs b/satellite/crates/pulsar/src/controller/logic.rs
-index 687892b..bf76f00 100644
+index 51bd96e..c8b82e6 100644
 --- a/satellite/crates/pulsar/src/controller/logic.rs
 +++ b/satellite/crates/pulsar/src/controller/logic.rs
-@@ -237,13 +237,6 @@ pub fn command_of(word: &str) -> Option<VoiceCommand> {
-     })
+@@ -252,6 +252,26 @@ pub fn stt_stop(text: &str) -> bool {
+     words.peek().is_some() && words.all(|w| command_of(w) == Some(VoiceCommand::Stop))
  }
  
--/// Within the window after the wake word that opened this dialog: HA may end the speech of a
--/// short "Алиса, громче" (PROCESSING) before the command spotter confirms the word.
--pub fn after_wake(phase: Phase, now: i64, listen_started_ms: i64) -> bool {
--    matches!(phase, Phase::Listening | Phase::Processing)
--        && now - listen_started_ms < COMMAND_AFTER_WAKE_MS
--}
--
- /// Music of this station: playing or loading on the HA media channel or as a Sendspin stream, or
- /// paused / ended less than PAUSED_MUSIC_MS ago (Sendspin: its server still connected).
- /// `*_since`: when the media channel paused / the Sendspin stream ended; None = not since start.
++/// Что делает стоп-слово из текста STT в диалоге.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum SttStopAction {
++    /// Не трогать локально: текст уходит в HA (диалог открыт wake word).
++    None,
++    /// Выключить звонок таймера, если он звонит, и завершить диалог.
++    Cancel,
++}
++
++/// Отличие форка: в диалоге, открытом wake word, «стоп» из текста STT не обрабатывается локально —
++/// HA останавливает будильник и возвращает музыку. В остальных диалогах (кнопка, продолжение
++/// разговора, start_conversation) слово действует как локальный «стоп». см. RICARDO.md.
++pub fn stt_stop_action(text: &str, wake_dialog: bool) -> SttStopAction {
++    if wake_dialog || !stt_stop(text) {
++        SttStopAction::None
++    } else {
++        SttStopAction::Cancel
++    }
++}
++
+ /// Within the window after the wake word that opened this dialog: HA may end the speech of a
+ /// short "Алиса, громче" (PROCESSING) before the command spotter confirms the word.
+ pub fn after_wake(phase: Phase, now: i64, listen_started_ms: i64) -> bool {
 diff --git a/satellite/crates/pulsar/src/controller/logic/tests.rs b/satellite/crates/pulsar/src/controller/logic/tests.rs
-index 4aad396..84b0243 100644
+index 2af365e..58020e7 100644
 --- a/satellite/crates/pulsar/src/controller/logic/tests.rs
 +++ b/satellite/crates/pulsar/src/controller/logic/tests.rs
-@@ -185,17 +185,6 @@ fn command_words() {
+@@ -232,6 +232,25 @@ fn stt_stop_words() {
      }
  }
  
--#[test]
--fn command_gating() {
--    // The window after the wake word: 2.5 s of LISTENING / PROCESSING.
--    assert!(after_wake(Phase::Listening, 12_499, 10_000));
--    assert!(!after_wake(Phase::Listening, 12_500, 10_000));
--    assert!(after_wake(Phase::Processing, 12_499, 10_000));
--    assert!(!after_wake(Phase::Processing, 12_500, 10_000));
--    assert!(!after_wake(Phase::Idle, 10_001, 10_000));
--    assert!(!after_wake(Phase::Speaking, 10_001, 10_000));
--}
--
++#[test]
++fn stt_stop_in_a_wake_dialog_is_left_to_ha() {
++    // Диалог открыт wake word: «Рикардо, стоп» должно дойти до Home Assistant (оно выключает
++    // будильник и возвращает музыку), а не отменить диалог и не поставить музыку на паузу.
++    assert_eq!(stt_stop_action("стоп", true), SttStopAction::None);
++    assert_eq!(stt_stop_action("хватит", true), SttStopAction::None);
++    // Остальные диалоги (кнопка, продолжение разговора, start_conversation): стоп-слово действует
++    // локально — звонок таймера выключается, если звонит, и диалог завершается (в voice.rs это
++    // stop_timer_ring(), затем cancel_dialog()); диалог не остаётся в LISTENING до watchdog.
++    assert_eq!(stt_stop_action("стоп", false), SttStopAction::Cancel);
++    assert_eq!(stt_stop_action("хватит", false), SttStopAction::Cancel);
++    // Не стоп-слово — обычный запрос.
++    assert_eq!(stt_stop_action("включи свет", false), SttStopAction::None);
++    assert_eq!(
++        stt_stop_action("хватит ли времени", false),
++        SttStopAction::None
++    );
++}
++
  #[test]
- fn music_ownership() {
-     use PlayState as P;
+ fn command_gating() {
+     // The window after the wake word: 2.5 s of LISTENING / PROCESSING.
 diff --git a/satellite/crates/pulsar/src/controller/media.rs b/satellite/crates/pulsar/src/controller/media.rs
 index 665efb4..11dcc63 100644
 --- a/satellite/crates/pulsar/src/controller/media.rs
@@ -9327,7 +9673,7 @@ index 665efb4..11dcc63 100644
  
      pub(super) fn update_music(&self) {
 diff --git a/satellite/crates/pulsar/src/controller/mod.rs b/satellite/crates/pulsar/src/controller/mod.rs
-index ba4e888..dbaee58 100644
+index d57c6e6..37743de 100644
 --- a/satellite/crates/pulsar/src/controller/mod.rs
 +++ b/satellite/crates/pulsar/src/controller/mod.rs
 @@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
@@ -9367,7 +9713,7 @@ index ba4e888..dbaee58 100644
  const UPDATE_FIRST_CHECK_MS: u64 = 60_000;
  const UPDATE_CHECK_PERIOD_MS: u64 = 6 * 3_600_000;
  const UPDATE_IDLE_RETRY_MS: u64 = 10 * 60_000;
-@@ -86,6 +94,43 @@ enum Tk {
+@@ -88,6 +96,43 @@ enum Tk {
      UpdateExit,
  }
  
@@ -9411,7 +9757,7 @@ index ba4e888..dbaee58 100644
  /// What a `play()` was for: the C++ completion callback and the values it captured.
  #[derive(Clone, Copy, Debug)]
  enum Pending {
-@@ -168,10 +213,15 @@ pub struct Controller {
+@@ -174,10 +219,15 @@ pub struct Controller {
      arb_phrase: String,
      arb_level: f32,
      arb_audio: Vec<i16>,
@@ -9428,7 +9774,7 @@ index ba4e888..dbaee58 100644
      /// voice_request_stop already sent for this dialog's run.
      stop_sent: bool,
      /// Id of the last voice_request_start: VoiceStartFailed / VoiceAudioOverflow of another
-@@ -226,6 +276,10 @@ pub struct Controller {
+@@ -232,6 +282,10 @@ pub struct Controller {
      /// Last Zigbee status line published.
      zigbee_status: String,
      sendspin_pairing_prompt: bool,
@@ -9439,7 +9785,7 @@ index ba4e888..dbaee58 100644
  }
  
  fn read_line(path: &str) -> String {
-@@ -246,7 +300,11 @@ fn clock_face_index(name: &str) -> i32 {
+@@ -252,7 +306,11 @@ fn clock_face_index(name: &str) -> i32 {
  }
  
  fn model_dir(id: &str) -> PathBuf {
@@ -9452,7 +9798,7 @@ index ba4e888..dbaee58 100644
  }
  
  /// C++ `uint8_t(x * 255)`.
-@@ -289,8 +347,8 @@ impl Controller {
+@@ -295,8 +353,8 @@ impl Controller {
              VERSION,
              BUILD_TIME,
          );
@@ -9463,7 +9809,7 @@ index ba4e888..dbaee58 100644
          }
          let case_colors = pulsar_hw::case_colors();
          let dir = logic::state_dir(state_path.as_os_str());
-@@ -323,6 +381,11 @@ impl Controller {
+@@ -329,6 +387,11 @@ impl Controller {
                      phrase: "Яндекс".into(),
                      languages: vec!["ru".into()],
                  },
@@ -9475,7 +9821,7 @@ index ba4e888..dbaee58 100644
              ],
              active_wake_words: vec![st.wake_word.clone()],
              light_effects: strings(pulsar_hw::effect_names()),
-@@ -330,7 +393,11 @@ impl Controller {
+@@ -336,7 +399,11 @@ impl Controller {
              music_styles: strings(pulsar_hw::music_styles()),
              case_colors: with_none(case_colors.clone()),
              clock_music_styles: strings(pulsar_clock::music_styles()),
@@ -9488,7 +9834,7 @@ index ba4e888..dbaee58 100644
                  Vec::new()
              } else {
                  pulsar_zigbee::ROLES
-@@ -367,6 +434,7 @@ impl Controller {
+@@ -373,6 +440,7 @@ impl Controller {
          clock.set_music_style(st.clock_music.clone());
          leds.set_speed(st.led_speed);
          leds.set_voice_indication(st.voice_indication);
@@ -9496,7 +9842,7 @@ index ba4e888..dbaee58 100644
          leds.set_music_style(st.music_viz.clone());
          leds.set_user_light(
              st.light.on,
-@@ -438,12 +506,27 @@ impl Controller {
+@@ -444,12 +512,27 @@ impl Controller {
              }
          };
          let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
@@ -9525,7 +9871,7 @@ index ba4e888..dbaee58 100644
  
          let ss_cfg = SendspinConfig {
              name: id.friendly_name.clone(),
-@@ -498,7 +581,7 @@ impl Controller {
+@@ -504,7 +587,7 @@ impl Controller {
              None
          };
  
@@ -9534,7 +9880,7 @@ index ba4e888..dbaee58 100644
              (None, None)
          } else {
              let zcfg = ZigbeeConfig {
-@@ -577,9 +660,11 @@ impl Controller {
+@@ -585,9 +668,11 @@ impl Controller {
              arb_phrase: String::new(),
              arb_level: -100.0,
              arb_audio: Vec::new(),
@@ -9547,7 +9893,7 @@ index ba4e888..dbaee58 100644
              stop_sent: false,
              voice_run: 0,
              tts_url: String::new(),
-@@ -616,6 +701,8 @@ impl Controller {
+@@ -624,6 +709,8 @@ impl Controller {
              install_version: String::new(),
              zigbee_status: String::new(),
              sendspin_pairing_prompt: false,
@@ -9556,7 +9902,7 @@ index ba4e888..dbaee58 100644
          };
          // The rest of the C++ start(), in its order: every call below only queues commands to
          // the services, which run once `run` is awaited.
-@@ -767,15 +854,17 @@ impl Controller {
+@@ -779,15 +866,17 @@ impl Controller {
                  phrase,
                  level_db,
                  preroll,
@@ -9577,7 +9923,7 @@ index ba4e888..dbaee58 100644
                  } else if self.arbitrating {
                      // The request goes on with what was said right after the wake word.
                      self.arb_audio.extend_from_slice(&pcm);
-@@ -810,6 +899,15 @@ impl Controller {
+@@ -822,6 +911,15 @@ impl Controller {
          self.state.flush(&self.st);
      }
  
@@ -9594,7 +9940,7 @@ index ba4e888..dbaee58 100644
          self.st.mic_muted || self.hw_mic_muted
      }
 diff --git a/satellite/crates/pulsar/src/controller/voice.rs b/satellite/crates/pulsar/src/controller/voice.rs
-index c442678..d54fe94 100644
+index 8366705..671aa5e 100644
 --- a/satellite/crates/pulsar/src/controller/voice.rs
 +++ b/satellite/crates/pulsar/src/controller/voice.rs
 @@ -4,6 +4,7 @@
@@ -9623,7 +9969,7 @@ index c442678..d54fe94 100644
                      self.end_announce();
                  }
 @@ -101,17 +103,28 @@ impl Controller {
-         self.continue_conversation = false;
+         self.followup = logic::Followup::default();
          self.tts_report_owed = false;
          if matches!(self.phase, Phase::Listening | Phase::Processing) {
 +            self.mark_wake_cancelled();
@@ -9652,8 +9998,8 @@ index c442678..d54fe94 100644
          if self.timer_ringing {
              // The wake word works as a stop word while ringing. A ringing station takes the
              // turn so that its neighbours do not start a dialog.
-@@ -122,46 +135,91 @@ impl Controller {
-             }
+@@ -124,46 +137,91 @@ impl Controller {
+                 matches!(self.phase, Phase::Listening | Phase::Processing);
              return self.stop_timer_ring();
          }
 -        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
@@ -9756,7 +10102,7 @@ index c442678..d54fe94 100644
              info!(
                  "wake word: {} answers ({}{:.1} dB, ours {:.1} dB)",
                  best.station,
-@@ -175,16 +233,11 @@ impl Controller {
+@@ -177,16 +235,11 @@ impl Controller {
              return;
          }
          info!("wake word: this station answers ({peers} other station(s) heard it)");
@@ -9775,7 +10121,7 @@ index c442678..d54fe94 100644
          if self.phase != Phase::Listening {
              self.mic.set_streaming(false); // no dialog started (e.g. HA gone)
          }
-@@ -194,11 +247,17 @@ impl Controller {
+@@ -196,11 +249,17 @@ impl Controller {
          if !self.arbitrating {
              return;
          }
@@ -9794,7 +10140,7 @@ index c442678..d54fe94 100644
          if self.phase != Phase::Listening {
              self.mic.set_streaming(false);
          }
-@@ -206,8 +265,24 @@ impl Controller {
+@@ -208,8 +267,24 @@ impl Controller {
  
      // ---------------- pipeline ----------------
  
@@ -9820,8 +10166,8 @@ index c442678..d54fe94 100644
 +    ) {
          // The button, a continued conversation or HA's start_conversation win.
          self.cancel_arbitration();
-         if !self.api.voice_subscribed() {
-@@ -222,6 +297,19 @@ impl Controller {
+         self.timers.cancel(Tk::FollowupWait);
+@@ -225,6 +300,19 @@ impl Controller {
          self.dialog += 1;
          self.run.start();
          self.stop_sent = false;
@@ -9839,9 +10185,9 @@ index c442678..d54fe94 100644
 +            );
 +        }
          self.listen_started_ms = now_ms();
-         self.tts_url.clear();
-         self.tts_played = false;
-@@ -241,12 +329,21 @@ impl Controller {
+         self.wake_dialog = !phrase.is_empty();
+         self.ring_stopped_in_dialog = false;
+@@ -246,6 +334,9 @@ impl Controller {
          for chunk in preroll.chunks(512) {
              self.api.voice_send_audio(chunk.to_vec());
          }
@@ -9851,9 +10197,10 @@ index c442678..d54fe94 100644
          self.mic.set_streaming(true);
          self.arm_watchdog();
          self.update_ui();
-     }
+@@ -253,6 +344,12 @@ impl Controller {
  
      fn stop_streaming(&mut self) {
+         self.timers.cancel(Tk::FollowupWait);
 +        // HA finished the phrase first (STT_VAD_END/STT_END), the dialog was cancelled or a
 +        // repeated wake replaced it: drop the run so no stale end can follow.
 +        if let Some(r) = self.endpoint.as_mut() {
@@ -9863,7 +10210,7 @@ index c442678..d54fe94 100644
          // A wake word heard meanwhile keeps its audio.
          self.mic.set_streaming(self.arbitrating);
          if self.phase == Phase::Listening {
-@@ -254,6 +351,68 @@ impl Controller {
+@@ -260,6 +357,68 @@ impl Controller {
          }
      }
  
@@ -9932,23 +10279,52 @@ index c442678..d54fe94 100644
      pub(super) fn on_voice_event(&mut self, ev: VaEvent, data: &HashMap<String, String>) {
          let get = |k: &str| data.get(k).map_or("", String::as_str);
          let code = ev.code();
-@@ -280,7 +439,14 @@ impl Controller {
-                 self.tts_played = false;
-                 self.continue_conversation = false;
+@@ -296,30 +455,22 @@ impl Controller {
              }
--            VaEvent::SttVadEnd | VaEvent::SttEnd => {
-+            VaEvent::SttEnd => {
-+                if let Some(rec) = &mut self.wake_rec {
-+                    rec.stt = Some(get("text").to_owned());
-+                }
-+                self.stop_streaming();
-+                self.update_ui();
-+            }
-+            VaEvent::SttVadEnd => {
+             VaEvent::SttVadStart => self.timers.cancel(Tk::FollowupWait),
+             VaEvent::SttVadEnd | VaEvent::SttEnd => {
+-                if ev == VaEvent::SttEnd
+-                    && matches!(self.phase, Phase::Listening | Phase::Processing)
+-                    && logic::stt_stop(get("text"))
+-                {
+-                    info!("voice command: stop word in STT text");
+-                    // Во фразе только стоп-слова: отдавать HA нечего, диалог кончается и при
+-                    // звонке таймера. Когда прозвучало слово, по тексту не узнать, поэтому действие
+-                    // выбирается по тому, чем открыт диалог: от wake word — как «Алиса, стоп»
+-                    // (самого wake word в тексте нет), иначе — как «стоп» посреди диалога.
+-                    // Если звонок посреди этого диалога уже выключили «стоп» спотера или wake
+-                    // word, а новый не звонит, слово здесь не применяется: иначе оно поставило бы
+-                    // музыку на паузу.
+-                    // см. docs/voice.md, «Пре-ролл: методика измерения»
+-                    if self.wake_dialog {
+-                        self.finish_interaction();
+-                        if self.timer_ringing || !self.ring_stopped_in_dialog {
+-                            self.stop_word(false);
+-                        }
+-                        return;
++                if ev == VaEvent::SttEnd {
++                    if let Some(rec) = &mut self.wake_rec {
++                        rec.stt = Some(get("text").to_owned());
+                     }
+-                    if self.timer_ringing {
+-                        self.stop_timer_ring();
++                    if matches!(self.phase, Phase::Listening | Phase::Processing) {
++                        match logic::stt_stop_action(get("text"), self.wake_dialog) {
++                            logic::SttStopAction::None => {}
++                            logic::SttStopAction::Cancel => {
++                                info!("voice command: stop word in STT text");
++                                if self.timer_ringing {
++                                    self.stop_timer_ring();
++                                }
++                                return self.cancel_dialog();
++                            }
++                        }
+                     }
+-                    return self.cancel_dialog();
+                 }
                  self.stop_streaming();
                  self.update_ui();
-             }
-@@ -311,16 +477,28 @@ impl Controller {
+@@ -348,19 +499,31 @@ impl Controller {
                      info!(
                          "pipeline: another satellite answers this wake word (HA duplicate wake-up)"
                      );
@@ -9963,6 +10339,9 @@ index c442678..d54fe94 100644
 +                    if let Some(rec) = &mut self.wake_rec {
 +                        rec.stt = Some(String::new());
 +                    }
+                     self.stop_streaming();
+                 } else if self.followup.silent(get("code")) {
+                     info!("follow-up: nothing said, conversation ends");
                      self.stop_streaming();
                  } else {
                      warn!("pipeline error: {} {}", get("code"), get("message"));
@@ -9981,16 +10360,16 @@ index c442678..d54fe94 100644
                  }
              }
              VaEvent::RunEnd => {
-@@ -352,7 +530,7 @@ impl Controller {
-         self.send_tts_report(ok);
-         if ok && self.continue_conversation && !self.timer_ringing && !self.mic_muted() {
-             self.continue_conversation = false;
+@@ -396,7 +559,7 @@ impl Controller {
+             self.st.followup_duration_s,
+             self.timer_ringing || self.mic_muted(),
+         ) {
 -            self.start_pipeline("", false, Vec::new());
 +            self.start_pipeline("", false, Vec::new(), Vec::new(), None);
-             return;
-         }
-         self.finish_interaction();
-@@ -384,12 +562,14 @@ impl Controller {
+             if self.phase == Phase::Listening {
+                 self.followup = followup.next_turn();
+             }
+@@ -432,11 +595,13 @@ impl Controller {
          }
          self.run.awaiting_run_start = false;
          self.send_tts_report(false);
@@ -10000,12 +10379,11 @@ index c442678..d54fe94 100644
          self.dialog += 1;
          self.tts_played = false;
          self.tts_url.clear();
-         self.continue_conversation = false;
 +        self.finish_wake_rec();
+         self.followup = logic::Followup::default();
          self.update_duck();
          self.arm_watchdog();
-         if self.error_shown {
-@@ -405,6 +585,7 @@ impl Controller {
+@@ -453,6 +618,7 @@ impl Controller {
          warn!("voice pipeline: {why}");
          self.error_shown = true;
          self.show_ui(UiState::Error);
@@ -10013,7 +10391,7 @@ index c442678..d54fe94 100644
          self.finish_interaction();
      }
  
-@@ -460,6 +641,7 @@ impl Controller {
+@@ -509,6 +675,7 @@ impl Controller {
      fn cancel_dialog(&mut self) {
          self.interrupt_speech();
          self.play_closing_earcon(format!("{SOUNDS}{}", self.model.cancel_sound));
@@ -10021,7 +10399,7 @@ index c442678..d54fe94 100644
          self.finish_interaction();
      }
  
-@@ -472,10 +654,11 @@ impl Controller {
+@@ -521,10 +688,11 @@ impl Controller {
              return self.cancel_dialog();
          }
          if self.phase == Phase::Speaking || self.announcing {
@@ -10034,7 +10412,7 @@ index c442678..d54fe94 100644
      }
  
      // ---------------- announcements ----------------
-@@ -629,10 +812,23 @@ impl Controller {
+@@ -678,10 +846,23 @@ impl Controller {
      // ---------------- local commands ----------------
  
      /// Stock command spotter ("стоп", "хватит", "пауза", "продолжи", "громче", "тише", "дальше",
@@ -10061,7 +10439,7 @@ index c442678..d54fe94 100644
      }
  
      fn owns_music(&self) -> bool {
-@@ -674,9 +870,7 @@ impl Controller {
+@@ -723,9 +904,7 @@ impl Controller {
          }
      }
  
@@ -10072,7 +10450,7 @@ index c442678..d54fe94 100644
          if self.mic_muted() {
              return;
          }
-@@ -687,54 +881,26 @@ impl Controller {
+@@ -736,50 +915,26 @@ impl Controller {
              info!("voice command '{word}' ignored: another station answers this wake word");
              return;
          }
@@ -10084,7 +10462,11 @@ index c442678..d54fe94 100644
 +        // only pause the music and cancel the pipeline. This also covers a callback
 +        // queued just before update_commands() switched the spotter off.
 +        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
-+            info!("voice command '{word}' left to Home Assistant during a voice request");
++            let after_wake = logic::after_wake(self.phase, now_ms(), self.listen_started_ms);
++            info!(
++                "voice command '{word}' left to Home Assistant during a voice request{}",
++                if after_wake { " (after wake word)" } else { "" }
++            );
              return;
          }
 -        let after_wake = logic::after_wake(self.phase, now_ms(), self.listen_started_ms);
@@ -10120,23 +10502,32 @@ index c442678..d54fe94 100644
 -                ""
 -            }
 -        );
--        // A word in the dialog's own window ends the dialog first; one held through an
--        // arbitration in SPEAKING / IDLE leaves the answer playing.
+-        // Слово в окне самого диалога сначала завершает диалог; удержанное через арбитраж в
+-        // SPEAKING / IDLE оставляет ответ играть. Слово, распознанное уже после barge-in, отменяет
+-        // новый диалог; см. docs/voice.md, «Командный спотер».
 -        if after_wake {
 -            self.finish_interaction();
 -        }
 +        info!("voice command '{word}'");
          match c {
-             VoiceCommand::Stop => {
-                 if self.timer_ringing {
-                     self.stop_timer_ring();
--                } else if in_dialog {
--                    self.cancel_dialog();
-                 } else if self.phase == Phase::Speaking {
-+                    self.mark_wake_cancelled();
-                     self.interrupt_speech();
-                     self.finish_interaction();
-                 } else if self.announcing {
+-            VoiceCommand::Stop => self.stop_word(in_dialog),
++            VoiceCommand::Stop => self.stop_word(false),
+             VoiceCommand::Pause => {
+                 if self.music_pause() {
+                     self.clock.play(ClockShot::Pause);
+@@ -813,10 +968,12 @@ impl Controller {
+         } else if in_dialog {
+             self.cancel_dialog();
+         } else if self.phase == Phase::Speaking {
++            self.mark_wake_cancelled();
+             self.interrupt_speech();
+             self.finish_interaction();
+         } else if self.announcing {
+             // A dialog listening meanwhile goes on.
++            self.mark_wake_cancelled();
+             self.interrupt_speech();
+             self.update_duck();
+             self.update_ui();
 diff --git a/satellite/crates/pulsar/src/main.rs b/satellite/crates/pulsar/src/main.rs
 index 37a0bb9..d42e6d0 100644
 --- a/satellite/crates/pulsar/src/main.rs
@@ -10210,13 +10601,13 @@ index 37a0bb9..d42e6d0 100644
 +    }
 +}
 diff --git a/satellite/crates/pulsar/src/settings.rs b/satellite/crates/pulsar/src/settings.rs
-index 862d92c..af9e2bc 100644
+index e3206f4..8d6362a 100644
 --- a/satellite/crates/pulsar/src/settings.rs
 +++ b/satellite/crates/pulsar/src/settings.rs
-@@ -64,8 +64,14 @@ pub struct Settings {
-     pub voice_indication: bool,
-     /// Audio between the end of the wake word and its confirmation goes ahead of the request.
+@@ -66,8 +66,14 @@ pub struct Settings {
      pub wake_preroll: bool,
+     /// Сколько ждать начала речи в follow-up-реплике, с; 0 — не продолжать разговор.
+     pub followup_duration_s: u32,
 +    /// Wake-event recording («Wake: запись событий»).
 +    pub wake_recording: bool,
 +    /// Dry run of the Ricardo detector: record, never answer («Wake: тестовый режим»).
@@ -10228,7 +10619,7 @@ index 862d92c..af9e2bc 100644
      /// Release being installed. Still set after a restart into another version: that release
      /// was rolled back by supervise.sh (crash loop), automatic updates skip it.
      pub update_attempt: String,
-@@ -89,16 +95,20 @@ impl Default for Settings {
+@@ -91,17 +97,21 @@ impl Default for Settings {
              clock_auto_brightness: true,
              clock_scroll_ms: 400,
              light: LightState::default(),
@@ -10244,6 +10635,7 @@ index 862d92c..af9e2bc 100644
              led_speed: 1.0,
              voice_indication: true,
              wake_preroll: true,
+             followup_duration_s: 10,
 +            wake_recording: true,
 +            wake_dry_run: false,
              led_case_color: String::new(),
@@ -10251,10 +10643,10 @@ index 862d92c..af9e2bc 100644
              update_attempt: String::new(),
              zigbee_role: Mode::Off,
              zigbee_flash_failed: 0,
-@@ -171,7 +181,10 @@ impl Settings {
+@@ -179,7 +189,10 @@ impl Settings {
+                         self.followup_duration_s = s;
+                     }
                  }
-                 b"voice_indication" => self.voice_indication = on,
-                 b"wake_preroll" => self.wake_preroll = on,
 +                b"wake_event_recording" => self.wake_recording = on,
 +                b"wake_dry_run" => self.wake_dry_run = on,
                  b"led_case_color" => self.led_case_color = v,
@@ -10262,19 +10654,19 @@ index 862d92c..af9e2bc 100644
                  _ => {}
              }
          }
-@@ -193,8 +206,9 @@ impl Settings {
+@@ -201,8 +214,9 @@ impl Settings {
               clock_scroll_ms={}\nlight_on={}\nlight_brightness={}\nlight_r={}\nlight_g={}\n\
               light_b={}\nlight_effect={}\nwake_word={}\ntz={}\nauto_update={}\nupdate_attempt={}\n\
               zigbee_role={}\nzigbee_flash_failed={:x}\nnearest_answers={}\nmusic_viz={}\n\
 -             led_speed={}\nvoice_indication={}\nled_case_color={}\nclock_music={}\n\
--             wake_preroll={}\nclock_auto_brightness={}\n",
+-             wake_preroll={}\nclock_auto_brightness={}\nfollowup_duration_s={}\n",
 +             led_speed={}\nvoice_indication={}\nled_case_color={}\nvoice_color={}\nclock_music={}\n\
-+             wake_preroll={}\nclock_auto_brightness={}\nwake_event_recording={}\n\
-+             wake_dry_run={}\n",
++             wake_preroll={}\nclock_auto_brightness={}\nfollowup_duration_s={}\n\
++             wake_event_recording={}\nwake_dry_run={}\n",
              f(self.volume),
              f(self.volume_legacy),
              b(self.muted),
-@@ -219,9 +233,12 @@ impl Settings {
+@@ -227,10 +241,13 @@ impl Settings {
              f(self.led_speed),
              b(self.voice_indication),
              self.led_case_color,
@@ -10282,26 +10674,28 @@ index 862d92c..af9e2bc 100644
              self.clock_music,
              b(self.wake_preroll),
              b(self.clock_auto_brightness),
+             self.followup_duration_s,
 +            b(self.wake_recording),
 +            b(self.wake_dry_run),
          )
      }
  
 diff --git a/satellite/crates/pulsar/src/settings/tests.rs b/satellite/crates/pulsar/src/settings/tests.rs
-index f573b05..3a9f04a 100644
+index c87dd39..416afe2 100644
 --- a/satellite/crates/pulsar/src/settings/tests.rs
 +++ b/satellite/crates/pulsar/src/settings/tests.rs
-@@ -2,7 +2,8 @@
- // and Settings::save of controller.cpp, copied verbatim into a throwaway host harness built with
- // `zig c++ -std=c++20 -O2`. save_*.conf: `save` of the values below; load_*.out: `load` of
- // load_*.in, then `save`. Edited by hand since: `wake_preroll` (after `clock_music`; 0 in
--// load_odd.in); `clock_auto_brightness` (after `wake_preroll`).
-+// load_odd.in); `clock_auto_brightness` (after `wake_preroll`); `voice_color` (after
-+// `led_case_color`); and this fork's defaults (`wake_word=ricardo`, `nearest_answers=0`).
+@@ -2,7 +2,9 @@
+ // Settings::save из controller.cpp, перенесённые без изменений во временный хост-харнесс, собранный
+ // `zig c++ -std=c++20 -O2`. save_*.conf — `save` значений ниже; load_*.out — `load` из load_*.in,
+ // затем `save`. С тех пор правились руками: `wake_preroll` (после `clock_music`; 0 в load_odd.in);
+-// `clock_auto_brightness` (после `wake_preroll`); `followup_duration_s` (10, последним).
++// `clock_auto_brightness` (после `wake_preroll`); `voice_color` (после `led_case_color`);
++// `followup_duration_s` (10); ключи форка `wake_event_recording` / `wake_dry_run` — последними; и
++// умолчания форка (`wake_word=ricardo`, `nearest_answers=0`).
  
  use super::*;
  
-@@ -45,7 +46,7 @@ fn values() -> Settings {
+@@ -45,7 +47,7 @@ fn values() -> Settings {
  }
  
  #[test]
@@ -10310,7 +10704,7 @@ index f573b05..3a9f04a 100644
      assert_eq!(
          Settings::default().serialize().as_bytes(),
          golden("save_default.conf")
-@@ -79,7 +80,7 @@ fn save_matches_cxx_byte_for_byte() {
+@@ -79,7 +81,7 @@ fn save_matches_cxx_byte_for_byte() {
  }
  
  #[test]
@@ -10319,20 +10713,10 @@ index f573b05..3a9f04a 100644
      let mut s = Settings::default();
      s.parse(&golden("save_values.conf"));
      // Written with 6 significant digits: the values read back are those of the text.
-@@ -329,10 +330,46 @@ fn strtoul_hex_matches_libc() {
- fn clock_auto_brightness_is_always_written() {
-     let mut s = Settings::default();
-     assert!(s.clock_auto_brightness);
--    assert!(s.serialize().ends_with("clock_auto_brightness=1\n"));
-+    assert!(s.serialize().contains("clock_auto_brightness=1\n"));
-     s.parse(b"clock_auto_brightness=0\n");
-     assert!(!s.clock_auto_brightness);
--    assert!(s.serialize().ends_with("clock_auto_brightness=0\n"));
-+    assert!(s.serialize().contains("clock_auto_brightness=0\n"));
-     s.parse(b"clock_auto_brightness=1\n");
+@@ -345,6 +347,42 @@ fn clock_auto_brightness_is_always_written() {
      assert!(s.clock_auto_brightness);
  }
-+
+ 
 +#[test]
 +fn voice_color_defaults_to_violet_and_round_trips() {
 +    // The stock look; a `.prev` binary skips the unknown key, and an old file has none.
@@ -10368,11 +10752,15 @@ index f573b05..3a9f04a 100644
 +    assert!(parsed.wake_dry_run);
 +    assert!(parsed.serialize().ends_with("wake_dry_run=1\n"));
 +}
++
+ #[test]
+ fn followup_duration_defaults_roundtrips_and_clamps() {
+     let mut st = Settings::default();
 diff --git a/satellite/crates/pulsar/tests/golden/settings/load_edge.out b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-index 3180a40..8ab5f58 100644
+index e302f9b..fd56d3b 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/load_edge.out
 +++ b/satellite/crates/pulsar/tests/golden/settings/load_edge.out
-@@ -11,17 +11,20 @@ light_r=1
+@@ -11,18 +11,21 @@ light_r=1
  light_g=1
  light_b=inf
  light_effect=
@@ -10393,13 +10781,14 @@ index 3180a40..8ab5f58 100644
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1
+ followup_duration_s=10
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/load_odd.out b/satellite/crates/pulsar/tests/golden/settings/load_odd.out
-index 4020990..9445431 100644
+index 304b677..48294a8 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/load_odd.out
 +++ b/satellite/crates/pulsar/tests/golden/settings/load_odd.out
-@@ -22,6 +22,9 @@ music_viz=All styles
+@@ -22,7 +22,10 @@ music_viz=All styles
  led_speed=1
  voice_indication=0
  led_case_color=
@@ -10407,13 +10796,14 @@ index 4020990..9445431 100644
  clock_music=Levels
  wake_preroll=0
  clock_auto_brightness=1
+ followup_duration_s=10
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_default.conf b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-index 0408207..0366ec8 100644
+index 1a47b2e..375b65b 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_default.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_default.conf
-@@ -11,17 +11,20 @@ light_r=1
+@@ -11,18 +11,21 @@ light_r=1
  light_g=1
  light_b=1
  light_effect=
@@ -10434,13 +10824,14 @@ index 0408207..0366ec8 100644
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1
+ followup_duration_s=10
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-index b2058b0..56e3198 100644
+index 227cee2..0634504 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_extremes.conf
-@@ -11,17 +11,20 @@ light_r=0
+@@ -11,18 +11,21 @@ light_r=0
  light_g=1
  light_b=0.5
  light_effect=
@@ -10461,13 +10852,14 @@ index b2058b0..56e3198 100644
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1
+ followup_duration_s=10
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/crates/pulsar/tests/golden/settings/save_values.conf b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-index 566543b..e40a163 100644
+index a1303e6..44bd4a3 100644
 --- a/satellite/crates/pulsar/tests/golden/settings/save_values.conf
 +++ b/satellite/crates/pulsar/tests/golden/settings/save_values.conf
-@@ -11,17 +11,20 @@ light_r=1e-05
+@@ -11,18 +11,21 @@ light_r=1e-05
  light_g=123457
  light_b=3.14159
  light_effect=Rainbow
@@ -10488,6 +10880,7 @@ index 566543b..e40a163 100644
  clock_music=Off
  wake_preroll=1
  clock_auto_brightness=1
+ followup_duration_s=10
 +wake_event_recording=1
 +wake_dry_run=0
 diff --git a/satellite/wakewords/.gitignore b/satellite/wakewords/.gitignore

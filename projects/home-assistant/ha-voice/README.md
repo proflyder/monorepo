@@ -32,8 +32,13 @@
 - «Рикардо: ложное срабатывание» — сценарий `script.wake_false_alarm`
   (метка HA `scenario`, запуск из приложения): нажимает
   `button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie` и помечает
-  последнее срабатывание Рикардо за 10 минут как ложное. Скрипта для
-  «пропущенного» срабатывания нет: его окно 6 с короче тапа по телефону;
+  последнее срабатывание Рикардо за 10 минут как ложное;
+- «Рикардо: не услышала» — сценарий `script.wake_missed` (метка HA
+  `scenario`, запуск из приложения): нажимает
+  `button.iandeks_stantsiia_midi_wake_ne_uslyshala` и сохраняет последние
+  30 с микрофона станции как пропущенное срабатывание для обучения. Жать
+  в течение ~20 с после неотвеченного «Рикардо», пока момент обращения
+  ещё попадает в окно;
 - «включи музыку» / «поставь музыку» / «вруби музыку» — локальный
   `StationMusicPlay` → Liked Songs, без Hermes;
 - «включи любимое» и варианты — Liked Songs (`library://playlist/9`);
@@ -178,7 +183,7 @@ so voice snooze/stop target the correct schedule id without guessing.
   `alarm_announce` / `alarm_loop` / `alarm_ramp` / `alarm_stop` /
   `alarm_restore` / `alarm_resume`), canonical `scheduler_*` /
   `schedule_*` client, notes, scenarios (`work_mode`, `blackout`,
-  `wake_false_alarm`)
+  `wake_false_alarm`, `wake_missed`)
 - `automations.yaml` — music route follows source, action-button stop,
   assist-satellite watchdog
 - `schedules_dashboard.yaml` — dashboard «Помощник» (read-only pointers;

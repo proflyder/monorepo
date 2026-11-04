@@ -1,28 +1,32 @@
 # Pulsar Rust fork
 
-**Станция (установлено):** Rust Pulsar `v0.5.1002` —
-armhf-сборка с повторным wake, экспериментальным локальным endpointing и
-Ricardo pre-roll 256 ms (SHA256 `3a544979…`, база upstream `v0.5.3`); процесс
-запущен с `PULSAR_LOCAL_ENDPOINTING=1`. StationCancel без речи — HA-конфиг, не
-бинарник. `pulsar.prev` — `v0.5.1001` (`80aea2ec…`, база `v0.5.2`, тот же
-Ricardo-код); historical: `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
+**Станция (установлено):** Rust Pulsar `v0.5.1005` —
+armhf-сборка (SHA256 `89415c5a…71671b6`) с повторным wake, экспериментальным
+локальным endpointing, Ricardo pre-roll 256 ms и записью wake-событий; база
+upstream `v0.5.4` (`f1f5b17`), HEAD `427a8e3`. Процесс запущен с
+`PULSAR_LOCAL_ENDPOINTING=1`. StationCancel без речи — HA-конфиг, не
+бинарник. `pulsar.prev` — `v0.5.1004` (`fb0695b2…`); historical:
+`3a544979…` (`v0.5.1002`), `80aea2ec…` (`v0.5.1001`, база `v0.5.2`),
+`7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
 `0b0c48e4…` (endpointing 512 ms), `pulsar.pre-endpoint-20261030` —
 `v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
 только private backup вне Git.
 
-**Локальный форк:** upstream `v0.5.3` (`504830d`) влит в ветку `main` (merge
-`02f0298`, PR merge `ccef054` = тег `v0.5.1002`); `feat/ricardo-rust` —
-только история. Safety ref `ricardo-rust/pre-v0.5.2` = `908a027`.
-Legacy C++ исходники, patch и binaries в активном дереве отсутствуют; private
-recovery archive — `secrets/local/recovery/`.
+**Локальный форк:** upstream `v0.5.4` (`f1f5b17`) влит в ветку `main`
+вручную из remote `upstream`; PR в самостоятельном репозитории сливается
+merge-коммитом. `feat/ricardo-rust` — только история. Safety ref
+`ricardo-rust/pre-v0.5.2` = `908a027`. Legacy C++ исходники, patch и binaries
+в активном дереве отсутствуют; private recovery archive —
+`secrets/local/recovery/`.
 
-- Fork: <https://github.com/OWNER/pulsar>
-- База: upstream `v0.5.3` (`504830d`), ancestor HEAD.
+- Fork: <https://github.com/OWNER/pulsar> — самостоятельный публичный
+  репозиторий, не GitHub-fork (Actions в сети форков были отключены)
+- База: upstream `v0.5.4` (`f1f5b17`), ancestor HEAD.
 - Локальный checkout: `projects/station/upstream/pulsar-rust/`
 - Снимок изменений: `projects/station/patches/pulsar-rust/`
-  (`snapshot-pulsar.py`, base v0.5.3)
+  (`snapshot-pulsar.py`, base v0.5.4)
 - armhf build: `satellite/build/armhf/pulsar` — stripped ARM EABI5
-  hard-float ELF (`v0.5.1002`), установлен на станции. Makefile
+  hard-float ELF (`v0.5.1005`), установлен на станции. Makefile
   zig objcopy на macOS всё ещё падает; артефакт получен установленным LLVM
   objcopy (GNU-совместимый, PT_LOAD/NEEDED проверены), source/Makefile не
   менялись. Артефакт не версионируется.
@@ -41,6 +45,11 @@ recovery archive — `secrets/local/recovery/`.
   n=3 — эмпирика, не гарантия). HA switch «Command right after wake word»
   управляет `wake_preroll`.
 - `stt-no-text-recognized` — тихая отмена.
+- Отклонение форка от upstream `v0.5.4` (STT stop-word fallback): в диалоге,
+  открытом «Рикардо», распознанный текст всегда уходит в HA — локальной
+  отмены/паузы нет, поэтому «Рикардо, стоп» доходит до HA. Для диалогов по
+  кнопке, follow-up и `start_conversation` отдельное «стоп»/«хватит» отменяет
+  диалог локально и останавливает звонящий таймер.
 - Локальный command spotter только во время playback; «Рикардо, стоп»
   уходит в HA для остановки будильника и восстановления музыки.
 - `wake_word=ricardo`, `auto_update=0`, `ENABLE_ZIGBEE=false`.
