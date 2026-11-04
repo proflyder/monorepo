@@ -1,7 +1,7 @@
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load(":robolectric_android_all.bzl", "android_all_dir")
 load("//platform/android:defs.bzl", "home_android_binary", "home_google_services_resources", "metro_android_library")
+load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,23 +18,23 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]) + [":google_services_resources"],
     view_binding = True,
     deps = [
-        "//projects/mobile/android/core/config:config",
-        "//projects/mobile/android/core/model:model",
-        "//projects/mobile/android/core/navigation:navigation",
-        "//projects/mobile/android/core/network:network",
-        "//projects/mobile/android/core/remoteconfig:remoteconfig",
-        "//projects/mobile/android/core/settings:settings",
-        "//projects/mobile/android/core/ui:ui",
-        "//projects/mobile/android/features/alarms/api:api",
-        "//projects/mobile/android/features/alarms/impl:impl",
-        "//projects/mobile/android/features/connection/api:api",
-        "//projects/mobile/android/features/control/api:api",
-        "//projects/mobile/android/features/control/impl:impl",
-        "//projects/mobile/android/features/connection/impl:impl",
-        "//projects/mobile/android/features/reminders/api:api",
-        "//projects/mobile/android/features/reminders/impl:impl",
-        "//projects/mobile/android/features/timers/api:api",
-        "//projects/mobile/android/features/timers/impl:impl",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/navigation",
+        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/remoteconfig",
+        "//projects/mobile/android/core/settings",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/alarms/api",
+        "//projects/mobile/android/features/alarms/impl",
+        "//projects/mobile/android/features/connection/api",
+        "//projects/mobile/android/features/control/api",
+        "//projects/mobile/android/features/control/impl",
+        "//projects/mobile/android/features/connection/impl",
+        "//projects/mobile/android/features/reminders/api",
+        "//projects/mobile/android/features/reminders/impl",
+        "//projects/mobile/android/features/timers/api",
+        "//projects/mobile/android/features/timers/impl",
         "@maven//:androidx_activity_activity_ktx",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
@@ -75,12 +75,11 @@ sh_test(
         "$(location :app_deploy.jar)",
     ],
     data = [
-        "//platform/android/tools/apk_runtime_closure",
         ":app.apk",
         ":app_deploy.jar",
+        "//platform/android/tools/apk_runtime_closure",
     ],
 )
-
 
 # Robolectric resolves SDK 35 to this pinned preinstrumented jar. The staged
 # properties file avoids any runtime Maven download; rules_android turns it into
@@ -101,8 +100,8 @@ kt_android_local_test(
     associates = [":app_lib"],
     custom_package = "dev.proflyder.home",
     data = [
-        ":robolectric_android_all_sdk35",
         "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
     ],
     jvm_flags = [
         "-Drobolectric.offline=true",
@@ -119,10 +118,10 @@ kt_android_local_test(
     robolectric_properties_file = "robolectric-deps.properties",
     test_class = "dev.proflyder.home.AppSmokeTestSuite",
     deps = [
-        "//projects/mobile/android/core/config:config",
-        "//projects/mobile/android/core/model:model",
-        "//projects/mobile/android/core/network:network",
-        "//projects/mobile/android/core/settings:settings",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/settings",
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:junit_junit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",

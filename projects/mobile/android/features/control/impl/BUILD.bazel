@@ -1,6 +1,6 @@
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
-load(":robolectric_android_all.bzl", "android_all_dir")
 load("//platform/android:defs.bzl", "metro_android_library")
+load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,13 +12,13 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
-        "//packages/kotlin/core:core",
-        "//projects/mobile/android/core/config:config",
-        "//projects/mobile/android/core/model:model",
-        "//projects/mobile/android/core/navigation:navigation",
-        "//projects/mobile/android/core/network:network",
-        "//projects/mobile/android/core/ui:ui",
-        "//projects/mobile/android/features/control/api:api",
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/navigation",
+        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/control/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:androidx_fragment_fragment_ktx",
@@ -47,12 +47,9 @@ kt_android_local_test(
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.control.impl",
-    manifest = "src/test/AndroidManifest.xml",
-    test_class = "dev.proflyder.home.feature.control.presentation.ControlProfileRowTest",
-    robolectric_properties_file = "robolectric-deps.properties",
     data = [
-        ":robolectric_android_all_sdk35",
         "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
     ],
     jvm_flags = [
         "-Drobolectric.offline=true",
@@ -65,10 +62,13 @@ kt_android_local_test(
         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
         "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
     ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.control.presentation.ControlProfileRowTest",
     deps = [
-        "//projects/mobile/android/core/model:model",
-        "//projects/mobile/android/core/ui:ui",
-        "//projects/mobile/android/features/control/api:api",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/control/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",
@@ -86,9 +86,9 @@ kt_android_local_test(
     manifest = "src/test/AndroidManifest.xml",
     test_class = "dev.proflyder.home.feature.control.presentation.ControlDiffPayloadTest",
     deps = [
-        "//projects/mobile/android/core/model:model",
-        "//projects/mobile/android/core/ui:ui",
-        "//projects/mobile/android/features/control/api:api",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/control/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",

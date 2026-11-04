@@ -6,8 +6,8 @@ kt_jvm_library(
     name = "config",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     deps = [
-        "//packages/kotlin/core:core",
-        "//projects/mobile/android/core/model:model",
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
         "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],

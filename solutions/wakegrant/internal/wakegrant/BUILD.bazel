@@ -24,5 +24,4 @@ go_test(
         "service_test.go",
     ],
     embed = [":wakegrant"],
-    deps = ["@org_modernc_sqlite//:sqlite"],
 )

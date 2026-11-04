@@ -6,7 +6,7 @@ kt_jvm_library(
     name = "api",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     deps = [
-        "//projects/mobile/android/core/config:config",
-        "//projects/mobile/android/core/model:model",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
     ],
 )

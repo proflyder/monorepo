@@ -5,5 +5,5 @@ package(default_visibility = ["//visibility:public"])
 kt_jvm_library(
     name = "api",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
-    deps = ["//projects/mobile/android/core/model:model"],
+    deps = ["//projects/mobile/android/core/model"],
 )

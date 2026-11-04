@@ -14,9 +14,9 @@ alias(
 # job without aborting the app's tests.
 home_android_lint(
     name = "android_lint",
-    deps = ["//projects/mobile/android/app:app_lib"],
     app_module = "//projects/mobile/android/app:app_lib",
     config = "//projects/mobile/android:lint.xml",
+    deps = ["//projects/mobile/android/app:app_lib"],
 )
 
 # Unit tests only. `//projects/mobile/android:android_lint` is intentionally
