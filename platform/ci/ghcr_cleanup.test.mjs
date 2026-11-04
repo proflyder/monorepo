@@ -216,10 +216,13 @@ test("PROTECTED_DIGESTS keeps a version and its referrer", () => {
       version(2, "2026-09-01T00:00:00Z", [`sha256-${protectedDigest.slice(7)}`], DIGEST("b")),
       version(1, "2026-09-01T00:00:00Z", [TREE("a")], protectedDigest),
     ],
-    { now: NOW },
+    {
+      now: NOW,
+      protectedDigests: [{ package: "voice-proxy", digest: protectedDigest, reason: "still pinned by a workload" }],
+    },
   );
   assert.equal(summary(plan)[1].action, "keep");
-  assert.match(summary(plan)[1].reason, /protected digest \(last Python voice-proxy/);
+  assert.match(summary(plan)[1].reason, /protected digest \(still pinned by a workload/);
   assert.equal(summary(plan)[2].action, "keep");
   assert.match(summary(plan)[2].reason, /referrer of protected digest/);
 });
@@ -291,14 +294,15 @@ test("the CLI dry run reports the fixture decisions without GitHub", () => {
   assert.equal(code, 0);
   const output = lines.join("\n");
   // scheduler: 102/106 (stale tree/untagged), 104 (deploy beyond the newest 5),
-  // 112 (tree subject) and 113 (its referrer). voice-proxy: 302, while 303/304
-  // are protected. hermes 202 is protected by `latest`; 101/201/301 are newest.
+  // 112 (tree subject) and 113 (its referrer). voice-proxy: 302, 303 and its
+  // referrer 304 (nothing is protected by digest any more). hermes 202 is
+  // protected by `latest`; 101/201/301 are newest.
   assert.match(output, /\*\*delete\*\*.*102|102.*\*\*delete\*\*/);
-  assert.match(output, /dry run: 6 version\(s\) would be deleted/);
+  assert.match(output, /dry run: 8 version\(s\) would be deleted/);
   assert.doesNotMatch(output, /103.*\*\*delete\*\*/);
   assert.doesNotMatch(output, /202.*\*\*delete\*\*/);
-  assert.doesNotMatch(output, /303.*\*\*delete\*\*/);
-  assert.doesNotMatch(output, /304.*\*\*delete\*\*/);
+  assert.match(output, /303.*\*\*delete\*\*/);
+  assert.match(output, /304.*\*\*delete\*\*/);
   assert.doesNotMatch(output, /115.*\*\*delete\*\*/);
 });
 
@@ -306,4 +310,9 @@ test("the local CLI refuses to delete", () => {
   assert.throws(() => main(["--fixture", "unused.json", "--delete"]), /dry run only/);
   assert.throws(() => main([]), /--fixture is required/);
   assert.ok(fs.existsSync(path.join(HERE, "testdata", "ghcr-versions.json")));
+});
+
+test("no digest is protected by default once the exporter left the Python image", async () => {
+  const { PROTECTED_DIGESTS } = await import("./ghcr_cleanup.mjs");
+  assert.deepEqual(PROTECTED_DIGESTS, []);
 });

@@ -69,13 +69,9 @@ export const PROTECTED_TAGS = [
  * (pinned in private runtime values) until the exporter moves to Go
  * (docs/PENDING.md, "Решение 35"). Drop this entry when that migration lands.
  */
-export const PROTECTED_DIGESTS = [
-  {
-    package: "voice-proxy",
-    digest: "sha256:238e0a0f3afe5f152e3d8b1de7a35452c016d68368e3bac24c5fde882869fca9",
-    reason: "last Python voice-proxy image still used by the Hermes health exporter",
-  },
-];
+// Digests a running workload still needs although no tag protects them, as
+// { package, digest, reason }. Empty since the health exporter moved to Go.
+export const PROTECTED_DIGESTS = [];
 /**
  * Never touched, even if a future unit map were to list them. The Windows logon
  * provider is a public release artifact with immutable version tags.
@@ -131,9 +127,9 @@ function isProtectedTag(tag) {
   return PROTECTED_TAGS.some((pattern) => pattern.test(tag));
 }
 
-function isProtectedDigest(version) {
+function isProtectedDigest(version, protectedDigests) {
   const digest = digestOf(version);
-  return digest ? PROTECTED_DIGESTS.find((entry) => entry.digest === digest) : undefined;
+  return digest ? protectedDigests.find((entry) => entry.digest === digest) : undefined;
 }
 
 function isDeployVersion(tags) {
@@ -162,7 +158,10 @@ function referrerSubject(tags) {
  *   updated_at?: string, metadata?: {container?: {tags?: string[]}}}>} versions
  * @param {{now?: number, keepDays?: number}} options
  */
-export function planPackageCleanup(versions, { now = Date.now(), keepDays = KEEP_DAYS } = {}) {
+export function planPackageCleanup(
+  versions,
+  { now = Date.now(), keepDays = KEEP_DAYS, protectedDigests = PROTECTED_DIGESTS } = {},
+) {
   const list = Array.isArray(versions) ? versions.filter(Boolean) : [];
   if (!list.length) {
     return { newest: null, decisions: [], delete: [], keep: [] };
@@ -225,7 +224,7 @@ export function planPackageCleanup(versions, { now = Date.now(), keepDays = KEEP
       decisions[index] = decision("keep", `younger than ${keepDays} days (${ageDays.toFixed(1)}d)`);
       return;
     }
-    const protectedDigest = isProtectedDigest(version);
+    const protectedDigest = isProtectedDigest(version, protectedDigests);
     if (protectedDigest) {
       decisions[index] = decision("keep", `protected digest (${protectedDigest.reason})`);
       return;
@@ -294,13 +293,13 @@ export function planPackageCleanup(versions, { now = Date.now(), keepDays = KEEP
       decisions[index] = decision("keep", `younger than ${keepDays} days (${ageDays.toFixed(1)}d)`);
       return;
     }
-    const protectedDigest = isProtectedDigest(version);
+    const protectedDigest = isProtectedDigest(version, protectedDigests);
     if (protectedDigest) {
       decisions[index] = decision("keep", `protected digest (${protectedDigest.reason})`);
       return;
     }
     const subject = referrerSubject(tags);
-    const protectedSubject = PROTECTED_DIGESTS.find((entry) => entry.digest === subject);
+    const protectedSubject = protectedDigests.find((entry) => entry.digest === subject);
     if (protectedSubject) {
       decisions[index] = decision(
         "keep",

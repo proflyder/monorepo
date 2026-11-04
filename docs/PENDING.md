@@ -30,12 +30,6 @@
       `restore-volumes`, `wifi-uplink`, `backup-before-install`), ML
       wake-word, dev-утилиты станции, проверки YAML, live e2e.
 
-      После первого успешного rollout'а Go-exporter'а удалить запись
-      `PROTECTED_DIGESTS` для `voice-proxy`
-      (`sha256:238e0a0f…`) из `platform/ci/ghcr_cleanup.mjs`: она защищает
-      последний Python-образ voice-proxy, из которого exporter работал до
-      миграции. Пока первый rollout не подтверждён — не удалять.
-
 - [ ] **CI: правка документации внутри юнита не должна деплоить.** После
       #97 перевыкатились mcp-gateway/currency-bot/wakegrant только из-за
       README в их папках. Следующий шаг: в `affected.mjs` не выбирать юнит
