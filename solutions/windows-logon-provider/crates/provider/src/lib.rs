@@ -21,5 +21,5 @@ pub mod worker;
 
 #[cfg(windows)]
 pub mod dll;
-#[cfg(windows)]
 pub mod http;
+pub mod wide;

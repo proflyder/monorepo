@@ -72,8 +72,9 @@ mod windows_impl {
     use crate::log::log_event;
     use crate::provider::{
         PROVIDER_CLSID, Session, cancel_session, configured_user_sid, consume_arming,
-        notify_session_changed, session_note_failed_logon, session_scenario, widen,
+        notify_session_changed, session_note_failed_logon, session_scenario,
     };
+    use crate::wide::{WideNul, widen};
 
     const CPGSR: CREDENTIAL_PROVIDER_GET_SERIALIZATION_RESPONSE = CPGSR_NO_CREDENTIAL_NOT_FINISHED;
 
@@ -83,6 +84,13 @@ mod windows_impl {
     impl Drop for WipedWide {
         fn drop(&mut self) {
             zero_wide(&mut self.0);
+        }
+    }
+
+    impl WipedWide {
+        /// `PCWSTR` over the buffer; callers must have made it NUL-terminated.
+        fn as_pcwstr(&self) -> PCWSTR {
+            PCWSTR(self.0.as_ptr())
         }
     }
 
@@ -160,15 +168,15 @@ mod windows_impl {
             return Ok(WipedWide(vec![0]));
         }
 
-        // CredProtect takes a mutable NUL-terminated string.
-        let mut copy = WipedWide(password.to_vec());
-        copy.0.push(0);
+        // CredProtect takes the buffer together with its terminator, like the
+        // C++ implementation (`wcslen(copy) + 1`).
+        let copy = WipedWide(WideNul::from_wide(password).into_vec());
 
         let mut protection = CRED_PROTECTION_TYPE(0);
-        // SAFETY: `copy` is a NUL-terminated wide string.
-        let already_protected =
-            unsafe { CredIsProtectedW(PCWSTR(copy.0.as_ptr()), &raw mut protection) }.is_ok()
-                && protection != CredUnprotected;
+        // SAFETY: `copy` is NUL-terminated by construction.
+        let already_protected = unsafe { CredIsProtectedW(copy.as_pcwstr(), &raw mut protection) }
+            .is_ok()
+            && protection != CredUnprotected;
 
         if cpus == CPUS_CREDUI || already_protected {
             return Ok(WipedWide(copy.0.clone()));
@@ -601,13 +609,9 @@ mod windows_impl {
                         // The credential stays valid, just unbound.
                         return Err(S_FALSE.into());
                     }
-                    let mut wide = WipedWide(widen(&sid));
-                    if wide.is_empty() {
-                        return Err(S_FALSE.into());
-                    }
-                    wide.0.push(0);
-                    // SAFETY: `wide` is NUL-terminated for the call.
-                    unsafe { SHStrDupW(PCWSTR(wide.0.as_ptr())) }
+                    let wide = WideNul::new(&sid);
+                    // SAFETY: `wide` is NUL-terminated by construction.
+                    unsafe { SHStrDupW(wide.as_pcwstr()) }
                 },
                 || Err(E_FAIL.into()),
             )

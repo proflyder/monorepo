@@ -106,7 +106,7 @@ mod imp {
     use windows_core::PCWSTR;
     use windows_core::w;
 
-    use crate::provider::widen_nul;
+    use crate::wide::WideNul;
 
     use logon_protocol::{MachineSecret, parse_secret_json, validate_config};
 
@@ -240,11 +240,12 @@ mod imp {
         error.clear();
 
         let mut key = HKEY::default();
-        // SAFETY: `key` is a valid out-parameter; the fixed key path is static.
+        let key_path = WideNul::new(REGISTRY_KEY);
+        // SAFETY: `key` is a valid out-parameter; `key_path` is NUL-terminated.
         let status = unsafe {
             RegOpenKeyExW(
                 HKEY_LOCAL_MACHINE,
-                PCWSTR(widen_nul(REGISTRY_KEY).as_ptr()),
+                key_path.as_pcwstr(),
                 None,
                 KEY_READ | KEY_WOW64_64KEY,
                 &raw mut key,
@@ -294,10 +295,11 @@ mod imp {
     /// Reads, DPAPI-decrypts and parses the secret file. `Err` carries a short
     /// log-safe phrase (never the secret or the decrypted plaintext).
     pub fn load_secret() -> Result<MachineSecret, &'static str> {
-        // SAFETY: static NUL-terminated path, no security attributes.
+        let secret_path = WideNul::new(SECRET_PATH);
+        // SAFETY: `secret_path` is NUL-terminated; no security attributes.
         let file = match unsafe {
             CreateFileW(
-                PCWSTR(widen_nul(SECRET_PATH).as_ptr()),
+                secret_path.as_pcwstr(),
                 GENERIC_READ.0,
                 FILE_SHARE_READ,
                 None,
@@ -377,11 +379,13 @@ mod imp {
     /// Returns the stored values; `(0, false)` when the key cannot be updated.
     pub fn record_failed_logon() -> (u32, bool) {
         let mut key = HKEY::default();
-        // SAFETY: `key` is a valid out-parameter and the path is static.
+        let key_path = WideNul::new(REGISTRY_KEY);
+        // SAFETY: `key` is a valid out-parameter and `key_path` is
+        // NUL-terminated.
         let status = unsafe {
             RegOpenKeyExW(
                 HKEY_LOCAL_MACHINE,
-                PCWSTR(widen_nul(REGISTRY_KEY).as_ptr()),
+                key_path.as_pcwstr(),
                 None,
                 KEY_READ | KEY_SET_VALUE | KEY_WOW64_64KEY,
                 &raw mut key,

@@ -24,9 +24,7 @@ mod windows_impl {
     use crate::bindings::Windows::Win32::Foundation::{
         E_FAIL, E_INVALIDARG, E_NOTIMPL, E_OUTOFMEMORY, HLOCAL, LocalFree,
     };
-    use crate::bindings::Windows::Win32::Globalization::{
-        CP_UTF8, MULTI_BYTE_TO_WIDE_CHAR_FLAGS, MultiByteToWideChar, WideCharToMultiByte,
-    };
+    use crate::bindings::Windows::Win32::Globalization::{CP_UTF8, WideCharToMultiByte};
     use crate::bindings::Windows::Win32::Security::Authorization::ConvertSidToStringSidW;
     use crate::bindings::Windows::Win32::Security::{
         LookupAccountNameW, PSID, SECURITY_MAX_SID_SIZE, SID_NAME_USE,
@@ -50,6 +48,7 @@ mod windows_impl {
     use crate::dll::DllRef;
     use crate::ffi_guard::guard;
     use crate::log::log_event;
+    use crate::wide::{WideNul, widen};
     use crate::worker::start_worker_thread;
 
     use super::within_budget;
@@ -232,40 +231,6 @@ mod windows_impl {
         }
     }
 
-    /// UTF-16 conversion without a terminating NUL.
-    pub fn widen(text: &str) -> Vec<u16> {
-        if text.is_empty() {
-            return Vec::new();
-        }
-        let bytes = text.as_bytes();
-        // SAFETY: `bytes` is a valid UTF-8 slice; a null output buffer asks for
-        // the required length.
-        let length =
-            unsafe { MultiByteToWideChar(CP_UTF8, MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0), bytes, None) };
-        if length <= 0 {
-            return Vec::new();
-        }
-        let mut wide = vec![0u16; length as usize];
-        // SAFETY: `wide` is exactly `length` units long.
-        let written = unsafe {
-            MultiByteToWideChar(
-                CP_UTF8,
-                MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0),
-                bytes,
-                Some(&mut wide),
-            )
-        };
-        wide.truncate(written.max(0) as usize);
-        wide
-    }
-
-    /// [`widen`] with the NUL terminator required by Windows APIs.
-    pub fn widen_nul(text: &str) -> Vec<u16> {
-        let mut wide = widen(text);
-        wide.push(0);
-        wide
-    }
-
     /// UTF-8 from a NUL-terminated UTF-16 string.
     ///
     /// # Safety
@@ -314,7 +279,7 @@ mod windows_impl {
 
         // "." means the local SAM: qualify with the computer name so a domain
         // account with the same name can never be picked instead.
-        let mut qualified = if domain == widen(".") {
+        let qualified = if domain == widen(".") {
             let mut computer = [0u16; MAX_COMPUTERNAME_LENGTH as usize + 1];
             let mut size = MAX_COMPUTERNAME_LENGTH + 1;
             // SAFETY: `computer` has room for `size` units.
@@ -333,7 +298,9 @@ mod windows_impl {
             value.extend_from_slice(&account);
             value
         };
-        qualified.push(0);
+        // The only place a `PCWSTR` is built from the account name: `WideNul`
+        // guarantees the terminator `LookupAccountNameW` reads.
+        let qualified = WideNul::from_wide(&qualified);
 
         #[repr(align(8))]
         struct AlignedSid([u8; SECURITY_MAX_SID_SIZE as usize]);
@@ -347,7 +314,7 @@ mod windows_impl {
         let lookup = unsafe {
             LookupAccountNameW(
                 PCWSTR::null(),
-                PCWSTR(qualified.as_ptr()),
+                qualified.as_pcwstr(),
                 Some(PSID(sid.0.as_mut_ptr().cast())),
                 &raw mut sid_size,
                 Some(PWSTR(domain_name.as_mut_ptr())),

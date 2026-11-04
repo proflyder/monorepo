@@ -72,20 +72,18 @@ pub use imp::log_event;
 mod imp {
     use std::sync::{Mutex, Once};
 
+    use super::{DATA_DIR, LOG_PATH, ROTATED_PATH, format_line, should_rotate, timestamp_string};
     use crate::bindings::Windows::Win32::Foundation::CloseHandle;
     use crate::bindings::Windows::Win32::Storage::FileSystem::{
-        CreateDirectoryW, CreateFileW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
-        FILE_SHARE_WRITE, GetFileAttributesExW, GetFileExInfoStandard, MOVEFILE_REPLACE_EXISTING,
-        MoveFileExW, OPEN_ALWAYS, WIN32_FILE_ATTRIBUTE_DATA, WriteFile,
+        CreateDirectoryW, CreateFileW, DeleteFileW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, GetFileAttributesExW, GetFileExInfoStandard,
+        MOVEFILE_REPLACE_EXISTING, MoveFileExW, OPEN_ALWAYS, WIN32_FILE_ATTRIBUTE_DATA, WriteFile,
     };
     use crate::bindings::Windows::Win32::System::SystemInformation::GetSystemTime;
     use crate::bindings::Windows::Win32::System::Threading::{
         GetCurrentProcessId, GetCurrentThreadId,
     };
-    use windows_core::PCWSTR;
-
-    use super::{DATA_DIR, LOG_PATH, ROTATED_PATH, format_line, should_rotate, timestamp_string};
-    use crate::provider::widen_nul;
+    use crate::wide::WideNul;
 
     static LOG_LOCK: Mutex<()> = Mutex::new(());
     static LOG_INIT: Once = Once::new();
@@ -94,18 +92,20 @@ mod imp {
         LOG_INIT.call_once(|| {
             // Idempotent: ERROR_ALREADY_EXISTS is expected. The installer owns
             // the ACL; if the directory is missing we simply cannot log.
-            // SAFETY: a static NUL-terminated path and no security attributes.
-            let _ = unsafe { CreateDirectoryW(PCWSTR(widen_nul(DATA_DIR).as_ptr()), None) };
+            let data_dir = WideNul::new(DATA_DIR);
+            // SAFETY: `data_dir` is NUL-terminated; no security attributes.
+            let _ = unsafe { CreateDirectoryW(data_dir.as_pcwstr(), None) };
         });
     }
 
     fn rotate_if_needed() {
         let mut data = WIN32_FILE_ATTRIBUTE_DATA::default();
+        let log_path = WideNul::new(LOG_PATH);
         // SAFETY: `data` is a valid, correctly sized out-parameter for
-        // GetFileExInfoStandard, and the path literal outlives the call.
+        // GetFileExInfoStandard, and `log_path` is NUL-terminated.
         let attributes = unsafe {
             GetFileAttributesExW(
-                PCWSTR(widen_nul(LOG_PATH).as_ptr()),
+                log_path.as_pcwstr(),
                 GetFileExInfoStandard,
                 (&raw mut data).cast(),
             )
@@ -117,15 +117,14 @@ mod imp {
         if !should_rotate(size) {
             return;
         }
+        let rotated_path = WideNul::new(ROTATED_PATH);
         // One generation only: the current log always describes the latest run.
-        // SAFETY: both arguments are static NUL-terminated paths.
+        // SAFETY: both paths are NUL-terminated and live for the call.
         unsafe {
-            let _ = crate::bindings::Windows::Win32::Storage::FileSystem::DeleteFileW(PCWSTR(
-                widen_nul(ROTATED_PATH).as_ptr(),
-            ));
+            let _ = DeleteFileW(rotated_path.as_pcwstr());
             let _ = MoveFileExW(
-                PCWSTR(widen_nul(LOG_PATH).as_ptr()),
-                PCWSTR(widen_nul(ROTATED_PATH).as_ptr()),
+                log_path.as_pcwstr(),
+                rotated_path.as_pcwstr(),
                 MOVEFILE_REPLACE_EXISTING,
             );
         }
@@ -158,12 +157,13 @@ mod imp {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         rotate_if_needed();
 
+        let log_path = WideNul::new(LOG_PATH);
         // SAFETY: OPEN_ALWAYS creates the file if needed; no security
-        // attributes and no template file are passed. The handle is closed on
-        // every path.
+        // attributes and no template file are passed, and `log_path` is
+        // NUL-terminated. The handle is closed on every path.
         match unsafe {
             CreateFileW(
-                PCWSTR(widen_nul(LOG_PATH).as_ptr()),
+                log_path.as_pcwstr(),
                 FILE_APPEND_DATA.0,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 None,
