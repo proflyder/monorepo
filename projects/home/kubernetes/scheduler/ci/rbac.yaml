@@ -43,6 +43,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods/exec"]
     verbs: ["create", "get"]
+  # The Hermes rollout reads the health exporter's /metrics through the
+  # API-server Service proxy (no exec, works for any exporter image). The
+  # subresource is authorized by the full request name, so only this Service.
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    resourceNames: ["runtime-health-exporter:9116", "runtime-health-exporter"]
+    verbs: ["get"]
   - apiGroups: [""]
     resources:
       - services
