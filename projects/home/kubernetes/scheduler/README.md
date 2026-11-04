@@ -29,8 +29,7 @@ projects/home/kubernetes/scheduler/BUILD.bazel
   targets build on macOS and on the GitHub runner.
 - `home-deploy oci` (`platform/deploy`, decision 35) reads the resulting OCI
   layout: its `digest` prints the manifest digest, `pack` writes an OCI archive
-  for `ctr images import` and `docker` a docker archive for local smoke tests
-  (byte-identical to the retired `platform/ci/oci_image.py`). The image is
+  for `ctr images import` and `docker` a docker archive for local smoke tests. The image is
   referenced as `ghcr.io/proflyder/<name>@sha256:...`, never by a moving tag.
 - The image has no shell. Probes and deploy checks run the binary itself:
   `-healthcheck` (authenticated readiness) and `-status` (raw GetStatus JSON).

@@ -18,7 +18,8 @@ Wi-Fi RTL8821CE работает на host как 4-address/WDS uplink `vmbr0`,
 VM IP и L2/multicast сохраняются. `ricardo-uplink` выбирает один uplink:
 Ethernet при carrier, иначе Wi-Fi. NAT и PCI passthrough не требуются.
 Исходники/установка/откат: [wifi-uplink](wifi-uplink/).
-`bootstrap-wifi-mapping.sh` — неиспользуемая подготовка прежнего варианта.
+`bootstrap-wifi-mapping.sh` и `backup-before-install.py` — помощники разовой
+миграции на PVE; в текущей эксплуатации не используются.
 
 VPN-сервер (ocserv) разворачивается отдельным unprivileged CT 102 `vpn`
 скриптами [vpn](vpn/): создание LXC, установка ocserv с nftables,
@@ -40,12 +41,6 @@ HAOS, K3s и bb.
 новых универсальных инсталляций. `cloud-init.yaml` сохраняет существующие
 SSH host keys при смене config-drive instance ID.
 
-`backup-before-install.py --output /private/new-directory` запускается root на
-текущем K3s host. Останавливает writers, копирует PVC/host recovery, восстанавливает
-replica counts, сохраняет cluster metadata и проверяет SQLite. Output содержит
-секреты; хранить вне Git. Путь output не должен лежать внутри копируемого PVC.
-Скрипт рассчитан на текущую Ubuntu/LVM/K3s композицию, не универсальный backup tool.
-
 `authorize.sh HOST KEY KNOWN_HOSTS` запускается интерактивно на Mac после установки
 PVE: добавляет отдельный ключ через ssh-copy-id и проверяет доступ. Fingerprint
 обязательно сравнить с физической консолью. Приватный wrapper с параметрами
@@ -66,9 +61,9 @@ snippet загружаются bootstrap-этапом; Terraform использ�
 
 Авторитетный Terraform directory/state находится на PVE в root-only
 `/var/lib/ricardo-terraform/`; после apply state копируется на Mac в
-`secrets/proxmox-install/terraform-state-pve/`. Первый macOS apply не создал
-ресурсов: Go TLS на macOS не использует SSL_CERT_FILE как Linux. Terraform
-запускается на Linux с проверкой CA, системное trust store Mac не меняется.
+`secrets/proxmox-install/terraform-state-pve/`. Terraform запускается на Linux
+с проверкой CA (Go TLS на macOS игнорирует `SSL_CERT_FILE`); системное trust
+store Mac не меняется.
 Конфигурация синхронизируется из tracked main.tf; lock копируется обратно в source.
 TLS проверяется CA, полученным по проверенному SSH; `insecure=false`.
 Provider endpoint/token берутся из environment, не из публичных tfvars.

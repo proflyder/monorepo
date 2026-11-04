@@ -70,8 +70,9 @@
 
 ## Egress guard
 
-- Разрешены LAN, loopback, DHCP, multicast, Google NTP; публичный WAN —
-  `DROP`; Яндекс — отдельный block.
+- Разрешены LAN, loopback, DHCP, multicast, Google NTP и `tcp/443` к
+  публичным IPv4-диапазонам GitHub (updater, `ALLOW_GITHUB=1`); остальной
+  публичный WAN — `DROP`; Яндекс — отдельный block.
 - Private LAN считается доверенной; для строгого режима сузить allowlist.
 - Снятие guard не снимает Яндекс-блок/OTA.
 
@@ -83,8 +84,7 @@
 - `secrets/CREDENTIALS.md` — SSH/ADB/сервисные пароли.
 - `secrets/certs/` — приватные сертификаты/ключи.
 - QR/DPP отключён; прежний материал — только в private recovery archive.
-- `secrets/kubernetes-research/` — kubeconfig, values, Grafana password,
-  recovery OCI/SQLite.
+- `secrets/kubernetes-research/` — kubeconfig, values, Grafana password.
 - `secrets/currency-bot/` — VPS ssh key/config, экспорт H2 CSV/SQLite,
   tunnel token, Cloudflare tunnel API token, `k8s.env`;
   `secrets/home/currency-bot.env`.

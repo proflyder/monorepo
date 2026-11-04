@@ -197,8 +197,6 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
   (currency-bot), остальные пути — 404.
 - Grafana требует login; анонимный доступ выключен.
 - Matter не имеет отдельного LAN UI: используется HA add-on ingress.
-- Старый compatibility endpoint `http://192.0.2.27:8123` не используется;
-  HA открывается напрямую через HAOS.
 
 ## 5. Удалённый доступ
 

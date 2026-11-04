@@ -25,7 +25,7 @@ Deliberate deviations from upstream are listed below.
 | Area | Change |
 |---|---|
 | Wake word | New on-device «Рикардо» detector, same microWakeWord model as the deployed fork build; `wake_word=ricardo` is the default. |
-| Pre-roll | The wake event carries 0.5 s (16 chunks, 512 ms) of VQE-cleaned audio taken from the shared 1.024 s ring (upstream `wake_preroll` rule `Fixed(16)` for the `ricardo` id), so «Рикардо, включи свет» does not lose its first syllables. The upstream `WakePreroll` switch and `wake_preroll=` key control it. |
+| Pre-roll | The wake event carries 256 ms (8 chunks) of VQE-cleaned audio taken from the shared 1.024 s ring (upstream `wake_preroll` rule `Fixed(8)` for the `ricardo` id), so «Рикардо, включи свет» does not lose its first syllables. The upstream `WakePreroll` switch and `wake_preroll=` key control it. |
 | Silent cancel | `stt-no-text-recognized` is treated as a cancel, not as an error ring. |
 | Repeated wake | A wake word heard during LISTENING / PROCESSING ends that dialog (`voice_request_stop`) and starts a new one with the wake earcon; during SPEAKING the answer is cut and the new dialog starts. A station that loses wake arbitration does not cut its answer. Late events of a replaced started run are dropped (its RUN_END is treated as stale). |
 | `стоп` | The local command spotter is off during LISTENING/PROCESSING/arbitration. «Рикардо, стоп» reaches HA, which stops the alarm and restores the music. |
@@ -184,10 +184,8 @@ upstream-патча, поэтому сравнение версий (`vMAJOR.MIN
 `zigbee-*.ybl`) и проверяет digest слоя, `SHA256SUMS` и `--version`. Этот пакет публикует
 монорепозиторий; константа — `pulsar_update::UPDATE_REPO`.
 
-Переходный момент: установленная прошивка `v0.5.1005` читает GitHub Releases репозитория
-`proflyder/pulsar`. Читать `pulsar-firmware` умеет только `v0.5.1007` и новее, поэтому первый
-релиз из монорепозитория встанет через HA только на станцию, где уже стоит `v0.5.1007+`.
-Пока это не так, бинарник ставится вручную (`pulsar-install` или замена `pulsar` + `.prev` и
+Прошивка старше `v0.5.1007` читает прежние GitHub Releases и через HA не обновится:
+на такую станцию бинарник ставится вручную (`pulsar-install` или замена `pulsar` + `.prev` и
 `ctl.sh restart`).
 
 Повторный деплой уже опубликованной версии — `workflow_dispatch` для `deploy-home`

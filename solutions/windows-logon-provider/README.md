@@ -55,7 +55,7 @@ Service URL, имя машины и учётная запись задаёт п�
 | `src/helpers.cpp` | упаковка `KERB_INTERACTIVE_UNLOCK_LOGON` (MIT, см. `THIRD-PARTY-NOTICES.md`) |
 | `src/selftest/cp_selftest.cpp` | `cp-selftest.exe`: загрузка провайдера вне LogonUI |
 | `install.ps1`, `set-secret.ps1`, `uninstall.ps1`, `status.ps1` | установка и обслуживание |
-| `build.sh`, `run-tests.sh`, `tests/` | сборка и переносимые тесты |
+| `build.sh`, `run-tests.sh`, `tests/`, `test_install_scripts.py`, `test_oci_scripts.py` | сборка и переносимые тесты |
 | `VERSION`, `publish-oci.sh`, `fetch.sh` | версия и публикация/получение OCI-артефакта |
 
 CLSID провайдера (зафиксирован, менять нельзя без правки всех скриптов и
@@ -193,8 +193,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 
 ## Ограничения
 
-- Проверено только сборкой и переносимыми тестами; реальный экран входа,
-  замок и переключатель «только Windows Hello» требуют проверки на самом ПК.
 - Опрос каждые 2 с даёт до ~45 challenge за 90 с при лимите 30/мин на машину:
   на длинном окне сервис может ответить `429`, тогда провайдер отступает на
   4 с и продолжает; на реальный сценарий (грант выдан до Wake-on-LAN) это не

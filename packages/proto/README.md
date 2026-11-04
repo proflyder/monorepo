@@ -1,19 +1,11 @@
 # packages/proto
 
-Общие контракты между Go, Rust, mobile и будущими клиентами.
-
-Первый контракт:
-
-```text
-ricardo/v1/alarms.proto   AlarmService
-```
-
-Сборка:
+Общие protobuf-контракты для Go, Kotlin и HA-клиентов. Канонический API —
+`ricardo/v1/scheduler.proto` (`SchedulerService`), legacy —
+`ricardo/v1/alarms.proto` (`AlarmService`). Описание пакета и checked-in
+stubs — [`ricardo/v1/README.md`](ricardo/v1/README.md); транспорт
+(Connect/gRPC/gRPC-Web) — [`docs/GRPC.md`](../../docs/GRPC.md).
 
 ```bash
 bazel build //packages/proto/...
 ```
-
-`go_grpc_library` генерирует Go + gRPC stubs из protobuf. Канонический API —
-gRPC/protobuf; для HA и браузера используем Connect/gRPC-Web на том же
-контракте. Детали — [`docs/GRPC.md`](../../docs/GRPC.md).

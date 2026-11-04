@@ -77,33 +77,15 @@ VM и host сохранят прежние адреса. При ручном for
 `/run/ricardo-uplink.mode` с консоли. Для полного отката с консоли остановить
 и disable `ricardo-uplink`, остановить Wi-Fi supplicant, отсоединить Wi-Fi,
 подключить Ethernet к vmbr0 и вернуть сохранённый `/etc/network/interfaces`.
-На текущем PVE сохранён `/root/wifi-cutover/rollback.sh`; выполнять его
-только с подключённым Ethernet. Сам daemon при остановке не разбирает мост.
+Сам daemon при остановке не разбирает мост.
 
-## Результат приёмки на текущем стенде
+## Ограничения стенда
 
-Физически отключён Ethernet, выполнены две полные штатные перезагрузки PVE.
-Host uplink и VM возвращаются автоматически, прежние IP/MAC сохраняются.
-K3s network CIDR/gateway заданы в private Terraform variables; cloud-init
-сохраняет host keys, netplan сохраняет MAC match/set-name eth0. Нельзя
-удалять эти поля из guest netplan: иначе Linux вернёт predictable NIC name,
-а node-ip/flannel-iface/firewall ожидают eth0.
-
-Пройдены PVE TLS, cluster 5/5, HA 3/3, Hermes 4/4, STT/TTS smoke,
-IPv6 multicast и физический Matter attribute read. Firewall пережил reboot.
-Router reservations созданы для host/VM и станции без изменения DHCP-пула.
-
-Sendspin станции после reboot не находился по IPv4 mDNS. В штатной настройке
-MA Sendspin provider **Manual IP addresses for discovery** добавлен закрытый
-адрес станции; повторный restart MA подтвердил reconnect. Pairing не сбрасывали,
-station firmware не меняли, воспроизведение не запускали. При восстановлении
-MA вернуть эту настройку из backup либо добавить фиксированный адрес станции
-через UI/API. Пример адреса в публичном стенде: `192.0.2.13`.
-Подтверждение IPv6 multicast не означает, что все IPv4 mDNS service types
-будут автоматически обнаруживаться через конкретный AP.
-
-Private network/IaC recovery и новый native partial MA backup с SHA-256
-хранятся отдельно на Mac; full disaster restore не выполнялся.
+- Netplan гостя K3s сохраняет MAC match/set-name `eth0`: без этих полей Linux
+  вернёт predictable NIC name, а node-ip/flannel-iface/firewall ожидают `eth0`.
+- Sendspin станции после reboot не находится по IPv4 mDNS через AP: в MA
+  Sendspin provider **Manual IP addresses for discovery** задан адрес станции
+  (пример: `192.0.2.13`). При восстановлении MA вернуть эту настройку.
 
 Источники: [Linux Wireless 4-address](https://wireless.docs.kernel.org/en/latest/en/users/documentation/iw.html),
 [Music Assistant Sendspin settings](https://www.music-assistant.io/player-support/sendspin/).

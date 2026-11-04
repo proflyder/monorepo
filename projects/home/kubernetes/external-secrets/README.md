@@ -1,4 +1,4 @@
-# External Secrets Operator (этап 2)
+# External Secrets Operator
 
 ESO `2.14.0` (chart `2.14.0`, образ по digest) в namespace
 `external-secrets`. Он читает KV v2 `secret/` в OpenBao через Kubernetes auth
@@ -61,7 +61,7 @@ kubectl get externalsecret -A
 
 ## Права OpenBao
 
-`configure.py` создаёт:
+`projects/home/kubernetes/openbao/configure.py` создаёт:
 
 - policy `k8s-read`: `read` на `secret/data/k8s/*` и
   `read`/`list` на `secret/metadata/k8s*`; записи нет;

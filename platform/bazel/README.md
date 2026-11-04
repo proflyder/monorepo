@@ -1,13 +1,9 @@
 # Bazel platform layer
 
-Здесь будут общие toolchain-настройки, constraints и платформы
-(`linux_amd64`, `linux_arm64`, `darwin_arm64`, будущие mobile).
-
-Сейчас корневой `MODULE.bazel` уже подключает:
-
-- `rules_go` + Gazelle;
-- `rules_rust` + Rust toolchain;
-- Bzlmod (без WORKSPACE).
+Общие toolchain-настройки и платформы. Корневой `MODULE.bazel` (Bzlmod, без
+WORKSPACE) подключает `rules_go` + Gazelle, `rules_rust`, `rules_oci` и
+Android-правила; `zig/` — Zig cross-toolchain и платформы
+`//platform/bazel/zig:<arch>_linux` для станционных сборок Pulsar.
 
 Правило: BUILD-файлы приложений не должны содержать машинно-специфичные
 пути и абсолютные toolchain-пути.
