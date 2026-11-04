@@ -27,14 +27,15 @@ number «Follow-up duration», STT stop-word fallback и «Wake: не услыш
 Legacy исходники и binaries — private в `secrets/local/recovery/`.
 
 Исходники Pulsar — first-party в этом монорепозитории. Релиз — изменение
-`projects/station/pulsar/VERSION`: merge в `develop` запускает
-`release-pulsar.yml`, который собирает обе архитектуры и публикует OCI-артефакт
-`ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`); после approve в
-Environment `Station` job катит его на станцию через HA updater. GitHub
-Releases и теги не используются. Upstream `Morvex885/pulsar` вливается
-вручную патчем. Процедура — `docs/OPERATIONS.md`, полная версия —
-`projects/station/pulsar/RICARDO.md`, «Релизы и деплой». Откат — только на
-станции (`pulsar.prev` + `ctl.sh reload`).
+`projects/station/pulsar/VERSION`: merge в `develop` проводит Pulsar через
+общий `deploy-home` (`publish_when` по VERSION), `publish-native` публикует
+OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`),
+после approve в Environment `Station` job `deploy-station` катит его на
+станцию через HA updater. GitHub Releases и теги не используются. Upstream
+`Morvex885/pulsar` вливается вручную патчем. Процедура —
+`docs/OPERATIONS.md`, полная версия — `projects/station/pulsar/RICARDO.md`,
+«Релизы и деплой». Откат — только на станции (`pulsar.prev` +
+`ctl.sh reload`).
 
 ## Границы
 

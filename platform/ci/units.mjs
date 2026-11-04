@@ -774,8 +774,14 @@ export const config = {
     // provider is a repository-script C++ cross-build; Pulsar is the Rust
     // station tree built with Make + cargo-zigbuild. PRs upload their
     // artifacts; a push to `develop` publishes eligible units as public OCI
-    // artifacts in GHCR (deploy-home, publish-native). Pulsar opts out
-    // (`publish: false`): `release-pulsar.yml` owns its GHCR release.
+    // artifacts in GHCR (deploy-home, publish-native).
+    //
+    // `publish_when` narrows publication to a release trigger: the unit is
+    // still built and tested by PR CI on every path change, but deploy-home
+    // builds/publishes it only when one of these paths changed. Without it a
+    // unit is publishable on any affected change. `publish_script` owns the
+    // registry contract; `publish_attest_glob` is the artifact file (or glob)
+    // whose build provenance is attested next to the pushed manifest.
     {
       id: "logon-provider",
       platform: "native",
@@ -792,6 +798,8 @@ export const config = {
           "out/hmac-selftest.exe",
         ],
         checksums: "out/SHA256SUMS",
+        publish_script: "solutions/windows-logon-provider/publish-oci.sh",
+        publish_attest_glob: "RicardoKompLogon.dll",
         toolchain: {
           name: "llvm-mingw",
           version: "20261020",
@@ -806,9 +814,9 @@ export const config = {
 
     // The Rust station daemon and its surrounding builds (radio firmware,
     // Go installer, dropbear). `make check` plus both station ABIs, the radio
-    // and ssh builds all live in `_native.yml`. Releases are not deploy-home
-    // units: `release-pulsar.yml` publishes `ghcr.io/proflyder/pulsar-firmware`
-    // from a VERSION bump on `develop`.
+    // and ssh builds all live in `_native.yml`. Any Pulsar change is PR CI;
+    // only a VERSION change publishes the release OCI artifact, and
+    // deploy-home's `deploy-station` job then rolls it out through HA.
     {
       id: "pulsar",
       platform: "native",
@@ -817,8 +825,10 @@ export const config = {
       native: {
         kind: "pulsar",
         workdir: "projects/station/pulsar",
-        // deploy-home must not build or publish this unit as an OCI artifact.
-        publish: false,
+        // The version is the release trigger and the artifact tag.
+        publish_when: ["projects/station/pulsar/VERSION"],
+        publish_script: "projects/station/pulsar/publish-oci.sh",
+        publish_attest_glob: "*",
       },
     },
 

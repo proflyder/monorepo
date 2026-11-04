@@ -5,11 +5,14 @@ name: deploy-home
 # OpenBao env key and ExternalSecret set come from `platform/ci/units.mjs`
 # (matrix payload), so adding a deployable unit does not need a workflow edit.
 #
-# A push also publishes affected `native` units (today the Windows logon
-# provider) as public OCI artifacts. `native-build` reuses `_native.yml` for the
-# exact PR build; `publish-native` downloads that artifact, pushes it with ORAS
-# and attests provenance. Pull requests never reach this workflow, so they never
-# publish.
+# A push also publishes affected `native` units as public OCI artifacts: the
+# Windows logon provider on any affected change, and Pulsar only when
+# `projects/station/pulsar/VERSION` changed (its `publish_when` trigger).
+# `native-build` reuses `_native.yml` for the exact build; `publish-native`
+# downloads that artifact, runs the unit's own publish script and attests
+# provenance. Pull requests never reach this workflow, so they never publish.
+# A Pulsar release then rolls out through `deploy-station` (Environment
+# `Station`); that job is independent of the home `deploy` job.
 #
 # A push to `develop` is a squash-merge of a PR, so it runs in the base
 # repository context with Environment secrets. The `plan` job routes the change
@@ -189,6 +192,10 @@ jobs:
     outputs:
       units: ${{ steps.filter.outputs.units }}
       native_units: ${{ steps.filter.outputs.native_units }}
+      # `true` when the station release should run (Pulsar VERSION changed on
+      # push, or an explicit dispatch asks for it).
+      station: ${{ steps.filter.outputs.station }}
+      pulsar_version: ${{ steps.pulsar-version.outputs.version }}
       pr_url: ${{ steps.pr.outputs.url }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -205,6 +212,19 @@ jobs:
       - name: Ensure base branch history
         if: github.event_name == 'push'
         run: git fetch --no-tags origin "+refs/heads/develop:refs/remotes/origin/develop"
+
+      # The release tag is the content of VERSION, passed to the version-aware
+      # native build and to the station deploy job.
+      - name: Read Pulsar release version
+        id: pulsar-version
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < projects/station/pulsar/VERSION)
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION must be vMAJOR.MINOR.PATCH, got '$version'"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Route affected deployable units
         id: route
@@ -249,26 +269,46 @@ jobs:
           script: |
             const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
             const units = JSON.parse(process.env.DEPLOY_UNITS || '[]');
+            const allNative = JSON.parse(process.env.NATIVE_UNITS || '[]');
+            const dispatch = process.env.EVENT_NAME === 'workflow_dispatch';
             const wantedRaw = (process.env.WANTED || '').trim();
+            const isPulsar = (entry) => entry.id === 'pulsar';
             let selected = units;
-            if (process.env.EVENT_NAME === 'workflow_dispatch' && wantedRaw && wantedRaw !== 'all') {
+            let station = false;
+            if (dispatch && wantedRaw && wantedRaw !== 'all') {
               const wanted = new Set(wantedRaw.split(',').map((item) => item.trim()).filter(Boolean));
-              const unknown = [...wanted].filter((id) => !units.some((entry) => entry.id === id)).sort();
+              const known = new Set([
+                ...units.map((entry) => entry.id),
+                ...allNative.map((entry) => entry.id),
+              ]);
+              const unknown = [...wanted].filter((id) => !known.has(id)).sort();
               if (unknown.length) {
                 throw new Error(`unknown deployable unit(s): [${unknown.map((id) => `'${id}'`).join(', ')}]`);
               }
               selected = units.filter((entry) => wanted.has(entry.id));
+              // A dispatch with units=pulsar re-deploys the already published
+              // VERSION through `deploy-station`; it never rebuilds or pushes.
+              station = wanted.has('pulsar');
+            } else if (dispatch) {
+              // `all` includes every unit, including the station release.
+              station = allNative.some(isPulsar);
+            } else {
+              // Push: `publish` is true only when the unit's `publish_when`
+              // release path (Pulsar VERSION) changed.
+              station = allNative.some((entry) => isPulsar(entry) && entry.publish !== false);
             }
             const json = affected.jsonDumps(selected);
             core.setOutput('units', json);
-            // Native units marked `publish: false` (Pulsar) are built and
-            // released by release-pulsar.yml, never by deploy-home.
-            const natives = JSON.parse(process.env.NATIVE_UNITS || '[]')
-              .filter((entry) => entry.publish !== false);
+            // Native units whose release trigger did not fire are PR CI only:
+            // they are built by `ci.yml`, never by deploy-home.
+            const natives = allNative.filter((entry) => entry.publish !== false);
             const nativeJson = affected.jsonDumps(natives);
             core.setOutput('native_units', nativeJson);
+            core.setOutput('station', String(station));
             core.summary.addRaw(`### deploy-home plan\n\n\`\`\`json\n${json}\n\`\`\`\n`);
-            await core.summary.addRaw(`\nnative units: \`${nativeJson}\`\n`).write();
+            await core.summary
+              .addRaw(`\nnative units: \`${nativeJson}\`\nstation release: \`${station}\`\n`)
+              .write();
 
       - name: Resolve pull request link
         id: pr
@@ -282,8 +322,9 @@ jobs:
   # Build affected non-Bazel native units exactly as PR CI does. `_native.yml`
   # owns the toolchain download/verification, host tests, cross-build and the
   # checksummed artifact; this job adds no build logic of its own. Push-only:
-  # a manual dispatch is about home services, not a release. Reusable workflows
-  # cannot widen the caller's permissions, and `_native.yml` stays read-only.
+  # a dispatch never builds or publishes (Pulsar's dispatch path re-deploys an
+  # already published VERSION). Reusable workflows cannot widen the caller's
+  # permissions, and `_native.yml` stays read-only.
   native-build:
     name: native / ${{ matrix.id }}
     needs: plan
@@ -312,6 +353,9 @@ jobs:
       toolchain_url: ${{ matrix.toolchain_url }}
       toolchain_sha256: ${{ matrix.toolchain_sha256 }}
       toolchain_root: ${{ matrix.toolchain_root }}
+      # Only Pulsar uses it: the VERSION that triggered this deploy, which
+      # makes `_native.yml` build, verify and assemble the release artifact.
+      release_version: ${{ matrix.id == 'pulsar' && needs.plan.outputs.pulsar_version || '' }}
 
   # Publish the artifact of the *same* build to GHCR with ORAS and attest its
   # provenance. Only this job needs registry/OIDC/attestation write access, and
@@ -372,10 +416,15 @@ jobs:
 
       - name: Publish OCI artifact
         id: publish
+        env:
+          PUBLISH_SCRIPT: ${{ matrix.publish_script }}
         run: |
           set -euo pipefail
-          solutions/windows-logon-provider/publish-oci.sh \
-            --source-dir "$RUNNER_TEMP/artifact"
+          [[ -n "$PUBLISH_SCRIPT" ]] || {
+            echo "unit ${{ matrix.id }} has no publish_script in units.mjs" >&2
+            exit 1
+          }
+          "$PUBLISH_SCRIPT" --source-dir "$RUNNER_TEMP/artifact"
 
       # Provenance for the pushed OCI manifest digest, stored in the registry
       # alongside the artifact (push-to-registry).
@@ -388,11 +437,13 @@ jobs:
           registry-username: ${{ github.actor }}
           registry-password: ${{ github.token }}
 
-      # The DLL is the file an operator installs; keep a subject for it too.
-      - name: Attest the DLL file
+      # Also attest the files an operator consumes, not just the manifest. The
+      # glob comes from units.mjs, so this step is unit-agnostic.
+      - name: Attest unit files
+        if: matrix.publish_attest_glob != ''
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: ${{ runner.temp }}/artifact/RicardoKompLogon.dll
+          subject-path: ${{ runner.temp }}/artifact/${{ matrix.publish_attest_glob }}
 
   # One matrix entry per affected deployable unit. Jobs run one at a time and a
   # unit never runs two deploys concurrently; neither is ever cancelled.
@@ -893,6 +944,142 @@ jobs:
                 | jq -r 'map(select(.name == "runtime"))[0].revision // "unknown"')\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Disconnect VPN and remove temporary files
+        if: always()
+        run: |
+          set +e
+          CI_DIR="$RUNNER_TEMP/ci"
+          if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then
+            sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
+          fi
+          sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
+          rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
+          echo "temporary deploy files removed"
+
+  # The station release. It runs only when Pulsar's `publish_when` release path
+  # (VERSION) changed on push, or when a dispatch explicitly asks for it. The
+  # Environment approval is the only gate before the station is touched; the
+  # job is independent from `deploy`, so home units neither wait for it nor
+  # fail with it. On dispatch it installs the already published VERSION and
+  # does not rebuild or push (Pulsar tags are immutable).
+  deploy-station:
+    name: deploy station (${{ needs.plan.outputs.pulsar_version }})
+    needs: [plan, publish-native]
+    if: >-
+      !cancelled() &&
+      needs.plan.result == 'success' &&
+      needs.plan.outputs.station == 'true' &&
+      (github.event_name == 'workflow_dispatch' || needs.publish-native.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # OIDC `environment` claim keeps this exact casing; OpenBao binds "Station".
+    environment: Station
+    permissions:
+      contents: read
+      id-token: write # OpenBao auth/github OIDC (audience = OPENBAO_ADDR)
+    concurrency:
+      group: deploy-home-station
+      cancel-in-progress: false
+    env:
+      VERSION: ${{ needs.plan.outputs.pulsar_version }}
+      VPN_SERVER: ${{ secrets.VPN_SERVER }}
+      IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
+      IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
+      OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
+      OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE || 'deploy-station' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install openconnect
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends openconnect vpnc-scripts curl
+
+      - name: Materialise VPN credentials
+        run: |
+          set +x
+          set -euo pipefail
+          umask 077
+          CI_DIR="$RUNNER_TEMP/ci"
+          rm -rf "$CI_DIR"
+          mkdir -p "$CI_DIR"
+          chmod 700 "$CI_DIR"
+          printf '%s' "$IN_VPN_CERT_P12_B64" | base64 -d > "$CI_DIR/ci.p12"
+          printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
+          chmod 600 "$CI_DIR"/*
+          echo "VPN credentials prepared"
+
+      - name: Connect VPN (group ci)
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          test -n "$OPENBAO_ADDR"
+          # shellcheck disable=SC2024 # the log is user-writable; only openconnect is root
+          sudo openconnect \
+            --no-dtls \
+            --certificate "$CI_DIR/ci.p12" \
+            --passwd-on-stdin \
+            --authgroup ci \
+            --pid-file "$RUNNER_TEMP/openconnect.pid" \
+            "${VPN_SERVER%/}" \
+            < "$CI_DIR/ci.pass" > "$RUNNER_TEMP/openconnect.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+              "$OPENBAO_ADDR/v1/sys/health" || true)
+            if [[ -n "$code" && "$code" != "000" ]]; then
+              echo "OpenBao reachable over the VPN"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "OpenBao is not reachable over the VPN" >&2
+          tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
+          exit 1
+
+      # GitHub OIDC -> OpenBao (auth/github, JWT audience = OPENBAO_ADDR).
+      - name: Read deploy secrets from OpenBao
+        id: openbao
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        with:
+          url: ${{ env.OPENBAO_ADDR }}
+          method: jwt
+          path: github
+          role: ${{ env.OPENBAO_ROLE }}
+          jwtGithubAudience: ${{ env.OPENBAO_ADDR }}
+          exportEnv: false
+          secrets: |
+            secret/data/ci/deploy-station ha_url | HA_URL ;
+            secret/data/ci/deploy-station ha_token | HA_TOKEN ;
+            secret/data/ci/deploy-station entity_id | ENTITY_ID
+
+      - name: Install ${{ needs.plan.outputs.pulsar_version }} through Home Assistant
+        env:
+          HA_URL: ${{ steps.openbao.outputs.HA_URL }}
+          HA_TOKEN: ${{ steps.openbao.outputs.HA_TOKEN }}
+          ENTITY_ID: ${{ steps.openbao.outputs.ENTITY_ID }}
+          DEPLOY_LOG: ${{ runner.temp }}/ci/deploy.log
+        run: |
+          set +e
+          set -o pipefail
+          if [[ -z "${HA_URL:-}" || -z "${HA_TOKEN:-}" || -z "${ENTITY_ID:-}" ]]; then
+            echo "OpenBao returned an empty deploy value" >&2
+            exit 1
+          fi
+          python3 projects/station/pulsar/tools/ha_firmware_deploy.py --tag "$VERSION" 2>&1 | tee "$DEPLOY_LOG"
+          status=$?
+          {
+            echo "### Station deploy"
+            echo
+            echo "- version: \`$VERSION\`"
+            if grep -q 'already installed' "$DEPLOY_LOG"; then
+              echo "- result: already installed"
+            else
+              grep -E 'done: before=|^error:' "$DEPLOY_LOG" | sed 's/^/- /' || true
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Disconnect VPN and remove temporary files
         if: always()

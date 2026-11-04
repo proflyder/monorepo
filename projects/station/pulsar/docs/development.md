@@ -52,10 +52,13 @@ CI Pulsar — корневой монорепозиторный юнит `pulsar
 `radio/build.sh` и `ssh/build.sh`. Версии инструментов — как в «Сборке» выше.
 
 Релиз — изменение `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`) в PR в
-`develop`; merge запускает `.github/workflows/release-pulsar.yml`. Он собирает обе архитектуры
-и radio, проверяет `--version`, складывает `pulsar-<arch>.bin`, `SHA256SUMS` и `zigbee-*.ybl`
-в OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>` и переносит `:latest`. GitHub
-Releases и теги не используются. Имена слоёв — постоянный контракт; от них зависят:
+`develop`; merge проводит юнит `pulsar` через общий `.github/workflows/deploy-home.yml`
+(`native.publish_when` по VERSION). `_native.yml` собирает обе архитектуры с этой версией и
+radio, проверяет `--version` под qemu, складывает `pulsar-<arch>.bin`, `SHA256SUMS` и
+`zigbee-*.ybl` в OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>`
+(`publish-oci.sh`) и переносит `:latest`; затем `deploy-station` после approve в Environment
+`Station` катит его на станцию. GitHub Releases и теги не используются. Прочие изменения
+Pulsar — только PR CI. Имена слоёв — постоянный контракт; от них зависят:
 
 | Слой OCI | Кто зависит |
 |---|---|

@@ -95,12 +95,13 @@ git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
 
 затем обычный squash PR. GitHub `proflyder/pulsar` — прежний самостоятельный
 репозиторий, архивируется. Релиз Pulsar — изменение
-`projects/station/pulsar/VERSION`: merge в `develop` запускает
-`release-pulsar.yml`, который публикует OCI-артефакт
-`ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`); GitHub Releases и
-теги в монорепо запрещены. Процедуры — `docs/OPERATIONS.md` и
-`projects/station/pulsar/RICARDO.md`. Правила самого Pulsar —
-`projects/station/pulsar/AGENTS.md`.
+`projects/station/pulsar/VERSION`: merge в `develop` проводит юнит `pulsar`
+через общий `deploy-home` (`publish_when` — только VERSION), `publish-native`
+публикует OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>`
+(+ `:latest`), затем `deploy-station` после approve в Environment `Station`
+катит его на колонку. GitHub Releases и теги в монорепо запрещены. Процедуры —
+`docs/OPERATIONS.md` и `projects/station/pulsar/RICARDO.md`. Правила самого
+Pulsar — `projects/station/pulsar/AGENTS.md`.
 
 ## Монорепозиторий и Bazel
 

@@ -261,6 +261,19 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
       if (unit.nativeKind === "script" && !unit.nativeChecksums) {
         problems.push(`${prefix}: native unit without a checksums file`);
       }
+      if (unit.nativePublishScript) {
+        const script = path.resolve(root, unit.nativePublishScript);
+        if (!fs.existsSync(script) || !fs.statSync(script).isFile()) {
+          problems.push(
+            `${prefix}: publish_script does not exist: ${unit.nativePublishScript}`,
+          );
+        }
+      }
+      for (const pattern of unit.nativePublishWhen) {
+        if (pattern === "*" || pattern === "**" || pattern === "**/*") {
+          problems.push(`${prefix}: publish_when pattern '${pattern}' is too broad`);
+        }
+      }
       const toolchain = [
         unit.nativeToolchainName,
         unit.nativeToolchainVersion,

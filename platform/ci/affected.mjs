@@ -79,6 +79,12 @@ export class Unit {
         nativeWorkdir: "",
         nativeKind: "script",
         nativePublish: true,
+        // Paths that gate publication: empty means "any affected change".
+        nativePublishWhen: [],
+        // Per-unit OCI publish entrypoint and the artifact file/glob whose
+        // provenance is attested next to the pushed manifest.
+        nativePublishScript: "",
+        nativePublishAttestGlob: "",
         nativeBuild: "",
         nativeTest: "",
         nativeArtifacts: [],
@@ -198,8 +204,11 @@ export function normalizeConfig(data, label = "units") {
       nativeWorkdir: String(native.workdir ?? ""),
       nativeKind: String(native.kind ?? "script"),
       // `publish: false` keeps a native unit out of deploy-home's OCI
-      // publication (Pulsar releases through release-pulsar.yml).
+      // publication entirely; `publish_when` narrows it to a release trigger.
       nativePublish: native.publish !== false,
+      nativePublishWhen: list(native.publish_when),
+      nativePublishScript: String(native.publish_script ?? ""),
+      nativePublishAttestGlob: String(native.publish_attest_glob ?? ""),
       nativeBuild: String(native.build ?? ""),
       nativeTest: String(native.test ?? ""),
       nativeArtifacts: list(native.artifacts),
@@ -1216,6 +1225,24 @@ export function jsonDumps(value) {
   return JSON.stringify(value);
 }
 
+/**
+ * Whether deploy-home should publish this native unit for this change range.
+ *
+ * PR CI always builds every affected native unit; `publish` only controls the
+ * push side (deploy-home filters `publish: false` entries). A `publish_when`
+ * unit publishes only when one of its release paths changed, so e.g. a Pulsar
+ * source change is tested in the PR but does not create a release.
+ */
+export function nativePublishSelected(unit, changed) {
+  if (!unit.nativePublish) {
+    return false;
+  }
+  if (!unit.nativePublishWhen.length) {
+    return true;
+  }
+  return changed.some((item) => pathMatches(item, unit.nativePublishWhen));
+}
+
 export function matrixEntries(route_, config) {
   // Matrix payloads for the reusable platform workflows.
   const go = route_.routes.go.units.map((unit) => ({
@@ -1253,7 +1280,9 @@ export function matrixEntries(route_, config) {
   const native = route_.routes.native.units.map((unit) => ({
     id: unit.id,
     kind: unit.nativeKind,
-    publish: unit.nativePublish,
+    publish: nativePublishSelected(unit, route_.changed),
+    publish_script: unit.nativePublishScript,
+    publish_attest_glob: unit.nativePublishAttestGlob,
     workdir: unit.nativeWorkdir,
     build: unit.nativeBuild,
     test: unit.nativeTest,

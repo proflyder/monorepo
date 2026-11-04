@@ -129,7 +129,9 @@ bazel run //:gazelle
 
 `projects/station/pulsar` пока тоже вне Bazel: Make + cargo-zigbuild + zig
 0.14.1, CI-юнит `pulsar` в `_native.yml` (проверки, обе архитектуры, installer,
-radio, ssh), релиз — `release-pulsar.yml` в GHCR `pulsar-firmware`. Перевод на
+radio, ssh). Это publishable native-юнит общего `deploy-home` с
+`publish_when` по `VERSION`: релиз публикует `publish-native` в GHCR
+`pulsar-firmware`, деплой на станцию — job `deploy-station`. Перевод на
 `rules_rust` — открытая задача (`PENDING.md`), поэтому каталог в
 `.bazelignore`.
 

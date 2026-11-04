@@ -769,17 +769,22 @@ adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollba
 # 1. в рабочей ветке изменить версию (v<major.minor>.<1000+N>)
 $EDITOR projects/station/pulsar/VERSION
 # 2. обычный PR в develop, squash после зелёного ci-ok;
-#    merge запускает release-pulsar.yml:
-#    сборка aarch64/armhf + radio → oras push
+#    merge проводит pulsar через deploy-home (publish_when по VERSION):
+#    _native.yml собирает aarch64/armhf + radio и проверяет --version
+#    → publish-native (projects/station/pulsar/publish-oci.sh) пушит
 #    ghcr.io/proflyder/pulsar-firmware:<version> и :latest
-# 3. approve в GitHub Environment `Station` (job deploy)
+# 3. approve в GitHub Environment `Station` (job deploy-station)
 #    → VPN группа ci → OIDC в OpenBao (deploy-station)
 #    → HA update_entity + update.install
-# 4. повторный запуск уже собранной версии — workflow_dispatch;
-#    если OCI-тег существует, workflow падает: выпускается следующая версия
+# 4. повторный запуск уже опубликованной версии — workflow_dispatch
+#    deploy-home с units=pulsar: катится только deploy-station, текущий
+#    VERSION без сборки и push; units=all тоже включает deploy-station.
+#    Если OCI-тег версии уже существует, publish падает: выпускается
+#    следующая версия
+# 5. прочие изменения Pulsar — только PR CI, ничего не публикуется
 ```
 
-После approve job входит в VPN группой `ci` (отдельный клиентский сертификат
+После approve job `deploy-station` входит в VPN группой `ci` (отдельный клиентский сертификат
 `ci-pulsar`, выпускается `vpncerts.py`) и по GitHub OIDC в OpenBao роль
 `deploy-station`. Политика `ci-station` читает
 `secret/ci/deploy-station` (`ha_url`, `ha_token`, `entity_id`; HA long-lived
