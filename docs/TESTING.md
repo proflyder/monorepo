@@ -40,7 +40,7 @@ teardown восстанавливает source/volume.
 | Audit scanner | approved public domain/namespace allowances and lookalikes |
 | Pairing | WAV/OGG, token redaction |
 | BLE gateway | token, Wi-Fi validation/rollback, WPA, GATT, HTTP auth/status |
-| Windows logon provider | portable protocol/HMAC/config vectors, cross-build exports/imports, static install scripts, on-PC self-tests |
+| Windows logon provider | portable protocol/HMAC/config vectors, cross-build exports/imports, static install scripts, on-PC self-test |
 | Heartbeat Worker | grace-логика, auth, KV transitions, Telegram-доставка (моки) |
 | HA live | API, entities, text intents, optional mutation/alarm |
 | Gateway live | bearer auth, status shape, method guards |
@@ -220,32 +220,35 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
 
 ## Windows logon provider
 
-`solutions/windows-logon-provider` — C++17-креденшел-провайдер, кросс-сборка
-llvm-mingw. Проверки:
+`solutions/windows-logon-provider` — Rust-креденшел-провайдер, кросс-сборка
+Bazel/rules_rust + герметичный zig под `x86_64-pc-windows-gnu`. Проверки:
 
 ```bash
 cd solutions/windows-logon-provider
-./run-tests.sh      # переносимые protocol/HMAC/config-векторы, host clang++ + ASan/UBSan
-./build.sh          # кросс-сборка; objdump проверяет exports (DllGetClassObject/DllCanUnloadNow) и imports
+./run-tests.sh      # bazel test: protocol/HMAC/config-векторы на host + rustfmt/clippy (host и Windows)
+./build.sh          # кросс-сборка; pe_artifacts.py проверяет exports (DllGetClassObject/DllCanUnloadNow) и imports
 python3 -m unittest discover -s . -p 'test_*.py' -v   # статический контракт install/set-secret/uninstall/status
 ```
 
-`build.sh` берёт локальный `secrets/local-tools/llvm-mingw/` (релиз `20261020`) по
-умолчанию; `LLVM_MINGW=/path/to/root` (или `LLVM_MINGW_BIN=/path/to/bin`)
-переопределяет toolchain — так CI использует Linux-архив того же релиза.
-CI (платформа `native`, `_native.yml`) проверяет sha256 архива, кеширует его,
-запускает оба скрипта и публикует DLL, `cp-selftest.exe`, `hmac-selftest.exe`
-и `SHA256SUMS` артефактом; ПК из CI недоступен. PR из этого репозитория
+Bazel и Rust/zig-тулчейн приходят из `MODULE.bazel`; на macOS/Linux Bazelisk
+ищется в `PATH`, затем в `secrets/local-tools/bazelisk` (в linked worktree —
+в главном checkout'е), либо задаётся `BAZELISK`. Отдельного mingw-архива и
+host clang++ нет: `build.sh` собирает
+`//solutions/windows-logon-provider/crates/provider:provider` под
+`//platform/bazel/windows:x86_64_windows`, обнуляет PE-таймстемп для
+воспроизводимости и проверяет импорты/экспорты через `pe_artifacts.py`.
+CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, кеширует Bazel
+и запускает оба скрипта, затем публикует DLL, `cp-selftest.exe` и
+`SHA256SUMS` артефактом; ПК из CI недоступен. PR из этого репозитория
 публикует тот же артефакт через ORAS под `tree-<hash>` с provenance
 (build once); merge продвигает проверенный digest на теги `VERSION` и
 `sha-<12>` либо, при missing/unverified, собирает и публикует заново
 (`publish-oci.sh`). Тег версии неизменяем по содержимому. Форки не публикуют;
 проверка получения и проверки digest — `fetch.sh`.
 
-На самом ПК — self-tests (когда грант не ожидается) и живая приёмка:
+На самом ПК — self-test (когда грант не ожидается) и живая приёмка:
 
 ```powershell
-.\hmac-selftest.exe   # CNG HMAC против тест-вектора
 .\cp-selftest.exe     # загрузка провайдера вне LogonUI
 ```
 

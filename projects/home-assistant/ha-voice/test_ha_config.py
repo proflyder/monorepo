@@ -1208,8 +1208,17 @@ class KompPowerTests(unittest.TestCase):
         # best-effort: a wakegrant outage must still wake the machine.
         self.assertEqual(services(switch["turn_on"]),
                          ["rest_command.wakegrant_issue", "wake_on_lan.send_magic_packet"])
-        self.assertIs(switch["turn_on"][0].get("continue_on_error"), True)
-        mac = switch["turn_on"][1]["data"]["mac"]
+        # The grant is issued only when the PC is down or shutting down, never
+        # for an already running session: a second line of defence after the
+        # KompOn intent.
+        on_dump = yaml.safe_dump(switch["turn_on"], allow_unicode=True)
+        self.assertIn(self.BINARY_SENSOR, on_dump)
+        self.assertIn("continue_on_error: true", on_dump)
+        wol = next(
+            item for item in switch["turn_on"]
+            if item.get("service") == "wake_on_lan.send_magic_packet"
+        )
+        mac = wol["data"]["mac"]
         self.assertEqual(mac, "__SECRET__", "MAC must come from secrets.yaml")
         # Compact catalogue/Android control: no role label, plain switch.
         self.assertNotIn("label", yaml.safe_dump(switch, allow_unicode=True))
@@ -1222,7 +1231,19 @@ class KompPowerTests(unittest.TestCase):
         self.assertTrue(rest["url"].endswith("/v1/grants"))
         self.assertEqual(rest["headers"]["Authorization"], "__SECRET__")
         self.assertEqual(rest["content_type"], "application/json")
-        self.assertEqual(json.loads(rest["payload"]), {"machine": "komp", "ttlSeconds": 180})
+        self.assertEqual(
+            json.loads(rest["payload"]),
+            {"machine": "komp", "purpose": "logon", "ttlSeconds": 180},
+        )
+        unlock = REST["wakegrant_issue_unlock"]
+        self.assertEqual(unlock["method"], "POST")
+        self.assertEqual(unlock["url"], rest["url"])
+        self.assertEqual(unlock["headers"]["Authorization"], "__SECRET__")
+        self.assertEqual(unlock["content_type"], "application/json")
+        self.assertEqual(
+            json.loads(unlock["payload"]),
+            {"machine": "komp", "purpose": "unlock", "ttlSeconds": 60},
+        )
         inputs = load_yaml(HA / "input_text.yaml")
         self.assertEqual(inputs["wakegrant_endpoint"]["initial"], "__SECRET__")
         self.assertTrue(inputs["wakegrant_endpoint"]["name"])
@@ -1277,7 +1298,7 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(cancel["mode"], "single")
 
     def test_intents_are_local_and_reference_the_switch_entities(self):
-        for intent in ("KompOn", "KompOff", "KompStatus"):
+        for intent in ("KompOn", "KompOff", "KompUnlock", "KompStatus"):
             dump = yaml.safe_dump(INTENTS[intent], allow_unicode=True)
             self.assertNotIn("conversation.hermes", dump)
             self.assertIn(self.BINARY_SENSOR, dump)
@@ -1295,6 +1316,11 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(services(INTENTS["KompOff"]), ["script.komp_shutdown"])
         self.assertIn(self.OFF_INPUT, yaml.safe_dump(INTENTS["KompOff"], allow_unicode=True))
         self.assertEqual(services(INTENTS["KompCancelOff"]), ["script.komp_cancel_shutdown"])
+        self.assertEqual(services(INTENTS["KompUnlock"]), ["rest_command.wakegrant_issue_unlock"])
+        self.assertNotIn(
+            "wake_on_lan.send_magic_packet",
+            yaml.safe_dump(INTENTS["KompUnlock"], allow_unicode=True),
+        )
         self.assertEqual(services(INTENTS["KompStatus"]), [])
 
     def test_speech_matches_the_confirmed_wording(self):
@@ -1331,6 +1357,10 @@ class KompPowerTests(unittest.TestCase):
             "Отменил выключение компа.",
         )
 
+        unlock = INTENTS["KompUnlock"]["speech"]["text"]
+        self.assertEqual(self._render(unlock, True), "Разблокирую.")
+        self.assertEqual(self._render(unlock, False), "Комп выключен.")
+
     def test_sentences_cover_the_required_phrases_without_collisions(self):
         sentences = self._sentences()
         self.assertEqual(
@@ -1345,11 +1375,18 @@ class KompPowerTests(unittest.TestCase):
             set(sentences["KompCancelOff"]),
             {"отмени выключение компа", "не выключай комп"},
         )
+        self.assertEqual(
+            set(sentences["KompUnlock"]),
+            {"разблокируй комп", "разблокируй мой комп", "открой комп"},
+        )
         self.assertTrue(
             {"комп включён", "мой комп включён", "включён ли комп", "комп работает"}
             <= set(sentences["KompStatus"])
         )
-        self.assertEqual(set(sentences), {"KompOn", "KompOff", "KompCancelOff", "KompStatus"})
+        self.assertEqual(
+            set(sentences),
+            {"KompOn", "KompOff", "KompCancelOff", "KompUnlock", "KompStatus"},
+        )
 
         # No phrase is reused by another intent (duplicate detection also runs
         # globally), and the light intents cannot swallow «комп».

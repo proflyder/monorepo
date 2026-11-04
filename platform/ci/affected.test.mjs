@@ -334,7 +334,7 @@ function nativeUnit(overrides = {}) {
     nativeBuild: "./build.sh",
     nativeArtifacts: ["out/lib.dll"],
     nativeChecksums: "out/SHA256SUMS",
-    nativeToolchainName: "llvm-mingw",
+    nativeToolchainName: "cross-toolchain",
     nativeToolchainVersion: "1",
     nativeToolchainUrl: "https://example.test/toolchain.tar.xz",
     nativeToolchainSha256: "a".repeat(64),
@@ -420,7 +420,7 @@ test("real repo: every known platform has a unit", () => {
 test("real repo: native provider change routes to its unit", () => {
   const config = affected.loadConfig();
   const result = withDeps({ goPackageDirs: () => new Set() }, () =>
-    affected.route(config, ["solutions/windows-logon-provider/src/worker.cpp"], {
+    affected.route(config, ["solutions/windows-logon-provider/crates/provider/src/worker.rs"], {
       root: REPO,
       base: "b",
     }),
@@ -442,16 +442,13 @@ test("real repo: native provider change routes to its unit", () => {
       workdir: "solutions/windows-logon-provider",
       build: "./build.sh",
       test: "./run-tests.sh",
-      artifacts: "out/RicardoKompLogon.dll out/cp-selftest.exe out/hmac-selftest.exe",
+      artifacts: "out/RicardoKompLogon.dll out/cp-selftest.exe",
       checksums: "out/SHA256SUMS",
-      toolchain_name: "llvm-mingw",
-      toolchain_version: "20261020",
-      toolchain_url:
-        "https://github.com/mstorsjo/llvm-mingw/releases/download/" +
-        "20261020/llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64.tar.xz",
-      toolchain_sha256:
-        "55064b60b991a1e1e8090b8c2f84e82b22cfe5903d12c159d65064cf5e8ae335",
-      toolchain_root: "llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64",
+      toolchain_name: "",
+      toolchain_version: "",
+      toolchain_url: "",
+      toolchain_sha256: "",
+      toolchain_root: "",
     },
   ]);
 });
@@ -517,7 +514,7 @@ test("real repo: pulsar publishes only when VERSION changed", () => {
   // The logon provider has no publish_when: any affected change publishes it.
   const logon = affected.loadConfig();
   const result = withDeps({ goPackageDirs: () => new Set() }, () =>
-    affected.route(logon, ["solutions/windows-logon-provider/src/worker.cpp"], {
+    affected.route(logon, ["solutions/windows-logon-provider/crates/provider/src/worker.rs"], {
       root: REPO,
       base: "b",
     }),

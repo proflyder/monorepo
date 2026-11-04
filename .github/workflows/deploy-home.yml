@@ -353,11 +353,6 @@ jobs:
       test: ${{ matrix.test }}
       artifacts: ${{ matrix.artifacts }}
       checksums: ${{ matrix.checksums }}
-      toolchain_name: ${{ matrix.toolchain_name }}
-      toolchain_version: ${{ matrix.toolchain_version }}
-      toolchain_url: ${{ matrix.toolchain_url }}
-      toolchain_sha256: ${{ matrix.toolchain_sha256 }}
-      toolchain_root: ${{ matrix.toolchain_root }}
       publish_repository: ${{ matrix.publish_repository }}
       publish_tags: ${{ matrix.publish_tags }}
       publish_script: ${{ matrix.publish_script }}

@@ -751,6 +751,24 @@ KompCancelOff:
   action:
     - service: script.komp_cancel_shutdown
 
+KompUnlock:
+  # A running but locked PC: issue a one-time unlock grant. Nothing is sent to
+  # a powered-off PC, and this intent never wakes it (that is KompOn).
+  speech:
+    text: >-
+      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      Разблокирую.
+      {% else %}
+      Комп выключен.
+      {% endif %}
+  action:
+    - if:
+        - condition: template
+          value_template: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
+      then:
+        - service: rest_command.wakegrant_issue_unlock
+          continue_on_error: true
+
 KompStatus:
   speech:
     text: >-

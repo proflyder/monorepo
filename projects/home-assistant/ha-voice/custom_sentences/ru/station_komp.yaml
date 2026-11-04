@@ -30,6 +30,12 @@ intents:
       - sentences:
           - "отмени выключение компа"
           - "не выключай комп"
+  KompUnlock:
+    data:
+      - sentences:
+          - "разблокируй комп"
+          - "разблокируй мой комп"
+          - "открой комп"
   KompStatus:
     data:
       - sentences:

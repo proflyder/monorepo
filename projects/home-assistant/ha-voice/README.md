@@ -67,8 +67,10 @@
 - «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
   (заметки остаются в Home Assistant без изменений);
 - «включи комп» / «включи мой комп» / «включи компьютер» — локальный
-  `KompOn` → `switch.turn_on` `switch.komp` (одноразовый пропуск wakegrant,
-  best-effort, и Wake-on-LAN; MAC только из `!secret komp_mac`); «выключи
+  `KompOn` → `switch.turn_on` `switch.komp` (одноразовый logon-пропуск
+  wakegrant, best-effort, и Wake-on-LAN; MAC только из `!secret komp_mac`);
+  «разблокируй комп» / «разблокируй мой комп» / «открой комп» — `KompUnlock`
+  (unlock-пропуск для работающего заблокированного ПК, без WoL); «выключи
   комп» и варианты — `KompOff` →
   `script.komp_shutdown` (SSH → Windows `shutdown /s /t 60`); «отмени
   выключение компа» / «не выключай комп» — `KompCancelOff`; «комп включён»,
@@ -195,7 +197,7 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `custom_sentences/ru/station_alarm.yaml`
 - `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
 - `custom_sentences/ru/station_currency.yaml` — курсы валют
-- `custom_sentences/ru/station_komp.yaml` — включение/выключение/статус компа
+- `custom_sentences/ru/station_komp.yaml` — включение/выключение/разблокировка/статус компа
 - `input_select.yaml` — `music_route`, `ricardo_voice_profile`
 - `templates.yaml` — `switch.ricardo_work_profile` (обёртка над
   `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный; источник
@@ -352,7 +354,8 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 ```text
 binary_sensor.komp_v_seti   command_line: busybox ping -c 1 -W 1, 10 с
 switch.komp                 template switch, state = binary_sensor
-  turn_on  → rest_command.wakegrant_issue (best-effort, continue_on_error)
+  turn_on  → если ПК выключен/выключается:
+               rest_command.wakegrant_issue (logon, best-effort)
              → wake_on_lan.send_magic_packet (mac из !secret komp_mac)
   turn_off → script.komp_shutdown
 script.komp_shutdown        → input_datetime.komp_off_requested = now()
@@ -366,6 +369,8 @@ KompOn      sensor off или выключение запрошено < 5 мин
             иначе «Комп уже включён.», без действий
 KompOff     выключение уже запрошено < 2 мин → «Комп уже выключается.», без повторного SSH
             иначе sensor on → script.komp_shutdown; sensor off → «Комп уже выключен.»
+KompUnlock  sensor on → rest_command.wakegrant_issue_unlock, «Разблокирую.»
+            sensor off → «Комп выключен.», ничего не выдаётся и WoL не отправляется
 KompStatus  sensor on и выключение запрошено < 5 мин → «Комп выключается.»
 ```
 
@@ -401,14 +406,22 @@ wakegrant_bearer: "Bearer <issuer_token>"
 
 ### Вход по одноразовому пропуску (wakegrant)
 
-`switch.komp.turn_on` сначала вызывает `rest_command.wakegrant_issue`
-(`POST {wakegrant_endpoint}/v1/grants`, тело
-`{"machine":"komp","ttlSeconds":180}`), затем отправляет Wake-on-LAN.
-Шаг пропуска помечен `continue_on_error: true`: если сервис пропусков
-недоступен, ПК всё равно включается и показывает обычный экран входа
-(fail closed). Пропуск одноразовый и живёт 180 с; логин-компонент на ПК
-обменивает его через `/v1/challenge` и `/v1/claim` по
-`packages/contracts/wakegrant/PROTOCOL.md`.
+`switch.komp.turn_on` сначала (только если ПК выключен или уже выключается)
+вызывает `rest_command.wakegrant_issue` (`POST {wakegrant_endpoint}/v1/grants`,
+тело `{"machine":"komp","purpose":"logon","ttlSeconds":180}`), затем
+отправляет Wake-on-LAN. Шаг пропуска помечен `continue_on_error: true`: если
+сервис пропусков недоступен, ПК всё равно включается и показывает обычный
+экран входа (fail closed). `purpose` разделяет сценарии: logon-пропуск живёт
+180 с и подходит только для холодного входа, unlock-пропуск (`KompUnlock`,
+`ttlSeconds` 60) — только для разблокировки уже работающего ПК. Новый пропуск
+заменяет старый только в пределах своей пары (machine, purpose).
+
+`KompUnlock` вызывается только при `binary_sensor.komp_v_seti = on` и не
+отправляет Wake-on-LAN. Логин-компонент на ПК обменивает пропуск через
+`/v1/challenge` и `/v1/claim` по `packages/contracts/wakegrant/PROTOCOL.md`;
+для разблокировки используется long-poll `/v1/claim` с
+`{"purpose":"unlock","waitSeconds":…}`, чтобы команда «разблокируй комп»
+доходила до ПК, который уже держит запрос.
 
 `wakegrant_endpoint` — LAN base URL NodePort без завершающего слэша
 (в текущем deployment `30130`), токен-издатель — только из

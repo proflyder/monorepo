@@ -52,8 +52,10 @@ func Run(ctx context.Context) error {
 		Handler:           service.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       time.Minute,
+		// Long-poll claims may wait up to 25 s (PROTOCOL.md), so the write
+		// deadline must comfortably exceed that.
+		WriteTimeout: 40 * time.Second,
+		IdleTimeout:  time.Minute,
 	}
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {

@@ -196,11 +196,17 @@
     `solutions/windows-logon-provider`, CLSID
     `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`.
 
-31. **Грант принимается только в `CPUS_LOGON`, никогда при разблокировке.**
-    `CPUS_UNLOCK_WORKSTATION` не запускает сеть, не показывает плитку и
-    возвращает `GetCredentialCount` = 0. Иначе одноразовый пропуск мог бы
-    разблокировать уже работающий ПК; грант существует только для холодного
-    входа после Wake-on-LAN. Остальные сценарии — `E_NOTIMPL`.
+31. **Грант принимается только по своему назначению: `logon` — после
+    холодной загрузки, `unlock` — для заблокированной сессии того же
+    пользователя.** Режим выбирает чистая функция по сценарию, WTS-сессии
+    настроенного пользователя (любое состояние; ошибка запроса — отказ) и
+    аптайму: сессия есть → `unlock` при `CPUS_LOGON` или
+    `CPUS_UNLOCK_WORKSTATION`, сессии нет и аптайм меньше 10 минут → `logon`,
+    иначе `off` (Windows 11 вызывает `CPUS_LOGON` и при блокировке).
+    Unlock-воркер шлёт `purpose=unlock` с long-poll `waitSeconds=25` без
+    бюджета, logon-воркер — `purpose=logon` с бюджетом 90 с; MAC обоих
+    направлений включает purpose, поэтому одно назначение не может
+    выполнить действие другого. Остальные сценарии — `E_NOTIMPL`.
 
 32. **`wakegrant` — отдельный маленький сервис, не часть `mcp-gateway`.**
     Он принимает plain HTTP только в LAN и защищён HMAC в обе стороны поверх
@@ -210,12 +216,13 @@
     владеет пропусками входа. Контракт —
     `packages/contracts/wakegrant/PROTOCOL.md`.
 
-33. **Windows-компонент собирается llvm-mingw без Visual Studio.**
-    Провайдер и self-tests — C++17, кросс-сборка pinned llvm-mingw
-    (`20261020`) с macOS и Linux CI, переносимые проверки — host clang++.
-    Код основан на MIT-примерах Microsoft
-    (`Windows-classic-samples`), GPL/unlicensed-код не используется;
-    уведомления — `THIRD-PARTY-NOTICES.md`. CI собирает DLL, self-tests и
+33. **Windows-компонент собирается без Visual Studio.**
+    Отменено решением 39: провайдер и self-test — Rust, сборка
+    Bazel/rules_rust + герметичный zig под `x86_64-pc-windows-gnu`. Код
+    основан на MIT-примерах Microsoft (`Windows-classic-samples`),
+    GPL/unlicensed-код не используется; уведомления —
+    `THIRD-PARTY-NOTICES.md`, упаковка KERB портирована в
+    `crates/provider/src/kerb.rs`. CI собирает DLL, `cp-selftest.exe` и
     `SHA256SUMS` и не трогает ПК (он недоступен из CI); распространение —
     решение 34.
 
@@ -384,5 +391,24 @@
     * Golden-фикстуры и `rollout_test.go` фиксируют: другая git-ревизия при
       тех же образах/конфиге → идентичный pod template; другой digest или
       конфиг → другой.
+
+
+39. **Windows-провайдер — Rust на Bazel, без Visual Studio и отдельного mingw.**
+    Провайдер, переносимый protocol-слой и `cp-selftest` — Rust;
+    `windows-bindgen` генерирует закоммиченные `bindings.rs` по фильтрам из
+    `bindings.txt`, поэтому в зависимостях только `windows-core` и
+    `windows-link`, без крейта `windows`. `rules_rust` собирает
+    `x86_64-pc-windows-gnu` и линкует герметичный zig `cc_toolchain`
+    (mingw-w64/UCRT) из `MODULE.bazel`; host-код тестируется и линтуется
+    `bazel test` на macOS/Linux, а Windows-цели — rustfmt/clippy через
+    transition на `//platform/bazel/windows:x86_64_windows`. Два патча
+    rules_rust нужны потому, что Bazel не отличает gnu-трипль от msvc по
+    `@platforms`-constraints и rules_rust объявляет MSVC import library у
+    любого Windows-cdylib; при обновлении rules_rust патчи перепроверить.
+    PE-таймстемп обнуляется после сборки ради неизменяемых OCI-тегов, а
+    импорты/экспорты проверяет `pe_artifacts.py` без Windows-тулчейна. CI
+    ставит pinned Bazelisk вместо архива кросс-компилятора. MIT-фрагмент
+    упаковки KERB — в `crates/provider/src/kerb.rs`.
+    `VERSION` поднят до `1.1.0`: поведение и формат OCI-артефакта те же.
 
 Меняется решение — обновить этот файл и `STATE.md`.

@@ -31,7 +31,7 @@ while (($#)); do
     --target|-target) shift 2 ;;
     -target=*) shift ;;
     -Wl,--fix-cortex-a53-843419) shift ;;
-    *) argv+=("$1"); shift ;;
+{windows_args}    *) argv+=("$1"); shift ;;
   esac
 done
 # rules_rust's cc toolchain wiring sets CC and CXX to the same gcc tool, so
@@ -45,6 +45,30 @@ if [ "$subcommand" = "cc" ]; then
   done
 fi
 exec "$DIR/zig" "$subcommand" {args} "${argv[@]}"
+"""
+
+# rules_rust drives the linker directly on windows-gnu targets and therefore
+# needs `dlltool` for the raw-dylib imports used by the official windows-rs
+# crates. Zig ships llvm-dlltool as `zig dlltool`; the wrapper is generated next
+# to the linker so `-C dlltool=<linker dir>/dlltool` resolves inside the
+# sandbox, with no host toolchain.
+_DLLTOOL_WRAPPER = """#!/bin/bash
+set -eu
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$DIR/zig" dlltool "$@"
+"""
+
+# rustc's windows-gnu link line is written for a MinGW gcc driver. Zig's `cc`
+# rejects a positional `.def` path passed through `-Wl,`, cannot resolve
+# `-lmsvcrt` (it links UCRT import libraries itself), and does not accept
+# rustc's `-nodefaultlibs`/mingw runtime library set. These translations only
+# apply to the windows wrappers; the station wrappers keep the empty value.
+_WINDOWS_ARGS = """    -Wl,*.def) argv+=("${1#-Wl,}"); shift ;;
+    -l:libpthread.a) argv+=("-lwinpthread"); shift ;;
+    # zig supplies UCRT/mingw-w64 defaults itself; rustc's gcc-driver flags
+    # (and the -O1/auto-image-base options zig ignores with a warning) are
+    # dropped.
+    -nodefaultlibs|-lmsvcrt|-Wl,-O1|-Wl,--disable-auto-image-base) shift ;;
 """
 
 def _host_platform(ctx):
@@ -112,13 +136,25 @@ _WRAPPERS = [
     ("armhf", "ranlib", "ranlib", ""),
     ("armhf", "ld", "ld.lld", "-target arm-linux-gnueabihf.2.23"),
     ("armhf", "objcopy", "objcopy", ""),
+    # Windows Credential Provider (solutions/windows-logon-provider). Zig's
+    # x86_64-windows-gnu target uses mingw-w64/UCRT; the resulting PE imports
+    # only system DLLs.
+    ("windows_x86_64", "cc", "cc", "-target x86_64-windows-gnu"),
+    ("windows_x86_64", "cpp", "c++", "-target x86_64-windows-gnu -isystem \"$DIR/lib/libcxx/include\" -isystem \"$DIR/lib/libcxxabi/include\""),
+    ("windows_x86_64", "ar", "ar", ""),
+    ("windows_x86_64", "ranlib", "ranlib", ""),
+    ("windows_x86_64", "ld", "ld.lld", "-target x86_64-windows-gnu"),
+    ("windows_x86_64", "objcopy", "objcopy", ""),
 ]
 
 def _generate_wrappers(ctx):
     for prefix, name, subcommand, args in _WRAPPERS:
+        windows_args = _WINDOWS_ARGS if prefix == "windows_x86_64" else ""
         ctx.file(
             "tool_{}_{}".format(prefix, name),
-            _WRAPPER.replace("{subcommand}", subcommand).replace("{args}", args),
+            _WRAPPER.replace("{subcommand}", subcommand)
+            .replace("{args}", args)
+            .replace("{windows_args}", windows_args),
             executable = True,
         )
     # `nm`/`gcov` are never on the code path we build (Rust and static C/C++),
@@ -126,6 +162,12 @@ def _generate_wrappers(ctx):
     ctx.file(
         "noop",
         "#!/bin/sh\nexit 0\n",
+        executable = True,
+    )
+    # rules_rust derives `-C dlltool=<linker dir>/dlltool` for windows targets.
+    ctx.file(
+        "dlltool",
+        _DLLTOOL_WRAPPER,
         executable = True,
     )
 
@@ -142,6 +184,16 @@ constraint_value(
     constraint_setting = ":station_setting",
 )
 
+# Same idea for the Windows credential provider target: only
+# //platform/bazel/windows:x86_64_windows carries this value, so host builds and
+# the station triples never select the windows cc_toolchain.
+constraint_setting(name = "windows_setting")
+
+constraint_value(
+    name = "windows",
+    constraint_setting = ":windows_setting",
+)
+
 filegroup(
     name = "zig_bin",
     srcs = ["zig"],
@@ -155,6 +207,11 @@ filegroup(
 filegroup(
     name = "noop_file",
     srcs = ["noop"],
+)
+
+filegroup(
+    name = "dlltool_file",
+    srcs = ["dlltool"],
 )
 
 zig_cc_toolchain(
@@ -179,6 +236,19 @@ zig_cc_toolchain(
         "@platforms//cpu:armv7",
         ":station",
     ],
+)
+
+zig_cc_toolchain(
+    name = "windows_x86_64",
+    cpu = "x86_64_windows",
+    includes_arch = "x86_64",
+    sdk_root = "{sdk_root}",
+    target_compatible_with = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+        ":windows",
+    ],
+    target_os = "windows",
 )
 """
 

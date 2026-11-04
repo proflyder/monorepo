@@ -1,0 +1,19 @@
+# Windows cross-build platform for the Ricardo Komp Logon credential provider
+# (solutions/windows-logon-provider).
+#
+# It carries the zig windows constraint so toolchain resolution selects the
+# hermetic zig cc_toolchain for x86_64-windows-gnu, while host builds and the
+# station platforms keep their own toolchains. The Rust side comes from the
+# `x86_64-pc-windows-gnu` target triple registered in MODULE.bazel; the PE
+# imports only system DLLs, so no Windows SDK or Visual Studio is involved.
+
+package(default_visibility = ["//visibility:public"])
+
+platform(
+    name = "x86_64_windows",
+    constraint_values = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+        "@zig_0_14_1//:windows",
+    ],
+)

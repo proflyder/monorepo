@@ -41,11 +41,24 @@
       icon: mdi:desktop-tower
       state: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
       turn_on:
-        # Issue a one-time logon grant before waking the machine. The grant
-        # service must never block Wake-on-LAN: if it is down the PC still
-        # boots and shows its normal sign-in screen (fail closed).
-        - service: rest_command.wakegrant_issue
-          continue_on_error: true
+        - variables:
+            komp_off_at: "{{ states('input_datetime.komp_off_requested') }}"
+            komp_going_off: >-
+              {{ komp_off_at not in ['', 'unknown', 'unavailable', 'None']
+                 and (as_timestamp(now()) - as_timestamp(komp_off_at)) < 300 }}
+        # Issue a one-time logon grant only when the PC is down (or is already
+        # shutting down): a logon grant must not exist for an already running
+        # session. The grant service must never block Wake-on-LAN: if it is
+        # down the PC still boots and shows its normal sign-in screen (fail
+        # closed).
+        - if:
+            - condition: template
+              value_template: >-
+                {{ komp_going_off
+                   or not is_state('binary_sensor.komp_v_seti', 'on') }}
+          then:
+            - service: rest_command.wakegrant_issue
+              continue_on_error: true
         - service: wake_on_lan.send_magic_packet
           data:
             mac: !secret komp_mac
