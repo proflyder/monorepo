@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+# Cargo workspace manifest and lock are the source of truth for crate_universe
+# (see MODULE.bazel). crate-universe.lock is the generated Bazel lock.
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+    "crate-universe.lock",
+])

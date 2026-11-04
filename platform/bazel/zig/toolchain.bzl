@@ -4,8 +4,10 @@ This file is copied into the zig SDK repository by `zig_sdk_repository`, so
 every tool path is relative to that repository's package and the toolchain has
 no host-absolute paths. It is not loaded from the main repository.
 
-Targets: aarch64-linux-gnu (glibc 2.36) and arm-linux-gnueabihf (glibc 2.23,
-cortex-a53 / VFPv4), matching the former satellite/Makefile and cargo-zigbuild.
+Targets: aarch64-linux-gnu (glibc 2.36), arm-linux-gnueabihf (glibc 2.23,
+cortex-a53 / VFPv4) and x86_64-windows-gnu (mingw-w64/UCRT), matching the
+former satellite/Makefile and cargo-zigbuild, and the Windows credential
+provider.
 """
 
 load("@bazel_tools//tools/cpp:cc_toolchain_config_lib.bzl", "feature", "flag_group", "flag_set")
@@ -18,28 +20,50 @@ def _zig_cc_toolchain_config_impl(ctx):
     # execroot-relative.
     base = ctx.attr.sdk_root
 
-    include_dirs = [
-        base + "/lib/libc/include/generic-glibc",
-        base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-gnu",
-        base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-gnueabihf",
-        base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-any",
-        base + "/lib/libc/include/any-linux-any",
-        base + "/lib/libcxx/include",
-        base + "/lib/libcxxabi/include",
-        base + "/lib/include",
-        base + "/lib/unwind/include",
-    ]
+    if ctx.attr.target_os == "windows":
+        # mingw-w64/UCRT headers plus zig's libc++ for C++ sources. The
+        # Windows provider itself is pure Rust; these paths keep a future C/C++
+        # dependency compilable with the same toolchain.
+        include_dirs = [
+            base + "/lib/libc/include/any-windows-any",
+            base + "/lib/libc/mingw/include",
+            base + "/lib/libc/mingw/crt",
+            base + "/lib/libcxx/include",
+            base + "/lib/libcxxabi/include",
+            base + "/lib/include",
+        ]
+        target_libc = "ucrt"
+    else:
+        include_dirs = [
+            base + "/lib/libc/include/generic-glibc",
+            base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-gnu",
+            base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-gnueabihf",
+            base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-any",
+            base + "/lib/libc/include/any-linux-any",
+            base + "/lib/libcxx/include",
+            base + "/lib/libcxxabi/include",
+            base + "/lib/include",
+            base + "/lib/unwind/include",
+        ]
+        target_libc = "glibc"
 
     prefix = ctx.attr.prefix
+    # rules_rust derives `-C dlltool=<linker dir>/dlltool` for windows targets
+    # and rustc runs dlltool from its temporary codegen directory, so a
+    # relative path is not resolvable there. The windows tool paths are
+    # therefore absolute (the SDK lives in the external repository, which Bazel
+    # maps into the sandbox as a declared input). Station toolchains keep the
+    # relative paths they always used.
+    tool_prefix = (base + "/" + prefix) if ctx.attr.target_os == "windows" else prefix
     tool_paths = [
-        struct(name = "gcc", path = prefix + "_cc"),
-        struct(name = "cpp", path = prefix + "_cpp"),
-        struct(name = "ar", path = prefix + "_ar"),
-        struct(name = "ld", path = prefix + "_cc"),
+        struct(name = "gcc", path = tool_prefix + "_cc"),
+        struct(name = "cpp", path = tool_prefix + "_cpp"),
+        struct(name = "ar", path = tool_prefix + "_ar"),
+        struct(name = "ld", path = tool_prefix + "_cc"),
         struct(name = "nm", path = "noop"),
-        struct(name = "objcopy", path = prefix + "_objcopy"),
+        struct(name = "objcopy", path = tool_prefix + "_objcopy"),
         struct(name = "objdump", path = "noop"),
-        struct(name = "strip", path = prefix + "_objcopy"),
+        struct(name = "strip", path = tool_prefix + "_objcopy"),
         struct(name = "gcov", path = "noop"),
         struct(name = "llvm-cov", path = "noop"),
         struct(name = "dwp", path = "noop"),
@@ -65,7 +89,7 @@ def _zig_cc_toolchain_config_impl(ctx):
         host_system_name = "local",
         target_system_name = ctx.attr.target,
         target_cpu = ctx.attr.cpu,
-        target_libc = "glibc",
+        target_libc = target_libc,
         compiler = "zig",
         abi_version = "local",
         abi_libc_version = "local",
@@ -86,15 +110,17 @@ _zig_cc_toolchain_config = rule(
         "prefix": attr.string(mandatory = True),
         "sdk_root": attr.string(mandatory = True),
         "target": attr.string(mandatory = True),
+        "target_os": attr.string(default = "linux"),
     },
     provides = [CcToolchainConfigInfo],
 )
 
-def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with):
+def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with, target_os = "linux"):
     """Declares the config, cc_toolchain and Bazel toolchain for one target."""
     triple = {
         "aarch64": "aarch64-linux-gnu.2.36",
         "armv7": "arm-linux-gnueabihf.2.23",
+        "x86_64_windows": "x86_64-windows-gnu",
     }[cpu]
 
     _zig_cc_toolchain_config(
@@ -104,6 +130,7 @@ def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with)
         prefix = "tool_" + name,
         sdk_root = sdk_root,
         target = triple,
+        target_os = target_os,
     )
 
     native.filegroup(
@@ -112,6 +139,9 @@ def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with)
             ":headers",
             ":noop_file",
             ":zig_bin",
+            # rules_rust derives the dlltool path from the linker directory for
+            # every windows compile, so the wrapper must be an action input.
+            ":dlltool_file",
         ] + native.glob(["tool_" + name + "_*"]),
     )
 
@@ -122,6 +152,9 @@ def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with)
         as_files = ":" + name + "_files",
         compiler_files = ":" + name + "_files",
         dwp_files = ":" + name + "_files",
+        # rules_rust passes `-C dlltool=<linker dir>/dlltool` for windows
+        # targets and derives it from this toolchain's linker path, so the
+        # wrapper must travel with the linker files.
         linker_files = ":" + name + "_files",
         objcopy_files = ":" + name + "_files",
         strip_files = ":" + name + "_files",

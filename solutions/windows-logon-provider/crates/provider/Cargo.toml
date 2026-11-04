@@ -1,0 +1,21 @@
+[package]
+name = "logon_provider"
+description = "Windows Credential Provider (COM in-proc server) for Ricardo Komp Logon"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+logon_protocol = { path = "../protocol" }
+
+# The official windows-rs bindings are only compiled for the Windows target:
+# `Win32_System_Com` pulls in `windows-future`, whose bindings do not build on
+# macOS/Linux hosts. Host `cargo clippy` checks the ABI-compatible fallback
+# shapes in `lib.rs` instead, and the Bazel build compiles the real crate for
+# `x86_64-pc-windows-gnu`.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }

@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Credential provider COM in-proc server (PE32+ DLL). Stage 1: the two COM
+# exports only; the class and credential implementation follow.
+#
+# Windows-only: the official windows-rs bindings (and `windows-future` behind
+# Win32_System_Com) do not compile for host targets, and the real artifact is
+# the DLL anyway.
+rust_shared_library(
+    name = "provider",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        "//solutions/windows-logon-provider/crates/protocol:logon_protocol",
+        "@logon_crates//:windows",
+    ],
+)

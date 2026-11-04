@@ -1,0 +1,31 @@
+rules_rust fixes for the x86_64-pc-windows-gnu credential provider target.
+
+1. `rust/platform/triple_mappings.bzl`: rules_rust deliberately omits the
+   *-windows-gnu triples because they map to the same Bazel constraints
+   (@platforms//os:windows + @platforms//cpu:x86_64) as *-windows-msvc, so a
+   single select cannot distinguish them. This repository builds only the gnu
+   variant (the Windows credential provider links with the hermetic zig
+   cc_toolchain, no Visual Studio), and its crate_universe lock lists only the
+   gnu triple, so declaring it is unambiguous here. Without the entry
+   `@rules_rust//rust/platform:x86_64-pc-windows-gnu` does not exist and every
+   generated crate select fails to resolve.
+2. `rust/private/rustc.bzl`: rules_rust declares an MSVC-style
+   `<name>.dll.lib` import library as an output of every Windows cdylib. On
+   windows-gnu rustc writes `<name>.dll.a` instead and never the declared
+   path, so the action would fail with "output was not created". The extra
+   output is only meaningful for MSVC consumers, so it is gated on
+   `target_abi == "msvc"`.
+
+--- a/rust/platform/triple_mappings.bzl
++++ b/rust/platform/triple_mappings.bzl
+@@ -44,6 +44,10 @@
+ SUPPORTED_T2_PLATFORM_TRIPLES = {
+     "aarch64-apple-ios": _support(std = True, host_tools = False),
+     "aarch64-apple-ios-macabi": _support(std = True, host_tools = False),
++    # solutions/windows-logon-provider: only the gnu ABI is built, and only
++    # this triple appears in the crate_universe selects, so it does not clash
++    # with the msvc constraints.
++    "x86_64-pc-windows-gnu": _support(std = True, host_tools = False),
+     "aarch64-apple-ios-sim": _support(std = True, host_tools = False),
+     "aarch64-linux-android": _support(std = True, host_tools = False),
+     "aarch64-pc-windows-msvc": _support(std = True, host_tools = True),
