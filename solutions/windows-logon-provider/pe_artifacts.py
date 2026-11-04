@@ -1,22 +1,15 @@
 #!/usr/bin/env python3
 """PE checks for the Windows logon provider artifacts.
 
-The build no longer ships a Windows linker toolchain on the host: Bazel builds
-the DLL with rules_rust and the hermetic zig cc linker. This dependency-free
-script replaces the old `llvm-objdump` verification and runs anywhere with
-Python 3 (macOS and the Ubuntu CI runner):
+Dependency-free; runs on macOS and the Ubuntu CI runner:
 
     python3 pe_artifacts.py normalize out/RicardoKompLogon.dll out/cp-selftest.exe
     python3 pe_artifacts.py verify out/RicardoKompLogon.dll
 
-`normalize` zeroes the PE timestamps (COFF header, export and debug directory
-entries) that the linker stamps with the current time. Identical sources must
-produce identical bytes: the OCI publisher refuses a second build of the same
-VERSION with different content.
-
-`verify` fails unless the DLL imports only the allowed system DLLs (static
-CRT/libc++ expected) and exports exactly `DllGetClassObject` and
-`DllCanUnloadNow`.
+`normalize` zeroes the linker-stamped PE timestamps so identical sources give
+identical bytes (immutable OCI tags). `verify` fails unless the DLL imports
+only allowed system DLLs (static CRT) and exports exactly `DllGetClassObject`
+and `DllCanUnloadNow`.
 """
 from __future__ import annotations
 
@@ -25,8 +18,7 @@ import struct
 import sys
 from pathlib import Path
 
-# System DLLs the provider may import. Everything else (in particular a
-# dynamically linked CRT or libc++) fails the check.
+# System DLLs the provider may import; a dynamic CRT fails the check.
 ALLOWED_DLLS = {
     "advapi32.dll",
     "bcryptprimitives.dll",
@@ -34,7 +26,6 @@ ALLOWED_DLLS = {
     "crypt32.dll",
     "kernel32.dll",
     "ntdll.dll",
-    "ole32.dll",
     "oleaut32.dll",
     "rpcrt4.dll",
     "secur32.dll",

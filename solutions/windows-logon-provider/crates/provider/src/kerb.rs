@@ -1,17 +1,11 @@
-//! Portable packing of `KERB_INTERACTIVE_UNLOCK_LOGON`.
+//! Packing of `KERB_INTERACTIVE_UNLOCK_LOGON`.
 //!
-//! This is the direct port of `KerbInteractiveUnlockLogonInit` /
-//! `KerbInteractiveUnlockLogonPack` from `helpers.cpp` (MIT, see
-//! `THIRD-PARTY-NOTICES.md`), with one deliberate difference: the layout is
-//! written into a byte buffer by explicit offsets instead of by taking pointers
-//! to a stack structure. That keeps the computation in safe Rust and testable on
-//! the build host.
+//! Derived from the Microsoft sample (MIT, see `THIRD-PARTY-NOTICES.md`): the
+//! x86_64 layout is written by explicit offsets instead of stack pointers, so
+//! the packer is safe Rust and host-tested. [`abi_checks`] verifies the offsets
+//! against `ntsecapi.h` on the Windows target.
 //!
-//! The offsets are the x86_64 Windows ABI. On the Windows target they are
-//! checked at compile time against the real `ntsecapi` structures (see
-//! [`abi_checks`]).
-//!
-//! Packed layout (all little-endian):
+//! All fields are little-endian:
 //!
 //! ```text
 //! +0   KERB_INTERACTIVE_LOGON
@@ -105,7 +99,7 @@ fn put_i32(out: &mut [u8], at: usize, value: i32) {
 /// real Windows target.
 #[cfg(windows)]
 mod abi_checks {
-    use windows::Win32::Security::Authentication::Identity::{
+    use crate::bindings::Windows::Win32::Security::Authentication::Identity::{
         KERB_INTERACTIVE_LOGON as WinKerbInteractiveLogon,
         KERB_INTERACTIVE_UNLOCK_LOGON as WinKerbInteractiveUnlockLogon, LSA_UNICODE_STRING,
     };
@@ -177,25 +171,20 @@ mod tests {
 
         assert_eq!(packed.len(), UNLOCK_HEADER_BYTES + 2 + 8 + 12);
 
-        // MessageType.
         assert_eq!(&packed[0..4], &KERB_INTERACTIVE_LOGON.to_le_bytes());
-        // LogonId is zeroed.
         assert!(packed[56..64].iter().all(|&b| b == 0));
 
-        // Domain.
         assert_eq!(read_u16(&packed, DOMAIN_FIELD_OFFSET), 2);
         assert_eq!(read_u16(&packed, DOMAIN_FIELD_OFFSET + 2), 2);
         assert_eq!(
             read_u64(&packed, DOMAIN_FIELD_OFFSET + UNICODE_STRING_BUFFER_OFFSET) as usize,
             UNLOCK_HEADER_BYTES
         );
-        // User.
         assert_eq!(read_u16(&packed, USER_FIELD_OFFSET), 8);
         assert_eq!(
             read_u64(&packed, USER_FIELD_OFFSET + UNICODE_STRING_BUFFER_OFFSET) as usize,
             UNLOCK_HEADER_BYTES + 2
         );
-        // Password.
         assert_eq!(read_u16(&packed, PASSWORD_FIELD_OFFSET), 12);
         assert_eq!(
             read_u64(
@@ -205,7 +194,6 @@ mod tests {
             UNLOCK_HEADER_BYTES + 2 + 8
         );
 
-        // Payload bytes, in order and without NUL terminators.
         let payload = &packed[UNLOCK_HEADER_BYTES..];
         assert_eq!(&payload[0..2], by_units(&domain).as_slice());
         assert_eq!(&payload[2..10], by_units(&user).as_slice());

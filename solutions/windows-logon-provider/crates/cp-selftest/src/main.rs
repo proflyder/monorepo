@@ -1,12 +1,11 @@
-//! `cp-selftest.exe`: loads the credential provider outside LogonUI.
+//! `cp-selftest.exe`: loads the credential provider outside LogonUI. It
+//! changes nothing on the machine, but `SetUsageScenario(CPUS_LOGON)` starts
+//! the poller for a moment: run it only when no wake grant is pending.
 //!
-//! It changes nothing on the machine:
-//! but `SetUsageScenario(CPUS_LOGON)` starts the single poller for a moment:
-//! run it only when no wake grant is pending.
-//!
-//! The tool is Windows-only (see `main_windows.rs`); the stub below keeps host
-//! `cargo clippy --all-targets`/`cargo test` builds working.
+//! Windows-only (see `main_windows.rs`); the stub keeps host clippy/test happy.
 
+#[cfg(windows)]
+mod bindings;
 #[cfg(windows)]
 mod main_windows;
 

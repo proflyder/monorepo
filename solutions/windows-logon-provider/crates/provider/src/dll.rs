@@ -1,48 +1,35 @@
-//! Standard COM in-proc server entry points.
+//! COM in-proc server entry points: exactly `DllGetClassObject` and
+//! `DllCanUnloadNow` (`#[unsafe(no_mangle)]`, no `.def`).
 //!
-//! Exports are exactly `DllGetClassObject` and `DllCanUnloadNow`: only the
-//! `#[unsafe(no_mangle)]` functions below become PE exports, so no `.def` file
-//! is involved.
-//!
-//! `DllCanUnloadNow` returns `S_FALSE` while a provider object is alive
-//! (`DLL_REFS`) or a worker thread is still running (`ACTIVE_WORKERS`). A live
-//! worker means logon code could still run, so the module must stay mapped until
-//! the thread exits (at most one poll budget).
+//! `DllCanUnloadNow` keeps the DLL mapped while a provider object or worker
+//! thread is alive: a live worker can still run logon code.
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-use windows::Win32::Foundation::{
+use crate::bindings::Windows::Win32::Foundation::{
     CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_FAIL, E_INVALIDARG, S_FALSE, S_OK,
 };
-use windows::Win32::System::Com::{IClassFactory, IClassFactory_Impl};
-use windows::core::{
-    BOOL, GUID, HRESULT, IUnknown, Interface, Ref, Result as WinResult, implement,
-};
+use crate::bindings::Windows::Win32::System::Com::{IClassFactory, IClassFactory_Impl};
+use windows_core::{BOOL, GUID, HRESULT, IUnknown, Interface, Ref, Result as WinResult, implement};
 
 use crate::ffi_guard::guard;
 use crate::provider::{ACTIVE_WORKERS, PROVIDER_CLSID, Provider};
 
 static DLL_REFS: AtomicI32 = AtomicI32::new(0);
 
-/// Called by every live provider object and by `IClassFactory::LockServer`.
 pub fn dll_add_ref() {
     DLL_REFS.fetch_add(1, Ordering::SeqCst);
 }
 
-/// Matches [`dll_add_ref`].
 pub fn dll_release() {
     DLL_REFS.fetch_sub(1, Ordering::SeqCst);
 }
 
-/// `DllCanUnloadNow` reference count, exposed for tests/verification.
 pub fn dll_refs() -> i32 {
     DLL_REFS.load(Ordering::SeqCst)
 }
 
-/// RAII holder for one DLL reference. The guard lives in the provider object,
-/// so the count is decremented when the last COM reference is released, even
-/// if construction panics after the increment.
 pub struct DllRef;
 
 impl DllRef {
@@ -58,7 +45,6 @@ impl Drop for DllRef {
     }
 }
 
-/// Class factory: one live object per `DllGetClassObject` call.
 #[implement(IClassFactory)]
 struct ClassFactory {}
 

@@ -1,8 +1,5 @@
-//! Log-safe protocol error.
-//!
-//! Every message is a short static phrase. Secrets, keys, passwords, URLs with
-//! paths and MAC values are never part of it, so the value can be written to
-//! the logon log as is.
+//! Log-safe protocol error: a short static phrase, never a secret, key,
+//! password or MAC, so it can be written to the logon log as is.
 
 use core::fmt;
 

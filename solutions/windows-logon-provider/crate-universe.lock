@@ -1,5 +1,5 @@
 {
-  "checksum": "fba335e055e9c49451b01313ba7ae3652e20fd68f7472a76054e89d024ba8032",
+  "checksum": "ed489f767d5448ed7825493739eb1b5e423ef125f70c3097f93ed63b94eb5eac",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -165,8 +165,12 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "windows 0.62.2",
-                "target": "windows"
+                "id": "windows-core 0.62.2",
+                "target": "windows_core"
+              },
+              {
+                "id": "windows-link 0.2.1",
+                "target": "windows_link"
               }
             ]
           }
@@ -520,12 +524,12 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "windows 0.62.2",
-                "target": "windows"
-              },
-              {
                 "id": "windows-core 0.62.2",
                 "target": "windows_core"
+              },
+              {
+                "id": "windows-link 0.2.1",
+                "target": "windows_link"
               }
             ]
           }
@@ -842,120 +846,6 @@
       ],
       "version": "1.0.27"
     },
-    "windows 0.62.2": {
-      "common_attrs": {
-        "crate_features": [
-          "Win32",
-          "Win32_Foundation",
-          "Win32_Globalization",
-          "Win32_Graphics",
-          "Win32_Graphics_Gdi",
-          "Win32_Networking",
-          "Win32_Networking_WinHttp",
-          "Win32_Security",
-          "Win32_Security_Authentication",
-          "Win32_Security_Authentication_Identity",
-          "Win32_Security_Authorization",
-          "Win32_Security_Credentials",
-          "Win32_Security_Cryptography",
-          "Win32_Storage",
-          "Win32_Storage_FileSystem",
-          "Win32_System",
-          "Win32_System_Com",
-          "Win32_System_IO",
-          "Win32_System_LibraryLoader",
-          "Win32_System_Registry",
-          "Win32_System_SystemInformation",
-          "Win32_System_Threading",
-          "Win32_System_WindowsProgramming",
-          "Win32_UI",
-          "Win32_UI_Shell",
-          "default",
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "windows-collections 0.3.2",
-            "target": "windows_collections"
-          },
-          {
-            "id": "windows-core 0.62.2",
-            "target": "windows_core"
-          },
-          {
-            "id": "windows-future 0.3.2",
-            "target": "windows_future"
-          },
-          {
-            "id": "windows-numerics 0.3.1",
-            "target": "windows_numerics"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "windows",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "527fadee13e0c05939a6a05d5bd6eec6cd2e3dbd648b9f8e447c6518133d8580",
-          "url": "https://static.crates.io/crates/windows/0.62.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.62.2"
-    },
-    "windows-collections 0.3.2": {
-      "common_attrs": {
-        "crate_features": [
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "windows-core 0.62.2",
-            "target": "windows_core"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "windows_collections",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows-collections",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "23b2d95af1a8a14a3c7367e1ed4fc9c20e0a26e79551b1454d72583c97cc6610",
-          "url": "https://static.crates.io/crates/windows-collections/0.3.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_collections",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.2"
-    },
     "windows-core 0.62.2": {
       "common_attrs": {
         "crate_features": [
@@ -1012,52 +902,6 @@
         }
       ],
       "version": "0.62.2"
-    },
-    "windows-future 0.3.2": {
-      "common_attrs": {
-        "crate_features": [
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "windows-core 0.62.2",
-            "target": "windows_core"
-          },
-          {
-            "id": "windows-link 0.2.1",
-            "target": "windows_link"
-          },
-          {
-            "id": "windows-threading 0.2.1",
-            "target": "windows_threading"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "windows_future",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows-future",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "e1d6f90251fe18a279739e78025bd6ddc52a7e22f921070ccdc67dde84c605cb",
-          "url": "https://static.crates.io/crates/windows-future/0.3.2/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_future",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.2"
     },
     "windows-implement 0.60.2": {
       "common_attrs": {
@@ -1174,48 +1018,6 @@
       ],
       "version": "0.2.1"
     },
-    "windows-numerics 0.3.1": {
-      "common_attrs": {
-        "crate_features": [
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "windows-core 0.62.2",
-            "target": "windows_core"
-          },
-          {
-            "id": "windows-link 0.2.1",
-            "target": "windows_link"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "windows_numerics",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows-numerics",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "6e2e40844ac143cdb44aead537bbf727de9b044e107a0f1220392177d15b0f26",
-          "url": "https://static.crates.io/crates/windows-numerics/0.3.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_numerics",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.1"
-    },
     "windows-result 0.4.1": {
       "common_attrs": {
         "crate_features": [
@@ -1291,41 +1093,6 @@
         }
       ],
       "version": "0.5.1"
-    },
-    "windows-threading 0.2.1": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "windows-link 0.2.1",
-            "target": "windows_link"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "windows_threading",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "license-apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "windows-threading",
-      "package_url": "https://github.com/microsoft/windows-rs",
-      "repository": {
-        "Http": {
-          "sha256": "3949bd5b99cafdf1c7ca86b43ca564028dfe27d66958f2470940f73d86d75b37",
-          "url": "https://static.crates.io/crates/windows-threading/0.2.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "windows_threading",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.2.1"
     },
     "zeroize 1.9.1": {
       "common_attrs": {
@@ -1416,8 +1183,8 @@
     "hmac 0.13.0",
     "sha2 0.11.1",
     "subtle 2.6.1",
-    "windows 0.62.2",
     "windows-core 0.62.2",
+    "windows-link 0.2.1",
     "zeroize 1.9.1"
   ],
   "direct_dev_deps": [],

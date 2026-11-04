@@ -406,8 +406,10 @@
 
 
 39. **Windows-провайдер — Rust на Bazel, без Visual Studio и отдельного mingw.**
-    Провайдер, переносимый protocol-слой и `cp-selftest` — Rust
-    (`windows-rs` для COM). `rules_rust` собирает
+    Провайдер, переносимый protocol-слой и `cp-selftest` — Rust;
+    `windows-bindgen` генерирует закоммиченные `bindings.rs` по фильтрам из
+    `bindings.txt`, поэтому в зависимостях только `windows-core` и
+    `windows-link`, без крейта `windows`. `rules_rust` собирает
     `x86_64-pc-windows-gnu` и линкует герметичный zig `cc_toolchain`
     (mingw-w64/UCRT) из `MODULE.bazel`; host-код тестируется и линтуется
     `bazel test` на macOS/Linux, а Windows-цели — rustfmt/clippy через
@@ -417,9 +419,8 @@
     любого Windows-cdylib; при обновлении rules_rust патчи перепроверить.
     PE-таймстемп обнуляется после сборки ради неизменяемых OCI-тегов, а
     импорты/экспорты проверяет `pe_artifacts.py` без Windows-тулчейна. CI
-    ставит pinned Bazelisk вместо архива кросс-компилятора. Прежний C++
-    удалён; MIT-фрагмент упаковки KERB остался в `crates/provider/src/kerb.rs`.
-    `VERSION` поднят до `1.1.0`: поведение и формат OCI-артефакта те же,
-    сменились язык и тулчейн.
+    ставит pinned Bazelisk вместо архива кросс-компилятора. MIT-фрагмент
+    упаковки KERB — в `crates/provider/src/kerb.rs`.
+    `VERSION` поднят до `1.1.0`: поведение и формат OCI-артефакта те же.
 
 Меняется решение — обновить этот файл и `STATE.md`.

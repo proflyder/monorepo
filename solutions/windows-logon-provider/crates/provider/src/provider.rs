@@ -1,19 +1,14 @@
-//! `ICredentialProvider` implementation and the state shared with the
-//! credential and the single background worker.
+//! `ICredentialProvider` and the state shared with the credential and the
+//! worker.
 //!
-//! The provider shows no tile until the worker has claimed a valid one-time
-//! wakegrant. Every failure path removes the tile again: a normal power-button
-//! boot behaves exactly like a machine without this provider.
-//!
-//! [`Session`] is reference-counted and is the *only* thing the credential and
-//! the worker touch, so the provider object may be destroyed at any time without
-//! leaving a dangling reference behind (the shared reference-counted session
-//! design).
+//! No tile appears until the worker has claimed a valid one-time wakegrant;
+//! every failure path removes it again. [`Session`] is reference-counted and is
+//! the only state the credential and worker touch, so the provider object may
+//! be destroyed at any time.
 
 /// Budget from provider load to the last challenge attempt: 90 s.
 pub const WORKER_BUDGET_MS: u64 = 90 * 1000;
 
-/// True while a worker may still start or continue polling.
 pub fn within_budget(elapsed_ms: u64) -> bool {
     elapsed_ms < WORKER_BUDGET_MS
 }
@@ -26,23 +21,27 @@ mod windows_impl {
     use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
     use std::sync::{Arc, Mutex, MutexGuard};
 
-    use windows::Win32::Foundation::{
+    use crate::bindings::Windows::Win32::Foundation::{
         E_FAIL, E_INVALIDARG, E_NOTIMPL, E_OUTOFMEMORY, HLOCAL, LocalFree,
     };
-    use windows::Win32::Globalization::{
+    use crate::bindings::Windows::Win32::Globalization::{
         CP_UTF8, MULTI_BYTE_TO_WIDE_CHAR_FLAGS, MultiByteToWideChar, WideCharToMultiByte,
     };
-    use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
-    use windows::Win32::Security::{LookupAccountNameW, PSID, SECURITY_MAX_SID_SIZE, SID_NAME_USE};
-    use windows::Win32::System::SystemInformation::GetTickCount64;
-    use windows::Win32::System::WindowsProgramming::{GetComputerNameW, MAX_COMPUTERNAME_LENGTH};
-    use windows::Win32::UI::Shell::{
+    use crate::bindings::Windows::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use crate::bindings::Windows::Win32::Security::{
+        LookupAccountNameW, PSID, SECURITY_MAX_SID_SIZE, SID_NAME_USE,
+    };
+    use crate::bindings::Windows::Win32::System::SystemInformation::GetTickCount64;
+    use crate::bindings::Windows::Win32::System::WindowsProgramming::{
+        GetComputerNameW, MAX_COMPUTERNAME_LENGTH,
+    };
+    use crate::bindings::Windows::Win32::UI::Shell::{
         CPUS_LOGON, CPUS_UNLOCK_WORKSTATION, CREDENTIAL_PROVIDER_NO_DEFAULT,
         CREDENTIAL_PROVIDER_USAGE_SCENARIO, ICredentialProvider, ICredentialProvider_Impl,
         ICredentialProviderCredential, ICredentialProviderEvents, ICredentialProviderSetUserArray,
         ICredentialProviderSetUserArray_Impl, ICredentialProviderUserArray,
     };
-    use windows::core::{
+    use windows_core::{
         BOOL, GUID, HRESULT, Interface, PCSTR, PCWSTR, PWSTR, Ref, Result as WinResult, implement,
     };
 
@@ -76,7 +75,7 @@ mod windows_impl {
         cpus: CREDENTIAL_PROVIDER_USAGE_SCENARIO,
     }
 
-    /// State shared by the provider, its credential and the single worker.
+    /// State shared by the provider, its credential and the worker.
     pub struct Session {
         state: Mutex<SessionState>,
         /// Incremented by every cancel; a worker stops as soon as it changes.
@@ -86,11 +85,8 @@ mod windows_impl {
         pub load_tick: AtomicU64,
     }
 
-    // SAFETY: the COM interface pointer in `SessionState` is only accessed
-    // while the mutex is held, and the worker thread calls
-    // `CredentialsChanged` on it as described in `README.md`. The other
-    // fields are atomics. This mirrors the design where the worker thread
-    // owns a `std::shared_ptr<Session>` and calls LogonUI from that thread.
+    // SAFETY: the interface pointer in `SessionState` is only reached under
+    // the mutex; the other fields are atomics.
     unsafe impl Send for Session {}
     unsafe impl Sync for Session {}
 
@@ -140,7 +136,6 @@ mod windows_impl {
     pub enum ArmResult {
         /// Tile shown, LogonUI notified.
         Armed,
-        /// Generation cancelled or the provider is gone.
         Cancelled,
         /// LogonUI has not advised us yet: retry shortly, never re-claim.
         Unavailable,
@@ -172,7 +167,6 @@ mod windows_impl {
         session.lock().armed = false;
     }
 
-    /// True while the tile should be shown.
     pub fn session_is_armed(session: &Arc<Session>) -> bool {
         let state = session.lock();
         state.owner_alive && state.armed
@@ -553,7 +547,7 @@ mod windows_impl {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             if slot.is_none() {
-                let credential: windows::Win32::UI::Shell::ICredentialProviderCredential2 =
+                let credential: crate::bindings::Windows::Win32::UI::Shell::ICredentialProviderCredential2 =
                     Credential::new(Arc::clone(&self.session)).into();
                 *slot = Some(credential.cast()?);
             }
@@ -609,7 +603,7 @@ mod windows_impl {
 
         fn SetSerialization(
             &self,
-            _pcpcs: *const windows::Win32::UI::Shell::CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION,
+            _pcpcs: *const crate::bindings::Windows::Win32::UI::Shell::CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION,
         ) -> WinResult<()> {
             guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
         }
@@ -633,8 +627,9 @@ mod windows_impl {
         fn GetFieldDescriptorAt(
             &self,
             dwindex: u32,
-        ) -> WinResult<*mut windows::Win32::UI::Shell::CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR>
-        {
+        ) -> WinResult<
+            *mut crate::bindings::Windows::Win32::UI::Shell::CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR,
+        > {
             guard(
                 || credential_field_descriptor_at(dwindex),
                 || Err(E_FAIL.into()),

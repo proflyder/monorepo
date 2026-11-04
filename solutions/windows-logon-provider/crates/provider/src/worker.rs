@@ -1,12 +1,6 @@
-//! The single background poller.
-//!
-//! Reads the configuration, then loops `POST /v1/challenge` -> `POST /v1/claim`
-//! until a valid grant is armed, the 90 s budget since provider load is
-//! exhausted, or the session is cancelled. It never blocks a LogonUI thread and
-//! never survives past its budget.
-//!
-//! The retry/budget decisions are plain functions so they are testable on the
-//! build host.
+//! The single background poller: `POST /v1/challenge` -> `POST /v1/claim`
+//! until a valid grant is armed, the 90 s budget expires, or the session is
+//! cancelled. It never blocks a LogonUI thread and never outlives its budget.
 
 /// Poll interval between rounds.
 pub const POLL_INTERVAL_MS: u32 = 2000;
@@ -18,13 +12,10 @@ pub const BACKOFF_INTERVAL_MS: u32 = 4000;
 pub enum RoundKind {
     /// The tile is armed; the worker stops.
     Armed,
-    /// Sleep for `delay_ms` and try again.
     Retry,
-    /// Stop the worker.
     Fatal,
 }
 
-/// Result of one challenge/claim exchange.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RoundOutcome {
     pub kind: RoundKind,
@@ -64,7 +55,6 @@ pub fn retry_delay_for_status(status: i32) -> Option<u32> {
     }
 }
 
-/// Clamps a sleep to the remaining budget so the thread never outlives it.
 pub fn clamp_delay(delay_ms: u32, remaining_ms: u64) -> u32 {
     u64::from(delay_ms).min(remaining_ms) as u32
 }
@@ -79,12 +69,12 @@ mod windows_impl {
     use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
 
-    use windows::Win32::Foundation::{CloseHandle, FreeLibrary, HMODULE};
-    use windows::Win32::System::LibraryLoader::{
+    use crate::bindings::Windows::Win32::Foundation::{CloseHandle, FreeLibrary, HMODULE};
+    use crate::bindings::Windows::Win32::System::LibraryLoader::{
         FreeLibraryAndExitThread, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW,
     };
-    use windows::Win32::System::Threading::{CreateThread, THREAD_CREATION_FLAGS};
-    use windows::core::PCWSTR;
+    use crate::bindings::Windows::Win32::System::Threading::{CreateThread, THREAD_CREATION_FLAGS};
+    use windows_core::PCWSTR;
 
     use logon_protocol::{
         ClaimOutcome, challenge_request_json, claim_mac_message, endpoint_path, hmac_sha256_b64,

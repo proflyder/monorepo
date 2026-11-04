@@ -1,11 +1,6 @@
-//! Plaintext payload of `C:\ProgramData\Ricardo\KompLogon\secret.bin` after
-//! DPAPI machine-scope decryption:
-//!
-//! ```json
-//! {"version":1,"password":"<utf-8>","key":"<base64 of 32 bytes>"}
-//! ```
-//!
-//! The password and the key are wiped on drop and never appear in `Debug`.
+//! Plaintext payload of `secret.bin` after DPAPI machine-scope decryption:
+//! `{"version":1,"password":"<utf-8>","key":"<base64 of 32 bytes>"}`.
+//! Password and key are wiped on drop and redacted in `Debug`.
 
 use core::fmt;
 

@@ -12,11 +12,8 @@ crate-type = ["cdylib"]
 [dependencies]
 logon_protocol = { path = "../protocol" }
 
-# The official windows-rs bindings are only compiled for the Windows target:
-# `Win32_System_Com` pulls in `windows-future`, whose bindings do not build on
-# macOS/Linux hosts. Host `cargo clippy` checks the ABI-compatible fallback
-# shapes in `lib.rs` instead, and the Bazel build compiles the real crate for
-# `x86_64-pc-windows-gnu`.
+# Windows-only modules use the generated `src/bindings.rs`; on other hosts
+# only the portable core is compiled.
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true }
 windows-core = { workspace = true }
+windows-link = { workspace = true }

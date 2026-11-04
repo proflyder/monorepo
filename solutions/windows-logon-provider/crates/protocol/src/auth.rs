@@ -4,7 +4,6 @@ use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
-/// HMAC-SHA256 over the UTF-8 bytes of `message`, output base64.
 pub fn hmac_sha256_b64(key: &[u8], message: &str) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts keys of any length");
     mac.update(message.as_bytes());

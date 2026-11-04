@@ -1,14 +1,7 @@
 #!/usr/bin/env bash
-# Host-side and Windows-target checks for the credential provider.
+# Host tests, rustfmt and clippy for host and Windows targets.
 #
-#   * `bazel test //solutions/windows-logon-provider/...` runs the portable
-#     protocol vectors and the provider's safe core on the build host, plus
-#     rustfmt and clippy for those host targets.
-#   * the same targets are then linted with the aspect transitioned to the
-#     Windows platform, so the real `#[cfg(windows)]` code is formatted and
-#     clippy-checked against windows-rs.
-#
-# The Windows cross-build itself is `./build.sh`; CI runs both scripts.
+# CI runs this and ./build.sh (the actual cross-build).
 set -euo pipefail
 
 cd "$(dirname "$0")"

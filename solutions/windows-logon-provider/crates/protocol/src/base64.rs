@@ -1,17 +1,14 @@
 //! Standard base64 with padding.
 //!
-//! The decoder is deliberately hand-written instead of using the `base64`
-//! crate: the PROTOCOL.md contract accepts non-canonical trailing bits
-//! (`"ZZ=="` decodes to `0x65`), while `base64`'s `STANDARD` engine rejects
-//! them. Keeping the behaviour explicit keeps the wire format identical and
-//! testable with the documented vectors. The decoder rejects non-canonical
-//! padding, embedded whitespace and any character outside the alphabet.
+//! Hand-written because PROTOCOL.md accepts non-canonical trailing bits
+//! (`"ZZ=="` decodes to `0x65`), which the `base64` crate's `STANDARD` engine
+//! rejects. Padding placement is still strict, and whitespace and foreign
+//! characters are rejected.
 
 use crate::Error;
 
 const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/// Standard base64 with padding.
 pub fn b64_encode(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     let (chunks, rest) = data.as_chunks::<3>();

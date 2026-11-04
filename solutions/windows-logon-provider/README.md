@@ -54,6 +54,8 @@ Service URL, имя машины и учётная запись задаёт п�
 | `crates/provider/src/http.rs`, `log.rs` | WinHTTP, журнал; HMAC — из crates.io |
 | `crates/provider/src/kerb.rs` | упаковка `KERB_INTERACTIVE_UNLOCK_LOGON` (MIT, см. `THIRD-PARTY-NOTICES.md`) |
 | `crates/provider/src/dll.rs` | `DllGetClassObject`, `DllCanUnloadNow` |
+| `crates/provider/src/bindings.rs`, `crates/*/bindings.txt` | сгенерированные Win32-привязки и их фильтры |
+| `regen-bindings.sh` | перегенерация `bindings.rs` (вручную, не в сборке) |
 | `crates/cp-selftest/` | `cp-selftest.exe`: загрузка провайдера вне LogonUI |
 | `install.ps1`, `set-secret.ps1`, `uninstall.ps1`, `status.ps1` | установка и обслуживание |
 | `build.sh`, `run-tests.sh`, `pe_artifacts.py` | сборка Bazel, host-тесты и проверка PE |
@@ -101,7 +103,7 @@ solutions/windows-logon-provider/run-tests.sh     # host-тесты, rustfmt/cli
 воспроизводимым (обнуляет TimeDateStamp). Затем `pe_artifacts.py` проверяет,
 что DLL экспортирует ровно `DllGetClassObject` и `DllCanUnloadNow` и
 импортирует только системные библиотеки (KERNEL32, ntdll, advapi32,
-combase, ole32, oleaut32, rpcrt4, crypt32, secur32, shlwapi, userenv,
+combase, oleaut32, rpcrt4, crypt32, secur32, shlwapi, userenv,
 winhttp, ws2_32, bcryptprimitives и api-ms-win-*); всё остальное — ошибка.
 Проверка не требует Windows-тулчейна на хосте.
 
@@ -114,6 +116,20 @@ rustfmt/clippy для host- и Windows-целей (aspect переключает
 если он ещё не зарегистрирован) и печатает число полей и плиток. Он запускает
 и сразу останавливает фоновый поток, поэтому проверять им стоит только когда
 грант не ожидается.
+
+### Win32-привязки
+
+`crates/*/src/bindings.rs` сгенерированы `windows-bindgen 0.63.0` из фильтров
+`crates/*/bindings.txt` (`--no-comment --implement`); поэтому в зависимостях
+только `windows-core` и `windows-link`, без крейта `windows`. Генерация не
+входит в сборку. После изменения фильтров:
+
+```bash
+solutions/windows-logon-provider/regen-bindings.sh
+```
+
+Скрипт собирает pinned bindgen во временном cargo-проекте, перезаписывает оба
+`bindings.rs` и прогоняет `rustfmt`; файлы коммитятся вместе с фильтрами.
 
 ## Публикация и установка из GHCR
 

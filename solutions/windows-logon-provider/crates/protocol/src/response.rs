@@ -15,7 +15,6 @@ pub struct ChallengeResponse {
     pub expires_in: i64,
 }
 
-/// Returns an error on malformed or implausible responses.
 pub fn parse_challenge_response(body: &str) -> Result<ChallengeResponse, Error> {
     let object = json::parse(body)?;
 

@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
 # Cross-build the Windows credential provider with Bazel on macOS or Linux.
 #
-# The DLL and cp-selftest.exe are built by rules_rust for
-# x86_64-pc-windows-gnu; the linker and libc come from the hermetic zig 0.14.1
-# cc_toolchain pinned in MODULE.bazel, the Rust toolchain from rules_rust. No
-# Visual Studio or Windows SDK installation is involved.
-#
-# Outputs: out/RicardoKompLogon.dll, out/cp-selftest.exe
-#
-# The PE timestamps are zeroed after the build so identical sources produce
-# identical bytes: the OCI publisher refuses a second build of the same VERSION
-# with different content. `pe_artifacts.py` then verifies the export table and
-# the system-DLL import allowlist without any Windows toolchain on the host.
+# rules_rust targets x86_64-pc-windows-gnu and links the hermetic zig cc
+# toolchain from MODULE.bazel; no Visual Studio or Windows SDK is involved.
+# PE timestamps are zeroed so identical sources give identical bytes, then
+# pe_artifacts.py checks the export table and the import allowlist.
 set -euo pipefail
 
 cd "$(dirname "$0")"

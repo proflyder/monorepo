@@ -1,25 +1,17 @@
-//! Provider configuration: `HKLM` registry values and the DPAPI-protected
-//! secret file.
+//! Registry configuration and the DPAPI-protected secret file.
 //!
-//! Value names, types, size limits and error phrases are the install contract
-//! documented in `README.md`. All reads are cheap (one registry key and one
-//! small file) and happen on the worker thread or in `GetSerialization`.
-//!
-//! The arithmetic that can be tested without Windows (`FailCount` increment,
-//! the disable threshold) is plain safe Rust.
+//! Value names, types, limits and error phrases are the install contract in
+//! `README.md`. `FailCount` arithmetic is pure Rust and host-tested.
 
 /// `HKLM\SOFTWARE\Ricardo\KompLogon` (64-bit view).
 pub const REGISTRY_KEY: &str = r"SOFTWARE\Ricardo\KompLogon";
-/// Fixed optional DPAPI entropy; `set-secret.ps1` uses the same bytes.
+/// Fixed DPAPI entropy; `set-secret.ps1` uses the same bytes.
 pub const SECRET_ENTROPY: &[u8] = b"ricardo-komp-logon-v1";
-/// DPAPI blob path.
 pub const SECRET_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\secret.bin";
-/// Upper bound for the encrypted blob.
 pub const MAX_SECRET_FILE_BYTES: u64 = 64 * 1024;
 /// Third failed logon disables the provider.
 pub const FAILURE_DISABLE_THRESHOLD: u32 = 3;
 
-/// Registry configuration after normalisation.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Config {
     /// Normalised URL without a trailing slash.
@@ -31,10 +23,8 @@ pub struct Config {
     pub disabled: bool,
 }
 
-/// Result of reading the configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigState {
-    /// Fully usable.
     Ok,
     /// `Disabled=1`: do nothing at all.
     Disabled,
@@ -42,17 +32,15 @@ pub enum ConfigState {
     Invalid,
 }
 
-/// Next stored `FailCount`. Saturates at 1000 like `RecordFailedLogon`.
+/// Next stored `FailCount`; saturates at 1000 like `RecordFailedLogon`.
 pub fn next_fail_count(count: u32) -> u32 {
     if count < 1000 { count + 1 } else { count }
 }
 
-/// True when a stored `FailCount` must disable the provider.
 pub fn reaches_disable_threshold(count: u32) -> bool {
     count >= FAILURE_DISABLE_THRESHOLD
 }
 
-/// `RecordFailedLogon` as a pure function: `(fail_count, disabled)`.
 pub fn updated_fail_state(count: u32, disabled: u32) -> (u32, u32) {
     let count = next_fail_count(count);
     let disabled = if reaches_disable_threshold(count) {
@@ -88,7 +76,6 @@ pub unsafe fn secure_zero_raw(ptr: *mut u8, len: usize) {
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
 
-/// Overwrites a `Vec<u16>` in place (`SecureZeroMemory` for wide strings).
 pub fn zero_wide(text: &mut [u16]) {
     for unit in text {
         // SAFETY: `unit` is a valid, uniquely borrowed `u16`.
@@ -102,20 +89,22 @@ pub use imp::{load_config, load_secret, record_failed_logon};
 
 #[cfg(windows)]
 mod imp {
-    use windows::Win32::Foundation::{
+    use crate::bindings::Windows::Win32::Foundation::{
         CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, GENERIC_READ, HLOCAL, LocalFree,
     };
-    use windows::Win32::Security::Cryptography::{CRYPT_INTEGER_BLOB, CryptUnprotectData};
-    use windows::Win32::Storage::FileSystem::{
+    use crate::bindings::Windows::Win32::Security::Cryptography::{
+        CRYPT_INTEGER_BLOB, CryptUnprotectData,
+    };
+    use crate::bindings::Windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, GetFileSizeEx, OPEN_EXISTING, ReadFile,
     };
-    use windows::Win32::System::Registry::{
+    use crate::bindings::Windows::Win32::System::Registry::{
         HKEY, HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE, KEY_WOW64_64KEY, REG_DWORD,
         REG_ROUTINE_FLAGS, RRF_RT_REG_DWORD, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6464KEY, RegCloseKey,
         RegGetValueW, RegOpenKeyExW, RegSetValueExW,
     };
-    use windows::core::PCWSTR;
-    use windows::core::w;
+    use windows_core::PCWSTR;
+    use windows_core::w;
 
     use crate::provider::widen_nul;
 

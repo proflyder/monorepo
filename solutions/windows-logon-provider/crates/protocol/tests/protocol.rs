@@ -1,6 +1,4 @@
-//! Protocol vectors and fail-closed branches from
-//! `packages/contracts/wakegrant/PROTOCOL.md`, including the golden HMAC
-//! vectors pinned by `packages/contracts/wakegrant/PROTOCOL.md`.
+//! Protocol vectors and fail-closed branches from `PROTOCOL.md`.
 
 use logon_protocol::{
     ClaimOutcome, b64_decode, b64_encode, challenge_request_json, claim_mac_message,
@@ -79,7 +77,6 @@ fn protocol_vectors() {
         "I6ClmYKmmfO6wodeKXOobAtJj/SgQ7C/ieNumDYrj1Y="
     );
 
-    // Valid granted response.
     let granted_mac = "UAADAs7pUxn/EN42woIH5K0qrH2YB+bd1SYZVKP//FI=";
     let granted = verify_claim_response(
         &make_claim_body(true, vector.grant_id, granted_mac),
@@ -90,7 +87,6 @@ fn protocol_vectors() {
     assert_eq!(granted.outcome, ClaimOutcome::Granted);
     assert_eq!(granted.grant_id, vector.grant_id);
 
-    // Valid denied response.
     let denied = verify_claim_response(
         &make_claim_body(false, "", "I6ClmYKmmfO6wodeKXOobAtJj/SgQ7C/ieNumDYrj1Y="),
         &vector.key,
@@ -100,7 +96,6 @@ fn protocol_vectors() {
     assert_eq!(denied.outcome, ClaimOutcome::Denied);
     assert!(denied.grant_id.is_empty());
 
-    // A granted body cannot carry the denied mac.
     assert_eq!(
         verify_claim_response(
             &make_claim_body(
@@ -116,7 +111,6 @@ fn protocol_vectors() {
         ClaimOutcome::InvalidMac
     );
 
-    // A denied body cannot carry the granted mac.
     assert_eq!(
         verify_claim_response(
             &make_claim_body(false, "", granted_mac),
@@ -161,7 +155,6 @@ fn protocol_vectors() {
         .outcome,
         ClaimOutcome::InvalidMac
     );
-    // A different grant id invalidates the mac as well.
     assert_eq!(
         verify_claim_response(
             &make_claim_body(true, "00000000-0000-4000-8000-000000000002", granted_mac),
@@ -220,7 +213,6 @@ fn challenge_parsing() {
     )
     .expect("leading/trailing space is allowed");
 
-    // Empty nonce field and a non-object body.
     assert!(parse_challenge_response("{}").is_err());
 
     // Malformed shapes: none may be accepted.

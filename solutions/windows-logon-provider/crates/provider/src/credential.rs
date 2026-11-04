@@ -1,25 +1,19 @@
 //! The single auto-logon tile.
 //!
-//! The tile only exists while a valid wakegrant is armed. It never owns or
-//! references the provider object: it shares only the reference-counted
-//! [`Session`], so a late LogonUI call cannot touch a destroyed provider.
-//!
-//! `GetSerialization` is the only place that decrypts the DPAPI secret. It
-//! packs `KERB_INTERACTIVE_UNLOCK_LOGON` with `.\<user>`, optionally runs
-//! `CredProtectW`, looks up the Negotiate package and hands the buffer to
-//! LogonUI (`CoTaskMemAlloc`). The password, the protected password and the
-//! key are wiped on every path.
+//! It never references the provider object, only the shared [`Session`].
+//! `GetSerialization` is the only place that decrypts the DPAPI secret; it
+//! packs `KERB_INTERACTIVE_UNLOCK_LOGON` for `.\<user>`, optionally runs
+//! `CredProtectW` and wipes the password, protected password and key on every
+//! path.
 
 /// Field ids, in descriptor order.
 pub const FIELD_LARGE_TEXT: u32 = 0;
-/// Subtitle field id.
 pub const FIELD_SMALL_TEXT: u32 = 1;
 /// Number of fields exposed to LogonUI.
 pub const FIELD_COUNT: u32 = 2;
 
-/// Tile title, as UTF-8 (tests assert the UTF-16 constants below match).
+/// Tile title, as UTF-8 (tests assert the UTF-16 constants match).
 pub const TILE_TITLE: &str = "Ricardo";
-/// Tile subtitle ("Автовход").
 pub const TILE_SUBTITLE: &str = "Автовход";
 
 /// `L"Ricardo"`, NUL terminated.
@@ -46,20 +40,20 @@ mod windows_impl {
     use std::sync::atomic::Ordering;
     use std::sync::{Arc, Mutex};
 
-    use windows::Win32::Foundation::{
+    use crate::bindings::Windows::Win32::Foundation::{
         E_FAIL, E_INVALIDARG, E_NOTIMPL, E_OUTOFMEMORY, E_UNEXPECTED, ERROR_INSUFFICIENT_BUFFER,
         HANDLE, NTSTATUS, S_FALSE,
     };
-    use windows::Win32::Security::Authentication::Identity::{
+    use crate::bindings::Windows::Win32::Security::Authentication::Identity::{
         LSA_STRING, LsaConnectUntrusted, LsaDeregisterLogonProcess, LsaLookupAuthenticationPackage,
     };
-    use windows::Win32::Security::Credentials::{
+    use crate::bindings::Windows::Win32::Security::Credentials::{
         CRED_PROTECTION_TYPE, CredIsProtectedW, CredProtectW, CredUnprotected,
     };
-    use windows::Win32::System::Com::{CoTaskMemAlloc, CoTaskMemFree};
-    use windows::Win32::System::SystemInformation::GetTickCount64;
-    use windows::Win32::UI::Shell::CREDENTIAL_PROVIDER_FIELD_TYPE;
-    use windows::Win32::UI::Shell::{
+    use crate::bindings::Windows::Win32::System::Com::{CoTaskMemAlloc, CoTaskMemFree};
+    use crate::bindings::Windows::Win32::System::SystemInformation::GetTickCount64;
+    use crate::bindings::Windows::Win32::UI::Shell::CREDENTIAL_PROVIDER_FIELD_TYPE;
+    use crate::bindings::Windows::Win32::UI::Shell::{
         CPFIS_NONE, CPFS_DISPLAY_IN_BOTH, CPFS_DISPLAY_IN_SELECTED_TILE, CPFT_LARGE_TEXT,
         CPFT_SMALL_TEXT, CPGSR_NO_CREDENTIAL_NOT_FINISHED, CPGSR_RETURN_CREDENTIAL_FINISHED,
         CPSI_NONE, CPUS_CREDUI, CPUS_LOGON, CPUS_UNLOCK_WORKSTATION,
@@ -70,7 +64,7 @@ mod windows_impl {
         ICredentialProviderCredential2, ICredentialProviderCredential2_Impl,
         ICredentialProviderCredentialEvents, SHStrDupW,
     };
-    use windows::core::{BOOL, GUID, HRESULT, PCWSTR, PWSTR, Ref, Result as WinResult, implement};
+    use windows_core::{BOOL, GUID, HRESULT, PCWSTR, PWSTR, Ref, Result as WinResult, implement};
 
     use crate::config::{Config, ConfigState, load_config, load_secret, zero_wide};
     use crate::ffi_guard::guard;
@@ -227,7 +221,7 @@ mod windows_impl {
         let package_name = LSA_STRING {
             Length: (NAME.len() - 1) as u16,
             MaximumLength: NAME.len() as u16,
-            Buffer: windows::core::PSTR(NAME.as_ptr().cast_mut()),
+            Buffer: windows_core::PSTR(NAME.as_ptr().cast_mut()),
         };
         let mut package = 0u32;
         // SAFETY: the name struct and the out-parameter are valid.
@@ -490,7 +484,7 @@ mod windows_impl {
         fn GetBitmapValue(
             &self,
             _dwfieldid: u32,
-        ) -> WinResult<windows::Win32::Graphics::Gdi::HBITMAP> {
+        ) -> WinResult<crate::bindings::Windows::Win32::Graphics::Gdi::HBITMAP> {
             guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
         }
 

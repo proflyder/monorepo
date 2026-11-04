@@ -6,7 +6,7 @@
 
 use core::ffi::c_void;
 
-use windows::Win32::Networking::WinHttp::{
+use crate::bindings::Windows::Win32::Networking::WinHttp::{
     WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_DISABLE_COOKIES, WINHTTP_DISABLE_REDIRECTS,
     WINHTTP_FLAG_SECURE, WINHTTP_OPEN_REQUEST_FLAGS, WINHTTP_OPTION_DISABLE_FEATURE,
     WINHTTP_OPTION_REDIRECT_POLICY, WINHTTP_OPTION_REDIRECT_POLICY_NEVER,
@@ -15,8 +15,8 @@ use windows::Win32::Networking::WinHttp::{
     WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetOption,
     WinHttpSetTimeouts,
 };
-use windows::Win32::System::SystemInformation::GetTickCount64;
-use windows::core::{PCWSTR, w};
+use crate::bindings::Windows::Win32::System::SystemInformation::GetTickCount64;
+use windows_core::{PCWSTR, w};
 
 use logon_protocol::ServiceEndpoint;
 

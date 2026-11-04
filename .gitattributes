@@ -2,3 +2,11 @@
 *.md whitespace=-blank-at-eol
 *.patch -whitespace
 *.tflite -diff -text
+
+# Generated lockfiles and Windows bindings: collapsed in review, still normal
+# text diffs for local checks (`-diff` would hide them from `git diff`).
+**/Cargo.lock linguist-generated=true
+**/crate-universe.lock linguist-generated=true
+/MODULE.bazel.lock linguist-generated=true
+**/src/bindings.rs linguist-generated=true
+/projects/mobile/android/maven_install.json linguist-generated=true

@@ -2,14 +2,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_shared_library", "rust_
 
 package(default_visibility = ["//visibility:public"])
 
-# Credential provider COM in-proc server. The crate is named
-# `RicardoKompLogon` so rustc emits exactly `RicardoKompLogon.dll` (the name the
-# install scripts, OCI artifact and cp-selftest expect); the Bazel target keeps
-# the short name.
-#
-# Windows-only: the official windows-rs bindings (and `windows-future` behind
-# Win32_System_Com) do not compile for host targets, and the real artifact is
-# the DLL anyway.
+# Credential provider COM in-proc server. `crate_name` makes rustc emit
+# `RicardoKompLogon.dll`, the name the install scripts, OCI artifact and
+# cp-selftest expect. Windows-only: `src/bindings.rs` is Win32.
 rust_shared_library(
     name = "provider",
     srcs = glob(["src/**/*.rs"]),
@@ -18,22 +13,18 @@ rust_shared_library(
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
         "//solutions/windows-logon-provider/crates/protocol:logon_protocol",
-        "@logon_crates//:windows",
         "@logon_crates//:windows-core",
+        "@logon_crates//:windows-link",
     ],
 )
 
 # Host-portable core: log sanitising/rotation, KERB packing, retry/budget
-# decisions, FailCount arithmetic and panic containment. The Windows modules are
-# `#[cfg(windows)]`, so this target builds and tests on macOS/Linux and runs in
-# `bazel test` on the host.
+# decisions, FailCount arithmetic and panic containment.
 rust_library(
     name = "provider_host",
     srcs = glob(["src/**/*.rs"]),
     edition = "2024",
-    # The same sources are compiled for Windows by `:provider`; this target is
-    # the host-portable core and must not be configured for a Windows platform
-    # (where `#[cfg(windows)]` would pull in windows-rs).
+    # `#[cfg(windows)]` would pull the Windows bindings into a host build.
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],

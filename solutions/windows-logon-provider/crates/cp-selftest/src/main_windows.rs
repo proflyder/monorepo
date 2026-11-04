@@ -1,24 +1,21 @@
-//! Windows half of `cp-selftest.exe`.
-//!
-//! Tries the registered CLSID first; if the provider is not registered yet it
-//! loads `RicardoKompLogon.dll` from the directory of this executable and asks
-//! the DLL for its class factory, so a build can be smoke-tested before install.
-//!
-//! Output is `PASS`/`FAIL`; exit codes are 0/1.
+//! Windows half of `cp-selftest.exe`: tries the registered CLSID, otherwise
+//! loads `RicardoKompLogon.dll` next to the executable. Output is `PASS`/`FAIL`;
+//! exit codes are 0/1.
 
 use std::ffi::c_void;
 use std::ptr;
 
-use windows::Win32::Foundation::{E_FAIL, E_NOTIMPL, S_OK};
-use windows::Win32::System::Com::{
+use crate::bindings::Windows::Win32::Foundation::{E_FAIL, E_NOTIMPL, S_OK};
+use crate::bindings::Windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
     CoUninitialize, IClassFactory,
 };
-use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress, LoadLibraryW};
-use windows::Win32::UI::Shell::{CPUS_CREDUI, CPUS_LOGON, ICredentialProvider};
-use windows::core::{BOOL, GUID, HRESULT, IUnknown, Interface, PCWSTR, Result as WinResult, s};
+use crate::bindings::Windows::Win32::System::LibraryLoader::{
+    GetModuleFileNameW, GetProcAddress, LoadLibraryW,
+};
+use crate::bindings::Windows::Win32::UI::Shell::{CPUS_CREDUI, CPUS_LOGON, ICredentialProvider};
+use windows_core::{BOOL, GUID, HRESULT, IUnknown, Interface, PCWSTR, Result as WinResult, s};
 
-/// `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}` — must match
 /// `crates/provider/src/provider.rs` (`PROVIDER_CLSID`).
 const PROVIDER_CLSID: GUID = GUID {
     data1: 0x9459_ccea,
@@ -27,10 +24,8 @@ const PROVIDER_CLSID: GUID = GUID {
     data4: [0x89, 0xbf, 0xe0, 0xe1, 0x32, 0xe0, 0xc2, 0x7f],
 };
 
-/// Matches the provider DLL name produced by Bazel/`build.sh`.
 const DLL_NAME: &str = "RicardoKompLogon.dll";
 
-/// `S_OK` for `Ok`, the failure code otherwise.
 fn code_of(result: &WinResult<()>) -> HRESULT {
     result.as_ref().err().map_or(S_OK, |error| error.code())
 }
@@ -61,8 +56,7 @@ fn local_dll_path() -> Option<Vec<u16>> {
     Some(result)
 }
 
-/// `CoCreateInstance` fallback: load the DLL next to the executable and ask it
-/// for the class factory.
+/// `CoCreateInstance` fallback: load the DLL next to the executable.
 fn provider_from_dll_next_to_executable() -> WinResult<ICredentialProvider> {
     let path = local_dll_path().ok_or(E_FAIL)?;
     // SAFETY: `path` is a NUL-terminated wide string.
@@ -84,7 +78,7 @@ fn provider_from_dll_next_to_executable() -> WinResult<ICredentialProvider> {
     let hr = unsafe { get_class_object(&PROVIDER_CLSID, &IClassFactory::IID, &mut factory) };
     if hr.is_err() {
         println!("  DllGetClassObject(CLSID) failed");
-        return Err(windows::core::Error::from_hresult(hr));
+        return Err(windows_core::Error::from_hresult(hr));
     }
     // SAFETY: on success the callee returned an owned IClassFactory pointer.
     let factory = unsafe { IClassFactory::from_raw(factory) };

@@ -1,11 +1,8 @@
 //! Minimal flat-object JSON reader.
 //!
-//! The protocol only exchanges flat objects with string, integer and boolean
-//! values. Anything else (nested objects, arrays, floats, exponents, `null`)
-//! is a protocol violation and is rejected instead of being tolerated, exactly
-//! as documented. Duplicate keys and bodies over 64 KiB are rejected
-//! too. `serde_json` accepts all of those, so this hand-written reader is the
-//! faithful port.
+//! Only string, integer and boolean values are allowed; nested objects,
+//! arrays, floats, exponents, `null` and duplicate keys are rejected. Bodies
+//! over 64 KiB are refused before parsing.
 
 use std::collections::BTreeMap;
 

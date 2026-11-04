@@ -1,18 +1,13 @@
 //! Append-only diagnostic log for the logon provider.
 //!
-//! Every line is `<UTC ISO8601> pid=<pid> tid=<tid> <event> key=value...`,
-//! as documented in `README.md`. Secrets never reach this module; every field
-//! is sanitised (control characters replaced by spaces, at most 240 bytes) so
-//! remote data cannot forge log lines.
-//!
-//! Rotation: one generation, at 256 KiB, `logon.log` -> `logon.log.1`. A failure
-//! to write is silently ignored: logging must never break logon.
+//! Line format, rotation (one generation at 256 KiB) and the event set are the
+//! contract in `README.md`. Every field is sanitised (control characters
+//! replaced, 240 bytes max) so remote data cannot forge log lines. A write
+//! failure is ignored: logging must never break logon.
 
 /// Directory and files are created by the installer; the path is fixed.
 pub const DATA_DIR: &str = r"C:\ProgramData\Ricardo\KompLogon";
-/// Current log file.
 pub const LOG_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\logon.log";
-/// Single rotated generation.
 pub const ROTATED_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\logon.log.1";
 /// Rotation threshold (256 KiB).
 pub const MAX_LOG_BYTES: u64 = 256 * 1024;
@@ -36,7 +31,6 @@ pub fn sanitize(text: &str) -> String {
     out
 }
 
-/// `YYYY-MM-DDTHH:MM:SS.mmmZ` from already extracted UTC fields.
 #[allow(clippy::too_many_arguments)]
 pub fn timestamp_string(
     year: u16,
@@ -50,7 +44,6 @@ pub fn timestamp_string(
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{milliseconds:03}Z")
 }
 
-/// One complete log line, including the trailing `\n`.
 pub fn format_line(timestamp: &str, pid: u32, tid: u32, event: &str, fields: &str) -> String {
     let mut line = String::with_capacity(160 + fields.len());
     line.push_str(timestamp);
@@ -68,7 +61,6 @@ pub fn format_line(timestamp: &str, pid: u32, tid: u32, event: &str, fields: &st
     line
 }
 
-/// True when the current log must be rotated before appending.
 pub fn should_rotate(current_size: u64) -> bool {
     current_size >= MAX_LOG_BYTES
 }
@@ -80,15 +72,17 @@ pub use imp::log_event;
 mod imp {
     use std::sync::{Mutex, Once};
 
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Storage::FileSystem::{
+    use crate::bindings::Windows::Win32::Foundation::CloseHandle;
+    use crate::bindings::Windows::Win32::Storage::FileSystem::{
         CreateDirectoryW, CreateFileW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
         FILE_SHARE_WRITE, GetFileAttributesExW, GetFileExInfoStandard, MOVEFILE_REPLACE_EXISTING,
         MoveFileExW, OPEN_ALWAYS, WIN32_FILE_ATTRIBUTE_DATA, WriteFile,
     };
-    use windows::Win32::System::SystemInformation::GetSystemTime;
-    use windows::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId};
-    use windows::core::PCWSTR;
+    use crate::bindings::Windows::Win32::System::SystemInformation::GetSystemTime;
+    use crate::bindings::Windows::Win32::System::Threading::{
+        GetCurrentProcessId, GetCurrentThreadId,
+    };
+    use windows_core::PCWSTR;
 
     use super::{DATA_DIR, LOG_PATH, ROTATED_PATH, format_line, should_rotate, timestamp_string};
     use crate::provider::widen_nul;
@@ -126,7 +120,7 @@ mod imp {
         // One generation only: the current log always describes the latest run.
         // SAFETY: both arguments are static NUL-terminated paths.
         unsafe {
-            let _ = windows::Win32::Storage::FileSystem::DeleteFileW(PCWSTR(
+            let _ = crate::bindings::Windows::Win32::Storage::FileSystem::DeleteFileW(PCWSTR(
                 widen_nul(ROTATED_PATH).as_ptr(),
             ));
             let _ = MoveFileExW(

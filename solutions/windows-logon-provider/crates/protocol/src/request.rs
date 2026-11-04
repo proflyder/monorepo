@@ -26,7 +26,6 @@ pub fn challenge_request_json(machine: &str) -> String {
     format!("{{\"machine\":\"{}\"}}", json_escape(machine))
 }
 
-/// Body shape only: `mac` is filled in by the caller, which owns the key.
 pub fn claim_request_json(machine: &str, nonce: &str) -> String {
     format!(
         "{{\"machine\":\"{}\",\"nonce\":\"{}\",\"mac\":\"\"}}",
