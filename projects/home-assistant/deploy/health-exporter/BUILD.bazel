@@ -1,33 +1,13 @@
-load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("//solutions/voice-proxy:images.bzl", "service_image")
 
 package(default_visibility = ["//visibility:public"])
-
-go_library(
-    name = "health-exporter_lib",
-    srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/projects/home-assistant/deploy/health-exporter",
-    visibility = ["//visibility:private"],
-)
-
-go_binary(
-    name = "health-exporter",
-    embed = [":health-exporter_lib"],
-    visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "health-exporter_test",
-    srcs = ["main_test.go"],
-    embed = [":health-exporter_lib"],
-)
 
 # The runtime chart's exporter is a distroless Go binary now, built and pushed
 # byte-for-byte like the other service images. It belongs to the `hermes`
 # deploy unit (deploy.bazel_images), so a change here rolls the runtime release.
 service_image(
     name = "health-exporter",
-    binary = "//projects/home-assistant/deploy/health-exporter:health-exporter",
+    binary = "//projects/home-assistant/deploy/health-exporter/cmd/health-exporter",
     repo = "ghcr.io/proflyder/health-exporter",
 )
 

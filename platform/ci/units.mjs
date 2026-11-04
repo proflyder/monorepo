@@ -164,7 +164,7 @@ export const config = {
         module: ".",
         packages: ["./projects/home-assistant/deploy/health-exporter/..."],
         race: true,
-        build: ["./projects/home-assistant/deploy/health-exporter"],
+        build: ["./projects/home-assistant/deploy/health-exporter/cmd/health-exporter"],
       },
     },
     {
