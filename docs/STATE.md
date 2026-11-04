@@ -161,7 +161,13 @@
   `GITHUB_TOKEN`, живой узел импортирует те же digest'ы в containerd.
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), без pull-secret.
-  `hermes` собирается Docker из upstream revision, `voice-proxy` — Go-сервис
+  `hermes` собирается Docker из upstream-ревизии
+  (`projects/home-assistant/deploy/images/hermes/revision`) воспроизводимо:
+  базовые образы закреплены по digest, apt — из snapshot Debian,
+  `SOURCE_DATE_EPOCH` = время upstream-коммита, сборка через Buildx с
+  `rewrite-timestamp` (общий `hermes/build.sh`, проверка —
+  `verify-reproducible.sh`); повторная сборка той же ревизии не меняет digest и
+  не вызывает rollout. `voice-proxy` — Go-сервис
   `solutions/voice-proxy`, собираемый Bazel `rules_oci` (distroless) и
   пушимый байт-в-байт через `oci_push`. Health exporter — отдельный
   Go-образ `ghcr.io/proflyder/health-exporter`. `deploy-home` (builder `mixed`, карта

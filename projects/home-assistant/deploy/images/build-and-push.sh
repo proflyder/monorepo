@@ -14,11 +14,12 @@
 # --hermes-digest … --voice-proxy-digest …`; `projects/home/kubernetes/
 # versions.sh` records the current pins.
 #
-# `hermes` stays a Docker build from the upstream revision in
-# `projects/home/kubernetes/versions.sh`. `voice-proxy`, `health-exporter` and
-# `home-deploy` are hermetic Bazel images (rules_oci/distroless) and are pushed
-# byte-for-byte through their `oci_push` targets: `docker push` would rewrite the
-# media types and change the digest.
+# `hermes` stays a reproducible Docker build (`projects/home-assistant/deploy/
+# images/hermes/build.sh`) from the upstream revision in
+# `projects/home-assistant/deploy/images/hermes/revision`. `voice-proxy`,
+# `health-exporter` and `home-deploy` are hermetic Bazel images
+# (rules_oci/distroless) and are pushed byte-for-byte through their `oci_push`
+# targets: `docker push` would rewrite the media types and change the digest.
 #
 # Authentication is the job-scoped GITHUB_TOKEN already logged in by the
 # caller (`docker login ghcr.io`); the Bazel push target reads the same Docker
@@ -59,20 +60,6 @@ record_digest() {
   if [[ -n "${DIGEST_FILE:-}" ]]; then
     printf '%s=%s\n' "$name" "$digest" >> "$DIGEST_FILE"
   fi
-}
-
-push_image() {
-  local repository=$1
-  docker tag "$repository:build" "$repository:${IMAGE_TAG}"
-  docker push "$repository:${IMAGE_TAG}" >/dev/null
-  if [[ "$IMAGE_TAG" != develop ]]; then
-    docker tag "$repository:build" "$repository:develop"
-    docker push "$repository:develop" >/dev/null
-  fi
-  local digest
-  digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$repository:${IMAGE_TAG}")
-  record_digest "${repository##*/}" "${digest#*@}"
-  echo "pushed ${digest} (tags ${IMAGE_TAG}, develop)"
 }
 
 # Push the exact built manifest under one tag and prove the registry kept the
@@ -148,19 +135,34 @@ for image in "$@"; do
       push_bazel_image home-deploy //projects/home/kubernetes/scheduler:home-deploy_image
       ;;
     hermes)
-      revision=$(sed -n 's/^HERMES_REVISION=//p' "$ROOT/projects/home/kubernetes/versions.sh")
-      [[ -n "$revision" ]] || { echo "HERMES_REVISION missing in versions.sh" >&2; exit 1; }
+      revision=$(tr -d '[:space:]' < "$IMAGES_DIR/hermes/revision")
+      [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
+        echo "invalid hermes revision in $IMAGES_DIR/hermes/revision: '$revision'" >&2
+        exit 1
+      }
       echo "== building hermes at $revision"
       git clone --quiet --filter=blob:none "$UPSTREAM" "$WORK/hermes-src"
       mkdir -p "$WORK/hermes"
       git -C "$WORK/hermes-src" archive "$revision" | tar -x -C "$WORK/hermes"
-      docker build \
-        -f "$IMAGES_DIR/hermes/Dockerfile" \
-        --label "org.opencontainers.image.revision=${revision}" \
-        -t "${REGISTRY}/hermes:build" \
-        "$WORK/hermes"
-      docker image inspect "${REGISTRY}/hermes:build" >/dev/null
-      push_image "${REGISTRY}/hermes"
+      # Same wrapper as PR CI: pinned inputs + SOURCE_DATE_EPOCH + Buildx
+      # rewrite-timestamp keep the digest identical across both builders.
+      digest=$("$IMAGES_DIR/hermes/build.sh" \
+        --context "$WORK/hermes" \
+        --source-repo "$WORK/hermes-src" \
+        --revision "$revision" \
+        --push --tag "${REGISTRY}/hermes:${IMAGE_TAG}")
+      if [[ "$IMAGE_TAG" != develop ]]; then
+        docker buildx imagetools create \
+          --tag "${REGISTRY}/hermes:develop" "${REGISTRY}/hermes@${digest}"
+        moved=$(docker buildx imagetools inspect \
+          --format '{{.Manifest.Digest}}' "${REGISTRY}/hermes:develop")
+        [[ "$moved" == "$digest" ]] || {
+          echo "develop tag reports ${moved}, expected ${digest}" >&2
+          exit 1
+        }
+      fi
+      record_digest hermes "$digest"
+      echo "pushed ${REGISTRY}/hermes@${digest} (tags ${IMAGE_TAG}, develop)"
       ;;
   esac
 done

@@ -346,6 +346,14 @@
       `pulsar-firmware` и `windows-logon-provider` это означает: релизные теги
       (`latest`, `vX.Y.Z`/`X.Y.Z`, `sha-<12>`) сохраняются, устаревшие
       `tree-*`-only удаляются через 7 дней.
+    * Docker-образы тоже обязаны быть воспроизводимыми: одинаковые входы —
+      один digest, иначе fallback-сборка (`deploy-home` без `tree-*`)
+      перекатывает pod без изменения кода. Hermes собирается
+      `projects/home-assistant/deploy/images/hermes/build.sh` с базовыми
+      образами по digest, apt из `snapshot.debian.org` на дату базового тега,
+      `SOURCE_DATE_EPOCH` = время upstream-коммита и Buildx
+      `rewrite-timestamp=true`; `verify-reproducible.sh` доказывает совпадение
+      двух сборок без кэша. Тег и apt-снимок меняются только осознанным bump'ом.
 
 37. **Pulsar — first-party код в монорепозитории.** Релиз, публикация и
     выкатка — решение 20.

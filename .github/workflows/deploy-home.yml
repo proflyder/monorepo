@@ -445,6 +445,13 @@ jobs:
           test -x "$binary" || { echo "missing $binary" >&2; exit 1; }
           echo "HOME_DEPLOY=$PWD/$binary" >> "$GITHUB_ENV"
 
+      # Same Buildx as PR CI: the digest of the Docker-built `hermes` image must
+      # not depend on which job built it. `rewrite-timestamp` needs BuildKit
+      # >= 0.13, which the action's containerised builder guarantees.
+      - name: Set up Buildx
+        if: matrix.builder == 'docker' || matrix.builder == 'mixed'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
       - name: Install VPN client
         # No official action exists for openconnect; the runner image has none.
         run: |
