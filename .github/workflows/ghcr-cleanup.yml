@@ -7,16 +7,17 @@ name: ghcr-cleanup
 # digest is promoted to `develop` and the commit sha) or abandoned, that tag is
 # dead weight. This workflow keeps the account from growing without bound.
 #
-# Only the deploy images listed in `platform/ci/units.mjs` are considered; other
-# GHCR packages of the account (for example the Windows logon provider release
-# artifact) are never touched.
+# Only the deploy images and native publish repositories listed in
+# `platform/ci/units.mjs` are considered (`pulsar-firmware`,
+# `windows-logon-provider` included); other GHCR packages of the account are
+# never touched.
 #
-# Per package, never deleted: the newest version, `develop`/`latest` and semver
-# tags, digests in PROTECTED_DIGESTS, and anything younger than 7 days. Deploy
-# versions (40-hex commit-sha tags) keep the five newest; older ones are deleted.
-# Stale `tree-*`/untagged versions are deleted. Cosign-style referrers
-# (`sha256-<hex>` tags) follow the digest they point at: removed only when that
-# digest is deleted in the same run or is already gone.
+# Per package, never deleted: the newest version, `develop`/`latest`, semver and
+# native `sha-<commit>` tags, digests in PROTECTED_DIGESTS, and anything younger
+# than 7 days. Deploy versions (40-hex commit-sha tags) keep the five newest;
+# older ones are deleted. Stale `tree-*`/untagged versions are deleted.
+# Cosign-style referrers (`sha256-<hex>` tags) follow the digest they point at:
+# removed only when that digest is deleted in the same run or is already gone.
 #
 # Scheduled runs delete; a manual run defaults to a dry run and only reports.
 # The token is GITHUB_TOKEN when it may delete these user-owned package

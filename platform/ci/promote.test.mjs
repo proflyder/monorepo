@@ -10,10 +10,14 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  expandTags,
+  formatNativeSummary,
   formatPrebuilt,
   formatSummary,
   imageRef,
+  nativeSignerIdentityPattern,
   parseDigest,
+  planNativePromotion,
   planPromotion,
   runPromotion,
   signerIdentityPattern,
@@ -312,6 +316,216 @@ test("the fallback emits an empty digest list so the deploy builds", () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("native signer pattern is bound to ci/_native and the repository", () => {
+  const pattern = nativeSignerIdentityPattern(REPO);
+  const regex = new RegExp(pattern);
+  assert.ok(regex.test("https://github.com/acme/home-lab/.github/workflows/_native.yml@refs/pull/7/merge"));
+  assert.ok(regex.test("https://github.com/acme/home-lab/.github/workflows/ci.yml@refs/pull/7/merge"));
+  assert.ok(!regex.test("https://github.com/acme/home-lab/.github/workflows/deploy-home.yml@refs/heads/develop"));
+  assert.ok(!regex.test("https://github.com/evil/home-lab/.github/workflows/_native.yml@refs/pull/7/merge"));
+});
+
+test("native tag templates expand version and commit", () => {
+  assert.deepEqual(
+    expandTags(["{version}", "sha-{commit12}", "latest"], { version: "v0.5.1008", commit: COMMIT }),
+    ["v0.5.1008", "sha-bbbbbbbbbbbb", "latest"],
+  );
+  assert.deepEqual(expandTags(["latest"], { version: "1.2.3", commit: COMMIT }), ["latest"]);
+  assert.throws(() => expandTags([], { version: "v1.2.3", commit: COMMIT }), /no publish tags/);
+  assert.throws(() => expandTags(["latest"], { version: "nope", commit: COMMIT }), /version must be/);
+  assert.throws(() => expandTags(["bad tag"], { version: "v1.2.3", commit: COMMIT }), /invalid publish tag/);
+});
+
+function nativeHandlers({ ref, tree, digest, existing = {} }) {
+  const treeRef = `${ref}:tree-${tree}`;
+  const tagged = new Set();
+  // `crane digest <ref>:<tag>` -> args[1]; `crane tag <ref>@<digest> <tag>` -> args[2].
+  const tagOf = (args) => String(args[args.length - 1]).slice(
+    String(args[args.length - 1]).lastIndexOf(":") + 1,
+  );
+  return [
+    [
+      (command, args) => command === "crane" && args[0] === "digest" && args[1] === treeRef,
+      digest,
+    ],
+    [isGhVerify, ""],
+    [
+      isCraneTag,
+      (command, args) => {
+        tagged.add(tagOf(args));
+        return "";
+      },
+    ],
+    [
+      (command, args) => command === "crane" && args[0] === "digest",
+      (command, args) => {
+        const tag = tagOf(args);
+        if (tagged.has(tag)) {
+          return digest;
+        }
+        if (Object.hasOwn(existing, tag)) {
+          const value = existing[tag];
+          if (value instanceof Error) throw value;
+          return value;
+        }
+        throw new Error("MANIFEST_UNKNOWN: manifest unknown");
+      },
+    ],
+  ];
+}
+
+test("native artifact is promoted to version and latest without rebuilding", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { calls, exec } = recorder(
+    nativeHandlers({ ref, tree: TREE, digest: DIGEST_A, existing: { latest: DIGEST_B } }),
+  );
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "v0.5.1008",
+    tags: ["{version}", "latest"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(result.mode, "promoted");
+  assert.equal(result.digest, DIGEST_A);
+  assert.deepEqual(tagsWritten(calls), [
+    ["crane", "tag", `${ref}@${DIGEST_A}`, "v0.5.1008"],
+    ["crane", "tag", `${ref}@${DIGEST_A}`, "latest"],
+  ]);
+  assert.equal(result.decisions.find((item) => item.tag === "latest").status, "moved");
+  assert.equal(result.decisions.find((item) => item.tag === "v0.5.1008").status, "tagged");
+});
+
+test("a missing native tree tag falls back to a build", () => {
+  const ref = "ghcr.io/proflyder/windows-logon-provider";
+  const { calls, exec } = recorder([
+    [
+      (command, args) => command === "crane" && args[0] === "digest",
+      new Error("MANIFEST_UNKNOWN: manifest unknown"),
+    ],
+  ]);
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "1.2.3",
+    tags: ["{version}", "sha-{commit12}"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(result.mode, "build");
+  assert.equal(result.decisions[0].status, "missing");
+  assert.equal(tagsWritten(calls).length, 0);
+  assert.match(formatNativeSummary(result), /fallback build/);
+});
+
+test("unverified native provenance falls back and tags nothing", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { calls, exec } = recorder([
+    [
+      (command, args) => command === "crane" && args[0] === "digest",
+      DIGEST_A,
+    ],
+    [isGhVerify, new Error("no attestations found")],
+  ]);
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "v0.5.1008",
+    tags: ["{version}", "latest"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(result.mode, "build");
+  assert.equal(result.decisions[0].status, "unverified");
+  assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("an existing version tag with a different digest is refused", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { calls, exec } = recorder(
+    nativeHandlers({ ref, tree: TREE, digest: DIGEST_A, existing: { "v0.5.1008": DIGEST_B } }),
+  );
+  assert.throws(
+    () =>
+      planNativePromotion({
+        repository: ref,
+        tree: TREE,
+        commit: COMMIT,
+        version: "v0.5.1008",
+        tags: ["{version}", "latest"],
+        githubRepository: REPO,
+        exec,
+      }),
+    /already exists with .*release tags are immutable/,
+  );
+  // The conflicting immutable tag was not overwritten, and `latest` was never
+  // reached because the version is checked first.
+  assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("an identical existing tag is a no-op", () => {
+  const ref = "ghcr.io/proflyder/windows-logon-provider";
+  const { calls, exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "1.2.3": DIGEST_A, "sha-bbbbbbbbbbbb": DIGEST_A },
+    }),
+  );
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "1.2.3",
+    tags: ["{version}", "sha-{commit12}"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(result.mode, "promoted");
+  assert.equal(tagsWritten(calls).length, 0);
+  assert.deepEqual(
+    result.decisions.filter((item) => item.status === "unchanged").map((item) => item.tag),
+    ["1.2.3", "sha-bbbbbbbbbbbb"],
+  );
+});
+
+test("native invalid input fails the step instead of falling back", () => {
+  const exec = () => {
+    throw new Error("no command may run");
+  };
+  assert.throws(
+    () =>
+      planNativePromotion({
+        repository: "https://example.test/x",
+        tree: TREE,
+        commit: COMMIT,
+        version: "v1.2.3",
+        tags: ["latest"],
+        githubRepository: REPO,
+        exec,
+      }),
+    /invalid native repository/,
+  );
+  assert.throws(
+    () =>
+      planNativePromotion({
+        repository: "ghcr.io/proflyder/pulsar-firmware",
+        tree: "short",
+        commit: COMMIT,
+        version: "v1.2.3",
+        tags: ["latest"],
+        githubRepository: REPO,
+        exec,
+      }),
+    /tree must be/,
+  );
 });
 
 test("output formats carry the digest list and the chosen path", () => {

@@ -798,9 +798,10 @@ export const config = {
     // ----------------------------------------------------------- Native --------
     // Native units: the Windows logon provider is a repository-script C++
     // cross-build; Pulsar's station daemon is cross-built with Bazel and its
-    // installer/radio/ssh use their own scripts. PRs upload their artifacts; a
-    // push to `develop` publishes eligible units as public OCI artifacts in
-    // GHCR (deploy-home, publish-native).
+    // installer/radio/ssh use their own scripts. A same-repo PR publishes the
+    // release-shaped OCI artifact under `tree-<hash>` with provenance; a push
+    // to `develop` promotes that digest to the release tags (deploy-home) or
+    // rebuilds on a missing/unverified tree tag (DECISIONS 36).
     //
     // `publish_when` narrows publication to a release trigger: the unit is
     // still built and tested by PR CI on every path change, but deploy-home
@@ -808,6 +809,12 @@ export const config = {
     // unit is publishable on any affected change. `publish_script` owns the
     // registry contract; `publish_attest_glob` is the artifact file (or glob)
     // whose build provenance is attested next to the pushed manifest.
+    //
+    // `publish_repository` is the artifact's full GHCR reference and
+    // `publish_tags` are the tags deploy-home attaches when it promotes the
+    // PR-built `tree-<hash>` digest (DECISIONS 36). `{version}` and
+    // `{commit12}` expand from the deployed VERSION and commit. A PR publishes
+    // the same artifact under `tree-<hash>` only.
     {
       id: "logon-provider",
       platform: "native",
@@ -825,6 +832,8 @@ export const config = {
         ],
         checksums: "out/SHA256SUMS",
         publish_script: "solutions/windows-logon-provider/publish-oci.sh",
+        publish_repository: "ghcr.io/proflyder/windows-logon-provider",
+        publish_tags: ["{version}", "sha-{commit12}"],
         publish_attest_glob: "RicardoKompLogon.dll",
         toolchain: {
           name: "llvm-mingw",
@@ -854,6 +863,10 @@ export const config = {
         // The version is the release trigger and the artifact tag.
         publish_when: ["projects/station/pulsar/VERSION"],
         publish_script: "projects/station/pulsar/publish-oci.sh",
+        publish_repository: "ghcr.io/proflyder/pulsar-firmware",
+        // `latest` moves with every promoted version; the version tag itself
+        // is immutable and promotion refuses a different digest.
+        publish_tags: ["{version}", "latest"],
         publish_attest_glob: "*",
       },
     },

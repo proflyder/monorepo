@@ -85,6 +85,10 @@ export class Unit {
         // provenance is attested next to the pushed manifest.
         nativePublishScript: "",
         nativePublishAttestGlob: "",
+        // Full GHCR reference of the published artifact and the tags
+        // deploy-home attaches when promoting the PR-built tree digest.
+        nativePublishRepository: "",
+        nativePublishTags: [],
         nativeBuild: "",
         nativeTest: "",
         nativeArtifacts: [],
@@ -209,6 +213,8 @@ export function normalizeConfig(data, label = "units") {
       nativePublishWhen: list(native.publish_when),
       nativePublishScript: String(native.publish_script ?? ""),
       nativePublishAttestGlob: String(native.publish_attest_glob ?? ""),
+      nativePublishRepository: String(native.publish_repository ?? ""),
+      nativePublishTags: list(native.publish_tags).map((tag) => String(tag)),
       nativeBuild: String(native.build ?? ""),
       nativeTest: String(native.test ?? ""),
       nativeArtifacts: list(native.artifacts),
@@ -1293,6 +1299,8 @@ export function matrixEntries(route_, config) {
     publish: nativePublishSelected(unit, route_.changed),
     publish_script: unit.nativePublishScript,
     publish_attest_glob: unit.nativePublishAttestGlob,
+    publish_repository: unit.nativePublishRepository,
+    publish_tags: space(unit.nativePublishTags),
     workdir: unit.nativeWorkdir,
     build: unit.nativeBuild,
     test: unit.nativeTest,

@@ -155,22 +155,26 @@ missing; it does not silently fall back to «Алиса».
 upstream-патча, поэтому сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз новее.
 
 1. Изменить `projects/station/pulsar/VERSION` в рабочей ветке и открыть обычный PR в `develop`.
-2. Merge PR (squash) проводит юнит `pulsar` через общий `.github/workflows/deploy-home.yml`:
-   `native.publish_when` пускает его в план только при изменении VERSION, `_native.yml`
-   собирает обе архитектуры с этой версией, radio `.ybl` и `SHA256SUMS`, проверяет
-   `--version` под qemu, а `publish-native` скриптом `publish-oci.sh` пушит OCI-слой в
-   `ghcr.io/proflyder/pulsar-firmware:<version>`, затем переносит `:latest`. Если тег версии
-   уже есть в GHCR, publish падает — выпускается следующая версия. Прочие изменения Pulsar
-   идут только через PR CI и ничего не публикуют.
-3. Job `deploy-station` ждёт одобрения в Environment `Station` (required reviewer).
-4. После одобрения job поднимает VPN (группа `ci`), затем `hashicorp/vault-action` по
+2. Каждый PR, затрагивающий Pulsar, уже собирает release-shaped артефакт: обе архитектуры с
+   версией из `VERSION` (`--define`), radio `.ybl`, `SHA256SUMS`, проверка `--version` под qemu.
+   Из этого репозитория PR публикует его как `tree-<git tree hash>` с build provenance.
+3. Merge PR (squash) проводит юнит `pulsar` через общий `.github/workflows/deploy-home.yml`:
+   `native.publish_when` пускает его в план только при изменении VERSION. `native-release`
+   сначала считает tree деплоимого коммита, проверяет `tree-<hash>` и provenance и ставит на
+   тот же digest `ghcr.io/proflyder/pulsar-firmware:<version>` и `:latest` — байты, прошедшие
+   PR, не пересобираются. Если tree-тега нет или provenance не сходится, workflow собирает и
+   публикует `publish-oci.sh` как раньше, с пометкой fallback в summary. Тег версии неизменяем:
+   другой digest — отказ, тот же — no-op; двигается только `latest`. Прочие изменения Pulsar
+   идут только через PR CI и релизные теги не двигают.
+4. Job `deploy-station` ждёт одобрения в Environment `Station` (required reviewer).
+5. После одобрения job поднимает VPN (группа `ci`), затем `hashicorp/vault-action` по
    GitHub OIDC (роль `deploy-station`) читает `secret/data/ci/deploy-station` и вызывает
    `tools/ha_firmware_deploy.py --tag <version>`: HA `homeassistant.update_entity` → сущность
    «Firmware» видит версию → `update.install` → колонка скачивает слои, проверяет `SHA256SUMS`
    и `--version`, меняет бинарник (старый остаётся `.prev`) и перезапускается. Скрипт ждёт
    `installed_version == version` и ещё 90 с следит за стабильностью; откат `supervise.sh` на
    `.prev` или недоступность сущности дольше 30 с валят job.
-5. Проверить в HA: «Firmware» показывает установленную версию, колонка онлайн; при сомнениях —
+6. Проверить в HA: «Firmware» показывает установленную версию, колонка онлайн; при сомнениях —
    `ctl.sh log` на станции.
 
 ### Источник обновлений — GHCR

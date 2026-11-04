@@ -7,10 +7,15 @@
 # `oras` on PATH.
 #
 #   ./publish-oci.sh --source-dir /path/to/artifact
+#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<git tree hash>
 #
 # Repository and tags:
 #   ghcr.io/<owner>/windows-logon-provider:<VERSION>
 #   ghcr.io/<owner>/windows-logon-provider:sha-<12 hex of GITHUB_SHA>
+#
+# `--tag` publishes the same artifact under exactly one tag (the PR build-once
+# path uses `tree-<git tree hash>`); it does not touch the release tags. That
+# path is idempotent for identical content and refuses different content.
 #
 # A tag is immutable by content: if `<VERSION>` already exists with the same
 # SHA256SUMS this is a successful no-op; different content is a hard failure so
@@ -24,10 +29,11 @@ DEFAULT_REPOSITORY="ghcr.io/proflyder/windows-logon-provider"
 REPOSITORY="${OCI_REPOSITORY:-$DEFAULT_REPOSITORY}"
 VERSION_FILE="${VERSION_FILE:-$HERE/VERSION}"
 SOURCE_DIR=""
+TAG=""
 OUTPUT_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
 usage() {
-  echo "usage: $0 --source-dir DIR [--repository REPOSITORY]" >&2
+  echo "usage: $0 --source-dir DIR [--repository REPOSITORY] [--tag TAG]" >&2
 }
 
 die() {
@@ -43,6 +49,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --repository)
       REPOSITORY="${2:?--repository needs a value}"
+      shift 2
+      ;;
+    --tag)
+      TAG="${2:?--tag needs a value}"
       shift 2
       ;;
     -h|--help)
@@ -140,24 +150,13 @@ check_existing_tag() {
   die "tag $tag already exists with different content; bump VERSION to release"
 }
 
-version_exists=false
-sha_exists=false
-if check_existing_tag "$version"; then version_exists=true; fi
-if check_existing_tag "$sha_tag"; then sha_exists=true; fi
-
-if $version_exists; then
-  digest="$(oras resolve "$(repo_ref "$version")")"
-  if ! $sha_exists; then
-    oras tag "$(repo_ref "$version")" "$sha_tag" >/dev/null
-    echo "tagged existing $version as $sha_tag"
-  fi
-  echo "version $version is already published with identical content; not rebuilding"
-else
+push_artifact() {
+  local destination="$1"
   # `cd` keeps the layer names bare (RicardoKompLogon.dll, ...) and the working
   # directory outside the pushed file set.
   (
     cd "$(dirname "$CHECKSUMS")"
-    oras push "$(repo_ref "$version")" \
+    oras push "$destination" \
       --artifact-type "$ARTIFACT_TYPE" \
       --annotation "org.opencontainers.image.title=windows-logon-provider" \
       --annotation "org.opencontainers.image.version=$version" \
@@ -170,10 +169,39 @@ else
       "hmac-selftest.exe:application/vnd.microsoft.portable-executable" \
       "SHA256SUMS:text/plain"
   )
-  digest="$(oras resolve "$(repo_ref "$version")")"
-  if ! $sha_exists; then
-    oras tag "$(repo_ref "$version")" "$sha_tag" >/dev/null
+}
+
+published_tags=""
+if [[ -n "$TAG" ]]; then
+  # Build-once PR path: exactly one tag, no release-tag side effects.
+  if check_existing_tag "$TAG"; then
+    echo "tag $TAG is already published with identical content; not rebuilding"
+  else
+    push_artifact "$(repo_ref "$TAG")"
   fi
+  digest="$(oras resolve "$(repo_ref "$TAG")")"
+  published_tags="$TAG"
+else
+  version_exists=false
+  sha_exists=false
+  if check_existing_tag "$version"; then version_exists=true; fi
+  if check_existing_tag "$sha_tag"; then sha_exists=true; fi
+
+  if $version_exists; then
+    digest="$(oras resolve "$(repo_ref "$version")")"
+    if ! $sha_exists; then
+      oras tag "$(repo_ref "$version")" "$sha_tag" >/dev/null
+      echo "tagged existing $version as $sha_tag"
+    fi
+    echo "version $version is already published with identical content; not rebuilding"
+  else
+    push_artifact "$(repo_ref "$version")"
+    digest="$(oras resolve "$(repo_ref "$version")")"
+    if ! $sha_exists; then
+      oras tag "$(repo_ref "$version")" "$sha_tag" >/dev/null
+    fi
+  fi
+  published_tags="$version, $sha_tag"
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
@@ -190,7 +218,7 @@ if [[ -n "$OUTPUT_SUMMARY" ]]; then
     echo "### publish-native / windows-logon-provider"
     echo
     echo "- repository: \`$REPOSITORY\`"
-    echo "- version: \`$version\` (tag \`$sha_tag\`)"
+    echo "- tags: \`$published_tags\`"
     echo "- artifact: \`$REPOSITORY@$digest\`"
     echo "- artifact type: \`$ARTIFACT_TYPE\`"
   } >> "$OUTPUT_SUMMARY"

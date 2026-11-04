@@ -7,6 +7,13 @@
 # `oras login`) and has `oras` on PATH.
 #
 #   ./publish-oci.sh --source-dir /path/to/artifact
+#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<git tree hash>
+#
+# `--tag` publishes the same release-shaped artifact under exactly one tag (the
+# PR build-once path uses `tree-<git tree hash>`) and leaves `<VERSION>` and
+# `:latest` alone. It is idempotent for identical content and refuses different
+# content; deploy-home later promotes the verified tree digest to the release
+# tags without rebuilding.
 #
 # The station updater reads this exact contract, so the names are frozen:
 #   repository  ghcr.io/proflyder/pulsar-firmware
@@ -32,10 +39,11 @@ REPOSITORY="${OCI_REPOSITORY:-$DEFAULT_REPOSITORY}"
 SOURCE_URL="${OCI_SOURCE_URL:-$DEFAULT_SOURCE}"
 VERSION_FILE="${VERSION_FILE:-$HERE/VERSION}"
 SOURCE_DIR=""
+TAG=""
 OUTPUT_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
 usage() {
-  echo "usage: $0 --source-dir DIR [--repository REPOSITORY]" >&2
+  echo "usage: $0 --source-dir DIR [--repository REPOSITORY] [--tag TAG]" >&2
 }
 
 die() {
@@ -51,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --repository)
       REPOSITORY="${2:?--repository needs a value}"
+      shift 2
+      ;;
+    --tag)
+      TAG="${2:?--tag needs a value}"
       shift 2
       ;;
     -h|--help)
@@ -105,28 +117,59 @@ stage="$(dirname "${files[0]}")"
   fi
 )
 
-# The version tag is immutable. Only a definitive "not found" means it is safe
-# to publish; any other registry/auth error fails the job instead of risking an
-# overwrite.
-if output="$(oras manifest fetch "$REPOSITORY:$version" 2>&1)"; then
-  die "$REPOSITORY:$version already exists; bump projects/station/pulsar/VERSION"
-elif ! grep -qiE 'not found|manifest_unknown|name unknown|404' <<< "$output"; then
-  die "cannot check $REPOSITORY:$version: $output"
-fi
+push_artifact() {
+  local destination="$1"
+  # `cd` keeps the layer titles bare (the updater finds them by exact name).
+  (
+    cd "$stage"
+    oras push "$destination" \
+      --artifact-type "application/vnd.proflyder.pulsar.release.v1" \
+      --annotation "org.opencontainers.image.version=$version" \
+      --annotation "org.opencontainers.image.source=$SOURCE_URL" \
+      pulsar-aarch64.bin pulsar-armhf.bin SHA256SUMS \
+      zigbee-coordinator.ybl zigbee-router.ybl
+  )
+}
 
-# `cd` keeps the layer titles bare (the updater finds them by exact name).
-(
-  cd "$stage"
-  oras push "$REPOSITORY:$version" \
-    --artifact-type "application/vnd.proflyder.pulsar.release.v1" \
-    --annotation "org.opencontainers.image.version=$version" \
-    --annotation "org.opencontainers.image.source=$SOURCE_URL" \
-    pulsar-aarch64.bin pulsar-armhf.bin SHA256SUMS \
-    zigbee-coordinator.ybl zigbee-router.ybl
-)
-digest="$(oras resolve "$REPOSITORY:$version")"
-# The station updater reads :latest.
-oras tag "$REPOSITORY:$version" latest >/dev/null
+published_tags=""
+if [[ -n "$TAG" ]]; then
+  # Build-once PR path: exactly one tag, no release-tag side effects.
+  if output="$(oras manifest fetch "$REPOSITORY:$TAG" 2>&1)"; then
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/pulsar-tree-tag.XXXXXX")"
+    if ! oras pull "$REPOSITORY:$TAG" -o "$tmp" >/dev/null 2>&1; then
+      rm -rf "$tmp"
+      die "tag $TAG exists but cannot be pulled; refusing to overwrite it"
+    fi
+    if cmp -s "$stage/SHA256SUMS" "$tmp/SHA256SUMS"; then
+      rm -rf "$tmp"
+      echo "tag $TAG is already published with identical content; not rebuilding"
+    else
+      rm -rf "$tmp"
+      die "tag $TAG already exists with different content"
+    fi
+  elif ! grep -qiE 'not found|manifest_unknown|name unknown|404' <<< "$output"; then
+    die "cannot check $REPOSITORY:$TAG: $output"
+  else
+    push_artifact "$REPOSITORY:$TAG"
+  fi
+  digest="$(oras resolve "$REPOSITORY:$TAG")"
+  published_tags="$TAG"
+else
+  # The version tag is immutable. Only a definitive "not found" means it is
+  # safe to publish; any other registry/auth error fails the job instead of
+  # risking an overwrite.
+  if output="$(oras manifest fetch "$REPOSITORY:$version" 2>&1)"; then
+    die "$REPOSITORY:$version already exists; bump projects/station/pulsar/VERSION"
+  elif ! grep -qiE 'not found|manifest_unknown|name unknown|404' <<< "$output"; then
+    die "cannot check $REPOSITORY:$version: $output"
+  fi
+
+  push_artifact "$REPOSITORY:$version"
+  digest="$(oras resolve "$REPOSITORY:$version")"
+  # The station updater reads :latest.
+  oras tag "$REPOSITORY:$version" latest >/dev/null
+  published_tags="$version, latest"
+fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
@@ -142,7 +185,7 @@ if [[ -n "$OUTPUT_SUMMARY" ]]; then
     echo "### publish-native / pulsar"
     echo
     echo "- repository: \`$REPOSITORY\`"
-    echo "- version: \`$version\` (and \`:latest\`)"
+    echo "- tags: \`$published_tags\`"
     echo "- artifact: \`$REPOSITORY@$digest\`"
     echo "- layers: \`pulsar-aarch64.bin\`, \`pulsar-armhf.bin\`, \`SHA256SUMS\`, \`zigbee-*.ybl\`"
   } >> "$OUTPUT_SUMMARY"

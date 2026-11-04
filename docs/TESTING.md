@@ -235,11 +235,12 @@ python3 -m unittest discover -s . -p 'test_*.py' -v   # статический �
 переопределяет toolchain — так CI использует Linux-архив того же релиза.
 CI (платформа `native`, `_native.yml`) проверяет sha256 архива, кеширует его,
 запускает оба скрипта и публикует DLL, `cp-selftest.exe`, `hmac-selftest.exe`
-и `SHA256SUMS` артефактом; ПК из CI недоступен. На push в `develop`
-`deploy-home` переиспользует тот же сборщик, скачивает его artifact и
-публикует OCI-артефакт в GHCR через ORAS (`publish-oci.sh`): теги `VERSION` и
-`sha-<12>`, неизменяемость по содержимому, provenance attestation. PR не
-публикует; проверка получения и проверки digest — `fetch.sh`.
+и `SHA256SUMS` артефактом; ПК из CI недоступен. PR из этого репозитория
+публикует тот же артефакт через ORAS под `tree-<hash>` с provenance
+(build once); merge продвигает проверенный digest на теги `VERSION` и
+`sha-<12>` либо, при missing/unverified, собирает и публикует заново
+(`publish-oci.sh`). Тег версии неизменяем по содержимому. Форки не публикуют;
+проверка получения и проверки digest — `fetch.sh`.
 
 На самом ПК — self-tests (когда грант не ожидается) и живая приёмка:
 
@@ -288,7 +289,7 @@ matrix одного платформенного workflow.
 | bazel | `_bazel.yml` | Linux-runner, `bazel build` затем `bazel test` (Rust-хост Pulsar: тесты, fmt, clippy) |
 | python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
 | js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
-| native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact |
+| native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact; same-repo PR публикует release-shaped `tree-<hash>` с provenance |
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
 `ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
@@ -328,6 +329,13 @@ lint также пропускает публикацию APK. `_android.yml` с
 Форки и `workflow_dispatch` только собирают: у них нет прав на registry.
 Отдельный job `attest` матрицей по опубликованным digest'ам создаёт
 attestation; `ci-ok` не меняется.
+
+Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) следуют
+тому же правилу: `_native.yml` после сборки публикует release-shaped артефакт
+под `tree-<hash>` и аттестует digest. Pulsar собирается так на каждом PR
+(версия из `VERSION`, radio, `SHA256SUMS`, проверка `--version` под qemu), а
+не только при изменении `VERSION`. Права `packages`/`id-token`/`attestations`
+выданы только job `native`.
 
 ### Карта юнитов
 
@@ -516,12 +524,19 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
   provenance). Если все образы юнита прошли проверку, скрипт получает
   `PREBUILT_DIGESTS` и не собирает/push'ит их; иначе — обычная сборка.
   Выбранный путь виден в job summary (`image path: prebuilt|build`).
+- Native (Pulsar, logon provider): job `native-release` вызывает `_native.yml`
+  с `promote: true`. Тот проверяет `tree-<hash>` и provenance, ставит релизные
+  теги на тот же digest и пропускает сборку; при missing/unverified собирает и
+  публикует как раньше. Summary пишет `path: promoted|build` и
+  `fallback build`. `deploy-station` ждёт `native-release` и ставит версию.
 - Откат — только применённого объекта; изменение целиком откатывается новым
   PR с `git revert`.
 
 Pulsar: хост-сборка и тесты — Bazel-юнит `pulsar-bazel`; станционные
 бинарники (Bazel), radio, ssh, installer и релиз — native-юнит `pulsar`
-(`_native.yml`). Make/cargo-zigbuild из станционной сборки удалены.
+(`_native.yml`). Каждый PR собирает release-shaped артефакт и публикует
+`tree-<hash>`; merge продвигает его либо пересобирает fallback-путём.
+Make/cargo-zigbuild из станционной сборки удалены.
 
 ## Публикация
 
