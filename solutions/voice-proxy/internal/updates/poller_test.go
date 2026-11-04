@@ -20,7 +20,7 @@ type fetchCall struct {
 }
 
 // runPoller starts the poller with a sleeper that cancels the context after a
-// fixed number of pauses, mirroring the Python test sleeper.
+// fixed number of pauses.
 func runPoller(t *testing.T, cfg Config, limit int, sleeps *[]time.Duration) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())

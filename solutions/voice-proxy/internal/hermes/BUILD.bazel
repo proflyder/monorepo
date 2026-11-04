@@ -11,5 +11,5 @@ go_library(
 go_test(
     name = "hermes_test",
     srcs = ["hermes_test.go"],
-    embed = [":hermes"],
+    deps = [":hermes"],
 )

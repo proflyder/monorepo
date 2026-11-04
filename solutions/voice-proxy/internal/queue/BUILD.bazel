@@ -20,10 +20,12 @@ go_test(
     srcs = [
         "consumer_test.go",
         "created_internal_test.go",
-        "crossimpl_test.go",
+        "golden_test.go",
         "producer_test.go",
     ],
     embed = [":queue"],
-    embedsrcs = ["testdata/voice_announce_python.json"],
-    deps = ["//packages/go/scheduler"],
+    deps = [
+        "//packages/go/scheduler",
+        "//solutions/voice-proxy/internal/testfake",
+    ],
 )

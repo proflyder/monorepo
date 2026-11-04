@@ -15,10 +15,5 @@ go_library(
 go_test(
     name = "sanitize_test",
     srcs = ["sanitize_test.go"],
-    data = [
-        "//solutions/voice-proxy/testdata/parity:sanitize.json",
-        "//solutions/voice-proxy/testdata/parity:speech.json",
-        "//solutions/voice-proxy/testdata/parity:streaming.json",
-    ],
-    embed = [":sanitize"],
+    deps = [":sanitize"],
 )

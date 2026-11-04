@@ -2,10 +2,9 @@
 // OpenAI-compatible passthrough client plus the error normalisation HA's
 // llama_cpp adapter requires.
 //
-// It is a port of _upstream(), error_body() and normalize_error() in
-// voice_proxy.py. There is no authentication of our own: the client's
-// Authorization header is forwarded verbatim, because the proxy is not an auth
-// boundary (the nftables rule in front of the Pod is).
+// There is no authentication of our own: the client's Authorization header is
+// forwarded verbatim, because the proxy is not an auth boundary (the nftables
+// rule in front of the Pod is).
 package hermes
 
 import (
@@ -20,7 +19,7 @@ import (
 	"time"
 )
 
-// MaxBody is the request body cap from voice_proxy.py (10 MiB).
+// MaxBody is the request body cap (10 MiB).
 const MaxBody = 10 << 20
 
 // DefaultTimeout is the upstream timeout for buffered and streaming requests.
@@ -37,8 +36,7 @@ type Client struct {
 	streaming *http.Client
 }
 
-// New returns a client for baseURL (trailing slashes are ignored, like the
-// Python module constant).
+// New returns a client for baseURL; trailing slashes are ignored.
 func New(baseURL string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
@@ -47,8 +45,8 @@ func New(baseURL string, timeout time.Duration) *Client {
 	if base, ok := http.DefaultTransport.(*http.Transport); ok {
 		transport = base.Clone()
 	}
-	// Waiting for the response headers is bounded exactly like Python's
-	// urlopen(timeout): a stalled upstream fails instead of hanging.
+	// Waiting for the response headers is bounded, so a stalled upstream fails
+	// instead of hanging.
 	transport.ResponseHeaderTimeout = timeout
 	return &Client{
 		base:      strings.TrimSuffix(strings.TrimSpace(baseURL), "/"),
@@ -94,11 +92,10 @@ func (c *Client) Do(ctx context.Context, method, path string, body []byte, heade
 // Stream opens a request and leaves the response body to the caller, who must
 // close it: closing the body also cancels the upstream turn.
 //
-// The response is returned even for 4xx/5xx so the caller can relay the status
-// exactly like the Python HTTPError branch.
+// The response is returned even for 4xx/5xx so the caller can relay the status.
 //
-// The timeout is per read, like Python's socket timeout: a long turn that keeps
-// producing frames is never cut, while a stalled one fails after the timeout.
+// The timeout is per read: a long turn that keeps producing frames is never cut,
+// while a stalled one fails after the timeout.
 func (c *Client) Stream(ctx context.Context, method, path string, body []byte, headers http.Header) (*http.Response, error) {
 	reqCtx, cancel := context.WithCancel(ctx)
 	req, err := c.request(reqCtx, method, path, body, headers)
@@ -120,8 +117,7 @@ func (c *Client) Stream(ctx context.Context, method, path string, body []byte, h
 	return resp, nil
 }
 
-// idleBody cancels the request when no bytes arrive for the timeout, which is
-// what a Python socket timeout does on each recv.
+// idleBody cancels the request when no bytes arrive for the timeout.
 type idleBody struct {
 	io.ReadCloser
 	cancel  context.CancelFunc
@@ -150,8 +146,7 @@ func (c *Client) request(ctx context.Context, method, path string, body []byte, 
 		return nil, err
 	}
 	// The client's Authorization is forwarded verbatim, including when it is
-	// absent: Python sends the same empty header and the proxy is not an auth
-	// boundary.
+	// absent: the proxy is not an auth boundary.
 	req.Header.Set("Authorization", headerOr(headers, "Authorization", ""))
 	req.Header.Set("Content-Type", headerOr(headers, "Content-Type", "application/json"))
 	req.Header.Set("Accept", headerOr(headers, "Accept", "application/json"))

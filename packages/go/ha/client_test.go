@@ -201,6 +201,61 @@ func TestNetworkErrorOmitsURLAndToken(t *testing.T) {
 	}
 }
 
+func TestStateReadsOneEntityAndResolvesTheTokenPerRequest(t *testing.T) {
+	var gotPath, gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		fmt.Fprint(w, `{"entity_id":"input_select.profile","state":"Рабочий"}`)
+	}))
+	defer server.Close()
+
+	token := "first-token"
+	client := NewWithToken(server.URL, func() string { return token }, server.Client())
+	state, err := client.State(context.Background(), "input_select.profile")
+	if err != nil || state != "Рабочий" {
+		t.Fatalf("State = %q, %v", state, err)
+	}
+	if gotPath != "/api/states/input_select.profile" || gotAuth != "Bearer first-token" {
+		t.Fatalf("path=%q auth=%q", gotPath, gotAuth)
+	}
+
+	token = "second-token"
+	if _, err := client.State(context.Background(), "input_select.profile"); err != nil {
+		t.Fatalf("State: %v", err)
+	}
+	if gotAuth != "Bearer second-token" {
+		t.Fatalf("auth = %q, want the rotated token", gotAuth)
+	}
+}
+
+func TestStateRejectsUnusableResponses(t *testing.T) {
+	cases := map[string]struct {
+		status int
+		body   string
+	}{
+		"http error": {http.StatusServiceUnavailable, `{}`},
+		"array":      {http.StatusOK, `[1,2]`},
+		"null":       {http.StatusOK, `null`},
+		"no state":   {http.StatusOK, `{"entity_id":"x"}`},
+		"non-string": {http.StatusOK, `{"state":5}`},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			if state, err := New(server.URL, testToken, server.Client()).State(context.Background(), "x.y"); err == nil {
+				t.Fatalf("State = %q, want an error", state)
+			}
+		})
+	}
+	if _, err := New("http://example.invalid", testToken, nil).State(context.Background(), "  "); err == nil {
+		t.Fatal("an empty entity must be rejected")
+	}
+}
+
 func TestEntityID(t *testing.T) {
 	cases := map[string]string{
 		"alarm_start":        "script.alarm_start",

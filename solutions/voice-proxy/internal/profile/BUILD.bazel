@@ -7,6 +7,7 @@ go_library(
     srcs = ["profile.go"],
     importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/profile",
     deps = [
+        "//packages/go/ha",
         "//solutions/voice-proxy/internal/sanitize",
         "@org_golang_x_text//cases",
         "@org_golang_x_text//unicode/norm",
@@ -16,5 +17,8 @@ go_library(
 go_test(
     name = "profile_test",
     srcs = ["profile_test.go"],
-    deps = [":profile"],
+    deps = [
+        ":profile",
+        "//solutions/voice-proxy/internal/testfake",
+    ],
 )

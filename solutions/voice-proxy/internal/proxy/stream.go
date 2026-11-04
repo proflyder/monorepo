@@ -31,15 +31,15 @@ func (h *Handler) streamChat(w http.ResponseWriter, r *http.Request, payload map
 		return err
 	}
 	// The streaming request always asks Hermes for SSE, whatever the client
-	// sent, exactly like _stream_chat in voice_proxy.py.
+	// sent.
 	headers := r.Header.Clone()
 	headers.Set("Content-Type", "application/json")
 	headers.Set("Accept", "text/event-stream")
 	started := time.Now()
 	resp, err := h.upstream.Stream(r.Context(), http.MethodPost, r.URL.RequestURI(), body, headers)
 	if err != nil {
-		// Python's urlopen raises here before any header is sent, so the outer
-		// handler answers 503 with the OpenAI-shaped error.
+		// Nothing was written yet, so the outer handler answers 503 with the
+		// OpenAI-shaped error.
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -49,7 +49,7 @@ func (h *Handler) streamChat(w http.ResponseWriter, r *http.Request, payload map
 		if readErr != nil {
 			return readErr
 		}
-		// The upstream error body is relayed as JSON; _send normalises it.
+		// The upstream error body is relayed as JSON; send normalises it.
 		h.send(w, resp.StatusCode, data, "application/json")
 		return nil
 	}

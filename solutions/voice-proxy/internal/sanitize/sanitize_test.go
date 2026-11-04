@@ -1,68 +1,113 @@
 package sanitize_test
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
-// SanitizeTests mirrors SanitizeTests in test_voice_proxy.py.
-func TestSanitizeRemovesMarkdownLinkAndURL(t *testing.T) {
-	text := "Новость. ([investing.com](https://example.com/a?b=1))"
-	if got, want := sanitize.SanitizeText(text), "Новость."; got != want {
-		t.Fatalf("SanitizeText(%q) = %q, want %q", text, got, want)
+// TestSanitizeText covers every branch of the cleaning pipeline: citations,
+// Markdown links, bare URLs, list prefixes, emphasis marks, empty parentheses
+// and whitespace collapsing.
+func TestSanitizeText(t *testing.T) {
+	cases := map[string]string{
+		// Untouched prose.
+		"Простой ответ.":                       "Простой ответ.",
+		"Это тест (не ссылка), всё нормально.": "Это тест (не ссылка), всё нормально.",
+		"Привет!":                       "Привет!",
+		"Вопрос?":                       "Вопрос?",
+		"Полный вопрос？":                "Полный вопрос？",
+		"Многоточие…":                   "Многоточие…",
+		"Дефис - и тире — внутри.":      "Дефис - и тире — внутри.",
+		"Кавычки «ёлочки» и \"лапки\".": "Кавычки «ёлочки» и \"лапки\".",
+		"Точка с запятой; двоеточие: и запятая,": "Точка с запятой; двоеточие: и запятая,",
+		"Эмодзи 😀 в тексте.":                     "Эмодзи 😀 в тексте.",
+		"👨\u200d👩\u200d👧\u200d👦 семья":           "👨\u200d👩\u200d👧\u200d👦 семья",
+		"É\u0301 combining":                      "É\u0301 combining",
+		"Ｆｕｌｌｗｉｄｔｈ ｔｅｘｔ":                         "Ｆｕｌｌｗｉｄｔｈ ｔｅｘｔ",
+		"𝔘𝔫𝔦𝔠𝔬𝔡𝔢":                                "𝔘𝔫𝔦𝔠𝔬𝔡𝔢",
+		// Empty input.
+		"":     "",
+		"   ":  "",
+		"\n\n": "",
+		// Whole citation parentheses go before link unwrapping.
+		"Новость. ([investing.com](https://example.com/a?b=1))":              "Новость.",
+		"Новость. ([investing.com](https://example.com/a?b=1)) Ещё новость.": "Новость. Ещё новость.",
+		"Цитата ([сайт](http://сайт.рф/путь)) конец.":                        "Цитата конец.",
+		// Markdown links keep their text.
+		"Источник: [Reuters](https://reuters.com/x).":                "Источник: Reuters.",
+		"Ссылка [x](https://a.example) в середине.":                  "Ссылка x в середине.",
+		"Две ссылки [a](https://a.example) и [b](http://b.example).": "Две ссылки a и b.",
+		"**Готово**: отчёт [тут](https://example.com/x).":            "Готово: отчёт тут.",
+		"Ответ [источник](https://example)":                          "Ответ источник",
+		// Bare URLs are deleted, including in brackets, quotes and angle brackets.
+		"Смотри https://example.com/news и всё.":           "Смотри и всё.",
+		"URL в скобках (https://example.com/x) конец.":     "URL в скобках конец.",
+		"URL с query https://example.com/a?b=1&c=2 конец.": "URL с query конец.",
+		"URL в угловых <https://example.com/x> конец.":     "URL в угловых <> конец.",
+		"URL в кавычках \"https://example.com/x\" конец.":  "URL в кавычках \"\" конец.",
+		"Схема http://example.com":                         "Схема",
+		"Хвост https://example.com/path?q=1#frag.":         "Хвост",
+		// Incomplete schemes are not URLs and survive.
+		"Не URL: https//example.com и http:/example.com.": "Не URL: https//example.com и http:/example.com.",
+		"Хвост http":                             "Хвост http",
+		"Хвост https:":                           "Хвост https:",
+		"Хвост https://":                         "Хвост https://",
+		"Ответ [источник]":                       "Ответ [источник]",
+		"Ответ [источник](https://example.com/x": "Ответ [источник](",
+		// Line prefixes: headings, bullets and numbered items.
+		"## Заголовок\n- **важно**\n- `код`":                        "Заголовок важно код",
+		"# h1\n## h2\n### h3\n#### h4\n##### h5\n###### h6":         "h1 h2 h3 h4 h5 h6",
+		"* звёздочка\n+ плюс\n- минус\n1. один\n2) два\n10. десять": "звёздочка плюс минус один два десять",
+		// Emphasis marks.
+		"~~зачёркнуто~~ и _курсив_ и *жирный*": "зачёркнуто и курсив и жирный",
+		"a*b*c_d_e`f`g~h~i":                    "abcdefghi",
+		"***тройные*** звёздочки":              "тройные звёздочки",
+		"__подчёркивания__":                    "подчёркивания",
+		"`код с [ссылкой](https://x.example)`": "код с ссылкой",
+		// Empty parentheses disappear.
+		"Пустые скобки () и ( ) и (  ) остаются?": "Пустые скобки и и остаются?",
+		"Пустые скобки () и ( ) и (  )":           "Пустые скобки и и",
+		// Unicode whitespace, including the C0 information separators that
+		// strings.TrimSpace leaves behind.
+		"привет\u00a0мир":      "привет мир",
+		"привет\u202fмир":      "привет мир",
+		"привет\u2009мир":      "привет мир",
+		"привет\u3000мир":      "привет мир",
+		"привет\u200bмир":      "привет\u200bмир",
+		"привет\tмир":          "привет мир",
+		"привет\x0bмир":        "привет мир",
+		"привет\x0cмир":        "привет мир",
+		"привет\x1cмир":        "привет мир",
+		"привет\x1dмир":        "привет мир",
+		"привет\x1eмир":        "привет мир",
+		"привет\x1fмир":        "привет мир",
+		"привет\u0085мир":      "привет мир",
+		"привет\u2028мир":      "привет мир",
+		"привет\u2029мир":      "привет мир",
+		"  привет \n\n  мир  ": "привет мир",
+		"\u00a0привет\u00a0":   "привет",
+		"- \u00a0пункт":        "пункт",
+		"#\u00a0Заголовок":     "Заголовок",
+		"1.\u00a0пункт":        "пункт",
+	}
+	for input, want := range cases {
+		if got := sanitize.SanitizeText(input); got != want {
+			t.Errorf("SanitizeText(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 
-func TestSanitizeRemovesBareURL(t *testing.T) {
-	text := "Смотри https://example.com/news и всё."
-	if got, want := sanitize.SanitizeText(text), "Смотри и всё."; got != want {
-		t.Fatalf("SanitizeText(%q) = %q, want %q", text, got, want)
-	}
-}
-
-func TestSanitizeUnwrapsLinkTextWithoutURL(t *testing.T) {
-	text := "Источник: [Reuters](https://reuters.com/x)."
-	if got, want := sanitize.SanitizeText(text), "Источник: Reuters."; got != want {
-		t.Fatalf("SanitizeText(%q) = %q, want %q", text, got, want)
-	}
-}
-
-func TestSanitizeStripsMarkdownMarksAndListPrefix(t *testing.T) {
-	text := "## Заголовок\n- **важно**\n- `код`"
-	if got, want := sanitize.SanitizeText(text), "Заголовок важно код"; got != want {
-		t.Fatalf("SanitizeText(%q) = %q, want %q", text, got, want)
-	}
-}
-
-func TestSanitizeKeepsNormalPunctuationAndParentheses(t *testing.T) {
-	text := "Это тест (не ссылка), всё нормально."
-	if got := sanitize.SanitizeText(text); got != text {
-		t.Fatalf("SanitizeText(%q) = %q, want it unchanged", text, got)
-	}
-}
-
-func TestSanitizeCollapsesWhitespace(t *testing.T) {
-	if got, want := sanitize.SanitizeText("  привет \n\n  мир  "), "привет мир"; got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
-}
-
-func TestSanitizeEmptyValues(t *testing.T) {
-	if got := sanitize.SanitizeText(""); got != "" {
-		t.Fatalf("SanitizeText(\"\") = %q, want empty", got)
-	}
-}
-
-func TestSanitizeAllChoices(t *testing.T) {
+// TestSanitizeChatPayload touches every choice.
+func TestSanitizeChatPayload(t *testing.T) {
 	payload := map[string]any{
 		"choices": []any{
 			map[string]any{"message": map[string]any{"content": "A https://a.example"}},
 			map[string]any{"message": map[string]any{"content": "B [x](https://b.example)"}},
+			map[string]any{"message": map[string]any{"content": 5}},
+			map[string]any{},
+			"not an object",
 		},
 	}
 	out := sanitize.SanitizeChatPayload(payload)
@@ -72,10 +117,13 @@ func TestSanitizeAllChoices(t *testing.T) {
 	if first != "A" || second != "B x" {
 		t.Fatalf("contents = %q, %q; want %q, %q", first, second, "A", "B x")
 	}
+	if choices[2].(map[string]any)["message"].(map[string]any)["content"] != 5 {
+		t.Fatal("non-string content must be left alone")
+	}
 }
 
-// StreamingTests mirrors the streaming half of StreamingTests in
-// test_voice_proxy.py.
+// TestStreamingFirstSentenceReleasedBeforeCompletion: only complete sentences
+// are released early, and the tail is joined with a space.
 func TestStreamingFirstSentenceReleasedBeforeCompletion(t *testing.T) {
 	s := &sanitize.StreamingSanitizer{}
 	feed := func(text string, final bool) string {
@@ -97,12 +145,16 @@ func TestStreamingFirstSentenceReleasedBeforeCompletion(t *testing.T) {
 	}
 }
 
-func TestStreamingLinksCitationsAndURLsAtEverySplit(t *testing.T) {
+// TestStreamingMatchesWholeTextAtEverySplit: feeding the text in every possible
+// split and char-by-char produces the same speech as one buffered sanitize.
+func TestStreamingMatchesWholeTextAtEverySplit(t *testing.T) {
 	samples := []string{
 		"Новость. ([investing.com](https://example.com/a?b=1)) Ещё новость.",
 		"Источник: [Reuters](https://reuters.com/x). Следующий ответ.",
 		"Смотри https://example.com/news и всё. Второе предложение.",
 		"Ответ (не ссылка). **Второе** предложение.",
+		"Вопрос? Да! Точно… Последнее.",
+		"Полный вопрос？ И ответ.",
 	}
 	for _, text := range samples {
 		runes := []rune(text)
@@ -141,54 +193,29 @@ func TestStreamingLinksCitationsAndURLsAtEverySplit(t *testing.T) {
 	}
 }
 
+// TestStreamingUnfinishedLinkIsDiscarded: a half URL is never spoken.
 func TestStreamingUnfinishedLinkIsDiscarded(t *testing.T) {
+	for _, input := range []string{"Ответ [источник](https://example", "Ответ https://example"} {
+		s := &sanitize.StreamingSanitizer{}
+		got, err := s.Feed(input, true)
+		if err != nil {
+			t.Fatalf("Feed: %v", err)
+		}
+		if got != "Ответ" {
+			t.Errorf("Feed(%q) = %q, want %q", input, got, "Ответ")
+		}
+	}
+}
+
+// TestStreamingRejectsOversizedTail bounds a runaway stream.
+func TestStreamingRejectsOversizedTail(t *testing.T) {
 	s := &sanitize.StreamingSanitizer{}
-	got, err := s.Feed("Ответ [источник](https://example", true)
-	if err != nil {
-		t.Fatalf("Feed: %v", err)
-	}
-	if got != "Ответ" {
-		t.Fatalf("got %q, want %q", got, "Ответ")
+	if _, err := s.Feed(strings.Repeat("a", sanitize.MaxStreamBytes+1), false); err != sanitize.ErrStreamTooLarge {
+		t.Fatalf("Feed = %v, want ErrStreamTooLarge", err)
 	}
 }
 
-// New Unicode parity cases: Go's RE2 \s is ASCII-only, so every one of these
-// would leak a separator into speech if the package used \s.
-func TestSanitizeUnicodeWhitespaceParity(t *testing.T) {
-	cases := map[string]string{
-		"привет\u00a0мир":                       "привет мир", // NBSP
-		"привет\u202fмир":                       "привет мир", // narrow NBSP
-		"привет\u2009мир":                       "привет мир", // thin space
-		"привет\u3000мир":                       "привет мир", // ideographic space
-		"привет\u0085мир":                       "привет мир", // NEL
-		"привет\x1cмир":                         "привет мир", // file separator
-		"  привет \n\n  мир  ":                  "привет мир",
-		"\u00a0привет\u00a0":                    "привет",
-		"- \u00a0пункт":                         "пункт",
-		"#\u00a0Заголовок":                      "Заголовок",
-		"1.\u00a0пункт":                         "пункт",
-		"Пустые скобки ()\u00a0и ( ) остаются?": "Пустые скобки и остаются?",
-	}
-	for input, want := range cases {
-		if got := sanitize.SanitizeText(input); got != want {
-			t.Errorf("SanitizeText(%q) = %q, want %q", input, got, want)
-		}
-	}
-}
-
-func TestSanitizeKeepsEmojiAndCombiningMarks(t *testing.T) {
-	for _, text := range []string{
-		"Эмодзи 😀 в тексте.",
-		"👨‍👩‍👧‍👦 семья",
-		"É\u0301 combining",
-		"Ｆｕｌｌｗｉｄｔｈ ｔｅｘｔ",
-	} {
-		if got := sanitize.SanitizeText(text); got != text {
-			t.Errorf("SanitizeText(%q) = %q, want it unchanged", text, got)
-		}
-	}
-}
-
+// TestEnsureNotQuestion covers each shape of the acknowledgement guard.
 func TestEnsureNotQuestion(t *testing.T) {
 	cases := map[string]string{
 		"Готово?":      "Готово.",
@@ -208,6 +235,7 @@ func TestEnsureNotQuestion(t *testing.T) {
 	}
 }
 
+// TestAnnounceText covers sanitising and every truncation branch.
 func TestAnnounceText(t *testing.T) {
 	if got := sanitize.AnnounceText("Смотри https://example.com/x и **готово**.", 200); got != "Смотри и готово." {
 		t.Fatalf("AnnounceText = %q", got)
@@ -215,195 +243,22 @@ func TestAnnounceText(t *testing.T) {
 	if got := sanitize.AnnounceText("", 200); got != "" {
 		t.Fatalf("AnnounceText(\"\") = %q", got)
 	}
-	if got := sanitize.AnnounceText(strings.Repeat("слово ", 80), 200); len([]rune(got)) > 201 {
-		t.Fatalf("len = %d, want <= 201", len([]rune(got)))
+	// A long statement is cut at a word boundary and ends with an ellipsis.
+	got := sanitize.AnnounceText(strings.Repeat("слово ", 80), 200)
+	if !strings.HasSuffix(got, "…") || strings.HasSuffix(got, "?") || len([]rune(got)) > 201 {
+		t.Fatalf("long statement = %q", got)
 	}
-	// Prefer the final question sentence when it fits.
-	if got := sanitize.AnnounceText("Первый факт. "+strings.Repeat("слово ", 80)+". Подтверждаете?", 200); got != "Подтверждаете?" {
-		t.Fatalf("AnnounceText kept-question = %q", got)
-	}
-	// If even the question is too long, cut it but keep the trailing "?".
-	got := sanitize.AnnounceText(strings.Repeat("слово ", 80)+"Подтверждаете?", 200)
-	if !strings.HasSuffix(got, "?") || len([]rune(got)) > 201 {
-		t.Fatalf("AnnounceText long-question = %q", got)
-	}
-	// A statement keeps the previous ellipsis truncation and no "?".
-	got = sanitize.AnnounceText(strings.Repeat("слово ", 80), 200)
-	if !strings.HasSuffix(got, "…") || strings.HasSuffix(got, "?") {
-		t.Fatalf("AnnounceText long-statement = %q", got)
-	}
-}
-
-// TestParityGoldenSanitize asserts byte-identical output for a corpus generated
-// by calling the Python implementation directly. See testdata/parity/README.md.
-func TestParityGoldenSanitize(t *testing.T) {
-	dir := parityDir(t)
-	var fixture struct {
-		Cases []struct {
-			Input string `json:"input"`
-			Want  string `json:"want"`
-		} `json:"cases"`
-	}
-	readJSON(t, filepath.Join(dir, "sanitize.json"), &fixture)
-	if len(fixture.Cases) < 200 {
-		t.Fatalf("parity corpus has %d cases, want at least 200", len(fixture.Cases))
-	}
-	for _, tc := range fixture.Cases {
-		if got := sanitize.SanitizeText(tc.Input); got != tc.Want {
-			t.Errorf("SanitizeText(%q) = %q, want %q", tc.Input, got, tc.Want)
-		}
-	}
-}
-
-// TestParityGoldenStreaming replays every corpus string char-by-char and, when
-// the Python implementation is split-independent for that string, at every
-// split index. The expectation always comes from Python, never from the Go
-// implementation.
-func TestParityGoldenStreaming(t *testing.T) {
-	dir := parityDir(t)
-	var fixture struct {
-		Cases []struct {
-			Input    string `json:"input"`
-			Want     string `json:"want"`
-			SplitsOK bool   `json:"splits_ok"`
-		} `json:"cases"`
-	}
-	readJSON(t, filepath.Join(dir, "streaming.json"), &fixture)
-	if len(fixture.Cases) < 200 {
-		t.Fatalf("streaming corpus has %d cases, want at least 200", len(fixture.Cases))
-	}
-	for _, tc := range fixture.Cases {
-		var got strings.Builder
-		s := &sanitize.StreamingSanitizer{}
-		for _, r := range tc.Input {
-			out, err := s.Feed(string(r), false)
-			if err != nil {
-				t.Fatalf("%q char-by-char: %v", tc.Input, err)
-			}
-			got.WriteString(out)
-		}
-		out, err := s.Feed("", true)
-		if err != nil {
-			t.Fatalf("%q final: %v", tc.Input, err)
-		}
-		got.WriteString(out)
-		if got.String() != tc.Want {
-			t.Errorf("%q char-by-char = %q, want %q", tc.Input, got.String(), tc.Want)
-			continue
-		}
-		if !tc.SplitsOK {
-			continue
-		}
-		runes := []rune(tc.Input)
-		for split := 0; split <= len(runes); split++ {
-			s := &sanitize.StreamingSanitizer{}
-			var mixed strings.Builder
-			for _, part := range []string{string(runes[:split]), string(runes[split:]), ""} {
-				out, err := s.Feed(part, part == "")
-				if err != nil {
-					t.Fatalf("%q split %d: %v", tc.Input, split, err)
-				}
-				mixed.WriteString(out)
-			}
-			if mixed.String() != tc.Want {
-				t.Fatalf("%q split %d = %q, want %q", tc.Input, split, mixed.String(), tc.Want)
-			}
-		}
-	}
-}
-
-// TestParityGoldenSpeech pins ensure_not_question and announce_text.
-func TestParityGoldenSpeech(t *testing.T) {
-	dir := parityDir(t)
-	var fixture struct {
-		Question []struct {
-			Input string `json:"input"`
-			Want  string `json:"want"`
-		} `json:"question"`
-		Announce []struct {
-			Input string `json:"input"`
-			Want  string `json:"want"`
-		} `json:"announce"`
-	}
-	readJSON(t, filepath.Join(dir, "speech.json"), &fixture)
-	const down = "Сервер агентов недоступен."
-	for _, tc := range fixture.Question {
-		if got := sanitize.EnsureNotQuestion(tc.Input, down); got != tc.Want {
-			t.Errorf("EnsureNotQuestion(%q) = %q, want %q", tc.Input, got, tc.Want)
-		}
-	}
-	for _, tc := range fixture.Announce {
-		if got := sanitize.AnnounceText(tc.Input, 200); got != tc.Want {
-			t.Errorf("AnnounceText(%q) = %q, want %q", tc.Input, got, tc.Want)
-		}
-	}
-}
-
-func parityDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for range 12 {
-		for _, candidate := range []string{
-			filepath.Join(dir, "testdata", "parity"),
-			filepath.Join(dir, "solutions", "voice-proxy", "testdata", "parity"),
-		} {
-			if _, err := os.Stat(filepath.Join(candidate, "sanitize.json")); err == nil {
-				return candidate
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	t.Fatal("parity testdata not found")
-	return ""
-}
-
-func readJSON(t *testing.T, path string, target any) {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	if err := json.Unmarshal(data, target); err != nil {
-		t.Fatalf("decode %s: %v", path, err)
-	}
-}
-
-// TestAnnounceTextSanitizesAndShortens mirrors
-// test_announce_text_sanitizes_and_shortens.
-func TestAnnounceTextSanitizesAndShortens(t *testing.T) {
-	if got := sanitize.AnnounceText(strings.Repeat("слово ", 80), 200); len([]rune(got)) > 201 {
-		t.Fatalf("len = %d, want <= 201", len([]rune(got)))
-	}
-	if got := sanitize.AnnounceText("Смотри https://example.com/x и **готово**.", 200); got != "Смотри и готово." {
-		t.Fatalf("AnnounceText = %q", got)
-	}
-	if got := sanitize.AnnounceText("", 200); got != "" {
-		t.Fatalf("AnnounceText(\"\") = %q", got)
-	}
-}
-
-// TestLongQuestionTruncationKeepsTheQuestionMark mirrors
-// test_long_question_truncation_keeps_the_question_mark.
-func TestLongQuestionTruncationKeepsTheQuestionMark(t *testing.T) {
-	// Prefer the final question sentence when it fits.
+	// The final question sentence is preferred when it fits.
 	if got := sanitize.AnnounceText("Первый факт. "+strings.Repeat("слово ", 80)+". Подтверждаете?", 200); got != "Подтверждаете?" {
 		t.Fatalf("kept question = %q", got)
 	}
-	// If even the question is too long, cut it but keep the trailing "?".
-	got := sanitize.AnnounceText(strings.Repeat("слово ", 80)+"Подтверждаете?", 200)
+	// An over-long question is cut but keeps its trailing "?".
+	got = sanitize.AnnounceText(strings.Repeat("слово ", 80)+"Подтверждаете?", 200)
 	if !strings.HasSuffix(got, "?") || len([]rune(got)) > 201 {
 		t.Fatalf("long question = %q", got)
 	}
-	// A statement keeps the previous ellipsis truncation and no "?".
-	got = sanitize.AnnounceText(strings.Repeat("слово ", 80), 200)
-	if !strings.HasSuffix(got, "…") || strings.HasSuffix(got, "?") {
-		t.Fatalf("long statement = %q", got)
+	// A short text under a small limit is returned unchanged.
+	if got := sanitize.AnnounceText("Готово.", 200); got != "Готово." {
+		t.Fatalf("short text = %q", got)
 	}
 }

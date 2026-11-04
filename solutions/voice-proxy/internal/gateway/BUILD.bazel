@@ -11,5 +11,8 @@ go_library(
 go_test(
     name = "gateway_test",
     srcs = ["client_test.go"],
-    deps = [":gateway"],
+    deps = [
+        ":gateway",
+        "//solutions/voice-proxy/internal/testfake",
+    ],
 )

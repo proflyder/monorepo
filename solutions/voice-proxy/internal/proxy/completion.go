@@ -10,7 +10,7 @@ import (
 )
 
 // send relays a buffered response. The status/body pair goes through the same
-// normalisation Python applies to every non-streaming response.
+// error normalisation as every non-streaming response.
 func (h *Handler) send(w http.ResponseWriter, status int, body []byte, contentType string) {
 	body, contentType = hermes.NormalizeError(status, body, contentType)
 	w.Header().Set("Content-Type", contentType)

@@ -27,4 +27,8 @@ go_test(
     name = "voice-proxy_test",
     srcs = ["cmd_test.go"],
     embed = [":voice-proxy_lib"],
+    deps = [
+        "//solutions/voice-proxy/internal/config",
+        "//solutions/voice-proxy/internal/testfake",
+    ],
 )

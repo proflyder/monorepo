@@ -26,9 +26,8 @@ func (NopLogger) Infof(string, ...any) {}
 // Errorf implements Logger.
 func (NopLogger) Errorf(string, ...any) {}
 
-// StderrLogger writes "voice-proxy: ..." lines, like Handler.log_message in
-// voice_proxy.py. Errors are prefixed with an uppercase ERROR level so the
-// rollout log scan still catches them.
+// StderrLogger writes "voice-proxy: ..." lines. Errors are prefixed with an
+// uppercase ERROR level so the rollout log scan still catches them.
 type StderrLogger struct {
 	mu  sync.Mutex
 	out io.Writer

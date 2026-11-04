@@ -3,9 +3,8 @@
 // forwards comment lines as keepalives, and a writer that flushes one frame at
 // a time.
 //
-// The reader is a port of sse_events() in voice_proxy.py. Python iterates the
-// HTTP response by lines and strips every trailing CR/LF; the protocol itself
-// only requires one line ending, so the reader accepts both.
+// The reader iterates the HTTP response by lines and strips every trailing
+// CR/LF; the protocol itself only requires one line ending, so it accepts both.
 package sse
 
 import (
@@ -19,7 +18,7 @@ import (
 // Event is one decoded SSE record.
 //
 // Event is the "event:" field (default "message"). Keepalive records use the
-// pseudo-event "keepalive" with empty Data, exactly like the Python reader.
+// pseudo-event "keepalive" with empty Data.
 type Event struct {
 	Event string
 	Data  string
@@ -41,8 +40,7 @@ func NewReader(r io.Reader) *Reader {
 	return &Reader{lines: bufio.NewReaderSize(r, 64<<10), event: "message"}
 }
 
-// ErrInvalidUTF8 reports a record that is not valid UTF-8; the Python reader
-// raises UnicodeDecodeError on the same input.
+// ErrInvalidUTF8 reports a record that is not valid UTF-8.
 var ErrInvalidUTF8 = errors.New("sse: data is not valid utf-8")
 
 // Next returns the next record, or io.EOF at end of stream.
@@ -83,7 +81,7 @@ func (r *Reader) Next() (Event, error) {
 }
 
 // readLine returns one line without its terminating newline. A final line
-// without a newline is returned before io.EOF, matching Python's line iterator.
+// without a newline is returned before io.EOF.
 func (r *Reader) readLine() (string, error) {
 	line, err := r.lines.ReadString('\n')
 	if err != nil {
@@ -95,8 +93,7 @@ func (r *Reader) readLine() (string, error) {
 	return finishLine(line)
 }
 
-// finishLine trims the line ending and validates UTF-8 per line, exactly like
-// Python's raw.decode("utf-8").
+// finishLine trims the line ending and validates UTF-8 per line.
 func finishLine(line string) (string, error) {
 	line = strings.TrimRight(line, "\r\n")
 	if !utf8.ValidString(line) {

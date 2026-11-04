@@ -11,7 +11,7 @@ import (
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
 )
 
-// Consumer defaults from voice_proxy.py.
+// Consumer defaults.
 const (
 	DefaultLeaseSeconds = 120
 	DefaultTTLSeconds   = 10800
@@ -28,8 +28,8 @@ const (
 	DetailIdle      = "idle_timeout"
 )
 
-// ConsumerConfig wires the queue consumer. Every dependency is a function so
-// the tests can drive the loop with fakes, like the Python fakes.
+// ConsumerConfig wires the queue consumer. Every dependency is a function so a
+// test can drive the loop with fakes.
 type ConsumerConfig struct {
 	// Profile reads the current profile fresh from HA (no cache).
 	Profile func(ctx context.Context) (string, bool)
@@ -75,7 +75,7 @@ type Consumer struct {
 	cfg ConsumerConfig
 }
 
-// NewConsumer builds a Consumer with Python's defaults.
+// NewConsumer builds a Consumer with the documented defaults.
 func NewConsumer(cfg ConsumerConfig) *Consumer {
 	if cfg.Prefix == "" {
 		cfg.Prefix = DefaultPrefix
@@ -120,8 +120,7 @@ func NewConsumer(cfg ConsumerConfig) *Consumer {
 }
 
 // Run speaks queued answers one at a time until ctx is cancelled. It never
-// returns an error: a transient failure is logged and retried with backoff, like
-// the Python daemon thread.
+// returns an error: a transient failure is logged and retried with backoff.
 func (c *Consumer) Run(ctx context.Context) {
 	retry := c.cfg.RetryMin
 	fail := func(err error) {
@@ -298,10 +297,10 @@ func eventPayload(raw string) map[string]any {
 	return object
 }
 
-// eventCreatedUnix prefers payload.created_unix over event.createdUnix, like
-// _event_created_unix. A JSON bool is not a timestamp. A zero createdUnix is
-// what the client decodes for an absent field: it is unknown (Python's None),
-// never the epoch, so a missing timestamp cannot silently expire an answer.
+// eventCreatedUnix prefers payload.created_unix over event.createdUnix. A JSON
+// bool is not a timestamp. A zero createdUnix is what the client decodes for an
+// absent field: it is unknown, never the epoch, so a missing timestamp cannot
+// silently expire an answer.
 func eventCreatedUnix(payload map[string]any, event scheduler.Event) (int64, bool) {
 	if value, ok := intValue(payload["created_unix"]); ok {
 		return value, true

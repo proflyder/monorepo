@@ -27,5 +27,6 @@ go_test(
         "//solutions/voice-proxy/internal/hermes",
         "//solutions/voice-proxy/internal/sanitize",
         "//solutions/voice-proxy/internal/sse",
+        "//solutions/voice-proxy/internal/testfake",
     ],
 )

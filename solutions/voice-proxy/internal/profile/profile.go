@@ -1,19 +1,16 @@
 // Package profile reads the Home Assistant voice-profile entity and maps its
 // state onto the routing profile.
 //
-// It is a port of read_entity_state(), profile_from_state(), read_profile()
-// and _fetch_profile() in voice_proxy.py. Two details are part of the contract:
+// Two details are part of the contract:
 //
 //   - only a fresh *successful* read is cached; a failed read returns unknown
 //     and clears the cache, so a stale profile is never used;
 //   - the state is normalised with NFKC and a full Unicode case fold before
-//     mapping, exactly like Python's unicodedata.normalize + str.casefold().
+//     mapping, so fullwidth and non-breaking forms are recognised too.
 package profile
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -22,6 +19,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
 
+	"ricardo.local/monorepo/packages/go/ha"
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
@@ -31,15 +29,12 @@ const (
 	Personal = "personal"
 )
 
-// maxStateBytes bounds one HA state response.
-const maxStateBytes = 1 << 20
-
 // Config configures a Reader.
 type Config struct {
 	// URL is the Home Assistant base URL (no trailing slash).
 	URL string
 	// Token is resolved on every request, so a rotated mounted secret is picked
-	// up without a restart (ha_token() in voice_proxy.py).
+	// up without a restart.
 	Token func() string
 	// Entity is the profile input_select entity id.
 	Entity string
@@ -57,11 +52,10 @@ type Config struct {
 // Reader reads HA entity states and caches only a successful profile read.
 type Reader struct {
 	url      string
-	token    func() string
+	client   *ha.Client
 	entity   string
 	cache    time.Duration
 	timeout  time.Duration
-	http     *http.Client
 	clock    func() time.Time
 	mu       sync.Mutex
 	cached   string
@@ -74,25 +68,16 @@ func New(cfg Config) *Reader {
 	if timeout <= 0 {
 		timeout = 3 * time.Second
 	}
-	hc := cfg.HTTP
-	if hc == nil {
-		hc = &http.Client{}
-	}
 	clock := cfg.Clock
 	if clock == nil {
 		clock = time.Now
 	}
-	token := cfg.Token
-	if token == nil {
-		token = func() string { return "" }
-	}
 	return &Reader{
 		url:     strings.TrimSuffix(strings.TrimSpace(cfg.URL), "/"),
-		token:   token,
+		client:  ha.NewWithToken(cfg.URL, cfg.Token, cfg.HTTP),
 		entity:  cfg.Entity,
 		cache:   cfg.Cache,
 		timeout: timeout,
-		http:    hc,
 		clock:   clock,
 	}
 }
@@ -133,8 +118,8 @@ func (r *Reader) Fetch(ctx context.Context) (string, bool) {
 	return MapState(state)
 }
 
-// State reads one entity state; ok is false for a transport error, a non-object
-// body, a missing state or a body that is not a JSON object.
+// State reads one entity state; ok is false for a transport error, a non-2xx
+// response, a missing state or a body that is not a JSON object.
 func (r *Reader) State(ctx context.Context, entity string) (string, bool) {
 	return r.state(ctx, entity)
 }
@@ -145,30 +130,11 @@ func (r *Reader) state(ctx context.Context, entity string) (string, bool) {
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, r.url+"/api/states/"+entity, nil)
+	state, err := r.client.State(reqCtx, entity)
 	if err != nil {
 		return "", false
 	}
-	req.Header.Set("Authorization", "Bearer "+r.token())
-	resp, err := r.http.Do(req)
-	if err != nil {
-		return "", false
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxStateBytes))
-		return "", false
-	}
-	var payload any
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxStateBytes)).Decode(&payload); err != nil {
-		return "", false
-	}
-	object, ok := payload.(map[string]any)
-	if !ok {
-		return "", false
-	}
-	state, ok := object["state"].(string)
-	return state, ok
+	return state, true
 }
 
 // MapState maps an input_select state onto a routing profile. Anything else is
@@ -184,7 +150,7 @@ func MapState(state string) (string, bool) {
 	return "", false
 }
 
-// NormalizeState is " ".join(NFKC(state).casefold().split()).
+// NormalizeState is NFKC, full Unicode case folding and whitespace collapsing.
 func NormalizeState(state string) string {
 	normalized := norm.NFKC.String(state)
 	normalized = cases.Fold().String(normalized)

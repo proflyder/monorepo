@@ -2,8 +2,7 @@
 // belongs (/v1/voice/utterance) and long-polls the routed turn result and the
 // dispatcher updates.
 //
-// The request bodies, paths and timeouts are copied from call_utterance(),
-// call_result(), call_updates() and _post_json() in voice_proxy.py:
+// The request bodies, paths and timeouts:
 //
 //   - utterance: 5 s (HERMES_VOICE_GATEWAY_TIMEOUT);
 //   - result/updates: gateway timeout + the long-poll wait, because the server
@@ -83,7 +82,7 @@ func (c *Client) Utterance(ctx context.Context, text, profile string) (map[strin
 }
 
 // Result long-polls the answer of a routed turn. waitSeconds is raised to at
-// least 1 and added to the request timeout, like call_result().
+// least 1 and added to the request timeout.
 func (c *Client) Result(ctx context.Context, threadID string, afterSeq int64, waitSeconds int) (map[string]any, error) {
 	wait := waitSeconds
 	if wait < 1 {
@@ -135,7 +134,7 @@ func (c *Client) post(ctx context.Context, path string, body map[string]any, tim
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return map[string]any{}, errors.New("gateway returned " + resp.Status)
 	}
-	// _post_json returns an empty object for a non-object JSON value.
+	// A non-object JSON value is treated as an empty object.
 	var value any
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&value); err != nil {
 		return map[string]any{}, err

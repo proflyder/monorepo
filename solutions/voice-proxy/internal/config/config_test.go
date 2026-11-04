@@ -29,8 +29,8 @@ func load(t *testing.T, values map[string]string) config.Config {
 	return cfg
 }
 
-// TestDefaultsMatchThePythonModule pins every default in voice_proxy.py.
-func TestDefaultsMatchThePythonModule(t *testing.T) {
+// TestDefaults pins every documented default.
+func TestDefaults(t *testing.T) {
 	cfg := load(t, nil)
 	checks := []struct {
 		name string
@@ -98,7 +98,7 @@ func TestEmptyValuesAreNotDefaults(t *testing.T) {
 	if cfg.ProfileEntity != "" {
 		t.Fatalf("profile entity = %q, want empty", cfg.ProfileEntity)
 	}
-	// Numeric variables are parsed, so an empty value is an error, as in Python.
+	// Numeric variables are parsed, so an empty value is an error.
 	if _, err := config.LoadFrom(env(map[string]string{"HERMES_PROXY_PORT": ""}), noFiles); err == nil {
 		t.Fatal("an empty HERMES_PROXY_PORT should be rejected")
 	}
@@ -142,7 +142,7 @@ func TestSecretsPreferFiles(t *testing.T) {
 	}
 }
 
-// TestSwitches pins routing/updates/queue semantics from voice_proxy.py.
+// TestSwitches pins the routing/updates/queue switches.
 func TestSwitches(t *testing.T) {
 	base := map[string]string{
 		"HERMES_HA_URL":              "http://ha.example",
@@ -253,7 +253,7 @@ func TestQueueSwitchNeedsURLAndToken(t *testing.T) {
 	}
 }
 
-// TestSecretFilesAreReadOnEveryUse pins the lazy *_FILE semantics: Python's
+// TestSecretFilesAreReadOnEveryUse pins the lazy *_FILE semantics: a
 // ha_token()/voice_token()/scheduler_token() re-read the mounted file, so a
 // rotated token needs no restart.
 func TestSecretFilesAreReadOnEveryUse(t *testing.T) {
@@ -273,7 +273,7 @@ func TestSecretFilesAreReadOnEveryUse(t *testing.T) {
 	if got := cfg.HATokenValue(); got != "rotated-token" {
 		t.Fatalf("token after rotation = %q", got)
 	}
-	// The inline fallback is only used without a *_FILE, exactly like Python.
+	// The inline fallback is only used without a *_FILE.
 	inline := load(t, map[string]string{"HERMES_HA_TOKEN": "inline-token"})
 	if got := inline.HATokenValue(); got != "inline-token" {
 		t.Fatalf("inline token = %q", got)

@@ -1,15 +1,12 @@
 // Package config loads voice-proxy settings from the environment only.
 //
-// The variable names, defaults and secret handling are copied from
-// projects/home-assistant/hermes/voice_proxy.py so the Go binary can take over
-// the Python image without a values change:
+// The contract:
 //
 //   - a "*_FILE" variable wins over the inline value and is re-read from disk;
 //     a missing or unreadable file yields an empty secret, never a fallback;
 //   - trailing slashes are stripped from every base URL;
-//   - the routing, updates and queue switches keep their Python semantics;
 //   - a default applies only when the variable is unset, not when it is set to
-//     an empty string (os.environ.get(name, default)).
+//     an empty string.
 //
 // Values that belong to a project composition (entity ids, script names, the
 // satellite) stay overridable there; the defaults mirror the current home
@@ -25,7 +22,7 @@ import (
 	"time"
 )
 
-// Defaults from voice_proxy.py.
+// Defaults.
 const (
 	DefaultUpstream          = "http://127.0.0.1:8642"
 	DefaultBind              = "127.0.0.1"
@@ -84,8 +81,7 @@ type Config struct {
 	UpdatesRescan      int
 
 	// Secret sources are kept so a caller can re-read a mounted token on every
-	// use, exactly like ha_token()/voice_token()/scheduler_token() in
-	// voice_proxy.py. Python never caches a *_FILE secret.
+	// use. A *_FILE secret is never cached.
 	haTokenInline        string
 	gatewayTokenInline   string
 	schedulerTokenInline string
@@ -286,8 +282,8 @@ func (c Config) Redact() Redacted {
 
 // readSecret reads a Bearer token from a mounted file, falling back to the
 // inline environment value. A configured but unreadable file is empty and does
-// not fall back, exactly like _read_secret() in voice_proxy.py. A nil accessor
-// (a zero Config in a test) falls back to os.ReadFile.
+// not fall back. A nil accessor (a zero Config in a test) falls back to
+// os.ReadFile.
 func readSecret(path, inline string, readFile ReadFile) string {
 	if path != "" {
 		if readFile == nil {
@@ -302,14 +298,13 @@ func readSecret(path, inline string, readFile ReadFile) string {
 	return strings.TrimSpace(inline)
 }
 
-// baseURL mirrors `os.environ.get(name, fallback).rstrip("/")`.
+// baseURL strips trailing slashes from a base URL.
 func baseURL(lookup LookupEnv, name, fallback string) string {
 	value := stringEnv(lookup, name, fallback)
 	return strings.TrimRight(value, "/")
 }
 
-// stringEnv mirrors `os.environ.get(name, fallback)`: the fallback applies only
-// when the variable is absent.
+// stringEnv returns the variable value, or the fallback when it is absent.
 func stringEnv(lookup LookupEnv, name, fallback string) string {
 	if value, ok := lookup(name); ok {
 		return value
@@ -317,7 +312,7 @@ func stringEnv(lookup LookupEnv, name, fallback string) string {
 	return fallback
 }
 
-// switchedOff mirrors Python's `.strip().lower() in ("0", "false", "no", "off")`.
+// switchedOff reports the accepted off spellings, case-insensitively.
 func switchedOff(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "0", "false", "no", "off":
@@ -328,7 +323,7 @@ func switchedOff(value string) bool {
 
 func intEnv(lookup LookupEnv, name string, fallback int) (int, error) {
 	raw := stringEnv(lookup, name, strconv.Itoa(fallback))
-	// Python int() accepts surrounding whitespace.
+	// Surrounding whitespace is accepted.
 	value, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil {
 		return 0, fmt.Errorf("%s: %q is not an integer", name, raw)
