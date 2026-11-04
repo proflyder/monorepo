@@ -655,15 +655,22 @@ helm template runtime projects/home-assistant/deploy/chart \
 ```
 
 Полный `apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а
-workloads — через Helm; CI катит только workloads. Автодеплой Hermes
+workloads — через Helm; CI катит только workloads. Скрипту нужен digest
+Go-exporter'а: `HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:…`
+(взять текущий: `kubectl -n home-assistant get deployment
+runtime-health-exporter -o jsonpath='{.spec.template.spec.containers[0].image}'`);
+он подставляет image, command и пустые volume-монтирования вместо удалённого
+Python-скрипта/ConfigMap. Автодеплой Hermes
 (build+push → digest в релиз → голосовая проверка → откат) описан в
 `KUBERNETES-OPERATIONS.md`; ручной прогон:
 
 ```bash
 KUBECONFIG=secrets/kubernetes-research/kubeconfig \
-  python3 projects/home-assistant/deploy/hermes_rollout.py \
+  home-deploy hermes rollout \
     --values-file "$RUNTIME_PRIVATE_VALUES" \
     --hermes-digest sha256:… --voice-proxy-digest sha256:… \
+    --exporter-digest sha256:… \
+    --smoke-image ghcr.io/proflyder/home-deploy@sha256:… \
     --state-dir /tmp/hermes-state
 ```
 
@@ -1059,7 +1066,7 @@ dashboard `currency-bot` (uid `currency-bot`).
 Откат Deployment из state последнего деплоя:
 
 ```bash
-python3 projects/home/kubernetes/scheduler/rollback.py \
+home-deploy state rollback \
   --state-dir secrets/local/rendered/currency-bot/state \
   --namespace currency-bot
 ```

@@ -18,6 +18,8 @@
 #   ./projects/home/kubernetes/external-secrets/deploy.sh --skip-secrets
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 # shellcheck disable=SC1091
 source "$ROOT/projects/home/kubernetes/versions.sh"
 
@@ -78,20 +80,7 @@ if [[ "$APPLY_SECRETS" == 1 ]]; then
 
   # Wait for every ExternalSecret created above. `kubectl wait` needs explicit
   # names, so resolve them from the applied manifests.
-  python3 - "$TMP/names" "${manifests[@]}" <<'PY'
-import pathlib
-import sys
-
-import yaml
-
-out = pathlib.Path(sys.argv[1])
-lines = []
-for path in sys.argv[2:]:
-    for doc in yaml.safe_load_all(pathlib.Path(path).read_text()):
-        if doc and doc.get("kind") == "ExternalSecret":
-            lines.append(f'{doc["metadata"]["namespace"]}/{doc["metadata"]["name"]}')
-out.write_text("\n".join(lines) + "\n")
-PY
+  home_deploy eso names --out "$TMP/names" "${manifests[@]}" >/dev/null
   while IFS= read -r item; do
     [[ -n "$item" ]] || continue
     ns=${item%%/*}

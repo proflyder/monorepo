@@ -1,0 +1,17 @@
+package(default_visibility = ["//visibility:public"])
+
+# Reviewed renderer inputs. The renderer itself is Go
+# (//platform/deploy/internal/hermesconfig); these are the files it installs and
+# merges into HERMES_HOME.
+filegroup(
+    name = "render_sources",
+    srcs = glob(
+        [
+            "*.md",
+            "*.txt",
+            "*.yaml",
+            "skills/**",
+        ],
+        exclude = ["hermes-private.yaml"],
+    ),
+)

@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "buildid",
+    srcs = ["buildid.go"],
+    importpath = "ricardo.local/monorepo/platform/deploy/internal/buildid",
+)
+
+go_test(
+    name = "buildid_test",
+    srcs = ["buildid_test.go"],
+    embed = [":buildid"],
+)

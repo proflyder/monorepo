@@ -71,6 +71,8 @@ export class Unit {
         goRace: false,
         suites: [],
         compileDirs: [],
+        // Python units whose suites exec the Go deploy binary.
+        pythonDeployTool: false,
         jsTests: [],
         // Native (non-Bazel) build units: a repository script that produces
         // host- or cross-built artifacts, plus the pinned toolchain it needs.
@@ -90,8 +92,12 @@ export class Unit {
         deployImages: [],
         deployWorkloads: [],
         deployBuilder: "bazel",
-        // Bazel package that owns the `<image>_image`/`<image>_push` targets.
+        // Bazel package that owns the `<image>_image`/`<image>_push` targets
+        // (single-image `bazel` units).
         deployTargetRoot: "",
+        // Explicit image -> Bazel package map for `mixed` units, so several
+        // Bazel images can live next to a Dockerfile image.
+        deployBazelImages: {},
         // Kubernetes namespace, deploy entrypoint and the OpenBao `secret/ci/
         // deploy-home` key/file that carries the private deploy-time env.
         deployNamespace: "",
@@ -142,6 +148,18 @@ function list(value) {
   return Array.isArray(value) ? [...value] : [];
 }
 
+// normalizeImageMap keeps `deploy.bazel_images` as a plain image -> package map.
+function normalizeImageMap(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const result = {};
+  for (const [image, target] of Object.entries(value)) {
+    result[String(image)] = String(target ?? "");
+  }
+  return result;
+}
+
 export function normalizeConfig(data, label = "units") {
   if (!data || typeof data !== "object" || data.version !== 1) {
     throw new Error(`${label}: expected a version: 1 mapping`);
@@ -171,6 +189,9 @@ export function normalizeConfig(data, label = "units") {
       goRace: Boolean(go.race),
       suites: list(python.suites),
       compileDirs: list(python.compile),
+      // The suite drives a deploy script that execs the Go deploy binary; the
+      // workflow builds it once and exports HOME_DEPLOY.
+      pythonDeployTool: Boolean(python.deploy_tool),
       jsTests: list(js.tests),
       nativeWorkdir: String(native.workdir ?? ""),
       nativeBuild: String(native.build ?? ""),
@@ -187,6 +208,7 @@ export function normalizeConfig(data, label = "units") {
       deployWorkloads: list(deploy.workloads),
       deployBuilder: String(deploy.builder ?? "bazel"),
       deployTargetRoot: String(deploy.target_root ?? ""),
+      deployBazelImages: normalizeImageMap(deploy.bazel_images),
       deployNamespace: String(deploy.namespace ?? ""),
       deployScript: String(deploy.script ?? ""),
       deployEnvKey: String(deploy.env_key ?? ""),
@@ -1216,6 +1238,7 @@ export function matrixEntries(route_, config) {
     id: unit.id,
     suites: space(unit.suites),
     compile: space(unit.compileDirs),
+    deploy_tool: unit.pythonDeployTool,
   }));
   const js = route_.routes.js.units.map((unit) => ({
     id: unit.id,
@@ -1258,6 +1281,7 @@ export function deployEntries(route_, config) {
       workloads: space(unit.deployWorkloads),
       builder: unit.deployBuilder,
       target_root: unit.deployTargetRoot,
+      bazel_images: JSON.stringify(unit.deployBazelImages),
       namespace: unit.deployNamespace,
       script: unit.deployScript,
       env_key: unit.deployEnvKey,

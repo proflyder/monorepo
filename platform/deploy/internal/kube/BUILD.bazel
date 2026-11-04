@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "kube",
+    srcs = ["kube.go"],
+    importpath = "ricardo.local/monorepo/platform/deploy/internal/kube",
+)

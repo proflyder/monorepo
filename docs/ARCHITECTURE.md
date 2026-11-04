@@ -153,7 +153,7 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
   а юнит `hermes` имеет builder `mixed` (Docker + Bazel).
 - currency-bot — data-driven юнит `platform/ci/units.mjs`: свой namespace,
   script, `externalsecrets`, `env_key`/`env_file`; contract-тест
-  `currency-bot-deploy`. `converge.py` заменяет Deployment целиком и сохраняет
+  `currency-bot-deploy`. `home-deploy converge` заменяет Deployment целиком и сохраняет
   env/режим/replicas; откат восстанавливает ровно тот объект, который применил
   job.
 - Режимы исполнения (`execute`, `shadow`, `control-*`) меняются только

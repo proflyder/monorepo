@@ -1,0 +1,151 @@
+# wakegrant: one-time logon grants for a machine woken by Home Assistant.
+#
+# TEMPLATE. deploy.sh renders it with private values from an ignored env file;
+# rendered manifests must never be committed.
+#
+#   WAKE_GRANT_IMAGE      digest-pinned image built by Bazel
+#   WAKE_GRANT_NODE_PORT  LAN NodePort exposed to Home Assistant
+#   BUILD_ID              rollout annotation (image fingerprint)
+#
+# SQLite is single-writer: exactly one replica, Recreate, one volume. The grant
+# must survive a pod restart between the Wake-on-LAN packet and the claim, so
+# the database lives on the `local-retain` PVC rather than in memory.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wakegrant-data
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: wakegrant
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wakegrant
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: wakegrant
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wakegrant
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wakegrant
+      annotations:
+        ricardo.dev/build: 0123456789ab
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wakegrant
+          image: ghcr.io/proflyder/wakegrant@sha256:7777777777777777777777777777777777777777777777777777777777777777
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WAKE_GRANT_LISTEN
+              value: 0.0.0.0:8099
+            - name: WAKE_GRANT_DB_PATH
+              value: /data/wakegrant.db
+            - name: WAKE_GRANT_ISSUER_TOKEN_FILE
+              value: /run/secrets/wakegrant/issuer_token
+            - name: WAKE_GRANT_MACHINES_FILE
+              value: /run/secrets/wakegrant/machines
+            - name: WAKE_GRANT_MAX_TTL_SECONDS
+              value: "600"
+            - name: LOG_LEVEL
+              value: info
+          ports:
+            - name: http
+              containerPort: 8099
+              protocol: TCP
+          # /healthz is unauthenticated and checks the SQLite connection, so a
+          # lost PVC or a broken mount fails readiness instead of serving 500s.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: secrets
+              mountPath: /run/secrets/wakegrant
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: wakegrant-data
+        - name: secrets
+          secret:
+            secretName: wakegrant
+            defaultMode: 0440
+            items:
+              - key: issuer_token
+                path: issuer_token
+              - key: machines
+                path: machines
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wakegrant
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: wakegrant
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: wakegrant
+  ports:
+    - name: http
+      port: 8099
+      targetPort: http
+      nodePort: 30101
+      protocol: TCP

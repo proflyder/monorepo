@@ -1,7 +1,7 @@
 # Hermes Agent overlay for the Station Midi voice cascade.
 #
 # This is a deployment fragment, not a complete ~/.hermes/config.yaml.
-# Merge it into the generated Hermes config (render_hermes_config.py), then
+# Merge it into the generated Hermes config (home-deploy hermes render-config), then
 # keep secrets only in the Pod environment / Secret and private endpoints only
 # in a private values file outside Git (secrets/home/hermes-private.yaml):
 #

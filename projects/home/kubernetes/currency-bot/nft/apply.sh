@@ -8,12 +8,17 @@
 #   PRIVATE_ENV=secrets/home/currency-bot.env ./apply.sh
 #   ./apply.sh --env /path/to/currency-bot.env
 #
+# Rendering needs the Go `home-deploy` binary on this node (an installed
+# /usr/local/bin/home-deploy, or set HOME_DEPLOY); see platform/deploy.
+#
 # The rendered ruleset replaces only `table inet ricardo_currency_bot`; the
 # Kubernetes, scheduler and management tables are untouched.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../../../.." && pwd)"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 PRIVATE_ENV=${PRIVATE_ENV:-"$ROOT/secrets/home/currency-bot.env"}
 NFT_BIN=${NFT_BIN:-/usr/sbin/nft}
 TARGET=/etc/ricardo-currency-bot-nodeport.nft
@@ -32,7 +37,7 @@ done
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-python3 "$DIR/../../scheduler/render.py" --env "$PRIVATE_ENV" --out "$tmp" "$DIR/currency-bot-nodeport.nft"
+home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$tmp" "$DIR/currency-bot-nodeport.nft"
 
 "$NFT_BIN" -c -f "$tmp/currency-bot-nodeport.nft"
 install -m 0644 "$tmp/currency-bot-nodeport.nft" "$TARGET"

@@ -86,6 +86,23 @@ class PrebuiltDigestTests(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(self.digests(), {"hermes": hermes, "voice-proxy": voice})
 
+    def test_every_hermes_unit_image_accepts_a_prebuilt_digest(self):
+        # The mixed unit now owns four images; the smoke Job and the runtime
+        # chart exporter must follow the same promote-then-deploy path.
+        digests = {
+            "hermes": "sha256:" + "1" * 64,
+            "voice-proxy": "sha256:" + "2" * 64,
+            "health-exporter": "sha256:" + "3" * 64,
+            "home-deploy": "sha256:" + "4" * 64,
+        }
+        res = self.run_script(
+            list(digests),
+            {"PREBUILT_DIGESTS": ",".join(f"{name}={digest}" for name, digest in digests.items())},
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertFalse(self.calls.exists(), "a prebuilt image was rebuilt or pushed")
+        self.assertEqual(self.digests(), digests)
+
     def test_malformed_digest_fails_before_any_build(self):
         res = self.run_script(
             ["hermes"], {"PREBUILT_DIGESTS": "hermes=sha256:nothex"}

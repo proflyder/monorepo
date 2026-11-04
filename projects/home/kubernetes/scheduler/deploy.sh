@@ -34,8 +34,10 @@
 #   SSH_KEY/SSH_OPTS  ssh transport for NODE_SSH
 #   PREFLIGHT_IN_CLUSTER=1  run the cutover preflight as an in-cluster Job
 #   HA_TOKEN_FILE, SCHEDULER_TOKEN_FILE  local preflight tokens
-#   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE  pre-resolved refs
-#                   (skip building that image; used by the regression test)
+#   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE/PREFLIGHT_IMAGE
+#                   pre-resolved refs (skip building that image; used by the
+#                   regression test). PREFLIGHT_IMAGE is the distroless
+#                   `home-deploy` image that runs the in-cluster preflight Job.
 #   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
 #                   pull-request build (DECISIONS 36); an explicit *_IMAGE wins
 #   SKIP_FIREWALL=1 no longer needed: the NodePort filter is host configuration
@@ -44,6 +46,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck source=platform/ci/prebuilt-digests.sh
 source "$ROOT/platform/ci/prebuilt-digests.sh"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 NS=home-assistant
 DIR="$ROOT/projects/home/kubernetes/scheduler"
 KUBECTL=${KUBECTL:-kubectl}
@@ -61,15 +65,15 @@ IMAGE_REGISTRY=${IMAGE_REGISTRY:-"ghcr.io/proflyder"}
 PUSH_ONLY=${PUSH_ONLY:-0}
 PREFLIGHT_IN_CLUSTER=${PREFLIGHT_IN_CLUSTER:-0}
 SCHEDULER_TOKEN_FILE=${SCHEDULER_TOKEN_FILE:-"$ROOT/secrets/home/scheduler.token"}
-OCI="$ROOT/platform/ci/oci_image.py"
 PREFLIGHT_JOB=scheduler-preflight
 # Pre-deploy state for a safe rollback: deploy.sh records each Deployment it is
 # about to change and marks it only after a successful apply. CI restores from
 # this, never with a blind `kubectl rollout undo`.
 DEPLOY_STATE_DIR=${DEPLOY_STATE_DIR:-"$RENDER_DIR/state"}
-# Pinned python image for the in-cluster preflight Job (digest of the multi-arch
-# `3.13-slim` index). The node resolves the linux/amd64 child itself.
-PREFLIGHT_IMAGE=${PREFLIGHT_IMAGE:-"docker.io/library/python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb"}
+# Image for the in-cluster preflight Job: the `home-deploy` binary on
+# distroless. Resolved from an explicit PREFLIGHT_IMAGE, a promoted PR digest or
+# the Bazel build, exactly like the service images below.
+PREFLIGHT_IMAGE=${PREFLIGHT_IMAGE:-}
 
 # ssh/scp transport. CI passes a dedicated key and IdentityFile-only use; the
 # manual flow keeps using ssh-agent.
@@ -145,15 +149,7 @@ $WANT_SCHEDULER || $WANT_BRIDGE || $WANT_CONTROL || {
 }
 
 env_value() {
-  python3 - "$PRIVATE_ENV" "$1" <<'PY'
-import sys, pathlib
-path, key = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
-for line in path.read_text().splitlines():
-    line = line.strip()
-    if line and not line.startswith("#") and line.split("=", 1)[0] == key:
-        print(line.split("=", 1)[1].strip().strip('"').strip("'"))
-        break
-PY
+  home_deploy env get "$PRIVATE_ENV" "$1"
 }
 
 # Not named `bazel`: a function of that name would shadow the binary and
@@ -175,11 +171,13 @@ fi
 IMAGE_REF_SCHEDULER=
 IMAGE_REF_HA_BRIDGE=
 IMAGE_REF_HA_CONTROL=
+IMAGE_REF_HOME_DEPLOY=
 set_image_ref() {
   case "$1" in
     scheduler) IMAGE_REF_SCHEDULER=$2 ;;
     ha-bridge) IMAGE_REF_HA_BRIDGE=$2 ;;
     ha-control) IMAGE_REF_HA_CONTROL=$2 ;;
+    home-deploy) IMAGE_REF_HOME_DEPLOY=$2 ;;
   esac
 }
 get_image_ref() {
@@ -187,6 +185,7 @@ get_image_ref() {
     scheduler) echo "$IMAGE_REF_SCHEDULER" ;;
     ha-bridge) echo "$IMAGE_REF_HA_BRIDGE" ;;
     ha-control) echo "$IMAGE_REF_HA_CONTROL" ;;
+    home-deploy) echo "$IMAGE_REF_HOME_DEPLOY" ;;
   esac
 }
 image_var() {
@@ -194,6 +193,7 @@ image_var() {
     scheduler) echo SCHEDULER_IMAGE ;;
     ha-bridge) echo HA_BRIDGE_IMAGE ;;
     ha-control) echo HA_CONTROL_IMAGE ;;
+    home-deploy) echo PREFLIGHT_IMAGE ;;
   esac
 }
 
@@ -202,7 +202,7 @@ image_var() {
 # pins them via the *_IMAGE variables, so neither path runs Bazel here.
 if $BUILD; then
   build_needed=false
-  for image in scheduler ha-bridge ha-control; do
+  for image in scheduler ha-bridge ha-control home-deploy; do
     var=$(image_var "$image")
     if [[ -n "${!var:-}" || -n "$(prebuilt_digest "$image")" ]]; then
       continue
@@ -268,7 +268,7 @@ resolve_image() {
     echo "missing image layout $layout; build it or set $var" >&2
     exit 1
   }
-  digest=$(python3 "$OCI" digest "$layout")
+  digest=$(home_deploy oci digest "$layout")
 
   if [[ "$PUSH_IMAGES" == 1 ]]; then
     repo="${IMAGE_REGISTRY}/${name}"
@@ -282,7 +282,7 @@ resolve_image() {
     fi
     echo "== image ${name}: pushed ${repo}@${digest} (tags ${IMAGE_TAG}, develop)"
   elif [[ -n "${NODE_SSH:-}" ]]; then
-    python3 "$OCI" pack "$layout" --ref "${IMAGE_REGISTRY}/${name}:${IMAGE_TAG}" \
+    home_deploy oci pack "$layout" --ref "${IMAGE_REGISTRY}/${name}:${IMAGE_TAG}" \
       --out "$TMP_IMAGES/${name}.tar" >/dev/null
     remote_scp -q "$TMP_IMAGES/${name}.tar" "$NODE_SSH:/tmp/${name}-${IMAGE_TAG}.tar"
     remote_ssh "sudo -n k3s ctr -n k8s.io images import '/tmp/${name}-${IMAGE_TAG}.tar' >/dev/null && rm -f '/tmp/${name}-${IMAGE_TAG}.tar'"
@@ -299,23 +299,27 @@ resolve_image() {
 
 TMP_IMAGES=$(mktemp -d)
 trap 'rm -rf "$TMP_IMAGES"' EXIT
-# All three images are always resolved: the manifests are rendered as one set
-# and a skipped workload still needs a valid reference for its template.
-for image in scheduler ha-bridge ha-control; do
+# Every image is always resolved: the manifests are rendered as one set and a
+# skipped workload (or the preflight Job) still needs a valid reference.
+for image in scheduler ha-bridge ha-control home-deploy; do
   resolve_image "$image"
 done
+# The rendered Job references the resolved preflight image by digest.
+PREFLIGHT_IMAGE=$(get_image_ref home-deploy)
 
 if [[ "$PUSH_ONLY" == 1 ]]; then
-  echo "push-only: $(get_image_ref scheduler) $(get_image_ref ha-bridge) $(get_image_ref ha-control)"
+  echo "push-only: $(get_image_ref scheduler) $(get_image_ref ha-bridge) $(get_image_ref ha-control) $(get_image_ref home-deploy)"
   exit 0
 fi
 
-IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)"
-BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(printf '%s' "$IMAGE_FINGERPRINT" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:12])')"
+IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)$(get_image_ref home-deploy)"
+BUILD_ID="$(home_deploy build-id \
+  --revision "$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)" \
+  --fingerprint "$IMAGE_FINGERPRINT")"
 echo "== build id: $BUILD_ID"
 
 echo "== rendering manifests into $RENDER_DIR"
-python3 "$DIR/render.py" --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
+home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
   --set "SCHEDULER_IMAGE=$(get_image_ref scheduler)" \
   --set "HA_BRIDGE_IMAGE=$(get_image_ref ha-bridge)" \
@@ -329,18 +333,15 @@ python3 "$DIR/render.py" --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
 rm -rf "$DEPLOY_STATE_DIR"
 mkdir -p "$DEPLOY_STATE_DIR"
 
+# The marker contract (.before.json / .absent / .applied) is owned by
+# `home-deploy state`, so a mixed run with an older deploy.sh stays safe.
 record_before() {
-  local name=$1
-  if $KUBECTL -n "$NS" get deployment "$name" >/dev/null 2>&1; then
-    $KUBECTL -n "$NS" get deployment "$name" -o json >"$DEPLOY_STATE_DIR/$name.before.json"
-  else
-    : >"$DEPLOY_STATE_DIR/$name.absent"
-  fi
-  rm -f "$DEPLOY_STATE_DIR/$name.applied"
+  home_deploy state record --state-dir "$DEPLOY_STATE_DIR" \
+    --namespace "$NS" --name "$1" --kubectl "$KUBECTL"
 }
 
 mark_applied() {
-  : >"$DEPLOY_STATE_DIR/$1.applied"
+  home_deploy state mark --state-dir "$DEPLOY_STATE_DIR" --name "$1"
 }
 
 # Replace the live Deployment with the rendered object instead of patching it.
@@ -350,7 +351,7 @@ mark_applied() {
 converge_deployment() {
   local name=$1 file=$2
   shift 2
-  python3 "$DIR/converge.py" \
+  home_deploy converge \
     --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file" "$@"
 }
 
@@ -408,43 +409,43 @@ if $WANT_CONTROL; then
   control_queue_pending() {
     # Fail closed: --control-execute refuses when the dedicated control queue
     # has pending or leased events. GetStatus only reports queues with backlog.
-    local status
+    local status total
     status=$(get_status)
-    printf '%s' "$status" | python3 -c '
-import json,sys
-
-def fail(msg):
-    print("control preflight refused:", msg, file=sys.stderr)
-    sys.exit(1)
-
-try:
-    d = json.load(sys.stdin)
-except Exception as exc:
-    fail(f"GetStatus is not JSON: {exc}")
-if not isinstance(d, dict):
-    fail("GetStatus response is not an object")
-if d.get("ready") is not True:
-    fail("scheduler reports ready=false")
-queues = d.get("queues")
-if not isinstance(queues, list) or not queues:
-    # GetStatus always reports the default queues; an empty/absent list means a
-    # malformed or stale response, not an empty control queue.
-    fail("GetStatus has no queues array")
-total = 0
-for q in queues:
-    if not isinstance(q, dict) or not isinstance(q.get("name"), str):
-        fail(f"malformed queue entry: {q!r}")
-    for key in ("pending", "leased"):
-        value = q.get(key, 0)
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            fail("malformed %s for queue %r: %r" % (key, q.get("name"), value))
-        if q["name"] == "control":
-            total += value
-if total > 0:
-    fail(f"control queue is not empty: pending+leased={total}")
-print("control queue empty")
-'
+    if ! printf '%s' "$status" | jq -e 'type == "object"' >/dev/null 2>&1; then
+      echo "control preflight refused: GetStatus is not a JSON object" >&2
+      return 1
+    fi
+    if ! printf '%s' "$status" | jq -e '.ready == true' >/dev/null 2>&1; then
+      echo "control preflight refused: scheduler reports ready=false" >&2
+      return 1
+    fi
+    if ! printf '%s' "$status" | jq -e \
+      '(.queues | type) == "array" and (.queues | length) > 0' >/dev/null 2>&1; then
+      # GetStatus always reports the default queues; an empty/absent list means
+      # a malformed or stale response, not an empty control queue.
+      echo "control preflight refused: GetStatus has no queues array" >&2
+      return 1
+    fi
+    if ! printf '%s' "$status" | jq -e '
+        all(.queues[];
+          (type == "object") and
+          ((.name | type) == "string") and
+          (((.pending // 0) | type) == "number") and ((.pending // 0) >= 0) and
+          ((.pending // 0) == ((.pending // 0) | floor)) and
+          (((.leased // 0) | type) == "number") and ((.leased // 0) >= 0) and
+          ((.leased // 0) == ((.leased // 0) | floor)))' >/dev/null 2>&1; then
+      echo "control preflight refused: malformed queue entry" >&2
+      return 1
+    fi
+    total=$(printf '%s' "$status" | jq \
+      '[.queues[] | select(.name == "control") | ((.pending // 0) + (.leased // 0))] | add // 0')
+    if [[ "$total" -gt 0 ]]; then
+      echo "control preflight refused: control queue is not empty: pending+leased=$total" >&2
+      return 1
+    fi
+    echo "control queue empty"
   }
+
 
   if [[ "$CONTROL_MODE" == "catalog" ]]; then
     echo "== ha-control -> catalog only (execution disabled)"
@@ -496,7 +497,7 @@ preflight_local() {
   local ha_url scheduler_url
   ha_url=$(env_value HA_URL)
   scheduler_url=$(env_value SCHEDULER_PUBLIC_URL)
-  python3 "$DIR/preflight.py" \
+  home_deploy preflight \
     --ha-url "$ha_url" \
     --ha-token-file "$HA_TOKEN_FILE" \
     --scheduler-url "$scheduler_url" \
@@ -505,10 +506,6 @@ preflight_local() {
 }
 
 preflight_cluster() {
-  echo "== creating the in-cluster preflight ConfigMap"
-  $KUBECTL -n "$NS" create configmap "$PREFLIGHT_JOB" \
-    --from-file=preflight.py="$DIR/preflight.py" \
-    --dry-run=client -o yaml | $KUBECTL apply -f -
   $KUBECTL -n "$NS" delete job "$PREFLIGHT_JOB" --ignore-not-found >/dev/null
   $KUBECTL apply -f "$RENDER_DIR/preflight-job.yaml" >/dev/null
   local rc=0

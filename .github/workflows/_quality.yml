@@ -46,13 +46,11 @@ jobs:
             const audit = await import(`${process.env.GITHUB_WORKSPACE}/platform/quality/audit_repository.mjs`);
             audit.runGithubScript({ core });
 
-      # Python remains only for first-party Python product checks: the static
-      # gate (platform/quality/test_static.py) and the out-of-scope container
-      # helper (platform/ci/oci_image.py) tests.
-      - name: Python product gates (syntax, shellcheck, secret patterns, oci helper)
+      # Python remains only for first-party Python product checks (the static
+      # gate). Deploy tooling is Go and is covered by the platform-deploy unit.
+      - name: Python product gates (syntax, shellcheck, secret patterns)
         run: |
           python3 -m unittest discover -s platform/quality -p 'test_static.py' -v
-          python3 -m unittest discover -s platform/ci -p 'test_oci_image.py' -v
 
       - name: CI unit map is valid and every source/test file is routed
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -69,9 +67,11 @@ jobs:
           shellcheck -S error \
             platform/quality/*.sh \
             platform/ci/*.sh \
+            platform/deploy/*.sh \
             projects/home/kubernetes/scheduler/*.sh \
             projects/home/kubernetes/scheduler/nft/*.sh \
             projects/home/kubernetes/currency-bot/*.sh \
+            projects/home/kubernetes/currency-bot/nft/*.sh \
             projects/station/scripts/*.sh \
             projects/home-assistant/stack/*.sh \
             solutions/windows-logon-provider/*.sh

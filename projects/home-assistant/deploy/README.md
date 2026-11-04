@@ -35,14 +35,27 @@ Voice proxy — Go-сервис `solutions/voice-proxy`, а не Dockerfile: о�
 собирается Bazel `rules_oci` из `//solutions/voice-proxy:voice-proxy_image`
 (distroless, без shell и python) и пушится байт-в-байт целью
 `//solutions/voice-proxy:voice-proxy_push`; `docker push` переписал бы
-media type и digest. Оба образа публикуются в GHCR (`ghcr.io/proflyder/...`)
+media type и digest. Все образы публикуются в GHCR (`ghcr.io/proflyder/...`)
 по digest `imagePullPolicy: IfNotPresent`, без pull-secret. Юнит `hermes`
-имеет `deploy.builder: mixed`: `hermes` собирается Docker, `voice-proxy` —
-Bazel; `deploy-home` вызывает один `build-and-push.sh`, затем
-`hermes_rollout.py` подставляет оба digest'а в релиз `runtime`, проверяет
-rollout, health exporter, `voice-proxy -healthcheck`, Assist через Hermes и
-логи voice-proxy и откатывается на прежнюю ревизию при провале. Сборка без
-новых digest'ов не перезапускает контур.
+имеет `deploy.builder: mixed`: `hermes` собирается Docker, а
+`voice-proxy`, `health-exporter` и `home-deploy` — Bazel (явная карта
+`deploy.bazel_images` в `platform/ci/units.mjs`). `deploy-home` вызывает один
+`build-and-push.sh`, затем `home-deploy hermes rollout`
+(`projects/home-assistant/deploy/rollout.sh` — тонкая обёртка) подставляет
+digest'ы в релиз `runtime`, проверяет rollout, health exporter,
+`voice-proxy -healthcheck`, Assist через Hermes и логи voice-proxy и
+откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
+перезапускает контур.
+
+Health exporter — Go-бинарник `health-exporter/` (distroless-образ
+`//projects/home-assistant/deploy/health-exporter:health-exporter_image`,
+`ghcr.io/proflyder/health-exporter`). Метрики, метки, порт 9116 и переменные
+`ENDPOINT_HOST_*` те же, что у прежнего `chart/files/health_exporter.py`;
+Python-скрипт и его ConfigMap удалены. Карта больше не владеет exporter'ом:
+`hermes rollout` (и `apply-runtime.sh` через `HEALTH_EXPORTER_IMAGE`) задают
+image, command и пустые `volumeMounts`/`volumes` через `helm --set/--set-json`,
+поэтому приватные values менять не нужно. Assist smoke Job тоже собран из
+`home-deploy`, а не из python-образа: `home-deploy hermes assist-smoke`.
 
 ## Voice routing: приватные values
 
@@ -107,7 +120,9 @@ Secret в volume.
 ## Storage и CI
 
 `apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а workloads —
-через Helm. PV/PVC помечены `helm.sh/resource-policy: keep` и не входят в
+через Helm. Для ручного полного apply нужен digest exporter'а:
+`HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:…`
+(`kubectl -n home-assistant get deployment runtime-health-exporter -o jsonpath='{.spec.template.spec.containers[0].image}'`). PV/PVC помечены `helm.sh/resource-policy: keep` и не входят в
 Helm-релиз, чтобы `ci-deploy` (namespace-scoped, без cluster-scoped прав,
 VPN-группа только к API 6443) не мог их изменить или удалить. Ручной rollout
 выполняется тем же скриптом, что и CI; OpenBao `secret/ci/deploy-home`
@@ -127,6 +142,7 @@ backup. Выполнять только при остановленном gatewa
 
 ```bash
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
+go test -race ./platform/deploy/... ./projects/home-assistant/deploy/health-exporter/...
 go test -race ./solutions/voice-proxy/...
 helm lint projects/home-assistant/deploy/chart
 helm lint projects/home-assistant/observability/chart

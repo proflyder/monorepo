@@ -2,23 +2,23 @@
 # Build and push the Hermes gateway and voice-proxy images to GHCR.
 #
 # This is the build+push half of the Hermes image flow. The deploy-home
-# workflow then calls `hermes_rollout.py`, which promotes the pushed digests
-# into the `runtime` Helm release, waits for the rollout, runs the voice smoke
-# checks and rolls back to the previous revision on failure.
+# workflow then calls `home-deploy hermes rollout`, which promotes the pushed
+# digests into the `runtime` Helm release, waits for the rollout, runs the voice
+# smoke checks and rolls back to the previous revision on failure.
 #
 #   IMAGE_TAG=<git-sha> DIGEST_FILE=<path> ./build-and-push.sh hermes voice-proxy
 #
 # `DIGEST_FILE` receives one `<image>=<sha256:…>` line per pushed image; the
-# workflow passes those digests to the rollout script. A manual rollout can be
-# run with `hermes_rollout.py --values-file <private values> --hermes-digest …
-# --voice-proxy-digest …`; `projects/home/kubernetes/versions.sh` records the
-# current pins.
+# workflow passes those digests to the rollout subcommand. A manual rollout can
+# be run with `home-deploy hermes rollout --values-file <private values>
+# --hermes-digest … --voice-proxy-digest …`; `projects/home/kubernetes/
+# versions.sh` records the current pins.
 #
 # `hermes` stays a Docker build from the upstream revision in
-# `projects/home/kubernetes/versions.sh`. `voice-proxy` is now a hermetic Bazel
-# image (//solutions/voice-proxy:voice-proxy_image, rules_oci/distroless) and is
-# pushed byte-for-byte through the `oci_push` target: `docker push` would rewrite
-# the media types and change the digest.
+# `projects/home/kubernetes/versions.sh`. `voice-proxy`, `health-exporter` and
+# `home-deploy` are hermetic Bazel images (rules_oci/distroless) and are pushed
+# byte-for-byte through their `oci_push` targets: `docker push` would rewrite the
+# media types and change the digest.
 #
 # Authentication is the job-scoped GITHUB_TOKEN already logged in by the
 # caller (`docker login ghcr.io`); the Bazel push target reads the same Docker
@@ -33,12 +33,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck source=platform/ci/prebuilt-digests.sh
 source "$ROOT/platform/ci/prebuilt-digests.sh"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 IMAGES_DIR="$ROOT/projects/home-assistant/deploy/images"
 REGISTRY=${REGISTRY:-"ghcr.io/proflyder"}
 IMAGE_TAG=${IMAGE_TAG:-$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)}
 UPSTREAM=${HERMES_UPSTREAM:-https://github.com/NousResearch/hermes-agent.git}
 PLATFORM="--platforms=@rules_go//go/toolchain:linux_amd64"
-OCI="$ROOT/platform/ci/oci_image.py"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -77,10 +78,10 @@ push_image() {
 # Push the exact built manifest under one tag and prove the registry kept the
 # digest (a rewritten manifest would mean a different image).
 push_bazel_tag() {
-  local digest=$1 tag=$2 repo=$3
+  local digest=$1 tag=$2 repo=$3 target=$4
   local bin out pushed
   bin=$(bazel_bin)
-  out=$( cd "$ROOT" && "$bin" run //solutions/voice-proxy:voice-proxy_push \
+  out=$( cd "$ROOT" && "$bin" run "$target" \
     "$PLATFORM" \
     -- --repository "$repo" --tag "$tag" 2>&1 ) || {
       printf '%s\n' "$out" >&2
@@ -95,9 +96,32 @@ push_bazel_tag() {
   fi
 }
 
+# Build one Bazel image, push it under the commit and develop tags, and record
+# the digest. `image_target` is the package target of the `<image>_image` rule.
+push_bazel_image() {
+  local image=$1 image_target=$2
+  local bin package layout digest repo push_target
+  bin=$(bazel_bin)
+  echo "== building ${image} with Bazel"
+  ( cd "$ROOT" && "$bin" build "$image_target" "$PLATFORM" )
+  package="${image_target%%:*}"
+  package="${package#//}"
+  layout="$ROOT/bazel-bin/${package}/${image}_image"
+  [[ -d "$layout" ]] || { echo "missing image layout $layout; build it first" >&2; return 1; }
+  digest=$(home_deploy oci digest "$layout")
+  repo="${REGISTRY}/${image}"
+  push_target="${image_target%_image}_push"
+  push_bazel_tag "$digest" "$IMAGE_TAG" "$repo" "$push_target"
+  if [[ "$IMAGE_TAG" != develop ]]; then
+    push_bazel_tag "$digest" develop "$repo" "$push_target"
+  fi
+  record_digest "$image" "$digest"
+  echo "pushed ${repo}@${digest} (tags ${IMAGE_TAG}, develop)"
+}
+
 for image in "$@"; do
   case "$image" in
-    voice-proxy|hermes) ;;
+    voice-proxy|health-exporter|home-deploy|hermes) ;;
     *)
       echo "unknown image: $image" >&2
       exit 2
@@ -114,19 +138,14 @@ for image in "$@"; do
   fi
   case "$image" in
     voice-proxy)
-      echo "== building voice-proxy with Bazel"
-      bin=$(bazel_bin)
-      ( cd "$ROOT" && "$bin" build //solutions/voice-proxy:voice-proxy_image "$PLATFORM" )
-      layout="$ROOT/bazel-bin/solutions/voice-proxy/voice-proxy_image"
-      [[ -d "$layout" ]] || { echo "missing image layout $layout; build it first" >&2; exit 1; }
-      digest=$(python3 "$OCI" digest "$layout")
-      repo="${REGISTRY}/voice-proxy"
-      push_bazel_tag "$digest" "$IMAGE_TAG" "$repo"
-      if [[ "$IMAGE_TAG" != develop ]]; then
-        push_bazel_tag "$digest" develop "$repo"
-      fi
-      record_digest voice-proxy "$digest"
-      echo "pushed ${repo}@${digest} (tags ${IMAGE_TAG}, develop)"
+      push_bazel_image voice-proxy //solutions/voice-proxy:voice-proxy_image
+      ;;
+    health-exporter)
+      push_bazel_image health-exporter \
+        //projects/home-assistant/deploy/health-exporter:health-exporter_image
+      ;;
+    home-deploy)
+      push_bazel_image home-deploy //projects/home/kubernetes/scheduler:home-deploy_image
       ;;
     hermes)
       revision=$(sed -n 's/^HERMES_REVISION=//p' "$ROOT/projects/home/kubernetes/versions.sh")

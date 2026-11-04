@@ -123,25 +123,6 @@ class DeployEnvTests(unittest.TestCase):
         self.assertIn("192.0.2.27/32", api_sources)
         self.assertIn("192.0.2.0/24", api_sources)
 
-    def test_nft_template_renders_private_allowlist(self):
-        tmp = Path(tempfile.mkdtemp(prefix="currency-nft-"))
-        self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
-        env_file = tmp / "currency-bot.env"
-        env_file.write_text(GOOD_ENV)
-        render = HERE.parent / "scheduler" / "render.py"
-        res = subprocess.run(
-            ["python3", str(render), "--env", str(env_file), "--out", str(tmp / "out"),
-             str(HERE / "nft" / "currency-bot-nodeport.nft")],
-            text=True, capture_output=True, timeout=30,
-        )
-        self.assertEqual(res.returncode, 0, res.stderr)
-        rendered = (tmp / "out" / "currency-bot-nodeport.nft").read_text()
-        self.assertIn("table inet ricardo_currency_bot", rendered)
-        self.assertIn("tcp dport { 30100 }", rendered)
-        self.assertIn("192.0.2.0/24", rendered)
-        self.assertIn("192.0.2.27", rendered)
-        self.assertNotIn("${", rendered)
-
     def test_forbidden_namespace_read_is_not_an_apply(self):
         # CI's ServiceAccount cannot read cluster-scoped namespaces; that must
         # not turn into an attempt to create the namespace.

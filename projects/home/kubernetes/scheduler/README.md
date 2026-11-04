@@ -27,10 +27,11 @@ projects/home/kubernetes/scheduler/BUILD.bazel
   `gcr.io/distroless/static-debian12:nonroot`, pinned by digest in
   `MODULE.bazel`. No Docker daemon and no `RUN` steps are involved, so the same
   targets build on macOS and on the GitHub runner.
-- `platform/ci/oci_image.py` reads the resulting OCI layout: it prints the
-  manifest digest, writes an OCI archive for `ctr images import` or a
-  docker archive for local smoke tests. The image is referenced as
-  `ghcr.io/proflyder/<name>@sha256:...`, never by a moving tag.
+- `home-deploy oci` (`platform/deploy`, decision 35) reads the resulting OCI
+  layout: its `digest` prints the manifest digest, `pack` writes an OCI archive
+  for `ctr images import` and `docker` a docker archive for local smoke tests
+  (byte-identical to the retired `platform/ci/oci_image.py`). The image is
+  referenced as `ghcr.io/proflyder/<name>@sha256:...`, never by a moving tag.
 - The image has no shell. Probes and deploy checks run the binary itself:
   `-healthcheck` (authenticated readiness) and `-status` (raw GetStatus JSON).
 - Pods keep `runAsUser/fsGroup 65534`, matching the existing SQLite and ledger
@@ -48,11 +49,10 @@ manifests/external-secrets.yaml ExternalSecrets for scheduler-auth/ha-bridge-ha
 nft/scheduler-nodeport.nft      NodePort source filter (template, host config)
 nft/apply.sh                    install/refresh that filter as root on the node
 scheduler.env.example           placeholders; copy to secrets/home/scheduler.env
-render.py                       strict ${VAR} renderer (unknown/empty => fail)
 deploy.sh                       build/push/import images, apply, mode transitions
+                                (templates rendered by `home-deploy render`)
 backup.sh                       quiesced SQLite + ledger backup with checksums
-preflight.py                    safety preflight (retired writers absent/off, scheduler ready)
-rollback.py                     restore exactly the Deployments this deploy applied
+                                (preflight/state/converge: `home-deploy`, platform/deploy)
 ci/rbac.yaml                    ServiceAccount/Role for CI kubectl
 ```
 
@@ -225,12 +225,13 @@ kubectl only — no SSH and no root helper.
 - Rollback is driven by recorded state, not `kubectl rollout undo`.
   `deploy.sh` captures each Deployment before it changes it
   (`<name>.before.json`, or `<name>.absent`) and writes `<name>.applied` only
-  after the converge succeeds. `rollback.py` replaces the Deployment with the
-  full remembered object, and only when the generation actually changed. A
+  after the converge succeeds. `home-deploy state rollback` replaces the
+  Deployment with the full remembered object, and only when the generation
+  actually changed. A
   failure during build, push, rendering or preflight leaves no marker, so the
   live Deployments are untouched.
-- Existing Deployments are converged with `converge.py` (a full replace of the
-  rendered object) instead of `kubectl apply`/`kubectl patch`. A patch cannot
+- Existing Deployments are converged with `home-deploy converge` (a full
+  replace of the rendered object) instead of `kubectl apply`/`kubectl patch`. A patch cannot
   remove a volume or mount that an earlier ad-hoc change added; the replace
   prunes such drift. `--preserve-env` keeps `BRIDGE_EXECUTE`/`CONTROL_EXECUTE`
   and `--preserve-replicas` keeps the current scale, so mode transitions stay

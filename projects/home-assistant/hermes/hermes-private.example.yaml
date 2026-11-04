@@ -1,4 +1,4 @@
-# Example private values for render_hermes_config.py — copy, fill with the real
+# Example private values for home-deploy hermes render-config — copy, fill with the real
 # endpoints and keep the copy in secrets/ (for example
 # secrets/home/hermes-private.yaml). Never commit the filled file.
 #

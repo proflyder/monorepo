@@ -25,12 +25,11 @@ else
   skip "Node.js is not installed: platform CI/quality tests need node --test"
 fi
 
-# Python checks that outlive the CI-glue migration: first-party Python product
-# syntax/secret gates and the out-of-scope oci_image.py helper tests.
+# Python checks that outlive the CI-glue migration: the first-party Python
+# product syntax/secret gates. The deploy tooling moved to Go (decision 35) and
+# is covered by the Go step below.
 echo "== Python: platform/quality static gate =="
 python3 -m unittest discover -s platform/quality -p 'test_static.py' -v
-echo "== Python: platform/ci oci helper =="
-python3 -m unittest discover -s platform/ci -p 'test_oci_image.py' -v
 
 # Dependency-free edge Workers use Node's built-in runner, not npm.
 if command -v node >/dev/null 2>&1; then
@@ -40,20 +39,27 @@ else
   skip "Node.js is not installed: solutions/heartbeat tests need node --test"
 fi
 
-# Scheduler deployment helpers: real preflight regression and the mocked-kubectl
-# control-mode test (the shell test is not covered by unittest discovery).
-echo "== Scheduler deployment: preflight =="
-(cd projects/home/kubernetes/scheduler && python3 -m unittest test_preflight.py test_rollback.py -v)
+# Deploy tooling: build the Go CLI once and let every deploy.sh in this run
+# resolve it through platform/deploy/resolve.sh.
+if command -v go >/dev/null 2>&1; then
+  echo "== Deploy tooling: home-deploy =="
+  HOME_DEPLOY="${TMPDIR:-/tmp}/home-deploy-$$"
+  go build -o "$HOME_DEPLOY" ./platform/deploy/cmd/home-deploy
+  export HOME_DEPLOY
+else
+  skip "Go is not installed: deploy scripts fall back to bazel/installed home-deploy"
+fi
 
 # The control-mode regression drives deploy.sh --skip-build with pre-resolved
 # image digests, so it needs neither Bazel nor release binaries in dist/.
+# converge/state/preflight are Go and covered by platform/deploy's go_test.
 echo "== Scheduler deployment: deploy control =="
 bash projects/home/kubernetes/scheduler/test_deploy_control.sh
 
 # Root Go module: reusable solutions and shared packages. Android/Bazel gates are
 # separate (they need the Android SDK) and are documented in docs/TESTING.md.
-echo "== Go: solutions and packages =="
-go test ./solutions/... ./packages/...
+echo "== Go: solutions, packages and deploy tooling =="
+go test ./solutions/... ./packages/... ./platform/deploy/...
 (cd projects/station/ble-gateway && go test ./...)
 
 if [[ -d projects/station/upstream/pulsar-rust/installer ]]; then

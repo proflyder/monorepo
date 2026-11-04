@@ -54,10 +54,6 @@ spec:
     matchLabels: {app.kubernetes.io/name: {{ $name }}}
   template:
     metadata:
-      {{- if eq $name "runtime-health-exporter" }}
-      annotations:
-        checksum/source: {{ $.Files.Get "files/health_exporter.py" | sha256sum }}
-      {{- end }}
       labels:
         app.kubernetes.io/name: {{ $name }}
         ricardo.io/collect-logs: {{ $workload.collectLogs | default "false" | quote }}

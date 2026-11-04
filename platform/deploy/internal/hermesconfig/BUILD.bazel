@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "hermesconfig",
+    srcs = [
+        "diff.go",
+        "hermesconfig.go",
+    ],
+    importpath = "ricardo.local/monorepo/platform/deploy/internal/hermesconfig",
+    deps = ["@in_yaml_go_yaml_v2//:yaml"],
+)
+
+# Golden parity: render the committed TEST-NET fixtures with the real fragment
+# and compare the parsed document with the output captured from the Python
+# renderer.
+go_test(
+    name = "hermesconfig_test",
+    srcs = ["hermesconfig_test.go"],
+    data = [
+        "//platform/deploy/testdata/golden",
+        "//platform/deploy/testdata/hermes",
+        "//projects/home-assistant/hermes:render_sources",
+    ],
+    embed = [":hermesconfig"],
+    deps = ["@in_yaml_go_yaml_v2//:yaml"],
+)

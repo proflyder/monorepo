@@ -10,10 +10,21 @@
 # Both halves come from the same private values file, so a manual apply and the
 # CI rollout render identical objects. Run this script as a cluster admin; the
 # CI ServiceAccount only has the workload half.
+#
+# `HEALTH_EXPORTER_IMAGE` must be the digest-pinned
+# `ghcr.io/proflyder/health-exporter@sha256:…` image. The chart no longer ships
+# the Python exporter script/ConfigMap; the image, command and volume mounts
+# are pinned here (and by `home-deploy hermes rollout` in CI), so the private
+# values do not have to change. Read the current digest with:
+#   kubectl -n home-assistant get deployment runtime-health-exporter \
+#     -o jsonpath='{.spec.template.spec.containers[0].image}'
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 : "${KUBECONFIG:?Set KUBECONFIG to a private admin kubeconfig}"
 : "${RUNTIME_PRIVATE_VALUES:?Set RUNTIME_PRIVATE_VALUES to the private runtime values}"
+: "${HEALTH_EXPORTER_IMAGE:?Set HEALTH_EXPORTER_IMAGE to the digest-pinned ghcr.io/proflyder/health-exporter image}"
 KUBECTL=${KUBECTL:-kubectl}
 
 # Existing data directories and local images must exist. For initial migration,
@@ -26,21 +37,13 @@ helm template runtime "$ROOT/projects/home-assistant/deploy/chart" \
   -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" > "$TMP/render.yaml"
 
 # Split the render: keep PV/PVC out of the Helm release and write a values file
-# without `storage`. PyYAML is a test/CI dependency already.
-python3 - "$TMP/render.yaml" "$TMP/storage.yaml" "$TMP/values.yaml" "$RUNTIME_PRIVATE_VALUES" <<'PY'
-import pathlib
-import sys
-
-import yaml
-
-render_path, storage_path, values_path, private_values = map(pathlib.Path, sys.argv[1:])
-docs = [doc for doc in yaml.safe_load_all(render_path.read_text()) if doc]
-storage = [doc for doc in docs if doc.get("kind") in ("PersistentVolume", "PersistentVolumeClaim")]
-storage_path.write_text(yaml.safe_dump_all(storage, default_flow_style=False, sort_keys=False))
-values = yaml.safe_load(private_values.read_text()) or {}
-values.pop("storage", None)
-values_path.write_text(yaml.safe_dump(values, default_flow_style=False, sort_keys=False))
-PY
+# without `storage`, with the health exporter pinned to the Go image.
+home_deploy runtime split \
+  --render "$TMP/render.yaml" \
+  --private "$RUNTIME_PRIVATE_VALUES" \
+  --storage-out "$TMP/storage.yaml" \
+  --values-out "$TMP/values.yaml" \
+  --health-exporter-image "$HEALTH_EXPORTER_IMAGE" >/dev/null
 chmod 600 "$TMP/storage.yaml" "$TMP/values.yaml"
 
 # Apply storage first: this also stamps the keep annotation on volumes that an

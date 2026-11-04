@@ -72,6 +72,7 @@ engine, два entrypoint-а для совместимости.
 | HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
 | Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
+| `platform/deploy` (`home-deploy`) и runtime health exporter | Go | все инструменты деплоя и in-cluster Job/экспортер — один distroless-бинарник, без Python в кластере (решение 35) |
 | задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
 | ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 

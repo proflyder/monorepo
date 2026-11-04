@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "manifests",
+    srcs = ["manifests.go"],
+    importpath = "ricardo.local/monorepo/platform/deploy/internal/manifests",
+    deps = [
+        "//platform/deploy/internal/envfile",
+        "@in_yaml_go_yaml_v2//:yaml",
+    ],
+)
+
+go_test(
+    name = "manifests_test",
+    srcs = ["manifests_test.go"],
+    embed = [":manifests"],
+)

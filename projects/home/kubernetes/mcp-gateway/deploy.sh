@@ -33,6 +33,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck source=platform/ci/prebuilt-digests.sh
 source "$ROOT/platform/ci/prebuilt-digests.sh"
+# shellcheck source=platform/deploy/resolve.sh
+source "$ROOT/platform/deploy/resolve.sh"
 
 NS=home-assistant
 DIR="$ROOT/projects/home/kubernetes/mcp-gateway"
@@ -65,15 +67,7 @@ fi
 }
 
 env_value() {
-  python3 - "$PRIVATE_ENV" "$1" <<'PY'
-import sys, pathlib
-path, key = pathlib.Path(sys.argv[1]), sys.argv[2]
-for line in path.read_text().splitlines():
-    line = line.strip()
-    if line and not line.startswith("#") and line.split("=", 1)[0] == key:
-        print(line.split("=", 1)[1].strip().strip('"').strip("'"))
-        break
-PY
+  home_deploy env get "$PRIVATE_ENV" "$1"
 }
 
 LAN_CIDR=$(env_value LAN_CIDR)
@@ -125,12 +119,11 @@ if $BUILD && [[ -z "${MCP_GATEWAY_IMAGE:-}" ]]; then
       --platforms=@rules_go//go/toolchain:linux_amd64 )
 fi
 
-OCI="$ROOT/platform/ci/oci_image.py"
 IMAGE_REF=${MCP_GATEWAY_IMAGE:-}
 if [[ -z "$IMAGE_REF" ]]; then
   layout="$ROOT/bazel-bin/solutions/mcp-gateway/mcp-gateway_image"
   [[ -d "$layout" ]] || { echo "missing image layout $layout; build it first" >&2; exit 1; }
-  digest=$(python3 "$OCI" digest "$layout")
+  digest=$(home_deploy oci digest "$layout")
   repo="${IMAGE_REGISTRY}/mcp-gateway"
   if [[ "$PUSH_IMAGES" == 1 ]]; then
     out=$( cd "$ROOT" && "$(bazel_bin)" run //solutions/mcp-gateway:mcp-gateway_push \
@@ -150,7 +143,7 @@ if [[ -z "$IMAGE_REF" ]]; then
   elif [[ -n "${NODE_SSH:-}" ]]; then
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    python3 "$OCI" pack "$layout" --ref "${repo}:${IMAGE_TAG}" --out "$tmp/mcp-gateway.tar" >/dev/null
+    home_deploy oci pack "$layout" --ref "${repo}:${IMAGE_TAG}" --out "$tmp/mcp-gateway.tar" >/dev/null
     scp -q "$tmp/mcp-gateway.tar" "$NODE_SSH:/tmp/mcp-gateway-${IMAGE_TAG}.tar"
     # shellcheck disable=SC2029 # deliberately expanded locally into the remote command
     ssh "$NODE_SSH" "sudo -n k3s ctr -n k8s.io images import '/tmp/mcp-gateway-${IMAGE_TAG}.tar' >/dev/null && rm -f '/tmp/mcp-gateway-${IMAGE_TAG}.tar'"
@@ -164,11 +157,13 @@ if [[ -z "$IMAGE_REF" ]]; then
   IMAGE_REF="${repo}@${digest}"
 fi
 
-BUILD_ID="$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)-$(printf '%s' "$IMAGE_REF" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:12])')"
+BUILD_ID="$(home_deploy build-id \
+  --revision "$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)" \
+  --fingerprint "$IMAGE_REF")"
 echo "== build id: $BUILD_ID"
 
 echo "== rendering manifests into $RENDER_DIR"
-python3 "$DIR/render.py" \
+home_deploy render --unit mcp-gateway \
   --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
   --set "MCP_GATEWAY_IMAGE=$IMAGE_REF" \
@@ -232,9 +227,9 @@ done
 
 echo "== catalog and bb-targets ConfigMaps"
 # External check hosts and the personal project id are rendered from the
-# private env, so the ConfigMaps are built from the rendered copies. render.py
-# refuses an unknown or unset placeholder, which keeps a half-rendered
-# manifest out of the cluster.
+# private env, so the ConfigMaps are built from the rendered copies.
+# `home-deploy render` refuses an unknown or unset placeholder, which keeps a
+# half-rendered manifest out of the cluster.
 $KUBECTL -n "$NS" create configmap mcp-gateway-catalog \
   --from-file=catalog.yaml="$RENDER_DIR/catalog.yaml" \
   --from-file=bb-targets.yaml="$RENDER_DIR/bb-targets.yaml" \
@@ -248,21 +243,20 @@ $KUBECTL apply -f "$RENDER_DIR/servicemonitor.yaml"
 rm -rf "$DEPLOY_STATE_DIR"
 mkdir -p "$DEPLOY_STATE_DIR"
 
+# The marker contract (.before.json / .absent / .applied) is owned by
+# `home-deploy state`, so a mixed run with an older deploy.sh stays safe.
 record_before() {
-  local name=$1
-  if $KUBECTL -n "$NS" get deployment "$name" >/dev/null 2>&1; then
-    $KUBECTL -n "$NS" get deployment "$name" -o json >"$DEPLOY_STATE_DIR/$name.before.json"
-  else
-    : >"$DEPLOY_STATE_DIR/$name.absent"
-  fi
-  rm -f "$DEPLOY_STATE_DIR/$name.applied"
+  home_deploy state record --state-dir "$DEPLOY_STATE_DIR" \
+    --namespace "$NS" --name "$1" --kubectl "$KUBECTL"
 }
 
-mark_applied() { : >"$DEPLOY_STATE_DIR/$1.applied"; }
+mark_applied() {
+  home_deploy state mark --state-dir "$DEPLOY_STATE_DIR" --name "$1"
+}
 
 converge_deployment() {
   local name=$1 file=$2
-  python3 "$ROOT/projects/home/kubernetes/scheduler/converge.py" \
+  home_deploy converge \
     --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file"
 }
 
