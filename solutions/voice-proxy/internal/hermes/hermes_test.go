@@ -93,10 +93,10 @@ func TestClientForwardsHeadersAndRelaysStatus(t *testing.T) {
 		t.Errorf("content type = %q", response.ContentType)
 	}
 	if got.Get("Content-Type") != "application/json" {
-		t.Errorf("Content-Type = %q, want the Python default", got.Get("Content-Type"))
+		t.Errorf("Content-Type = %q, want the default", got.Get("Content-Type"))
 	}
 	if got.Get("Accept") != "application/json" {
-		t.Errorf("Accept = %q, want the Python default", got.Get("Accept"))
+		t.Errorf("Accept = %q, want the default", got.Get("Accept"))
 	}
 }
 
@@ -120,7 +120,7 @@ func TestReadBodyEnforcesTheCap(t *testing.T) {
 }
 
 // TestStreamIdleTimeoutFailsAStalledBody pins the per-read timeout: a stream
-// that stops producing frames is cancelled like a Python socket timeout.
+// that stops producing frames is cancelled.
 func TestStreamIdleTimeoutFailsAStalledBody(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

@@ -10,7 +10,6 @@ import (
 //
 // Every frame is written as "data: <payload>\n\n" and flushed immediately, so
 // Piper can start speaking the first sentence before the upstream turn ends.
-// That matches _write_event() in voice_proxy.py.
 type Writer struct {
 	w   io.Writer
 	buf bytes.Buffer
@@ -22,7 +21,7 @@ func NewWriter(w io.Writer) *Writer { return &Writer{w: w} }
 
 // WriteData writes one data frame. A string payload is written verbatim
 // (used for the "[DONE]" sentinel); anything else is JSON-encoded without
-// ASCII escaping, like json.dumps(..., ensure_ascii=False).
+// ASCII escaping, so non-Latin speech stays readable.
 func (w *Writer) WriteData(payload any) error {
 	w.buf.Reset()
 	w.buf.WriteString("data: ")

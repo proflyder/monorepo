@@ -7,17 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"regexp"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/hermes"
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/sse"
+	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 // ---------------------------------------------------------------- helpers ---
@@ -116,8 +114,8 @@ func firstChoice(t *testing.T, chunk map[string]any) map[string]any {
 
 // --------------------------------------------------- CancelGuardTests ------
 
-// TestCancelGuardExactNormalizedPhrasesMatch mirrors
-// test_exact_normalized_cancel_phrases_match.
+// TestCancelGuardExactNormalizedPhrasesMatch: every exact phrase matches after
+// normalisation.
 func TestCancelGuardExactNormalizedPhrasesMatch(t *testing.T) {
 	handler := newProxy(t, "http://127.0.0.1:1", nil)
 	for _, text := range []string{
@@ -131,8 +129,8 @@ func TestCancelGuardExactNormalizedPhrasesMatch(t *testing.T) {
 	}
 }
 
-// TestCancelGuardExtraMeaningAndNonUserRolesDoNotMatch mirrors
-// test_extra_meaning_and_non_user_roles_do_not_match.
+// TestCancelGuardExtraMeaningAndNonUserRolesDoNotMatch: only an exact phrase in
+// the final user message matches.
 func TestCancelGuardExtraMeaningAndNonUserRolesDoNotMatch(t *testing.T) {
 	handler := newProxy(t, "http://127.0.0.1:1", nil)
 	negatives := []string{
@@ -158,8 +156,8 @@ func TestCancelGuardExtraMeaningAndNonUserRolesDoNotMatch(t *testing.T) {
 	}
 }
 
-// TestCancelGuardOnlyLastUserMessageIsConsidered mirrors
-// test_only_last_user_message_is_considered.
+// TestCancelGuardOnlyLastUserMessageIsConsidered: an earlier cancel phrase in
+// the history does not match.
 func TestCancelGuardOnlyLastUserMessageIsConsidered(t *testing.T) {
 	handler := newProxy(t, "http://127.0.0.1:1", nil)
 	payload := testPayload(t, `{"messages":[
@@ -171,8 +169,8 @@ func TestCancelGuardOnlyLastUserMessageIsConsidered(t *testing.T) {
 	}
 }
 
-// TestCancelGuardUnicodeFolding pins the casefold/NFKC behaviour the Python
-// implementation gets from casefold(): fullwidth and non-breaking forms match.
+// TestCancelGuardUnicodeFolding pins the casefold/NFKC behaviour: fullwidth and
+// non-breaking forms match, an ideographic full stop survives.
 func TestCancelGuardUnicodeFolding(t *testing.T) {
 	handler := newProxy(t, "http://127.0.0.1:1", nil)
 	for _, text := range []string{"ОТМЕНА", "Отмена\u00a0", "ОТМЕНА！", "отмена。"} {
@@ -180,7 +178,7 @@ func TestCancelGuardUnicodeFolding(t *testing.T) {
 		_, matched := handler.CancelShortCircuit(payload)
 		if text == "отмена。" {
 			if matched {
-				t.Errorf("%q matched, but 。 is not stripped by Python either", text)
+				t.Errorf("%q matched, but 。 is not sentence-final punctuation for the guard", text)
 			}
 			continue
 		}
@@ -192,14 +190,12 @@ func TestCancelGuardUnicodeFolding(t *testing.T) {
 
 // ----------------------------------------- CancelGuardTransportTests ------
 
-// TestCancelGuardNonStreamCancelReturnsEmptyAssistantWithoutUpstream mirrors
-// test_non_stream_cancel_returns_empty_assistant_without_upstream.
+// TestCancelGuardNonStreamCancelReturnsEmptyAssistantWithoutUpstream: the cancel
+// reply is an empty assistant message and Hermes is never called.
 func TestCancelGuardNonStreamCancelReturnsEmptyAssistantWithoutUpstream(t *testing.T) {
-	fake := &recordingUpstream{}
-	upstream := httptest.NewServer(fake)
-	defer upstream.Close()
-	proxyServer := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer proxyServer.Close()
+	fake := testfake.NewHermes()
+	upstream := testfake.Serve(t, fake)
+	proxyServer := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	resp := postChat(t, proxyServer.URL, `{"model":"hermes-agent","stream":false,"messages":[{"role":"user","content":"отмена"}]}`)
 	defer resp.Body.Close()
@@ -208,8 +204,8 @@ func TestCancelGuardNonStreamCancelReturnsEmptyAssistantWithoutUpstream(t *testi
 		t.Fatalf("read: %v", err)
 	}
 	body := decodeEvent(t, string(raw))
-	if fake.count() != 0 {
-		t.Fatalf("upstream was called %d times, want 0", fake.count())
+	if fake.Len() != 0 {
+		t.Fatalf("upstream was called %d times, want 0", fake.Len())
 	}
 	choice := firstChoice(t, body)
 	if choice["finish_reason"] != "stop" {
@@ -236,20 +232,18 @@ func TestCancelGuardNonStreamCancelReturnsEmptyAssistantWithoutUpstream(t *testi
 	}
 }
 
-// TestCancelGuardStreamCancelHasRoleFinishDoneAndNoUpstream mirrors
-// test_stream_cancel_has_role_finish_done_and_no_upstream.
+// TestCancelGuardStreamCancelHasRoleFinishDoneAndNoUpstream: a streaming cancel
+// still has a role chunk, a finish frame and [DONE].
 func TestCancelGuardStreamCancelHasRoleFinishDoneAndNoUpstream(t *testing.T) {
-	fake := &recordingUpstream{}
-	upstream := httptest.NewServer(fake)
-	defer upstream.Close()
-	proxyServer := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer proxyServer.Close()
+	fake := testfake.NewHermes()
+	upstream := testfake.Serve(t, fake)
+	proxyServer := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	resp := postChat(t, proxyServer.URL, `{"model":"hermes-agent","stream":true,"messages":[{"role":"user","content":"Отмена!"}]}`)
 	defer resp.Body.Close()
 	events := allEvents(t, sse.NewReader(resp.Body))
-	if fake.count() != 0 {
-		t.Fatalf("upstream was called %d times, want 0", fake.count())
+	if fake.Len() != 0 {
+		t.Fatalf("upstream was called %d times, want 0", fake.Len())
 	}
 	if len(events) < 3 || events[len(events)-1].Data != "[DONE]" {
 		t.Fatalf("events = %#v", events)
@@ -280,36 +274,33 @@ func TestCancelGuardStreamCancelHasRoleFinishDoneAndNoUpstream(t *testing.T) {
 	}
 }
 
-// TestCancelGuardToolContinuationAndFreeTextStillReachUpstream mirrors
-// test_tool_continuation_and_free_text_still_reach_upstream.
+// TestCancelGuardToolContinuationAndFreeTextStillReachUpstream: only an exact
+// final user cancel phrase is intercepted.
 func TestCancelGuardToolContinuationAndFreeTextStillReachUpstream(t *testing.T) {
-	fake := &recordingUpstream{}
-	upstream := httptest.NewServer(fake)
-	defer upstream.Close()
-	proxyServer := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer proxyServer.Close()
+	fake := testfake.NewHermes()
+	upstream := testfake.Serve(t, fake)
+	proxyServer := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	postChat(t, proxyServer.URL, `{"model":"hermes-agent","stream":false,"messages":[{"role":"tool","content":"отмена"}]}`).Body.Close()
-	if fake.count() == 0 {
+	if fake.Len() == 0 {
 		t.Fatal("tool continuation did not reach the upstream")
 	}
-	fake.reset()
+	fake.Reset()
 	postChat(t, proxyServer.URL, `{"model":"hermes-agent","stream":false,"messages":[{"role":"user","content":"включи музыку"}]}`).Body.Close()
-	if fake.count() == 0 {
+	if fake.Len() == 0 {
 		t.Fatal("free text did not reach the upstream")
 	}
 }
 
 // ------------------------------------------------- ProxyTransportTests -----
 
-// TestProxyEarlyDeliveryCleanTailAndHAFinishOrder mirrors
-// test_early_delivery_clean_tail_and_ha_finish_order.
+// TestProxyEarlyDeliveryCleanTailAndHAFinishOrder: the first sentence is
+// released before the upstream finishes, and only collapsed speech reaches HA.
 func TestProxyEarlyDeliveryCleanTailAndHAFinishOrder(t *testing.T) {
-	fake := newGatedUpstream(t)
-	upstream := httptest.NewServer(fake)
-	defer upstream.Close()
-	proxyServer := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer proxyServer.Close()
+	fake := testfake.NewHermes()
+	fake.SetMode(testfake.ModeStream)
+	upstream := testfake.Serve(t, fake)
+	proxyServer := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	resp := postChat(t, proxyServer.URL, `{"model":"hermes-agent","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
 	defer resp.Body.Close()
@@ -326,17 +317,17 @@ func TestProxyEarlyDeliveryCleanTailAndHAFinishOrder(t *testing.T) {
 	if content != "Первое предложение.\n\n" {
 		t.Fatalf("early content = %q", content)
 	}
-	if fake.released() {
+	if fake.Released() {
 		t.Fatal("the proxy buffered the whole answer instead of streaming the first sentence")
 	}
 
-	fake.release()
+	fake.Release()
 	remaining := allEvents(t, reader)
 	if len(remaining) == 0 || remaining[len(remaining)-1].Data != "[DONE]" {
 		t.Fatalf("remaining = %#v", remaining)
 	}
 
-	received := fake.last()
+	received := fake.Last()
 	if stream, _ := received["stream"].(bool); !stream {
 		t.Errorf("upstream stream = %v, want true", received["stream"])
 	}
@@ -344,7 +335,7 @@ func TestProxyEarlyDeliveryCleanTailAndHAFinishOrder(t *testing.T) {
 	if options["reasoning_effort"] != "low" {
 		t.Errorf("reasoning_effort = %v, want low", options["reasoning_effort"])
 	}
-	headers := fake.lastHeaders()
+	headers := fake.LastHeader()
 	if headers.Get("Accept") != "text/event-stream" {
 		t.Errorf("Accept = %q, want text/event-stream", headers.Get("Accept"))
 	}
@@ -356,7 +347,7 @@ func TestProxyEarlyDeliveryCleanTailAndHAFinishOrder(t *testing.T) {
 	for _, event := range remaining[:len(remaining)-1] {
 		chunks = append(chunks, decodeEvent(t, event.Data))
 	}
-	// Mirror HA's rule: a finish frame terminates reading before its delta is used.
+	// HA stops reading at a finish frame before using its delta.
 	var spoken strings.Builder
 	for _, chunk := range chunks {
 		choice := firstChoice(t, chunk)
@@ -380,19 +371,17 @@ func TestProxyEarlyDeliveryCleanTailAndHAFinishOrder(t *testing.T) {
 	}
 }
 
-// TestProxyMidstreamDisconnectIsErrorWithoutSecondHTTPResponse mirrors
-// test_midstream_disconnect_is_error_without_second_http_response.
+// TestProxyMidstreamDisconnectIsErrorWithoutSecondHTTPResponse: a truncated
+// stream emits one error frame and no second HTTP response.
 func TestProxyMidstreamDisconnectIsErrorWithoutSecondHTTPResponse(t *testing.T) {
-	fake := newGatedUpstream(t)
-	fake.setMode("truncated")
-	upstream := httptest.NewServer(fake)
-	defer upstream.Close()
-	proxyServer := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer proxyServer.Close()
+	fake := testfake.NewHermes()
+	fake.SetMode(testfake.ModeTruncated)
+	upstream := testfake.Serve(t, fake)
+	proxyServer := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	resp := postChat(t, proxyServer.URL, `{"model":"hermes-agent","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
 	defer resp.Body.Close()
-	fake.release()
+	fake.Release()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -409,14 +398,13 @@ func TestProxyMidstreamDisconnectIsErrorWithoutSecondHTTPResponse(t *testing.T) 
 	}
 }
 
-// TestProxyHTTPErrorKeepsStatus mirrors test_http_error_keeps_status.
+// TestProxyHTTPErrorKeepsStatus: an upstream error status and its JSON error
+// object are relayed unchanged.
 func TestProxyHTTPErrorKeepsStatus(t *testing.T) {
-	fake := newGatedUpstream(t)
-	fake.setMode("http_error")
-	upstream := httptest.NewServer(fake)
-	defer upstream.Close()
-	proxyServer := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer proxyServer.Close()
+	fake := testfake.NewHermes()
+	fake.SetMode(testfake.ModeHTTPError)
+	upstream := testfake.Serve(t, fake)
+	proxyServer := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	resp := postChat(t, proxyServer.URL, `{"model":"hermes-agent","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
 	defer resp.Body.Close()
@@ -435,8 +423,8 @@ func TestProxyHTTPErrorKeepsStatus(t *testing.T) {
 
 // ------------------------------------------------------ StreamingTests -----
 
-// TestReasoningOverrideIsVoiceOnlyAndPreservesOptions mirrors
-// test_reasoning_override_is_voice_only_and_preserves_options.
+// TestReasoningOverrideIsVoiceOnlyAndPreservesOptions: the injected effort wins
+// without mutating the caller's payload.
 func TestReasoningOverrideIsVoiceOnlyAndPreservesOptions(t *testing.T) {
 	original := testPayload(t, `{"stream":true,"model_options":{"reasoning_effort":"high","fast":false}}`)
 	prepared := PrepareChatRequest(original, "low")
@@ -454,13 +442,10 @@ func TestReasoningOverrideIsVoiceOnlyAndPreservesOptions(t *testing.T) {
 // TestBufferedResponseIsSanitised pins the buffered relay: every choice content
 // is sanitised and the payload shape is preserved.
 func TestBufferedResponseIsSanitised(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"id":"x","choices":[{"message":{"role":"assistant","content":"A https://a.example"}},{"message":{"content":"B [x](https://b.example)"}}],"usage":{"n":1}}`)
-	}))
-	defer upstream.Close()
-	server := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer server.Close()
+	fake := testfake.NewHermes()
+	fake.SetResponse(http.StatusOK, `{"id":"x","choices":[{"message":{"role":"assistant","content":"A https://a.example"}},{"message":{"content":"B [x](https://b.example)"}}],"usage":{"n":1}}`)
+	upstream := testfake.Serve(t, fake)
+	server := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	resp := postChat(t, server.URL, `{"model":"hermes-agent","messages":[{"role":"user","content":"hi"}]}`)
 	defer resp.Body.Close()
@@ -481,19 +466,10 @@ func TestBufferedResponseIsSanitised(t *testing.T) {
 
 // TestGetPassthroughRelaysStatusAndBody pins GET <any path>.
 func TestGetPassthroughRelaysStatusAndBody(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.RequestURI() != "/v1/models?x=1" {
-			t.Errorf("upstream got %s %s", r.Method, r.URL.RequestURI())
-		}
-		if r.Header.Get("Authorization") != "Bearer client-token" {
-			t.Errorf("Authorization = %q, want it forwarded", r.Header.Get("Authorization"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"data":[]}`)
-	}))
-	defer upstream.Close()
-	server := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer server.Close()
+	fake := testfake.NewHermes()
+	fake.SetResponse(http.StatusOK, `{"data":[]}`)
+	upstream := testfake.Serve(t, fake)
+	server := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	req, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/models?x=1", nil)
 	req.Header.Set("Authorization", "Bearer client-token")
@@ -506,21 +482,25 @@ func TestGetPassthroughRelaysStatusAndBody(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || string(body) != `{"data":[]}` {
 		t.Fatalf("status/body = %d %q", resp.StatusCode, body)
 	}
+	calls := fake.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("upstream calls = %d, want 1", len(calls))
+	}
+	if calls[0].Method != http.MethodGet || calls[0].Path != "/v1/models" {
+		t.Errorf("upstream got %s %s", calls[0].Method, calls[0].Path)
+	}
+	if got := calls[0].Header.Get("Authorization"); got != "Bearer client-token" {
+		t.Errorf("Authorization = %q, want it forwarded", got)
+	}
 }
 
-// TestOtherPostPathsAreReencoded pins the de-facto Python behaviour: a POST to
-// any other path is parsed and re-serialised before proxying.
+// TestOtherPostPathsAreReencoded: a POST to any other path is parsed and
+// re-serialised before proxying.
 func TestOtherPostPathsAreReencoded(t *testing.T) {
-	received := make(chan string, 1)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, _ := io.ReadAll(r.Body)
-		received <- string(data)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"ok":true}`)
-	}))
-	defer upstream.Close()
-	server := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer server.Close()
+	fake := testfake.NewHermes()
+	fake.SetResponse(http.StatusOK, `{"ok":true}`)
+	upstream := testfake.Serve(t, fake)
+	server := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	resp, err := http.Post(server.URL+"/v1/other", "application/json", strings.NewReader(`{ "b" : 2, "a" : 1 }`))
 	if err != nil {
@@ -530,21 +510,19 @@ func TestOtherPostPathsAreReencoded(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
-	select {
-	case body := <-received:
-		if body != `{"a":1,"b":2}` {
-			t.Fatalf("upstream body = %q, want a re-encoded object", body)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("upstream never received the request")
+	calls := fake.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("upstream calls = %d, want 1", len(calls))
+	}
+	if calls[0].RawBody != `{"a":1,"b":2}` {
+		t.Fatalf("upstream body = %q, want a re-encoded object", calls[0].RawBody)
 	}
 }
 
-// TestNonJSONPostIs503 pins the inherited behaviour: a body that is not a JSON
-// object cannot be re-serialised.
+// TestNonJSONPostIs503: a body that is not a JSON object cannot be
+// re-serialised.
 func TestNonJSONPostIs503(t *testing.T) {
-	server := httptest.NewServer(newProxy(t, "http://127.0.0.1:1", nil))
-	defer server.Close()
+	server := testfake.Serve(t, newProxy(t, "http://127.0.0.1:1", nil))
 
 	for _, body := range []string{`not json`, `[1,2]`, `null`, `5`} {
 		resp, err := http.Post(server.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
@@ -568,8 +546,7 @@ func TestNonJSONPostIs503(t *testing.T) {
 
 // TestBodyLimitRejectsOversizedRequest pins the 10 MiB cap.
 func TestBodyLimitRejectsOversizedRequest(t *testing.T) {
-	server := httptest.NewServer(newProxy(t, "http://127.0.0.1:1", nil))
-	defer server.Close()
+	server := testfake.Serve(t, newProxy(t, "http://127.0.0.1:1", nil))
 
 	oversized := strings.Repeat("a", hermes.MaxBody+1)
 	resp, err := http.Post(server.URL+"/v1/chat/completions", "application/json", strings.NewReader(oversized))
@@ -590,11 +567,9 @@ func TestBodyLimitRejectsOversizedRequest(t *testing.T) {
 	}
 }
 
-// TestUnsupportedMethodIs501 mirrors http.server, which only implements GET and
-// POST.
+// TestUnsupportedMethodIs501: only GET and POST exist.
 func TestUnsupportedMethodIs501(t *testing.T) {
-	server := httptest.NewServer(newProxy(t, "http://127.0.0.1:1", nil))
-	defer server.Close()
+	server := testfake.Serve(t, newProxy(t, "http://127.0.0.1:1", nil))
 	req, _ := http.NewRequest(http.MethodPut, server.URL+"/v1/chat/completions", strings.NewReader("{}"))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -610,7 +585,7 @@ func TestUnsupportedMethodIs501(t *testing.T) {
 // connection must interrupt the Hermes turn instead of orphaning it.
 func TestClientDisconnectCancelsUpstream(t *testing.T) {
 	cancelled := make(chan struct{}, 1)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := testfake.Serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher := w.(http.Flusher)
@@ -622,9 +597,7 @@ func TestClientDisconnectCancelsUpstream(t *testing.T) {
 		case <-time.After(5 * time.Second):
 		}
 	}))
-	defer upstream.Close()
-	server := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer server.Close()
+	server := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/v1/chat/completions",
@@ -650,11 +623,10 @@ func TestClientDisconnectCancelsUpstream(t *testing.T) {
 // uppercase ERROR level and the absence of speech text.
 func TestLogFormatKeepsTheSmokeGrepWorking(t *testing.T) {
 	var logs bytes.Buffer
-	fake := newGatedUpstream(t)
-	upstream := httptest.NewServer(fake)
-	defer upstream.Close()
-	server := httptest.NewServer(newProxy(t, upstream.URL, NewStderrLogger(&logs)))
-	defer server.Close()
+	fake := testfake.NewHermes()
+	fake.SetMode(testfake.ModeStream)
+	upstream := testfake.Serve(t, fake)
+	server := testfake.Serve(t, newProxy(t, upstream.URL, NewStderrLogger(&logs)))
 
 	drain(t, postChat(t, server.URL, `{"model":"hermes-agent","stream":false,"messages":[{"role":"user","content":"отмена"}]}`))
 	line := logs.String()
@@ -662,8 +634,8 @@ func TestLogFormatKeepsTheSmokeGrepWorking(t *testing.T) {
 		t.Errorf("log = %q", line)
 	}
 
-	fake.setMode("truncated")
-	fake.release()
+	fake.SetMode(testfake.ModeTruncated)
+	fake.Release()
 	drain(t, postChat(t, server.URL, `{"model":"hermes-agent","stream":true,"messages":[{"role":"user","content":"hi"}]}`))
 	line = logs.String()
 	smoke := regexp.MustCompile(`\b(ERROR|CRITICAL|Traceback)\b`)
@@ -678,157 +650,16 @@ func TestLogFormatKeepsTheSmokeGrepWorking(t *testing.T) {
 	}
 }
 
-// ------------------------------------------------------------- fakes -------
-
-// recordingUpstream records every POST body and answers with a plain JSON
-// completion, like the Python test's Upstream.
-type recordingUpstream struct {
-	mu       sync.Mutex
-	requests []map[string]any
-}
-
-func (u *recordingUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var body map[string]any
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	u.mu.Lock()
-	u.requests = append(u.requests, body)
-	u.mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"upstream"}}]}`)
-}
-
-func (u *recordingUpstream) count() int {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return len(u.requests)
-}
-
-func (u *recordingUpstream) reset() {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.requests = nil
-}
-
-// gatedUpstream reproduces the Python ProxyTransportTests Upstream: a role
-// chunk, tool progress, a reasoning delta, the first sentence, a gate, then the
-// tail and [DONE].
-type gatedUpstream struct {
-	mu       sync.Mutex
-	mode     string
-	gate     chan struct{}
-	closed   bool
-	requests []map[string]any
-	headers  []http.Header
-}
-
-func newGatedUpstream(t *testing.T) *gatedUpstream {
-	t.Helper()
-	return &gatedUpstream{mode: "normal", gate: make(chan struct{})}
-}
-
-func (u *gatedUpstream) setMode(mode string) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.mode = mode
-}
-
-func (u *gatedUpstream) release() {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if !u.closed {
-		close(u.gate)
-		u.closed = true
-	}
-}
-
-func (u *gatedUpstream) released() bool {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return u.closed
-}
-
-func (u *gatedUpstream) lastHeaders() http.Header {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if len(u.headers) == 0 {
-		return http.Header{}
-	}
-	return u.headers[len(u.headers)-1]
-}
-
-func (u *gatedUpstream) last() map[string]any {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if len(u.requests) == 0 {
-		return nil
-	}
-	return u.requests[len(u.requests)-1]
-}
-
-func (u *gatedUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var body map[string]any
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	u.mu.Lock()
-	u.requests = append(u.requests, body)
-	u.headers = append(u.headers, r.Header.Clone())
-	mode := u.mode
-	u.mu.Unlock()
-
-	if mode == "http_error" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = io.WriteString(w, `{"error":{"message":"limited"}}`)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.WriteHeader(http.StatusOK)
-	flusher := w.(http.Flusher)
-	send := func(delta map[string]any, finish any) {
-		chunk := map[string]any{
-			"id":      "test",
-			"object":  "chat.completion.chunk",
-			"created": 1,
-			"model":   "hermes-agent",
-			"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}},
-		}
-		encoded, _ := json.Marshal(chunk)
-		_, _ = fmt.Fprintf(w, "data: %s\n\n", encoded)
-		flusher.Flush()
-	}
-	send(map[string]any{"role": "assistant"}, nil)
-	_, _ = io.WriteString(w, "event: hermes.tool.progress\ndata: {\"tool\":\"private\"}\n\n")
-	flusher.Flush()
-	send(map[string]any{"reasoning_content": "SECRET THINKING"}, nil)
-	send(map[string]any{"content": "Первое предложение. "}, nil)
-
-	select {
-	case <-u.gate:
-	case <-r.Context().Done():
-		return
-	}
-	if mode == "truncated" {
-		return
-	}
-	send(map[string]any{"content": "Источник: [Reuters](https://example.com)."}, nil)
-	send(map[string]any{}, "stop")
-	_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	flusher.Flush()
-}
-
 // ------------------------------------------------ StartupRecoveryTests -----
 
-// TestUnavailableUpstreamIsOpenAIErrorAndRecoversWithoutProxyRestart mirrors
-// test_unavailable_upstream_is_openai_error_and_recovers_without_proxy_restart:
-// the failure is not cached, so the next request reaches Hermes again.
+// TestUnavailableUpstreamIsOpenAIErrorAndRecoversWithoutProxyRestart: the
+// failure is not cached, so the next request reaches Hermes again.
 func TestUnavailableUpstreamIsOpenAIErrorAndRecoversWithoutProxyRestart(t *testing.T) {
-	flaky := &flakyUpstream{}
-	flaky.down.Store(true)
-	upstream := httptest.NewServer(flaky)
-	defer upstream.Close()
+	fake := testfake.NewHermes()
+	fake.SetDown(true)
+	upstream := testfake.Serve(t, fake)
 	// One proxy process for the whole test: the failure must not be cached.
-	server := httptest.NewServer(newProxy(t, upstream.URL, nil))
-	defer server.Close()
+	server := testfake.Serve(t, newProxy(t, upstream.URL, nil))
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		var body io.Reader
@@ -862,7 +693,8 @@ func TestUnavailableUpstreamIsOpenAIErrorAndRecoversWithoutProxyRestart(t *testi
 		}
 	}
 
-	flaky.down.Store(false)
+	fake.SetDown(false)
+	fake.SetResponse(http.StatusOK, `{"data": []}`)
 	resp, err := http.Get(server.URL + "/v1/models")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
@@ -871,24 +703,4 @@ func TestUnavailableUpstreamIsOpenAIErrorAndRecoversWithoutProxyRestart(t *testi
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200 after recovery", resp.StatusCode)
 	}
-}
-
-// flakyUpstream can drop a connection without stopping its listener, which is
-// how the Python test simulates a refused connection, then serve normally
-// again.
-type flakyUpstream struct {
-	down atomic.Bool
-}
-
-func (f *flakyUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if f.down.Load() {
-		if hijacker, ok := w.(http.Hijacker); ok {
-			if conn, _, err := hijacker.Hijack(); err == nil {
-				_ = conn.Close()
-			}
-		}
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = io.WriteString(w, `{"data": []}`)
 }

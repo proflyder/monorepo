@@ -1,14 +1,9 @@
 // Package sanitize turns assistant replies into text that Piper TTS can speak.
 //
-// The rules are a line-by-line port of the former Python proxy
-// (projects/home-assistant/hermes/voice_proxy.py, removed at cutover).
-//
-// The important porting constraint is that Go's RE2 \s and \b are ASCII-only
-// while Python's are Unicode-aware. Every whitespace class below is therefore
-// written out explicitly as pySpace, which is exactly the character set
-// CPython's Py_UNICODE_ISSPACE accepts: the ASCII whitespace characters, the
-// C0 information separators U+001C..U+001F, NEL (U+0085) and the Unicode
-// separator categories Zs, Zl and Zp.
+// Go's RE2 \s and \b are ASCII-only, so every whitespace class below is written
+// out explicitly instead: the ASCII whitespace characters, the C0 information
+// separators U+001C..U+001F, NEL (U+0085) and the Unicode separator categories
+// Zs, Zl and Zp.
 package sanitize
 
 import (
@@ -22,31 +17,32 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// MaxStreamBytes bounds the buffered streaming tail exactly like the proxy's
-// 10 MiB request cap; a runaway stream fails instead of growing without bound.
+// MaxStreamBytes bounds the buffered streaming tail like the 10 MiB request
+// cap; a runaway stream fails instead of growing without bound.
 const MaxStreamBytes = 10 << 20
 
 // ErrStreamTooLarge reports a streaming tail that exceeded MaxStreamBytes.
 var ErrStreamTooLarge = errors.New("stream text too large")
 
-// pySpace matches one Python whitespace character (Py_UNICODE_ISSPACE).
-const pySpace = `[ \t\n\v\f\r\x1c-\x1f\x85\p{Z}]`
+// spaceClass matches one character of the Unicode space set: ASCII whitespace,
+// the C0 information separators, NEL and the Zs/Zl/Zp categories.
+const spaceClass = `[ \t\n\v\f\r\x1c-\x1f\x85\p{Z}]`
 
-// notPySpace is the negated form used inside larger character classes.
-const notPySpace = `[^ \t\n\v\f\r\x1c-\x1f\x85\p{Z}`
+// notSpaceClass is the negated form used inside larger character classes.
+const notSpaceClass = `[^ \t\n\v\f\r\x1c-\x1f\x85\p{Z}`
 
 // trailingPunct is the sentence-final punctuation STT may append.
 const trailingPunct = ".!?…"
 
 var (
 	// Order matters: remove whole citation parentheses before unwrapping links.
-	citation    = regexp.MustCompile(pySpace + `*\(\[[^\]]+\]\(https?://[^)]+\)\)`)
+	citation    = regexp.MustCompile(spaceClass + `*\(\[[^\]]+\]\(https?://[^)]+\)\)`)
 	mdLink      = regexp.MustCompile(`\[([^\]]+)\]\(https?://[^)]+\)`)
-	bareURL     = regexp.MustCompile(`https?://` + notPySpace + `)\]}>"']+`)
-	mdLinePfx   = regexp.MustCompile(`(?m)^` + pySpace + `*(?:#{1,6}` + pySpace + `*|[-*+]` + pySpace + `+|\d+[.)]` + pySpace + `+)`)
+	bareURL     = regexp.MustCompile(`https?://` + notSpaceClass + `)\]}>"']+`)
+	mdLinePfx   = regexp.MustCompile(`(?m)^` + spaceClass + `*(?:#{1,6}` + spaceClass + `*|[-*+]` + spaceClass + `+|\d+[.)]` + spaceClass + `+)`)
 	mdMarks     = regexp.MustCompile("[*_`~]+")
-	emptyParens = regexp.MustCompile(`\(` + pySpace + `*\)`)
-	runOfSpace  = regexp.MustCompile(pySpace + `+`)
+	emptyParens = regexp.MustCompile(`\(` + spaceClass + `*\)`)
+	runOfSpace  = regexp.MustCompile(spaceClass + `+`)
 
 	// truncatedLink and truncatedHTTP drop an unterminated link or scheme tail
 	// at end of stream: a half URL must never be spoken.
@@ -54,10 +50,10 @@ var (
 	truncatedHTTP = regexp.MustCompile(`https?(?::/{0,2})?$`)
 
 	// questionTail finds the final question sentence of an over-long answer.
-	questionTail = regexp.MustCompile(`[^.!?…？]*[?？]` + pySpace + `*$`)
+	questionTail = regexp.MustCompile(`[^.!?…？]*[?？]` + spaceClass + `*$`)
 )
 
-// IsSpace reports whether r is whitespace to Python: Py_UNICODE_ISSPACE.
+// IsSpace reports whether r belongs to the Unicode space set above.
 func IsSpace(r rune) bool {
 	switch r {
 	case '\t', '\n', '\v', '\f', '\r', ' ', '\x1c', '\x1d', '\x1e', '\x1f', '\x85':
@@ -66,12 +62,12 @@ func IsSpace(r rune) bool {
 	return unicode.Is(unicode.Zs, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r)
 }
 
-// TrimSpace trims Python whitespace, including the C0 information separators
-// that strings.TrimSpace leaves behind.
+// TrimSpace trims the Unicode space set, including the C0 information
+// separators that strings.TrimSpace leaves behind.
 func TrimSpace(s string) string { return strings.TrimFunc(s, IsSpace) }
 
-// CollapseSpace is Python's " ".join(s.split()): split on runs of whitespace
-// and join with a single ASCII space.
+// CollapseSpace is " ".join(s.split()): split on runs of whitespace and join
+// with a single ASCII space.
 func CollapseSpace(s string) string { return strings.Join(strings.FieldsFunc(s, IsSpace), " ") }
 
 // SanitizeText returns a TTS-friendly version of an assistant reply.
@@ -152,13 +148,13 @@ func (s *StreamingSanitizer) Feed(text string, final bool) (string, error) {
 	return result, nil
 }
 
-// boundaryEnd ports the Python scanner
+// boundaryEnd is the equivalent of the scanner
 //
 //	r"https?://[^\s)\]]*|[\[\]()]|[.!?…]+(?=\s)"
 //
 // and returns the byte index after the last sentence boundary that is outside a
 // link/parenthesis. RE2 has no lookahead, so the scanner is written by hand; it
-// also keeps the exact leftmost-first order of the alternatives.
+// keeps the leftmost-first order of the alternatives.
 func boundaryEnd(text string) int {
 	brackets, parens, end := 0, 0, 0
 	for i := 0; i < len(text); {

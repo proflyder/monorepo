@@ -1,16 +1,14 @@
 // Package updates announces turns the owner did not start by voice: child
 // completions and dispatcher messages.
 //
-// It is a port of _updates_poller(), _enqueue_updates(), _updates_cursor() and
-// _updates_spoken() in voice_proxy.py. Two modes exist:
+// Two modes exist:
 //
 //   - with the durable queue every non-owner turn is enqueued for the work
 //     profile, regardless of the current speaker profile; the queue consumer
 //     waits for the work profile and an idle station. A restart rescans a recent
 //     window and the idempotency key drops duplicates;
-//   - without the queue the previous behaviour is unchanged: advance the cursor,
-//     re-read the profile and speak only in the work profile, joining the batch
-//     into one utterance.
+//   - without the queue the cursor advances, the profile is re-read and the
+//     batch is spoken only in the work profile as one utterance.
 //
 // Errors back off 2 s -> 60 s and never speak or reach Hermes.
 package updates
@@ -72,7 +70,7 @@ type Poller struct {
 	cfg Config
 }
 
-// New builds a Poller with the Python defaults.
+// New builds a Poller with the documented defaults.
 func New(cfg Config) *Poller {
 	if cfg.Rescan <= 0 {
 		cfg.Rescan = 300

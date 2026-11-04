@@ -1,8 +1,7 @@
 // Package router decides whether the last user utterance reaches Hermes, is
 // answered locally, or starts a bb turn whose answer is announced later.
 //
-// It is a port of route_utterance() and RouteDecision in voice_proxy.py. The
-// fail-closed contract is the important part:
+// The fail-closed contract is the important part:
 //
 //   - an unknown profile answers "Не могу подтвердить профиль." and never
 //     reaches Hermes, for every profile;
@@ -10,7 +9,7 @@
 //     "Сервер агентов недоступен." and is never forwarded;
 //   - a gateway failure in the work profile stays local, because forwarding it
 //     would run a work phrase in the personal agent; in the personal profile the
-//     previous behaviour is kept and the request still reaches Hermes.
+//     request still reaches Hermes.
 package router
 
 import (
@@ -25,7 +24,7 @@ import (
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
-// Speech phrases from voice_proxy.py.
+// Speech phrases.
 const (
 	SpeechProfileUnknown = "Не могу подтвердить профиль."
 	SpeechAgentsDown     = "Сервер агентов недоступен."

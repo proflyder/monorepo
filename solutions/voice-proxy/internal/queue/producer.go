@@ -2,15 +2,12 @@
 // spoken answer as a "voice.announce" task and a consumer that speaks it only
 // when the station is idle.
 //
-// The wire contract is shared with the Python proxy during the cutover, so the
-// payload keys, task type, queue names, idempotency keys and ack outcomes are
-// byte-for-byte compatible:
+// The payload keys, task type, queue names, idempotency keys and ack outcomes
+// are a wire contract:
 //
 //	payloadJson: {"text","profile","thread_id","seq","created_unix"}
 //	queue:       voice-<profile>
 //	key:         voice:<thread_id>:<seq>
-//
-// Python and Go may drain each other's events after a rollback.
 package queue
 
 import (
@@ -24,14 +21,14 @@ import (
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
 )
 
-// Defaults from voice_proxy.py.
+// Defaults.
 const (
 	DefaultPrefix   = "voice-"
 	DefaultTaskType = "voice.announce"
 )
 
-// AnnouncePayload is the voice.announce payload. Field order is the Python
-// insertion order, so a Go-produced payload is textually familiar too.
+// AnnouncePayload is the voice.announce payload. Field order is part of the
+// wire contract and must not change.
 type AnnouncePayload struct {
 	Text        string `json:"text"`
 	Profile     string `json:"profile"`
@@ -107,8 +104,8 @@ func (p *Producer) Enqueue(ctx context.Context, speech, profileID, threadID, seq
 	return err == nil
 }
 
-// encodePayload is json.dumps(..., ensure_ascii=False): UTF-8, no HTML escaping
-// and no trailing newline.
+// encodePayload writes UTF-8 JSON with no HTML escaping and no trailing
+// newline.
 func encodePayload(payload AnnouncePayload) (string, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

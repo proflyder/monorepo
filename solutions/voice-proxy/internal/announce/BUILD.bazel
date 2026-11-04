@@ -15,5 +15,8 @@ go_library(
 go_test(
     name = "announce_test",
     srcs = ["announce_test.go"],
-    deps = [":announce"],
+    deps = [
+        ":announce",
+        "//solutions/voice-proxy/internal/testfake",
+    ],
 )

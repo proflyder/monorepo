@@ -24,5 +24,6 @@ go_test(
         "//solutions/voice-proxy/internal/proxy",
         "//solutions/voice-proxy/internal/result",
         "//solutions/voice-proxy/internal/sse",
+        "//solutions/voice-proxy/internal/testfake",
     ],
 )

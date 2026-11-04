@@ -10,8 +10,8 @@ import (
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/sse"
 )
 
-// TestSSEMultilineCRLFCommentsAndUnicode mirrors
-// test_sse_multiline_crlf_comments_and_unicode in test_voice_proxy.py.
+// TestSSEMultilineCRLFCommentsAndUnicode covers multiline data, CRLF, a
+// comment keepalive and non-ASCII payloads.
 func TestSSEMultilineCRLFCommentsAndUnicode(t *testing.T) {
 	raw := ": ping\r\nevent: hermes.status\r\ndata: {\"text\":\r\ndata: \"Привет\"}\r\n\r\ndata: [DONE]\r\n\r\n"
 	want := []sse.Event{

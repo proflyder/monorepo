@@ -14,5 +14,5 @@ go_library(
 go_test(
     name = "sse_test",
     srcs = ["sse_test.go"],
-    embed = [":sse"],
+    deps = [":sse"],
 )

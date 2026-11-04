@@ -1,4 +1,4 @@
-// Command voice-proxy is the Go replacement for the Python Hermes voice proxy:
+// Command voice-proxy is the Hermes voice proxy:
 // an OpenAI-compatible passthrough that makes replies safe for Piper TTS.
 //
 // The container is distroless, so the two diagnostics that used to be

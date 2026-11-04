@@ -28,15 +28,26 @@ const (
 	maxResponseBytes = 64 << 10
 )
 
-// Client calls script entities on Home Assistant.
+// Client calls Home Assistant services, reads states and renders templates.
 type Client struct {
 	baseURL string
-	token   string
+	token   func() string
 	http    *http.Client
 }
 
-// New returns a Home Assistant client. baseURL must not contain credentials.
+// New returns a Home Assistant client with a fixed token. baseURL must not
+// contain credentials.
 func New(baseURL, token string, hc *http.Client) *Client {
+	return NewWithToken(baseURL, func() string { return token }, hc)
+}
+
+// NewWithToken returns a Home Assistant client that resolves the token on every
+// request, so a rotated mounted secret needs no restart. A nil token source
+// sends no Authorization header.
+func NewWithToken(baseURL string, token func() string, hc *http.Client) *Client {
+	if token == nil {
+		token = func() string { return "" }
+	}
 	if hc == nil {
 		hc = &http.Client{}
 	}
@@ -80,7 +91,7 @@ func (c *Client) CallScript(ctx context.Context, script string, variables map[st
 		return &httpapi.Error{Op: "call script", Err: errors.New("build request")}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.token())
 	return c.send(req, "call script")
 }
 
@@ -91,14 +102,14 @@ func (c *Client) Ping(ctx context.Context) error {
 	if err != nil {
 		return &httpapi.Error{Op: "ping HA", Err: errors.New("build request")}
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.token())
 	return c.send(req, "ping HA")
 }
 
 func (c *Client) send(req *http.Request, op string) error {
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return &httpapi.Error{Op: op, Err: networkError(err, c.token)}
+		return &httpapi.Error{Op: op, Err: networkError(err, c.token())}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -110,7 +121,7 @@ func (c *Client) send(req *http.Request, op string) error {
 		return &httpapi.Error{
 			Op:         op,
 			StatusCode: resp.StatusCode,
-			Message:    httpapi.Sanitize(resp.Status, c.token),
+			Message:    httpapi.Sanitize(resp.Status, c.token()),
 		}
 	}
 	return nil
@@ -127,6 +138,7 @@ func networkError(err error, token string) error {
 const (
 	statesPath          = "/api/states"
 	maxStatesBodyBytes  = 8 << 20
+	maxStateBodyBytes   = 1 << 20
 	serviceCallBasePath = "/api/services/"
 )
 
@@ -156,7 +168,7 @@ func (c *Client) CallService(ctx context.Context, domain, service, entity string
 		return &httpapi.Error{Op: op, Err: errors.New("build request")}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.token())
 	return c.send(req, op)
 }
 
@@ -187,15 +199,15 @@ func (c *Client) Entities(ctx context.Context) ([]Entity, error) {
 	if err != nil {
 		return nil, &httpapi.Error{Op: op, Err: errors.New("build request")}
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.token())
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, &httpapi.Error{Op: op, Err: networkError(err, c.token)}
+		return nil, &httpapi.Error{Op: op, Err: networkError(err, c.token())}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBytes))
-		return nil, &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token)}
+		return nil, &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token())}
 	}
 	var states []struct {
 		EntityID   string `json:"entity_id"`
@@ -241,6 +253,40 @@ func (c *Client) Entities(ctx context.Context) ([]Entity, error) {
 	return out, nil
 }
 
+// State reads the state string of one entity from /api/states/<entity>. An
+// unknown entity, a non-object body or a missing/non-string state is an error.
+func (c *Client) State(ctx context.Context, entity string) (string, error) {
+	const op = "read state"
+	entity = strings.TrimSpace(entity)
+	if entity == "" {
+		return "", &httpapi.Error{Op: op, Err: errors.New("empty entity")}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+statesPath+"/"+url.PathEscape(entity), nil)
+	if err != nil {
+		return "", &httpapi.Error{Op: op, Err: errors.New("build request")}
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token())
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", &httpapi.Error{Op: op, Err: networkError(err, c.token())}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBytes))
+		return "", &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token())}
+	}
+	var payload struct {
+		State *string `json:"state"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxStateBodyBytes)).Decode(&payload); err != nil {
+		return "", &httpapi.Error{Op: op, Err: errors.New("decode state")}
+	}
+	if payload.State == nil {
+		return "", &httpapi.Error{Op: op, Err: errors.New("state is not a string")}
+	}
+	return *payload.State, nil
+}
+
 type templateRequest struct {
 	Template string `json:"template"`
 }
@@ -259,15 +305,15 @@ func (c *Client) RenderTemplate(ctx context.Context, template string) (string, e
 		return "", &httpapi.Error{Op: op, Err: errors.New("build request")}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.token())
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", &httpapi.Error{Op: op, Err: networkError(err, c.token)}
+		return "", &httpapi.Error{Op: op, Err: networkError(err, c.token())}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBytes))
-		return "", &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token)}
+		return "", &httpapi.Error{Op: op, StatusCode: resp.StatusCode, Message: httpapi.Sanitize(resp.Status, c.token())}
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatesBodyBytes))
 	if err != nil {

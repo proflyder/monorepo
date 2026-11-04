@@ -1,10 +1,10 @@
 // Package proxy is the HTTP surface of the voice proxy: GET passthrough and
 // the POST /v1/chat/completions pipeline.
 //
-// The pipeline order is part of the contract and is copied from
-// voice_proxy.py: cancel guard first (before any profile read or routing call),
-// then the optional voice router, then the reasoning_effort injection, then
-// either the streaming relay or the buffered sanitising relay.
+// The pipeline order is part of the contract: cancel guard first (before any
+// profile read or routing call), then the optional voice router, then the
+// reasoning_effort injection, then either the streaming relay or the buffered
+// sanitising relay.
 package proxy
 
 import (
@@ -137,8 +137,7 @@ func (h *Handler) CancelCount() int64 { return h.cancelCount }
 // ServeHTTP dispatches like BaseHTTPRequestHandler: only GET and POST exist, so
 // HEAD, PUT and friends are 501, not 405.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Python's http.server is HTTP/1.0 and closes every connection; force the
-	// same semantics so HA's OpenAI client never sees a chunked tail.
+	// Close every connection so HA's OpenAI client never sees a chunked tail.
 	w.Header().Set("Connection", "close")
 	switch r.Method {
 	case http.MethodGet:
@@ -250,8 +249,7 @@ func (h *Handler) sendCancelCompletion(w http.ResponseWriter, payload map[string
 	h.sendLocalCompletion(w, payload, CancelSilence, CancelCompletionID)
 }
 
-// ErrNotObject reports a request body that is not a JSON object; Python raises
-// the same way when it calls .get on a non-dict value.
+// ErrNotObject reports a request body that is not a JSON object.
 var ErrNotObject = errors.New("request body is not a JSON object")
 
 func decodeObject(raw []byte) (map[string]any, error) {
@@ -270,14 +268,14 @@ func decodeObject(raw []byte) (map[string]any, error) {
 	return object, nil
 }
 
-// isStream mirrors Python's `payload.get("stream") is True`: only the JSON
-// literal true selects the streaming reply shape.
+// isStream reports `payload.get("stream") is True`: only the JSON literal true
+// selects the streaming reply shape.
 func isStream(payload map[string]any) bool {
 	stream, ok := payload["stream"].(bool)
 	return ok && stream
 }
 
-// truthy mirrors Python's bool(value), used only for the structural cancel log.
+// truthy is bool(value), used only for the structural cancel log.
 func truthy(value any) bool {
 	switch typed := value.(type) {
 	case nil:

@@ -1,7 +1,7 @@
 // Package app is the process composition root: configuration, the upstream
 // client, the voice router, the background workers and the HTTP listener.
 //
-// Start-up order mirrors main() in voice_proxy.py:
+// Start-up order:
 //
 //   - the listener is bound first;
 //   - the dispatcher updates poller starts when routing and updates are on;

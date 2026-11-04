@@ -1,9 +1,8 @@
 // Package result announces the final answer of a routed bb turn.
 //
-// It is a port of start_result_announcer() and _result_announcer() in
-// voice_proxy.py: the immediate acknowledgement was already spoken by the
-// router, so this background worker long-polls /v1/voice/result for up to 900 s
-// and then either enqueues the answer (durable queue) or announces it directly.
+// The immediate acknowledgement was already spoken by the router, so this
+// background worker long-polls /v1/voice/result for up to 900 s and then either
+// enqueues the answer (durable queue) or announces it directly.
 //
 // Two behaviours are deliberate:
 //
@@ -27,7 +26,7 @@ import (
 	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
-// Speech phrases from voice_proxy.py. They never end with a question: HA's
+// Speech phrases. They never end with a question: HA's
 // pipeline enables continued conversation when the assistant reply does.
 const (
 	SpeechAgentsDown = "Сервер агентов недоступен."
@@ -147,7 +146,7 @@ func (a *Announcer) Wait(timeout time.Duration) {
 }
 
 // Poll long-polls one turn and speaks or enqueues its answer. It is synchronous
-// so tests can drive it exactly like the Python tests drive _result_announcer.
+// so a test can drive it directly.
 func (a *Announcer) Poll(ctx context.Context, threadID string, afterSeq int64, profileID string) {
 	deadline := a.cfg.Clock().Add(a.cfg.Timeout)
 	status := "timeout"
@@ -186,8 +185,8 @@ func (a *Announcer) Poll(ctx context.Context, threadID string, afterSeq int64, p
 		finished = true
 		break
 	}
-	// Python's while-else: reaching the deadline without an answer is a timeout,
-	// even when the last poll said "running".
+	// Reaching the deadline without an answer is a timeout, even when the last
+	// poll said "running".
 	if !finished {
 		status = "timeout"
 	}
