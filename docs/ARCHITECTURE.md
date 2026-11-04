@@ -165,9 +165,12 @@ Pulsar живёт в монорепозитории (`projects/station/pulsar/`)
 
 ```text
 merge PR в develop с новым VERSION
-   → release-pulsar.yml: сборка aarch64/armhf, radio, SHA256SUMS
-        → oras push ghcr.io/proflyder/pulsar-firmware:<version> (+ :latest)
-   → deploy job: ручной approve в Environment `Station`
+   → deploy-home plan: native.publish_when по VERSION → native_units
+   → native-build (_native.yml): сборка aarch64/armhf с VERSION, radio,
+        SHA256SUMS, проверка --version под qemu
+   → publish-native: publish-oci.sh → oras push
+        ghcr.io/proflyder/pulsar-firmware:<version> (+ :latest)
+   → deploy-station: ручной approve в Environment `Station`
         → VPN группа ci
         → OIDC в OpenBao: роль deploy-station → secret/ci/deploy-station
         → HA update_entity + update.install (Firmware станции)

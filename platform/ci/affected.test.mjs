@@ -435,6 +435,8 @@ test("real repo: native provider change routes to its unit", () => {
       id: "logon-provider",
       kind: "script",
       publish: true,
+      publish_script: "solutions/windows-logon-provider/publish-oci.sh",
+      publish_attest_glob: "RicardoKompLogon.dll",
       workdir: "solutions/windows-logon-provider",
       build: "./build.sh",
       test: "./run-tests.sh",
@@ -479,6 +481,8 @@ test("real repo: pulsar change routes to the native pulsar unit", () => {
       id: "pulsar",
       kind: "pulsar",
       publish: false,
+      publish_script: "projects/station/pulsar/publish-oci.sh",
+      publish_attest_glob: "*",
       workdir: "projects/station/pulsar",
       build: "",
       test: "",
@@ -491,6 +495,34 @@ test("real repo: pulsar change routes to the native pulsar unit", () => {
       toolchain_root: "",
     },
   ]);
+});
+
+test("real repo: pulsar publishes only when VERSION changed", () => {
+  const config = affected.loadConfig();
+  const entryFor = (changed) => {
+    const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+      affected.route(config, changed, { root: REPO, base: "b" }),
+    );
+    return affected.matrixEntries(result, config).native.find((item) => item.id === "pulsar");
+  };
+  // A source change is PR CI only: the unit is built, but not published.
+  assert.equal(entryFor(["projects/station/pulsar/satellite/Makefile"]).publish, false);
+  assert.equal(entryFor(["projects/station/pulsar/VERSION"]).publish, true);
+  // A global invalidation does not turn an unchanged VERSION into a release.
+  assert.equal(entryFor(["MODULE.bazel"]).publish, false);
+  // The logon provider has no publish_when: any affected change publishes it.
+  const logon = affected.loadConfig();
+  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+    affected.route(logon, ["solutions/windows-logon-provider/src/worker.cpp"], {
+      root: REPO,
+      base: "b",
+    }),
+  );
+  assert.equal(
+    affected.matrixEntries(result, logon).native.find((item) => item.id === "logon-provider")
+      .publish,
+    true,
+  );
 });
 
 test("real repo: js worker change routes to its unit", () => {

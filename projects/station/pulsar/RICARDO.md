@@ -146,11 +146,14 @@ missing; it does not silently fall back to «Алиса».
 upstream-патча, поэтому сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз новее.
 
 1. Изменить `projects/station/pulsar/VERSION` в рабочей ветке и открыть обычный PR в `develop`.
-2. Merge PR (squash) запускает `.github/workflows/release-pulsar.yml`: он собирает обе
-   архитектуры, debug-файлы (workflow-артефакты), radio `.ybl`, `SHA256SUMS` и пушит OCI-слой
-   в `ghcr.io/proflyder/pulsar-firmware:<version>`, затем переносит `:latest`. Если тег версии
-   уже есть в GHCR, workflow падает — выпускается следующая версия.
-3. Job `deploy` ждёт одобрения в Environment `Station` (required reviewer).
+2. Merge PR (squash) проводит юнит `pulsar` через общий `.github/workflows/deploy-home.yml`:
+   `native.publish_when` пускает его в план только при изменении VERSION, `_native.yml`
+   собирает обе архитектуры с этой версией, radio `.ybl` и `SHA256SUMS`, проверяет
+   `--version` под qemu, а `publish-native` скриптом `publish-oci.sh` пушит OCI-слой в
+   `ghcr.io/proflyder/pulsar-firmware:<version>`, затем переносит `:latest`. Если тег версии
+   уже есть в GHCR, publish падает — выпускается следующая версия. Прочие изменения Pulsar
+   идут только через PR CI и ничего не публикуют.
+3. Job `deploy-station` ждёт одобрения в Environment `Station` (required reviewer).
 4. После одобрения job поднимает VPN (группа `ci`), затем `hashicorp/vault-action` по
    GitHub OIDC (роль `deploy-station`) читает `secret/data/ci/deploy-station` и вызывает
    `tools/ha_firmware_deploy.py --tag <version>`: HA `homeassistant.update_entity` → сущность
@@ -174,9 +177,10 @@ upstream-патча, поэтому сравнение версий (`vMAJOR.MIN
 Пока это не так, бинарник ставится вручную (`pulsar-install` или замена `pulsar` + `.prev` и
 `ctl.sh restart`).
 
-Повторный деплой уже опубликованной версии — `workflow_dispatch` для `release-pulsar.yml`
-(сборка упадёт, если OCI-тег уже существует) либо повторный approve существующего run.
-Если версия уже стоит, скрипт печатает `already installed` и выходит успешно.
+Повторный деплой уже опубликованной версии — `workflow_dispatch` для `deploy-home`
+с `units=pulsar`: job `deploy-station` катит текущий VERSION, ничего не собирая и не
+перезаписывая OCI-тег, либо повторный approve существующего run. Если версия уже стоит,
+скрипт печатает `already installed` и выходит успешно.
 
 Откат через dispatch **невозможен**: обновлятор предлагает только более новые версии, поэтому
 старая версия не появится в `latest_version`. Откат делается на станции: `.prev` (или резервная

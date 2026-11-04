@@ -73,14 +73,18 @@
 20. **Pulsar — код и релизы в монорепозитории, деплой через HA updater.**
     Исходники — `projects/station/pulsar/`; CI — юнит `pulsar`
     (`_native.yml`: `make check`, обе архитектуры, installer, radio, ssh).
-    Версия — `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`);
-    изменение файла в `develop` запускает `release-pulsar.yml`, который
+    Версия — `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`).
+    Pulsar — обычный publishable native-юнит общего `deploy-home`: поле
+    `native.publish_when` пускает его в `native_units` на push только при
+    изменении VERSION; прочие изменения Pulsar — только PR CI. `publish-native`
     публикует OCI-артефакт в `ghcr.io/proflyder/pulsar-firmware:<version>`
     (+ `:latest`); GitHub Releases и теги в монорепо не используются.
-    Выкатка на станцию — job `deploy` после ручного approve в Environment
-    `Station`, через VPN группу `ci` и OIDC в OpenBao (`deploy-station`),
-    затем HA `update.install`; job проверяет установленную версию и
-    стабильность. Откат — не через CI, а на станции (`.prev` +
+    Выкатка на станцию — job `deploy-station` после ручного approve в
+    Environment `Station`, через VPN группу `ci` и OIDC в OpenBao
+    (`deploy-station`), затем HA `update.install`; job проверяет
+    установленную версию и стабильность. `workflow_dispatch` с
+    `units=pulsar` повторно катит уже опубликованный VERSION, не пересобирая
+    и не перезаписывая тег. Откат — не через CI, а на станции (`.prev` +
     `ctl.sh reload`). Egress станции при этом разрешает HTTPS только к
     публичным IPv4-диапазонам GitHub, весь остальной WAN и Яндекс — DROP.
 
@@ -301,16 +305,27 @@
       patch-каталога больше нет.
     * GitHub Releases в монорепозитории запрещены, теги не пушатся
       (pre-push hook). Релиз — изменение `VERSION`
-      (`v<major.minor>.<1000+N>`): push в `develop` запускает
-      `release-pulsar.yml`, который собирает обе архитектуры, radio и
-      `SHA256SUMS` и публикует OCI-артефакт
+      (`v<major.minor>.<1000+N>`): push в `develop` проводит Pulsar через
+      общий `deploy-home`. Юнит `pulsar` объявлен publishable native-юнитом с
+      `native.publish_when: ["projects/station/pulsar/VERSION"]`, поэтому
+      `plan` кладёт его в `native_units` только при изменении VERSION, а
+      `native-build` (`_native.yml`, `release_version`) собирает обе
+      архитектуры с этой версией, radio и `SHA256SUMS`, проверяет `--version`
+      под qemu и отдаёт `publish-native` скрипту
+      `projects/station/pulsar/publish-oci.sh`. Тот публикует OCI-артефакт
       `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`) с типом
       `application/vnd.proflyder.pulsar.release.v1`. Существующий тег GHCR
-      перезаписать нельзя — выпускается следующая версия.
+      перезаписать нельзя — publish падает, выпускается следующая версия.
+      Прочие изменения Pulsar — только PR CI, без публикации.
     * `proflyder/pulsar-firmware` — публичный пакет, созданный workflow из
       `GITHUB_TOKEN` (`packages: write`); имя зашито в
       `pulsar_update::UPDATE_REPO` установленной прошивки. `ghcr-cleanup`
       этот пакет не рассматривает: `latest` и версии должны сохраняться.
+    * Выкатка — job `deploy-station` в `deploy-home.yml` (Environment
+      `Station`, VPN группа `ci`, OpenBao роль `deploy-station`) через
+      `tools/ha_firmware_deploy.py --tag <version>`. Job независим от
+      домашнего `deploy`: его сбой не блокирует home-юниты, а домашний
+      `deploy` никогда не выбирает `pulsar`.
     * Upstream `Morvex885/pulsar` вливается вручную патчем:
       `git diff vA..vB` → `git apply -3 --directory=projects/station/pulsar`,
       затем обычный squash PR. Автоматический fork-sync не используется.

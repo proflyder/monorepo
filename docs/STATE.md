@@ -183,18 +183,20 @@
   прав.
 - Pulsar собирается в монорепо: исходники лежат в `projects/station/pulsar`,
   сборка — Make + cargo-zigbuild; монорепо собирает его в CI-юните `pulsar`
-  (`_native.yml`). Изменение `projects/station/pulsar/VERSION` на `develop`
-  запускает `release-pulsar.yml` → OCI-артефакт
-  `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`), затем после
-  approve в Environment `Station` job входит в VPN группой `ci`
-  (отдельный сертификат `ci-pulsar`) и по OIDC в OpenBao роль
-  `deploy-station` (политика `ci-station`,
-  `secret/ci/deploy-station`: `ha_url`, `ha_token`, `entity_id`) вызывает HA
-  `update_entity` + `update.install`. Job ждёт
+  (`_native.yml`). Pulsar — publishable native-юнит общего `deploy-home` с
+  `publish_when` по `projects/station/pulsar/VERSION`: только изменение этого
+  файла на `develop` запускает `native-build` → `publish-native` →
+  OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`).
+  Прочие изменения Pulsar — только PR CI. Затем job `deploy-station` после
+  approve в Environment `Station` входит в VPN группой `ci` (отдельный
+  сертификат `ci-pulsar`) и по OIDC в OpenBao роль `deploy-station` (политика
+  `ci-station`, `secret/ci/deploy-station`: `ha_url`, `ha_token`, `entity_id`)
+  вызывает HA `update_entity` + `update.install`. Job ждёт
   `installed_version == version` и 90 с стабильности; откат `supervise.sh` на
   `.prev` валит job. GitHub Releases и теги в монорепо не используются.
-  Повторный запуск — `workflow_dispatch` для `release-pulsar.yml`. Откат — не
-  через CI, а на станции (`.prev` + `ctl.sh reload`).
+  Повторный запуск — `workflow_dispatch` deploy-home с `units=pulsar` (катит
+  уже опубликованный VERSION, тег не перезаписывается). Откат — не через CI,
+  а на станции (`.prev` + `ctl.sh reload`).
 
 ## Remote / VPN
 
@@ -247,12 +249,13 @@
 - Версия Pulsar — `v<upstream major.minor>.<1000+N>` (`v0.5.1007`,
   следующий `v0.5.1008`): updater демона ставит только строго большую
   `MAJOR.MINOR.PATCH`, а upstream уже имеет `v0.5.4`. Релиз — изменение
-  `projects/station/pulsar/VERSION` в PR в `develop`; merge запускает
-  `release-pulsar.yml`, который публикует OCI-артефакт в
-  `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`) и после approve
-  в Environment `Station` катит на станцию через HA updater. GitHub Releases
-  и теги в монорепо не используются. Процедура — RICARDO.md «Релизы и
-  деплой». Репозиторий обновлений — константа `pulsar_update::UPDATE_REPO`.
+  `projects/station/pulsar/VERSION` в PR в `develop`; merge маршрутизирует
+  Pulsar через общий deploy-home, `publish-native` публикует OCI-артефакт в
+  `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`), после approve
+  в Environment `Station` `deploy-station` катит на станцию через HA updater.
+  GitHub Releases и теги в монорепо не используются. Процедура — RICARDO.md
+  «Релизы и деплой». Репозиторий обновлений — константа
+  `pulsar_update::UPDATE_REPO`.
 - GitHub `proflyder/pulsar` — прежний самостоятельный публичный репозиторий;
   код перенесён в монорепо `projects/station/pulsar/`, upstream
   `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` →

@@ -33,18 +33,21 @@ Skill `pre-publish-review` по диапазону PR.
 ## 4. PR и публикация
 
 1. Обычный PR в `develop`; merge — squash после зелёного `ci-ok`.
-2. Push в `develop` с изменённым `VERSION` запускает `release-pulsar.yml`: сборка `aarch64` и
-   `armhf`, radio, `SHA256SUMS`, `oras push` в
-   `ghcr.io/proflyder/pulsar-firmware:<version>` и перенос `:latest`.
-3. Workflow падает, если тег этой версии уже есть в GHCR. Уже опубликованную версию не
+2. Push в `develop` с изменённым `VERSION` проводит юнит `pulsar` через общий `deploy-home`
+   (`native.publish_when` по VERSION): `_native.yml` собирает `aarch64` и `armhf` с этой
+   версией, radio и `SHA256SUMS`, проверяет `--version` под qemu; `publish-native`
+   (`publish-oci.sh`) делает `oras push` в `ghcr.io/proflyder/pulsar-firmware:<version>` и
+   переносит `:latest`. Прочие изменения Pulsar публикации не запускают.
+3. Publish падает, если тег этой версии уже есть в GHCR. Уже опубликованную версию не
    перезаписывать, а выпускать следующую.
 
 ## 5. Контроль
 
-1. `gh run list --workflow release-pulsar --branch develop --limit 1` и `gh run watch <id>`.
+1. `gh run list --workflow deploy-home --branch develop --limit 1` и `gh run watch <id>`.
 2. Упал — `gh run view <id> --log-failed`, сообщить пользователю; релиз не править молча.
 3. Проверить артефакт: `oras manifest fetch ghcr.io/proflyder/pulsar-firmware:<version>` —
    слои `pulsar-aarch64.bin`, `pulsar-armhf.bin`, `SHA256SUMS`, `zigbee-*.ybl`; аннотация
    `org.opencontainers.image.version`.
-4. Деплой на станцию — job `deploy` того же workflow после approve в Environment `Station`
-   (только для прошивки, которая уже читает `pulsar-firmware`).
+4. Деплой на станцию — job `deploy-station` того же workflow после approve в Environment
+   `Station` (только для прошивки, которая уже читает `pulsar-firmware`). Повторный деплой
+   уже опубликованной версии — `workflow_dispatch` deploy-home с `units=pulsar`.

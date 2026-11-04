@@ -23,9 +23,10 @@ history. Upstream `Morvex885/pulsar` вливается вручную патч�
 - База: upstream `v0.5.4` (`f1f5b17`), ancestor HEAD.
 - Сборка: `make -C projects/station/pulsar/satellite ARCH=armhf` или обе
   архитектуры; CI-юнит `pulsar` в корневом `_native.yml`.
-- Релиз: изменение `projects/station/pulsar/VERSION` →
-  `release-pulsar.yml` → OCI `ghcr.io/proflyder/pulsar-firmware:<version>`
-  (+ `:latest`), затем approve в Environment `Station`. GitHub Releases и
+- Релиз: изменение `projects/station/pulsar/VERSION` → общий `deploy-home`
+  (`publish_when` по VERSION) → `publish-native` публикует OCI
+  `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`), затем
+  `deploy-station` после approve в Environment `Station`. GitHub Releases и
   теги запрещены; подробности — `RICARDO.md`, «Релизы и деплой».
 - armhf build: `satellite/build/armhf/pulsar` — stripped ARM EABI5
   hard-float ELF (`v0.5.1005`), установлен на станции. Makefile
