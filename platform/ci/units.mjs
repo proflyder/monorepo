@@ -154,6 +154,20 @@ export const config = {
       },
     },
     {
+      id: "health-exporter",
+      platform: "go",
+      title: "projects/home-assistant/deploy/health-exporter (runtime chart)",
+      paths: ["projects/home-assistant/deploy/health-exporter/**"],
+      // Tests and the Bazel image target only. The image is deployed by the
+      // `hermes` unit (one Helm release, one smoke, one rollback).
+      go: {
+        module: ".",
+        packages: ["./projects/home-assistant/deploy/health-exporter/..."],
+        race: true,
+        build: ["./projects/home-assistant/deploy/health-exporter"],
+      },
+    },
+    {
       id: "scheduler",
       platform: "go",
       title: "solutions/scheduler (scheduler service)",
@@ -449,24 +463,33 @@ export const config = {
         // no `go list` closure), so the shared-client closure never reaches it.
         "solutions/voice-proxy/**",
         "packages/go/**",
+        // The runtime chart's Go health exporter is part of this deploy unit.
+        "projects/home-assistant/deploy/health-exporter/**",
+        "projects/home-assistant/deploy/chart/**",
         // build-and-push.sh reads image digests with `home-deploy oci digest`.
         "platform/deploy/**",
       ],
-      // Hermes/voice-proxy: build+push, then promote both digests into the
-      // runtime Helm release (hermes_rollout.py). `hermes` is a Docker build,
-      // `voice-proxy` is a Bazel/rules_oci image; build-and-push.sh owns the
-      // split, so the workflow keeps one deploy branch. The upgrade is skipped
-      // when the digests did not change; the smoke checks must pass or the job
-      // rolls the release back to the previous revision.
+      // Hermes/voice-proxy/health-exporter: build+push, then promote the digests
+      // into the runtime Helm release (`home-deploy hermes rollout`). `hermes`
+      // is a Docker build; the other images are Bazel/rules_oci images named in
+      // `bazel_images`; build-and-push.sh owns the split, so the workflow keeps
+      // one deploy branch. The upgrade is skipped when the digests did not
+      // change; the smoke checks must pass or the job rolls the release back to
+      // the previous revision.
       deploy: {
         builder: "mixed",
-        // Bazel package of the `<image>_image`/`<image>_push` targets used by
-        // the mixed builder (hermes is built from Dockerfile).
-        target_root: "//solutions/voice-proxy",
-        images: ["hermes", "voice-proxy"],
+        // image -> Bazel package of the `<image>_image`/`<image>_push` targets.
+        // Images not listed here are Dockerfile builds.
+        bazel_images: {
+          "voice-proxy": "//solutions/voice-proxy",
+          "health-exporter": "//projects/home-assistant/deploy/health-exporter",
+          // The Assist smoke Job runs this binary, so no Python image is needed.
+          "home-deploy": "//projects/home/kubernetes/scheduler",
+        },
+        images: ["hermes", "voice-proxy", "health-exporter", "home-deploy"],
         workloads: ["hermes"],
         namespace: "home-assistant",
-        script: "projects/home-assistant/deploy/hermes_rollout.py",
+        script: "projects/home-assistant/deploy/rollout.sh",
         env_key: "runtime_values",
         env_file: "runtime-values.yaml",
         externalsecrets: ["hermes-environment"],

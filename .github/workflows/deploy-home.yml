@@ -472,7 +472,7 @@ jobs:
         # No official action exists for openconnect; the runner image has none.
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl python3-yaml
+          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -697,26 +697,33 @@ jobs:
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
           if [[ "${{ matrix.builder }}" == "docker" || "${{ matrix.builder }}" == "mixed" ]]; then
-            # Hermes/voice-proxy (builder `mixed`): build+push the Docker-built
-            # gateway and the Bazel-built proxy, then promote both digests into
-            # the runtime release. hermes_rollout.py skips the upgrade when the
-            # digests did not change, runs the voice smoke checks and rolls back
-            # to the previous revision on failure.
+            # Hermes/voice-proxy/health-exporter (builder `mixed`): build+push
+            # the Docker-built gateway plus the Bazel-built images, then promote
+            # every digest into the runtime release. `home-deploy hermes
+            # rollout` skips the upgrade when the digests did not change, runs
+            # the voice smoke checks and rolls back to the previous revision on
+            # failure. The smoke Job runs the same `home-deploy` image, so the
+            # cluster never needs a Python image.
             DIGEST_FILE="$CI_DIR/digests" \
             IMAGE_TAG="$GITHUB_SHA" \
               projects/home-assistant/deploy/images/build-and-push.sh ${{ matrix.images }}
             hermes_digest=$(sed -n 's/^hermes=//p' "$CI_DIR/digests")
             voice_digest=$(sed -n 's/^voice-proxy=//p' "$CI_DIR/digests")
+            exporter_digest=$(sed -n 's/^health-exporter=//p' "$CI_DIR/digests")
+            home_deploy_digest=$(sed -n 's/^home-deploy=//p' "$CI_DIR/digests")
             test -n "$hermes_digest" && test -n "$voice_digest"
+            test -n "$exporter_digest" && test -n "$home_deploy_digest"
             ROLLOUT_ARGS=()
             if [[ "$HERMES_SIMULATE_SMOKE_FAILURE" == "1" ]]; then
               ROLLOUT_ARGS+=(--simulate-smoke-failure)
             fi
             KUBECONFIG="$CI_DIR/kubeconfig" \
-              python3 "${{ matrix.script }}" \
+              "${{ matrix.script }}" \
                 --values-file "$CI_DIR/${{ matrix.env_file }}" \
                 --hermes-digest "$hermes_digest" \
                 --voice-proxy-digest "$voice_digest" \
+                --exporter-digest "$exporter_digest" \
+                --smoke-image "ghcr.io/proflyder/home-deploy@${home_deploy_digest}" \
                 --state-dir "$CI_DIR/hermes-state" \
                 "${ROLLOUT_ARGS[@]}"
             exit 0
@@ -843,10 +850,10 @@ jobs:
           set +e
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
-          # Safety net if the runner dies before hermes_rollout.py can roll
-          # back. The script removes the marker after a successful smoke, so a
+          # Safety net if the runner dies before the rollout can roll back. The
+          # rollout removes the marker after a successful smoke, so a
           # build/push failure never touches the running release.
-          python3 "${{ matrix.script }}" \
+          "${{ matrix.script }}" \
             --rollback-only \
             --state-dir "$CI_DIR/hermes-state" \
             --namespace "${{ matrix.namespace }}" | tee "$RUNNER_TEMP/hermes-rollback.log"

@@ -45,6 +45,33 @@ class ChartContracts(unittest.TestCase):
         self.assertEqual(volume["spec"]["persistentVolumeReclaimPolicy"], "Retain")
         self.assertEqual(volume["spec"]["local"]["path"], "/srv/example/data")
 
+    def test_runtime_health_exporter_is_a_pinned_go_image(self):
+        # The Python script and its ConfigMap are gone: the exporter is a
+        # distroless Go image pinned by `hermes rollout`/apply-runtime.sh. The
+        # chart only owns the Service; the workload comes from private values.
+        values = {"nodeName": "example-node", "storage": {}, "workloads": {
+            "runtime-health-exporter": {"replicas": 1, "containers": [{
+                "name": "health-exporter",
+                "image": "ghcr.io/proflyder/health-exporter@sha256:" + "0" * 64,
+                "command": ["/usr/local/bin/health-exporter"],
+            }], "volumes": []}}}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
+            yaml.safe_dump(values, f)
+            f.flush()
+            rendered = subprocess.check_output(["helm", "template", "test", str(HERE / "chart"), "-f", f.name])
+        docs = [x for x in yaml.safe_load_all(rendered) if x]
+        self.assertEqual({x["kind"] for x in docs}, {"Deployment", "Service"})
+        service = next(x for x in docs if x["kind"] == "Service")
+        self.assertEqual(service["spec"]["ports"][0]["port"], 9116)
+        deployment = next(x for x in docs if x["kind"] == "Deployment")
+        container = deployment["spec"]["template"]["spec"]["containers"][0]
+        self.assertEqual(container["name"], "health-exporter")
+        self.assertEqual(container["command"], ["/usr/local/bin/health-exporter"])
+        self.assertNotIn("checksum/source",
+                         deployment["spec"]["template"]["metadata"].get("annotations", {}))
+        # No Python source is shipped by the chart any more.
+        self.assertFalse((HERE / "chart/files/health_exporter.py").exists())
+
     def test_every_dashboard_is_packaged_once_with_stable_uid(self):
         rendered = subprocess.check_output(["helm", "template", "dashboards", str(OBS), "-n", "monitoring"])
         maps = [x for x in yaml.safe_load_all(rendered) if x and x["kind"] == "ConfigMap"]

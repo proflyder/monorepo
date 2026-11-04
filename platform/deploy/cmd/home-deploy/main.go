@@ -12,6 +12,12 @@
 //	home-deploy converge --kubectl K --namespace NS --name N --file F [--preserve-replicas] [--preserve-env]
 //	home-deploy state record|mark|rollback --state-dir D ...
 //	home-deploy preflight --ha-url URL --ha-token-file FILE ...
+//	home-deploy runtime split --render F --private F --storage-out F --values-out F
+//	home-deploy eso names --out F MANIFEST...
+//	home-deploy secret opaque --name N --namespace NS --key K --from-env-file F --env KEY
+//	home-deploy hermes rollout --values-file F --hermes-digest D --voice-proxy-digest D ...
+//	home-deploy hermes render-config --home DIR [--private-values F] [--dry-run|--check]
+//	home-deploy hermes assist-smoke
 //
 // `render`, `env get` and `oci` keep the argument shape of the Python scripts
 // they replace (`render.py`, the deploy.sh `env_value` heredoc and
@@ -23,20 +29,27 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"ricardo.local/monorepo/platform/deploy/internal/buildid"
 	"ricardo.local/monorepo/platform/deploy/internal/converge"
 	"ricardo.local/monorepo/platform/deploy/internal/envfile"
+	hermesdeploy "ricardo.local/monorepo/platform/deploy/internal/hermes"
+	"ricardo.local/monorepo/platform/deploy/internal/hermesconfig"
 	"ricardo.local/monorepo/platform/deploy/internal/kube"
+	"ricardo.local/monorepo/platform/deploy/internal/manifests"
 	"ricardo.local/monorepo/platform/deploy/internal/oci"
 	"ricardo.local/monorepo/platform/deploy/internal/preflight"
 	"ricardo.local/monorepo/platform/deploy/internal/render"
+	"ricardo.local/monorepo/platform/deploy/internal/runtimevalues"
 	"ricardo.local/monorepo/platform/deploy/internal/state"
 )
 
@@ -68,19 +81,61 @@ Commands:
   preflight --ha-url URL --ha-token-file FILE --scheduler-url URL
             --scheduler-token-file FILE [--expected-endpoint URL]
            read-only cutover checks for deploy.sh --execute
+  runtime split --render F --private F --storage-out F --values-out F
+            [--health-exporter-image DIGEST]
+           split a Helm render into kubectl-applied storage and Helm values
+  eso names --out F MANIFEST...
+           list ExternalSecrets as <namespace>/<name>
+  secret opaque --name N --namespace NS --key K --from-env-file F --env KEY
+           print a one-key Opaque Secret JSON (bootstrap path)
+  hermes rollout --values-file F --hermes-digest D --voice-proxy-digest D
+            --exporter-digest D --smoke-image IMAGE --state-dir D [--force]
+            [--simulate-smoke-failure] [--rollback-only]
+           promote the Hermes/voice-proxy/exporter digests into the runtime release
+  hermes render-config --home DIR [--private-values F] [--dry-run|--check]
+           merge config.fragment.yaml into a live HERMES_HOME
+  hermes assist-smoke
+           one Assist turn through the in-cluster HA API (smoke Job client)
 `
 
 // errStatusReported means the command already printed its diagnostics and only
 // the exit status has to change (preflight prints one line per failed check).
 var errStatusReported = errors.New("status already reported")
 
-func main() {
-	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		if !errors.Is(err, flag.ErrHelp) && !errors.Is(err, errStatusReported) {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(1)
+// statusError changes the process exit status. A nil err means the command
+// already printed its diagnostics.
+type statusError struct {
+	code int
+	err  error
+}
+
+func (e *statusError) Error() string {
+	if e.err == nil {
+		return "status already reported"
 	}
+	return e.err.Error()
+}
+
+func (e *statusError) Unwrap() error { return e.err }
+
+func main() {
+	err := run(os.Args[1:], os.Stdout, os.Stderr)
+	if err == nil {
+		return
+	}
+	code := 1
+	var status *statusError
+	if errors.As(err, &status) {
+		code = status.code
+		if status.err != nil {
+			fmt.Fprintln(os.Stderr, status.err)
+		}
+		os.Exit(code)
+	}
+	if !errors.Is(err, flag.ErrHelp) && !errors.Is(err, errStatusReported) {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	os.Exit(1)
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
@@ -106,6 +161,14 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runState(args[1:], stdout, stderr)
 	case "preflight":
 		return runPreflight(args[1:], stdout, stderr)
+	case "runtime":
+		return runRuntime(args[1:], stdout)
+	case "eso":
+		return runESO(args[1:], stdout)
+	case "secret":
+		return runSecret(args[1:], stdout, stderr)
+	case "hermes":
+		return runHermes(args[1:], stdout, stderr)
 	default:
 		fmt.Fprint(stderr, usage)
 		return fmt.Errorf("unknown command %q", args[0])
@@ -392,5 +455,285 @@ func (list *stringList) String() string {
 
 func (list *stringList) Set(value string) error {
 	*list = append(*list, value)
+	return nil
+}
+
+// repoRoot walks up from the working directory to the module root. It lets the
+// binary default to the repository's tracked Hermes sources when it is run from
+// a checkout without explicit paths.
+func repoRoot() string {
+	directory, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(directory, "go.mod")); err == nil {
+			return directory
+		}
+		parent := filepath.Dir(directory)
+		if parent == directory {
+			return ""
+		}
+		directory = parent
+	}
+}
+
+func runRuntime(args []string, stdout io.Writer) error {
+	if len(args) == 0 || args[0] != "split" {
+		return errors.New("usage: home-deploy runtime split --render F --private F --storage-out F --values-out F")
+	}
+	flags := flag.NewFlagSet("runtime split", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	renderPath := flags.String("render", "", "helm template output")
+	privatePath := flags.String("private", "", "private runtime values")
+	storageOut := flags.String("storage-out", "", "storage documents output")
+	valuesOut := flags.String("values-out", "", "workload values output")
+	exporterImage := flags.String("health-exporter-image", "", "digest-pinned health exporter image")
+	exporterWorkload := flags.String("health-exporter-workload", "runtime-health-exporter", "exporter workload key in the values")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *renderPath == "" || *privatePath == "" || *storageOut == "" || *valuesOut == "" {
+		return errors.New("runtime split: --render, --private, --storage-out and --values-out are required")
+	}
+	storage, err := runtimevalues.SplitRender(*renderPath)
+	if err != nil {
+		return err
+	}
+	if err := runtimevalues.Write(*storageOut, storage); err != nil {
+		return err
+	}
+	values, err := runtimevalues.WorkloadValues(*privatePath)
+	if err != nil {
+		return err
+	}
+	if *exporterImage != "" {
+		values, err = runtimevalues.PinHealthExporter(values, *exporterImage, *exporterWorkload)
+		if err != nil {
+			return err
+		}
+	}
+	encoded, err := runtimevalues.Marshal(values)
+	if err != nil {
+		return err
+	}
+	if err := runtimevalues.Write(*valuesOut, encoded); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "wrote %s and %s\n", *storageOut, *valuesOut)
+	return nil
+}
+
+func runESO(args []string, stdout io.Writer) error {
+	if len(args) == 0 || args[0] != "names" {
+		return errors.New("usage: home-deploy eso names --out F MANIFEST...")
+	}
+	flags := flag.NewFlagSet("eso names", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	out := flags.String("out", "", "output file")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *out == "" {
+		return errors.New("eso names: --out is required")
+	}
+	if len(flags.Args()) == 0 {
+		return errors.New("eso names: at least one manifest is required")
+	}
+	names, err := manifests.ExternalSecretNames(flags.Args())
+	if err != nil {
+		return err
+	}
+	if err := manifests.WriteNames(*out, names); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "%d ExternalSecret(s)\n", len(names))
+	return nil
+}
+
+func runSecret(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 || args[0] != "opaque" {
+		return errors.New("usage: home-deploy secret opaque --name N --namespace NS --key K --from-env-file F --env KEY")
+	}
+	flags := flag.NewFlagSet("secret opaque", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	name := flags.String("name", "", "Secret name")
+	namespace := flags.String("namespace", "", "Secret namespace")
+	key := flags.String("key", "", "data key")
+	fromEnvFile := flags.String("from-env-file", "", "private dotenv file")
+	envKey := flags.String("env", "", "variable to read from the dotenv file")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *name == "" || *namespace == "" || *key == "" || *fromEnvFile == "" || *envKey == "" {
+		return errors.New("secret opaque: --name, --namespace, --key, --from-env-file and --env are required")
+	}
+	document, err := manifests.OpaqueSecret(*name, *namespace, *key, *fromEnvFile, *envKey)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, string(document))
+	return nil
+}
+
+func runHermes(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("usage: home-deploy hermes rollout|render-config|assist-smoke ...")
+	}
+	switch args[0] {
+	case "rollout":
+		return runHermesRollout(args[1:], stdout, stderr)
+	case "render-config":
+		return runHermesRenderConfig(args[1:], stdout, stderr)
+	case "assist-smoke":
+		return runHermesAssistSmoke(args[1:], stdout, stderr)
+	default:
+		return fmt.Errorf("unknown hermes command %q (expected rollout, render-config or assist-smoke)", args[0])
+	}
+}
+
+func runHermesRollout(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("hermes rollout", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	valuesFile := flags.String("values-file", "", "private runtime values file")
+	hermesDigest := flags.String("hermes-digest", "", "pushed Hermes digest")
+	proxyDigest := flags.String("voice-proxy-digest", "", "pushed voice-proxy digest")
+	exporterDigest := flags.String("exporter-digest", "", "pushed health-exporter digest")
+	smokeImage := flags.String("smoke-image", "", "digest-pinned home-deploy image for the smoke Job")
+	release := flags.String("release", hermesdeploy.Release, "Helm release")
+	deployment := flags.String("deployment", "hermes", "Hermes Deployment")
+	exporterDeployment := flags.String("exporter-deployment", hermesdeploy.ExporterDeployment, "health exporter Deployment")
+	namespace := flags.String("namespace", hermesdeploy.Namespace, "Kubernetes namespace")
+	chart := flags.String("chart", "", "runtime chart directory")
+	kubectl := flags.String("kubectl", "kubectl", "kubectl binary")
+	helm := flags.String("helm", "helm", "helm binary")
+	stateDir := flags.String("state-dir", "", "rollback state directory")
+	timeout := flags.String("timeout", hermesdeploy.DefaultTimeout, "Helm timeout")
+	force := flags.Bool("force", false, "upgrade even when the digests are unchanged")
+	simulateFailure := flags.Bool("simulate-smoke-failure", false, "fail after the upgrade (rollback test)")
+	rollbackOnly := flags.Bool("rollback-only", false, "roll back the recorded revision")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *chart == "" {
+		if root := repoRoot(); root != "" {
+			*chart = filepath.Join(root, "projects/home-assistant/deploy/chart")
+		}
+	}
+	if *stateDir == "" {
+		temporary, err := os.MkdirTemp("", "hermes-rollout-")
+		if err != nil {
+			return err
+		}
+		*stateDir = temporary
+	}
+	options := hermesdeploy.Options{
+		ValuesFile:         *valuesFile,
+		HermesDigest:       *hermesDigest,
+		VoiceProxyDigest:   *proxyDigest,
+		ExporterDigest:     *exporterDigest,
+		SmokeImage:         *smokeImage,
+		Release:            *release,
+		Deployment:         *deployment,
+		ExporterDeployment: *exporterDeployment,
+		Namespace:          *namespace,
+		Chart:              *chart,
+		StateDir:           *stateDir,
+		Timeout:            *timeout,
+		Force:              *force,
+		SimulateFailure:    *simulateFailure,
+		RollbackOnly:       *rollbackOnly,
+		Kubectl:            *kubectl,
+		Helm:               *helm,
+		Stdout:             stdout,
+		Stderr:             stderr,
+	}
+	code, err := hermesdeploy.Run(hermesdeploy.Exec(), options)
+	if err != nil || code != 0 {
+		return &statusError{code: codeOrOne(code), err: err}
+	}
+	return nil
+}
+
+func codeOrOne(code int) int {
+	if code == 0 {
+		return 1
+	}
+	return code
+}
+
+func runHermesRenderConfig(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("hermes render-config", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	home := flags.String("home", "", "HERMES_HOME")
+	fragment := flags.String("fragment", "", "config fragment")
+	privateValues := flags.String("private-values", "", "private values merged after the fragment")
+	voicePrompt := flags.String("voice-prompt", "", "source for agent.personalities.voice")
+	telegramPrompt := flags.String("telegram-prompt", "", "system prompt for the owner chat")
+	contextFile := flags.String("context", "", "infra context installed as .hermes.md")
+	soul := flags.String("soul", "", "identity file installed as SOUL.md")
+	skills := flags.String("skills", "", "skill directories installed into <home>/skills")
+	allowPlaceholders := flags.Bool("allow-placeholders", false, "allow TEST-NET/example placeholders (tests only)")
+	dryRun := flags.Bool("dry-run", false, "print diffs, change nothing")
+	check := flags.Bool("check", false, "like --dry-run, but exit 1 when a render is pending")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *home == "" {
+		return errors.New("hermes render-config: --home is required")
+	}
+	if *dryRun && *check {
+		return errors.New("hermes render-config: --dry-run and --check are mutually exclusive")
+	}
+	sourceDir := ""
+	if root := repoRoot(); root != "" {
+		sourceDir = filepath.Join(root, "projects/home-assistant/hermes")
+	}
+	defaultPath := func(value, name string) string {
+		if value != "" || sourceDir == "" {
+			return value
+		}
+		return filepath.Join(sourceDir, name)
+	}
+	options := hermesconfig.Options{
+		Home:              *home,
+		Fragment:          defaultPath(*fragment, "config.fragment.yaml"),
+		Context:           defaultPath(*contextFile, "HERMES.md"),
+		Soul:              defaultPath(*soul, "SOUL.md"),
+		VoicePrompt:       defaultPath(*voicePrompt, "voice_prompt.txt"),
+		TelegramPrompt:    defaultPath(*telegramPrompt, "telegram_prompt.txt"),
+		Skills:            defaultPath(*skills, "skills"),
+		PrivateValues:     *privateValues,
+		AllowPlaceholders: *allowPlaceholders,
+	}
+	var buffer bytes.Buffer
+	code, err := hermesconfig.Run(options, *dryRun, *check, &buffer)
+	if buffer.Len() > 0 {
+		fmt.Fprint(stdout, buffer.String())
+	}
+	if err != nil {
+		return err
+	}
+	if code != 0 {
+		return &statusError{code: code}
+	}
+	return nil
+}
+
+func runHermesAssistSmoke(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("hermes assist-smoke", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	haURL := flags.String("ha-url", hermesdeploy.HAURL, "Home Assistant base URL")
+	agent := flags.String("agent", hermesdeploy.HAAgent, "conversation agent id")
+	text := flags.String("text", hermesdeploy.SmokeText, "Assist text")
+	tokenFile := flags.String("token-file", "/run/secrets/ha/token", "mounted HA token file")
+	timeout := flags.Duration("timeout", 150*time.Second, "request timeout")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	code := hermesdeploy.AssistSmokeClient(*haURL, *agent, *text, *tokenFile, *timeout, stdout)
+	if code != 0 {
+		return &statusError{code: code}
+	}
 	return nil
 }

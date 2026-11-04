@@ -46,6 +46,7 @@ test("only the deploy images of units.mjs are considered", () => {
     "currency-bot",
     "ha-bridge",
     "ha-control",
+    "health-exporter",
     "hermes",
     "home-deploy",
     "mcp-gateway",

@@ -467,6 +467,7 @@ jobs:
       images: ${{ matrix.images }}
       builder: ${{ matrix.builder }}
       target_root: ${{ matrix.target_root }}
+      bazel_images: ${{ matrix.bazel_images }}
       push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
   # Expensive regression with real linux/amd64 release binaries. Only when the

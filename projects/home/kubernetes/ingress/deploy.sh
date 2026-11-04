@@ -85,29 +85,14 @@ render() {
 }
 
 apply_cloudflare_secret() {
-  python3 - "$CLOUDFLARE_API_TOKEN_FILE" "$CERT_MANAGER_NS" <<'PY' | kubectl apply -f -
-import base64
-import json
-import sys
-
-path, namespace = sys.argv[1], sys.argv[2]
-token = None
-with open(path, encoding="utf-8") as handle:
-    for line in handle:
-        line = line.strip()
-        if line.startswith("CLOUDFLARE_API_TOKEN="):
-            token = line.split("=", 1)[1].strip().strip('"').strip("'")
-            break
-if not token:
-    sys.exit("CLOUDFLARE_API_TOKEN is missing in %s" % path)
-print(json.dumps({
-    "apiVersion": "v1",
-    "kind": "Secret",
-    "metadata": {"name": "cloudflare-api-token", "namespace": namespace},
-    "type": "Opaque",
-    "data": {"api-token": base64.b64encode(token.encode()).decode()},
-}))
-PY
+  # `secret opaque` reads CLOUDFLARE_API_TOKEN from the private file and prints
+  # the one-key Opaque Secret; the token never appears on a command line.
+  home_deploy secret opaque \
+    --name cloudflare-api-token \
+    --namespace "$CERT_MANAGER_NS" \
+    --key api-token \
+    --from-env-file "$CLOUDFLARE_API_TOKEN_FILE" \
+    --env CLOUDFLARE_API_TOKEN | kubectl apply -f -
 }
 
 helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null

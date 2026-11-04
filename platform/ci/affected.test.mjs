@@ -659,9 +659,14 @@ test("deploy: hermes change selects its images", () => {
   const result = routeReal(["projects/home-assistant/hermes/README.md"]);
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
-  assert.equal(entries[0].images, "hermes voice-proxy");
+  assert.equal(entries[0].images, "hermes voice-proxy health-exporter home-deploy");
   assert.equal(entries[0].builder, "mixed");
-  assert.equal(entries[0].target_root, "//solutions/voice-proxy");
+  assert.equal(entries[0].target_root, "");
+  assert.deepEqual(JSON.parse(entries[0].bazel_images), {
+    "voice-proxy": "//solutions/voice-proxy",
+    "health-exporter": "//projects/home-assistant/deploy/health-exporter",
+    "home-deploy": "//projects/home/kubernetes/scheduler",
+  });
 });
 
 test("deploy: voice-proxy solution change runs its go unit and deploys hermes", () => {

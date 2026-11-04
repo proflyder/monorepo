@@ -157,11 +157,30 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
       if (!unit.deployExternalsecrets.length) {
         problems.push(`${prefix}: deploy.externalsecrets is required`);
       }
-      if (
-        ["bazel", "mixed"].includes(unit.deployBuilder) &&
-        !unit.deployTargetRoot.startsWith("//")
-      ) {
+      if (unit.deployBuilder === "bazel" && !unit.deployTargetRoot.startsWith("//")) {
         problems.push(`${prefix}: deploy.target_root must be a Bazel package (//pkg)`);
+      }
+      const bazelImages = Object.entries(unit.deployBazelImages || {});
+      if (unit.deployBuilder === "mixed") {
+        if (!bazelImages.length) {
+          problems.push(
+            `${prefix}: a mixed unit needs deploy.bazel_images (image -> Bazel package)`,
+          );
+        } else if (unit.deployTargetRoot) {
+          problems.push(
+            `${prefix}: deploy.target_root is ambiguous for a mixed unit; use deploy.bazel_images`,
+          );
+        }
+      }
+      for (const [image, target] of bazelImages) {
+        if (!unit.deployImages.includes(image)) {
+          problems.push(`${prefix}: deploy.bazel_images.${image} is not in deploy.images`);
+        }
+        if (!String(target).startsWith("//")) {
+          problems.push(
+            `${prefix}: deploy.bazel_images.${image} must be a Bazel package (//pkg)`,
+          );
+        }
       }
     }
     if (unit.platform === "go") {

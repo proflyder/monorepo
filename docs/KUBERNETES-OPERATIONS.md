@@ -124,25 +124,29 @@ Helm при удалении объекта из релиза делает GET �
 единственный путь менять storage; CI его не трогает. На чистой установке
 сначала `apply-runtime.sh` (создаёт PV/PVC), затем CI может катить workloads.
 
-## Автодеплой Hermes / voice-proxy
+## Автодеплой Hermes / voice-proxy / health exporter
 
-`deploy-home` для юнита `hermes` (builder `mixed`: `hermes` — Docker,
-`voice-proxy` — Bazel/rules_oci) после build+push вызывает
-`projects/home-assistant/deploy/hermes_rollout.py`:
+`deploy-home` для юнита `hermes` (builder `mixed`: `hermes` — Docker;
+`voice-proxy`, `health-exporter` и `home-deploy` — Bazel/rules_oci, явная
+карта `deploy.bazel_images`) после build+push вызывает
+`projects/home-assistant/deploy/rollout.sh` →
+`home-deploy hermes rollout`:
 
 1. значения берутся из OpenBao `secret/ci/deploy-home` (key `runtime_values`,
    исходный текст без base64; токенов в нём нет — они в Kubernetes Secrets),
    job материализует их в файл 600 после OIDC-входа;
 2. если digest'ы не изменились, upgrade не запускается;
-3. `helm upgrade runtime` получает только `--set` образов (без
-   `--reuse-values`), `storage` вырезается;
+3. `helm upgrade runtime` получает только `--set`/`--set-json` образов (без
+   `--reuse-values`), `storage` вырезается; exporter получает Go-образ,
+   command и пустые volume-монтирования, поэтому приватные values не меняются;
 4. запоминается ревизия до upgrade, затем проверяются rollout, health exporter
    (все endpoint'ы = 1), Assist-запрос через `conversation.hermes_agent`,
    `kubectl exec deploy/hermes -c voice-proxy -- /usr/local/bin/voice-proxy
    -healthcheck` и отсутствие ошибок в логах voice-proxy. Assist Job работает
-   на отдельном pinned python-образе (voice-proxy теперь distroless, без
-   python/shell); HA-токен читается Job'ом из Secret `ha-bridge-ha`, HA
-   вызывается по cluster-internal Service, поэтому в GitHub он не попадает;
+   на том же distroless-образе `home-deploy` (`hermes assist-smoke`), поэтому
+   python-образ в кластере не нужен; HA-токен читается Job'ом из Secret
+   `ha-bridge-ha`, HA вызывается по cluster-internal Service, поэтому в GitHub
+   он не попадает;
 5. при провале — `helm rollback runtime <прежняя ревизия>`, повторная проверка;
    если upgrade не создал ревизию, откат не выполняется.
 
@@ -150,9 +154,11 @@ Helm при удалении объекта из релиза делает GET �
 
 ```bash
 KUBECONFIG=secrets/kubernetes-research/kubeconfig \
-  python3 projects/home-assistant/deploy/hermes_rollout.py \
+  home-deploy hermes rollout \
     --values-file secrets/kubernetes-research/runtime-values.yaml \
     --hermes-digest sha256:… --voice-proxy-digest sha256:… \
+    --exporter-digest sha256:… \
+    --smoke-image ghcr.io/proflyder/home-deploy@sha256:… \
     --state-dir /tmp/hermes-state
 ```
 
@@ -353,9 +359,10 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
   IfNotPresent`, без pull-secret. `hermes` собирается Docker, `voice-proxy` —
   Bazel `rules_oci` (distroless, `oci_push` без переписывания digest).
-  deploy-home собирает и пушит их, затем
-  `hermes_rollout.py` подставляет digest'и в релиз `runtime`, прогоняет
-  голосовую проверку и откатывается на предыдущую ревизию при провале.
+  deploy-home собирает и пушит их, затем `home-deploy hermes rollout`
+  подставляет digest'и (включая `ghcr.io/proflyder/health-exporter`) в релиз
+  `runtime`, прогоняет голосовую проверку и откатывается на предыдущую
+  ревизию при провале.
   Текущие пины — `versions.sh`; ручной откат — `helm rollback`.
 - Полный restore:
   1. восстановить Ubuntu/K3s;

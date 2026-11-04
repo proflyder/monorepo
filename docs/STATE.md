@@ -166,13 +166,16 @@
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), без pull-secret.
   `hermes` собирается Docker из upstream revision, `voice-proxy` — Go-сервис
   `solutions/voice-proxy`, собираемый Bazel `rules_oci` (distroless) и
-  пушимый байт-в-байт через `oci_push`. `deploy-home` (builder `mixed`)
-  собирает и пушит оба, `hermes_rollout.py` подставляет digest'ы, проверяет
-  `-healthcheck`/health/Assist/логи и делает `helm rollback` при провале.
+  пушимый байт-в-байт через `oci_push`. Health exporter — отдельный
+  Go-образ `ghcr.io/proflyder/health-exporter`; Python-скрипт и ConfigMap из
+  runtime chart удалены. `deploy-home` (builder `mixed`, карта
+  `deploy.bazel_images`) собирает и пушит gateway, proxy, exporter и
+  `home-deploy`, затем `home-deploy hermes rollout` подставляет digest'ы,
+  проверяет `-healthcheck`/health/Assist/логи и делает `helm rollback` при
+  провале. Assist smoke Job работает на `home-deploy` (`hermes assist-smoke`).
   Go-voice-proxy работает с 2026-11-04 (#99, #101) и принят вживую на
   станции: оба профиля, подтверждение с открытым микрофоном, отмена, поздние
-  ответы. Контейнер health exporter пока запущен из последнего Python-образа
-  voice-proxy (digest закреплён в приватных values) до перевода exporter на Go.
+  ответы.
 - Деплой — `home-deploy converge` (Go): полная замена Deployment, сохранение env/режима и
   replicas; откат восстанавливает только применённый объект целиком.
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
@@ -640,7 +643,7 @@
   home/music/web/mcp-infra, без terminal/file/browser. Telegram-канал Hermes —
   тот же инфра-бот, long polling, allow-list владельца. Контекст —
   `hermes/HERMES.md` → `/opt/data/.hermes.md`; overlay на PVC ставит
-  идемпотентный `hermes/render_hermes_config.py` (реальные endpoint'ы — из
+  идемпотентный `home-deploy hermes render-config` (реальные endpoint'ы — из
   git-ignored `secrets/home/hermes-private.yaml`, `--private-values`;
   `agent.personalities.voice` рендерится из `voice_prompt.txt`).
   Telegram-промпт — `telegram_prompt.txt` в

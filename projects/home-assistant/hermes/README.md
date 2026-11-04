@@ -40,18 +40,19 @@ Do not copy secrets into this directory.
 
 `config.yaml`, `.hermes.md` and `SOUL.md` live on the PVC
 (`/srv/k3s/volumes/runtime-hermes` on lab-host, `/opt/data` in the Pod) and are not
-watched by CI.  [`render_hermes_config.py`](render_hermes_config.py) is the
+watched by CI.  `home-deploy hermes render-config`
+(`//platform/deploy`, Go) is the
 only reviewed path from this directory to that volume:
 
 ```bash
 cd <repo>
 # 1. see what would change (prints a redacted diff, writes nothing)
-python3 projects/home-assistant/hermes/render_hermes_config.py \
+home-deploy hermes render-config \
   --home /srv/k3s/volumes/runtime-hermes \
   --private-values secrets/home/hermes-private.yaml --dry-run
 
 # 2. render; a changed file keeps its previous version as <name>.prev (600)
-sudo python3 projects/home-assistant/hermes/render_hermes_config.py \
+sudo home-deploy hermes render-config \
   --home /srv/k3s/volumes/runtime-hermes \
   --private-values secrets/home/hermes-private.yaml
 
@@ -59,6 +60,9 @@ sudo python3 projects/home-assistant/hermes/render_hermes_config.py \
 kubectl -n home-assistant rollout restart deployment/hermes
 kubectl -n home-assistant rollout status deployment/hermes --timeout=180s
 ```
+
+If the binary is not installed on the host, run it from a checkout:
+`bazel run //platform/deploy/cmd/home-deploy -- hermes render-config …`.
 
 `--private-values` is required on a live home.  The tracked fragment carries
 TEST-NET placeholders for the Home Assistant and Music Assistant endpoints;
@@ -248,10 +252,10 @@ Apply on lab-host after editing the repo files.  The renderer installs
 HERMES_HOME, so no hand edit of the PVC is needed:
 
 ```bash
-python3 projects/home-assistant/hermes/render_hermes_config.py \
+home-deploy hermes render-config \
   --home /srv/k3s/volumes/runtime-hermes \
   --private-values secrets/home/hermes-private.yaml --dry-run
-sudo python3 projects/home-assistant/hermes/render_hermes_config.py \
+sudo home-deploy hermes render-config \
   --home /srv/k3s/volumes/runtime-hermes \
   --private-values secrets/home/hermes-private.yaml
 kubectl -n home-assistant rollout restart deployment/hermes

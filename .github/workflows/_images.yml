@@ -7,7 +7,7 @@ name: _images
 #            binaries (//projects/home/kubernetes/scheduler:<image>_image)
 #   docker - Dockerfile-based images (the Hermes gateway)
 #   mixed  - one deploy unit with both kinds (the Hermes unit: `hermes` from a
-#            Dockerfile, `voice-proxy` from //solutions/voice-proxy)
+#            Dockerfile plus several Bazel images listed in `bazel_images`)
 #
 # Build once, deploy the same bytes (DECISIONS 36): for a pull request from this
 # repository (never a fork) the built images are also pushed to
@@ -38,7 +38,12 @@ on:
         default: bazel
         type: string
       target_root:
-        description: Bazel package owning the <image>_image targets (bazel/mixed)
+        description: Bazel package owning the <image>_image targets (bazel)
+        required: false
+        default: ""
+        type: string
+      bazel_images:
+        description: JSON map image -> Bazel package for a mixed unit
         required: false
         default: ""
         type: string
@@ -191,10 +196,11 @@ jobs:
             fi
           done
 
-      # One deploy unit can own both image kinds. The image named after the
-      # `target_root` package is the Bazel/rules_oci one; the rest are
-      # Dockerfile builds. Today that is the Hermes unit: `voice-proxy` from
-      # //solutions/voice-proxy, `hermes` from the upstream revision.
+      # One deploy unit can own both image kinds. Every image listed in
+      # `bazel_images` is built from that Bazel package; the rest are Dockerfile
+      # builds. Today that is the Hermes unit: `voice-proxy`,
+      # `health-exporter` and `home-deploy` from Bazel, `hermes` from the
+      # upstream revision.
       - name: Build mixed images (Bazel + Dockerfile)
         if: inputs.builder == 'mixed'
         env:
@@ -203,16 +209,21 @@ jobs:
         run: |
           set -euo pipefail
           read -r -a images <<< "${{ inputs.images }}"
-          target_root="${{ inputs.target_root }}"
-          if [[ "$target_root" != //* ]]; then
-            echo "mixed unit without a //target_root: '$target_root'" >&2
+          bazel_images='${{ inputs.bazel_images }}'
+          if [[ -z "$bazel_images" || "$bazel_images" == "{}" ]]; then
+            echo "mixed unit without deploy.bazel_images" >&2
             exit 2
           fi
-          package="${target_root#//}"
-          bazel_image="${package##*/}"
           revision=$(sed -n 's/^HERMES_REVISION=//p' projects/home/kubernetes/versions.sh)
           for image in "${images[@]}"; do
-            if [[ "$image" == "$bazel_image" ]]; then
+            target_root=$(printf '%s' "$bazel_images" \
+              | jq -r --arg image "$image" '.[$image] // ""')
+            if [[ -n "$target_root" ]]; then
+              if [[ "$target_root" != //* ]]; then
+                echo "deploy.bazel_images.${image} is not a Bazel package: '$target_root'" >&2
+                exit 2
+              fi
+              package="${target_root#//}"
               bazel build "${target_root}:${image}_image" \
                 --platforms=@rules_go//go/toolchain:linux_amd64
               layout="bazel-bin/${package}/${image}_image"

@@ -169,10 +169,10 @@ class HermesConfigTests(unittest.TestCase):
         assert "agent" not in self.data or "personalities" not in self.data["agent"]
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         assert "Рикардо" in prompt
-        # The renderer wires that file into agent.personalities.voice.
-        renderer = (ROOT / "projects" / "home-assistant" / "hermes" /
-                    "render_hermes_config.py").read_text()
-        assert "DEFAULT_VOICE_PROMPT = HERE / \"voice_prompt.txt\"" in renderer
+        # The Go renderer wires that file into agent.personalities.voice.
+        renderer = (ROOT / "platform" / "deploy" / "internal" / "hermesconfig" /
+                    "hermesconfig.go").read_text()
+        assert "voice_prompt.txt" in renderer
         assert "agent.personalities.voice" in renderer
 
     def test_persona_is_ricardo_not_hermes(self):

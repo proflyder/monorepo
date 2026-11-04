@@ -143,6 +143,11 @@ python3 -m unittest projects/home/proxmox/test_bb_dispatch.py -v
 # голос: маршрут по профилю, fail-closed, cancel guard, announce, очередь
 go test -race ./solutions/voice-proxy/...
 python3 -m unittest projects/home-assistant/deploy/test_voice_routing_contract.py -v
+
+# деплой-инструменты, Hermes rollout/render-config и health exporter
+go test -race ./platform/deploy/... ./projects/home-assistant/deploy/health-exporter/...
+python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home-assistant/hermes -p 'test_*.py' -v
 ```
 
 Тесты герметичны: SSH и плагин подменяются фейками, живой CT/кластер не
@@ -454,7 +459,11 @@ digest-пины образов, поэтому `make test` и `make test-deploy-
 образ не собирается и не пушится, digest попадает в отрендеренный манифест,
 а кривое/дублирующее значение падает fail-closed до обращения к кластеру.
 `projects/home-assistant/deploy/test_build_and_push.py` проверяет то же для
-`build-and-push.sh` (`hermes` + `voice-proxy`) с заглушками docker/bazel/git.
+`build-and-push.sh` (`hermes`, `voice-proxy`, `health-exporter`,
+`home-deploy`) с заглушками docker/bazel/git. Hermes rollout и
+render-config покрыты Go-тестами `platform/deploy/internal/hermes` и
+`.../hermesconfig` (включая golden parity с Python-выходом рендерера);
+health exporter — `.../deploy/health-exporter`.
 
 ### Required check
 

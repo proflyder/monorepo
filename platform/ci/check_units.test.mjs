@@ -44,6 +44,40 @@ test("check_units: unowned tracked file is reported", () => {
   assert.ok(problems.some((problem) => problem.includes("stray/y.go")));
 });
 
+test("check_units: a mixed unit needs an explicit Bazel image map", () => {
+  const base = {
+    id: "mixed",
+    platform: "go",
+    paths: ["solutions/x/**"],
+    goPackages: ["./solutions/x/..."],
+    deployImages: ["a", "b"],
+    deployWorkloads: ["w"],
+    deployBuilder: "mixed",
+    deployNamespace: "ns",
+    deployScript: "projects/home-assistant/deploy/rollout.sh",
+    deployEnvKey: "k",
+    deployEnvFile: "f",
+    deployExternalsecrets: ["s"],
+  };
+  const validate = (extra) =>
+    checkUnits.validateSchema(
+      new affected.Config({ units: [new affected.Unit({ ...base, ...extra })], invalidations: [] }),
+      process.cwd(),
+    );
+  assert.ok(validate({}).some((problem) => problem.includes("deploy.bazel_images")));
+  assert.ok(
+    validate({ deployTargetRoot: "//x", deployBazelImages: { a: "//x" } }).some((problem) =>
+      problem.includes("ambiguous"),
+    ),
+  );
+  assert.ok(
+    validate({ deployBazelImages: { a: "//x", c: "//y" } }).some((problem) =>
+      problem.includes("is not in deploy.images"),
+    ),
+  );
+  assert.deepEqual(validate({ deployBazelImages: { a: "//x", b: "//y" } }), []);
+});
+
 test("check_units: committed unit map and tree pass", async () => {
   const result = await checkUnits.check([]);
   assert.deepEqual(result.problems, []);

@@ -4,7 +4,9 @@
 деплоя (решение 35: инструменты деплоя пишутся на Go).
 
 ```text
-cmd/home-deploy/   CLI: render, env get, build-id, oci, converge, state, preflight
+cmd/home-deploy/   CLI: render, env get, build-id, oci, converge, state,
+                   preflight, runtime split, eso names, secret opaque,
+                   hermes rollout|render-config|assist-smoke
 internal/envfile   разбор приватных KEY=VALUE файлов
 internal/render    подстановка ${KEY} с allowlist по юниту
 internal/buildid   короткий идентификатор сборки
@@ -13,7 +15,11 @@ internal/kube      запуск kubectl с подменяемым runner'ом
 internal/converge  полная замена Deployment с prune drift
 internal/state     маркеры .before.json/.absent/.applied и rollback
 internal/preflight read-only проверки HA + scheduler для --execute
-internal/...       далее: openbao, hermes
+internal/hermes    rollout digest'ов в релиз runtime + Assist smoke клиент
+internal/hermesconfig  merge config.fragment.yaml в живой HERMES_HOME
+internal/runtimevalues split helm template, values и pin exporter'а
+internal/manifests имена ExternalSecret и bootstrap Opaque Secret
+internal/...       далее: openbao
 testdata/          golden-выходы, OCI-фикстура и трассы converge для parity
 resolve.sh         находит и запускает бинарник из deploy-скриптов
 docker/            reusable Dockerfile fragments
@@ -56,6 +62,12 @@ CI собирает бинарник один раз на job (`bazel build
 | `state mark --state-dir D --name N` | `mark_applied` из deploy-скриптов |
 | `state rollback --state-dir D [--namespace NS] [--kubectl K]` | `scheduler/rollback.py` |
 | `preflight --ha-url U --ha-token-file F --scheduler-url U --scheduler-token-file F [--expected-endpoint U]` | `scheduler/preflight.py` |
+| `runtime split --render F --private F --storage-out F --values-out F [--health-exporter-image D]` | heredoc в `apply-runtime.sh` |
+| `eso names --out F манифесты...` | heredoc в `external-secrets/deploy.sh` |
+| `secret opaque --name N --namespace NS --key K --from-env-file F --env KEY` | heredoc в `ingress/deploy.sh` |
+| `hermes rollout --values-file F --hermes-digest D --voice-proxy-digest D --exporter-digest D --smoke-image I --state-dir D [...]` | `hermes_rollout.py` |
+| `hermes render-config --home DIR [--private-values F] [--dry-run\|--check]` | `render_hermes_config.py` |
+| `hermes assist-smoke` | inline Python-скрипт Assist smoke Job |
 
 `converge` вызывает kubectl как Python-версия: support objects (Service/PVC)
 применяются через `apply`, отсутствующий Deployment создаётся, существующий
@@ -81,9 +93,22 @@ Python-рендерера, зафиксированными в `testdata/golden/
 
 Образ `home-deploy` (`//projects/home/kubernetes/scheduler:home-deploy_image`,
 repo `ghcr.io/proflyder/home-deploy`) — тот же бинарник на distroless
-(`user 65534`); его запускает in-cluster preflight Job, поэтому Python-образ в
-кластере не нужен. Собирается и продвигается вместе с образами юнита
-scheduler (DECISIONS 36).
+(`user 65534`); его запускают in-cluster preflight Job и Assist smoke Job
+юнита `hermes`, поэтому Python-образ в кластере не нужен. Собирается и
+продвигается вместе с образами юнитов scheduler и hermes (DECISIONS 36).
+
+Образ `health-exporter`
+(`//projects/home-assistant/deploy/health-exporter:health-exporter_image`, repo
+`ghcr.io/proflyder/health-exporter`) — Go-порт `chart/files/health_exporter.py`.
+`hermes rollout` подставляет его digest, command и пустые volume-монтирования
+в релиз `runtime`; chart больше не содержит Python-скрипта и ConfigMap.
+
+`hermes render-config` сохраняет правила Python-рендерера (deep merge,
+отказ на TEST-NET placeholder, `.prev`, `--dry-run`/`--check`). Документ
+держится как упорядоченное дерево (`yaml.MapSlice`), поэтому порядок ключей
+совпадает; golden-тест сравнивает разобранные документы с Python-выходом
+(`testdata/golden/hermes-config/`), потому что emitter по-разному оформляет
+длинные строки и кавычки.
 
 Правила развёртывания:
 

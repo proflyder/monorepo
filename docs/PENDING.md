@@ -13,33 +13,29 @@
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким
       запуском.
 
-- [ ] **Решение 35: остаток перевода Python.** CI-обвязка (#97),
-      Android-инструменты сборки (#98) и voice-proxy (#99) уже переведены.
-      Осталось по исследованию: (1) Go-утилита `platform/deploy`
-      (`home-deploy`): шаг 1 (`feat/home-deploy-go`) добавил `render`,
-      `env get`, `build-id` и `oci digest/pack/docker` и переключил на них
-      `deploy.sh` юнитов, `nft/apply.sh`, ingress-render и сборку образов в CI
-      (Python-рендерер и `platform/ci/oci_image.py` удалены, parity
-      зафиксирован в `platform/deploy/testdata/`); шаг 2 добавил
-      `converge`, `state record|mark|rollback` и `preflight`, переключил
-      deploy-скрипты и rollback в `deploy-home.yml`, а preflight Job теперь
-      работает из distroless-образа `ghcr.io/proflyder/home-deploy`
-      (`python:3.13-slim` и ConfigMap удалены); Python `converge.py`,
-      `rollback.py`, `preflight.py` и их тесты удалены. Осталось
-      inline-Python в `apply-runtime.sh`, external-secrets, `hermes_rollout.py`,
-      `render_hermes_config.py`; health
-      exporter — Go-образ (сейчас он запущен из последнего Python-образа
-      voice-proxy, закреплённого digest в приватных values; пока это так, этот
-      digest защищён записью `PROTECTED_DIGESTS` в
-      `platform/ci/ghcr_cleanup.mjs` — удалить запись вместе с миграцией
-      exporter'а). Проверка —
-      побайтный рендер и разобранные объекты kubectl против Python, затем
-      ручной `workflow_dispatch` каждого юнита. (2) Хосты и оператор:
-      `offsite_backup.py` → Go-бинарник из GHCR по digest (как решение 34),
-      `vpncerts.py`/`vpnusers.py` → `vpn-pki`, `openbao configure/drill`.
+- [ ] **Решение 35: остаток перевода Python (хосты и оператор).**
+      CI-обвязка (#97), Android-инструменты сборки (#98), voice-proxy (#99) и
+      `platform/deploy` (`home-deploy`) переведены. Шаг 1 добавил `render`,
+      `env get`, `build-id`, `oci`; шаг 2 — `converge`, `state rollback`,
+      `preflight`; шаг 3 — `hermes rollout`, `hermes
+      render-config`, `hermes assist-smoke`, `runtime split`, `eso names`,
+      `secret opaque`, Go health exporter и разбор статуса scheduler на jq.
+      Python `hermes_rollout.py`, `render_hermes_config.py`,
+      `health_exporter.py` и их тесты удалены; `deploy-home` больше не ставит
+      `python3-yaml`, а Assist smoke Job работает на distroless
+      `home-deploy`. Осталось (хосты/оператор): `openbao configure/drill`
+      (operator tooling, отдельный PR), `offsite_backup.py` → Go-бинарник из
+      GHCR по digest (как решение 34), `vpncerts.py`/`vpnusers.py` → `vpn-pki`.
       Python остаётся: короткие хост-скрипты (`backup_metrics`,
       `restore-volumes`, `wifi-uplink`, `backup-before-install`), ML
       wake-word, dev-утилиты станции, проверки YAML, live e2e.
+
+      После первого успешного rollout'а Go-exporter'а удалить запись
+      `PROTECTED_DIGESTS` для `voice-proxy`
+      (`sha256:238e0a0f…`) из `platform/ci/ghcr_cleanup.mjs`: она защищает
+      последний Python-образ voice-proxy, из которого exporter работал до
+      миграции. Пока первый rollout не подтверждён — не удалять.
+
 - [ ] **CI: правка документации внутри юнита не должна деплоить.** После
       #97 перевыкатились mcp-gateway/currency-bot/wakegrant только из-за
       README в их папках. Следующий шаг: в `affected.mjs` не выбирать юнит

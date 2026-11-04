@@ -409,43 +409,43 @@ if $WANT_CONTROL; then
   control_queue_pending() {
     # Fail closed: --control-execute refuses when the dedicated control queue
     # has pending or leased events. GetStatus only reports queues with backlog.
-    local status
+    local status total
     status=$(get_status)
-    printf '%s' "$status" | python3 -c '
-import json,sys
-
-def fail(msg):
-    print("control preflight refused:", msg, file=sys.stderr)
-    sys.exit(1)
-
-try:
-    d = json.load(sys.stdin)
-except Exception as exc:
-    fail(f"GetStatus is not JSON: {exc}")
-if not isinstance(d, dict):
-    fail("GetStatus response is not an object")
-if d.get("ready") is not True:
-    fail("scheduler reports ready=false")
-queues = d.get("queues")
-if not isinstance(queues, list) or not queues:
-    # GetStatus always reports the default queues; an empty/absent list means a
-    # malformed or stale response, not an empty control queue.
-    fail("GetStatus has no queues array")
-total = 0
-for q in queues:
-    if not isinstance(q, dict) or not isinstance(q.get("name"), str):
-        fail(f"malformed queue entry: {q!r}")
-    for key in ("pending", "leased"):
-        value = q.get(key, 0)
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            fail("malformed %s for queue %r: %r" % (key, q.get("name"), value))
-        if q["name"] == "control":
-            total += value
-if total > 0:
-    fail(f"control queue is not empty: pending+leased={total}")
-print("control queue empty")
-'
+    if ! printf '%s' "$status" | jq -e 'type == "object"' >/dev/null 2>&1; then
+      echo "control preflight refused: GetStatus is not a JSON object" >&2
+      return 1
+    fi
+    if ! printf '%s' "$status" | jq -e '.ready == true' >/dev/null 2>&1; then
+      echo "control preflight refused: scheduler reports ready=false" >&2
+      return 1
+    fi
+    if ! printf '%s' "$status" | jq -e \
+      '(.queues | type) == "array" and (.queues | length) > 0' >/dev/null 2>&1; then
+      # GetStatus always reports the default queues; an empty/absent list means
+      # a malformed or stale response, not an empty control queue.
+      echo "control preflight refused: GetStatus has no queues array" >&2
+      return 1
+    fi
+    if ! printf '%s' "$status" | jq -e '
+        all(.queues[];
+          (type == "object") and
+          ((.name | type) == "string") and
+          (((.pending // 0) | type) == "number") and ((.pending // 0) >= 0) and
+          ((.pending // 0) == ((.pending // 0) | floor)) and
+          (((.leased // 0) | type) == "number") and ((.leased // 0) >= 0) and
+          ((.leased // 0) == ((.leased // 0) | floor)))' >/dev/null 2>&1; then
+      echo "control preflight refused: malformed queue entry" >&2
+      return 1
+    fi
+    total=$(printf '%s' "$status" | jq \
+      '[.queues[] | select(.name == "control") | ((.pending // 0) + (.leased // 0))] | add // 0')
+    if [[ "$total" -gt 0 ]]; then
+      echo "control preflight refused: control queue is not empty: pending+leased=$total" >&2
+      return 1
+    fi
+    echo "control queue empty"
   }
+
 
   if [[ "$CONTROL_MODE" == "catalog" ]]; then
     echo "== ha-control -> catalog only (execution disabled)"
