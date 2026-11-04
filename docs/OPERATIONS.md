@@ -908,8 +908,8 @@ PREBUILT_DIGESTS="scheduler=sha256:…,ha-bridge=sha256:…,ha-control=sha256:�
 
 Чистка GHCR — `.github/workflows/ghcr-cleanup.yml`, ежедневно по расписанию.
 Политика по каждому пакету: не удаляются новейшая версия, теги `develop`,
-`latest` и semver, digest'ы из `PROTECTED_DIGESTS` (сейчас — последний
-Python-образ `voice-proxy` для health-exporter'а Hermes) и версии моложе
+`latest` и semver, digest'ы из `PROTECTED_DIGESTS` (сейчас пусто: health
+exporter Hermes работает на Go-образе с 2026-11-04) и версии моложе
 7 дней. Deploy-версии (40-hex commit-sha тег) сохраняют пять новейших, более
 старые старше 7 дней удаляются. Устаревшие версии только с `tree-*` или без
 тегов удаляются. Referrer-версии с тегами `sha256-<hex>` удаляются вместе со
