@@ -33,6 +33,7 @@ ALLOWED_DLLS = {
     "userenv.dll",
     "winhttp.dll",
     "ws2_32.dll",
+    "wtsapi32.dll",
 }
 ALLOWED_PREFIXES = ("api-ms-win-",)
 REQUIRED_EXPORTS = {"DllGetClassObject", "DllCanUnloadNow"}

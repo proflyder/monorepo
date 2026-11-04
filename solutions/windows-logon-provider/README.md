@@ -19,10 +19,25 @@ Service URL, имя машины и учётная запись задаёт п�
 ## Как это работает
 
 1. LogonUI создаёт провайдера и вызывает `SetUsageScenario`. Гранты
-   запрашиваются **только** в `CPUS_LOGON` (холодная загрузка → вход).
-   `CPUS_UNLOCK_WORKSTATION` принимается, но ничего не делает: ни плитки, ни
-   фонового потока, ни сети, `GetCredentialCount` = 0 — грант никогда не
-   должен разблокировать уже работающий ПК. Остальные сценарии → `E_NOTIMPL`.
+   запрашиваются **только** в `CPUS_LOGON`. Windows 11 вызывает
+   `CPUS_LOGON` и после `LockWorkStation`, поэтому сценария недостаточно:
+   до запуска потока проверяются два гейта.
+   - **Сессия пользователя.** `WTSEnumerateSessionsW` +
+     `WTSQuerySessionInformationW` ищут любую сессию настроенной учётной
+     записи в любом состоянии (Active, Disconnected и т.д.); сессия 0 и
+     пустое имя игнорируются. Сравнивается только имя пользователя без учёта
+     регистра: домен из WTS (NetBIOS, полное имя, учётка Microsoft) может не
+     совпасть с настроенным, и лишний отказ здесь безопаснее лишнего входа.
+     Нашлась — ни плитки, ни потока, ни сети, `GetCredentialCount` = 0, в
+     журнале `scenario cpus=logon gate=session_exists`. Ошибка WTS-вызова —
+     fail closed, `gate=session_query_failed`.
+   - **Аптайм.** Плитка взводится только когда `GetTickCount64()` меньше
+     10 минут от загрузки; иначе `scenario cpus=logon gate=uptime`.
+
+   `CPUS_UNLOCK_WORKSTATION` принимается, но ничего не делает: ни плитки,
+   ни фонового потока, ни сети, `GetCredentialCount` = 0. Остальные
+   сценарии → `E_NOTIMPL`. Грант никогда не должен разблокировать уже
+   работающий ПК.
 2. Провайдер запускает **один** фоновый поток (`CreateThread`, не UI-поток).
    Бюджет — 90 секунд от загрузки провайдера, интервал опроса 2 секунды,
    WinHTTP-таймауты 2/2/4/4 с, `WINHTTP_ACCESS_TYPE_NO_PROXY`, без редиректов
@@ -48,6 +63,7 @@ Service URL, имя машины и учётная запись задаёт п�
 |---|---|
 | `crates/protocol/` | переносимый слой: base64, HMAC-сообщения, разбор JSON, проверка MAC, конфиг |
 | `crates/provider/src/provider.rs` | `ICredentialProvider`, общее состояние `Session`, бюджет |
+| `crates/provider/src/gate.rs` | гейты «нет сессии пользователя» (WTS) и «аптайм < 10 минут» |
 | `crates/provider/src/credential.rs` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |
 | `crates/provider/src/worker.rs` | единственный фоновый поток challenge/claim |
 | `crates/provider/src/config.rs` | реестр, DPAPI, `FailCount`/`Disabled` |
@@ -104,7 +120,8 @@ solutions/windows-logon-provider/run-tests.sh     # host-тесты, rustfmt/cli
 что DLL экспортирует ровно `DllGetClassObject` и `DllCanUnloadNow` и
 импортирует только системные библиотеки (KERNEL32, ntdll, advapi32,
 combase, oleaut32, rpcrt4, crypt32, secur32, shlwapi, userenv,
-winhttp, ws2_32, bcryptprimitives и api-ms-win-*); всё остальное — ошибка.
+winhttp, ws2_32, wtsapi32, bcryptprimitives и api-ms-win-*); всё остальное —
+ошибка.
 Проверка не требует Windows-тулчейна на хосте.
 
 `run-tests.sh` запускает `bazel test //solutions/windows-logon-provider/...`:
@@ -204,6 +221,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 
 ```
 2026-11-03T21:44:12.123Z pid=912 tid=913 provider_load
+2026-11-03T21:44:12.128Z pid=912 tid=913 scenario cpus=logon gate=ok
 2026-11-03T21:44:12.130Z pid=912 tid=1204 worker phase=start budget_ms=90000
 2026-11-03T21:44:12.400Z pid=912 tid=1204 grant result=granted grant_id=… ms=41 elapsed_ms=270
 2026-11-03T21:44:12.401Z pid=912 tid=1204 armed ok=1
@@ -223,7 +241,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
   4 с и продолжает; на реальный сценарий (грант выдан до Wake-on-LAN) это не
   влияет — первый claim успевает раньше.
 - `SetUsageScenario` не блокирует вход: `CPUS_UNLOCK_WORKSTATION` молча
-  ничего не делает (без сети и плитки); грант выдаётся только для `CPUS_LOGON`.
+  ничего не делает (без сети и плитки); `CPUS_LOGON` дополнительно требует
+  отсутствия сессии настроенного пользователя и аптайма меньше 10 минут.
 - `Disabled` снимается только переустановкой (`install.ps1` сбрасывает
   `FailCount` и `Disabled`) или правкой реестра.
 - Выключение провайдера не влияет на обычный вход по PIN.

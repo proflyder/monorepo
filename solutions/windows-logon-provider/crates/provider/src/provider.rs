@@ -9,6 +9,10 @@
 /// Budget from provider load to the last challenge attempt: 90 s.
 pub const WORKER_BUDGET_MS: u64 = 90 * 1000;
 
+/// Cold-boot window from `GetTickCount64()`: a grant is considered only within
+/// the first 10 minutes after boot.
+pub const MAX_UPTIME_MS: u64 = 10 * 60 * 1000;
+
 pub fn within_budget(elapsed_ms: u64) -> bool {
     elapsed_ms < WORKER_BUDGET_MS
 }
@@ -404,6 +408,17 @@ mod windows_impl {
                 log_event("worker", "skipped=budget_exhausted");
                 return;
             }
+            // Windows 11 calls CPUS_LOGON for the lock screen too, so the
+            // scenario is not proof of a cold boot. A session of the configured
+            // user (any state) or an uptime over the bound means this PC is
+            // already in use: stop before any network traffic.
+            let gate = crate::gate::evaluate();
+            if gate != crate::gate::LogonGate::Allow {
+                self.session.running.store(false, Ordering::SeqCst);
+                log_event("scenario", &format!("cpus=logon gate={}", gate.label()));
+                return;
+            }
+            log_event("scenario", "cpus=logon gate=ok");
             start_worker_thread(&self.session);
         }
 
@@ -437,7 +452,6 @@ mod windows_impl {
                 log_event("scenario", "cpus=unlock claims=0");
                 return Ok(());
             }
-            log_event("scenario", "cpus=logon");
             self.start_worker_once();
             Ok(())
         }

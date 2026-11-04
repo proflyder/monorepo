@@ -1587,6 +1587,69 @@ pub mod Windows {
                 pub const RRF_RT_REG_SZ: REG_ROUTINE_FLAGS = REG_ROUTINE_FLAGS(2u32);
                 pub const RRF_SUBKEY_WOW6464KEY: REG_ROUTINE_FLAGS = REG_ROUTINE_FLAGS(65536u32);
             }
+            pub mod RemoteDesktop {
+                #[inline]
+                pub unsafe fn WTSEnumerateSessionsW(
+                    hserver: Option<super::super::Foundation::HANDLE>,
+                    reserved: u32,
+                    version: u32,
+                    ppsessioninfo: *mut *mut WTS_SESSION_INFOW,
+                    pcount: *mut u32,
+                ) -> windows_core::Result<()> {
+                    windows_link::link!("wtsapi32.dll" "system" fn WTSEnumerateSessionsW(hserver : super::super::Foundation:: HANDLE, reserved : u32, version : u32, ppsessioninfo : *mut *mut WTS_SESSION_INFOW, pcount : *mut u32) -> windows_core::BOOL);
+                    unsafe {
+                        WTSEnumerateSessionsW(
+                            hserver.unwrap_or(core::mem::zeroed()) as _,
+                            reserved,
+                            version,
+                            ppsessioninfo as _,
+                            pcount as _,
+                        )
+                        .ok()
+                    }
+                }
+                #[inline]
+                pub unsafe fn WTSFreeMemory(pmemory: *mut core::ffi::c_void) {
+                    windows_link::link!("wtsapi32.dll" "system" fn WTSFreeMemory(pmemory : *mut core::ffi::c_void));
+                    unsafe { WTSFreeMemory(pmemory as _) }
+                }
+                #[inline]
+                pub unsafe fn WTSQuerySessionInformationW(
+                    hserver: Option<super::super::Foundation::HANDLE>,
+                    sessionid: u32,
+                    wtsinfoclass: WTS_INFO_CLASS,
+                    ppbuffer: *mut windows_core::PWSTR,
+                    pbytesreturned: *mut u32,
+                ) -> windows_core::Result<()> {
+                    windows_link::link!("wtsapi32.dll" "system" fn WTSQuerySessionInformationW(hserver : super::super::Foundation:: HANDLE, sessionid : u32, wtsinfoclass : WTS_INFO_CLASS, ppbuffer : *mut windows_core::PWSTR, pbytesreturned : *mut u32) -> windows_core::BOOL);
+                    unsafe {
+                        WTSQuerySessionInformationW(
+                            hserver.unwrap_or(core::mem::zeroed()) as _,
+                            sessionid,
+                            wtsinfoclass,
+                            ppbuffer as _,
+                            pbytesreturned as _,
+                        )
+                        .ok()
+                    }
+                }
+                pub const WTSUserName: WTS_INFO_CLASS = WTS_INFO_CLASS(5i32);
+                #[repr(transparent)]
+                #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+                pub struct WTS_CONNECTSTATE_CLASS(pub i32);
+                pub const WTS_CURRENT_SERVER_HANDLE: super::super::Foundation::HANDLE =
+                    super::super::Foundation::HANDLE(0i32 as _);
+                #[repr(transparent)]
+                #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+                pub struct WTS_INFO_CLASS(pub i32);
+                #[repr(C)]
+                #[derive(Clone, Copy, Debug, Default, PartialEq)]
+                pub struct WTS_SESSION_INFOW {
+                    pub SessionId: u32,
+                    pub pWinStationName: windows_core::PWSTR,
+                    pub State: WTS_CONNECTSTATE_CLASS,
+                }
+            }
             pub mod SystemInformation {
                 #[inline]
                 pub unsafe fn GetSystemTime() -> super::super::Foundation::SYSTEMTIME {

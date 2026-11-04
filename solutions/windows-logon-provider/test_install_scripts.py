@@ -253,12 +253,24 @@ class ProviderSourceTests(unittest.TestCase):
         # An unlock must be inert: the logon branch is the only one that starts
         # the challenge/claim worker.
         unlock_branch, logon_tail = scenario.split("if cpus != CPUS_LOGON {", 1)[1].split(
-            "            log_event(\"scenario\", \"cpus=logon\");", 1
+            "            self.start_worker_once();", 1
         )
         self.assertIn("claims=0", unlock_branch)
         self.assertIn("state.armed = false;", scenario)
         self.assertNotIn("start_worker_once", unlock_branch)
-        self.assertIn("start_worker_once", logon_tail)
+        self.assertIn("Ok(())", logon_tail)
+
+    def test_session_and_uptime_gates_run_before_the_worker(self):
+        provider = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
+        start = provider.split("fn start_worker_once(", 1)[1].split(
+            "\n        fn set_usage_scenario", 1
+        )[0]
+        self.assertIn("crate::gate::evaluate()", start)
+        self.assertIn("gate={}", start)
+        # A denied gate must return before the network thread is created.
+        gate_at = start.index("crate::gate::evaluate()")
+        self.assertLess(gate_at, start.index("start_worker_thread(&self.session)"))
+        self.assertIn("log_event(\"scenario\", \"cpus=logon gate=ok\")", start)
 
     def test_worker_and_credentials_are_logon_only(self):
         provider = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
