@@ -781,3 +781,30 @@ func newTestServer(t *testing.T, status int, body string) string {
 	t.Cleanup(server.Close)
 	return server.URL
 }
+
+func TestHealthMetricsUsesServiceProxyNotExec(t *testing.T) {
+	var got []string
+	run := func(c Command) Result {
+		got = c.Args
+		return Result{Code: 0, Stdout: "ricardo_endpoint_up{endpoint=\"ha\"} 1\n"}
+	}
+	if _, err := HealthMetrics(run, Options{Kubectl: "kubectl", Namespace: "home-assistant", ExporterDeployment: "runtime-health-exporter"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"get", "--raw", "/api/v1/namespaces/home-assistant/services/runtime-health-exporter:9116/proxy/metrics"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+}
+
+func TestLogScanIgnoresLowercaseRetryNotes(t *testing.T) {
+	text := "voice-proxy: queue retry backoff=2.0s reason=\"scheduler unavailable\"\nvoice-proxy: error=transient\n"
+	if errs := VoiceProxyLogErrors(text); len(errs) != 0 {
+		t.Fatalf("informational lines flagged: %q", errs)
+	}
+	for _, line := range []string{"voice-proxy: ERROR announce failed", "panic: runtime error", "Traceback (most recent call last):"} {
+		if len(VoiceProxyLogErrors(line)) != 1 {
+			t.Fatalf("real error not flagged: %q", line)
+		}
+	}
+}

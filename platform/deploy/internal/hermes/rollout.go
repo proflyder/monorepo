@@ -52,7 +52,6 @@ const (
 	ExporterDeployment    = "runtime-health-exporter"
 	DefaultTimeout        = "8m"
 	DefaultRolloutTimeout = "240s"
-	ExporterQueryURL      = "http://127.0.0.1:9116/metrics"
 )
 
 // ExpectedEndpoints is the health exporter's endpoint set that must be up.
@@ -68,7 +67,7 @@ var (
 		"health-exporter": "ghcr.io/proflyder/health-exporter",
 	}
 	digestPattern  = regexp.MustCompile(`^[^@]+@sha256:[0-9a-f]{64}$`)
-	errorPattern   = regexp.MustCompile(`(?im)\b(ERROR|CRITICAL|Traceback)\b`)
+	errorPattern   = regexp.MustCompile(`(?m)\b(ERROR|CRITICAL|Traceback)\b|panic:`)
 	healthPattern  = regexp.MustCompile(`^ricardo_endpoint_up\{endpoint="([^"]+)"\}\s+([0-9.]+)`)
 	transientWords = []string{"URLError", "TimeoutError", "ConnectionError", "ConnectionResetError", "RemoteDisconnected", "timed out", "connection refused"}
 )
@@ -394,13 +393,18 @@ func Rollback(run Runner, options Options, revision int) error {
 	return err
 }
 
-// HealthMetrics reads the exporter's /metrics through its own binary, which is
-// the only shell-free way into a distroless container.
+// HealthMetrics reads the exporter's /metrics through the API server's service
+// proxy: no exec, so it works for the Go exporter, for a rolled-back older
+// image and for a distroless container alike.
 func HealthMetrics(run Runner, options Options) (string, error) {
 	return checked(run, Command{Name: options.Kubectl, Args: []string{
-		"-n", options.Namespace, "exec", "deployment/" + options.ExporterDeployment,
-		"--", "/usr/local/bin/health-exporter", "-query", ExporterQueryURL,
+		"get", "--raw", ExporterMetricsPath(options.Namespace, options.ExporterDeployment),
 	}})
+}
+
+// ExporterMetricsPath is the service-proxy path of the exporter's /metrics.
+func ExporterMetricsPath(namespace, service string) string {
+	return "/api/v1/namespaces/" + namespace + "/services/" + service + ":9116/proxy/metrics"
 }
 
 // ParseHealth parses `ricardo_endpoint_up{endpoint="…"} N`.

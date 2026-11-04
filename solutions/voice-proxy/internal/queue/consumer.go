@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -126,7 +125,7 @@ func NewConsumer(cfg ConsumerConfig) *Consumer {
 func (c *Consumer) Run(ctx context.Context) {
 	retry := c.cfg.RetryMin
 	fail := func(err error) {
-		c.cfg.Logger.Infof("queue error=%s backoff=%.1fs", fmt.Sprintf("%T", err), retry.Seconds())
+		c.cfg.Logger.Infof("queue retry backoff=%.1fs reason=%q", retry.Seconds(), err.Error())
 		c.cfg.Sleep(ctx, retry)
 		retry = c.nextRetry(retry)
 	}
