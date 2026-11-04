@@ -214,9 +214,7 @@ and check the reply length (it must exceed 180 characters for a real report).
 The TTS sanitizer, cancel guard, profile routing, late answers, dispatcher
 updates and durable announcement queue are now the reusable
 [`solutions/voice-proxy`](../../../solutions/voice-proxy/README.md) service
-(Go, `rules_oci`/distroless image), not `voice_proxy.py`. Behaviour,
-environment names/defaults, log lines and the scheduler payload/idempotency
-contract are unchanged; that README is the single contract for every
+(Go, `rules_oci`/distroless image). That README is the single contract for every
 `HERMES_*` variable and for `-healthcheck` / `-status`.
 
 Hermes-specific notes:
