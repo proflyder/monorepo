@@ -127,6 +127,12 @@ bazel run //:gazelle
 рисковать станцией. Android собирается root-инструментами в
 `projects/mobile/android`.
 
+`projects/station/pulsar` пока тоже вне Bazel: Make + cargo-zigbuild + zig
+0.14.1, CI-юнит `pulsar` в `_native.yml` (проверки, обе архитектуры, installer,
+radio, ssh), релиз — `release-pulsar.yml` в GHCR `pulsar-firmware`. Перевод на
+`rules_rust` — открытая задача (`PENDING.md`), поэтому каталог в
+`.bazelignore`.
+
 `solutions/windows-logon-provider` — переиспользуемый компонент, тоже вне
 Bazel: его контракт — `build.sh` (кросс-сборка pinned llvm-mingw `20261020`) и
 `run-tests.sh` (host clang++), без BUILD-целей и toolchain-правил. В CI это

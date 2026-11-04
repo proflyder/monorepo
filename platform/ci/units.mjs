@@ -13,8 +13,9 @@
 //                applications that depend on it.
 //   * python   - path rules below plus optional declarative `depends_on`.
 //   * js       - path rules for dependency-free edge Workers (runs `node --test`).
-//   * native   - path rules for repository-script C/C++ builds (no Bazel):
-//                pinned toolchain download, host tests and cross-build.
+//   * native   - path rules for non-Bazel native builds (repository-script
+//                C/C++ and the Rust Pulsar station tree): pinned toolchains,
+//                host tests, cross-builds and artifacts.
 //   * quality  - always runs; owns repository-wide checks and every shell script.
 //
 // Adding a unit: copy a block, set unique `id`, `platform`, `paths` and the
@@ -769,11 +770,12 @@ export const config = {
     },
 
     // ----------------------------------------------------------- Native --------
-    // Non-Bazel C/C++ build with a pinned cross toolchain. The reusable Windows
-    // logon provider is cross-built with llvm-mingw from macOS/CI without Visual
-    // Studio; CI verifies the toolchain digest and runs the portable host tests.
-    // PRs upload the binaries as an artifact; a push to `develop` additionally
-    // publishes them as a public OCI artifact in GHCR (deploy-home, publish-native).
+    // Non-Bazel native builds with a pinned toolchain. The Windows logon
+    // provider is a repository-script C++ cross-build; Pulsar is the Rust
+    // station tree built with Make + cargo-zigbuild. PRs upload their
+    // artifacts; a push to `develop` publishes eligible units as public OCI
+    // artifacts in GHCR (deploy-home, publish-native). Pulsar opts out
+    // (`publish: false`): `release-pulsar.yml` owns its GHCR release.
     {
       id: "logon-provider",
       platform: "native",
@@ -781,6 +783,7 @@ export const config = {
       paths: ["solutions/windows-logon-provider/**"],
       native: {
         workdir: "solutions/windows-logon-provider",
+        kind: "script",
         test: "./run-tests.sh",
         build: "./build.sh",
         artifacts: [
@@ -798,6 +801,24 @@ export const config = {
           sha256: "55064b60b991a1e1e8090b8c2f84e82b22cfe5903d12c159d65064cf5e8ae335",
           root: "llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64",
         },
+      },
+    },
+
+    // The Rust station daemon and its surrounding builds (radio firmware,
+    // Go installer, dropbear). `make check` plus both station ABIs, the radio
+    // and ssh builds all live in `_native.yml`. Releases are not deploy-home
+    // units: `release-pulsar.yml` publishes `ghcr.io/proflyder/pulsar-firmware`
+    // from a VERSION bump on `develop`.
+    {
+      id: "pulsar",
+      platform: "native",
+      title: "projects/station/pulsar (Rust station daemon, radio, installer)",
+      paths: ["projects/station/pulsar/**"],
+      native: {
+        kind: "pulsar",
+        workdir: "projects/station/pulsar",
+        // deploy-home must not build or publish this unit as an OCI artifact.
+        publish: false,
       },
     },
 

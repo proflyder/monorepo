@@ -71,7 +71,7 @@ test("audit: exact public repo slug is accepted", () => {
     `https://github.com/${REPO}`,
   ]) {
     assert.deepEqual(
-      scanText("projects/station/upstream/pulsar-rust/RICARDO.md", text),
+      scanText("projects/station/pulsar/RICARDO.md", text),
       [],
       text,
     );

@@ -70,17 +70,19 @@
     merge PR запускает `deploy-home`. Режимы исполнения меняются только
     ручным `workflow_dispatch`; откат — только применённого объекта, полный —
     новым revert-PR.
-20. **Pulsar — релизы в форке, деплой через HA updater.** Монорепо Pulsar не
-    собирает: сборка и GitHub release выходят из форка (origin вложенного
-    checkout `projects/station/upstream/pulsar-rust`, линия `main` = Ricardo),
-    теги `v<major.minor>.<1000+N>` — updater ставит только строго большую
-    версию. Выкатка на станцию — только `deploy-station.yml` после ручного
-    approve в Environment `Station` (теги `v*`), через VPN группу `ci` и OIDC
-    в OpenBao (`deploy-station`), затем HA `update.install`; job проверяет
-    установленную версию и стабильность. Откат — не через CI, а на станции
-    (`.prev` + `ctl.sh reload`). Egress станции при этом разрешает HTTPS
-    только к публичным IPv4-диапазонам GitHub, весь остальной WAN и Яндекс —
-    DROP.
+20. **Pulsar — код и релизы в монорепозитории, деплой через HA updater.**
+    Исходники — `projects/station/pulsar/`; CI — юнит `pulsar`
+    (`_native.yml`: `make check`, обе архитектуры, installer, radio, ssh).
+    Версия — `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`);
+    изменение файла в `develop` запускает `release-pulsar.yml`, который
+    публикует OCI-артефакт в `ghcr.io/proflyder/pulsar-firmware:<version>`
+    (+ `:latest`); GitHub Releases и теги в монорепо не используются.
+    Выкатка на станцию — job `deploy` после ручного approve в Environment
+    `Station`, через VPN группу `ci` и OIDC в OpenBao (`deploy-station`),
+    затем HA `update.install`; job проверяет установленную версию и
+    стабильность. Откат — не через CI, а на станции (`.prev` +
+    `ctl.sh reload`). Egress станции при этом разрешает HTTPS только к
+    публичным IPv4-диапазонам GitHub, весь остальной WAN и Яндекс — DROP.
 
 21. **Currency bot — Go-переписывание, Cloudflare Tunnel, OpenBao вместо
     Unkey.** Kotlin `tg-bot-currency` и VPS-стек `infra-monitoring`/`infra-ci`
@@ -292,22 +294,27 @@
       Пакеты — только образы деплой-юнитов из `units.mjs`;
       `windows-logon-provider` и прочие пакеты аккаунта не рассматриваются.
 
-37. **Pulsar-форк — самостоятельный репозиторий, upstream вливается вручную.**
-    * `proflyder/pulsar` опубликован как обычный публичный репозиторий, а не
-      GitHub-fork: Actions были отключены во всей сети форков, а релиз и
-      деплой станции строятся на `build.yml`/`deploy-station.yml` в этом
-      репозитории. Старый форк переименован в `pulsar-fork-old` (удаляется).
-    * Имя `proflyder/pulsar` зашито в обновлятор прошивки станции, поэтому
-      репозиторий остаётся публичным и сохраняет имя; переезд потребовал бы
-      менять прошивку.
-    * Upstream `Morvex885/pulsar` вливается вручную: remote `upstream`,
-      `git merge vX` во вложенном checkout, PR в форке сливается
-      merge-коммитом (`--merge --admin`). Автоматический fork-sync не
-      используется: без fork-связи он недоступен.
-    * Коммиты, заголовки и описания PR в форке подчиняются его `AGENTS.md`:
-      без AI-трейлеров и подписей «Generated with…» (CI job `commits`,
-      `tools/check-authorship.sh`); обычные PR — squash, merge-коммит только
-      для слияния upstream. Release job при сетевом сбое перезапускается
-      `gh run rerun <id> --failed`.
+37. **Pulsar живёт в монорепозитории; релиз — VERSION bump в GHCR.**
+    * Код Pulsar перенесён из отдельного репозитория в
+      `projects/station/pulsar/` (AGPL-3.0, `LICENSE`, README, docs,
+      RICARDO.md сохранены). Вложенного checkout'а, snapshot-скрипта и
+      patch-каталога больше нет.
+    * GitHub Releases в монорепозитории запрещены, теги не пушатся
+      (pre-push hook). Релиз — изменение `VERSION`
+      (`v<major.minor>.<1000+N>`): push в `develop` запускает
+      `release-pulsar.yml`, который собирает обе архитектуры, radio и
+      `SHA256SUMS` и публикует OCI-артефакт
+      `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`) с типом
+      `application/vnd.proflyder.pulsar.release.v1`. Существующий тег GHCR
+      перезаписать нельзя — выпускается следующая версия.
+    * `proflyder/pulsar-firmware` — публичный пакет, созданный workflow из
+      `GITHUB_TOKEN` (`packages: write`); имя зашито в
+      `pulsar_update::UPDATE_REPO` установленной прошивки. `ghcr-cleanup`
+      этот пакет не рассматривает: `latest` и версии должны сохраняться.
+    * Upstream `Morvex885/pulsar` вливается вручную патчем:
+      `git diff vA..vB` → `git apply -3 --directory=projects/station/pulsar`,
+      затем обычный squash PR. Автоматический fork-sync не используется.
+    * Коммиты и PR — по корневому `AGENTS.md`/`docs/GIT.md`; отдельного
+      authorship-скрипта и job `commits` в монорепо нет.
 
 Меняется решение — обновить этот файл и `STATE.md`.

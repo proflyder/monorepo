@@ -28,9 +28,9 @@ Pulsar.** Физический mute не включать: он может вы�
 
 ## Подготовка
 
-Нужен актуальный игнорируемый checkout `projects/station/upstream/pulsar-rust`,
+Нужен актуальный checkout `projects/station/pulsar` (входит в монорепозиторий),
 Rust/cargo-zigbuild, ARM target и Zig 0.14.1. Отдельный Cargo package
-ссылается на его audio/core crates; сам checkout не редактируется.
+ссылается на его audio/core crates; сам Pulsar не редактируется.
 
 ```sh
 .venv/bin/pip install -r projects/station/tools/voice-recorder/requirements.txt

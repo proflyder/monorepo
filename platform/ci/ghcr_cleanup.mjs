@@ -74,9 +74,11 @@ export const PROTECTED_TAGS = [
 export const PROTECTED_DIGESTS = [];
 /**
  * Never touched, even if a future unit map were to list them. The Windows logon
- * provider is a public release artifact with immutable version tags.
+ * provider is a public release artifact with immutable version tags. Pulsar
+ * firmware is the station updater's OCI release package (`pulsar-firmware`):
+ * `latest` and the version tags must survive, so the cleanup never considers it.
  */
-export const EXCLUDED_PACKAGES = new Set(["windows-logon-provider"]);
+export const EXCLUDED_PACKAGES = new Set(["windows-logon-provider", "pulsar-firmware"]);
 
 /** Package names owned by the deploy units, in a stable order. */
 export function deployImagePackages(unitsConfig = config) {

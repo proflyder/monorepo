@@ -62,12 +62,8 @@ echo "== Go: solutions, packages and deploy tooling =="
 go test ./solutions/... ./packages/... ./platform/deploy/...
 (cd projects/station/ble-gateway && go test ./...)
 
-if [[ -d projects/station/upstream/pulsar-rust/installer ]]; then
-  echo "== Go: Pulsar installer (nested checkout) =="
-  (cd projects/station/upstream/pulsar-rust/installer && GOWORK=off go test ./...)
-else
-  skip "Pulsar installer Go tests: projects/station/upstream/pulsar-rust is not checked out"
-fi
+echo "== Go: Pulsar installer (nested module, GOWORK=off) =="
+(cd projects/station/pulsar/installer && GOWORK=off go test ./...)
 
 if [[ -d projects/station/resources/quasar-connect-bot ]]; then
   echo "== Python: quasar-connect-bot (nested checkout) =="

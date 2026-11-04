@@ -1,17 +1,29 @@
 name: _native
 
-# Reusable native platform workflow: one matrix entry per affected unit that
-# builds C/C++ with a repository script instead of Bazel. The unit supplies its
-# working directory, host-test and cross-build commands, the artifacts it owns
-# and the pinned toolchain archive. The archive is cached by version + sha256,
-# and its digest is verified before extraction. Nothing is deployed: the
-# Windows PC is not reachable from CI. A push to `develop` reuses this same
-# workflow in deploy-home and publishes the resulting artifact as an OCI
-# artifact; this reusable workflow itself stays read-only.
+# Reusable native platform workflow. Two kinds of non-Bazel build share it:
+#
+#   * `script` (default) — one repository-script C/C++ build with a pinned
+#     cross toolchain (the Windows logon provider). The unit supplies its
+#     working directory, host-test and cross-build commands, the artifacts it
+#     owns and the pinned toolchain archive. The archive is cached by version +
+#     sha256, and its digest is verified before extraction. A push to `develop`
+#     reuses this workflow in deploy-home and publishes the resulting artifact
+#     as an OCI artifact; this reusable workflow itself stays read-only.
+#
+#   * `pulsar` — the Rust station daemon in `projects/station/pulsar`. It
+#     mirrors the old upstream `build.yml`: host `make check`, both station
+#     architectures, the Go installer, the Zigbee radio and the dropbear build.
+#     Tool versions are pinned here (zig 0.14.1, cargo-zigbuild 0.24.0); the
+#     Rust toolchain comes from `satellite/rust-toolchain.toml`.
 
 on:
   workflow_call:
     inputs:
+      kind:
+        description: Unit kind from platform/ci/units.mjs (script or pulsar)
+        required: false
+        default: script
+        type: string
       unit:
         description: Unit id from platform/ci/units.mjs
         required: true
@@ -21,21 +33,22 @@ on:
         required: true
         type: string
       build:
-        description: Build command, run from workdir
-        required: true
+        description: Build command, run from workdir (script kind)
+        required: false
+        default: ""
         type: string
       test:
-        description: Optional host-test command, run from workdir
+        description: Optional host-test command, run from workdir (script kind)
         required: false
         default: ""
         type: string
       artifacts:
-        description: Space separated artifact paths, relative to workdir
+        description: Space separated artifact paths, relative to workdir (script kind)
         required: false
         default: ""
         type: string
       checksums:
-        description: Checksums file to generate over artifacts, relative to workdir
+        description: Checksums file to generate over artifacts, relative to workdir (script kind)
         required: false
         default: ""
         type: string
@@ -72,8 +85,10 @@ permissions:
   contents: read
 
 jobs:
+  # ---------------------------------------------------------------- script ----
   native:
     name: native / ${{ inputs.unit }}
+    if: inputs.kind == 'script'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -183,5 +198,217 @@ jobs:
         with:
           name: ${{ inputs.unit }}
           path: ${{ steps.artifact-paths.outputs.paths }}
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention_days }}
+
+  # ---------------------------------------------------------------- pulsar ----
+  # Host check: cargo fmt, clippy -D warnings (host + both station targets
+  # through cargo-zigbuild) and the workspace tests. Mirrors upstream build.yml.
+  pulsar-check:
+    name: native / pulsar-check
+    if: inputs.kind == 'pulsar'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        timeout-minutes: 5
+        with:
+          version: "0.14.1"
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        working-directory: ${{ inputs.workdir }}/satellite
+        run: rustup toolchain install
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ inputs.workdir }}/satellite/target
+          key: pulsar-rust-host-${{ hashFiles(format('{0}/satellite/Cargo.lock', inputs.workdir), format('{0}/satellite/rust-toolchain.toml', inputs.workdir)) }}
+          restore-keys: pulsar-rust-host-
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-zigbuild
+          key: cargo-zigbuild-0.24.0-${{ runner.os }}-check
+
+      - name: Install cargo-zigbuild 0.24.0
+        run: |
+          cargo-zigbuild --version 2>/dev/null | grep -qx 'cargo-zigbuild 0.24.0' ||
+            cargo install cargo-zigbuild --locked --force --version 0.24.0
+
+      - name: Check pulsar
+        working-directory: ${{ inputs.workdir }}
+        run: make -C satellite check
+
+  # Both station ABIs: the daemon and its tools, cross-built with cargo-zigbuild.
+  pulsar-build:
+    name: native / pulsar-build (${{ matrix.arch }})
+    if: inputs.kind == 'pulsar'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64, armhf]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        timeout-minutes: 5
+        with:
+          version: "0.14.1"
+
+      - name: Build prerequisites
+        run: sudo apt-get update -q && sudo apt-get install -yq ninja-build
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        working-directory: ${{ inputs.workdir }}/satellite
+        run: rustup toolchain install
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ inputs.workdir }}/satellite/target
+          key: pulsar-rust-${{ matrix.arch }}-${{ hashFiles(format('{0}/satellite/Cargo.lock', inputs.workdir), format('{0}/satellite/rust-toolchain.toml', inputs.workdir)) }}
+          restore-keys: pulsar-rust-${{ matrix.arch }}-
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-zigbuild
+          key: cargo-zigbuild-0.24.0-${{ runner.os }}-${{ matrix.arch }}
+
+      - name: Install cargo-zigbuild 0.24.0
+        run: |
+          cargo-zigbuild --version 2>/dev/null | grep -qx 'cargo-zigbuild 0.24.0' ||
+            cargo install cargo-zigbuild --locked --force --version 0.24.0
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ inputs.workdir }}/satellite/third_party/src
+          key: pulsar-third-party-${{ hashFiles(format('{0}/satellite/third_party/fetch.sh', inputs.workdir)) }}
+
+      - name: Daemon and tools
+        working-directory: ${{ inputs.workdir }}
+        run: make -C satellite ARCH=${{ matrix.arch }} -j"$(nproc)" binary tools
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pulsar-${{ matrix.arch }}
+          path: |
+            ${{ inputs.workdir }}/satellite/build/${{ matrix.arch }}/pulsar
+            ${{ inputs.workdir }}/satellite/build/${{ matrix.arch }}/pulsar.debug
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention_days }}
+
+  # The Go installer is a nested module with its own go.mod. The root go.work
+  # does not list it, so every command runs with GOWORK=off.
+  pulsar-installer:
+    name: native / pulsar-installer
+    if: inputs.kind == 'pulsar'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: ${{ inputs.workdir }}/installer/go.sum
+
+      - name: vet + test
+        working-directory: ${{ inputs.workdir }}/installer
+        env:
+          GOWORK: "off"
+        run: |
+          go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...
+          go test ./...
+
+      - name: cross-build
+        working-directory: ${{ inputs.workdir }}/installer
+        env:
+          GOWORK: "off"
+        run: |
+          for t in windows/amd64 darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            os=${t%/*} arch=${t#*/} ext=
+            [ "$os" = windows ] && ext=.exe
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags='-s -w' -o "dist/$os-$arch/pulsar-install$ext" .
+          done
+
+  # Zigbee firmware for the Midi radio (Telink B91).
+  pulsar-radio:
+    name: native / pulsar-radio
+    if: inputs.kind == 'pulsar'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        timeout-minutes: 5
+        with:
+          version: "0.14.1"
+
+      - name: i386 C library (the Telink toolchain is 32-bit x86)
+        run: sudo dpkg --add-architecture i386 && sudo apt-get update -q && sudo apt-get install -yq libc6:i386
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ inputs.workdir }}/radio/src
+            ${{ inputs.workdir }}/radio/toolchain
+          key: pulsar-radio-${{ hashFiles(format('{0}/radio/build.sh', inputs.workdir), format('{0}/radio/sdk.patch', inputs.workdir)) }}
+
+      - name: Build radio firmware
+        working-directory: ${{ inputs.workdir }}
+        run: radio/build.sh
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pulsar-radio
+          path: |
+            ${{ inputs.workdir }}/radio/out/zigbee-router.ybl
+            ${{ inputs.workdir }}/radio/out/zigbee-coordinator.ybl
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention_days }}
+
+  # dropbear + sftp-server for `pulsar-install --ssh`.
+  pulsar-ssh:
+    name: native / pulsar-ssh
+    if: inputs.kind == 'pulsar'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        timeout-minutes: 5
+        with:
+          version: "0.14.1"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ inputs.workdir }}/ssh/out/src
+          key: pulsar-ssh-${{ hashFiles(format('{0}/ssh/build.sh', inputs.workdir)) }}
+
+      - name: Build dropbear and sftp-server
+        working-directory: ${{ inputs.workdir }}
+        run: ssh/build.sh
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pulsar-ssh
+          path: |
+            ${{ inputs.workdir }}/ssh/out/aarch64/
+            ${{ inputs.workdir }}/ssh/out/armhf/
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}

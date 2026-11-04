@@ -188,7 +188,7 @@ jobs:
       pull-requests: read
     outputs:
       units: ${{ steps.filter.outputs.units }}
-      native_units: ${{ steps.route.outputs.native_units }}
+      native_units: ${{ steps.filter.outputs.native_units }}
       pr_url: ${{ steps.pr.outputs.url }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -261,8 +261,14 @@ jobs:
             }
             const json = affected.jsonDumps(selected);
             core.setOutput('units', json);
+            // Native units marked `publish: false` (Pulsar) are built and
+            // released by release-pulsar.yml, never by deploy-home.
+            const natives = JSON.parse(process.env.NATIVE_UNITS || '[]')
+              .filter((entry) => entry.publish !== false);
+            const nativeJson = affected.jsonDumps(natives);
+            core.setOutput('native_units', nativeJson);
             core.summary.addRaw(`### deploy-home plan\n\n\`\`\`json\n${json}\n\`\`\`\n`);
-            await core.summary.addRaw(`\nnative units: \`${process.env.NATIVE_UNITS || '[]'}\`\n`).write();
+            await core.summary.addRaw(`\nnative units: \`${nativeJson}\`\n`).write();
 
       - name: Resolve pull request link
         id: pr
@@ -295,6 +301,7 @@ jobs:
     uses: ./.github/workflows/_native.yml
     with:
       unit: ${{ matrix.id }}
+      kind: ${{ matrix.kind }}
       workdir: ${{ matrix.workdir }}
       build: ${{ matrix.build }}
       test: ${{ matrix.test }}

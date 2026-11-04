@@ -1,0 +1,4 @@
+# Imported upstream tree: keep bytes exactly as upstream tracks them. Some
+# fixtures and patches are CRLF, and golden tests compare exact content. The
+# monorepo's core.autocrlf=input must not rewrite this subtree.
+* -text

@@ -50,11 +50,11 @@ def pairing_total() -> float | None:
 
 def count_tests() -> dict[str, int]:
     py = 0
-    for path in (p for base in (ROOT / "projects", ROOT / "platform") for p in base.rglob("test_*.py") if not any(part in {"upstream", "resources", ".venv"} for part in p.relative_to(ROOT).parts)):
+    for path in (p for base in (ROOT / "projects", ROOT / "platform") for p in base.rglob("test_*.py") if not any(part in {".venv", "resources"} for part in p.relative_to(ROOT).parts)):
         py += len(re.findall(r"^\s+def test_", path.read_text(), re.M))
     pairing = len(re.findall(r"^\s+def test_", (ROOT / "projects/station/resources/quasar-connect-bot/tests/test_pairing.py").read_text(), re.M))
     go = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/ble-gateway").glob("*_test.go"))
-    go_installer = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/upstream/pulsar-rust/installer").glob("*_test.go"))
+    go_installer = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/pulsar/installer").glob("*_test.go"))
     return {"python": py, "pairing": pairing, "go": go, "go_installer": go_installer}
 
 
@@ -97,7 +97,7 @@ def percent(value: float | None) -> str:
 
 def main() -> int:
     ble = go_total(ROOT / "reports" / "ble-gateway.cover", ROOT / "projects" / "station" / "ble-gateway")
-    installer = go_total(ROOT / "reports" / "pulsar-installer.cover", ROOT / "projects" / "station" / "upstream" / "pulsar-rust" / "installer")
+    installer = go_total(ROOT / "reports" / "pulsar-installer.cover", ROOT / "projects" / "station" / "pulsar" / "installer")
     pairing = pairing_total()
     tests = count_tests()
     ha = ha_metrics()
@@ -107,8 +107,8 @@ def main() -> int:
     shell_files = classify(ROOT / "projects" / "home-assistant", ["**/*.sh"])
     script_files = classify(ROOT / "projects" / "station" / "scripts", ["*.sh", "*.py"])
     pairing_files = [ROOT / "projects/station/resources/quasar-connect-bot/pairing.py"]
-    installer_files = classify(ROOT / "projects/station/upstream/pulsar-rust/installer", ["*.go"])
-    rust_files = classify(ROOT / "projects/station/upstream/pulsar-rust/satellite",
+    installer_files = classify(ROOT / "projects/station/pulsar/installer", ["*.go"])
+    rust_files = classify(ROOT / "projects/station/pulsar/satellite",
                           ["crates/**/*.rs"])
 
     ble_loc, ha_loc, shell_loc, script_loc = (loc(x) for x in (ble_files, ha_files, shell_files, script_files))

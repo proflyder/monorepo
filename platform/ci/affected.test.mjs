@@ -433,6 +433,8 @@ test("real repo: native provider change routes to its unit", () => {
   assert.deepEqual(entries.native, [
     {
       id: "logon-provider",
+      kind: "script",
+      publish: true,
       workdir: "solutions/windows-logon-provider",
       build: "./build.sh",
       test: "./run-tests.sh",
@@ -456,7 +458,39 @@ test("real repo: native workflow change runs native units", () => {
     affected.route(config, [".github/workflows/_native.yml"], { root: REPO, base: "b" }),
   );
   assert.equal(result.routes.native.mode, "all");
-  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), ["logon-provider"]);
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
+    "logon-provider",
+    "pulsar",
+  ]);
+});
+
+test("real repo: pulsar change routes to the native pulsar unit", () => {
+  const config = affected.loadConfig();
+  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+    affected.route(config, ["projects/station/pulsar/satellite/Makefile"], {
+      root: REPO,
+      base: "b",
+    }),
+  );
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), ["pulsar"]);
+  const entries = affected.matrixEntries(result, config);
+  assert.deepEqual(entries.native, [
+    {
+      id: "pulsar",
+      kind: "pulsar",
+      publish: false,
+      workdir: "projects/station/pulsar",
+      build: "",
+      test: "",
+      artifacts: "",
+      checksums: "",
+      toolchain_name: "",
+      toolchain_version: "",
+      toolchain_url: "",
+      toolchain_sha256: "",
+      toolchain_root: "",
+    },
+  ]);
 });
 
 test("real repo: js worker change routes to its unit", () => {

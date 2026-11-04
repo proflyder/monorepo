@@ -417,8 +417,9 @@ jobs:
       unit: ${{ matrix.id }}
       tests: ${{ matrix.tests }}
 
-  # One matrix entry per affected non-Bazel native build (Windows logon
-  # provider cross-built with the pinned llvm-mingw toolchain). Host tests,
+  # One matrix entry per affected non-Bazel native build: the Windows logon
+  # provider cross-built with the pinned llvm-mingw toolchain, and the Rust
+  # Pulsar tree (make check, both arches, installer, radio, ssh). Host tests,
   # build, checksums and artifact upload only; there is no deploy target.
   native:
     needs: changes
@@ -430,6 +431,7 @@ jobs:
     uses: ./.github/workflows/_native.yml
     with:
       unit: ${{ matrix.id }}
+      kind: ${{ matrix.kind }}
       workdir: ${{ matrix.workdir }}
       build: ${{ matrix.build }}
       test: ${{ matrix.test }}

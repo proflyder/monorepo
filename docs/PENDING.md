@@ -18,6 +18,22 @@
       README в их папках. Следующий шаг: в `affected.mjs` не выбирать юнит
       для деплоя, если все его изменённые файлы — `*.md`.
 
+- [ ] **Bazel-сборка Pulsar.** Сейчас станция собирается Make + cargo-zigbuild
+      + zig 0.14.1 (`projects/station/pulsar/satellite`, CI-юнит `pulsar` в
+      `_native.yml`). Следующий шаг: отдельным PR перевести Rust-крейты на
+      `rules_rust`, сохранив on-device ABI shim и обе station-цели, и убрать
+      `projects/station/pulsar` из `.bazelignore`.
+
+- [ ] **Архивировать `proflyder/pulsar`.** Код перенесён в монорепо
+      (`projects/station/pulsar/`), новые релизы идут в
+      `ghcr.io/proflyder/pulsar-firmware`. Следующий шаг: после первого
+      монорепо-релиза перевести репозиторий в read-only/archived и убрать
+      доступ CI.
+
+- [ ] **Удалить репозиторий `pulsar-fork-old`.** Старый форк переименован и
+      больше не используется. Следующий шаг: убедиться, что на него не
+      ссылаются workflow/обновлятор, и удалить.
+
 ## P3 — приёмка и развитие
 
 ### Станция и голос
@@ -87,12 +103,6 @@
       `script.schedule_announce`; затем то же в личном профиле без режима
       агента (Hermes) и с режимом; проверить смену цвета Blue/Violet и что
       рабочая фраза не уходит в Hermes.
-- [ ] **Pulsar `cargo test` на Linux для `v0.5.1005`.** Раскатан релиз
-      с number «Follow-up duration» и STT stop-word fallback.
-      Следующий шаг: проверить, покрывает ли CI форка `cargo test` на Linux
-      для тега `v0.5.1005`; если workflow только собирает armhf — прогнать
-      `cargo test` на Linux вручную и зафиксировать результат перед следующим
-      релизом.
 
 ### Планировщик / Android
 
