@@ -74,9 +74,17 @@ pub use windows_impl::start_worker_thread;
 
 #[cfg(windows)]
 mod windows_impl {
+    use core::ffi::c_void;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
+
+    use windows::Win32::Foundation::{CloseHandle, FreeLibrary, HMODULE};
+    use windows::Win32::System::LibraryLoader::{
+        FreeLibraryAndExitThread, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW,
+    };
+    use windows::Win32::System::Threading::{CreateThread, THREAD_CREATION_FLAGS};
+    use windows::core::PCWSTR;
 
     use logon_protocol::{
         ClaimOutcome, challenge_request_json, claim_mac_message, endpoint_path, hmac_sha256_b64,
@@ -93,15 +101,6 @@ mod windows_impl {
     use crate::worker::{
         POLL_INTERVAL_MS, RoundKind, RoundOutcome, clamp_delay, retry_delay_for_status,
     };
-
-    /// Keeps `ACTIVE_WORKERS` accurate for `DllCanUnloadNow`.
-    struct ActiveWorker;
-
-    impl Drop for ActiveWorker {
-        fn drop(&mut self) {
-            ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
-        }
-    }
 
     fn sleep_interruptible(session: &Arc<Session>, generation: u32, milliseconds: u32) {
         let deadline = Instant::now() + Duration::from_millis(u64::from(milliseconds));
@@ -364,35 +363,111 @@ mod windows_impl {
         }
     }
 
-    fn worker_thread_proc(session: Arc<Session>) {
-        let _active = ActiveWorker;
-        let generation = session.generation();
-        guard(
-            || run_worker(&session, generation),
-            || log_event("worker", "phase=exception"),
-        );
-        session.running.store(false, Ordering::SeqCst);
+    /// Arguments moved into the worker thread.
+    ///
+    /// The last `Arc<Session>` is owned here, so the session outlives the
+    /// thread's use of it; `module` is the pinned DLL handle released with
+    /// `FreeLibraryAndExitThread`.
+    struct StartArgs {
+        session: Arc<Session>,
+        module: HMODULE,
     }
 
-    /// Creates the single worker thread. The caller must have set
-    /// `session.running`.
+    /// Worker thread procedure. Owns `parameter` and never returns.
+    ///
+    /// The module is pinned for exactly this thread's lifetime: every Rust
+    /// object with a `Drop` impl is gone before `FreeLibraryAndExitThread`, so
+    /// no code from this DLL can run after the module is released.
+    unsafe extern "system" fn worker_thread_proc(parameter: *mut c_void) -> u32 {
+        // SAFETY: `parameter` comes from `Box::into_raw(StartArgs)` in
+        // `start_worker_thread` and this thread owns it.
+        let StartArgs { session, module } =
+            *unsafe { Box::from_raw(parameter.cast::<StartArgs>()) };
+
+        {
+            let generation = session.generation();
+            guard(
+                || run_worker(&session, generation),
+                || log_event("worker", "phase=exception"),
+            );
+            session.running.store(false, Ordering::SeqCst);
+            // Bookkeeping for DllCanUnloadNow; the module pin above is what
+            // actually makes unloading safe.
+            ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
+        }
+        // The only remaining Rust object is the session reference itself; drop
+        // it before the module can disappear.
+        drop(session);
+
+        // SAFETY: releases the pin taken in `start_worker_thread` and exits the
+        // thread. It diverges, so no code below (or after this call) runs in the
+        // possibly unloaded module.
+        unsafe { FreeLibraryAndExitThread(module, 0) }
+    }
+
+    /// Creates the single worker thread with a raw `CreateThread`.
+    ///
+    /// This deliberately does not use `std::thread`. A `std::thread` keeps
+    /// running std's thread epilogue (`thread_start`, `Packet`, TLS
+    /// destructors) after the closure returns, i.e. after `ACTIVE_WORKERS` has
+    /// been decremented. LogonUI could then call `DllCanUnloadNow`, get `S_OK`
+    /// and `FreeLibrary` while that epilogue is still executing our code. A raw
+    /// thread plus `GetModuleHandleExW(FROM_ADDRESS)` pins the module until the
+    /// very last instruction of this module has run.
     pub fn start_worker_thread(session: &Arc<Session>) {
-        let worker_session = Arc::clone(session);
-        let reset_session = Arc::clone(session);
+        // +1 module reference for as long as the thread may execute our code.
+        let mut module = HMODULE::default();
+        // SAFETY: `worker_thread_proc` is an address inside this DLL, so
+        // GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS resolves to this module.
+        let pinned = unsafe {
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                PCWSTR(worker_thread_proc as *const u16),
+                &raw mut module,
+            )
+        };
+        if pinned.is_err() {
+            session.running.store(false, Ordering::SeqCst);
+            log_event("worker", "phase=start_failed");
+            return;
+        }
+
+        let args = Box::new(StartArgs {
+            session: Arc::clone(session),
+            module,
+        });
+        let parameter = Box::into_raw(args).cast::<c_void>();
         ACTIVE_WORKERS.fetch_add(1, Ordering::SeqCst);
-        // `std::thread` uses CreateThread underneath. This is not the LogonUI
-        // thread, exactly like the C++ `CreateThread` call.
-        let spawned = std::thread::Builder::new()
-            .name("ricardo-logon-worker".to_owned())
-            .spawn(move || worker_thread_proc(worker_session));
-        match spawned {
+        // SAFETY: the procedure has the LPTHREAD_START_ROUTINE signature, and
+        // on success the new thread takes ownership of `parameter`.
+        let thread = unsafe {
+            CreateThread(
+                None,
+                0,
+                Some(worker_thread_proc),
+                Some(parameter),
+                THREAD_CREATION_FLAGS(0),
+                None,
+            )
+        };
+        match thread {
             Ok(handle) => {
-                // Detach: the worker is bounded by the budget and never joined.
-                drop(handle);
+                // SAFETY: `handle` is open and owned here; closing it does not
+                // stop the thread.
+                unsafe {
+                    let _ = CloseHandle(handle);
+                }
             }
             Err(_) => {
                 ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
-                reset_session.running.store(false, Ordering::SeqCst);
+                // The thread never started, so it did not take the argument.
+                // SAFETY: `parameter` came from `Box::into_raw` above.
+                drop(unsafe { Box::from_raw(parameter.cast::<StartArgs>()) });
+                // SAFETY: balances the successful GetModuleHandleExW above.
+                unsafe {
+                    let _ = FreeLibrary(module);
+                }
+                session.running.store(false, Ordering::SeqCst);
                 log_event("worker", "phase=start_failed");
             }
         }
