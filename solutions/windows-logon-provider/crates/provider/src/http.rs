@@ -2,7 +2,9 @@
 //!
 //! No proxy, no redirects, no cookies, no credential attachment: the wakegrant
 //! MAC is the only authenticator and it must not be relayed anywhere. Timeouts
-//! and limits are the ones documented in the README (2/2/4/4 s, 16 KiB body).
+//! and limits are the ones documented in the README (2/2/4/4 s by default,
+//! 16 KiB body). The unlock claim raises only the receive timeout so it can
+//! outlast the server's 25 s long-poll.
 //!
 //! Only the argument construction is host-portable; the WinHTTP calls are
 //! behind `cfg(windows)`.
@@ -48,7 +50,7 @@ pub(crate) fn request_targets(
 }
 
 #[cfg(windows)]
-pub use winhttp::post_json;
+pub use winhttp::{post_json, post_json_with_receive_timeout};
 
 #[cfg(windows)]
 mod winhttp {
@@ -99,6 +101,7 @@ mod winhttp {
         endpoint: &ServiceEndpoint,
         path: &str,
         body: &[u8],
+        receive_timeout_ms: i32,
     ) -> Result<(i32, Vec<u8>), &'static str> {
         let targets = request_targets(endpoint, path)?;
         let user_agent = WideNul::new(USER_AGENT);
@@ -124,7 +127,7 @@ mod winhttp {
                 RESOLVE_TIMEOUT_MS,
                 CONNECT_TIMEOUT_MS,
                 SEND_TIMEOUT_MS,
-                RECEIVE_TIMEOUT_MS,
+                receive_timeout_ms,
             );
         }
 
@@ -266,12 +269,23 @@ mod winhttp {
         Ok((status as i32, response))
     }
 
-    /// `POST path` with a JSON body. Never panics; every failure is a log-safe
-    /// `error` string and `ok = false`.
+    /// `POST path` with a JSON body and the documented 4 s receive timeout.
+    /// Never panics; every failure is a log-safe `error` string and `ok = false`.
     pub fn post_json(endpoint: &ServiceEndpoint, path: &str, body: &[u8]) -> HttpResult {
+        post_json_with_receive_timeout(endpoint, path, body, RECEIVE_TIMEOUT_MS)
+    }
+
+    /// Same as [`post_json`], with an explicit receive timeout for the unlock
+    /// long-poll claim. The send timeout stays at 4 s: the claim body is tiny.
+    pub fn post_json_with_receive_timeout(
+        endpoint: &ServiceEndpoint,
+        path: &str,
+        body: &[u8],
+        receive_timeout_ms: i32,
+    ) -> HttpResult {
         // SAFETY: GetTickCount64 takes no arguments.
         let started = unsafe { GetTickCount64() };
-        let result = post_json_inner(endpoint, path, body);
+        let result = post_json_inner(endpoint, path, body, receive_timeout_ms);
         // SAFETY: same as above.
         let elapsed_ms = unsafe { GetTickCount64() }.saturating_sub(started) as u32;
 

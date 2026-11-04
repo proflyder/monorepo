@@ -1,6 +1,8 @@
 //! HMAC-SHA256 message shapes and constant-time comparison.
 
 use hmac::{Hmac, KeyInit, Mac};
+
+use crate::purpose::Purpose;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
@@ -29,4 +31,28 @@ pub fn claim_mac_message(machine: &str, nonce: &str) -> String {
 pub fn grant_mac_message(machine: &str, nonce: &str, granted: bool, grant_id: &str) -> String {
     let flag = if granted { '1' } else { '0' };
     format!("grant\n{machine}\n{nonce}\n{flag}\n{grant_id}")
+}
+
+/// Purpose-aware claim message: `<v1 claim>\n<purpose>`.
+pub fn claim_mac_message_for_purpose(machine: &str, nonce: &str, purpose: Purpose) -> String {
+    format!(
+        "{}\n{}",
+        claim_mac_message(machine, nonce),
+        purpose.as_str()
+    )
+}
+
+/// Purpose-aware grant message: `<v1 grant>\n<purpose>`.
+pub fn grant_mac_message_for_purpose(
+    machine: &str,
+    nonce: &str,
+    granted: bool,
+    grant_id: &str,
+    purpose: Purpose,
+) -> String {
+    format!(
+        "{}\n{}",
+        grant_mac_message(machine, nonce, granted, grant_id),
+        purpose.as_str()
+    )
 }

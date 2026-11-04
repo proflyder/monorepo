@@ -2,8 +2,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Portable wakegrant v1 client logic. No Windows dependency: it is compiled and
-# tested on the host without a Windows toolchain.
+# Portable wakegrant client logic (v1 and purpose-aware logon/unlock). No
+# Windows dependency: it is compiled and tested on the host without a Windows
+# toolchain.
 rust_library(
     name = "logon_protocol",
     srcs = glob(["src/**/*.rs"]),

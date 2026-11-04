@@ -1,7 +1,10 @@
 //! Parsing and MAC verification of the service responses.
 
-use crate::auth::{constant_time_equal, grant_mac_message, hmac_sha256_b64};
+use crate::auth::{
+    constant_time_equal, grant_mac_message, grant_mac_message_for_purpose, hmac_sha256_b64,
+};
 use crate::json::{self, JsonValue, find_value, get_bool, get_string};
+use crate::purpose::Purpose;
 use crate::{Error, b64_decode};
 
 const NONCE_BYTES: usize = 32;
@@ -67,10 +70,35 @@ impl ClaimResult {
     }
 }
 
-/// Verifies the server response for `nonce` with `key`. Only
+/// Verifies the v1 server response for `nonce` with `key`. Only
 /// [`ClaimOutcome::Granted`] may arm the provider; every other outcome is
 /// fail-closed.
 pub fn verify_claim_response(body: &str, key: &[u8], machine: &str, nonce: &str) -> ClaimResult {
+    verify_claim_response_with(body, key, |granted, grant_id| {
+        grant_mac_message(machine, nonce, granted, grant_id)
+    })
+}
+
+/// Verifies a purpose-aware server response. The MAC must be computed over the
+/// same purpose that was sent in the claim, so a logon grant cannot be
+/// accepted for an unlock and vice versa.
+pub fn verify_claim_response_for_purpose(
+    body: &str,
+    key: &[u8],
+    machine: &str,
+    nonce: &str,
+    purpose: Purpose,
+) -> ClaimResult {
+    verify_claim_response_with(body, key, |granted, grant_id| {
+        grant_mac_message_for_purpose(machine, nonce, granted, grant_id, purpose)
+    })
+}
+
+fn verify_claim_response_with(
+    body: &str,
+    key: &[u8],
+    mac_message: impl Fn(bool, &str) -> String,
+) -> ClaimResult {
     let object = match json::parse(body) {
         Ok(object) => object,
         Err(error) => return ClaimResult::fail(ClaimOutcome::Malformed, error.detail()),
@@ -110,7 +138,7 @@ pub fn verify_claim_response(body: &str, key: &[u8], machine: &str, nonce: &str)
 
     // Compare the MAC as bytes; encoding the expected value and decoding it
     // again would only add a step that cannot fail.
-    let expected = hmac_sha256_b64(key, &grant_mac_message(machine, nonce, granted, grant_id));
+    let expected = hmac_sha256_b64(key, &mac_message(granted, grant_id));
     let expected = match b64_decode(&expected) {
         Ok(expected) => expected,
         Err(_) => return ClaimResult::fail(ClaimOutcome::InvalidMac, "local mac encoding failed"),

@@ -1,5 +1,7 @@
 //! Request bodies for `POST /v1/challenge` and `POST /v1/claim`.
 
+use crate::purpose::Purpose;
+
 /// Escapes a string for embedding in a JSON string literal. Only the
 /// characters the protocol can produce are escaped; control bytes become
 /// lowercase `\u00XX`, byte for byte as documented.
@@ -26,10 +28,34 @@ pub fn challenge_request_json(machine: &str) -> String {
     format!("{{\"machine\":\"{}\"}}", json_escape(machine))
 }
 
+/// v1 claim body, no `purpose` and no long-poll.
 pub fn claim_request_json(machine: &str, nonce: &str) -> String {
     format!(
         "{{\"machine\":\"{}\",\"nonce\":\"{}\",\"mac\":\"\"}}",
         json_escape(machine),
         json_escape(nonce)
     )
+}
+
+/// Purpose-aware claim body. `wait_seconds` is `Some` only for the unlock
+/// long-poll; the protocol allows it exclusively together with `purpose`.
+pub fn claim_request_json_for_purpose(
+    machine: &str,
+    nonce: &str,
+    mac: &str,
+    purpose: Purpose,
+    wait_seconds: Option<u32>,
+) -> String {
+    let mut body = format!(
+        "{{\"machine\":\"{}\",\"nonce\":\"{}\",\"purpose\":\"{}\",\"mac\":\"{}\"",
+        json_escape(machine),
+        json_escape(nonce),
+        purpose.as_str(),
+        json_escape(mac)
+    );
+    if let Some(wait_seconds) = wait_seconds {
+        body.push_str(&format!(",\"waitSeconds\":{wait_seconds}"));
+    }
+    body.push('}');
+    body
 }
