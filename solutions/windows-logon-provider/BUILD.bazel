@@ -1,0 +1,51 @@
+load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Cargo workspace manifest and lock are the source of truth for crate_universe;
+# crate-universe.lock is the generated Bazel lock (see MODULE.bazel).
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+    "crate-universe.lock",
+    "pe_artifacts.py",
+])
+
+# Host-portable targets: protocol and the provider's safe core.
+_HOST_TARGETS = [
+    "//solutions/windows-logon-provider/crates/protocol:logon_protocol",
+    "//solutions/windows-logon-provider/crates/protocol:logon_protocol_tests",
+    "//solutions/windows-logon-provider/crates/provider:provider_host",
+    "//solutions/windows-logon-provider/crates/provider:provider_host_tests",
+]
+
+# Artifacts of the Windows cross-build; only //platform/bazel/windows:x86_64_windows.
+_WINDOWS_TARGETS = [
+    "//solutions/windows-logon-provider/crates/provider:provider",
+    "//solutions/windows-logon-provider/crates/cp-selftest:cp-selftest",
+]
+
+# fmt/clippy run once per platform on local targets only; warnings fail.
+rustfmt_test(
+    name = "rustfmt",
+    targets = _HOST_TARGETS,
+)
+
+rust_clippy_test(
+    name = "clippy",
+    targets = _HOST_TARGETS,
+)
+
+# The `platform` attribute transitions only the linted targets; the test itself
+# still runs on the host, which is what makes a Windows cross-clippy possible.
+rustfmt_test(
+    name = "rustfmt_windows",
+    platform = "//platform/bazel/windows:x86_64_windows",
+    targets = _WINDOWS_TARGETS,
+)
+
+rust_clippy_test(
+    name = "clippy_windows",
+    platform = "//platform/bazel/windows:x86_64_windows",
+    targets = _WINDOWS_TARGETS,
+)

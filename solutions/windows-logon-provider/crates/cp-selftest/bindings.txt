@@ -1,0 +1,15 @@
+CLSCTX_INPROC_SERVER
+COINIT_APARTMENTTHREADED
+CPUS_CREDUI
+CPUS_LOGON
+CoCreateInstance
+CoInitializeEx
+CoUninitialize
+E_FAIL
+E_NOTIMPL
+GetModuleFileNameW
+GetProcAddress
+IClassFactory
+ICredentialProvider
+LoadLibraryW
+S_OK

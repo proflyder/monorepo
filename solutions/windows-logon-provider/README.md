@@ -19,10 +19,25 @@ Service URL, имя машины и учётная запись задаёт п�
 ## Как это работает
 
 1. LogonUI создаёт провайдера и вызывает `SetUsageScenario`. Гранты
-   запрашиваются **только** в `CPUS_LOGON` (холодная загрузка → вход).
-   `CPUS_UNLOCK_WORKSTATION` принимается, но ничего не делает: ни плитки, ни
-   фонового потока, ни сети, `GetCredentialCount` = 0 — грант никогда не
-   должен разблокировать уже работающий ПК. Остальные сценарии → `E_NOTIMPL`.
+   запрашиваются **только** в `CPUS_LOGON`. Windows 11 вызывает
+   `CPUS_LOGON` и после `LockWorkStation`, поэтому сценария недостаточно:
+   до запуска потока проверяются два гейта.
+   - **Сессия пользователя.** `WTSEnumerateSessionsW` +
+     `WTSQuerySessionInformationW` ищут любую сессию настроенной учётной
+     записи в любом состоянии (Active, Disconnected и т.д.); сессия 0 и
+     пустое имя игнорируются. Сравнивается только имя пользователя без учёта
+     регистра: домен из WTS (NetBIOS, полное имя, учётка Microsoft) может не
+     совпасть с настроенным, и лишний отказ здесь безопаснее лишнего входа.
+     Нашлась — ни плитки, ни потока, ни сети, `GetCredentialCount` = 0, в
+     журнале `scenario cpus=logon gate=session_exists`. Ошибка WTS-вызова —
+     fail closed, `gate=session_query_failed`.
+   - **Аптайм.** Плитка взводится только когда `GetTickCount64()` меньше
+     10 минут от загрузки; иначе `scenario cpus=logon gate=uptime`.
+
+   `CPUS_UNLOCK_WORKSTATION` принимается, но ничего не делает: ни плитки,
+   ни фонового потока, ни сети, `GetCredentialCount` = 0. Остальные
+   сценарии → `E_NOTIMPL`. Грант никогда не должен разблокировать уже
+   работающий ПК.
 2. Провайдер запускает **один** фоновый поток (`CreateThread`, не UI-поток).
    Бюджет — 90 секунд от загрузки провайдера, интервал опроса 2 секунды,
    WinHTTP-таймауты 2/2/4/4 с, `WINHTTP_ACCESS_TYPE_NO_PROXY`, без редиректов
@@ -46,16 +61,20 @@ Service URL, имя машины и учётная запись задаёт п�
 
 | файл | назначение |
 |---|---|
-| `src/protocol/` | переносимый слой: base64, HMAC-сообщения, разбор JSON, проверка MAC, конфиг |
-| `src/provider.cpp` | `ICredentialProvider`, общее состояние `Session`, бюджет |
-| `src/credential.cpp` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |
-| `src/worker.cpp` | единственный фоновый поток challenge/claim |
-| `src/config.cpp` | реестр, DPAPI, `FailCount`/`Disabled` |
-| `src/http.cpp`, `src/log.cpp`, `src/hmac_bcrypt.cpp` | WinHTTP, журнал, HMAC через BCrypt |
-| `src/helpers.cpp` | упаковка `KERB_INTERACTIVE_UNLOCK_LOGON` (MIT, см. `THIRD-PARTY-NOTICES.md`) |
-| `src/selftest/cp_selftest.cpp` | `cp-selftest.exe`: загрузка провайдера вне LogonUI |
+| `crates/protocol/` | переносимый слой: base64, HMAC-сообщения, разбор JSON, проверка MAC, конфиг |
+| `crates/provider/src/provider.rs` | `ICredentialProvider`, общее состояние `Session`, бюджет |
+| `crates/provider/src/gate.rs` | гейты «нет сессии пользователя» (WTS) и «аптайм < 10 минут» |
+| `crates/provider/src/credential.rs` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |
+| `crates/provider/src/worker.rs` | единственный фоновый поток challenge/claim |
+| `crates/provider/src/config.rs` | реестр, DPAPI, `FailCount`/`Disabled` |
+| `crates/provider/src/http.rs`, `log.rs` | WinHTTP, журнал; HMAC — из crates.io |
+| `crates/provider/src/kerb.rs` | упаковка `KERB_INTERACTIVE_UNLOCK_LOGON` (MIT, см. `THIRD-PARTY-NOTICES.md`) |
+| `crates/provider/src/dll.rs` | `DllGetClassObject`, `DllCanUnloadNow` |
+| `crates/provider/src/bindings.rs`, `crates/*/bindings.txt` | сгенерированные Win32-привязки и их фильтры |
+| `regen-bindings.sh` | перегенерация `bindings.rs` (вручную, не в сборке) |
+| `crates/cp-selftest/` | `cp-selftest.exe`: загрузка провайдера вне LogonUI |
 | `install.ps1`, `set-secret.ps1`, `uninstall.ps1`, `status.ps1` | установка и обслуживание |
-| `build.sh`, `run-tests.sh`, `tests/`, `test_install_scripts.py`, `test_oci_scripts.py` | сборка и переносимые тесты |
+| `build.sh`, `run-tests.sh`, `pe_artifacts.py` | сборка Bazel, host-тесты и проверка PE |
 | `VERSION`, `publish-oci.sh`, `fetch.sh` | версия и публикация/получение OCI-артефакта |
 
 CLSID провайдера (зафиксирован, менять нельзя без правки всех скриптов и
@@ -80,30 +99,54 @@ CLSID провайдера (зафиксирован, менять нельзя 
 `{"version":1,"password":"…","key":"<base64 32 байта>"}`. Каталог и файл:
 System + Administrators полный доступ, больше никого.
 
-## Сборка (macOS, без Visual Studio)
+## Сборка (macOS/Linux, без Visual Studio)
 
-Нужен [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) `20261020`
-(LLVM 23.1.4), архив `llvm-mingw-20261020-ucrt-macos-universal.tar.xz`,
-sha256 `e9c13e4ede38e715003ffc674d4d00a1088df8235439d1f0c16188ff0704c17e`
-(совпадает с digest из GitHub API релиза). Положить в
-`secrets/local-tools/llvm-mingw/` (каталог в Git не попадает) или задать
-`LLVM_MINGW=/path/to/root` (или `LLVM_MINGW_BIN=/path/to/bin`).
+Провайдер — Rust: `rules_rust` собирает `x86_64-pc-windows-gnu`, линкует
+герметичный zig 0.14.1 `cc_toolchain` из `MODULE.bazel` (mingw-w64/UCRT,
+статический CRT). Windows SDK, Visual Studio и отдельный mingw-тулчейн не
+нужны; Bazel и Bazelisk — корневой build contract репозитория. Локально Bazelisk лежит в
+`secrets/local-tools/bazelisk` (скрипты находят его сами), либо `bazel` на
+`PATH`/`BAZELISK`.
 
 ```bash
-solutions/windows-logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe, out/hmac-selftest.exe
-solutions/windows-logon-provider/run-tests.sh     # переносимые unit-тесты на clang++
+solutions/windows-logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe
+solutions/windows-logon-provider/run-tests.sh     # host-тесты, rustfmt/clippy (host и Windows)
 ```
 
-`build.sh` собирает x86_64 с `-static -static-libgcc -O2`, ASLR (`--dynamicbase`,
-`--high-entropy-va`) и NX, экспортирует только `DllGetClassObject` и
-`DllCanUnloadNow` и проверяет, что DLL импортирует только системные
-библиотеки (WinHTTP, crypt32, bcrypt, secur32, advapi32, shlwapi, ole32,
-KERNEL32 и api-ms-win-crt-*).
+`build.sh` собирает цель
+`//solutions/windows-logon-provider/crates/provider:provider` под платформой
+`//platform/bazel/windows:x86_64_windows`, копирует артефакты и делает PE
+воспроизводимым (обнуляет TimeDateStamp). Затем `pe_artifacts.py` проверяет,
+что DLL экспортирует ровно `DllGetClassObject` и `DllCanUnloadNow` и
+импортирует только системные библиотеки (KERNEL32, ntdll, advapi32,
+combase, oleaut32, rpcrt4, crypt32, secur32, shlwapi, userenv,
+winhttp, ws2_32, wtsapi32, bcryptprimitives и api-ms-win-*); всё остальное —
+ошибка.
+Проверка не требует Windows-тулчейна на хосте.
+
+`run-tests.sh` запускает `bazel test //solutions/windows-logon-provider/...`:
+переносимые protocol-векторы и безопасное ядро провайдера на host, плюс
+rustfmt/clippy для host- и Windows-целей (aspect переключается на Windows
+платформу, поэтому проверяется настоящий `#[cfg(windows)]`-код).
 
 `out/cp-selftest.exe` загружает провайдера по CLSID (или из DLL рядом с exe,
 если он ещё не зарегистрирован) и печатает число полей и плиток. Он запускает
 и сразу останавливает фоновый поток, поэтому проверять им стоит только когда
 грант не ожидается.
+
+### Win32-привязки
+
+`crates/*/src/bindings.rs` сгенерированы `windows-bindgen 0.63.0` из фильтров
+`crates/*/bindings.txt` (`--no-comment --implement`); поэтому в зависимостях
+только `windows-core` и `windows-link`, без крейта `windows`. Генерация не
+входит в сборку. После изменения фильтров:
+
+```bash
+solutions/windows-logon-provider/regen-bindings.sh
+```
+
+Скрипт собирает pinned bindgen во временном cargo-проекте, перезаписывает оба
+`bindings.rs` и прогоняет `rustfmt`; файлы коммитятся вместе с фильтрами.
 
 ## Публикация и установка из GHCR
 
@@ -117,8 +160,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 ```
 
 Тип артефакта — `application/vnd.<owner>.windows-logon-provider.v1`; файлы:
-`RicardoKompLogon.dll`, `cp-selftest.exe`, `hmac-selftest.exe` и
-`SHA256SUMS`. Тег `<VERSION>` неизменяем по содержимому: повторная публикация
+`RicardoKompLogon.dll`, `cp-selftest.exe` и `SHA256SUMS`. Тег `<VERSION>` неизменяем по содержимому: повторная публикация
 с тем же `SHA256SUMS` — успешный no-op, с другим — ошибка. Поэтому релиз
 делается сменой `VERSION`. Provenance attestation создаётся для digest
 опубликованного артефакта (`push-to-registry`) и для файла DLL.
@@ -127,7 +169,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 
 ```bash
 # нужны oras и авторизованный gh; oras можно положить в secrets/local-tools/
-solutions/windows-logon-provider/fetch.sh 1.0.0
+solutions/windows-logon-provider/fetch.sh 1.1.0
 solutions/windows-logon-provider/fetch.sh sha256:<digest>   # рекомендуемый pin
 ```
 
@@ -179,6 +221,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 
 ```
 2026-11-03T21:44:12.123Z pid=912 tid=913 provider_load
+2026-11-03T21:44:12.128Z pid=912 tid=913 scenario cpus=logon gate=ok
 2026-11-03T21:44:12.130Z pid=912 tid=1204 worker phase=start budget_ms=90000
 2026-11-03T21:44:12.400Z pid=912 tid=1204 grant result=granted grant_id=… ms=41 elapsed_ms=270
 2026-11-03T21:44:12.401Z pid=912 tid=1204 armed ok=1
@@ -198,7 +241,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
   4 с и продолжает; на реальный сценарий (грант выдан до Wake-on-LAN) это не
   влияет — первый claim успевает раньше.
 - `SetUsageScenario` не блокирует вход: `CPUS_UNLOCK_WORKSTATION` молча
-  ничего не делает (без сети и плитки); грант выдаётся только для `CPUS_LOGON`.
+  ничего не делает (без сети и плитки); `CPUS_LOGON` дополнительно требует
+  отсутствия сессии настроенного пользователя и аптайма меньше 10 минут.
 - `Disabled` снимается только переустановкой (`install.ps1` сбрасывает
   `FailCount` и `Disabled`) или правкой реестра.
 - Выключение провайдера не влияет на обычный вход по PIN.

@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Portable wakegrant v1 client logic. No Windows dependency: it is compiled and
+# tested on the host without a Windows toolchain.
+rust_library(
+    name = "logon_protocol",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    deps = [
+        "@logon_crates//:hmac",
+        "@logon_crates//:sha2",
+        "@logon_crates//:subtle",
+        "@logon_crates//:zeroize",
+    ],
+)
+
+# The protocol suite, including the golden HMAC
+# vectors from packages/contracts/wakegrant/PROTOCOL.md.
+rust_test(
+    name = "logon_protocol_tests",
+    srcs = ["tests/protocol.rs"],
+    edition = "2024",
+    deps = [":logon_protocol"],
+)

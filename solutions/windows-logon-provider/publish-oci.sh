@@ -94,7 +94,6 @@ file_path() {
 
 file_path RicardoKompLogon.dll >/dev/null
 file_path cp-selftest.exe >/dev/null
-file_path hmac-selftest.exe >/dev/null
 CHECKSUMS="$(file_path SHA256SUMS)"
 
 # Verify the checksums before publishing, so a broken artifact never reaches
@@ -163,10 +162,9 @@ push_artifact() {
       --annotation "org.opencontainers.image.revision=$commit" \
       --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       --annotation "org.opencontainers.image.source=${source_url}" \
-      --annotation "io.github.windows-logon-provider.toolchain=llvm-mingw-20261020" \
+      --annotation "io.github.windows-logon-provider.toolchain=bazel-rules_rust-zig-x86_64-windows-gnu" \
       "RicardoKompLogon.dll:application/vnd.microsoft.portable-executable" \
       "cp-selftest.exe:application/vnd.microsoft.portable-executable" \
-      "hmac-selftest.exe:application/vnd.microsoft.portable-executable" \
       "SHA256SUMS:text/plain"
   )
 }

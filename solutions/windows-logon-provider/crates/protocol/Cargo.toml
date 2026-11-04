@@ -1,0 +1,13 @@
+[package]
+name = "logon_protocol"
+description = "Portable wakegrant v1 client-side protocol logic for the Windows logon provider"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[dependencies]
+hmac = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+zeroize = { workspace = true }

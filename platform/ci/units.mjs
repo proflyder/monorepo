@@ -815,9 +815,10 @@ export const config = {
     },
 
     // ----------------------------------------------------------- Native --------
-    // Native units: the Windows logon provider is a repository-script C++
-    // cross-build; Pulsar's station daemon is cross-built with Bazel and its
-    // installer/radio/ssh use their own scripts. A same-repo PR publishes the
+    // Native units: the Windows logon provider is a repository-script Bazel
+    // cross-build (rules_rust + hermetic zig cc_toolchain); Pulsar's station
+    // daemon is cross-built with Bazel and its installer/radio/ssh use their
+    // own scripts. A same-repo PR publishes the
     // release-shaped OCI artifact under `tree-<hash>` with provenance; a push
     // to `develop` promotes that digest to the release tags (deploy-home) or
     // rebuilds on a missing/unverified tree tag (DECISIONS 36).
@@ -838,7 +839,14 @@ export const config = {
       id: "logon-provider",
       platform: "native",
       title: "solutions/windows-logon-provider (Windows credential provider)",
-      paths: ["solutions/windows-logon-provider/**"],
+      // The Windows target platform and the hermetic zig toolchain are part of
+      // the build contract: changing either must rebuild and publish the unit.
+      paths: [
+        "solutions/windows-logon-provider/**",
+        "platform/bazel/windows/**",
+        "platform/bazel/zig/**",
+        "MODULE.bazel",
+      ],
       native: {
         workdir: "solutions/windows-logon-provider",
         kind: "script",
@@ -847,22 +855,12 @@ export const config = {
         artifacts: [
           "out/RicardoKompLogon.dll",
           "out/cp-selftest.exe",
-          "out/hmac-selftest.exe",
         ],
         checksums: "out/SHA256SUMS",
         publish_script: "solutions/windows-logon-provider/publish-oci.sh",
         publish_repository: "ghcr.io/proflyder/windows-logon-provider",
         publish_tags: ["{version}", "sha-{commit12}"],
         publish_attest_glob: "RicardoKompLogon.dll",
-        toolchain: {
-          name: "llvm-mingw",
-          version: "20261020",
-          // GitHub release API `digest` for this asset (Linux x86_64, same release
-          // as the owner's macOS toolchain). Pinned here, verified before use.
-          url: "https://github.com/mstorsjo/llvm-mingw/releases/download/20261020/llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64.tar.xz",
-          sha256: "55064b60b991a1e1e8090b8c2f84e82b22cfe5903d12c159d65064cf5e8ae335",
-          root: "llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64",
-        },
       },
     },
 

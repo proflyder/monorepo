@@ -6,6 +6,19 @@ module(
 bazel_dep(name = "rules_go", version = "0.65.0")
 bazel_dep(name = "gazelle", version = "0.54.0")
 bazel_dep(name = "rules_rust", version = "0.75.0")
+
+# rules_rust omits the *-windows-gnu triples because Bazel cannot distinguish
+# them from *-windows-msvc through @platforms constraints. The credential
+# provider builds only the gnu ABI, so two small patches add the triple back and
+# gate the MSVC-only cdylib import library; see the patch headers.
+single_version_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = [
+        "//platform/bazel/windows:rules_rust_windows_gnu_triples.patch",
+        "//platform/bazel/windows:rules_rust_windows_gnu_rustc.patch",
+    ],
+)
 bazel_dep(name = "rules_proto", version = "7.1.0")
 
 # Target constraints for the Linux-only Pulsar Rust targets.
@@ -110,6 +123,9 @@ rust.toolchain(
     extra_target_triples = [
         "aarch64-unknown-linux-gnu",
         "armv7-unknown-linux-gnueabihf",
+        # Windows credential provider (solutions/windows-logon-provider); the
+        # platform that selects it is //platform/bazel/windows:x86_64_windows.
+        "x86_64-pc-windows-gnu",
     ],
     versions = ["1.99.1"],
 )
@@ -193,9 +209,9 @@ http_archive(
     url = "https://github.com/xiph/opus/archive/22244de5a79bd1d6d623c32e72bf1954b56235be.tar.gz",
 )
 
-# Hermetic zig 0.14.1 cc toolchains for the two station ABIs. Only these two
-# target-constrained toolchains are registered, so host builds keep using the
-# host compiler. See platform/bazel/zig/.
+# Hermetic zig 0.14.1 cc toolchains for the two station ABIs and the Windows
+# provider. Only these target-constrained toolchains are registered, so host
+# builds keep using the host compiler. See platform/bazel/zig/.
 bazel_dep(name = "rules_cc", version = "0.2.17")
 
 zig_sdk_repository = use_repo_rule("//platform/bazel/zig:repositories.bzl", "zig_sdk_repository")
@@ -205,6 +221,7 @@ zig_sdk_repository(name = "zig_0_14_1")
 register_toolchains(
     "@zig_0_14_1//:aarch64_toolchain",
     "@zig_0_14_1//:armhf_toolchain",
+    "@zig_0_14_1//:windows_x86_64_toolchain",
 )
 
 # External crates of the Pulsar Cargo workspace. Cargo.lock stays the source of
@@ -225,6 +242,25 @@ crate.from_cargo(
     ],
 )
 use_repo(crate, "pulsar_crates")
+
+# Windows Credential Provider Cargo workspace (solutions/windows-logon-provider).
+# It is a separate workspace from Pulsar; crate-universe.lock is its generated
+# Bazel lock next to Cargo.lock. Host triples keep the portable protocol tests
+# buildable on macOS/Linux, the windows triple builds the cdylib.
+crate.from_cargo(
+    name = "logon_crates",
+    cargo_lockfile = "//solutions/windows-logon-provider:Cargo.lock",
+    lockfile = "//solutions/windows-logon-provider:crate-universe.lock",
+    manifests = ["//solutions/windows-logon-provider:Cargo.toml"],
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "logon_crates")
 
 # ---------------------------------------------------------------------------
 # Android / Kotlin (projects/mobile/android)
