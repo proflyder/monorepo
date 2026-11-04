@@ -739,6 +739,20 @@ test("deploy: hermes change selects its images", () => {
   });
 });
 
+test("deploy: hermes Dockerfile change deploys the hermes unit", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["projects/home-assistant/deploy/images/hermes/Dockerfile"]);
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
+});
+
+test("deploy: hermes upstream revision bump deploys the hermes unit", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["projects/home-assistant/deploy/images/hermes/revision"]);
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
+});
+
 test("deploy: voice-proxy solution change runs its go unit and deploys hermes", () => {
   const config = affected.loadConfig();
   const result = routeReal(["solutions/voice-proxy/app/run.go"]);

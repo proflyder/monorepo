@@ -4,9 +4,10 @@ PVE_VERSION=9.2.24
 MATTER_ADDON_VERSION=9.2.0
 MUSIC_ASSISTANT_ADDON_VERSION=2.10.8
 # Hermes runtime images are built and pushed by the `hermes` CI unit
-# (`projects/home-assistant/deploy/images/build-and-push.sh`). `hermes` is a
-# Docker build from HERMES_REVISION; `voice-proxy`, `health-exporter` and
-# `home-deploy` are Bazel/rules_oci images (distroless). deploy-home then calls
+# (`projects/home-assistant/deploy/images/build-and-push.sh`) from the upstream
+# revision and Dockerfile in `projects/home-assistant/deploy/images/hermes/`
+# (see `revision` there); `voice-proxy`, `health-exporter` and `home-deploy` are
+# Bazel/rules_oci images (distroless). deploy-home then calls
 # `home-deploy hermes rollout`, which sets the pushed digests on the `runtime` release,
 # runs the voice smoke checks and rolls back on failure. The values below
 # record the last reviewed pins; the live release is the source of truth.
@@ -27,7 +28,6 @@ OPENBAO_IMAGE_DIGEST=sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce
 EXTERNAL_SECRETS_CHART_VERSION=2.14.0
 EXTERNAL_SECRETS_IMAGE_VERSION=v2.14.0
 EXTERNAL_SECRETS_IMAGE_DIGEST=sha256:10608eb53e636e744903d5f3657a4d9c44e28d9d9c181b73e07bc7dd2e6884dc
-HERMES_REVISION=bf0203a794a07aac3ff764972ab9087baa4e4f4e
 # Cloudflare Tunnel sidecar for the currency-bot webhook. Pinned by tag and
 # manifest-list digest; renovate-style bumps are a reviewed change here.
 CLOUDFLARED_IMAGE=cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba

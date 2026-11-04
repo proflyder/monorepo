@@ -881,6 +881,27 @@ Pulsar собирается release-shaped на каждом PR, затраги�
 версией из `VERSION`, radio и `SHA256SUMS`; тег версии создаётся только при
 merge с изменением `VERSION`.
 
+### Воспроизводимая сборка Hermes
+
+`hermes` — единственный образ деплоя, собираемый Dockerfile'ом. Его собирает
+общий скрипт `projects/home-assistant/deploy/images/hermes/build.sh`, который
+вызывают и PR CI (`_images.yml`), и fallback `build-and-push.sh`: запиненные по
+digest базовые образы, apt только из snapshot Debian и `SOURCE_DATE_EPOCH` =
+время upstream-коммита, а Buildx переписывает mtime слоёв
+(`rewrite-timestamp=true`). Поэтому две сборки одной ревизии дают один digest и
+неподвижный образ не вызывает rollout.
+
+```bash
+# две сборки без кэша в разные каталоги → сравнение digest'ов
+projects/home-assistant/deploy/images/hermes/verify-reproducible.sh
+# ожидается «reproducible: sha256:…»
+```
+
+Обновление Hermes — bump `projects/home-assistant/deploy/images/hermes/revision`
+(и при необходимости digest'ов баз и `DEBIAN_SNAPSHOT` в `Dockerfile`); путь
+`projects/home-assistant/deploy/images/hermes/**` привязан к деплой-юниту
+`hermes`, так что изменение доезжает до кластера.
+
 Как понять, что использовал деплой:
 
 * вкладка Actions → прогон `deploy-home` → summary job'а

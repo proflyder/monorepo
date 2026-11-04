@@ -502,6 +502,9 @@ export const config = {
       title: "projects/home-assistant/hermes",
       paths: [
         "projects/home-assistant/hermes/**",
+        // The Dockerfile, the pinned upstream `revision`, the reproducible
+        // build wrapper and its verification script are this image's inputs.
+        "projects/home-assistant/deploy/images/hermes/**",
         // The voice-proxy Go solution and the shared clients it compiles into
         // the deployed binary. The `voice-proxy` go unit runs the tests; this
         // unit owns the deploy. `packages/go/**` is explicit because a deploy

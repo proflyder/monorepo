@@ -5,7 +5,8 @@ name: _images
 #
 #   bazel  - hermetic distroless images assembled by rules_oci from the Go
 #            binaries (//projects/home/kubernetes/scheduler:<image>_image)
-#   docker - Dockerfile-based images (the Hermes gateway)
+#   docker - Dockerfile-based images (the Hermes gateway), built reproducibly
+#            through `projects/home-assistant/deploy/images/hermes/build.sh`
 #   mixed  - one deploy unit with both kinds (the Hermes unit: `hermes` from a
 #            Dockerfile plus several Bazel images listed in `bazel_images`)
 #
@@ -117,6 +118,14 @@ jobs:
           test -x "$binary" || { echo "missing $binary" >&2; exit 1; }
           echo "HOME_DEPLOY=$PWD/$binary" >> "$GITHUB_ENV"
 
+      # Buildx is what makes the Dockerfile image reproducible: with
+      # `rewrite-timestamp=true` and a fixed SOURCE_DATE_EPOCH it normalises the
+      # layer mtimes and the config `created`/`history` entries. Pinned like the
+      # other actions.
+      - name: Set up Buildx
+        if: inputs.builder == 'docker' || inputs.builder == 'mixed'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
       - name: Build distroless images with Bazel
         if: inputs.builder == 'bazel'
         env:
@@ -165,7 +174,11 @@ jobs:
         run: |
           set -euo pipefail
           read -r -a images <<< "${{ inputs.images }}"
-          revision=$(sed -n 's/^HERMES_REVISION=//p' projects/home/kubernetes/versions.sh)
+          revision=$(tr -d '[:space:]' < projects/home-assistant/deploy/images/hermes/revision)
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "invalid hermes revision in projects/home-assistant/deploy/images/hermes/revision: '$revision'" >&2
+            exit 1
+          fi
           for image in "${images[@]}"; do
             case "$image" in
               hermes)
@@ -174,26 +187,34 @@ jobs:
                 mkdir -p "$RUNNER_TEMP/hermes"
                 git -C "$RUNNER_TEMP/hermes-src" archive "$revision" \
                   | tar -x -C "$RUNNER_TEMP/hermes"
-                docker build \
-                  -f projects/home-assistant/deploy/images/hermes/Dockerfile \
-                  -t "ghcr.io/proflyder/hermes:${revision:0:12}" \
-                  "$RUNNER_TEMP/hermes"
+                # One build command for PR CI and deploy-home (hermes/build.sh):
+                # pinned base digests, the Debian snapshot and SOURCE_DATE_EPOCH
+                # plus `rewrite-timestamp` keep the digest identical, so an
+                # unchanged revision does not move the image or the rollout.
+                if [[ "$PUSH" == "true" ]]; then
+                  digest=$(projects/home-assistant/deploy/images/hermes/build.sh \
+                    --context "$RUNNER_TEMP/hermes" \
+                    --source-repo "$RUNNER_TEMP/hermes-src" \
+                    --revision "$revision" \
+                    --metadata-file "$RUNNER_TEMP/hermes-metadata.json" \
+                    --push --tag "ghcr.io/proflyder/hermes:${TREE_TAG}")
+                  printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
+                  echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
+                    | tee -a "$GITHUB_STEP_SUMMARY"
+                else
+                  projects/home-assistant/deploy/images/hermes/build.sh \
+                    --context "$RUNNER_TEMP/hermes" \
+                    --source-repo "$RUNNER_TEMP/hermes-src" \
+                    --revision "$revision" \
+                    --oci-dir "$RUNNER_TEMP/hermes-oci"
+                  echo "- \`${image}\`: built, not published" | tee -a "$GITHUB_STEP_SUMMARY"
+                fi
                 ;;
               *)
                 echo "unknown docker image: $image" >&2
                 exit 2
                 ;;
             esac
-            echo "built ghcr.io/proflyder/${image}" | tee -a "$GITHUB_STEP_SUMMARY"
-            if [[ "$PUSH" == "true" ]]; then
-              digest=$(platform/ci/push-image.sh docker \
-                --repository "ghcr.io/proflyder/${image}" \
-                --source "ghcr.io/proflyder/${image}:${revision:0:12}" \
-                --tag "$TREE_TAG")
-              printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
-              echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
-                | tee -a "$GITHUB_STEP_SUMMARY"
-            fi
           done
 
       # One deploy unit can own both image kinds. Every image listed in
@@ -214,7 +235,11 @@ jobs:
             echo "mixed unit without deploy.bazel_images" >&2
             exit 2
           fi
-          revision=$(sed -n 's/^HERMES_REVISION=//p' projects/home/kubernetes/versions.sh)
+          revision=$(tr -d '[:space:]' < projects/home-assistant/deploy/images/hermes/revision)
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "invalid hermes revision in projects/home-assistant/deploy/images/hermes/revision: '$revision'" >&2
+            exit 1
+          fi
           for image in "${images[@]}"; do
             target_root=$(printf '%s' "$bazel_images" \
               | jq -r --arg image "$image" '.[$image] // ""')
@@ -250,26 +275,34 @@ jobs:
                 mkdir -p "$RUNNER_TEMP/hermes"
                 git -C "$RUNNER_TEMP/hermes-src" archive "$revision" \
                   | tar -x -C "$RUNNER_TEMP/hermes"
-                docker build \
-                  -f projects/home-assistant/deploy/images/hermes/Dockerfile \
-                  -t "ghcr.io/proflyder/hermes:${revision:0:12}" \
-                  "$RUNNER_TEMP/hermes"
+                # One build command for PR CI and deploy-home (hermes/build.sh):
+                # pinned base digests, the Debian snapshot and SOURCE_DATE_EPOCH
+                # plus `rewrite-timestamp` keep the digest identical, so an
+                # unchanged revision does not move the image or the rollout.
+                if [[ "$PUSH" == "true" ]]; then
+                  digest=$(projects/home-assistant/deploy/images/hermes/build.sh \
+                    --context "$RUNNER_TEMP/hermes" \
+                    --source-repo "$RUNNER_TEMP/hermes-src" \
+                    --revision "$revision" \
+                    --metadata-file "$RUNNER_TEMP/hermes-metadata.json" \
+                    --push --tag "ghcr.io/proflyder/hermes:${TREE_TAG}")
+                  printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
+                  echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
+                    | tee -a "$GITHUB_STEP_SUMMARY"
+                else
+                  projects/home-assistant/deploy/images/hermes/build.sh \
+                    --context "$RUNNER_TEMP/hermes" \
+                    --source-repo "$RUNNER_TEMP/hermes-src" \
+                    --revision "$revision" \
+                    --oci-dir "$RUNNER_TEMP/hermes-oci"
+                  echo "- \`${image}\`: built, not published" | tee -a "$GITHUB_STEP_SUMMARY"
+                fi
                 ;;
               *)
                 echo "unknown mixed image: $image" >&2
                 exit 2
                 ;;
             esac
-            echo "built ghcr.io/proflyder/${image}" | tee -a "$GITHUB_STEP_SUMMARY"
-            if [[ "$PUSH" == "true" ]]; then
-              digest=$(platform/ci/push-image.sh docker \
-                --repository "ghcr.io/proflyder/${image}" \
-                --source "ghcr.io/proflyder/${image}:${revision:0:12}" \
-                --tag "$TREE_TAG")
-              printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
-              echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
-                | tee -a "$GITHUB_STEP_SUMMARY"
-            fi
           done
 
       # JSON list for the attestation matrix: [{"image":…, "digest":…}].
