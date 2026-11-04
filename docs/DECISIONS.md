@@ -318,6 +318,11 @@
       `<version>`. При отсутствии/непроверенном tree — обычная сборка и
       публикация, путь `build` с пометкой fallback в summary. `deploy-station`
       ставит версию и проверяет digest'ы слоёв.
+    * Любой job, который пишет в GHCR (`crane tag`/`crane push`, `oras
+      push`/`oras tag`, `promote.mjs`, `push-to-registry`), логинится в
+      `ghcr.io` до первой записи. Публичные пакеты читаются анонимно, поэтому
+      без логина падает только PUT манифеста с `UNAUTHORIZED`.
+      `check_units.mjs` проверяет это по workflow-файлам.
     * `ghcr-cleanup.yml` (ежедневно по расписанию; ручной запуск — dry-run по
       умолчанию) через REST API применяет политику хранения по пакету:
       никогда не удаляются новейшая версия, версии с тегами `develop`/`latest`
