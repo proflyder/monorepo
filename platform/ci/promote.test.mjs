@@ -15,11 +15,13 @@ import {
   formatPrebuilt,
   formatSummary,
   imageRef,
+  manifestContent,
   nativeSignerIdentityPattern,
   parseDigest,
   planNativePromotion,
   planPromotion,
   runPromotion,
+  sameManifestContent,
   signerIdentityPattern,
   treeTag,
   verifyArgs,
@@ -30,6 +32,7 @@ const COMMIT = "b".repeat(40);
 const REPO = "acme/home-lab";
 const DIGEST_A = "sha256:" + "1".repeat(64);
 const DIGEST_B = "sha256:" + "2".repeat(64);
+const DIGEST_C = "sha256:" + "3".repeat(64);
 
 function recorder(handlers) {
   const calls = [];
@@ -338,9 +341,10 @@ test("native tag templates expand version and commit", () => {
   assert.throws(() => expandTags(["bad tag"], { version: "v1.2.3", commit: COMMIT }), /invalid publish tag/);
 });
 
-function nativeHandlers({ ref, tree, digest, existing = {} }) {
+function nativeHandlers({ ref, tree, digest, existing = {}, manifests = {}, candidate = null }) {
   const treeRef = `${ref}:tree-${tree}`;
-  const tagged = new Set();
+  const tagged = new Map();
+  const candidateManifest = candidate || artifactManifest();
   // `crane digest <ref>:<tag>` -> args[1]; `crane tag <ref>@<digest> <tag>` -> args[2].
   const tagOf = (args) => String(args[args.length - 1]).slice(
     String(args[args.length - 1]).lastIndexOf(":") + 1,
@@ -354,7 +358,8 @@ function nativeHandlers({ ref, tree, digest, existing = {} }) {
     [
       isCraneTag,
       (command, args) => {
-        tagged.add(tagOf(args));
+        const source = String(args[1]).slice(String(args[1]).lastIndexOf("@") + 1);
+        tagged.set(tagOf(args), parseDigest(source) || digest);
         return "";
       },
     ],
@@ -363,7 +368,7 @@ function nativeHandlers({ ref, tree, digest, existing = {} }) {
       (command, args) => {
         const tag = tagOf(args);
         if (tagged.has(tag)) {
-          return digest;
+          return tagged.get(tag);
         }
         if (Object.hasOwn(existing, tag)) {
           const value = existing[tag];
@@ -373,7 +378,58 @@ function nativeHandlers({ ref, tree, digest, existing = {} }) {
         throw new Error("MANIFEST_UNKNOWN: manifest unknown");
       },
     ],
+    [
+      (command, args) => command === "crane" && args[0] === "manifest",
+      (command, args) => {
+        const target = String(args[1]);
+        if (target === `${ref}@${digest}`) {
+          return candidateManifest;
+        }
+        const tag = target.slice(target.lastIndexOf(":") + 1);
+        if (Object.hasOwn(manifests, tag)) {
+          const value = manifests[tag];
+          if (value instanceof Error) throw value;
+          return value;
+        }
+        throw new Error("MANIFEST_UNKNOWN: manifest unknown");
+      },
+    ],
   ];
+}
+
+const LAYER_DIGESTS = {
+  "RicardoKompLogon.dll": `sha256:${"d".repeat(64)}`,
+  "cp-selftest.exe": `sha256:${"e".repeat(64)}`,
+  "hmac-selftest.exe": `sha256:${"f".repeat(64)}`,
+  SHA256SUMS: `sha256:${"a".repeat(64)}`,
+};
+
+/** Release-shaped manifest; only the annotations differ between rebuilds. */
+function artifactManifest({
+  artifactType = "application/vnd.example.windows-logon-provider.v1",
+  layerDigests = LAYER_DIGESTS,
+  annotations = { "org.opencontainers.image.created": "2026-01-01T00:00:00Z" },
+} = {}) {
+  return JSON.stringify({
+    schemaVersion: 2,
+    mediaType: "application/vnd.oci.image.manifest.v1+json",
+    artifactType,
+    config: {
+      mediaType: "application/vnd.oci.empty.v1+json",
+      digest: `sha256:${"0".repeat(64)}`,
+      size: 2,
+    },
+    layers: Object.entries(layerDigests).map(([title, layerDigest]) => ({
+      mediaType:
+        title.endsWith(".dll") || title.endsWith(".exe")
+          ? "application/vnd.microsoft.portable-executable"
+          : "text/plain",
+      digest: layerDigest,
+      size: 123,
+      annotations: { "org.opencontainers.image.title": title },
+    })),
+    annotations,
+  });
 }
 
 test("native artifact is promoted to version and latest without rebuilding", () => {
@@ -446,10 +502,19 @@ test("unverified native provenance falls back and tags nothing", () => {
   assert.equal(tagsWritten(calls).length, 0);
 });
 
-test("an existing version tag with a different digest is refused", () => {
+test("an existing version tag with different layer content is refused", () => {
   const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const changed = artifactManifest({
+    layerDigests: { ...LAYER_DIGESTS, "pulsar-aarch64.bin": `sha256:${"9".repeat(64)}` },
+  });
   const { calls, exec } = recorder(
-    nativeHandlers({ ref, tree: TREE, digest: DIGEST_A, existing: { "v0.5.1008": DIGEST_B } }),
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "v0.5.1008": DIGEST_B },
+      manifests: { "v0.5.1008": changed },
+    }),
   );
   assert.throws(
     () =>
@@ -462,11 +527,208 @@ test("an existing version tag with a different digest is refused", () => {
         githubRepository: REPO,
         exec,
       }),
-    /already exists with .*release tags are immutable/,
+    /already exists with .*immutable by content/,
   );
   // The conflicting immutable tag was not overwritten, and `latest` was never
   // reached because the version is checked first.
   assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("identical content with different annotations is a no-op", () => {
+  const ref = "ghcr.io/proflyder/windows-logon-provider";
+  // Two builds of the same files: same artifact type and layers, but different
+  // manifest digests because only `created`/`revision` annotations changed.
+  const candidate = artifactManifest({
+    annotations: {
+      "org.opencontainers.image.created": "2026-02-02T00:00:00Z",
+      "org.opencontainers.image.revision": COMMIT,
+    },
+  });
+  const existingManifest = artifactManifest({
+    annotations: {
+      "org.opencontainers.image.created": "2026-01-01T00:00:00Z",
+      "org.opencontainers.image.revision": "c".repeat(40),
+    },
+  });
+  const { calls, exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "1.2.3": DIGEST_B, "sha-bbbbbbbbbbbb": DIGEST_B },
+      manifests: { "1.2.3": existingManifest, "sha-bbbbbbbbbbbb": existingManifest },
+      candidate,
+    }),
+  );
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "1.2.3",
+    tags: ["{version}", "sha-{commit12}"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(result.mode, "promoted");
+  assert.equal(result.digest, DIGEST_B);
+  assert.equal(tagsWritten(calls).length, 0);
+  const kept = result.decisions.filter((item) => item.status === "unchanged");
+  assert.deepEqual(kept.map((item) => item.tag), ["1.2.3", "sha-bbbbbbbbbbbb"]);
+  for (const item of kept) {
+    assert.equal(item.digest, DIGEST_B);
+    assert.match(item.detail, /already published with identical content/);
+  }
+  // The digest of the kept version tag is what the summary reports.
+  assert.match(formatNativeSummary(result), /already published with identical content/);
+});
+
+test("latest follows the kept version tag digest, not the candidate", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const candidate = artifactManifest({
+    annotations: { "org.opencontainers.image.created": "2026-02-02T00:00:00Z" },
+  });
+  const existingManifest = artifactManifest({
+    annotations: { "org.opencontainers.image.created": "2026-01-01T00:00:00Z" },
+  });
+  const { calls, exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "v0.5.1008": DIGEST_B, latest: DIGEST_C },
+      manifests: { "v0.5.1008": existingManifest },
+      candidate,
+    }),
+  );
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "v0.5.1008",
+    tags: ["{version}", "latest"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(result.mode, "promoted");
+  assert.equal(result.digest, DIGEST_B);
+  // The version tag was kept; `latest` moves to its digest, not the candidate.
+  assert.deepEqual(tagsWritten(calls), [["crane", "tag", `${ref}@${DIGEST_B}`, "latest"]]);
+  assert.equal(result.decisions.find((item) => item.tag === "latest").status, "moved");
+  assert.equal(result.decisions.find((item) => item.tag === "latest").digest, DIGEST_B);
+});
+
+test("latest is unchanged when it already points at the kept version digest", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const existingManifest = artifactManifest();
+  const { calls, exec } = recorder(
+    nativeHandlers({
+      ref,
+      tree: TREE,
+      digest: DIGEST_A,
+      existing: { "v0.5.1008": DIGEST_B, latest: DIGEST_B },
+      manifests: { "v0.5.1008": existingManifest },
+    }),
+  );
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "v0.5.1008",
+    tags: ["{version}", "latest"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(tagsWritten(calls).length, 0);
+  assert.equal(result.decisions.find((item) => item.tag === "latest").status, "unchanged");
+});
+
+test("a sha tag follows the same content identity rule", () => {
+  const ref = "ghcr.io/proflyder/windows-logon-provider";
+  const changed = artifactManifest({
+    layerDigests: { ...LAYER_DIGESTS, SHA256SUMS: `sha256:${"8".repeat(64)}` },
+  });
+  // Same content under a different digest is kept.
+  {
+    const { calls, exec } = recorder(
+      nativeHandlers({
+        ref,
+        tree: TREE,
+        digest: DIGEST_A,
+        existing: { "sha-bbbbbbbbbbbb": DIGEST_B },
+        manifests: { "sha-bbbbbbbbbbbb": artifactManifest() },
+      }),
+    );
+    const result = planNativePromotion({
+      repository: ref,
+      tree: TREE,
+      commit: COMMIT,
+      version: "1.2.3",
+      tags: ["sha-{commit12}"],
+      githubRepository: REPO,
+      exec,
+    });
+    assert.equal(result.mode, "promoted");
+    assert.equal(tagsWritten(calls).length, 0);
+    assert.equal(result.decisions.find((item) => item.tag === "sha-bbbbbbbbbbbb").status, "unchanged");
+  }
+  // Different content under the same sha tag is a hard failure.
+  {
+    const { exec } = recorder(
+      nativeHandlers({
+        ref,
+        tree: TREE,
+        digest: DIGEST_A,
+        existing: { "sha-bbbbbbbbbbbb": DIGEST_B },
+        manifests: { "sha-bbbbbbbbbbbb": changed },
+      }),
+    );
+    assert.throws(
+      () =>
+        planNativePromotion({
+          repository: ref,
+          tree: TREE,
+          commit: COMMIT,
+          version: "1.2.3",
+          tags: ["sha-{commit12}"],
+          githubRepository: REPO,
+          exec,
+        }),
+      /already exists with .*immutable by content/,
+    );
+  }
+});
+
+test("manifestContent compares ordered layer identity and artifact type", () => {
+  const base = manifestContent(artifactManifest());
+  assert.equal(base.artifactType, "application/vnd.example.windows-logon-provider.v1");
+  assert.deepEqual(base.layers.map((layer) => layer.title), [
+    "RicardoKompLogon.dll",
+    "cp-selftest.exe",
+    "hmac-selftest.exe",
+    "SHA256SUMS",
+  ]);
+  // Manifest-level annotations are not content identity.
+  const annotated = manifestContent(
+    artifactManifest({ annotations: { "org.opencontainers.image.created": "later" } }),
+  );
+  assert.equal(sameManifestContent(base, annotated), true);
+  // Layer order matters.
+  const reordered = manifestContent(
+    artifactManifest({
+      layerDigests: {
+        "cp-selftest.exe": LAYER_DIGESTS["cp-selftest.exe"],
+        "RicardoKompLogon.dll": LAYER_DIGESTS["RicardoKompLogon.dll"],
+        "hmac-selftest.exe": LAYER_DIGESTS["hmac-selftest.exe"],
+        SHA256SUMS: LAYER_DIGESTS.SHA256SUMS,
+      },
+    }),
+  );
+  assert.equal(sameManifestContent(base, reordered), false);
+  // Artifact type matters.
+  const otherType = manifestContent(artifactManifest({ artifactType: "application/vnd.other" }));
+  assert.equal(sameManifestContent(base, otherType), false);
+  assert.throws(() => manifestContent("not json"), /not valid JSON/);
+  assert.throws(() => manifestContent("{}"), /neither layers nor manifests/);
 });
 
 test("an identical existing tag is a no-op", () => {

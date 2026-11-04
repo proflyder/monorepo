@@ -152,7 +152,8 @@ jobs:
   # Build once, deploy the same bytes: on the deploy-home path, promote the
   # artifact the merged PR already built and attested under `tree-<hash>` to the
   # unit's release tags. A missing or unverified tree tag selects `build`;
-  # a version tag that already exists with a different digest fails hard.
+  # release tags are immutable by content: identical layers under an existing
+  # tag (different manifest annotations) is a no-op, different content fails.
   #
   # The job always runs so the build jobs can depend on `mode`; when `promote`
   # is false (PR CI) it only publishes `mode=build`.
