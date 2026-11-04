@@ -1,10 +1,11 @@
 //! Protocol vectors and fail-closed branches from `PROTOCOL.md`.
 
 use logon_protocol::{
-    ClaimOutcome, b64_decode, b64_encode, challenge_request_json, claim_mac_message,
-    claim_request_json, constant_time_equal, endpoint_path, grant_mac_message, hmac_sha256_b64,
-    parse_challenge_response, parse_secret_json, parse_service_url, redact_service_url,
-    validate_config, verify_claim_response,
+    ClaimOutcome, Purpose, b64_decode, b64_encode, challenge_request_json, claim_mac_message,
+    claim_mac_message_for_purpose, claim_request_json, claim_request_json_for_purpose,
+    constant_time_equal, endpoint_path, grant_mac_message, grant_mac_message_for_purpose,
+    hmac_sha256_b64, parse_challenge_response, parse_secret_json, parse_service_url,
+    redact_service_url, validate_config, verify_claim_response, verify_claim_response_for_purpose,
 };
 
 fn byte_range(first: u8, last: u8) -> Vec<u8> {
@@ -165,6 +166,154 @@ fn protocol_vectors() {
         .outcome,
         ClaimOutcome::InvalidMac
     );
+}
+
+/// The purpose-aware vectors pinned in `PROTOCOL.md`, byte for byte.
+#[test]
+fn purpose_aware_protocol_vectors() {
+    let vector = TestVector::new();
+
+    let expected = [
+        (
+            Purpose::Logon,
+            "AMPMcTPW1kuBTUp8sWtF4weIoI/Vtcp0R+cNBK+xdB0=",
+            "kmFSwXXu4g4wylTSIf9DSYht1v28pG4jboomTnocI0k=",
+            "HkwjpcROboJ+1uR7P8Rydoo2JvNFHx8iOEI0BS0G7K8=",
+        ),
+        (
+            Purpose::Unlock,
+            "jCy3/2JoHClgcwP3xBRHbyQNwGOsloT8uKvgu6fR7H0=",
+            "55kYSfTNqLYnhU6jg+WfuZaUkThoZehudbJPPuP/JH0=",
+            "OcN4e3gJUGVCUF8chuwGQ0FnhU9vRJ0HowN3zReozxc=",
+        ),
+    ];
+
+    for (purpose, claim_mac, granted_mac, denied_mac) in expected {
+        assert_eq!(
+            claim_mac_message_for_purpose(vector.machine, vector.nonce, purpose),
+            format!("claim\nkomp\n{}\n{}", vector.nonce, purpose.as_str())
+        );
+        assert_eq!(
+            grant_mac_message_for_purpose(
+                vector.machine,
+                vector.nonce,
+                true,
+                vector.grant_id,
+                purpose
+            ),
+            format!(
+                "grant\nkomp\n{}\n1\n{}\n{}",
+                vector.nonce,
+                vector.grant_id,
+                purpose.as_str()
+            )
+        );
+        assert_eq!(
+            grant_mac_message_for_purpose(vector.machine, vector.nonce, false, "", purpose),
+            format!("grant\nkomp\n{}\n0\n\n{}", vector.nonce, purpose.as_str())
+        );
+
+        assert_eq!(
+            hmac_sha256_b64(
+                &vector.key,
+                &claim_mac_message_for_purpose(vector.machine, vector.nonce, purpose)
+            ),
+            claim_mac
+        );
+        assert_eq!(
+            hmac_sha256_b64(
+                &vector.key,
+                &grant_mac_message_for_purpose(
+                    vector.machine,
+                    vector.nonce,
+                    true,
+                    vector.grant_id,
+                    purpose
+                )
+            ),
+            granted_mac
+        );
+        assert_eq!(
+            hmac_sha256_b64(
+                &vector.key,
+                &grant_mac_message_for_purpose(vector.machine, vector.nonce, false, "", purpose)
+            ),
+            denied_mac
+        );
+
+        let granted = verify_claim_response_for_purpose(
+            &make_claim_body(true, vector.grant_id, granted_mac),
+            &vector.key,
+            vector.machine,
+            vector.nonce,
+            purpose,
+        );
+        assert_eq!(granted.outcome, ClaimOutcome::Granted, "{purpose:?}");
+        assert_eq!(granted.grant_id, vector.grant_id);
+
+        let denied = verify_claim_response_for_purpose(
+            &make_claim_body(false, "", denied_mac),
+            &vector.key,
+            vector.machine,
+            vector.nonce,
+            purpose,
+        );
+        assert_eq!(denied.outcome, ClaimOutcome::Denied, "{purpose:?}");
+    }
+
+    // A response MAC of the other purpose is rejected: a logon grant can never
+    // unlock and an unlock grant can never log on.
+    let logon_granted = "kmFSwXXu4g4wylTSIf9DSYht1v28pG4jboomTnocI0k=";
+    let unlock_granted = "55kYSfTNqLYnhU6jg+WfuZaUkThoZehudbJPPuP/JH0=";
+    assert_eq!(
+        verify_claim_response_for_purpose(
+            &make_claim_body(true, vector.grant_id, logon_granted),
+            &vector.key,
+            vector.machine,
+            vector.nonce,
+            Purpose::Unlock,
+        )
+        .outcome,
+        ClaimOutcome::InvalidMac
+    );
+    assert_eq!(
+        verify_claim_response_for_purpose(
+            &make_claim_body(true, vector.grant_id, unlock_granted),
+            &vector.key,
+            vector.machine,
+            vector.nonce,
+            Purpose::Logon,
+        )
+        .outcome,
+        ClaimOutcome::InvalidMac
+    );
+}
+
+#[test]
+fn purpose_aware_claim_bodies() {
+    let claim = claim_request_json_for_purpose(
+        "komp",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "jCy3/2JoHClgcwP3xBRHbyQNwGOsloT8uKvgu6fR7H0=",
+        Purpose::Unlock,
+        Some(25),
+    );
+    assert_eq!(
+        claim,
+        "{\"machine\":\"komp\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\",\
+         \"purpose\":\"unlock\",\"mac\":\"jCy3/2JoHClgcwP3xBRHbyQNwGOsloT8uKvgu6fR7H0=\",\
+         \"waitSeconds\":25}"
+    );
+
+    let logon = claim_request_json_for_purpose(
+        "komp",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "AMPMcTPW1kuBTUp8sWtF4weIoI/Vtcp0R+cNBK+xdB0=",
+        Purpose::Logon,
+        None,
+    );
+    assert!(logon.contains("\"purpose\":\"logon\""));
+    assert!(!logon.contains("waitSeconds"));
 }
 
 #[test]

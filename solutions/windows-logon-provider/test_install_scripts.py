@@ -245,42 +245,47 @@ class ProviderSourceTests(unittest.TestCase):
         self.assertIn("pe_artifacts.py normalize", build)
         self.assertIn("pe_artifacts.py verify", build)
 
-    def test_only_logon_claims_grants(self):
+    def test_both_supported_scenarios_start_the_worker(self):
         provider = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
         scenario = provider.split("fn set_usage_scenario(", 1)[1].split("\n        fn advise", 1)[0]
         self.assertIn("cpus != CPUS_LOGON && cpus != CPUS_UNLOCK_WORKSTATION", scenario)
         self.assertIn("return Err(E_NOTIMPL.into());", scenario)
-        # An unlock must be inert: the logon branch is the only one that starts
+        # Both logon and unlock are gated by the mode decision and may start
         # the challenge/claim worker.
-        unlock_branch, logon_tail = scenario.split("if cpus != CPUS_LOGON {", 1)[1].split(
-            "            self.start_worker_once();", 1
-        )
-        self.assertIn("claims=0", unlock_branch)
-        self.assertIn("state.armed = false;", scenario)
-        self.assertNotIn("start_worker_once", unlock_branch)
-        self.assertIn("Ok(())", logon_tail)
+        self.assertIn("self.start_worker_once();", scenario)
+        self.assertIn("cancel_session(&self.session);", scenario)
+        for unsupported in ("CPUS_CHANGE_PASSWORD", "CPUS_CREDUI", "CPUS_PLAP"):
+            self.assertNotIn(f"if cpus == {unsupported}", provider)
 
-    def test_session_and_uptime_gates_run_before_the_worker(self):
+    def test_mode_is_decided_before_the_worker(self):
         provider = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
         start = provider.split("fn start_worker_once(", 1)[1].split(
             "\n        fn set_usage_scenario", 1
         )[0]
-        self.assertIn("crate::gate::evaluate()", start)
-        self.assertIn("gate={}", start)
+        self.assertIn("crate::gate::evaluate(scenario)", start)
+        self.assertIn("cpus={} mode={}", start)
+        self.assertIn("cpus={} mode=off reason={}", start)
         # A denied gate must return before the network thread is created.
-        gate_at = start.index("crate::gate::evaluate()")
-        self.assertLess(gate_at, start.index("start_worker_thread(&self.session)"))
-        self.assertIn("log_event(\"scenario\", \"cpus=logon gate=ok\")", start)
+        gate_at = start.index("crate::gate::evaluate(scenario)")
+        self.assertLess(
+            gate_at, start.index("start_worker_thread(&self.session, mode, generation)")
+        )
+        self.assertIn("mode == Mode::Logon && !within_budget", start)
 
-    def test_worker_and_credentials_are_logon_only(self):
+    def test_worker_is_purpose_aware_and_the_tile_needs_only_an_arming(self):
+        worker = (PROVIDER / "worker.rs").read_text(encoding="utf-8")
+        self.assertIn("Purpose::Logon", worker)
+        self.assertIn("Purpose::Unlock", worker)
+        self.assertIn("UNLOCK_WAIT_SECONDS", worker)
+        self.assertIn("claim_request_json_for_purpose", worker)
+        self.assertIn("verify_claim_response_for_purpose", worker)
         provider = (PROVIDER / "provider.rs").read_text(encoding="utf-8")
-        start = provider.split("fn start_worker_once(", 1)[1].split("\n        fn set_usage_scenario", 1)[0]
-        self.assertIn("session_scenario(&self.session) != CPUS_LOGON", start)
-        count = provider.split("fn get_credential_count(", 1)[1].split("\n        fn get_credential_at", 1)[0]
-        self.assertIn("session_scenario(&self.session) != CPUS_LOGON", count)
+        count = provider.split("fn get_credential_count(", 1)[1].split(
+            "\n        fn get_credential_at", 1
+        )[0]
+        self.assertNotIn("CPUS_LOGON", count)
+        self.assertIn("session_is_armed", count)
         self.assertIn("pdwcount.write(0)", count)
-        for unsupported in ("CPUS_CHANGE_PASSWORD", "CPUS_CREDUI", "CPUS_PLAP"):
-            self.assertNotIn(f"if cpus == {unsupported}", provider)
 
     def test_log_and_data_paths_match_the_documentation(self):
         log_rs = (PROVIDER / "log.rs").read_text(encoding="utf-8")
@@ -296,7 +301,12 @@ class ProviderSourceTests(unittest.TestCase):
         self.assertNotIn("thread::sleep(Duration::from_millis(2000))", worker)
         self.assertIn("sleep_interruptible", worker)
         self.assertIn("CreateThread", worker)
-        # The DLL must stay mapped while the worker runs.
+        # The unlock long-poll is abandoned after cancellation instead of
+        # closing a synchronous WinHTTP handle from another thread.
+        self.assertIn("cancellable_post", worker)
+        self.assertIn("UNLOCK_RECEIVE_TIMEOUT_MS", worker)
+        self.assertIn("session.cancelled(generation)", worker)
+        # The DLL must stay mapped while the worker or a claim runs.
         self.assertIn("ACTIVE_WORKERS", (PROVIDER / "dll.rs").read_text(encoding="utf-8"))
 
 

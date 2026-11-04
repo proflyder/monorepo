@@ -1,16 +1,24 @@
 # Провайдер входа Windows (Ricardo Komp Logon)
 
 Переиспользуемый Credential Provider для Windows 11: показывает одну плитку
-«Ricardo — Автовход» и входит в настроенную учётную запись **только** тогда,
-когда сервис `wakegrant` выдал одноразовый грант (контракт
-`packages/contracts/wakegrant/PROTOCOL.md`).
+«Ricardo — Автовход» и выполняет действие с настроенной учётной записью
+**только** тогда, когда сервис `wakegrant` выдал одноразовый грант нужного
+назначения (контракт `packages/contracts/wakegrant/PROTOCOL.md`):
+
+- `logon` — вход после холодной загрузки (Wake-on-LAN);
+- `unlock` — разблокировка уже работающего, заблокированного ПК.
+
+Гранты двух назначений хранятся, запрашиваются и проверяются по MAC
+раздельно: грант `logon` никогда не разблокирует сессию, грант `unlock`
+никогда не используется для входа.
 
 - выключенный по кнопке ПК → гранта нет → плитки нет, обычный вход по PIN
   работает как раньше;
 - любая ошибка (нет конфигурации, секрета, сети, неверный MAC, включённый
   `Disabled`) → плитки нет, диалогов нет, зависаний нет;
 - грант расходуется на одну попытку: после сериализации плитка снимается,
-  фоновый поток останавливается.
+  фоновый поток останавливается (в режиме `unlock` — до остановки
+  провайдера или следующей блокировки).
 
 Service URL, имя машины и учётная запись задаёт проект при установке; в самом
 решении этих значений нет. Домашняя установка для ПК «комп» описана в
@@ -18,44 +26,59 @@ Service URL, имя машины и учётная запись задаёт п�
 
 ## Как это работает
 
-1. LogonUI создаёт провайдера и вызывает `SetUsageScenario`. Гранты
-   запрашиваются **только** в `CPUS_LOGON`. Windows 11 вызывает
-   `CPUS_LOGON` и после `LockWorkStation`, поэтому сценария недостаточно:
-   до запуска потока проверяются два гейта.
+1. LogonUI создаёт провайдера и вызывает `SetUsageScenario`.
+   Поддерживаются `CPUS_LOGON` и `CPUS_UNLOCK_WORKSTATION`; остальные —
+   `E_NOTIMPL`. Windows 11 вызывает `CPUS_LOGON` и после `LockWorkStation`,
+   поэтому сценария недостаточно: до запуска потока чистая функция
+   `gate::decide_mode(сценарий, есть_сессия, аптайм, запрос_WTS_успешен)`
+   выбирает режим.
    - **Сессия пользователя.** `WTSEnumerateSessionsW` +
      `WTSQuerySessionInformationW` ищут любую сессию настроенной учётной
      записи в любом состоянии (Active, Disconnected и т.д.); сессия 0 и
      пустое имя игнорируются. Сравнивается только имя пользователя без учёта
      регистра: домен из WTS (NetBIOS, полное имя, учётка Microsoft) может не
      совпасть с настроенным, и лишний отказ здесь безопаснее лишнего входа.
-     Нашлась — ни плитки, ни потока, ни сети, `GetCredentialCount` = 0, в
-     журнале `scenario cpus=logon gate=session_exists`. Ошибка WTS-вызова —
-     fail closed, `gate=session_query_failed`.
-   - **Аптайм.** Плитка взводится только когда `GetTickCount64()` меньше
-     10 минут от загрузки; иначе `scenario cpus=logon gate=uptime`.
-
-   `CPUS_UNLOCK_WORKSTATION` принимается, но ничего не делает: ни плитки,
-   ни фонового потока, ни сети, `GetCredentialCount` = 0. Остальные
-   сценарии → `E_NOTIMPL`. Грант никогда не должен разблокировать уже
-   работающий ПК.
+     Нашлась — режим `unlock` независимо от аптайма. Нет сессии и аптайм
+     меньше 10 минут — режим `logon`.
+   - **Отказ.** `CPUS_UNLOCK_WORKSTATION` без сессии настроенного
+     пользователя, ошибка WTS-вызова, нечитаемая конфигурация или
+     `Disabled` → `off`: ни плитки, ни потока, ни сети,
+     `GetCredentialCount` = 0. В журнале
+     `scenario cpus=logon mode=off reason=...`.
 2. Провайдер запускает **один** фоновый поток (`CreateThread`, не UI-поток).
-   Бюджет — 90 секунд от загрузки провайдера, интервал опроса 2 секунды,
-   WinHTTP-таймауты 2/2/4/4 с, `WINHTTP_ACCESS_TYPE_NO_PROXY`, без редиректов
-   и cookie.
-3. Поток читает конфигурацию и секрет, затем циклически:
+   Он читает конфигурацию и секрет, затем циклически выполняет
    `POST /v1/challenge` → `POST /v1/claim`.
-4. Ответ `/v1/claim` проверяется по HMAC (свой nonce, `grants`/`granted`);
-   только `granted:true` с валидным MAC «взводит» плитку и один раз вызывает
-   `CredentialsChanged`.
+   - **logon:** `"purpose":"logon"`, опрос каждые 2 секунды без
+     `waitSeconds`, бюджет 90 секунд от загрузки провайдера.
+   - **unlock:** `"purpose":"unlock"` и `"waitSeconds":25` (long-poll), без
+     бюджета — цикл живёт, пока провайдер не остановлен. Отказ сервера
+     (`denied`) сразу начинает следующий раунд: паузу даёт сам long-poll.
+     Ошибка сети, `429` или `5xx` — пауза 5/10/20/30 секунд (backoff,
+     насыщается на 30). Остальные HTTP-статусы — остановка (fail closed).
+   WinHTTP-таймауты 2/2/4/4 с; у unlock-claim receive timeout 35 секунд
+   (больше `waitSeconds`). `WINHTTP_ACCESS_TYPE_NO_PROXY`, без редиректов и
+   cookie.
+3. Ответ `/v1/claim` проверяется по HMAC со своим nonce, `granted` и
+   **purpose**; только `granted:true` с валидным MAC нужного назначения
+   «взводит» плитку и один раз вызывает `CredentialsChanged`. MAC для
+   другого purpose отвергается.
+4. Остановка. `UnAdvise`, смена сценария и сериализация увеличивают
+   `cancel_generation`; поток проверяет его до и после каждого запроса.
+   Unlock-claim выполняется на отдельном короткоживущем потоке с
+   закреплённым модулем: воркер перестаёт ждать long-poll в течение ~100 мс,
+   а сам запрос ограничен receive timeout. Закрывать WinHTTP-хендл
+   синхронного запроса из другого потока нельзя (документированная гонка),
+   поэтому запрос просто доигрывается и ничего не может взвести.
 5. `GetCredentialCount` → `1`, default `0`, `autoLogonWithDefault = TRUE`;
    LogonUI сразу вызывает `GetSerialization`.
 6. `GetSerialization` расшифровывает DPAPI-блоб в этот момент, собирает
-   `KERB_INTERACTIVE_UNLOCK_LOGON` (`.\<user>`), при необходимости
-   `CredProtect`, затирает пароль `SecureZeroMemory` и возвращает
-   `CPGSR_RETURN_CREDENTIAL_FINISHED`.
-7. `ReportResult` с ошибкой входа увеличивает `FailCount`; на третьем —
+   `KERB_INTERACTIVE_UNLOCK_LOGON` (`.\<user>`; для
+   `CPUS_UNLOCK_WORKSTATION` — `KERB_WORKSTATION_UNLOCK_LOGON`), при
+   необходимости `CredProtect`, затирает пароль `SecureZeroMemory` и
+   возвращает `CPGSR_RETURN_CREDENTIAL_FINISHED`.
+7. `ReportResult` с ошибкой увеличивает `FailCount`; на третьем —
    `Disabled=1`, после чего провайдер не делает ничего (ни сети, ни плитки)
-   до переустановки.
+   до переустановки. В обоих режимах.
 
 ## Файлы
 
@@ -63,9 +86,9 @@ Service URL, имя машины и учётная запись задаёт п�
 |---|---|
 | `crates/protocol/` | переносимый слой: base64, HMAC-сообщения, разбор JSON, проверка MAC, конфиг |
 | `crates/provider/src/provider.rs` | `ICredentialProvider`, общее состояние `Session`, бюджет |
-| `crates/provider/src/gate.rs` | гейты «нет сессии пользователя» (WTS) и «аптайм < 10 минут» |
+| `crates/provider/src/gate.rs` | режим `logon`/`unlock`/`off` по WTS-сессии, аптайму и сценарию |
 | `crates/provider/src/credential.rs` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |
-| `crates/provider/src/worker.rs` | единственный фоновый поток challenge/claim |
+| `crates/provider/src/worker.rs` | единственный фоновый поток challenge/claim, long-poll и прерывание |
 | `crates/provider/src/config.rs` | реестр, DPAPI, `FailCount`/`Disabled` |
 | `crates/provider/src/http.rs`, `log.rs` | WinHTTP, журнал; HMAC — из crates.io |
 | `crates/provider/src/kerb.rs` | упаковка `KERB_INTERACTIVE_UNLOCK_LOGON` (MIT, см. `THIRD-PARTY-NOTICES.md`) |
@@ -221,28 +244,42 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 
 ```
 2026-11-03T21:44:12.123Z pid=912 tid=913 provider_load
-2026-11-03T21:44:12.128Z pid=912 tid=913 scenario cpus=logon gate=ok
-2026-11-03T21:44:12.130Z pid=912 tid=1204 worker phase=start budget_ms=90000
-2026-11-03T21:44:12.400Z pid=912 tid=1204 grant result=granted grant_id=… ms=41 elapsed_ms=270
+2026-11-03T21:44:12.128Z pid=912 tid=913 scenario cpus=logon mode=logon
+2026-11-03T21:44:12.130Z pid=912 tid=1204 worker phase=start mode=logon budget_ms=90000
+2026-11-03T21:44:12.400Z pid=912 tid=1204 grant result=granted purpose=logon grant_id=… ms=41 elapsed_ms=270
 2026-11-03T21:44:12.401Z pid=912 tid=1204 armed ok=1
 2026-11-03T21:44:12.520Z pid=912 tid=913 serialization elapsed_ms=3
 2026-11-03T21:44:13.900Z pid=912 tid=913 report_result status=success
+2026-11-03T22:10:00.100Z pid=912 tid=913 scenario cpus=logon mode=unlock
+2026-11-03T22:10:00.102Z pid=912 tid=1209 worker phase=start mode=unlock wait_s=25
+2026-11-03T22:10:31.500Z pid=912 tid=1209 grant result=granted purpose=unlock grant_id=… ms=25031 elapsed_ms=31320
+2026-11-03T22:10:31.501Z pid=912 tid=1209 armed ok=1
+2026-11-03T22:10:31.600Z pid=912 tid=913 worker phase=armed
+2026-11-03T22:12:05.000Z pid=912 tid=913 cancel reason=unadvise
+2026-11-03T22:12:05.050Z pid=912 tid=1211 worker phase=cancelled
 ```
 
 События: `provider_load/unload`, `scenario`, `worker`, `config`, `secret`,
 `http`, `challenge`, `claim`, `grant`, `armed`, `cancel`, `serialization`,
-`serialization_config`, `serialization_secret`, `report_result`. Пароль, ключ
-и MAC в журнал не попадают; все значения очищаются от управляющих символов.
+`serialization_config`, `serialization_secret`, `report_result`. В режиме
+`unlock` отказы (`denied`) не пишутся — за ночь их были бы тысячи; ошибки
+пишутся с подавлением повторов, остановка и `grant result=granted
+purpose=unlock` — всегда. Пароль, ключ и MAC в журнал не попадают; все
+значения очищаются от управляющих символов.
 
 ## Ограничения
 
-- Опрос каждые 2 с даёт до ~45 challenge за 90 с при лимите 30/мин на машину:
-  на длинном окне сервис может ответить `429`, тогда провайдер отступает на
-  4 с и продолжает; на реальный сценарий (грант выдан до Wake-on-LAN) это не
-  влияет — первый claim успевает раньше.
-- `SetUsageScenario` не блокирует вход: `CPUS_UNLOCK_WORKSTATION` молча
-  ничего не делает (без сети и плитки); `CPUS_LOGON` дополнительно требует
-  отсутствия сессии настроенного пользователя и аптайма меньше 10 минут.
+- Режим `logon` опрашивает каждые 2 с: до ~45 challenge за 90 с при лимите
+  30/мин на машину, поэтому сервис может ответить `429`; провайдер отступает
+  на 4 с и продолжает. На реальный сценарий (грант выдан до Wake-on-LAN) это
+  не влияет — первый claim успевает раньше.
+- Режим `unlock` держит long-poll по 25 с (около 2–3 challenge в минуту), пока
+  провайдер жив. Если провайдера остановили, пока запрос в полёте, поток
+  запроса доигрывает не дольше receive timeout (35 с), ничего не взводит и не
+  держит DLL: модуль закреплён до его завершения.
+- `SetUsageScenario` не блокирует вход: `CPUS_LOGON` без сессии настроенного
+  пользователя требует аптайма меньше 10 минут; `CPUS_UNLOCK_WORKSTATION` без
+  такой сессии ничего не делает (без сети и плитки).
 - `Disabled` снимается только переустановкой (`install.ps1` сбрасывает
   `FailCount` и `Disabled`) или правкой реестра.
 - Выключение провайдера не влияет на обычный вход по PIN.

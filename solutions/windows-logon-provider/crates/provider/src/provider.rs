@@ -51,6 +51,7 @@ mod windows_impl {
     use crate::credential::{Credential, FIELD_COUNT, credential_field_descriptor_at};
     use crate::dll::DllRef;
     use crate::ffi_guard::guard;
+    use crate::gate::{Mode, Scenario};
     use crate::log::log_event;
     use crate::wide::{WideNul, widen};
     use crate::worker::start_worker_thread;
@@ -78,12 +79,18 @@ mod windows_impl {
         cpus: CREDENTIAL_PROVIDER_USAGE_SCENARIO,
     }
 
+    /// Sentinel for [`Session::worker_generation`]: no worker owns the session.
+    const NO_WORKER: u32 = u32::MAX;
+
     /// State shared by the provider, its credential and the worker.
     pub struct Session {
         state: Mutex<SessionState>,
         /// Incremented by every cancel; a worker stops as soon as it changes.
         pub cancel_generation: AtomicU32,
-        pub running: AtomicBool,
+        /// Generation of the worker that currently owns the claim loop, or
+        /// [`NO_WORKER`]. A new generation may start while a cancelled worker
+        /// is still finishing its last bounded request.
+        worker_generation: AtomicU32,
         pub serialized: AtomicBool,
         pub load_tick: AtomicU64,
     }
@@ -106,7 +113,7 @@ mod windows_impl {
                     cpus: CPUS_LOGON,
                 }),
                 cancel_generation: AtomicU32::new(0),
-                running: AtomicBool::new(false),
+                worker_generation: AtomicU32::new(NO_WORKER),
                 serialized: AtomicBool::new(false),
                 load_tick: AtomicU64::new(load_tick),
             })
@@ -131,6 +138,39 @@ mod windows_impl {
 
         pub fn generation(&self) -> u32 {
             self.cancel_generation.load(Ordering::SeqCst)
+        }
+
+        /// Claims the claim loop for `generation`. Returns `false` when that
+        /// same generation already owns it. A stale, cancelled generation never
+        /// blocks a newer one: the old worker cannot arm anything because
+        /// [`arm_session`] checks the generation.
+        pub fn try_start_worker(&self, generation: u32) -> bool {
+            let mut current = self.worker_generation.load(Ordering::SeqCst);
+            loop {
+                if current == generation {
+                    return false;
+                }
+                match self.worker_generation.compare_exchange(
+                    current,
+                    generation,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
+                    Ok(_) => return true,
+                    Err(actual) => current = actual,
+                }
+            }
+        }
+
+        /// Releases the claim loop, but only if `generation` still owns it; a
+        /// newer worker that already took over is left alone.
+        pub fn finish_worker(&self, generation: u32) {
+            let _ = self.worker_generation.compare_exchange(
+                generation,
+                NO_WORKER,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            );
         }
     }
 
@@ -394,32 +434,54 @@ mod windows_impl {
         }
 
         fn start_worker_once(&self) {
-            // Defense in depth: only the logon scenario may claim a grant.
-            // Advise() also calls this, so unlock must be filtered here too.
-            if session_scenario(&self.session) != CPUS_LOGON {
-                log_event("worker", "skipped=scenario_not_logon");
+            // A verified grant that is waiting for `GetSerialization` needs no
+            // second claim; a later `Advise` must not add one.
+            if session_is_armed(&self.session) {
                 return;
             }
-            if self.session.running.swap(true, Ordering::SeqCst) {
+            let cpus = session_scenario(&self.session);
+            // Defense in depth: `Advise` and `SetUsageScenario` both get here,
+            // so only the two supported scenarios may start a claim.
+            let scenario = match cpus {
+                CPUS_LOGON => Scenario::Logon,
+                CPUS_UNLOCK_WORKSTATION => Scenario::Unlock,
+                _ => {
+                    log_event("worker", "skipped=unsupported_scenario");
+                    return;
+                }
+            };
+            // Windows 11 calls CPUS_LOGON for the lock screen too, so the
+            // scenario alone is not proof of a cold boot. A session of the
+            // configured user selects unlock; without one, only a fresh boot
+            // selects logon. A failed WTS query or an unsupported state is off.
+            let mode = crate::gate::evaluate(scenario);
+            if let Mode::Off(reason) = mode {
+                log_event(
+                    "scenario",
+                    &format!(
+                        "cpus={} mode=off reason={}",
+                        scenario.label(),
+                        reason.label()
+                    ),
+                );
                 return;
             }
-            if !within_budget(self.session.elapsed_ms()) {
-                self.session.running.store(false, Ordering::SeqCst);
+            if mode == Mode::Logon && !within_budget(self.session.elapsed_ms()) {
                 log_event("worker", "skipped=budget_exhausted");
                 return;
             }
-            // Windows 11 calls CPUS_LOGON for the lock screen too, so the
-            // scenario is not proof of a cold boot. A session of the configured
-            // user (any state) or an uptime over the bound means this PC is
-            // already in use: stop before any network traffic.
-            let gate = crate::gate::evaluate();
-            if gate != crate::gate::LogonGate::Allow {
-                self.session.running.store(false, Ordering::SeqCst);
-                log_event("scenario", &format!("cpus=logon gate={}", gate.label()));
+            // A worker of the same generation already owns the loop. A
+            // cancelled one (older generation) may still be finishing its last
+            // bounded request; the new generation does not have to wait.
+            let generation = self.session.generation();
+            if !self.session.try_start_worker(generation) {
                 return;
             }
-            log_event("scenario", "cpus=logon gate=ok");
-            start_worker_thread(&self.session);
+            log_event(
+                "scenario",
+                &format!("cpus={} mode={}", scenario.label(), mode.label()),
+            );
+            start_worker_thread(&self.session, mode, generation);
         }
 
         fn set_usage_scenario(
@@ -431,26 +493,16 @@ mod windows_impl {
                 // Every other scenario is deliberately unsupported.
                 return Err(E_NOTIMPL.into());
             }
-            // A scenario change invalidates any previous arming.
+            // A scenario change invalidates any previous arming and stops a
+            // worker of the previous mode.
             let changed = {
                 let mut state = self.session.lock();
                 let changed = state.cpus != cpus;
                 state.cpus = cpus;
-                if cpus != CPUS_LOGON {
-                    state.armed = false;
-                }
                 changed
             };
             if changed {
                 cancel_session(&self.session);
-            }
-
-            if cpus != CPUS_LOGON {
-                // A grant signs in only after a cold boot. Claiming one during
-                // an unlock could unlock an already running PC, so the unlock
-                // scenario does nothing at all: no tile, no worker, no network.
-                log_event("scenario", "cpus=unlock claims=0");
-                return Ok(());
             }
             self.start_worker_once();
             Ok(())
@@ -503,10 +555,7 @@ mod windows_impl {
                 pdwdefault.write(CREDENTIAL_PROVIDER_NO_DEFAULT);
                 pbautologonwithdefault.write(BOOL(0));
             }
-            // Only a cold-boot logon can show the one-time tile.
-            if session_scenario(&self.session) != CPUS_LOGON {
-                return Ok(());
-            }
+            // Only a verified grant of the current mode can show the tile.
             if !session_is_armed(&self.session) {
                 return Ok(());
             }
