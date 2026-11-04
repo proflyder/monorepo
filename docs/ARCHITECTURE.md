@@ -181,8 +181,9 @@ merge PR в develop с новым VERSION
   updater (`vMAJOR.MINOR.PATCH`) видит релиз новее.
 - Откат через CI невозможен (updater только повышает версию): на станции
   `.prev` + `ctl.sh reload`.
-- CI-юнит `pulsar` (`.github/workflows/_native.yml`) выполняет `make check`,
-  обе архитектуры, installer, radio и ssh.
+- CI-юнит `pulsar-bazel` (`.github/workflows/_bazel.yml`) выполняет fmt, clippy и
+  тесты; юнит `pulsar` (`.github/workflows/_native.yml`) — Bazel-кросс-сборку
+  обеих архитектур, installer, radio и ssh.
 
 ## Данные
 

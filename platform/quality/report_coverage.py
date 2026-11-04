@@ -184,7 +184,7 @@ def main() -> int:
         "",
         "- Реальный BlueZ/D-Bus, ALSA, кнопки event2 и Wi-Fi откат: требуют станции;",
         "  покрыты live smoke/E2E и ручными сценариями, не unit-тестами.",
-        "- Pulsar Rust/hardware: unit-тесты запускаются `make -C satellite check`;",
+        "- Pulsar Rust/hardware: unit-тесты запускаются `bazel test //projects/station/pulsar/...`;",
         "  этот отчёт их не исполняет и покрытие по ним не заявляет.",
         "- Реальный микрофон/Whisper/ASR и Spotify 429: недетерминированы; проверяются",
         "  голосом и live E2E там, где возможно.",

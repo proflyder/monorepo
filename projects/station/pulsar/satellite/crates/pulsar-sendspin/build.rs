@@ -1,6 +1,7 @@
-//! Compiles the C shim over sendspin-cpp and links the library statically when the Makefile
-//! provides its per-arch build (PULSAR_SS_SRC, PULSAR_SS_BUILD). Without it (host `make check`,
-//! clippy for the station targets) nothing C++ is compiled and cfg `sendspin_ffi` stays unset.
+//! Compiles the C shim over sendspin-cpp and links the library statically when the former Makefile
+//! provided its per-arch build (PULSAR_SS_SRC, PULSAR_SS_BUILD). Bazel host builds do not set
+//! them and leave cfg `sendspin_ffi` unset; the station Bazel build sets the cfg and links the
+//! `cc_library` shim in crates/pulsar-sendspin/BUILD.bazel instead of running this script.
 
 use std::env;
 use std::path::PathBuf;

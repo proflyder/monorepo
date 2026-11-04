@@ -46,21 +46,22 @@ Assistant через ESPHome Native API, Music Assistant через Sendspin, н
 ## Сборка и проверки
 
 ```sh
-make -C satellite -j"$(nproc)"                        # обе архитектуры
-make -C satellite ARCH=armhf                          # одна архитектура
-make -C satellite ARCH=armhf tools                    # все утилиты src/bin
-make -C satellite ARCH=armhf build/armhf/tools/<name> # одна утилита
-make -C satellite check                               # fmt, clippy -D warnings, тесты
+bazel test //projects/station/pulsar/satellite/...    # fmt, clippy -D warnings, тесты
+bazel build //projects/station/pulsar/satellite/crates/... # все утилиты src/bin
+bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
+  --define=pulsar_version="$(tr -d '[:space:]' < VERSION)" \
+  //projects/station/pulsar/satellite:station_binary  # одна архитектура
 go -C installer test ./...
 radio/build.sh
 ssh/build.sh
 ```
 
-- Версии инструментов, выходы, версия бинаря и zig для `make check` —
+- Версии инструментов, выходы и версия бинаря —
   [docs/development.md, «Сборка»](docs/development.md#сборка).
-- `make -C satellite check` должен проходить. Хостовые тесты покрывают Rust-крейты и установщик;
-  поведение железа проверяется на станции (skill `station-test`). Те же проверки (обе архитектуры,
-  installer, radio, ssh) выполняет CI-юнит `pulsar` в корневом `_native.yml`.
+- `bazel test //projects/station/pulsar/satellite/...` должен проходить. Хостовые тесты
+  покрывают Rust-крейты и установщик; поведение железа проверяется на станции (skill
+  `station-test`). Те же проверки (обе архитектуры, installer, radio, ssh) выполняют CI-юниты
+  `pulsar-bazel` и `pulsar` в корневых `_bazel.yml`/`_native.yml`.
 - Перед `git push` и PR пройти skill `pre-publish-review` до чистого раунда в рамках правил
   монорепозитория.
 

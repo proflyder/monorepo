@@ -42,6 +42,7 @@ jobs:
     outputs:
       go_units: ${{ steps.route.outputs.go_units }}
       android_units: ${{ steps.route.outputs.android_units }}
+      bazel_units: ${{ steps.route.outputs.bazel_units }}
       python_units: ${{ steps.route.outputs.python_units }}
       js_units: ${{ steps.route.outputs.js_units }}
       native_units: ${{ steps.route.outputs.native_units }}
@@ -134,6 +135,22 @@ jobs:
       artifact_name: ${{ matrix.artifact_name }}
       base_sha: ${{ needs.changes.outputs.base_sha }}
       precise_targets: true
+
+  # One matrix entry per affected generic Bazel unit on a Linux runner (today:
+  # the Pulsar Rust workspace: host build, tests, rustfmt and clippy). Separate
+  # from `android` because it needs no JDK or Android SDK.
+  bazel:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.bazel_units != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.bazel_units) }}
+    uses: ./.github/workflows/_bazel.yml
+    with:
+      unit: ${{ matrix.id }}
+      test_targets: ${{ matrix.test_targets }}
+      build_targets: ${{ matrix.build_targets }}
 
   # Firebase App Distribution of the Home Android app on every PR that changes
   # it: one APK per push, after that PR's `android` build passed.
@@ -417,10 +434,11 @@ jobs:
       unit: ${{ matrix.id }}
       tests: ${{ matrix.tests }}
 
-  # One matrix entry per affected non-Bazel native build: the Windows logon
-  # provider cross-built with the pinned llvm-mingw toolchain, and the Rust
-  # Pulsar tree (make check, both arches, installer, radio, ssh). Host tests,
-  # build, checksums and artifact upload only; there is no deploy target.
+  # One matrix entry per affected native build: the Windows logon provider
+  # cross-built with the pinned llvm-mingw toolchain, and the Rust Pulsar tree
+  # (Bazel for both arches, installer, radio, ssh; host fmt/clippy/tests are
+  # the pulsar-bazel unit). Build, checksums and artifact upload only; there is
+  # no deploy target.
   native:
     needs: changes
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.native_units != '[]' }}
@@ -487,7 +505,7 @@ jobs:
   # dispatched job succeeded or was legitimately skipped.
   ci-ok:
     if: always()
-    needs: [changes, quality, go, android, python, js, native, images, deploy-control]
+    needs: [changes, quality, go, android, bazel, python, js, native, images, deploy-control]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

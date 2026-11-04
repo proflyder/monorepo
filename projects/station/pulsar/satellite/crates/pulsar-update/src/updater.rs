@@ -79,7 +79,11 @@ pub enum UpdateEvent {
 
 /// Asset suffix of this build.
 pub fn arch() -> &'static str {
-    if cfg!(target_arch = "aarch64") {
+    // Unit tests run on the build host, including aarch64/arm CI runners; they
+    // are not station builds, so their fixtures keep the "host" asset names.
+    if cfg!(test) {
+        "host"
+    } else if cfg!(target_arch = "aarch64") {
         "aarch64"
     } else if cfg!(target_arch = "arm") {
         "armhf"

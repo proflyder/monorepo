@@ -9,47 +9,70 @@
 
 ## Сборка
 
-Сборка — на Linux или WSL2 (кросс-компиляция через cargo-zigbuild); сборка демона на macOS не
-поддерживается. Версии инструментов совпадают с CI (корневой
-`.github/workflows/_native.yml`, юнит `pulsar`):
+Сборка — на Linux или WSL2. Демон и его C/C++-зависимости собираются Bazel
+(Bazelisk, Bazel 9.3.1); версии закреплены в корневом `MODULE.bazel`:
+Rust 1.99.1 (совпадает с `satellite/rust-toolchain.toml`), zig 0.14.1 с
+cc-toolchain для `aarch64-linux-gnu` (glibc 2.36) и
+`arm-linux-gnueabihf` (glibc 2.23, cortex-a53/VFPv4), sendspin-cpp и его
+зависимости — `http_archive` с теми же ревизиями, что раньше качал
+`third_party/fetch.sh` (BUILD-overlay'и — `satellite/third_party/bazel/`).
+Rust, zig и C/C++ скачиваются Bazel'ом; rustup, cargo-zigbuild, cmake и ninja
+не нужны. Для installer — Go 1.27+; для установки — adb из platform-tools.
 
-- [rustup](https://rustup.rs/) — сам ставит нужную версию Rust и обе цели из
-  `satellite/rust-toolchain.toml`;
-- cargo-zigbuild 0.24.0: `cargo install cargo-zigbuild --locked --version 0.24.0`;
-- [zig 0.14.1](https://ziglang.org/download/) — компоновщик и C/C++-компилятор для станций; другой
-  zig — `make -C satellite ZIG=/путь/к/zig`; сборки под станции отклоняют zig 0.11–0.13: их
-  armhf-сборки C++ в release (sendspin-cpp) падают до `main`. Цель armhf — glibc 2.23 (userland
-  Мини), цель aarch64 — glibc 2.36 (обычный userland Миди); glibc станций —
-  вики и docs моделей ([hardware.md, «Модели»](hardware.md#модели));
-- `make`, `git`, `curl`, `patch`, компилятор C для хоста (`cc`); для sendspin-cpp
-  ([«Линковка C++ (sendspin-cpp)»](architecture.md#линковка-c-sendspin-cpp)) — `cmake` ≥ 3.16 и
-  `ninja` (`uv tool install cmake`, `uv tool install ninja`);
-- [Go](https://go.dev/dl/) 1.27+ (`installer/go.mod`) — для установщика из копии репозитория;
-- `adb` из Android platform-tools.
+Хост-проверки (fmt, clippy с `-D warnings`, юнит/интеграционные тесты,
+golden-файлы) — те же, что в CI-юните `pulsar-bazel`:
 
-- **`make check` берёт zig любой версии**: clippy под станции только проверяет типы, а из C
-  компилирует лишь `ring` в build-скриптах. cargo-zigbuild и C-компилятор хоста (`cc`) ему тоже
-  нужны.
+```sh
+bazel test //projects/station/pulsar/satellite/...
+```
 
-Выходы `make -C satellite` на каждую архитектуру, `satellite/build/<arch>/`:
+Кросс-сборка на одну архитектуру; release передаёт версию и дату коммита:
 
-- `pulsar` — стрипнутый, именно он ставится на станцию;
-- `pulsar.debug` — нестрипнутый, с таблицами строк, для разбора crash-отчёта (см.
-  [«Диагностика»](#диагностика)).
+```sh
+version=$(tr -d '[:space:]' < projects/station/pulsar/VERSION)
+build_time=$(TZ=UTC0 LC_ALL=C git log -1 --format=%cd --date=format-local:'%b %e %Y, %H:%M:%S')
+bazel build -c opt \
+  --platforms=//platform/bazel/zig:aarch64_linux \
+  --define=pulsar_version="$version" \
+  --define=pulsar_build_time="$build_time" \
+  //projects/station/pulsar/satellite:station_binary
+```
 
-`ssh/build.sh` собирает dropbear и sftp-server для `pulsar-install --ssh` и архивов релиза.
+(`armhf_linux` вместо `aarch64_linux` для 32-битного userland.) `-c opt`
+даёт `opt-level=3`, thin LTO, `debuginfo=1` и `panic=abort` как Cargo-профиль
+release. `panic=abort` включён только у финального `pulsar` для `:station`
+(host-тесты того же triple собираются с unwind и не затрагиваются): паника в
+задаче завершает процесс, и supervisor перезапускает демон, а не оставляет его
+полурабочим. Без `--define` версия и время — `unknown`; host-сборка значения
+не использует.
 
-Версия бинарника — `git describe --tags --match 'v*' --always --dirty`
-([`../satellite/Makefile`](../satellite/Makefile), `VERSION`). В CI без тегов
-Makefile получает версию явно: `make VERSION=vX.Y.Z` (командная переменная
-перекрывает `git describe`). Апдейтер разбирает версию как
-`vX.Y.Z[-N-g<hash>]` и сверяет `--version` нового бинарника с версией OCI-тега.
+Выходы `satellite:station_binary`:
+
+- `bazel-bin/projects/station/pulsar/satellite/pulsar` — стрипнутый, именно он
+  ставится на станцию;
+- `pulsar.debug` — нестрипнутый бинарник (символы и debug info); в
+  `pulsar` записан `.gnu_debuglink`, поэтому `addr2line -f -e pulsar.debug
+  <addr>` разбирает crash-отчёт (non-PIE, адреса абсолютные).
+
+CI копирует их в `satellite/build/<arch>/`; локально можно сделать то же
+`cp` (см. workflow) или передать путь из `bazel-bin`.
+
+`ssh/build.sh` собирает dropbear и sftp-server для `pulsar-install --ssh` и
+архивов релиза.
+
+Версия бинарника — содержимое `VERSION`, переданное в
+`--define=pulsar_version`; апдейтер разбирает её как `vX.Y.Z[-N-g<hash>]` и
+сверяет `--version` нового бинарника с версией OCI-тега. Время сборки —
+дата HEAD-коммита в формате C++ `__DATE__ ", " __TIME__`, поэтому пересборка
+того же коммита не меняет `option_env!` и не вызывает relink.
 
 ## CI и релизы
 
-CI Pulsar — корневой монорепозиторный юнит `pulsar` (`.github/workflows/_native.yml`):
-`make -C satellite check`, сборки `aarch64`/`armhf`, installer `go test` (`GOWORK=off`),
-`radio/build.sh` и `ssh/build.sh`. Версии инструментов — как в «Сборке» выше.
+CI Pulsar разделён на два юнита. `pulsar-bazel` (`.github/workflows/_bazel.yml`) — хост-сборка,
+`rustfmt`, `clippy` и тесты: `bazel build //projects/station/pulsar/...` + `bazel test
+//projects/station/pulsar/satellite/...`. `pulsar` (`.github/workflows/_native.yml`) — Bazel-кросс-сборка
+обеих архитектур, installer `go test` (`GOWORK=off`), `radio/build.sh` и `ssh/build.sh`.
+Версии инструментов — как в «Сборке» выше; `make check` больше не дублируется.
 
 Релиз — изменение `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`) в PR в
 `develop`; merge проводит юнит `pulsar` через общий `.github/workflows/deploy-home.yml`
@@ -67,7 +90,7 @@ Pulsar — только PR CI. Имена слоёв — постоянный к
 | `SHA256SUMS` | апдейтер сверяет по нему `.bin` и `.ybl` |
 | `pulsar-<arch>.debug` | не в OCI: workflow-артефакт для разбора crash-отчёта |
 
-Версия из `VERSION` передаётся сборке (`make VERSION=...`) и должна совпадать с
+Версия из `VERSION` передаётся сборке (`--define=pulsar_version=...`) и должна совпадать с
 `pulsar --version`; апдейтер предлагает только строго большие `MAJOR.MINOR.PATCH`.
 `pulsar-windows-amd64.zip`, `pulsar-macos-*.tar.gz`, `pulsar-linux-*.tar.gz` и
 `pulsar-install` больше не публикуются из монорепозитория; установщик собирается в CI как

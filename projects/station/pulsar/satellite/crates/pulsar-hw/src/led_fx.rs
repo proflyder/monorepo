@@ -12,7 +12,7 @@
 //! within one expression (-ffp-contract=on) into fused multiply-adds on both stations (aarch64
 //! fmadd, armhf -mcpu=cortex_a53 vfma); those sites are `mul_add` here, everything else is
 //! unfused. `mul_add` is the same single rounding: fmadd on aarch64, vfma on armhf (built with
-//! `-C target-cpu=cortex-a53`, see the Makefile), a libm fma call on the x86_64 host.
+//! `-C target-cpu=cortex-a53`, see MODULE.bazel), a libm fma call on the x86_64 host.
 //!
 //! Listening, thinking and speaking use the stock violet by default; the «Voice color» select
 //! (`VoiceColor`) can move them to blue. The error pulse, the timer ring and the one-shots keep

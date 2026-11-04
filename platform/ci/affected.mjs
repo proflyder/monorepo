@@ -43,7 +43,7 @@ import unitModule from "./units.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_UNITS = path.join(HERE, "units.mjs");
-export const PLATFORMS = ["go", "android", "python", "js", "native", "quality"];
+export const PLATFORMS = ["go", "android", "bazel", "python", "js", "native", "quality"];
 
 // --------------------------------------------------------------------------
 // Configuration
@@ -1029,51 +1029,56 @@ function routePlatforms(config, changed, root, invalidated, graph, graphLoader, 
   goRoute.units = expandDependsOn(config, goRoute.units);
   routes.go = goRoute;
 
-  // --- android: Bazel reverse dependencies ------------------------------
-  const androidRoute = new PlatformRoute("android", "bazel-graph");
-  const androidUnits = config.byPlatform("android");
-  if (invalidated.has(GLOBAL) || invalidated.has("android")) {
-    androidRoute.mode = "all";
-    androidRoute.units = [...androidUnits];
-  } else {
-    const touched = changed.filter((item) =>
-      androidUnits.some((unit) => pathMatches(item, unit.paths)),
-    );
-    if (!touched.length) {
-      androidRoute.mode = "paths";
+  // --- android / bazel: Bazel reverse dependencies ----------------------
+  // `android` is the JDK/SDK application platform; `bazel` is a generic
+  // Linux Bazel unit (the Pulsar Rust workspace). Both route identically
+  // through the loading graph, which needs no language toolchain.
+  for (const platform of ["android", "bazel"]) {
+    const bazelRoute = new PlatformRoute(platform, "bazel-graph");
+    const units = config.byPlatform(platform);
+    if (invalidated.has(GLOBAL) || invalidated.has(platform)) {
+      bazelRoute.mode = "all";
+      bazelRoute.units = [...units];
     } else {
-      try {
-        if (graph === null || graph === undefined) {
-          if (!graphLoader) {
-            throw new Error("no graph loader configured");
+      const touched = changed.filter((item) =>
+        units.some((unit) => pathMatches(item, unit.paths)),
+      );
+      if (!touched.length) {
+        bazelRoute.mode = "paths";
+      } else {
+        try {
+          if (graph === null || graph === undefined) {
+            if (!graphLoader) {
+              throw new Error("no graph loader configured");
+            }
+            graph = graphLoader();
           }
-          graph = graphLoader();
-        }
-        const affected = graph.affectedRules(changed);
-        for (const unit of androidUnits) {
-          if (
-            changed.some((item) => pathMatches(item, unit.paths)) ||
-            [...affected].some((label) =>
-              unit.bazelRoots.some(
-                (rootLabel) =>
-                  label.startsWith(`${rootLabel}:`) || label.startsWith(`${rootLabel}/`),
-              ),
-            )
-          ) {
-            androidRoute.units.push(unit);
+          const affected = graph.affectedRules(changed);
+          for (const unit of units) {
+            if (
+              changed.some((item) => pathMatches(item, unit.paths)) ||
+              [...affected].some((label) =>
+                unit.bazelRoots.some(
+                  (rootLabel) =>
+                    label.startsWith(`${rootLabel}:`) || label.startsWith(`${rootLabel}/`),
+                ),
+              )
+            ) {
+              bazelRoute.units.push(unit);
+            }
           }
+        } catch (error) {
+          bazelRoute.mode = "all";
+          bazelRoute.units = [...units];
+          bazelRoute.warnings.push(
+            `bazel graph failed (${error.message}); running every ${platform} unit`,
+          );
         }
-      } catch (error) {
-        androidRoute.mode = "all";
-        androidRoute.units = [...androidUnits];
-        androidRoute.warnings.push(
-          `bazel graph failed (${error.message}); running every android unit`,
-        );
       }
     }
+    bazelRoute.units = expandDependsOn(config, bazelRoute.units);
+    routes[platform] = bazelRoute;
   }
-  androidRoute.units = expandDependsOn(config, androidRoute.units);
-  routes.android = androidRoute;
 
   // --- python: declarative path rules ----------------------------------
   const pythonRoute = new PlatformRoute("python", "paths");
@@ -1267,6 +1272,11 @@ export function matrixEntries(route_, config) {
     sdk_packages: space(unit.bazelSdkPackages),
     universe,
   }));
+  const bazel = route_.routes.bazel.units.map((unit) => ({
+    id: unit.id,
+    test_targets: space(unit.testTargets),
+    build_targets: space(unit.buildTargets),
+  }));
   const python = route_.routes.python.units.map((unit) => ({
     id: unit.id,
     suites: space(unit.suites),
@@ -1294,7 +1304,7 @@ export function matrixEntries(route_, config) {
     toolchain_sha256: unit.nativeToolchainSha256,
     toolchain_root: unit.nativeToolchainRoot,
   }));
-  return { go, android, python, js, native };
+  return { go, android, bazel, python, js, native };
 }
 
 export function deployEntries(route_, config) {
@@ -1501,6 +1511,7 @@ export function githubOutputs(computed) {
     base_sha: result.base || "",
     go_units: jsonDumps(entries.go),
     android_units: jsonDumps(entries.android),
+    bazel_units: jsonDumps(entries.bazel),
     python_units: jsonDumps(entries.python),
     js_units: jsonDumps(entries.js),
     native_units: jsonDumps(entries.native),

@@ -1,0 +1,91 @@
+name: _bazel
+
+# Reusable Bazel platform workflow for Linux Bazel units that are not Android
+# (today: the Pulsar Rust workspace). One matrix entry per affected unit.
+#
+# The Pulsar targets are Linux-only: `target_compatible_with` makes a macOS
+# `bazel build //...` skip them, while this Linux runner actually builds and
+# tests them. Build runs before test, like `_android.yml`.
+#
+# Toolchains (Rust 1.99.1, Rustfmt, Clippy) come from rules_rust in the root
+# MODULE.bazel; nothing is installed through rustup on the runner. A C/C++
+# compiler is already present on ubuntu-24.04 for the `cc` build scripts
+# (pulsar-audio's microWakeWord).
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.mjs
+        required: true
+        type: string
+      test_targets:
+        description: Space separated Bazel test targets owned by the unit
+        required: false
+        default: ""
+        type: string
+      build_targets:
+        description: Space separated Bazel build targets owned by the unit
+        required: false
+        default: ""
+        type: string
+      artifact:
+        description: Path of the build artifact to upload (empty to skip)
+        required: false
+        default: ""
+        type: string
+      artifact_name:
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bazel:
+    name: bazel / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # Pinned Bazelisk on PATH, plus its Bzlmod/repository caches. The Rust
+      # toolchain and crate_universe results are restored from the repository
+      # cache, so a warm run does not re-download them.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Action-output disk cache (.bazelrc only). The unit is per-unit keyed
+          # so a small unit cannot evict the large Pulsar build.
+          path: ~/.cache/bazel-disk
+          key: bazel-${{ inputs.unit }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/station/pulsar/satellite/Cargo.lock', 'projects/station/pulsar/satellite/crate-universe.lock') }}
+          restore-keys: |
+            bazel-${{ inputs.unit }}-${{ runner.os }}-
+            bazel-${{ runner.os }}-
+
+      - name: bazel build ${{ inputs.unit }}
+        if: inputs.build_targets != ''
+        run: |
+          read -r -a targets <<< "${{ inputs.build_targets }}"
+          bazel build "${targets[@]}"
+
+      - name: bazel test ${{ inputs.unit }}
+        if: inputs.test_targets != ''
+        run: |
+          read -r -a targets <<< "${{ inputs.test_targets }}"
+          bazel test "${targets[@]}" --test_output=errors
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.artifact != '' && inputs.build_targets != ''
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact }}
+          if-no-files-found: error
+          retention-days: 14

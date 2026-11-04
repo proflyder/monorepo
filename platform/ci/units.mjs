@@ -94,6 +94,11 @@ export const config = {
       deploy: false,
     },
     {
+      paths: [".github/workflows/_bazel.yml"],
+      platforms: ["bazel"],
+      deploy: false,
+    },
+    {
       paths: [".github/workflows/_python.yml"],
       platforms: ["python"],
       deploy: false,
@@ -440,6 +445,27 @@ export const config = {
       },
     },
 
+    // ------------------------------------------------------------- Bazel ------
+    // Generic Bazel units on a Linux runner (no JDK/SDK). The Pulsar Rust
+    // workspace is Linux-only, so on macOS the same targets are skipped by
+    // target_compatible_with. This unit owns fmt/clippy/tests; the `pulsar`
+    // native unit only cross-builds the station binaries and its side builds.
+    {
+      id: "pulsar-bazel",
+      platform: "bazel",
+      title: "projects/station/pulsar/satellite (Rust host build, tests, fmt, clippy)",
+      paths: ["projects/station/pulsar/satellite/**"],
+      bazel: {
+        roots: ["//projects/station/pulsar"],
+        test_targets: [
+          "//projects/station/pulsar/satellite:clippy",
+          "//projects/station/pulsar/satellite:rustfmt",
+          "//projects/station/pulsar/satellite/crates/...",
+        ],
+        build_targets: ["//projects/station/pulsar/..."],
+      },
+    },
+
     // ------------------------------------------------------------ Python --------
     {
       id: "ha-voice",
@@ -770,11 +796,11 @@ export const config = {
     },
 
     // ----------------------------------------------------------- Native --------
-    // Non-Bazel native builds with a pinned toolchain. The Windows logon
-    // provider is a repository-script C++ cross-build; Pulsar is the Rust
-    // station tree built with Make + cargo-zigbuild. PRs upload their
-    // artifacts; a push to `develop` publishes eligible units as public OCI
-    // artifacts in GHCR (deploy-home, publish-native).
+    // Native units: the Windows logon provider is a repository-script C++
+    // cross-build; Pulsar's station daemon is cross-built with Bazel and its
+    // installer/radio/ssh use their own scripts. PRs upload their artifacts; a
+    // push to `develop` publishes eligible units as public OCI artifacts in
+    // GHCR (deploy-home, publish-native).
     //
     // `publish_when` narrows publication to a release trigger: the unit is
     // still built and tested by PR CI on every path change, but deploy-home
@@ -813,8 +839,8 @@ export const config = {
     },
 
     // The Rust station daemon and its surrounding builds (radio firmware,
-    // Go installer, dropbear). `make check` plus both station ABIs, the radio
-    // and ssh builds all live in `_native.yml`. Any Pulsar change is PR CI;
+    // Go installer, dropbear). Both station ABIs are built with Bazel; host
+    // fmt/clippy/tests are the `pulsar-bazel` unit. Any Pulsar change is PR CI;
     // only a VERSION change publishes the release OCI artifact, and
     // deploy-home's `deploy-station` job then rolls it out through HA.
     {

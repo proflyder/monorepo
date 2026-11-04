@@ -1,0 +1,89 @@
+load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rustfmt_test")
+load(":station_binary.bzl", "station_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# Cargo workspace manifest and lock are the source of truth for crate_universe
+# (see MODULE.bazel). crate-universe.lock is the generated Bazel lock.
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+    "crate-universe.lock",
+    "rust-toolchain.toml",
+])
+
+LINUX = ["@platforms//os:linux"]
+
+# Every local Rust target: fmt/clippy run once for the whole workspace, like
+# `cargo fmt --all` and `cargo clippy --workspace --all-targets`. External
+# crates are not linted (transitive = False), matching cargo.
+_CRATES = [
+    "//projects/station/pulsar/satellite/crates/pulsar:pulsar",
+    "//projects/station/pulsar/satellite/crates/pulsar:pulsar_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:alsa_abi_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-audio:pulsar_audio",
+    "//projects/station/pulsar/satellite/crates/pulsar-audio:frontend_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-audio:ww_offline",
+    "//projects/station/pulsar/satellite/crates/pulsar-audio:spectrum_golden_test",
+    "//projects/station/pulsar/satellite/crates/pulsar-audio:pulsar_audio_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock",
+    "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:log_sink_test",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:own_target_test",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-esphome:pulsar_esphome",
+    "//projects/station/pulsar/satellite/crates/pulsar-esphome:api_selftest",
+    "//projects/station/pulsar/satellite/crates/pulsar-esphome:log_stream_test",
+    "//projects/station/pulsar/satellite/crates/pulsar-esphome:pulsar_esphome_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-hw:pulsar_hw",
+    "//projects/station/pulsar/satellite/crates/pulsar-hw:hw_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-hw:pulsar_hw_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-lan:pulsar_lan",
+    "//projects/station/pulsar/satellite/crates/pulsar-lan:lan_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-lan:pulsar_lan_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-media:pulsar_media",
+    "//projects/station/pulsar/satellite/crates/pulsar-media:player_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-media:mixer_golden_test",
+    "//projects/station/pulsar/satellite/crates/pulsar-media:pulsar_media_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-sendspin:pulsar_sendspin",
+    "//projects/station/pulsar/satellite/crates/pulsar-sendspin:sendspin_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-sendspin:pulsar_sendspin_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-update:pulsar_update",
+    "//projects/station/pulsar/satellite/crates/pulsar-update:update_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-update:update_probe_test",
+    "//projects/station/pulsar/satellite/crates/pulsar-update:pulsar_update_unit_tests",
+    "//projects/station/pulsar/satellite/crates/pulsar-zigbee:pulsar_zigbee",
+    "//projects/station/pulsar/satellite/crates/pulsar-zigbee:zigbee_probe",
+    "//projects/station/pulsar/satellite/crates/pulsar-zigbee:pulsar_zigbee_unit_tests",
+]
+
+rustfmt_test(
+    name = "rustfmt",
+    target_compatible_with = LINUX,
+    targets = _CRATES,
+)
+
+# clippy fails on warnings by default (rules_rust turns every warning into an
+# error unless capture_clippy_output is set), which is the `-D warnings` of
+# `make check`.
+rust_clippy_test(
+    name = "clippy",
+    target_compatible_with = LINUX,
+    targets = _CRATES,
+)
+
+# Deployable station binary for the selected zig platform
+# (`--platforms=//platform/bazel/zig:aarch64_linux` or `:armhf_linux`).
+#
+# The former Makefile kept a full unstripped copy as pulsar.debug and stripped the
+# deployed binary; here pulsar.debug keeps only debug information and the
+# stripped binary carries a .gnu_debuglink, so `addr2line -f -e pulsar.debug`
+# still resolves the absolute (non-PIE) crash-report addresses.
+station_binary(
+    name = "station_binary",
+    binary = "//projects/station/pulsar/satellite/crates/pulsar:pulsar",
+    target_compatible_with = LINUX + ["@zig_0_14_1//:station"],
+)

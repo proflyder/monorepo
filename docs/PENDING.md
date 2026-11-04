@@ -18,12 +18,6 @@
       README в их папках. Следующий шаг: в `affected.mjs` не выбирать юнит
       для деплоя, если все его изменённые файлы — `*.md`.
 
-- [ ] **Bazel-сборка Pulsar.** Сейчас станция собирается Make + cargo-zigbuild
-      + zig 0.14.1 (`projects/station/pulsar/satellite`, CI-юнит `pulsar` в
-      `_native.yml`). Следующий шаг: отдельным PR перевести Rust-крейты на
-      `rules_rust`, сохранив on-device ABI shim и обе station-цели, и убрать
-      `projects/station/pulsar` из `.bazelignore`.
-
 - [ ] **Архивировать `proflyder/pulsar`.** Код перенесён в монорепо
       (`projects/station/pulsar/`), новые релизы идут в
       `ghcr.io/proflyder/pulsar-firmware`. Следующий шаг: после первого

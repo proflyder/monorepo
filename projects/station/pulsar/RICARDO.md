@@ -104,24 +104,33 @@ adb -s <serial> pull /data/pulsar/wake-events/ ./wake-events/
 scp -r root@<ip>:/data/pulsar/wake-events/ ./wake-events/
 ```
 
-Проверки: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D warnings` и
-`cargo test --workspace` (Linux arm64, `rust:1.99.1-bookworm`); падают только 7 известных
-host-тестов `pulsar-update` про имя x86_64-ассета (см. «Verification performed»). На станции
-не проверено: реальная запись с микрофона, загрузка манифеста рядом с моделью, поведение кнопок
-в HA и заполнение `outcome` живым пайплайном.
+Проверки: `bazel test //projects/station/pulsar/satellite/...` (fmt, clippy с `-D warnings`,
+юнит/интеграционные тесты, golden-файлы; Linux). На станции не проверено: реальная запись с
+микрофона, загрузка манифеста рядом с моделью, поведение кнопок в HA и заполнение `outcome`
+живым пайплайном.
 
 ## Build
 
-Linux or WSL2, Zig 0.14.1, `cargo-zigbuild` 0.24.0:
+Linux or WSL2 with Bazelisk (Bazel 9.3.1) and a host C/C++ compiler. Zig 0.14.1,
+Rust 1.99.1 and the sendspin C/C++ libraries come from the root `MODULE.bazel`:
 
 ```bash
-cd satellite
-make check
-make ARCH=armhf ZIG=/path/to/zig-0.14.1 binary
+bazel test //projects/station/pulsar/satellite/...
+
+# Deployable daemon for one station ABI (glibc 2.36 / 2.23).
+bazel build -c opt \
+  --platforms=//platform/bazel/zig:armhf_linux \
+  --define=pulsar_version="$(cat projects/station/pulsar/VERSION)" \
+  //projects/station/pulsar/satellite:station_binary
 ```
 
-The active Midi uses the armhf userland. The output is
-`satellite/build/armhf/pulsar` (stripped) and `pulsar.debug`.
+The outputs are `bazel-bin/projects/station/pulsar/satellite/pulsar` (stripped)
+and `pulsar.debug` (unstripped; `pulsar` carries a `.gnu_debuglink`), copied by CI to
+`satellite/build/<arch>/`. `PULSAR_BUILD_TIME` defaults to `unknown`; the release
+workflow passes HEAD's commit date with `--define=pulsar_build_time=...`.
+Targets are Linux-only and skipped on macOS.
+
+The active Midi uses the armhf userland (`//platform/bazel/zig:armhf_linux`).
 
 Put the model here before an install:
 

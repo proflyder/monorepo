@@ -1,0 +1,99 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+# Compiles the Ricardo microWakeWord detector and its vendored microfrontend
+# through the `cc` crate (crates/pulsar-audio/build.rs). Host defaults:
+# PULSAR_VERSION / PULSAR_BUILD_TIME are not set, so the build script uses its
+# own fallbacks (same as a plain `cargo build`).
+cargo_build_script(
+    name = "pulsar_audio_build_script",
+    srcs = ["build.rs"],
+    data = glob(["ricardo/**"]),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = ["@pulsar_crates//:cc"],
+)
+
+rust_library(
+    name = "pulsar_audio",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = [
+        ":pulsar_audio_build_script",
+        "@pulsar_crates//:libc",
+        "@pulsar_crates//:libloading",
+        "@pulsar_crates//:log",
+        "@pulsar_crates//:ring",
+        "@pulsar_crates//:tokio",
+        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    ],
+)
+
+rust_test(
+    name = "spectrum_golden_test",
+    srcs = ["tests/spectrum_golden.rs"],
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = [
+        ":pulsar_audio",
+        "@pulsar_crates//:libc",
+        "@pulsar_crates//:libloading",
+        "@pulsar_crates//:log",
+        "@pulsar_crates//:ring",
+        "@pulsar_crates//:tokio",
+        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    ],
+)
+
+rust_test(
+    name = "pulsar_audio_unit_tests",
+    crate = ":pulsar_audio",
+    edition = "2024",
+    target_compatible_with = LINUX,
+)
+
+rust_binary(
+    name = "frontend_probe",
+    srcs = ["src/bin/frontend_probe.rs"],
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = [
+        ":pulsar_audio",
+        "@pulsar_crates//:libc",
+        "@pulsar_crates//:libloading",
+        "@pulsar_crates//:log",
+        "@pulsar_crates//:ring",
+        "@pulsar_crates//:tokio",
+        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    ],
+)
+
+rust_binary(
+    name = "ww_offline",
+    srcs = ["src/bin/ww_offline.rs"],
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = [
+        ":pulsar_audio",
+        "@pulsar_crates//:libc",
+        "@pulsar_crates//:libloading",
+        "@pulsar_crates//:log",
+        "@pulsar_crates//:ring",
+        "@pulsar_crates//:tokio",
+        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    ],
+)
