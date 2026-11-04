@@ -12,8 +12,7 @@ projects/home-assistant   HA/MA/STT/TTS/Hermes
 ```text
 solutions/scheduler       durable расписания/таймеры/задачи, SQLite outbox
 solutions/ha-bridge       executor очереди home → HA scripts
-solutions/alarm           legacy instance=home (AlarmService facade)
-solutions/ha-control      каталог Home + executor queue=control
+solutions/ha-bridge/cmd/ha-control  каталог Home + executor queue=control
 ```
 
 Windows-десктоп «комп» (WoL, OpenSSH forced command) настраивается в
@@ -43,8 +42,7 @@ allowlisted HA scripts (`alarm_start`, `schedule_announce`, `alarm_stop`),
 HA/ADB): `projects/home/e2e/scheduler_smoke.py`.
 
 Рабочая Kubernetes-композиция и pinned Helm releases — [kubernetes/](kubernetes/README.md).
-HA Core перенесён в HAOS VM; MA и Matter — add-ons в HAOS. K3s VM содержит
-STT/TTS, Hermes, scheduler, OpenBao/ESO и observability. Старые HA data paths
-сохранены как архив/PV, но не являются текущим writer. Legacy alarm/MCP/UI
-solutions остаются отдельными дополнениями; Hermes и другие проекты в будущем
-используют один общий MCP gateway, а не MCP внутри каждого сервиса.
+HA Core живёт в HAOS VM; MA и Matter — add-ons в HAOS. K3s VM содержит
+STT/TTS, Hermes, scheduler, OpenBao/ESO, mcp-gateway и observability. Hermes и
+другие проекты используют один общий `mcp-gateway`, а не MCP внутри каждого
+сервиса.

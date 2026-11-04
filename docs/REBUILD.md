@@ -7,11 +7,15 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 
 Приватно, вне Git:
 
+- Гости PVE — nightly vzdump на backup SSD (`/mnt/pve/backup`).
+- Offsite restic → Google Drive (`rclone:gdrive:home-offsite-v2`): OpenBao
+  raft snapshot, SQLite scheduler/currency-bot, ledger ha-bridge, backup HA,
+  `bb server export`. Restic password и ключ HA backup — в password manager.
 - `secrets/proxmox-install/` — ISO, install settings, SSH keys, TF state,
-  HA/K3s recovery, Wi-Fi profile.
-- `secrets/kubernetes-research/recovery/` — cluster/auth и custom OCI images.
-- `secrets/local/backups/` — HA config/DB, MA/STT/TTS, станция.
-- `secrets/local/snapshots/nettop/` — PVE/VM конфигурация.
+  Wi-Fi profile.
+- `secrets/kubernetes-research/` — kubeconfig, private values.
+- `secrets/local/backups/`, `secrets/local/snapshots/station/` — станция
+  (`/data`, `/etc`, оригиналы, модели wake word).
 - `secrets/openbao/` — recovery keys, seal key, username; `secrets/home/vpn/` —
   CA и клиентские сертификаты VPN.
 
@@ -99,8 +103,9 @@ Hermes auth старой копией.
 ## 4. Станция
 
 - ADB/SSH: только LAN; пароль — `secrets/CREDENTIALS.md`.
-- Pulsar: `/data/pulsar`; бинарник/модель/rollback — `artifacts/wakeword/`
-  и `projects/station/resources/`.
+- Pulsar: `/data/pulsar`; бинарник — `ghcr.io/proflyder/pulsar-firmware:<version>`
+  (установка — `deploy-station` или `pulsar-install`), модель —
+  `artifacts/wakeword/`, откат — `pulsar.prev`.
 - Factory reset сносит `/data`, root/SSH/OTA/guard. Делать только с
   согласованием и запасной станцией.
 - После восстановления: ESPHome entities, wake word, HA pipeline, Sendspin,
@@ -216,6 +221,3 @@ sqlite3 -readonly "$B/scheduler-data/scheduler.db" 'pragma integrity_check'
 В live восстановление — процедура из README scheduler: scale 0, файлы в PVC
 `scheduler-data`, scale 1, `GetStatus`. Правило в live не должно получить
 второй исполнитель.
-
-В бэкапах до 2026-11-02 `SHA256SUMS` содержит строку для самого себя;
-ошибка `shasum -c` только на `./SHA256SUMS` ложная.

@@ -44,8 +44,7 @@ bb plugin config home-dispatcher set hmacSecret <random-secret>
 | `compactAtContextPercent` | `70` | Порог заполнения контекста в процентах; при наличии данных он приоритетнее счётчика реплик. |
 | `dispatcherReminder` | текст роли диспетчера | Напоминание, один раз добавляемое к первому сообщению после успешной компакции; пустая строка отключает его. |
 
-Отдельной настройки allowlist провайдеров больше нет: политика профиля живёт
-в плагине `profiles` (`bb profiles providers`, `bb profiles machines`) и
+Политика провайдеров и машин живёт в плагине `profiles` (`bb profiles providers`, `bb profiles machines`) и
 читается через `profilePolicy`. `null` в ответе RPC означает «любой провайдер»
 или «любая машина».
 

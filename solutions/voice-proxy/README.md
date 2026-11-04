@@ -21,7 +21,7 @@ boundary. The default bind is loopback.
 | `GET` | any | Blind passthrough to Hermes; status, body and `Content-Type` relayed |
 | `POST` | `/v1/chat/completions` | Cancel guard → (voice router) → `model_options.reasoning_effort` → buffered or streaming relay |
 | `POST` | any other | Body is parsed and re-serialised, then proxied |
-| other | — | `501`, like `http.server`, which only implements GET and POST |
+| other | — | `501 Not Implemented` |
 
 * **Cancel guard.** An exact, normalised match of the last user message against
   the cancel phrases answers `" "` locally (HTTP 200, `id=chatcmpl-ricardo-cancel`)
@@ -51,7 +51,7 @@ boundary. The default bind is loopback.
 
 ## Sanitising
 
-`sanitize_text` removes whole citation parentheses, unwraps Markdown links,
+`SanitizeText` removes whole citation parentheses, unwraps Markdown links,
 deletes bare URLs, strips `#`/list prefixes and `*_` backtick `~` marks,
 drops empty parentheses and collapses whitespace. `StreamingSanitizer` releases
 complete sentences only at a boundary outside links/parentheses and followed by
@@ -79,13 +79,13 @@ present, each chat turn is routed before Hermes:
 | Profile read | Gateway | Result |
 |---|---|---|
 | failed / unmapped | not called | `Не могу подтвердить профиль.` — fail-closed for every profile |
-| any | error | `work`: `Сервер агентов недоступен.`; `personal`: forwarded to Hermes (previous behaviour) |
+| any | error | `work`: `Сервер агентов недоступен.`; `personal`: forwarded to Hermes |
 | any | `route=hermes` | forwarded to Hermes unchanged |
 | any | `route=bb` with `ok:true`, `threadId`, `afterSeq` | ack spoken locally, Hermes never called, final answer announced later |
 | any | `route=local` | the gateway phrase is spoken locally |
 | any | unknown route or `ok:false` | `Сервер агентов недоступен.` — never forwarded |
 
-An acknowledgement is always shaped with `ensure_not_question`, because HA
+An acknowledgement is always shaped with `EnsureNotQuestion`, because HA
 starts continued conversation when a reply ends with `?`.
 
 Only a fresh successful profile read is cached (`HERMES_VOICE_PROFILE_CACHE_MS`,
@@ -211,8 +211,7 @@ queue additionally needs `HERMES_SCHEDULER_URL`+token.
 
 ## Diagnostics
 
-The container has no shell, so the two former `kubectl exec … sh -c 'curl …'`
-checks are subcommands:
+The container has no shell, so checks are subcommands:
 
 ```text
 voice-proxy -healthcheck   # load config, then GET <upstream>/v1/models (any status below 500 = up; 401 from an API-key Hermes is fine)

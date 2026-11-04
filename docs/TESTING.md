@@ -167,7 +167,7 @@ bazel test  //projects/station/pulsar/satellite/...
 ```
 
 `bazel test` для Pulsar включает юнит- и интеграционные тесты, golden-файлы,
-`rustfmt` и `clippy` (warnings = errors, как бывший `make check`). На macOS те же
+`rustfmt` и `clippy` (warnings = errors). На macOS те же
 цели несовместимы и пропускаются; реальная сборка/тесты — только на Linux.
 Станционная кросс-сборка и разбор crash-файла — там же:
 
@@ -230,7 +230,7 @@ cd solutions/windows-logon-provider
 python3 -m unittest discover -s . -p 'test_*.py' -v   # статический контракт install/set-secret/uninstall/status
 ```
 
-`build.sh` берёт локальный `secrets/local-tools/llvm-mingw/20261020` по
+`build.sh` берёт локальный `secrets/local-tools/llvm-mingw/` (релиз `20261020`) по
 умолчанию; `LLVM_MINGW=/path/to/root` (или `LLVM_MINGW_BIN=/path/to/bin`)
 переопределяет toolchain — так CI использует Linux-архив того же релиза.
 CI (платформа `native`, `_native.yml`) проверяет sha256 архива, кеширует его,
@@ -256,7 +256,7 @@ CI (платформа `native`, `_native.yml`) проверяет sha256 арх
 ## Не автоматизировано
 
 - реальный BlueZ/ALSA/event2/Wi-Fi rollback на станции;
-- Pulsar C++/прошивка/cross-toolchain;
+- установка прошивки Pulsar на реальную станцию вне `deploy-station`;
 - микрофон/ASR, Spotify 429, реальный звук;
 - `resources/spotify-autostart/spotify.sh` — документированный legacy,
   исключён из syntax gate.
@@ -293,9 +293,7 @@ matrix одного платформенного workflow.
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
 `ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
-workflow → `ci-ok`. Отдельного generic Bazel-workflow нет: Bazel — внутренний
-инструмент `_android.yml` и deploy-control регрессии, а не платформа.
-Единственное исключение — job `android-distribute`: он ждёт `android` и при
+workflow → `ci-ok`. Единственное исключение — job `android-distribute`: он ждёт `android` и при
 PR (не из форка) с `android_distribute` = true собирает и загружает APK в
 Firebase. Этот output true, когда изменился реальный вход приложения
 (`projects/mobile/android/**`, `packages/kotlin/**` или `platform/android/**`)
@@ -433,11 +431,10 @@ Kotlin-юнитом).
 
 ### Расширение
 
-Новая платформа (например Rust): добавить reusable workflow `_rust.yml` с
-inputs юнита, добавить `platform: rust` в `units.mjs` (`cargo`-поля), научить
-`affected.mjs` считать затронутые юниты (для Cargo — `cargo metadata`/
-`cargo tree`, для Bazel-целей — `bazel.roots`, как у android) и добавить job с
-matrix в `ci.yml`. Новый юнит — это новая запись в `units.mjs` и путь в
+Новый язык по возможности идёт через Bazel (`platform: bazel`,
+`bazel.roots`), как Rust у Pulsar. Действительно новая платформа: reusable
+workflow `_<platform>.yml` с inputs юнита, `platform` в `units.mjs`, расчёт
+затронутых юнитов в `affected.mjs` и job с matrix в `ci.yml`. Новый юнит — это новая запись в `units.mjs` и путь в
 `paths`; отдельный job не нужен.
 
 ### Локальное воспроизведение
@@ -539,7 +536,6 @@ Pulsar: хост-сборка и тесты — Bazel-юнит `pulsar-bazel`; �
 бинарники (Bazel), radio, ssh, installer и релиз — native-юнит `pulsar`
 (`_native.yml`). Каждый PR собирает release-shaped артефакт и публикует
 `tree-<hash>`; merge продвигает его либо пересобирает fallback-путём.
-Make/cargo-zigbuild из станционной сборки удалены.
 
 ## Публикация
 

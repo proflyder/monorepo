@@ -1,4 +1,4 @@
-# TROUBLESHOOTING — неттоп
+# TROUBLESHOOTING — домашний сервер и станция
 
 Текущая сеть: PVE Wi-Fi 4addr/WDS, Ethernet fallback. Факты — `../../docs/STATE.md`.
 
@@ -43,12 +43,6 @@ Wi-Fi-модуль должен быть подписан MOK. Не удалят
 sudo dkms autoinstall
 sudo update-initramfs -u
 ```
-
-## UBSAN / Wi-Fi
-
-Старый `rtl8821ce` мог давать `array-index-out-of-bounds`. Текущий штатный
-`rtw88_8821ce`; патч — `patches/rtl8821ce-ubsan.patch` (legacy).
-Не менять драйвер без canary на отдельном MAC.
 
 ## HA/MA/Grafana не открываются
 
@@ -105,8 +99,6 @@ Rust Pulsar/данные не откатывать поверх актуальн
 
 ## Rollback
 
-- PVE network: вернуть предыдущий `/etc/network/interfaces` из
-  `/root/wifi-cutover/*`.
 - Wi-Fi uplink: остановить `ricardo-uplink`, вернуть Ethernet в `vmbr0`.
 - HA/K3s: `../../docs/REBUILD.md`; не запускать второй writer.
 

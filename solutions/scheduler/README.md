@@ -26,9 +26,9 @@ solutions/scheduler/
   scripts/generate-proto.sh перегенерация checked-in Go stubs
 ```
 
-`//solutions/alarm/cmd/alarm` запускает тот же engine и дополнительно отдаёт
-legacy `ricardo.v1.AlarmService`. Это один процесс и одна БД, не второй
-планировщик.
+Legacy `ricardo.v1.AlarmService` отдаётся на том же listener, что и
+`SchedulerService`. `//solutions/alarm/cmd/alarm` — тот же engine под именем
+процесса `alarm`, не второй планировщик.
 
 ## Контракт
 
@@ -177,14 +177,10 @@ always-on home-сервиса. Kafka/NATS можно добавить позже
 доставки, не меняя canonical protobuf API: `EnqueueTask`/`ListDueEvents`/
 `AckEvent` остаются контрактом, а broker станет ещё одним consumer/producer.
 
-MCP в этом срезе **не реализуется**. Будущая схема: один общий extensible MCP
-gateway для проектов (Hermes/HA) с доменной группой scheduler, а не
-отдельный MCP-сервер на каждый проект. Scheduler остаётся transport/domain neutral и
-не импортирует Hermes/HA. Будущие tool groups gateway: `scheduler.schedules.*`
-(create/list/update/enable/snooze/stop), `scheduler.timers.*`
-(start/pause/resume/cancel/list), `scheduler.tasks.*` (enqueue/cancel/status),
-`scheduler.events.*` (lease/ack только для executor-роли). Gateway отвечает
-за auth/tenant mapping; scheduler — за durable state.
+MCP живёт в общем `solutions/mcp-gateway`, а не в отдельном сервере на
+проект. Scheduler остаётся transport/domain neutral и не импортирует
+Hermes/HA. Группы `scheduler.*` в gateway пока нет; когда появится, gateway
+отвечает за auth/tenant mapping, а scheduler — за durable state.
 
 ## Хранилище
 
@@ -199,7 +195,7 @@ Schema version проверяется: БД новее бинарника отв
 `SCHEDULER_*` и legacy fallback `ALARM_*`:
 
 ```text
-SCHEDULER_DB_PATH=/data/home/scheduler.db   (ALARM_DB_PATH; default scheduler.db)
+SCHEDULER_DB_PATH=scheduler.db              (ALARM_DB_PATH)
 SCHEDULER_LISTEN=127.0.0.1:8098             (ALARM_LISTEN; loopback default)
 SCHEDULER_TIMEZONE=UTC                      (ALARM_TIMEZONE; default для пустого tz)
 SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE)
@@ -239,10 +235,9 @@ optimistic concurrency для `UpdateAlarm`. `last_ring_unix` означает
 «последний emission», а не «прозвучал». Audibility доказывается только
 executor-ом и не гарантируется этим сервисом.
 
-## Ограничения текущего среза
+## Ограничения
 
-- нет deploy-манифеста и выбора always-on хоста;
-- нет HA bridge, Android-клиента, MCP и scenario executor;
+- нет scenario executor;
 - нет recurring generic tasks (`SCHEDULE_KIND_TASK`);
 - нет streaming `WatchEvents`;
 - SQLite рассчитан на один процесс; горизонтальное масштабирование

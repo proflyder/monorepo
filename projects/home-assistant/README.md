@@ -1,6 +1,6 @@
 # Home Assistant / голос / музыка
 
-Текущий runtime: HAOS VM `100` + K3s VM `101`. Docker/Compose — legacy.
+Runtime: HAOS VM `100` + K3s VM `101`.
 
 ## Где что
 
@@ -10,8 +10,10 @@ deploy/        K3s chart для GigaAM/Whisper/Piper/Hermes
 observability/ dashboards, Prometheus/Loki/Alloy
 hermes/        Hermes gateway + voice proxy + MCP
 tts/puriso/    Piper Puriso model/install
-configs/       host netplan/modprobe/wait-online
 tools/tts-lab/ TTS evaluation/installer
+e2e/           live e2e проекта
+scripts/       операторские скрипты
+stack/, configs/, patches/  прежний docker-compose стек неттопа; в runtime не используется
 ```
 
 ## Текущий контур
@@ -20,8 +22,7 @@ tools/tts-lab/ TTS evaluation/installer
 - K3s: GigaAM `10305`, Whisper `10300`, Piper `10200`, Hermes `8642`,
   voice proxy `8643`.
 - Pipeline «Рикардо»: GigaAM → local intents → Hermes → Puriso.
-- Pulsar Rust `v0.5.2-4-g9b5e86a-dirty` (armhf, Ricardo pre-roll 256 ms);
-  ESPHome `6053`, Sendspin `8928`.
+- Станция: Pulsar (версия — `docs/STATE.md`), ESPHome `6053`, Sendspin `8928`.
 
 ## Документы
 

@@ -11,9 +11,9 @@
 | `secrets/certs/*.key` | eMudhra/leaf ключи | подпись/доверие станции |
 | `secrets/proxmox-install/retired-dpp-*/` | архив удалённого QR/DPP, старые config/keys | приватный recovery; не активный provisioning |
 | `secrets/openbao/` | seal key, recovery keys, admin password, TOTP method id | доступ к секретам/root recovery |
-| `secrets/kubernetes-research/` | kubeconfig, values, Grafana password, recovery | admin/state |
+| `secrets/kubernetes-research/` | kubeconfig, values, Grafana password | admin/state |
 | `secrets/proxmox-install/` | SSH keys, TF state, Wi-Fi profile, install settings | host/VM recovery |
-| `secrets/local/backups/` | HA config/DB, MA/STT/TTS, станция | токены/auth/ключи |
+| `secrets/local/backups/` | станция (`/data`, `/etc`), HA scripts | токены/auth/ключи |
 | `/data/quasar/ble-gateway/token` | BLE token | смена Wi-Fi |
 | `/data/quasar/ble-gateway/control-token` | HTTP control | gateway/Bluetooth |
 | `/var/lib/shim-signed/mok/MOK.priv` | MOK private key | DKMS при Secure Boot |
@@ -32,8 +32,7 @@ OpenBao `secret/k8s/*`; Kubernetes Secrets создаёт External Secrets Opera
 |---|---|---|
 | `secrets/local/logs/`, `archive/logs/` | статусы/диагностика | IP, URL, иногда токены |
 | `secrets/local/artifacts/` | архивы, pcap, прошивки | метаданные/ключи внутри |
-| `secrets/proxmox-install/migration-*` | HA/K3s migration archives | auth/state |
-| `secrets/local/snapshots/` | PVE/VM snapshots | сеть/конфиги |
+| `secrets/local/snapshots/` | снапшоты станции и `git archive` проекта | сеть/конфиги |
 | `projects/station/configs/*.env` | station env | IP/URL, возможно ключи |
 | `artifacts/firmware/*.zip` | прошивка Station | юридический/риск кирпича |
 

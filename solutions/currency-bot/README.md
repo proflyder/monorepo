@@ -1,6 +1,6 @@
 # currency-bot
 
-Go port of the Kotlin `tg-bot-currency` service. One static binary scrapes
+One static Go binary scrapes
 [kurs.kz](https://kurs.kz), stores USD/KZT and RUB/KZT snapshots in SQLite,
 alerts a Telegram chat when a threshold is crossed, and serves a small internal
 JSON API.
@@ -13,7 +13,7 @@ JSON API.
   - `sell` = lowest five (cheapest rate when you buy currency),
   - `buy` = highest five (best rate when you sell currency).
   The `buy`/`sell` labels in the Telegram message are **deliberately inverted**
-  relative to the model, exactly as before: "Покупка" prints `sell`,
+  relative to the model: "Покупка" prints `sell`,
   "Продажа" prints `buy`.
 - **Alerts only.** The scheduled job does **not** broadcast rates. It sends a
   message only when at least one threshold fires. `/help` still claims an hourly
@@ -40,9 +40,7 @@ JSON API.
   When a threshold no longer fires, the corresponding row is cleared.
 - **Retention.** A weekly job at `CLEANUP_WEEKDAY` `CLEANUP_HOUR` (default
   Sunday 00:00) deletes history older than 35 days.
-- **Time zone.** The Kotlin service used the JVM default zone; the production
-  container had no `TZ`, so schedules effectively ran in **UTC**. This port
-  defaults `TZ=UTC` and accepts any IANA zone.
+- **Time zone.** Schedules run in `TZ` (default `UTC`, any IANA zone).
 - **Manual trigger asymmetry (kept intentionally).** `/trigger` and
   `POST /api/trigger` skip dedup reads and always send, but still write
   `sent_alerts` and never save history. This can suppress the next scheduled
@@ -90,7 +88,6 @@ There is no `.env` loader and no secret has a default.
 | `POST` | `/api/trigger` | Bearer | Runs the pipeline in-process, always sends. |
 
 Auth is `Authorization: Bearer <API_TOKEN>` with a constant-time comparison.
-This replaces Unkey; there is no external verification call and no Swagger UI.
 
 `/api/history` filters:
 
@@ -101,7 +98,7 @@ This replaces Unkey; there is no external verification call and no Swagger UI.
 An unparseable `date`, `from` or `to` returns `400 Bad Request` with the usual
 error envelope and `errorCode=BAD_REQUEST`.
 
-Response shapes match the Kotlin DTOs:
+Response shape:
 
 ```json
 {"records":[{"timestamp":"2026-10-31T12:00:00Z",
@@ -133,7 +130,7 @@ the JSON is malformed or handling fails: Telegram retries every non-2xx
 response, which would re-run `/trigger`. Those failures are logged only. The
 webhook is intended to be exposed through a Cloudflare Tunnel.
 
-Commands are matched by prefix, like the Kotlin `startsWith` dispatch:
+Commands are matched by prefix:
 `/trigger`, `/start`, `/help`. Replies go to the chat that sent the command, and
 only when that chat is in `CHAT_ID`. Other chats are logged by id only (never
 with message text) and ignored. `/trigger` sends no acknowledgement on success;
@@ -173,53 +170,12 @@ SQLite (`modernc.org/sqlite`, WAL) with the H2 tables translated 1:1:
 - `sent_alerts(id, pair, period, rate_type, level, direction, rate_at_alert,
   change_percent)` with a unique index on `(pair, period, rate_type)`.
 
-## Deployment at home
+## H2 import
 
-Running in K3s namespace `currency-bot`: SQLite on PVC `currency-bot-data`, the
-API on LAN/VPN `currency.<home-domain>` and the webhook exposed only through the
-Cloudflare Tunnel `home-k3s` at `tg.example.com/telegram/webhook`. The old
-Kotlin deployment was replaced on 2026-10-31 with 990 history rows and 2
-`sent_alerts` migrated; details, cutover and rollback are in
+`cmd/currency-bot-import` imports CSV exports of the former H2 tables
+(`currency_history`, `sent_alerts`) into SQLite; it is idempotent and skips
+existing timestamps. The home deployment and its history live in
 `projects/home/kubernetes/currency-bot/README.md`.
-
-## Importing the H2 data
-
-Stop the old bot first, then export both tables with H2 Shell from the old
-image. The fat jar already contains the H2 classes, so `/app/app.jar` is the
-classpath. The compose service is `currency-bot` and its data volume is
-`currency-bot-data`.
-
-```bash
-# 1. stop the old bot (H2 must not be open by two processes)
-docker compose stop currency-bot
-
-# 2. export both tables to ./export on the host
-mkdir -p export
-docker compose run --rm -v "$PWD/export:/export" --entrypoint sh currency-bot -c '
-java -cp /app/app.jar org.h2.tools.Shell \
-  -url "jdbc:h2:file:/app/data/currency-history;IFEXISTS=TRUE" \
-  -user sa -password "" \
-  -sql "CALL CSVWRITE('"'"'/export/currency_history.csv'"'"', '"'"'SELECT * FROM CURRENCY_HISTORY'"'"');
-        CALL CSVWRITE('"'"'/export/sent_alerts.csv'"'"', '"'"'SELECT * FROM SENT_ALERTS'"'"');"
-'
-```
-
-If the deployment is not the compose one, run the same `java -cp …` command in
-a one-off container with the old database volume mounted at `/app/data`.
-H2 quoting (`"` around fields, `""` for an embedded quote) is handled by the
-importer; both `,` and `;` separators are auto-detected.
-
-```bash
-# 3. import into SQLite (idempotent: re-running skips existing timestamps)
-go run ./solutions/currency-bot/cmd/currency-bot-import \
-  -db /data/currency-bot.db \
-  -history ./export/currency_history.csv \
-  -alerts ./export/sent_alerts.csv
-```
-
-Migrate at least 35 days of history (the alert lookbacks need it) and all
-`sent_alerts` rows, otherwise the first run after migration re-sends alerts that
-were already delivered.
 
 ## Build and test
 

@@ -3,8 +3,8 @@
 **Deployment:** gateway and voice proxy run in one Kubernetes
 Pod; native user units are masked. [Current runbook](../../../docs/KUBERNETES-OPERATIONS.md).
 State is `/srv/k3s/volumes/runtime-hermes` on the host (`/opt/data` in the Pod);
-`~/.local/bin/hermes` is a kubectl wrapper. Native Install/Service commands below
-are retained for historical recovery and must not start a second production writer.
+`~/.local/bin/hermes` on the K3s node is a kubectl wrapper into the Pod. Do not
+start a native gateway next to the Pod: it would be a second production writer.
 
 Hermes is the **fallback** brain for the Station Midi voice cascade, not the
 fast path.  HA Assist keeps timers, alarms, volume, music transport and simple
@@ -15,11 +15,11 @@ the full Home Assistant MCP surface and the Music Assistant MCP server.
 
 | Item | Value |
 |---|---|
-| Install | `~/.hermes/hermes-agent` (official installer) |
-| Data | `~/.hermes/` |
-| Launcher | `~/.local/bin/hermes` |
-| Config | `~/.hermes/config.yaml` |
-| Secrets | `~/.hermes/.env` (mode `600`); in K3s, `Secret/hermes-environment` |
+| Image | `ghcr.io/proflyder/hermes@sha256:…` (pins — `projects/home/kubernetes/versions.sh`) |
+| Data | `/opt/data` in the Pod (host `/srv/k3s/volumes/runtime-hermes`) |
+| Launcher | `~/.local/bin/hermes` on the K3s node (kubectl wrapper) |
+| Config | `/opt/data/config.yaml`, rendered from [`config.fragment.yaml`](config.fragment.yaml) |
+| Secrets | `Secret/hermes-environment` (ESO from OpenBao `secret/k8s/home-assistant/hermes-environment`) |
 | MCP HA | `http://192.0.2.28:8123/api/mcp` (HA MCP Server, streamable HTTP) |
 | MCP MA | `http://192.0.2.28:8095/mcp/v1` (Music Assistant FastMCP plugin; HAOS add-on) |
 | MCP infra | `http://mcp-gateway.home-assistant.svc.cluster.local:8080/mcp` (cluster-internal) |
@@ -237,9 +237,9 @@ Deployment values and the readiness probe are described in
 The station assistant is **Рикардо**, the user's personal voice assistant, not
 "Hermes".  Three layers must agree:
 
-1. `~/.hermes/SOUL.md` — primary identity (`SOUL.md` in this directory is the
+1. `/opt/data/SOUL.md` — primary identity (`SOUL.md` in this directory is the
    reviewed source).  It explicitly says not to call itself Hermes/Гермес.
-2. `agent.personalities.voice` in `~/.hermes/config.yaml` — the active
+2. `agent.personalities.voice` in `/opt/data/config.yaml` — the active
    `voice` personality, rendered from `voice_prompt.txt`
    (single source; the fragment does not repeat the text).
 3. HA `llama_cpp` conversation subentry — prompt from
@@ -265,39 +265,12 @@ Verify with a direct conversation call: «как тебя зовут?» must ret
 «Я Рикардо, ваш личный ассистент».  If it says Hermes, check all three layers
 and restart the gateway.
 
-## Install
-
-```bash
-# As the service user, on lab-host:
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh \
-  -o /tmp/hermes-install.sh
-bash /tmp/hermes-install.sh --non-interactive --skip-browser --skip-computer-use
-
-# ChatGPT / Codex subscription (device-code flow; approve in a browser):
-hermes auth add openai-codex --type oauth --no-browser
-hermes model          # choose the Codex/ChatGPT model if needed
-```
-
-On this ChatGPT account the Codex backend accepted `gpt-5.6-luna`; it rejected
-`gpt-5.4`, `gpt-5.4-mini`, `gpt-5.5`, `gpt-5.3-codex` and
-`gpt-5.4-codex` with HTTP 400. The working default is stored in
-`model.default`; test a new model with one short chat turn before switching.
-
-If a slow link stalls the installer's Git clone, clone shallowly first and
-point the installer at the checkout:
-
-```bash
-git clone --depth 1 --branch v0.22.5 \
-  https://github.com/NousResearch/hermes-agent.git ~/.hermes/hermes-agent
-bash /tmp/hermes-install.sh --non-interactive --skip-browser \
-  --skip-computer-use --dir ~/.hermes/hermes-agent
-```
-
 ## MCP tokens
 
 Create a dedicated long-lived HA token for Hermes (owner/admin is required by
 the HA MCP Server's default admin policy) and a separate long-lived Music
-Assistant token. Store both only in `~/.hermes/.env` (mode `600`):
+Assistant token. Both live in OpenBao `secret/k8s/home-assistant/hermes-environment`
+(rendered into `Secret/hermes-environment`):
 
 ```text
 HERMES_HA_TOKEN=<token>
@@ -319,7 +292,7 @@ deployment the MA plugin is configured with:
 - `require_auth=true`, `require_confirmation=false`;
 - mount path `/mcp/v1`.
 
-The MA MCP token is a secret: never print it or commit `.env`. Keep the MCP
+The MA MCP token is a secret: never print it or commit it. Keep the MCP
 binds on loopback and do not expose `8642`, `/api/mcp` or `/mcp/v1` to the
 internet. The MA MCP plugin is marked experimental upstream; rollback is to
 remove the `music-assistant` entry from Hermes and/or disable the plugin.
@@ -383,7 +356,7 @@ endpoints loopback-only.
 ## Verify
 
 ```bash
-set -a; . ~/.hermes/.env; set +a
+# on the K3s node; `hermes` execs into the Pod
 hermes mcp list
 hermes mcp test homeassistant
 hermes mcp test music-assistant
@@ -395,19 +368,6 @@ A healthy MCP test reports the server, a discovery count and the selected
 tools. A `401` means the corresponding token is stale; a `404` means the HA
 MCP Server integration or the MA MCP plugin is not configured/loaded. `mcp
 list` should show `homeassistant → all` and `music-assistant → all`.
-
-## Service
-
-Use the official gateway service after the model auth succeeds:
-
-```bash
-hermes gateway install
-hermes gateway start
-hermes gateway status
-```
-
-The API server listens on `127.0.0.1:8642` only.  HA connects to it from the
-same host with the `API_SERVER_KEY`; do not bind it to `0.0.0.0`.
 
 ## Voice wiring
 
@@ -456,13 +416,9 @@ matching HA aliases and are exposed to Assist, so `GetLiveContext` and
 `HassTurnOff` can find them.
 
 If Hermes reports an MCP circuit-breaker pause after three rejected calls,
-restart just `hermes-gateway.service` (or wait for the pause) after fixing
-arguments; do not repeatedly retry the same failed call. A healthy check:
-
-```bash
-export HERMES_HOME=/home/labuser/.hermes
-/home/labuser/.hermes/hermes-agent/.hermes/bin/hermes mcp test homeassistant
-```
+restart the Pod (`kubectl -n home-assistant rollout restart deploy/hermes`) or
+wait for the pause after fixing arguments; do not repeatedly retry the same
+failed call. A healthy check: `hermes mcp test homeassistant`.
 
 Title-generation warnings about a missing Codex OAuth token are separate from
 the main chat/tool path; main `openai-codex` inference still works through the

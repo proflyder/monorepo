@@ -19,7 +19,7 @@ MCP client (Hermes, IDE, agent)          voice proxy
   /healthz  /readyz  /metrics
 
   mcp-gateway ── SSH (одна сессия на вызов, JSON в stdin) ──► forced command
-       на CT 103 ──► HTTP loopback ──► плагин bb home-dispatcher
+       на bb-хосте ──► HTTP loopback ──► плагин bb home-dispatcher
 ```
 
 Шлюз не знает plugin-token и HMAC-секрет bb: их держит мост на хосте bb.

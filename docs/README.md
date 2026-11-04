@@ -19,7 +19,6 @@
 | [`KUBERNETES-OPERATIONS.md`](KUBERNETES-OPERATIONS.md) | K3s, Helm, Grafana, volumes |
 | [`INSTALL-PROXMOX.md`](INSTALL-PROXMOX.md) | PVE, VM, Terraform, Wi-Fi uplink |
 | [`REBUILD.md`](REBUILD.md) | восстановление после потери host/VM/станции |
-| [`SNAPSHOTS.md`](SNAPSHOTS.md) | снапшоты и приватные копии |
 | [`TESTING.md`](TESTING.md) | hermetic и live-проверки |
 | [`GIT.md`](GIT.md) | ветки, pull request, защита и выкладка |
 
