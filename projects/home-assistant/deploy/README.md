@@ -47,11 +47,11 @@ digest'ы в релиз `runtime`, проверяет rollout, health exporter,
 откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
 перезапускает контур.
 
-Health exporter — Go-бинарник `health-exporter/` (distroless-образ
+Health exporter — Go-бинарник `health-exporter/cmd/health-exporter`
+(distroless-образ
 `//projects/home-assistant/deploy/health-exporter:health-exporter_image`,
-`ghcr.io/proflyder/health-exporter`). Метрики, метки, порт 9116 и переменные
-`ENDPOINT_HOST_*` те же, что у прежнего `chart/files/health_exporter.py`;
-Python-скрипт и его ConfigMap удалены. Карта больше не владеет exporter'ом:
+`ghcr.io/proflyder/health-exporter`): метрики `up` по endpoint'ам, порт 9116,
+цели из переменных `ENDPOINT_HOST_*`. Карта больше не владеет exporter'ом:
 `hermes rollout` (и `apply-runtime.sh` через `HEALTH_EXPORTER_IMAGE`) задают
 image, command и пустые `volumeMounts`/`volumes` через `helm --set/--set-json`,
 поэтому приватные values менять не нужно. Assist smoke Job тоже собран из
