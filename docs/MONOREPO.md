@@ -106,12 +106,21 @@ go.work            workspace корня и отслеживаемого BLE-мо
 ViewBinding/google-services и `android_lint` запускают их по `$(execpath)`, не
 требуя `python3` в песочнице. Python в Android-сборке не используется.
 
-`MODULE.bazel` — глобальная CI/deploy-инвалидация. Исключение: если его diff
-затрагивает только Maven-расширение rules_jvm_external
-(`maven.install(...)`/`maven.<tag>(...)`, `use_repo(maven, ...)`) и
-комментарии, `affected.mjs` маршрутизирует изменение как `MODULE.bazel#maven`
-только в android (меняется Maven/APK-замыкание). Остальные правки —
-`bazel_dep`, toolchain, `go_deps`, `oci`, python — остаются глобальными.
+`MODULE.bazel` — глобальная CI/deploy-инвалидация, сужаемая по структурному
+диффу base/head. Если меняется только Maven-расширение rules_jvm_external
+(`maven.install(...)`/`maven.<tag>(...)`, `use_repo(maven, ...)`),
+`affected.mjs` маршрутизирует изменение как `MODULE.bazel#maven` только в
+android (меняется Maven/APK-замыкание). Если меняются только native-входы —
+`rust.toolchain`/crate_universe, `zig_sdk_repository`, регистрация
+`@zig_0_14_1//` toolchain'ов, `single_version_override(module_name =
+"rules_rust")` и сторонние C/C++ станции через `_SENDSPIN_BAZEL`
+`http_archive` — путь становится `MODULE.bazel#native` (платформы `native` и
+`bazel`). Смешанный дифф даёт оба виртуальных пути. Остальные правки —
+`bazel_dep`, `go_deps`, `oci`, python — остаются глобальными. `.bazelrc`
+сужается до `.bazelrc#cache` (ни одной платформы), только если дифф меняет
+исключительно cache/output-флаги; `platform/bazel/zig/**` и
+`platform/bazel/windows/**` — только `native` (`platform/bazel#native`).
+Подробности и белый список флагов — `docs/TESTING.md`.
 
 Чистый checkout поддерживает `go test ./solutions/scheduler/... ./solutions/alarm/... ./packages/...`;
 Pulsar installer — отдельный Go-модуль, проверяется с `GOWORK=off`.
