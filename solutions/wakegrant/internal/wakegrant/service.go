@@ -23,6 +23,9 @@ const (
 	chalPrefix   = "challenge:"
 )
 
+// errTooManyWaiters means the 429 response was already written.
+var errTooManyWaiters = errors.New("too many concurrent waiters")
+
 // Protocol TTL bounds. config has its own copy so that package loads no
 // protocol code; both are pinned to PROTOCOL.md.
 const (
@@ -52,6 +55,7 @@ type Service struct {
 	now     func() time.Time
 	nonces  *nonceStore
 	limiter *limiter
+	waiters *waiterHub
 }
 
 // New builds a service. The caller owns the store lifecycle.
@@ -77,6 +81,7 @@ func New(opts Options) *Service {
 		now:     now,
 		nonces:  newNonceStore(),
 		limiter: newLimiter(ChallengeLimit, RateWindow),
+		waiters: newWaiterHub(),
 	}
 }
 
@@ -91,8 +96,9 @@ func (s *Service) Handler() http.Handler {
 }
 
 type grantRequest struct {
-	Machine    string `json:"machine"`
-	TTLSeconds *int   `json:"ttlSeconds"`
+	Machine    string  `json:"machine"`
+	TTLSeconds *int    `json:"ttlSeconds"`
+	Purpose    *string `json:"purpose"`
 }
 
 type grantResponse struct {
@@ -110,9 +116,11 @@ type challengeResponse struct {
 }
 
 type claimRequest struct {
-	Machine string `json:"machine"`
-	Nonce   string `json:"nonce"`
-	MAC     string `json:"mac"`
+	Machine     string  `json:"machine"`
+	Nonce       string  `json:"nonce"`
+	MAC         string  `json:"mac"`
+	Purpose     *string `json:"purpose"`
+	WaitSeconds *int    `json:"waitSeconds"`
 }
 
 type claimResponse struct {
@@ -144,6 +152,16 @@ func (s *Service) handleGrant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest)
 		return
 	}
+	purpose := DefaultPurpose
+	if req.Purpose != nil {
+		parsed, ok := ParsePurpose(*req.Purpose)
+		if !ok {
+			s.logOutcome("grant", req.Machine, "bad-purpose", "")
+			writeError(w, http.StatusBadRequest)
+			return
+		}
+		purpose = parsed
+	}
 	ttl := DefaultTTL
 	if req.TTLSeconds != nil {
 		ttl = time.Duration(*req.TTLSeconds) * time.Second
@@ -153,12 +171,15 @@ func (s *Service) handleGrant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest)
 		return
 	}
-	id, expires, err := s.store.CreateGrant(r.Context(), req.Machine, now, ttl)
+	id, expires, err := s.store.CreateGrant(r.Context(), req.Machine, purpose, now, ttl)
 	if err != nil {
 		s.logOutcome("grant", req.Machine, "storage-error", "")
 		writeError(w, http.StatusInternalServerError)
 		return
 	}
+	// Wake any long-poll claim waiting for this (machine, purpose) after the
+	// grant is committed, so its re-read sees the row.
+	s.waiters.broadcast(req.Machine, purpose)
 	s.logOutcome("grant", req.Machine, "issued", id)
 	writeJSON(w, http.StatusCreated, grantResponse{
 		GrantID:   id,
@@ -215,6 +236,28 @@ func (s *Service) handleClaim(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest)
 		return
 	}
+	purpose := DefaultPurpose
+	purposeAware := req.Purpose != nil
+	if purposeAware {
+		parsed, ok := ParsePurpose(*req.Purpose)
+		if !ok {
+			s.logOutcome("claim", req.Machine, "bad-purpose", "")
+			writeError(w, http.StatusBadRequest)
+			return
+		}
+		purpose = parsed
+	}
+	wait := 0
+	if req.WaitSeconds != nil {
+		// Long-poll is only defined for an explicit purpose: a v1 client that
+		// blocks here would break the old wire contract.
+		if !purposeAware || *req.WaitSeconds < MinWaitSeconds || *req.WaitSeconds > MaxWaitSeconds {
+			s.logOutcome("claim", req.Machine, "bad-wait", "")
+			writeError(w, http.StatusBadRequest)
+			return
+		}
+		wait = *req.WaitSeconds
+	}
 	key, ok := s.keys[req.Machine]
 	if !ok {
 		// Never reveal whether the machine exists.
@@ -235,33 +278,106 @@ func (s *Service) handleClaim(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized)
 		return
 	}
-	if !verifyMAC([]byte(ClaimMAC(key, req.Machine, req.Nonce)), []byte(req.MAC)) {
+	var expected string
+	if purposeAware {
+		expected = ClaimMACForPurpose(key, req.Machine, req.Nonce, purpose)
+	} else {
+		expected = ClaimMAC(key, req.Machine, req.Nonce)
+	}
+	if !verifyMAC([]byte(expected), []byte(req.MAC)) {
 		s.logOutcome("claim", req.Machine, "bad-mac", "")
 		writeError(w, http.StatusUnauthorized)
 		return
 	}
 
-	grantID, granted, err := s.store.ConsumeNewest(r.Context(), req.Machine, now)
+	grantID, granted, err := s.store.ConsumeNewest(r.Context(), req.Machine, purpose, now)
 	if err != nil {
 		// The nonce is already burnt; fail closed without a MAC.
 		s.logOutcome("claim", req.Machine, "storage-error", "")
 		writeError(w, http.StatusInternalServerError)
 		return
 	}
+	if !granted && wait > 0 {
+		grantID, granted, err = s.waitForGrant(w, r, req.Machine, purpose, wait)
+		if err != nil {
+			// A storage error or cancellation: the nonce is burnt and no MAC
+			// is sent, so the client fails closed.
+			return
+		}
+	}
 	if granted {
 		s.logOutcome("claim", req.Machine, "granted", grantID)
+		mac := GrantedMAC(key, req.Machine, req.Nonce, grantID)
+		if purposeAware {
+			mac = GrantedMACForPurpose(key, req.Machine, req.Nonce, grantID, purpose)
+		}
 		writeJSON(w, http.StatusOK, claimResponse{
 			Granted: true,
 			GrantID: grantID,
-			MAC:     GrantedMAC(key, req.Machine, req.Nonce, grantID),
+			MAC:     mac,
 		})
 		return
 	}
 	s.logOutcome("claim", req.Machine, "denied", "")
+	mac := DeniedMAC(key, req.Machine, req.Nonce)
+	if purposeAware {
+		mac = DeniedMACForPurpose(key, req.Machine, req.Nonce, purpose)
+	}
 	writeJSON(w, http.StatusOK, claimResponse{
 		Granted: false,
-		MAC:     DeniedMAC(key, req.Machine, req.Nonce),
+		MAC:     mac,
 	})
+}
+
+// waitForGrant holds an authenticated claim until a grant of the requested
+// purpose appears, the wait elapses or the client/server goes away. It returns
+// (("", false, nil)) on timeout. A false ok from acquire is answered as 429.
+func (s *Service) waitForGrant(w http.ResponseWriter, r *http.Request, machine string, purpose Purpose, waitSeconds int) (string, bool, error) {
+	deadline := time.Now().Add(time.Duration(waitSeconds) * time.Second)
+	for {
+		wake, release, ok := s.waiters.acquire(machine, purpose)
+		if !ok {
+			s.logOutcome("claim", machine, "too-many-waiters", "")
+			writeError(w, http.StatusTooManyRequests)
+			return "", false, errTooManyWaiters
+		}
+
+		// Re-check after registering: a grant committed between the earlier
+		// consume and acquire must not be missed.
+		grantID, granted, err := s.store.ConsumeNewest(r.Context(), machine, purpose, s.now())
+		if err != nil || granted {
+			release()
+			if err != nil {
+				s.logOutcome("claim", machine, "storage-error", "")
+				writeError(w, http.StatusInternalServerError)
+			}
+			return grantID, granted, err
+		}
+
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			release()
+			return "", false, nil
+		}
+		timer := time.NewTimer(remaining)
+		select {
+		case <-wake:
+			// Either our grant is now visible or another waiter took it. Loop
+			// and re-check until the deadline, so a second waiter is not
+			// denied early by a grant meant for the first.
+			timer.Stop()
+			release()
+		case <-timer.C:
+			release()
+			return "", false, nil
+		case <-r.Context().Done():
+			timer.Stop()
+			release()
+			// Server shutdown or client disconnect: stop waiting without
+			// writing, the nonce is burnt and the client fails closed.
+			return "", false, r.Context().Err()
+		}
+	}
 }
 
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {

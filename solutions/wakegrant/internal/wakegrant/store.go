@@ -13,7 +13,7 @@ import (
 )
 
 // SchemaVersion is the current SQLite schema version.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Store is the durable grant store. It lives on a PVC so a pod restart between
 // the Wake-on-LAN packet and the machine's claim does not lose the grant.
@@ -101,6 +101,17 @@ func (s *Store) migrate(ctx context.Context) error {
 		}
 		version = 1
 	}
+	if version < 2 {
+		// Existing rows were all issued for a cold logon, so the default is
+		// exactly the v1 semantic. New grant selection is per (machine, purpose).
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE grants ADD COLUMN purpose TEXT NOT NULL DEFAULT 'logon'`); err != nil {
+			return fmt.Errorf("add grants.purpose: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS grants_machine_purpose ON grants(machine, purpose, consumed, expires_unix)`); err != nil {
+			return fmt.Errorf("create grants purpose index: %w", err)
+		}
+		version = 2
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE schema_meta SET version = ?`, version); err != nil {
 		return fmt.Errorf("write schema version: %w", err)
 	}
@@ -111,8 +122,8 @@ func (s *Store) migrate(ctx context.Context) error {
 }
 
 // CreateGrant stores a new grant and replaces any unconsumed grant for the
-// same machine, so only the newest one can ever be claimed.
-func (s *Store) CreateGrant(ctx context.Context, machine string, now time.Time, ttl time.Duration) (string, time.Time, error) {
+// same (machine, purpose), so only the newest one of that kind can be claimed.
+func (s *Store) CreateGrant(ctx context.Context, machine string, purpose Purpose, now time.Time, ttl time.Duration) (string, time.Time, error) {
 	id, err := newUUID()
 	if err != nil {
 		return "", time.Time{}, err
@@ -123,12 +134,12 @@ func (s *Store) CreateGrant(ctx context.Context, machine string, now time.Time, 
 		return "", time.Time{}, fmt.Errorf("begin grant: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM grants WHERE machine = ? AND consumed = 0`, machine); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM grants WHERE machine = ? AND purpose = ? AND consumed = 0`, machine, string(purpose)); err != nil {
 		return "", time.Time{}, fmt.Errorf("replace grant: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO grants(id, machine, created_unix, expires_unix, consumed) VALUES (?, ?, ?, ?, 0)`,
-		id, machine, now.UnixNano(), expires.Unix(),
+		`INSERT INTO grants(id, machine, purpose, created_unix, expires_unix, consumed) VALUES (?, ?, ?, ?, ?, 0)`,
+		id, machine, string(purpose), now.UnixNano(), expires.Unix(),
 	); err != nil {
 		return "", time.Time{}, fmt.Errorf("insert grant: %w", err)
 	}
@@ -139,18 +150,18 @@ func (s *Store) CreateGrant(ctx context.Context, machine string, now time.Time, 
 }
 
 // ConsumeNewest atomically consumes the newest unexpired unconsumed grant for
-// machine. It reports false when there is nothing to grant.
-func (s *Store) ConsumeNewest(ctx context.Context, machine string, now time.Time) (string, bool, error) {
+// (machine, purpose). It reports false when there is nothing to grant.
+func (s *Store) ConsumeNewest(ctx context.Context, machine string, purpose Purpose, now time.Time) (string, bool, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx,
 		`UPDATE grants SET consumed = 1, consumed_unix = ?
 		 WHERE rowid = (
 			SELECT rowid FROM grants
-			WHERE machine = ? AND consumed = 0 AND expires_unix > ?
+			WHERE machine = ? AND purpose = ? AND consumed = 0 AND expires_unix > ?
 			ORDER BY rowid DESC LIMIT 1
 		 )
 		 RETURNING id`,
-		now.UnixNano(), machine, now.Unix(),
+		now.UnixNano(), machine, string(purpose), now.Unix(),
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil

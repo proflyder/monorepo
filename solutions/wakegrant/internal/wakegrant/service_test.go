@@ -3,8 +3,10 @@ package wakegrant
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -161,6 +163,81 @@ func (h *harness) claim(machine, nonce string) (int, claimResponse, []byte) {
 	_ = json.Unmarshal(data, &out)
 	return status, out, data
 }
+
+func (h *harness) claimPurpose(machine, nonce, purpose string, wait *int) (int, claimResponse, []byte) {
+	h.t.Helper()
+	out := h.claimRaw(machine, nonce, purpose, wait)
+	return out.status, out.claim, out.raw
+}
+
+func (h *harness) issuePurpose(machine, purpose string, ttl *int) grantResponse {
+	h.t.Helper()
+	body := map[string]any{"machine": machine, "purpose": purpose}
+	if ttl != nil {
+		body["ttlSeconds"] = *ttl
+	}
+	status, data := h.post("/v1/grants", body, "test-issuer-token")
+	if status != http.StatusCreated {
+		h.t.Fatalf("issue %s grant: status %d body %s", purpose, status, data)
+	}
+	var out grantResponse
+	if err := json.Unmarshal(data, &out); err != nil {
+		h.t.Fatalf("decode grant: %v", err)
+	}
+	return out
+}
+
+type claimResult struct {
+	status int
+	claim  claimResponse
+	raw    []byte
+	err    error
+}
+
+// claimRaw is goroutine-safe: it never calls t.Fatalf.
+func (h *harness) claimRaw(machine, nonce, purpose string, waitSeconds *int) claimResult {
+	h.t.Helper()
+	key, ok := h.keys[machine]
+	if !ok {
+		return claimResult{err: errUnknownTestMachine}
+	}
+	body := map[string]any{
+		"machine": machine,
+		"nonce":   nonce,
+		"purpose": purpose,
+	}
+	if purpose != "" {
+		body["mac"] = ClaimMACForPurpose(key, machine, nonce, Purpose(purpose))
+	} else {
+		body["mac"] = ClaimMAC(key, machine, nonce)
+	}
+	if waitSeconds != nil {
+		body["waitSeconds"] = *waitSeconds
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return claimResult{err: err}
+	}
+	req, err := http.NewRequest(http.MethodPost, h.srv.URL+"/v1/claim", bytes.NewReader(encoded))
+	if err != nil {
+		return claimResult{err: err}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return claimResult{err: err}
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return claimResult{err: err, status: resp.StatusCode}
+	}
+	var out claimResponse
+	_ = json.Unmarshal(data, &out)
+	return claimResult{status: resp.StatusCode, claim: out, raw: data}
+}
+
+var errUnknownTestMachine = errors.New("unknown test machine")
 
 func TestFullFlow(t *testing.T) {
 	h := newHarness(t)
@@ -469,3 +546,286 @@ func TestHealthz(t *testing.T) {
 }
 
 func ptr(v int) *int { return &v }
+
+func TestPurposeGrantsReplaceWithinTheirPurposeOnly(t *testing.T) {
+	h := newHarness(t)
+	firstLogon := h.issuePurpose("komp", "logon", nil)
+	unlock := h.issuePurpose("komp", "unlock", nil)
+	secondLogon := h.issuePurpose("komp", "logon", nil)
+	if firstLogon.GrantID == secondLogon.GrantID {
+		t.Fatal("grant ids must differ")
+	}
+
+	status, claim, raw := h.claimPurpose("komp", h.challenge("komp"), "unlock", nil)
+	if status != http.StatusOK || !claim.Granted || claim.GrantID != unlock.GrantID {
+		t.Fatalf("unlock claim: status %d claim %+v body %s", status, claim, raw)
+	}
+	status, claim, raw = h.claimPurpose("komp", h.challenge("komp"), "logon", nil)
+	if status != http.StatusOK || !claim.Granted || claim.GrantID != secondLogon.GrantID {
+		t.Fatalf("logon claim: status %d claim %+v body %s", status, claim, raw)
+	}
+}
+
+func TestLogonGrantIsNotOfferedToAnUnlockClaim(t *testing.T) {
+	h := newHarness(t)
+	logon := h.issuePurpose("komp", "logon", nil)
+
+	nonce := h.challenge("komp")
+	status, claim, raw := h.claimPurpose("komp", nonce, "unlock", nil)
+	if status != http.StatusOK {
+		t.Fatalf("unlock claim: status %d body %s", status, raw)
+	}
+	if claim.Granted {
+		t.Fatalf("logon grant was granted to an unlock claim: %+v", claim)
+	}
+	if want := DeniedMACForPurpose(h.key("komp"), "komp", nonce, PurposeUnlock); claim.MAC != want {
+		t.Fatalf("denied mac = %q, want %q", claim.MAC, want)
+	}
+
+	// The logon grant is still there for the right purpose.
+	status, claim, raw = h.claimPurpose("komp", h.challenge("komp"), "logon", nil)
+	if status != http.StatusOK || !claim.Granted || claim.GrantID != logon.GrantID {
+		t.Fatalf("logon claim after unlock miss: status %d claim %+v body %s", status, claim, raw)
+	}
+}
+
+func TestUnlockGrantIsNotOfferedToALogonClaim(t *testing.T) {
+	h := newHarness(t)
+	unlock := h.issuePurpose("komp", "unlock", nil)
+
+	status, claim, raw := h.claimPurpose("komp", h.challenge("komp"), "logon", nil)
+	if status != http.StatusOK || claim.Granted {
+		t.Fatalf("logon claim got an unlock grant: status %d claim %+v body %s", status, claim, raw)
+	}
+	status, claim, raw = h.claimPurpose("komp", h.challenge("komp"), "unlock", nil)
+	if status != http.StatusOK || !claim.Granted || claim.GrantID != unlock.GrantID {
+		t.Fatalf("unlock claim: status %d claim %+v body %s", status, claim, raw)
+	}
+}
+
+func TestClaimWithoutPurposeKeepsV1Messages(t *testing.T) {
+	h := newHarness(t)
+	// A v1-style grant (no purpose field) defaults to logon.
+	grant := h.issue("komp", nil)
+
+	nonce := h.challenge("komp")
+	mac := ClaimMAC(h.key("komp"), "komp", nonce)
+	status, data := h.post("/v1/claim", map[string]string{
+		"machine": "komp", "nonce": nonce, "mac": mac,
+	}, "")
+	if status != http.StatusOK {
+		t.Fatalf("v1 claim: status %d body %s", status, data)
+	}
+	var claim claimResponse
+	if err := json.Unmarshal(data, &claim); err != nil {
+		t.Fatal(err)
+	}
+	if !claim.Granted || claim.GrantID != grant.GrantID {
+		t.Fatalf("v1 claim = %+v, want grant %s", claim, grant.GrantID)
+	}
+	if want := GrantedMAC(h.key("komp"), "komp", nonce, grant.GrantID); claim.MAC != want {
+		t.Fatalf("v1 granted mac = %q, want %q", claim.MAC, want)
+	}
+
+	// A v1 denial also keeps the old bytes: no purpose line.
+	nonce = h.challenge("komp")
+	mac = ClaimMAC(h.key("komp"), "komp", nonce)
+	status, data = h.post("/v1/claim", map[string]string{
+		"machine": "komp", "nonce": nonce, "mac": mac,
+	}, "")
+	if status != http.StatusOK {
+		t.Fatalf("v1 denied claim: status %d body %s", status, data)
+	}
+	if err := json.Unmarshal(data, &claim); err != nil {
+		t.Fatal(err)
+	}
+	if claim.Granted {
+		t.Fatal("a v1 claim must not consume an unlock grant")
+	}
+	if want := DeniedMAC(h.key("komp"), "komp", nonce); claim.MAC != want {
+		t.Fatalf("v1 denied mac = %q, want %q", claim.MAC, want)
+	}
+}
+
+func TestLongPollReceivesGrantIssuedWhileWaiting(t *testing.T) {
+	h := newHarness(t)
+	nonce := h.challenge("komp")
+
+	type outcome struct{ result claimResult }
+	done := make(chan outcome, 1)
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		done <- outcome{h.claimRaw("komp", nonce, "unlock", ptr(3))}
+	}()
+	<-started
+	time.Sleep(150 * time.Millisecond)
+
+	grant := h.issuePurpose("komp", "unlock", nil)
+
+	select {
+	case out := <-done:
+		if out.result.err != nil {
+			t.Fatalf("long-poll claim: %v", out.result.err)
+		}
+		if out.result.status != http.StatusOK || !out.result.claim.Granted {
+			t.Fatalf("long-poll result: status %d claim %+v", out.result.status, out.result.claim)
+		}
+		if out.result.claim.GrantID != grant.GrantID {
+			t.Fatalf("granted %s, want %s", out.result.claim.GrantID, grant.GrantID)
+		}
+		if want := GrantedMACForPurpose(h.key("komp"), "komp", nonce, grant.GrantID, PurposeUnlock); out.result.claim.MAC != want {
+			t.Fatalf("long-poll mac = %q, want %q", out.result.claim.MAC, want)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("long-poll did not return after a grant was issued")
+	}
+}
+
+func TestLongPollTimesOutWithADeniedClaim(t *testing.T) {
+	h := newHarness(t)
+	nonce := h.challenge("komp")
+	start := time.Now()
+	out := h.claimRaw("komp", nonce, "unlock", ptr(1))
+	elapsed := time.Since(start)
+	if out.err != nil {
+		t.Fatalf("long-poll claim: %v", out.err)
+	}
+	if out.status != http.StatusOK || out.claim.Granted {
+		t.Fatalf("timeout result: status %d claim %+v", out.status, out.claim)
+	}
+	if elapsed < 900*time.Millisecond {
+		t.Fatalf("long-poll returned after %s, want about 1s", elapsed)
+	}
+	if want := DeniedMACForPurpose(h.key("komp"), "komp", nonce, PurposeUnlock); out.claim.MAC != want {
+		t.Fatalf("timeout mac = %q, want %q", out.claim.MAC, want)
+	}
+}
+
+func TestWaitersPerMachineAreLimited(t *testing.T) {
+	h := newHarness(t)
+	// Register the maximum number of waits directly so the cap is tested
+	// deterministically, then prove the HTTP path maps it to 429.
+	for i := 0; i < MaxWaitersPerQueue; i++ {
+		_, release, ok := h.svc.waiters.acquire("komp", PurposeUnlock)
+		if !ok {
+			t.Fatalf("waiter %d was refused below the limit", i)
+		}
+		defer release()
+	}
+	out := h.claimRaw("komp", h.challenge("komp"), "unlock", ptr(1))
+	if out.err != nil {
+		t.Fatalf("long-poll claim: %v", out.err)
+	}
+	if out.status != http.StatusTooManyRequests {
+		t.Fatalf("third waiter: status %d body %s, want 429", out.status, out.raw)
+	}
+	// The per-machine cap applies across purposes: a logon waiter is refused
+	// while two waits are already outstanding.
+	if _, _, ok := h.svc.waiters.acquire("komp", PurposeLogon); ok {
+		t.Fatal("per-machine waiter cap must include every purpose")
+	}
+}
+
+func TestWaitSecondsRequiresAValidPurpose(t *testing.T) {
+	h := newHarness(t)
+	for name, body := range map[string]map[string]any{
+		"wait without purpose": {"machine": "komp", "nonce": "n", "mac": "m", "waitSeconds": 5},
+		"wait zero":            {"machine": "komp", "nonce": "n", "mac": "m", "purpose": "unlock", "waitSeconds": 0},
+		"wait too long":        {"machine": "komp", "nonce": "n", "mac": "m", "purpose": "unlock", "waitSeconds": 26},
+	} {
+		status, data := h.post("/v1/claim", body, "")
+		if status != http.StatusBadRequest {
+			t.Errorf("%s: status %d body %s, want 400", name, status, data)
+		}
+	}
+}
+
+func TestInvalidPurposeIsRejected(t *testing.T) {
+	h := newHarness(t)
+	status, data := h.post("/v1/grants", map[string]any{
+		"machine": "komp", "purpose": "admin",
+	}, "test-issuer-token")
+	if status != http.StatusBadRequest {
+		t.Errorf("grant bad purpose: status %d body %s, want 400", status, data)
+	}
+	status, data = h.post("/v1/claim", map[string]any{
+		"machine": "komp", "nonce": "n", "mac": "m", "purpose": "admin",
+	}, "")
+	if status != http.StatusBadRequest {
+		t.Errorf("claim bad purpose: status %d body %s, want 400", status, data)
+	}
+}
+
+func TestMigrationDefaultsExistingGrantsToLogon(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	legacy := []string{
+		`CREATE TABLE schema_meta (version INTEGER NOT NULL)`,
+		`INSERT INTO schema_meta(version) VALUES (1)`,
+		`CREATE TABLE grants (
+			id TEXT PRIMARY KEY,
+			machine TEXT NOT NULL,
+			created_unix INTEGER NOT NULL,
+			expires_unix INTEGER NOT NULL,
+			consumed INTEGER NOT NULL DEFAULT 0,
+			consumed_unix INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX grants_machine ON grants(machine, consumed, expires_unix)`,
+	}
+	for _, statement := range legacy {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("legacy schema: %v", err)
+		}
+	}
+	now := time.Now()
+	if _, err := db.Exec(`INSERT INTO grants(id, machine, created_unix, expires_unix, consumed) VALUES (?, ?, ?, ?, 0)`,
+		"legacy-grant", "komp", now.UnixNano(), now.Add(time.Hour).Unix()); err != nil {
+		t.Fatalf("insert legacy grant: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	store, err := OpenStore(context.Background(), path)
+	if err != nil {
+		t.Fatalf("migrate legacy db: %v", err)
+	}
+	defer store.Close()
+	svc := New(Options{
+		Keys:        Keys{"komp": vectorKey()},
+		IssuerToken: "test-issuer-token",
+		Store:       store,
+		MaxTTL:      MaxTTL,
+		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	srv := httptest.NewServer(svc.Handler())
+	defer srv.Close()
+
+	challenge, err := http.Post(srv.URL+"/v1/challenge", "application/json", bytes.NewBufferString(`{"machine":"komp"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var chal challengeResponse
+	if err := json.NewDecoder(challenge.Body).Decode(&chal); err != nil {
+		t.Fatal(err)
+	}
+	_ = challenge.Body.Close()
+	mac := ClaimMAC(vectorKey(), "komp", chal.Nonce)
+	body, _ := json.Marshal(map[string]string{"machine": "komp", "nonce": chal.Nonce, "mac": mac})
+	resp, err := http.Post(srv.URL+"/v1/claim", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var claim claimResponse
+	if err := json.NewDecoder(resp.Body).Decode(&claim); err != nil {
+		t.Fatal(err)
+	}
+	if !claim.Granted || claim.GrantID != "legacy-grant" {
+		t.Fatalf("legacy grant not claimable as logon: %+v", claim)
+	}
+}

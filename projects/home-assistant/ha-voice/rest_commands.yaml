@@ -37,8 +37,9 @@ scheduler_rpc:
   timeout: 10
 
 # wakegrant issuer (packages/contracts/wakegrant/PROTOCOL.md). Called right
-# before Wake-on-LAN so the machine can sign the owner in once. The endpoint is
-# a non-secret LAN base URL in input_text.wakegrant_endpoint; the bearer value
+# before Wake-on-LAN so the machine can sign the owner in once, and before an
+# unlock so a running, locked PC can be unlocked once. The endpoint is a
+# non-secret LAN base URL in input_text.wakegrant_endpoint; the bearer value
 # (including the "Bearer " prefix) stays in secrets.yaml.
 wakegrant_issue:
   url: "{{ states('input_text.wakegrant_endpoint') | trim | regex_replace('/+$', '') }}/v1/grants"
@@ -46,7 +47,17 @@ wakegrant_issue:
   headers:
     Authorization: !secret wakegrant_bearer
     Content-Type: "application/json"
-  payload: '{"machine":"komp","ttlSeconds":180}'
+  payload: '{"machine":"komp","purpose":"logon","ttlSeconds":180}'
+  content_type: "application/json"
+  timeout: 5
+
+wakegrant_issue_unlock:
+  url: "{{ states('input_text.wakegrant_endpoint') | trim | regex_replace('/+$', '') }}/v1/grants"
+  method: POST
+  headers:
+    Authorization: !secret wakegrant_bearer
+    Content-Type: "application/json"
+  payload: '{"machine":"komp","purpose":"unlock","ttlSeconds":60}'
   content_type: "application/json"
   timeout: 5
 
