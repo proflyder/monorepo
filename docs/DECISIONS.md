@@ -378,4 +378,29 @@
     * Коммиты и PR — по корневому `AGENTS.md`/`docs/GIT.md`; отдельного
       authorship-скрипта и job `commits` в монорепо нет.
 
+38. **Pod template аннотируется содержимым, а не git-ревизией.**
+    * Раньше `ricardo.dev/build` в `spec.template.metadata.annotations` был
+      `<git short rev>-<sha256(image refs)[:12]>`: любая новая ревизия Git
+      (даже при идентичных digest'ах образов) меняла pod template,
+      `kubectl replace` создавал новый ReplicaSet и перезапускал все pods.
+    * Теперь pod template несёт `ricardo.dev/rollout`, а
+      `home-deploy render --rollout-key ROLLOUT_ID` заполняет его первыми
+      12 hex sha256 **всего отрендеренного юнита** (digest'ы всех
+      контейнеров, значения из private env, содержимое ConfigMap, probes,
+      resources). При хешировании маскируются `BUILD_ID` (git-ревизия) и сам
+      `ROLLOUT_ID`, поэтому хеш зависит только от того, что исполняют pods.
+    * `BUILD_ID` остаётся аннотацией самого Deployment
+      (`metadata.annotations.ricardo.dev/build`) для трассировки; изменение
+      metadata не меняет generation и не катит pods. `converge
+      --summary-file` пишет `unchanged|rolled-out` по сравнению
+      `metadata.generation` до и после apply; `deploy-home` показывает это в
+      job summary.
+    * Изменение образа, отрендеренного конфига или смонтированного
+      ConfigMap по-прежнему перезапускает pods. ESO-managed Secret'ы не
+      входят в хеш: они не рендерятся юнитом. Первый deploy после смены
+      формата аннотации один раз перекатит каждый юнит.
+    * Golden-фикстуры и `rollout_test.go` фиксируют: другая git-ревизия при
+      тех же образах/конфиге → идентичный pod template; другой digest или
+      конфиг → другой.
+
 Меняется решение — обновить этот файл и `STATE.md`.

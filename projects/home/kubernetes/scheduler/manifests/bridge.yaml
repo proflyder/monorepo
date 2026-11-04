@@ -33,6 +33,9 @@ metadata:
   labels:
     app.kubernetes.io/name: ha-bridge
     app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    # Traceability only: a Deployment metadata change never rolls pods.
+    ricardo.dev/build: ${BUILD_ID}
 spec:
   replicas: 0
   # One executor per queue. A second replica would duplicate HA side effects.
@@ -46,7 +49,8 @@ spec:
       labels:
         app.kubernetes.io/name: ha-bridge
       annotations:
-        ricardo.dev/build: ${BUILD_ID}
+        # Content-addressed: identical rendered content keeps the pod template.
+        ricardo.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
       securityContext:

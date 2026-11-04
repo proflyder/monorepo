@@ -321,6 +321,7 @@ echo "== build id: $BUILD_ID"
 echo "== rendering manifests into $RENDER_DIR"
 home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
+  --rollout-key ROLLOUT_ID \
   --set "SCHEDULER_IMAGE=$(get_image_ref scheduler)" \
   --set "HA_BRIDGE_IMAGE=$(get_image_ref ha-bridge)" \
   --set "HA_CONTROL_IMAGE=$(get_image_ref ha-control)" \
@@ -352,7 +353,8 @@ converge_deployment() {
   local name=$1 file=$2
   shift 2
   home_deploy converge \
-    --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file" "$@"
+    --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file" \
+    --summary-file "${DEPLOY_SUMMARY_FILE:-}" "$@"
 }
 
 echo "== checking required secrets"

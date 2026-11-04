@@ -79,6 +79,7 @@ var goldenCases = []goldenCase{
 		env:    "platform/deploy/testdata/env/scheduler.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
+			"ROLLOUT_ID=0123456789ab",
 			"SCHEDULER_IMAGE=" + image("ghcr.io/proflyder/scheduler", 0),
 			"HA_BRIDGE_IMAGE=" + image("ghcr.io/proflyder/ha-bridge", 1),
 			"HA_CONTROL_IMAGE=" + image("ghcr.io/proflyder/ha-control", 2),
@@ -98,6 +99,7 @@ var goldenCases = []goldenCase{
 		env:    "platform/deploy/testdata/env/currency-bot.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
+			"ROLLOUT_ID=0123456789ab",
 			"CURRENCY_BOT_IMAGE=" + image("ghcr.io/proflyder/currency-bot", 4),
 			"CLOUDFLARED_IMAGE=" + image("cloudflare/cloudflared", 5),
 			"CURRENCY_WEBHOOK_URL=https://bot.example.test/telegram/webhook",
@@ -116,6 +118,7 @@ var goldenCases = []goldenCase{
 		env:    "platform/deploy/testdata/env/mcp-gateway.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
+			"ROLLOUT_ID=0123456789ab",
 			"MCP_GATEWAY_IMAGE=" + image("ghcr.io/proflyder/mcp-gateway", 6),
 			"BB_CT_IP=192.0.2.30",
 			"BB_PROJECT_STATION_LAB=proj_0000000000000001",
@@ -136,6 +139,7 @@ var goldenCases = []goldenCase{
 		env:    "platform/deploy/testdata/env/wakegrant.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
+			"ROLLOUT_ID=0123456789ab",
 			"WAKE_GRANT_IMAGE=" + image("ghcr.io/proflyder/wakegrant", 7),
 			"WAKE_GRANT_NODE_PORT=30101",
 		},
@@ -149,6 +153,7 @@ var goldenCases = []goldenCase{
 		env:    "platform/deploy/testdata/env/scheduler.env.example",
 		sets: []string{
 			"BUILD_ID=0123456789ab",
+			"ROLLOUT_ID=0123456789ab",
 			"SCHEDULER_IMAGE=" + image("ghcr.io/proflyder/scheduler", 0),
 			"HA_BRIDGE_IMAGE=" + image("ghcr.io/proflyder/ha-bridge", 1),
 			"HA_CONTROL_IMAGE=" + image("ghcr.io/proflyder/ha-control", 2),

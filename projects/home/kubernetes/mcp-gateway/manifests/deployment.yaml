@@ -5,7 +5,8 @@
 # manifests are never committed.
 #
 #   MCP_GATEWAY_IMAGE   digest-pinned image built by Bazel
-#   BUILD_ID            rollout annotation (image fingerprint)
+#   BUILD_ID            Deployment annotation (traceability, never rolls pods)
+#   ROLLOUT_ID          content-addressed pod-template annotation
 #
 # The pod runs as 65534 with a read-only root filesystem. It has a
 # ServiceAccount token on purpose: the only cluster access in the whole voice
@@ -18,6 +19,9 @@ metadata:
   labels:
     app.kubernetes.io/name: mcp-gateway
     app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    # Traceability only: a Deployment metadata change never rolls pods.
+    ricardo.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
   # A second replica would double the pending-action store and the cooldown
@@ -35,7 +39,8 @@ spec:
       labels:
         app.kubernetes.io/name: mcp-gateway
       annotations:
-        ricardo.dev/build: ${BUILD_ID}
+        # Content-addressed: identical rendered content keeps the pod template.
+        ricardo.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
       serviceAccountName: mcp-gateway

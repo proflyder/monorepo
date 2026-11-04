@@ -26,6 +26,11 @@ func Fingerprint(fingerprint string) string {
 
 // BuildID joins the short git revision and the fingerprint digest the way the
 // deploy scripts always have: `<rev>-<12 hex chars>`.
+//
+// It is the traceability identifier on the Deployment itself
+// (`metadata.annotations.ricardo.dev/build`). Pod templates use the
+// content-addressed render.RolloutKey instead, so a new git revision alone
+// never changes `spec.template` and never rolls pods.
 func BuildID(revision, fingerprint string) string {
 	return revision + "-" + Fingerprint(fingerprint)
 }

@@ -149,6 +149,7 @@ echo "== rendering manifests into $RENDER_DIR"
 home_deploy render --unit wakegrant \
   --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
+  --rollout-key ROLLOUT_ID \
   --set "WAKE_GRANT_IMAGE=$IMAGE_REF" \
   --set "WAKE_GRANT_NODE_PORT=$WAKE_GRANT_NODE_PORT" \
   "$DIR/manifests/wakegrant.yaml"
@@ -197,7 +198,30 @@ mark_applied() {
 
 echo "== applying wakegrant"
 record_before wakegrant
+# The rollout annotation is content-addressed: an identical deploy leaves
+# metadata.generation unchanged, so `kubectl apply` creates no new ReplicaSet
+# and no pod restart. Record that per workload for the deploy-home summary.
+if $KUBECTL -n "$NS" get deployment wakegrant >/dev/null 2>&1; then
+  generation_before=$($KUBECTL -n "$NS" get deployment wakegrant -o jsonpath='{.metadata.generation}' 2>/dev/null || true)
+else
+  generation_before=""
+fi
 $KUBECTL apply -f "$RENDER_DIR/wakegrant.yaml"
+if [[ -n "${DEPLOY_SUMMARY_FILE:-}" ]]; then
+  if [[ -z "$generation_before" ]]; then
+    status=created
+  else
+    generation_after=$($KUBECTL -n "$NS" get deployment wakegrant -o jsonpath='{.metadata.generation}' 2>/dev/null || true)
+    if [[ -z "$generation_after" ]]; then
+      status=unknown
+    elif [[ "$generation_before" == "$generation_after" ]]; then
+      status=unchanged
+    else
+      status=rolled-out
+    fi
+  fi
+  printf '%s\t%s\n' wakegrant "$status" >> "$DEPLOY_SUMMARY_FILE"
+fi
 mark_applied wakegrant
 $KUBECTL -n "$NS" rollout status deployment/wakegrant --timeout=180s
 

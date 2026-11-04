@@ -5,7 +5,8 @@
 #
 #   WAKE_GRANT_IMAGE      digest-pinned image built by Bazel
 #   WAKE_GRANT_NODE_PORT  LAN NodePort exposed to Home Assistant
-#   BUILD_ID              rollout annotation (image fingerprint)
+#   BUILD_ID              Deployment annotation (traceability, never rolls pods)
+#   ROLLOUT_ID            content-addressed pod-template annotation
 #
 # SQLite is single-writer: exactly one replica, Recreate, one volume. The grant
 # must survive a pod restart between the Wake-on-LAN packet and the claim, so
@@ -34,6 +35,9 @@ metadata:
   labels:
     app.kubernetes.io/name: wakegrant
     app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    # Traceability only: a Deployment metadata change never rolls pods.
+    ricardo.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
   strategy:
@@ -46,7 +50,8 @@ spec:
       labels:
         app.kubernetes.io/name: wakegrant
       annotations:
-        ricardo.dev/build: ${BUILD_ID}
+        # Content-addressed: identical rendered content keeps the pod template.
+        ricardo.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
       securityContext:

@@ -13,6 +13,9 @@ metadata:
   labels:
     app.kubernetes.io/name: ha-control
     app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    # Traceability only: a Deployment metadata change never rolls pods.
+    ricardo.dev/build: 0123456789ab
 spec:
   replicas: 1
   strategy:
@@ -25,7 +28,8 @@ spec:
       labels:
         app.kubernetes.io/name: ha-control
       annotations:
-        ricardo.dev/build: 0123456789ab
+        # Content-addressed: identical rendered content keeps the pod template.
+        ricardo.dev/rollout: 0123456789ab
     spec:
       enableServiceLinks: false
       securityContext:

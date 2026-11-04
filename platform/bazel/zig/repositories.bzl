@@ -56,7 +56,15 @@ def _host_platform(ctx):
         arch = "aarch64"
     else:
         fail("unsupported zig exec host architecture: {}".format(arch))
-    if os not in ("linux", "macos"):
+    # Bazel reports the host OS as `ctx.os.name`, which is not the zig archive
+    # spelling: macOS is "mac os x" (older Bazel also "macos"/"darwin"), Linux
+    # is "linux". Normalise the prefix, keep the explicit refusal for anything
+    # else so an unsupported host can never silently pick a wrong archive.
+    if os.startswith("mac") or os.startswith("darwin"):
+        os = "macos"
+    elif os.startswith("linux"):
+        os = "linux"
+    else:
         fail("unsupported zig exec host OS: {}".format(os))
     return os, arch
 
