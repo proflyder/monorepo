@@ -1,6 +1,6 @@
 # projects
 
-Композиции solutions. Здесь живут project-specific конфиги, compose, env,
+Композиции solutions. Здесь живут project-specific конфиги, env, манифесты,
 systemd и deployment, но **не** бизнес-логика.
 
 ```text

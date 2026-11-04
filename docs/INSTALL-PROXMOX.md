@@ -12,12 +12,13 @@ VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB, HAOS 2026.10.4
                  add-ons: Music Assistant 2.10.8, Matter 9.2.0
 VM 101 lab-k3s   192.0.2.27   8 vCPU / 12 GiB / 200 GiB, Ubuntu + K3s
 CT 102 vpn       192.0.2.29   1 vCPU / 512 MiB / 4 GiB, Debian 13, ocserv
+CT 103 bb        192.0.2.30   2 vCPU / 2 GiB / 16 GiB, Debian 13, bb server
 ```
 
 - PVE `9.2.24`, root 64 GiB, swap 8 GiB, `local-lvm` ~379 GiB.
 - SATA SSD `/dev/sda1` ext4 `pve-backup` → `/mnt/pve/backup` (fstab по UUID,
   `nofail`), PVE storage `backup` (dir, content backup, `is_mountpoint`),
-  задание `nightly` (vzdump 100,101,102 в 04:00). Переустановка PVE этот диск
+  задание `nightly` (vzdump 100,101,102,103 в 04:00). Переустановка PVE этот диск
   не трогает: выбирать в установщике только `nvme0n1`.
 - VM — UEFI, guest agent, startup order 1/2.
 - Terraform — `projects/home/proxmox/terraform/`; state root-only на PVE,

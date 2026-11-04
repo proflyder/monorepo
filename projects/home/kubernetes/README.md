@@ -3,7 +3,7 @@
 Рабочая композиция: один K3s server/worker в Ubuntu VM `lab-k3s` на Proxmox,
 собственный containerd, GigaAM/Whisper/Piper/Hermes, observability и
 HTTPS ingress. HA Core, **Music Assistant** и **Matter Server** живут
-в HAOS VM как add-ons; их прежние данные сохранены в приватных backup для отката. Pulsar и
+в HAOS VM как add-ons. Pulsar и
 BLE gateway остаются на станции. Версии зафиксированы в `versions.sh`.
 
 - [Эксплуатация и восстановление](../../../docs/KUBERNETES-OPERATIONS.md).
@@ -19,7 +19,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 `/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
 `/srv/k3s/runtime`. Новые observability PVC используют `local-retain`;
 существующие данные приложений — static local PV с Retain. Это локальное
-хранение, не репликация. VM `lab-k3s` — 8 GiB, `192.0.2.27`;
+хранение, не репликация. VM `lab-k3s` — 12 GiB, `192.0.2.27`;
 HAOS — 4 GiB, `192.0.2.28`; host Proxmox — `192.0.2.26`.
 MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`.
 
@@ -38,10 +38,8 @@ export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml
 ./projects/home/kubernetes/apply-runtime.sh
 ```
 
-Для первого переноса недостаточно выполнить helm upgrade с replicas=1:
-старые writers должны быть остановлены, данные сохранены, volumes/images
-подготовлены. Подробности и rollback — в runbook. Не выполнять параллельные
-Helm операции над одним release.
+Не выполнять параллельные Helm операции над одним release; rollback — в
+runbook (`docs/KUBERNETES-OPERATIONS.md`).
 
 Администрирование — по SSH или через закрытый tunnel. API/kubelet/node metrics
 закрыты от обычного LAN; Grafana доступна по `https://grafana.home.example.com/`,

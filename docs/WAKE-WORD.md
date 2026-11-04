@@ -22,20 +22,11 @@
 - Записи и нарезанные PCM-контексты с разметкой по версиям сохранены в
   `secrets/datasets/`, вне Git. Случайные аугментации сохранены как массивы
   признаков и воспроизводятся по рецептам/seed.
-- Бинарник и device-откат — `/data/pulsar`; legacy исходники и binaries —
-  private в `secrets/local/recovery/`.
+- Бинарник и device-откат (`pulsar.prev`) — `/data/pulsar`.
 - Изменяемые исходники — `projects/station/pulsar/` (монорепозиторий).
 
-База локального форка — tag `v0.5.4`, commit `f1f5b17` (upstream `v0.5.3`
-остаётся в истории); на станции установлена сборка форка `v0.5.1005`
-(SHA256 `89415c5a…71671b6`). `pulsar.prev` — `v0.5.1004` (`fb0695b2…`);
-historical: `3a544979…` (`v0.5.1002`), `80aea2ec…` (`v0.5.1001`, база
-`v0.5.2`), `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
-`0b0c48e4…` (endpointing 512 ms), `pulsar.pre-endpoint-20261030` —
-`v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
-private backup вне Git.
-Локальных snapshot-патчей больше нет: код Pulsar версионируется в
-монорепозитории. Upstream вливается патчем (`git diff vA..vB` →
+База — upstream tag `v0.5.4`, commit `f1f5b17`; установленная версия —
+`docs/STATE.md`. Upstream вливается патчем (`git diff vA..vB` →
 `git apply -3 --directory=projects/station/pulsar`), см. `docs/OPERATIONS.md`.
 ALSA ABI armhf обрабатывается runtime-обёрткой `pulsar-alsa`.
 
@@ -61,8 +52,7 @@ deploy из `projects/station/tools/wakeword-personalize/README.md`.
 ## Установка / откат
 
 - Установка и `ctl.sh` — `OPERATIONS.md`.
-- Rollback: `/data/pulsar/backups/pre-ricardo*/` и
-  `/data/pulsar/rollback-ricardo.sh`.
+- Rollback бинарника — `pulsar.prev` (`OPERATIONS.md`).
 - `ctl.sh disable` возвращает `maind`; `enable` — Pulsar.
 
 ## Wake-события и FP/ч

@@ -8,12 +8,8 @@ Telegram webhook delivered through a Cloudflare Tunnel.
   schema.
 - The home server is authoritative for scheduling and storage; Telegram is only
   the delivery channel.
-- The old VPS deployment (`/app/currency-bot`, H2 + Quartz + Promtail) was
-  retired in the 2026-10-31 cutover: data exported, all VPS containers and
-  volumes removed, and the three old repositories (`tg-bot-currency`,
-  `infra-monitoring`, `infra-ci`) archived with their secrets deleted.
 
-## Current state (2026-10-31)
+## Current state
 
 - Namespace `currency-bot`: Deployment `currency-bot` (PVC `currency-bot-data`,
   1 GiB `local-retain`, digest-pinned image) and Deployment `cloudflared`
@@ -24,14 +20,11 @@ Telegram webhook delivered through a Cloudflare Tunnel.
   points at the tunnel with `allowed_updates=["message"]`.
 - LAN/VPN API `https://currency.home.<domain>/api/*` (Bearer, `home-allowlist`);
   `ServiceMonitor` scrapes `/metrics` (verified `up=1`).
-- History migrated from H2: 990 `currency_history` rows (2026-09-20 …
-  2026-10-31) and 2 `sent_alerts`; the PVC was seeded before the first start.
 - CI units `currency-bot` (Go, image, deploy) and `currency-bot-deploy`
   (deploy-script contract test) are green; the deploy env lives in OpenBao
   `secret/ci/deploy-home` key `currency_bot_env`.
 - Observability: Alloy ships the namespace's logs with secret redaction and the
-  Grafana dashboard `currency-bot` (uid `currency-bot`) is live. The old VPS
-  node dashboard was not ported.
+  Grafana dashboard `currency-bot` (uid `currency-bot`) is live.
 
 ## Files
 
@@ -212,136 +205,6 @@ kubectl -n currency-bot get --raw \
   "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
 ```
 
-## Cutover from the VPS (H2 → SQLite, done 2026-10-31)
-
-This is the record of the completed cutover. The importer is
-`solutions/currency-bot/cmd/currency-bot-import`. It reads the H2 CSV exports
-and is idempotent (existing timestamps are skipped). The production run moved
-990 history rows and 2 `sent_alerts`.
-
-1. **Prepare the new deployment** (steps 1–6 above), but keep `cloudflared` at
-   0 replicas / do not point Telegram at it yet. Deploying the bot pod is safe:
-   it writes history but the webhook is still the old one.
-
-2. **Stop the old bot** so H2 is not open twice (compose deployment):
-
-   ```bash
-   docker compose stop currency-bot
-   ```
-
-3. **Export both tables** from the old image (the fat jar contains H2):
-
-   ```bash
-   mkdir -p export
-   docker compose run --rm -v "$PWD/export:/export" --entrypoint sh currency-bot -c '
-   java -cp /app/app.jar org.h2.tools.Shell \
-     -url "jdbc:h2:file:/app/data/currency-history;IFEXISTS=TRUE" \
-     -user sa -password "" \
-     -sql "CALL CSVWRITE('"'"'/export/currency_history.csv'"'"', '"'"'SELECT * FROM CURRENCY_HISTORY'"'"');
-           CALL CSVWRITE('"'"'/export/sent_alerts.csv'"'"', '"'"'SELECT * FROM SENT_ALERTS'"'"');"
-   '
-   ```
-
-   See `solutions/currency-bot/README.md` for a non-compose one-off container.
-   Migrate at least 35 days of history (alert lookbacks) and **all**
-   `sent_alerts` rows, otherwise the next run re-sends already delivered alerts.
-
-4. **Import into the live PVC** with the dedicated importer image. The runtime
-   image is distroless and only contains the bot, so build the one-off
-   `currency-bot-import` image, ship the CSVs in a ConfigMap, scale the bot to
-   zero (the PVC is `ReadWriteOnce`) and run one Job:
-
-   ```bash
-   # build + push the import helper once (digest-pinned, same distroless base)
-   bazel run //solutions/currency-bot:currency-bot-import_push \
-     --platforms=@rules_go//go/toolchain:linux_amd64 \
-     -- --repository ghcr.io/proflyder/currency-bot-import --tag migration
-   # home-deploy (platform/deploy/resolve.sh) prints the manifest digest
-   digest=$("${HOME_DEPLOY:-home-deploy}" oci digest \
-     bazel-bin/solutions/currency-bot/currency-bot-import_image)
-   import_image="ghcr.io/proflyder/currency-bot-import@${digest}"
-
-   kubectl -n currency-bot create configmap currency-import \
-     --from-file=history=export/currency_history.csv \
-     --from-file=alerts=export/sent_alerts.csv
-   kubectl -n currency-bot scale deployment/currency-bot --replicas=0
-   kubectl -n currency-bot wait --for=delete pod \
-     -l app.kubernetes.io/name=currency-bot --timeout=120s
-   ```
-
-   ```yaml
-   # migration-job.yaml
-   apiVersion: batch/v1
-   kind: Job
-   metadata:
-     name: currency-import
-     namespace: currency-bot
-   spec:
-     backoffLimit: 0
-     template:
-       spec:
-         restartPolicy: Never
-         securityContext:
-           runAsNonRoot: true
-           runAsUser: 65534
-           runAsGroup: 65534
-           fsGroup: 65534
-         containers:
-           - name: import
-             image: ghcr.io/proflyder/currency-bot-import@sha256:<digest>
-             args:
-               - -db
-               - /data/currency-bot.db
-               - -history
-               - /import/history
-               - -alerts
-               - /import/alerts
-             volumeMounts:
-               - name: data
-                 mountPath: /data
-               - name: import
-                 mountPath: /import
-                 readOnly: true
-         volumes:
-           - name: data
-             persistentVolumeClaim:
-               claimName: currency-bot-data
-           - name: import
-             configMap:
-               name: currency-import
-   ```
-
-   ```bash
-   kubectl -n currency-bot apply -f migration-job.yaml
-   kubectl -n currency-bot wait --for=condition=complete job/currency-import --timeout=600s
-   kubectl -n currency-bot logs job/currency-import
-   kubectl -n currency-bot delete job/currency-import
-   kubectl -n currency-bot delete configmap currency-import
-   kubectl -n currency-bot scale deployment/currency-bot --replicas=1
-   ```
-
-   The importer is idempotent; a re-run skips timestamps already present.
-
-5. **Switch the webhook**:
-   - scale `cloudflared` to 1 and confirm the tunnel is connected;
-   - call Telegram `setWebhook` for the new public URL with
-     `secret_token=<WEBHOOK_SECRET>` and `allowed_updates=["message"]`. The bot
-     also calls `setWebhook` at startup when `WEBHOOK_URL` is set, so a restart
-     of the new pod is an alternative;
-   - send `/trigger` from the allowed chat and confirm the reply arrives once.
-
-6. **Stop the old containers** and disable the old deploy:
-
-   ```bash
-   docker compose down
-   ```
-
-   Keep the old volume and `.env` until one green week has passed.
-
-7. **Retire old monitoring**: the VPS Promtail/Prometheus currency job and the
-   four jsonnet dashboards are replaced by the ServiceMonitor and the Home
-   dashboard `currency-bot` (delivered by the observability change).
-
 ## Rollback
 
 `deploy.sh` records each Deployment before it changes it and writes an
@@ -360,9 +223,8 @@ ServiceMonitor) are idempotent and intentionally not rolled back; the previous
 manifests can be re-applied by checking out the previous commit and re-running
 `deploy.sh`.
 
-The VPS deployment no longer exists, so there is no fallback outside K3s: roll
-back with the script above or fix forward. The original H2 files are kept in
-the private VPS backup.
+There is no fallback outside K3s: roll back with the script above or fix
+forward.
 
 Full removal (history is lost unless the PVC is backed up first):
 
@@ -373,15 +235,4 @@ kubectl delete namespace currency-bot
 kubectl delete -f projects/home/kubernetes/currency-bot/ci/rbac.yaml
 ```
 
-Also remove the Cloudflare tunnel route and call Telegram `deleteWebhook` or
-point `setWebhook` back at the old service.
-
-## Cutover checks (all passed 2026-10-31)
-
-- [x] `kubectl -n currency-bot get secret currency-bot cloudflared-tunnel`
-- [x] `kubectl -n currency-bot get externalsecret` → both `SecretSynced=True`
-- [x] `kubectl auth can-i -n currency-bot get deployments` as the CI identity
-- [x] `secret/ci/deploy-home` has `currency_bot_env` with `WEBHOOK_URL`,
-      `LAN_CIDR`, `NODE_LAN_IP`
-- [x] `currency.<HOME_DOMAIN>` DNS record and ingress route exist
-- [x] Cloudflare tunnel route targets the webhook Service
+Also remove the Cloudflare tunnel route and call Telegram `deleteWebhook`.

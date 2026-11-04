@@ -150,8 +150,7 @@ kubectl -n openbao delete pod openbao-0
 
 OpenBao поддерживает login MFA. `configure.py` создаёт метод `human-totp`
 (per-entity TOTP, SHA1/6/30 с, issuer `OpenBao home`). **Состояние:**
-устройство зарегистрировано, enforcement на `auth/userpass` включён
-(2026-10-31); вход в UI требует пароль и 6-значный код. Повторный запуск
+устройство зарегистрировано, enforcement на `auth/userpass` включён; вход в UI требует пароль и 6-значный код. Повторный запуск
 `configure.py` без флага enforcement не трогает и сообщает его состояние.
 
 Регистрация/перевыпуск устройства (UI самостоятельной регистрации нет):
@@ -294,7 +293,7 @@ KUBECONFIG=… kubectl auth can-i create tokenreviews.authentication.k8s.io \
 `external-secrets/external-secrets` и используется External Secrets Operator;
 для неё отдельных изменений политики не требуется.
 
-## External Secrets Operator (этап 2)
+## External Secrets Operator
 
 ESO читает `secret/k8s/<namespace>/<secret-name>` и создаёт Kubernetes Secret
 с тем же именем и ключами в namespace приложения. Установка и таблица
@@ -321,7 +320,7 @@ kubectl -n <ns> annotate externalsecret <name> force-sync="$(date +%s)" --overwr
 
 ## CI (GitHub OIDC)
 
-### CI-секреты (этап 3)
+### CI-секреты
 
 В GitHub Environment `Home` остаются только значения, нужные до входа в
 OpenBao:

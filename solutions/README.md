@@ -7,10 +7,15 @@
 | Solution | Язык | Назначение | Статус |
 |---|---|---|---|
 | `scheduler/` | Go | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect/gRPC | развёрнут |
-| `alarm/` | Go | legacy `AlarmService` facade над тем же engine + совместимый entrypoint | реализован facade |
+| `alarm/` | Go | совместимый entrypoint с именем `alarm` над тем же engine (`AlarmService` отдаёт и `scheduler`) | не развёрнут |
 | `ha-bridge/` | Go | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `cmd/ha-control` — каталог Home и очередь `control` | развёрнут |
-| `currency-bot/` | Go | курсы kurs.kz → SQLite, алерты и API; Telegram webhook через Cloudflare Tunnel, импорт H2 | развёрнут |
-| `mcp-gateway/` | Go | MCP Streamable HTTP шлюз: группы `infra.read`, `infra.fix`, `infra.report`; каталог сервисов из env | реализован |
+| `currency-bot/` | Go | курсы kurs.kz → SQLite, алерты и API; Telegram webhook | развёрнут |
+| `mcp-gateway/` | Go | MCP Streamable HTTP шлюз: группы `infra.read`, `infra.fix`, `infra.report`; каталог сервисов из env | развёрнут |
+| `voice-proxy/` | Go | OpenAI-совместимый прокси перед LLM: делает ответы пригодными для Piper TTS | развёрнут |
+| `wakegrant/` | Go | одноразовые гранты входа для ПК, разбуженного HA (`packages/contracts/wakegrant`) | развёрнут |
+| `heartbeat/` | JS | Cloudflare Worker: внешний dead-man switch для Alertmanager `Watchdog` | развёрнут |
+| `bb-home-dispatcher/` | TS | плагин bb: детерминированный исполнитель голосовых команд от `mcp-gateway` | развёрнут |
+| `bb-profiles/` | TS | плагин bb: изолированные профили (логины, конфиги, провайдеры, машины) | развёрнут |
 | `windows-logon-provider/` | Rust (`windows-rs`, Bazel + zig) | Windows Credential Provider: плитка входа только при гранте `wakegrant`; конфигурация приходит при установке; публикуется в GHCR как OCI-артефакт | установлен на домашнем ПК |
 
 ## Правила
@@ -31,17 +36,9 @@
 - MCP не разворачивается per-project; будущие tool groups живут в одном
   `mcp-gateway`.
 
-## Пример
+## Инстансы
 
-```text
-projects/home:
-  scheduler@home    sqlite=/data/home/scheduler.db  :8098
-  alarm@home        тот же engine + legacy AlarmService facade
-  ha-bridge@home    SCHEDULER_ENDPOINT=127.0.0.1:8098, queue=home
-  ha-control@home   каталог Home, queue=control
-  currency-bot@home sqlite=/data/currency-bot.db :8080/:8081, webhook через tunnel
-  android           Connect JSON → LAN/VPN HTTPS endpoint
-```
-
-Это один и тот же код, разные инстансы и конфигурация. Два executor-а на
-одни и те же live schedules одновременно не включаются.
+Конкретные инстансы, endpoint, DB path и секреты описывает проект
+(`projects/home/kubernetes/`, `projects/home/proxmox/`). Один и тот же код
+запускается с разной конфигурацией; два executor-а на одни и те же live
+schedules одновременно не включаются.

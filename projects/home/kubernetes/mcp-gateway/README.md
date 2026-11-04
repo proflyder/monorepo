@@ -421,9 +421,8 @@ kubectl delete -f projects/home/kubernetes/mcp-gateway/manifests/external-secret
   TCP and HA entities). A check proves reachability, not application-level
   correctness, and `ha_unavailable_summary` is limited to the configured
   domains to avoid noise from permanently unavailable entities.
-- `TELEGRAM_ALLOWED_USERS` must exist in `hermes-environment`; until the
-  Hermes/Telegram rollout writes it, `mcp-gateway-telegram` stays not Ready and
-  the deploy fails closed on purpose.
+- `TELEGRAM_ALLOWED_USERS` must exist in `hermes-environment`; without it
+  `mcp-gateway-telegram` stays not Ready and the deploy fails closed on purpose.
 - Restarting `traefik`, `openbao` or a monitoring component is technically
   possible after confirmation and briefly degrades the whole home; the
   warnings state the consequence, and RBAC cannot express "but not during an

@@ -22,8 +22,8 @@
 - Use `bb thread spawn` with `--parent-self`, `--reasoning-level low`, and
   explicit project, environment, provider, and model. Reuse the existing
   environment for sequential shared-checkout tasks; use separate worktrees only
-  when appropriate. Do not assume ignored or nested Pulsar sources are copied
-  into worktrees.
+  when appropriate. Ignored files (secrets, local tools, build outputs) are not
+  copied into worktrees.
 - Start with one write worker per shared checkout. Parallel research is allowed;
   concurrent writers require nonoverlapping file ownership or deliberate
   isolation.
@@ -56,7 +56,7 @@
 - HA integrates through an executor adapter. Hermes and future projects should
   share one extensible MCP gateway with domain tool groups, rather than one MCP
   server per project. Start MCP only when an actual client needs it.
-- Keep the current HA scheduler authoritative until an explicit, tested cutover;
+- The scheduler owns live schedules and `ha-bridge` is their only executor;
   never enable a second executor for the same live schedules implicitly.
 
 ## Git и pull request
@@ -84,17 +84,15 @@ PR со squash-merge и зелёным `ci-ok`; merge в `develop` = депло�
 Существующие upstream remote не означают разрешения публиковать наши изменения.
 
 Активный Pulsar — first-party код в `projects/station/pulsar/` (AGPL-3.0;
-`LICENSE`, README, docs и RICARDO.md сохранены). Вложенного checkout'а
-`projects/station/upstream/pulsar-rust/`, snapshot-скрипта и patch-каталога
-больше нет. Upstream `Morvex885/pulsar` вливается вручную патчем:
+`LICENSE`, README, docs и RICARDO.md сохранены). Upstream `Morvex885/pulsar`
+вливается вручную патчем:
 
 ```bash
 git -C <upstream-checkout> diff vOLD..vNEW > /tmp/pulsar-upstream.patch
 git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
 ```
 
-затем обычный squash PR. GitHub `proflyder/pulsar` — прежний самостоятельный
-репозиторий, архивируется. Релиз Pulsar — изменение
+затем обычный squash PR. Релиз Pulsar — изменение
 `projects/station/pulsar/VERSION`: merge в `develop` проводит юнит `pulsar`
 через общий `deploy-home` (`publish_when` — только VERSION), `publish-native`
 публикует OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>`

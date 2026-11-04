@@ -10,11 +10,16 @@
 ```text
 solutions/               переиспользуемые решения
   scheduler/             durable scheduler, SQLite queues, Connect/gRPC
-  alarm/                 legacy AlarmService facade над тем же engine
+  alarm/                 тот же engine под именем процесса alarm
   ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler (+ cmd/ha-control)
   mcp-gateway/           MCP Streamable HTTP: infra.read / infra.fix / infra.report
+  currency-bot/          курсы kurs.kz, алерты, Telegram webhook
+  voice-proxy/           OpenAI-совместимый прокси для Piper TTS
   wakegrant/             one-time logon grants for a WoL machine (PROTOCOL.md)
+  windows-logon-provider/ Windows Credential Provider (C++17)
   heartbeat/             внешний dead-man switch (Cloudflare Worker)
+  bb-home-dispatcher/    плагин bb: исполнитель голосовых команд
+  bb-profiles/           плагин bb: изолированные профили
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (+ checked-in Go stubs)
@@ -69,7 +74,8 @@ engine, два entrypoint-а для совместимости.
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
 | `solutions/bb-home-dispatcher`, `solutions/bb-profiles` | JavaScript/TypeScript (плагины bb) | исполняются внутри bb как path-источник; `node --test` без внешних сервисов |
 | Windows logon provider | Rust (`windows-rs`) | in-proc COM DLL для LogonUI; `rules_rust` + герметичный zig (`x86_64-pc-windows-gnu`) через Bazel, без Visual Studio; переносимые host-тесты и clippy под Windows |
-| HA/Pulsar edge | YAML/C++ | существующий контур, не переписывать ради модности |
+| HA-конфиг | YAML | существующий контур, не переписывать ради модности |
+| Pulsar (станция) | Rust (`rules_rust`, Zig cross) | first-party форк upstream, сборка Bazel |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
 | Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
 | `platform/deploy` (`home-deploy`) и runtime health exporter | Go | все инструменты деплоя и in-cluster Job/экспортер — один distroless-бинарник, без Python в кластере (решение 35) |
@@ -108,9 +114,9 @@ ViewBinding/google-services и `android_lint` запускают их по `$(ex
 `bazel_dep`, toolchain, `go_deps`, `oci`, python — остаются глобальными.
 
 Чистый checkout поддерживает `go test ./solutions/scheduler/... ./solutions/alarm/... ./packages/...`;
-игнорируемый Pulsar installer проверяется отдельно с `GOWORK=off`.
-`make test` требует локальных upstream checkout’ов и Python-зависимостей
-(см. `docs/TESTING.md`).
+Pulsar installer — отдельный Go-модуль, проверяется с `GOWORK=off`.
+`make test` пропускает (`SKIP`) тесты, которым нужны игнорируемые локальные
+источники (см. `docs/TESTING.md`).
 
 Команды:
 
@@ -136,7 +142,8 @@ sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'
 `satellite/third_party/bazel/`. Юнит `pulsar` (`_native.yml`) собирает обе
 архитектуры и релиз Bazel-путём, installer/radio/ssh остаются своими
 скриптами. Цели Linux-only; на macOS `bazel build //...` их пропускает.
-`.bazelignore` держит только сгенерированные каталоги `satellite/`.
+`.bazelignore` исключает сгенерированные каталоги `satellite/` и игнорируемые
+локальные каталоги (`secrets`, `resources`, …).
 
 `solutions/windows-logon-provider` — Rust-компонент на том же Bazel:
 `crates/protocol` (переносимый слой), `crates/provider` (COM DLL) и
@@ -179,7 +186,7 @@ gRPC-Web; отдельного REST API нет. Go stubs лежат в репо�
   публикует только SSH forced command.
 - `projects/mobile/android`: управление server state, Connect JSON; нативных
   phone alarm/push пока нет.
-- `projects/*`: композиция, env, compose, systemd.
+- `projects/*`: композиция, env, манифесты K3s, systemd.
 
 ## Следующие этапы
 

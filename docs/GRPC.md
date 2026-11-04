@@ -168,6 +168,6 @@ target-имена (`alarms_go_proto`, `scheduler_go_proto`) сохранены �
 - streaming `WatchEvents`;
 - recurring generic tasks и event-trigger rules;
 - scenario executor (`SCHEDULE_KIND_SCENARIO` зарезервирован);
-- MCP gateway (только при появлении реального клиента);
+- группа `scheduler.*` в `mcp-gateway`;
 - Kafka/external broker (SQLite inbox/outbox достаточен для одного сервиса;
   broker можно добавить позже без изменения контракта).

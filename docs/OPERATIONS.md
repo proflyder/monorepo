@@ -24,7 +24,7 @@ HA: `http://192.0.2.28:8123`
 MA: `http://192.0.2.28:8095`  
 Grafana LAN: `http://192.0.2.27:30300/`  
 Grafana HTTPS: `https://grafana.home.example.com/`  
-HTTPS вход (LAN/VPN): `https://{ha,grafana,alarms,control}.home.example.com/`
+HTTPS вход (LAN/VPN): `https://{ha,grafana,alarms,control,currency,vault}.home.example.com/`
 
 Только LAN/VPN. Не пробрасывать `8123/8095/8099/6053/6638` и
 `80/443` на роутере.
@@ -445,10 +445,9 @@ unset VOICE_TOKEN
 профиль «Рабочий». Выключается `HERMES_VOICE_UPDATES=0`; подробности —
 `solutions/voice-proxy/README.md`.
 
-# профиль и цвет кольца станции
-#   HA: input_select.ricardo_voice_profile, switch.ricardo_work_profile
-#   станция: select.iandeks_stantsiia_midi_voice_color (Blue = рабочий)
-```
+Профиль и цвет кольца станции: HA `input_select.ricardo_voice_profile`,
+`switch.ricardo_work_profile`; станция —
+`select.iandeks_stantsiia_midi_voice_color` (Blue = рабочий).
 
 Проверка моста и плагинов — в разделе «BB server (CT 103)». Ручной эквивалент
 для диагностики (обходит аудит шлюза): `printf` JSON в
@@ -557,11 +556,8 @@ cd solutions/windows-logon-provider
 `fetch.sh` тянет артефакт в временный каталог, проверяет `SHA256SUMS` и
 `gh attestation verify` для DLL, печатает разрешённый digest. Любое
 расхождение — ошибка. Затем скопировать файлы на ПК по SSH, запустить
-self-test, установить/заменить DLL и записать digest в `docs/STATE.md`.
-Текущий установленный DLL — sha256
-`4481ae77f91411e5ceffe410c8b934f983a544fccfa70493e545e81177627c0b`
-(из CI artifact); после первого GHCR publish оператор записывает digest
-артефакта.
+self-test, установить/заменить DLL и записать digest в `docs/STATE.md`
+(там же — текущая установленная версия).
 
 Установка (PowerShell от администратора; `out` — распакованный артефакт):
 
@@ -711,9 +707,8 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 
 Цвет анимации слушания по профилю — HA select
 `select.iandeks_stantsiia_midi_voice_color` (Violet = личный, Blue = рабочий);
-его выставляет автоматизация `voice_profile_station_color`. Если сущности
-нет — на станции прошивка старше `v0.5.1004`; автоматизация тогда ничего не
-делает.
+его выставляет автоматизация `voice_profile_station_color`; если сущности
+нет, автоматизация ничего не делает.
 
 Экспериментальный локальный endpointing (см. `PENDING.md`) включается только
 переменной окружения процесса Pulsar: `PULSAR_LOCAL_ENDPOINTING=1`; без неё
@@ -734,29 +729,10 @@ known-good бинарник — атомарно, не поверх работа
 adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
-Установлен релиз `v0.5.1005` (armhf, SHA256 `89415c5a…71671b6`, база
-upstream `v0.5.4`): Ricardo pre-roll 256 ms (`Fixed(8)`), локальный
-endpointing, «Wake: не услышала» с окном 30 с и upstream-функции `v0.5.4`
-(number «Follow-up duration», STT stop-word fallback, switch часов «Clock auto
-brightness», Mini gen1 и Mini 3 experimental, переработанные
-volume/mixer/player/pcm_out/sendspin). `--version` показывает тег релиза.
-Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`. `pulsar.prev` — предыдущая
-сборка `fb0695b2…` (`v0.5.1004`).
-Historical старше в `/data/pulsar/backups/` и private: `3a544979…`
-(`v0.5.1002`), `80aea2ec…` (`v0.5.1001`, база `v0.5.2`), `7081ef8e…`
-(`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (endpointing 512 ms),
-`d2197f6a…` (`v0.5.2-3-gc57d521-dirty`, `pulsar.pre-endpoint-20261030`),
-`69310a37…` (`pulsar.prev.pre-endpoint-20261030`); off-device private
-`secrets/local/backups/pulsar-preroll8-20261030T185157Z/`.
-
-Откат на предыдущую сборку — только на станции, не через CI: updater
-предлагает лишь более новые версии. Команда ниже возвращает `pulsar.prev`
-(сейчас — `v0.5.1004`; более старые сборки лежат в
-`/data/pulsar/backups/`):
-
-```bash
-adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
-```
+Установленная версия и состав — `docs/STATE.md`; `--version` показывает тег
+релиза. Откат на предыдущую сборку — только на станции, не через CI
+(updater предлагает лишь более новые версии): команда выше возвращает
+`pulsar.prev`.
 
 ### Релиз и деплой Pulsar
 
@@ -800,12 +776,6 @@ token `ci-pulsar-deploy`, 2 года). Деплой — HA `update_entity` +
 job. Если версия уже стоит, скрипт пишет `already installed` и выходит
 успешно.
 
-Переходное ограничение: установленная прошивка `v0.5.1005` читает GitHub
-Releases `proflyder/pulsar`; `pulsar-firmware` умеет читать `v0.5.1007+`.
-Первый релиз из монорепо встанет через HA только после того, как на станции
-окажется `v0.5.1007` или новее; до этого — установка вручную (`pulsar-install`
-или замена `pulsar`/`.prev` и `ctl.sh restart`).
-
 Ручной sync upstream:
 
 ```bash
@@ -822,24 +792,11 @@ git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
 Повторное включение endpointing — reload с переменной; длина pre-roll при
 этом не меняется.
 
-Установленная версия — Rust `v0.5.1005` (armhf, SHA256 `89415c5a…71671b6`,
-сборка на базе upstream `v0.5.4` / `f1f5b17`; повторный wake +
-endpointing + Ricardo pre-roll 256 ms + окно «Wake: не услышала» 30 с +
-number «Follow-up duration»); `pulsar.prev` — `fb0695b2…` (`v0.5.1004`;
-historical: `3a544979…` — `v0.5.1002`, `80aea2ec…` — `v0.5.1001`, база
-`v0.5.2`, тот же Ricardo-код). Historical known-good: `7081ef8e…`
-(`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (512 ms endpointing),
-`pulsar.pre-endpoint-20261030` — `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`);
-`pulsar.prev.pre-endpoint-20261030` — более старый pre-endpoint backup
-`69310a37…`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private
-backup вне Git. StationCancel без речи — HA-конфиг, а не бинарник.
+StationCancel без речи — HA-конфиг, а не бинарник.
 Штатный `quasar-server`
 остановлен вместе со stock-стеком; при возврате на него (`ctl.sh disable` или
 crash-loop) снова откроется `:31116` без auth — перед возвратом закрыть порт
-правилом INPUT. Legacy C++ checkout, patch и
-binaries не входят в активное дерево; приватный архив и способ восстановления —
-в `secrets/local/recovery/` (не публикуется). Возврат к прежней C++-сборке не
-является штатным rollback и не должен выполняться без отдельного плана.
+правилом INPUT.
 
 Модель wake word меняется отдельно, model-only, без замены бинарника.
 Установлен кандидат v27; best-known/reference по решению пользователя — v24.
@@ -891,8 +848,8 @@ python3 projects/station/tools/wakeword-personalize/calibrate.py \
 размеченные файлы; без флага устройство не меняется.
 
 После рестарта Pulsar MA переподключается сам: supervised `reload` завершает
-Sendspin-сессию goodbye-причиной `restart`, после чего MA делает redial (на
-`v0.5.2-3-gc57d521` измерено ~3 с) без рестарта add-on MA. Проверка: entity
+Sendspin-сессию goodbye-причиной `restart`, после чего MA делает redial
+(~3 с) без рестарта add-on MA. Проверка: entity
 `media_player.iandeks_stantsiia_midi` = `idle`, source `Music Assistant Queue`,
 volume 0.3; в `/tmp/pulsar.log` — `sendspin: goodbye restart (daemon restarts)`,
 `sendspin: connection trust unpaired` и `sendspin: server connected: Music
@@ -1129,7 +1086,6 @@ Guard разрешает LAN/DHCP/NTP и — при `ALLOW_GITHUB=1` (по ум�
 (`140.82.112.0/20`, `143.55.64.0/20`, `185.199.108.0/22`, `192.30.252.0/22`)
 для updater'а; публичный WAN и Яндекс — DROP. При смене диапазонов GitHub
 обновить `GITHUB_NETS` в скрипте. Снятие guard не снимает Яндекс-блок/OTA.
-Прежний скрипт без GitHub-разрешения — `egress-guard.sh.bak-20261031-github`.
 
 ## BLE gateway
 

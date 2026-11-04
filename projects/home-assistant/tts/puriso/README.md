@@ -1,6 +1,6 @@
 # Puriso через существующий Piper
 
-Фактический текущий статус — `../../../docs/STATE.md`; команды — `../../../docs/OPERATIONS.md`.
+Фактический текущий статус — `../../../../docs/STATE.md`; команды — `../../../../docs/OPERATIONS.md`.
 
 Источник: https://huggingface.co/dhammagift/piper-ru-puriso
 

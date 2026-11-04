@@ -19,11 +19,8 @@ internal/hermes    rollout digest'ов в релиз runtime + Assist smoke кл
 internal/hermesconfig  merge config.fragment.yaml в живой HERMES_HOME
 internal/runtimevalues split helm template, values и pin exporter'а
 internal/manifests имена ExternalSecret и bootstrap Opaque Secret
-internal/...       далее: openbao
 testdata/          golden-выходы, OCI-фикстура и трассы converge для parity
 resolve.sh         находит и запускает бинарник из deploy-скриптов
-docker/            reusable Dockerfile fragments
-systemd/           reusable unit templates
 ```
 
 ## Вызов

@@ -92,8 +92,8 @@
     публичным IPv4-диапазонам GitHub, весь остальной WAN и Яндекс — DROP.
 
 21. **Currency bot — Go-переписывание, Cloudflare Tunnel, OpenBao вместо
-    Unkey.** Kotlin `tg-bot-currency` и VPS-стек `infra-monitoring`/`infra-ci`
-    заменены монорепо, старые репозитории архивируются. Поведение 1:1
+    Unkey.** Заменяет Kotlin `tg-bot-currency` и VPS-стек. Поведение
+    прежнего бота сохранено
     (kurs.kz, часовой job, алерты HOUR/DAY/WEEK/MONTH с dedup, retention
     35 дней), но SQLite вместо H2, webhook на отдельном порту `8081` с
     Telegram `secret_token` и allowlist чатов, Bearer-токен API из OpenBao
@@ -258,7 +258,7 @@
     * Python остаётся для ML/обучения wake-word, dev-утилит станции,
       проверок YAML-конфигов (включая отчёт `make coverage`) и live-e2e, где
       он не исполняется в проде.
-    k3s, деплой, CI и инструменты Bazel переведены (#97–#107). Существующие
+    Существующие
     хостовые и операторские скрипты на Python stdlib — `offsite_backup.py`,
     `vpncerts.py`/`vpnusers.py`, `openbao/configure.py`/`restore_drill.py` —
     оставлены сознательно: они запускаются вручную или по таймеру, не стоят
@@ -341,50 +341,25 @@
       (`latest`, `vX.Y.Z`/`X.Y.Z`, `sha-<12>`) сохраняются, устаревшие
       `tree-*`-only удаляются через 7 дней.
 
-37. **Pulsar живёт в монорепозитории; релиз — VERSION bump в GHCR.**
-    * Код Pulsar перенесён из отдельного репозитория в
-      `projects/station/pulsar/` (AGPL-3.0, `LICENSE`, README, docs,
-      RICARDO.md сохранены). Вложенного checkout'а, snapshot-скрипта и
-      patch-каталога больше нет.
-    * GitHub Releases в монорепозитории запрещены, теги не пушатся
-      (pre-push hook). Релиз — изменение `VERSION`
-      (`v<major.minor>.<1000+N>`): push в `develop` проводит Pulsar через
-      общий `deploy-home`. Юнит `pulsar` объявлен publishable native-юнитом с
-      `native.publish_when: ["projects/station/pulsar/VERSION"]`, поэтому
-      `plan` кладёт его в `native_units` только при изменении VERSION.
-      Каждый PR, затрагивающий Pulsar, собирает release-shaped артефакт
-      (`_native.yml`) и публикует его под `tree-<hash>` с provenance. При
-      merge `native-release` сначала продвигает этот digest: проверяет
-      `tree-<hash>`, provenance и ставит `<version>` + `latest` на тот же
-      digest. Только если tree-тега нет или provenance не сходится, workflow
-      собирает заново и публикует скриптом
-      `projects/station/pulsar/publish-oci.sh` OCI-артефакт с типом
-      `application/vnd.proflyder.pulsar.release.v1`. Существующий тег версии с
-      другим digest перезаписать нельзя — promotion/публикация падает,
-      выпускается следующая версия; тот же digest — no-op. Прочие изменения
-      Pulsar — только PR CI, без релизных тегов.
+37. **Pulsar — first-party код в монорепозитории.** Релиз, публикация и
+    выкатка — решение 20.
+    * `projects/station/pulsar/` — AGPL-3.0 (`LICENSE`, README, docs,
+      RICARDO.md сохранены). Upstream `Morvex885/pulsar` вливается вручную
+      патчем: `git diff vA..vB` → `git apply -3 --directory=projects/station/pulsar`,
+      затем обычный squash PR; автоматического fork-sync нет.
+    * GitHub Releases и теги в монорепо запрещены (pre-push hook).
+      Существующий тег версии в GHCR с другим digest перезаписать нельзя —
+      выпускается следующая версия; тот же digest — no-op.
     * `proflyder/pulsar-firmware` — публичный пакет, созданный workflow из
       `GITHUB_TOKEN` (`packages: write`); имя зашито в
-      `pulsar_update::UPDATE_REPO` установленной прошивки. `ghcr-cleanup`
-      рассматривает его по общему правилу: `latest` и версии (`vX.Y.Z`)
-      защищены, устаревшие `tree-*`-only удаляются через 7 дней.
-    * Выкатка — job `deploy-station` в `deploy-home.yml` (Environment
-      `Station`, VPN группа `ci`, OpenBao роль `deploy-station`) через
-      `tools/ha_firmware_deploy.py --tag <version>`. Job независим от
-      домашнего `deploy`: его сбой не блокирует home-юниты, а домашний
-      `deploy` никогда не выбирает `pulsar`.
-    * Upstream `Morvex885/pulsar` вливается вручную патчем:
-      `git diff vA..vB` → `git apply -3 --directory=projects/station/pulsar`,
-      затем обычный squash PR. Автоматический fork-sync не используется.
-    * Коммиты и PR — по корневому `AGENTS.md`/`docs/GIT.md`; отдельного
-      authorship-скрипта и job `commits` в монорепо нет.
+      `pulsar_update::UPDATE_REPO` установленной прошивки. `ghcr-cleanup`:
+      `latest` и версии защищены, устаревшие `tree-*`-only удаляются через
+      7 дней.
 
 38. **Pod template аннотируется содержимым, а не git-ревизией.**
-    * Раньше `ricardo.dev/build` в `spec.template.metadata.annotations` был
-      `<git short rev>-<sha256(image refs)[:12]>`: любая новая ревизия Git
-      (даже при идентичных digest'ах образов) меняла pod template,
-      `kubectl replace` создавал новый ReplicaSet и перезапускал все pods.
-    * Теперь pod template несёт `ricardo.dev/rollout`, а
+    * Почему: git-ревизия в pod template перезапускала все pods на каждом
+      merge, даже при тех же образах и конфиге.
+    * Pod template несёт `ricardo.dev/rollout`, а
       `home-deploy render --rollout-key ROLLOUT_ID` заполняет его первыми
       12 hex sha256 **всего отрендеренного юнита** (digest'ы всех
       контейнеров, значения из private env, содержимое ConfigMap, probes,
@@ -398,8 +373,7 @@
       job summary.
     * Изменение образа, отрендеренного конфига или смонтированного
       ConfigMap по-прежнему перезапускает pods. ESO-managed Secret'ы не
-      входят в хеш: они не рендерятся юнитом. Первый deploy после смены
-      формата аннотации один раз перекатит каждый юнит.
+      входят в хеш: они не рендерятся юнитом.
     * Golden-фикстуры и `rollout_test.go` фиксируют: другая git-ревизия при
       тех же образах/конфиге → идентичный pod template; другой digest или
       конфиг → другой.

@@ -123,7 +123,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/bluetooth/o
 ```
 
 HA использует `rest_command` + `intent_script`; файлы —
-`../../projects/home-assistant/ha-voice/`. Токен не публиковать; порт 8099 не выставлять
+`../../home-assistant/ha-voice/`. Токен не публиковать; порт 8099 не выставлять
 в интернет.
 
 ## Dry-run

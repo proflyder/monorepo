@@ -59,13 +59,12 @@
 
 - HA: `http://192.0.2.28:8123`; `internal_url` и trusted proxy обновлены.
 - Add-ons:
-  - Music Assistant `2.10.8`: UI/API `8095`, stream `8097`, Sendspin `8927`;
-    данные перенесены из K3s `runtime-music`.
+  - Music Assistant `2.10.8`: UI/API `8095`, stream `8097`, Sendspin `8927`.
   - Matter Server `9.2.0`: `ws://127.0.0.1:5580/ws`; paired 1 узел —
     Yandex LED strip `YNDX-00544` («Лента», `light.spalnia_lenta`), on/off,
     яркость и цвет проверены. Дублирующий набор сущностей от повторного
     интервью остался неактивным.
-- K3s HAProxy и HA Container удалены; HAOS — единственный HA runtime.
+- HAOS — единственный HA runtime.
 
 ## K3s
 
@@ -80,8 +79,6 @@
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
   currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`).
 - `8643` доступен только HAOS/K3s/loopback через nftables.
-- MA/Matter Deployments, PV и data из K3s удалены; `runtime-ha` оставлен как
-  архив старого HA Container.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
 - Alertmanager шлёт warning/critical в личный чат владельца через инфра-бот
@@ -90,7 +87,7 @@
   `k8s/home-assistant/hermes-environment` (`TELEGRAM_BOT_TOKEN`, первый
   `TELEGRAM_ALLOWED_USERS`); Watchdog и info не отправляются. В каждом алерте
   — отпечаток для `infra_alert`.
-  Оформление — HTML-шаблон `observability/alertmanager/telegram.tmpl`
+  Оформление — HTML-шаблон `projects/home/kubernetes/observability/alertmanager/telegram.tmpl`
   (ConfigMap `alertmanager-templates`, время Asia/Almaty).
   Доставка проверена тестовым алертом 2026-11-01.
   Внешний dead-man switch: `Watchdog` раз в 5 минут уходит webhook-ом на
@@ -167,15 +164,13 @@
   `hermes` собирается Docker из upstream revision, `voice-proxy` — Go-сервис
   `solutions/voice-proxy`, собираемый Bazel `rules_oci` (distroless) и
   пушимый байт-в-байт через `oci_push`. Health exporter — отдельный
-  Go-образ `ghcr.io/proflyder/health-exporter`; Python-скрипт и ConfigMap из
-  runtime chart удалены. `deploy-home` (builder `mixed`, карта
+  Go-образ `ghcr.io/proflyder/health-exporter`. `deploy-home` (builder `mixed`, карта
   `deploy.bazel_images`) собирает и пушит gateway, proxy, exporter и
   `home-deploy`, затем `home-deploy hermes rollout` подставляет digest'ы,
   проверяет `-healthcheck`/health/Assist/логи и делает `helm rollback` при
   провале. Assist smoke Job работает на `home-deploy` (`hermes assist-smoke`).
-  Go-voice-proxy работает с 2026-11-04 (#99, #101) и принят вживую на
-  станции: оба профиля, подтверждение с открытым микрофоном, отмена, поздние
-  ответы.
+  Voice-proxy принят вживую на станции: оба профиля, подтверждение с
+  открытым микрофоном, отмена, поздние ответы.
 - Деплой — `home-deploy converge` (Go): полная замена Deployment, сохранение env/режима и
   replicas; откат восстанавливает только применённый объект целиком.
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
@@ -228,10 +223,9 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.1005` — установленная armhf-сборка
-  (`/lib/ld-linux-armhf.so.3`, SHA256 `89415c5a…71671b6`; исходники —
-  `projects/station/pulsar/`, линия Ricardo; база upstream `v0.5.4` =
-  `f1f5b17`, HEAD `427a8e3`).
+- Pulsar Rust `v0.5.1009` — armhf-сборка из `projects/station/pulsar/`
+  (Bazel), раскатана `deploy-station` 2026-11-04; линия Ricardo, база
+  upstream `v0.5.4` = `f1f5b17`.
   Включает повторный wake, заменяющий активный диалог, экспериментальный
   локальный endpointing, Ricardo pre-roll 256 ms и запись wake-событий
   (`/data/pulsar/wake-events/`, cutoff/window из manifest модели); из
@@ -247,8 +241,7 @@
   уходит в HA — локальной отмены/паузы нет, поэтому «Рикардо, стоп» доходит
   до HA. Для диалогов по кнопке, follow-up и `start_conversation` отдельное
   «стоп»/«хватит» отменяет диалог локально и останавливает звонящий таймер.
-- Версия Pulsar — `v<upstream major.minor>.<1000+N>` (`v0.5.1007`,
-  следующий `v0.5.1008`): updater демона ставит только строго большую
+- Версия Pulsar — `v<upstream major.minor>.<1000+N>`: updater демона ставит только строго большую
   `MAJOR.MINOR.PATCH`, а upstream уже имеет `v0.5.4`. Релиз — изменение
   `projects/station/pulsar/VERSION` в PR в `develop`; merge маршрутизирует
   Pulsar через общий deploy-home, `publish-native` публикует OCI-артефакт в
@@ -257,26 +250,14 @@
   GitHub Releases и теги в монорепо не используются. Процедура — RICARDO.md
   «Релизы и деплой». Репозиторий обновлений — константа
   `pulsar_update::UPDATE_REPO`.
-- GitHub `proflyder/pulsar` — прежний самостоятельный публичный репозиторий;
-  код перенесён в монорепо `projects/station/pulsar/`, upstream
-  `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` →
+- Upstream `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` →
   `git apply -3 --directory=projects/station/pulsar`), затем обычный PR.
-  Репозиторий архивируется (`docs/PENDING.md`).
-- Установленный бинарник — `v0.5.1005` (раскатан тем же flow 2026-11-04);
-  `pulsar.prev` — `fb0695b2…` (`v0.5.1004`); historical старше:
-  `3a544979…` (`v0.5.1002`, без записи
-  wake-событий), `80aea2ec…` (`v0.5.1001`, база upstream
-  `v0.5.2`), `7081ef8e…`
-  (`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (endpointing 512 ms), `d2197f6a…`
-  (`v0.5.2-3-gc57d521-dirty`, `pulsar.pre-endpoint-20261030`),
-  `pulsar.prev.pre-endpoint-20261030` — `69310a37…`; `v0.5.2-2-g95ce568` и
-  `v0.5.0-1-g908a027` — только private backup вне Git. Legacy C++ checkout,
-  patch и binaries — private в `secrets/local/recovery/`.
+  Прежние GitHub `proflyder/pulsar` и `pulsar-fork-old` удалены. Откат на станции —
+  `pulsar.prev` (предыдущий бинарник рядом с текущим).
 - ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`,
-  SSH `22`; 33 ESPHome entities на `v0.5.1001`, Noise; HA satellite работает.
+  SSH `22`; Noise; HA satellite работает.
   Switch «Clock auto brightness» включён: автояркость часов по датчику
-  освещённости, при выключении — уровень «Clock brightness»; число сущностей
-  после обновлений не пересчитывалось.
+  освещённости, при выключении — уровень «Clock brightness».
 - `number.iandeks_stantsiia_midi_follow_up_duration` — «Follow-up duration»
   (0–10 с, по умолчанию 10, `followup_duration_s` в `state.conf`, ESPHome
   key 39).
@@ -287,8 +268,7 @@
   после недоступности; пока сущности нет — no-op. Прямое управление
   `light.ring`/`led_show` во время LISTENING перекрывается voice state прошивки,
   поэтому профиль задаётся только этим select.
-- После `v0.5.1003` проверено: модель Ricardo загружена с cutoff 0.90 /
-  window 10 из manifest, `PULSAR_LOCAL_ENDPOINTING=1` сохранён, запись
+- Модель Ricardo загружается с cutoff 0.90 / window 10 из manifest, `PULSAR_LOCAL_ENDPOINTING=1` сохранён, запись
   wake-событий включена (`state.conf`: `wake_event_recording=1`,
   `wake_dry_run=0`), первое near-событие записано. Сущности HA:
   `button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie`,
@@ -340,8 +320,7 @@
   `ALLOW_GITHUB=1` (по умолчанию) дополнительно разрешает `tcp/443` только к
   публичным IPv4-диапазонам GitHub (`140.82.112.0/20`, `143.55.64.0/20`,
   `185.199.108.0/22`, `192.30.252.0/22`, по `api.github.com/meta`) — для
-  updater'а; при смене диапазонов обновить `GITHUB_NETS`. Прежний скрипт —
-  `egress-guard.sh.bak-20261031-github`.
+  updater'а; при смене диапазонов обновить `GITHUB_NETS`.
 - Известная проблема: после reboot станция иногда не отвечает в LAN при
   online-статусе роутера; BLE остаётся доступен, снятие питания на 20–30 с
   восстанавливает IP/HA/голос. Первопричина не установлена (`PENDING.md`).
@@ -396,12 +375,11 @@
   только личные проекты из `bb-targets.yaml`; рабочие и проекты с неизвестным
   профилем отфильтрованы шлюзом и неотличимы от несуществующих. После запуска
   включается режим агента, выход — «выйди из режима агента».
-- Voice proxy `v7`: к v6 добавлена маршрутизация по профилю (см. «Профиль
-  голоса»). Без всех четырёх значений URL+токен для HA и шлюза прокси работает
-  как v6. V6-часть: exact cancel guard. Если
-  предыдущий ответ Hermes закончился вопросом, HA включает
-  `continue_conversation` и обходит `prefer_local_intents`; распознанная
-  «отмена» уходила в Hermes. Proxy перехватывает только точную
+- Voice proxy: маршрутизация по профилю (см. «Профиль голоса»); без всех
+  четырёх значений URL+токен для HA и шлюза маршрутизации нет. Exact cancel
+  guard: если предыдущий ответ Hermes закончился вопросом, HA включает
+  `continue_conversation` и обходит `prefer_local_intents`, поэтому proxy
+  перехватывает только точную
   нормализованную фразу последнего user-сообщения, отвечает пустым
   completion без upstream Hermes и без TTS (`action_done`,
   `processed_locally=false`, `continue_conversation=false`). Свободный
@@ -484,8 +462,8 @@
   (одна логическая запись, dedupe `expiry:stop:<kind>:<id>:<occurrence>`;
   доставка at-least-once, HA повторный STOP игнорирует). Bridge доставляет
   STOP, HA проверяет source+FIRE event id и не трогает более новый звонок.
-  Правка правила во время звонка (`UpdateSchedule`/enable) пока не эмитит
-  STOP — отдельная задача в `PENDING.md`.
+  Правка правила во время звонка (`UpdateSchedule`/enable) тоже закрывает
+  occurrence и ставит STOP (`DetailRuleChanged`).
 - Голосовые intents в `projects/home-assistant/ha-voice` вызывают canonical
   Connect API (`rest_command.scheduler_rpc`); endpoint —
   `input_text.scheduler_endpoint` (LAN NodePort base URL, durable via
@@ -539,13 +517,10 @@
   `CHAT_ID`, `WEBHOOK_SECRET`, `API_TOKEN`) и
   `k8s/currency-bot/cloudflared-tunnel` (`TUNNEL_TOKEN`).
   `CHAT_ID` — два чата: первый (группа/канал) получает алерты, второй — личный
-  чат владельца для команд; в отличие от Kotlin-бота команды из других чатов
-  игнорируются.
+  чат владельца для команд; команды из других чатов игнорируются.
   NetworkPolicies: 8081 только от cloudflared; egress cloudflared к Cloudflare
   `7844/udp` + `443/tcp` и DNS.
-- История перенесена из H2 2026-10-31: 990 записей (2026-09-20 … 2026-10-31)
-  и 2 `sent_alerts`; PVC заполнен до первого старта. `/trigger` и
-  `POST /api/trigger` по-прежнему всегда отправляют.
+- `/trigger` и `POST /api/trigger` всегда отправляют.
 - CI: юниты `currency-bot` (go + образ + deploy) и `currency-bot-deploy`
   (contract-тест `deploy.sh`); deploy-env — `secret/ci/deploy-home`,
   ключ `currency_bot_env` (в нём должен появиться `CURRENCY_BOT_NODE_PORT`
@@ -560,13 +535,10 @@
   `conversation/process`; живой голос — за владельцем.
 - Наблюдаемость: Alloy шипит логи namespace `currency-bot` (редакция
   Telegram bot tokens, Bearer и key=value/JSON секретов); дашборд Grafana
-  `currency-bot` (uid `currency-bot`). VPS-дашборд node не переносился.
-- Старые `tg-bot-currency`, `infra-monitoring`, `infra-ci` заменены монорепо,
-  их GitHub secrets удалены, репозитории в archive (2026-10-31). На VPS
-  снесены бот, Prometheus/Grafana/Loki/node-exporter/promtail (контейнеры,
-  volumes, образы, `/app/currency-bot`, `/opt/monitoring`); nginx на домене
-  отдаёт только 404 (certbot продлевает сертификат), наружу открыты лишь
-  22/80/443. Backup конфигов и данных — `secrets/currency-bot/vps-backup/`.
+  `currency-bot` (uid `currency-bot`).
+- VPS: сервисов нет, nginx на домене отдаёт только 404 (certbot продлевает
+  сертификат), наружу открыты лишь 22/80/443. Backup конфигов и данных —
+  `secrets/currency-bot/vps-backup/`.
   Приватные материалы — `secrets/currency-bot/` (VPS ssh
   key/config, CSV/DB, tunnel token, Cloudflare tunnel API token, `k8s.env`) и
   `secrets/home/currency-bot.env`.
@@ -687,10 +659,9 @@
 ## Приватное / backups
 
 - `secrets/NETWORK.md` — реальные IP/порты; `secrets/CREDENTIALS.md` — доступы.
-- HA backups, K3s recovery, OCI images и PVC cold copy — на Mac, вне Git;
-  SHA-256 проверены.
 - `secrets/kubernetes-research/` — kubeconfig, private values, Grafana
-  password, recovery.
+  password. Полные бэкапы хоста/VM на Mac не хранятся: их покрывают vzdump и
+  offsite (ниже).
 - HA automatic encrypted backup включён: ежедневно 03:30, 3 копии, ~45 MB,
   агент `hassio.local`.
 - Offsite backup live: K3s timer 04:45, restic → личный Google Drive

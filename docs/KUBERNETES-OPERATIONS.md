@@ -5,7 +5,7 @@
 
 ## Состав
 
-- Ubuntu 24.04.5, 8 GiB RAM, 200 GiB, `192.0.2.27`, node `lab-host`.
+- Ubuntu 24.04.5, 12 GiB RAM, 200 GiB, `192.0.2.27`, node `lab-host`.
 - K3s `v1.35.9+k3s1`, data-dir `/srv/k3s/runtime`, SQLite.
 - Namespaces:
   - `home-assistant`: GigaAM, Whisper, Piper, Hermes gateway+proxy,
@@ -60,7 +60,6 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 - Host-дерева `/opt/ricardo` и запасных релизов нет: откат — только
   digest-pinned образы в GHCR/containerd, деплой — `home-deploy converge`.
 - `runtime-ha` — архив старого HA Container, не активный writer.
-- `runtime-music`/`runtime-matter` удалены; tar-копии на Mac.
 
 Секреты Hermes (`Secret/hermes-environment`), scheduler/HA
 (`scheduler-auth`, `ha-bridge-ha`), currency-bot (`currency-bot`,
@@ -246,8 +245,7 @@ Bearer). Ротация Telegram-бота: обновить `TELEGRAM_BOT_TOKEN`
 
 ## Grafana / observability
 
-- LAN: `http://192.0.2.27:30300/` (корень; прежний `/grafana/` больше не
-  используется после перехода `root_url` на отдельный хост)
+- LAN: `http://192.0.2.27:30300/` (корень)
 - HTTPS (LAN/VPN): `https://grafana.home.example.com/`
 - Loki/Prometheus наружу не опубликованы.
 - Port-forward для диагностики:
@@ -350,11 +348,9 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
 - Без server token восстановление datastore невозможно.
 - Образы scheduler/ha-bridge/ha-control/currency-bot собираются Bazel
   (`rules_oci`, distroless, digest-pinned base) и адресуются по digest; в CI
-  они пушатся в GHCR, на живой узел импортируются в containerd
-  (`ctr images import`).
+  они пушатся в GHCR, деплой подставляет digest и узел тянет образ из GHCR.
 - currency-bot хранит историю в SQLite на PVC `currency-bot-data` (1Gi,
-  `local-retain`); H2→SQLite перенос и импорт — в
-  `projects/home/kubernetes/currency-bot/README.md`.
+  `local-retain`); подробности — `projects/home/kubernetes/currency-bot/README.md`.
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
   IfNotPresent`, без pull-secret. `hermes` собирается Docker, `voice-proxy` —
@@ -369,8 +365,8 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
   2. остановить K3s;
   3. вернуть data-dir/token/ключи;
   4. вернуть PVC до запуска Pods;
-  5. сначала попробовать pull из GHCR (digest-пины); если пакеты недоступны —
-     импортировать OCI-архивы (`k3s ctr images import`);
+  5. pull из GHCR по digest-пинам; если пакеты недоступны — пересобрать и
+     запушить образы из монорепо (`deploy-home`/Bazel);
   6. проверить endpoints, HTTPS-имена, voice/music.
 
 Disaster restore на запасном железе ещё не выполнялся.
