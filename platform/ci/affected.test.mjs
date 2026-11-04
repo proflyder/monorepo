@@ -170,7 +170,7 @@ test("android fixture: docs-only change runs nothing but quality", () => {
     }),
   );
   assert.equal(result.docsOnly, true);
-  for (const platform of ["go", "android", "python", "js", "native"]) {
+  for (const platform of ["go", "android", "bazel", "python", "js", "native"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
   }
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
@@ -469,7 +469,7 @@ test("real repo: native workflow change runs native units", () => {
 test("real repo: pulsar change routes to the native pulsar unit", () => {
   const config = affected.loadConfig();
   const result = withDeps({ goPackageDirs: () => new Set() }, () =>
-    affected.route(config, ["projects/station/pulsar/satellite/Makefile"], {
+    affected.route(config, ["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"], {
       root: REPO,
       base: "b",
     }),
@@ -506,7 +506,7 @@ test("real repo: pulsar publishes only when VERSION changed", () => {
     return affected.matrixEntries(result, config).native.find((item) => item.id === "pulsar");
   };
   // A source change is PR CI only: the unit is built, but not published.
-  assert.equal(entryFor(["projects/station/pulsar/satellite/Makefile"]).publish, false);
+  assert.equal(entryFor(["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"]).publish, false);
   assert.equal(entryFor(["projects/station/pulsar/VERSION"]).publish, true);
   // A global invalidation does not turn an unchanged VERSION into a release.
   assert.equal(entryFor(["MODULE.bazel"]).publish, false);
@@ -861,7 +861,7 @@ test("workflow invalidation: native workflow runs native", () => {
 
 test("workflow invalidation: ci entrypoint runs everything", () => {
   const result = routeReal([".github/workflows/ci.yml"]);
-  for (const platform of ["go", "android", "python", "js", "native"]) {
+  for (const platform of ["go", "android", "bazel", "python", "js", "native"]) {
     assert.ok(result.routes[platform].units.length, platform);
   }
 });

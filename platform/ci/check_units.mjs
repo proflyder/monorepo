@@ -29,7 +29,15 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(HERE, "../..");
-export const KNOWN_PLATFORMS = new Set(["go", "android", "python", "js", "native", "quality"]);
+export const KNOWN_PLATFORMS = new Set([
+  "go",
+  "android",
+  "bazel",
+  "python",
+  "js",
+  "native",
+  "quality",
+]);
 
 // Suffixes/names that must be routed somewhere: compiled sources, tests, build
 // files and shell entry points.
@@ -187,9 +195,9 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
       if (!unit.goPackages.length) {
         problems.push(`${prefix}: go unit without packages`);
       }
-    } else if (unit.platform === "android") {
+    } else if (unit.platform === "android" || unit.platform === "bazel") {
       if (!unit.bazelRoots.length) {
-        problems.push(`${prefix}: android unit without bazel.roots`);
+        problems.push(`${prefix}: ${unit.platform} unit without bazel.roots`);
       }
       for (const target of [...unit.testTargets, ...unit.buildTargets]) {
         if (
@@ -202,7 +210,7 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
         }
       }
       if (!unit.testTargets.length) {
-        problems.push(`${prefix}: android unit without test_targets`);
+        problems.push(`${prefix}: ${unit.platform} unit without test_targets`);
       }
     } else if (unit.platform === "python") {
       if (!unit.suites.length && !unit.compileDirs.length) {

@@ -1,0 +1,49 @@
+# BUILD overlay for esphome-libs/noise-c v0.1.13.
+#
+# The reference backend only (ChaChaPoly + Curve25519 + SHA-256), the same
+# choice as sendspin-cpp's cmake/host.cmake: no libsodium, no OpenSSL, no
+# AES-GCM, OS randomness.
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "noise_c",
+    srcs = [
+        "src/backend/ref/cipher-chachapoly.c",
+        "src/backend/ref/dh-curve25519.c",
+        "src/backend/ref/hash-sha256.c",
+        "src/crypto/chacha/chacha.c",
+        "src/crypto/donna/poly1305-donna.c",
+        "src/crypto/sha2/sha256.c",
+        "src/crypto/x25519/x25519.c",
+        "src/protocol/cipherstate.c",
+        "src/protocol/dhstate.c",
+        "src/protocol/errors.c",
+        "src/protocol/handshakestate.c",
+        "src/protocol/hashstate.c",
+        "src/protocol/internal.c",
+        "src/protocol/names.c",
+        "src/protocol/patterns.c",
+        "src/protocol/rand_os.c",
+        "src/protocol/randstate.c",
+        "src/protocol/signstate.c",
+        "src/protocol/symmetricstate.c",
+        "src/protocol/util.c",
+    ],
+    hdrs = glob([
+        "include/**/*.h",
+        "src/**/*.h",
+    ]),
+    includes = [
+        "include",
+        "src",
+    ],
+    copts = ["-std=c99"],
+    defines = [
+        "NOISE_USE_REFERENCE_BACKEND=1",
+        "NOISE_USE_AES=0",
+        "NOISE_USE_LIBSODIUM=0",
+        "NOISE_USE_CUSTOM_RAND=0",
+    ],
+)

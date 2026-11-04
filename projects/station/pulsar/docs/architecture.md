@@ -10,8 +10,8 @@
 ## Workspace
 
 `satellite/` — Cargo workspace: `Cargo.toml`, `Cargo.lock` (коммитится; сборка, clippy и тесты
-идут с `--locked`), `rust-toolchain.toml`, `Makefile` (кросс-сборки через cargo-zigbuild,
-`make check`).
+идут с `--locked`), `rust-toolchain.toml`; сборка, fmt/clippy/тесты и кросс-сборки — Bazel
+(`BUILD.bazel` в `satellite/` и `crates/*`, toolchain и C/C++ — в корневом `MODULE.bazel`).
 
 | Крейт | Ответственность |
 |---|---|
@@ -124,7 +124,7 @@ flowchart LR
    - Раскладки C-структур — `#[repr(C)]` с compile-time `assert!(core::mem::offset_of!(…) == …)`
      под `#[cfg(target_arch)]`.
 9. Комментарии в коде — [AGENTS.md, «Правила кода»](../AGENTS.md#правила-кода).
-10. Должен проходить `make -C satellite check` (состав — target `check` в `satellite/Makefile`).
+10. Должен проходить `bazel test //projects/station/pulsar/satellite/...` (fmt, clippy, тесты).
 
 ## Плавающая точка (FMA)
 
@@ -139,7 +139,7 @@ flowchart LR
   wake (`frontend.rs`, `mean_square`), энергии `ww_offline`, матрица цвета корпуса (`leds.rs`),
   диапазоны музыки часов (`clock.rs`), число громкости на часах (`controller/media.rs`).
 - armhf-сборка даёт аппаратный `vfma` для `mul_add` только с `-C target-cpu=cortex-a53` (его
-  ставит Makefile, см. [«Линковка C++ (sendspin-cpp)»](#линковка-c-sendspin-cpp)). Без флага
+  ставит toolchain в `MODULE.bazel`, см. [«Линковка C++ (sendspin-cpp)»](#линковка-c-sendspin-cpp)). Без флага
   (например, ручной `cargo build --target armv7-unknown-linux-gnueabihf`) `mul_add` становится
   вызовом libm `fmaf` / `fma`: результат тот же, но в горячих циклах на каждый сэмпл заметно
   медленнее. На x86_64-хосте `mul_add` — тоже вызов libm.
@@ -148,22 +148,21 @@ flowchart LR
 
 ## Линковка C++ (sendspin-cpp)
 
-Шим `pulsar-sendspin/shim/` и статические библиотеки sendspin-cpp — единственный C++ в сборке —
-линкуются через `cargo zigbuild` в окружении Makefile (`CARGO_ENV` в
-[`satellite/Makefile`](../satellite/Makefile); `-C target-cpu=cortex-a53` для armhf). Рецепт
-минимальный: [`build.rs`](../satellite/crates/pulsar-sendspin/build.rs) компилирует шим через `cc`
-и линкует только `c++`.
+Шим `pulsar-sendspin/shim/` и статические библиотеки sendspin-cpp — единственный C++ в сборке.
+Их собирает Bazel: `cc_library` из `http_archive`-репозиториев (`satellite/third_party/bazel/`)
+через герметичный zig 0.14.1 cc-toolchain (`platform/bazel/zig/`; `-C target-cpu=cortex-a53`
+для armhf задают флаги toolchain в `MODULE.bazel`). Шим — `cc_library` в
+[`pulsar-sendspin/BUILD.bazel`](../satellite/crates/pulsar-sendspin/BUILD.bazel), он попадает в
+`link_deps` только для платформы `:station`; host-сборка (`bazel test`) остаётся без C++ и без cfg
+`sendspin_ffi`.
 
 - `c++abi` и `-Wl,--start-group` / `--end-group` не нужны: zig сам линкует свои libc++,
-  libc++abi и libunwind статически. Для статических библиотек с перекрёстными ссылками
-  `--start-group` остаётся запасным путём; сейчас порядок держит список библиотек в `build.rs`.
+  libc++abi и libunwind статически. Порядок статических архивов держит Bazel.
 - `NEEDED`: aarch64 — только `libm.so.6` и `libc.so.6` (максимум версий символов `GLIBC_2.34`);
   armhf — `libm.so.6`, `libpthread.so.0`, `libc.so.6`, `libdl.so.2`, `ld-linux-armhf.so.3`
   (фактический максимум `GLIBC_2.18`), `hard-float ABI`.
-- `cc` печатает безвредные предупреждения проверки компилятора через обёртки cargo-zigbuild:
-  aarch64 — `zig: error: version '.2.36' in target triple 'aarch64-unknown-linux-gnu.2.36' is invalid`,
-  armhf — `…/cargo-zigbuild/0.24.0/aeabi_unaligned.c:1:1: error: FileNotFound`. Объект при этом
-  собирается и линкуется.
+- `build.rs` в `pulsar-sendspin` остаётся только для host-сборки: он не компилирует C++ и не
+  выставляет `sendspin_ffi`. Для станций cfg и линковку задаёт Bazel.
 
 ## state.conf и откат на .prev
 

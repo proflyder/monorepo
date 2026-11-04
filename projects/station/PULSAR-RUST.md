@@ -21,8 +21,9 @@ history. Upstream `Morvex885/pulsar` вливается вручную патч�
 
 - Исходники: `projects/station/pulsar/` (вложенного checkout'а и snapshot нет).
 - База: upstream `v0.5.4` (`f1f5b17`), ancestor HEAD.
-- Сборка: `make -C projects/station/pulsar/satellite ARCH=armhf` или обе
-  архитектуры; CI-юнит `pulsar` в корневом `_native.yml`.
+- Сборка: `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux
+  //projects/station/pulsar/satellite:station_binary`; CI-юниты `pulsar-bazel`
+  (хост-тесты) и `pulsar` (кросс-сборка/релиз).
 - Релиз: изменение `projects/station/pulsar/VERSION` → общий `deploy-home`
   (`publish_when` по VERSION) → `publish-native` публикует OCI
   `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`), затем

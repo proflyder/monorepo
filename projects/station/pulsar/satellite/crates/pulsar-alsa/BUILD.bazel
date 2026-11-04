@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@pulsar_crates//:libc",
+    "@pulsar_crates//:libloading",
+    "@pulsar_crates//:log",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+]
+
+rust_library(
+    name = "pulsar_alsa",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_binary(
+    name = "alsa_abi_probe",
+    srcs = ["src/bin/alsa_abi_probe.rs"],
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS + [":pulsar_alsa"],
+)
+
+rust_test(
+    name = "pulsar_alsa_unit_tests",
+    crate = ":pulsar_alsa",
+    edition = "2024",
+    target_compatible_with = LINUX,
+)

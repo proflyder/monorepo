@@ -182,8 +182,9 @@
   namespace-scoped workloads, поэтому `ci-deploy` не имеет cluster-scoped
   прав.
 - Pulsar собирается в монорепо: исходники лежат в `projects/station/pulsar`,
-  сборка — Make + cargo-zigbuild; монорепо собирает его в CI-юните `pulsar`
-  (`_native.yml`). Pulsar — publishable native-юнит общего `deploy-home` с
+  сборка — Bazel (Rust + герметичный zig cc-toolchain + sendspin-cpp из
+  `http_archive`); монорепо собирает его в CI-юнитах `pulsar-bazel` и `pulsar`
+  (`_bazel.yml`/`_native.yml`). Pulsar — publishable native-юнит общего `deploy-home` с
   `publish_when` по `projects/station/pulsar/VERSION`: только изменение этого
   файла на `develop` запускает `native-build` → `publish-native` →
   OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`).

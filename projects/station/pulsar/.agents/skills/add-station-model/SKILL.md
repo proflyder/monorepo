@@ -78,8 +78,10 @@ description: >-
 
 ## 3. Измерения
 
-После п. 2 собрать утилиты: `make -C satellite ARCH=<arch> tools` →
-`satellite/build/<arch>/tools/<name>` (`AGENTS.md`, «Сборка и проверки»). Запуск — вручную (п. 0),
+После п. 2 собрать утилиты:
+`bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux
+//projects/station/pulsar/satellite/crates/...` → `bazel-bin/.../crates/<crate>/<name>`
+(`AGENTS.md`, «Сборка и проверки»). Запуск — вручную (п. 0),
 при остановленном стеке; звук и яркость — только с согласия владельца:
 
 - `frontend_probe --record` — микрофонный тракт, сырая запись;
@@ -141,7 +143,7 @@ description: >-
 
 ## 5. Проверка
 
-`make -C satellite check` и `go -C installer test ./...`. Затем найти остальные места по всему
+`bazel test //projects/station/pulsar/satellite/...` и `go -C installer test ./...`. Затем найти остальные места по всему
 репозиторию и проверить каждое (перечни моделей, цели, ключи):
 
 ```sh

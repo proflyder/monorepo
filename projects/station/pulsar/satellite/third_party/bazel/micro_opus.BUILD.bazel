@@ -1,0 +1,47 @@
+# BUILD overlay for esphome-libs/micro-opus v0.3.5.
+#
+# The Opus port itself is the separate @opus repository (the revision micro-opus
+# pins), with micro-opus's celt_stack_alloc.patch applied there. This library
+# holds micro-opus's C++ wrappers and the thread-safe pseudostack support that
+# the CMake host build adds for OPUS_ALLOCATION_MODE=THREADSAFE_PSEUDOSTACK.
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Headers used both by @opus//:opus and by this target. Kept separate so the
+# Opus library can depend on them without a target cycle.
+cc_library(
+    name = "support_headers",
+    hdrs = [
+        "patches/custom_support.h",
+        "patches/thread_local_stack.h",
+    ],
+    includes = ["patches"],
+)
+
+filegroup(
+    name = "thread_local_stack_c",
+    srcs = ["patches/thread_local_stack.c"],
+)
+
+cc_library(
+    name = "micro_opus",
+    srcs = [
+        "src/ogg_opus_decoder.cpp",
+        "src/opus_header.cpp",
+    ],
+    hdrs = glob([
+        "include/**/*.h",
+        "src/**/*.h",
+    ]),
+    includes = [
+        "include",
+        "src",
+    ],
+    copts = ["-std=c++17"],
+    deps = [
+        ":support_headers",
+        "@micro_ogg_demuxer//:micro_ogg_demuxer",
+        "@opus//:opus",
+    ],
+)

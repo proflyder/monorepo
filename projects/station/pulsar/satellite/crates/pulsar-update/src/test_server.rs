@@ -16,7 +16,12 @@ use tokio::net::TcpListener;
 use tokio_rustls::LazyConfigAcceptor;
 
 pub fn data(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    // Под Bazel тест исполняется из runfiles-дерева, поэтому путь к данным
+    // берётся из PULSAR_MANIFEST_DIR относительно текущего каталога; Cargo
+    // переменную не выставляет и использует CARGO_MANIFEST_DIR.
+    std::env::var_os("PULSAR_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
         .join("tests/data")
         .join(name)
 }

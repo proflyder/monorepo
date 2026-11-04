@@ -27,17 +27,23 @@ fn main() {
     println!("cargo:rerun-if-changed=ricardo");
     println!("cargo:rerun-if-changed=build.rs");
 
-    let mut sources = vec![PathBuf::from("ricardo/microwakeword.cpp")];
-    collect_cc(Path::new("ricardo/microfrontend"), &mut sources);
+    // Пути к исходникам C++ строятся от манифеста пакета: Bazel запускает
+    // build-скрипт из execroot, а не из каталога крейта.
+    let manifest = PathBuf::from(
+        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set by cargo and rules_rust"),
+    );
+
+    let mut sources = vec![manifest.join("ricardo/microwakeword.cpp")];
+    collect_cc(&manifest.join("ricardo/microfrontend"), &mut sources);
     sources.sort();
 
     let mut build = cc::Build::new();
     build
         .cpp(true)
         .std("c++17")
-        .include("ricardo/microfrontend")
-        .include("ricardo/microfrontend/kissfft")
-        .include("ricardo/microfrontend/kissfft/tools")
+        .include(manifest.join("ricardo/microfrontend"))
+        .include(manifest.join("ricardo/microfrontend/kissfft"))
+        .include(manifest.join("ricardo/microfrontend/kissfft/tools"))
         .warnings(false);
     for source in sources {
         build.file(source);

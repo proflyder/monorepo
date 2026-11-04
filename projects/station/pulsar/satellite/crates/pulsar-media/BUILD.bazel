@@ -1,0 +1,51 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@pulsar_crates//:libc",
+    "@pulsar_crates//:libloading",
+    "@pulsar_crates//:log",
+    "@pulsar_crates//:tokio",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+]
+
+rust_library(
+    name = "pulsar_media",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_binary(
+    name = "player_probe",
+    srcs = ["src/bin/player_probe.rs"],
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS + [":pulsar_media"],
+)
+
+rust_test(
+    name = "mixer_golden_test",
+    srcs = ["tests/mixer_golden.rs"],
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS + [":pulsar_media"],
+)
+
+rust_test(
+    name = "pulsar_media_unit_tests",
+    crate = ":pulsar_media",
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = ["@pulsar_crates//:tokio"],
+)

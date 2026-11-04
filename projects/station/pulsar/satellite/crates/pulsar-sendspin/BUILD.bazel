@@ -1,0 +1,97 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+# The two device ABIs configure the zig cc toolchain; the same constraint turns
+# on sendspin-cpp and links the C shim (the former Makefile's cfg `sendspin_ffi`).
+STATION = ["@zig_0_14_1//:station"]
+
+DEPS = [
+    "@pulsar_crates//:libc",
+    "@pulsar_crates//:log",
+    "@pulsar_crates//:tokio",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+]
+
+# Host build: no PULSAR_SS_BUILD, so build.rs compiles no C++ and leaves cfg
+# `sendspin_ffi` unset (the same behaviour as `cargo build`/`make check` on the
+# host). The station configuration instead links the Bazel-built sendspin-cpp
+# and sets the cfg here, without running build.rs.
+cargo_build_script(
+    name = "pulsar_sendspin_build_script",
+    srcs = ["build.rs"],
+    data = glob(["shim/**"]),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = ["@pulsar_crates//:cc"],
+)
+
+# rules_rust repeats every static C++ library as a plain `-l` after rustc's
+# own `-Wl,-Bdynamic`, and the zig driver would then search only for `.so`.
+# This empty library's user link flag lands in front of that repeated group, so
+# the archives are still resolved statically (the same link the former Makefile gets
+# from `-C link-arg=-Wl,-Bstatic`/`rustc-link-lib=static`).
+cc_library(
+    name = "static_link_group",
+    linkopts = ["-Wl,-Bstatic"],
+)
+
+# The C ABI over sendspin-cpp (shim/sendspin_shim.cpp), only for the stations.
+# zig links its libc++ statically; the former Makefile added the same link-lib after the
+# static sendspin libraries to keep the static link order.
+cc_library(
+    name = "sendspin_shim",
+    srcs = ["shim/sendspin_shim.cpp"],
+    hdrs = ["shim/sendspin_shim.h"],
+    copts = ["-std=c++20"],
+    linkopts = ["-lc++"],
+    target_compatible_with = LINUX + STATION,
+    deps = ["@sendspin_cpp//:sendspin_cpp"],
+)
+
+rust_library(
+    name = "pulsar_sendspin",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    edition = "2024",
+    rustc_flags = select({
+        "@zig_0_14_1//:station": [
+            "--cfg",
+            "sendspin_ffi",
+            "--check-cfg=cfg(sendspin_ffi)",
+        ],
+        "//conditions:default": [],
+    }),
+    target_compatible_with = LINUX,
+    deps = DEPS + select({
+        "@zig_0_14_1//:station": [
+            ":static_link_group",
+            ":sendspin_shim",
+        ],
+        "//conditions:default": [":pulsar_sendspin_build_script"],
+    }),
+)
+
+rust_binary(
+    name = "sendspin_probe",
+    srcs = ["src/bin/sendspin_probe.rs"],
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS + [":pulsar_sendspin"],
+)
+
+rust_test(
+    name = "pulsar_sendspin_unit_tests",
+    crate = ":pulsar_sendspin",
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = ["@pulsar_crates//:tokio"],
+)

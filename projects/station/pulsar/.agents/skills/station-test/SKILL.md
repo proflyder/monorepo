@@ -38,8 +38,8 @@ description: >-
 
 ## 4. Тестовый экземпляр
 
-1. Сборка: `make -C satellite ARCH=<arch>` (`AGENTS.md`, «Сборка и проверки»).
-2. Последовательность: `push satellite/build/<arch>/pulsar` → `stop` → `test-start` → тест →
+1. Сборка: `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` → `bazel-bin/projects/station/pulsar/satellite/pulsar` (`AGENTS.md`, «Сборка и проверки»).
+2. Последовательность: `push bazel-bin/projects/station/pulsar/satellite/pulsar` → `stop` → `test-start` → тест →
    `test-stop` → `start`.
 3. Клиент: `tools/esphome_check.py --host <ip> --port 16053 <command>`; команды (`dump`, `commands`,
    `voice-fake`, `announce`, `timer`, `set-key`, `scenario-*`) — в `--help` и docstring скрипта.
@@ -52,7 +52,8 @@ description: >-
 
 ## 5. Probe-утилиты
 
-`make -C satellite ARCH=<arch> tools` → `satellite/build/<arch>/tools/<name>`
+`bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux
+//projects/station/pulsar/satellite/crates/...` → `bazel-bin/.../crates/<crate>/<name>`
 (`AGENTS.md`, «Сборка и проверки»); список — `docs/architecture.md`, «Workspace». `push` файла в
 `/tmp/pulsar-test/`, запуск — `ssh "$PULSAR_<X>" /tmp/pulsar-test/<name> …` (то же ssh-назначение,
 что у `station.sh`; команды запуска в нём нет). Утилиты со звуком — п. 6.

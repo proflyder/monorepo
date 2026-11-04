@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@pulsar_crates//:libc",
+    "@pulsar_crates//:log",
+    "@pulsar_crates//:socket2",
+    "@pulsar_crates//:tokio",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+]
+
+rust_library(
+    name = "pulsar_zigbee",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_binary(
+    name = "zigbee_probe",
+    srcs = ["src/bin/zigbee_probe.rs"],
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS + [":pulsar_zigbee"],
+)
+
+rust_test(
+    name = "pulsar_zigbee_unit_tests",
+    crate = ":pulsar_zigbee",
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = ["@pulsar_crates//:tokio"],
+)

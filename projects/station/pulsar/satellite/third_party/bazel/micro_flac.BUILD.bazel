@@ -1,0 +1,34 @@
+# BUILD overlay for esphome-libs/micro-flac v0.3.0.
+#
+# MICRO_FLAC_ENABLE_OGG=OFF (third_party/CMakeLists.txt), so the Ogg demuxer
+# submodule is not part of this library; encoder LPC and Rice partitions keep
+# their default (ON) values.
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "micro_flac",
+    srcs = [
+        "src/crc.cpp",
+        "src/decorrelation.cpp",
+        "src/flac_decoder.cpp",
+        "src/flac_encoder.cpp",
+        "src/frame_header.cpp",
+        "src/lpc.cpp",
+        "src/lpc_analysis.cpp",
+        "src/pcm_packing.cpp",
+        "src/rice_partitions.cpp",
+        "src/subframe_coding.cpp",
+    ],
+    hdrs = glob([
+        "include/**/*.h",
+        "src/**/*.h",
+    ]),
+    includes = [
+        "include",
+        "src",
+    ],
+    copts = ["-std=c++14"],
+    defines = ["MICRO_FLAC_DISABLE_OGG"],
+)

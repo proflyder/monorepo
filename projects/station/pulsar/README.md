@@ -433,48 +433,39 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
 
 ## Сборка из исходников
 
-Демон написан на Rust и собирается на Linux или WSL2 (кросс-компиляция через
-[cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild)); установщику из копии репозитория
-нужен ещё [Go](https://go.dev/dl/) 1.27+:
+Демон написан на Rust и собирается на Linux или WSL2 через Bazel ([Bazelisk](https://github.com/bazelbuild/bazelisk),
+Bazel 9.3.1); установщику из копии репозитория нужен ещё [Go](https://go.dev/dl/) 1.27+:
 
-- [rustup](https://rustup.rs/) — сам ставит нужную версию Rust и обе цели из
-  `satellite/rust-toolchain.toml`;
-- cargo-zigbuild 0.24.0: `cargo install cargo-zigbuild --locked --version 0.24.0`;
-- [zig 0.14.1](https://ziglang.org/download/) — компоновщик и C/C++-компилятор для колонок
-  (aarch64/glibc 2.36 — обычный userspace Миди; 32-битный armhf/glibc 2.23 — Мини, а также Лайт 2,
-  Мини 2, Мини 3 и образы Миди с 32-битным userspace, у которых glibc 2.30). zig 0.13 не подходит:
-  собранные им 32-битные программы падают при запуске. Другой zig можно указать как
-  `ZIG=/путь/к/zig`;
-- `make`, `git`, `curl`, `patch`, компилятор C/C++ для хоста (`cc`/`c++`), а для библиотеки Sendspin
-  (sendspin-cpp) и on-device детектора «Рикардо» из `crates/pulsar-audio/ricardo/` — `cmake` ≥ 3.16
-  и `ninja` (их можно поставить через `uv tool install cmake ninja`);
+- Bazelisk (`bazel` в PATH) — версия Bazel из `.bazelversion`;
+- `git` и компилятор C/C++ для хоста (`cc`/`c++`); Rust 1.99.1, zig 0.14.1 и sendspin-cpp
+  скачивает и собирает сам Bazel по пинам `MODULE.bazel` — rustup, cargo-zigbuild, cmake и ninja
+  не нужны;
 - `adb` из Android platform-tools.
 
 ```sh
-make -C satellite -j"$(nproc)"                       # zig 0.14.1 в PATH
-make -C satellite -j"$(nproc)" ZIG=~/opt/zig/zig     # или явно
-make -C satellite ARCH=armhf tools                   # диагностические утилиты → satellite/build/armhf/tools/
-make -C satellite check                              # проверки на компьютере: rustfmt, clippy, тесты
-go -C installer run . 192.168.1.50                  # установщик из копии репозитория; сам вызывает make
+bazel test //projects/station/pulsar/satellite/...    # rustfmt, clippy, тесты на компьютере
+bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
+  --define=pulsar_version="$(tr -d '[:space:]' < projects/station/pulsar/VERSION)" \
+  //projects/station/pulsar/satellite:station_binary  # одна архитектура
+go -C projects/station/pulsar/installer run . 192.168.1.50  # установщик; сам собирает Bazel
 ```
+
+`aarch64_linux` — обычный userspace Миди (glibc 2.36), `armhf_linux` — 32-битный
+userspace Мини, Лайт 2, Мини 2, Мини 3 и образов Миди с armhf (glibc 2.23). Сборка
+`station_binary` даёт `bazel-bin/projects/station/pulsar/satellite/pulsar` (стрипнутый) и
+`pulsar.debug` (нестрипнутый, с символами; `pulsar` несёт `.gnu_debuglink` для `addr2line`). CI и установщик копируют их в
+`satellite/build/<arch>/`. `--version` печатает версию из `VERSION`, переданную в
+`--define=pulsar_version`.
 
 Для профиля Ricardo положите модель в `satellite/wakewords/ru_ricardo_mww.tflite`
 (инструкция и SHA-256 — `satellite/wakewords/README.md`). Установщик скопирует её
 в `/data/pulsar/wakewords/` с проверкой хеша.
 
-Makefile отказывается работать с zig 0.13 и более ранними. Результат: `satellite/build/<arch>/pulsar`
-(без отладочной информации — его и ставит установщик) и рядом `pulsar.debug` с
-символами для разбора отчётов о падениях. Версия берётся из `git describe` и видна в
-`pulsar --version` и в HA (сущность «Version»).
-
-При первой сборке скачиваются зависимости: крейты Rust (версии зафиксированы в
-`satellite/Cargo.lock`) и sendspin-cpp с его библиотеками (`satellite/third_party/fetch.sh`, тоже
-закреплены), которые собираются для каждой архитектуры. alsa-lib не линкуется: демон загружает
-её с колонки при запуске. Собираются обе версии: `satellite/build/aarch64/`
-и `satellite/build/armhf/`. Установщик смотрит, какой из загрузчиков `/lib/ld-linux-aarch64.so.1`
-и `/lib/ld-linux-armhf.so.3` есть на станции, и ставит эту сборку. Для Миди обычен aarch64; если
-его нет, а armhf есть, ставится armhf (образы с 32-битным userspace). Лайт 2, Мини 2, Мини 3 и
-Мини — только armhf. С `--ssh` установщик дополнительно собирает dropbear (`ssh/build.sh`).
+`alsa-lib` не линкуется: демон загружает её с колонки при запуске. Установщик смотрит, какой из
+загрузчиков `/lib/ld-linux-aarch64.so.1` и `/lib/ld-linux-armhf.so.3` есть на станции, и ставит
+эту сборку. Для Миди обычен aarch64; если его нет, а armhf есть, ставится armhf (образы с
+32-битным userspace). Лайт 2, Мини 2, Мини 3 и Мини — только armhf. С `--ssh` установщик
+дополнительно собирает dropbear (`ssh/build.sh`).
 
 Прошивки координатора и роутера для Zigbee-модуля Миди собирает `radio/build.sh` (нужны `unzip` и 32-битная
 библиотека C: `sudo dpkg --add-architecture i386 && sudo apt-get install libc6:i386`, потому что
@@ -483,10 +474,11 @@ Makefile отказывается работать с zig 0.13 и более р�
 `radio/out/zigbee-router.ybl`; установщик копирует их на Миди, если они собраны. В архивах релиза
 они уже есть.
 
-Каждый pull request и каждый push в `main` собираются в GitHub Actions (обе архитектуры и прошивки
-Zigbee-модуля); готовые бинарники лежат в артефактах сборки, а для версий (теги `v*`) — в Releases:
-архивы `pulsar-<ОС>-<arch>` для установки, бинарники обеих архитектур, `zigbee-*.ybl`,
-`.debug`-файлы и `SHA256SUMS` (архивы собирает `satellite/deploy/dist.sh`).
+Pulsar живёт в монорепозитории: PR в `develop` собирает обе архитектуры и прошивки Zigbee-модуля
+через GitHub Actions, merge публикует OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<VERSION>`
+(`pulsar-<arch>.bin`, `zigbee-*.ybl`, `SHA256SUMS`) и после approve в Environment `Station`
+раскатывает его через Home Assistant. GitHub Releases и теги не используются; `.debug`-файлы
+остаются артефактами workflow для разбора crash-отчётов.
 
 ## Управление
 

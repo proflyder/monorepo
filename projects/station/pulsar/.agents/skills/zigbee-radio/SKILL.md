@@ -17,7 +17,9 @@ description: >-
 ## 2. Утилита на станции
 
 `zigbee_probe` (`satellite/crates/pulsar-zigbee/src/bin/zigbee_probe.rs`):
-`make -C satellite ARCH=<arch> tools` → `satellite/build/<arch>/tools/zigbee_probe`
+`bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux
+//projects/station/pulsar/satellite/crates/pulsar-zigbee:zigbee_probe` →
+`bazel-bin/projects/station/pulsar/satellite/crates/pulsar-zigbee/zigbee_probe`
 (`AGENTS.md`, «Сборка и проверки»). Режимы:
 
 - `zigbee_probe info` — версия работающей прошивки;

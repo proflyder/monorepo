@@ -1,0 +1,79 @@
+# BUILD overlay for Sendspin/sendspin-cpp at 985fba57afb0462b520ab9ce974d1860858ed685.
+#
+# Reproduces the options of the former Makefile's third_party/CMakeLists.txt:
+# player + Opus + metadata + controller + visualizer, color/artwork/source off.
+# Keep the role list in sync with ROLES in crates/pulsar-sendspin/build.rs.
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+_ROLES = [
+    "SENDSPIN_ENABLE_PLAYER",
+    "SENDSPIN_ENABLE_OPUS",
+    "SENDSPIN_ENABLE_METADATA",
+    "SENDSPIN_ENABLE_CONTROLLER",
+    "SENDSPIN_ENABLE_VISUALIZER",
+]
+
+cc_library(
+    name = "sendspin_cpp",
+    srcs = [
+        "src/audio_stream_info.cpp",
+        "src/client.cpp",
+        "src/client_dispatch.cpp",
+        "src/connection.cpp",
+        "src/connection_manager.cpp",
+        "src/connection_manager_pairing.cpp",
+        "src/controller_role.cpp",
+        "src/crypto/constants.cpp",
+        "src/crypto/cpace.cpp",
+        "src/crypto/keys.cpp",
+        "src/crypto/pairing_code.cpp",
+        "src/crypto/pairing_token.cpp",
+        "src/crypto/psk_wrap.cpp",
+        "src/decoder.cpp",
+        "src/host/client_connection.cpp",
+        "src/host/network_info.cpp",
+        "src/host/server_connection.cpp",
+        "src/host/ws_server.cpp",
+        "src/inbound_ring.cpp",
+        "src/metadata_role.cpp",
+        "src/noise_handshake.cpp",
+        "src/noise_session.cpp",
+        "src/noise_transport.cpp",
+        "src/outbound_ring.cpp",
+        "src/persistence_codec.cpp",
+        "src/player_role.cpp",
+        "src/protocol.cpp",
+        "src/protocol_task.cpp",
+        "src/record_store.cpp",
+        "src/sync_task.cpp",
+        "src/time_burst.cpp",
+        "src/time_filter.cpp",
+        "src/transfer_buffer.cpp",
+        "src/visualizer_role.cpp",
+    ],
+    hdrs = glob([
+        "include/**/*.h",
+        "src/**/*.h",
+    ]),
+    # CMake: include (PUBLIC), src/host (PUBLIC), src (PRIVATE).
+    includes = [
+        "include",
+        "src",
+        "src/host",
+    ],
+    copts = ["-std=c++20"],
+    defines = _ROLES + [
+        "ARDUINOJSON_ENABLE_STD_STRING=1",
+        "ARDUINOJSON_USE_LONG_LONG=1",
+    ],
+    linkopts = ["-pthread"],
+    deps = [
+        "@arduino_json//:arduino_json",
+        "@ixwebsocket//:ixwebsocket",
+        "@micro_flac//:micro_flac",
+        "@micro_opus//:micro_opus",
+        "@noise_c//:noise_c",
+    ],
+)

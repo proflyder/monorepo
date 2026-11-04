@@ -8,10 +8,19 @@
 
 use super::*;
 
-const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/settings/");
+// Под Bazel тест исполняется из runfiles-дерева, где абсолютный
+// CARGO_MANIFEST_DIR сборочного экшена не существует; PULSAR_MANIFEST_DIR
+// задаёт путь относительно текущего каталога теста. Cargo его не выставляет,
+// поэтому там работает прежний CARGO_MANIFEST_DIR.
+fn dir() -> std::path::PathBuf {
+    std::env::var_os("PULSAR_MANIFEST_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+        .join("tests/golden/settings")
+}
 
 fn golden(name: &str) -> Vec<u8> {
-    std::fs::read(format!("{DIR}{name}")).unwrap()
+    std::fs::read(dir().join(name)).unwrap()
 }
 
 /// As the harness read its arguments (strtof).

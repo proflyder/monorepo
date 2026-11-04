@@ -1,0 +1,10 @@
+# BUILD overlay for bblanchon/ArduinoJson v7.4.1 (header-only).
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "arduino_json",
+    hdrs = glob(["src/**"]),
+    includes = ["src"],
+)

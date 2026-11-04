@@ -38,8 +38,9 @@ the supported, rooted stations found. Per station:
 - enables the satellite (stops the Yandex stack) unless --no-enable; an already running
   satellite is restarted with the new binary and, after ~10 s, checked (process alive, no crash
   report in the log); on failure the previous binary is put back (asked, or automatic with --yes).
-In a repository checkout (satellite/Makefile present) the daemon is built first
-(make; ssh/build.sh for --ssh). Outside /data only /etc/init.d/S99zpulsar is written. Re-running is safe.
+In a repository checkout (satellite/BUILD.bazel present) the daemon is built first
+(bazel build for both stations; ssh/build.sh for --ssh). Outside /data only /etc/init.d/S99zpulsar
+is written. Re-running is safe.
 adb: from PATH, else platform-tools/ next to the installer, else downloaded there
 from dl.google.com (Android SDK Platform-Tools 37.0.1; Google's terms apply).
 --list only shows what was found; --yes installs to every station found without asking.

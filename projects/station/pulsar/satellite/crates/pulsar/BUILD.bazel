@@ -1,0 +1,71 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//projects/station/pulsar/satellite:version.bzl", "pulsar_version_env")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@pulsar_crates//:libc",
+    "@pulsar_crates//:log",
+    "@pulsar_crates//:tokio",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+    "//projects/station/pulsar/satellite/crates/pulsar-audio:pulsar_audio",
+    "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-esphome:pulsar_esphome",
+    "//projects/station/pulsar/satellite/crates/pulsar-hw:pulsar_hw",
+    "//projects/station/pulsar/satellite/crates/pulsar-lan:pulsar_lan",
+    "//projects/station/pulsar/satellite/crates/pulsar-media:pulsar_media",
+    "//projects/station/pulsar/satellite/crates/pulsar-sendspin:pulsar_sendspin",
+    "//projects/station/pulsar/satellite/crates/pulsar-update:pulsar_update",
+    "//projects/station/pulsar/satellite/crates/pulsar-zigbee:pulsar_zigbee",
+]
+
+# PULSAR_VERSION / PULSAR_BUILD_TIME for src/version.rs, from
+# --define=pulsar_version=... --define=pulsar_build_time=... (see
+# satellite/version.bzl and docs/development.md). Releases pass the VERSION
+# file and HEAD's commit date; the host build defaults to "unknown".
+pulsar_version_env(name = "version_env")
+
+rust_binary(
+    name = "pulsar",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    crate_root = "src/main.rs",
+    edition = "2024",
+    rustc_env_files = [":version_env"],
+    # The Cargo release profile: thin LTO, 4 codegen units and panic=abort.
+    # panic=abort is set on the station binary only: tests share the same Rust
+    # triple and cannot be built with it, but Rust allows linking unwind-built
+    # rlibs into an abort binary. The supervisor restarts a panic instead of a
+    # task catching it and leaving the daemon half-broken.
+    rustc_flags = select({
+        "@zig_0_14_1//:station": [
+            "-C",
+            "lto=thin",
+            "-C",
+            "codegen-units=4",
+            "-C",
+            "panic=abort",
+        ],
+        "//conditions:default": [],
+    }),
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+# settings/tests.rs reads tests/golden/settings at runtime; the test environment
+# resolves it relative to the runfiles tree (see the PULSAR_MANIFEST_DIR use in
+# that file).
+rust_test(
+    name = "pulsar_unit_tests",
+    crate = ":pulsar",
+    data = glob(["tests/golden/settings/**"]),
+    edition = "2024",
+    env = {
+        "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar",
+    },
+    target_compatible_with = LINUX,
+    deps = ["@pulsar_crates//:tokio"],
+)

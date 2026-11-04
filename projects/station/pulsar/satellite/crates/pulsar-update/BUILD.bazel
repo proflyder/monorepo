@@ -1,0 +1,66 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@pulsar_crates//:libc",
+    "@pulsar_crates//:ring",
+    "@pulsar_crates//:rustls",
+    "@pulsar_crates//:rustls-pki-types",
+    "@pulsar_crates//:tokio",
+    "@pulsar_crates//:tokio-rustls",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+]
+
+rust_library(
+    name = "pulsar_update",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_binary(
+    name = "update_probe",
+    srcs = ["src/bin/update_probe.rs"],
+    edition = "2024",
+    target_compatible_with = LINUX,
+    deps = DEPS + [":pulsar_update"],
+)
+
+# The integration test runs the update_probe binary at runtime. Cargo exports
+# CARGO_BIN_EXE_<bin>; Bazel does not, so it is passed through `env` and the
+# binary is a runfile.
+rust_test(
+    name = "update_probe_test",
+    srcs = ["tests/update_probe.rs"],
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    data = [":update_probe"],
+    edition = "2024",
+    env = {
+        "CARGO_BIN_EXE_update_probe": "$(rootpath :update_probe)",
+        "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar-update",
+    },
+    target_compatible_with = LINUX,
+    deps = DEPS + [":pulsar_update"],
+)
+
+# test_server.rs reads tests/data at runtime; the test environment points
+# CARGO_MANIFEST_DIR-style lookups at the runfiles tree.
+rust_test(
+    name = "pulsar_update_unit_tests",
+    crate = ":pulsar_update",
+    data = glob(["tests/data/**"]),
+    edition = "2024",
+    env = {
+        "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar-update",
+    },
+    target_compatible_with = LINUX,
+    deps = ["@pulsar_crates//:tokio"],
+)

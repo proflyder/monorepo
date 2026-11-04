@@ -3,7 +3,8 @@
 # radio's firmware images, dropbear and the device scripts in the repository layout (pulsar-install
 # finds them next to itself).
 # Usage: satellite/deploy/dist.sh <out.zip|out.tar.gz> <pulsar-install binary>
-#   (needs: make -C satellite; radio/build.sh; ssh/build.sh; the installer built for the target OS)
+#   (needs: bazel build ...:station_binary for both arches copied to satellite/build/<arch>;
+#    radio/build.sh; ssh/build.sh; the installer built for the target OS)
 set -eu
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 [ $# = 2 ] || { echo "usage: $0 <out.zip|out.tar.gz> <pulsar-install binary>" >&2; exit 1; }
@@ -15,7 +16,7 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 P=$STAGE/pulsar
 put() { # repo-relative path, mode
-  [ -s "$ROOT/$1" ] || { echo "missing $1 (make -C satellite; radio/build.sh; ssh/build.sh)" >&2; exit 1; }
+  [ -s "$ROOT/$1" ] || { echo "missing $1 (bazel build ...:station_binary; radio/build.sh; ssh/build.sh)" >&2; exit 1; }
   mkdir -p "$P/$(dirname "$1")"
   cp "$ROOT/$1" "$P/$1"
   # CI artifacts lose permission bits.

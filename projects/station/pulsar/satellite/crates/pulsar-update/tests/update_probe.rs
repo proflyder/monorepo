@@ -4,7 +4,10 @@
 use std::process::Command;
 
 fn probe(args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_update_probe"))
+    // Cargo задаёт CARGO_BIN_EXE_* и при компиляции, и при запуске; Bazel —
+    // только через env теста (см. BUILD.bazel), поэтому читаем его в рантайме.
+    let binary = std::env::var("CARGO_BIN_EXE_update_probe").expect("CARGO_BIN_EXE_update_probe");
+    Command::new(binary)
         .args(args)
         .output()
         .expect("run update_probe")

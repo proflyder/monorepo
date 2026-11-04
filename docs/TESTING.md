@@ -47,7 +47,7 @@ teardown восстанавливает source/volume.
 | MCP gateway | Go unit (фейки backend'ов), каталог↔RBAC, contract `deploy.sh`, fake SSH |
 | bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
 | Voice routing | Go-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
-| Pulsar Rust | `make -C satellite check` (fmt/clippy/tests), сборки `aarch64`/`armhf`, radio, ssh — CI-юнит `pulsar` (`_native.yml`) |
+| Pulsar Rust | `bazel test //projects/station/pulsar/satellite/...` (fmt/clippy/tests, Linux) и `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` для `aarch64`/`armhf` — CI-юниты `pulsar-bazel` (`_bazel.yml`) и `pulsar` (`_native.yml`) |
 | Pulsar installer | Go-тесты установщика (nested module, `GOWORK=off`); исходники в `projects/station/pulsar/` |
 
 ## Hermes
@@ -159,8 +159,24 @@ Bazel-гейты отдельные:
 ```bash
 # backend-таргеты (нужен Bazelisk; локально — secrets/local-tools/bazelisk)
 bazel test //solutions/... //packages/...
+
+# Rust-хост Pulsar (Linux; на macOS цели пропускаются через
+# target_compatible_with, поэтому build проходит без сборки)
+bazel build //projects/station/pulsar/...
+bazel test  //projects/station/pulsar/satellite/...
 ```
 
+`bazel test` для Pulsar включает юнит- и интеграционные тесты, golden-файлы,
+`rustfmt` и `clippy` (warnings = errors, как бывший `make check`). На macOS те же
+цели несовместимы и пропускаются; реальная сборка/тесты — только на Linux.
+Станционная кросс-сборка и разбор crash-файла — там же:
+
+```bash
+bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
+  --define=pulsar_version="$(tr -d '[:space:]' < projects/station/pulsar/VERSION)" \
+  //projects/station/pulsar/satellite:station_binary
+# pulsar (stripped, .gnu_debuglink) и pulsar.debug (unstripped) лежат в bazel-bin/.../satellite/
+```
 Android-сборка/тесты требуют Android SDK и выполняются из
 `projects/mobile/android` отдельно; они не входят в backend `make test`.
 
@@ -269,6 +285,7 @@ matrix одного платформенного workflow.
 |---|---|---|
 | go | `_go.yml` | `go vet`, `go test` (`-race` где объявлено), `go build` бинарей |
 | android | `_android.yml` | JDK 21 + SDK 36, `bazel build` затем `bazel test`, APK в artifact |
+| bazel | `_bazel.yml` | Linux-runner, `bazel build` затем `bazel test` (Rust-хост Pulsar: тесты, fmt, clippy) |
 | python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
 | js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
 | native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact |
@@ -352,6 +369,7 @@ attestation; `ci-ok` не меняется.
 |---|---|---|
 | go | `go list -deps` пакетов юнита | правка `packages/proto` выбирает все юниты, которые его импортируют |
 | android | обратные зависимости Bazel (`bazel query --output=xml`, loading phase) | правка `packages/kotlin/core` выбирает `kotlin-shared` и только те приложения, что от него зависят |
+| bazel | те же обратные зависимости Bazel, что у android | правка `projects/station/pulsar/satellite/crates/pulsar-core` выбирает `pulsar-bazel` |
 | python | пути юнита (+ `depends_on`) | правка `projects/home/proxmox/**` выбирает `proxmox` |
 | native | пути юнита | правка `solutions/windows-logon-provider/**` выбирает `logon-provider` |
 | quality | всегда | audit/Gitleaks/shellcheck идут на любом изменении |
@@ -373,7 +391,7 @@ SDK, поэтому маршрутизация дешёвая и не может
   `.bazelignore`, `BUILD.bazel`, `platform/bazel/**` → все платформы и все
   юниты; исключение — Maven-only diff `MODULE.bazel`, который даёт
   `MODULE.bazel#maven` и только android;
-* `go list` упал → все go-юниты; `bazel query` упал → все android-юниты;
+* `go list` упал → все go-юниты; `bazel query` упал → все android и bazel юниты;
 * база не определена (новый push, `workflow_dispatch`) → все юниты
   (`affected.mjs --all`);
 * база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
@@ -501,8 +519,9 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
 - Откат — только применённого объекта; изменение целиком откатывается новым
   PR с `git revert`.
 
-Pulsar собирается и релизится в своём репозитории; монорепо в CI его не
-собирает. Деплой релиза Pulsar на станцию — открытая задача (`PENDING.md`).
+Pulsar: хост-сборка и тесты — Bazel-юнит `pulsar-bazel`; станционные
+бинарники (Bazel), radio, ssh, installer и релиз — native-юнит `pulsar`
+(`_native.yml`). Make/cargo-zigbuild из станционной сборки удалены.
 
 ## Публикация
 

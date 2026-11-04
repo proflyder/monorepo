@@ -7,7 +7,9 @@ resources
 projects/station/ble-gateway
 projects/station/upstream
 projects/station/resources
-# Pulsar is built with Make + cargo-zigbuild (see docs/PENDING.md); keep Bazel
-# from traversing its cross-build outputs until a Bazel migration lands.
-projects/station/pulsar
+# Pulsar Rust workspace is built by Bazel now; only its generated build/output
+# directories stay outside the Bazel graph.
+projects/station/pulsar/satellite/target
+projects/station/pulsar/satellite/build
+projects/station/pulsar/satellite/third_party/src
 snapshots

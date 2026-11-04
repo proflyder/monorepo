@@ -1,0 +1,15 @@
+# BUILD overlay for esphome-libs/micro-ogg-demuxer at
+# 865ad9d831e7dc76bb9c142607bae33fc75648e7 (the revision micro-opus v0.3.5
+# pins; micro-flac's own submodule revision is not used because its Ogg support
+# is off).
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "micro_ogg_demuxer",
+    srcs = ["src/ogg_demuxer.cpp"],
+    hdrs = glob(["include/**/*.h"]),
+    includes = ["include"],
+    copts = ["-std=c++11"],
+)

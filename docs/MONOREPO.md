@@ -127,13 +127,16 @@ bazel run //:gazelle
 рисковать станцией. Android собирается root-инструментами в
 `projects/mobile/android`.
 
-`projects/station/pulsar` пока тоже вне Bazel: Make + cargo-zigbuild + zig
-0.14.1, CI-юнит `pulsar` в `_native.yml` (проверки, обе архитектуры, installer,
-radio, ssh). Это publishable native-юнит общего `deploy-home` с
-`publish_when` по `VERSION`: релиз публикует `publish-native` в GHCR
-`pulsar-firmware`, деплой на станцию — job `deploy-station`. Перевод на
-`rules_rust` — открытая задача (`PENDING.md`), поэтому каталог в
-`.bazelignore`.
+`projects/station/pulsar` — Rust-хост на `rules_rust`: `crate_universe` берёт
+крейты из `satellite/Cargo.toml` + `Cargo.lock`, BUILD-цели лежат в
+`satellite/crates/*`, а тесты/fmt/clippy идут юнитом `pulsar-bazel`
+(`_bazel.yml`). Станции собирает тот же Bazel: герметичный zig 0.14.1
+cc-toolchain (`platform/bazel/zig/`) с платформами `aarch64_linux`/`armhf_linux`,
+sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'и в
+`satellite/third_party/bazel/`. Юнит `pulsar` (`_native.yml`) собирает обе
+архитектуры и релиз Bazel-путём, installer/radio/ssh остаются своими
+скриптами. Цели Linux-only; на macOS `bazel build //...` их пропускает.
+`.bazelignore` держит только сгенерированные каталоги `satellite/`.
 
 `solutions/windows-logon-provider` — переиспользуемый компонент, тоже вне
 Bazel: его контракт — `build.sh` (кросс-сборка pinned llvm-mingw `20261020`) и

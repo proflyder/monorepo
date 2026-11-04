@@ -1,0 +1,27 @@
+package(default_visibility = ["//visibility:public"])
+
+# Station cross-build targets. The matching cc_toolchain rules live in the
+# generated @zig_0_14_1 repository (platform/bazel/zig/repositories.bzl); these
+# platforms select them together with rules_rust's extra target triples.
+platform(
+    name = "aarch64_linux",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+        "@zig_0_14_1//:station",
+    ],
+)
+
+platform(
+    name = "armhf_linux",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:armv7",
+        "@zig_0_14_1//:station",
+    ],
+)
+
+exports_files([
+    "repositories.bzl",
+    "toolchain.bzl",
+])

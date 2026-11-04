@@ -42,13 +42,15 @@ ALSA ABI armhf обрабатывается runtime-обёрткой `pulsar-als
 ## Сборка
 
 ```bash
-cd projects/station/pulsar
-make -C satellite -j"$(nproc)" ZIG=/path/to/zig-0.14.1
+bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
+  --define=pulsar_version="$(tr -d '[:space:]' < projects/station/pulsar/VERSION)" \
+  //projects/station/pulsar/satellite:station_binary
 ```
 
-Нужны rustup (версия из `satellite/rust-toolchain.toml`), cargo-zigbuild
-0.24.0, zig 0.14.1, make, git, curl, patch, cmake и ninja. Сборка проверена в
-Linux/WSL2; результат — `satellite/build/<arch>/pulsar` и `pulsar.debug`.
+Нужен Bazelisk; Rust 1.99.1, zig 0.14.1 и sendspin-cpp скачивает сам Bazel по
+`MODULE.bazel`. Сборка проверена в Linux/WSL2; результат —
+`bazel-bin/projects/station/pulsar/satellite/pulsar` и `pulsar.debug` (CI
+копирует их в `satellite/build/<arch>/`).
 Модель для профиля Ricardo кладётся в `satellite/wakewords/` по
 `satellite/wakewords/README.md`.
 Это путь сборки общего upstream-профиля. Персональные веса туда не

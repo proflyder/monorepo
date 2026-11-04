@@ -10,14 +10,14 @@ name: _native
 #     reuses this workflow in deploy-home and publishes the resulting artifact
 #     as an OCI artifact; this reusable workflow itself stays read-only.
 #
-#   * `pulsar` — the Rust station daemon in `projects/station/pulsar`. It
-#     mirrors the old upstream `build.yml`: host `make check`, both station
-#     architectures, the Go installer, the Zigbee radio and the dropbear build.
-#     Tool versions are pinned here (zig 0.14.1, cargo-zigbuild 0.24.0); the
-#     Rust toolchain comes from `satellite/rust-toolchain.toml`. With
-#     `release_version` set (the deploy-home push path) the same jobs build the
-#     versioned binaries, verify `--version` under qemu and add `pulsar-release`,
-#     the single OCI-ready artifact `publish-native` consumes.
+#   * `pulsar` — the Rust station daemon in `projects/station/pulsar`. Its host
+#     fmt/clippy/tests are the `pulsar-bazel` unit (`_bazel.yml`); this workflow
+#     cross-builds both station ABIs with Bazel and builds the Go installer, the
+#     Zigbee radio and dropbear. Zig 0.14.1, Rust 1.99.1 and the sendspin C/C++
+#     are pinned by MODULE.bazel. With `release_version` set (the deploy-home
+#     push path) the same jobs build the versioned binaries, verify `--version`
+#     under qemu and add `pulsar-release`, the single OCI-ready artifact
+#     `publish-native` consumes.
 
 on:
   workflow_call:
@@ -214,55 +214,18 @@ jobs:
           retention-days: ${{ inputs.retention_days }}
 
   # ---------------------------------------------------------------- pulsar ----
-  # Host check: cargo fmt, clippy -D warnings (host + both station targets
-  # through cargo-zigbuild) and the workspace tests. Mirrors upstream build.yml.
-  pulsar-check:
-    name: native / pulsar-check
-    if: inputs.kind == 'pulsar'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - name: Set up zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        timeout-minutes: 5
-        with:
-          version: "0.14.1"
-
-      - name: Rust toolchain (rust-toolchain.toml)
-        working-directory: ${{ inputs.workdir }}/satellite
-        run: rustup toolchain install
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ${{ inputs.workdir }}/satellite/target
-          key: pulsar-rust-host-${{ hashFiles(format('{0}/satellite/Cargo.lock', inputs.workdir), format('{0}/satellite/rust-toolchain.toml', inputs.workdir)) }}
-          restore-keys: pulsar-rust-host-
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/bin/cargo-zigbuild
-          key: cargo-zigbuild-0.24.0-${{ runner.os }}-check
-
-      - name: Install cargo-zigbuild 0.24.0
-        run: |
-          cargo-zigbuild --version 2>/dev/null | grep -qx 'cargo-zigbuild 0.24.0' ||
-            cargo install cargo-zigbuild --locked --force --version 0.24.0
-
-      - name: Check pulsar
-        working-directory: ${{ inputs.workdir }}
-        run: make -C satellite check
-
-  # Both station ABIs: the daemon and its tools, cross-built with cargo-zigbuild.
+  # Host fmt/clippy/tests are the `pulsar-bazel` unit (`_bazel.yml`); this unit
+  # only cross-builds the deployable station binaries with Bazel. The zig cc
+  # toolchain, Rust toolchain and sendspin C/C++ all come from MODULE.bazel, so
+  # no rustup/zig/cargo-zigbuild/CMake/ninja setup happens here.
+  #
+  # Both station ABIs: the daemon at -c opt (line tables kept for pulsar.debug,
+  # VERSION/BUILD_TIME passed as --define) for aarch64 and armhf.
   pulsar-build:
     name: native / pulsar-build (${{ matrix.arch }})
     if: inputs.kind == 'pulsar'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -270,69 +233,70 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - name: Set up zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        timeout-minutes: 5
+      # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
+      # `_bazel.yml` unit the host checks use.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
-          version: "0.14.1"
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - name: Build prerequisites
-        run: sudo apt-get update -q && sudo apt-get install -yq ninja-build
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Action-output disk cache (.bazelrc only); keyed like the pulsar-bazel
+          # unit so both restore the same Rust/C++ objects.
+          path: ~/.cache/bazel-disk
+          key: bazel-pulsar-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/station/pulsar/satellite/Cargo.lock', 'projects/station/pulsar/satellite/crate-universe.lock') }}
+          restore-keys: |
+            bazel-pulsar-${{ runner.os }}-
+            bazel-${{ runner.os }}-
 
       # The release path verifies the cross-built binary under qemu exactly as
       # the station updater does before accepting a release.
       - name: Release verification prerequisites
         if: inputs.release_version != ''
-        run: sudo apt-get install -yq qemu-user libc6-arm64-cross libc6-armhf-cross
-
-      - name: Rust toolchain (rust-toolchain.toml)
-        working-directory: ${{ inputs.workdir }}/satellite
-        run: rustup toolchain install
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ${{ inputs.workdir }}/satellite/target
-          key: pulsar-rust-${{ matrix.arch }}-${{ hashFiles(format('{0}/satellite/Cargo.lock', inputs.workdir), format('{0}/satellite/rust-toolchain.toml', inputs.workdir)) }}
-          restore-keys: pulsar-rust-${{ matrix.arch }}-
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/bin/cargo-zigbuild
-          key: cargo-zigbuild-0.24.0-${{ runner.os }}-${{ matrix.arch }}
-
-      - name: Install cargo-zigbuild 0.24.0
         run: |
-          cargo-zigbuild --version 2>/dev/null | grep -qx 'cargo-zigbuild 0.24.0' ||
-            cargo install cargo-zigbuild --locked --force --version 0.24.0
+          sudo apt-get update -q
+          sudo apt-get install -yq qemu-user libc6-arm64-cross libc6-armhf-cross
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ inputs.workdir }}/satellite/third_party/src
-          key: pulsar-third-party-${{ hashFiles(format('{0}/satellite/third_party/fetch.sh', inputs.workdir)) }}
-
-      # `VERSION` is only overridden on the release path: the Makefile defaults
-      # to `git describe`, and monorepo tags do not exist. PR CI keeps the
-      # upstream default so its build stays byte-identical to before.
-      - name: Daemon and tools
-        working-directory: ${{ inputs.workdir }}
+      # VERSION is the release trigger and the value `pulsar --version` prints.
+      # BUILD_TIME is HEAD's commit date (the Makefile's reproducible value):
+      # a rebuild of the same commit does not change option_env! and relink.
+      - name: Release identity
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
-          args=(-C satellite ARCH=${{ matrix.arch }} -j"$(nproc)" binary tools)
+          version=$(tr -d '[:space:]' < projects/station/pulsar/VERSION)
           if [[ -n "$RELEASE_VERSION" ]]; then
-            args+=("VERSION=$RELEASE_VERSION")
+            version="$RELEASE_VERSION"
           fi
-          make "${args[@]}"
+          build_time=$(TZ=UTC0 LC_ALL=C git log -1 --format=%cd --date=format-local:'%b %e %Y, %H:%M:%S')
+          {
+            echo "PULSAR_VERSION=$version"
+            echo "PULSAR_BUILD_TIME=$build_time"
+          } >> "$GITHUB_ENV"
+
+      - name: Build station daemon
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          bazel build -c opt \
+            --platforms="//platform/bazel/zig:${ARCH}_linux" \
+            --define="pulsar_version=$PULSAR_VERSION" \
+            --define="pulsar_build_time=$PULSAR_BUILD_TIME" \
+            //projects/station/pulsar/satellite:station_binary
+          out="$GITHUB_WORKSPACE/projects/station/pulsar/satellite/build/$ARCH"
+          mkdir -p "$out"
+          cp bazel-bin/projects/station/pulsar/satellite/pulsar "$out/pulsar"
+          cp bazel-bin/projects/station/pulsar/satellite/pulsar.debug "$out/pulsar.debug"
 
       # Glibc binaries run under qemu with the cross libc; the updater compares
       # exactly this `--version` output against the OCI tag.
       - name: Verify pulsar --version
         if: inputs.release_version != ''
-        working-directory: ${{ inputs.workdir }}
         env:
           VERSION: ${{ inputs.release_version }}
           ARCH: ${{ matrix.arch }}
@@ -343,7 +307,8 @@ jobs:
             armhf) emulator=qemu-arm; sysroot=/usr/arm-linux-gnueabihf ;;
             *) echo "unknown arch $ARCH" >&2; exit 1 ;;
           esac
-          output=$("$emulator" -L "$sysroot" "satellite/build/$ARCH/pulsar" --version)
+          binary="projects/station/pulsar/satellite/build/$ARCH/pulsar"
+          output=$("$emulator" -L "$sysroot" "$binary" --version)
           printf '%s\n' "$output"
           if [[ "$output" != "pulsar $VERSION" ]]; then
             echo "::error::--version printed '$output', expected 'pulsar $VERSION'"

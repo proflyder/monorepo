@@ -72,7 +72,8 @@
     новым revert-PR.
 20. **Pulsar — код и релизы в монорепозитории, деплой через HA updater.**
     Исходники — `projects/station/pulsar/`; CI — юнит `pulsar`
-    (`_native.yml`: `make check`, обе архитектуры, installer, radio, ssh).
+    (`_native.yml`: Bazel-сборка обеих архитектур, installer, radio, ssh), хост
+    fmt/clippy/тесты — отдельный юнит `pulsar-bazel` (`_bazel.yml`).
     Версия — `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`).
     Pulsar — обычный publishable native-юнит общего `deploy-home`: поле
     `native.publish_when` пускает его в `native_units` на push только при

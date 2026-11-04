@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -17,18 +16,55 @@ import (
 // sources.
 func build() bool {
 	sat := filepath.Join(root, "satellite")
-	if _, err := os.Stat(filepath.Join(sat, "Makefile")); err != nil {
+	if _, err := os.Stat(filepath.Join(sat, "BUILD.bazel")); err != nil {
 		return true
 	}
 	fmt.Println("== build")
 	fail := func(err error) bool {
-		fmt.Fprintf(os.Stderr, "build: %v (building from source needs Linux or WSL, see README)\n", err)
+		fmt.Fprintf(os.Stderr, "build: %v (building from source needs Linux or WSL with Bazelisk, see README)\n", err)
 		return false
 	}
-	mk := exec.Command("make", "-C", sat, fmt.Sprintf("-j%d", runtime.NumCPU()))
-	mk.Stderr = os.Stderr
-	if err := mk.Run(); err != nil {
-		return fail(err)
+	version := "unknown"
+	if b, err := os.ReadFile(filepath.Join(root, "VERSION")); err == nil {
+		if v := strings.TrimSpace(string(b)); v != "" {
+			version = v
+		}
+	}
+	buildTime := "unknown"
+	gitLog := exec.Command("git", "-C", root, "log", "-1", "--format=%cd",
+		"--date=format-local:%b %e %Y, %H:%M:%S")
+	gitLog.Env = append(os.Environ(), "TZ=UTC0", "LC_ALL=C")
+	if out, err := gitLog.Output(); err == nil {
+		buildTime = strings.TrimSpace(string(out))
+	}
+	// The Makefile built both arches. Bazel writes each platform to bazel-bin in
+	// turn, so each build is copied out before the next one replaces it.
+	for _, arch := range []string{"aarch64", "armhf"} {
+		bazel := exec.Command("bazel", "build", "-c", "opt",
+			"--platforms=//platform/bazel/zig:"+arch+"_linux",
+			"--define=pulsar_version="+version,
+			"--define=pulsar_build_time="+buildTime,
+			"//projects/station/pulsar/satellite:station_binary")
+		bazel.Dir = root
+		bazel.Stderr = os.Stderr
+		bazel.Stdout = os.Stdout
+		if err := bazel.Run(); err != nil {
+			return fail(err)
+		}
+		outDir := filepath.Join(sat, "build", arch)
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
+			return fail(err)
+		}
+		for _, name := range []string{"pulsar", "pulsar.debug"} {
+			data, err := os.ReadFile(filepath.Join(root, "bazel-bin",
+				"projects", "station", "pulsar", "satellite", name))
+			if err != nil {
+				return fail(err)
+			}
+			if err := os.WriteFile(filepath.Join(outDir, name), data, 0o755); err != nil {
+				return fail(err)
+			}
+		}
 	}
 	if opts.ssh {
 		for _, a := range []string{"aarch64", "armhf"} {

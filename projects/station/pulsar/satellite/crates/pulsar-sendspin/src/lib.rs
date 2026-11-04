@@ -3,8 +3,9 @@
 //! the playback dmix), metadata, controller (transport commands), visualizer (8 log bands
 //! 40 Hz–7.6 kHz, loudness, beats → `MusicFrame`).
 //!
-//! sendspin-cpp is only linked in the station builds of the Makefile (cfg `sendspin_ffi`, set by
-//! build.rs); elsewhere `spawn` fails with "sendspin: built without sendspin-cpp".
+//! sendspin-cpp is only linked in the station builds (cfg `sendspin_ffi`, set by the Bazel
+//! station configuration; the host build script leaves it unset); elsewhere `spawn` fails with
+//! "sendspin: built without sendspin-cpp".
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]

@@ -1,5 +1,5 @@
-//! Set by the Makefile: `git describe --tags --match 'v*' --always --dirty` (release tags only)
-//! and HEAD's commit date.
+//! Set by the release build: the VERSION file and HEAD's commit date (`--define=pulsar_version`,
+//! `--define=pulsar_build_time` via satellite/version.bzl); defaults are "unknown".
 
 /// `pulsar --version`, Home Assistant DeviceInfo and the "Version" entity; the updater compares
 /// it with the release tag.
