@@ -251,6 +251,22 @@ class ManifestTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             station.assign_split("2026-11-01", train=.8, val=.3)
 
+    def test_thirty_second_miss_is_a_review_candidate(self):
+        missed = "20261101T104000Z-miss-21"
+        events = {
+            missed: (sidecar(missed, kind="miss", pre_ms=30000, post_ms=0,
+                             label="missed", label_source="user"), wav_bytes(30.0)),
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            pull(folder, bundle(events))
+            manifest = station.to_manifest(folder, Path(folder) / "run/station-manifest.json")
+            record = {record["id"]: record for record in manifest["records"]}[missed]
+            self.assertEqual(record["block"], "station")
+            self.assertTrue(record["review_only"])
+            self.assertEqual(record["targets"], [])
+            self.assertAlmostEqual(record["seconds"], 30.0, places=3)
+            self.assertEqual(record["review_regions"], [[0.0, record["seconds"]]])
+
     def test_confirmed_false_and_near_become_hard_negatives(self):
         hit = "20261101T101500Z-hit-17"
         near = "20261101T101530Z-near-18"

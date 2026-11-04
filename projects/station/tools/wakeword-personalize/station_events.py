@@ -681,7 +681,8 @@ def _positive_candidate(event, split):
         "id": event["id"], "source_split": split, "block": "station",
         "sha256": event["sha256"], "seconds": round(event["seconds"], 3),
         "interrupted": False, "review_only": True, "targets": [],
-        # Word position inside a 4-6 s clip is unknown; never auto-positive.
+        # Word position inside the clip is unknown (hit/near ~4 s, miss up to
+        # 30 s); never auto-positive.
         "review_regions": [[0.0, round(event["seconds"], 3)]],
         "station_label": sidecar.get("label"), "station_kind": sidecar["kind"],
         "station_outcome": sidecar.get("outcome"),

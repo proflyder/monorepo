@@ -734,14 +734,16 @@ known-good бинарник — атомарно, не поверх работа
 adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
-Установлен релиз форка `v0.5.1002` (armhf, SHA256 `3a544979…`, база upstream
-`v0.5.3`): Ricardo pre-roll 256 ms (`Fixed(8)`), локальный endpointing и
-upstream-функции `v0.5.3` (switch часов «Clock auto brightness», Mini gen1 и
-Mini 3 experimental, переработанные volume/mixer/player/pcm_out/sendspin).
-`--version` теперь показывает тег релиза. Процесс запущен с
-`PULSAR_LOCAL_ENDPOINTING=1`. `pulsar.prev` — предыдущая сборка `80aea2ec…`
-(`v0.5.1001`, база upstream `v0.5.2`, тот же Ricardo-код).
-Historical старше в `/data/pulsar/backups/` и private: `7081ef8e…`
+Установлен релиз форка `v0.5.1005` (armhf, SHA256 `89415c5a…71671b6`, база
+upstream `v0.5.4`): Ricardo pre-roll 256 ms (`Fixed(8)`), локальный
+endpointing, «Wake: не услышала» с окном 30 с и upstream-функции `v0.5.4`
+(number «Follow-up duration», STT stop-word fallback, switch часов «Clock auto
+brightness», Mini gen1 и Mini 3 experimental, переработанные
+volume/mixer/player/pcm_out/sendspin). `--version` показывает тег релиза.
+Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`. `pulsar.prev` — предыдущая
+сборка `fb0695b2…` (`v0.5.1004`).
+Historical старше в `/data/pulsar/backups/` и private: `3a544979…`
+(`v0.5.1002`), `80aea2ec…` (`v0.5.1001`, база `v0.5.2`), `7081ef8e…`
 (`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (endpointing 512 ms),
 `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`, `pulsar.pre-endpoint-20261030`),
 `69310a37…` (`pulsar.prev.pre-endpoint-20261030`); off-device private
@@ -749,7 +751,7 @@ Historical старше в `/data/pulsar/backups/` и private: `7081ef8e…`
 
 Откат на предыдущую сборку — только на станции, не через CI: updater
 предлагает лишь более новые версии. Команда ниже возвращает `pulsar.prev`
-(сейчас — `v0.5.1003`; более старые сборки лежат в
+(сейчас — `v0.5.1004`; более старые сборки лежат в
 `/data/pulsar/backups/`):
 
 ```bash
@@ -759,7 +761,15 @@ adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollba
 ### Релиз и деплой Pulsar
 
 Pulsar собирается и релизится в форке (origin вложенного checkout
-`projects/station/upstream/pulsar-rust`), а не в монорепо. Полная процедура —
+`projects/station/upstream/pulsar-rust`), а не в монорепо. `proflyder/pulsar`
+— самостоятельный публичный репозиторий, не GitHub-fork (Actions были
+отключены в сети форков), имя зашито в обновлятор станции. Upstream
+`Morvex885/pulsar` вливается вручную: во вложенном checkout remote `upstream`,
+`git fetch upstream vX` и `git merge vX`; PR в форке сливается merge-коммитом
+(`gh pr merge --merge --admin`); остальные PR — squash. Коммиты и PR форка
+следуют его `AGENTS.md`: без AI-трейлеров и подписей (job `commits`,
+`tools/check-authorship.sh`). Release job при сетевом сбое повторяется
+`gh run rerun <id> --failed`. Полная процедура —
 RICARDO.md «Релизы и деплой форка» в форке. Кратко:
 
 ```bash
@@ -794,17 +804,17 @@ job. Если версия уже стоит, скрипт пишет `already i
 Повторное включение endpointing — reload с переменной; длина pre-roll при
 этом не меняется.
 
-Установленная версия — Rust `v0.5.1004` (armhf, релиз форка на базе upstream
-`v0.5.3`; повторный wake + endpointing + Ricardo pre-roll 256 ms + select
-«Voice color»); `pulsar.prev` — `0ee350f5…` (`v0.5.1003`; historical:
-`3a544979…` — `v0.5.1002`,
-`80aea2ec…` — `v0.5.1001`, база `v0.5.2`, тот же
-Ricardo-код). Historical known-good: `7081ef8e…` (`v0.5.2-4-g9b5e86a-dirty`),
-`0b0c48e4…` (512 ms endpointing), `pulsar.pre-endpoint-20261030` — `d2197f6a…`
-(`v0.5.2-3-gc57d521-dirty`); `pulsar.prev.pre-endpoint-20261030` — более
-старый pre-endpoint backup `69310a37…`; `v0.5.2-2-g95ce568` и
-`v0.5.0-1-g908a027` — только private backup вне Git. StationCancel без речи —
-HA-конфиг, а не бинарник.
+Установленная версия — Rust `v0.5.1005` (armhf, SHA256 `89415c5a…71671b6`,
+релиз форка на базе upstream `v0.5.4` / `f1f5b17`; повторный wake +
+endpointing + Ricardo pre-roll 256 ms + окно «Wake: не услышала» 30 с +
+number «Follow-up duration»); `pulsar.prev` — `fb0695b2…` (`v0.5.1004`;
+historical: `3a544979…` — `v0.5.1002`, `80aea2ec…` — `v0.5.1001`, база
+`v0.5.2`, тот же Ricardo-код). Historical known-good: `7081ef8e…`
+(`v0.5.2-4-g9b5e86a-dirty`), `0b0c48e4…` (512 ms endpointing),
+`pulsar.pre-endpoint-20261030` — `d2197f6a…` (`v0.5.2-3-gc57d521-dirty`);
+`pulsar.prev.pre-endpoint-20261030` — более старый pre-endpoint backup
+`69310a37…`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` — только private
+backup вне Git. StationCancel без речи — HA-конфиг, а не бинарник.
 Штатный `quasar-server`
 остановлен вместе со stock-стеком; при возврате на него (`ctl.sh disable` или
 crash-loop) снова откроется `:31116` без auth — перед возвратом закрыть порт

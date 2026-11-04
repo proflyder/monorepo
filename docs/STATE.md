@@ -221,30 +221,44 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.1004` — установленная armhf-сборка
-  (`/lib/ld-linux-armhf.so.3`; релиз форка Pulsar, origin вложенного checkout
-  `projects/station/upstream/pulsar-rust`, линия `main` = Ricardo; база
-  upstream `v0.5.3` = `504830d`). Включает повторный wake, заменяющий
-  активный диалог, экспериментальный локальный endpointing и Ricardo
-  pre-roll 256 ms и запись wake-событий (`/data/pulsar/wake-events/`,
-  cutoff/window из manifest модели); из upstream `v0.5.3` — switch часов «Clock auto
-  brightness», Mini gen1 и Mini 3 (experimental), S32 capture,
-  переработанные volume/mixer/player/pcm_out/sendspin и `deploy/asound.conf`.
-  Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
+- Pulsar Rust `v0.5.1005` — установленная armhf-сборка
+  (`/lib/ld-linux-armhf.so.3`, SHA256 `89415c5a…71671b6`; релиз форка Pulsar,
+  origin вложенного checkout `projects/station/upstream/pulsar-rust`, линия
+  `main` = Ricardo; база upstream `v0.5.4` = `f1f5b17`, HEAD `427a8e3`).
+  Включает повторный wake, заменяющий активный диалог, экспериментальный
+  локальный endpointing, Ricardo pre-roll 256 ms и запись wake-событий
+  (`/data/pulsar/wake-events/`, cutoff/window из manifest модели); из
+  upstream `v0.5.4` — number «Follow-up duration», STT stop-word fallback,
+  switch часов «Clock auto brightness», Mini gen1 и Mini 3 (experimental),
+  S32 capture, переработанные volume/mixer/player/pcm_out/sendspin и
+  `deploy/asound.conf`. «Wake: не услышала» сохраняет последние 30 с
+  (кольцевой буфер 31 с). Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
   унаследованным supervisor'ом от `ctl.sh reload`; это не boot-persistent:
   после reboot или нового supervisor без env feature выключен.
-  `--version` теперь различает сборки по тегу.
-- Теги форка — `v<upstream major.minor>.<1000+N>` (`v0.5.1004`, следующий
-  `v0.5.1005`):
+  `--version` различает сборки по тегу.
+- `v0.5.4` в форке: в диалоге, открытом «Рикардо», распознанный текст всегда
+  уходит в HA — локальной отмены/паузы нет, поэтому «Рикардо, стоп» доходит
+  до HA. Для диалогов по кнопке, follow-up и `start_conversation` отдельное
+  «стоп»/«хватит» отменяет диалог локально и останавливает звонящий таймер.
+- Теги форка — `v<upstream major.minor>.<1000+N>` (`v0.5.1005`, следующий
+  `v0.5.1006`):
   updater демона ставит только строго большую `MAJOR.MINOR.PATCH`, а upstream
-  уже имеет `v0.5.3`. Релиз — push тега → `build.yml` собирает и публикует
+  уже имеет `v0.5.4`. Релиз — push тега → `build.yml` собирает и публикует
   GitHub release (latest) → `deploy-station.yml` после approve в Environment
   `Station` (только теги `v*`) катит на станцию через HA updater. Процедура —
   RICARDO.md «Релизы и деплой форка» в форке. Репозиторий обновлений —
-  константа `pulsar_update::UPDATE_REPO` в форке (перенесена upstream),
-  указывает на форк.
-- Установленный бинарник — `v0.5.1004` (раскатан тем же flow 2026-11-03);
-  `pulsar.prev` — `0ee350f5…` (`v0.5.1003`); historical старше:
+  константа `pulsar_update::UPDATE_REPO` в форке.
+- GitHub `proflyder/pulsar` — отдельный публичный репозиторий, не GitHub-fork:
+  Actions были отключены в сети форков. Старый форк переименован в
+  `pulsar-fork-old` (удаляется). Upstream `Morvex885/pulsar` вливается вручную:
+  remote `upstream`, `git merge vX` во вложенном checkout, PR в
+  `proflyder/pulsar` сливается merge-коммитом (`--merge --admin`). Имя
+  `proflyder/pulsar` зашито в обновлятор прошивки, поэтому репозиторий остаётся
+  публичным с этим именем. Коммиты и PR форка — по его `AGENTS.md` (без
+  AI-трейлеров, job `commits`); release job при сетевом сбое —
+  `gh run rerun <id> --failed`.
+- Установленный бинарник — `v0.5.1005` (раскатан тем же flow 2026-11-04);
+  `pulsar.prev` — `fb0695b2…` (`v0.5.1004`); historical старше:
   `3a544979…` (`v0.5.1002`, без записи
   wake-событий), `80aea2ec…` (`v0.5.1001`, база upstream
   `v0.5.2`), `7081ef8e…`
@@ -255,16 +269,19 @@
   patch и binaries — private в `secrets/local/recovery/`.
 - ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`,
   SSH `22`; 33 ESPHome entities на `v0.5.1001`, Noise; HA satellite работает.
-  `v0.5.1002` добавляет switch «Clock auto brightness» (включён): автояркость
-  часов по датчику освещённости, при выключении — уровень «Clock brightness»;
-  число сущностей после обновления не пересчитывалось.
-- `v0.5.1004` добавляет select «Voice color» — цвет анимации слушания
-  (`select.iandeks_stantsiia_midi_voice_color`, Violet/Blue). Автоматизация HA
-  `voice_profile_station_color` ставит Blue для рабочего профиля и Violet для
-  личного: при смене `input_select.ricardo_voice_profile`, при старте HA и когда
-  select появляется после недоступности; пока сущности нет — no-op. Прямое
-  управление `light.ring`/`led_show` во время LISTENING перекрывается voice
-  state прошивки, поэтому профиль задаётся только этим select.
+  Switch «Clock auto brightness» включён: автояркость часов по датчику
+  освещённости, при выключении — уровень «Clock brightness»; число сущностей
+  после обновлений не пересчитывалось.
+- `number.iandeks_stantsiia_midi_follow_up_duration` — «Follow-up duration»
+  (0–10 с, по умолчанию 10, `followup_duration_s` в `state.conf`, ESPHome
+  key 39).
+- `select.iandeks_stantsiia_midi_voice_color` — цвет анимации слушания
+  (Violet/Blue). Автоматизация HA `voice_profile_station_color` ставит Blue для
+  рабочего профиля и Violet для личного: при смене
+  `input_select.ricardo_voice_profile`, при старте HA и когда select появляется
+  после недоступности; пока сущности нет — no-op. Прямое управление
+  `light.ring`/`led_show` во время LISTENING перекрывается voice state прошивки,
+  поэтому профиль задаётся только этим select.
 - После `v0.5.1003` проверено: модель Ricardo загружена с cutoff 0.90 /
   window 10 из manifest, `PULSAR_LOCAL_ENDPOINTING=1` сохранён, запись
   wake-событий включена (`state.conf`: `wake_event_recording=1`,
