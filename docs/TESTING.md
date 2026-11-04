@@ -422,7 +422,10 @@ SDK, поэтому маршрутизация дешёвая и не может
 * объявленный python-suite не содержит `test_*.py` (для каталогов без
   герметичных тестов есть `python.compile`: только `compileall`);
 * **любой tracked `*.go`/`*.py`/`*.kt`/`*.js`/`*.mjs`/`*.sh`/`*.bzl`/`BUILD.bazel` не
-  принадлежит ни одному юниту** — новый тест не может молча выпасть из CI.
+  принадлежит ни одному юниту** — новый тест не может молча выпасть из CI;
+* job workflow пишет в registry (`crane tag`/`crane push`, `oras push`/`oras
+  tag`, `platform/ci/promote.mjs`, `push-to-registry: true`) без логина в
+  `ghcr.io` до первой записи.
 
 Тесты маршрутизатора: `platform/ci/affected.test.mjs` (включая фикстуру
 `testdata/units-two-apps.mjs` с двумя Android-приложениями и общим

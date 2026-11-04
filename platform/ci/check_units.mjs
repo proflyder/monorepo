@@ -319,6 +319,101 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
   return problems;
 }
 
+/**
+ * Registry writes in a workflow job need credentials even when the package is
+ * publicly readable: anonymous reads succeed and only the manifest PUT fails
+ * with UNAUTHORIZED. Match the commands that write, including
+ * `platform/ci/promote.mjs`, which re-tags with crane internally and cannot be
+ * found by looking for literal `crane tag` text.
+ */
+export const REGISTRY_WRITE_PATTERNS = [
+  /\bcrane\s+(?:tag|push)\b/,
+  /\boras\s+(?:tag|push|manifest\s+push)\b/,
+  /\bpromote\.mjs\b/,
+  /^\s*push-to-registry:\s*true\s*$/,
+];
+
+export const REGISTRY_LOGIN_PATTERNS = [
+  /uses:\s+docker\/login-action@/,
+  /\bcrane\s+auth\s+login\b/,
+  /\boras\s+login\b/,
+  /\bdocker\s+login\b/,
+];
+
+function isRegistryWrite(line) {
+  return REGISTRY_WRITE_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+function isRegistryLogin(line) {
+  return REGISTRY_LOGIN_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+/**
+ * Every job that writes to a registry must log in before the first write.
+ * Jobs are delimited by their two-space keys under the top-level `jobs:` map;
+ * a nested `steps:` list never uses that indentation, so a line scan is enough
+ * and needs no YAML dependency.
+ */
+export function workflowRegistryProblems(root = DEFAULT_ROOT) {
+  const problems = [];
+  const directory = path.resolve(root, ".github/workflows");
+  if (!isDirectory(directory)) {
+    return problems;
+  }
+  const files = fs
+    .readdirSync(directory)
+    .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+    .sort();
+  for (const name of files) {
+    const relative = `.github/workflows/${name}`;
+    const lines = fs.readFileSync(path.join(directory, name), "utf8").split(/\r?\n/);
+    const jobsLine = lines.findIndex((line) => /^jobs:\s*$/.test(line));
+    if (jobsLine === -1) {
+      continue;
+    }
+    const jobStarts = [];
+    for (let index = jobsLine + 1; index < lines.length; index += 1) {
+      const match = /^  ([A-Za-z0-9_-]+):\s*$/.exec(lines[index]);
+      if (match) {
+        jobStarts.push({ job: match[1], index });
+      }
+    }
+    for (let position = 0; position < jobStarts.length; position += 1) {
+      const { job, index: start } = jobStarts[position];
+      const end = position + 1 < jobStarts.length ? jobStarts[position + 1].index : lines.length;
+      let firstWrite = -1;
+      let firstLogin = -1;
+      for (let index = start; index < end; index += 1) {
+        // A comment that mentions `crane tag` is prose, not a write.
+        if (/^\s*#/.test(lines[index])) {
+          continue;
+        }
+        if (firstLogin === -1 && isRegistryLogin(lines[index])) {
+          firstLogin = index;
+        }
+        if (firstWrite === -1 && isRegistryWrite(lines[index])) {
+          firstWrite = index;
+        }
+      }
+      if (firstWrite === -1) {
+        continue;
+      }
+      if (firstLogin === -1) {
+        problems.push(
+          `${relative} job '${job}' writes to a registry without a login step ` +
+            "(public packages still need credentials for the manifest PUT)",
+        );
+      } else if (firstLogin > firstWrite) {
+        problems.push(
+          `${relative} job '${job}' logs in after its first registry write; ` +
+            "the login must come first",
+        );
+      }
+    }
+  }
+  return problems;
+}
+
 export function coverageProblems(config, files) {
   const ownedPatterns = config.units.flatMap((unit) => unit.paths);
   ownedPatterns.push(...config.invalidations.flatMap((rule) => rule.paths));
@@ -372,6 +467,7 @@ export async function check(argv) {
     problems: [
       ...validateSchema(config, root),
       ...coverageProblems(config, trackedFiles(root)),
+      ...workflowRegistryProblems(root),
     ],
   };
 }

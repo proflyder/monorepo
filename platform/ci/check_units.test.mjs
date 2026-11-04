@@ -2,6 +2,9 @@
 /** Focused tests for the CI unit-map validator. */
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import * as affected from "./affected.mjs";
@@ -76,6 +79,88 @@ test("check_units: a mixed unit needs an explicit Bazel image map", () => {
     ),
   );
   assert.deepEqual(validate({ deployBazelImages: { a: "//x", b: "//y" } }), []);
+});
+
+function workflowFixture(files) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "check-units-workflows-"));
+  fs.mkdirSync(path.join(root, ".github/workflows"), { recursive: true });
+  for (const [name, body] of Object.entries(files)) {
+    fs.writeFileSync(path.join(root, ".github/workflows", name), body);
+  }
+  return root;
+}
+
+test("check_units: a job that promotes without a login is rejected", () => {
+  // The incident shape: promote.mjs re-tags with crane, and the public package
+  // reads anonymously, so only the manifest PUT fails.
+  const root = workflowFixture({
+    "_native.yml": [
+      "on: workflow_call",
+      "jobs:",
+      "  promote:",
+      "    runs-on: ubuntu-24.04",
+      "    steps:",
+      "      - name: Promote",
+      "        run: node platform/ci/promote.mjs --native --tree \"$tree\"",
+      "",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowRegistryProblems(root);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes("_native.yml job 'promote'"));
+  assert.ok(problems[0].includes("without a login step"));
+});
+
+test("check_units: a login before the registry write is accepted", () => {
+  const root = workflowFixture({
+    "workflow.yml": [
+      "jobs:",
+      "  promote:",
+      "    steps:",
+      "      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6",
+      "      - name: Promote",
+      "        run: node platform/ci/promote.mjs --native",
+      "  publish:",
+      "    steps:",
+      "      - name: Log in",
+      "        run: echo \"$token\" | crane auth login ghcr.io -u me --password-stdin",
+      "      - run: oras push ghcr.io/acme/artifact:latest ./artifact",
+      "",
+    ].join("\n"),
+  });
+  assert.deepEqual(checkUnits.workflowRegistryProblems(root), []);
+});
+
+test("check_units: a login after the first registry write is rejected", () => {
+  const root = workflowFixture({
+    "workflow.yml": [
+      "jobs:",
+      "  publish:",
+      "    steps:",
+      "      - run: crane tag ghcr.io/acme/artifact@sha256:abc latest",
+      "      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6",
+      "",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowRegistryProblems(root);
+  assert.ok(problems.some((problem) => problem.includes("logs in after its first registry write")));
+});
+
+test("check_units: jobs without registry writes need no login", () => {
+  const root = workflowFixture({
+    "ci.yml": [
+      "jobs:",
+      "  test:",
+      "    steps:",
+      "      - run: go test ./...",
+      "",
+    ].join("\n"),
+  });
+  assert.deepEqual(checkUnits.workflowRegistryProblems(root), []);
+});
+
+test("check_units: committed workflows log in before every registry write", () => {
+  assert.deepEqual(checkUnits.workflowRegistryProblems(), []);
 });
 
 test("check_units: committed unit map and tree pass", async () => {

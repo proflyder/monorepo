@@ -184,6 +184,17 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP" crane
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
+      # Re-tagging writes a manifest to GHCR. The package is publicly readable,
+      # so reads succeed anonymously and only the PUT fails with UNAUTHORIZED.
+      # The Docker config written here is what `crane tag` reads.
+      - name: Log in to GHCR
+        if: inputs.promote && inputs.publish_repository != ''
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Promote the PR-built artifact by tree hash
         id: promote
         if: inputs.promote && inputs.publish_repository != ''
