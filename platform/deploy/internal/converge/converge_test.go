@@ -203,6 +203,65 @@ func sortStrings(values []string) {
 	}
 }
 
+func TestConvergeRecordsRolloutSummary(t *testing.T) {
+	live := `{"metadata":{"generation":4,"resourceVersion":"7"},"spec":{"template":{"metadata":{},"spec":{"containers":[]}}}}`
+	manifest := filepath.Join(t.TempDir(), "deployment.yaml")
+	document := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: ha-bridge\n  namespace: home-assistant\nspec:\n  selector:\n    matchLabels:\n      app: bridge\n  template:\n    metadata:\n      labels:\n        app: bridge\n    spec:\n      containers:\n        - name: ha-bridge\n          image: ghcr.io/proflyder/ha-bridge@sha256:" + strings.Repeat("0", 64) + "\n"
+	if err := os.WriteFile(manifest, []byte(document), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, testCase := range []struct {
+		name       string
+		generation string
+	}{
+		{name: "unchanged", generation: "4"},
+		{name: "rolled-out", generation: "5"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			summary := filepath.Join(t.TempDir(), "rollout-summary")
+			calls := [][]string{}
+			run := kube.Fake(func(args []string) kube.Result {
+				switch {
+				case containsArg(args, "replace"):
+					return kube.Result{Stdout: "deployment.apps/ha-bridge replaced\n"}
+				case containsArg(args, "jsonpath={.metadata.generation}"):
+					return kube.Result{Stdout: testCase.generation + "\n"}
+				case containsArg(args, "get") && containsArg(args, "json"):
+					return kube.Result{Stdout: live}
+				default:
+					return kube.Result{Code: 1, Stderr: "unexpected kubectl call"}
+				}
+			}, &calls)
+			if _, err := Converge(Options{
+				Kubectl:     "fake-kubectl",
+				Namespace:   "home-assistant",
+				Name:        "ha-bridge",
+				File:        manifest,
+				SummaryFile: summary,
+			}, run); err != nil {
+				t.Fatalf("converge: %v", err)
+			}
+			raw, err := os.ReadFile(summary)
+			if err != nil {
+				t.Fatalf("read summary: %v", err)
+			}
+			if got, want := string(raw), "ha-bridge\t"+testCase.name+"\n"; got != want {
+				t.Fatalf("summary = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
 // TestDesiredDeploymentReadsTheRenderedName is the Go counterpart of the
 // Python test that checked the parsed manifest shape.
 func TestDesiredDeploymentReadsTheRenderedName(t *testing.T) {

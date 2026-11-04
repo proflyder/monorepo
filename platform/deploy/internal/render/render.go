@@ -23,7 +23,24 @@ import (
 	"sort"
 	"strings"
 
+	"ricardo.local/monorepo/platform/deploy/internal/buildid"
 	"ricardo.local/monorepo/platform/deploy/internal/envfile"
+)
+
+// RolloutKey is the placeholder that the `render --rollout-key` flag fills with
+// a content fingerprint of the rendered output. Pod templates use it instead of
+// the git-based BUILD_ID: a deploy whose rendered content is identical then
+// keeps an identical pod template, so `kubectl apply`/`replace` does not create
+// a new ReplicaSet and the pods do not restart.
+const RolloutKey = "ROLLOUT_ID"
+
+// The two values that must not contribute to the content fingerprint:
+// ROLLOUT_ID is the fingerprint itself, and BUILD_ID carries the git revision.
+// Both are replaced by fixed markers while hashing, so the fingerprint depends
+// only on what the pods run (images, rendered config, mounted ConfigMaps).
+const (
+	rolloutMask = "rollout-fingerprint"
+	buildMask   = "build-traceability"
 )
 
 // placeholder matches the templates' `${KEY}` syntax. The character class is
@@ -38,6 +55,10 @@ var placeholder = regexp.MustCompile(`\$\{([A-Z0-9_]+)\}`)
 // wrappers) starts from this set.
 var schedulerPlaceholders = []string{
 	"BUILD_ID",
+	// Content-addressed rollout annotation: sha256 of the rendered unit, with
+	// the git revision and the fingerprint itself masked out. Pod templates
+	// reference only this value, so an identical deploy never rolls pods.
+	RolloutKey,
 	"HA_URL",
 	"LAN_CIDR",
 	"NODE_LAN_IP",
@@ -199,8 +220,18 @@ type Options struct {
 	Files []string
 	// Unit selects the preset.
 	Unit string
+	// RolloutKey, when non-empty, is the placeholder replaced by a content
+	// fingerprint of the rendered files. Callers pass `RolloutKey` for deploy
+	// units whose pod template must only change when the rendered content does.
+	RolloutKey string
 	// Stdout receives the `rendered <src> -> <dst>` progress lines.
 	Stdout io.Writer
+}
+
+// renderSource is one template read for a render invocation.
+type renderSource struct {
+	path string
+	raw  string
 }
 
 // Run renders every file in opts.
@@ -228,6 +259,9 @@ func Run(opts Options) error {
 		}
 		values[key] = value
 	}
+	if opts.RolloutKey != "" && !preset.Allowed[opts.RolloutKey] {
+		return fmt.Errorf("rollout key %s is not an allowed placeholder", opts.RolloutKey)
+	}
 
 	if err := os.MkdirAll(opts.OutDir, 0o777); err != nil {
 		return err
@@ -236,20 +270,65 @@ func Run(opts Options) error {
 	if stdout == nil {
 		stdout = io.Discard
 	}
+
+	// Read every source up front: the content fingerprint covers the whole
+	// rendered unit, so no file may be written before all of them rendered.
+	sources := make([]renderSource, 0, len(opts.Files))
 	for _, src := range opts.Files {
 		raw, err := os.ReadFile(src)
 		if err != nil {
 			return err
 		}
-		rendered, err := Render(string(raw), values, src, preset)
+		sources = append(sources, renderSource{path: src, raw: string(raw)})
+	}
+
+	if opts.RolloutKey != "" {
+		fingerprint, err := contentFingerprint(sources, values, preset, opts.RolloutKey)
 		if err != nil {
 			return err
 		}
-		dest := filepath.Join(opts.OutDir, filepath.Base(src))
+		values[opts.RolloutKey] = fingerprint
+		fmt.Fprintf(stdout, "rollout id: %s\n", fingerprint)
+	}
+
+	for _, src := range sources {
+		rendered, err := Render(src.raw, values, src.path, preset)
+		if err != nil {
+			return err
+		}
+		dest := filepath.Join(opts.OutDir, filepath.Base(src.path))
 		if err := os.WriteFile(dest, []byte(rendered), 0o644); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "rendered %s -> %s\n", src, dest)
+		fmt.Fprintf(stdout, "rendered %s -> %s\n", src.path, dest)
 	}
 	return nil
+}
+
+// contentFingerprint hashes the rendered unit with the two values that must not
+// feed back into the fingerprint masked: the rollout id itself and BUILD_ID
+// (which carries the git revision). The result therefore changes only when the
+// rendered content changes: image digests, config values, mounted ConfigMap
+// data, probes, resources, and so on.
+func contentFingerprint(sources []renderSource, values map[string]string, preset *Preset, rolloutKey string) (string, error) {
+	masked := make(map[string]string, len(values))
+	for key, value := range values {
+		masked[key] = value
+	}
+	masked[rolloutKey] = rolloutMask
+	if _, ok := masked["BUILD_ID"]; ok {
+		masked["BUILD_ID"] = buildMask
+	}
+	var canonical strings.Builder
+	for _, src := range sources {
+		rendered, err := Render(src.raw, masked, src.path, preset)
+		if err != nil {
+			return "", err
+		}
+		canonical.WriteString(filepath.Base(src.path))
+		canonical.WriteByte(0)
+		canonical.WriteString(rendered)
+		canonical.WriteByte(0)
+	}
+	return buildid.Fingerprint(canonical.String()), nil
 }

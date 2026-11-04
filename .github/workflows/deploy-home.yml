@@ -675,6 +675,9 @@ jobs:
           # Empty means "build exactly as before"; the deploy entrypoints read
           # this shared value (platform/ci/prebuilt-digests.sh).
           PREBUILT_DIGESTS: ${{ steps.promote.outputs.prebuilt_digests }}
+          # converge/kubectl record `workload<TAB>created|unchanged|rolled-out`
+          # here; the Summary step renders it per workload.
+          DEPLOY_SUMMARY_FILE: ${{ runner.temp }}/ci/rollout-summary
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -856,6 +859,16 @@ jobs:
             # Which path the unit took: promoted PR build or a fresh build.
             echo "- image path: \`${IMAGE_PROMOTION:-unknown}\`"
             echo "- pull request: ${{ needs.plan.outputs.pr_url }}"
+            if [[ -s "$CI_DIR/rollout-summary" ]]; then
+              while IFS=$'\t' read -r workload status; do
+                case "$status" in
+                  unchanged) echo "- $workload: \`unchanged\` (pod template identical, no rollout)" ;;
+                  rolled-out) echo "- $workload: \`rolled out\`" ;;
+                  created) echo "- $workload: \`created\`" ;;
+                  *) echo "- $workload: \`${status:-unknown}\`" ;;
+                esac
+              done < "$CI_DIR/rollout-summary"
+            fi
             if kubectl -n "${{ matrix.namespace }}" get deployment scheduler >/dev/null 2>&1; then
               STATUS=$(kubectl -n "${{ matrix.namespace }}" exec deployment/scheduler -- \
                 /usr/local/bin/scheduler -status 2>/dev/null)

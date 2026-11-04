@@ -6,14 +6,20 @@ go_library(
     name = "render",
     srcs = ["render.go"],
     importpath = "ricardo.local/monorepo/platform/deploy/internal/render",
-    deps = ["//platform/deploy/internal/envfile"],
+    deps = [
+        "//platform/deploy/internal/buildid",
+        "//platform/deploy/internal/envfile",
+    ],
 )
 
 # Golden parity: render the real templates with the committed TEST-NET env and
 # compare byte for byte with the outputs captured from the Python renderer.
 go_test(
     name = "render_test",
-    srcs = ["golden_test.go"],
+    srcs = [
+        "golden_test.go",
+        "rollout_test.go",
+    ],
     data = [
         "//platform/deploy/testdata/env",
         "//platform/deploy/testdata/golden",
@@ -24,5 +30,7 @@ go_test(
         "//projects/home/kubernetes/wakegrant:deploy_templates",
     ],
     embed = [":render"],
-    deps = ["//platform/deploy/internal/envfile"],
+    deps = [
+        "//platform/deploy/internal/envfile",
+    ],
 )

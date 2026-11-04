@@ -159,6 +159,7 @@ echo "== rendering manifests into $RENDER_DIR"
 home_deploy render --unit currency-bot \
   --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "BUILD_ID=$BUILD_ID" \
+  --rollout-key ROLLOUT_ID \
   --set "CURRENCY_BOT_IMAGE=$IMAGE_REF" \
   --set "CLOUDFLARED_IMAGE=$CLOUDFLARED_IMAGE" \
   --set "CURRENCY_WEBHOOK_URL=$WEBHOOK_URL" \
@@ -224,7 +225,8 @@ mark_applied() {
 converge_deployment() {
   local name=$1 file=$2
   home_deploy converge \
-    --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file"
+    --kubectl "$KUBECTL" --namespace "$NS" --name "$name" --file "$file" \
+    --summary-file "${DEPLOY_SUMMARY_FILE:-}"
 }
 
 echo "== applying currency-bot"

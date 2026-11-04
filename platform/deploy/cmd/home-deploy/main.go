@@ -61,6 +61,8 @@ Commands:
              --env FILE   private KEY=VALUE file (optional)
              --out DIR    output directory
              --set K=V    override a placeholder (repeatable)
+             --rollout-key K
+                          fill K with a content fingerprint of the rendered unit
              FILE...      templates (an output file keeps the template name)
   env get FILE KEY
            print the value of KEY (empty output when absent)
@@ -72,8 +74,9 @@ Commands:
   oci docker LAYOUT --ref REF --out FILE
            inspect or pack a rules_oci image layout (byte-preserving)
   converge --kubectl K --namespace NS --name N --file F
-           [--preserve-replicas] [--preserve-env]
-           replace a live Deployment with the rendered manifest (prunes drift)
+           [--preserve-replicas] [--preserve-env] [--summary-file F]
+           replace a live Deployment with the rendered manifest (prunes drift);
+           --summary-file records created|unchanged|rolled-out
   state record --state-dir D --namespace NS --name N [--kubectl K]
   state mark --state-dir D --name N
   state rollback --state-dir D [--namespace NS] [--kubectl K]
@@ -181,6 +184,7 @@ func runRender(args []string, stdout, stderr io.Writer) error {
 	unit := flags.String("unit", "scheduler", "deploy unit whose placeholder allowlist applies")
 	envPath := flags.String("env", "", "private KEY=VALUE file")
 	outDir := flags.String("out", "", "output directory")
+	rolloutKey := flags.String("rollout-key", "", "placeholder filled with a content fingerprint of the rendered unit")
 	sets := stringList{}
 	flags.Var(&sets, "set", "KEY=VALUE override (repeatable)")
 	if err := flags.Parse(args); err != nil {
@@ -194,12 +198,13 @@ func runRender(args []string, stdout, stderr io.Writer) error {
 		return errors.New("render: at least one template is required")
 	}
 	return render.Run(render.Options{
-		EnvFile: *envPath,
-		Sets:    sets,
-		OutDir:  *outDir,
-		Files:   files,
-		Unit:    *unit,
-		Stdout:  stdout,
+		EnvFile:    *envPath,
+		Sets:       sets,
+		OutDir:     *outDir,
+		Files:      files,
+		Unit:       *unit,
+		RolloutKey: *rolloutKey,
+		Stdout:     stdout,
 	})
 }
 
@@ -335,6 +340,7 @@ func runConverge(args []string, stdout, stderr io.Writer) error {
 	file := flags.String("file", "", "rendered manifest")
 	preserveReplicas := flags.Bool("preserve-replicas", false, "keep the live replica count")
 	preserveEnv := flags.Bool("preserve-env", false, "keep the live container env/envFrom")
+	summaryFile := flags.String("summary-file", "", "append '<name>\\t<status>' after applying")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -351,6 +357,7 @@ func runConverge(args []string, stdout, stderr io.Writer) error {
 		File:             *file,
 		PreserveReplicas: *preserveReplicas,
 		PreserveEnv:      *preserveEnv,
+		SummaryFile:      *summaryFile,
 	}, kube.Exec(*kubectl))
 	if err != nil {
 		return err

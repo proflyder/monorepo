@@ -33,6 +33,9 @@ metadata:
   labels:
     app.kubernetes.io/name: scheduler
     app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    # Traceability only: a Deployment metadata change never rolls pods.
+    ricardo.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
   # SQLite is single-writer: never run two pods against the same volume.
@@ -46,7 +49,10 @@ spec:
       labels:
         app.kubernetes.io/name: scheduler
       annotations:
-        ricardo.dev/build: ${BUILD_ID}
+        # Content-addressed: changes only when the rendered unit (images,
+        # config) changes, so an identical deploy keeps the pod template and
+        # does not restart anything.
+        ricardo.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
       securityContext:

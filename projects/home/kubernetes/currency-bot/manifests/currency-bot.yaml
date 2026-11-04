@@ -7,7 +7,8 @@
 #   CURRENCY_BOT_IMAGE    digest-pinned image built by Bazel
 #   CURRENCY_WEBHOOK_URL  public Cloudflare Tunnel host, e.g.
 #                         https://<public webhook host>/telegram/webhook
-#   BUILD_ID              rollout annotation (image fingerprint)
+#   BUILD_ID              Deployment annotation (traceability, never rolls pods)
+#   ROLLOUT_ID            content-addressed pod-template annotation
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -32,6 +33,9 @@ metadata:
   labels:
     app.kubernetes.io/name: currency-bot
     app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    # Traceability only: a Deployment metadata change never rolls pods.
+    ricardo.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
   # SQLite is single-writer: never two pods against the same volume.
@@ -45,7 +49,8 @@ spec:
       labels:
         app.kubernetes.io/name: currency-bot
       annotations:
-        ricardo.dev/build: ${BUILD_ID}
+        # Content-addressed: identical rendered content keeps the pod template.
+        ricardo.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
       securityContext:

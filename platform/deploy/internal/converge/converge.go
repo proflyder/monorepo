@@ -27,6 +27,8 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strconv"
+	"strings"
 
 	yaml "go.yaml.in/yaml/v2"
 
@@ -41,6 +43,12 @@ type Options struct {
 	File             string
 	PreserveReplicas bool
 	PreserveEnv      bool
+	// SummaryFile, when set, receives one `<name>\t<status>` line after the
+	// Deployment was applied: `created`, `unchanged` (the pod template did not
+	// change, so no new ReplicaSet and no pod restart) or `rolled-out`. It is
+	// read by the deploy-home job summary; an empty value disables the extra
+	// kubectl call.
+	SummaryFile string
 }
 
 // DesiredObjects parses every non-empty YAML document in the rendered file.
@@ -118,9 +126,13 @@ func Converge(options Options, run kube.Runner) (string, error) {
 		if result.Code != 0 {
 			return "", fmt.Errorf("%s: create failed: %s", options.Name, strip(result.Stderr))
 		}
+		if err := recordSummary(options, "created"); err != nil {
+			return "", err
+		}
 		return fmt.Sprintf("%s: created from manifest", options.Name), nil
 	}
 
+	before := generation(current)
 	mergeRuntimeState(desired, current, options.PreserveReplicas, options.PreserveEnv)
 
 	payload, err := json.Marshal(desired)
@@ -136,7 +148,73 @@ func Converge(options Options, run kube.Runner) (string, error) {
 	if result.Code != 0 {
 		return "", fmt.Errorf("%s: replace failed: %s", options.Name, strip(result.Stderr))
 	}
+	if err := recordSummary(options, rolloutStatus(options, before, run)); err != nil {
+		return "", err
+	}
 	return fmt.Sprintf("%s: converged to manifest", options.Name), nil
+}
+
+// generation reads metadata.generation from a Deployment object. The API server
+// increments it exactly when the desired state changes, and a pod template
+// change is what creates a new ReplicaSet, so comparing it before and after an
+// apply is the same signal `kubectl apply` uses to decide on a rollout.
+func generation(object map[string]interface{}) string {
+	var value interface{} = object
+	for _, key := range []string{"metadata", "generation"} {
+		mapping, ok := value.(map[string]interface{})
+		if !ok {
+			return ""
+		}
+		value = mapping[key]
+	}
+	if value == nil {
+		return ""
+	}
+	if number, ok := value.(float64); ok {
+		// json.Unmarshal decodes numbers as float64; format it without an
+		// exponent so it matches kubectl's jsonpath output for large counts.
+		return strconv.FormatFloat(number, 'f', -1, 64)
+	}
+	return fmt.Sprint(value)
+}
+
+// rolloutStatus compares the generation before the replace with the generation
+// the API server reports afterwards. An absent or unreadable value is reported
+// as `unknown` rather than guessing.
+func rolloutStatus(options Options, before string, run kube.Runner) string {
+	if options.SummaryFile == "" {
+		return ""
+	}
+	result := run([]string{"-n", options.Namespace, "get", "deployment", options.Name,
+		"-o", "jsonpath={.metadata.generation}"})
+	if result.Code != 0 {
+		return "unknown"
+	}
+	after := strings.TrimSpace(result.Stdout)
+	switch {
+	case before == "" || after == "":
+		return "unknown"
+	case before == after:
+		return "unchanged"
+	default:
+		return "rolled-out"
+	}
+}
+
+// recordSummary appends one `<name>\t<status>` line to the per-job summary.
+func recordSummary(options Options, status string) error {
+	if options.SummaryFile == "" || status == "" {
+		return nil
+	}
+	handle, err := os.OpenFile(options.SummaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("%s: open summary: %w", options.Name, err)
+	}
+	defer handle.Close()
+	if _, err := fmt.Fprintf(handle, "%s\t%s\n", options.Name, status); err != nil {
+		return fmt.Errorf("%s: write summary: %w", options.Name, err)
+	}
+	return nil
 }
 
 func applySupportObjects(options Options, objects []map[string]interface{}, run kube.Runner) error {
