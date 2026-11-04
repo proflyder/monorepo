@@ -95,6 +95,23 @@ dist/
 /projects/station/ble-gateway/ble-gateway*
 /projects/station/ble-gateway/bletest*
 
+# Pulsar (projects/station/pulsar) build outputs, fetched dependencies and
+# generated toolchains. The Pulsar tree keeps its own .gitignore; these root
+# rules keep the same paths out of the monorepo index as well.
+/projects/station/pulsar/satellite/build/
+/projects/station/pulsar/satellite/target/
+/projects/station/pulsar/satellite/third_party/src/
+/projects/station/pulsar/satellite/.zig-cache/
+/projects/station/pulsar/radio/src/
+/projects/station/pulsar/radio/toolchain/
+/projects/station/pulsar/radio/out/
+/projects/station/pulsar/ssh/out/
+/projects/station/pulsar/installer/dist/
+/projects/station/pulsar/platform-tools/
+
+# Pulsar's updater tests ship a throwaway test key pair, not a real secret.
+!/projects/station/pulsar/satellite/crates/pulsar-update/tests/data/server.key
+
 # Private local compatibility links (targets live under secrets/local/).
 /projects/home-assistant/ha-voice/www/alarm_ringtone.wav
 

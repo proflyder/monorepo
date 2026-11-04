@@ -240,10 +240,14 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
       } else if (!isDirectory(path.resolve(root, unit.nativeWorkdir))) {
         problems.push(`${prefix}: native workdir missing: ${unit.nativeWorkdir}`);
       }
-      if (!unit.nativeBuild) {
+      if (!["script", "pulsar"].includes(unit.nativeKind)) {
+        problems.push(`${prefix}: unknown native.kind '${unit.nativeKind}'`);
+        continue;
+      }
+      if (unit.nativeKind === "script" && !unit.nativeBuild) {
         problems.push(`${prefix}: native unit without a build command`);
       }
-      if (!unit.nativeArtifacts.length) {
+      if (unit.nativeKind === "script" && !unit.nativeArtifacts.length) {
         problems.push(`${prefix}: native unit without artifacts`);
       }
       for (const artifact of [
@@ -254,7 +258,7 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
           problems.push(`${prefix}: artifact must be relative to workdir: ${artifact}`);
         }
       }
-      if (!unit.nativeChecksums) {
+      if (unit.nativeKind === "script" && !unit.nativeChecksums) {
         problems.push(`${prefix}: native unit without a checksums file`);
       }
       const toolchain = [

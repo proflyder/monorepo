@@ -181,16 +181,20 @@
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
   namespace-scoped workloads, поэтому `ci-deploy` не имеет cluster-scoped
   прав.
-- Pulsar не собирается монорепо: релиз выходит в форке. Push тега `v0.5.100N`
-  → `build.yml` публикует GitHub release → `deploy-station.yml` после approve
-  в Environment `Station` входит в VPN группой `ci` (отдельный сертификат
-  `ci-pulsar`) и по OIDC в OpenBao роль `deploy-station` (политика `ci-station`,
-  `secret/ci/deploy-station`: `ha_url`, `ha_token`, `entity_id`), затем
-  вызывает HA `update_entity` + `update.install`. Job ждёт
-  `installed_version == tag` и 90 с стабильности; откат `supervise.sh` на
-  `.prev` валит job. Ручной повтор — `gh workflow run deploy-station.yml
-  --ref <tag> -f tag=<tag>` в форке. Откат — не через CI, а на станции
-  (`.prev` + `ctl.sh reload`).
+- Pulsar собирается в монорепо: исходники лежат в `projects/station/pulsar`,
+  сборка — Make + cargo-zigbuild; монорепо собирает его в CI-юните `pulsar`
+  (`_native.yml`). Изменение `projects/station/pulsar/VERSION` на `develop`
+  запускает `release-pulsar.yml` → OCI-артефакт
+  `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`), затем после
+  approve в Environment `Station` job входит в VPN группой `ci`
+  (отдельный сертификат `ci-pulsar`) и по OIDC в OpenBao роль
+  `deploy-station` (политика `ci-station`,
+  `secret/ci/deploy-station`: `ha_url`, `ha_token`, `entity_id`) вызывает HA
+  `update_entity` + `update.install`. Job ждёт
+  `installed_version == version` и 90 с стабильности; откат `supervise.sh` на
+  `.prev` валит job. GitHub Releases и теги в монорепо не используются.
+  Повторный запуск — `workflow_dispatch` для `release-pulsar.yml`. Откат — не
+  через CI, а на станции (`.prev` + `ctl.sh reload`).
 
 ## Remote / VPN
 
@@ -222,9 +226,9 @@
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
 - Pulsar Rust `v0.5.1005` — установленная armhf-сборка
-  (`/lib/ld-linux-armhf.so.3`, SHA256 `89415c5a…71671b6`; релиз форка Pulsar,
-  origin вложенного checkout `projects/station/upstream/pulsar-rust`, линия
-  `main` = Ricardo; база upstream `v0.5.4` = `f1f5b17`, HEAD `427a8e3`).
+  (`/lib/ld-linux-armhf.so.3`, SHA256 `89415c5a…71671b6`; исходники —
+  `projects/station/pulsar/`, линия Ricardo; база upstream `v0.5.4` =
+  `f1f5b17`, HEAD `427a8e3`).
   Включает повторный wake, заменяющий активный диалог, экспериментальный
   локальный endpointing, Ricardo pre-roll 256 ms и запись wake-событий
   (`/data/pulsar/wake-events/`, cutoff/window из manifest модели); из
@@ -236,27 +240,24 @@
   унаследованным supervisor'ом от `ctl.sh reload`; это не boot-persistent:
   после reboot или нового supervisor без env feature выключен.
   `--version` различает сборки по тегу.
-- `v0.5.4` в форке: в диалоге, открытом «Рикардо», распознанный текст всегда
+- `v0.5.4` в Ricardo-профиле: в диалоге, открытом «Рикардо», распознанный текст всегда
   уходит в HA — локальной отмены/паузы нет, поэтому «Рикардо, стоп» доходит
   до HA. Для диалогов по кнопке, follow-up и `start_conversation` отдельное
   «стоп»/«хватит» отменяет диалог локально и останавливает звонящий таймер.
-- Теги форка — `v<upstream major.minor>.<1000+N>` (`v0.5.1005`, следующий
-  `v0.5.1006`):
-  updater демона ставит только строго большую `MAJOR.MINOR.PATCH`, а upstream
-  уже имеет `v0.5.4`. Релиз — push тега → `build.yml` собирает и публикует
-  GitHub release (latest) → `deploy-station.yml` после approve в Environment
-  `Station` (только теги `v*`) катит на станцию через HA updater. Процедура —
-  RICARDO.md «Релизы и деплой форка» в форке. Репозиторий обновлений —
-  константа `pulsar_update::UPDATE_REPO` в форке.
-- GitHub `proflyder/pulsar` — отдельный публичный репозиторий, не GitHub-fork:
-  Actions были отключены в сети форков. Старый форк переименован в
-  `pulsar-fork-old` (удаляется). Upstream `Morvex885/pulsar` вливается вручную:
-  remote `upstream`, `git merge vX` во вложенном checkout, PR в
-  `proflyder/pulsar` сливается merge-коммитом (`--merge --admin`). Имя
-  `proflyder/pulsar` зашито в обновлятор прошивки, поэтому репозиторий остаётся
-  публичным с этим именем. Коммиты и PR форка — по его `AGENTS.md` (без
-  AI-трейлеров, job `commits`); release job при сетевом сбое —
-  `gh run rerun <id> --failed`.
+- Версия Pulsar — `v<upstream major.minor>.<1000+N>` (`v0.5.1007`,
+  следующий `v0.5.1008`): updater демона ставит только строго большую
+  `MAJOR.MINOR.PATCH`, а upstream уже имеет `v0.5.4`. Релиз — изменение
+  `projects/station/pulsar/VERSION` в PR в `develop`; merge запускает
+  `release-pulsar.yml`, который публикует OCI-артефакт в
+  `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`) и после approve
+  в Environment `Station` катит на станцию через HA updater. GitHub Releases
+  и теги в монорепо не используются. Процедура — RICARDO.md «Релизы и
+  деплой». Репозиторий обновлений — константа `pulsar_update::UPDATE_REPO`.
+- GitHub `proflyder/pulsar` — прежний самостоятельный публичный репозиторий;
+  код перенесён в монорепо `projects/station/pulsar/`, upstream
+  `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` →
+  `git apply -3 --directory=projects/station/pulsar`), затем обычный PR.
+  Репозиторий архивируется (`docs/PENDING.md`).
 - Установленный бинарник — `v0.5.1005` (раскатан тем же flow 2026-11-04);
   `pulsar.prev` — `fb0695b2…` (`v0.5.1004`); historical старше:
   `3a544979…` (`v0.5.1002`, без записи

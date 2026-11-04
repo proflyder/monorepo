@@ -83,24 +83,24 @@ PR со squash-merge и зелёным `ci-ok`; merge в `develop` = депло�
 автоматически в submodule и не включать как gitlink в корневой репозиторий.
 Существующие upstream remote не означают разрешения публиковать наши изменения.
 
-Активный Pulsar: Rust-форк `projects/station/upstream/pulsar-rust/` (ветка
-`main`, база upstream `v0.5.4` = `f1f5b17`; `feat/ricardo-rust` — только
-история). GitHub `proflyder/pulsar` — отдельный публичный репозиторий, не
-GitHub-fork: upstream вливается вручную `git merge` из remote `upstream`,
-PR сливается merge-коммитом; имя репозитория зашито в обновлятор станции. База и текущие локальные изменения фиксируются в корневой истории через
-`projects/station/patches/pulsar-rust/`:
+Активный Pulsar — first-party код в `projects/station/pulsar/` (AGPL-3.0;
+`LICENSE`, README, docs и RICARDO.md сохранены). Вложенного checkout'а
+`projects/station/upstream/pulsar-rust/`, snapshot-скрипта и patch-каталога
+больше нет. Upstream `Morvex885/pulsar` вливается вручную патчем:
 
 ```bash
-python3 projects/station/scripts/snapshot-pulsar.py
+git -C <upstream-checkout> diff vOLD..vNEW > /tmp/pulsar-upstream.patch
+git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
 ```
 
-Запускать после правок Rust Pulsar и перед корневым коммитом. Скрипт сохраняет
-pinned base commit, полный delta от базы до текущего HEAD (committed, staged,
-unstaged и новые исходники), не изменяя индекс или историю вложенного
-репозитория. Legacy C++ checkout, patch и binaries заархивированы private
-в `secrets/local/recovery/`; активный worktree содержит только Rust v0.5.
-Следовать также `projects/station/upstream/pulsar-rust/AGENTS.md`; прямой запрос
-пользователя о локальной работе имеет приоритет над upstream-процессом PR/push.
+затем обычный squash PR. GitHub `proflyder/pulsar` — прежний самостоятельный
+репозиторий, архивируется. Релиз Pulsar — изменение
+`projects/station/pulsar/VERSION`: merge в `develop` запускает
+`release-pulsar.yml`, который публикует OCI-артефакт
+`ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`); GitHub Releases и
+теги в монорепо запрещены. Процедуры — `docs/OPERATIONS.md` и
+`projects/station/pulsar/RICARDO.md`. Правила самого Pulsar —
+`projects/station/pulsar/AGENTS.md`.
 
 ## Монорепозиторий и Bazel
 

@@ -62,13 +62,36 @@ export const APPROVED_PUBLIC = [
     /(?<![A-Za-z0-9_.-])prof[l]yder\/pulsar(?![A-Za-z0-9_.-])/g,
     "<public-repo>",
   ],
+  // Exact public monorepo slug (release provenance annotation, docs).
+  [
+    /(?<![A-Za-z0-9_.-])prof[l]yder\/monorepo(?![A-Za-z0-9_.-])/g,
+    "<public-repo>",
+  ],
+  // GHCR package short name (the station updater's OCI repository).
+  [
+    /(?<![A-Za-z0-9_.-])prof[l]yder\/pulsar-firmware(?![A-Za-z0-9_.-])/g,
+    "<public-repo>",
+  ],
+  // Public OCI artifact media type of the Pulsar release.
+  [
+    /application\/vnd\.prof[l]yder\.pulsar\.release\.v1/g,
+    "<public-artifact-type>",
+  ],
   // Public GHCR namespace for the monorepo service images. Only the registry
   // path is approved; any other use of the account name still fails.
   [
-    /(?<![A-Za-z0-9_.-])ghcr\.io\/prof[l]yder(?:\/[A-Za-z0-9<>${}_-]+)?/g,
+    /(?<![A-Za-z0-9_.-])ghcr\.io\/(?:v2\/)?prof[l]yder(?:\/[A-Za-z0-9<>${}_-]+)*/g,
     "<public-registry>",
   ],
 ];
+
+// Reviewed exception: the Pulsar updater's HTTPS tests ship a throwaway EC
+// key pair. It is a test fixture, not an operator credential, and upstream
+// tracks it in the same path. Both the `.key` suffix rule and the private-key
+// pattern are skipped for exactly this file.
+export const PUBLIC_TEST_KEY_FIXTURES = new Set([
+  "projects/station/pulsar/satellite/crates/pulsar-update/tests/data/server.key",
+]);
 
 export const CREDENTIAL_PATTERN =
   /(?:\/Users\/stanislav[p]lotnikov|prof[l]yder|R101[C]M3008W60N)|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bgh[pousr]_[A-Za-z0-9]{30,}|\bsk-[A-Za-z0-9]{25,}|\beyJhbGciOi[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.|spotify_refresh_token:\s*[A-Za-z0-9_-]{20,}|station_control_bearer:\s*[0-9a-fA-F]{32,}/;
@@ -85,8 +108,7 @@ export function sanitizeApprovedTokens(line) {
 }
 
 /** Return credential findings for one tracked text file. */
-export function scanText(name, text) {
-  const errors = [];
+export function scanText(name, text) {  const errors = [];
   let number = 0;
   for (const line of text.split(LINE_BREAK)) {
     number += 1;
@@ -166,11 +188,18 @@ export function audit(root = ROOT) {
     }
 
     const suffix = path.extname(name);
-    if ([".key", ".p12", ".pfx", ".pcap", ".pcapng", ".wav", ".pcm", ".mp3"].includes(suffix)) {
+    if (
+      [".key", ".p12", ".pfx", ".pcap", ".pcapng", ".wav", ".pcm", ".mp3"].includes(suffix) &&
+      !PUBLIC_TEST_KEY_FIXTURES.has(name)
+    ) {
       errors.push(`private media/key tracked: ${name}`);
     }
     if (!isFile(full)) {
       errors.push(`missing tracked file: ${name}`);
+      continue;
+    }
+    if (PUBLIC_TEST_KEY_FIXTURES.has(name)) {
+      // Reviewed synthetic test key pair; see the constant above.
       continue;
     }
     const data = fs.readFileSync(full);

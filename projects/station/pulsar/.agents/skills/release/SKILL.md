@@ -1,0 +1,50 @@
+---
+name: release
+description: >-
+  Выпуск релиза pulsar (изменение VERSION, OCI-артефакт в GHCR). Только по явной просьбе
+  пользователя. Ключевые слова: release, tag, version bump, VERSION, GHCR, publish, deploy,
+  SHA256SUMS, release assets.
+---
+
+# Релиз
+
+Только по явной просьбе пользователя. Контракты (имена OCI-слоёв, версия, обновления из HA) —
+`docs/development.md`, «CI и релизы» и «Обновления из HA»; правила git — корневой
+`../../../docs/GIT.md`.
+
+Релизы Pulsar публикует монорепозиторий: GitHub Releases и теги запрещены. Источник обновлений
+станции — `ghcr.io/proflyder/pulsar-firmware`.
+
+## 1. Предусловия
+
+- Ветка `<type>/<name>` от свежего `origin/develop`, чистое дерево.
+- CI-юнит `pulsar` (`_native.yml`) зелёный в PR.
+
+## 2. Проверки
+
+Skill `pre-publish-review` по диапазону PR.
+
+## 3. Версия
+
+Версия — содержимое `projects/station/pulsar/VERSION` (`vMAJOR.MINOR.PATCH`, продолжение
+нумерации upstream: `v<major.minor>.<1000+N>`). Изменить файл в рабочей ветке; сравнить с прошлым
+значением и предложить версию пользователю.
+
+## 4. PR и публикация
+
+1. Обычный PR в `develop`; merge — squash после зелёного `ci-ok`.
+2. Push в `develop` с изменённым `VERSION` запускает `release-pulsar.yml`: сборка `aarch64` и
+   `armhf`, radio, `SHA256SUMS`, `oras push` в
+   `ghcr.io/proflyder/pulsar-firmware:<version>` и перенос `:latest`.
+3. Workflow падает, если тег этой версии уже есть в GHCR. Уже опубликованную версию не
+   перезаписывать, а выпускать следующую.
+
+## 5. Контроль
+
+1. `gh run list --workflow release-pulsar --branch develop --limit 1` и `gh run watch <id>`.
+2. Упал — `gh run view <id> --log-failed`, сообщить пользователю; релиз не править молча.
+3. Проверить артефакт: `oras manifest fetch ghcr.io/proflyder/pulsar-firmware:<version>` —
+   слои `pulsar-aarch64.bin`, `pulsar-armhf.bin`, `SHA256SUMS`, `zigbee-*.ybl`; аннотация
+   `org.opencontainers.image.version`.
+4. Деплой на станцию — job `deploy` того же workflow после approve в Environment `Station`
+   (только для прошивки, которая уже читает `pulsar-firmware`).

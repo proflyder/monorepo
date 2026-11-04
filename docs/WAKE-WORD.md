@@ -24,8 +24,7 @@
   признаков и воспроизводятся по рецептам/seed.
 - Бинарник и device-откат — `/data/pulsar`; legacy исходники и binaries —
   private в `secrets/local/recovery/`.
-- Изменяемые исходники — `projects/station/upstream/pulsar-rust/`,
-  ветка `main`.
+- Изменяемые исходники — `projects/station/pulsar/` (монорепозиторий).
 
 База локального форка — tag `v0.5.4`, commit `f1f5b17` (upstream `v0.5.3`
 остаётся в истории); на станции установлена сборка форка `v0.5.1005`
@@ -35,15 +34,15 @@ historical: `3a544979…` (`v0.5.1002`), `80aea2ec…` (`v0.5.1001`, база
 `0b0c48e4…` (endpointing 512 ms), `pulsar.pre-endpoint-20261030` —
 `v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
 private backup вне Git.
-Снимок локальных изменений — `projects/station/patches/pulsar-rust/`;
-обновляется `projects/station/scripts/snapshot-pulsar.py` перед корневым
-коммитом.
+Локальных snapshot-патчей больше нет: код Pulsar версионируется в
+монорепозитории. Upstream вливается патчем (`git diff vA..vB` →
+`git apply -3 --directory=projects/station/pulsar`), см. `docs/OPERATIONS.md`.
 ALSA ABI armhf обрабатывается runtime-обёрткой `pulsar-alsa`.
 
 ## Сборка
 
 ```bash
-cd projects/station/upstream/pulsar-rust
+cd projects/station/pulsar
 make -C satellite -j"$(nproc)" ZIG=/path/to/zig-0.14.1
 ```
 

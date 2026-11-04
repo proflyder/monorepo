@@ -734,7 +734,7 @@ known-good бинарник — атомарно, не поверх работа
 adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
-Установлен релиз форка `v0.5.1005` (armhf, SHA256 `89415c5a…71671b6`, база
+Установлен релиз `v0.5.1005` (armhf, SHA256 `89415c5a…71671b6`, база
 upstream `v0.5.4`): Ricardo pre-roll 256 ms (`Fixed(8)`), локальный
 endpointing, «Wake: не услышала» с окном 30 с и upstream-функции `v0.5.4`
 (number «Follow-up duration», STT stop-word fallback, switch часов «Clock auto
@@ -760,29 +760,23 @@ adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollba
 
 ### Релиз и деплой Pulsar
 
-Pulsar собирается и релизится в форке (origin вложенного checkout
-`projects/station/upstream/pulsar-rust`), а не в монорепо. `proflyder/pulsar`
-— самостоятельный публичный репозиторий, не GitHub-fork (Actions были
-отключены в сети форков), имя зашито в обновлятор станции. Upstream
-`Morvex885/pulsar` вливается вручную: во вложенном checkout remote `upstream`,
-`git fetch upstream vX` и `git merge vX`; PR в форке сливается merge-коммитом
-(`gh pr merge --merge --admin`); остальные PR — squash. Коммиты и PR форка
-следуют его `AGENTS.md`: без AI-трейлеров и подписей (job `commits`,
-`tools/check-authorship.sh`). Release job при сетевом сбое повторяется
-`gh run rerun <id> --failed`. Полная процедура —
-RICARDO.md «Релизы и деплой форка» в форке. Кратко:
+Исходники Pulsar — `projects/station/pulsar/` в монорепозитории. GitHub Releases и теги
+запрещены; релиз публикуется в публичный OCI-пакет
+`ghcr.io/proflyder/pulsar-firmware` (его читает `pulsar_update::UPDATE_REPO`).
+Полная процедура — `projects/station/pulsar/RICARDO.md`, «Релизы и деплой». Кратко:
 
 ```bash
-# 1. в форке: аннотированный тег и push (v<major.minor>.<1000+N>)
-git tag -a v0.5.1005 -m 'pulsar v0.5.1005'
-git push origin v0.5.1005
-# build.yml собирает и публикует GitHub release (latest),
-# затем запускает deploy-station.yml
-
-# 2. approve в GitHub Environment `Station` (только теги v*)
-
-# 3. повторный деплой уже опубликованного релиза — вручную
-gh workflow run deploy-station.yml --ref v0.5.1005 -f tag=v0.5.1005
+# 1. в рабочей ветке изменить версию (v<major.minor>.<1000+N>)
+$EDITOR projects/station/pulsar/VERSION
+# 2. обычный PR в develop, squash после зелёного ci-ok;
+#    merge запускает release-pulsar.yml:
+#    сборка aarch64/armhf + radio → oras push
+#    ghcr.io/proflyder/pulsar-firmware:<version> и :latest
+# 3. approve в GitHub Environment `Station` (job deploy)
+#    → VPN группа ci → OIDC в OpenBao (deploy-station)
+#    → HA update_entity + update.install
+# 4. повторный запуск уже собранной версии — workflow_dispatch;
+#    если OCI-тег существует, workflow падает: выпускается следующая версия
 ```
 
 После approve job входит в VPN группой `ci` (отдельный клиентский сертификат
@@ -790,12 +784,27 @@ gh workflow run deploy-station.yml --ref v0.5.1005 -f tag=v0.5.1005
 `deploy-station`. Политика `ci-station` читает
 `secret/ci/deploy-station` (`ha_url`, `ha_token`, `entity_id`; HA long-lived
 token `ci-pulsar-deploy`, 2 года). Деплой — HA `update_entity` +
-`update.install` на Firmware-сущность станции: колонка скачивает релиз,
+`update.install` на Firmware-сущность станции: колонка скачивает слои OCI,
 проверяет `SHA256SUMS` и `--version`, меняет бинарник (старый — `.prev`) и
-перезапускается. Job ждёт `installed_version == tag` и 90 с стабильности;
+перезапускается. Job ждёт `installed_version == version` и 90 с стабильности;
 откат `supervise.sh` на `.prev` или недоступность сущности дольше 30 с валят
 job. Если версия уже стоит, скрипт пишет `already installed` и выходит
 успешно.
+
+Переходное ограничение: установленная прошивка `v0.5.1005` читает GitHub
+Releases `proflyder/pulsar`; `pulsar-firmware` умеет читать `v0.5.1007+`.
+Первый релиз из монорепо встанет через HA только после того, как на станции
+окажется `v0.5.1007` или новее; до этого — установка вручную (`pulsar-install`
+или замена `pulsar`/`.prev` и `ctl.sh restart`).
+
+Ручной sync upstream:
+
+```bash
+# в checkout upstream (Morvex885/pulsar) получить диапазон и применить патчем
+git -C <upstream-checkout> diff vOLD..vNEW > /tmp/pulsar-upstream.patch
+git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
+# дальше обычные проверки и PR; конфликты разрешать вручную
+```
 
 Локальные приватные копии CI-значений — `secrets/ci/pulsar/` (`VPN_*`,
 `ha_url`, `ha_token`, `entity_id`); значения не печатать и не коммитить.
@@ -805,7 +814,7 @@ job. Если версия уже стоит, скрипт пишет `already i
 этом не меняется.
 
 Установленная версия — Rust `v0.5.1005` (armhf, SHA256 `89415c5a…71671b6`,
-релиз форка на базе upstream `v0.5.4` / `f1f5b17`; повторный wake +
+сборка на базе upstream `v0.5.4` / `f1f5b17`; повторный wake +
 endpointing + Ricardo pre-roll 256 ms + окно «Wake: не услышала» 30 с +
 number «Follow-up duration»); `pulsar.prev` — `fb0695b2…` (`v0.5.1004`;
 historical: `3a544979…` — `v0.5.1002`, `80aea2ec…` — `v0.5.1001`, база

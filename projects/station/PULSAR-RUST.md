@@ -12,19 +12,21 @@ upstream `v0.5.4` (`f1f5b17`), HEAD `427a8e3`. Процесс запущен с
 `v0.5.2-3-gc57d521-dirty`; `v0.5.2-2-g95ce568` и `v0.5.0-1-g908a027` —
 только private backup вне Git.
 
-**Локальный форк:** upstream `v0.5.4` (`f1f5b17`) влит в ветку `main`
-вручную из remote `upstream`; PR в самостоятельном репозитории сливается
-merge-коммитом. `feat/ricardo-rust` — только история. Safety ref
-`ricardo-rust/pre-v0.5.2` = `908a027`. Legacy C++ исходники, patch и binaries
-в активном дереве отсутствуют; private recovery archive —
-`secrets/local/recovery/`.
+**Код в монорепозитории:** исходники Pulsar — `projects/station/pulsar/`
+(first-party, AGPL-3.0); база upstream `v0.5.4` (`f1f5b17`) сохранена в
+history. Upstream `Morvex885/pulsar` вливается вручную патчем
+(`git diff vA..vB` → `git apply -3 --directory=projects/station/pulsar`), затем
+обычный squash PR. Legacy C++ исходники, patch и binaries в активном дереве
+отсутствуют; private recovery archive — `secrets/local/recovery/`.
 
-- Fork: <https://github.com/OWNER/pulsar> — самостоятельный публичный
-  репозиторий, не GitHub-fork (Actions в сети форков были отключены)
+- Исходники: `projects/station/pulsar/` (вложенного checkout'а и snapshot нет).
 - База: upstream `v0.5.4` (`f1f5b17`), ancestor HEAD.
-- Локальный checkout: `projects/station/upstream/pulsar-rust/`
-- Снимок изменений: `projects/station/patches/pulsar-rust/`
-  (`snapshot-pulsar.py`, base v0.5.4)
+- Сборка: `make -C projects/station/pulsar/satellite ARCH=armhf` или обе
+  архитектуры; CI-юнит `pulsar` в корневом `_native.yml`.
+- Релиз: изменение `projects/station/pulsar/VERSION` →
+  `release-pulsar.yml` → OCI `ghcr.io/proflyder/pulsar-firmware:<version>`
+  (+ `:latest`), затем approve в Environment `Station`. GitHub Releases и
+  теги запрещены; подробности — `RICARDO.md`, «Релизы и деплой».
 - armhf build: `satellite/build/armhf/pulsar` — stripped ARM EABI5
   hard-float ELF (`v0.5.1005`), установлен на станции. Makefile
   zig objcopy на macOS всё ещё падает; артефакт получен установленным LLVM

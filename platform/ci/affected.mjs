@@ -77,6 +77,8 @@ export class Unit {
         // Native (non-Bazel) build units: a repository script that produces
         // host- or cross-built artifacts, plus the pinned toolchain it needs.
         nativeWorkdir: "",
+        nativeKind: "script",
+        nativePublish: true,
         nativeBuild: "",
         nativeTest: "",
         nativeArtifacts: [],
@@ -194,6 +196,10 @@ export function normalizeConfig(data, label = "units") {
       pythonDeployTool: Boolean(python.deploy_tool),
       jsTests: list(js.tests),
       nativeWorkdir: String(native.workdir ?? ""),
+      nativeKind: String(native.kind ?? "script"),
+      // `publish: false` keeps a native unit out of deploy-home's OCI
+      // publication (Pulsar releases through release-pulsar.yml).
+      nativePublish: native.publish !== false,
       nativeBuild: String(native.build ?? ""),
       nativeTest: String(native.test ?? ""),
       nativeArtifacts: list(native.artifacts),
@@ -1246,6 +1252,8 @@ export function matrixEntries(route_, config) {
   }));
   const native = route_.routes.native.units.map((unit) => ({
     id: unit.id,
+    kind: unit.nativeKind,
+    publish: unit.nativePublish,
     workdir: unit.nativeWorkdir,
     build: unit.nativeBuild,
     test: unit.nativeTest,

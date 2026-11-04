@@ -159,24 +159,27 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 - Режимы исполнения (`execute`, `shadow`, `control-*`) меняются только
   ручным `workflow_dispatch`.
 
-Pulsar живёт вне монорепо: релиз собирается и публикуется в форке (origin
-вложенного checkout `projects/station/upstream/pulsar-rust`), монорепо его не
-собирает и не деплоит. Поток:
+Pulsar живёт в монорепозитории (`projects/station/pulsar/`). Релиз — изменение
+`projects/station/pulsar/VERSION` в PR в `develop`; сборка и публикация — в
+монорепо, без GitHub Releases и тегов. Поток:
 
 ```text
-push тега v0.5.100N в форке
-   → build.yml: сборка + GitHub release (latest)
-   → deploy-station.yml: ручной approve в Environment `Station` (теги v*)
-        → VPN группа ci (сертификат ci-pulsar)
+merge PR в develop с новым VERSION
+   → release-pulsar.yml: сборка aarch64/armhf, radio, SHA256SUMS
+        → oras push ghcr.io/proflyder/pulsar-firmware:<version> (+ :latest)
+   → deploy job: ручной approve в Environment `Station`
+        → VPN группа ci
         → OIDC в OpenBao: роль deploy-station → secret/ci/deploy-station
         → HA update_entity + update.install (Firmware станции)
-        → проверка installed_version == tag и 90 с стабильности
+        → проверка installed_version == version и 90 с стабильности
 ```
 
-- Тег `v<upstream major.minor>.<1000+N>` больше любого upstream-патча, поэтому
-  updater (`vMAJOR.MINOR.PATCH`) видит релиз форка новее.
+- Версия `v<upstream major.minor>.<1000+N>` больше любого upstream-патча, поэтому
+  updater (`vMAJOR.MINOR.PATCH`) видит релиз новее.
 - Откат через CI невозможен (updater только повышает версию): на станции
   `.prev` + `ctl.sh reload`.
+- CI-юнит `pulsar` (`.github/workflows/_native.yml`) выполняет `make check`,
+  обе архитектуры, installer, radio и ssh.
 
 ## Данные
 
