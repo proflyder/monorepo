@@ -13,23 +13,6 @@
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким
       запуском.
 
-- [ ] **Решение 35: остаток перевода Python (хосты и оператор).**
-      CI-обвязка (#97), Android-инструменты сборки (#98), voice-proxy (#99) и
-      `platform/deploy` (`home-deploy`) переведены. Шаг 1 добавил `render`,
-      `env get`, `build-id`, `oci`; шаг 2 — `converge`, `state rollback`,
-      `preflight`; шаг 3 — `hermes rollout`, `hermes
-      render-config`, `hermes assist-smoke`, `runtime split`, `eso names`,
-      `secret opaque`, Go health exporter и разбор статуса scheduler на jq.
-      Python `hermes_rollout.py`, `render_hermes_config.py`,
-      `health_exporter.py` и их тесты удалены; `deploy-home` больше не ставит
-      `python3-yaml`, а Assist smoke Job работает на distroless
-      `home-deploy`. Осталось (хосты/оператор): `openbao configure/drill`
-      (operator tooling, отдельный PR), `offsite_backup.py` → Go-бинарник из
-      GHCR по digest (как решение 34), `vpncerts.py`/`vpnusers.py` → `vpn-pki`.
-      Python остаётся: короткие хост-скрипты (`backup_metrics`,
-      `restore-volumes`, `wifi-uplink`, `backup-before-install`), ML
-      wake-word, dev-утилиты станции, проверки YAML, live e2e.
-
 - [ ] **CI: правка документации внутри юнита не должна деплоить.** После
       #97 перевыкатились mcp-gateway/currency-bot/wakegrant только из-за
       README в их папках. Следующий шаг: в `affected.mjs` не выбирать юнит
