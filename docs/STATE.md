@@ -422,22 +422,22 @@
   Секреты — ESO `wakegrant` из `secret/k8s/home-assistant/wakegrant`
   (`issuer_token`, `machines`), в HA — `wakegrant_endpoint`/
   `wakegrant_bearer`. Деплой — `projects/home/kubernetes/wakegrant`.
-  Логин-компонент запрашивает грант только в `CPUS_LOGON`; разблокировка
-  (`CPUS_UNLOCK_WORKSTATION`) ничего не делает — грант никогда не должен
-  разблокировать уже работающий ПК. Модуль входа — переиспользуемое решение
-  `solutions/windows-logon-provider` (CLSID
+  Логин-компонент запрашивает грант только в `CPUS_LOGON` и только когда у
+  настроенного пользователя нет сессии и с загрузки прошло меньше 10 минут:
+  Windows 11 вызывает провайдеры с `CPUS_LOGON` и при блокировке, поэтому
+  без этого гейта грант разблокировал бы работающий ПК. Модуль входа —
+  переиспользуемое решение `solutions/windows-logon-provider` (Rust, CLSID
   `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`, журнал
-  `C:\ProgramData\Ricardo\KompLogon\logon.log`). На ПК установлена
-  опубликованная версия `1.0.0` из GHCR по digest
-  `ghcr.io/proflyder/windows-logon-provider@sha256:e3a959586bacc4d92563fbfc61b79a4ea197e76d8f9a3bc51cf4698cac584108`
-  (sha256 DLL `d5ec9b629a0f83143543c907bc5b2068dc30cd6769a77f616d78c63cd3eac35b`;
-  пакет публичный, подтверждение сборки проверено `fetch.sh`). Сборка
-  воспроизводима (`--no-insert-timestamp`).
-  Принято вживую 2026-11-03:
-  «включи комп» → рабочий стол без PIN (grant с первой попытки, сеть готова
-  к появлению экрана входа); включение кнопкой → обычный вход, сервис
-  отказывает, модуль отступает при вводе PIN. Режим «только Windows Hello»
-  входу по пропуску не мешает. Сценарий «wakegrant недоступен» вживую не
+  `C:\ProgramData\Ricardo\KompLogon\logon.log`). На ПК установлена сборка
+  `1.1.0` из GHCR (артефакт PR, проверен `fetch.sh`): sha256 DLL
+  `a42a1ddcf2ce8fe95a5f9aae6dfc49610d4ba77417d53ecc12d093f1f5e7e576`;
+  PE-таймстемп обнуляется, поэтому релизный тег `1.1.0` содержит те же
+  байты. Предыдущая C++ DLL `1.0.0` лежит рядом как
+  `RicardoKompLogon.dll.cpp-1.0.0` для отката.
+  Принято вживую 2026-11-05: холодная загрузка с грантом → вход без PIN
+  (~1 с, `gate=ok`); загрузка без гранта → обычный экран входа (`denied`);
+  блокировка с выданным грантом → остаётся заблокированным
+  (`gate=session_exists`). Сценарий «wakegrant недоступен» вживую не
   проверялся (по коду — обычный вход).
 
 ## Планировщик, HA bridge, Android

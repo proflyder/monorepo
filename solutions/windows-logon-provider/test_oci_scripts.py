@@ -27,11 +27,13 @@ class VersionTests(unittest.TestCase):
 
 
 class ReproducibleBuildTests(unittest.TestCase):
-    def test_link_omits_the_pe_timestamp(self):
+    def test_build_normalizes_the_pe_timestamp(self):
         # Immutable OCI tags need identical bytes for identical sources; the PE
         # TimeDateStamp was the only varying field.
         build = (HERE / "build.sh").read_text(encoding="utf-8")
-        self.assertIn("-Wl,--no-insert-timestamp", build)
+        self.assertIn("pe_artifacts.py normalize", build)
+        pe = (HERE / "pe_artifacts.py").read_text(encoding="utf-8")
+        self.assertIn("self.data, self.elfanew + 8, 0", pe)
 
 
 class PublishScriptTests(unittest.TestCase):
@@ -52,7 +54,6 @@ class PublishScriptTests(unittest.TestCase):
         for name in (
             "RicardoKompLogon.dll",
             "cp-selftest.exe",
-            "hmac-selftest.exe",
             "SHA256SUMS",
         ):
             self.assertIn(name, self.text)
@@ -69,7 +70,7 @@ class PublishScriptTests(unittest.TestCase):
             "org.opencontainers.image.version",
             "org.opencontainers.image.revision",
             "org.opencontainers.image.source",
-            "toolchain=llvm-mingw-20261020",
+            "toolchain=bazel-rules_rust-zig-x86_64-windows-gnu",
         ):
             self.assertIn(annotation, self.text)
 

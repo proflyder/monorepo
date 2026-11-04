@@ -1,0 +1,17 @@
+[package]
+name = "cp_selftest"
+description = "cp-selftest.exe: loads the Ricardo Komp Logon credential provider outside LogonUI"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[[bin]]
+name = "cp-selftest"
+path = "src/main.rs"
+
+# The self-test is a Windows executable; the host build compiles only the stub
+# in `src/main.rs` so `cargo clippy --all-targets` still works on macOS/Linux.
+[target.'cfg(windows)'.dependencies]
+windows-core = { workspace = true }
+windows-link = { workspace = true }

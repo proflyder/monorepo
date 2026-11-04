@@ -16,7 +16,7 @@
 | `heartbeat/` | JS | Cloudflare Worker: внешний dead-man switch для Alertmanager `Watchdog` | развёрнут |
 | `bb-home-dispatcher/` | TS | плагин bb: детерминированный исполнитель голосовых команд от `mcp-gateway` | развёрнут |
 | `bb-profiles/` | TS | плагин bb: изолированные профили (логины, конфиги, провайдеры, машины) | развёрнут |
-| `windows-logon-provider/` | C++17 | Windows Credential Provider: плитка входа только при гранте `wakegrant`; конфигурация приходит при установке; публикуется в GHCR как OCI-артефакт | установлен на домашнем ПК |
+| `windows-logon-provider/` | Rust (`windows-rs`, Bazel + zig) | Windows Credential Provider: плитка входа только при гранте `wakegrant`; конфигурация приходит при установке; публикуется в GHCR как OCI-артефакт | установлен на домашнем ПК |
 
 ## Правила
 
