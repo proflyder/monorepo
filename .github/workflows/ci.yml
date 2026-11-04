@@ -437,11 +437,21 @@ jobs:
   # One matrix entry per affected native build: the Windows logon provider
   # cross-built with the pinned llvm-mingw toolchain, and the Rust Pulsar tree
   # (Bazel for both arches, installer, radio, ssh; host fmt/clippy/tests are
-  # the pulsar-bazel unit). Build, checksums and artifact upload only; there is
-  # no deploy target.
+  # the pulsar-bazel unit). Build, checksums and artifact upload; on a PR from
+  # this repository (never a fork) `_native.yml` also publishes the
+  # release-shaped artifact as `tree-<hash>` with build provenance, so the merge
+  # deploys the bytes this PR tested (DECISIONS 36). Fork PRs only build.
+  #
+  # Registry/OIDC/attestation permissions are granted to this job alone; every
+  # other job stays `contents: read`.
   native:
     needs: changes
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.native_units != '[]' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -460,6 +470,13 @@ jobs:
       toolchain_url: ${{ matrix.toolchain_url }}
       toolchain_sha256: ${{ matrix.toolchain_sha256 }}
       toolchain_root: ${{ matrix.toolchain_root }}
+      publish_repository: ${{ matrix.publish_repository }}
+      publish_tags: ${{ matrix.publish_tags }}
+      publish_script: ${{ matrix.publish_script }}
+      publish_attest_glob: ${{ matrix.publish_attest_glob }}
+      promote: false
+      publish_versions: false
+      push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
   # Container-image build for the affected deployable units. On a pull request
   # from this repository, `_images.yml` also publishes the built images as

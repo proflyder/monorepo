@@ -4,8 +4,9 @@
 // versions may be deleted: stale `tree-*`/untagged versions, deploy versions
 // beyond the five-version window, and referrers whose subject disappears —
 // while the newest, `develop`/semver tags and PROTECTED_DIGESTS survive. The
-// package list is derived from platform/ci/units.mjs, so a non-deploy package
-// (the Windows logon provider) can never be touched.
+// package list is derived from platform/ci/units.mjs, including the native
+// publish repositories (`windows-logon-provider`, `pulsar-firmware`): their
+// release tags are protected and only stale `tree-*` versions are deleted.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -41,7 +42,7 @@ function summary(plan) {
   return Object.fromEntries(plan.decisions.map((item) => [item.id, item]));
 }
 
-test("only the deploy images of units.mjs are considered", () => {
+test("deploy images and native publish repositories of units.mjs are considered", () => {
   assert.deepEqual(deployImagePackages(), [
     "currency-bot",
     "ha-bridge",
@@ -50,11 +51,34 @@ test("only the deploy images of units.mjs are considered", () => {
     "hermes",
     "home-deploy",
     "mcp-gateway",
+    "pulsar-firmware",
     "scheduler",
     "voice-proxy",
     "wakegrant",
+    "windows-logon-provider",
   ]);
-  assert.ok(!deployImagePackages().includes("windows-logon-provider"));
+});
+
+test("native release tags survive and stale tree tags are deleted", () => {
+  const plan = planPackageCleanup(
+    [
+      version(6, "2026-11-03T00:00:00Z", [TREE("f")]),
+      version(5, "2026-08-01T00:00:00Z", ["v0.5.1008", "latest"]),
+      version(4, "2026-08-01T00:00:00Z", ["1.2.3"]),
+      version(3, "2026-08-01T00:00:00Z", ["sha-0123456789ab"]),
+      version(2, "2026-08-01T00:00:00Z", [TREE("b")]),
+      version(1, "2026-08-01T00:00:00Z", []),
+    ],
+    { now: NOW },
+  );
+  // Native release tags are protected; only the stale tree-only and untagged
+  // versions go. The newest version is kept regardless of its tag.
+  assert.deepEqual(plan.delete.map((item) => item.id), [2, 1]);
+  assert.equal(summary(plan)[6].reason, "newest version of the package");
+  for (const id of [5, 4, 3]) {
+    assert.equal(summary(plan)[id].action, "keep");
+    assert.match(summary(plan)[id].reason, /protected tag/);
+  }
 });
 
 test("stale tree-tagged versions are deleted, the newest is kept", () => {

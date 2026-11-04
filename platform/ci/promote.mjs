@@ -22,11 +22,19 @@
  * provenance says "this repository's CI built this commit's tree" may be
  * deployed, so a wrong-tree image can never reach the cluster.
  *
- * Pure decision logic (`planPromotion`) takes an injected `exec`, so it is
- * tested without a registry. The CLI writes the action outputs:
+ * Native units (Pulsar firmware, the Windows logon provider) follow the same
+ * rule with one artifact instead of an image set: their PR build publishes the
+ * release-shaped OCI artifact under `tree-<hash>`, and `planNativePromotion`
+ * verifies it and attaches the unit's release tags (`{version}`, `latest`,
+ * `sha-{commit12}`) to the same digest. The version tag is immutable: an
+ * existing different digest is a hard failure, never an overwrite.
+ *
+ * Pure decision logic (`planPromotion`/`planNativePromotion`) takes an injected
+ * `exec`, so it is tested without a registry. The CLI writes the action outputs:
  *   prebuilt_digests   `<image>=sha256:…,<image>=sha256:…` (empty on fallback)
- *   mode               `prebuilt` or `build`
- *   IMAGE_PROMOTION    same mode, for the deploy job summary
+ *   mode               `prebuilt` or `build` (native: `promoted` or `build`)
+ *   digest             the promoted native artifact digest
+ *   IMAGE_PROMOTION / NATIVE_PROMOTION   same mode, for the deploy job summary
  */
 
 import { spawnSync } from "node:child_process";
@@ -80,7 +88,19 @@ export function signerIdentityPattern(repository) {
   return `^https://github\\.com/${escaped}/\\.github/workflows/(ci|_images)\\.yml@`;
 }
 
-export function verifyArgs({ repository, reference }) {
+/**
+ * Signer of a native artifact's provenance: the same reusable-workflow rule as
+ * images, limited to `_native.yml` (the job that pushes and attests it).
+ */
+export function nativeSignerIdentityPattern(repository) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository || ""))) {
+    throw new Error(`invalid GitHub repository '${repository}' (expected owner/repo)`);
+  }
+  const escaped = repository.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return `^https://github\\.com/${escaped}/\\.github/workflows/(ci|_native)\\.yml@`;
+}
+
+export function verifyArgs({ repository, reference, signerPattern = null }) {
   return [
     "attestation",
     "verify",
@@ -90,7 +110,7 @@ export function verifyArgs({ repository, reference }) {
     // gh refuses --signer-repo together with --cert-identity-regex; the regex
     // already pins both the repository and the signing workflow.
     "--cert-identity-regex",
-    signerIdentityPattern(repository),
+    signerPattern || signerIdentityPattern(repository),
   ];
 }
 
@@ -230,12 +250,227 @@ export function formatSummary(result) {
   return `${lines.join("\n")}\n`;
 }
 
+// --------------------------------------------------------------------------
+// Native artifact promotion (DECISIONS 36, native units)
+// --------------------------------------------------------------------------
+
+/** Full GHCR reference of a native publish repository. */
+const NATIVE_REPOSITORY = /^ghcr\.io\/[a-z0-9.-]+\/[a-z0-9._-]+$/;
+/** Destination tag characters accepted from units.mjs / CLI. */
+const TAG = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
+const VERSION = /^v?[0-9]+\.[0-9]+\.[0-9]+$/;
+
+export function nativeRepository(repository) {
+  const text = String(repository || "").trim();
+  if (!NATIVE_REPOSITORY.test(text)) {
+    throw new Error(`invalid native repository '${text}' (expected ghcr.io/owner/name)`);
+  }
+  return text;
+}
+
+/** Expand `{version}` and `{commit12}` in the unit's publish tag templates. */
+export function expandTags(templates, { version, commit }) {
+  if (!VERSION.test(String(version || ""))) {
+    throw new Error(`version must be MAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH, got '${version}'`);
+  }
+  if (!COMMIT.test(String(commit || ""))) {
+    throw new Error(`commit must be a git sha, got '${commit}'`);
+  }
+  const expanded = [];
+  for (const raw of templates || []) {
+    const tag = String(raw || "")
+      .replaceAll("{version}", version)
+      .replaceAll("{commit12}", commit.slice(0, 12));
+    if (!TAG.test(tag)) {
+      throw new Error(`invalid publish tag '${tag}' (from '${raw}')`);
+    }
+    if (!expanded.includes(tag)) {
+      expanded.push(tag);
+    }
+  }
+  if (!expanded.length) {
+    throw new Error("no publish tags to attach");
+  }
+  return expanded;
+}
+
+/**
+ * Promote a PR-built native artifact from `tree-<hash>` to the unit's release
+ * tags. The only tag allowed to move to a different digest is `latest`; a
+ * version or `sha-<commit>` tag that already exists with another digest is a
+ * hard failure, matching the publish scripts' immutability rule.
+ */
+export function planNativePromotion({
+  repository,
+  tree,
+  commit,
+  version,
+  tags,
+  githubRepository = process.env.GITHUB_REPOSITORY,
+  exec,
+}) {
+  const tag = treeTag(tree);
+  const ref = nativeRepository(repository);
+  const destinations = expandTags(tags, { version, commit });
+  const signer = nativeSignerIdentityPattern(githubRepository);
+  const decisions = [];
+
+  let digest;
+  try {
+    digest = parseDigest(exec("crane", ["digest", `${ref}:${tag}`]));
+  } catch (error) {
+    return {
+      mode: "build",
+      tag,
+      repository: ref,
+      digest: null,
+      tags: destinations,
+      decisions: [
+        { tag, status: "missing", detail: `${tag} not found: ${message(error)}` },
+      ],
+      reason: `${tag} is missing`,
+    };
+  }
+  if (!digest) {
+    return {
+      mode: "build",
+      tag,
+      repository: ref,
+      digest: null,
+      tags: destinations,
+      decisions: [{ tag, status: "missing", detail: `${tag} did not resolve to a sha256 digest` }],
+      reason: `${tag} did not resolve`,
+    };
+  }
+
+  try {
+    exec(
+      "gh",
+      verifyArgs({ repository: githubRepository, reference: `${ref}@${digest}`, signerPattern: signer }),
+    );
+  } catch (error) {
+    return {
+      mode: "build",
+      tag,
+      repository: ref,
+      digest,
+      tags: destinations,
+      decisions: [
+        { tag, status: "unverified", digest, detail: `provenance check failed: ${message(error)}` },
+      ],
+      reason: "provenance did not verify",
+    };
+  }
+  decisions.push({ tag, status: "verified", digest });
+
+  for (const destination of destinations) {
+    let existing = null;
+    try {
+      existing = parseDigest(exec("crane", ["digest", `${ref}:${destination}`]));
+    } catch {
+      existing = null;
+    }
+    if (existing === digest) {
+      decisions.push({ tag: destination, status: "unchanged", digest });
+      continue;
+    }
+    if (existing && destination !== "latest") {
+      throw new Error(
+        `${ref}:${destination} already exists with ${existing}, not ${digest}; ` +
+          "release tags are immutable — bump the version",
+      );
+    }
+    exec("crane", ["tag", `${ref}@${digest}`, destination]);
+    const actual = parseDigest(exec("crane", ["digest", `${ref}:${destination}`]));
+    if (actual !== digest) {
+      throw new Error(
+        `${ref}:${destination} resolves to ${actual || "an unknown digest"}, not ${digest}`,
+      );
+    }
+    decisions.push({ tag: destination, status: existing ? "moved" : "tagged", digest });
+  }
+
+  return {
+    mode: "promoted",
+    tag,
+    repository: ref,
+    digest,
+    tags: destinations,
+    decisions,
+  };
+}
+
+export function formatNativeSummary(result) {
+  const lines = [`### native promotion (${result.tag})`, ""];
+  lines.push(`- repository: \`${result.repository}\``);
+  for (const decision of result.decisions) {
+    const digest = decision.digest ? ` \`${decision.digest}\`` : "";
+    const detail = decision.detail ? ` — ${decision.detail}` : "";
+    lines.push(`- \`${decision.tag}\`: ${decision.status}${digest}${detail}`);
+  }
+  lines.push("", `- path: \`${result.mode}\``);
+  if (result.mode !== "promoted") {
+    lines.push(`- fallback build: ${result.reason}; building and publishing as before`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function runNativePromotion({ args, exec, env = process.env, log = console.log }) {
+  const repository = nativeRepository(args.repository);
+  log(`promoting native ${repository} for tree ${args.tree}`);
+  const result = planNativePromotion({
+    repository,
+    tree: args.tree,
+    commit: args.commit,
+    version: args.version,
+    tags: args.tags,
+    githubRepository: args.githubRepository || env.GITHUB_REPOSITORY,
+    exec,
+  });
+  log(formatNativeSummary(result));
+  if (env.GITHUB_OUTPUT) {
+    appendFile(env.GITHUB_OUTPUT, `mode=${result.mode}\n`);
+    appendFile(env.GITHUB_OUTPUT, `digest=${result.digest || ""}\n`);
+  }
+  if (env.GITHUB_ENV) {
+    appendFile(env.GITHUB_ENV, `NATIVE_PROMOTION=${result.mode}\n`);
+  }
+  if (env.GITHUB_STEP_SUMMARY) {
+    appendFile(env.GITHUB_STEP_SUMMARY, formatNativeSummary(result));
+  }
+  return result;
+}
+
 function parseArgs(argv) {
-  const args = { images: [], tree: "", commit: "", repository: "" };
+  const args = {
+    images: [],
+    tree: "",
+    commit: "",
+    repository: "",
+    native: false,
+    version: "",
+    tags: [],
+    githubRepository: "",
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     switch (flag) {
+      case "--native":
+        args.native = true;
+        break;
+      case "--version":
+        args.version = value;
+        index += 1;
+        break;
+      case "--tags":
+        args.tags = String(value || "").split(/[\s,]+/).filter(Boolean);
+        index += 1;
+        break;
+      case "--github-repository":
+        args.githubRepository = value;
+        index += 1;
+        break;
       case "--images":
         args.images = String(value || "").split(/[\s,]+/).filter(Boolean);
         index += 1;
@@ -316,8 +551,14 @@ export function main(argv = process.argv.slice(2)) {
   if (args.help) {
     console.log(
       "usage: promote.mjs --images 'a b' --tree <40-hex> --commit <sha> " +
-        "[--repository owner/repo]",
+        "[--repository owner/repo]\n" +
+        "   or: promote.mjs --native --repository ghcr.io/owner/name --tree <40-hex> " +
+        "--commit <sha> --version <vX.Y.Z> --tags '{version} latest'",
     );
+    return 0;
+  }
+  if (args.native) {
+    runNativePromotion({ args, exec: spawnExec });
     return 0;
   }
   runPromotion({ args, exec: spawnExec });

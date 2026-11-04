@@ -276,6 +276,19 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
             `${prefix}: publish_script does not exist: ${unit.nativePublishScript}`,
           );
         }
+        if (!unit.nativePublishRepository) {
+          problems.push(`${prefix}: publish_script requires publish_repository`);
+        } else if (
+          !/^ghcr\.io\/[a-z0-9.-]+\/[a-z0-9._-]+$/.test(unit.nativePublishRepository)
+        ) {
+          problems.push(
+            `${prefix}: publish_repository must be ghcr.io/<owner>/<name>: ` +
+              `'${unit.nativePublishRepository}'`,
+          );
+        }
+        if (!unit.nativePublishTags.length) {
+          problems.push(`${prefix}: publish_script requires publish_tags`);
+        }
       }
       for (const pattern of unit.nativePublishWhen) {
         if (pattern === "*" || pattern === "**" || pattern === "**/*") {

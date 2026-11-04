@@ -77,9 +77,11 @@
     Версия — `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`).
     Pulsar — обычный publishable native-юнит общего `deploy-home`: поле
     `native.publish_when` пускает его в `native_units` на push только при
-    изменении VERSION; прочие изменения Pulsar — только PR CI. `publish-native`
-    публикует OCI-артефакт в `ghcr.io/proflyder/pulsar-firmware:<version>`
-    (+ `:latest`); GitHub Releases и теги в монорепо не используются.
+    изменении VERSION; прочие изменения Pulsar — только PR CI. `native-release`
+    продвигает проверенный PR-артефакт `tree-<hash>` на
+    `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`) или при
+    missing/unverified собирает и публикует заново (решение 36); GitHub
+    Releases и теги в монорепо не используются.
     Выкатка на станцию — job `deploy-station` после ручного approve в
     Environment `Station`, через VPN группу `ci` и OIDC в OpenBao
     (`deploy-station`), затем HA `update.install`; job проверяет
@@ -224,9 +226,11 @@
     тот же `SHA256SUMS` — no-op, другой — ошибка, поэтому релиз — смена
     `VERSION`. Установка — по digest (`@sha256:…`) после `sha256sum -c` и
     `gh attestation verify`; build provenance создаётся для digest артефакта
-    (`push-to-registry`) и для DLL. Публикует только push в `develop`
-    (`deploy-home`), переиспользуя сборку `_native.yml`; PR никогда не
-    публикует. GitHub Releases отклонены (монорепозиторий смешал бы продукты
+    (`push-to-registry`) и для DLL. PR из этого репозитория публикует
+    release-shaped артефакт под `tree-<hash>` (build once), а push в
+    `develop` продвигает проверенный digest на теги `VERSION` и `sha-<12>`
+    либо пересобирает при missing/unverified (решение 36); форки не
+    публикуют. GitHub Releases отклонены (монорепозиторий смешал бы продукты
     в одном потоке релизов), Maven/NuGet — тоже (даже публичное чтение
     требует авторизации). Новый пакет GHCR может создаться приватным:
     публичность включается один раз в GitHub UI (Package settings → Change
@@ -262,11 +266,13 @@
     хранения, PKI в OpenBao и т.п.), а не отдельной задачей; новые скрипты
     такого объёма сразу пишутся по правилу выше.
 
-36. **Образ собирается один раз на PR; деплой — по git tree hash и provenance.**
-    * Идентичность образа — git tree собираемого коммита. PR собирает merge-ref,
-      и его `git rev-parse HEAD^{tree}` совпадает с tree squash-коммита, пока
-      `develop` не ушёл вперёд. Поэтому тег — `tree-<полный tree hash>`, а не
-      sha коммита.
+36. **Артефакт собирается один раз на PR; деплой — по git tree hash и provenance.**
+    * Идентичность собранного артефакта — git tree собираемого коммита. PR
+      собирает merge-ref, и его `git rev-parse HEAD^{tree}` совпадает с tree
+      squash-коммита, пока `develop` не ушёл вперёд. Поэтому тег —
+      `tree-<полный tree hash>`, а не sha коммита. Правило одно для
+      контейнерных образов и native-артефактов (Pulsar, Windows logon
+      provider).
     * `ci.yml` → `_images.yml` для PR из этого репозитория (форки — только
       сборка) после сборки публикует каждый образ затронутых деплой-юнитов в
       `ghcr.io/proflyder/<image>:tree-<hash>` и создаёт build provenance для
@@ -275,7 +281,18 @@
       побайтно (digest после push обязан совпасть со собранным), Docker-образы
       — `docker push`. Права `packages: write`, `id-token: write`,
       `attestations: write` выданы только job `images` в `ci.yml`.
-    * `deploy-home` считает tree деплоимого коммита. Digest из
+    * `ci.yml` → `_native.yml` делает то же для native-юнитов с
+      `native.publish_script`: после сборки публикует release-shaped
+      OCI-артефакт в `native.publish_repository` под `tree-<hash>` и аттестует
+      тот же digest. Pulsar собирается release-shaped на каждом PR, а не только
+      при изменении VERSION: бинарники обеих архитектур с версией из
+      `projects/station/pulsar/VERSION` (`--define`), radio `.ybl`,
+      `SHA256SUMS`, те же заголовки слоёв/тип/аннотации; `--version`
+      проверяется под qemu. Тег версии и `latest` ставит только deploy-home.
+      Logon provider публикует свой обычный артефакт. `publish-oci.sh` умеет
+      `--tag` (пуш ровно под одним тегом) и обычный режим релизных тегов.
+      Права выданы только job `native` в `ci.yml`; форки только собирают.
+    * `deploy-home` считает tree деплоимого коммита. Для образов digest из
       `tree-<hash>` используется, только если тег существует, а provenance
       проверяется `gh attestation verify oci://… --repo <owner>/<repo>` с
       signer, ограниченным `ci.yml`/`_images.yml` этого репозитория. Обычные
@@ -285,19 +302,30 @@
       образов. Любой отсутствующий или непроверенный образ деплой-юнита —
       откат на обычную сборку; выбранный путь пишется в job summary. Неверный
       tree не может быть задеплоен.
+    * Native-юнит `deploy-home` продвигает через `platform/ci/promote.mjs
+      --native`: требует существующий `tree-<hash>`, проверяет provenance с
+      signer `ci.yml`/`_native.yml` и ставит релизные теги из
+      `native.publish_tags` (`{version}`, `latest`, `sha-{commit12}`) на тот же
+      digest pinned-`crane`. `<version>` неизменяем: тот же digest — no-op,
+      другой — отказ; двигается только `latest`. При отсутствии/непроверенном
+      tree — обычная сборка и публикация, путь `build` с пометкой fallback в
+      summary. `deploy-station` ставит версию и проверяет digest'ы слоёв.
     * `ghcr-cleanup.yml` (ежедневно по расписанию; ручной запуск — dry-run по
       умолчанию) через REST API применяет политику хранения по пакету:
       никогда не удаляются новейшая версия, версии с тегами `develop`/`latest`
-      и semver, digest'ы из явного `PROTECTED_DIGESTS` в модуле и версии
-      моложе 7 дней. Deploy-версии (есть 40-hex commit-sha тег) сохраняют
-      пять новейших; более старые удаляются, если им больше 7 дней. Устаревшие
-      версии только с `tree-*` и без тегов удаляются. Referrer-версии
-      (`sha256-<hex>` теги, cosign-style) удаляются вместе с digest'ом, на
-      который указывают, либо если он уже отсутствует в пакете; в окно пяти
-      deploy-версий они не входят. `PROTECTED_DIGESTS` сейчас пуст (exporter
-      Hermes переведён на Go-образ `health-exporter`).
-      Пакеты — только образы деплой-юнитов из `units.mjs`;
-      `windows-logon-provider` и прочие пакеты аккаунта не рассматриваются.
+      и semver, версии с `sha-<commit>` (native-релизы), digest'ы из явного
+      `PROTECTED_DIGESTS` в модуле и версии моложе 7 дней. Deploy-версии (есть
+      40-hex commit-sha тег) сохраняют пять новейших; более старые удаляются,
+      если им больше 7 дней. Устаревшие версии только с `tree-*` и без тегов
+      удаляются. Referrer-версии (`sha256-<hex>` теги, cosign-style) удаляются
+      вместе с digest'ом, на который указывают, либо если он уже отсутствует в
+      пакете; в окно пяти deploy-версий они не входят. `PROTECTED_DIGESTS`
+      сейчас пуст (exporter Hermes переведён на Go-образ `health-exporter`).
+      Пакеты — образы деплой-юнитов и `native.publish_repository` из
+      `units.mjs`; прочие пакеты аккаунта не рассматриваются. Для
+      `pulsar-firmware` и `windows-logon-provider` это означает: релизные теги
+      (`latest`, `vX.Y.Z`/`X.Y.Z`, `sha-<12>`) сохраняются, устаревшие
+      `tree-*`-only удаляются через 7 дней.
 
 37. **Pulsar живёт в монорепозитории; релиз — VERSION bump в GHCR.**
     * Код Pulsar перенесён из отдельного репозитория в
@@ -309,19 +337,23 @@
       (`v<major.minor>.<1000+N>`): push в `develop` проводит Pulsar через
       общий `deploy-home`. Юнит `pulsar` объявлен publishable native-юнитом с
       `native.publish_when: ["projects/station/pulsar/VERSION"]`, поэтому
-      `plan` кладёт его в `native_units` только при изменении VERSION, а
-      `native-build` (`_native.yml`, `release_version`) собирает обе
-      архитектуры с этой версией, radio и `SHA256SUMS`, проверяет `--version`
-      под qemu и отдаёт `publish-native` скрипту
-      `projects/station/pulsar/publish-oci.sh`. Тот публикует OCI-артефакт
-      `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`) с типом
-      `application/vnd.proflyder.pulsar.release.v1`. Существующий тег GHCR
-      перезаписать нельзя — publish падает, выпускается следующая версия.
-      Прочие изменения Pulsar — только PR CI, без публикации.
+      `plan` кладёт его в `native_units` только при изменении VERSION.
+      Каждый PR, затрагивающий Pulsar, собирает release-shaped артефакт
+      (`_native.yml`) и публикует его под `tree-<hash>` с provenance. При
+      merge `native-release` сначала продвигает этот digest: проверяет
+      `tree-<hash>`, provenance и ставит `<version>` + `latest` на тот же
+      digest. Только если tree-тега нет или provenance не сходится, workflow
+      собирает заново и публикует скриптом
+      `projects/station/pulsar/publish-oci.sh` OCI-артефакт с типом
+      `application/vnd.proflyder.pulsar.release.v1`. Существующий тег версии с
+      другим digest перезаписать нельзя — promotion/публикация падает,
+      выпускается следующая версия; тот же digest — no-op. Прочие изменения
+      Pulsar — только PR CI, без релизных тегов.
     * `proflyder/pulsar-firmware` — публичный пакет, созданный workflow из
       `GITHUB_TOKEN` (`packages: write`); имя зашито в
       `pulsar_update::UPDATE_REPO` установленной прошивки. `ghcr-cleanup`
-      этот пакет не рассматривает: `latest` и версии должны сохраняться.
+      рассматривает его по общему правилу: `latest` и версии (`vX.Y.Z`)
+      защищены, устаревшие `tree-*`-only удаляются через 7 дней.
     * Выкатка — job `deploy-station` в `deploy-home.yml` (Environment
       `Station`, VPN группа `ci`, OpenBao роль `deploy-station`) через
       `tools/ha_firmware_deploy.py --tag <version>`. Job независим от

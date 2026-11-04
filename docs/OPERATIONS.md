@@ -769,19 +769,23 @@ adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollba
 # 1. в рабочей ветке изменить версию (v<major.minor>.<1000+N>)
 $EDITOR projects/station/pulsar/VERSION
 # 2. обычный PR в develop, squash после зелёного ci-ok;
+#    PR уже собрал release-shaped артефакт (обе архитектуры с версией из
+#    VERSION, radio .ybl, SHA256SUMS, проверка --version под qemu) и
+#    опубликовал его как tree-<git tree hash> с build provenance;
 #    merge проводит pulsar через deploy-home (publish_when по VERSION):
-#    _native.yml собирает aarch64/armhf + radio и проверяет --version
-#    → publish-native (projects/station/pulsar/publish-oci.sh) пушит
-#    ghcr.io/proflyder/pulsar-firmware:<version> и :latest
+#    native-release проверяет tree-тег и provenance и ставит на тот же
+#    digest ghcr.io/proflyder/pulsar-firmware:<version> и :latest.
+#    Если tree-тега нет или provenance не сходится — обычная сборка
+#    (projects/station/pulsar/publish-oci.sh) с пометкой fallback в summary.
 # 3. approve в GitHub Environment `Station` (job deploy-station)
 #    → VPN группа ci → OIDC в OpenBao (deploy-station)
 #    → HA update_entity + update.install
 # 4. повторный запуск уже опубликованной версии — workflow_dispatch
 #    deploy-home с units=pulsar: катится только deploy-station, текущий
 #    VERSION без сборки и push; units=all тоже включает deploy-station.
-#    Если OCI-тег версии уже существует, publish падает: выпускается
-#    следующая версия
-# 5. прочие изменения Pulsar — только PR CI, ничего не публикуется
+#    Если OCI-тег версии уже существует с другим digest, promotion/publish
+#    падает: выпускается следующая версия; тот же digest — no-op
+# 5. прочие изменения Pulsar — только PR CI, релизные теги не двигаются
 ```
 
 После approve job `deploy-station` входит в VPN группой `ci` (отдельный клиентский сертификат
@@ -904,13 +908,21 @@ projects/station/scripts/restore-ota-fortress.sh   # осторожно, отк�
 ```
 
 
-## Образы GHCR: сборка на PR и продвижение
+## Артефакты GHCR: сборка на PR и продвижение
 
-Образ деплой-юнита собирается один раз на PR и после merge не пересобирается
-(решение 36). PR публикует его как
-`ghcr.io/proflyder/<image>:tree-<git tree hash>` с build provenance;
-`deploy-home` проверяет тег и provenance и ставит на тот же digest обычные теги
-(`<commit sha>`, `develop`).
+Образ деплой-юнита и native-артефакт (Pulsar, Windows logon provider)
+собираются один раз на PR и после merge не пересобираются (решение 36). PR
+публикует их как `ghcr.io/proflyder/<image>:tree-<git tree hash>` с build
+provenance; `deploy-home` проверяет тег и provenance:
+
+* образы — ставит на тот же digest теги `<commit sha>` и `develop`;
+* native — ставит `native.publish_tags`: для Pulsar `<version>` и `latest`,
+  для logon provider `<version>` и `sha-<12>`. Версия неизменяема: тот же
+  digest — no-op, другой — отказ; двигается только `latest`.
+
+Pulsar собирается release-shaped на каждом PR, затрагивающем его код, — с
+версией из `VERSION`, radio и `SHA256SUMS`; тег версии создаётся только при
+merge с изменением `VERSION`.
 
 Как понять, что использовал деплой:
 
@@ -919,8 +931,9 @@ projects/station/scripts/restore-ota-fortress.sh   # осторожно, отк�
   или `build` (обычная сборка; причина — в блоке `image promotion`);
 * там же видны digest'ы образов и `runtime revision` Helm-релиза.
 
-Если PR-образ не найден или provenance не проверяется, юнит автоматически
-собирается как раньше — это штатный fallback, а не ошибка.
+Если PR-артефакт не найден или provenance не проверяется, юнит автоматически
+собирается и публикуется как раньше — это штатный fallback, а не ошибка
+(в summary он виден как `fallback build`).
 
 Локально путь продвижения можно повторить, передав проверенные digest'ы
 (без них скрипты собирают и пушат как обычно):
@@ -931,8 +944,10 @@ PREBUILT_DIGESTS="scheduler=sha256:…,ha-bridge=sha256:…,ha-control=sha256:�
 ```
 
 Чистка GHCR — `.github/workflows/ghcr-cleanup.yml`, ежедневно по расписанию.
-Политика по каждому пакету: не удаляются новейшая версия, теги `develop`,
-`latest` и semver, digest'ы из `PROTECTED_DIGESTS` (сейчас пусто: health
+Пакеты — образы деплой-юнитов и `native.publish_repository` из
+`units.mjs`, включая `pulsar-firmware` и `windows-logon-provider`. Политика по
+каждому пакету: не удаляются новейшая версия, теги `develop`, `latest`, semver
+и native `sha-<12>`, digest'ы из `PROTECTED_DIGESTS` (сейчас пусто: health
 exporter Hermes работает на Go-образе с 2026-11-04) и версии моложе
 7 дней. Deploy-версии (40-hex commit-sha тег) сохраняют пять новейших, более
 старые старше 7 дней удаляются. Устаревшие версии только с `tree-*` или без

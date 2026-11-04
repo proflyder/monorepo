@@ -24,9 +24,11 @@
  * In particular `develop` and semver tags are never deleted: a Helm rollback
  * and the digests pinned in private values point at them.
  *
- * Packages are exactly the deploy images listed in `platform/ci/units.mjs`.
- * Other GHCR packages of the account (for example the Windows logon provider
- * artifact) are never considered.
+ * Packages are exactly the deploy images and the native publish repositories
+ * listed in `platform/ci/units.mjs`. Native units also publish `tree-*` tags on
+ * PRs, so their release packages (`windows-logon-provider`, `pulsar-firmware`)
+ * follow the same policy: `latest`, version and `sha-<commit>` tags survive;
+ * stale `tree-*`-only versions are deleted after `KEEP_DAYS`.
  *
  * The selection logic is pure (`planPackageCleanup`) and covered by
  * `ghcr_cleanup.test.mjs`; the GitHub API plumbing is in `runGithubScript`.
@@ -73,14 +75,19 @@ export const PROTECTED_TAGS = [
 // { package, digest, reason }. Empty since the health exporter moved to Go.
 export const PROTECTED_DIGESTS = [];
 /**
- * Never touched, even if a future unit map were to list them. The Windows logon
- * provider is a public release artifact with immutable version tags. Pulsar
- * firmware is the station updater's OCI release package (`pulsar-firmware`):
- * `latest` and the version tags must survive, so the cleanup never considers it.
+ * Packages the policy never considers even if a future unit map lists them.
+ * Empty: native release packages are included, with their `latest`, version and
+ * `sha-<commit>` tags protected by `PROTECTED_TAGS` and only stale `tree-*`
+ * versions eligible for deletion.
  */
-export const EXCLUDED_PACKAGES = new Set(["windows-logon-provider", "pulsar-firmware"]);
+export const EXCLUDED_PACKAGES = new Set();
 
-/** Package names owned by the deploy units, in a stable order. */
+/** Package name (last GHCR path segment) of a unit's publish repository. */
+function packageName(repository) {
+  return String(repository || "").split("/").filter(Boolean).pop() || "";
+}
+
+/** Package names owned by the deploy and native publish units, sorted. */
 export function deployImagePackages(unitsConfig = config) {
   const names = [];
   for (const unit of unitsConfig.units || []) {
@@ -88,6 +95,10 @@ export function deployImagePackages(unitsConfig = config) {
       if (!names.includes(image) && !EXCLUDED_PACKAGES.has(image)) {
         names.push(image);
       }
+    }
+    const native = packageName(unit.native?.publish_repository);
+    if (native && !names.includes(native) && !EXCLUDED_PACKAGES.has(native)) {
+      names.push(native);
     }
   }
   return names.sort();
