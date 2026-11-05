@@ -109,8 +109,9 @@ Pulsar — `projects/station/pulsar/AGENTS.md`.
   `resources/` — только внешние checkout'ы.
 - Корневой build contract — `MODULE.bazel` + Bazelisk. Не добавлять
   `WORKSPACE` и не дублировать toolchain-настройки по приложениям.
-- Go-сервисы собираются `rules_go`, Rust-крейты — `rules_rust`. Для
-  существующего `projects/station/ble-gateway` миграция в Bazel — отдельный этап.
+- Go-сервисы собираются `rules_go`, Rust-крейты — `rules_rust`.
+  `projects/station/ble-gateway` — отдельный Rust Cargo workspace в Bazel
+  (`zbus`/`tokio`, armhf через `//platform/bazel/zig:armhf_linux`).
 - После добавления Go-зависимости обновлять `go.mod` и `go_deps`/Gazelle,
   затем проверять `bazel build` и `go test`.
 - Не коммитить Bazel output base, `bazel-*` symlinks и тяжёлые кэши;

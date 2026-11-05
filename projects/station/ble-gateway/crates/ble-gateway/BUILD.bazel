@@ -1,0 +1,64 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPS = [
+    "@ble_gateway_crates//:time",
+    "@ble_gateway_crates//:tokio",
+    "@ble_gateway_crates//:zbus",
+]
+
+rust_library(
+    name = "ble_gateway",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/bin/**",
+            "src/main.rs",
+        ],
+    ),
+    crate_root = "src/lib.rs",
+    edition = "2024",
+    deps = DEPS,
+)
+
+# The deployed armhf binary. The station profile mirrors the Pulsar release
+# profile (thin LTO, four codegen units, abort on panic) and strips symbols;
+# host builds stay unoptimised and keep their debug info.
+rust_binary(
+    name = "ble-gateway",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    rustc_flags = select({
+        "@zig_0_14_1//:station": [
+            "-C",
+            "lto=thin",
+            "-C",
+            "codegen-units=4",
+            "-C",
+            "panic=abort",
+            "-C",
+            "strip=symbols",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = DEPS + [":ble_gateway"],
+)
+
+rust_binary(
+    name = "bletest",
+    srcs = ["src/bin/bletest.rs"],
+    edition = "2024",
+    deps = [
+        ":ble_gateway",
+        "@ble_gateway_crates//:tokio",
+        "@ble_gateway_crates//:zbus",
+    ],
+)
+
+rust_test(
+    name = "ble_gateway_unit_tests",
+    crate = ":ble_gateway",
+    edition = "2024",
+    deps = DEPS,
+)

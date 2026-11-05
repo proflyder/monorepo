@@ -382,14 +382,17 @@ export const config = {
 
     {
       id: "ble-gateway",
-      platform: "go",
-      title: "projects/station/ble-gateway (separate Go module, outside Bazel)",
+      platform: "bazel",
+      title: "projects/station/ble-gateway (Rust host build, tests, fmt, clippy)",
       paths: ["projects/station/ble-gateway/**"],
-      go: {
-        module: "./projects/station/ble-gateway",
-        packages: ["./..."],
-        race: false,
-        build: ["./..."],
+      bazel: {
+        roots: ["//projects/station/ble-gateway"],
+        test_targets: [
+          "//projects/station/ble-gateway:clippy",
+          "//projects/station/ble-gateway:rustfmt",
+          "//projects/station/ble-gateway/crates/ble-gateway:ble_gateway_unit_tests",
+        ],
+        build_targets: ["//projects/station/ble-gateway/..."],
       },
     },
 

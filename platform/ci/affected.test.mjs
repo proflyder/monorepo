@@ -1400,7 +1400,7 @@ function routeModuleFiles(changed, oldText, newText) {
   );
 }
 
-test("module routing: native-only edit reaches native and pulsar-bazel only", () => {
+test("module routing: native-only edit reaches native and every Rust Bazel unit", () => {
   const config = affected.loadConfig();
   const result = routeModuleFiles(
     [affected.MODULE_BAZEL],
@@ -1415,7 +1415,10 @@ test("module routing: native-only edit reaches native and pulsar-bazel only", ()
     "logon-provider",
     "pulsar",
   ]);
-  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["pulsar-bazel"]);
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
+    "ble-gateway",
+    "pulsar-bazel",
+  ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
   assert.deepEqual(affected.deployEntries(result, config), []);
   assert.equal(result.androidDistribute, false);

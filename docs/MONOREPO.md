@@ -76,6 +76,7 @@ engine, два entrypoint-а для совместимости.
 | Windows logon provider | Rust (`windows-rs`) | in-proc COM DLL для LogonUI; `rules_rust` + герметичный zig (`x86_64-pc-windows-gnu`) через Bazel, без Visual Studio; переносимые host-тесты и clippy под Windows |
 | HA-конфиг | YAML | существующий контур, не переписывать ради модности |
 | Pulsar (станция) | Rust (`rules_rust`, Zig cross) | first-party форк upstream, сборка Bazel |
+| `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; отдельный Cargo workspace рядом с Pulsar, host-тесты и armhf-кросс через Bazel |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
 | Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
 | `platform/deploy` (`home-deploy`) и runtime health exporter | Go | все инструменты деплоя и in-cluster Job/экспортер — один distroless-бинарник, без Python в кластере (решение 35) |
@@ -137,10 +138,10 @@ bazel test //packages/...
 bazel run //:gazelle
 ```
 
-`projects/station/ble-gateway` пока исключён из Bazel (`.bazelignore`) и
-собирается своим Go-модулем. Его перевод — отдельная миграция, чтобы не
-рисковать станцией. Android собирается root-инструментами в
-`projects/mobile/android`.
+`projects/station/ble-gateway` — отдельный Rust Cargo workspace на
+`rules_rust`/`zbus`, включён в Bazel: `//projects/station/ble-gateway:ble-gateway`
+собирается armhf тем же zig toolchain'ом, что и Pulsar. Android собирается
+root-инструментами в `projects/mobile/android`.
 
 `projects/station/pulsar` — Rust-хост на `rules_rust`: `crate_universe` берёт
 крейты из `satellite/Cargo.toml` + `Cargo.lock`, BUILD-цели лежат в

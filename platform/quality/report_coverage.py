@@ -53,9 +53,12 @@ def count_tests() -> dict[str, int]:
     for path in (p for base in (ROOT / "projects", ROOT / "platform") for p in base.rglob("test_*.py") if not any(part in {".venv", "resources"} for part in p.relative_to(ROOT).parts)):
         py += len(re.findall(r"^\s+def test_", path.read_text(), re.M))
     pairing = len(re.findall(r"^\s+def test_", (ROOT / "projects/station/resources/quasar-connect-bot/tests/test_pairing.py").read_text(), re.M))
-    go = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/ble-gateway").glob("*_test.go"))
+    rust_ble = sum(
+        len(re.findall(r"^\s*#\[(?:tokio::)?test\]", p.read_text(), re.M))
+        for p in (ROOT / "projects/station/ble-gateway/crates").rglob("*.rs")
+    )
     go_installer = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/pulsar/installer").glob("*_test.go"))
-    return {"python": py, "pairing": pairing, "go": go, "go_installer": go_installer}
+    return {"python": py, "pairing": pairing, "rust_ble": rust_ble, "go_installer": go_installer}
 
 
 def ha_metrics() -> dict[str, int]:
@@ -96,13 +99,12 @@ def percent(value: float | None) -> str:
 
 
 def main() -> int:
-    ble = go_total(ROOT / "reports" / "ble-gateway.cover", ROOT / "projects" / "station" / "ble-gateway")
     installer = go_total(ROOT / "reports" / "pulsar-installer.cover", ROOT / "projects" / "station" / "pulsar" / "installer")
     pairing = pairing_total()
     tests = count_tests()
     ha = ha_metrics()
 
-    ble_files = classify(ROOT / "projects/station/ble-gateway", ["*.go"])
+    ble_files = classify(ROOT / "projects/station/ble-gateway", ["crates/**/*.rs"])
     ha_files = classify(HA, ["**/*.yaml"])
     shell_files = classify(ROOT / "projects" / "home-assistant", ["**/*.sh"])
     script_files = classify(ROOT / "projects" / "station" / "scripts", ["*.sh", "*.py"])
@@ -119,7 +121,6 @@ def main() -> int:
     # labelled as an estimate, not as a Codecov-style percentage.
     covered_weight = (
         ha_loc * 1.0
-        + ble_loc * ((ble or 0) / 100)
         + shell_loc * 0.95
         + script_loc * 0.60  # egress + pairing CLI are tested; legacy ops scripts are static-only
         + pairing_loc * ((pairing or 0) / 100)
@@ -141,7 +142,7 @@ def main() -> int:
         "| Область | Объём | Что проверено | Статус |",
         "|---|---:|---|---|",
         f"| HA voice YAML | {ha_loc} строк, {ha['files']} файлов | {ha['scripts']}/{ha['scripts']} scripts, {ha['intents']}/{ha['intents']} intents, {ha['automations']}/{ha['automations']} automations, {ha['sentences']} фраз, {ha['templates']} Jinja-вхождений | ✅ структурно 100% |",
-        f"| BLE gateway (Go) | {ble_loc} строк | unit/HTTP/GATT/Wi-Fi mocks | {percent(ble)} statements |",
+        f"| BLE gateway (Rust) | {ble_loc} строк | unit/HTTP/GATT/Wi-Fi mocks | ⚠️ покрытие не измерено |",
         f"| home-assistant shell | {shell_loc} строк | `bash -n`, ShellCheck errors, `ctl.sh` команды | ✅ command paths + static |",
         f"| scripts (security/ops) | {script_loc} строк | syntax, egress-guard rules, pairing CLI | ✅ targeted |",
         f"| pairing core | {pairing_loc} строк | 15 unit tests | {percent(pairing)} lines |",
@@ -150,14 +151,14 @@ def main() -> int:
         "",
         f"**Взвешенная оценка по строкам:** ~**{estimate:.0f}%** первой-party поверхности.",
         "Это оценка, а не CI-метрика: HA YAML считается структурно проверенным (100%),",
-        "Rust satellite/hardware — 0%, Go/Python — по измеренному покрытию. Вендорные",
+        "Rust BLE gateway/satellite — 0%, Go/Python — по измеренному покрытию. Вендорные",
         "`resources/` (кроме активного pairing) в оценку не входят.",
         "",
         "## Тесты",
         "",
         f"- Python hermetic: **{tests['python']}**",
         f"- Existing pairing: **{tests['pairing']}**",
-        f"- Go BLE gateway: **{tests['go']}**",
+        f"- Rust BLE gateway: **{tests['rust_ble']}**",
         f"- Go Pulsar installer: **{tests['go_installer']}**",
         f"- Итого: **{sum(tests.values())}** тестовых функций",
         "",

@@ -7,7 +7,7 @@ BLE gateway и provisioning. Это **не** HA и не TTS-стек.
 
 ```text
 projects/station/pulsar/          Rust Pulsar (AGPL-3.0), включая radio/ и installer/
-projects/station/ble-gateway/     BLE provisioning gateway (пока вне Bazel)
+projects/station/ble-gateway/     BLE provisioning gateway (Rust, Bazel)
 projects/station/scripts/station-*  station-side операции
 docs/OTA-FORTRESS.md
 docs/PROVISIONING.md

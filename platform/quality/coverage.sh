@@ -9,9 +9,6 @@ mkdir -p reports
 echo "== hermetic test suite =="
 ./platform/quality/run-tests.sh
 
-echo "== Go coverage: BLE gateway =="
-(cd projects/station/ble-gateway && go test -coverprofile="$ROOT/reports/ble-gateway.cover" ./...)
-
 echo "== Go coverage: Pulsar installer =="
 (cd projects/station/pulsar/installer && GOWORK=off go test -coverprofile="$ROOT/reports/pulsar-installer.cover" ./...)
 
