@@ -167,7 +167,10 @@ bazel test  //projects/station/pulsar/satellite/...
 ```
 
 `bazel test` для Pulsar включает юнит- и интеграционные тесты, golden-файлы,
-`rustfmt` и `clippy` (warnings = errors). На macOS те же
+`rustfmt` и `clippy` (warnings = errors). `clippy` линтует ровно
+`[workspace.lints]` корневого `/Cargo.toml`: каждый crate-пакет передаёт
+`extract_cargo_lints(... workspace = "//:Cargo.toml")` в `lint_config`, поэтому
+`cargo clippy --workspace` и Bazel дают один набор предупреждений. На macOS те же
 цели несовместимы и пропускаются; реальная сборка/тесты — только на Linux.
 Станционная кросс-сборка и разбор crash-файла — там же:
 

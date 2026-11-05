@@ -27,7 +27,7 @@ pub fn validate_wifi(ssid: &[u8], psk: &[u8]) -> Result<(), &'static str> {
         return Err("EMPTY_PSK");
     }
     if psk.len() == 64 {
-        if psk.iter().all(|b| b.is_ascii_hexdigit()) {
+        if psk.iter().all(u8::is_ascii_hexdigit) {
             return Ok(());
         }
         return Err("BAD_PSK");
@@ -55,7 +55,7 @@ pub fn wpa_quote(value: &str) -> String {
     out
 }
 
-fn combine(output: std::process::Output) -> (String, bool) {
+fn combine(output: &std::process::Output) -> (String, bool) {
     let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
     text.push_str(&String::from_utf8_lossy(&output.stderr));
     (text.trim().to_string(), output.status.success())
@@ -90,7 +90,7 @@ impl Wpa {
             .output()
             .await;
         match output {
-            Ok(output) => combine(output),
+            Ok(output) => combine(&output),
             Err(err) => (err.to_string(), false),
         }
     }
@@ -121,7 +121,7 @@ impl Wpa {
             drop(stdin);
         }
         match child.wait_with_output().await {
-            Ok(output) => combine(output),
+            Ok(output) => combine(&output),
             Err(err) => (err.to_string(), false),
         }
     }
@@ -237,10 +237,10 @@ impl Wpa {
         }
         if failure.is_none() {
             let (list, ok) = self.cli(&["list_networks"]).await;
-            if !ok {
-                failure = Some(list);
-            } else {
+            if ok {
                 failure = Some(format!("temporary network id={id} set OK; list:\n{list}"));
+            } else {
+                failure = Some(list);
             }
         }
         let _ = self.remove_network(id).await;
@@ -283,13 +283,10 @@ impl Gateway {
             self.set_status("ERROR:ADD_NETWORK").await;
             return;
         }
-        let id = match out.trim().parse::<i32>() {
-            Ok(id) => id,
-            Err(_) => {
-                logf!(self.logger, "add_network: bad output {out:?}");
-                self.set_status("ERROR:ADD_NETWORK").await;
-                return;
-            }
+        let Ok(id) = out.trim().parse::<i32>() else {
+            logf!(self.logger, "add_network: bad output {out:?}");
+            self.set_status("ERROR:ADD_NETWORK").await;
+            return;
         };
         logf!(self.logger, "new network id={id}");
 

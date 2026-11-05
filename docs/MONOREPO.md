@@ -76,7 +76,7 @@ engine, два entrypoint-а для совместимости.
 | Windows logon provider | Rust (`windows-rs`) | in-proc COM DLL для LogonUI; `rules_rust` + герметичный zig (`x86_64-pc-windows-gnu`) через Bazel, без Visual Studio; переносимые host-тесты и clippy под Windows |
 | HA-конфиг | YAML | существующий контур, не переписывать ради модности |
 | Pulsar (станция) | Rust (`rules_rust`, Zig cross) | first-party форк upstream, сборка Bazel |
-| `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; отдельный Cargo workspace рядом с Pulsar, host-тесты и armhf-кросс через Bazel |
+| `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; члены общего корневого Cargo workspace, host-тесты и armhf-кросс через Bazel |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
 | Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
 | `platform/deploy` (`home-deploy`) и runtime health exporter | Go | все инструменты деплоя и in-cluster Job/экспортер — один distroless-бинарник, без Python в кластере (решение 35) |
@@ -98,6 +98,10 @@ MODULE.bazel.lock  зафиксированные зависимости
 .bazelrc           cache/вывод
 .bazelignore       тяжёлые/чужие/legacy каталоги
 BUILD.bazel        //:gazelle
+Cargo.toml         единый Cargo workspace всего first-party Rust
+Cargo.lock         единственный lockfile workspace (cargo)
+crate-universe.lock  generated Bazel lock для @crates
+rust-toolchain.toml  канал 1.99.1 и targets всех Rust-целей
 go.mod             Go module для новых решений
 go.work            workspace корня и отслеживаемого BLE-модуля
 ```
@@ -138,13 +142,32 @@ bazel test //packages/...
 bazel run //:gazelle
 ```
 
-`projects/station/ble-gateway` — отдельный Rust Cargo workspace на
-`rules_rust`/`zbus`, включён в Bazel: `//projects/station/ble-gateway:ble-gateway`
-собирается armhf тем же zig toolchain'ом, что и Pulsar. Android собирается
-root-инструментами в `projects/mobile/android`.
+`projects/station/ble-gateway` — Rust-крейт `zbus`/`tokio` на `rules_rust`:
+`//projects/station/ble-gateway:ble-gateway` собирается armhf тем же zig
+toolchain'ом, что и Pulsar. Android собирается root-инструментами в
+`projects/mobile/android`.
 
-`projects/station/pulsar` — Rust-хост на `rules_rust`: `crate_universe` берёт
-крейты из `satellite/Cargo.toml` + `Cargo.lock`, BUILD-цели лежат в
+### Rust: единый workspace
+
+Весь first-party Rust — один Cargo workspace в корне (`/Cargo.toml`,
+`/Cargo.lock`, `/rust-toolchain.toml`): Pulsar (`satellite/crates/*`), BLE
+gateway, Windows logon provider и станционный helper. Общий
+`[workspace.dependencies]` пинит точные версии, `[workspace.package]` задаёт
+edition 2024 и `rust-version`, `[workspace.lints]` — единый набор rust/clippy
+предупреждений (CI собирает с `-D warnings`). Общий код с двумя и более
+потребителями живёт в `packages/rust/`; solution/package не импортирует
+project.
+
+Bazel читает тот же workspace: одно расширение `crate.from_cargo(name =
+"crates", ...)` с `//:Cargo.lock` и сгенерированным
+`//:crate-universe.lock` порождает `@crates//` для всех Rust-целей. Каждый
+crate-пакет объявляет `extract_cargo_lints(... workspace = "//:Cargo.toml")` и
+передаёт его в `lint_config`, поэтому `cargo clippy` и `rust_clippy_test`
+линтуют ровно `[workspace.lints]`. `MODULE.bazel` держит объединённый набор
+`supported_platform_triples` (host macOS/Linux, обе станционные архитектуры,
+`x86_64-pc-windows-gnu`).
+
+`projects/station/pulsar` — Rust-хост на `rules_rust`: BUILD-цели лежат в
 `satellite/crates/*`, а тесты/fmt/clippy идут юнитом `pulsar-bazel`
 (`_bazel.yml`). Станции собирает тот же Bazel: герметичный zig 0.14.1
 cc-toolchain (`platform/bazel/zig/`) с платформами `aarch64_linux`/`armhf_linux`,

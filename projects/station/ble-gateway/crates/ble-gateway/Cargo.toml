@@ -21,3 +21,6 @@ path = "src/bin/bletest.rs"
 tokio.workspace = true
 zbus.workspace = true
 time.workspace = true
+
+[lints]
+workspace = true

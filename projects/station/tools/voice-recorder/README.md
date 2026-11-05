@@ -29,8 +29,8 @@ Pulsar.** Физический mute не включать: он может вы�
 ## Подготовка
 
 Нужен актуальный checkout `projects/station/pulsar` (входит в монорепозиторий),
-Rust/cargo-zigbuild, ARM target и Zig 0.14.1. Отдельный Cargo package
-ссылается на его audio/core crates; сам Pulsar не редактируется.
+Rust/cargo-zigbuild, ARM target и Zig 0.14.1. Helper — член корневого Cargo
+workspace и ссылается на audio/core crates Pulsar; сам Pulsar не редактируется.
 
 ```sh
 .venv/bin/pip install -r projects/station/tools/voice-recorder/requirements.txt
@@ -41,8 +41,8 @@ projects/station/tools/voice-recorder/build-helper.sh
 
 Другой Zig: `ZIG=/path/to/zig .../build-helper.sh`. Бинарник и target cache
 остаются в `secrets/local-tools/voice-recorder-target/`. Версии зависимостей
-helper закреплены в Cargo.lock. Сборка armhf; для других моделей ABI
-необходимо отдельно проверить до запуска.
+helper закреплены в корневом `/Cargo.lock` (общий workspace). Сборка armhf; для
+других моделей ABI необходимо отдельно проверить до запуска.
 
 Создайте приватный `secrets/voice-recorder/connection.json` (chmod 600):
 

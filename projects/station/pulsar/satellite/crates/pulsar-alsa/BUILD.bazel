@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -5,9 +6,9 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
-    "@pulsar_crates//:libc",
-    "@pulsar_crates//:libloading",
-    "@pulsar_crates//:log",
+    "@crates//:libc",
+    "@crates//:libloading",
+    "@crates//:log",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
 
@@ -18,6 +19,7 @@ rust_library(
         exclude = ["src/bin/**"],
     ),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS,
 )
@@ -26,6 +28,7 @@ rust_binary(
     name = "alsa_abi_probe",
     srcs = ["src/bin/alsa_abi_probe.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS + [":pulsar_alsa"],
 )
@@ -34,5 +37,13 @@ rust_test(
     name = "pulsar_alsa_unit_tests",
     crate = ":pulsar_alsa",
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

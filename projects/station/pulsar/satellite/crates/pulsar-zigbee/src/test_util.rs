@@ -12,7 +12,7 @@ use crate::link::{ACK, Link, build_frame};
 
 /// Polls `f` once; None if it is not ready. Used to run the link and the radio in lock-step from
 /// a single task, so that paused time only moves when the test says so.
-pub(crate) fn poll_once<F: Future>(f: F) -> Option<F::Output> {
+pub fn poll_once<F: Future>(f: F) -> Option<F::Output> {
     let mut f = pin!(f);
     match f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
         Poll::Ready(v) => Some(v),
@@ -20,7 +20,7 @@ pub(crate) fn poll_once<F: Future>(f: F) -> Option<F::Output> {
     }
 }
 
-pub(crate) fn hex(p: &[u8]) -> String {
+pub fn hex(p: &[u8]) -> String {
     if p.is_empty() {
         return "-".into();
     }
@@ -28,7 +28,7 @@ pub(crate) fn hex(p: &[u8]) -> String {
 }
 
 /// Compares with a golden file line by line, naming the first difference.
-pub(crate) fn assert_golden(golden: &str, actual: &str) {
+pub fn assert_golden(golden: &str, actual: &str) {
     let want: Vec<&str> = golden.lines().collect();
     let got: Vec<&str> = actual.lines().collect();
     for (i, (w, g)) in want.iter().zip(&got).enumerate() {
@@ -42,7 +42,7 @@ pub(crate) fn assert_golden(golden: &str, actual: &str) {
 }
 
 /// The chip's end of an in-memory link.
-pub(crate) struct Radio {
+pub struct Radio {
     io: DuplexStream,
     rx: Vec<u8>,
 }
@@ -56,7 +56,7 @@ impl Radio {
             let mut rb = ReadBuf::new(&mut buf);
             match Pin::new(&mut self.io).poll_read(&mut cx, &mut rb) {
                 Poll::Ready(Ok(())) if !rb.filled().is_empty() => {
-                    self.rx.extend_from_slice(rb.filled())
+                    self.rx.extend_from_slice(rb.filled());
                 }
                 _ => break,
             }
@@ -97,7 +97,7 @@ impl Radio {
 }
 
 /// A link (reset as at open) and the radio's end of its wire.
-pub(crate) fn link_pair(lines: &RadioLines) -> (Link, Radio) {
+pub fn link_pair(lines: &RadioLines) -> (Link, Radio) {
     let (a, b) = tokio::io::duplex(1 << 16);
     (
         Link::over(a, lines),
@@ -109,7 +109,7 @@ pub(crate) fn link_pair(lines: &RadioLines) -> (Link, Radio) {
 }
 
 /// Reset / boot files that do not exist: the link boots at once without driving anything.
-pub(crate) fn absent_lines() -> RadioLines {
+pub fn absent_lines() -> RadioLines {
     RadioLines {
         tty: String::new(),
         reset: "/nonexistent/zb-reset/value".into(),
@@ -118,12 +118,12 @@ pub(crate) fn absent_lines() -> RadioLines {
 }
 
 /// Reset and boot value files in a temporary directory.
-pub(crate) struct Lines {
+pub struct Lines {
     dir: PathBuf,
 }
 
 impl Lines {
-    pub(crate) fn new() -> Lines {
+    pub(crate) fn new() -> Self {
         static N: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
             "pulsar-zigbee-{}-{}",
@@ -134,7 +134,7 @@ impl Lines {
         for f in ["reset", "boot"] {
             std::fs::write(dir.join(f), "x").unwrap();
         }
-        Lines { dir }
+        Self { dir }
     }
 
     pub(crate) fn radio_lines(&self) -> RadioLines {
@@ -164,7 +164,7 @@ impl Drop for Lines {
 }
 
 /// A valid .ybl image of `version` (0x200 bytes + CRC-32 trailer).
-pub(crate) fn ybl_image(version: u32) -> Vec<u8> {
+pub fn ybl_image(version: u32) -> Vec<u8> {
     let size = 0x200usize;
     let mut v: Vec<u8> = (0..size).map(|i| (i * 7 + 3) as u8).collect();
     v[2..6].copy_from_slice(&version.to_le_bytes());

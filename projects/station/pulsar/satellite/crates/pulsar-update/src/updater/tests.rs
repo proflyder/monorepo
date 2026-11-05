@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::*;
@@ -7,7 +8,7 @@ use crate::test_server::{End, Reply, Server, data, ok, raw, redirect};
 struct TempDir(PathBuf);
 
 impl TempDir {
-    fn new() -> TempDir {
+    fn new() -> Self {
         static N: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
             "pulsar-update-test-{}-{}",
@@ -15,7 +16,7 @@ impl TempDir {
             N.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&dir).expect("temp dir");
-        TempDir(dir)
+        Self(dir)
     }
 
     fn join(&self, name: &str) -> PathBuf {
@@ -195,12 +196,9 @@ fn json_manifest(version: Option<&str>, layers: &[(&str, &str)]) -> Vec<u8> {
             )
         })
         .collect();
-    let annotations = match version {
-        Some(version) => {
-            format!(r#","annotations":{{"org.opencontainers.image.version":"{version}"}}"#)
-        }
-        None => String::new(),
-    };
+    let annotations = version.map_or_else(String::new, |version| {
+        format!(r#","annotations":{{"org.opencontainers.image.version":"{version}"}}"#)
+    });
     format!(
         r#"{{"schemaVersion":2,"layers":[{}]{annotations}}}"#,
         layers.join(",")
@@ -744,7 +742,7 @@ async fn cancel_after_download(
     let mut sums = format!("{}  pulsar-host.bin\n", sha256_hex(&bin));
     let (up, mut events) = spawn_test(&s);
     if let Some(extra) = extra {
-        sums += &format!("{}  zigbee-router.ybl\n", sha256_hex(b"router"));
+        let _ = writeln!(sums, "{}  zigbee-router.ybl", sha256_hex(b"router"));
         s.route("/dl/v9.9.9/zigbee-router.ybl", extra);
         up.add_extra_asset("zigbee-router.ybl", dir.join("zigbee-router.ybl"));
     }

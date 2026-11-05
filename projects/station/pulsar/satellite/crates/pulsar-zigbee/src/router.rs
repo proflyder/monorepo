@@ -71,8 +71,8 @@ fn join_error(bdb_status: u8) -> String {
 impl Router {
     /// `link`: open, the running firmware identified as pulsar's router. Events the link had
     /// already queued are the router's.
-    pub fn new(link: Link) -> Router {
-        Router {
+    pub fn new(link: Link) -> Self {
+        Self {
             link,
             timers: Timers::new(),
             st: State::default(),

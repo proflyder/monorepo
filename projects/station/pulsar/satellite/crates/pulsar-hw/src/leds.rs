@@ -405,16 +405,16 @@ pub fn spawn_leds(model: &'static Model) -> LedsHandle {
     let n = usize::try_from(model.ring.count).unwrap_or(0);
     let nlogo = usize::try_from(model.logo.count).unwrap_or(0);
     let sink = if !model.ring.i2c_dev.is_empty() {
-        match open_i2c(model, n, nlogo) {
-            Some(sink) => {
+        open_i2c(model, n, nlogo).map_or_else(
+            || Sink::None,
+            |sink| {
                 info!(
                     "leds: driving {n} ring LEDs via i2c {}@0x{:02x}",
                     model.ring.i2c_dev, model.ring.i2c_addr
                 );
                 sink
-            }
-            None => Sink::None,
-        }
+            },
+        )
     } else if let Some(fb) = open_fb(model, nlogo) {
         info!("leds: driving {n} ring + {nlogo} logo LEDs via framebuffer");
         fb
@@ -780,12 +780,11 @@ fn open_sysfs(model: &Model, n: usize, nlogo: usize) -> Option<Vec<File>> {
                 led_name(model, &model.logo, c, (i - n) as i32)
             };
             let path = format!("{LED_DIR}{name}/brightness");
-            match std::fs::OpenOptions::new().write(true).open(&path) {
-                Ok(f) => files.push(f),
-                Err(_) => {
-                    error!("leds: cannot open {path}");
-                    return None;
-                }
+            if let Ok(f) = std::fs::OpenOptions::new().write(true).open(&path) {
+                files.push(f);
+            } else {
+                error!("leds: cannot open {path}");
+                return None;
             }
         }
     }
@@ -1363,15 +1362,13 @@ impl Compositor {
 
         // Fades: between layers 250 ms (the volume overlay appears at once), user light changes
         // over their transition.
-        let mut fade = None;
-        if lay != self.layer {
-            fade = Some(if lay == Layer::Volume { 0 } else { FADE_MS });
-        }
-        if self.user_changed
+        let fade = if self.user_changed
             && (lay == Layer::User || (self.layer == Layer::User && lay != self.layer))
         {
-            fade = Some(i64::from(self.user_transition));
-        }
+            Some(i64::from(self.user_transition))
+        } else {
+            (lay != self.layer).then(|| if lay == Layer::Volume { 0 } else { FADE_MS })
+        };
         self.user_changed = false;
         self.layer = lay;
         if let Some(f) = fade {

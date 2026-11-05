@@ -14,6 +14,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::cell::Cell;
+use std::fmt::Write as _;
 use std::io::Write as _;
 use std::os::unix::fs::FileExt as _;
 use std::process::ExitCode;
@@ -44,7 +45,7 @@ fn main() -> ExitCode {
     pulsar_core::add_own_target(module_path!());
     let args: Vec<String> = std::env::args().skip(1).collect();
     let arg = |i: usize, default: u64| args.get(i).map_or(Some(default), |s| s.parse::<u64>().ok());
-    let cmd = args.first().map(String::as_str).unwrap_or("");
+    let cmd = args.first().map_or("", String::as_str);
     let (a, b) = match cmd {
         "leds" | "clock" => (arg(1, 2000), Some(0)),
         "input" => (arg(1, 15), Some(0)),
@@ -123,10 +124,10 @@ fn ring_dump(model: &Model) -> String {
     let step = if model.ring.count > 6 { 3 } else { 1 };
     let mut s = String::new();
     for i in (0..model.ring.count).step_by(step) {
-        s += &format!("{i}:{} ", hex(rgb_values(model, &model.ring, i)));
+        let _ = write!(s, "{i}:{} ", hex(rgb_values(model, &model.ring, i)));
     }
     if model.logo.count > 0 {
-        s += &format!("logo0:{}", hex(rgb_values(model, &model.logo, 0)));
+        let _ = write!(s, "logo0:{}", hex(rgb_values(model, &model.logo, 0)));
     }
     s
 }
@@ -189,14 +190,12 @@ fn check_strip(model: &Model, s: &LedStrip, what: &str, fb: [u8; 3]) -> bool {
     for i in 0..s.count {
         let v = rgb_values(model, s, i);
         ok &= v.iter().zip(want).all(|(g, w)| (g - w).abs() <= 3);
-        got += &format!(" {},{},{}", v[0], v[1], v[2]);
+        let _ = write!(got, " {},{},{}", v[0], v[1], v[2]);
     }
     // pulsar-hw uses the framebuffers only if the ring's and the logo's both qualify.
     let fb_output =
         fb_mode(model, &model.ring) && (model.logo.count == 0 || fb_mode(model, &model.logo));
-    let fb_state = if !fb_output {
-        "fb not checked (sysfs output)".to_owned()
-    } else {
+    let fb_state = if fb_output {
         match strip_fb(s) {
             Some(px) if px.iter().all(|p| *p == fb) => "fb ok".to_owned(),
             Some(px) => {
@@ -208,6 +207,8 @@ fn check_strip(model: &Model, s: &LedStrip, what: &str, fb: [u8; 3]) -> bool {
                 "fb not readable".to_owned()
             }
         }
+    } else {
+        "fb not checked (sysfs output)".to_owned()
     };
     say(&format!(
         "   check {what} ({}): fb {},{},{} {fb_state}; sysfs want {},{},{} got{got}: {}",
@@ -378,7 +379,7 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
     for v in [0.6f32, 1.0] {
         let l = leds.clone();
         steps.push(step(format!("show_volume {v:.1}"), move || {
-            l.show_volume(v)
+            l.show_volume(v);
         }));
     }
     for &style in &pulsar_hw::music_styles()[2..] {
@@ -422,7 +423,7 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
     // The 600 ms mute sweep shows over the countdown, which then goes on (green at the dumps).
     let l = leds.clone();
     steps.push(step("mic muted during the countdown", move || {
-        l.set_muted(true)
+        l.set_muted(true);
     }));
     let l = leds.clone();
     steps.push(step("mic unmuted during the countdown", move || {
@@ -661,12 +662,12 @@ fn clock_values(model: &Model) -> String {
     let mut s = String::new();
     for d in 0..4 {
         for seg in 0..7 {
-            s += &format!("{:02x}", clock_led(model, &seg_name(model, d, seg)));
+            let _ = write!(s, "{:02x}", clock_led(model, &seg_name(model, d, seg)));
         }
         s.push(' ');
     }
     if !model.clock_center.is_empty() {
-        s += &format!("c={:02x}", clock_led(model, model.clock_center));
+        let _ = write!(s, "c={:02x}", clock_led(model, model.clock_center));
     }
     s
 }
@@ -785,7 +786,7 @@ fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHan
     ));
     let c = clock.clone();
     steps.push(step("clock set_timer 125 s", move || {
-        c.set_timer(125_000, true)
+        c.set_timer(125_000, true);
     }));
     let c = clock.clone();
     let a = ambient[0];
@@ -814,7 +815,7 @@ fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHan
     steps.push(step("clock SPEAKING", st(UiState::Speaking)));
     let c = clock.clone();
     steps.push(step("clock voice indication off", move || {
-        c.set_voice_indication(false)
+        c.set_voice_indication(false);
     }));
     steps.push(step("clock TIMER_RING", st(UiState::TimerRing)));
     let c = clock.clone();

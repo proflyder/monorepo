@@ -115,7 +115,7 @@ impl Writer {
                 }
             }
             match self.jobs.recv_timeout(Duration::from_millis(WAKE_MS)) {
-                Ok(Job::Save(rec)) => self.save(*rec),
+                Ok(Job::Save(rec)) => self.save(&rec),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
@@ -131,10 +131,13 @@ impl Writer {
 
     fn load(&mut self) {
         let path = self.dir.join("stats.json");
-        self.base = match fs::read_to_string(&path) {
-            Ok(text) => match logic::parse_stats(&text) {
-                Some(s) => s,
-                None => {
+        self.base = fs::read_to_string(&path).map_or_else(
+            |_| Stats {
+                since_utc: logic::format_utc(logic::utc_ms()),
+                ..Stats::default()
+            },
+            |text| {
+                logic::parse_stats(&text).unwrap_or_else(|| {
                     warn!(
                         "wake events: {} is not valid, counters start over",
                         path.display()
@@ -143,13 +146,9 @@ impl Writer {
                         since_utc: logic::format_utc(logic::utc_ms()),
                         ..Stats::default()
                     }
-                }
+                })
             },
-            Err(_) => Stats {
-                since_utc: logic::format_utc(logic::utc_ms()),
-                ..Stats::default()
-            },
-        };
+        );
         self.index = scan(&self.dir);
         info!(
             "wake events: {} event(s) on disk, {:.1} listening hour(s) since {}",
@@ -187,7 +186,7 @@ impl Writer {
         self.last_written = Some(stats);
     }
 
-    fn save(&mut self, rec: Recording) {
+    fn save(&mut self, rec: &Recording) {
         let side = Sidecar {
             schema: 1,
             id: rec.id.clone(),
@@ -421,7 +420,7 @@ mod tests {
             label_source: None,
         };
         let id = rec.id.clone();
-        w.save(rec);
+        w.save(&rec);
         made(&dir, &id);
         // The sidecar has the contract shape and the WAV is 1 s of PCM16.
         let side = w.read_sidecar(&id).unwrap();
@@ -482,7 +481,7 @@ mod tests {
             stt_text: None,
         });
         assert_eq!(w.pending_outcomes.len(), 1);
-        w.save(rec);
+        w.save(&rec);
         assert!(w.pending_outcomes.is_empty());
         let side = w.read_sidecar(&id).unwrap();
         assert_eq!(side.outcome.as_deref(), Some("arbiter_lost"));
@@ -508,7 +507,7 @@ mod tests {
             label_source: None,
         };
         let id = rec.id.clone();
-        w.save(rec);
+        w.save(&rec);
         let side = w.read_sidecar(&id).unwrap();
         assert!(side.dry_run);
         assert_eq!(side.outcome.as_deref(), Some("dry_run"));
@@ -522,7 +521,7 @@ mod tests {
         let (mut w, _) = writer(&dir);
         let now = logic::utc_ms();
         for (k, kind) in [(1, Kind::Near), (2, Kind::Hit)] {
-            w.save(Recording {
+            w.save(&Recording {
                 id: logic::event_id(now + k, kind, k as u64),
                 kind,
                 utc_ms: now + k,

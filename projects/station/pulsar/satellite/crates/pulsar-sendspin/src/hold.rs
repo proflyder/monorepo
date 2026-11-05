@@ -12,18 +12,18 @@ use pulsar_core::Timers;
 
 /// Timers of the service actor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Key {
+pub enum Key {
     /// `SendspinClient::loop()` cadence (sendspin-cpp integration guide).
     Tick,
     /// Held stream end.
     StreamEnd,
 }
 
-pub(crate) const STREAM_END_HOLD_MS: u64 = 1000;
+pub const STREAM_END_HOLD_MS: u64 = 1000;
 
 /// Each method returns the `Stream(..)` event to send, if any; `streaming` (the handle's getter)
 /// is already updated when it returns.
-pub(crate) struct StreamHold {
+pub struct StreamHold {
     streaming: Rc<Cell<bool>>,
     group_stopped: bool,
 }

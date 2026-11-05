@@ -2,12 +2,9 @@ load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rustfmt_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Cargo workspace manifest and lock are the source of truth for crate_universe;
-# crate-universe.lock is the generated Bazel lock (see MODULE.bazel).
+# The release package artifact helpers. Cargo manifests/locks live in the root
+# workspace (/Cargo.toml) and are read by crate_universe from there.
 exports_files([
-    "Cargo.lock",
-    "Cargo.toml",
-    "crate-universe.lock",
     "pe_artifacts.py",
 ])
 

@@ -9,35 +9,35 @@ use std::collections::BTreeMap;
 use crate::Error;
 
 /// Bodies above this size are rejected before parsing.
-pub(crate) const MAX_JSON_BYTES: usize = 64 * 1024;
+pub const MAX_JSON_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum JsonValue {
+pub enum JsonValue {
     String(String),
     Number(i64),
     Boolean(bool),
 }
 
-pub(crate) type JsonObject = BTreeMap<String, JsonValue>;
+pub type JsonObject = BTreeMap<String, JsonValue>;
 
 /// Parses a flat JSON object. Keys may appear in any order and may repeat only
 /// once; unknown keys are kept so callers can inspect them.
-pub(crate) fn parse(body: &str) -> Result<JsonObject, Error> {
+pub fn parse(body: &str) -> Result<JsonObject, Error> {
     Reader::new(body.as_bytes()).parse()
 }
 
-pub(crate) fn find_value<'a>(object: &'a JsonObject, key: &str) -> Option<&'a JsonValue> {
+pub fn find_value<'a>(object: &'a JsonObject, key: &str) -> Option<&'a JsonValue> {
     object.get(key)
 }
 
-pub(crate) fn get_string<'a>(object: &'a JsonObject, key: &str) -> Option<&'a str> {
+pub fn get_string<'a>(object: &'a JsonObject, key: &str) -> Option<&'a str> {
     match find_value(object, key) {
         Some(JsonValue::String(text)) => Some(text),
         _ => None,
     }
 }
 
-pub(crate) fn get_bool(object: &JsonObject, key: &str) -> Option<bool> {
+pub fn get_bool(object: &JsonObject, key: &str) -> Option<bool> {
     match find_value(object, key) {
         Some(JsonValue::Boolean(value)) => Some(*value),
         _ => None,

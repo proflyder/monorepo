@@ -10,3 +10,6 @@ libc = { workspace = true }
 libloading = { workspace = true }
 log = { workspace = true }
 pulsar-core = { path = "../pulsar-core" }
+
+[lints]
+workspace = true

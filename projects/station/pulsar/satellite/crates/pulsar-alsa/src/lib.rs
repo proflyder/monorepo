@@ -37,16 +37,14 @@ pub fn has_modern_aliases() -> bool {
 
 /// snd_strerror; without libasound, the C library's text for the errno.
 pub fn strerror(err: i32) -> String {
-    match ffi::lib() {
-        Ok(lib) => lib.strerror(err),
-        Err(_) => {
+    ffi::lib().map_or_else(
+        |_| {
             let s = std::io::Error::from_raw_os_error(err.saturating_neg()).to_string();
-            match s.find(" (os error") {
-                Some(i) => s[..i].to_owned(),
-                None => s,
-            }
-        }
-    }
+            s.find(" (os error")
+                .map_or_else(|| s.clone(), |i| s[..i].to_owned())
+        },
+        |lib| lib.strerror(err),
+    )
 }
 
 /// Process-wide: alsa-lib's own diagnostics go to the debug log (without their message text).
@@ -72,17 +70,17 @@ pub enum Format {
 impl Format {
     fn bytes(self) -> usize {
         match self {
-            Format::S16Le => 2,
-            Format::S24_3Le => 3,
-            Format::S32Le => 4,
+            Self::S16Le => 2,
+            Self::S24_3Le => 3,
+            Self::S32Le => 4,
         }
     }
 
     fn raw(self) -> i32 {
         match self {
-            Format::S16Le => ffi::FORMAT_S16_LE,
-            Format::S24_3Le => ffi::FORMAT_S24_3LE,
-            Format::S32Le => ffi::FORMAT_S32_LE,
+            Self::S16Le => ffi::FORMAT_S16_LE,
+            Self::S24_3Le => ffi::FORMAT_S24_3LE,
+            Self::S32Le => ffi::FORMAT_S32_LE,
         }
     }
 }
@@ -129,7 +127,7 @@ fn ok(rc: i32) -> Result<(), i32> {
 
 impl Pcm {
     /// Err = negative ALSA errno.
-    pub fn open(name: &str, stream: Stream, nonblock: bool) -> Result<Pcm, i32> {
+    pub fn open(name: &str, stream: Stream, nonblock: bool) -> Result<Self, i32> {
         let lib = ffi::lib().map_err(|_| -libc::ENOENT)?;
         let name = ffi::c_name(name)?;
         let stream = match stream {
@@ -138,7 +136,7 @@ impl Pcm {
         };
         let mode = if nonblock { ffi::PCM_NONBLOCK } else { 0 };
         let raw = lib.pcm_open(&name, stream, mode)?;
-        Ok(Pcm {
+        Ok(Self {
             raw,
             frame_bytes: 0,
         })
@@ -315,10 +313,10 @@ pub struct Ctl {
 
 impl Ctl {
     /// `name`: a card, e.g. "hw:0".
-    pub fn open(name: &str) -> Result<Ctl, i32> {
+    pub fn open(name: &str) -> Result<Self, i32> {
         let lib = ffi::lib().map_err(|_| -libc::ENOENT)?;
         let name = ffi::c_name(name)?;
-        Ok(Ctl {
+        Ok(Self {
             raw: lib.ctl_open(&name)?,
         })
     }
@@ -356,9 +354,8 @@ impl Ctl {
 mod tests {
     #[test]
     fn load_from_missing_library_reports_dlerror() {
-        let err = match super::ffi::load_from("libasound-does-not-exist.so.2") {
-            Ok(_) => panic!("a missing library loaded"),
-            Err(e) => e,
+        let Err(err) = super::ffi::load_from("libasound-does-not-exist.so.2") else {
+            panic!("a missing library loaded");
         };
         assert!(err.contains("libasound-does-not-exist.so.2"), "{err}");
         assert!(err.contains("cannot open shared object file"), "{err}");

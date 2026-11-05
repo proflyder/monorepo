@@ -28,9 +28,9 @@ pub struct Col {
 }
 
 impl Mul<f32> for Col {
-    type Output = Col;
-    fn mul(self, k: f32) -> Col {
-        Col {
+    type Output = Self;
+    fn mul(self, k: f32) -> Self {
+        Self {
             r: self.r * k,
             g: self.g * k,
             b: self.b * k,
@@ -39,9 +39,9 @@ impl Mul<f32> for Col {
 }
 
 impl Add for Col {
-    type Output = Col;
-    fn add(self, o: Col) -> Col {
-        Col {
+    type Output = Self;
+    fn add(self, o: Self) -> Self {
+        Self {
             r: self.r + o.r,
             g: self.g + o.g,
             b: self.b + o.b,
@@ -253,29 +253,29 @@ const BLUE: Palette = Palette {
 };
 
 impl VoiceColor {
-    pub const ALL: [VoiceColor; 2] = [VoiceColor::Violet, VoiceColor::Blue];
+    pub const ALL: [Self; 2] = [Self::Violet, Self::Blue];
 
     /// `state.conf` (`voice_color=`) and the ESPHome option.
     pub fn label(self) -> &'static str {
         match self {
-            VoiceColor::Violet => "Violet",
-            VoiceColor::Blue => "Blue",
+            Self::Violet => "Violet",
+            Self::Blue => "Blue",
         }
     }
 
     /// Anything but "Blue" is the stock violet: an unknown key in `state.conf` must not change
     /// the look.
-    pub fn from_label(s: &str) -> VoiceColor {
+    pub fn from_label(s: &str) -> Self {
         match s {
-            "Blue" => VoiceColor::Blue,
-            _ => VoiceColor::Violet,
+            "Blue" => Self::Blue,
+            _ => Self::Violet,
         }
     }
 
     fn palette(self) -> Palette {
         match self {
-            VoiceColor::Violet => VIOLET,
-            VoiceColor::Blue => BLUE,
+            Self::Violet => VIOLET,
+            Self::Blue => BLUE,
         }
     }
 }
@@ -765,7 +765,7 @@ pub enum Style {
 }
 
 impl Style {
-    pub const ALL: [Style; 4] = [Style::Spectrum, Style::Pulse, Style::Disco, Style::Polar];
+    pub const ALL: [Self; 4] = [Self::Spectrum, Self::Pulse, Self::Disco, Self::Polar];
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

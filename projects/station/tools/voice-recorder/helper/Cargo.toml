@@ -1,12 +1,14 @@
 [package]
 name = "ricardo-voicestream"
 version = "0.1.0"
-edition = "2024"
-publish = false
-
-[workspace]
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
 
 [dependencies]
 pulsar-audio = { path = "../../../pulsar/satellite/crates/pulsar-audio" }
 pulsar-core = { path = "../../../pulsar/satellite/crates/pulsar-core" }
-tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time", "macros"] }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

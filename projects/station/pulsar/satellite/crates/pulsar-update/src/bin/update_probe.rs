@@ -128,7 +128,7 @@ async fn get(url: &str) -> ExitCode {
 }
 
 async fn check(repo: &str) -> ExitCode {
-    let (up, mut events) = pulsar_update::spawn(repo.into(), "probe".into());
+    let (up, mut events) = pulsar_update::spawn(repo.into(), "probe");
     up.check();
     while let Some(ev) = events.recv().await {
         if let UpdateEvent::Checked { result, .. } = ev {
@@ -155,7 +155,7 @@ async fn install(args: &[String], binary: PathBuf) -> ExitCode {
     let [version, bin_url, sums_url] = args else {
         return ExitCode::from(2);
     };
-    let (up, mut events) = pulsar_update::spawn(REPO.into(), "probe".into());
+    let (up, mut events) = pulsar_update::spawn(REPO.into(), "probe");
     let r = Release {
         version: version.clone(),
         url: String::new(),

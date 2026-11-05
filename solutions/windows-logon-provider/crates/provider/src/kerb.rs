@@ -46,12 +46,12 @@ pub fn packed_len(domain: &[u16], user: &[u16], password: &[u16]) -> Option<usiz
     let password_bytes = utf16_bytes(password)?;
     let total = UNLOCK_HEADER_BYTES + domain_bytes + user_bytes + password_bytes;
     // `CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION.cbSerialization` is a DWORD.
-    (total <= u32::MAX as usize).then_some(total)
+    u32::try_from(total).is_ok().then_some(total)
 }
 
 fn utf16_bytes(text: &[u16]) -> Option<usize> {
     let bytes = text.len().checked_mul(2)?;
-    (bytes <= u16::MAX as usize).then_some(bytes)
+    u16::try_from(bytes).is_ok().then_some(bytes)
 }
 
 /// Builds the buffer that LSA consumes. Returns `None` on the same overflow

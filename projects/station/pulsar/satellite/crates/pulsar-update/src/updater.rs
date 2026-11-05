@@ -177,7 +177,7 @@ struct Config {
 /// `repo`: "owner/name" on GitHub or "ghcr.io/owner/name". Call inside the controller's LocalSet.
 pub fn spawn(
     repo: String,
-    current_version: String,
+    current_version: &str,
 ) -> (UpdaterHandle, UnboundedReceiver<UpdateEvent>) {
     spawn_with(Config {
         repo,
@@ -928,12 +928,11 @@ async fn run_version(path: &Path) -> String {
     };
     let _ = tokio::time::timeout_at(deadline, read).await;
     // EOF comes while the child is still exiting: wait for it within the same deadline.
-    let ok = match tokio::time::timeout_at(deadline, child.wait()).await {
-        Ok(Ok(status)) => status.success(),
-        _ => {
-            let _ = child.kill().await;
-            false
-        }
+    let ok = if let Ok(Ok(status)) = tokio::time::timeout_at(deadline, child.wait()).await {
+        status.success()
+    } else {
+        let _ = child.kill().await;
+        false
     };
     drop(stdout);
     if !ok {

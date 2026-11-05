@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
@@ -11,9 +12,9 @@ LINUX = ["@platforms//os:linux"]
 STATION = ["@zig_0_14_1//:station"]
 
 DEPS = [
-    "@pulsar_crates//:libc",
-    "@pulsar_crates//:log",
-    "@pulsar_crates//:tokio",
+    "@crates//:libc",
+    "@crates//:log",
+    "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
@@ -27,8 +28,9 @@ cargo_build_script(
     srcs = ["build.rs"],
     data = glob(["shim/**"]),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:cc"],
+    deps = ["@crates//:cc"],
 )
 
 # rules_rust repeats every static C++ library as a plain `-l` after rustc's
@@ -62,6 +64,7 @@ rust_library(
     ),
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     rustc_flags = select({
         "@zig_0_14_1//:station": [
             "--cfg",
@@ -84,6 +87,7 @@ rust_binary(
     name = "sendspin_probe",
     srcs = ["src/bin/sendspin_probe.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS + [":pulsar_sendspin"],
 )
@@ -92,6 +96,14 @@ rust_test(
     name = "pulsar_sendspin_unit_tests",
     crate = ":pulsar_sendspin",
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:tokio"],
+    deps = ["@crates//:tokio"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

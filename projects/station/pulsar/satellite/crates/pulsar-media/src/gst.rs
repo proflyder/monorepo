@@ -30,7 +30,7 @@ type GstBusFunc = unsafe extern "C" fn(Gp, Gp, Gp) -> c_int;
 type ParseFn = unsafe extern "C" fn(Gp, *mut Gp, *mut *mut c_char);
 
 /// A command for the GLib thread (see [`idle_add`]).
-pub(crate) type Call = Box<dyn FnOnce() + Send>;
+pub type Call = Box<dyn FnOnce() + Send>;
 
 const LIB_DIR: &str = "/system/vendor/quasar/libs/";
 const CA_BUNDLE: &CStr = c"/etc/ssl/certs/ca-certificates.crt";
@@ -135,7 +135,7 @@ const _: () = assert!(
 );
 
 /// Every symbol the player uses, resolved once.
-pub(crate) struct Api {
+pub struct Api {
     _iconv: Option<Library>,
     _glib: Library,
     gst: Library,
@@ -169,19 +169,17 @@ pub(crate) struct Api {
     element_seek_simple: Option<unsafe extern "C" fn(Gp, c_int, c_int, i64) -> c_int>,
 }
 
-fn dl_error(e: libloading::Error) -> String {
+fn dl_error(e: &libloading::Error) -> String {
     // The source carries dlerror()'s text ("<file>: cannot open shared object file: ...").
-    match e.source() {
-        Some(src) => src.to_string(),
-        None => e.to_string(),
-    }
+    e.source()
+        .map_or_else(|| e.to_string(), ToString::to_string)
 }
 
 fn open(name: &str) -> Result<Library, String> {
     // SAFETY: the firmware's own libraries; their initialisers have no preconditions and they
     // are never unloaded (the handles live in the static Api).
     unsafe { Library::open(Some(format!("{LIB_DIR}{name}")), RTLD_NOW | RTLD_GLOBAL) }
-        .map_err(dl_error)
+        .map_err(|e| dl_error(&e))
 }
 
 /// `name` as a function pointer of type `T`, None if the library does not export it (or
@@ -218,7 +216,7 @@ unsafe fn req<T: Copy>(lib: &Library, name: &CStr, ok: &mut bool) -> Option<T> {
 static API: LazyLock<Option<Api>> = LazyLock::new(load_api);
 
 /// dlopen + symbol resolution, once per process; None (logged) on failure.
-pub(crate) fn load() -> Option<&'static Api> {
+pub fn load() -> Option<&'static Api> {
     API.as_ref()
 }
 
@@ -314,7 +312,7 @@ fn load_api() -> Option<Api> {
 
 /// Points OpenSSL (souphttpsrc's TLS backend, below) at the system CA bundle unless the
 /// environment already names one.
-pub(crate) fn set_ssl_cert_file() {
+pub fn set_ssl_cert_file() {
     // SAFETY: NUL-terminated path.
     if unsafe { libc::access(CA_BUNDLE.as_ptr(), libc::R_OK) } != 0
         || std::env::var_os("SSL_CERT_FILE").is_some()
@@ -328,7 +326,7 @@ pub(crate) fn set_ssl_cert_file() {
         std::env::set_var(
             "SSL_CERT_FILE",
             std::ffi::OsStr::from_bytes(CA_BUNDLE.to_bytes()),
-        )
+        );
     };
 }
 
@@ -360,7 +358,7 @@ fn free_error(api: &Api, err: Gp) {
 }
 
 /// gst_init_check, the static plugins and the TLS backend; false (logged) on failure.
-pub(crate) fn init(api: &Api) -> bool {
+pub fn init(api: &Api) -> bool {
     let mut err: Gp = ptr::null_mut();
     // SAFETY: no argv; out-pointer to a local.
     if unsafe { (api.init_check)(ptr::null_mut(), ptr::null_mut(), &mut err) } == 0 {
@@ -401,7 +399,7 @@ pub(crate) fn init(api: &Api) -> bool {
 }
 
 /// A GLib main loop on the default main context.
-pub(crate) struct MainLoop {
+pub struct MainLoop {
     api: &'static Api,
     ml: NonNull<c_void>,
 }
@@ -413,10 +411,10 @@ unsafe impl Send for MainLoop {}
 unsafe impl Sync for MainLoop {}
 
 impl MainLoop {
-    pub(crate) fn new(api: &'static Api) -> Option<MainLoop> {
+    pub(crate) fn new(api: &'static Api) -> Option<Self> {
         // SAFETY: NULL = the default main context, not running.
         let ml = unsafe { (api.main_loop_new)(ptr::null_mut(), 0) };
-        NonNull::new(ml).map(|ml| MainLoop { api, ml })
+        NonNull::new(ml).map(|ml| Self { api, ml })
     }
 
     pub(crate) fn run(&self) {
@@ -446,7 +444,7 @@ unsafe extern "C" fn run_call(data: Gp) -> c_int {
 }
 
 /// Runs `call` on the thread of the default main context (the player's GLib thread).
-pub(crate) fn idle_add(api: &Api, call: Call) {
+pub fn idle_add(api: &Api, call: Call) {
     let data = Box::into_raw(Box::new(call));
     // SAFETY: run_call matches GSourceFunc and takes ownership of `data`.
     unsafe { (api.idle_add)(run_call, data.cast()) };
@@ -457,25 +455,25 @@ unsafe extern "C" fn on_timeout(user: Gp) -> c_int {
 }
 
 /// A GLib timeout calling `player::on_timer(tag)` every `ms` while it returns true.
-pub(crate) fn timeout_add(api: &Api, ms: u32, tag: usize) -> u32 {
+pub fn timeout_add(api: &Api, ms: u32, tag: usize) -> u32 {
     // SAFETY: on_timeout matches GSourceFunc; the tag is a plain integer, never dereferenced.
     unsafe { (api.timeout_add)(ms, on_timeout, ptr::without_provenance_mut(tag)) }
 }
 
-pub(crate) fn source_remove(api: &Api, id: u32) {
+pub fn source_remove(api: &Api, id: u32) {
     // SAFETY: removing an id GLib no longer knows only logs a critical warning.
     unsafe { (api.source_remove)(id) };
 }
 
 /// The resource-error domain of souphttpsrc's errors; 0 when unknown.
-pub(crate) fn resource_error_quark(api: &Api) -> u32 {
+pub fn resource_error_quark(api: &Api) -> u32 {
     // SAFETY: NUL-terminated string; try_string never creates a quark.
     api.quark_try_string
         .map_or(0, |f| unsafe { f(c"gst-resource-error-quark".as_ptr()) })
 }
 
 /// A playbin element.
-pub(crate) struct Pipeline {
+pub struct Pipeline {
     api: &'static Api,
     el: NonNull<c_void>,
     /// The fdsink ANNOUNCE decodes into (a reference we hold), see [`Pipeline::find_out_sink`].
@@ -490,7 +488,7 @@ unsafe impl Send for Pipeline {}
 
 impl Pipeline {
     /// gst_parse_launch; None (logged) on failure.
-    pub(crate) fn launch(api: &'static Api, desc: &CStr) -> Option<Pipeline> {
+    pub(crate) fn launch(api: &'static Api, desc: &CStr) -> Option<Self> {
         let mut err: Gp = ptr::null_mut();
         // SAFETY: NUL-terminated description, out-pointer to a local.
         let el = unsafe { (api.parse_launch)(desc.as_ptr(), &mut err) };
@@ -507,7 +505,7 @@ impl Pipeline {
             warn!("player: playbin: {}", unsafe { gerror_message(err) });
             free_error(api, err);
         }
-        Some(Pipeline {
+        Some(Self {
             api,
             el,
             out_sink: None,
@@ -631,7 +629,7 @@ impl Drop for Pipeline {
 }
 
 /// A bus message during its watch callback.
-pub(crate) struct Message {
+pub struct Message {
     api: &'static Api,
     msg: NonNull<c_void>,
 }
@@ -674,7 +672,7 @@ impl Message {
                         &mut old,
                         &mut new,
                         &mut pending,
-                    )
+                    );
                 };
                 Msg::StateChanged { new }
             }

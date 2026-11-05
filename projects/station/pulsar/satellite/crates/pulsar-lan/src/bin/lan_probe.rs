@@ -217,7 +217,7 @@ async fn run(mode: Mode) -> u8 {
 }
 
 async fn run_mdns(host: String, service: String, port: u16, seconds: u64, txt: Vec<String>) -> u8 {
-    let Ok((h, mut answered)) = mdns::spawn_traced(host.clone()) else {
+    let Ok((h, mut answered)) = mdns::spawn_traced(&host) else {
         return 1;
     };
     h.add_service(MdnsService {

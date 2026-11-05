@@ -128,11 +128,12 @@ impl<'a> Scan<'a> {
         {
             return None;
         }
-        let mut frac_digits = 0;
-        if self.peek() == Some(b'.') {
+        let frac_digits = if self.peek() == Some(b'.') {
             self.pos += 1;
-            frac_digits = self.take_while(|b| b.is_ascii_digit());
-        }
+            self.take_while(|b| b.is_ascii_digit())
+        } else {
+            0
+        };
         if int_digits + frac_digits == 0 {
             return None;
         }

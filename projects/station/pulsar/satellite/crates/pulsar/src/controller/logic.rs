@@ -83,10 +83,9 @@ pub fn ports(offset: Option<&OsStr>) -> Option<Ports> {
 /// C++ `state_path_.substr(0, rfind('/'))`, "." without a slash.
 pub fn state_dir(state_path: &OsStr) -> std::path::PathBuf {
     let b = state_path.as_bytes();
-    match b.iter().rposition(|&c| c == b'/') {
-        Some(i) => OsStr::from_bytes(&b[..i]).into(),
-        None => ".".into(),
-    }
+    b.iter()
+        .rposition(|&c| c == b'/')
+        .map_or_else(|| ".".into(), |i| OsStr::from_bytes(&b[..i]).into())
 }
 
 /// `<dir>/<name>` as the C++ string concatenation (`dir + "/" + name`).

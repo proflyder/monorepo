@@ -1,5 +1,7 @@
 //! Request bodies for `POST /v1/challenge` and `POST /v1/claim`.
 
+use std::fmt::Write as _;
+
 use crate::purpose::Purpose;
 
 /// Escapes a string for embedding in a JSON string literal. Only the
@@ -54,7 +56,7 @@ pub fn claim_request_json_for_purpose(
         json_escape(mac)
     );
     if let Some(wait_seconds) = wait_seconds {
-        body.push_str(&format!(",\"waitSeconds\":{wait_seconds}"));
+        let _ = write!(body, ",\"waitSeconds\":{wait_seconds}");
     }
     body.push('}');
     body

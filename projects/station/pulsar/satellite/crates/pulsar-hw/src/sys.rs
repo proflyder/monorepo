@@ -195,7 +195,7 @@ impl Evdev {
     }
 
     /// Registers the device with the runtime's reactor for reading.
-    pub fn into_async(self) -> io::Result<AsyncFd<Evdev>> {
+    pub fn into_async(self) -> io::Result<AsyncFd<Self>> {
         // SAFETY: the AsyncFd owns the file and never replaces it, so its descriptor stays open
         // and refers to the same file description until the AsyncFd is dropped.
         Ok(unsafe { AsyncFd::register_with_interest(self, Interest::READABLE) }?)
@@ -206,10 +206,10 @@ impl Evdev {
         // SAFETY: `buf` is writable for its full byte length; RawInputEvent is plain data, so
         // any bytes the kernel writes form valid values.
         let n = unsafe { libc::read(self.as_raw_fd(), buf.as_mut_ptr().cast(), size_of_val(buf)) };
-        match usize::try_from(n) {
-            Ok(n) => Ok(n / size_of::<RawInputEvent>()),
-            Err(_) => Err(io::Error::last_os_error()),
-        }
+        usize::try_from(n).map_or_else(
+            |_| Err(io::Error::last_os_error()),
+            |n| Ok(n / size_of::<RawInputEvent>()),
+        )
     }
 
     fn eviocg<const N: usize>(&self, nr: u32) -> io::Result<[u8; N]> {

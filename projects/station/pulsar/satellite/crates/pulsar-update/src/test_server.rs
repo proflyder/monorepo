@@ -20,8 +20,7 @@ pub fn data(name: &str) -> PathBuf {
     // берётся из PULSAR_MANIFEST_DIR относительно текущего каталога; Cargo
     // переменную не выставляет и использует CARGO_MANIFEST_DIR.
     std::env::var_os("PULSAR_MANIFEST_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
         .join("tests/data")
         .join(name)
 }
@@ -80,11 +79,11 @@ pub struct Server {
 impl Server {
     /// Serves TLS 1.2 and 1.3 on 127.0.0.1 from a task of the current LocalSet; unknown paths get
     /// a 404.
-    pub async fn start() -> Server {
+    pub async fn start() -> Self {
         Self::start_with(rustls::DEFAULT_VERSIONS).await
     }
 
-    pub async fn start_with(versions: &[&'static SupportedProtocolVersion]) -> Server {
+    pub async fn start_with(versions: &[&'static SupportedProtocolVersion]) -> Self {
         let certs: Vec<_> = CertificateDer::pem_file_iter(data("server.pem"))
             .expect("server.pem")
             .collect::<Result<_, _>>()
@@ -100,7 +99,7 @@ impl Server {
         let config = Arc::new(config);
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let port = listener.local_addr().expect("local addr").port();
-        let server = Server {
+        let server = Self {
             port,
             requests: Rc::default(),
             sessions: Rc::default(),

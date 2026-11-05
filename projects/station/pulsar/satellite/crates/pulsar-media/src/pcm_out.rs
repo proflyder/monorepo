@@ -30,7 +30,7 @@ use pulsar_alsa::{Format, HwRequest, Pcm};
 use pulsar_core::model::Model;
 
 /// The format playsink converts to (capsfilter before the fdsink) and the PCM is opened with.
-pub(crate) const CAPS: &str = "audio/x-raw,format=S16LE,layout=interleaved,rate=48000,channels=2";
+pub const CAPS: &str = "audio/x-raw,format=S16LE,layout=interleaved,rate=48000,channels=2";
 const RATE: u32 = 48_000;
 const CHANNELS: u32 = 2;
 const FRAME_BYTES: usize = 4;
@@ -57,7 +57,7 @@ const DRAIN_SLACK: Duration = Duration::from_millis(500);
 
 /// Writer progress of an output item, reported on the GLib thread.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum OutEvent {
+pub enum OutEvent {
     /// The first samples went to the device.
     Started(u64),
     /// The last sample has been played.
@@ -108,7 +108,7 @@ struct Item {
 }
 
 /// Owned by the GLib thread's backend.
-pub(crate) struct Output {
+pub struct Output {
     cmds: Sender<Cmd>,
     /// f32 bits of the channel gain the writer applies (playsink's volume would act on PCM that
     /// is already queued, up to ~2 s late).
@@ -122,7 +122,7 @@ impl Output {
     pub(crate) fn spawn(
         model: &'static Model,
         notify: Box<dyn Fn(OutEvent) + Send>,
-    ) -> Option<Output> {
+    ) -> Option<Self> {
         let (cmds, rx) = mpsc::channel();
         let gain = Arc::new(AtomicU32::new(1.0f32.to_bits()));
         let w = Writer {
@@ -146,7 +146,7 @@ impl Output {
             .spawn(move || w.run(&rx))
             .inspect_err(|e| error!("player: announce output thread: {e}"))
             .ok()?;
-        Some(Output {
+        Some(Self {
             cmds,
             gain,
             item: None,
@@ -377,13 +377,10 @@ impl Writer {
             }
         }
         if self.phase == Phase::Playing {
-            let wrote = match self.write(&mut st) {
-                Ok(w) => w,
-                Err(()) => {
-                    drop(st);
-                    self.finish(OutEvent::Failed(item));
-                    return;
-                }
+            let Ok(wrote) = self.write(&mut st) else {
+                drop(st);
+                self.finish(OutEvent::Failed(item));
+                return;
             };
             let (done, empty) = (
                 st.eof && st.data.len() < FRAME_BYTES,

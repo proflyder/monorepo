@@ -135,14 +135,14 @@ impl Peer {
     }
 
     async fn send(&mut self, msg_type: u32, w: &Writer) {
-        let bytes = match &mut self.noise {
-            Some(n) => n.encrypt(msg_type as u16, w.data()),
-            None => {
+        let bytes = self.noise.as_mut().map_or_else(
+            || {
                 let mut v = Vec::new();
                 append_plain(&mut v, msg_type, w.data());
                 v
-            }
-        };
+            },
+            |n| n.encrypt(msg_type as u16, w.data()),
+        );
         self.write(&bytes).await;
     }
 
@@ -160,8 +160,7 @@ impl Peer {
     async fn raw_noise(&mut self) -> Option<Vec<u8>> {
         loop {
             if !self.rbuf.is_empty()
-                && let crate::frame::NoiseFrame::Frame { body, used } =
-                    parse_noise(&self.rbuf, false)
+                && let NoiseFrame::Frame { body, used } = parse_noise(&self.rbuf, false)
             {
                 let body = body.to_vec();
                 self.rbuf.drain(..used);
@@ -179,9 +178,7 @@ impl Peer {
             if !self.rbuf.is_empty() {
                 match &mut self.noise {
                     Some(n) => {
-                        if let crate::frame::NoiseFrame::Frame { body, used } =
-                            parse_noise(&self.rbuf, false)
-                        {
+                        if let NoiseFrame::Frame { body, used } = parse_noise(&self.rbuf, false) {
                             let (t, m) = n.decrypt(body);
                             self.rbuf.drain(..used);
                             return Some((u32::from(t), m));
@@ -813,7 +810,7 @@ async fn noise_provisioning_and_key_change() {
                 Peer::noise(port, &[0; 32]).await.err().unwrap(),
                 "Handshake MAC failure"
             );
-            let key = crate::key::decode_psk(KEY_B64.as_bytes()).unwrap();
+            let key = key::decode_psk(KEY_B64.as_bytes()).unwrap();
             let mut p = Peer::noise(port, &key).await.unwrap();
             p.hello("HA").await;
             event(&mut rx).await;
@@ -868,7 +865,7 @@ async fn noise_frame_errors() {
             );
             let raw = |payload: &[u8]| {
                 let mut v = Vec::new();
-                crate::frame::append_noise_raw(&mut v, &[payload]);
+                frame::append_noise_raw(&mut v, &[payload]);
                 v
             };
             let reject = |reason: &str| raw(&[b"\x01", reason.as_bytes()].concat());
@@ -894,7 +891,7 @@ async fn noise_frame_errors() {
                 assert_eq!(p.closed().await, want, "{input:?}");
             }
             // Garbage after the handshake: decryption fails, the client goes.
-            let key = crate::key::decode_psk(KEY_B64.as_bytes()).unwrap();
+            let key = key::decode_psk(KEY_B64.as_bytes()).unwrap();
             let mut p = Peer::noise(port, &key).await.unwrap();
             p.write(b"\x01\x00\x20").await;
             p.write(&[0x55; 32]).await;
@@ -938,7 +935,7 @@ async fn shutdown_asks_clients_to_disconnect() {
             let b = Peer::connect(port).await;
             assert!(a.sync().await.is_empty());
             drop(h);
-            assert!(pulsar_core::actors::join_all(Duration::from_secs(3)).await);
+            assert!(actors::join_all(Duration::from_secs(3)).await);
             // No events from the teardown.
             assert!(rx.recv().await.is_none());
             (a, b)

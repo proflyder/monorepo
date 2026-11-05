@@ -3,7 +3,7 @@
 /// The 8 bands of a `MusicFrame` from the server's spectrum bins, low to high: each band is the
 /// mean of its share of the bins; with fewer than 8 bins, or a band without its own bin, it takes
 /// the bin at its start. None without bins.
-pub(crate) fn bands(bins: &[u16]) -> Option<[f32; 8]> {
+pub fn bands(bins: &[u16]) -> Option<[f32; 8]> {
     let n = bins.len();
     if n == 0 {
         return None;
@@ -23,7 +23,7 @@ pub(crate) fn bands(bins: &[u16]) -> Option<[f32; 8]> {
     Some(out)
 }
 
-pub(crate) fn loudness(v: u16) -> f32 {
+pub fn loudness(v: u16) -> f32 {
     f32::from(v) / 65535.0
 }
 

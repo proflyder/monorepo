@@ -204,8 +204,8 @@ fn bit(ch: u8) -> u32 {
 impl DeconzServer {
     /// A server with a ConBee's default endpoint slots; [`DeconzServer::attach`] gives them to
     /// the coordinator.
-    pub fn new(port: u16) -> DeconzServer {
-        DeconzServer {
+    pub fn new(port: u16) -> Self {
+        Self {
             port,
             listener: None,
             accept_paused_until: None,

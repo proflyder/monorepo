@@ -91,6 +91,19 @@ export const config = {
       paths: ["go.mod", "go.sum", "go.work", "go.work.sum"],
       platforms: ["go"],
     },
+    // Root Cargo workspace: one lockfile and one toolchain for every
+    // first-party Rust crate. A pin, lock or toolchain change reaches every
+    // unit that compiles Rust (host checks and cross-builds).
+    {
+      paths: [
+        "Cargo.toml",
+        "Cargo.lock",
+        "crate-universe.lock",
+        "rust-toolchain.toml",
+        "packages/rust/**",
+      ],
+      platforms: ["native", "bazel"],
+    },
     {
       paths: ["requirements-test.txt"],
       platforms: ["python", "quality"],

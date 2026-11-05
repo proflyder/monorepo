@@ -29,8 +29,8 @@ use crate::types::{ApiConfig, ApiEvent, DeviceIdentity};
 /// API version announced in HelloResponse. 1.15 = DeviceCapabilitiesRequest/Response supported.
 const API_MAJOR: u32 = 1;
 const API_MINOR: u32 = 15;
-pub(crate) const ESPHOME_VERSION: &str = "2026.9.0";
-pub(crate) const PROJECT_NAME: &str = "pulsar.satellite";
+pub const ESPHOME_VERSION: &str = "2026.9.0";
+pub const PROJECT_NAME: &str = "pulsar.satellite";
 
 /// Message ids (api.proto `option (id)`).
 mod msg {
@@ -104,7 +104,7 @@ mod msg {
 mod commands;
 mod entities;
 
-pub(crate) use entities::Publish;
+pub use entities::Publish;
 use entities::{Cache, DIAG_PERIOD_MS};
 
 /// End the voice run when the socket is this far behind: a hole in the utterance would make HA
@@ -115,7 +115,7 @@ const MAX_BACKLOG: usize = 8 << 20;
 #[cfg(test)]
 thread_local! {
     /// Largest `rbuf` seen by `read_into` on this thread.
-    static MAX_RBUF: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static MAX_RBUF: Cell<usize> = const { Cell::new(0) };
 }
 /// Per wake-up and client, so a flooding peer cannot starve the runtime (capture hand-off,
 /// timers) or grow its buffer without bound before it is parsed.
@@ -176,7 +176,7 @@ fn poll_accept(
 }
 
 /// State the handle reads; the actor updates it before sending the matching event.
-pub(crate) struct Shared {
+pub struct Shared {
     pub connected: Cell<bool>,
     pub voice_subscribed: Cell<bool>,
     pub mdns_txt: RefCell<Vec<String>>,
@@ -184,7 +184,7 @@ pub(crate) struct Shared {
     pub run_seq: Cell<u64>,
 }
 
-pub(crate) enum Cmd {
+pub enum Cmd {
     VoiceRequestStart {
         run: u64,
         phrase: String,
@@ -199,7 +199,7 @@ pub(crate) enum Cmd {
     Publish(Publish),
 }
 
-pub(crate) struct Spawned {
+pub struct Spawned {
     pub cmds: UnboundedSender<Cmd>,
     pub shared: Rc<Shared>,
     pub events: UnboundedReceiver<ApiEvent>,
@@ -209,7 +209,7 @@ pub(crate) struct Spawned {
 }
 
 /// Binds the port and starts the actor on the current `LocalSet`.
-pub(crate) fn spawn(id: DeviceIdentity, mut cfg: ApiConfig) -> Result<Spawned, String> {
+pub fn spawn(id: DeviceIdentity, mut cfg: ApiConfig) -> Result<Spawned, String> {
     let listener = bind(cfg.port)?;
     let port = listener.local_addr().map_or(cfg.port, |a| a.port());
     info!("api: listening on :{} as '{}'", cfg.port, id.name);
@@ -298,7 +298,7 @@ fn mac_plain(mac: &str) -> String {
 }
 
 /// TXT records of `_esphomelib._tcp`.
-pub(crate) fn txt_records(id: &DeviceIdentity, key_supported: bool, has_key: bool) -> Vec<String> {
+pub fn txt_records(id: &DeviceIdentity, key_supported: bool, has_key: bool) -> Vec<String> {
     let mut txt = vec![
         format!("friendly_name={}", id.friendly_name),
         format!("version={ESPHOME_VERSION}"),

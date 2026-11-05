@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::fs::File;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -55,7 +56,7 @@ fn crc_and_ybl_parse_match_cxx_golden() {
                 i.version, i.manufacturer, i.image_type
             ),
             Err(e) => format!("ybl {name} err {e}"),
-        })
+        });
     };
     case("valid", &ybl(0x200, 0x5001_0203, 0x140A, 0x0580));
     case("valid-min", &ybl(0x40, 0x5100_0001, 0x140A, 0x0580));
@@ -173,7 +174,7 @@ fn emulate(master: &File, s: &Script, done: &AtomicBool) -> Vec<u8> {
     };
     let get = |rx: &mut Vec<u8>, mut ms: i32| -> Option<u8> {
         loop {
-            if crate::sys::wait_readable(master, 50) {
+            if sys::wait_readable(master, 50) {
                 let mut c = [0u8];
                 let mut m = master;
                 return match m.read(&mut c) {
@@ -269,7 +270,7 @@ fn emulate(master: &File, s: &Script, done: &AtomicBool) -> Vec<u8> {
 /// radio_flash against the emulated bootloader on a pseudo-terminal: result, progress, the reset
 /// / boot lines and the byte stream must be those of the C++ flasher (tests/golden/flash.txt).
 fn flash_case(s: Script) {
-    let (master, slave) = crate::sys::open_pty().unwrap();
+    let (master, slave) = sys::open_pty().unwrap();
     let lines = Lines::new();
     let mut l = lines.radio_lines();
     l.tty = slave;
@@ -281,7 +282,9 @@ fn flash_case(s: Script) {
     };
     let image = pattern(s.image_size, 31, 5);
     let mut progress = String::new();
-    let result = radio_flash(&l, &image, &mut |p| progress += &format!(" {p:.6}"));
+    let result = radio_flash(&l, &image, &mut |p| {
+        let _ = write!(progress, " {p:.6}");
+    });
     done.store(true, Ordering::Relaxed);
     let rx = emu.join().unwrap();
     let (boot, reset) = lines.get();
@@ -376,7 +379,7 @@ fn flash_without_xmodem_start() {
 
 #[test]
 fn flash_refuses_undrivable_lines() {
-    let (mut master, slave) = crate::sys::open_pty().unwrap();
+    let (mut master, slave) = sys::open_pty().unwrap();
     let l = RadioLines {
         tty: slave,
         reset: "/nonexistent/zb-reset/value".into(),
@@ -386,5 +389,5 @@ fn flash_refuses_undrivable_lines() {
     assert_eq!(err, "cannot drive the radio's reset/boot lines");
     // Nothing reached the radio: the closed slave reads as EIO (or end), never as data.
     let mut buf = [0u8; 16];
-    assert!(!matches!(std::io::Read::read(&mut master, &mut buf), Ok(n) if n > 0));
+    assert!(!matches!(io::Read::read(&mut master, &mut buf), Ok(n) if n > 0));
 }

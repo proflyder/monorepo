@@ -144,8 +144,7 @@ impl Gateway {
     ) -> Response {
         let expected = format!("Bearer {}", self.lock_state().control_token);
         let authorized = authorization
-            .map(|value| constant_time_eq(value.as_bytes(), expected.as_bytes()))
-            .unwrap_or(false);
+            .is_some_and(|value| constant_time_eq(value.as_bytes(), expected.as_bytes()));
         if !authorized {
             return Response::text(401, "unauthorized");
         }
@@ -439,13 +438,10 @@ mod tests {
         let address = listener.local_addr().expect("addr");
         gateway.serve_control(listener);
 
-        let mut stream = tokio::time::timeout(
-            Duration::from_secs(2),
-            tokio::net::TcpStream::connect(address),
-        )
-        .await
-        .expect("connect timeout")
-        .expect("connect");
+        let mut stream = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect(address))
+            .await
+            .expect("connect timeout")
+            .expect("connect");
         let request = format!(
             "GET /status HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {TOKEN}\r\n\r\n"
         );
@@ -460,9 +456,7 @@ mod tests {
         assert!(text.contains("Content-Type: application/json"), "{text}");
         assert!(text.contains("\"wifi\":\"COMPLETED\""), "{text}");
 
-        let mut unauthorized = tokio::net::TcpStream::connect(address)
-            .await
-            .expect("connect");
+        let mut unauthorized = TcpStream::connect(address).await.expect("connect");
         unauthorized
             .write_all(b"GET /status HTTP/1.1\r\nHost: x\r\n\r\n")
             .await

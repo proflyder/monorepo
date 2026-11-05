@@ -199,7 +199,7 @@ pub(crate) struct Slot {
 
 impl Slot {
     fn new(what: &'static str) -> Self {
-        Slot {
+        Self {
             what,
             sp: None,
             vqe: Vec::new(),
@@ -288,7 +288,7 @@ impl Engine {
         custom_wake_model: Option<&Path>,
         command_dir: Option<&Path>,
         custom_thresholds: crate::wake_events::Thresholds,
-    ) -> Option<Engine> {
+    ) -> Option<Self> {
         if let Err(e) = preload_deps() {
             warn!("libtflite: {e}");
         }
@@ -351,7 +351,7 @@ impl Engine {
                  {EV_REJECTION_2ND}={rej:?}; 1st-stage anchor off"
             );
         }
-        let mut eng = Engine {
+        let mut eng = Self {
             wake: Slot::new("wake word"),
             cmd: Slot::new("command"),
             custom: custom.flatten(),
@@ -534,7 +534,7 @@ mod tests {
 
     impl Script {
         fn new(events: &[Result<i32, ()>]) -> Self {
-            Script {
+            Self {
                 events: events.to_vec(),
                 polled: 0,
                 phrases: 0,

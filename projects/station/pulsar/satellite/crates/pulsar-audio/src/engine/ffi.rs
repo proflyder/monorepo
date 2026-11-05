@@ -69,12 +69,10 @@ pub enum LoadError {
     Missing(&'static str),
 }
 
-fn dl_error(e: libloading::Error) -> String {
+fn dl_error(e: &libloading::Error) -> String {
     // The source carries dlerror()'s text ("<file>: cannot open shared object file: ...").
-    match e.source() {
-        Some(src) => src.to_string(),
-        None => e.to_string(),
-    }
+    e.source()
+        .map_or_else(|| e.to_string(), ToString::to_string)
 }
 
 #[allow(
@@ -101,7 +99,8 @@ unsafe fn sym<T: Copy>(lib: &Library, name: &'static str) -> Result<T, LoadError
 fn open_global(path: &str) -> Result<(), String> {
     // SAFETY: the firmware libraries' initialisers have no preconditions; they are never
     // unloaded.
-    let lib = unsafe { Library::open(Some(path), RTLD_NOW | RTLD_GLOBAL) }.map_err(dl_error)?;
+    let lib =
+        unsafe { Library::open(Some(path), RTLD_NOW | RTLD_GLOBAL) }.map_err(|e| dl_error(&e))?;
     let _handle = lib.into_raw();
     Ok(())
 }
@@ -124,15 +123,15 @@ impl Lib {
     /// dlopen("libyandex_evil.so", RTLD_NOW | RTLD_GLOBAL) and every symbol the daemon uses, once
     /// per process (later calls return the same outcome); the library stays loaded for the life
     /// of the process, as in the C++ daemon.
-    pub fn load() -> Result<Lib, LoadError> {
+    pub fn load() -> Result<Self, LoadError> {
         static LIB: LazyLock<Result<Lib, LoadError>> = LazyLock::new(Lib::open);
         LIB.clone()
     }
 
-    fn open() -> Result<Lib, LoadError> {
+    fn open() -> Result<Self, LoadError> {
         // SAFETY: the library's initialisers have no preconditions; it is never unloaded.
         let lib = unsafe { Library::open(Some(EVIL), RTLD_NOW | RTLD_GLOBAL) }
-            .map_err(|e| LoadError::Open(dl_error(e)))?;
+            .map_err(|e| LoadError::Open(dl_error(&e)))?;
         // SAFETY: `resolve` reads symbols of the library just opened.
         let resolved = unsafe { Self::resolve(&lib) };
         // Never unloaded, also after a missing symbol (as the C++ daemon).
@@ -142,11 +141,11 @@ impl Lib {
 
     /// # Safety
     /// `lib` must be libyandex_evil.so and stay loaded for the life of the process.
-    unsafe fn resolve(lib: &Library) -> Result<Lib, LoadError> {
+    unsafe fn resolve(lib: &Library) -> Result<Self, LoadError> {
         // SAFETY: every type below is the prototype recovered from maind (module comment), with
         // size_t = usize, long = c_long, bool = C++ bool and the opaque handles as void*.
         unsafe {
-            Ok(Lib {
+            Ok(Self {
                 cfg_create: sym(lib, "YandexVqeC_Config_CreateFromPreset")?,
                 cfg_free: sym(lib, "YandexVqeC_Config_Free")?,
                 cfg_chunk: sym(lib, "YandexVqeC_Config_GetInputChunkSize")?,
@@ -263,7 +262,7 @@ impl Vqe {
         models: &Path,
         nmic: usize,
         nspk: usize,
-    ) -> Result<Vqe, (VqeStep, String)> {
+    ) -> Result<Self, (VqeStep, String)> {
         let preset = CString::new(preset)
             .map_err(|_| (VqeStep::Config, format!("{preset}: NUL in preset name")))?;
         let models = path_cstr(models).map_err(|e| (VqeStep::Create, e))?;
@@ -273,7 +272,7 @@ impl Vqe {
                 format!("{nmic} mic, {nspk} speaker channels"),
             ));
         }
-        let mut v = Vqe {
+        let mut v = Self {
             lib: *lib,
             cfg: ptr::null_mut(),
             vqe: ptr::null_mut(),
@@ -387,7 +386,7 @@ unsafe impl Send for SpotterConf {}
 
 impl SpotterConf {
     /// spotter_conf_read(dir). Err(None): no config and no error message.
-    pub fn read(lib: &Lib, dir: &Path) -> Result<SpotterConf, Option<String>> {
+    pub fn read(lib: &Lib, dir: &Path) -> Result<Self, Option<String>> {
         let dir = path_cstr(dir).map_err(Some)?;
         let mut err = ptr::null_mut();
         // SAFETY: NUL-terminated directory, out-pointer to a local.
@@ -398,7 +397,7 @@ impl SpotterConf {
             return Err(Some(e));
         }
         NonNull::new(conf)
-            .map(|conf| SpotterConf { lib: *lib, conf })
+            .map(|conf| Self { lib: *lib, conf })
             .ok_or(None)
     }
 
@@ -412,10 +411,7 @@ impl SpotterConf {
         let mut err = ptr::null_mut();
         // SAFETY: valid config, out-pointer to a local.
         let n = unsafe { (self.lib.sp_conf_chans)(self.conf.as_ptr(), ty, &mut err) };
-        match self.lib.sp_error(err) {
-            Some(e) => Err(e),
-            None => Ok(from_long(n)),
-        }
+        self.lib.sp_error(err).map_or_else(|| Ok(from_long(n)), Err)
     }
 
     /// spotter_conf_native_sample_rate: the value and the error, if any (the C++ daemon logged
@@ -451,11 +447,7 @@ unsafe impl Send for Spotter {}
 impl Spotter {
     /// spotter_create_multichannel(conf, rate, types.len(), types, false): the spotter (if the
     /// library returned one) and the error (if it set one). Both can be present.
-    pub fn create(
-        conf: &SpotterConf,
-        rate: i32,
-        types: &[i32],
-    ) -> (Option<Spotter>, Option<String>) {
+    pub fn create(conf: &SpotterConf, rate: i32, types: &[i32]) -> (Option<Self>, Option<String>) {
         if let Some(t) = types
             .iter()
             .find(|&&t| !(0..SPOTTER_TYPES as i32).contains(&t))
@@ -473,7 +465,7 @@ impl Spotter {
         };
         let lib = conf.lib;
         (
-            NonNull::new(sp).map(|sp| Spotter { lib, sp }),
+            NonNull::new(sp).map(|sp| Self { lib, sp }),
             lib.sp_error(err),
         )
     }
@@ -489,7 +481,7 @@ impl Spotter {
                 pcm.as_ptr().cast(),
                 size_of_val(pcm),
                 &mut err,
-            )
+            );
         };
         self.lib.sp_error(err).map_or(Ok(()), Err)
     }

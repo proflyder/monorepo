@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -14,11 +15,12 @@ rust_library(
     ),
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = [
-        "@pulsar_crates//:libc",
-        "@pulsar_crates//:log",
-        "@pulsar_crates//:tokio",
+        "@crates//:libc",
+        "@crates//:log",
+        "@crates//:tokio",
     ],
 )
 
@@ -28,20 +30,22 @@ rust_test(
     name = "pulsar_core_unit_tests",
     crate = ":pulsar_core",
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:tokio"],
+    deps = ["@crates//:tokio"],
 )
 
 rust_test(
     name = "log_sink_test",
     srcs = ["tests/log_sink.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_core",
-        "@pulsar_crates//:libc",
-        "@pulsar_crates//:log",
-        "@pulsar_crates//:tokio",
+        "@crates//:libc",
+        "@crates//:log",
+        "@crates//:tokio",
     ],
 )
 
@@ -49,11 +53,19 @@ rust_test(
     name = "own_target_test",
     srcs = ["tests/own_target.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_core",
-        "@pulsar_crates//:libc",
-        "@pulsar_crates//:log",
-        "@pulsar_crates//:tokio",
+        "@crates//:libc",
+        "@crates//:log",
+        "@crates//:tokio",
     ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

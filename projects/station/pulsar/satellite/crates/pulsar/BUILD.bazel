@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("//projects/station/pulsar/satellite:version.bzl", "pulsar_version_env")
 
@@ -6,9 +7,9 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
-    "@pulsar_crates//:libc",
-    "@pulsar_crates//:log",
-    "@pulsar_crates//:tokio",
+    "@crates//:libc",
+    "@crates//:log",
+    "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-audio:pulsar_audio",
     "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock",
@@ -34,6 +35,7 @@ rust_binary(
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     crate_root = "src/main.rs",
     edition = "2024",
+    lint_config = ":workspace_lints",
     rustc_env_files = [":version_env"],
     # The Cargo release profile: thin LTO, 4 codegen units and panic=abort.
     # panic=abort is set on the station binary only: tests share the same Rust
@@ -63,9 +65,17 @@ rust_test(
     crate = ":pulsar",
     data = glob(["tests/golden/settings/**"]),
     edition = "2024",
+    lint_config = ":workspace_lints",
     env = {
         "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar",
     },
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:tokio"],
+    deps = ["@crates//:tokio"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

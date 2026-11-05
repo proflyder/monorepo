@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use super::*;
@@ -93,7 +94,7 @@ type Reply = (u8, u8, u8, Vec<u8>);
 
 impl Bench {
     /// Coordinator on a formed network (PAN 0x1A62, channel 15), a client connected.
-    async fn new(formed: bool) -> Bench {
+    async fn new(formed: bool) -> Self {
         let (mut link, radio) = link_pair(&absent_lines());
         assert_eq!(link.next().await, LinkEvent::Boot);
         let mut coord = Coordinator::new(link);
@@ -117,7 +118,7 @@ impl Bench {
             };
         }
         coord.start(&mut server);
-        let mut b = Bench {
+        let mut b = Self {
             coord,
             server,
             ncp: Ncp {
@@ -739,9 +740,7 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
             .port();
         coord.start(&mut server);
         // Not ready (no network state yet): the connection is closed at once.
-        let mut c = tokio::net::TcpStream::connect(("127.0.0.1", port))
-            .await
-            .unwrap();
+        let mut c = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
         run(&mut server, &mut coord, &mut radio, 50).await;
         let mut buf = [0u8; 64];
         assert_eq!(c.read(&mut buf).await.unwrap(), 0);
@@ -750,9 +749,7 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
         st.extend_from_slice(&[0; 40]);
         radio.send(0x8A00, &st);
         run(&mut server, &mut coord, &mut radio, 50).await;
-        let mut c1 = tokio::net::TcpStream::connect(("127.0.0.1", port))
-            .await
-            .unwrap();
+        let mut c1 = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
         run(&mut server, &mut coord, &mut radio, 50).await;
         c1.write_all(&encode(VERSION, 1, &[0, 0, 0, 0]))
             .await
@@ -764,9 +761,7 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
             [(VERSION, 1, SUCCESS, vec![0, 9, 0x78, 0x26])]
         );
         // A second client replaces the first.
-        let mut c2 = tokio::net::TcpStream::connect(("127.0.0.1", port))
-            .await
-            .unwrap();
+        let mut c2 = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
         run(&mut server, &mut coord, &mut radio, 50).await;
         assert_eq!(c1.read(&mut buf).await.unwrap(), 0);
         c2.write_all(&encode(DEVICE_STATE, 2, &[0, 0, 0]))
@@ -1018,9 +1013,6 @@ fn unhex(h: &str) -> Vec<u8> {
 #[tokio::test(start_paused = true)]
 async fn deconz_matches_cxx_golden() {
     use crate::test_util::hex;
-    let mut out = String::new();
-    let mut bench: Option<(Coordinator, DeconzServer, Radio, VecDeque<u8>)> = None;
-    let mut seq = 0u8;
     // Runs the coordinator and the radio (ACKing each frame) until both are idle.
     async fn settle(
         coord: &mut Coordinator,
@@ -1035,7 +1027,7 @@ async fn deconz_matches_cxx_golden() {
                 continue;
             }
             if let Some((ty, p)) = radio.read_frame() {
-                out.push_str(&format!("send {ty:04x} {}\n", hex(&p)));
+                let _ = writeln!(out, "send {ty:04x} {}", hex(&p));
                 radio.ack(ty, acks.pop_front().unwrap_or(0));
                 continue;
             }
@@ -1049,12 +1041,15 @@ async fn deconz_matches_cxx_golden() {
             }
         }
     }
+    let mut out = String::new();
+    let mut bench: Option<(Coordinator, DeconzServer, Radio, VecDeque<u8>)> = None;
+    let mut seq = 0u8;
     let script = include_str!("../../tests/golden/deconz_script.txt");
     for line in script.lines() {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        out.push_str(&format!("> {line}\n"));
+        let _ = writeln!(out, "> {line}");
         let w: Vec<&str> = line.split_whitespace().collect();
         if w[0] == "new" {
             let (mut link, radio) = link_pair(&absent_lines());
@@ -1092,12 +1087,9 @@ async fn deconz_matches_cxx_golden() {
         settle(coord, server, radio, acks, &mut out).await;
         let got = server.take_output();
         if !got.is_empty() {
-            out.push_str(&format!("client {}\n", hex(&got)));
+            let _ = writeln!(out, "client {}", hex(&got));
         }
-        out.push_str(&format!(
-            "client_connected {}\n",
-            u8::from(server.has_client())
-        ));
+        let _ = writeln!(out, "client_connected {}", u8::from(server.has_client()));
     }
     crate::test_util::assert_golden(include_str!("../../tests/golden/deconz.txt"), &out);
 }

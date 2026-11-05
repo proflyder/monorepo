@@ -95,7 +95,7 @@ impl Server {
                 }
                 self.send_all_states(id);
             }
-            msg::SUBSCRIBE_HA_SERVICES_REQ | msg::SUBSCRIBE_HA_STATES_REQ => {}
+            msg::SUBSCRIBE_HA_SERVICES_REQ | msg::SUBSCRIBE_HA_STATES_REQ | msg::VA_AUDIO => {}
             msg::MEDIA_PLAYER_CMD => self.on_media_cmd(r),
             msg::BUTTON_CMD => return self.on_button_cmd(id, r),
             msg::SWITCH_CMD => self.on_switch_cmd(r),
@@ -144,7 +144,6 @@ impl Server {
             msg::VA_CONFIG_REQ => self.send_va_config(id),
             msg::VA_SET_CONFIG => self.on_va_set_config(r),
             // HA -> device TTS audio over the API; SPEAKER is not advertised.
-            msg::VA_AUDIO => {}
             _ => debug!("api: ignoring message type {msg_type} ({len} bytes)"),
         }
         true

@@ -10,7 +10,7 @@
 //! device buffer when reading and processing shared one thread.
 
 use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{
     AtomicBool, AtomicU32, AtomicU64, Ordering::AcqRel, Ordering::Acquire, Ordering::Relaxed,
 };
@@ -114,19 +114,18 @@ pub struct FrontendHandle {
 /// every 2 s.
 pub fn spawn(
     model: &'static Model,
-    wake_model_dir: PathBuf,
-    custom_wake_model: Option<PathBuf>,
+    wake_model_dir: &Path,
+    custom_wake_model: Option<&Path>,
     custom_active: bool,
     command_model_dir: Option<PathBuf>,
-    wake: Option<WakeEventOptions>,
+    wake: Option<&WakeEventOptions>,
 ) -> (FrontendHandle, UnboundedReceiver<FrontendEvent>) {
     let (tx, rx) = unbounded_channel();
     // The manifest next to the loaded model sets the detector's cutoff / window; near-miss
     // recording and the sidecars use the same numbers.
-    let (thresholds, from_manifest) = custom_wake_model
-        .as_deref()
-        .map_or((logic::Thresholds::default(), false), logic::thresholds_for);
-    if let Some(path) = &custom_wake_model {
+    let (thresholds, from_manifest) =
+        custom_wake_model.map_or((logic::Thresholds::default(), false), logic::thresholds_for);
+    if let Some(path) = custom_wake_model {
         info!(
             "Ricardo thresholds: cutoff {:.2}, window {} ({})",
             thresholds.cutoff,
@@ -143,28 +142,24 @@ pub fn spawn(
         pipe: None,
         threads: Vec::new(),
         frame: 0,
-        wake: wake
-            .as_ref()
-            .and_then(|w| wake_events::start(w, thresholds, from_manifest)),
+        wake: wake.and_then(|w| wake_events::start(w, thresholds, from_manifest)),
         _events: tx.clone(),
     };
     let command_dir = command_model_dir.filter(|d| !d.as_os_str().is_empty());
-    let started = match Engine::start(
+    let started = Engine::start(
         model,
-        &wake_model_dir,
-        custom_wake_model.as_deref(),
+        wake_model_dir,
+        custom_wake_model,
         command_dir.as_deref(),
         thresholds,
-    ) {
-        Some(eng) => {
-            inner.frame = eng.frame();
-            inner
-                .start_threads(model, eng, tx)
-                .inspect_err(|e| error!("audio threads: {e}"))
-                .is_ok()
-        }
-        None => false,
-    };
+    )
+    .is_some_and(|eng| {
+        inner.frame = eng.frame();
+        inner
+            .start_threads(model, eng, tx)
+            .inspect_err(|e| error!("audio threads: {e}"))
+            .is_ok()
+    });
     if !started {
         inner.stop();
         inner.frame = 0;
@@ -332,7 +327,7 @@ struct Shared {
 
 impl Shared {
     fn new(custom_active: bool) -> Self {
-        Shared {
+        Self {
             running: AtomicBool::new(false),
             stop_lock: Mutex::new(()),
             stop_cv: Condvar::new(),
@@ -450,7 +445,7 @@ impl Drop for Inner {
 }
 
 /// Interleaved capture frames, oldest first, at most `max` samples.
-pub(crate) struct Fifo {
+pub struct Fifo {
     buf: VecDeque<i16>,
     nch: usize,
     chunk: usize,
@@ -460,7 +455,7 @@ pub(crate) struct Fifo {
 impl Fifo {
     /// `nch` channels per frame, chunks of `chunk_frames`, at most `max_frames` queued.
     pub(crate) fn new(nch: usize, chunk_frames: usize, max_frames: usize) -> Self {
-        Fifo {
+        Self {
             buf: VecDeque::new(),
             nch,
             chunk: chunk_frames * nch,
@@ -614,7 +609,7 @@ fn capture(model: &'static Model, period: usize, shared: &Shared, pipe: &Pipe) {
 /// The C++ name of a failed hw_params step and its error, or the rate the device offered
 /// instead of the model's.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum HwFail {
+pub enum HwFail {
     Step(&'static str, i32),
     Rate(u32),
 }
@@ -622,7 +617,7 @@ pub(crate) enum HwFail {
 /// Outcome of the capture hw_params in the order the C++ daemon checked them: the rate right
 /// after set_rate_near, then period, buffer, apply (the period / buffer read back afterwards were
 /// not checked there). Ok = the period and buffer the device chose.
-pub(crate) fn hw_outcome(t: &HwTrace, rate: u32) -> Result<(u64, u64), HwFail> {
+pub fn hw_outcome(t: &HwTrace, rate: u32) -> Result<(u64, u64), HwFail> {
     let cxx = |step| match step {
         "any" => "hw_params_any",
         "access" => "set_access",
@@ -693,7 +688,7 @@ fn open_capture(model: &Model, period: usize) -> Option<(Pcm, usize)> {
 }
 
 /// Capture frames -> VQE input: `mics` / `spk` frame-interleaved, scaled to [-1, 1].
-pub(crate) fn deinterleave(
+pub fn deinterleave(
     input: &[i16],
     nch: usize,
     mic_ch: &[u32],
@@ -724,7 +719,7 @@ fn endpoint_prior(hist: &[f32; LEVEL_CHUNKS], filled: usize) -> Option<EndpointP
 /// Mean of the 8 loudest of the last 47 frames (mean squares), in dBFS clamped to -100..0 and
 /// rounded to 0.1 dB: stations compare levels received as "%.1f" text, so ours must be the same
 /// number the peers see, or ties could resolve differently on each side.
-pub(crate) fn wake_level_db(h: &[f32; LEVEL_CHUNKS]) -> f32 {
+pub fn wake_level_db(h: &[f32; LEVEL_CHUNKS]) -> f32 {
     let mut s = *h;
     s.sort_unstable_by(|a, b| b.total_cmp(a));
     let mut sum = 0.0f32;
@@ -788,7 +783,7 @@ impl LevelHistory {
 }
 
 /// The last VQE chunks as s16, for the pre-roll after a wake word.
-pub(crate) struct PrerollRing {
+pub struct PrerollRing {
     buf: Vec<i16>,
     frame: usize,
     /// Slot the next chunk goes to.
@@ -798,7 +793,7 @@ pub(crate) struct PrerollRing {
 
 impl PrerollRing {
     pub(crate) fn new(chunks: usize, frame: usize) -> Self {
-        PrerollRing {
+        Self {
             buf: vec![0; chunks * frame],
             frame,
             next: 0,
@@ -964,10 +959,11 @@ fn processing(
         }
         // Exactly one VQE chunk.
         {
-            let f = lock(&pipe.fifo);
             let (mut f, _) = pipe
                 .ready
-                .wait_timeout_while(f, CHUNK_WAIT, |f| !f.has_chunk() && shared.running())
+                .wait_timeout_while(lock(&pipe.fifo), CHUNK_WAIT, |f| {
+                    !f.has_chunk() && shared.running()
+                })
                 .unwrap_or_else(PoisonError::into_inner);
             if !f.take_chunk(&mut input) {
                 continue;
@@ -1015,87 +1011,84 @@ fn processing(
         let mut custom_mean = None;
         let mut custom_feeding = false;
         let mut wake_hit_id = None;
-        match eng.output(VQE_OMNI_WITH_GAIN).filter(|d| !d.is_empty()) {
-            Some(d) => {
-                gain_hist[gain_pos] = mean_square(d);
-                gain_pos = (gain_pos + 1) % LEVEL_CHUNKS;
-                gain_filled = (gain_filled + 1).min(LEVEL_CHUNKS);
-                if let Some(slot) = ring.push(d) {
-                    // The Ricardo detector hears the same cleaned chunk as the ring and the
-                    // stock spotter; its confirmation then takes the pre-roll from the ring.
-                    if custom_active && detecting && !custom_failed {
-                        custom_feeding = true;
-                        match eng.feed_custom(slot) {
-                            Some(Ok((true, score))) => {
-                                custom_hit = Some(score);
-                                custom_mean = Some(score);
-                            }
-                            Some(Ok((false, score))) => {
-                                // The windowed mean of every chunk drives the near-miss band;
-                                // negative means the detector window is still filling.
-                                custom_mean = (score >= 0.0).then_some(score);
-                            }
-                            Some(Err(e)) => {
-                                custom_failed = true;
-                                error!("Ricardo wake word: {e}");
-                            }
-                            None => {
-                                custom_failed = true;
-                                error!("Ricardo wake word: detector is not loaded");
-                            }
+        if let Some(d) = eng.output(VQE_OMNI_WITH_GAIN).filter(|d| !d.is_empty()) {
+            gain_hist[gain_pos] = mean_square(d);
+            gain_pos = (gain_pos + 1) % LEVEL_CHUNKS;
+            gain_filled = (gain_filled + 1).min(LEVEL_CHUNKS);
+            if let Some(slot) = ring.push(d) {
+                // The Ricardo detector hears the same cleaned chunk as the ring and the
+                // stock spotter; its confirmation then takes the pre-roll from the ring.
+                if custom_active && detecting && !custom_failed {
+                    custom_feeding = true;
+                    match eng.feed_custom(slot) {
+                        Some(Ok((true, score))) => {
+                            custom_hit = Some(score);
+                            custom_mean = Some(score);
                         }
-                    }
-                    // The same detector input, in a 31 s ring: a hit keeps 3 s before and 1 s
-                    // after, a miss the last 30 s. Off when muted or without the Ricardo model.
-                    let recording = wake.is_some()
-                        && shared.recording.load(Relaxed)
-                        && custom_active
-                        && detecting
-                        && !custom_failed;
-                    if recording {
-                        let now = pulsar_core::now_ms();
-                        let utc = logic::utc_ms();
-                        let miss = shared.wake_miss.swap(false, Relaxed);
-                        let st = wake.as_mut().expect("wake is Some when recording");
-                        if miss && let Some(rec) = st.capture.miss(utc) {
-                            st.counters.miss.fetch_add(1, Relaxed);
-                            st.send(rec);
+                        Some(Ok((false, score))) => {
+                            // The windowed mean of every chunk drives the near-miss band;
+                            // negative means the detector window is still filling.
+                            custom_mean = (score >= 0.0).then_some(score);
                         }
-                        let p = st
-                            .capture
-                            .push(slot, custom_mean, custom_hit, dry_run, now, utc);
-                        if p.hit.is_some() {
-                            st.counters.hits.fetch_add(1, Relaxed);
+                        Some(Err(e)) => {
+                            custom_failed = true;
+                            error!("Ricardo wake word: {e}");
                         }
-                        if p.near {
-                            st.counters.near.fetch_add(1, Relaxed);
+                        None => {
+                            custom_failed = true;
+                            error!("Ricardo wake word: detector is not loaded");
                         }
-                        if p.dropped {
-                            st.counters.dropped.fetch_add(1, Relaxed);
-                        }
-                        for rec in p.finished {
-                            st.send(rec);
-                        }
-                        wake_hit_id = p.hit.map(|h| h.id);
-                    } else {
-                        // No ring without recording: a miss button pressed meanwhile is void.
-                        shared.wake_miss.store(false, Relaxed);
-                        if let Some(st) = wake.as_mut() {
-                            st.capture.reset();
-                        }
-                    }
-                    if shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed) {
-                        let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
                     }
                 }
+                // The same detector input, in a 31 s ring: a hit keeps 3 s before and 1 s
+                // after, a miss the last 30 s. Off when muted or without the Ricardo model.
+                let recording = wake.is_some()
+                    && shared.recording.load(Relaxed)
+                    && custom_active
+                    && detecting
+                    && !custom_failed;
+                if recording {
+                    let now = pulsar_core::now_ms();
+                    let utc = logic::utc_ms();
+                    let miss = shared.wake_miss.swap(false, Relaxed);
+                    let st = wake.as_mut().expect("wake is Some when recording");
+                    if miss && let Some(rec) = st.capture.miss(utc) {
+                        st.counters.miss.fetch_add(1, Relaxed);
+                        st.send(rec);
+                    }
+                    let p = st
+                        .capture
+                        .push(slot, custom_mean, custom_hit, dry_run, now, utc);
+                    if p.hit.is_some() {
+                        st.counters.hits.fetch_add(1, Relaxed);
+                    }
+                    if p.near {
+                        st.counters.near.fetch_add(1, Relaxed);
+                    }
+                    if p.dropped {
+                        st.counters.dropped.fetch_add(1, Relaxed);
+                    }
+                    for rec in p.finished {
+                        st.send(rec);
+                    }
+                    wake_hit_id = p.hit.map(|h| h.id);
+                } else {
+                    // No ring without recording: a miss button pressed meanwhile is void.
+                    shared.wake_miss.store(false, Relaxed);
+                    if let Some(st) = wake.as_mut() {
+                        st.capture.reset();
+                    }
+                }
+                if shared.wake_pending.load(Acquire) > 0 || shared.stream.load(Relaxed) {
+                    let _ = tx.send(FrontendEvent::Audio(slot.to_vec()));
+                }
             }
-            None => {
-                ring.clear();
-                // A missing output is a gap: restart the prior window.
-                gain_hist = [0.0; LEVEL_CHUNKS];
-                gain_pos = 0;
-                gain_filled = 0;
-            }
+        } else {
+            ring.clear();
+            // A missing output is a gap: restart the prior window.
+            gain_hist = [0.0; LEVEL_CHUNKS];
+            gain_pos = 0;
+            gain_filled = 0;
         }
 
         // Listening time is the audio the detector actually heard (contract v1).
@@ -1328,9 +1321,9 @@ mod tests {
 
     #[test]
     fn ricardo_preroll_is_the_last_256_ms_of_the_ring() {
-        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
         const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
         const RING_CHUNKS: usize = PREROLL_SAMPLES / FRAME;
+        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
         let mut ring = PrerollRing::new(RING_CHUNKS, FRAME);
         for k in 0..RING_CHUNKS {
             ring.push(&[k as f32 / 32768.0; FRAME]);
@@ -1523,7 +1516,7 @@ mod tests {
     fn without_the_yandex_library_the_handle_is_degraded() {
         // No /system/vendor/quasar/libs on the build host: dlopen fails.
         let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-        let (h, mut rx) = spawn(midi, PathBuf::from("/nonexistent"), None, false, None, None);
+        let (h, mut rx) = spawn(midi, Path::new("/nonexistent"), None, false, None, None);
         h.set_streaming(true);
         h.set_model(PathBuf::from("/nonexistent/2"));
         let h2 = h.clone();

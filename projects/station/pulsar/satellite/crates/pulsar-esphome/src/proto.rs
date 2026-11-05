@@ -1,5 +1,8 @@
 //! Minimal hand-written protobuf (proto3) wire codec for the ESPHome native API.
 
+#[cfg(test)]
+use std::fmt::Write as _;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WireType {
     Varint = 0,
@@ -111,7 +114,7 @@ impl Writer {
         self.bytes(field, s.as_bytes(), force);
     }
 
-    pub fn msg(&mut self, field: u32, sub: &Writer) {
+    pub fn msg(&mut self, field: u32, sub: &Self) {
         self.bytes(field, &sub.buf, true);
     }
 
@@ -260,7 +263,7 @@ impl<'a> Reader<'a> {
 }
 
 #[cfg(test)]
-pub(crate) mod golden {
+pub mod golden {
     //! Golden vectors of the C++ reference, `tests/golden/proto.txt` (see its header).
 
     pub const PROTO: &str = include_str!("../tests/golden/proto.txt");
@@ -315,10 +318,8 @@ mod tests {
         for c in cases("get_varint") {
             let input = unhex(c[0]);
             let mut pos = 0;
-            let got = match get_varint(&input, &mut pos) {
-                Some(v) => format!("ok {v} {pos}"),
-                None => format!("fail {pos}"),
-            };
+            let got = get_varint(&input, &mut pos)
+                .map_or_else(|| format!("fail {pos}"), |v| format!("ok {v} {pos}"));
             assert_eq!(got, c[1..].join(" "), "get_varint {}", c[0]);
         }
     }
@@ -333,28 +334,28 @@ mod tests {
             }
         };
         check("u32", &|w, c| {
-            w.u32(c[0].parse().unwrap(), c[1].parse().unwrap(), flag(c[2]))
+            w.u32(c[0].parse().unwrap(), c[1].parse().unwrap(), flag(c[2]));
         });
         check("i32", &|w, c| {
-            w.i32(c[0].parse().unwrap(), c[1].parse().unwrap(), flag(c[2]))
+            w.i32(c[0].parse().unwrap(), c[1].parse().unwrap(), flag(c[2]));
         });
         check("bool", &|w, c| {
-            w.boolean(c[0].parse().unwrap(), flag(c[1]), flag(c[2]))
+            w.boolean(c[0].parse().unwrap(), flag(c[1]), flag(c[2]));
         });
         check("fixed32", &|w, c| {
-            w.fixed32(c[0].parse().unwrap(), c[1].parse().unwrap(), flag(c[2]))
+            w.fixed32(c[0].parse().unwrap(), c[1].parse().unwrap(), flag(c[2]));
         });
         check("flt", &|w, c| {
             let bits = u32::from_str_radix(c[1], 16).unwrap();
-            w.flt(c[0].parse().unwrap(), f32::from_bits(bits), flag(c[2]))
+            w.flt(c[0].parse().unwrap(), f32::from_bits(bits), flag(c[2]));
         });
         check("bytes", &|w, c| {
-            w.bytes(c[0].parse().unwrap(), &unhex(c[1]), flag(c[2]))
+            w.bytes(c[0].parse().unwrap(), &unhex(c[1]), flag(c[2]));
         });
         check("msg", &|w, c| {
             let mut sub = Writer::new();
             sub.buf = unhex(c[1]);
-            w.msg(c[0].parse().unwrap(), &sub)
+            w.msg(c[0].parse().unwrap(), &sub);
         });
         check("packed", &|w, c| {
             let vals: Vec<u32> = if c[1] == "-" {
@@ -362,7 +363,7 @@ mod tests {
             } else {
                 c[1].split(',').map(|v| v.parse().unwrap()).collect()
             };
-            w.packed_u32(c[0].parse().unwrap(), &vals)
+            w.packed_u32(c[0].parse().unwrap(), &vals);
         });
     }
 
@@ -401,10 +402,10 @@ mod tests {
                 } else {
                     "-".into()
                 };
-                out += &format!("{}:{}:{}:{data} ", f.num, f.wt as u8, f.v);
+                let _ = write!(out, "{}:{}:{}:{data} ", f.num, f.wt as u8, f.v);
             }
             let again = r.next().is_some();
-            out += &format!("err={} again={}", u8::from(r.error()), u8::from(again));
+            let _ = write!(out, "err={} again={}", u8::from(r.error()), u8::from(again));
             assert_eq!(out, c[1..].join(" "), "reader {}", c[0]);
         }
     }

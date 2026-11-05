@@ -156,6 +156,10 @@ async fn sleep_until(deadline: Option<Instant>) {
 
 impl Gateway {
     pub async fn run_button(self: Arc<Self>, path: &Path) {
+        enum Outcome {
+            Timer,
+            Read(std::io::Result<usize>),
+        }
         let mut file = match tokio::fs::File::open(path).await {
             Ok(file) => file,
             Err(err) => {
@@ -173,10 +177,6 @@ impl Gateway {
         let mut buffer = [0u8; 16];
         loop {
             let deadline = tracker.next_deadline();
-            enum Outcome {
-                Timer,
-                Read(std::io::Result<usize>),
-            }
             let outcome = tokio::select! {
                 biased;
                 () = sleep_until(deadline) => Outcome::Timer,
@@ -313,7 +313,7 @@ mod tests {
         assert_eq!(three.on_timer(deadline), Some(ButtonEvent::Decision(3)));
 
         // The third press of a four-press gesture must not decide early.
-        let mut four = ButtonTracker::new(timings.clone());
+        let mut four = ButtonTracker::new(timings);
         tap(&mut four, base);
         tap(&mut four, base + Duration::from_millis(200));
         tap(&mut four, base + Duration::from_millis(400));
@@ -365,7 +365,7 @@ mod tests {
     fn old_presses_expire() {
         let timings = Timings::default();
         let base = Instant::now();
-        let mut tracker = ButtonTracker::new(timings.clone());
+        let mut tracker = ButtonTracker::new(timings);
         tap(&mut tracker, base);
         // Two seconds later the earlier tap is outside the 1.5 s group.
         tap(&mut tracker, base + Duration::from_secs(2));

@@ -32,7 +32,7 @@ fn errstr(e: &io::Error) -> String {
 }
 
 /// mkdir 0700, not recursive; an existing entry counts as success.
-pub(crate) fn ensure_dir(dir: &Path) -> bool {
+pub fn ensure_dir(dir: &Path) -> bool {
     match DirBuilder::new().mode(0o700).create(dir) {
         Ok(()) => true,
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => true,
@@ -43,13 +43,13 @@ pub(crate) fn ensure_dir(dir: &Path) -> bool {
     }
 }
 
-pub(crate) fn load_blob(dir: &Path, key: &OsStr) -> Option<Vec<u8>> {
+pub fn load_blob(dir: &Path, key: &OsStr) -> Option<Vec<u8>> {
     fs::read(path(dir, key)).ok()
 }
 
 /// Atomic and durable: `<key>.tmp` (0600) written and fsynced, renamed over `<key>`, then the
 /// directory fsynced.
-pub(crate) fn save_blob(dir: &Path, key: &OsStr, data: &[u8]) -> bool {
+pub fn save_blob(dir: &Path, key: &OsStr, data: &[u8]) -> bool {
     let p = path(dir, key);
     let mut tmp = OsString::from(p.as_os_str());
     tmp.push(".tmp");
@@ -90,7 +90,7 @@ pub(crate) fn save_blob(dir: &Path, key: &OsStr, data: &[u8]) -> bool {
 
 /// Unpaired access lets Music Assistant use the speaker after the operator approves it there;
 /// on unless `<dir>/unpaired_access` starts (after blanks) with `0`.
-pub(crate) fn unpaired_access(dir: &Path) -> bool {
+pub fn unpaired_access(dir: &Path) -> bool {
     fs::read(path(dir, OsStr::new(UNPAIRED_ACCESS))).map_or(true, |b| unpaired_from(&b))
 }
 

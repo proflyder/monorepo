@@ -3,15 +3,6 @@ load(":station_binary.bzl", "station_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-# Cargo workspace manifest and lock are the source of truth for crate_universe
-# (see MODULE.bazel). crate-universe.lock is the generated Bazel lock.
-exports_files([
-    "Cargo.lock",
-    "Cargo.toml",
-    "crate-universe.lock",
-    "rust-toolchain.toml",
-])
-
 LINUX = ["@platforms//os:linux"]
 
 # Every local Rust target: fmt/clippy run once for the whole workspace, like

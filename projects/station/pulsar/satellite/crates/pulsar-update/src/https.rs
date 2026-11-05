@@ -51,7 +51,7 @@ pub struct Tls {
 
 impl Tls {
     /// Reads and parses the bundle (blocking: call it off the runtime thread in the daemon).
-    pub fn load(ca_bundle: &Path) -> Result<Tls, String> {
+    pub fn load(ca_bundle: &Path) -> Result<Self, String> {
         let fail = || format!("cannot load {}", ca_bundle.display());
         let pem = std::fs::read(ca_bundle).map_err(|_| fail())?;
         let mut roots = RootCertStore::empty();
@@ -67,7 +67,7 @@ impl Tls {
             .map_err(|e| format!("TLS setup: {e}"))?
             .with_root_certificates(roots)
             .with_no_client_auth();
-        Ok(Tls {
+        Ok(Self {
             connector: TlsConnector::from(Arc::new(config)),
         })
     }
@@ -230,10 +230,9 @@ pub(crate) struct Url {
 /// `https://host[:port][/path]`; the path keeps any query.
 pub(crate) fn parse_url(url: &str) -> Option<Url> {
     let rest = url.strip_prefix("https://")?;
-    let (hostport, path) = match rest.find('/') {
-        Some(slash) => rest.split_at(slash),
-        None => (rest, "/"),
-    };
+    let (hostport, path) = rest
+        .find('/')
+        .map_or((rest, "/"), |slash| rest.split_at(slash));
     let (host, port) = hostport.split_once(':').unwrap_or((hostport, "443"));
     (!host.is_empty()).then(|| Url {
         host: host.into(),
@@ -258,13 +257,11 @@ pub(crate) fn resolve_location(location: String, u: &Url) -> String {
 /// An OS error as strerror(3) words, without std's " (os error N)".
 pub(crate) fn os_text(e: &io::Error) -> String {
     let text = e.to_string();
-    match e.raw_os_error() {
-        Some(code) => match text.strip_suffix(&format!(" (os error {code})")) {
-            Some(t) => t.to_owned(),
-            None => text,
-        },
-        None => text,
-    }
+    let Some(code) = e.raw_os_error() else {
+        return text;
+    };
+    text.strip_suffix(&format!(" (os error {code})"))
+        .map_or_else(|| text.clone(), str::to_owned)
 }
 
 async fn connect(
@@ -379,12 +376,9 @@ async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
             return None;
         }
     };
-    let head = match parse_head(&head) {
-        Some(head) => head,
-        None => {
-            r.error = "bad status line".into();
-            return None;
-        }
+    let Some(head) = parse_head(&head) else {
+        r.error = "bad status line".into();
+        return None;
     };
     if (300..400).contains(&head.status) && !head.location.is_empty() {
         let location = resolve_location(head.location, u);
@@ -427,10 +421,8 @@ pub(crate) fn parse_head(head: &[u8]) -> Option<Head> {
     };
     let mut rest = &head[first + 2..];
     loop {
-        let (line, next) = match find(rest, b"\r\n") {
-            Some(end) => (&rest[..end], Some(&rest[end + 2..])),
-            None => (rest, None),
-        };
+        let (line, next) =
+            find(rest, b"\r\n").map_or((rest, None), |end| (&rest[..end], Some(&rest[end + 2..])));
         if let Some(colon) = line.iter().position(|&b| b == b':') {
             let name = line[..colon].to_ascii_lowercase();
             let mut value = &line[colon + 1..];
@@ -655,7 +647,7 @@ struct Timed<S> {
 
 impl<S> Timed<S> {
     fn new(io: S) -> Self {
-        Timed {
+        Self {
             io,
             read: Deadline::default(),
             write: Deadline::default(),

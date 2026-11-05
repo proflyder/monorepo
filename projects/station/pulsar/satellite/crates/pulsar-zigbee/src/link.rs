@@ -181,7 +181,7 @@ impl Link {
     /// application runs. Errors are logged. Must run inside the tokio runtime (the tty is
     /// registered with its reactor); from then on [`Link::next`] must be polled continuously,
     /// or the reset, ACK retries and holds do not advance.
-    pub fn open(lines: &RadioLines) -> Option<Link> {
+    pub fn open(lines: &RadioLines) -> Option<Self> {
         let file = match sys::open_tty(&lines.tty, true) {
             Ok(f) => f,
             Err(e) => {
@@ -201,7 +201,7 @@ impl Link {
                 return None;
             }
         };
-        let mut link = Link::with_wire(Box::new(Tty(fd)), lines);
+        let mut link = Self::with_wire(Box::new(Tty(fd)), lines);
         link.reset();
         Some(link)
     }
@@ -209,14 +209,14 @@ impl Link {
     /// A link over the in-memory pipe `wire` (the test's radio holds the other end), reset as
     /// [`Link::open`] does.
     #[cfg(test)]
-    pub(crate) fn over(wire: tokio::io::DuplexStream, lines: &RadioLines) -> Link {
-        let mut link = Link::with_wire(Box::new(wire), lines);
+    pub(crate) fn over(wire: tokio::io::DuplexStream, lines: &RadioLines) -> Self {
+        let mut link = Self::with_wire(Box::new(wire), lines);
         link.reset();
         link
     }
 
-    fn with_wire(wire: Box<dyn Wire>, lines: &RadioLines) -> Link {
-        Link {
+    fn with_wire(wire: Box<dyn Wire>, lines: &RadioLines) -> Self {
+        Self {
             wire,
             tty: lines.tty.clone(),
             read_dead: false,

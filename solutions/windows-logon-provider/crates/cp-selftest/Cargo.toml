@@ -2,9 +2,9 @@
 name = "cp_selftest"
 description = "cp-selftest.exe: loads the Ricardo Komp Logon credential provider outside LogonUI"
 version = "0.1.0"
-edition = "2024"
-license = "AGPL-3.0-only"
-publish = false
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "cp-selftest"
@@ -15,3 +15,6 @@ path = "src/main.rs"
 [target.'cfg(windows)'.dependencies]
 windows-core = { workspace = true }
 windows-link = { workspace = true }
+
+[lints]
+workspace = true

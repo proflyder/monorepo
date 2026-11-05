@@ -11,13 +11,22 @@
 
 Сборка — на Linux или WSL2. Демон и его C/C++-зависимости собираются Bazel
 (Bazelisk, Bazel 9.3.1); версии закреплены в корневом `MODULE.bazel`:
-Rust 1.99.1 (совпадает с `satellite/rust-toolchain.toml`), zig 0.14.1 с
+Rust 1.99.1 (совпадает с корневым `/rust-toolchain.toml`), zig 0.14.1 с
 cc-toolchain для `aarch64-linux-gnu` (glibc 2.36) и
 `arm-linux-gnueabihf` (glibc 2.23, cortex-a53/VFPv4), sendspin-cpp и его
 зависимости — `http_archive` с теми же ревизиями, что раньше качал
 `third_party/fetch.sh` (BUILD-overlay'и — `satellite/third_party/bazel/`).
 Rust, zig и C/C++ скачиваются Bazel'ом; rustup, cargo-zigbuild, cmake и ninja
 не нужны. Для installer — Go 1.27+; для установки — adb из platform-tools.
+
+Крейты Pulsar — члены общего корневого Cargo workspace: пины зависимостей
+лежат в `/Cargo.toml` (`[workspace.dependencies]`), один `Cargo.lock` и один
+`rust-toolchain.toml` на весь монорепозиторий, `crate_universe` читает их как
+`@crates//`. Общие линты — `[workspace.lints]` там же; Bazel передаёт их в
+`rust_clippy_test` через `extract_cargo_lints`. Upstream-патч, меняющий
+манифесты upstream, переносится вручную: версии из upstream
+`[workspace.dependencies]` добавляются/обновляются в корневом файле, а
+манифесты крейтов сохраняют `{ workspace = true }` (см. `RICARDO.md`).
 
 Хост-проверки (fmt, clippy с `-D warnings`, юнит/интеграционные тесты,
 golden-файлы) — те же, что в CI-юните `pulsar-bazel`:

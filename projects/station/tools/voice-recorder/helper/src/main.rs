@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 use pulsar_audio::FrontendEvent;
 use std::io::{Write, stdout};
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Duration;
 
 fn main() -> std::io::Result<()> {
@@ -24,9 +24,10 @@ fn main() -> std::io::Result<()> {
     rt.block_on(async {
         let (front, mut events) = pulsar_audio::spawn(
             model,
-            PathBuf::from("/system/vendor/quasar/spotter_models/activation/alisa"),
+            Path::new("/system/vendor/quasar/spotter_models/activation/alisa"),
             None,
             false,
+            None,
             None,
         );
         front.set_detection(false);

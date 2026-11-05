@@ -42,10 +42,10 @@ fn run() -> u8 {
         return 1;
     };
     pulsar_alsa::init(m);
-    let spk_channels = match std::env::var_os("SPK") {
-        Some(s) => parse_channels(&s.to_string_lossy()),
-        None => m.spk_channels.to_vec(),
-    };
+    let spk_channels = std::env::var_os("SPK").map_or_else(
+        || m.spk_channels.to_vec(),
+        |s| parse_channels(&s.to_string_lossy()),
+    );
     let cap = m.capture_channels as usize;
     if let Some(&c) = spk_channels.iter().find(|&&c| c as usize >= cap) {
         let _ = writeln!(
@@ -113,20 +113,14 @@ fn run() -> u8 {
             return 1;
         }
     };
-    let frames = match usize::try_from(vqe.chunk()) {
-        Ok(n @ 1..) => n,
-        _ => {
-            out!("cfg: input chunk size {}", vqe.chunk());
-            return 1;
-        }
+    let Ok(frames @ 1..) = usize::try_from(vqe.chunk()) else {
+        out!("cfg: input chunk size {}", vqe.chunk());
+        return 1;
     };
     // Samples per spotter channel and chunk: 512, 256 on the Mini 3 and Mini.
-    let frame = match usize::try_from(vqe.frame()) {
-        Ok(n @ 1..) => n,
-        _ => {
-            out!("cfg: processing frame {}", vqe.frame());
-            return 1;
-        }
+    let Ok(frame @ 1..) = usize::try_from(vqe.frame()) else {
+        out!("cfg: processing frame {}", vqe.frame());
+        return 1;
     };
 
     let conf = match SpotterConf::read(&lib, &model_dir) {

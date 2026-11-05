@@ -74,9 +74,10 @@ use_repo(
     "org_modernc_sqlite",
 )
 
-# Rust station daemon (projects/station/pulsar/satellite). The toolchain
-# version is the one pinned in satellite/rust-toolchain.toml; edition per crate
-# comes from Cargo.toml (workspace edition 2024).
+# Rust: one Cargo workspace for every first-party crate (Pulsar, BLE gateway,
+# Windows logon provider, station helper; see /Cargo.toml). The toolchain
+# version is the one pinned in /rust-toolchain.toml; edition per crate comes
+# from Cargo.toml (workspace edition 2024).
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
@@ -224,61 +225,28 @@ register_toolchains(
     "@zig_0_14_1//:windows_x86_64_toolchain",
 )
 
-# External crates of the Pulsar Cargo workspace. Cargo.lock stays the source of
-# truth: a Cargo.toml/Cargo.lock change repins the generated Bazel lock (see
-# projects/station/pulsar/docs/development.md, «Bazel»).
+# External crates of the single first-party Cargo workspace (/Cargo.toml).
+# Cargo.lock stays the source of truth: a Cargo.toml/Cargo.lock change repins
+# the generated Bazel lock `//:crate-universe.lock` (see
+# projects/station/pulsar/docs/development.md, «Bazel»). Host triples keep the
+# portable tests buildable on macOS/Linux; the station triples build the
+# deployed daemons and the windows triple builds the credential-provider DLL.
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 crate.from_cargo(
-    name = "pulsar_crates",
-    cargo_lockfile = "//projects/station/pulsar/satellite:Cargo.lock",
-    lockfile = "//projects/station/pulsar/satellite:crate-universe.lock",
-    manifests = ["//projects/station/pulsar/satellite:Cargo.toml"],
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    lockfile = "//:crate-universe.lock",
+    manifests = ["//:Cargo.toml"],
     supported_platform_triples = [
         "aarch64-apple-darwin",
         "aarch64-unknown-linux-gnu",
         "armv7-unknown-linux-gnueabihf",
-        "x86_64-apple-darwin",
-        "x86_64-unknown-linux-gnu",
-    ],
-)
-use_repo(crate, "pulsar_crates")
-
-# Windows Credential Provider Cargo workspace (solutions/windows-logon-provider).
-# It is a separate workspace from Pulsar; crate-universe.lock is its generated
-# Bazel lock next to Cargo.lock. Host triples keep the portable protocol tests
-# buildable on macOS/Linux, the windows triple builds the cdylib.
-crate.from_cargo(
-    name = "logon_crates",
-    cargo_lockfile = "//solutions/windows-logon-provider:Cargo.lock",
-    lockfile = "//solutions/windows-logon-provider:crate-universe.lock",
-    manifests = ["//solutions/windows-logon-provider:Cargo.toml"],
-    supported_platform_triples = [
-        "aarch64-apple-darwin",
-        "aarch64-unknown-linux-gnu",
         "x86_64-apple-darwin",
         "x86_64-pc-windows-gnu",
         "x86_64-unknown-linux-gnu",
     ],
 )
-use_repo(crate, "logon_crates")
-
-# BLE gateway Cargo workspace (projects/station/ble-gateway). A separate
-# workspace from Pulsar because Pulsar tracks upstream; host triples let the
-# unit tests build on macOS/Linux, armv7 builds the deployed station binary.
-crate.from_cargo(
-    name = "ble_gateway_crates",
-    cargo_lockfile = "//projects/station/ble-gateway:Cargo.lock",
-    lockfile = "//projects/station/ble-gateway:crate-universe.lock",
-    manifests = ["//projects/station/ble-gateway:Cargo.toml"],
-    supported_platform_triples = [
-        "aarch64-apple-darwin",
-        "aarch64-unknown-linux-gnu",
-        "armv7-unknown-linux-gnueabihf",
-        "x86_64-apple-darwin",
-        "x86_64-unknown-linux-gnu",
-    ],
-)
-use_repo(crate, "ble_gateway_crates")
+use_repo(crate, "crates")
 
 # ---------------------------------------------------------------------------
 # Android / Kotlin (projects/mobile/android)
