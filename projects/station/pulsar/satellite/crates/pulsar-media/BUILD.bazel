@@ -8,7 +8,7 @@ LINUX = ["@platforms//os:linux"]
 DEPS = [
     "@crates//:libc",
     "@crates//:libloading",
-    "@crates//:log",
+    "@crates//:tracing",
     "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",

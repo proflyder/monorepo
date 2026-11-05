@@ -11,7 +11,6 @@ mod voice;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use log::{debug, error, info, warn};
 use pulsar_audio::{FrontendEvent, Outcome};
 use pulsar_core::model::Model;
 use pulsar_core::{ClockShot, Timers, UiState, now_ms};
@@ -25,6 +24,7 @@ use pulsar_update::{Release, UpdateEvent, UpdaterHandle};
 use pulsar_zigbee::{ZigbeeConfig, ZigbeeEvent, ZigbeeHandle};
 use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc::UnboundedReceiver;
+use tracing::{debug, error, info, warn};
 
 use crate::settings::{Settings, StateFile};
 use crate::version::{BUILD_TIME, VERSION};

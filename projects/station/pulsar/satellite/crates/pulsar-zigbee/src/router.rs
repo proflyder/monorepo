@@ -4,8 +4,8 @@
 //! (join), 0x0005 leave + factory new; unsolicited 0x8906 joined, 0x8920 `[event][status]` (1
 //! started: status 0 = on a network; 2 join failed: BDB status; 3 left).
 
-use log::{info, warn};
 use pulsar_core::Timers;
+use tracing::{info, warn};
 
 use crate::bytes::get_be16;
 use crate::link::{AckTag, Link, LinkEvent};

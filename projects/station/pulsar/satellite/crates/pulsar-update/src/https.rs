@@ -254,15 +254,7 @@ pub(crate) fn resolve_location(location: String, u: &Url) -> String {
     format!("https://{}{port}{location}", u.host)
 }
 
-/// An OS error as strerror(3) words, without std's " (os error N)".
-pub(crate) fn os_text(e: &io::Error) -> String {
-    let text = e.to_string();
-    let Some(code) = e.raw_os_error() else {
-        return text;
-    };
-    text.strip_suffix(&format!(" (os error {code})"))
-        .map_or_else(|| text.clone(), str::to_owned)
-}
+pub(crate) use ricardo_linux::io_error_text as os_text;
 
 async fn connect(
     tls: &Tls,

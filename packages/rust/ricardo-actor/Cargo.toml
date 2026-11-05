@@ -1,0 +1,17 @@
+[package]
+name = "ricardo-actor"
+description = "Non-blocking, cloneable command handle for actors"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ricardo-runtime = { path = "../ricardo-runtime" }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

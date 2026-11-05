@@ -7,7 +7,7 @@ use std::io::{self, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::sys;
 
@@ -63,14 +63,7 @@ pub fn trim(s: &[u8]) -> &[u8] {
     &s[start..end]
 }
 
-/// `io::Error` as C strerror text, without std's " (os error N)".
-pub fn os_error_text(e: &io::Error) -> String {
-    let s = e.to_string();
-    match s.find(" (os error") {
-        Some(i) => s[..i].to_owned(),
-        None => s,
-    }
-}
+pub use ricardo_linux::io_error_text as os_error_text;
 
 /// Reads the key file. Missing / empty file or the all-zeros key: no key. A file that cannot be
 /// read or is not base64 of 32 bytes fails closed: someone meant to enable encryption, so there

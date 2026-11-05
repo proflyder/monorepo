@@ -6,9 +6,10 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
+    "//packages/rust/ricardo-linux:ricardo_linux",
     "@crates//:libc",
     "@crates//:libloading",
-    "@crates//:log",
+    "@crates//:tracing",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
 

@@ -18,8 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use log::{error, info};
-use pulsar_core::actors;
+use tracing::{error, info};
 
 use controller::Controller;
 use version::VERSION;
@@ -107,7 +106,13 @@ fn main() -> ExitCode {
         0
     });
 
-    local.block_on(&rt, actors::join_all(Duration::from_secs(3)));
+    let stuck = local.block_on(
+        &rt,
+        pulsar_core::supervisor().shutdown(Duration::from_secs(3)),
+    );
+    for name in stuck {
+        tracing::warn!("actor {name} did not stop");
+    }
     {
         // Actors still running are dropped inside the runtime, which their resources belong to.
         let _rt = rt.enter();

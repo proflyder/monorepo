@@ -1,16 +1,34 @@
 //! Runtime plumbing shared by first-party daemons: a thin [`Supervisor`] over
 //! [`CancellationToken`] and [`TaskTracker`], plus a Unix shutdown signal.
+//!
+//! The supervisor keeps a name per task so shutdown can report which actors
+//! refused to stop. It does not impose a runtime flavour: [`Supervisor::spawn`]
+//! takes `Send` futures for multi-threaded servers, [`Supervisor::spawn_local`]
+//! takes `!Send` ones inside a [`tokio::task::LocalSet`] (the Pulsar daemon).
 
 use std::future::Future;
+use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
+
+/// One tracked task: its supervisor-assigned name and the join handle used to
+/// report unfinished tasks at shutdown.
+#[derive(Debug)]
+struct Named {
+    name: &'static str,
+    handle: JoinHandle<()>,
+}
 
 /// Long-lived task registry with one cancellation token.
 #[derive(Clone, Debug, Default)]
 pub struct Supervisor {
     token: CancellationToken,
     tracker: TaskTracker,
+    /// Shared by clones; tasks are registered by every clone on the same tracker.
+    names: std::sync::Arc<Mutex<Vec<Named>>>,
 }
 
 impl Supervisor {
@@ -24,19 +42,54 @@ impl Supervisor {
         self.token.clone()
     }
 
-    /// Spawn a task that is awaited by [`Supervisor::shutdown`].
-    pub fn spawn<F>(&self, future: F) -> tokio::task::JoinHandle<()>
+    /// Spawn a `Send` task (the server flavour) and track it for [`Self::shutdown`].
+    pub fn spawn<F>(&self, name: &'static str, future: F)
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        self.tracker.spawn(future)
+        self.register(name, self.tracker.spawn(future));
     }
 
-    /// Cancel every task and wait until all of them have returned.
-    pub async fn shutdown(&self) {
+    /// Spawn a `!Send` task on the current `LocalSet` and track it for shutdown.
+    ///
+    /// Must be called from inside a [`tokio::task::LocalSet`]; that is how the
+    /// single-threaded station runtime runs every actor.
+    pub fn spawn_local<F>(&self, name: &'static str, future: F)
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        self.register(name, self.tracker.spawn_local(future));
+    }
+
+    fn register(&self, name: &'static str, handle: JoinHandle<()>) {
+        let mut names = self.names.lock().unwrap_or_else(PoisonError::into_inner);
+        // Servers spawn one task per connection: finished handles must not accumulate.
+        names.retain(|named| !named.handle.is_finished());
+        names.push(Named { name, handle });
+    }
+
+    /// Cancel every task and wait up to `timeout` for all of them to return.
+    ///
+    /// Returns the names of tasks that were still running when the timeout
+    /// expired (empty when every task stopped). Panics are reported by the
+    /// process's panic hook, so the registry only keeps handles for names.
+    pub async fn shutdown(&self, timeout: Duration) -> Vec<&'static str> {
         self.token.cancel();
         self.tracker.close();
-        self.tracker.wait().await;
+        if tokio::time::timeout(timeout, self.tracker.wait())
+            .await
+            .is_err()
+        {
+            return self.unfinished();
+        }
+        Vec::new()
+    }
+
+    /// Names of tasks that have not finished yet.
+    fn unfinished(&self) -> Vec<&'static str> {
+        let mut names = self.names.lock().unwrap_or_else(PoisonError::into_inner);
+        names.retain(|named| !named.handle.is_finished());
+        names.iter().map(|named| named.name).collect()
     }
 }
 
@@ -79,15 +132,19 @@ mod tests {
         let finished = Arc::new(AtomicBool::new(false));
         let task_token = supervisor.token();
         let task_finished = finished.clone();
-        supervisor.spawn(async move {
+        supervisor.spawn("worker", async move {
             task_token.cancelled().await;
             task_finished.store(true, Ordering::SeqCst);
         });
         tokio::task::yield_now().await;
         assert!(!finished.load(Ordering::SeqCst));
-        tokio::time::timeout(Duration::from_secs(1), supervisor.shutdown())
-            .await
-            .expect("shutdown must not hang");
+        let stuck = tokio::time::timeout(
+            Duration::from_secs(1),
+            supervisor.shutdown(Duration::from_secs(1)),
+        )
+        .await
+        .expect("shutdown must not hang");
+        assert!(stuck.is_empty());
         assert!(finished.load(Ordering::SeqCst));
     }
 
@@ -96,10 +153,50 @@ mod tests {
         let supervisor = Supervisor::new();
         let waiter = supervisor.token();
         let observer = tokio::spawn(async move { waiter.cancelled().await });
-        supervisor.shutdown().await;
+        supervisor.shutdown(Duration::from_secs(1)).await;
         tokio::time::timeout(Duration::from_secs(1), observer)
             .await
             .expect("observer should finish")
             .expect("observer task");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_reports_tasks_that_never_stop() {
+        let supervisor = Supervisor::new();
+        supervisor.spawn("stuck", std::future::pending());
+        tokio::task::yield_now().await;
+        let names = supervisor.shutdown(Duration::from_secs(1)).await;
+        assert_eq!(names, ["stuck"]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn finished_tasks_are_pruned_from_the_registry() {
+        let supervisor = Supervisor::new();
+        supervisor.spawn("done", async {});
+        tokio::task::yield_now().await;
+        supervisor.spawn("pending", std::future::pending());
+        let names = supervisor.names.lock().unwrap();
+        assert_eq!(names.len(), 1);
+        assert_eq!(names[0].name, "pending");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn local_tasks_run_on_the_local_set() {
+        let supervisor = Supervisor::new();
+        let local = tokio::task::LocalSet::new();
+        let done = Arc::new(AtomicBool::new(false));
+        let flag = done.clone();
+        local
+            .run_until(async {
+                supervisor.spawn_local("local", async move {
+                    // `Rc` makes this future `!Send`, which only `spawn_local` accepts.
+                    let _marker = std::rc::Rc::new(());
+                    flag.store(true, Ordering::SeqCst);
+                });
+                tokio::task::yield_now().await;
+                assert!(supervisor.shutdown(Duration::from_secs(1)).await.is_empty());
+            })
+            .await;
+        assert!(done.load(Ordering::SeqCst));
     }
 }

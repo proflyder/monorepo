@@ -935,7 +935,12 @@ async fn shutdown_asks_clients_to_disconnect() {
             let b = Peer::connect(port).await;
             assert!(a.sync().await.is_empty());
             drop(h);
-            assert!(actors::join_all(Duration::from_secs(3)).await);
+            assert!(
+                pulsar_core::supervisor()
+                    .shutdown(Duration::from_secs(3))
+                    .await
+                    .is_empty()
+            );
             // No events from the teardown.
             assert!(rx.recv().await.is_none());
             (a, b)

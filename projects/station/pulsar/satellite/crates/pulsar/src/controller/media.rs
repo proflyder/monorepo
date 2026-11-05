@@ -1,10 +1,10 @@
 //! Volume, mute, ducking, the HA media player and the Sendspin hooks (controller.cpp "media").
 
-use log::debug;
 use pulsar_core::{ClockShot, now_ms};
 use pulsar_esphome::{MediaCommand, MediaCommandRequest};
 use pulsar_media::{Channel, PlayState};
 use pulsar_sendspin::SendspinEvent;
+use tracing::debug;
 
 use super::logic::{self, cxx_max, cxx_min};
 use super::{Controller, DUCK_GAIN, Pending, SOUNDS};

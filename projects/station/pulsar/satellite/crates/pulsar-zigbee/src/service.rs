@@ -17,9 +17,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use log::{error, info, warn};
-use pulsar_core::{Timers, actors};
+use pulsar_core::Timers;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tracing::{error, info, warn};
 
 use crate::bytes::get_be32;
 use crate::coordinator::{ApsFrame, Coordinator, Hooks};
@@ -161,7 +161,7 @@ pub fn spawn_with(
         router: None,
     };
     svc.start();
-    actors::spawn_actor("zigbee", svc.run_actor(cmd_rx, flash_rx));
+    pulsar_core::supervisor().spawn_local("zigbee", svc.run_actor(cmd_rx, flash_rx));
     (
         ZigbeeHandle {
             mode,

@@ -13,13 +13,13 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use log::{Level, error, info, warn};
-use pulsar_core::{Timers, actors};
+use pulsar_core::Timers;
 use socket2::{Domain, SockRef, Socket, TcpKeepalive, Type};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Notify;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::Instant;
+use tracing::{Level, error, info, warn};
 
 use crate::frame::{self, EncryptError, HandshakeError, NOISE_PROTOCOL, Noise, NoiseFrame, Plain};
 use crate::key::{self, Key, SetKey, os_error_text};
@@ -255,7 +255,7 @@ pub fn spawn(id: DeviceIdentity, mut cfg: ApiConfig) -> Result<Spawned, String> 
     };
     // Diagnostics for the first SubscribeStates; the Diag timer keeps them fresh.
     server.refresh_diagnostics(false);
-    actors::spawn_actor("api", server.run());
+    pulsar_core::supervisor().spawn_local("api", server.run());
     Ok(Spawned {
         cmds: cmd_tx,
         shared,
@@ -365,10 +365,10 @@ fn posix_tz_from_parsed(p: &[u8]) -> String {
 /// Our levels <-> ESPHome LogLevel (DEBUG 5, INFO 3, WARN 2, ERROR 1).
 fn esphome_level(level: Level) -> u32 {
     match level {
-        Level::Error => 1,
-        Level::Warn => 2,
-        Level::Info => 3,
-        Level::Debug | Level::Trace => 5,
+        Level::ERROR => 1,
+        Level::WARN => 2,
+        Level::INFO => 3,
+        Level::DEBUG | Level::TRACE => 5,
     }
 }
 
@@ -1224,10 +1224,10 @@ impl Server {
             .unwrap_or(0);
         let min = match want {
             0 => return pulsar_core::set_log_sink(None, None),
-            5.. => Level::Debug,
-            3 | 4 => Level::Info,
-            2 => Level::Warn,
-            1 => Level::Error,
+            5.. => Level::DEBUG,
+            3 | 4 => Level::INFO,
+            2 => Level::WARN,
+            1 => Level::ERROR,
         };
         pulsar_core::set_log_sink(Some(min), Some(self.log_notify.clone()));
     }

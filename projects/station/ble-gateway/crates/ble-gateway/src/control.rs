@@ -48,7 +48,7 @@ pub async fn start(gateway: &Arc<Gateway>, config: &Config, supervisor: &Supervi
     info!(addr = %config.control_addr, "control HTTP listening");
     let router = router(gateway.clone(), token);
     let shutdown = supervisor.token();
-    supervisor.spawn(async move {
+    supervisor.spawn("control-http", async move {
         if let Err(error) = ricardo_http::serve(listener, router, shutdown).await {
             warn!(%error, "control HTTP stopped");
         }

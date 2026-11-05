@@ -12,7 +12,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use log::{debug, info, warn};
+use tracing::{debug, info, warn};
 
 use super::logic::{self, MAX_BYTES, MAX_EVENTS, Outcome, Sidecar, Stats, Thresholds};
 use super::{Command, Counters, Job, Recording};

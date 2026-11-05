@@ -14,11 +14,11 @@ use std::fs::File;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use log::warn;
 use pulsar_core::Timers;
 use pulsar_core::fmt::{g6, parse_f32_prefix};
 use pulsar_esphome::LightState;
 use pulsar_zigbee::Mode;
+use tracing::warn;
 
 /// A change is written this long after the last one.
 pub const SAVE_DELAY_MS: u64 = 1000;

@@ -1,6 +1,11 @@
-//! `log` backend with the C++ daemon's behaviour: stderr lines "HH:MM:SS.mmm L file:line msg",
-//! collapsing of identical consecutive records, and a bounded sink queue that the ESPHome
-//! server streams to API clients (SubscribeLogs).
+//! Pulsar's `tracing` backend with the C++ daemon's behaviour: stderr lines
+//! "HH:MM:SS.mmm L file:line msg", collapsing of identical consecutive records,
+//! and a bounded sink queue that the ESPHome server streams to API clients
+//! (SubscribeLogs).
+//!
+//! [`init_logger`] installs [`PulsarLayer`] through [`ricardo_telemetry`] and
+//! bridges records of third-party crates (`log`, e.g. rustls) with
+//! `tracing-log`. Pulsar crates themselves log with `tracing` macros.
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
@@ -8,8 +13,12 @@ use std::fmt::Write as _;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use log::{Level, LevelFilter, Log, Metadata, Record};
-use tokio::sync::Notify;
+use ricardo_telemetry::TelemetryBuilder;
+use tracing::field::{Field, Visit};
+use tracing::{Event, Level, Metadata};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::layer::{Context, Layer};
+use tracing_subscriber::registry::Registry;
 
 use crate::sys;
 
@@ -37,18 +46,25 @@ pub struct LogLine {
 /// 3 = error) filters stderr only; the sink has its own level.
 pub fn init_logger() {
     let level = std::env::var("PULSAR_LOG_LEVEL").map_or(1, |v| atoi(&v));
-    let mut g = global();
-    g.core.stderr_level = level;
-    update_max_level(&g.core);
-    drop(g);
-    // A second call keeps the first logger; the level above is updated either way.
-    let _ = log::set_logger(&LOGGER);
+    {
+        let mut g = global();
+        g.core.stderr_level = level;
+        update_max_level(&g.core);
+    }
+    // Records of crates that still log through `log` (rustls, …) become tracing events.
+    let _ = tracing_log::LogTracer::init();
+    // The debug filter is the union of stderr and the sink; the layer itself decides per record.
+    let _ = TelemetryBuilder::new()
+        .with_max_level(LevelFilter::DEBUG)
+        .without_default_layer()
+        .with_layer(PulsarLayer)
+        .init();
 }
 
 /// Queues records at `min_level` and above for `take_log_lines`, independently of the stderr
 /// level; `notify` fires when the queue goes from empty to non-empty. Either None turns the
 /// sink off and discards queued lines and the dropped count.
-pub fn set_log_sink(min_level: Option<Level>, notify: Option<Arc<Notify>>) {
+pub fn set_log_sink(min_level: Option<Level>, notify: Option<Arc<tokio::sync::Notify>>) {
     let mut g = global();
     g.core.set_sink(min_level, notify);
     update_max_level(&g.core);
@@ -69,7 +85,7 @@ pub fn add_own_target(prefix: &'static str) {
 
 /// Stderr's level from PULSAR_LOG_LEVEL (Info until `init_logger`), independent of the sink.
 pub fn stderr_level() -> LevelFilter {
-    filter_of(global().core.stderr_level)
+    level_filter(global().core.stderr_level)
 }
 
 /// Takes the queued lines; after an overflow the first one reports how many were dropped.
@@ -86,7 +102,6 @@ static GLOBAL: Mutex<Global> = Mutex::new(Global {
     core: Core::new(1),
     line: String::new(),
 });
-static LOGGER: Logger = Logger;
 /// Prefixes of `add_own_target`.
 static OWN_TARGETS: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
@@ -103,37 +118,47 @@ fn global() -> MutexGuard<'static, Global> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// log's max level is the more verbose of stderr and sink, so disabled records are dropped in
-/// the macro before formatting.
+/// The `log` bridge's max level is the more verbose of stderr and sink, so disabled records
+/// are dropped by `log` before reaching the subscriber.
 fn update_max_level(core: &Core) {
-    log::set_max_level(filter_of(core.stderr_level.min(core.sink_level)));
+    log::set_max_level(log_filter(core.stderr_level.min(core.sink_level)));
 }
 
-fn filter_of(num: i32) -> LevelFilter {
+fn log_filter(num: i32) -> log::LevelFilter {
     match num {
-        i32::MIN..=0 => LevelFilter::Debug,
-        1 => LevelFilter::Info,
-        2 => LevelFilter::Warn,
-        3 => LevelFilter::Error,
-        _ => LevelFilter::Off,
+        i32::MIN..=0 => log::LevelFilter::Debug,
+        1 => log::LevelFilter::Info,
+        2 => log::LevelFilter::Warn,
+        3 => log::LevelFilter::Error,
+        _ => log::LevelFilter::Off,
+    }
+}
+
+fn level_filter(num: i32) -> LevelFilter {
+    match num {
+        i32::MIN..=0 => LevelFilter::DEBUG,
+        1 => LevelFilter::INFO,
+        2 => LevelFilter::WARN,
+        3 => LevelFilter::ERROR,
+        _ => LevelFilter::OFF,
     }
 }
 
 fn level_num(level: Level) -> i32 {
     match level {
-        Level::Error => 3,
-        Level::Warn => 2,
-        Level::Info => 1,
-        Level::Debug | Level::Trace => 0,
+        Level::ERROR => 3,
+        Level::WARN => 2,
+        Level::INFO => 1,
+        Level::DEBUG | Level::TRACE => 0,
     }
 }
 
 fn level_of(num: i32) -> Level {
     match num {
-        3 => Level::Error,
-        2 => Level::Warn,
-        1 => Level::Info,
-        _ => Level::Debug,
+        3 => Level::ERROR,
+        2 => Level::WARN,
+        1 => Level::INFO,
+        _ => Level::DEBUG,
     }
 }
 
@@ -209,9 +234,100 @@ impl std::fmt::Write for Capped<'_> {
     }
 }
 
+#[cfg(test)]
 fn format_msg(buf: &mut String, args: std::fmt::Arguments<'_>) {
     buf.clear();
     let _ = std::fmt::write(&mut Capped(buf), args);
+}
+
+/// Copies the event's `message` field into the buffer, capped like the C++ daemon's line.
+///
+/// `tracing-log` events carry the real `log` target and location as fields
+/// (`log.target`, `log.file`, `log.line`) and a constant metadata target, so the
+/// visitor also captures those.
+struct MessageVisitor<'a> {
+    buf: &'a mut String,
+    target: Option<String>,
+    file: Option<String>,
+    line: Option<u32>,
+}
+
+impl<'a> MessageVisitor<'a> {
+    fn new(buf: &'a mut String) -> Self {
+        Self {
+            buf,
+            target: None,
+            file: None,
+            line: None,
+        }
+    }
+}
+
+impl MessageVisitor<'_> {
+    /// Fields other than `message` are appended like `tracing`'s own formatter,
+    /// within the same 1023-byte cap. `log.*` carries the bridge's metadata and
+    /// is not part of the C++ line.
+    fn field(&mut self, field: &Field) -> bool {
+        if field.name() == "message" || field.name().starts_with("log.") {
+            return false;
+        }
+        let _ = write!(Capped(self.buf), " {}", field.name());
+        true
+    }
+}
+
+impl Visit for MessageVisitor<'_> {
+    fn record_str(&mut self, field: &Field, value: &str) {
+        match field.name() {
+            "message" => {
+                self.buf.clear();
+                let _ = write!(Capped(self.buf), "{value}");
+            }
+            "log.target" => self.target = Some(value.to_owned()),
+            "log.file" => self.file = Some(value.to_owned()),
+            "log.module_path" if self.file.is_none() => self.file = Some(value.to_owned()),
+            _ => {
+                if self.field(field) {
+                    let _ = write!(Capped(self.buf), "={value}");
+                }
+            }
+        }
+    }
+
+    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.buf.clear();
+            let _ = write!(Capped(self.buf), "{value:?}");
+        } else if self.field(field) {
+            let _ = write!(Capped(self.buf), "={value:?}");
+        }
+    }
+
+    fn record_i64(&mut self, field: &Field, value: i64) {
+        if self.field(field) {
+            let _ = write!(Capped(self.buf), "={value}");
+        }
+    }
+
+    fn record_u64(&mut self, field: &Field, value: u64) {
+        if field.name() == "log.line" {
+            self.line = u32::try_from(value).ok();
+        } else if self.field(field) {
+            let _ = write!(Capped(self.buf), "={value}");
+        }
+    }
+
+    fn record_f64(&mut self, field: &Field, value: f64) {
+        if self.field(field) {
+            let _ = write!(Capped(self.buf), "={value}");
+        }
+    }
+
+    fn record_bool(&mut self, field: &Field, value: bool) {
+        if self.field(field) {
+            let _ = write!(Capped(self.buf), "={value}");
+        }
+    }
 }
 
 /// Where stderr lines go; the process writes them with a wall-clock time stamp, tests record
@@ -260,7 +376,7 @@ struct Last {
 struct Core {
     stderr_level: i32,
     sink_level: i32,
-    sink_notify: Option<Arc<Notify>>,
+    sink_notify: Option<Arc<tokio::sync::Notify>>,
     sink_queue: VecDeque<LogLine>,
     sink_dropped: usize,
     last: Option<Last>,
@@ -278,7 +394,7 @@ impl Core {
         }
     }
 
-    fn set_sink(&mut self, min_level: Option<Level>, notify: Option<Arc<Notify>>) {
+    fn set_sink(&mut self, min_level: Option<Level>, notify: Option<Arc<tokio::sync::Notify>>) {
         if let (Some(level), Some(notify)) = (min_level, notify) {
             self.sink_level = level_num(level);
             self.sink_notify = Some(notify);
@@ -294,7 +410,7 @@ impl Core {
         let mut out = Vec::with_capacity(self.sink_queue.len() + 1);
         if self.sink_dropped > 0 {
             out.push(LogLine {
-                level: Level::Warn,
+                level: Level::WARN,
                 text: format!("[W][log.rs]: {} log lines dropped", self.sink_dropped),
             });
             self.sink_dropped = 0;
@@ -406,30 +522,66 @@ impl Core {
     }
 }
 
-struct Logger;
+/// The Pulsar tracing layer: stderr contract plus the ESPHome log sink.
+struct PulsarLayer;
 
-impl Log for Logger {
-    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-        let level = metadata.level();
-        level != Level::Trace
-            && level <= log::max_level()
-            && (!is_foreign(metadata.target()) || level <= Level::Warn)
+impl Layer<Registry> for PulsarLayer {
+    fn register_callsite(
+        &self,
+        metadata: &'static Metadata<'static>,
+    ) -> tracing::subscriber::Interest {
+        if *metadata.level() == Level::TRACE {
+            tracing::subscriber::Interest::never()
+        } else {
+            // The sink level changes at runtime (`set_log_sink`), so `enabled` decides.
+            tracing::subscriber::Interest::sometimes()
+        }
     }
 
-    fn log(&self, record: &Record<'_>) {
-        if IN_NOTIFY.get() || record.level() == Level::Trace {
+    fn enabled(&self, metadata: &Metadata<'_>, _context: Context<'_, Registry>) -> bool {
+        let level = *metadata.level();
+        if level == Level::TRACE {
+            return false;
+        }
+        // `tracing-log` events use one static `log` callsite per level; their real
+        // target is a field, so `on_event` filters them by it.
+        if metadata.target() == "log" {
+            return true;
+        }
+        let level = level_num(level);
+        let foreign = is_foreign(metadata.target());
+        global().core.wanted(level, foreign)
+    }
+
+    fn on_event(&self, event: &Event<'_>, _context: Context<'_, Registry>) {
+        if IN_NOTIFY.get() {
             return;
         }
-        let level = level_num(record.level());
-        let foreign = is_foreign(record.target());
-        if foreign && level < WARN {
+        let metadata = event.metadata();
+        let level = *metadata.level();
+        if level == Level::TRACE {
             return;
         }
-        let file = record.file().unwrap_or(record.target());
-        let line = record.line().unwrap_or(0);
+        let level = level_num(level);
         // Formatting runs user Display impls outside the lock. One that logs itself, or a record
-        // during thread teardown, gets a fresh buffer.
-        let write = |buf: &mut String| write_record(buf, record.args(), level, file, line, foreign);
+        // during thread teardown, gets a fresh buffer. The visitor runs once so the `log`
+        // bridge's real target and location are known before the foreign check.
+        let write = |buf: &mut String| {
+            let mut visitor = MessageVisitor::new(buf);
+            event.record(&mut visitor);
+            let target = visitor.target.as_deref().unwrap_or(metadata.target());
+            let foreign = is_foreign(target);
+            if foreign && level < WARN {
+                return None;
+            }
+            let file = visitor
+                .file
+                .as_deref()
+                .or_else(|| metadata.file())
+                .unwrap_or(target);
+            let line = visitor.line.or_else(|| metadata.line()).unwrap_or(0);
+            write_record(buf, level, file, line, foreign)
+        };
         let mut notify = None;
         let buffered = MSG_BUF
             .try_with(|cell| {
@@ -447,20 +599,16 @@ impl Log for Logger {
             IN_NOTIFY.set(false);
         }
     }
-
-    fn flush(&self) {}
 }
 
 #[allow(clippy::significant_drop_tightening)] // the guard must outlive the `&mut *g` reborrow
 fn write_record(
-    buf: &mut String,
-    args: &std::fmt::Arguments<'_>,
+    buf: &str,
     level: i32,
     file: &str,
     line: u32,
     foreign: bool,
-) -> Option<Arc<Notify>> {
-    format_msg(buf, *args);
+) -> Option<Arc<tokio::sync::Notify>> {
     let mut g = global();
     let g = &mut *g;
     let now = sys::monotonic_ms();
@@ -495,7 +643,7 @@ mod tests {
 
     fn sink_core(stderr_level: i32, sink: Level) -> Core {
         let mut core = Core::new(stderr_level);
-        core.set_sink(Some(sink), Some(Arc::new(Notify::new())));
+        core.set_sink(Some(sink), Some(Arc::new(tokio::sync::Notify::new())));
         core
     }
 
@@ -582,7 +730,7 @@ mod tests {
 
     #[test]
     fn repeat_report_reaches_the_sink() {
-        let mut core = sink_core(4, Level::Info);
+        let mut core = sink_core(4, Level::INFO);
         let mut out = Lines::default();
         core.write(0, 1, "a.rs", 5, "tick", false, &mut out);
         core.write(10, 1, "a.rs", 5, "tick", false, &mut out);
@@ -601,7 +749,7 @@ mod tests {
 
     #[test]
     fn sink_levels_and_foreign_records() {
-        let mut core = sink_core(1, Level::Warn);
+        let mut core = sink_core(1, Level::WARN);
         let mut out = Lines::default();
         core.write(0, 1, "a.rs", 1, "info", false, &mut out);
         core.write(0, 3, "a.rs", 2, "error", false, &mut out);
@@ -615,18 +763,18 @@ mod tests {
         assert_eq!(
             core.take(),
             [LogLine {
-                level: Level::Error,
+                level: Level::ERROR,
                 text: "[E][a.rs:2]: error".into()
             }]
         );
 
         // Debug reaches the sink even when stderr is at Error.
-        let mut core = sink_core(3, Level::Debug);
+        let mut core = sink_core(3, Level::DEBUG);
         core.write(0, 0, "a.rs", 1, "dbg", false, &mut out);
         assert_eq!(
             core.take(),
             [LogLine {
-                level: Level::Debug,
+                level: Level::DEBUG,
                 text: "[D][a.rs:1]: dbg".into()
             }]
         );
@@ -636,7 +784,7 @@ mod tests {
 
     #[test]
     fn sink_overflow_and_notify_on_transition() {
-        let mut core = sink_core(4, Level::Info);
+        let mut core = sink_core(4, Level::INFO);
         let mut out = Lines::default();
         let mut notified = 0;
         for i in 0..600 {
@@ -650,7 +798,7 @@ mod tests {
         assert_eq!(
             lines[0],
             LogLine {
-                level: Level::Warn,
+                level: Level::WARN,
                 text: "[W][log.rs]: 88 log lines dropped".into()
             }
         );
@@ -664,12 +812,12 @@ mod tests {
 
     #[test]
     fn sink_off_discards_queue_and_dropped_count() {
-        let mut core = sink_core(4, Level::Info);
+        let mut core = sink_core(4, Level::INFO);
         let mut out = Lines::default();
         for i in 0..520 {
             core.write(0, 1, "a.rs", 1, &format!("{i}"), false, &mut out);
         }
-        core.set_sink(Some(Level::Info), None);
+        core.set_sink(Some(Level::INFO), None);
         assert!(core.take().is_empty());
         assert!(!core.write(0, 1, "a.rs", 1, "x", false, &mut out));
         assert!(core.take().is_empty());
@@ -693,6 +841,40 @@ mod tests {
                 .filter(|p| **p == "wp_own_target_probe")
                 .count(),
             1
+        );
+    }
+
+    #[test]
+    fn extra_fields_are_appended_to_the_message() {
+        use tracing_subscriber::layer::SubscriberExt as _;
+
+        #[derive(Clone)]
+        struct Capture(Arc<Mutex<Option<String>>>);
+
+        impl Layer<Registry> for Capture {
+            fn on_event(&self, event: &Event<'_>, _context: Context<'_, Registry>) {
+                let mut buf = String::new();
+                event.record(&mut MessageVisitor::new(&mut buf));
+                *self.0.lock().unwrap() = Some(buf);
+            }
+        }
+
+        let capture = Capture(Arc::new(Mutex::new(None)));
+        let subscriber = Registry::default().with(capture.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::warn!(answer = 42, name = "x", "with fields");
+        });
+        let msg = capture.0.lock().unwrap().clone().expect("event captured");
+        assert_eq!(msg, "with fields answer=42 name=x");
+
+        // The same text goes to stderr and to the ESPHome sink.
+        let mut core = sink_core(0, Level::INFO);
+        let mut out = Lines::default();
+        core.write(0, 2, "a.rs", 7, &msg, false, &mut out);
+        assert_eq!(out.0, ["W a.rs:7 with fields answer=42 name=x"]);
+        assert_eq!(
+            core.take()[0].text,
+            "[W][a.rs:7]: with fields answer=42 name=x"
         );
     }
 

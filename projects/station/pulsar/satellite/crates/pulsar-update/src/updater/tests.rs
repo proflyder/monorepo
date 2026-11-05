@@ -717,7 +717,12 @@ async fn dropping_the_handles_stops_a_download() {
         ));
         drop(up);
         let start = Instant::now();
-        assert!(pulsar_core::actors::join_all(Duration::from_secs(3)).await);
+        assert!(
+            pulsar_core::supervisor()
+                .shutdown(Duration::from_secs(3))
+                .await
+                .is_empty()
+        );
         assert!(start.elapsed() < Duration::from_secs(1));
         // The cancelled install reports nothing.
         assert!(events.recv().await.is_none());
@@ -759,7 +764,12 @@ async fn cancel_after_download(
     }
     drop(up);
     let cancelled = Instant::now();
-    assert!(pulsar_core::actors::join_all(Duration::from_secs(3)).await);
+    assert!(
+        pulsar_core::supervisor()
+            .shutdown(Duration::from_secs(3))
+            .await
+            .is_empty()
+    );
     assert!(cancelled.elapsed() < Duration::from_secs(1));
     while let Some(ev) = events.recv().await {
         assert!(matches!(ev, UpdateEvent::Progress { .. }), "{ev:?}");

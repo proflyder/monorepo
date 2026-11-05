@@ -191,8 +191,12 @@
   `@crates//` и общие `[workspace.lints]` (решение 40). Общий core-слой —
   `packages/rust`: `ricardo-telemetry` (tracing/фильтр/локальное время),
   `ricardo-runtime` (SIGTERM/SIGINT + `Supervisor` на
-  `CancellationToken`/`TaskTracker`), `ricardo-secret` (zeroize/0600/0700,
-  constant-time) и `ricardo-http` (axum bearer + graceful serve). BLE gateway
+  `CancellationToken`/`TaskTracker`, `spawn`/`spawn_local`), `ricardo-actor`
+  (`Handle`/`channel`; спавн через `Supervisor`), `ricardo-linux` (errno и sysfs
+  поверх `rustix`), `ricardo-secret` (zeroize/0600/0700, constant-time) и
+  `ricardo-http` (axum bearer + graceful serve). Pulsar пишет логи через
+  `tracing`; stderr-формат C++ и ESPHome-sink сохранены слоями
+  `pulsar-core`, записи сторонних крейтов идут мостом `tracing-log`. BLE gateway
   переписан на них: нативный control-сокет `wpa_supplicant`, `zbus` proxies,
   `watch`-статус и сериализованные Commit'ы. Pulsar — publishable
   native-юнит общего `deploy-home` с

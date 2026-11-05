@@ -12,9 +12,10 @@ use std::future::poll_fn;
 use std::io::{self, Read as _, Write as _};
 use std::task::{Context, Poll, Waker};
 
-use log::{error, info, warn};
-use pulsar_core::{Timers, sysfs};
+use pulsar_core::Timers;
+use ricardo_linux as sysfs;
 use tokio::io::unix::AsyncFd;
+use tracing::{error, info, warn};
 
 use crate::{RadioLines, os_error_text, sys};
 

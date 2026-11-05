@@ -22,7 +22,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::mpsc::{self, SyncSender};
 use std::thread::JoinHandle;
 
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 
 /// Ring of the detector's input stream: the 30 s of a miss plus the 3 s before a hit.
 pub(crate) const RING_MS: u32 = 31_000;

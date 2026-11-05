@@ -488,7 +488,12 @@ async fn shutdown_during_a_flash_does_not_wait_for_it() {
         // The upload is stuck (gate closed): dropping the handles still ends the actor at once.
         drop(r.handle);
         let start = tokio::time::Instant::now();
-        assert!(actors::join_all(Duration::from_secs(3)).await);
+        assert!(
+            pulsar_core::supervisor()
+                .shutdown(Duration::from_secs(3))
+                .await
+                .is_empty()
+        );
         assert_eq!(start.elapsed(), Duration::ZERO);
         // Let the detached flasher thread finish.
         *r.gate.0.lock().unwrap() = true;

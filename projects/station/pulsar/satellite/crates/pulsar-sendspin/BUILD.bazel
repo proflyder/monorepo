@@ -12,8 +12,9 @@ LINUX = ["@platforms//os:linux"]
 STATION = ["@zig_0_14_1//:station"]
 
 DEPS = [
+    "//packages/rust/ricardo-linux:ricardo_linux",
     "@crates//:libc",
-    "@crates//:log",
+    "@crates//:tracing",
     "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",

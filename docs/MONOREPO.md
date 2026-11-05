@@ -156,9 +156,11 @@ gateway, Windows logon provider и станционный helper. Общий
 edition 2024 и `rust-version`, `[workspace.lints]` — единый набор rust/clippy
 предупреждений (CI собирает с `-D warnings`). Общий код с двумя и более
 потребителями живёт в `packages/rust/`; solution/package не импортирует
-project. Сейчас там `ricardo-telemetry`, `ricardo-runtime`, `ricardo-secret`
-и `ricardo-http` — bootstrap логов, shutdown/supervisor, zeroizing-токены и
-axum bearer/serve; BLE gateway — первый потребитель.
+project. Сейчас там `ricardo-telemetry`, `ricardo-runtime`, `ricardo-actor`,
+`ricardo-linux`, `ricardo-secret` и `ricardo-http` — bootstrap логов,
+shutdown/supervisor, handle актора, errno и sysfs, zeroizing-токены и
+axum bearer/serve; BLE gateway — первый потребитель, Pulsar использует их в
+демоне.
 
 Bazel читает тот же workspace: одно расширение `crate.from_cargo(name =
 "crates", ...)` с `//:Cargo.lock` и сгенерированным

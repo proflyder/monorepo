@@ -433,7 +433,11 @@
     `extract_cargo_lints` линтуют один набор).
     Код с двумя и более потребителями выносится в `packages/rust/`; пакет
     не импортирует `projects/**` и не содержит проектных endpoint'ов или
-    путей БД. Стандартный стек крейтов вместо самописных реализаций:
+    путей БД. Общие примитивы станции и серверов — `ricardo-runtime`
+    (`Supervisor`: `spawn` для `Send`, `spawn_local` для `!Send`),
+    `ricardo-actor` (`Handle`/`channel`) и `ricardo-linux` (errno, sysfs
+    поверх `rustix`); они не привязаны к `!Send` и не диктуют рантайм.
+    Стандартный стек крейтов вместо самописных реализаций:
     `tokio` (runtime/io/time), `tracing`, `thiserror`/`anyhow`, `clap`,
     `serde`/`serde_json`, `axum`, `reqwest` с `rustls`, `prost`,
     `zbus`, `base64`/`hex`/`subtle`, `tokio-util`. Самописные HTTP-,

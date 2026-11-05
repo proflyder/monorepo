@@ -150,15 +150,21 @@ impl Gateway {
         {
             warn!(%error, "control HTTP disabled");
         }
-        supervisor.spawn(gateway.clone().status_task(supervisor.token()));
-        supervisor.spawn(gateway.clone().run_commits(receiver, supervisor.token()));
+        supervisor.spawn("status", gateway.clone().status_task(supervisor.token()));
+        supervisor.spawn(
+            "commits",
+            gateway.clone().run_commits(receiver, supervisor.token()),
+        );
         if !config.no_button {
             let button = gateway.clone();
             let path = config.button.clone();
             let shutdown = supervisor.token();
-            supervisor.spawn(async move { button.run_button(&path, shutdown).await });
+            supervisor.spawn(
+                "button",
+                async move { button.run_button(&path, shutdown).await },
+            );
         }
-        supervisor.spawn(gateway.clone().auto_loop(supervisor.token()));
+        supervisor.spawn("auto", gateway.clone().auto_loop(supervisor.token()));
         gateway.set_status(Status::Idle);
         info!(token = %config.token_file.display(), "station BLE gateway starting");
         if config.force

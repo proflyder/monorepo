@@ -12,12 +12,13 @@ use std::io::{self, Read as _};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::rc::Rc;
 
-use log::{debug, info, warn};
-use pulsar_core::{Timers, actors};
+use pulsar_core::Timers;
+use ricardo_actor::Handle;
 use socket2::{Domain, SockRef, Socket, Type};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::Instant;
+use tracing::{debug, info, warn};
 
 use crate::errstr;
 
@@ -76,7 +77,7 @@ enum Cmd {
 
 #[derive(Clone)]
 enum Link {
-    Actor(UnboundedSender<Cmd>),
+    Actor(Handle<Cmd>),
     /// No socket: the station answers alone.
     Alone {
         station: Rc<str>,
@@ -201,8 +202,8 @@ fn launch(
 ) -> (ArbiterHandle, UnboundedReceiver<ArbiterEvent>) {
     let (events, events_rx) = unbounded_channel();
     let arbiter = Arbiter::new(station, sock, dest, events, trace);
-    let (cmds, cmds_rx) = unbounded_channel();
-    actors::spawn_actor("arbiter", arbiter.run(cmds_rx));
+    let (cmds, cmds_rx) = ricardo_actor::channel();
+    pulsar_core::supervisor().spawn_local("arbiter", arbiter.run(cmds_rx));
     let next_id = Rc::new(Cell::new(0));
     let link = Link::Actor(cmds);
     (ArbiterHandle { next_id, link }, events_rx)

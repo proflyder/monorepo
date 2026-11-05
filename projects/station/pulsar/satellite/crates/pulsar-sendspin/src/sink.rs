@@ -10,9 +10,9 @@
 use std::sync::atomic::{AtomicU32, Ordering::SeqCst};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use log::{debug, error, info};
 use pulsar_alsa::{Format, HwRequest, Pcm};
 use pulsar_core::model::Model;
+use tracing::{debug, error, info};
 
 use crate::ffi::now_us;
 use crate::gain;
