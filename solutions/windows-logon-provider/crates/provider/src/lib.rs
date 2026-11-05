@@ -18,6 +18,7 @@ pub mod gate;
 pub mod kerb;
 pub mod log;
 pub mod provider;
+pub mod sync;
 pub mod worker;
 
 #[cfg(windows)]

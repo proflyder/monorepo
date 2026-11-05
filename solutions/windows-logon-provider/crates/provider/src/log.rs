@@ -1,9 +1,12 @@
 //! Append-only diagnostic log for the logon provider.
 //!
 //! Line format, rotation (one generation at 256 KiB) and the event set are the
-//! contract in `README.md`. Every field is sanitised (control characters
-//! replaced, 240 bytes max) so remote data cannot forge log lines. A write
-//! failure is ignored: logging must never break logon.
+//! contract in `README.md`. Calls go through `tracing`; the provider-local
+//! layer below renders the documented line shape through a Win32 append
+//! writer, because `LogonUI` has no stderr and the file must be rotated before
+//! every write. Every field is sanitised (control characters replaced, 240
+//! bytes max) so remote data cannot forge log lines. A write failure is
+//! ignored: logging must never break logon.
 
 /// Directory and files are created by the installer; the path is fixed.
 pub const DATA_DIR: &str = r"C:\ProgramData\Ricardo\KompLogon";
@@ -70,9 +73,16 @@ pub use imp::log_event;
 
 #[cfg(windows)]
 mod imp {
-    use std::sync::{Mutex, Once};
+    use std::fmt;
+    use std::sync::{Mutex, OnceLock};
 
-    use super::{DATA_DIR, LOG_PATH, ROTATED_PATH, format_line, should_rotate, timestamp_string};
+    use tracing::dispatcher::Dispatch;
+    use tracing::field::{Field, Visit};
+    use tracing::{Event, Subscriber};
+    use tracing_subscriber::Layer;
+    use tracing_subscriber::layer::Context;
+    use tracing_subscriber::layer::SubscriberExt;
+
     use crate::bindings::Windows::Win32::Foundation::CloseHandle;
     use crate::bindings::Windows::Win32::Storage::FileSystem::{
         CreateDirectoryW, CreateFileW, DeleteFileW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL,
@@ -85,17 +95,16 @@ mod imp {
     };
     use crate::wide::WideNul;
 
+    use super::{DATA_DIR, LOG_PATH, ROTATED_PATH, format_line, should_rotate, timestamp_string};
+
     static LOG_LOCK: Mutex<()> = Mutex::new(());
-    static LOG_INIT: Once = Once::new();
 
     fn ensure_data_dir() {
-        LOG_INIT.call_once(|| {
-            // Idempotent: ERROR_ALREADY_EXISTS is expected. The installer owns
-            // the ACL; if the directory is missing we simply cannot log.
-            let data_dir = WideNul::new(DATA_DIR);
-            // SAFETY: `data_dir` is NUL-terminated; no security attributes.
-            let _ = unsafe { CreateDirectoryW(data_dir.as_pcwstr(), None) };
-        });
+        // Idempotent: ERROR_ALREADY_EXISTS is expected. The installer owns the
+        // ACL; if the directory is missing we simply cannot log.
+        let data_dir = WideNul::new(DATA_DIR);
+        // SAFETY: `data_dir` is NUL-terminated; no security attributes.
+        let _ = unsafe { CreateDirectoryW(data_dir.as_pcwstr(), None) };
     }
 
     fn rotate_if_needed() {
@@ -146,17 +155,9 @@ mod imp {
 
     /// Appends one line. Never panics for I/O reasons and never blocks the
     /// caller longer than a single small `WriteFile`.
-    pub fn log_event(event: &str, fields: &str) {
-        ensure_data_dir();
-        // SAFETY: both getters take no arguments and return plain integers.
-        let (pid, tid) = unsafe { (GetCurrentProcessId(), GetCurrentThreadId()) };
-        let line = format_line(&timestamp(), pid, tid, event, fields);
-
-        let _unpoisoned = LOG_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+    fn write_line(line: &str) {
+        let _serialized = crate::sync::lock(&LOG_LOCK);
         rotate_if_needed();
-
         let log_path = WideNul::new(LOG_PATH);
         // SAFETY: OPEN_ALWAYS creates the file if needed; no security
         // attributes and no template file are passed, and `log_path` is
@@ -185,6 +186,67 @@ mod imp {
                 // Logging must never break logon.
             }
         }
+    }
+
+    /// The two fields every event carries; tracing also records callsite
+    /// metadata, which this fixed log format does not include.
+    #[derive(Default)]
+    struct LineFields {
+        event: String,
+        fields: String,
+    }
+
+    impl Visit for LineFields {
+        fn record_str(&mut self, field: &Field, value: &str) {
+            match field.name() {
+                "event" => self.event.push_str(value),
+                "fields" => self.fields.push_str(value),
+                _ => {}
+            }
+        }
+
+        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+            self.record_str(field, &format!("{value:?}"));
+        }
+    }
+
+    struct LineLayer;
+
+    impl<S: Subscriber> Layer<S> for LineLayer {
+        fn on_event(&self, event: &Event<'_>, _context: Context<'_, S>) {
+            let mut fields = LineFields::default();
+            event.record(&mut fields);
+            // SAFETY: both getters take no arguments and return plain integers.
+            let (pid, tid) = unsafe { (GetCurrentProcessId(), GetCurrentThreadId()) };
+            write_line(&format_line(
+                &timestamp(),
+                pid,
+                tid,
+                &fields.event,
+                &fields.fields,
+            ));
+        }
+    }
+
+    /// Installed once per DLL lifetime. `Dispatch::with_default` scopes it to
+    /// the call instead of `set_global_default`, which would leave the global
+    /// dispatcher pointing into this DLL after LogonUI unloads it.
+    fn dispatch() -> &'static Dispatch {
+        static DISPATCH: OnceLock<Dispatch> = OnceLock::new();
+        DISPATCH.get_or_init(|| {
+            Dispatch::new(
+                tracing_subscriber::registry()
+                    .with(tracing_subscriber::filter::LevelFilter::INFO)
+                    .with(LineLayer),
+            )
+        })
+    }
+
+    pub fn log_event(event: &str, fields: &str) {
+        ensure_data_dir();
+        tracing::dispatcher::with_default(dispatch(), || {
+            tracing::info!(target: "ricardo_logon", event = event, fields = fields);
+        });
     }
 }
 

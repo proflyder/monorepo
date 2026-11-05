@@ -13,27 +13,12 @@
 //!
 //! The decision itself is pure and host-tested; the WTS query is Windows-only.
 
+use logon_protocol::Purpose;
+
 /// Cold-boot window from `GetTickCount64()`: a logon grant is considered only
 /// within the first 10 minutes after boot. Lives next to the worker budget in
 /// [`crate::provider`].
 pub use crate::provider::MAX_UPTIME_MS;
-
-/// The usage scenario passed to `SetUsageScenario`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Scenario {
-    Logon,
-    Unlock,
-}
-
-impl Scenario {
-    /// Short log-safe label: `logon` or `unlock`.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Logon => "logon",
-            Self::Unlock => "unlock",
-        }
-    }
-}
 
 /// Why the provider is inactive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +83,7 @@ pub fn within_uptime(uptime_ms: u64) -> bool {
 /// lock screen, not a cold boot, so it selects `unlock` instead. Any failed
 /// query is `off`: fail closed.
 pub fn decide_mode(
-    scenario: Scenario,
+    scenario: Purpose,
     session_exists: bool,
     uptime_ms: u64,
     query_ok: bool,
@@ -107,7 +92,7 @@ pub fn decide_mode(
         return Mode::Off(OffReason::QueryFailed);
     }
     match scenario {
-        Scenario::Logon => {
+        Purpose::Logon => {
             if session_exists {
                 Mode::Unlock
             } else if within_uptime(uptime_ms) {
@@ -116,7 +101,7 @@ pub fn decide_mode(
                 Mode::Off(OffReason::Uptime)
             }
         }
-        Scenario::Unlock => {
+        Purpose::Unlock => {
             if session_exists {
                 Mode::Unlock
             } else {
@@ -133,7 +118,7 @@ pub fn decide_mode(
 /// be a NetBIOS name, a full name or empty for a Microsoft account, so
 /// requiring it to match would be fail-open.
 pub fn mode_for_sessions(
-    scenario: Scenario,
+    scenario: Purpose,
     configured_user: &str,
     uptime_ms: u64,
     sessions: Option<&[WtsSession]>,
@@ -180,9 +165,11 @@ mod imp {
     };
     use crate::bindings::Windows::Win32::System::SystemInformation::GetTickCount64;
 
-    use crate::config::{Config, ConfigState, load_config};
+    use crate::config::{ConfigError, load_config};
 
-    use super::{Mode, OffReason, Scenario, WtsSession, mode_for_sessions};
+    use logon_protocol::Purpose;
+
+    use super::{Mode, OffReason, WtsSession, mode_for_sessions};
 
     /// One `WTSQuerySessionInformationW` string, `None` when the call fails.
     fn query_string(session_id: u32, info_class: WTS_INFO_CLASS) -> Option<String> {
@@ -268,14 +255,12 @@ mod imp {
 
     /// Runs the decision against the live system. Call it before starting the
     /// worker, so an off mode never reaches the network.
-    pub fn evaluate(scenario: Scenario) -> Mode {
-        let mut config = Config::default();
-        let mut error = String::new();
-        match load_config(&mut config, &mut error) {
-            ConfigState::Ok => {}
-            ConfigState::Disabled => return Mode::Off(OffReason::Disabled),
-            ConfigState::Invalid => return Mode::Off(OffReason::ConfigUnavailable),
-        }
+    pub fn evaluate(scenario: Purpose) -> Mode {
+        let config = match load_config() {
+            Ok(config) => config,
+            Err(ConfigError::Disabled) => return Mode::Off(OffReason::Disabled),
+            Err(ConfigError::Invalid(_)) => return Mode::Off(OffReason::ConfigUnavailable),
+        };
         let Some(sessions) = query_sessions() else {
             return Mode::Off(OffReason::QueryFailed);
         };
@@ -297,11 +282,11 @@ mod tests {
     }
 
     fn logon(user: &str, uptime: u64, sessions: Option<&[WtsSession]>) -> Mode {
-        mode_for_sessions(Scenario::Logon, user, uptime, sessions)
+        mode_for_sessions(Purpose::Logon, user, uptime, sessions)
     }
 
     fn unlock(user: &str, uptime: u64, sessions: Option<&[WtsSession]>) -> Mode {
-        mode_for_sessions(Scenario::Unlock, user, uptime, sessions)
+        mode_for_sessions(Purpose::Unlock, user, uptime, sessions)
     }
 
     #[test]
@@ -390,27 +375,21 @@ mod tests {
     #[test]
     fn the_pure_decision_matches_the_table() {
         // scenario, session_exists, uptime, query_ok -> mode
+        assert_eq!(decide_mode(Purpose::Logon, false, 1_000, true), Mode::Logon);
+        assert_eq!(decide_mode(Purpose::Logon, true, 1_000, true), Mode::Unlock);
         assert_eq!(
-            decide_mode(Scenario::Logon, false, 1_000, true),
-            Mode::Logon
-        );
-        assert_eq!(
-            decide_mode(Scenario::Logon, true, 1_000, true),
-            Mode::Unlock
-        );
-        assert_eq!(
-            decide_mode(Scenario::Logon, false, MAX_UPTIME_MS, true),
+            decide_mode(Purpose::Logon, false, MAX_UPTIME_MS, true),
             Mode::Off(OffReason::Uptime)
         );
         assert_eq!(
-            decide_mode(Scenario::Unlock, true, MAX_UPTIME_MS * 10, true),
+            decide_mode(Purpose::Unlock, true, MAX_UPTIME_MS * 10, true),
             Mode::Unlock
         );
         assert_eq!(
-            decide_mode(Scenario::Unlock, false, 1_000, true),
+            decide_mode(Purpose::Unlock, false, 1_000, true),
             Mode::Off(OffReason::UnlockWithoutSession)
         );
-        for scenario in [Scenario::Logon, Scenario::Unlock] {
+        for scenario in [Purpose::Logon, Purpose::Unlock] {
             assert_eq!(
                 decide_mode(scenario, true, 1_000, false),
                 Mode::Off(OffReason::QueryFailed)
@@ -420,8 +399,8 @@ mod tests {
 
     #[test]
     fn labels_are_log_safe() {
-        assert_eq!(Scenario::Logon.label(), "logon");
-        assert_eq!(Scenario::Unlock.label(), "unlock");
+        assert_eq!(Purpose::Logon.as_str(), "logon");
+        assert_eq!(Purpose::Unlock.as_str(), "unlock");
         assert_eq!(Mode::Logon.label(), "logon");
         assert_eq!(Mode::Unlock.label(), "unlock");
         assert_eq!(Mode::Off(OffReason::Uptime).label(), "uptime");

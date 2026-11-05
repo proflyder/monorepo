@@ -16,7 +16,7 @@ solutions/               переиспользуемые решения
   currency-bot/          курсы kurs.kz, алерты, Telegram webhook
   voice-proxy/           OpenAI-совместимый прокси для Piper TTS
   wakegrant/             one-time logon grants for a WoL machine (PROTOCOL.md)
-  windows-logon-provider/ Windows Credential Provider (C++17)
+  windows-logon-provider/ Windows Credential Provider (Rust, Bazel)
   heartbeat/             внешний dead-man switch (Cloudflare Worker)
   bb-home-dispatcher/    плагин bb: исполнитель голосовых команд
   bb-profiles/           плагин bb: изолированные профили
@@ -73,7 +73,7 @@ engine, два entrypoint-а для совместимости.
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
 | `solutions/bb-home-dispatcher`, `solutions/bb-profiles` | JavaScript/TypeScript (плагины bb) | исполняются внутри bb как path-источник; `node --test` без внешних сервисов |
-| Windows logon provider | Rust (`windows-rs`) | in-proc COM DLL для LogonUI; `rules_rust` + герметичный zig (`x86_64-pc-windows-gnu`) через Bazel, без Visual Studio; переносимые host-тесты и clippy под Windows |
+| Windows logon provider | Rust (`windows-bindgen`/`windows-core`) | in-proc COM DLL для LogonUI; `rules_rust` + герметичный zig (`x86_64-pc-windows-gnu`) через Bazel, без Visual Studio; переносимые host-тесты и clippy под Windows |
 | HA-конфиг | YAML | существующий контур, не переписывать ради модности |
 | Pulsar (станция) | Rust (`rules_rust`, Zig cross) | first-party форк upstream, сборка Bazel |
 | `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; члены общего корневого Cargo workspace, host-тесты и armhf-кросс через Bazel |
@@ -182,7 +182,9 @@ sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'
 
 `solutions/windows-logon-provider` — Rust-компонент на том же Bazel:
 `crates/protocol` (переносимый слой), `crates/provider` (COM DLL) и
-`crates/cp-selftest` (self-test). `MODULE.bazel` добавляет
+`crates/cp-selftest` (self-test): `serde`/`serde_json`, `base64`,
+`thiserror`, `http::Uri` и `ricardo-secret` в protocol; `tracing` с
+провайдерским Win32-писателем журнала в DLL. `MODULE.bazel` добавляет
 `x86_64-pc-windows-gnu` в Rust-тулчейн и регистрирует zig cc_toolchain
 (`platform/bazel/windows:x86_64_windows`), поэтому DLL линкуется без Visual
 Studio и Windows SDK. Два патча rules_rust добавляют gnu-трипль и убирают

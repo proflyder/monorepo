@@ -13,15 +13,19 @@ use logon_protocol::ServiceEndpoint;
 
 use crate::wide::WideNul;
 
-/// One HTTP exchange. `ok` means the transport succeeded (any HTTP status).
-#[derive(Debug, Default)]
-pub struct HttpResult {
-    pub ok: bool,
-    pub status: i32,
-    pub body: Vec<u8>,
-    /// Log-safe reason when `ok` is false.
-    pub error: &'static str,
-    pub elapsed_ms: u32,
+/// One HTTP exchange. `Response` means the transport succeeded; any HTTP
+/// status is still a response, while `Transport` carries a log-safe reason.
+#[derive(Debug)]
+pub enum HttpOutcome {
+    Response {
+        status: i32,
+        body: Vec<u8>,
+        elapsed_ms: u32,
+    },
+    Transport {
+        error: &'static str,
+        elapsed_ms: u32,
+    },
 }
 
 /// The two NUL-terminated wide strings `WinHttpConnect`/`WinHttpOpenRequest`
@@ -70,7 +74,7 @@ mod winhttp {
 
     use logon_protocol::ServiceEndpoint;
 
-    use super::{HttpResult, request_targets};
+    use super::{HttpOutcome, request_targets};
     use crate::wide::WideNul;
 
     const RESOLVE_TIMEOUT_MS: i32 = 2000;
@@ -210,7 +214,7 @@ mod winhttp {
         }
 
         let mut status = 0u32;
-        let mut status_size = core::mem::size_of::<u32>() as u32;
+        let mut status_size = size_of::<u32>() as u32;
         // SAFETY: `status` is a DWORD-sized out-parameter; the name and index are
         // ignored for WINHTTP_QUERY_STATUS_CODE.
         let status_ok = unsafe {
@@ -270,8 +274,8 @@ mod winhttp {
     }
 
     /// `POST path` with a JSON body and the documented 4 s receive timeout.
-    /// Never panics; every failure is a log-safe `error` string and `ok = false`.
-    pub fn post_json(endpoint: &ServiceEndpoint, path: &str, body: &[u8]) -> HttpResult {
+    /// Never panics; every failure is a log-safe `Transport` value.
+    pub fn post_json(endpoint: &ServiceEndpoint, path: &str, body: &[u8]) -> HttpOutcome {
         post_json_with_receive_timeout(endpoint, path, body, RECEIVE_TIMEOUT_MS)
     }
 
@@ -282,7 +286,7 @@ mod winhttp {
         path: &str,
         body: &[u8],
         receive_timeout_ms: i32,
-    ) -> HttpResult {
+    ) -> HttpOutcome {
         // SAFETY: GetTickCount64 takes no arguments.
         let started = unsafe { GetTickCount64() };
         let result = post_json_inner(endpoint, path, body, receive_timeout_ms);
@@ -290,20 +294,12 @@ mod winhttp {
         let elapsed_ms = unsafe { GetTickCount64() }.saturating_sub(started) as u32;
 
         match result {
-            Ok((status, body)) => HttpResult {
-                ok: true,
+            Ok((status, body)) => HttpOutcome::Response {
                 status,
                 body,
-                error: "",
                 elapsed_ms,
             },
-            Err(error) => HttpResult {
-                ok: false,
-                status: 0,
-                body: Vec::new(),
-                error,
-                elapsed_ms,
-            },
+            Err(error) => HttpOutcome::Transport { error, elapsed_ms },
         }
     }
 }

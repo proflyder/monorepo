@@ -1,5 +1,5 @@
 {
-  "checksum": "c65a671a6a87ffafca033b1058443145282928ab363f49be6caba7acaee7da48",
+  "checksum": "6653e442f817a78dda70cb0640bced80fd734ea9e8d01977a4dab153cb3c4998",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -628,6 +628,39 @@
         }
       ],
       "version": "0.5.6"
+    },
+    "base64 0.22.1": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "std"
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "base64",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "base64",
+      "package_url": "https://github.com/marshallpierce/rust-base64",
+      "repository": {
+        "Http": {
+          "sha256": "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6",
+          "url": "https://static.crates.io/crates/base64/0.22.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "base64",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.22.1"
     },
     "bitflags 2.13.2": {
       "common_attrs": {
@@ -3682,8 +3715,24 @@
       "common_attrs": {
         "deps": [
           {
+            "id": "base64 0.22.1",
+            "target": "base64"
+          },
+          {
             "id": "hmac 0.13.0",
             "target": "hmac"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
           },
           {
             "id": "sha2 0.11.1",
@@ -3692,6 +3741,10 @@
           {
             "id": "subtle 2.6.1",
             "target": "subtle"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
           },
           {
             "id": "zeroize 1.9.1",
@@ -3720,9 +3773,26 @@
     "logon_provider 0.1.0": {
       "common_attrs": {
         "deps": {
-          "common": [],
+          "common": [
+            {
+              "id": "thiserror 2.0.21",
+              "target": "thiserror"
+            },
+            {
+              "id": "zeroize 1.9.1",
+              "target": "zeroize"
+            }
+          ],
           "selects": {
             "cfg(windows)": [
+              {
+                "id": "tracing 0.1.44",
+                "target": "tracing"
+              },
+              {
+                "id": "tracing-subscriber 0.3.23",
+                "target": "tracing_subscriber"
+              },
               {
                 "id": "windows-core 0.62.2",
                 "target": "windows_core"
@@ -9513,11 +9583,13 @@
   "direct_deps": [
     "anyhow 1.0.104",
     "axum 0.8.9",
+    "base64 0.22.1",
     "cc 1.10.0",
     "clap 4.6.7",
     "getrandom 0.3.4",
     "hex 0.4.3",
     "hmac 0.13.0",
+    "http 1.5.0",
     "libc 0.2.191",
     "libloading 0.9.0",
     "log 0.4.34",

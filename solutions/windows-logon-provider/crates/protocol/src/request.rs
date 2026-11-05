@@ -1,42 +1,47 @@
 //! Request bodies for `POST /v1/challenge` and `POST /v1/claim`.
 
-use std::fmt::Write as _;
+use serde::Serialize;
 
 use crate::purpose::Purpose;
 
-/// Escapes a string for embedding in a JSON string literal. Only the
-/// characters the protocol can produce are escaped; control bytes become
-/// lowercase `\u00XX`, byte for byte as documented.
-fn json_escape(text: &str) -> String {
-    let mut out: Vec<u8> = Vec::with_capacity(text.len() + 2);
-    for &c in text.as_bytes() {
-        match c {
-            b'"' => out.extend_from_slice(b"\\\""),
-            b'\\' => out.extend_from_slice(b"\\\\"),
-            0x08 => out.extend_from_slice(b"\\b"),
-            0x0c => out.extend_from_slice(b"\\f"),
-            b'\n' => out.extend_from_slice(b"\\n"),
-            b'\r' => out.extend_from_slice(b"\\r"),
-            b'\t' => out.extend_from_slice(b"\\t"),
-            c if c < 0x20 => out.extend_from_slice(format!("\\u{c:04x}").as_bytes()),
-            c => out.push(c),
-        }
-    }
-    // The input was UTF-8 and the replacements are ASCII, so this cannot fail.
-    String::from_utf8(out).expect("escaped request body is valid utf-8")
+#[derive(Serialize)]
+struct Challenge<'a> {
+    machine: &'a str,
+}
+
+#[derive(Serialize)]
+struct Claim<'a> {
+    machine: &'a str,
+    nonce: &'a str,
+    mac: &'a str,
+}
+
+#[derive(Serialize)]
+struct PurposeClaim<'a> {
+    machine: &'a str,
+    nonce: &'a str,
+    purpose: &'static str,
+    mac: &'a str,
+    #[serde(rename = "waitSeconds", skip_serializing_if = "Option::is_none")]
+    wait_seconds: Option<u32>,
+}
+
+/// Field order is part of the golden request bodies in `PROTOCOL.md`.
+fn to_json(value: &impl Serialize) -> String {
+    serde_json::to_string(value).expect("a request body of plain strings cannot fail")
 }
 
 pub fn challenge_request_json(machine: &str) -> String {
-    format!("{{\"machine\":\"{}\"}}", json_escape(machine))
+    to_json(&Challenge { machine })
 }
 
 /// v1 claim body, no `purpose` and no long-poll.
 pub fn claim_request_json(machine: &str, nonce: &str) -> String {
-    format!(
-        "{{\"machine\":\"{}\",\"nonce\":\"{}\",\"mac\":\"\"}}",
-        json_escape(machine),
-        json_escape(nonce)
-    )
+    to_json(&Claim {
+        machine,
+        nonce,
+        mac: "",
+    })
 }
 
 /// Purpose-aware claim body. `wait_seconds` is `Some` only for the unlock
@@ -48,16 +53,11 @@ pub fn claim_request_json_for_purpose(
     purpose: Purpose,
     wait_seconds: Option<u32>,
 ) -> String {
-    let mut body = format!(
-        "{{\"machine\":\"{}\",\"nonce\":\"{}\",\"purpose\":\"{}\",\"mac\":\"{}\"",
-        json_escape(machine),
-        json_escape(nonce),
-        purpose.as_str(),
-        json_escape(mac)
-    );
-    if let Some(wait_seconds) = wait_seconds {
-        let _ = write!(body, ",\"waitSeconds\":{wait_seconds}");
-    }
-    body.push('}');
-    body
+    to_json(&PurposeClaim {
+        machine,
+        nonce,
+        purpose: purpose.as_str(),
+        mac,
+        wait_seconds,
+    })
 }

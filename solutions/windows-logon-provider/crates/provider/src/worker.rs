@@ -127,10 +127,10 @@ mod windows_impl {
     use crate::bindings::Windows::Win32::System::Threading::{CreateThread, THREAD_CREATION_FLAGS};
     use windows_core::PCWSTR;
 
-    use crate::config::{Config, ConfigState, load_config, load_secret};
+    use crate::config::{Config, ConfigError, load_config, load_secret};
     use crate::ffi_guard::guard;
     use crate::gate::Mode;
-    use crate::http::{HttpResult, post_json, post_json_with_receive_timeout};
+    use crate::http::{HttpOutcome, post_json, post_json_with_receive_timeout};
     use crate::log::log_event;
     use crate::provider::{
         ACTIVE_WORKERS, ArmResult, Session, WORKER_BUDGET_MS, arm_session, within_budget,
@@ -193,6 +193,44 @@ mod windows_impl {
         mode: Mode,
     }
 
+    /// Logs a transport failure or a non-200 status and turns it into the
+    /// round outcome the loops expect; challenge and claim share it.
+    fn http_response(
+        outcome: HttpOutcome,
+        request: &str,
+        prefix: &str,
+        dedup: &mut Option<ErrorDedup>,
+    ) -> Result<(Vec<u8>, u32), RoundOutcome> {
+        match outcome {
+            HttpOutcome::Transport { error, elapsed_ms } => {
+                log_error(
+                    dedup,
+                    "http",
+                    &format!("{request}-transport-{error}"),
+                    &format!("request={request} ok=0 error={error} ms={elapsed_ms} {prefix}"),
+                );
+                Err(RoundOutcome::retry_error(POLL_INTERVAL_MS))
+            }
+            HttpOutcome::Response {
+                status: 200,
+                body,
+                elapsed_ms,
+            } => Ok((body, elapsed_ms)),
+            HttpOutcome::Response {
+                status, elapsed_ms, ..
+            } => {
+                log_error(
+                    dedup,
+                    "http",
+                    &format!("{request}-status-{status}"),
+                    &format!("request={request} ok=1 status={status} ms={elapsed_ms} {prefix}"),
+                );
+                Err(retry_delay_for_status(status)
+                    .map_or_else(RoundOutcome::fatal, RoundOutcome::retry_error))
+            }
+        }
+    }
+
     /// One challenge/claim exchange. Any unexpected answer ends the round
     /// without arming; only a verified grant arms the session.
     fn one_round(
@@ -208,15 +246,16 @@ mod windows_impl {
             secret,
             mode,
         } = *context;
-        let purpose = match mode {
-            Mode::Unlock => Purpose::Unlock,
-            _ => Purpose::Logon,
+        let purpose = if mode == Mode::Unlock {
+            Purpose::Unlock
+        } else {
+            Purpose::Logon
         };
         let prefix = format!("elapsed_ms={elapsed_ms}");
-
         if session.cancelled(generation) {
             return RoundOutcome::fatal();
         }
+
         let challenge_path = endpoint_path(endpoint, "/v1/challenge");
         let challenge = post_json(
             endpoint,
@@ -226,35 +265,12 @@ mod windows_impl {
         if session.cancelled(generation) {
             return RoundOutcome::fatal();
         }
-        if !challenge.ok {
-            log_error(
-                dedup,
-                "http",
-                &format!("challenge-transport-{}", challenge.error),
-                &format!(
-                    "request=challenge ok=0 error={} ms={} {prefix}",
-                    challenge.error, challenge.elapsed_ms
-                ),
-            );
-            return RoundOutcome::retry_error(POLL_INTERVAL_MS);
-        }
-        if challenge.status != 200 {
-            log_error(
-                dedup,
-                "http",
-                &format!("challenge-status-{}", challenge.status),
-                &format!(
-                    "request=challenge ok=1 status={} ms={} {prefix}",
-                    challenge.status, challenge.elapsed_ms
-                ),
-            );
-            return match retry_delay_for_status(challenge.status) {
-                Some(delay) => RoundOutcome::retry_error(delay),
-                None => RoundOutcome::fatal(),
-            };
-        }
+        let (challenge_body, _) = match http_response(challenge, "challenge", &prefix, dedup) {
+            Ok(value) => value,
+            Err(outcome) => return outcome,
+        };
 
-        let Ok(challenge_body) = std::str::from_utf8(&challenge.body) else {
+        let Ok(challenge_body) = std::str::from_utf8(&challenge_body) else {
             log_error(
                 dedup,
                 "challenge",
@@ -280,21 +296,7 @@ mod windows_impl {
             secret.key(),
             &claim_mac_message_for_purpose(&config.machine, &response.nonce, purpose),
         );
-        if mac.is_empty() {
-            log_error(
-                dedup,
-                "claim",
-                "claim-hmac-failed",
-                &format!("ok=0 error=hmac_failed {prefix}"),
-            );
-            return RoundOutcome::fatal();
-        }
-
-        let wait_seconds = if purpose == Purpose::Unlock {
-            Some(UNLOCK_WAIT_SECONDS)
-        } else {
-            None
-        };
+        let wait_seconds = (purpose == Purpose::Unlock).then_some(UNLOCK_WAIT_SECONDS);
         let claim_body = claim_request_json_for_purpose(
             &config.machine,
             &response.nonce,
@@ -322,35 +324,12 @@ mod windows_impl {
         if session.cancelled(generation) {
             return RoundOutcome::fatal();
         }
-        if !claim.ok {
-            log_error(
-                dedup,
-                "http",
-                &format!("claim-transport-{}", claim.error),
-                &format!(
-                    "request=claim ok=0 error={} ms={} {prefix}",
-                    claim.error, claim.elapsed_ms
-                ),
-            );
-            return RoundOutcome::retry_error(POLL_INTERVAL_MS);
-        }
-        if claim.status != 200 {
-            log_error(
-                dedup,
-                "http",
-                &format!("claim-status-{}", claim.status),
-                &format!(
-                    "request=claim ok=1 status={} ms={} {prefix}",
-                    claim.status, claim.elapsed_ms
-                ),
-            );
-            return match retry_delay_for_status(claim.status) {
-                Some(delay) => RoundOutcome::retry_error(delay),
-                None => RoundOutcome::fatal(),
-            };
-        }
+        let (claim_body, claim_ms) = match http_response(claim, "claim", &prefix, dedup) {
+            Ok(value) => value,
+            Err(outcome) => return outcome,
+        };
 
-        let result = match std::str::from_utf8(&claim.body) {
+        let result = match std::str::from_utf8(&claim_body) {
             Ok(body) => verify_claim_response_for_purpose(
                 body,
                 secret.key(),
@@ -363,10 +342,7 @@ mod windows_impl {
                     dedup,
                     "grant",
                     "grant-invalid-utf8",
-                    &format!(
-                        "result=malformed detail=invalid-utf8 ms={} {prefix}",
-                        claim.elapsed_ms
-                    ),
+                    &format!("result=malformed detail=invalid-utf8 ms={claim_ms} {prefix}"),
                 );
                 return RoundOutcome::retry_error(POLL_INTERVAL_MS);
             }
@@ -377,10 +353,9 @@ mod windows_impl {
                 log_event(
                     "grant",
                     &format!(
-                        "result=granted purpose={} grant_id={} ms={} {prefix}",
+                        "result=granted purpose={} grant_id={} ms={claim_ms} {prefix}",
                         purpose.as_str(),
-                        result.grant_id,
-                        claim.elapsed_ms
+                        result.grant_id
                     ),
                 );
                 // The grant is already consumed, so never claim again: only
@@ -410,10 +385,7 @@ mod windows_impl {
                 if purpose == Purpose::Logon {
                     log_event(
                         "grant",
-                        &format!(
-                            "result=denied purpose=logon ms={} {prefix}",
-                            claim.elapsed_ms
-                        ),
+                        &format!("result=denied purpose=logon ms={claim_ms} {prefix}"),
                     );
                 }
                 // Unlock denials are not logged: the long-poll is the pause,
@@ -435,10 +407,9 @@ mod windows_impl {
                     "grant",
                     &format!("grant-{label}-{}", result.detail),
                     &format!(
-                        "result={label} purpose={} detail={} ms={} {prefix}",
+                        "result={label} purpose={} detail={} ms={claim_ms} {prefix}",
                         purpose.as_str(),
-                        result.detail,
-                        claim.elapsed_ms
+                        result.detail
                     ),
                 );
                 RoundOutcome::retry_error(POLL_INTERVAL_MS)
@@ -447,30 +418,15 @@ mod windows_impl {
     }
 
     fn run_worker(session: &Arc<Session>, generation: u32, mode: Mode) {
-        if mode == Mode::Unlock {
-            log_event(
-                "worker",
-                &format!("phase=start mode=unlock wait_s={UNLOCK_WAIT_SECONDS}"),
-            );
+        let start = if mode == Mode::Unlock {
+            format!("phase=start mode=unlock wait_s={UNLOCK_WAIT_SECONDS}")
         } else {
-            log_event(
-                "worker",
-                &format!("phase=start mode=logon budget_ms={WORKER_BUDGET_MS}"),
-            );
-        }
+            format!("phase=start mode=logon budget_ms={WORKER_BUDGET_MS}")
+        };
+        log_event("worker", &start);
 
-        let mut config = Config::default();
-        let mut error = String::new();
-        match load_config(&mut config, &mut error) {
-            ConfigState::Disabled => {
-                log_event("config", "state=disabled");
-                return;
-            }
-            ConfigState::Invalid => {
-                log_event("config", &format!("state=invalid error={error}"));
-                return;
-            }
-            ConfigState::Ok => {
+        let config = match load_config() {
+            Ok(config) => {
                 log_event(
                     "config",
                     &format!(
@@ -479,8 +435,17 @@ mod windows_impl {
                         redact_service_url(&config.service_url)
                     ),
                 );
+                config
             }
-        }
+            Err(ConfigError::Disabled) => {
+                log_event("config", "state=disabled");
+                return;
+            }
+            Err(error) => {
+                log_event("config", &format!("state=invalid error={}", error.detail()));
+                return;
+            }
+        };
 
         let secret = match load_secret() {
             Ok(secret) => secret,
@@ -550,15 +515,16 @@ mod windows_impl {
         }
 
         drop(secret); // `MachineSecret` zeroizes the key and the password.
-        if armed {
-            // `consume_arming` may already have advanced the generation by the
-            // time this line runs; the round still ended by arming the tile.
-            log_event("worker", "phase=armed");
+        // `consume_arming` may already have advanced the generation by the time
+        // this line runs; the round still ended by arming the tile.
+        let phase = if armed {
+            "phase=armed"
         } else if session.cancelled(generation) {
-            log_event("worker", "phase=cancelled");
+            "phase=cancelled"
         } else {
-            log_event("worker", "phase=stopped");
-        }
+            "phase=stopped"
+        };
+        log_event("worker", phase);
     }
 
     /// Arguments moved into the claim request thread.
@@ -567,7 +533,7 @@ mod windows_impl {
         path: String,
         body: Vec<u8>,
         receive_timeout_ms: i32,
-        sender: std::sync::mpsc::Sender<HttpResult>,
+        sender: std::sync::mpsc::Sender<HttpOutcome>,
         module: HMODULE,
     }
 
@@ -617,7 +583,7 @@ mod windows_impl {
         path: &str,
         body: &[u8],
         receive_timeout_ms: i32,
-    ) -> Option<HttpResult> {
+    ) -> Option<HttpOutcome> {
         // +1 module reference for as long as the request thread may run.
         let mut module = HMODULE::default();
         // SAFETY: `claim_thread_proc` is an address inside this DLL, so
@@ -629,14 +595,10 @@ mod windows_impl {
                 &raw mut module,
             )
         };
+        let direct = || post_json_with_receive_timeout(endpoint, path, body, receive_timeout_ms);
         if pinned.is_err() {
             // Degraded but still bounded: cancel is checked right after.
-            return Some(post_json_with_receive_timeout(
-                endpoint,
-                path,
-                body,
-                receive_timeout_ms,
-            ));
+            return Some(direct());
         }
 
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -662,29 +624,21 @@ mod windows_impl {
                 None,
             )
         };
-        match thread {
-            Ok(handle) => {
-                // SAFETY: `handle` is open and owned here; closing it does not
-                // stop the thread.
-                unsafe {
-                    let _ = CloseHandle(handle);
-                }
+        if let Ok(handle) = thread {
+            // SAFETY: `handle` is open and owned here; closing it does not
+            // stop the thread.
+            unsafe {
+                let _ = CloseHandle(handle);
             }
-            Err(_) => {
-                ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
-                // SAFETY: `parameter` came from `Box::into_raw` above.
-                drop(unsafe { Box::from_raw(parameter.cast::<ClaimJob>()) });
-                // SAFETY: balances the successful GetModuleHandleExW above.
-                unsafe {
-                    let _ = FreeLibrary(module);
-                }
-                return Some(post_json_with_receive_timeout(
-                    endpoint,
-                    path,
-                    body,
-                    receive_timeout_ms,
-                ));
+        } else {
+            ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
+            // SAFETY: `parameter` came from `Box::into_raw` above.
+            drop(unsafe { Box::from_raw(parameter.cast::<ClaimJob>()) });
+            // SAFETY: balances the successful GetModuleHandleExW above.
+            unsafe {
+                let _ = FreeLibrary(module);
             }
+            return Some(direct());
         }
 
         loop {
@@ -793,26 +747,23 @@ mod windows_impl {
                 None,
             )
         };
-        match thread {
-            Ok(handle) => {
-                // SAFETY: `handle` is open and owned here; closing it does not
-                // stop the thread.
-                unsafe {
-                    let _ = CloseHandle(handle);
-                }
+        if let Ok(handle) = thread {
+            // SAFETY: `handle` is open and owned here; closing it does not
+            // stop the thread.
+            unsafe {
+                let _ = CloseHandle(handle);
             }
-            Err(_) => {
-                ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
-                // The thread never started, so it did not take the argument.
-                // SAFETY: `parameter` came from `Box::into_raw` above.
-                drop(unsafe { Box::from_raw(parameter.cast::<StartArgs>()) });
-                // SAFETY: balances the successful GetModuleHandleExW above.
-                unsafe {
-                    let _ = FreeLibrary(module);
-                }
-                session.finish_worker(generation);
-                log_event("worker", "phase=start_failed");
+        } else {
+            ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
+            // The thread never started, so it did not take the argument.
+            // SAFETY: `parameter` came from `Box::into_raw` above.
+            drop(unsafe { Box::from_raw(parameter.cast::<StartArgs>()) });
+            // SAFETY: balances the successful GetModuleHandleExW above.
+            unsafe {
+                let _ = FreeLibrary(module);
             }
+            session.finish_worker(generation);
+            log_event("worker", "phase=start_failed");
         }
     }
 }
