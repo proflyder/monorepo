@@ -897,6 +897,13 @@ projects/home-assistant/deploy/images/hermes/verify-reproducible.sh
 # ожидается «reproducible: sha256:…»
 ```
 
+PR CI и fallback `deploy-home` дополнительно читают общий кэш слоёв Buildx
+`ghcr.io/proflyder/hermes:buildcache`; пишут его (`mode=max`) только job'ы,
+которые уже залогинены в GHCR с правом записи. Кэш переиспользует слои с теми
+же входами (apt, `uv`), поэтому ускоряет сборку, но не меняет digest. Пакет
+должен оставаться публичным, иначе чтение кэша из PR без логина будет
+пропущено.
+
 Обновление Hermes — bump `projects/home-assistant/deploy/images/hermes/revision`
 (и при необходимости digest'ов баз и `DEBIAN_SNAPSHOT` в `Dockerfile`); путь
 `projects/home-assistant/deploy/images/hermes/**` привязан к деплой-юниту

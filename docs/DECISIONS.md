@@ -353,7 +353,11 @@
       образами по digest, apt из `snapshot.debian.org` на дату базового тега,
       `SOURCE_DATE_EPOCH` = время upstream-коммита и Buildx
       `rewrite-timestamp=true`; `verify-reproducible.sh` доказывает совпадение
-      двух сборок без кэша. Тег и apt-снимок меняются только осознанным bump'ом.
+      двух сборок без кэша. Registry-кэш слоёв buildx
+      (`ghcr.io/proflyder/hermes:buildcache`, запись `mode=max` только у job'ов
+      с правом записи в GHCR) — ускорение: он переиспользует только слои с
+      идентичными входами и digest не меняет. Тег и apt-снимок меняются только
+      осознанным bump'ом.
 
 37. **Pulsar — first-party код в монорепозитории.** Релиз, публикация и
     выкатка — решение 20.

@@ -23,7 +23,9 @@
 #
 # Authentication is the job-scoped GITHUB_TOKEN already logged in by the
 # caller (`docker login ghcr.io`); the Bazel push target reads the same Docker
-# config.
+# config. The same token owns the shared Buildx cache
+# (`<registry>/hermes:buildcache`, written with `mode=max`), which this script
+# only uses on the path that already pushes with that token.
 #
 # `PREBUILT_DIGESTS` / `PREBUILT_DIGESTS_FILE` carry the digests `deploy-home`
 # verified and promoted from the pull-request build (DECISIONS 36). Those images
@@ -145,11 +147,17 @@ for image in "$@"; do
       mkdir -p "$WORK/hermes"
       git -C "$WORK/hermes-src" archive "$revision" | tar -x -C "$WORK/hermes"
       # Same wrapper as PR CI: pinned inputs + SOURCE_DATE_EPOCH + Buildx
-      # rewrite-timestamp keep the digest identical across both builders.
+      # rewrite-timestamp keep the digest identical across both builders. The
+      # shared registry layer cache cuts the apt/uv work; the caller is already
+      # logged in with `packages: write` for the push below, so exporting it is
+      # allowed. A cache hit cannot change the digest: it only reuses layers
+      # whose inputs hash the same.
       digest=$("$IMAGES_DIR/hermes/build.sh" \
         --context "$WORK/hermes" \
         --source-repo "$WORK/hermes-src" \
         --revision "$revision" \
+        --cache-from "type=registry,ref=${REGISTRY}/hermes:buildcache" \
+        --cache-to "type=registry,ref=${REGISTRY}/hermes:buildcache,mode=max" \
         --push --tag "${REGISTRY}/hermes:${IMAGE_TAG}")
       if [[ "$IMAGE_TAG" != develop ]]; then
         docker buildx imagetools create \

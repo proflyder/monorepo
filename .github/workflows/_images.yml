@@ -19,6 +19,13 @@ name: _images
 # Fork pull requests and manual `workflow_dispatch` runs build only: their token
 # is read-only, so they never receive registry credentials and never push.
 #
+# The Hermes Dockerfile build additionally uses a shared Buildx layer cache in
+# `ghcr.io/proflyder/hermes:buildcache`. Every run reads it (the package is
+# public, so even a fork PR without credentials can); only a job that already
+# logs in with the write token exports it (`mode=max`). The cache only reuses a
+# layer whose inputs hash identically, so it speeds up apt and `uv` without
+# changing the reproducible manifest digest.
+#
 # Only the `images`/`attest` jobs of this file need registry, OIDC and
 # attestation permissions; the caller grants them to this job alone.
 
@@ -171,8 +178,16 @@ jobs:
         env:
           PUSH: ${{ inputs.push_tree_tag }}
           TREE_TAG: ${{ steps.tree.outputs.tag }}
+          # Shared Buildx layer cache. It is read on every build — the package is
+          # public, so the read works without credentials too — and written back
+          # only when this job has the same GHCR login as the image push above.
+          HERMES_CACHE_REF: ghcr.io/proflyder/hermes:buildcache
         run: |
           set -euo pipefail
+          cache_args=(--cache-from "type=registry,ref=${HERMES_CACHE_REF}")
+          if [[ "$PUSH" == "true" ]]; then
+            cache_args+=(--cache-to "type=registry,ref=${HERMES_CACHE_REF},mode=max")
+          fi
           read -r -a images <<< "${{ inputs.images }}"
           revision=$(tr -d '[:space:]' < projects/home-assistant/deploy/images/hermes/revision)
           if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
@@ -197,6 +212,7 @@ jobs:
                     --source-repo "$RUNNER_TEMP/hermes-src" \
                     --revision "$revision" \
                     --metadata-file "$RUNNER_TEMP/hermes-metadata.json" \
+                    "${cache_args[@]}" \
                     --push --tag "ghcr.io/proflyder/hermes:${TREE_TAG}")
                   printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
                   echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
@@ -206,6 +222,7 @@ jobs:
                     --context "$RUNNER_TEMP/hermes" \
                     --source-repo "$RUNNER_TEMP/hermes-src" \
                     --revision "$revision" \
+                    "${cache_args[@]}" \
                     --oci-dir "$RUNNER_TEMP/hermes-oci"
                   echo "- \`${image}\`: built, not published" | tee -a "$GITHUB_STEP_SUMMARY"
                 fi
@@ -227,8 +244,15 @@ jobs:
         env:
           PUSH: ${{ inputs.push_tree_tag }}
           TREE_TAG: ${{ steps.tree.outputs.tag }}
+          # Same shared Buildx cache as the docker-only job: read always, write
+          # only with the write token that also pushes the tree-tagged image.
+          HERMES_CACHE_REF: ghcr.io/proflyder/hermes:buildcache
         run: |
           set -euo pipefail
+          cache_args=(--cache-from "type=registry,ref=${HERMES_CACHE_REF}")
+          if [[ "$PUSH" == "true" ]]; then
+            cache_args+=(--cache-to "type=registry,ref=${HERMES_CACHE_REF},mode=max")
+          fi
           read -r -a images <<< "${{ inputs.images }}"
           bazel_images='${{ inputs.bazel_images }}'
           if [[ -z "$bazel_images" || "$bazel_images" == "{}" ]]; then
@@ -285,6 +309,7 @@ jobs:
                     --source-repo "$RUNNER_TEMP/hermes-src" \
                     --revision "$revision" \
                     --metadata-file "$RUNNER_TEMP/hermes-metadata.json" \
+                    "${cache_args[@]}" \
                     --push --tag "ghcr.io/proflyder/hermes:${TREE_TAG}")
                   printf '%s=%s\n' "$image" "$digest" >> "$RUNNER_TEMP/pushed.txt"
                   echo "- \`${image}\`: \`ghcr.io/proflyder/${image}@${digest}\` (\`${TREE_TAG}\`)" \
@@ -294,6 +319,7 @@ jobs:
                     --context "$RUNNER_TEMP/hermes" \
                     --source-repo "$RUNNER_TEMP/hermes-src" \
                     --revision "$revision" \
+                    "${cache_args[@]}" \
                     --oci-dir "$RUNNER_TEMP/hermes-oci"
                   echo "- \`${image}\`: built, not published" | tee -a "$GITHUB_STEP_SUMMARY"
                 fi
