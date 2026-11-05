@@ -9,11 +9,4 @@ pub mod mdns;
 #[allow(unsafe_code)]
 mod sys;
 
-/// strerror text of an OS error, as the C++ daemon logged it (without " (os error N)").
-fn errstr(e: &std::io::Error) -> String {
-    let s = e.to_string();
-    match s.find(" (os error ") {
-        Some(i) => s[..i].to_owned(),
-        None => s,
-    }
-}
+pub(crate) use ricardo_linux::io_error_text as errstr;

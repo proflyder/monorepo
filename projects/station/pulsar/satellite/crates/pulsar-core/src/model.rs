@@ -611,7 +611,7 @@ impl Model {
         if std::path::Path::new(self.alsa_config).is_file() {
             crate::sys::set_var("ALSA_CONFIG_PATH", self.alsa_config);
         } else {
-            log::error!(
+            tracing::error!(
                 "alsa: {} missing, ALSA_CONFIG_PATH not set: '{}' cannot open until pulsar-install \
                  puts it back",
                 self.alsa_config,
@@ -659,7 +659,7 @@ pub fn detect_model() -> Option<&'static Model> {
             let shown = String::from_utf8_lossy(&raw).replace('\0', " ");
             let dt = std::fs::read("/proc/device-tree/amlogic-dt-id").unwrap_or_default();
             let dt = String::from_utf8_lossy(&dt);
-            log::error!(
+            tracing::error!(
                 "unsupported device (devicetree compatible: {shown}, amlogic-dt-id: '{}')",
                 dt.trim_end_matches('\0')
             );

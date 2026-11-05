@@ -23,7 +23,6 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::Duration;
 
-use pulsar_core::actors;
 use pulsar_esphome::{
     ApiConfig, ApiEvent, ApiHandle, BinarySensorId, ButtonId, DeviceIdentity, EventId, LightState,
     MediaCommand, MediaState, NumberId, SelectId, SensorId, SwitchId, TextId, TextSensorId,
@@ -79,7 +78,7 @@ impl Echo {
                 println!("HOOK voice_subscribed {}", b(sub));
                 if sub {
                     let run = voice_run(self.api.clone(), self.stopped.clone());
-                    actors::spawn_actor("selftest-voice", run);
+                    pulsar_core::supervisor().spawn_local("selftest-voice", run);
                 }
             }
             ApiEvent::VoiceEvent { event, data } => {
@@ -97,7 +96,7 @@ impl Echo {
                     b(r.start_conversation)
                 );
                 let (api, stopped) = (self.api.clone(), self.stopped.clone());
-                actors::spawn_actor("selftest-announce", async move {
+                pulsar_core::supervisor().spawn_local("selftest-announce", async move {
                     let at = Instant::now() + Duration::from_millis(300);
                     if wait_until(&stopped, at).await {
                         api.voice_announce_finished(true);
@@ -265,7 +264,10 @@ fn main() -> ExitCode {
     let local = tokio::task::LocalSet::new();
     let code = local.block_on(&rt, run(port, name, run_s, key_path));
     // The server's teardown (DisconnectRequest to the clients) runs when its actor stops.
-    local.block_on(&rt, actors::join_all(Duration::from_secs(3)));
+    local.block_on(
+        &rt,
+        pulsar_core::supervisor().shutdown(Duration::from_secs(3)),
+    );
     {
         let _rt = rt.enter();
         drop(local);

@@ -10,8 +10,8 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use log::{error, info};
-use pulsar_core::sysfs;
+use ricardo_linux as sysfs;
+use tracing::{error, info};
 
 use crate::{RadioLines, os_error_text, sys};
 

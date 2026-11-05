@@ -18,7 +18,6 @@ use std::io::Write as _;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use pulsar_core::actors;
 use pulsar_lan::arbiter::{self, ArbiterEvent, Claim};
 use pulsar_lan::mdns::{self, MdnsService, Reply};
 use tokio::signal::unix::{Signal, SignalKind, signal};
@@ -133,7 +132,10 @@ fn main() -> ExitCode {
     let local = tokio::task::LocalSet::new();
     let code = local.block_on(&rt, run(mode));
     // The responder's goodbye goes out when its actor stops.
-    local.block_on(&rt, actors::join_all(Duration::from_secs(3)));
+    local.block_on(
+        &rt,
+        pulsar_core::supervisor().shutdown(Duration::from_secs(3)),
+    );
     {
         let _rt = rt.enter();
         drop(local);

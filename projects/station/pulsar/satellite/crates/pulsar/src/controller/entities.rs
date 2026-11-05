@@ -1,7 +1,6 @@
 //! HA connection and entities, buttons, the light sensor, Zigbee and updates (controller.cpp
 //! "HA connection", "entities", "updates").
 
-use log::{error, info, warn};
 use pulsar_core::now_ms;
 use pulsar_esphome::{
     ActionId, ApiEvent, BinarySensorId, ButtonId, EventId, LightState, NumberId, SelectId,
@@ -11,6 +10,7 @@ use pulsar_hw::{Button, InputEvent, Press};
 use pulsar_media::Channel;
 use pulsar_update::UpdateEvent;
 use pulsar_zigbee::{Mode, ZigbeeEvent};
+use tracing::{error, info, warn};
 
 use super::logic::{self, AutoUpdate, cxx_clamp, cxx_max, cxx_min};
 use super::{

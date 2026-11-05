@@ -97,6 +97,7 @@ pub struct TelemetryBuilder {
     level: LevelFilter,
     target: LogTarget,
     offset: UtcOffset,
+    default_layer: bool,
     layers: Vec<Box<dyn Layer<Registry> + Send + Sync>>,
 }
 
@@ -113,6 +114,7 @@ impl TelemetryBuilder {
             level: LevelFilter::INFO,
             target: LogTarget::Stderr,
             offset: local_offset(),
+            default_layer: true,
             layers: Vec::new(),
         }
     }
@@ -143,6 +145,17 @@ impl TelemetryBuilder {
     #[must_use]
     pub fn with_local_offset(mut self, offset: UtcOffset) -> Self {
         self.offset = offset;
+        self
+    }
+
+    /// Drop the built-in `fmt` layer.
+    ///
+    /// For a service that brings its own human-readable output as a [`Layer`]
+    /// (Pulsar keeps the C++ daemon's stderr contract); the level filter and
+    /// every attached layer still apply.
+    #[must_use]
+    pub fn without_default_layer(mut self) -> Self {
+        self.default_layer = false;
         self
     }
 
@@ -180,7 +193,9 @@ impl TelemetryBuilder {
             .with_ansi(false)
             .with_writer(sink);
         let mut layers: Vec<Box<dyn Layer<Registry> + Send + Sync>> = vec![Box::new(self.level)];
-        layers.push(Box::new(fmt));
+        if self.default_layer {
+            layers.push(Box::new(fmt));
+        }
         layers.extend(self.layers);
         Ok(Registry::default().with(LayerSet(layers)))
     }
@@ -196,6 +211,12 @@ impl TelemetryBuilder {
 struct LayerSet(Vec<Box<dyn Layer<Registry> + Send + Sync>>);
 
 impl Layer<Registry> for LayerSet {
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        // The most verbose inner level decides: `log`'s bridge consults the
+        // process-wide hint before it forwards a record.
+        self.0.iter().filter_map(Layer::max_level_hint).max()
+    }
+
     fn register_callsite(
         &self,
         metadata: &'static tracing::Metadata<'static>,

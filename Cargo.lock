@@ -921,7 +921,6 @@ name = "pulsar"
 version = "0.0.0"
 dependencies = [
  "libc",
- "log",
  "pulsar-alsa",
  "pulsar-audio",
  "pulsar-clock",
@@ -934,6 +933,7 @@ dependencies = [
  "pulsar-update",
  "pulsar-zigbee",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -942,8 +942,9 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "libloading",
- "log",
  "pulsar-core",
+ "ricardo-linux",
+ "tracing",
 ]
 
 [[package]]
@@ -953,11 +954,12 @@ dependencies = [
  "cc",
  "libc",
  "libloading",
- "log",
  "pulsar-alsa",
  "pulsar-core",
+ "ricardo-linux",
  "ring",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -965,9 +967,10 @@ name = "pulsar-clock"
 version = "0.0.0"
 dependencies = [
  "libc",
- "log",
  "pulsar-core",
+ "ricardo-linux",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -976,7 +979,12 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "log",
+ "ricardo-runtime",
+ "ricardo-telemetry",
  "tokio",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -984,11 +992,12 @@ name = "pulsar-esphome"
 version = "0.0.0"
 dependencies = [
  "libc",
- "log",
  "pulsar-core",
+ "ricardo-linux",
  "snow",
  "socket2",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -996,10 +1005,11 @@ name = "pulsar-hw"
 version = "0.0.0"
 dependencies = [
  "libc",
- "log",
  "pulsar-clock",
  "pulsar-core",
+ "ricardo-linux",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1007,10 +1017,12 @@ name = "pulsar-lan"
 version = "0.0.0"
 dependencies = [
  "libc",
- "log",
  "pulsar-core",
+ "ricardo-actor",
+ "ricardo-linux",
  "socket2",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1019,10 +1031,10 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "libloading",
- "log",
  "pulsar-alsa",
  "pulsar-core",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1031,10 +1043,11 @@ version = "0.0.0"
 dependencies = [
  "cc",
  "libc",
- "log",
  "pulsar-alsa",
  "pulsar-core",
+ "ricardo-linux",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1043,6 +1056,7 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "pulsar-core",
+ "ricardo-linux",
  "ring",
  "rustls",
  "rustls-pki-types",
@@ -1055,10 +1069,11 @@ name = "pulsar-zigbee"
 version = "0.0.0"
 dependencies = [
  "libc",
- "log",
  "pulsar-core",
+ "ricardo-linux",
  "socket2",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1083,6 +1098,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
+name = "ricardo-actor"
+version = "0.1.0"
+dependencies = [
+ "ricardo-runtime",
+ "tokio",
+]
+
+[[package]]
 name = "ricardo-http"
 version = "0.1.0"
 dependencies = [
@@ -1091,6 +1114,13 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "ricardo-linux"
+version = "0.1.0"
+dependencies = [
+ "rustix",
 ]
 
 [[package]]
@@ -1608,6 +1638,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
 ]
 
 [[package]]
@@ -1670,6 +1712,12 @@ dependencies = [
  "serde_core",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "valuable"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "version_check"

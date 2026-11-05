@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use log::{debug, info, warn};
+use tracing::{debug, info, warn};
 
 use super::entities::{CLOCK_TEXT_MAX, LED_SPEED_MAX, LED_SPEED_MIN, clamp01, key};
 use super::{Server, msg};
@@ -546,12 +546,11 @@ impl Server {
                 _ => {}
             }
         }
-        match timer_event(event) {
-            Some(e) => {
-                t.event = e;
-                self.emit(ApiEvent::Timer(t));
-            }
-            None => debug!("api: unknown timer event {event} dropped"),
+        if let Some(e) = timer_event(event) {
+            t.event = e;
+            self.emit(ApiEvent::Timer(t));
+        } else {
+            debug!("api: unknown timer event {event} dropped");
         }
     }
 

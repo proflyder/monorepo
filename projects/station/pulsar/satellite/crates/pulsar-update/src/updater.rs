@@ -192,7 +192,7 @@ fn spawn_with(cfg: Config) -> (UpdaterHandle, UnboundedReceiver<UpdateEvent>) {
     let (cmd_tx, cmd_rx) = unbounded_channel();
     let (ev_tx, ev_rx) = unbounded_channel();
     let busy = Rc::new(Cell::new(false));
-    pulsar_core::actors::spawn_actor("updater", run(cfg, cmd_rx, ev_tx, busy.clone()));
+    pulsar_core::supervisor().spawn_local("updater", run(cfg, cmd_rx, ev_tx, busy.clone()));
     let handle = UpdaterHandle {
         cmds: cmd_tx,
         busy,

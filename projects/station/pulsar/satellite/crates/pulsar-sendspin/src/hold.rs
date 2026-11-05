@@ -7,8 +7,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use log::info;
 use pulsar_core::Timers;
+use tracing::info;
 
 /// Timers of the service actor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

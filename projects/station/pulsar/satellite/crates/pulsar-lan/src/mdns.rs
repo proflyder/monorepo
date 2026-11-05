@@ -14,12 +14,12 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::os::fd::{AsFd, OwnedFd};
 use std::rc::Rc;
 
-use log::{debug, error, info, warn};
-use pulsar_core::{Timers, actors, net};
+use pulsar_core::{Timers, net};
 use socket2::{Domain, SockRef, Socket, Type};
 use tokio::io::unix::AsyncFd;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tracing::{debug, error, info, warn};
 
 use crate::errstr;
 use crate::sys::{self, MreqOpt};
@@ -140,7 +140,7 @@ fn start(host: &str, trace: Option<UnboundedSender<Answered>>) -> Result<MdnsHan
         }
     };
     let (tx, rx) = unbounded_channel();
-    actors::spawn_actor("mdns", r.run(rx, netlink));
+    pulsar_core::supervisor().spawn_local("mdns", r.run(rx, netlink));
     Ok(MdnsHandle { cmds: tx, ip })
 }
 

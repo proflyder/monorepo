@@ -2,7 +2,6 @@
 
 use std::ffi::{CStr, CString};
 use std::net::Ipv4Addr;
-use std::os::fd::RawFd;
 use std::sync::LazyLock;
 
 /// Sets a process-wide environment variable. Call only before threads or libraries that read the
@@ -119,12 +118,6 @@ pub fn set_tz(posix_tz: &str) {
     unsafe { std::env::set_var("TZ", posix_tz) };
     // SAFETY: tzset has no preconditions.
     unsafe { tzset() };
-}
-
-/// pwrite(2); returns the byte count or -1.
-pub fn pwrite(fd: RawFd, buf: &[u8], offset: i64) -> isize {
-    // SAFETY: `buf` is valid for reads of `buf.len()` bytes; an invalid fd only yields EBADF.
-    unsafe { libc::pwrite(fd, buf.as_ptr().cast(), buf.len(), offset as libc::off_t) }
 }
 
 /// One IPv4 entry of getifaddrs.

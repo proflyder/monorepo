@@ -39,13 +39,14 @@ use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd as _;
 use std::path::PathBuf;
 
-use log::{debug, error, info, warn};
 use pulsar_core::model::Model;
 use pulsar_core::{
     AmbientDimmer, ClockShot, MUSIC_STALE_MS, MusicFrame, SENDSPIN_FRESH_MS, Timers, UiState,
-    actors, now_ms, sysfs,
+    now_ms,
 };
+use ricardo_linux as sysfs;
 use tokio::sync::mpsc;
+use tracing::{debug, error, info, warn};
 
 use crate::clock_fx::{self, Anim, Frame, clamp};
 use crate::font::{self, Cell, DIGITS, Glyphs};
@@ -871,7 +872,7 @@ pub fn spawn(model: &'static Model) -> ClockHandle {
     clock.apply_level();
     clock.refresh();
     let (tx, rx) = mpsc::unbounded_channel();
-    actors::spawn_actor("clock", clock.run(rx));
+    pulsar_core::supervisor().spawn_local("clock", clock.run(rx));
     ClockHandle { tx: Some(tx) }
 }
 

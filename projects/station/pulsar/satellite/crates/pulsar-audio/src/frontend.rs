@@ -19,11 +19,11 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use log::{error, info, warn};
 use pulsar_alsa::{Format, HwRequest, HwTrace, Pcm, Stream};
 use pulsar_core::MusicFrame;
 use pulsar_core::model::{CaptureFormat, Model, PrerollRule};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tracing::{error, info, warn};
 
 use crate::endpoint::{EndpointPrior, percentile_db};
 use crate::engine::{Engine, Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN, to_s16};
@@ -258,25 +258,23 @@ impl FrontendHandle {
     /// The dialog started by a recorded hit ended: fills `outcome` (and `stt_text` when STT
     /// reported one) of that event's sidecar.
     pub fn wake_event_outcome(&self, id: &str, outcome: Outcome, stt_text: Option<&str>) {
-        match &self.inner.wake {
-            Some(w) => {
-                if !w.handle.set_outcome(id, outcome, stt_text) {
-                    warn!("wake events: writer is gone, outcome of {id} not saved");
-                }
+        if let Some(w) = &self.inner.wake {
+            if !w.handle.set_outcome(id, outcome, stt_text) {
+                warn!("wake events: writer is gone, outcome of {id} not saved");
             }
-            None => warn!("wake events: recording is not running, outcome of {id} not saved"),
+        } else {
+            warn!("wake events: recording is not running, outcome of {id} not saved");
         }
     }
 
     /// «Wake: ложное срабатывание»: labels the newest hit of the last 10 minutes.
     pub fn wake_event_false_alarm(&self) {
-        match &self.inner.wake {
-            Some(w) => {
-                if !w.handle.false_alarm() {
-                    warn!("wake events: writer is gone, false-alarm label not saved");
-                }
+        if let Some(w) = &self.inner.wake {
+            if !w.handle.false_alarm() {
+                warn!("wake events: writer is gone, false-alarm label not saved");
             }
-            None => warn!("wake events: recording is not running, false-alarm label not saved"),
+        } else {
+            warn!("wake events: recording is not running, false-alarm label not saved");
         }
     }
 

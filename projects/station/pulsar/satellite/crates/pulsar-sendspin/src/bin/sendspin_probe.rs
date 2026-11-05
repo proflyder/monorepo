@@ -15,8 +15,8 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use pulsar_alsa::{Ctl, Pcm, Stream};
+use pulsar_core::MusicFrame;
 use pulsar_core::model::Model;
-use pulsar_core::{MusicFrame, actors};
 use pulsar_sendspin::{SendspinConfig, SendspinEvent, Transport};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::Instant;
@@ -152,7 +152,10 @@ fn main() -> ExitCode {
     };
     let local = tokio::task::LocalSet::new();
     let result = local.block_on(&rt, run(&args, model));
-    local.block_on(&rt, actors::join_all(Duration::from_secs(3)));
+    local.block_on(
+        &rt,
+        pulsar_core::supervisor().shutdown(Duration::from_secs(3)),
+    );
     drop(local);
     rt.shutdown_timeout(Duration::from_secs(1));
     drop(cap);

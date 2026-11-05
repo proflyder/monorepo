@@ -6,6 +6,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+ricardo-linux = { path = "../../../../../../packages/rust/ricardo-linux" }
+
 libc = { workspace = true }
 pulsar-core = { path = "../pulsar-core" }
 ring = { workspace = true }

@@ -1,5 +1,5 @@
 {
-  "checksum": "6653e442f817a78dda70cb0640bced80fd734ea9e8d01977a4dab153cb3c4998",
+  "checksum": "c744bcb47e20fc804b56882445125840b9cf61eee1e01ac14f03732b29771ed8",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -1997,10 +1997,28 @@
     },
     "errno 0.3.14": {
       "common_attrs": {
-        "crate_features": [
-          "default",
-          "std"
-        ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "default"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "default"
+            ],
+            "armv7-unknown-linux-gnueabihf": [
+              "default"
+            ],
+            "x86_64-apple-darwin": [
+              "default"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "default"
+            ]
+          }
+        },
         "deps": {
           "common": [],
           "selects": {
@@ -4448,12 +4466,12 @@
             "target": "libc"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -4479,8 +4497,8 @@
             "target": "libloading"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -4528,16 +4546,16 @@
             "target": "libloading"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "ring 0.17.14",
             "target": "ring"
           },
           {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024",
@@ -4576,12 +4594,12 @@
             "target": "libc"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -4617,6 +4635,18 @@
           {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
+            "id": "tracing-log 0.2.0",
+            "target": "tracing_log"
+          },
+          {
+            "id": "tracing-subscriber 0.3.23",
+            "target": "tracing_subscriber"
           }
         ],
         "edition": "2024"
@@ -4646,10 +4676,6 @@
             "target": "libc"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "snow 0.10.0",
             "target": "snow"
           },
@@ -4660,6 +4686,10 @@
           {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -4689,12 +4719,12 @@
             "target": "libc"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -4724,16 +4754,16 @@
             "target": "libc"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "socket2 0.6.5",
             "target": "socket2"
           },
           {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -4767,12 +4797,12 @@
             "target": "libloading"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -4810,12 +4840,12 @@
             "target": "libc"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024",
@@ -4901,16 +4931,16 @@
             "target": "libc"
           },
           {
-            "id": "log 0.4.34",
-            "target": "log"
-          },
-          {
             "id": "socket2 0.6.5",
             "target": "socket2"
           },
           {
             "id": "tokio 1.54.1",
             "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "edition": "2024"
@@ -5039,6 +5069,33 @@
       ],
       "version": "6.0.0"
     },
+    "ricardo-actor 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ricardo_actor",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "ricardo-actor",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ricardo_actor",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "ricardo-http 0.1.0": {
       "common_attrs": {
         "deps": [
@@ -5072,6 +5129,33 @@
         {
           "Library": {
             "crate_name": "ricardo_http",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "ricardo-linux 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "rustix 1.1.6",
+            "target": "rustix"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ricardo_linux",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "ricardo-linux",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ricardo_linux",
             "crate_root": "src/lib.rs"
           }
         }
@@ -5338,12 +5422,35 @@
     "rustix 1.1.6": {
       "build_script_attrs": {},
       "common_attrs": {
-        "crate_features": [
-          "alloc",
-          "net",
-          "process",
-          "std"
-        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "fs",
+            "std"
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "net",
+              "process"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "net",
+              "process"
+            ],
+            "armv7-unknown-linux-gnueabihf": [
+              "net",
+              "process"
+            ],
+            "x86_64-apple-darwin": [
+              "net",
+              "process"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "net",
+              "process"
+            ]
+          }
+        },
         "deps": {
           "common": [
             {
@@ -5406,6 +5513,13 @@
               {
                 "id": "libc 0.2.191",
                 "target": "libc"
+              }
+            ],
+            "x86_64-pc-windows-gnu": [
+              {
+                "alias": "libc_errno",
+                "id": "errno 0.3.14",
+                "target": "errno"
               }
             ]
           }
@@ -7588,6 +7702,7 @@
     "tracing-core 0.1.36": {
       "common_attrs": {
         "crate_features": [
+          "default",
           "once_cell",
           "std"
         ],
@@ -7622,6 +7737,52 @@
         }
       ],
       "version": "0.1.36"
+    },
+    "tracing-log 0.2.0": {
+      "common_attrs": {
+        "crate_features": [
+          "log-tracer",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "log 0.4.34",
+            "target": "log"
+          },
+          {
+            "id": "once_cell 1.21.4",
+            "target": "once_cell"
+          },
+          {
+            "id": "tracing-core 0.1.36",
+            "target": "tracing_core"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "tracing_log",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "tracing-log",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "sha256": "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3",
+          "url": "https://static.crates.io/crates/tracing-log/0.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_log",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.0"
     },
     "tracing-subscriber 0.3.23": {
       "common_attrs": {
@@ -7889,6 +8050,43 @@
         }
       ],
       "version": "1.29.0"
+    },
+    "valuable 0.1.1": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "valuable",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "valuable",
+      "package_url": "https://github.com/tokio-rs/valuable",
+      "repository": {
+        "Http": {
+          "sha256": "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65",
+          "url": "https://static.crates.io/crates/valuable/0.1.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "valuable",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.1.1"
     },
     "version_check 0.9.5": {
       "common_attrs": {
@@ -8493,6 +8691,8 @@
           "Win32_Storage_FileSystem",
           "Win32_System",
           "Win32_System_Console",
+          "Win32_System_Diagnostics",
+          "Win32_System_Diagnostics_Debug",
           "Win32_System_IO",
           "Win32_System_Memory",
           "Win32_System_Pipes",
@@ -9594,6 +9794,7 @@
     "libloading 0.9.0",
     "log 0.4.34",
     "ring 0.17.14",
+    "rustix 1.1.6",
     "rustls 0.23.46",
     "rustls-pki-types 1.15.1",
     "serde 1.0.229",
@@ -9608,6 +9809,7 @@
     "tokio-rustls 0.26.6",
     "tokio-util 0.7.20",
     "tracing 0.1.44",
+    "tracing-log 0.2.0",
     "tracing-subscriber 0.3.23",
     "windows-core 0.62.2",
     "windows-link 0.2.1",
@@ -9632,7 +9834,9 @@
     "pulsar-sendspin 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-sendspin",
     "pulsar-update 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-update",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
+    "ricardo-actor 0.1.0": "packages/rust/ricardo-actor",
     "ricardo-http 0.1.0": "packages/rust/ricardo-http",
+    "ricardo-linux 0.1.0": "packages/rust/ricardo-linux",
     "ricardo-runtime 0.1.0": "packages/rust/ricardo-runtime",
     "ricardo-secret 0.1.0": "packages/rust/ricardo-secret",
     "ricardo-telemetry 0.1.0": "packages/rust/ricardo-telemetry",

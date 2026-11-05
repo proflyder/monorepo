@@ -1,10 +1,9 @@
-//! Shared runtime pieces of the pulsar daemon: logging, actor timers and registry, sysfs and
+//! Shared runtime pieces of the pulsar daemon: logging, the actor supervisor and timers,
 //! network helpers, the per-model hardware description and small types used across services.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
-pub mod actors;
 mod ambient;
 #[allow(unsafe_code)]
 mod compat;
@@ -12,9 +11,9 @@ pub mod fmt;
 mod logger;
 pub mod model;
 pub mod net;
+pub mod runtime;
 #[allow(unsafe_code)]
 mod sys;
-pub mod sysfs;
 mod timers;
 pub mod tz;
 pub mod volume;
@@ -23,6 +22,7 @@ pub use ambient::AmbientDimmer;
 pub use logger::{
     LogLine, add_own_target, init_logger, set_log_sink, stderr_level, take_log_lines,
 };
+pub use runtime::supervisor;
 pub use timers::Timers;
 
 /// Milliseconds on CLOCK_MONOTONIC (not affected by NTP steps after boot).

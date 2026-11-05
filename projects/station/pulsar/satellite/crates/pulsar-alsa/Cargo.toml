@@ -8,8 +8,9 @@ publish.workspace = true
 [dependencies]
 libc = { workspace = true }
 libloading = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 pulsar-core = { path = "../pulsar-core" }
+ricardo-linux = { path = "../../../../../../packages/rust/ricardo-linux" }
 
 [lints]
 workspace = true

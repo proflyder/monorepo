@@ -7,9 +7,10 @@ publish.workspace = true
 
 [dependencies]
 libc = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 pulsar-clock = { path = "../pulsar-clock" }
 pulsar-core = { path = "../pulsar-core" }
+ricardo-linux = { path = "../../../../../../packages/rust/ricardo-linux" }
 tokio = { workspace = true }
 
 [dev-dependencies]

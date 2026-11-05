@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use pulsar_clock::ClockHandle;
 use pulsar_core::model::{LedStrip, Model};
-use pulsar_core::{AmbientDimmer, ClockShot, MusicFrame, UiState, actors};
+use pulsar_core::{AmbientDimmer, ClockShot, MusicFrame, UiState};
 use pulsar_hw::{Button, InputEvent, InputHandle, LedsHandle, Press, Rgb};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::task::LocalSet;
@@ -80,7 +80,11 @@ fn main() -> ExitCode {
             "light" => light(a).await,
             _ => all(model, a, b).await,
         };
-        actors::join_all(Duration::from_secs(3)).await && ok
+        pulsar_core::supervisor()
+            .shutdown(Duration::from_secs(3))
+            .await
+            .is_empty()
+            && ok
     });
     {
         // Tasks still running are dropped inside the runtime, which their resources belong to.
@@ -106,8 +110,9 @@ fn led_value(model: &Model, s: &LedStrip, color: &str, i: i32) -> i32 {
         s.sysfs_kind,
         s.first_index + i
     );
-    pulsar_core::sysfs::read_file(&path)
-        .and_then(|v| pulsar_core::sysfs::trim(&v).parse().ok())
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|v| ricardo_linux::trim(&v).parse().ok())
         .unwrap_or(0)
 }
 
@@ -148,15 +153,17 @@ fn sysfs_expected(model: &Model, fb: [u8; 3]) -> [i32; 3] {
 /// Whether the daemon would drive `s` through its framebuffer: the same test as pulsar-hw
 /// (trigger active on the first red LED, fb named as expected).
 fn fb_mode(model: &Model, s: &LedStrip) -> bool {
-    let trigger = pulsar_core::sysfs::read_file(&format!(
+    let trigger = std::fs::read_to_string(format!(
         "/sys/class/leds/{}:red:{}{}/trigger",
         model.led_prefix, s.sysfs_kind, s.first_index
     ))
+    .ok()
     .unwrap_or_default();
     let dev = s.fb_dev.rsplit('/').next().unwrap_or(s.fb_dev);
-    let name = pulsar_core::sysfs::read_file(&format!("/sys/class/graphics/{dev}/name"))
+    let name = std::fs::read_to_string(format!("/sys/class/graphics/{dev}/name"))
+        .ok()
         .unwrap_or_default();
-    trigger.contains(&format!("[{}]", s.trigger)) && pulsar_core::sysfs::trim(&name) == s.fb_name
+    trigger.contains(&format!("[{}]", s.trigger)) && ricardo_linux::trim(&name) == s.fb_name
 }
 
 /// The strip's framebuffer as RGB per LED; None when it cannot be read.
@@ -275,7 +282,7 @@ fn feed_music(
     on: Rc<Cell<bool>>,
     done: Rc<Cell<bool>>,
 ) {
-    actors::spawn_actor("music feed", async move {
+    pulsar_core::supervisor().spawn_local("music feed", async move {
         let t0 = Instant::now();
         let mut last_beat: Option<Instant> = None;
         let mut tick = tokio::time::interval(Duration::from_millis(33));
@@ -483,7 +490,10 @@ async fn run_steps(model: &Model, steps: Vec<Step>, state_ms: u64, dumps: Dumps)
 
 /// After the LED steps: every handle gone, the actor turns the ring and logo off.
 async fn leds_off_after_exit(model: &Model) -> bool {
-    let stopped = actors::join_all(Duration::from_secs(3)).await;
+    let stopped = pulsar_core::supervisor()
+        .shutdown(Duration::from_secs(3))
+        .await
+        .is_empty();
     say(&format!("== exit (actors stopped: {stopped})"));
     say(&format!("   ring {}", ring_dump(model)));
     let mut off = check_strip(model, &model.ring, "off after exit", [0; 3]);
@@ -594,7 +604,9 @@ const MINUS: u8 = 0x40;
 const SMILEY: [u8; 4] = [0x40, 0x18, 0x0C, 0x40];
 
 fn read_trimmed(path: &str) -> Option<String> {
-    pulsar_core::sysfs::read_file(path).map(|s| pulsar_core::sysfs::trim(&s).to_owned())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| ricardo_linux::trim(&s).to_owned())
 }
 
 fn seg_name(model: &Model, digit: usize, seg: usize) -> String {
@@ -926,7 +938,7 @@ fn restore_current(saved: Option<[String; 2]>) {
     let Some(saved) = saved else { return };
     for (p, v) in MIDI_CURRENT.iter().zip(&saved) {
         if !v.is_empty() {
-            pulsar_core::sysfs::write_file(p, v);
+            ricardo_linux::write_file(p, v);
         }
     }
     say(&format!("restored clock current {}/{}", saved[0], saved[1]));
@@ -952,7 +964,10 @@ async fn clock(model: &'static Model, state_ms: u64) -> bool {
     say(&format!("final clock {}", clock_dump(model)));
     done.set(true);
     drop(clock);
-    let stopped = actors::join_all(Duration::from_secs(3)).await;
+    let stopped = pulsar_core::supervisor()
+        .shutdown(Duration::from_secs(3))
+        .await
+        .is_empty();
     restore_current(saved);
     ok && stopped
 }

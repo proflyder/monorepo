@@ -430,7 +430,7 @@ impl Drop for SpotterConf {
         // SAFETY: created by spotter_conf_read, freed once; out-pointer to a local.
         unsafe { (self.lib.sp_conf_free)(self.conf.as_ptr(), &mut err) };
         if let Some(e) = self.lib.sp_error(err) {
-            log::error!("spotter_conf_free: {e}");
+            tracing::error!("spotter_conf_free: {e}");
         }
     }
 }
@@ -516,7 +516,7 @@ impl Drop for Spotter {
         // SAFETY: created by spotter_create_multichannel, destroyed once; out-pointer to a local.
         unsafe { (self.lib.sp_destroy)(self.sp.as_ptr(), &mut err) };
         if let Some(e) = self.lib.sp_error(err) {
-            log::error!("spotter_destroy: {e}");
+            tracing::error!("spotter_destroy: {e}");
         }
     }
 }

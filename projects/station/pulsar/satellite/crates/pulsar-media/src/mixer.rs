@@ -8,10 +8,10 @@
 //! The curves live in `pulsar_core::volume` and repeat the C++ arithmetic step by step (f32 / f64 /
 //! int as there): state.conf values written by one binary are read by the other (`.prev`).
 
-use log::{debug, error, info};
 use pulsar_alsa::{Ctl, Pcm, Stream};
 use pulsar_core::model::Model;
 use pulsar_core::volume::{clamp_unit, from_raw, to_raw};
+use tracing::{debug, error, info};
 
 const MASTER: &str = "Master Playback Volume";
 
@@ -98,13 +98,14 @@ impl Mixer {
         } else {
             to_raw(self.model, self.volume)
         };
-        match ctl.write_integers(MASTER, &[raw, raw]) {
-            Err(rc) => error!("mixer: write {raw}: {}", pulsar_alsa::strerror(rc)),
-            Ok(()) => debug!(
+        if let Err(rc) = ctl.write_integers(MASTER, &[raw, raw]) {
+            error!("mixer: write {raw}: {}", pulsar_alsa::strerror(rc));
+        } else {
+            debug!(
                 "mixer: volume {:.2} muted={} -> raw {raw}",
                 self.volume,
                 i32::from(self.muted)
-            ),
+            );
         }
     }
 }

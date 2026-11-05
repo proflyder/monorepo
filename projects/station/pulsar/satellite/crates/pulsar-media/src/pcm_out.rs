@@ -25,9 +25,9 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use log::{debug, error, info, warn};
 use pulsar_alsa::{Format, HwRequest, Pcm};
 use pulsar_core::model::Model;
+use tracing::{debug, error, info, warn};
 
 /// The format playsink converts to (capsfilter before the fdsink) and the PCM is opened with.
 pub const CAPS: &str = "audio/x-raw,format=S16LE,layout=interleaved,rate=48000,channels=2";

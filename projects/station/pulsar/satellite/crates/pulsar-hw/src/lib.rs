@@ -14,11 +14,4 @@ pub use input::{Button, InputEvent, InputHandle, Press, spawn_input};
 pub use led_fx::VoiceColor;
 pub use leds::{LedsHandle, Rgb, case_colors, effect_names, music_styles, spawn_leds};
 
-/// strerror(3) text of an OS error, as the C++ daemon logged it (without " (os error N)").
-fn errstr(e: &std::io::Error) -> String {
-    let s = e.to_string();
-    match s.find(" (os error") {
-        Some(i) => s[..i].to_owned(),
-        None => s,
-    }
-}
+use ricardo_linux::io_error_text as errstr;

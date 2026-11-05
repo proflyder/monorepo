@@ -234,7 +234,7 @@ pub fn lib() -> Result<&'static Lib, &'static str> {
     LIB.get_or_init(|| {
         let path = LIB_PATH.get().copied().unwrap_or_default();
         let path = if path.is_empty() { SONAME } else { path };
-        load_from(path).inspect_err(|e| log::error!("alsa: {e}"))
+        load_from(path).inspect_err(|e| tracing::error!("alsa: {e}"))
     })
     .as_ref()
     .map_err(String::as_str)
@@ -319,7 +319,7 @@ unsafe extern "C" fn quiet_handler(
     // calls themselves.
     // Only when stderr itself logs at debug level (as the C++ daemon); otherwise nothing reaches
     // the sink.
-    if pulsar_core::stderr_level() < log::LevelFilter::Debug {
+    if pulsar_core::stderr_level() < tracing::level_filters::LevelFilter::DEBUG {
         return;
     }
     let text = |p: *const c_char| {
@@ -331,9 +331,10 @@ unsafe extern "C" fn quiet_handler(
         }
     };
     let (file, function) = (text(file), text(function));
-    match (err != 0).then(lib).and_then(Result::ok) {
-        Some(lib) => log::debug!("alsa: {file}:{line} {function}: {}", lib.strerror(err)),
-        None => log::debug!("alsa: {file}:{line} {function}"),
+    if let Some(lib) = (err != 0).then(lib).and_then(Result::ok) {
+        tracing::debug!("alsa: {file}:{line} {function}: {}", lib.strerror(err));
+    } else {
+        tracing::debug!("alsa: {file}:{line} {function}");
     }
 }
 

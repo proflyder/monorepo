@@ -9,7 +9,7 @@ use std::io::{self, Write as _};
 use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 
-use log::{error, warn};
+use tracing::{error, warn};
 
 /// File whose first non-blank character `0` turns unpaired access off (pairing required).
 const UNPAIRED_ACCESS: &str = "unpaired_access";
@@ -22,14 +22,7 @@ fn path(dir: &Path, key: &OsStr) -> PathBuf {
     PathBuf::from(p)
 }
 
-/// The C library's message for an OS error, without std's " (os error N)" suffix.
-fn errstr(e: &io::Error) -> String {
-    let s = e.to_string();
-    match s.find(" (os error") {
-        Some(i) => s[..i].to_owned(),
-        None => s,
-    }
-}
+use ricardo_linux::io_error_text as errstr;
 
 /// mkdir 0700, not recursive; an existing entry counts as success.
 pub fn ensure_dir(dir: &Path) -> bool {

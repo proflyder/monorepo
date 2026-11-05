@@ -20,9 +20,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 
-use log::{debug, error, info, warn};
 use socket2::{Domain, SockRef, Socket, Type};
 use tokio::net::{TcpListener, TcpStream};
+use tracing::{debug, error, info, warn};
 
 use crate::bytes::{get_le16, get_le32, get_le64, put_le16, put_le32, put_le64};
 use crate::coordinator::{

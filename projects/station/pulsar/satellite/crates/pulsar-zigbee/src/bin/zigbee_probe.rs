@@ -14,13 +14,13 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use log::{debug, error, info};
 use pulsar_zigbee::RadioLines;
 use pulsar_zigbee::bytes::{get_be16, get_be32};
 use pulsar_zigbee::coordinator::{ApsFrame, Coordinator, Hooks};
 use pulsar_zigbee::deconz::DeconzServer;
 use pulsar_zigbee::flasher::{radio_flash, ybl_load};
 use pulsar_zigbee::link::{Link, LinkEvent};
+use tracing::{debug, error, info};
 
 const APP_INFO_REQ: u16 = 0x0900;
 const APP_INFO_RSP: u16 = 0x8900;

@@ -561,7 +561,12 @@ async fn actor_draws_commands_and_stops_with_the_handles() {
             assert_eq!([lit(0), lit(1), lit(2), lit(3)], want);
             drop(clock);
             drop(other);
-            assert!(actors::join_all(Duration::from_secs(1)).await);
+            assert!(
+                pulsar_core::supervisor()
+                    .shutdown(Duration::from_secs(1))
+                    .await
+                    .is_empty()
+            );
         })
         .await;
 }
@@ -618,7 +623,12 @@ async fn auto_brightness_off_ignores_the_light() {
             clock.set_auto_brightness(true);
             assert_eq!(next().await, half_lit.to_string());
             drop(clock);
-            assert!(actors::join_all(Duration::from_secs(1)).await);
+            assert!(
+                pulsar_core::supervisor()
+                    .shutdown(Duration::from_secs(1))
+                    .await
+                    .is_empty()
+            );
         })
         .await;
 }
@@ -632,7 +642,12 @@ async fn unavailable_clock_is_a_no_op() {
             let clock = spawn(m);
             clock.set_text("1234".into());
             clock.play(ClockShot::Boot);
-            assert!(actors::join_all(Duration::from_secs(1)).await);
+            assert!(
+                pulsar_core::supervisor()
+                    .shutdown(Duration::from_secs(1))
+                    .await
+                    .is_empty()
+            );
         })
         .await;
 }

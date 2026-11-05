@@ -7,6 +7,17 @@ package(default_visibility = ["//visibility:public"])
 # skips it through target_compatible_with instead of failing.
 LINUX = ["@platforms//os:linux"]
 
+DEPS = [
+    "//packages/rust/ricardo-runtime:ricardo_runtime",
+    "//packages/rust/ricardo-telemetry:ricardo_telemetry",
+    "@crates//:libc",
+    "@crates//:log",
+    "@crates//:tokio",
+    "@crates//:tracing",
+    "@crates//:tracing-log",
+    "@crates//:tracing-subscriber",
+]
+
 rust_library(
     name = "pulsar_core",
     srcs = glob(
@@ -17,11 +28,7 @@ rust_library(
     edition = "2024",
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = [
-        "@crates//:libc",
-        "@crates//:log",
-        "@crates//:tokio",
-    ],
+    deps = DEPS,
 )
 
 # Unit tests: `crate` compiles the library sources with --test and inherits its
@@ -43,9 +50,9 @@ rust_test(
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_core",
-        "@crates//:libc",
         "@crates//:log",
         "@crates//:tokio",
+        "@crates//:tracing",
     ],
 )
 
@@ -57,9 +64,9 @@ rust_test(
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_core",
-        "@crates//:libc",
         "@crates//:log",
         "@crates//:tokio",
+        "@crates//:tracing",
     ],
 )
 

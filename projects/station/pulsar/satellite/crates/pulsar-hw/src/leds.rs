@@ -29,11 +29,11 @@ use std::fs::File;
 use std::io;
 use std::os::fd::AsRawFd as _;
 
-use log::{error, info, warn};
 use pulsar_core::model::{LedStrip, Model};
 use pulsar_core::{AmbientDimmer, MUSIC_STALE_MS, MusicFrame, SENDSPIN_FRESH_MS, Timers, UiState};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::Instant;
+use tracing::{error, info, warn};
 
 use crate::led_fx::{self as fx, Col};
 use crate::sys::{Framebuffer, I2c};
@@ -429,7 +429,7 @@ pub fn spawn_leds(model: &'static Model) -> LedsHandle {
     let (tx, rx) = unbounded_channel();
     let comp = Compositor::new(n, nlogo);
     let out = Output::new(sink, n, nlogo);
-    pulsar_core::actors::spawn_actor("leds", run(comp, out, rx, opened));
+    pulsar_core::supervisor().spawn_local("leds", run(comp, out, rx, opened));
     LedsHandle { tx }
 }
 
@@ -625,7 +625,7 @@ impl Output {
             Sink::Sysfs(files) => {
                 for (k, f) in files.iter().enumerate() {
                     if !have_last || px[k] != self.last[k] {
-                        pulsar_core::sysfs::write_int_fd(f.as_raw_fd(), i32::from(px[k]));
+                        ricardo_linux::write_int_fd(f.as_raw_fd(), i32::from(px[k]));
                     }
                 }
             }
@@ -694,8 +694,8 @@ fn led_name(model: &Model, s: &LedStrip, color: &str, i: i32) -> String {
 }
 
 fn trigger_is(led: &str, trig: &str) -> bool {
-    pulsar_core::sysfs::read_file(&format!("{LED_DIR}{led}/trigger"))
-        .is_some_and(|t| t.contains(&format!("[{trig}]")))
+    std::fs::read_to_string(format!("{LED_DIR}{led}/trigger"))
+        .is_ok_and(|t| t.contains(&format!("[{trig}]")))
 }
 
 /// Opens one strip's framebuffer if its trigger is active and the fb has the expected name.
@@ -709,9 +709,10 @@ fn open_strip_fb(model: &Model, s: &LedStrip) -> Option<Framebuffer> {
         return None;
     }
     let dev = s.fb_dev.rsplit('/').next().unwrap_or(s.fb_dev);
-    let name = pulsar_core::sysfs::read_file(&format!("/sys/class/graphics/{dev}/name"))
+    let name = std::fs::read_to_string(format!("/sys/class/graphics/{dev}/name"))
+        .ok()
         .unwrap_or_default();
-    let name = pulsar_core::sysfs::trim(&name);
+    let name = ricardo_linux::trim(&name);
     if name != s.fb_name {
         warn!("leds: {} is '{name}', expected '{}'", s.fb_dev, s.fb_name);
         return None;

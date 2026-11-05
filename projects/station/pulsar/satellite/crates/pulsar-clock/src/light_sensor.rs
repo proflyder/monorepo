@@ -4,9 +4,10 @@
 
 use std::path::{Path, PathBuf};
 
-use log::info;
-use pulsar_core::{Timers, actors, sysfs};
+use pulsar_core::Timers;
+use ricardo_linux as sysfs;
 use tokio::sync::mpsc;
+use tracing::info;
 
 const IIO_DIR: &str = "/sys/bus/iio/devices/";
 const SENSOR_NAME: &str = "ltr308als01";
@@ -45,7 +46,7 @@ fn parse_prefix(s: &str) -> Option<f64> {
 }
 
 fn read_num(dir: &Path, attr: &str) -> Option<f64> {
-    let s = sysfs::read_file(dir.join(attr).to_str()?)?;
+    let s = std::fs::read_to_string(dir.join(attr)).ok()?;
     parse_prefix(&s)
 }
 
@@ -69,7 +70,7 @@ fn find(iio_dir: &Path) -> Option<PathBuf> {
         .find(|dir| {
             dir.join("name")
                 .to_str()
-                .and_then(sysfs::read_file)
+                .and_then(|path| std::fs::read_to_string(path).ok())
                 .is_some_and(|name| sysfs::trim(&name) == SENSOR_NAME)
         })
 }
@@ -93,7 +94,7 @@ fn spawn_in(iio_dir: &Path, period_ms: u64) -> Result<mpsc::UnboundedReceiver<f3
     if let Some(lux) = read_lux(&dir) {
         let _ = tx.send(lux);
     }
-    actors::spawn_actor("light", async move {
+    pulsar_core::supervisor().spawn_local("light", async move {
         // As the C++ loop timer: re-armed `period_ms` after each poll; period 0 polls once more.
         let mut timers = Timers::new();
         timers.set_repeating((), period_ms, period_ms);
@@ -234,7 +235,12 @@ mod tests {
                 assert_eq!(rx.recv().await, Some(9.5));
                 assert_eq!(start.elapsed(), Duration::from_millis(4000));
                 drop(rx);
-                assert!(actors::join_all(Duration::from_secs(1)).await);
+                assert!(
+                    pulsar_core::supervisor()
+                        .shutdown(Duration::from_secs(1))
+                        .await
+                        .is_empty()
+                );
             })
             .await;
     }

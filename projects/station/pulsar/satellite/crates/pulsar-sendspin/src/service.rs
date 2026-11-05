@@ -14,9 +14,9 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use log::{debug, error, info, warn};
-use pulsar_core::{MusicFrame, Timers, actors};
+use pulsar_core::{MusicFrame, Timers};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tracing::{debug, error, info, warn};
 
 use crate::event::{LibEvent, SinkRequest, sink_request};
 use crate::ffi::{self, Client, Codec, Command, Config, Format, Listener, Scale, VisType};
@@ -317,7 +317,7 @@ pub fn spawn(
         connected: false,
         loop_failed_logged: false,
     };
-    actors::spawn_actor("sendspin", actor.run(cmds));
+    pulsar_core::supervisor().spawn_local("sendspin", actor.run(cmds));
     Ok((
         SendspinHandle {
             client,

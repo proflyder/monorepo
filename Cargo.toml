@@ -27,6 +27,7 @@ publish = false
 tokio = { version = "=1.54.1", default-features = false, features = ["rt", "net", "time", "sync", "macros", "signal", "process", "io-util", "fs"] }
 tokio-util = { version = "=0.7.20", default-features = false, features = ["rt"] }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
+tracing-log = { version = "=0.2.0", default-features = false, features = ["log-tracer", "std"] }
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["fmt", "registry", "std"] }
 thiserror = "=2.0.21"
 serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
@@ -45,6 +46,8 @@ ring = "=0.17.14"
 log = { version = "=0.4.34", features = ["std"] }
 libc = "=0.2.191"
 libloading = "=0.9.0"
+# Safe syscall wrappers (errno, pwrite) for the shared Linux helpers.
+rustix = { version = "=1.1.6", default-features = false, features = ["std", "fs"] }
 # snow: нужны только примитивы Noise_NNpsk0_25519_ChaChaPoly_SHA256; фичи по умолчанию (`std`,
 # `default-resolver-crypto`) тянут ещё ring, BLAKE2 и AES-GCM — они не нужны (ring в сборке и так
 # есть для rustls).

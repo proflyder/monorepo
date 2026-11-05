@@ -63,6 +63,8 @@ async fn run(config: Config) -> anyhow::Result<()> {
     shutdown_signal().await;
     info!("shutdown signal; unregistering BLE");
     gateway.disable_ble().await;
-    supervisor.shutdown().await;
+    supervisor
+        .shutdown(std::time::Duration::from_secs(30))
+        .await;
     Ok(())
 }

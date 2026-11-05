@@ -20,7 +20,7 @@ use std::ptr::{self, NonNull};
 use std::sync::LazyLock;
 
 use libloading::os::unix::{Library, RTLD_GLOBAL, RTLD_NOW};
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::player::{ErrorInfo, Msg};
 
@@ -375,13 +375,12 @@ pub fn init(api: &Api) -> bool {
             continue;
         };
         // SAFETY: GST_PLUGIN_DEFINE's static registration entry point, void (void).
-        match unsafe { opt::<unsafe extern "C" fn()>(&api.gst, &name) } {
-            Some(register) => {
-                // SAFETY: called after gst_init, as gst_init_static_plugins does.
-                unsafe { register() };
-                regs += 1;
-            }
-            None => warn!("player: plugin {p} not present"),
+        if let Some(register) = unsafe { opt::<unsafe extern "C" fn()>(&api.gst, &name) } {
+            // SAFETY: called after gst_init, as gst_init_static_plugins does.
+            unsafe { register() };
+            regs += 1;
+        } else {
+            warn!("player: plugin {p} not present");
         }
     }
     // TLS backend for souphttpsrc (https://): glib-networking's OpenSSL module is linked

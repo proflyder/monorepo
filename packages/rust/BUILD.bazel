@@ -5,8 +5,12 @@ package(default_visibility = ["//visibility:public"])
 # Host checks for the shared core layer. Consumers (ble-gateway today, Pulsar
 # and the logon provider later) list these targets in their CI unit.
 _ALL_TARGETS = [
+    "//packages/rust/ricardo-actor:ricardo_actor",
+    "//packages/rust/ricardo-actor:unit_tests",
     "//packages/rust/ricardo-http:ricardo_http",
     "//packages/rust/ricardo-http:unit_tests",
+    "//packages/rust/ricardo-linux:ricardo_linux",
+    "//packages/rust/ricardo-linux:unit_tests",
     "//packages/rust/ricardo-runtime:ricardo_runtime",
     "//packages/rust/ricardo-runtime:unit_tests",
     "//packages/rust/ricardo-secret:ricardo_secret",

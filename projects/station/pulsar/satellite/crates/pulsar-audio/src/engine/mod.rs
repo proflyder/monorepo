@@ -9,7 +9,7 @@ mod ffi;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::ricardo::RicardoWake;
 

@@ -450,7 +450,12 @@ async fn handle_numbers_claims_and_reports_decisions() {
             let copies = std::iter::from_fn(|| wire.recv(&mut b).ok()).count();
             assert_eq!(copies, 3 + 3 + 1);
             drop(h);
-            assert!(actors::join_all(Duration::from_secs(1)).await);
+            assert!(
+                pulsar_core::supervisor()
+                    .shutdown(Duration::from_secs(1))
+                    .await
+                    .is_empty()
+            );
         })
         .await;
 }

@@ -73,11 +73,4 @@ pub struct RadioLines {
     pub boot: String,
 }
 
-/// strerror text of an I/O error, as the C++ messages print it (without Rust's "(os error N)").
-fn os_error_text(e: &std::io::Error) -> String {
-    let s = e.to_string();
-    match s.find(" (os error") {
-        Some(i) => s[..i].to_owned(),
-        None => s,
-    }
-}
+pub(crate) use ricardo_linux::io_error_text as os_error_text;

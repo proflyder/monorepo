@@ -30,13 +30,13 @@ use std::os::unix::fs::FileExt as _;
 use std::path::Path;
 use std::rc::Rc;
 
-use log::{debug, error, info, warn};
 use pulsar_core::Timers;
 use pulsar_core::model::Model;
 use tokio::io::Interest;
 use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::Instant;
+use tracing::{debug, error, info, warn};
 
 use crate::sys::{self, Evdev, KeyBits, RawInputEvent, SwBits};
 
@@ -151,7 +151,7 @@ pub fn spawn_input(
         mute,
         mute_gpio,
     };
-    pulsar_core::actors::spawn_actor("input", run(m, devs, alive_rx));
+    pulsar_core::supervisor().spawn_local("input", run(m, devs, alive_rx));
     Ok((
         InputHandle {
             muted,
@@ -180,7 +180,9 @@ fn find_event_dev_in(devices: &str, name: &str) -> Option<String> {
 }
 
 fn open_dev(name: &str, quiet: bool) -> Option<AsyncFd<Evdev>> {
-    let devices = pulsar_core::sysfs::read_file("/proc/bus/input/devices").unwrap_or_default();
+    let devices = std::fs::read_to_string("/proc/bus/input/devices")
+        .ok()
+        .unwrap_or_default();
     let Some(path) = find_event_dev_in(&devices, name) else {
         if !quiet {
             error!("input: device \"{name}\" not found");
@@ -215,10 +217,12 @@ fn open_dev(name: &str, quiet: bool) -> Option<AsyncFd<Evdev>> {
 fn open_mute_gpio(dir: &str, gpio: u32, quiet: bool) -> Option<File> {
     let line = format!("{dir}/gpio{gpio}");
     if !Path::new(&line).exists() {
-        pulsar_core::sysfs::write_file(&format!("{dir}/export"), &gpio.to_string());
+        ricardo_linux::write_file(format!("{dir}/export"), &gpio.to_string());
     }
-    let direction = pulsar_core::sysfs::read_file(&format!("{line}/direction")).unwrap_or_default();
-    let direction = pulsar_core::sysfs::trim(&direction);
+    let direction = std::fs::read_to_string(format!("{line}/direction"))
+        .ok()
+        .unwrap_or_default();
+    let direction = ricardo_linux::trim(&direction);
     if direction != "in" {
         if !quiet {
             warn!("input: gpio{gpio} is not an input ('{direction}'), no mute switch");

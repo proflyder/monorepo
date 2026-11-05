@@ -38,11 +38,7 @@ pub fn has_modern_aliases() -> bool {
 /// snd_strerror; without libasound, the C library's text for the errno.
 pub fn strerror(err: i32) -> String {
     ffi::lib().map_or_else(
-        |_| {
-            let s = std::io::Error::from_raw_os_error(err.saturating_neg()).to_string();
-            s.find(" (os error")
-                .map_or_else(|| s.clone(), |i| s[..i].to_owned())
-        },
+        |_| ricardo_linux::errno_text(err.saturating_neg()),
         |lib| lib.strerror(err),
     )
 }
@@ -279,14 +275,14 @@ pub fn set_mixer_integer(name: &str, values: &[i64]) -> Result<(), i32> {
 /// both before and after a device is opened.
 pub fn enable_output(model: &Model) {
     for path in model.amp_enable_paths {
-        if !pulsar_core::sysfs::write_file(path, "1\n") {
-            log::warn!("amp: cannot write '{path}'");
+        if !ricardo_linux::write_file(path, "1\n") {
+            tracing::warn!("amp: cannot write '{path}'");
         }
     }
     if !model.spk_mute_ctl.is_empty()
         && let Err(e) = set_mixer_integer(model.spk_mute_ctl, &[1])
     {
-        log::warn!(
+        tracing::warn!(
             "spk: cannot unmute '{}': {}",
             model.spk_mute_ctl,
             strerror(e)

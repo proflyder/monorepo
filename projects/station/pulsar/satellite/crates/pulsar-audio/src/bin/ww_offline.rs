@@ -245,14 +245,7 @@ fn run() -> u8 {
     0
 }
 
-/// perror's text: the C library message without Rust's " (os error N)".
-fn strerror(e: &std::io::Error) -> String {
-    let s = e.to_string();
-    match s.find(" (os error") {
-        Some(i) => s[..i].to_owned(),
-        None => s,
-    }
-}
+use ricardo_linux::io_error_text as strerror;
 
 /// Leading whitespace, sign and decimal digits of `s`: (value, bytes used); (0, 0) without
 /// digits, as strtoul / atoi.

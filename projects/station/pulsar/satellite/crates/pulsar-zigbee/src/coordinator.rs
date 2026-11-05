@@ -9,9 +9,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use log::{info, warn};
 use pulsar_core::Timers;
 use tokio::time::Instant;
+use tracing::{info, warn};
 
 use crate::bytes::{get_le16, get_le32, get_le64, put_le16, put_le32, put_le64};
 use crate::link::{AckTag, Link, LinkEvent};
