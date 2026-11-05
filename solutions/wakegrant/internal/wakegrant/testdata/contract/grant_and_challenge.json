@@ -1,0 +1,139 @@
+{
+  "name": "grant_and_challenge",
+  "description": "Issuer auth and input validation: /v1/grants requires the Bearer token, rejects an unknown machine, and returns a fresh grant id (random UUID) with expiresAt computed from the fixed clock. /v1/challenge returns a fresh 32-byte nonce (random, placeholder) with expiresIn 60 and rejects an unknown machine.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/grants",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "machine": "komp"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/grants",
+        "headers": {
+          "Authorization": "Bearer wrong-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "machine": "komp"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/grants",
+        "headers": {
+          "Authorization": "Bearer contract-issuer-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "machine": "ghost"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Bad Request"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/grants",
+        "headers": {
+          "Authorization": "Bearer contract-issuer-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "machine": "komp",
+          "purpose": "logon",
+          "ttlSeconds": 180
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "expiresAt": "2026-11-03T12:03:00Z",
+          "grantId": "<uuid>"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/challenge",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "machine": "komp"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "expiresIn": 60,
+          "nonce": "<base64-32>"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/challenge",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "machine": "ghost"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Bad Request"
+        }
+      }
+    }
+  ]
+}

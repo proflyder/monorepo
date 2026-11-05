@@ -66,9 +66,7 @@ engine, два entrypoint-а для совместимости.
 
 | Слой | Язык | Почему |
 |---|---|---|
-| `solutions/scheduler` | Go | always-on scheduler/queue, один бинарник, low memory, pure-Go SQLite |
-| MCP/HA bridge | Go | сетевые адаптеры, простой деплой, общий код |
-| `solutions/voice-proxy` | Go | OpenAI-совместимый streaming-прокси с маршрутизацией и durable-очередью; один distroless-бинарник рядом с Hermes |
+| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `wakegrant`, `currency-bot` | Rust (цель, решение 41); сейчас Go | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
@@ -83,8 +81,8 @@ engine, два entrypoint-а для совместимости.
 | задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
 | ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 
-Go — для control plane, durable state и всего, что исполняется в k3s (включая
-CronJob и инструменты деплоя; решение 35), Rust — для тяжёлых вычислений,
+Rust — для долгоживущих сервисов (решение 41), станции и тяжёлых вычислений,
+Go — для инструментов деплоя, CronJob/Job и Bazel-инструментов (решение 35),
 JavaScript — только для edge Worker, которому нужен runtime Cloudflare, а не
 общий backend-стек.
 Mobile не владеет расписанием и не заменяет серверные будильники.

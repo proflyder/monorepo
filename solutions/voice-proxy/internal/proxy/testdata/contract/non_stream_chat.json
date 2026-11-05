@@ -1,0 +1,51 @@
+{
+  "name": "non_stream_chat",
+  "description": "Buffered POST /v1/chat/completions: the proxy injects model_options.reasoning_effort, forwards to Hermes and relays the sanitised OpenAI JSON response.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "messages": [
+            {
+              "content": "привет",
+              "role": "user"
+            }
+          ],
+          "model": "hermes-agent"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "Привет.",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": "<any>",
+          "id": "chatcmpl-contract",
+          "model": "hermes-agent",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 2,
+            "prompt_tokens": 1,
+            "total_tokens": 3
+          }
+        }
+      }
+    }
+  ]
+}

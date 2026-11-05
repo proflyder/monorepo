@@ -1,0 +1,78 @@
+{
+  "name": "alarm_facade",
+  "description": "AlarmService is a wire-compatible facade over the same schedules: CreateAlarm stores a SCHEDULE_KIND_ALARM and GetAlarm returns the legacy Alarm shape with the revision and next run time.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.AlarmService/CreateAlarm",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "enabled": true,
+          "hour": 7,
+          "label": "wake",
+          "minute": 30,
+          "repeat": "DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "alarm": {
+            "enabled": true,
+            "hour": 7,
+            "id": "{{alarmId}}",
+            "label": "wake",
+            "minute": 30,
+            "nextRunUnix": "1767339000",
+            "repeat": "DAILY",
+            "revision": "1",
+            "timezone": "UTC"
+          }
+        }
+      },
+      "capture": {
+        "alarmId": "alarm.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.AlarmService/GetAlarm",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{alarmId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "alarm": {
+            "enabled": true,
+            "hour": 7,
+            "id": "{{alarmId}}",
+            "label": "wake",
+            "minute": 30,
+            "nextRunUnix": "1767339000",
+            "repeat": "DAILY",
+            "revision": "1",
+            "timezone": "UTC"
+          }
+        }
+      }
+    }
+  ]
+}

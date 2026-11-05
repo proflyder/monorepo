@@ -31,7 +31,7 @@
 11. **Recovery — локально + offsite.** HA/K3s/PVE/станция; проверять SHA-256.
     Factory-образа Midi нет; OTA-блок не заменяет recovery.
 12. **Монорепозиторий + Bazel.** Go/Rust/mobile; hermetic build; тесты рядом
-    с кодом. Rust — DSP/инференс, Go — control plane.
+    с кодом. Языки рантайма — решение 41.
 13. **Home-сценарии — метка HA `scenario`.** Скрипт попадает в каталог Home
     только с этой нативной меткой; иконки/комнаты/имена — отображение.
 14. **Reminder-грамматика — один слот `{text}`.** Фраза поддерживает один
@@ -244,9 +244,8 @@
     visibility → Public), после чего `oras pull` анонимный.
 
 35. **Язык выбирается по месту исполнения, а не по типу задачи.**
-    * Всё, что исполняется в k3s (Deployment, CronJob, Job, init/sidecar),
-      и инструменты деплоя, которые собирают, рендерят и сходят в кластер,
-      пишется на Go: общий конвейер Bazel → OCI-образ → `deploy-home`,
+    * Долгоживущие сервисы в k3s — Rust (решение 41). Инструменты деплоя,
+      CronJob/Job и короткие in-cluster утилиты пишутся на Go: общий конвейер Bazel → OCI-образ → `deploy-home`,
       общие пакеты, один статический бинарник, нет второго базового образа.
     * Задачи на хостах (Proxmox, LXC, ПК): короткая обвязка вызовов команд
       (ориентир до ~200 строк, без протоколов и криптографии) — shell или
@@ -453,5 +452,45 @@
     `unsafe` по правилам Pulsar. Pulsar остаётся частью workspace;
     upstream-патчи адаптируются вручную: манифесты upstream мапятся на
     корневой workspace, версии переносятся в `[workspace.dependencies]`.
+
+41. **Сервисы домашней платформы — Rust поверх общего core-слоя.**
+    Долгоживущие first-party сервисы (scheduler, исполнители HA, voice-proxy,
+    mcp-gateway, wakegrant, currency-bot) перепроектируются на Rust. Это не
+    построчный перенос. Ресурсы — не мотив (все Go-поды вместе ≈72 Mi).
+    Мотив — архитектура: одна платформа вместо копий конфига, healthcheck,
+    backoff, SQLite и клиентов в каждом сервисе; типизированные контракты
+    вместо `map[string]any`; чистый домен без I/O.
+    * Слои: `packages/rust` — платформа и контракты; в solution — крейты
+      `domain` (чистая логика, `Clock`, функции возвращают эффекты),
+      `store`, `api`, `bin`. Wire-схема (prost) не служит доменной моделью
+      и схемой хранения: преобразования живут в `api`/`store`.
+    * Общие крейты по мере появления двух потребителей:
+      `ricardo-config` (env + `*_FILE` + границы значений),
+      `ricardo-sqlite` (single-writer, миграции), `ricardo-queue` (durable
+      outbox: dedupe → детерминированный id, lease/ack/attempts,
+      идемпотентность), `ricardo-worker` (цикл lease → handle → ack с
+      backoff), `ricardo-proto`, `ricardo-clients` (HA, Telegram,
+      Prometheus, Loki, Alertmanager; ошибка Transient/Permanent), а также
+      `voice-contract` и `wakegrant-protocol` (общий с logon-provider).
+    * Стек решения 40 плюс `rusqlite`, `rmcp`, `kube`, `russh`, `jiff`.
+      RPC `ricardo.v1` — официальный `connectrpc` (connect-rust) с
+      рантаймом сообщений `buffa`. Один listener отдаёт Connect JSON/binary,
+      gRPC и gRPC-Web. `tonic` Connect-протокол не поддерживает. Для
+      сервисов `ricardo.v1` вместо `prost` используется `buffa`. Bearer
+      проверяется через `connectrpc::Interceptor`, а не tower-слоем: иначе
+      gRPC получает `Unknown` вместо `Unauthenticated`. Лимиты тела (1 MiB) и
+      таймауты задаются явно.
+      Серверы работают на multi-thread runtime, Pulsar явно строит
+      `current_thread`.
+    * Сохраняются внешние контракты: пути `/ricardo.v1.*` и protojson,
+      UUIDv5 и dedupe-ключи, схема БД v1 (миграция на месте), имена env,
+      имена и схемы MCP-инструментов, кадры SSE, метрики.
+      Эталон — golden-фикстуры `testdata/contract/` рядом с Go-кодом;
+      Rust-реализация проходит их до переключения.
+    * Порядок: core → wakegrant (пилот) → voice-proxy → scheduler +
+      исполнители HA → mcp-gateway → currency-bot. Каждый сервис — отдельный
+      PR, откат — Go-образ по digest до удаления Go-кода.
+    * На Go остаются `platform/deploy`, Bazel-инструменты Android,
+      Pulsar installer (upstream) и health-exporter: там Rust ничего не даёт.
 
 Меняется решение — обновить этот файл и `STATE.md`.

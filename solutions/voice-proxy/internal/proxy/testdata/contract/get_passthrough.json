@@ -1,0 +1,27 @@
+{
+  "name": "get_passthrough",
+  "description": "GET requests are passed through to Hermes unchanged; the model list JSON is relayed with its content type.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/models"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "data": [
+            {
+              "id": "hermes-agent",
+              "object": "model"
+            }
+          ],
+          "object": "list"
+        }
+      }
+    }
+  ]
+}

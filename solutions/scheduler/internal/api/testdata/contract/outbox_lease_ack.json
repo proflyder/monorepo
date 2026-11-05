@@ -1,0 +1,184 @@
+{
+  "name": "outbox_lease_ack",
+  "description": "EnqueueTask -> ListDueEvents leases the event -> AckEvent by the owning consumer is accepted and replay is idempotent; an ack by another consumer is FAILED_PRECONDITION. Event id is captured and normalised to {{eventId}}.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/EnqueueTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "idempotencyKey": "task-key",
+          "payloadJson": "{\"text\":\"hi\"}",
+          "queue": "tasks",
+          "taskType": "notify.push"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268800",
+            "id": "{{eventId}}",
+            "payloadJson": "{\"text\":\"hi\"}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "notify.push"
+          }
+        }
+      },
+      "capture": {
+        "eventId": "event.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "tasks"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767268800",
+              "dueUnix": "1767268800",
+              "id": "{{eventId}}",
+              "leaseUntilUnix": "1767268860",
+              "payloadJson": "{\"text\":\"hi\"}",
+              "queue": "tasks",
+              "sourceId": "<uuid>",
+              "sourceKind": "SOURCE_KIND_TASK",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "notify.push"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/AckEvent",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-2",
+          "eventId": "{{eventId}}",
+          "outcome": "ACK_OUTCOME_DELIVERED"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "failed_precondition",
+          "message": "precondition failed: event is leased by another consumer"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/AckEvent",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "eventId": "{{eventId}}",
+          "outcome": "ACK_OUTCOME_DELIVERED"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_DELIVERED",
+            "ackedUnix": "1767268800",
+            "action": "EVENT_ACTION_FIRE",
+            "attempts": 1,
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268800",
+            "id": "{{eventId}}",
+            "payloadJson": "{\"text\":\"hi\"}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_DELIVERED",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/AckEvent",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "eventId": "{{eventId}}",
+          "outcome": "ACK_OUTCOME_DELIVERED"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_DELIVERED",
+            "ackedUnix": "1767268800",
+            "action": "EVENT_ACTION_FIRE",
+            "attempts": 1,
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268800",
+            "id": "{{eventId}}",
+            "payloadJson": "{\"text\":\"hi\"}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_DELIVERED",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    }
+  ]
+}

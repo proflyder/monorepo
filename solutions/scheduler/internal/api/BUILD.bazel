@@ -23,9 +23,14 @@ go_library(
 
 go_test(
     name = "api_test",
-    srcs = ["api_test.go"],
+    srcs = [
+        "api_test.go",
+        "contract_test.go",
+    ],
+    data = glob(["testdata/contract/*.json"]),
     embed = [":api"],
     deps = [
+        "//packages/go/contracttest",
         "//packages/proto/ricardo/v1:ricardo",
         "//packages/proto/ricardo/v1/ricardov1connect",
         "//solutions/scheduler/internal/engine",

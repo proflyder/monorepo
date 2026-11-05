@@ -1,0 +1,19 @@
+{
+  "name": "healthz",
+  "description": "GET /healthz reports the store is reachable with a plain-text 200 body.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/healthz"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "body": "ok\n"
+      }
+    }
+  ]
+}

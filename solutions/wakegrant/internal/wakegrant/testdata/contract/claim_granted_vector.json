@@ -1,0 +1,54 @@
+{
+  "name": "claim_granted_vector",
+  "description": "PROTOCOL.md test vector: the nonce and the logon grant id are seeded with the published values, so the claim request MAC and the granted response MAC are exact. A replay of the same nonce is rejected with 401 and no MAC.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/claim",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "mac": "+YedSn/aeRZqRNKKzkUS8Dy2aq/dVLkXbh9iX91L9XU=",
+          "machine": "komp",
+          "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "grantId": "00000000-0000-4000-8000-000000000001",
+          "granted": true,
+          "mac": "UAADAs7pUxn/EN42woIH5K0qrH2YB+bd1SYZVKP//FI="
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/claim",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "mac": "+YedSn/aeRZqRNKKzkUS8Dy2aq/dVLkXbh9iX91L9XU=",
+          "machine": "komp",
+          "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized"
+        }
+      }
+    }
+  ]
+}
