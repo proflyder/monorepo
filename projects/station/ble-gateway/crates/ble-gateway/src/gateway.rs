@@ -1,59 +1,36 @@
-//! Daemon state and the behaviours shared by GATT, HTTP, the button and auto mode.
+//! Daemon state and the behaviours shared by GATT, HTTP, the button and auto
+//! mode.
+//!
+//! The status is a [`tokio::sync::watch`] channel: the status file writer, GATT
+//! notifications and HTTP all read the same value. Commits arrive through an
+//! `mpsc` worker and an async mutex, so two parallel commits never run two
+//! Wi-Fi applies. Long D-Bus operations take short async mutexes; timestamps and
+//! flags use atomics or a one-field `std::sync::Mutex`.
 
-use std::collections::HashMap;
-use std::fs::OpenOptions;
-use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use anyhow::Context;
+use ricardo_runtime::Supervisor;
+use ricardo_secret::Secret;
+use tokio::sync::{Mutex as AsyncMutex, mpsc, watch};
+use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
 use zbus::Connection;
 
-use crate::gatt::Characteristic;
-use crate::logf;
-use crate::logging::Logger;
-use crate::wifi::{Wpa, validate_wifi};
+use crate::bluetooth::{BlueZAdapter, ClassicBluetooth};
+use crate::cli::Config;
+use crate::control;
+use crate::credentials::Credentials;
+use crate::gatt::Ble;
+use crate::status::Status;
+use crate::wifi::{WpaClient, validate_wifi};
 
-const DEFAULT_TOKEN_FILE: &str = "/data/quasar/ble-gateway/token";
-const DEFAULT_BUTTON: &str = "/dev/input/event2";
-const DEFAULT_CONTROL_ADDR: &str = "0.0.0.0:8099";
-const DEFAULT_CONTROL_TOKEN_FILE: &str = "/data/quasar/ble-gateway/control-token";
-
-/// Command-line configuration, mirroring the Go flags one for one.
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub log: Option<PathBuf>,
-    pub token_file: PathBuf,
-    pub button: PathBuf,
-    pub dry_run: bool,
-    pub auto_wifi: bool,
-    pub no_button: bool,
-    pub force: bool,
-    pub test_wpa: bool,
-    pub control_addr: String,
-    pub control_token_file: PathBuf,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            log: None,
-            token_file: PathBuf::from(DEFAULT_TOKEN_FILE),
-            button: PathBuf::from(DEFAULT_BUTTON),
-            dry_run: false,
-            auto_wifi: true,
-            no_button: false,
-            force: false,
-            test_wpa: false,
-            control_addr: DEFAULT_CONTROL_ADDR.to_string(),
-            control_token_file: PathBuf::from(DEFAULT_CONTROL_TOKEN_FILE),
-        }
-    }
-}
-
-/// Timings are fields rather than constants so unit tests can drive the same
-/// code without sleeping for production intervals.
+/// Timings are fields so tests can drive the same code without production
+/// sleeps.
 #[derive(Debug, Clone)]
 pub struct Timings {
     pub auto_tick: Duration,
@@ -85,506 +62,380 @@ impl Default for Timings {
     }
 }
 
-pub struct State {
-    pub by_name: HashMap<String, Arc<Characteristic>>,
-    pub chars: Vec<Arc<Characteristic>>,
-    pub gatt_registered: bool,
-    pub advertising: bool,
-    pub token: String,
-    pub status: String,
-    pub manual_until: Option<Instant>,
-    pub bt_mode: bool,
-    pub bt_generation: u64,
-    pub control_token: String,
-    pub ssid: String,
-    pub psk: String,
-    pub applying: bool,
-    pub disconnected_since: Option<Instant>,
-}
-
-impl State {
-    fn new() -> Self {
-        Self {
-            by_name: HashMap::new(),
-            chars: Vec::new(),
-            gatt_registered: false,
-            advertising: false,
-            token: String::new(),
-            status: "IDLE".to_string(),
-            manual_until: None,
-            bt_mode: false,
-            bt_generation: 0,
-            control_token: String::new(),
-            ssid: String::new(),
-            psk: String::new(),
-            applying: false,
-            disconnected_since: None,
-        }
-    }
-}
-
 pub struct Gateway {
-    pub cfg: Config,
-    pub logger: Logger,
-    pub wpa: Wpa,
-    pub timings: Timings,
-    pub state: Mutex<State>,
-    status_file: PathBuf,
-    conn: OnceLock<Connection>,
-}
-
-/// Snapshot of the mutable fields reported by `/status`.
-pub struct ControlStatus {
-    pub status: String,
-    pub manual: bool,
-    pub bluetooth: bool,
+    pub(crate) cfg: Config,
+    pub(crate) timings: Timings,
+    pub(crate) wpa: WpaClient,
+    token: Secret,
+    pub(crate) credentials: Arc<Credentials>,
+    pub(crate) ble: Ble,
+    pub(crate) bluetooth: Arc<ClassicBluetooth>,
+    status_tx: watch::Sender<Status>,
+    manual_until: Mutex<Option<Instant>>,
+    disconnected_since: Mutex<Option<Instant>>,
+    pub(crate) applying: AtomicBool,
+    ble_lock: AsyncMutex<()>,
+    bluetooth_lock: AsyncMutex<()>,
+    commit_lock: AsyncMutex<()>,
 }
 
 impl Gateway {
-    pub fn new(cfg: Config, logger: Logger, wpa: Wpa, timings: Timings) -> Arc<Self> {
+    pub(crate) fn new(
+        cfg: Config,
+        timings: Timings,
+        token: Secret,
+        credentials: Arc<Credentials>,
+        ble: Ble,
+        bluetooth: Arc<ClassicBluetooth>,
+        wpa: WpaClient,
+    ) -> Arc<Self> {
         Arc::new(Self {
-            status_file: status_path(&cfg.token_file),
             cfg,
-            logger,
-            wpa,
             timings,
-            state: Mutex::new(State::new()),
-            conn: OnceLock::new(),
+            wpa,
+            token,
+            credentials,
+            ble,
+            bluetooth,
+            status_tx: watch::channel(Status::Idle).0,
+            manual_until: Mutex::new(None),
+            disconnected_since: Mutex::new(None),
+            applying: AtomicBool::new(false),
+            ble_lock: AsyncMutex::new(()),
+            bluetooth_lock: AsyncMutex::new(()),
+            commit_lock: AsyncMutex::new(()),
         })
     }
 
-    pub fn status_file(&self) -> &Path {
-        &self.status_file
-    }
-
-    pub fn set_connection(&self, conn: Connection) {
-        let _ = self.conn.set(conn);
-    }
-
-    pub fn connection(&self) -> Option<&Connection> {
-        self.conn.get()
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    pub(crate) fn lock_state(&self) -> std::sync::MutexGuard<'_, State> {
-        self.lock()
-    }
-
-    pub fn load_token(&self) -> std::io::Result<()> {
-        if let Ok(bytes) = std::fs::read(&self.cfg.token_file) {
-            let token = trim_token(&String::from_utf8_lossy(&bytes));
-            if !token.is_empty() {
-                self.lock().token = token;
-                logf!(
-                    self.logger,
-                    "loaded token from {}",
-                    self.cfg.token_file.display()
-                );
-                return Ok(());
-            }
-        }
-
-        let value = random_u64()? % 900_000 + 100_000;
-        let token = format!("{value:06}");
-        let dir = directory_of(&self.cfg.token_file);
-        create_private_dir(&dir)?;
-        write_mode(&self.cfg.token_file, format!("{token}\n").as_bytes(), 0o600)?;
-        self.lock().token = token;
-        logf!(
-            self.logger,
-            "generated token in {}",
-            self.cfg.token_file.display()
+    /// Build the daemon, connect to BlueZ and spawn every background task.
+    pub async fn start(
+        config: Config,
+        token: Secret,
+        supervisor: Supervisor,
+    ) -> anyhow::Result<Arc<Self>> {
+        let credentials = Arc::new(Credentials::default());
+        let (commit, receiver) = mpsc::channel(8);
+        let ble = Ble::new(credentials.clone(), commit);
+        let wpa = WpaClient::new(&config.wpa_ctrl);
+        let adapter = Arc::new(BlueZAdapter::new());
+        let timings = Timings::default();
+        let bluetooth = Arc::new(ClassicBluetooth::new(
+            adapter.clone(),
+            wpa.clone(),
+            timings.bluetooth_window,
+        ));
+        let gateway = Self::new(
+            config.clone(),
+            timings,
+            token,
+            credentials,
+            ble,
+            bluetooth,
+            wpa,
         );
-        Ok(())
+        let connection = Connection::system().await.context("system D-Bus")?;
+        adapter.set_connection(connection.clone());
+        gateway.ble.set_connection(connection.clone());
+        if let Err(error) = connection
+            .request_name_with_flags(
+                "com.station.gateway",
+                zbus::fdo::RequestNameFlags::DoNotQueue.into(),
+            )
+            .await
+        {
+            warn!(%error, "RequestName com.station.gateway");
+        }
+        if !config.control_addr.is_empty()
+            && let Err(error) = control::start(&gateway, &config, &supervisor).await
+        {
+            warn!(%error, "control HTTP disabled");
+        }
+        supervisor.spawn(gateway.clone().status_task(supervisor.token()));
+        supervisor.spawn(gateway.clone().run_commits(receiver, supervisor.token()));
+        if !config.no_button {
+            let button = gateway.clone();
+            let path = config.button.clone();
+            let shutdown = supervisor.token();
+            supervisor.spawn(async move { button.run_button(&path, shutdown).await });
+        }
+        supervisor.spawn(gateway.clone().auto_loop(supervisor.token()));
+        gateway.set_status(Status::Idle);
+        info!(token = %config.token_file.display(), "station BLE gateway starting");
+        if config.force
+            && let Err(error) = gateway.enable_ble().await
+        {
+            warn!(%error, "force enable BLE");
+        }
+        Ok(gateway)
     }
 
-    pub async fn set_status(&self, status: &str) {
-        let status_file = {
-            let mut state = self.lock();
-            state.status = status.to_string();
-            drop(state);
-            self.status_file.clone()
-        };
-        logf!(self.logger, "status: {status}");
-        if !status_file.as_os_str().is_empty() {
-            let _ = write_mode(&status_file, format!("{status}\n").as_bytes(), 0o644);
-        }
-        let characteristic = {
-            let state = self.lock();
-            state.by_name.get("status").cloned()
-        };
-        if let Some(characteristic) = characteristic {
-            self.set_characteristic_value(&characteristic, status.as_bytes())
-                .await;
-        }
+    pub fn status(&self) -> Status {
+        self.status_tx.borrow().clone()
     }
 
-    pub async fn set_characteristic_value(&self, characteristic: &Characteristic, value: &[u8]) {
-        characteristic.set_value(value);
-        if characteristic.notifying() {
-            self.emit_value(characteristic, value).await;
+    pub fn set_status(&self, status: Status) {
+        if *self.status_tx.borrow() == status {
+            return;
         }
-    }
-
-    pub fn snapshot(&self) -> ControlStatus {
-        let state = self.lock();
-        ControlStatus {
-            status: state.status.clone(),
-            manual: state
-                .manual_until
-                .is_some_and(|until| until > Instant::now()),
-            bluetooth: state.bt_mode,
-        }
-    }
-
-    pub fn advertise_enabled(&self) -> bool {
-        self.lock().advertising
+        info!(%status, "status");
+        self.status_tx.send_replace(status);
     }
 
     pub fn is_manual(&self) -> bool {
-        let state = self.lock();
-        state
-            .manual_until
-            .is_some_and(|until| until > Instant::now())
+        match self.manual_until.lock() {
+            Ok(until) => until.is_some_and(|until| until > Instant::now()),
+            Err(error) => {
+                warn!(%error, "manual window lock poisoned");
+                false
+            }
+        }
     }
 
-    pub async fn enable_ble(self: &Arc<Self>) -> Result<(), String> {
-        if self.lock().advertising {
+    pub async fn enable_ble(&self) -> Result<(), String> {
+        let _guard = self.ble_lock.lock().await;
+        if self.ble.advertising() {
             return Ok(());
         }
-        if self.connection().is_none() {
-            return Err("no dbus connection".to_string());
-        }
-        let needs_gatt = !self.lock().gatt_registered;
-        if needs_gatt {
-            self.register_gatt().await?;
-            self.lock().gatt_registered = true;
-        }
-        self.set_adapter_connectable(true).await;
-        self.register_advertisement().await?;
-        self.lock().advertising = true;
-        logf!(self.logger, "BLE advertising ON");
-        self.set_status("READY").await;
+        self.ble.enable().await.map_err(|error| error.to_string())?;
+        self.set_status(Status::Ready);
         Ok(())
     }
 
     pub async fn disable_ble(&self) {
-        if !self.advertise_enabled() {
-            return;
-        }
-        self.lock().advertising = false;
-        self.unregister_advertisement().await;
-        if self.lock().gatt_registered {
-            self.unregister_gatt().await;
-            self.lock().gatt_registered = false;
-        }
-        logf!(self.logger, "BLE advertising OFF");
-        self.set_status("IDLE").await;
+        let _guard = self.ble_lock.lock().await;
+        self.ble.disable().await;
+        self.set_status(Status::Idle);
     }
 
-    pub async fn toggle_manual(self: &Arc<Self>) {
-        let now = Instant::now();
-        let open = {
-            let mut state = self.lock();
-            if state.manual_until.is_some_and(|until| until > now) {
-                state.manual_until = None;
-                false
-            } else {
-                state.manual_until = Some(now + self.timings.manual_window);
-                true
+    async fn set_manual(&self, open: bool) {
+        match self.manual_until.lock() {
+            Ok(mut until) => *until = open.then(|| Instant::now() + self.timings.manual_window),
+            Err(error) => warn!(%error, "manual window lock poisoned"),
+        }
+        if open {
+            if let Err(error) = self.enable_ble().await {
+                warn!(%error, "enable BLE for manual window");
             }
-        };
-        if !open {
-            logf!(self.logger, "manual window closed");
+        } else {
             self.disable_ble().await;
-            return;
-        }
-        logf!(self.logger, "manual window opened for 15 minutes");
-        if let Err(err) = self.enable_ble().await {
-            logf!(self.logger, "enable BLE: {err}");
         }
     }
 
-    pub async fn open_manual(self: &Arc<Self>) {
-        {
-            let mut state = self.lock();
-            state.manual_until = Some(Instant::now() + self.timings.manual_window);
-        }
-        logf!(self.logger, "manual window opened for 15 minutes");
-        if let Err(err) = self.enable_ble().await {
-            logf!(self.logger, "enable BLE: {err}");
-        }
+    pub async fn open_manual(&self) {
+        self.set_manual(true).await;
     }
 
     pub async fn close_manual(&self) {
-        {
-            let mut state = self.lock();
-            state.manual_until = None;
-        }
-        self.disable_ble().await;
-        logf!(self.logger, "manual window closed");
+        self.set_manual(false).await;
     }
 
-    fn characteristic_bytes(&self, name: &str) -> Vec<u8> {
-        let characteristic = {
-            let state = self.lock();
-            state.by_name.get(name).cloned()
-        };
-        characteristic.map_or_else(Vec::new, |c| c.value())
+    pub async fn toggle_manual(&self) {
+        self.set_manual(!self.is_manual()).await;
     }
 
-    /// Validate a commit frame and, when accepted, start the Wi-Fi task.
-    ///
-    /// Status is written before returning, exactly like the Go handler; only
-    /// the multi-second Wi-Fi apply runs in a background task.
+    pub async fn toggle_bluetooth(&self) {
+        let _guard = self.bluetooth_lock.lock().await;
+        self.bluetooth.toggle().await;
+    }
+
+    pub async fn enable_bluetooth(&self) {
+        let _guard = self.bluetooth_lock.lock().await;
+        self.bluetooth.enable().await;
+    }
+
+    pub async fn disable_bluetooth(&self) {
+        let _guard = self.bluetooth_lock.lock().await;
+        self.bluetooth.disable().await;
+    }
+
+    /// Validate a commit frame and apply the Wi-Fi network.
     pub async fn handle_commit(self: &Arc<Self>, value: &[u8]) {
-        let cmd = trim_bytes(value);
-        logf!(
-            self.logger,
-            "commit request: {:?}",
-            String::from_utf8_lossy(cmd)
-        );
-        if cmd.is_empty() {
-            self.set_status("ERROR:EMPTY_COMMIT").await;
-            return;
+        let command = trim_bytes(value);
+        info!(request = %String::from_utf8_lossy(command), "commit request");
+        if command.is_empty() {
+            return self.set_status(Status::error("EMPTY_COMMIT"));
         }
-        if cmd == b"CANCEL" {
-            self.disable_ble().await;
-            return;
+        if command == b"CANCEL" {
+            return self.disable_ble().await;
         }
-        let ssid_bytes = trim_bytes(&self.characteristic_bytes("ssid")).to_vec();
-        let psk_bytes = trim_bytes(&self.characteristic_bytes("psk")).to_vec();
-        let token_bytes = trim_bytes(&self.characteristic_bytes("token")).to_vec();
-        let expected = self.lock().token.clone();
-        if token_bytes != expected.as_bytes() {
-            logf!(self.logger, "commit: bad token");
-            self.set_status("ERROR:BAD_TOKEN").await;
-            return;
+        let snapshot = self.credentials.snapshot();
+        let ssid = trim_bytes(&snapshot.ssid).to_vec();
+        let psk = trim_bytes(&snapshot.psk).to_vec();
+        if !self.token.ct_eq(trim_bytes(&snapshot.token)) {
+            warn!("commit rejected: bad token");
+            return self.set_status(Status::error("BAD_TOKEN"));
         }
-        if let Err(code) = validate_wifi(&ssid_bytes, &psk_bytes) {
-            logf!(
-                self.logger,
-                "commit: invalid credentials: {}",
-                String::from_utf8_lossy(code.as_bytes())
-            );
-            self.set_status(&format!("ERROR:{code}")).await;
-            return;
+        if let Err(code) = validate_wifi(&ssid, &psk) {
+            warn!(code, "commit rejected: invalid Wi-Fi credentials");
+            return self.set_status(Status::error(code));
         }
-        let ssid = String::from_utf8_lossy(&ssid_bytes).into_owned();
-        let psk = String::from_utf8_lossy(&psk_bytes).into_owned();
-        {
-            let mut state = self.lock();
-            state.ssid.clone_from(&ssid);
-            state.psk.clone_from(&psk);
-        }
-        self.set_status("CONNECTING").await;
-        let gateway = self.clone();
-        tokio::spawn(async move {
-            gateway.apply_wifi(&ssid, &psk).await;
-        });
+        let _guard = self.commit_lock.lock().await;
+        self.set_status(Status::Connecting);
+        self.apply_wifi(
+            &String::from_utf8_lossy(&ssid),
+            &String::from_utf8_lossy(&psk),
+        )
+        .await;
     }
 
-    pub async fn auto_loop(self: Arc<Self>) {
+    /// Drain GATT commit frames one at a time until shutdown.
+    pub async fn run_commits(
+        self: Arc<Self>,
+        mut receiver: mpsc::Receiver<Vec<u8>>,
+        shutdown: CancellationToken,
+    ) {
+        loop {
+            tokio::select! {
+                () = shutdown.cancelled() => return,
+                frame = receiver.recv() => match frame {
+                    Some(frame) => self.handle_commit(&frame).await,
+                    None => return,
+                },
+            }
+        }
+    }
+
+    /// Write the latest status and notify GATT subscribers until shutdown.
+    pub async fn status_task(self: Arc<Self>, shutdown: CancellationToken) {
+        let mut receiver = self.status_tx.subscribe();
+        loop {
+            let status = receiver.borrow_and_update().clone();
+            self.publish_status(&status).await;
+            tokio::select! {
+                result = receiver.changed() => if result.is_err() { return },
+                () = shutdown.cancelled() => {
+                    self.publish_status(&self.status()).await;
+                    return;
+                }
+            }
+        }
+    }
+
+    async fn publish_status(&self, status: &Status) {
+        let path = status_path(&self.cfg.token_file);
+        if let Err(error) = write_status(&path, status) {
+            warn!(%error, path = %path.display(), "write status");
+        }
+        self.ble.notify_status(status.as_str().as_bytes()).await;
+    }
+
+    /// Automatic BLE fallback: advertise when Wi-Fi has been down long enough.
+    pub async fn auto_loop(self: Arc<Self>, shutdown: CancellationToken) {
         let mut ticker = tokio::time::interval(self.timings.auto_tick);
-        // The Go ticker fires after the first interval, not immediately.
         ticker.tick().await;
         loop {
-            ticker.tick().await;
-            if !self.cfg.auto_wifi {
-                continue;
+            tokio::select! {
+                () = shutdown.cancelled() => return,
+                _ = ticker.tick() => {}
             }
-            let (applying, manual) = {
-                let state = self.lock();
-                (
-                    state.applying,
-                    state
-                        .manual_until
-                        .is_some_and(|until| until > Instant::now()),
-                )
-            };
-            if applying {
+            if !self.cfg.auto_wifi || self.applying.load(Ordering::SeqCst) {
                 continue;
             }
             let state = self.wpa.state().await;
             if state == "COMPLETED" {
-                self.lock().disconnected_since = None;
-                if self.advertise_enabled() && !manual {
-                    logf!(
-                        self.logger,
-                        "Wi-Fi connected; stopping automatic advertisement"
-                    );
+                match self.disconnected_since.lock() {
+                    Ok(mut since) => *since = None,
+                    Err(error) => warn!(%error, "disconnect timer lock poisoned"),
+                }
+                if self.ble.advertising() && !self.is_manual() {
                     self.disable_ble().await;
                 }
                 continue;
             }
-            let first = {
-                let mut guard = self.lock();
-                if guard.disconnected_since.is_none() {
-                    guard.disconnected_since = Some(Instant::now());
-                    true
-                } else {
+            let first = match self.disconnected_since.lock() {
+                Ok(mut since) => since.replace(Instant::now()).is_none(),
+                Err(error) => {
+                    warn!(%error, "disconnect timer lock poisoned");
                     false
                 }
             };
             if first {
-                logf!(self.logger, "Wi-Fi state {state:?}; auto timer started");
                 continue;
             }
-            let down_for = {
-                let guard = self.lock();
-                guard.disconnected_since.map(|since| since.elapsed())
-            };
-            if down_for.is_some_and(|elapsed| elapsed >= self.timings.disconnect_threshold)
-                && !self.advertise_enabled()
-                && !manual
-            {
-                logf!(
-                    self.logger,
-                    "Wi-Fi down for 20s; starting automatic BLE gateway"
-                );
-                if let Err(err) = self.enable_ble().await {
-                    logf!(self.logger, "auto enable BLE: {err}");
+            let down = match self.disconnected_since.lock() {
+                Ok(since) => since
+                    .map(|at| at.elapsed())
+                    .is_some_and(|elapsed| elapsed >= self.timings.disconnect_threshold),
+                Err(error) => {
+                    warn!(%error, "disconnect timer lock poisoned");
+                    false
                 }
+            };
+            if down
+                && !self.ble.advertising()
+                && !self.is_manual()
+                && let Err(error) = self.enable_ble().await
+            {
+                warn!(%error, "auto enable BLE");
             }
         }
     }
 }
 
-/// Trim whitespace the way Go's `strings.TrimSpace` does. Valid UTF-8 uses the
-/// Unicode definition; invalid byte sequences fall back to ASCII trimming so
-/// they are still rejected by Wi-Fi validation instead of being rewritten.
+/// Trim whitespace like Go's `strings.TrimSpace`; invalid UTF-8 falls back to
+/// ASCII trimming so Wi-Fi validation still rejects it.
 pub fn trim_bytes(value: &[u8]) -> &[u8] {
     if let Ok(text) = std::str::from_utf8(value) {
         return text.trim().as_bytes();
     }
-    let mut start = 0;
-    let mut end = value.len();
-    while start < end && value[start].is_ascii_whitespace() {
-        start += 1;
+    let first = value.iter().position(|byte| !byte.is_ascii_whitespace());
+    let last = value.iter().rposition(|byte| !byte.is_ascii_whitespace());
+    match (first, last) {
+        (Some(first), Some(last)) => &value[first..=last],
+        _ => &[],
     }
-    while end > start && value[end - 1].is_ascii_whitespace() {
-        end -= 1;
-    }
-    &value[start..end]
 }
 
-/// `os.MkdirAll(dir, 0700)` for secrets such as token files.
-pub fn create_private_dir(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    let mut builder = std::fs::DirBuilder::new();
-    builder.recursive(true).mode(0o700);
-    builder.create(path)
-}
-
-/// Keep only digits and cap the result at 12 characters, like the Go daemon.
-pub fn trim_token(value: &str) -> String {
-    value
+/// Keep digits only and cap at 12 characters.
+pub fn normalize_token(value: &str) -> Option<String> {
+    let digits: String = value
         .chars()
         .filter(char::is_ascii_digit)
         .take(12)
-        .collect()
+        .collect();
+    (!digits.is_empty()).then_some(digits)
 }
 
 /// `status` lives next to the token file.
 pub fn status_path(token_file: &Path) -> PathBuf {
     token_file
         .parent()
-        .filter(|p| !p.as_os_str().is_empty())
+        .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."))
         .join("status")
 }
 
-pub fn directory_of(path: &Path) -> PathBuf {
-    path.parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf()
-}
-
-pub fn write_mode(path: &Path, bytes: &[u8], mode: u32) -> std::io::Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(mode)
-        .open(path)?;
-    file.write_all(bytes)
-}
-
-pub fn random_bytes(len: usize) -> std::io::Result<Vec<u8>> {
-    let mut buffer = vec![0u8; len];
-    std::fs::File::open("/dev/urandom")?.read_exact(&mut buffer)?;
-    Ok(buffer)
-}
-
-pub fn random_u64() -> std::io::Result<u64> {
-    let bytes = random_bytes(8)?;
-    let mut raw = [0u8; 8];
-    raw.copy_from_slice(&bytes);
-    Ok(u64::from_le_bytes(raw))
+fn write_status(path: &Path, status: &Status) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(path, format!("{status}\n"))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644))
 }
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::PermissionsExt;
+    #![allow(clippy::significant_drop_tightening)]
+
+    use std::time::Duration;
 
     use super::*;
-    use crate::test_support::{new_gateway, read_file};
-
-    #[test]
-    fn trim_token_digits_and_limit() {
-        let cases = [
-            ("123456", "123456"),
-            (" 12-34 56\n", "123456"),
-            ("abc123def456xyz789012", "123456789012"),
-            ("", ""),
-            ("только текст", ""),
-            ("0 1 2 3 4 5 6 7 8 9 10", "012345678910"),
-        ];
-        for (input, expected) in cases {
-            assert_eq!(trim_token(input), expected, "trim_token({input:?})");
-        }
-    }
-
-    #[test]
-    fn load_token_creates_and_reads_file() {
-        let context = new_gateway("token", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        gateway.load_token().expect("load token");
-        assert_eq!(gateway.lock_state().token.len(), 6);
-        let raw = read_file(&context.dir.join("token"));
-        assert_eq!(raw, format!("{}\n", gateway.lock_state().token));
-        let mode = std::fs::metadata(context.dir.join("token"))
-            .expect("stat token")
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o600);
-
-        std::fs::write(context.dir.join("token"), " 987-654 \n").expect("write token");
-        gateway.lock_state().token.clear();
-        gateway.load_token().expect("reload token");
-        assert_eq!(gateway.lock_state().token, "987654");
-    }
-
-    #[test]
-    fn load_token_existing_empty_falls_back() {
-        let context = new_gateway("token-invalid", Path::new("/nonexistent/wpa_cli"));
-        std::fs::write(context.dir.join("token"), "not digits\n").expect("write token");
-        context.gateway.load_token().expect("load token");
-        assert_eq!(context.gateway.lock_state().token.len(), 6);
-    }
+    use crate::test_support::TestGateway;
 
     #[test]
     fn trim_bytes_matches_go_trim_space() {
         assert_eq!(trim_bytes(b"  Home\t\n"), b"Home");
         assert_eq!(trim_bytes(" \u{00a0}Home\u{2028} ".as_bytes()), b"Home");
         assert_eq!(trim_bytes(&[b' ', 0xff, b' ']), &[0xff]);
+        assert!(trim_bytes(b" \t").is_empty());
+    }
+
+    #[test]
+    fn normalize_token_keeps_digits_only() {
+        assert_eq!(normalize_token("987-654"), Some("987654".to_string()));
+        assert_eq!(normalize_token("abc"), None);
+        assert_eq!(
+            normalize_token("0123456789012"),
+            Some("012345678901".to_string())
+        );
     }
 
     #[test]
@@ -594,5 +445,114 @@ mod tests {
             PathBuf::from("/data/quasar/ble-gateway/status")
         );
         assert_eq!(status_path(Path::new("token")), PathBuf::from("./status"));
+    }
+
+    #[tokio::test]
+    async fn status_task_writes_the_file_and_updates_readers() {
+        let context = TestGateway::new("status-task", |_| "OK".to_string());
+        let gateway = context.gateway.clone();
+        let mut receiver = gateway.status_tx.subscribe();
+        let task = tokio::spawn(gateway.clone().status_task(CancellationToken::new()));
+        gateway.set_status(Status::Ready);
+        tokio::time::timeout(Duration::from_secs(2), receiver.changed())
+            .await
+            .expect("watch update")
+            .expect("watch alive");
+        assert_eq!(*receiver.borrow(), Status::Ready);
+        let path = context.dir.join("status");
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::fs::read_to_string(&path).unwrap_or_default().trim() != "READY" {
+            assert!(std::time::Instant::now() < deadline, "status not written");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn commit_validates_token_and_credentials() {
+        let context = TestGateway::new("commit-validation", |_| "OK".to_string());
+        let gateway = &context.gateway;
+        gateway.handle_commit(&[]).await;
+        assert_eq!(gateway.status(), Status::error("EMPTY_COMMIT"));
+        gateway
+            .credentials
+            .set_all(b"Home", b"password123", b"wrong");
+        gateway.handle_commit(b"1").await;
+        assert_eq!(gateway.status(), Status::error("BAD_TOKEN"));
+        gateway.credentials.set_all(b"Home", b"", b"123456");
+        gateway.handle_commit(b"1").await;
+        assert_eq!(gateway.status(), Status::error("EMPTY_PSK"));
+    }
+
+    #[tokio::test]
+    async fn cancel_commit_only_disables_ble() {
+        let context = TestGateway::new("commit-cancel", |_| "OK".to_string());
+        context.gateway.set_status(Status::Ready);
+        context.gateway.handle_commit(b" CANCEL \n").await;
+        assert_eq!(context.gateway.status(), Status::Idle);
+    }
+
+    #[tokio::test]
+    async fn two_parallel_commits_are_serialised() {
+        let commands = Arc::new(Mutex::new(Vec::new()));
+        let sink = commands.clone();
+        let context = TestGateway::new("commit-serialised", move |command| {
+            sink.lock().expect("commands").push(command.to_string());
+            match command {
+                "STATUS" => "wpa_state=COMPLETED".to_string(),
+                "LIST_NETWORKS" => "0\tOld\tany\t[CURRENT]".to_string(),
+                "ADD_NETWORK" => "7".to_string(),
+                _ => "OK".to_string(),
+            }
+        });
+        let gateway = context.gateway.clone();
+        gateway
+            .credentials
+            .set_all(b"Home", b"password123", b"123456");
+        let _ = tokio::join!(gateway.handle_commit(b"1"), gateway.handle_commit(b"1"));
+        assert_eq!(gateway.status(), Status::Connected);
+        let commands = commands.lock().expect("commands");
+        let mut applies = 0;
+        let mut in_apply = false;
+        for command in commands.iter() {
+            if command == "ADD_NETWORK" {
+                assert!(!in_apply, "second apply started before the first finished");
+                in_apply = true;
+                applies += 1;
+            } else if command == "SAVE_CONFIG" {
+                in_apply = false;
+            }
+        }
+        assert_eq!(applies, 2, "commands: {commands:?}");
+    }
+
+    #[tokio::test]
+    async fn background_tasks_stop_on_shutdown() {
+        let context = TestGateway::new("shutdown", |_| "OK".to_string());
+        let gateway = context.gateway.clone();
+        let shutdown = CancellationToken::new();
+        let (sender, receiver) = mpsc::channel(1);
+        let status = tokio::spawn(gateway.clone().status_task(shutdown.clone()));
+        let commits = tokio::spawn(gateway.clone().run_commits(receiver, shutdown.clone()));
+        let auto = tokio::spawn(gateway.clone().auto_loop(shutdown.clone()));
+        drop(sender);
+        shutdown.cancel();
+        for task in [status, commits, auto] {
+            tokio::time::timeout(Duration::from_secs(1), task)
+                .await
+                .expect("task must stop")
+                .expect("task");
+        }
+    }
+
+    #[tokio::test]
+    async fn manual_window_toggles_ble_without_a_bus() {
+        let context = TestGateway::new("manual", |_| "OK".to_string());
+        let gateway = &context.gateway;
+        gateway.open_manual().await;
+        assert!(gateway.is_manual());
+        gateway.close_manual().await;
+        assert!(!gateway.is_manual());
+        assert_eq!(gateway.status(), Status::Idle);
     }
 }

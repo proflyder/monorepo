@@ -4,9 +4,19 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPS = [
-    "@crates//:time",
+    "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:clap",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
     "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
     "@crates//:zbus",
+    "//packages/rust/ricardo-http:ricardo_http",
+    "//packages/rust/ricardo-runtime:ricardo_runtime",
+    "//packages/rust/ricardo-secret:ricardo_secret",
 ]
 
 rust_library(
@@ -18,15 +28,13 @@ rust_library(
             "src/main.rs",
         ],
     ),
-    crate_root = "src/lib.rs",
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = DEPS,
 )
 
-# The deployed armhf binary. The station profile mirrors the Pulsar release
-# profile (thin LTO, four codegen units, abort on panic) and strips symbols;
-# host builds stay unoptimised and keep their debug info.
+# The deployed armhf binary is size-optimised (fat LTO, one codegen unit,
+# abort on panic) and stripped; host builds stay unoptimised with debug info.
 rust_binary(
     name = "ble-gateway",
     srcs = ["src/main.rs"],
@@ -35,9 +43,11 @@ rust_binary(
     rustc_flags = select({
         "@zig_0_14_1//:station": [
             "-C",
-            "lto=thin",
+            "opt-level=s",
             "-C",
-            "codegen-units=4",
+            "lto=fat",
+            "-C",
+            "codegen-units=1",
             "-C",
             "panic=abort",
             "-C",
@@ -45,7 +55,10 @@ rust_binary(
         ],
         "//conditions:default": [],
     }),
-    deps = DEPS + [":ble_gateway"],
+    deps = DEPS + [
+        ":ble_gateway",
+        "//packages/rust/ricardo-telemetry:ricardo_telemetry",
+    ],
 )
 
 rust_binary(
@@ -55,6 +68,10 @@ rust_binary(
     lint_config = ":workspace_lints",
     deps = [
         ":ble_gateway",
+        "@crates//:anyhow",
+        "@crates//:clap",
+    "@crates//:serde",
+    "@crates//:serde_json",
         "@crates//:tokio",
         "@crates//:zbus",
     ],

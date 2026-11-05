@@ -188,7 +188,13 @@
   (`_bazel.yml`/`_native.yml`). Весь first-party Rust (Pulsar, BLE gateway,
   Windows logon provider, voice-recorder helper) — один корневой Cargo
   workspace: `/Cargo.toml`, `/Cargo.lock`, `/rust-toolchain.toml`, один
-  `@crates//` и общие `[workspace.lints]` (решение 40). Pulsar — publishable
+  `@crates//` и общие `[workspace.lints]` (решение 40). Общий core-слой —
+  `packages/rust`: `ricardo-telemetry` (tracing/фильтр/локальное время),
+  `ricardo-runtime` (SIGTERM/SIGINT + `Supervisor` на
+  `CancellationToken`/`TaskTracker`), `ricardo-secret` (zeroize/0600/0700,
+  constant-time) и `ricardo-http` (axum bearer + graceful serve). BLE gateway
+  переписан на них: нативный control-сокет `wpa_supplicant`, `zbus` proxies,
+  `watch`-статус и сериализованные Commit'ы. Pulsar — publishable
   native-юнит общего `deploy-home` с
   `publish_when` по `projects/station/pulsar/VERSION`: только изменение этого
   файла на `develop` запускает `native-build` → `publish-native` →

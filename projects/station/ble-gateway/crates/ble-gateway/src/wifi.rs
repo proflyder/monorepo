@@ -1,392 +1,435 @@
-//! `wpa_cli` interaction and the Wi-Fi apply/rollback sequence.
+//! Native `wpa_supplicant` control-interface client and the Wi-Fi apply /
+//! rollback sequence.
+//!
+//! The daemon talks to `/var/run/wpa_supplicant/wlan0` over a unix datagram
+//! socket instead of forking `wpa_cli`. Replies are typed in [`WpaStatus`] and
+//! [`Network`]; every other command returns [`WpaError`].
 
-use std::process::Stdio;
+use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
+use thiserror::Error;
+use tokio::net::UnixDatagram;
+use tokio::time::{Instant, timeout};
+use tracing::{debug, info, warn};
 
 use crate::gateway::Gateway;
-use crate::logf;
+use crate::status::Status;
 
-const WPA_CLI: &str = "/usr/sbin/wpa_cli";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const STATE_COMPLETED: &str = "COMPLETED";
+static SOCKET_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Wi-Fi credential validation shared by the GATT commit path and tests.
 pub fn validate_wifi(ssid: &[u8], psk: &[u8]) -> Result<(), &'static str> {
     if ssid.is_empty() {
         return Err("EMPTY_SSID");
     }
-    if ssid.len() > 32 || std::str::from_utf8(ssid).is_err() {
-        return Err("BAD_SSID");
-    }
-    if ssid.iter().any(|b| *b == 0 || *b == b'\n' || *b == b'\r') {
+    if ssid.len() > 32
+        || std::str::from_utf8(ssid).is_err()
+        || ssid.iter().any(|b| matches!(b, 0 | b'\n' | b'\r'))
+    {
         return Err("BAD_SSID");
     }
     if psk.is_empty() {
         return Err("EMPTY_PSK");
     }
     if psk.len() == 64 {
-        if psk.iter().all(u8::is_ascii_hexdigit) {
-            return Ok(());
-        }
-        return Err("BAD_PSK");
+        return psk
+            .iter()
+            .all(u8::is_ascii_hexdigit)
+            .then_some(())
+            .ok_or("BAD_PSK");
     }
-    if psk.len() < 8 || psk.len() > 63 {
+    if !(8..=63).contains(&psk.len()) {
         return Err("BAD_PSK_LENGTH");
     }
-    if psk.iter().any(|b| *b == 0 || *b == b'\n' || *b == b'\r') {
+    if psk.iter().any(|b| matches!(b, 0 | b'\n' | b'\r')) {
         return Err("BAD_PSK");
     }
     Ok(())
 }
 
-/// Escape an SSID/PSK for the interactive `set_network` command.
+/// Quote an SSID/PSK for `SET_NETWORK`, escaping `\` and `"`.
 pub fn wpa_quote(value: &str) -> String {
-    let mut out = String::with_capacity(value.len() + 2);
-    out.push('"');
-    for ch in value.chars() {
-        if ch == '\\' || ch == '"' {
-            out.push('\\');
-        }
-        out.push(ch);
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// `SET_NETWORK <id> <field> <value>` may carry the Wi-Fi password. Every
+/// error stores only the verb, id and field; the value is never formatted.
+#[must_use]
+pub fn safe_command(command: &str) -> String {
+    let mut parts = command.split_whitespace();
+    if parts.next() == Some("SET_NETWORK") {
+        let id = parts.next().unwrap_or("");
+        let field = parts.next().unwrap_or("");
+        return format!("SET_NETWORK {id} {field}").trim().to_string();
     }
-    out.push('"');
-    out
+    command.to_string()
 }
 
-fn combine(output: &std::process::Output) -> (String, bool) {
-    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-    text.push_str(&String::from_utf8_lossy(&output.stderr));
-    (text.trim().to_string(), output.status.success())
+#[derive(Debug, Error)]
+pub enum WpaError {
+    #[error("wpa_supplicant io: {0}")]
+    Io(#[from] io::Error),
+    #[error("wpa_supplicant command {command:?} timed out")]
+    Timeout { command: String },
+    #[error("wpa_supplicant command {command:?} failed: {reply}")]
+    Failed { command: String, reply: String },
+    #[error("unexpected wpa_supplicant reply to {command:?}: {reply}")]
+    Unexpected { command: String, reply: String },
 }
 
-/// One invocation of the configured `wpa_cli` binary.
-#[derive(Clone)]
-pub struct Wpa {
-    path: String,
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WpaStatus {
+    pub state: String,
 }
 
-impl Wpa {
-    pub fn system() -> Self {
+impl WpaStatus {
+    fn parse(reply: &str) -> Self {
         Self {
-            path: WPA_CLI.to_string(),
+            state: reply
+                .lines()
+                .find_map(|line| line.strip_prefix("wpa_state="))
+                .unwrap_or("UNKNOWN")
+                .to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Network {
+    pub id: i32,
+    pub ssid: String,
+    pub flags: String,
+}
+
+impl Network {
+    pub fn is_current(&self) -> bool {
+        self.flags.contains("[CURRENT]")
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        !self.flags.contains("[DISABLED]")
+    }
+}
+
+/// Client for one `wpa_supplicant` control socket.
+#[derive(Clone, Debug)]
+pub struct WpaClient {
+    ctrl: PathBuf,
+    socket_dir: PathBuf,
+}
+
+impl WpaClient {
+    pub fn new(ctrl: impl Into<PathBuf>) -> Self {
+        Self {
+            ctrl: ctrl.into(),
+            socket_dir: short_socket_directory(),
         }
     }
 
-    pub fn with_path(path: impl Into<String>) -> Self {
-        Self { path: path.into() }
+    /// Override the reply-socket directory (tests).
+    pub fn with_socket_dir(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.socket_dir = directory.into();
+        self
     }
 
-    pub fn path(&self) -> &str {
-        &self.path
-    }
-
-    async fn cli(&self, args: &[&str]) -> (String, bool) {
-        let output = Command::new(&self.path)
-            .arg("-i")
-            .arg("wlan0")
-            .args(args)
-            .output()
-            .await;
-        match output {
-            Ok(output) => combine(&output),
-            Err(err) => (err.to_string(), false),
-        }
-    }
-
-    /// One-shot argv mode cannot reliably carry SSID/PSK values, and stdin
-    /// keeps the PSK out of the process argv.
-    async fn interactive(&self, commands: &[String]) -> (String, bool) {
-        let mut child = match Command::new(&self.path)
-            .arg("-i")
-            .arg("wlan0")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+    pub async fn request(&self, command: &str) -> Result<String, WpaError> {
+        let safe = safe_command(command);
+        let path = self.socket_dir.join(format!(
+            "rw-{}-{}.sock",
+            std::process::id(),
+            SOCKET_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        if let Err(error) = std::fs::remove_file(&path)
+            && error.kind() != io::ErrorKind::NotFound
         {
-            Ok(child) => child,
-            Err(err) => return (err.to_string(), false),
-        };
-        let input = format!("{}\n", commands.join("\n"));
-        if let Some(mut stdin) = child.stdin.take() {
-            if let Err(err) = stdin.write_all(input.as_bytes()).await {
-                // `exec.Cmd` in Go ignores EPIPE while copying stdin: the CLI
-                // may exit before reading it. All other write errors stay fatal.
-                if err.kind() != std::io::ErrorKind::BrokenPipe {
-                    return (err.to_string(), false);
-                }
-            }
-            drop(stdin);
+            debug!(%error, "remove stale wpa reply socket");
         }
-        match child.wait_with_output().await {
-            Ok(output) => combine(&output),
-            Err(err) => (err.to_string(), false),
+        let socket = UnixDatagram::bind(&path)?;
+        let _cleanup = SocketCleanup(path);
+        socket.connect(&self.ctrl)?;
+        socket.send(command.as_bytes()).await?;
+        let mut buffer = [0u8; 8192];
+        let received = timeout(REQUEST_TIMEOUT, socket.recv(&mut buffer))
+            .await
+            .map_err(|_| WpaError::Timeout {
+                command: safe.clone(),
+            })??;
+        let reply = String::from_utf8_lossy(&buffer[..received])
+            .trim_end()
+            .to_string();
+        if reply.starts_with("FAIL") {
+            let reply = if safe.starts_with("SET_NETWORK ") {
+                "FAIL".to_string()
+            } else {
+                reply
+            };
+            return Err(WpaError::Failed {
+                command: safe,
+                reply,
+            });
+        }
+        Ok(reply)
+    }
+
+    async fn expect_ok(&self, command: &str) -> Result<(), WpaError> {
+        match self.request(command).await? {
+            reply if reply == "OK" => Ok(()),
+            reply => Err(WpaError::Unexpected {
+                command: safe_command(command),
+                reply: if command.starts_with("SET_NETWORK ") {
+                    "FAIL".to_string()
+                } else {
+                    reply
+                },
+            }),
         }
     }
 
+    pub async fn status(&self) -> Result<WpaStatus, WpaError> {
+        Ok(WpaStatus::parse(&self.request("STATUS").await?))
+    }
+
+    /// State for the UI/auto loop; a broken socket reads as `UNKNOWN`.
     pub async fn state(&self) -> String {
-        let (out, ok) = self.cli(&["status"]).await;
-        if !ok && out.is_empty() {
-            return "UNKNOWN".to_string();
-        }
-        for line in out.lines() {
-            if let Some(state) = line.strip_prefix("wpa_state=") {
-                return state.to_string();
+        match self.status().await {
+            Ok(status) => status.state,
+            Err(error) => {
+                debug!(%error, "wpa_supplicant STATUS failed");
+                "UNKNOWN".to_string()
             }
         }
-        "UNKNOWN".to_string()
     }
 
-    pub async fn current_network(&self) -> i32 {
-        let (out, ok) = self.cli(&["list_networks"]).await;
-        if !ok {
-            return -1;
-        }
-        for line in out.lines() {
-            if !line.contains("[CURRENT]") {
-                continue;
-            }
-            if let Some(field) = line.split('\t').next()
-                && let Ok(id) = field.trim().parse::<i32>()
-            {
-                return id;
-            }
-        }
-        -1
+    pub async fn list_networks(&self) -> Result<Vec<Network>, WpaError> {
+        Ok(self
+            .request("LIST_NETWORKS")
+            .await?
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split('\t');
+                Some(Network {
+                    id: fields.next()?.trim().parse().ok()?,
+                    ssid: fields.next().unwrap_or_default().to_string(),
+                    flags: fields.nth(1).unwrap_or_default().to_string(),
+                })
+            })
+            .collect())
+    }
+
+    pub async fn current_network(&self) -> Option<i32> {
+        self.list_networks()
+            .await
+            .ok()?
+            .iter()
+            .find(|network| network.is_current())
+            .map(|network| network.id)
     }
 
     pub async fn enabled_networks(&self) -> Vec<i32> {
-        let (out, ok) = self.cli(&["list_networks"]).await;
-        if !ok {
-            return Vec::new();
+        self.list_networks()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter(Network::is_enabled)
+            .map(|network| network.id)
+            .collect()
+    }
+
+    pub async fn add_network(&self) -> Result<i32, WpaError> {
+        let reply = self.request("ADD_NETWORK").await?;
+        reply.trim().parse().map_err(|_| WpaError::Unexpected {
+            command: "ADD_NETWORK".to_string(),
+            reply,
+        })
+    }
+
+    pub async fn set_network(&self, id: i32, field: &str, value: &str) -> Result<(), WpaError> {
+        self.expect_ok(&format!("SET_NETWORK {id} {field} {value}"))
+            .await
+    }
+
+    pub async fn enable_network(&self, id: i32) -> Result<(), WpaError> {
+        self.expect_ok(&format!("ENABLE_NETWORK {id}")).await
+    }
+
+    pub async fn select_network(&self, id: i32) -> Result<(), WpaError> {
+        self.expect_ok(&format!("SELECT_NETWORK {id}")).await
+    }
+
+    pub async fn remove_network(&self, id: i32) -> Result<(), WpaError> {
+        self.expect_ok(&format!("REMOVE_NETWORK {id}")).await
+    }
+
+    pub async fn save_config(&self) -> Result<(), WpaError> {
+        self.expect_ok("SAVE_CONFIG").await
+    }
+
+    pub async fn reconnect(&self) -> Result<(), WpaError> {
+        self.expect_ok("RECONNECT").await
+    }
+
+    /// Add, fill and remove a temporary network. Every failure, including a
+    /// failed cleanup, is an error so the process exit code reflects reality.
+    pub async fn test_wpa(&self) -> Result<String, WpaError> {
+        let id = self.add_network().await?;
+        let result = async {
+            self.set_network(id, "ssid", &wpa_quote("Test Net")).await?;
+            self.set_network(id, "psk", &wpa_quote("examplepass"))
+                .await?;
+            self.set_network(id, "key_mgmt", "WPA-PSK").await?;
+            Ok::<(), WpaError>(())
         }
-        let mut ids = Vec::new();
-        for line in out.lines() {
-            if line.contains("[DISABLED]") || !line.contains('\t') {
-                continue;
-            }
-            if let Some(field) = line.split('\t').next()
-                && let Ok(id) = field.trim().parse::<i32>()
-            {
-                ids.push(id);
-            }
+        .await;
+        let removed = self.remove_network(id).await;
+        result?;
+        removed?;
+        let count = self.list_networks().await?.len();
+        Ok(format!(
+            "temporary network id={id} set OK; {count} network(s) configured"
+        ))
+    }
+}
+
+struct SocketCleanup(PathBuf);
+
+impl Drop for SocketCleanup {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_file(&self.0)
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            debug!(%error, "remove wpa reply socket");
         }
-        ids
     }
+}
 
-    async fn set_network(&self, id: i32, field: &str, value: &str) -> Result<(), String> {
-        let (out, ok) = self
-            .interactive(&[format!("set_network {id} {field} {value}")])
-            .await;
-        if !ok {
-            return Err(format!("command failed: {out}"));
-        }
-        if !out.contains("OK") {
-            return Err(format!("not OK: {out}"));
-        }
-        Ok(())
-    }
-
-    async fn enable_network(&self, id: i32) -> (String, bool) {
-        self.cli(&["enable_network", &id.to_string()]).await
-    }
-
-    async fn select_network(&self, id: i32) -> (String, bool) {
-        self.cli(&["select_network", &id.to_string()]).await
-    }
-
-    async fn remove_network(&self, id: i32) -> (String, bool) {
-        self.cli(&["remove_network", &id.to_string()]).await
-    }
-
-    async fn add_network(&self) -> (String, bool) {
-        self.cli(&["add_network"]).await
-    }
-
-    async fn save_config(&self) -> (String, bool) {
-        self.cli(&["save_config"]).await
-    }
-
-    pub async fn reconnect(&self) -> (String, bool) {
-        self.cli(&["reconnect"]).await
-    }
-
-    /// `--test-wpa`: always returns an error carrying the result, like Go.
-    pub async fn test_wpa_set(&self) -> Result<(), String> {
-        let (out, ok) = self.add_network().await;
-        if !ok {
-            return Err(format!("add_network: {out}"));
-        }
-        let id = out
-            .trim()
-            .parse::<i32>()
-            .map_err(|_| format!("add_network output {out:?}"))?;
-
-        let mut failure = None;
-        for (field, value) in [
-            ("ssid", wpa_quote("Test Net")),
-            ("psk", wpa_quote("examplepass")),
-            ("key_mgmt", "WPA-PSK".to_string()),
-        ] {
-            if let Err(err) = self.set_network(id, field, &value).await {
-                failure = Some(format!("set {field}: {err}"));
-                break;
-            }
-        }
-        if failure.is_none() {
-            let (list, ok) = self.cli(&["list_networks"]).await;
-            if ok {
-                failure = Some(format!("temporary network id={id} set OK; list:\n{list}"));
-            } else {
-                failure = Some(list);
-            }
-        }
-        let _ = self.remove_network(id).await;
-        Err(failure.unwrap_or_else(|| "test-wpa failed".to_string()))
-    }
-
-    async fn re_enable(&self, ids: &[i32], gateway: &Gateway) {
-        for id in ids {
-            let (out, ok) = self.enable_network(*id).await;
-            if !ok {
-                logf!(gateway.logger, "re-enable network {id}: {out}");
-            }
-        }
+/// Unix socket paths are limited to `SUN_LEN`; the default temp directory is
+/// already too deep on macOS, so the reply socket lives in `/tmp`.
+fn short_socket_directory() -> PathBuf {
+    let short = PathBuf::from("/tmp");
+    if short.is_dir() {
+        short
+    } else {
+        std::env::temp_dir()
     }
 }
 
 impl Gateway {
-    /// Apply a network with rollback to the previous profile on any failure.
-    pub async fn apply_wifi(self: &Arc<Self>, ssid: &str, psk: &str) {
+    pub(crate) async fn apply_wifi(self: &Arc<Self>, ssid: &str, psk: &str) {
         if self.cfg.dry_run {
-            self.set_status("DRY_RUN_OK").await;
+            self.set_status(Status::DryRunOk);
             return;
         }
-        self.lock_state().applying = true;
-        self.apply_wifi_inner(ssid, psk).await;
-        self.lock_state().applying = false;
+        self.applying.store(true, Ordering::SeqCst);
+        let outcome = self.apply_wifi_inner(ssid, psk).await;
+        self.applying.store(false, Ordering::SeqCst);
+        if let Err(code) = outcome {
+            self.set_status(Status::error(code));
+        }
     }
 
-    async fn apply_wifi_inner(&self, ssid: &str, psk: &str) {
-        let old_id = self.wpa.current_network().await;
-        let prior_enabled = self.wpa.enabled_networks().await;
-        logf!(
-            self.logger,
-            "Wi-Fi apply: old network id={old_id}; enabled={prior_enabled:?}; trying SSID {ssid:?}"
-        );
-
-        let (out, ok) = self.wpa.add_network().await;
-        if !ok {
-            logf!(self.logger, "add_network: {out}");
-            self.set_status("ERROR:ADD_NETWORK").await;
-            return;
-        }
-        let Ok(id) = out.trim().parse::<i32>() else {
-            logf!(self.logger, "add_network: bad output {out:?}");
-            self.set_status("ERROR:ADD_NETWORK").await;
-            return;
+    async fn apply_wifi_inner(&self, ssid: &str, psk: &str) -> Result<(), &'static str> {
+        let old = self.wpa.current_network().await;
+        let prior = self.wpa.enabled_networks().await;
+        info!(?old, ?prior, "Wi-Fi apply");
+        let id = match self.wpa.add_network().await {
+            Ok(id) => id,
+            Err(error) => {
+                warn!(%error, "add_network");
+                return Err("ADD_NETWORK");
+            }
         };
-        logf!(self.logger, "new network id={id}");
+        if let Err(code) = self.configure(id, ssid, psk).await {
+            self.rollback(id, old).await;
+            return Err(code);
+        }
+        let mut state = "UNKNOWN".to_string();
+        let deadline = Instant::now() + self.timings.wifi_apply_timeout;
+        while Instant::now() < deadline {
+            state = self.wpa.state().await;
+            if state == STATE_COMPLETED {
+                break;
+            }
+            tokio::time::sleep(self.timings.wifi_poll_interval).await;
+        }
+        if state != STATE_COMPLETED {
+            warn!(%state, "new network did not connect; rolling back");
+            self.rollback(id, old).await;
+            self.re_enable(&prior).await;
+            return Err("TIMEOUT");
+        }
+        self.re_enable(&prior).await;
+        if let Err(error) = self.wpa.save_config().await {
+            warn!(%error, "save_config");
+        } else {
+            info!("saved Wi-Fi configuration");
+        }
+        info!("Wi-Fi connected");
+        self.set_status(Status::Connected);
+        tokio::time::sleep(self.timings.wifi_post_connect_delay).await;
+        Ok(())
+    }
 
+    async fn configure(&self, id: i32, ssid: &str, psk: &str) -> Result<(), &'static str> {
         for (field, value) in [
             ("ssid", wpa_quote(ssid)),
             ("psk", wpa_quote(psk)),
             ("key_mgmt", "WPA-PSK".to_string()),
             ("priority", "10".to_string()),
         ] {
-            if let Err(err) = self.wpa.set_network(id, field, &value).await {
-                logf!(self.logger, "set_network {field}: {err}");
-                self.cleanup_new_network(id).await;
-                self.restore_old(old_id).await;
-                self.set_status("ERROR:SET_NETWORK").await;
-                return;
-            }
+            self.wpa
+                .set_network(id, field, &value)
+                .await
+                .map_err(|error| {
+                    warn!(%error, field, "set_network");
+                    "SET_NETWORK"
+                })?;
         }
-        let (out, ok) = self.wpa.enable_network(id).await;
-        if !ok {
-            logf!(self.logger, "enable_network: {out}");
-            self.cleanup_new_network(id).await;
-            self.restore_old(old_id).await;
-            self.set_status("ERROR:ENABLE_NETWORK").await;
-            return;
-        }
-        let (out, ok) = self.wpa.select_network(id).await;
-        if !ok {
-            logf!(self.logger, "select_network: {out}");
-            self.cleanup_new_network(id).await;
-            self.restore_old(old_id).await;
-            self.set_status("ERROR:SELECT_NETWORK").await;
-            return;
-        }
-
-        let deadline = Instant::now() + self.timings.wifi_apply_timeout;
-        let mut state = "UNKNOWN".to_string();
-        while Instant::now() < deadline {
-            state = self.wpa.state().await;
-            if state == "COMPLETED" {
-                break;
-            }
-            tokio::time::sleep(self.timings.wifi_poll_interval).await;
-        }
-        if state != "COMPLETED" {
-            logf!(
-                self.logger,
-                "new network failed: state={state}; rolling back"
-            );
-            self.cleanup_new_network(id).await;
-            self.restore_old(old_id).await;
-            self.wpa.re_enable(&prior_enabled, self).await;
-            self.set_status("ERROR:TIMEOUT").await;
-            return;
-        }
-
-        // select_network disables the other profiles; restore the previous one
-        // as a lower-priority fallback and persist both.
-        self.wpa.re_enable(&prior_enabled, self).await;
-        let (out, ok) = self.wpa.save_config().await;
-        if ok {
-            logf!(self.logger, "saved Wi-Fi config");
-        } else {
-            logf!(self.logger, "save_config: {out}");
-        }
-        logf!(self.logger, "Wi-Fi connected: SSID {ssid:?}");
-        self.set_status("CONNECTED").await;
-        tokio::time::sleep(self.timings.wifi_post_connect_delay).await;
+        self.wpa.enable_network(id).await.map_err(|error| {
+            warn!(%error, "enable_network");
+            "ENABLE_NETWORK"
+        })?;
+        self.wpa.select_network(id).await.map_err(|error| {
+            warn!(%error, "select_network");
+            "SELECT_NETWORK"
+        })
     }
 
-    async fn cleanup_new_network(&self, id: i32) {
-        if id < 0 {
-            return;
+    async fn rollback(&self, id: i32, old: Option<i32>) {
+        if id >= 0
+            && let Err(error) = self.wpa.remove_network(id).await
+        {
+            warn!(%error, id, "remove_network");
         }
-        let (out, ok) = self.wpa.remove_network(id).await;
-        if !ok {
-            logf!(self.logger, "remove_network {id}: {out}");
+        let Some(old) = old else {
+            return info!("no previous network to restore");
+        };
+        if let Err(error) = self.wpa.select_network(old).await {
+            warn!(%error, id = old, "restore old network");
         }
     }
 
-    async fn restore_old(&self, id: i32) {
-        if id < 0 {
-            logf!(self.logger, "no previous network to restore");
-            return;
+    async fn re_enable(&self, ids: &[i32]) {
+        for id in ids {
+            if let Err(error) = self.wpa.enable_network(*id).await {
+                warn!(%error, id, "re-enable network");
+            }
         }
-        let (out, ok) = self.wpa.select_network(id).await;
-        if !ok {
-            logf!(self.logger, "restore old {id}: {out}");
-            return;
-        }
-        logf!(self.logger, "restored old network id={id}");
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-    use std::sync::Arc;
+    #![allow(clippy::significant_drop_tightening)]
+
+    use std::sync::Mutex;
 
     use super::*;
-    use crate::test_support::{fake_wpa, new_gateway, new_gateway_live, read_file, temp_dir};
+    use crate::test_support::TestGateway;
 
     type ValidationCase = (&'static str, Vec<u8>, Vec<u8>, Option<&'static str>);
 
@@ -449,163 +492,197 @@ mod tests {
 
     #[test]
     fn wpa_quote_escapes() {
-        let cases = [
+        for (input, expected) in [
             ("Home", "\"Home\""),
             ("a\"b", "\"a\\\"b\""),
             ("a\\b", "\"a\\\\b\""),
             ("Дом 5G", "\"Дом 5G\""),
-        ];
-        for (input, expected) in cases {
+        ] {
             assert_eq!(wpa_quote(input), expected, "wpa_quote({input:?})");
         }
     }
 
+    fn recording_wpa() -> (TestGateway, Arc<Mutex<Vec<String>>>) {
+        let recorded = Arc::new(Mutex::new(Vec::new()));
+        let sink = recorded.clone();
+        let gateway = TestGateway::new("wpa-recording", move |command| {
+            sink.lock().expect("commands").push(command.to_string());
+            match command {
+                "STATUS" => "wpa_state=COMPLETED".to_string(),
+                "LIST_NETWORKS" => {
+                    "network id / ssid / bssid / flags\n0\tHome\tany\t[CURRENT]\n1\tOld\tany\t[DISABLED]\n2\tWork\tany".to_string()
+                }
+                "ADD_NETWORK" => "7".to_string(),
+                _ => "OK".to_string(),
+            }
+        });
+        (gateway, recorded)
+    }
+
     #[tokio::test]
-    async fn wpa_queries_and_set_network() {
-        let dir = temp_dir("wpa-queries");
-        let path = fake_wpa(
-            &dir,
-            r#"case "$*" in
-  *" status"*) echo wpa_state=COMPLETED ;;
-  *" list_networks"*) printf '0\tHome\tany\t[CURRENT]\n1\tOld\tany\t[DISABLED]\n2\tWork\tany\n' ;;
-  *" add_network"*) echo 7 ;;
-  *) echo OK ;;
-esac"#,
-        );
-        let wpa = Wpa::with_path(path.to_string_lossy().into_owned());
-        assert_eq!(wpa.state().await, "COMPLETED");
-        assert_eq!(wpa.current_network().await, 0);
-        assert_eq!(wpa.enabled_networks().await, vec![0, 2]);
-        wpa.set_network(7, "ssid", &wpa_quote("Test"))
-            .await
-            .expect("set_network");
-        let error = wpa
-            .test_wpa_set()
-            .await
-            .expect_err("test_wpa_set returns error");
+    async fn client_parses_status_and_networks() {
+        let (gateway, _) = recording_wpa();
+        let status = gateway.gateway.wpa.status().await.expect("status");
+        assert_eq!(status.state, "COMPLETED");
+        assert_eq!(status.state, "COMPLETED");
+        let networks = gateway.gateway.wpa.list_networks().await.expect("networks");
+        assert_eq!(networks.len(), 3);
+        assert_eq!(networks[0].id, 0);
+        assert!(networks[0].is_current());
+        assert!(!networks[1].is_enabled());
+        assert_eq!(gateway.gateway.wpa.current_network().await, Some(0));
+        assert_eq!(gateway.gateway.wpa.enabled_networks().await, vec![0, 2]);
+    }
+
+    #[tokio::test]
+    async fn apply_wifi_success_persists_and_restores_fallback() {
+        let (gateway, recorded) = recording_wpa();
+        gateway.gateway.apply_wifi("Home", "password123").await;
+        assert_eq!(gateway.gateway.status(), Status::Connected);
+        let commands = recorded.lock().expect("commands");
+        for expected in [
+            "ADD_NETWORK",
+            "SET_NETWORK 7 ssid \"Home\"",
+            "SET_NETWORK 7 psk \"password123\"",
+            "SET_NETWORK 7 key_mgmt WPA-PSK",
+            "SET_NETWORK 7 priority 10",
+            "ENABLE_NETWORK 7",
+            "SELECT_NETWORK 7",
+            "ENABLE_NETWORK 0",
+            "ENABLE_NETWORK 2",
+            "SAVE_CONFIG",
+        ] {
+            assert!(commands.iter().any(|c| c == expected), "missing {expected}");
+        }
+    }
+
+    #[tokio::test]
+    async fn add_network_failure_reports_add_network() {
+        let gateway = TestGateway::new("wpa-add-fail", |command| match command {
+            "LIST_NETWORKS" => "0\tHome\tany\t[CURRENT]".to_string(),
+            "ADD_NETWORK" => "FAIL".to_string(),
+            _ => "OK".to_string(),
+        });
+        gateway.gateway.apply_wifi("Home", "password123").await;
+        assert_eq!(gateway.gateway.status(), Status::error("ADD_NETWORK"));
+    }
+
+    #[tokio::test]
+    async fn set_network_failure_rolls_back_to_the_old_network() {
+        let commands = Arc::new(Mutex::new(Vec::new()));
+        let sink = commands.clone();
+        let gateway = TestGateway::new("wpa-set-fail", move |command| {
+            sink.lock().expect("commands").push(command.to_string());
+            match command {
+                "LIST_NETWORKS" => "0\tHome\tany\t[CURRENT]".to_string(),
+                "ADD_NETWORK" => "7".to_string(),
+                command if command.starts_with("SET_NETWORK 7 psk") => "FAIL".to_string(),
+                _ => "OK".to_string(),
+            }
+        });
+        gateway.gateway.apply_wifi("Home", "password123").await;
+        assert_eq!(gateway.gateway.status(), Status::error("SET_NETWORK"));
+        let commands = commands.lock().expect("commands");
+        assert!(commands.iter().any(|c| c == "REMOVE_NETWORK 7"));
+        assert!(commands.iter().any(|c| c == "SELECT_NETWORK 0"));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn timeout_rolls_back_and_reenables_prior_networks() {
+        let commands = Arc::new(Mutex::new(Vec::new()));
+        let sink = commands.clone();
+        let gateway = TestGateway::new("wpa-timeout", move |command| {
+            sink.lock().expect("commands").push(command.to_string());
+            match command {
+                "STATUS" => "wpa_state=DISCONNECTED".to_string(),
+                "LIST_NETWORKS" => "0\tHome\tany\t[CURRENT]\n1\tFallback\tany".to_string(),
+                "ADD_NETWORK" => "7".to_string(),
+                _ => "OK".to_string(),
+            }
+        });
+        gateway.gateway.apply_wifi("Home", "password123").await;
+        assert_eq!(gateway.gateway.status(), Status::error("TIMEOUT"));
+        let commands = commands.lock().expect("commands");
+        assert!(commands.iter().any(|c| c == "REMOVE_NETWORK 7"));
+        assert!(commands.iter().any(|c| c == "SELECT_NETWORK 0"));
+        assert!(commands.iter().any(|c| c == "ENABLE_NETWORK 0"));
+        assert!(commands.iter().any(|c| c == "ENABLE_NETWORK 1"));
+    }
+
+    #[tokio::test]
+    async fn dry_run_never_touches_wpa_supplicant() {
+        let gateway = TestGateway::new_dry_run("wpa-dry-run");
+        gateway.gateway.apply_wifi("Home", "password123").await;
+        assert_eq!(gateway.gateway.status(), Status::DryRunOk);
+    }
+
+    #[tokio::test]
+    async fn test_wpa_succeeds_and_cleans_up() {
+        let commands = Arc::new(Mutex::new(Vec::new()));
+        let sink = commands.clone();
+        let gateway = TestGateway::new("wpa-test-ok", move |command| {
+            sink.lock().expect("commands").push(command.to_string());
+            match command {
+                "ADD_NETWORK" => "9".to_string(),
+                "LIST_NETWORKS" => "0\tHome\tany\t[CURRENT]".to_string(),
+                _ => "OK".to_string(),
+            }
+        });
+        let message = gateway.gateway.wpa.test_wpa().await.expect("test-wpa");
+        assert!(message.contains("id=9"), "{message}");
         assert!(
-            error.contains("temporary network id=7"),
-            "unexpected error: {error}"
+            commands
+                .lock()
+                .expect("commands")
+                .iter()
+                .any(|c| c == "REMOVE_NETWORK 9")
         );
-        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
-    async fn interactive_ignores_broken_pipe_on_large_stdin() {
-        let dir = temp_dir("wpa-epipe");
-        // The fake never reads stdin, prints OK and exits before a >64 KiB
-        // command can be written, making EPIPE deterministic on macOS/Linux.
-        let path = fake_wpa(&dir, "echo OK");
-        let wpa = Wpa::with_path(path.to_string_lossy().into_owned());
-        let huge = wpa_quote(&"x".repeat(70 * 1024));
-        wpa.set_network(7, "ssid", &huge)
+    async fn test_wpa_failure_is_reported() {
+        let gateway = TestGateway::new("wpa-test-fail", |command| match command {
+            "ADD_NETWORK" => "9".to_string(),
+            command if command.starts_with("SET_NETWORK") => "FAIL".to_string(),
+            _ => "OK".to_string(),
+        });
+        assert!(matches!(
+            gateway.gateway.wpa.test_wpa().await,
+            Err(WpaError::Failed { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn set_network_error_never_contains_the_psk() {
+        let gateway = TestGateway::new("wpa-secret", |command| {
+            if command.starts_with("SET_NETWORK") {
+                "FAIL".to_string()
+            } else {
+                "OK".to_string()
+            }
+        });
+        let error = gateway
+            .gateway
+            .wpa
+            .set_network(3, "psk", &wpa_quote("super-secret-password"))
             .await
-            .expect("EPIPE must be ignored");
-        let _ = std::fs::remove_dir_all(dir);
+            .expect_err("write must fail");
+        for rendered in [error.to_string(), format!("{error:?}")] {
+            assert!(!rendered.contains("super-secret-password"), "{rendered}");
+            assert!(rendered.contains("SET_NETWORK 3 psk"), "{rendered}");
+        }
     }
 
     #[tokio::test]
-    async fn wpa_unknown_when_cli_empty() {
-        let dir = temp_dir("wpa-empty");
-        let path = fake_wpa(&dir, "exit 1");
-        let wpa = Wpa::with_path(path.to_string_lossy().into_owned());
-        assert_eq!(wpa.state().await, "UNKNOWN");
-        assert_eq!(wpa.current_network().await, -1);
-        assert!(wpa.enabled_networks().await.is_empty());
-        let _ = std::fs::remove_dir_all(dir);
+    async fn missing_socket_is_an_error_not_a_hang() {
+        let client = WpaClient::new("/nonexistent/wpa.sock");
+        assert!(matches!(client.status().await, Err(WpaError::Io(_))));
+        assert_eq!(client.state().await, "UNKNOWN");
     }
 
     #[tokio::test]
-    async fn apply_wifi_success() {
-        let dir = temp_dir("wifi-success-script");
-        let path = fake_wpa(
-            &dir,
-            r#"case "$*" in
-  *" status"*) echo wpa_state=COMPLETED ;;
-  *" list_networks"*) printf '0\tHome\tany\t[CURRENT]\n1\tFallback\tany\n' ;;
-  *" add_network"*) echo 7 ;;
-  *" enable_network"*) echo OK ;;
-  *" select_network"*) echo OK ;;
-  *" save_config"*) echo OK ;;
-  *) echo OK ;;
-esac"#,
-        );
-        let context = new_gateway_live("wifi-success", &path);
-        let gateway = context.gateway.clone();
-        gateway.apply_wifi("Home", "password123").await;
-        assert_eq!(read_file(&context.dir.join("status")).trim(), "CONNECTED");
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[tokio::test]
-    async fn apply_wifi_add_network_failure() {
-        let dir = temp_dir("wifi-add-fail-script");
-        let path = fake_wpa(
-            &dir,
-            r#"case "$*" in
-  *" list_networks"*) printf '0\tHome\tany\t[CURRENT]\n' ;;
-  *" add_network"*) echo FAIL; exit 1 ;;
-esac"#,
-        );
-        let context = new_gateway_live("wifi-add-fail", &path);
-        let gateway = context.gateway.clone();
-        gateway.apply_wifi("Home", "password123").await;
-        assert_eq!(
-            read_file(&context.dir.join("status")).trim(),
-            "ERROR:ADD_NETWORK"
-        );
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[tokio::test]
-    async fn apply_wifi_set_network_failure_rolls_back() {
-        let dir = temp_dir("wifi-set-fail-script");
-        let path = fake_wpa(
-            &dir,
-            r#"case "$*" in
-  *" list_networks"*) printf '0\tHome\tany\t[CURRENT]\n1\tFallback\tany\n' ;;
-  *" add_network"*) echo 7 ;;
-  *" set_network "*) echo FAIL; exit 1 ;;
-  *" select_network "*) echo OK ;;
-esac"#,
-        );
-        let context = new_gateway_live("wifi-set-fail", &path);
-        let gateway = context.gateway.clone();
-        gateway.apply_wifi("Home", "password123").await;
-        assert_eq!(
-            read_file(&context.dir.join("status")).trim(),
-            "ERROR:SET_NETWORK"
-        );
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[tokio::test]
-    async fn apply_wifi_timeout_rolls_back_and_reenables() {
-        let dir = temp_dir("wifi-timeout-script");
-        let path = fake_wpa(
-            &dir,
-            r#"case "$*" in
-  *" status"*) echo wpa_state=DISCONNECTED ;;
-  *" list_networks"*) printf '0\tHome\tany\t[CURRENT]\n1\tFallback\tany\n' ;;
-  *" add_network"*) echo 7 ;;
-  *) echo OK ;;
-esac"#,
-        );
-        let context = new_gateway_live("wifi-timeout", &path);
-        let gateway: Arc<Gateway> = context.gateway.clone();
-        gateway.apply_wifi("Home", "password123").await;
-        assert_eq!(
-            read_file(&context.dir.join("status")).trim(),
-            "ERROR:TIMEOUT"
-        );
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[tokio::test]
-    async fn dry_run_never_touches_wpa() {
-        let context = new_gateway("wifi-dry-run", Path::new("/nonexistent/wpa_cli"));
-        let gateway = context.gateway.clone();
-        gateway.apply_wifi("Home", "password123").await;
-        assert_eq!(read_file(&context.dir.join("status")).trim(), "DRY_RUN_OK");
+    async fn fake_wpa_helper_is_reachable() {
+        let gateway = TestGateway::new("wpa-helper", |_| "OK".to_string());
+        assert!(gateway.gateway.wpa.ctrl.exists());
     }
 }

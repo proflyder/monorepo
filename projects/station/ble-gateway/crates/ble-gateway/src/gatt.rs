@@ -1,15 +1,20 @@
 //! BlueZ GATT application, advertisement and characteristic interfaces.
+//!
+//! Objects are exported through `#[zbus::interface]`; BlueZ managers are
+//! reached through `#[zbus::proxy]`. `zbus` stays pure Rust and does not link
+//! libdbus, unlike `bluer`.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use zbus::Connection;
-use zbus::object_server::SignalEmitter;
+use anyhow::{Context, Result, anyhow};
+use tokio::sync::mpsc;
+use tracing::{debug, warn};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
+use zbus::{Connection, object_server::SignalEmitter};
 
-use crate::gateway::Gateway;
-use crate::logf;
+use crate::credentials::{CredentialField, Credentials};
 
 pub const SERVICE_UUID: &str = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
 pub const CHAR_SSID: &str = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c01";
@@ -17,122 +22,109 @@ pub const CHAR_PSK: &str = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c02";
 pub const CHAR_TOKEN: &str = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c03";
 pub const CHAR_COMMIT: &str = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c04";
 pub const CHAR_STATUS: &str = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c05";
-
 pub const APP_PATH: &str = "/com/station/gateway";
 pub const ADV_PATH: &str = "/com/station/gateway/advertisement";
 pub const SVC_PATH: &str = "/com/station/gateway/service0";
 const CHAR_BASE: &str = "/com/station/gateway/service0/char";
-const ADAPTER_PATH: &str = "/org/bluez/hci0";
 
-/// D-Bus errors BlueZ expects from characteristic implementations.
-#[derive(Debug, zbus::DBusError)]
-#[zbus(prefix = "org.bluez.Error")]
-pub enum BluezError {
-    InvalidOffset,
-    NotPermitted,
-}
+#[rustfmt::skip] const CHARS: [(usize, &str, &[&str], Source); 5] = [
+    (0, CHAR_SSID, &["read", "write"], Source::Credential(CredentialField::Ssid)),
+    (1, CHAR_PSK, &["write"], Source::Credential(CredentialField::Psk)),
+    (2, CHAR_TOKEN, &["write"], Source::Credential(CredentialField::Token)),
+    (3, CHAR_COMMIT, &["write"], Source::Commit),
+    (4, CHAR_STATUS, &["read", "notify"], Source::Status),
+];
 
-pub fn characteristic_name(uuid: &str) -> &'static str {
-    match uuid {
-        CHAR_SSID => "ssid",
-        CHAR_PSK => "psk",
-        CHAR_TOKEN => "token",
-        CHAR_COMMIT => "commit",
-        CHAR_STATUS => "status",
-        _ => "unknown",
-    }
-}
+#[derive(Debug, zbus::DBusError)] #[zbus(prefix = "org.bluez.Error")] #[rustfmt::skip] pub enum BluezError { InvalidOffset, NotPermitted }
 
 pub fn characteristic_path(index: usize) -> OwnedObjectPath {
     OwnedObjectPath::try_from(format!("{CHAR_BASE}{index}")).expect("valid characteristic path")
 }
 
-struct CharacteristicInner {
-    value: Mutex<Vec<u8>>,
-    notifying: AtomicBool,
+#[rustfmt::skip]
+#[zbus::proxy(interface = "org.bluez.GattManager1", default_service = "org.bluez", default_path = "/org/bluez/hci0")]
+trait GattManager1 {
+    fn register_application(
+        &self,
+        application: ObjectPath<'_>,
+        options: HashMap<&str, Value<'_>>,
+    ) -> zbus::Result<()>;
+    fn unregister_application(&self, application: ObjectPath<'_>) -> zbus::Result<()>;
 }
 
-#[derive(Clone)]
-pub struct Characteristic {
-    gateway: Arc<Gateway>,
-    index: usize,
-    uuid: String,
-    path: OwnedObjectPath,
-    flags: Vec<String>,
-    inner: Arc<CharacteristicInner>,
+#[rustfmt::skip]
+#[zbus::proxy(interface = "org.bluez.LEAdvertisingManager1", default_service = "org.bluez", default_path = "/org/bluez/hci0")]
+trait LeAdvertisingManager1 {
+    fn register_advertisement(
+        &self,
+        advertisement: ObjectPath<'_>,
+        options: HashMap<&str, Value<'_>>,
+    ) -> zbus::Result<()>;
+    fn unregister_advertisement(&self, advertisement: ObjectPath<'_>) -> zbus::Result<()>;
 }
+
+#[derive(Clone, Copy)] #[rustfmt::skip]
+enum Source { Credential(CredentialField), Commit, Status }
+
+#[rustfmt::skip]
+struct Inner { index: usize, uuid: String, flags: Vec<String>, source: Source, credentials: Arc<Credentials>, commit: mpsc::Sender<Vec<u8>>, connection: Option<Connection>, value: Mutex<Vec<u8>>, notifying: AtomicBool }
+
+#[derive(Clone)] #[rustfmt::skip]
+struct Characteristic { inner: Arc<Inner> }
 
 impl Characteristic {
-    pub fn new(gateway: Arc<Gateway>, index: usize, uuid: &str, flags: &[&str]) -> Arc<Self> {
+    fn new(
+        connection: Option<Connection>,
+        (index, uuid, flags, source): (usize, &str, &[&str], Source),
+        credentials: Arc<Credentials>,
+        commit: mpsc::Sender<Vec<u8>>,
+    ) -> Arc<Self> {
         Arc::new(Self {
-            gateway,
-            index,
-            uuid: uuid.to_string(),
-            path: characteristic_path(index),
-            flags: flags.iter().map(|flag| (*flag).to_string()).collect(),
-            inner: Arc::new(CharacteristicInner {
+            inner: Arc::new(Inner {
+                index,
+                uuid: uuid.to_string(),
+                flags: flags.iter().map(|flag| (*flag).to_string()).collect(),
+                source,
+                credentials,
+                commit,
+                connection,
                 value: Mutex::new(Vec::new()),
                 notifying: AtomicBool::new(false),
             }),
         })
     }
 
-    pub fn path(&self) -> &OwnedObjectPath {
-        &self.path
-    }
-
-    pub fn index(&self) -> usize {
-        self.index
-    }
-
-    pub fn uuid(&self) -> &str {
-        &self.uuid
-    }
-
-    pub fn name(&self) -> &'static str {
-        characteristic_name(&self.uuid)
-    }
-
-    pub fn value(&self) -> Vec<u8> {
-        self.inner
-            .value
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-
-    pub fn set_value(&self, value: &[u8]) {
-        *self
-            .inner
-            .value
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = value.to_vec();
-    }
-
-    pub fn notifying(&self) -> bool {
-        self.inner.notifying.load(Ordering::SeqCst)
-    }
-
-    fn set_notifying(&self, value: bool) {
-        self.inner.notifying.store(value, Ordering::SeqCst);
+    async fn emit(&self, value: &[u8]) {
+        let Some(connection) = self.inner.connection.as_ref() else {
+            return;
+        };
+        let Ok(emitter) = SignalEmitter::new(connection, characteristic_path(self.inner.index))
+        else {
+            return;
+        };
+        let changed = HashMap::from([("Value", Value::from(value.to_vec()))]);
+        if let Err(error) = emitter
+            .emit(
+                "org.freedesktop.DBus.Properties",
+                "PropertiesChanged",
+                &("org.bluez.GattCharacteristic1", changed, Vec::<&str>::new()),
+            )
+            .await
+        {
+            warn!(%error, "PropertiesChanged");
+        }
     }
 
     fn offset(options: &HashMap<String, OwnedValue>) -> i64 {
         let Some(value) = options.get("offset") else {
             return 0;
         };
-        // BlueZ sends the GATT write offset as uint16 (`q`). zvariant's numeric
-        // conversions are strict, so try u16 before the wider types.
-        if let Ok(value) = u16::try_from(value.clone()) {
-            return i64::from(value);
-        }
-        if let Ok(value) = i32::try_from(value.clone()) {
-            return i64::from(value);
-        }
-        if let Ok(value) = u32::try_from(value.clone()) {
-            return i64::from(value);
-        }
-        i64::try_from(value.clone()).unwrap_or(0)
+        // BlueZ sends the GATT write offset as uint16 (`q`).
+        u16::try_from(value.clone())
+            .ok()
+            .map(i64::from)
+            .or_else(|| i32::try_from(value.clone()).ok().map(i64::from))
+            .unwrap_or(0)
     }
 }
 
@@ -140,7 +132,7 @@ impl Characteristic {
 impl Characteristic {
     #[zbus(property, name = "UUID")]
     fn prop_uuid(&self) -> String {
-        self.uuid.clone()
+        self.inner.uuid.clone()
     }
 
     #[zbus(property, name = "Service")]
@@ -150,35 +142,36 @@ impl Characteristic {
 
     #[zbus(property, name = "Flags")]
     fn prop_flags(&self) -> Vec<String> {
-        self.flags.clone()
+        self.inner.flags.clone()
     }
 
     #[zbus(property, name = "Value")]
-    fn prop_value(&self) -> Vec<u8> {
-        self.value()
+    fn value(&self) -> Vec<u8> {
+        match self.inner.source {
+            Source::Credential(field) => self.inner.credentials.get(field),
+            Source::Commit | Source::Status => self
+                .inner
+                .value
+                .lock()
+                .map_or_else(|_| Vec::new(), |value| value.clone()),
+        }
     }
 
     #[zbus(property, name = "Notifying")]
     fn prop_notifying(&self) -> bool {
-        self.notifying()
+        self.inner.notifying.load(Ordering::SeqCst)
     }
 
-    #[zbus(property, name = "Descriptors")]
-    fn prop_descriptors(&self) -> Vec<OwnedObjectPath> {
-        Vec::new()
-    }
-
-    // zbus deserializes D-Bus arguments into owned values; a reference cannot implement the
-    // required `Type`/`Deserialize` contract.
     #[allow(clippy::needless_pass_by_value)]
     #[zbus(name = "ReadValue")]
     fn read_value(&self, options: HashMap<String, OwnedValue>) -> Result<Vec<u8>, BluezError> {
-        let offset = Self::offset(&options);
         let value = self.value();
-        if offset < 0 || offset as usize > value.len() {
-            return Err(BluezError::InvalidOffset);
-        }
-        Ok(value[offset as usize..].to_vec())
+        let offset = Self::offset(&options);
+        let offset = usize::try_from(offset).map_err(|_| BluezError::InvalidOffset)?;
+        value
+            .get(offset..)
+            .map(<[u8]>::to_vec)
+            .ok_or(BluezError::InvalidOffset)
     }
 
     #[zbus(name = "WriteValue")]
@@ -187,72 +180,43 @@ impl Characteristic {
         value: Vec<u8>,
         options: HashMap<String, OwnedValue>,
     ) -> Result<(), BluezError> {
-        let offset = Self::offset(&options);
-        if !(0..=512).contains(&offset) {
-            return Err(BluezError::InvalidOffset);
-        }
-
-        match self.uuid.as_str() {
-            CHAR_SSID | CHAR_PSK | CHAR_TOKEN => {
-                {
-                    let mut current = self
-                        .inner
-                        .value
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    if offset == 0 {
-                        value.clone_into(&mut current);
-                    } else {
-                        let offset = offset as usize;
-                        if offset > current.len() {
-                            return Err(BluezError::InvalidOffset);
-                        }
-                        current.truncate(offset);
-                        current.extend_from_slice(&value);
-                    }
+        match self.inner.source {
+            Source::Credential(field) => {
+                let offset = usize::try_from(Self::offset(&options))
+                    .map_err(|_| BluezError::InvalidOffset)?;
+                if self.inner.credentials.write(field, &value, offset) {
+                    Ok(())
+                } else {
+                    Err(BluezError::InvalidOffset)
                 }
-                logf!(
-                    self.gateway.logger,
-                    "write {}: {} bytes (offset {})",
-                    self.name(),
-                    value.len(),
-                    offset
-                );
-                Ok(())
             }
-            CHAR_COMMIT => {
-                self.gateway.handle_commit(&value).await;
-                Ok(())
-            }
-            _ => Err(BluezError::NotPermitted),
+            Source::Commit => self
+                .inner
+                .commit
+                .send(value)
+                .await
+                .map_err(|_| BluezError::NotPermitted),
+            Source::Status => Err(BluezError::NotPermitted),
         }
     }
 
     #[zbus(name = "StartNotify")]
     async fn start_notify(&self) -> Result<(), BluezError> {
-        self.set_notifying(true);
+        self.inner.notifying.store(true, Ordering::SeqCst);
         let value = self.value();
-        logf!(self.gateway.logger, "notify enabled for {}", self.name());
-        self.gateway.emit_value(self, &value).await;
+        self.emit(&value).await;
         Ok(())
     }
 
     #[zbus(name = "StopNotify")]
     fn stop_notify(&self) -> Result<(), BluezError> {
-        self.set_notifying(false);
+        self.inner.notifying.store(false, Ordering::SeqCst);
         Ok(())
     }
 }
 
-#[derive(Clone)]
-pub struct Service {
+struct Service {
     characteristics: Vec<OwnedObjectPath>,
-}
-
-impl Service {
-    fn new(characteristics: Vec<OwnedObjectPath>) -> Self {
-        Self { characteristics }
-    }
 }
 
 #[zbus::interface(name = "org.bluez.GattService1")]
@@ -273,9 +237,7 @@ impl Service {
     }
 }
 
-pub struct Advertisement {
-    gateway: Arc<Gateway>,
-}
+struct Advertisement;
 
 #[zbus::interface(name = "org.bluez.LEAdvertisement1")]
 impl Advertisement {
@@ -294,324 +256,313 @@ impl Advertisement {
         "Station-Gateway".to_string()
     }
 
-    #[zbus(property, name = "Includes")]
-    fn prop_includes(&self) -> Vec<String> {
-        vec!["tx-power".to_string()]
-    }
-
     #[zbus(name = "Release")]
-    fn release(&self) {
-        logf!(self.gateway.logger, "advertisement released by BlueZ");
+    fn release(&self) {}
+}
+
+/// BlueZ GATT application controller.
+pub struct Ble {
+    commit: mpsc::Sender<Vec<u8>>,
+    credentials: Arc<Credentials>,
+    connection: OnceLock<Connection>,
+    advertising: AtomicBool,
+    status: Mutex<Option<Arc<Characteristic>>>,
+}
+
+impl Ble {
+    pub fn new(credentials: Arc<Credentials>, commit: mpsc::Sender<Vec<u8>>) -> Self {
+        Self {
+            commit,
+            credentials,
+            connection: OnceLock::new(),
+            advertising: AtomicBool::new(false),
+            status: Mutex::new(None),
+        }
+    }
+
+    pub fn set_connection(&self, connection: Connection) {
+        if self.connection.set(connection).is_err() {
+            warn!("D-Bus connection already set");
+        }
+    }
+
+    pub(crate) fn advertising(&self) -> bool {
+        self.advertising.load(Ordering::SeqCst)
+    }
+
+    fn connection(&self) -> Result<Connection> {
+        self.connection
+            .get()
+            .cloned()
+            .ok_or_else(|| anyhow!("no D-Bus connection"))
+    }
+
+    pub(crate) async fn enable(&self) -> Result<()> {
+        let connection = self.connection()?;
+        if self.advertising() {
+            return Ok(());
+        }
+        if self.status.lock().is_ok_and(|status| status.is_none()) {
+            remove_gatt_objects(&connection).await;
+            self.export_gatt(&connection).await?;
+        }
+        if let Ok(properties) =
+            zbus::fdo::PropertiesProxy::new(&connection, "org.bluez", "/org/bluez/hci0").await
+            && let Ok(interface) = zbus::names::InterfaceName::try_from("org.bluez.Adapter1")
+            && let Err(error) = properties
+                .set(interface, "Connectable", Value::Bool(true))
+                .await
+        {
+            warn!(%error, "set Connectable");
+        }
+        self.register_advertisement(&connection).await?;
+        self.advertising.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    pub(crate) async fn disable(&self) {
+        if !self.advertising.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        let connection = match self.connection() {
+            Ok(connection) => connection,
+            Err(error) => {
+                warn!(%error, "BLE disable without D-Bus connection");
+                return;
+            }
+        };
+        self.unregister_advertisement(&connection).await;
+        if self.status.lock().is_ok_and(|status| status.is_some()) {
+            self.unregister_gatt(&connection).await;
+        }
+    }
+
+    pub(crate) async fn notify_status(&self, value: &[u8]) {
+        let status = match self.status.lock() {
+            Ok(status) => status.clone(),
+            Err(error) => {
+                warn!(%error, "GATT status lock poisoned");
+                None
+            }
+        };
+        if let Some(characteristic) = status {
+            if let Ok(mut current) = characteristic.inner.value.lock() {
+                current.clear();
+                current.extend_from_slice(value);
+            }
+            if characteristic.inner.notifying.load(Ordering::SeqCst) {
+                characteristic.emit(value).await;
+            }
+        }
+    }
+
+    async fn export_gatt(&self, connection: &Connection) -> Result<()> {
+        let chars: Vec<_> = CHARS
+            .into_iter()
+            .map(|spec| {
+                Characteristic::new(
+                    Some(connection.clone()),
+                    spec,
+                    self.credentials.clone(),
+                    self.commit.clone(),
+                )
+            })
+            .collect();
+        let server = connection.object_server();
+        for characteristic in &chars {
+            server
+                .at(
+                    characteristic_path(characteristic.inner.index),
+                    characteristic.as_ref().clone(),
+                )
+                .await
+                .context("export characteristic")?;
+        }
+        server
+            .at(
+                object_path(SVC_PATH),
+                Service {
+                    characteristics: chars
+                        .iter()
+                        .map(|characteristic| characteristic_path(characteristic.inner.index))
+                        .collect(),
+                },
+            )
+            .await
+            .context("export service")?;
+        server
+            .at(object_path(APP_PATH), zbus::fdo::ObjectManager)
+            .await
+            .context("export object manager")?;
+        *self
+            .status
+            .lock()
+            .map_err(|_| anyhow!("GATT state poisoned"))? = chars.last().cloned();
+        GattManager1Proxy::new(connection)
+            .await?
+            .register_application(
+                ObjectPath::try_from(APP_PATH).expect("valid path"),
+                HashMap::new(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn unregister_gatt(&self, connection: &Connection) {
+        match GattManager1Proxy::new(connection).await {
+            Ok(manager) => {
+                if let Err(error) = manager
+                    .unregister_application(ObjectPath::try_from(APP_PATH).expect("valid path"))
+                    .await
+                {
+                    warn!(%error, "UnregisterApplication");
+                }
+            }
+            Err(error) => warn!(%error, "GattManager1 proxy"),
+        }
+        remove_gatt_objects(connection).await;
+        if let Ok(mut status) = self.status.lock() {
+            *status = None;
+        }
+    }
+
+    async fn register_advertisement(&self, connection: &Connection) -> Result<()> {
+        if let Err(error) = connection
+            .object_server()
+            .remove::<Advertisement, _>(object_path(ADV_PATH))
+            .await
+        {
+            debug!(%error, "remove advertisement object");
+        }
+        connection
+            .object_server()
+            .at(object_path(ADV_PATH), Advertisement)
+            .await
+            .context("export advertisement")?;
+        LeAdvertisingManager1Proxy::new(connection)
+            .await?
+            .register_advertisement(
+                ObjectPath::try_from(ADV_PATH).expect("valid path"),
+                HashMap::new(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn unregister_advertisement(&self, connection: &Connection) {
+        match LeAdvertisingManager1Proxy::new(connection).await {
+            Ok(manager) => {
+                if let Err(error) = manager
+                    .unregister_advertisement(ObjectPath::try_from(ADV_PATH).expect("valid path"))
+                    .await
+                {
+                    warn!(%error, "UnregisterAdvertisement");
+                }
+            }
+            Err(error) => warn!(%error, "LEAdvertisingManager1 proxy"),
+        }
+        if let Err(error) = connection
+            .object_server()
+            .remove::<Advertisement, _>(object_path(ADV_PATH))
+            .await
+        {
+            debug!(%error, "remove advertisement object");
+        }
     }
 }
 
-fn dbus_path(path: &str) -> ObjectPath<'_> {
+fn object_path(path: &str) -> ObjectPath<'_> {
     ObjectPath::try_from(path).expect("valid object path")
-}
-
-async fn bluez_proxy<'a>(
-    connection: &'a Connection,
-    interface: &'a str,
-) -> zbus::Result<zbus::Proxy<'a>> {
-    zbus::Proxy::new(connection, "org.bluez", ADAPTER_PATH, interface).await
 }
 
 async fn remove_gatt_objects(connection: &Connection) {
     let server = connection.object_server();
-    for index in 0..5 {
-        let _ = server
+    for index in 0..CHARS.len() {
+        if let Err(error) = server
             .remove::<Characteristic, _>(characteristic_path(index))
-            .await;
-    }
-    let _ = server.remove::<Service, _>(dbus_path(SVC_PATH)).await;
-    let _ = server
-        .remove::<zbus::fdo::ObjectManager, _>(dbus_path(APP_PATH))
-        .await;
-}
-
-impl Gateway {
-    pub async fn register_gatt(self: &Arc<Self>) -> Result<(), String> {
-        let connection = self
-            .connection()
-            .cloned()
-            .ok_or_else(|| "no dbus connection".to_string())?;
-        // A previous attempt may have exported objects before BlueZ rejected
-        // RegisterApplication. zbus does not overwrite an existing interface,
-        // so clear the paths first instead of serving stale characteristics.
-        remove_gatt_objects(&connection).await;
-        let result = self.register_gatt_objects(&connection).await;
-        if result.is_err() {
-            remove_gatt_objects(&connection).await;
-        }
-        result
-    }
-
-    async fn register_gatt_objects(
-        self: &Arc<Self>,
-        connection: &Connection,
-    ) -> Result<(), String> {
-        let chars = vec![
-            Characteristic::new(self.clone(), 0, CHAR_SSID, &["read", "write"]),
-            Characteristic::new(self.clone(), 1, CHAR_PSK, &["write"]),
-            Characteristic::new(self.clone(), 2, CHAR_TOKEN, &["write"]),
-            Characteristic::new(self.clone(), 3, CHAR_COMMIT, &["write"]),
-            Characteristic::new(self.clone(), 4, CHAR_STATUS, &["read", "notify"]),
-        ];
-        let server = connection.object_server();
-
-        for (index, characteristic) in chars.iter().enumerate() {
-            server
-                .at(
-                    characteristic.path().clone(),
-                    characteristic.as_ref().clone(),
-                )
-                .await
-                .map_err(|err| format!("export char {index}: {err}"))?;
-        }
-        server
-            .at(
-                dbus_path(SVC_PATH),
-                Service::new(chars.iter().map(|c| c.path().clone()).collect()),
-            )
-            .await
-            .map_err(|err| format!("export service: {err}"))?;
-        // The ObjectManager must be added after its children so
-        // GetManagedObjects sees the complete application tree.
-        server
-            .at(dbus_path(APP_PATH), zbus::fdo::ObjectManager)
-            .await
-            .map_err(|err| format!("export object manager: {err}"))?;
-
-        {
-            let mut state = self.lock_state();
-            state.chars.clone_from(&chars);
-            state.by_name.clear();
-            for characteristic in &chars {
-                state
-                    .by_name
-                    .insert(characteristic.name().to_string(), characteristic.clone());
-            }
-        }
-
-        let options: HashMap<String, OwnedValue> = HashMap::new();
-        bluez_proxy(connection, "org.bluez.GattManager1")
-            .await
-            .map_err(|err| format!("RegisterApplication: {err}"))?
-            .call_method("RegisterApplication", &(dbus_path(APP_PATH), options))
-            .await
-            .map_err(|err| format!("RegisterApplication: {err}"))?;
-        logf!(self.logger, "GATT application registered");
-        Ok(())
-    }
-
-    pub async fn unregister_gatt(&self) {
-        let Some(connection) = self.connection().cloned() else {
-            return;
-        };
-        let result = async {
-            let proxy = bluez_proxy(&connection, "org.bluez.GattManager1").await?;
-            proxy
-                .call_method("UnregisterApplication", &dbus_path(APP_PATH))
-                .await
-        }
-        .await;
-        if let Err(err) = result {
-            logf!(self.logger, "UnregisterApplication: {err}");
-        }
-        remove_gatt_objects(&connection).await;
-        let mut state = self.lock_state();
-        state.chars.clear();
-        state.by_name.clear();
-    }
-
-    pub async fn register_advertisement(self: &Arc<Self>) -> Result<(), String> {
-        let connection = self
-            .connection()
-            .cloned()
-            .ok_or_else(|| "no dbus connection".to_string())?;
-        let _ = connection
-            .object_server()
-            .remove::<Advertisement, _>(dbus_path(ADV_PATH))
-            .await;
-        let result = async {
-            connection
-                .object_server()
-                .at(
-                    dbus_path(ADV_PATH),
-                    Advertisement {
-                        gateway: self.clone(),
-                    },
-                )
-                .await
-                .map_err(|err| format!("export advertisement: {err}"))?;
-            let options: HashMap<String, OwnedValue> = HashMap::new();
-            bluez_proxy(&connection, "org.bluez.LEAdvertisingManager1")
-                .await
-                .map_err(|err| format!("RegisterAdvertisement: {err}"))?
-                .call_method("RegisterAdvertisement", &(dbus_path(ADV_PATH), options))
-                .await
-                .map_err(|err| format!("RegisterAdvertisement: {err}"))?;
-            Ok::<(), String>(())
-        }
-        .await;
-        if result.is_err() {
-            let _ = connection
-                .object_server()
-                .remove::<Advertisement, _>(dbus_path(ADV_PATH))
-                .await;
-        } else {
-            logf!(self.logger, "advertisement registered");
-        }
-        result
-    }
-
-    pub async fn unregister_advertisement(&self) {
-        let Some(connection) = self.connection().cloned() else {
-            return;
-        };
-        let result = async {
-            let proxy = bluez_proxy(&connection, "org.bluez.LEAdvertisingManager1").await?;
-            proxy
-                .call_method("UnregisterAdvertisement", &dbus_path(ADV_PATH))
-                .await
-        }
-        .await;
-        if let Err(err) = result {
-            logf!(self.logger, "UnregisterAdvertisement: {err}");
-        }
-        let _ = connection
-            .object_server()
-            .remove::<Advertisement, _>(dbus_path(ADV_PATH))
-            .await;
-    }
-
-    pub async fn set_adapter_connectable(&self, value: bool) {
-        let Some(connection) = self.connection().cloned() else {
-            return;
-        };
-        let result = async {
-            let properties =
-                zbus::fdo::PropertiesProxy::new(&connection, "org.bluez", ADAPTER_PATH).await?;
-            properties
-                .set(
-                    zbus::names::InterfaceName::try_from("org.bluez.Adapter1")
-                        .expect("valid interface"),
-                    "Connectable",
-                    Value::Bool(value),
-                )
-                .await
-        }
-        .await;
-        if let Err(err) = result {
-            logf!(self.logger, "set Connectable={value}: {err}");
-        }
-    }
-
-    pub async fn emit_value(&self, characteristic: &Characteristic, value: &[u8]) {
-        let Some(connection) = self.connection() else {
-            return;
-        };
-        let emitter = match SignalEmitter::new(connection, characteristic.path().clone()) {
-            Ok(emitter) => emitter,
-            Err(err) => {
-                logf!(self.logger, "emit PropertiesChanged: {err}");
-                return;
-            }
-        };
-        let mut changed: HashMap<&str, Value<'_>> = HashMap::new();
-        changed.insert("Value", Value::from(value.to_vec()));
-        let invalidated: Vec<&str> = Vec::new();
-        let body = ("org.bluez.GattCharacteristic1", changed, invalidated);
-        if let Err(err) = emitter
-            .emit(
-                "org.freedesktop.DBus.Properties",
-                "PropertiesChanged",
-                &body,
-            )
             .await
         {
-            logf!(self.logger, "emit PropertiesChanged: {err}");
+            debug!(%error, "remove characteristic object");
         }
+    }
+    if let Err(error) = server.remove::<Service, _>(object_path(SVC_PATH)).await {
+        debug!(%error, "remove service object");
+    }
+    if let Err(error) = server
+        .remove::<zbus::fdo::ObjectManager, _>(object_path(APP_PATH))
+        .await
+    {
+        debug!(%error, "remove object manager");
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::path::Path;
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
+    use zbus::zvariant::Value;
 
     use super::*;
-    use crate::gateway::Gateway;
-    use crate::test_support::{new_gateway, read_file};
 
-    async fn wait_status(gateway: &Gateway, path: &Path, expected: &str) {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        loop {
-            let status = std::fs::read_to_string(path).unwrap_or_default();
-            if status.trim() == expected {
-                return;
-            }
-            if Instant::now() >= deadline {
-                panic!("status = {:?}, want {expected:?}", status.trim());
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-            let _ = gateway;
-        }
+    fn characteristic(
+        spec: (usize, &str, &[&str], Source),
+    ) -> (
+        Arc<Characteristic>,
+        Arc<Credentials>,
+        mpsc::Receiver<Vec<u8>>,
+    ) {
+        let credentials = Arc::new(Credentials::default());
+        let (sender, receiver) = mpsc::channel(4);
+        (
+            Characteristic::new(None, spec, credentials.clone(), sender),
+            credentials,
+            receiver,
+        )
     }
 
-    fn insert(gateway: &Arc<Gateway>, name: &str, uuid: &str) {
-        let characteristic = Characteristic::new(gateway.clone(), 0, uuid, &[]);
-        gateway
-            .lock_state()
-            .by_name
-            .insert(name.to_string(), characteristic);
+    fn ssid() -> (usize, &'static str, &'static [&'static str], Source) {
+        CHARS[0]
+    }
+
+    fn offset(value: i32) -> HashMap<String, OwnedValue> {
+        HashMap::from([(
+            "offset".to_string(),
+            OwnedValue::try_from(Value::I32(value)).expect("owned value"),
+        )])
     }
 
     #[tokio::test]
     async fn characteristic_read_write_offsets() {
-        let context = new_gateway("gatt-offset", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        let characteristic = Characteristic::new(gateway.clone(), 0, CHAR_SSID, &["read", "write"]);
-        assert_eq!(characteristic.name(), "ssid");
-        assert_eq!(characteristic.prop_uuid(), CHAR_SSID);
+        let (characteristic, _, _) = characteristic(ssid());
         characteristic
             .write_value(b"Home".to_vec(), HashMap::new())
             .await
             .expect("write initial");
-        let offset4 = HashMap::from([("offset".to_string(), OwnedValue::from(4i32))]);
         characteristic
-            .write_value(b"WiFi".to_vec(), offset4.clone())
+            .write_value(b"WiFi".to_vec(), offset(4))
             .await
-            .expect("write offset");
+            .expect("write at offset");
         assert_eq!(characteristic.value(), b"HomeWiFi");
-        let read = characteristic.read_value(offset4).expect("read offset");
-        assert_eq!(read, b"WiFi");
-        let offset99 = HashMap::from([("offset".to_string(), OwnedValue::from(99i32))]);
-        assert!(characteristic.read_value(offset99).is_err());
-        let offset600 = HashMap::from([("offset".to_string(), OwnedValue::from(600i32))]);
+        assert_eq!(
+            characteristic.read_value(offset(4)).expect("read offset"),
+            b"WiFi"
+        );
+        assert!(characteristic.read_value(offset(99)).is_err());
         assert!(
             characteristic
-                .write_value(b"x".to_vec(), offset600)
+                .write_value(b"x".to_vec(), offset(600))
                 .await
                 .is_err()
         );
-        let offset20 = HashMap::from([("offset".to_string(), OwnedValue::from(20i32))]);
         assert!(
             characteristic
-                .write_value(b"x".to_vec(), offset20)
+                .write_value(b"x".to_vec(), offset(20))
                 .await
                 .is_err()
         );
     }
 
     #[tokio::test]
-    async fn long_write_uint16_offsets() {
-        let context = new_gateway("gatt-long-write", Path::new("/nonexistent/wpa_cli"));
-        let characteristic = Characteristic::new(context.gateway.clone(), 1, CHAR_PSK, &["write"]);
-
-        // BlueZ long write: first chunk at offset 0, second at the current length.
+    async fn long_write_uses_uint16_offsets() {
+        let (characteristic, _, _) = characteristic(CHARS[1]);
         characteristic
             .write_value(b"password".to_vec(), HashMap::new())
             .await
@@ -623,14 +574,9 @@ mod tests {
         characteristic
             .write_value(b"123".to_vec(), offset8.clone())
             .await
-            .expect("second chunk with uint16 offset");
+            .expect("second chunk");
         assert_eq!(characteristic.value(), b"password123");
-
-        let read = characteristic
-            .read_value(offset8)
-            .expect("read with uint16 offset");
-        assert_eq!(read, b"123");
-
+        assert_eq!(characteristic.read_value(offset8).expect("read"), b"123");
         let past_end = HashMap::from([(
             "offset".to_string(),
             OwnedValue::try_from(Value::U16(20)).expect("owned u16"),
@@ -645,170 +591,85 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn characteristic_commit_and_notify() {
-        let context = new_gateway("gatt-notify", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        let characteristic =
-            Characteristic::new(gateway.clone(), 4, CHAR_STATUS, &["read", "notify"]);
+    async fn commit_writes_are_delivered_to_the_worker() {
+        let (characteristic, _, mut receiver) = characteristic(CHARS[3]);
+        characteristic
+            .write_value(b"1".to_vec(), HashMap::new())
+            .await
+            .expect("commit");
+        assert_eq!(receiver.recv().await, Some(b"1".to_vec()));
+    }
+
+    #[tokio::test]
+    async fn commit_channel_closed_is_an_error() {
+        let (characteristic, _, receiver) = characteristic(CHARS[3]);
+        drop(receiver);
+        assert!(
+            characteristic
+                .write_value(b"1".to_vec(), HashMap::new())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn status_notify_and_properties() {
+        let (characteristic, _, _) = characteristic(CHARS[4]);
         characteristic.start_notify().await.expect("start notify");
-        assert!(characteristic.notifying());
+        assert!(characteristic.prop_notifying());
         characteristic.stop_notify().expect("stop notify");
-        assert!(!characteristic.notifying());
+        assert!(!characteristic.prop_notifying());
         assert!(
             characteristic
                 .write_value(b"x".to_vec(), HashMap::new())
                 .await
                 .is_err()
         );
-
-        gateway.set_status("IDLE").await;
-        let commit = Characteristic::new(gateway.clone(), 3, CHAR_COMMIT, &["write"]);
-        commit
-            .write_value(b"CANCEL".to_vec(), HashMap::new())
-            .await
-            .expect("commit cancel");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        assert_eq!(read_file(&context.dir.join("status")).trim(), "IDLE");
+        *characteristic.inner.value.lock().expect("value") = b"READY".to_vec();
+        assert_eq!(characteristic.value(), b"READY");
+        assert_eq!(characteristic.prop_flags(), vec!["read", "notify"]);
     }
 
-    #[tokio::test]
-    async fn handle_commit_validation() {
-        let context = new_gateway("gatt-commit", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        for name in ["ssid", "psk", "token"] {
-            insert(gateway, name, CHAR_SSID);
-        }
-        gateway.handle_commit(&[]).await;
-        wait_status(gateway, &context.dir.join("status"), "ERROR:EMPTY_COMMIT").await;
-
-        gateway
-            .lock_state()
-            .by_name
-            .get("token")
-            .expect("token")
-            .set_value(b"wrong");
-        gateway.handle_commit(b"1").await;
-        wait_status(gateway, &context.dir.join("status"), "ERROR:BAD_TOKEN").await;
-
-        gateway
-            .lock_state()
-            .by_name
-            .get("token")
-            .expect("token")
-            .set_value(b"123456");
-        gateway
-            .lock_state()
-            .by_name
-            .get("ssid")
-            .expect("ssid")
-            .set_value(b"Home");
-        gateway
-            .lock_state()
-            .by_name
-            .get("psk")
-            .expect("psk")
-            .set_value(b"");
-        gateway.handle_commit(b"1").await;
-        wait_status(gateway, &context.dir.join("status"), "ERROR:EMPTY_PSK").await;
-    }
-
-    #[tokio::test]
-    async fn handle_commit_dry_run() {
-        let context = new_gateway("gatt-dry-run", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        insert(gateway, "ssid", CHAR_SSID);
-        insert(gateway, "psk", CHAR_PSK);
-        insert(gateway, "token", CHAR_TOKEN);
-        gateway
-            .lock_state()
-            .by_name
-            .get("ssid")
-            .expect("ssid")
-            .set_value(b"Home");
-        gateway
-            .lock_state()
-            .by_name
-            .get("psk")
-            .expect("psk")
-            .set_value(b"password123");
-        gateway
-            .lock_state()
-            .by_name
-            .get("token")
-            .expect("token")
-            .set_value(b"123456");
-        gateway.handle_commit(b"1").await;
-        wait_status(gateway, &context.dir.join("status"), "DRY_RUN_OK").await;
-    }
-
-    #[tokio::test]
-    async fn properties_and_objects() {
-        let context = new_gateway("gatt-props", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        let characteristic = Characteristic::new(gateway.clone(), 0, CHAR_SSID, &["read"]);
-        characteristic.set_value(b"abc");
+    #[test]
+    fn properties_match_the_bluez_contract() {
+        let (characteristic, _, _) = characteristic(ssid());
         assert_eq!(characteristic.prop_uuid(), CHAR_SSID);
         assert_eq!(
             characteristic.prop_service(),
-            OwnedObjectPath::try_from(SVC_PATH).unwrap()
+            OwnedObjectPath::try_from(SVC_PATH).expect("path")
         );
-        assert_eq!(characteristic.prop_value(), b"abc");
-        assert_eq!(characteristic.prop_flags(), vec!["read".to_string()]);
-        assert!(characteristic.prop_descriptors().is_empty());
-
-        let service = Service::new(vec![characteristic.path().clone()]);
+        let service = Service {
+            characteristics: vec![characteristic_path(0)],
+        };
         assert_eq!(service.prop_uuid(), SERVICE_UUID);
         assert!(service.prop_primary());
         assert_eq!(service.prop_characteristics().len(), 1);
-        assert!(gateway.enable_ble().await.is_err());
-    }
-
-    #[tokio::test]
-    async fn advertisement_properties() {
-        let context = new_gateway("gatt-adv", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        let advertisement = Advertisement {
-            gateway: gateway.clone(),
-        };
+        let advertisement = Advertisement;
         assert_eq!(advertisement.prop_local_name(), "Station-Gateway");
         assert_eq!(advertisement.prop_type(), "peripheral");
         assert_eq!(
             advertisement.prop_service_uuids(),
             vec![SERVICE_UUID.to_string()]
         );
-        assert_eq!(advertisement.prop_includes(), vec!["tx-power".to_string()]);
         advertisement.release();
     }
 
     #[tokio::test]
-    async fn set_characteristic_value_copies() {
-        let context = new_gateway("gatt-copy", Path::new("/nonexistent/wpa_cli"));
-        let gateway = &context.gateway;
-        let characteristic = Characteristic::new(gateway.clone(), 0, CHAR_SSID, &[]);
-        let mut source = b"abc".to_vec();
-        gateway
-            .set_characteristic_value(&characteristic, &source)
-            .await;
-        source[0] = b'x';
-        assert_eq!(characteristic.value(), b"abc");
-    }
-
-    #[tokio::test]
-    async fn open_input_file() {
-        let context = new_gateway("gatt-input", Path::new("/nonexistent/wpa_cli"));
-        let path = context.dir.join("event");
-        std::fs::write(&path, b"x").expect("write event file");
-        let file = tokio::fs::File::open(&path).await.expect("open input");
-        drop(file);
+    async fn ble_without_a_bus_never_claims_to_advertise() {
+        let (sender, _receiver) = mpsc::channel(1);
+        let ble = Ble::new(Arc::new(Credentials::default()), sender);
+        assert!(!ble.advertising());
+        assert!(ble.enable().await.is_err());
+        ble.disable().await;
+        ble.notify_status(b"IDLE").await;
+        assert!(!ble.advertising());
     }
 
     #[test]
-    fn characteristic_names() {
-        assert_eq!(characteristic_name(CHAR_SSID), "ssid");
-        assert_eq!(characteristic_name(CHAR_PSK), "psk");
-        assert_eq!(characteristic_name(CHAR_TOKEN), "token");
-        assert_eq!(characteristic_name(CHAR_COMMIT), "commit");
-        assert_eq!(characteristic_name(CHAR_STATUS), "status");
-        assert_eq!(characteristic_name("other"), "unknown");
+    fn characteristic_paths_are_stable() {
+        assert_eq!(
+            characteristic_path(4),
+            OwnedObjectPath::try_from("/com/station/gateway/service0/char4").expect("path")
+        );
     }
 }
