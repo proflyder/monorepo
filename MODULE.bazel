@@ -262,6 +262,24 @@ crate.from_cargo(
 )
 use_repo(crate, "logon_crates")
 
+# BLE gateway Cargo workspace (projects/station/ble-gateway). A separate
+# workspace from Pulsar because Pulsar tracks upstream; host triples let the
+# unit tests build on macOS/Linux, armv7 builds the deployed station binary.
+crate.from_cargo(
+    name = "ble_gateway_crates",
+    cargo_lockfile = "//projects/station/ble-gateway:Cargo.lock",
+    lockfile = "//projects/station/ble-gateway:crate-universe.lock",
+    manifests = ["//projects/station/ble-gateway:Cargo.toml"],
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "armv7-unknown-linux-gnueabihf",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "ble_gateway_crates")
+
 # ---------------------------------------------------------------------------
 # Android / Kotlin (projects/mobile/android)
 #

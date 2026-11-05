@@ -86,6 +86,7 @@ dist/
 # Windows logon provider build outputs (Bazel artifacts stay on disk).
 /solutions/windows-logon-provider/out/
 /solutions/windows-logon-provider/target/
+/projects/station/ble-gateway/target/
 # Rendered Cloudflare Worker config contains private account/KV ids.
 /projects/home/cloudflare/heartbeat/wrangler.generated.toml
 

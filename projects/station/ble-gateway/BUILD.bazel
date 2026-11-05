@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Cargo workspace manifest and lock are the source of truth for crate_universe;
+# crate-universe.lock is the generated Bazel lock (see MODULE.bazel).
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+    "crate-universe.lock",
+    "rust-toolchain.toml",
+])
+
+# The deployed binary keeps the historical target label used by the operations
+# docs: `//projects/station/ble-gateway:ble-gateway`.
+alias(
+    name = "ble-gateway",
+    actual = "//projects/station/ble-gateway/crates/ble-gateway:ble-gateway",
+)
+
+_ALL_TARGETS = [
+    "//projects/station/ble-gateway/crates/ble-gateway:ble_gateway",
+    "//projects/station/ble-gateway/crates/ble-gateway:ble-gateway",
+    "//projects/station/ble-gateway/crates/ble-gateway:bletest",
+    "//projects/station/ble-gateway/crates/ble-gateway:ble_gateway_unit_tests",
+]
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = _ALL_TARGETS,
+)
+
+# rules_rust turns every clippy warning into an error unless configured
+# otherwise, which is the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = _ALL_TARGETS,
+)

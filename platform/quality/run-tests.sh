@@ -60,7 +60,6 @@ bash projects/home/kubernetes/scheduler/test_deploy_control.sh
 # separate (they need the Android SDK) and are documented in docs/TESTING.md.
 echo "== Go: solutions, packages and deploy tooling =="
 go test ./solutions/... ./packages/... ./platform/deploy/...
-(cd projects/station/ble-gateway && go test ./...)
 
 echo "== Go: Pulsar installer (nested module, GOWORK=off) =="
 (cd projects/station/pulsar/installer && GOWORK=off go test ./...)

@@ -1,0 +1,45 @@
+[workspace]
+members = ["crates/ble-gateway"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+# Every external dependency is pinned exactly; Cargo.lock and crate-universe.lock
+# are the sources of truth for cargo and Bazel respectively.
+[workspace.dependencies]
+# BlueZ is reached over the system bus. zbus is a pure-Rust implementation and
+# its `tokio` feature uses the same runtime as the rest of the daemon; it does
+# not link libdbus (unlike `dbus`/`bluer`).
+zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }
+# Same version as Pulsar's workspace. Only the runtime, networking, timers,
+# signal handling and process spawning are enabled.
+tokio = { version = "=1.54.1", default-features = false, features = [
+    "rt",
+    "macros",
+    "net",
+    "time",
+    "sync",
+    "signal",
+    "fs",
+    "process",
+    "io-util",
+] }
+# std::time cannot format local calendar timestamps without unsafe libc calls;
+# `time` keeps the log format identical to the Go daemon.
+time = { version = "=0.3.55", default-features = false, features = [
+    "std",
+    "formatting",
+    "local-offset",
+    "macros",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+panic = "abort"
+debug = "line-tables-only"
+strip = "none"

@@ -109,7 +109,7 @@ class SecretHygieneTests(unittest.TestCase):
         hits = []
         for base in roots:
             for path in base.rglob("*"):
-                if not path.is_file() or path.suffix not in {".md", ".yaml", ".yml", ".sh", ".py", ".go"}:
+                if not path.is_file() or path.suffix not in {".md", ".yaml", ".yml", ".sh", ".py", ".go", ".rs", ".toml"}:
                     continue
                 if "secrets" in path.parts:
                     continue

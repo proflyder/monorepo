@@ -98,7 +98,7 @@ BLE gateway (запись той же сети). Поэтому окно 4 на�
 
 ```bash
 # один раз
-adb -s 192.0.2.13:5555 push ble-gateway-armhf /data/quasar/ble-gateway/ble-gateway
+adb -s 192.0.2.13:5555 push bazel-bin/projects/station/ble-gateway/crates/ble-gateway/ble-gateway /data/quasar/ble-gateway/ble-gateway
 adb -s 192.0.2.13:5555 push station/start.sh /data/quasar/ble-gateway/start.sh
 adb -s 192.0.2.13:5555 push station/stop.sh /data/quasar/ble-gateway/stop.sh
 adb -s 192.0.2.13:5555 push station/status.sh /data/quasar/ble-gateway/status.sh
@@ -140,12 +140,17 @@ Commit в этом режиме вернёт `DRY_RUN_OK`.
 ## Пересборка
 
 ```bash
-cd projects/station/ble-gateway
-CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 \
-  go build -trimpath -ldflags='-s -w' -o ble-gateway-armhf .
+bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
+  //projects/station/ble-gateway:ble-gateway
+# бинарник: bazel-bin/projects/station/ble-gateway/crates/ble-gateway/ble-gateway
 ```
 
-Новый бинарник — статический armhf. На станции: остановить gateway,
+`bazel test //projects/station/ble-gateway/...` запускает unit-тесты, `clippy`
+(warnings = errors) и `rustfmt`. Кросс-сборка использует тот же hermetic zig
+toolchain и Rust-тулчейн, что и Pulsar (`rules_rust` в корневом
+`MODULE.bazel`), поэтому отдельный Go- или rustup-тулчейн не нужен.
+
+Новый бинарник — armhf ELF. На станции: остановить gateway,
 заменить `/data/quasar/ble-gateway/ble-gateway`, запустить `start.sh`.
 Старый бинарник сохраняется как `ble-gateway.prev`.
 

@@ -4,7 +4,6 @@ backups
 logs
 secrets
 resources
-projects/station/ble-gateway
 projects/station/upstream
 projects/station/resources
 # Pulsar Rust workspace is built by Bazel now; only its generated build/output
