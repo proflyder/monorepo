@@ -396,16 +396,25 @@ export const config = {
     {
       id: "ble-gateway",
       platform: "bazel",
-      title: "projects/station/ble-gateway (Rust host build, tests, fmt, clippy)",
-      paths: ["projects/station/ble-gateway/**"],
+      title: "projects/station/ble-gateway + packages/rust (Rust host build, tests, fmt, clippy)",
+      paths: ["projects/station/ble-gateway/**", "packages/rust/**"],
       bazel: {
-        roots: ["//projects/station/ble-gateway"],
+        roots: ["//projects/station/ble-gateway", "//packages/rust"],
         test_targets: [
           "//projects/station/ble-gateway:clippy",
           "//projects/station/ble-gateway:rustfmt",
           "//projects/station/ble-gateway/crates/ble-gateway:ble_gateway_unit_tests",
+          "//packages/rust:clippy",
+          "//packages/rust:rustfmt",
+          "//packages/rust/ricardo-http:unit_tests",
+          "//packages/rust/ricardo-runtime:unit_tests",
+          "//packages/rust/ricardo-secret:unit_tests",
+          "//packages/rust/ricardo-telemetry:unit_tests",
         ],
-        build_targets: ["//projects/station/ble-gateway/..."],
+        build_targets: [
+          "//projects/station/ble-gateway/...",
+          "//packages/rust/...",
+        ],
       },
     },
 

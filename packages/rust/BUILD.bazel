@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Host checks for the shared core layer. Consumers (ble-gateway today, Pulsar
+# and the logon provider later) list these targets in their CI unit.
+_ALL_TARGETS = [
+    "//packages/rust/ricardo-http:ricardo_http",
+    "//packages/rust/ricardo-http:unit_tests",
+    "//packages/rust/ricardo-runtime:ricardo_runtime",
+    "//packages/rust/ricardo-runtime:unit_tests",
+    "//packages/rust/ricardo-secret:ricardo_secret",
+    "//packages/rust/ricardo-secret:unit_tests",
+    "//packages/rust/ricardo-telemetry:ricardo_telemetry",
+    "//packages/rust/ricardo-telemetry:unit_tests",
+]
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = _ALL_TARGETS,
+)
+
+# rules_rust turns every clippy warning into an error unless configured
+# otherwise, which is the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = _ALL_TARGETS,
+)

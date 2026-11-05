@@ -1,156 +1,99 @@
-//! Go-compatible flag parsing (`-flag`, `--flag`, `-flag=value`).
+//! Command-line interface (clap derive).
 
 use std::path::PathBuf;
 
-use crate::gateway::Config;
+use clap::Parser;
+use clap::builder::BoolishValueParser;
 
-pub const USAGE: &str = "\
-usage: ble-gateway [flags]
-  -auto=true: advertise automatically when Wi-Fi is down
-  -button string: input event device (default \"/dev/input/event2\")
-  -control-addr string: HTTP control listen address (empty disables)
-  -control-token-file string: HTTP control token file
-  -dry-run: do not apply Wi-Fi changes
-  -force: enable BLE immediately for testing
-  -log string: log file
-  -no-button: disable button monitor
-  -test-wpa: add/set/remove a temporary wpa network and exit
-  -token-file string: token file
-";
-
-pub enum Parsed {
-    Config(Config),
-    Help,
-}
-
-fn parse_bool(value: &str) -> Result<bool, String> {
-    match value {
-        "1" | "t" | "T" | "true" | "TRUE" | "True" => Ok(true),
-        "0" | "f" | "F" | "false" | "FALSE" | "False" => Ok(false),
-        other => Err(format!("invalid boolean value {other:?}")),
-    }
-}
-
-/// Parse the arguments after argv[0]. Non-flag arguments end flag parsing, as
-/// in Go's `flag` package.
-pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, String> {
-    let mut config = Config::default();
-    let mut args = args.into_iter();
-    while let Some(argument) = args.next() {
-        if argument == "--" {
-            break;
-        }
-        if !argument.starts_with('-') || argument == "-" {
-            break;
-        }
-        let trimmed = argument.trim_start_matches('-');
-        let (name, inline) = match trimmed.split_once('=') {
-            Some((name, value)) => (name, Some(value.to_string())),
-            None => (trimmed, None),
-        };
-        match name {
-            "h" | "help" => return Ok(Parsed::Help),
-            "dry-run" | "auto" | "no-button" | "force" | "test-wpa" => {
-                let value = match inline {
-                    Some(value) => parse_bool(&value)?,
-                    None => true,
-                };
-                match name {
-                    "dry-run" => config.dry_run = value,
-                    "auto" => config.auto_wifi = value,
-                    "no-button" => config.no_button = value,
-                    "force" => config.force = value,
-                    "test-wpa" => config.test_wpa = value,
-                    _ => unreachable!(),
-                }
-            }
-            "log" | "token-file" | "button" | "control-addr" | "control-token-file" => {
-                let value = match inline {
-                    Some(value) => value,
-                    None => args
-                        .next()
-                        .ok_or_else(|| format!("flag needs an argument: -{name}"))?,
-                };
-                match name {
-                    "log" => config.log = Some(PathBuf::from(value)),
-                    "token-file" => config.token_file = PathBuf::from(value),
-                    "button" => config.button = PathBuf::from(value),
-                    "control-addr" => config.control_addr = value,
-                    "control-token-file" => config.control_token_file = PathBuf::from(value),
-                    _ => unreachable!(),
-                }
-            }
-            other => return Err(format!("flag provided but not defined: -{other}")),
-        }
-    }
-    Ok(Parsed::Config(config))
+/// Station BLE provisioning gateway.
+#[derive(Debug, Clone, Parser)]
+#[rustfmt::skip]
+#[command(name = "ble-gateway", version, about = "Local BLE and HTTP control gateway for the station Wi-Fi setup")]
+pub struct Config {
+    /// `--auto`, `--auto=true|false`, `--auto=1|0`.
+    #[arg(long = "auto", value_name = "BOOL", num_args = 0..=1, default_missing_value = "true", default_value = "true", value_parser = BoolishValueParser::new(), action = clap::ArgAction::Set)]
+    pub auto_wifi: bool,
+    #[arg(long, value_name = "PATH")]
+    pub log: Option<PathBuf>,
+    #[arg(long, value_name = "PATH", default_value = "/data/quasar/ble-gateway/token")]
+    pub token_file: PathBuf,
+    #[arg(long, value_name = "PATH", default_value = "/dev/input/event2")]
+    pub button: PathBuf,
+    #[arg(long)]
+    pub dry_run: bool,
+    #[arg(long)]
+    pub no_button: bool,
+    #[arg(long)]
+    pub force: bool,
+    #[arg(long)]
+    pub test_wpa: bool,
+    #[arg(long, value_name = "ADDR", default_value = "0.0.0.0:8099")]
+    pub control_addr: String,
+    #[arg(long, value_name = "PATH", default_value = "/data/quasar/ble-gateway/control-token")]
+    pub control_token_file: PathBuf,
+    #[arg(long, value_name = "PATH", default_value = "/var/run/wpa_supplicant/wlan0")]
+    pub wpa_ctrl: PathBuf,
+    #[arg(long, value_name = "FILTER", default_value = "info")]
+    pub log_level: String,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn parse(arguments: &[&str]) -> Config {
+        Config::try_parse_from(arguments).expect("valid arguments")
+    }
+
     #[test]
-    fn defaults_match_go() {
-        let Parsed::Config(config) = parse(Vec::new()).unwrap() else {
-            panic!("expected config");
-        };
-        assert!(!config.dry_run);
-        assert!(config.auto_wifi);
-        assert!(!config.no_button);
-        assert!(!config.force);
-        assert!(!config.test_wpa);
+    fn defaults_match_the_deployed_paths() {
+        let cli = parse(&["ble-gateway"]);
+        assert!(cli.auto_wifi);
         assert_eq!(
-            config.token_file,
+            cli.token_file,
             PathBuf::from("/data/quasar/ble-gateway/token")
         );
-        assert_eq!(config.button, PathBuf::from("/dev/input/event2"));
-        assert_eq!(config.control_addr, "0.0.0.0:8099");
-        assert_eq!(
-            config.control_token_file,
-            PathBuf::from("/data/quasar/ble-gateway/control-token")
-        );
+        assert_eq!(cli.button, PathBuf::from("/dev/input/event2"));
+        assert_eq!(cli.control_addr, "0.0.0.0:8099");
+        assert_eq!(cli.wpa_ctrl, PathBuf::from("/var/run/wpa_supplicant/wlan0"));
+        assert_eq!(cli.log, None);
     }
 
     #[test]
-    fn start_script_form() {
-        let Parsed::Config(config) = parse([
-            "--auto=true".to_string(),
-            "--log".to_string(),
-            "/tmp/x.log".to_string(),
-        ])
-        .unwrap() else {
-            panic!("expected config");
-        };
-        assert!(config.auto_wifi);
-        assert_eq!(config.log, Some(PathBuf::from("/tmp/x.log")));
+    fn station_start_script_and_boolean_forms() {
+        let cli = parse(&["ble-gateway", "--auto=true", "--log", "/tmp/gw.log"]);
+        assert!(cli.auto_wifi);
+        assert_eq!(cli.log, Some(PathBuf::from("/tmp/gw.log")));
+        assert!(!parse(&["ble-gateway", "--auto=false"]).auto_wifi);
+        assert!(!parse(&["ble-gateway", "--auto=0"]).auto_wifi);
+        assert!(parse(&["ble-gateway", "--auto"]).auto_wifi);
+        assert!(Config::try_parse_from(["ble-gateway", "--auto=maybe"]).is_err());
     }
 
     #[test]
-    fn bool_and_value_flags() {
-        let Parsed::Config(config) = parse(
-            [
-                "--dry-run",
-                "-auto=false",
-                "--no-button",
-                "--force=1",
-                "--token-file=/tmp/token",
-            ]
-            .map(str::to_string),
-        )
-        .unwrap() else {
-            panic!("expected config");
-        };
-        assert!(config.dry_run);
-        assert!(!config.auto_wifi);
-        assert!(config.no_button);
-        assert!(config.force);
-        assert_eq!(config.token_file, PathBuf::from("/tmp/token"));
-    }
-
-    #[test]
-    fn rejects_unknown_and_bad_bool() {
-        assert!(parse(["--nope".to_string()]).is_err());
-        assert!(parse(["--auto=maybe".to_string()]).is_err());
+    fn value_flags_and_switches() {
+        let cli = parse(&[
+            "ble-gateway",
+            "--dry-run",
+            "--no-button",
+            "--force",
+            "--test-wpa",
+            "--token-file=/tmp/token",
+            "--button",
+            "/tmp/event",
+            "--control-addr",
+            "",
+            "--control-token-file",
+            "/tmp/control",
+            "--wpa-ctrl",
+            "/tmp/wpa",
+            "--log-level",
+            "debug",
+        ]);
+        assert!(cli.dry_run && cli.no_button && cli.force && cli.test_wpa);
+        assert_eq!(cli.token_file, PathBuf::from("/tmp/token"));
+        assert_eq!(cli.control_addr, "");
+        assert_eq!(cli.wpa_ctrl, PathBuf::from("/tmp/wpa"));
+        assert_eq!(cli.log_level, "debug");
     }
 }
