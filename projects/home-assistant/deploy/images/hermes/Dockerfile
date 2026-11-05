@@ -21,13 +21,18 @@ ARG DEBIAN_SNAPSHOT=20261020T000000Z
 ARG SQLITE_AUTOCONF_VERSION=3530400
 ARG SQLITE_SHA256=0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c
 # `snapshot.debian.org` keeps every index; the frozen Release has expired, so
-# apt must skip the Valid-Until check. Date-to-snapshot resolution needs
-# retries because the archive is slow. Plain HTTP is deliberate: the minimal
-# `debian:trixie` base has no ca-certificates yet, and apt still verifies the
-# signed Release against the image's keyring.
+# apt must skip the Valid-Until check. The archive is slow and answers 503/504
+# for individual `.deb` files, so apt retries each request and the install is
+# attempted three times with a pause (the last attempt uses `--fix-missing` for
+# a half-fetched index). This only affects whether the build completes: the
+# package set, the snapshot and therefore the layer content stay pinned.
+# Plain HTTP is deliberate: the minimal `debian:trixie` base has no
+# ca-certificates yet, and apt still verifies the signed Release against the
+# image's keyring.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.sources && \
+    set -eu; \
+    rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; \
     printf '%s\n' \
         'Types: deb' \
         "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}" \
@@ -40,10 +45,22 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         'Suites: trixie-security' \
         'Components: main' \
         'Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp' \
-        > /etc/apt/sources.list.d/debian.snapshot.sources && \
-    apt-get -o Acquire::Retries=3 -o Acquire::Check-Valid-Until=false update && \
-    apt-get -o Acquire::Retries=3 -o Acquire::Check-Valid-Until=false install -y --no-install-recommends \
-        build-essential ca-certificates curl && \
+        > /etc/apt/sources.list.d/debian.snapshot.sources; \
+    apt_opts="-o Acquire::Retries=8 -o Acquire::http::Timeout=30 \
+        -o Acquire::https::Timeout=30 -o Acquire::Check-Valid-Until=false"; \
+    install_packages() { \
+        for attempt in 1 2 3; do \
+            if apt-get $apt_opts install -y --no-install-recommends "$@"; then \
+                return 0; \
+            fi; \
+            echo "apt-get install failed (attempt ${attempt}/3); retrying" >&2; \
+            sleep $((attempt * 5)); \
+            apt-get $apt_opts update || true; \
+        done; \
+        apt-get $apt_opts install -y --fix-missing --no-install-recommends "$@"; \
+    }; \
+    apt-get $apt_opts update; \
+    install_packages build-essential ca-certificates curl; \
     (curl -fsSL --retry 1 --retry-all-errors --connect-timeout 15 --max-time 60 \
         -o /tmp/sqlite.tar.gz \
         "https://sqlite.org/2026/sqlite-autoconf-${SQLITE_AUTOCONF_VERSION}.tar.gz" || \
@@ -81,9 +98,13 @@ FROM python:3.14.9-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a482
 ARG DEBIAN_SNAPSHOT=20261020T000000Z
 # apt, dpkg, alternatives and fontconfig keep wall-clock state; leaving their
 # logs/caches in the layer would make every build a different image.
+# Same snapshot and the same retry policy as the build stage: `ffmpeg` and
+# friends are the largest set of `.deb` files, so a single 503 must not fail a
+# build that would otherwise be reproducible.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.sources && \
+    set -eu; \
+    rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; \
     printf '%s\n' \
         'Types: deb' \
         "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}" \
@@ -96,10 +117,22 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         'Suites: trixie-security' \
         'Components: main' \
         'Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp' \
-        > /etc/apt/sources.list.d/debian.snapshot.sources && \
-    apt-get -o Acquire::Retries=3 -o Acquire::Check-Valid-Until=false update && \
-    apt-get -o Acquire::Retries=3 -o Acquire::Check-Valid-Until=false install -y --no-install-recommends \
-        ca-certificates curl git ffmpeg libatomic1 tini && \
+        > /etc/apt/sources.list.d/debian.snapshot.sources; \
+    apt_opts="-o Acquire::Retries=8 -o Acquire::http::Timeout=30 \
+        -o Acquire::https::Timeout=30 -o Acquire::Check-Valid-Until=false"; \
+    install_packages() { \
+        for attempt in 1 2 3; do \
+            if apt-get $apt_opts install -y --no-install-recommends "$@"; then \
+                return 0; \
+            fi; \
+            echo "apt-get install failed (attempt ${attempt}/3); retrying" >&2; \
+            sleep $((attempt * 5)); \
+            apt-get $apt_opts update || true; \
+        done; \
+        apt-get $apt_opts install -y --fix-missing --no-install-recommends "$@"; \
+    }; \
+    apt-get $apt_opts update; \
+    install_packages ca-certificates curl git ffmpeg libatomic1 tini; \
     rm -rf /var/log/apt /var/log/dpkg.log /var/log/alternatives.log \
         /var/cache/fontconfig /var/cache/ldconfig
 COPY --from=uv /uv /usr/local/bin/uv

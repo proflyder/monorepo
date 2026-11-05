@@ -19,6 +19,16 @@
 # `--metadata-file` keeps Buildx's metadata (`containerimage.digest` and the
 # descriptor); the digest is also printed as the last line on stdout.
 #
+# `--cache-from` / `--cache-to` pass Buildx cache specs through unchanged
+# (`type=registry,ref=…`, `type=local,src=…`, …). CI reads the shared registry
+# cache on every build and writes it back only where the job holds a GHCR
+# token with `packages: write`. The cache only lets Buildx reuse an executor
+# result for a layer whose inputs hash the same: the layer content, the config
+# and `rewrite-timestamp` are still produced from the pinned inputs, so a cache
+# hit and a cold build of the same revision give the same manifest digest.
+# `verify-reproducible.sh` deliberately builds without cache; cached builds are
+# checked by comparing their printed digest with the PR-built one.
+#
 # Buildx's own provenance attestation is disabled: it would add a manifest to
 # the index (changing the digest) and duplicate the provenance that
 # `actions/attest-build-provenance` publishes for the same digest.
@@ -33,6 +43,7 @@ usage() {
 usage: build.sh --context <dir> (--source-repo <git-dir> | --source-date-epoch <unix>)
                 --revision <40-hex> (--push --tag <ref> | --oci-dir <dir>)
                 [--metadata-file <file>] [--no-cache]
+                [--cache-from <spec>] [--cache-to <spec>]
 EOF
   exit 2
 }
@@ -46,6 +57,7 @@ push=false
 oci_dir=""
 metadata_file=""
 no_cache=()
+cache_args=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -58,6 +70,16 @@ while [[ $# -gt 0 ]]; do
     --oci-dir) oci_dir=${2:-}; shift 2 ;;
     --metadata-file) metadata_file=${2:-}; shift 2 ;;
     --no-cache) no_cache=(--no-cache); shift ;;
+    --cache-from)
+      [[ -n "${2:-}" ]] || usage
+      cache_args+=(--cache-from "$2")
+      shift 2
+      ;;
+    --cache-to)
+      [[ -n "${2:-}" ]] || usage
+      cache_args+=(--cache-to "$2")
+      shift 2
+      ;;
     *) echo "unknown argument: $1" >&2; usage ;;
   esac
 done
@@ -105,6 +127,7 @@ docker buildx build \
   --output "$output" \
   --metadata-file "$metadata" \
   ${no_cache[@]+"${no_cache[@]}"} \
+  ${cache_args[@]+"${cache_args[@]}"} \
   "$context" >&2
 
 digest=$(sed -n 's/^[[:space:]]*"containerimage.digest":[[:space:]]*"\(sha256:[0-9a-f]*\)".*/\1/p' "$metadata" | tail -1)

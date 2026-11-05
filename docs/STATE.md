@@ -167,7 +167,10 @@
   `SOURCE_DATE_EPOCH` = время upstream-коммита, сборка через Buildx с
   `rewrite-timestamp` (общий `hermes/build.sh`, проверка —
   `verify-reproducible.sh`); повторная сборка той же ревизии не меняет digest и
-  не вызывает rollout. `voice-proxy` — Go-сервис
+  не вызывает rollout. Слои кэшируются в GHCR
+  (`hermes:buildcache`, запись только у job'ов с правом записи), apt повторяет
+  запросы к snapshot и установку пакетов — кэш и повторы не влияют на digest.
+  `voice-proxy` — Go-сервис
   `solutions/voice-proxy`, собираемый Bazel `rules_oci` (distroless) и
   пушимый байт-в-байт через `oci_push`. Health exporter — отдельный
   Go-образ `ghcr.io/proflyder/health-exporter`. `deploy-home` (builder `mixed`, карта
