@@ -110,10 +110,15 @@ impl Wpa {
             Err(err) => return (err.to_string(), false),
         };
         let input = format!("{}\n", commands.join("\n"));
-        if let Some(mut stdin) = child.stdin.take()
-            && let Err(err) = stdin.write_all(input.as_bytes()).await
-        {
-            return (err.to_string(), false);
+        if let Some(mut stdin) = child.stdin.take() {
+            if let Err(err) = stdin.write_all(input.as_bytes()).await {
+                // `exec.Cmd` in Go ignores EPIPE while copying stdin: the CLI
+                // may exit before reading it. All other write errors stay fatal.
+                if err.kind() != std::io::ErrorKind::BrokenPipe {
+                    return (err.to_string(), false);
+                }
+            }
+            drop(stdin);
         }
         match child.wait_with_output().await {
             Ok(output) => combine(output),
@@ -485,6 +490,20 @@ esac"#,
             error.contains("temporary network id=7"),
             "unexpected error: {error}"
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn interactive_ignores_broken_pipe_on_large_stdin() {
+        let dir = temp_dir("wpa-epipe");
+        // The fake never reads stdin, prints OK and exits before a >64 KiB
+        // command can be written, making EPIPE deterministic on macOS/Linux.
+        let path = fake_wpa(&dir, "echo OK");
+        let wpa = Wpa::with_path(path.to_string_lossy().into_owned());
+        let huge = wpa_quote(&"x".repeat(70 * 1024));
+        wpa.set_network(7, "ssid", &huge)
+            .await
+            .expect("EPIPE must be ignored");
         let _ = std::fs::remove_dir_all(dir);
     }
 
