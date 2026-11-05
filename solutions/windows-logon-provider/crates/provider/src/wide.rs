@@ -35,40 +35,15 @@ impl WideNul {
         Self(units)
     }
 
-    /// The buffer including its single trailing NUL.
-    pub fn as_slice(&self) -> &[u16] {
-        &self.0
-    }
-
     /// The text without the terminator.
     pub fn text(&self) -> &[u16] {
         let end = self.0.len().saturating_sub(1);
         &self.0[..end]
     }
 
-    /// Units of text, excluding the terminator.
-    pub fn len(&self) -> usize {
-        self.text().len()
-    }
-
-    /// No text at all: the buffer is just the terminator (`[0]`).
-    pub fn is_empty(&self) -> bool {
-        self.text().is_empty()
-    }
-
     /// Bypasses the `PCWSTR` and gives up the buffer, e.g. to a wiper.
     pub fn into_vec(self) -> Vec<u16> {
         self.0
-    }
-
-    /// Mutable access for wiping secrets; the terminator is still present.
-    pub fn as_mut_slice(&mut self) -> &mut [u16] {
-        &mut self.0
-    }
-
-    /// Pointer to the NUL-terminated string.
-    pub fn as_ptr(&self) -> *const u16 {
-        self.0.as_ptr()
     }
 
     /// A `PCWSTR` over the NUL-terminated buffer.
@@ -78,9 +53,11 @@ impl WideNul {
     }
 }
 
-impl From<&str> for WideNul {
-    fn from(text: &str) -> Self {
-        Self::new(text)
+#[cfg(test)]
+impl WideNul {
+    /// The buffer including its single trailing NUL; only assertions need it.
+    pub fn as_slice(&self) -> &[u16] {
+        &self.0
     }
 }
 
@@ -92,9 +69,9 @@ mod tests {
     fn wide_nul_has_exactly_one_terminator_at_the_end() {
         let value = WideNul::new("hello");
         assert_eq!(value.as_slice(), &[0x68, 0x65, 0x6c, 0x6c, 0x6f, 0]);
-        assert_eq!(value.len(), 5);
-        assert!(!value.is_empty());
-        assert_eq!(value.as_slice()[..value.len()], *value.text());
+        assert_eq!(value.text().len(), 5);
+        assert!(!value.text().is_empty());
+        assert_eq!(value.as_slice()[..value.text().len()], *value.text());
         assert_eq!(
             value.as_slice().iter().filter(|&&unit| unit == 0).count(),
             1
@@ -106,14 +83,14 @@ mod tests {
     fn the_empty_string_is_just_the_terminator() {
         let value = WideNul::new("");
         assert_eq!(value.as_slice(), &[0]);
-        assert_eq!(value.len(), 0);
-        assert!(value.is_empty());
+        assert_eq!(value.text().len(), 0);
+        assert!(value.text().is_empty());
     }
 
     #[test]
     fn non_ascii_text_is_converted_by_utf16_units() {
         let value = WideNul::new("Автовход");
-        assert_eq!(value.len(), 8);
+        assert_eq!(value.text().len(), 8);
         assert_eq!(value.text()[0], 0x0410);
         assert_eq!(value.as_slice().last(), Some(&0));
         assert_eq!(String::from_utf16(value.text()).unwrap(), "Автовход");

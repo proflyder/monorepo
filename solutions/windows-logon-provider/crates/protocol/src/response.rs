@@ -1,14 +1,36 @@
 //! Parsing and MAC verification of the service responses.
 
+use serde::Deserialize;
+
 use crate::auth::{
     constant_time_equal, grant_mac_message, grant_mac_message_for_purpose, hmac_sha256_b64,
 };
-use crate::json::{self, JsonValue, find_value, get_bool, get_string};
 use crate::purpose::Purpose;
+use crate::wire::{self, present};
 use crate::{Error, b64_decode};
 
 const NONCE_BYTES: usize = 32;
 const MAC_BYTES: usize = 32;
+
+/// Tolerant reader: unknown fields are ignored. Authenticity comes from the
+/// response MAC, so a new server field must not lock the machine out.
+#[derive(Debug, Deserialize)]
+struct ChallengeWire {
+    nonce: String,
+    #[serde(rename = "expiresIn", default, deserialize_with = "present")]
+    expires_in: Option<i64>,
+}
+
+/// Tolerant reader like [`ChallengeWire`]: unknown fields are ignored and
+/// duplicate known fields still fail.
+#[derive(Debug, Deserialize)]
+struct ClaimWire {
+    granted: bool,
+    #[serde(rename = "grantId", default, deserialize_with = "present")]
+    grant_id: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    mac: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChallengeResponse {
@@ -19,23 +41,20 @@ pub struct ChallengeResponse {
 }
 
 pub fn parse_challenge_response(body: &str) -> Result<ChallengeResponse, Error> {
-    let object = json::parse(body)?;
+    let challenge: ChallengeWire = wire::parse(body)?;
 
-    let nonce = get_string(&object, "nonce").ok_or(Error::new("challenge without nonce"))?;
-    let decoded =
-        b64_decode(nonce).map_err(|_| Error::new("challenge nonce is not 32 base64 bytes"))?;
+    let decoded = b64_decode(&challenge.nonce)
+        .map_err(|_| Error::new("challenge nonce is not 32 base64 bytes"))?;
     if decoded.len() != NONCE_BYTES {
         return Err(Error::new("challenge nonce is not 32 base64 bytes"));
     }
-    let mut expires_in = 0;
-    if let Some(value) = find_value(&object, "expiresIn") {
-        match value {
-            JsonValue::Number(number) if (1..=3600).contains(number) => expires_in = *number,
-            _ => return Err(Error::new("challenge expiresIn out of range")),
-        }
-    }
+    let expires_in = match challenge.expires_in {
+        None => 0,
+        Some(seconds) if (1..=3600).contains(&seconds) => seconds,
+        Some(_) => return Err(Error::new("challenge expiresIn out of range")),
+    };
     Ok(ChallengeResponse {
-        nonce: nonce.to_owned(),
+        nonce: challenge.nonce,
         expires_in,
     })
 }
@@ -99,46 +118,36 @@ fn verify_claim_response_with(
     key: &[u8],
     mac_message: impl Fn(bool, &str) -> String,
 ) -> ClaimResult {
-    let object = match json::parse(body) {
-        Ok(object) => object,
+    let claim: ClaimWire = match wire::parse(body) {
+        Ok(claim) => claim,
         Err(error) => return ClaimResult::fail(ClaimOutcome::Malformed, error.detail()),
     };
 
-    let Some(granted) = get_bool(&object, "granted") else {
-        return ClaimResult::fail(ClaimOutcome::Malformed, "claim without boolean granted");
-    };
-
-    let mut grant_id = "";
-    if granted {
-        match get_string(&object, "grantId") {
-            Some(id) if !id.is_empty() && id.len() <= 64 => grant_id = id,
+    let grant_id = if claim.granted {
+        match claim.grant_id {
+            Some(id) if !id.is_empty() && id.len() <= 64 => id,
             _ => {
                 return ClaimResult::fail(ClaimOutcome::Malformed, "granted claim without grantId");
             }
         }
-    } else if let Some(value) = find_value(&object, "grantId") {
-        match value {
-            JsonValue::String(text) if text.is_empty() => {}
-            _ => {
-                return ClaimResult::fail(
-                    ClaimOutcome::Malformed,
-                    "denied claim carries a grantId",
-                );
-            }
+    } else {
+        if claim.grant_id.is_some_and(|id| !id.is_empty()) {
+            return ClaimResult::fail(ClaimOutcome::Malformed, "denied claim carries a grantId");
         }
-    }
+        String::new()
+    };
 
-    let Some(mac) = get_string(&object, "mac") else {
+    let Some(mac) = claim.mac else {
         return ClaimResult::fail(ClaimOutcome::InvalidMac, "missing mac");
     };
-    let received = match b64_decode(mac) {
+    let received = match b64_decode(&mac) {
         Ok(received) if received.len() == MAC_BYTES => received,
         _ => return ClaimResult::fail(ClaimOutcome::InvalidMac, "mac is not 32 base64 bytes"),
     };
 
     // Compare the MAC as bytes; encoding the expected value and decoding it
     // again would only add a step that cannot fail.
-    let expected = hmac_sha256_b64(key, &mac_message(granted, grant_id));
+    let expected = hmac_sha256_b64(key, &mac_message(claim.granted, &grant_id));
     let Ok(expected) = b64_decode(&expected) else {
         return ClaimResult::fail(ClaimOutcome::InvalidMac, "local mac encoding failed");
     };
@@ -146,10 +155,10 @@ fn verify_claim_response_with(
         return ClaimResult::fail(ClaimOutcome::InvalidMac, "mac mismatch");
     }
 
-    if granted {
+    if claim.granted {
         ClaimResult {
             outcome: ClaimOutcome::Granted,
-            grant_id: grant_id.to_owned(),
+            grant_id,
             detail: "",
         }
     } else {

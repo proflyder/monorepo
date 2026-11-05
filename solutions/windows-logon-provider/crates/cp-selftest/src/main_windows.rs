@@ -2,19 +2,16 @@
 //! loads `RicardoKompLogon.dll` next to the executable. Output is `PASS`/`FAIL`;
 //! exit codes are 0/1.
 
-use std::ffi::c_void;
-use std::ptr;
-
 use crate::bindings::Windows::Win32::Foundation::{E_FAIL, E_NOTIMPL, S_OK};
 use crate::bindings::Windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
     CoUninitialize, IClassFactory,
 };
-use crate::bindings::Windows::Win32::System::LibraryLoader::{
-    GetModuleFileNameW, GetProcAddress, LoadLibraryW,
-};
+use crate::bindings::Windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use crate::bindings::Windows::Win32::UI::Shell::{CPUS_CREDUI, CPUS_LOGON, ICredentialProvider};
-use windows_core::{BOOL, GUID, HRESULT, IUnknown, Interface, PCWSTR, Result as WinResult, s};
+use windows_core::{
+    BOOL, GUID, HRESULT, HSTRING, IUnknown, Interface, PCWSTR, Result as WinResult, s,
+};
 
 /// `crates/provider/src/provider.rs` (`PROVIDER_CLSID`).
 const PROVIDER_CLSID: GUID = GUID {
@@ -26,8 +23,14 @@ const PROVIDER_CLSID: GUID = GUID {
 
 const DLL_NAME: &str = "RicardoKompLogon.dll";
 
+type GetClassObjectProc =
+    unsafe extern "system" fn(*const GUID, *const GUID, *mut *mut core::ffi::c_void) -> HRESULT;
+
 fn code_of(result: &WinResult<()>) -> HRESULT {
-    result.as_ref().err().map_or(S_OK, |error| error.code())
+    result
+        .as_ref()
+        .err()
+        .map_or(S_OK, windows_core::Error::code)
 }
 
 fn print(name: &str, hr: HRESULT) {
@@ -39,26 +42,16 @@ fn print(name: &str, hr: HRESULT) {
     );
 }
 
-/// Builds `<directory of this executable>\RicardoKompLogon.dll` as UTF-16.
-fn local_dll_path() -> Option<Vec<u16>> {
-    let mut path = [0u16; 260]; // MAX_PATH
-    // SAFETY: `path` is a writable buffer of `len` UTF-16 units.
-    let length = unsafe { GetModuleFileNameW(None, &mut path) } as usize;
-    if length == 0 || length >= path.len() {
-        return None;
-    }
-    let slash = path[..length]
-        .iter()
-        .rposition(|&unit| unit == u16::from(b'\\'))?;
-    let mut result = path[..=slash].to_vec();
-    result.extend(DLL_NAME.encode_utf16());
-    result.push(0);
-    Some(result)
+/// `<directory of this executable>\RicardoKompLogon.dll`, NUL terminated by
+/// `HSTRING`.
+fn local_dll_path() -> HSTRING {
+    let exe = std::env::current_exe().expect("current executable path");
+    HSTRING::from(exe.with_file_name(DLL_NAME).to_string_lossy().as_ref())
 }
 
 /// `CoCreateInstance` fallback: load the DLL next to the executable.
 fn provider_from_dll_next_to_executable() -> WinResult<ICredentialProvider> {
-    let path = local_dll_path().ok_or(E_FAIL)?;
+    let path = local_dll_path();
     // SAFETY: `path` is a NUL-terminated wide string.
     let module = unsafe { LoadLibraryW(PCWSTR(path.as_ptr())) }?;
 
@@ -68,12 +61,10 @@ fn provider_from_dll_next_to_executable() -> WinResult<ICredentialProvider> {
         return Err(E_FAIL.into());
     };
 
-    type GetClassObjectProc =
-        unsafe extern "system" fn(*const GUID, *const GUID, *mut *mut c_void) -> HRESULT;
     // SAFETY: `DllGetClassObject` has exactly this signature.
     let get_class_object: GetClassObjectProc = unsafe { std::mem::transmute(symbol) };
 
-    let mut factory = ptr::null_mut();
+    let mut factory = std::ptr::null_mut();
     // SAFETY: the out-parameter is valid and `IClassFactory::IID` is correct.
     let hr = unsafe { get_class_object(&PROVIDER_CLSID, &IClassFactory::IID, &mut factory) };
     if hr.is_err() {

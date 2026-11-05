@@ -11,10 +11,15 @@ crate-type = ["cdylib"]
 
 [dependencies]
 logon_protocol = { path = "../protocol" }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
 
-# Windows-only modules use the generated `src/bindings.rs`; on other hosts
-# only the portable core is compiled.
+# Windows-only modules use the generated `src/bindings.rs` and a tracing
+# subscriber that appends through Win32 with the documented log format; on
+# other hosts only the portable core is compiled.
 [target.'cfg(windows)'.dependencies]
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 windows-core = { workspace = true }
 windows-link = { workspace = true }
 

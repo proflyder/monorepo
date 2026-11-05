@@ -19,17 +19,29 @@ pub struct Config {
     pub machine: String,
     pub user: String,
     pub domain: String,
-    pub fail_count: u32,
-    pub disabled: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConfigState {
-    Ok,
+/// Why the registry configuration cannot be used. Both variants are
+/// log-safe: `Invalid` carries only a static phrase plus the value name.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ConfigError {
     /// `Disabled=1`: do nothing at all.
+    #[error("disabled")]
     Disabled,
     /// Missing or invalid values: log and stay closed.
-    Invalid,
+    #[error("{0}")]
+    Invalid(String),
+}
+
+impl ConfigError {
+    /// Reason for log lines; `Disabled` has no extra detail, matching the
+    /// installer contract.
+    pub fn detail(&self) -> &str {
+        match self {
+            Self::Disabled => "",
+            Self::Invalid(detail) => detail,
+        }
+    }
 }
 
 /// Next stored `FailCount`; saturates at 1000 like `RecordFailedLogon`.
@@ -51,16 +63,6 @@ pub fn updated_fail_state(count: u32, disabled: u32) -> (u32, u32) {
     (count, disabled)
 }
 
-/// Overwrites a byte slice in place with volatile writes so the compiler cannot
-/// elide the wipe (`SecureZeroMemory` equivalent for ordinary buffers).
-pub fn zero_bytes(bytes: &mut [u8]) {
-    for byte in bytes {
-        // SAFETY: `byte` is a valid, uniquely borrowed `u8`.
-        unsafe { core::ptr::write_volatile(byte, 0) };
-    }
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-}
-
 /// `SecureZeroMemory` for memory we do not own as a Rust slice (CoTaskMem
 /// buffers, DPAPI output).
 ///
@@ -72,14 +74,6 @@ pub unsafe fn secure_zero_raw(ptr: *mut u8, len: usize) {
     for index in 0..len {
         // SAFETY: the caller guarantees the range is writable.
         unsafe { core::ptr::write_volatile(ptr.add(index), 0) };
-    }
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-}
-
-pub fn zero_wide(text: &mut [u16]) {
-    for unit in text {
-        // SAFETY: `unit` is a valid, uniquely borrowed `u16`.
-        unsafe { core::ptr::write_volatile(unit, 0) };
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
@@ -110,9 +104,11 @@ mod imp {
 
     use logon_protocol::{MachineSecret, parse_secret_json, validate_config};
 
+    use zeroize::Zeroize;
+
     use super::{
-        Config, ConfigState, MAX_SECRET_FILE_BYTES, REGISTRY_KEY, SECRET_ENTROPY, SECRET_PATH,
-        secure_zero_raw, zero_bytes,
+        Config, ConfigError, MAX_SECRET_FILE_BYTES, REGISTRY_KEY, SECRET_ENTROPY, SECRET_PATH,
+        secure_zero_raw,
     };
 
     const RRF_STRING: REG_ROUTINE_FLAGS =
@@ -176,7 +172,7 @@ mod imp {
 
     fn read_dword(key: HKEY, name: PCWSTR) -> Result<u32, ()> {
         let mut value = 0u32;
-        let mut bytes = core::mem::size_of::<u32>() as u32;
+        let mut bytes = size_of::<u32>() as u32;
         // SAFETY: `value` is a valid DWORD-sized out-parameter for
         // RRF_RT_REG_DWORD.
         let status = unsafe {
@@ -209,36 +205,23 @@ mod imp {
     /// Reads one required `REG_SZ` value, recording
     /// `registry_value_invalid:<field>` on a missing or malformed value (the
     /// validation ladder keeps the name of the first failing field).
-    fn required_string(
-        key: HKEY,
-        name: PCWSTR,
-        field: &str,
-        error: &mut String,
-    ) -> Result<String, ()> {
-        match read_string(key, name) {
-            Ok(Some(text)) => Ok(text),
-            _ => {
-                error.clear();
-                error.push_str("registry_value_invalid:");
-                error.push_str(field);
-                Err(())
-            }
-        }
+    fn value_invalid(field: &str) -> ConfigError {
+        ConfigError::Invalid(format!("registry_value_invalid:{field}"))
     }
 
-    fn required_dword(key: HKEY, name: PCWSTR, field: &str, error: &mut String) -> Result<u32, ()> {
-        read_dword(key, name).map_err(|()| {
-            error.clear();
-            error.push_str("registry_value_invalid:");
-            error.push_str(field);
-        })
+    fn required_string(key: HKEY, name: PCWSTR, field: &str) -> Result<String, ConfigError> {
+        read_string(key, name)
+            .ok()
+            .flatten()
+            .ok_or_else(|| value_invalid(field))
+    }
+
+    fn required_dword(key: HKEY, name: PCWSTR, field: &str) -> Result<u32, ConfigError> {
+        read_dword(key, name).map_err(|()| value_invalid(field))
     }
 
     /// Reads and validates the registry configuration.
-    pub fn load_config(config: &mut Config, error: &mut String) -> ConfigState {
-        *config = Config::default();
-        error.clear();
-
+    pub fn load_config() -> Result<Config, ConfigError> {
         let mut key = HKEY::default();
         let key_path = WideNul::new(REGISTRY_KEY);
         // SAFETY: `key` is a valid out-parameter; `key_path` is NUL-terminated.
@@ -252,44 +235,32 @@ mod imp {
             )
         };
         if status != ERROR_SUCCESS {
-            *error = "registry_key_missing".to_owned();
-            return ConfigState::Invalid;
+            return Err(ConfigError::Invalid("registry_key_missing".to_owned()));
         }
 
         let values = (|| {
-            let service_url = required_string(key, w!("ServiceUrl"), "ServiceUrl", error)?;
-            let machine = required_string(key, w!("Machine"), "Machine", error)?;
-            let user = required_string(key, w!("UserName"), "UserName", error)?;
-            let domain = required_string(key, w!("Domain"), "Domain", error)?;
-            let disabled = required_dword(key, w!("Disabled"), "Disabled", error)?;
-            let fail_count = required_dword(key, w!("FailCount"), "FailCount", error)?;
-            Ok::<_, ()>((service_url, machine, user, domain, disabled, fail_count))
+            let service_url = required_string(key, w!("ServiceUrl"), "ServiceUrl")?;
+            let machine = required_string(key, w!("Machine"), "Machine")?;
+            let user = required_string(key, w!("UserName"), "UserName")?;
+            let domain = required_string(key, w!("Domain"), "Domain")?;
+            let disabled = required_dword(key, w!("Disabled"), "Disabled")?;
+            let _fail_count = required_dword(key, w!("FailCount"), "FailCount")?;
+            Ok::<_, ConfigError>((service_url, machine, user, domain, disabled))
         })();
         close_key(key);
 
-        let Ok((service_url, machine, user, domain, disabled, fail_count)) = values else {
-            return ConfigState::Invalid;
-        };
-
-        let normalized = match validate_config(&service_url, &machine, &user, &domain) {
-            Ok(url) => url,
-            Err(detail) => {
-                *error = detail.detail().to_owned();
-                return ConfigState::Invalid;
-            }
-        };
-
-        config.service_url = normalized;
-        config.machine = machine;
-        config.user = user;
-        config.domain = domain;
-        config.fail_count = fail_count;
-        config.disabled = disabled != 0;
-        if config.disabled {
-            ConfigState::Disabled
-        } else {
-            ConfigState::Ok
+        let (service_url, machine, user, domain, disabled) = values?;
+        let service_url = validate_config(&service_url, &machine, &user, &domain)
+            .map_err(|detail| ConfigError::Invalid(detail.detail().to_owned()))?;
+        if disabled != 0 {
+            return Err(ConfigError::Disabled);
         }
+        Ok(Config {
+            service_url,
+            machine,
+            user,
+            domain,
+        })
     }
 
     /// Reads, DPAPI-decrypts and parses the secret file. `Err` carries a short
@@ -333,7 +304,7 @@ mod imp {
             let _ = CloseHandle(file);
         };
         if !read_ok || read as usize != blob.len() {
-            zero_bytes(&mut blob);
+            blob.zeroize();
             return Err("secret_file_unreadable");
         }
 
@@ -352,7 +323,7 @@ mod imp {
             CryptUnprotectData(&input, None, Some(&entropy), None, None, 0, &raw mut output)
         };
         if decrypted.is_err() || output.pbData.is_null() || output.cbData == 0 {
-            zero_bytes(&mut blob);
+            blob.zeroize();
             return Err("secret_dpapi_failed");
         }
 
@@ -371,7 +342,7 @@ mod imp {
             secure_zero_raw(output.pbData, output.cbData as usize);
             let _ = LocalFree(Some(HLOCAL(output.pbData.cast())));
         }
-        zero_bytes(&mut blob);
+        blob.zeroize();
         parsed
     }
 
@@ -420,6 +391,7 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zeroize::Zeroize;
 
     #[test]
     fn fail_count_increments_and_saturates() {
@@ -451,11 +423,11 @@ mod tests {
     #[test]
     fn zeroing_clears_buffers() {
         let mut bytes = *b"secret";
-        zero_bytes(&mut bytes);
+        bytes.zeroize();
         assert_eq!(bytes, *b"\0\0\0\0\0\0");
 
         let mut wide = [1u16, 2, 3];
-        zero_wide(&mut wide);
+        wide.zeroize();
         assert_eq!(wide, [0, 0, 0]);
 
         let mut raw = [7u8; 4];

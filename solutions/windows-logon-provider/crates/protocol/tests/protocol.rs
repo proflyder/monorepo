@@ -380,7 +380,6 @@ fn challenge_parsing() {
         format!("{{\"nonce\":\"{nonce}\",\"nonce\":\"{nonce}\"}}"),
         format!("{{\"nonce\":\"{nonce}\",\"expiresIn\":0}}"),
         format!("{{\"nonce\":\"{nonce}\",\"expiresIn\":1.5}}"),
-        format!("{{\"nonce\":\"{nonce}\",\"extra\":{{\"a\":1}}}}"),
         format!("{{\"nonce\":\"{nonce}\",\"expiresIn\":\"60\"}}"),
         format!("{{\"nonce\":\"{nonce}\",\"expiresIn\":7200}}"),
     ];
@@ -549,6 +548,7 @@ fn secret_file() {
         format!("{{\"password\":\"\",\"key\":\"{key}\"}}"),
         "{\"password\":\"x\",\"key\":\"\"}".to_owned(),
         format!("{{\"version\":2,\"password\":\"x\",\"key\":\"{key}\"}}"),
+        format!("{{\"password\":\"x\",\"key\":\"{key}\",\"extra\":1}}"),
         format!("{{\"password\":\"x\",\"key\":\"{key}\""),
     ];
     for body in bad {
@@ -557,6 +557,34 @@ fn secret_file() {
             "accepted secret body {body:?}"
         );
     }
+}
+
+/// Server responses are tolerant readers: a new field in wakegrant must not
+/// lock the machine out, and the MAC still decides.
+#[test]
+fn response_unknown_fields_are_ignored() {
+    let vector = TestVector::new();
+
+    let challenge = parse_challenge_response(&format!(
+        "{{\"nonce\":\"{}\",\"expiresIn\":60,\"extra\":1,\"serverVersion\":\"x\"}}",
+        vector.nonce
+    ))
+    .expect("challenge with unknown fields");
+    assert_eq!(challenge.nonce, vector.nonce);
+    assert_eq!(challenge.expires_in, 60);
+
+    let granted_mac = "UAADAs7pUxn/EN42woIH5K0qrH2YB+bd1SYZVKP//FI=";
+    let claim = verify_claim_response(
+        &format!(
+            "{{\"granted\":true,\"grantId\":\"{}\",\"mac\":\"{granted_mac}\",\"extra\":1,\"serverVersion\":\"x\"}}",
+            vector.grant_id
+        ),
+        &vector.key,
+        vector.machine,
+        vector.nonce,
+    );
+    assert_eq!(claim.outcome, ClaimOutcome::Granted);
+    assert_eq!(claim.grant_id, vector.grant_id);
 }
 
 #[test]

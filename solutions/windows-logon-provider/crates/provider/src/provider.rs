@@ -28,7 +28,6 @@ mod windows_impl {
     use crate::bindings::Windows::Win32::Foundation::{
         E_FAIL, E_INVALIDARG, E_NOTIMPL, E_OUTOFMEMORY, HLOCAL, LocalFree,
     };
-    use crate::bindings::Windows::Win32::Globalization::{CP_UTF8, WideCharToMultiByte};
     use crate::bindings::Windows::Win32::Security::Authorization::ConvertSidToStringSidW;
     use crate::bindings::Windows::Win32::Security::{
         LookupAccountNameW, PSID, SECURITY_MAX_SID_SIZE, SID_NAME_USE,
@@ -44,15 +43,18 @@ mod windows_impl {
         ICredentialProviderSetUserArray_Impl, ICredentialProviderUserArray,
     };
     use windows_core::{
-        BOOL, GUID, HRESULT, Interface, PCSTR, PCWSTR, PWSTR, Ref, Result as WinResult, implement,
+        BOOL, GUID, HRESULT, Interface, PCWSTR, PWSTR, Ref, Result as WinResult, implement,
     };
 
-    use crate::config::{Config, ConfigState, load_config, record_failed_logon};
+    use logon_protocol::Purpose;
+
+    use crate::config::{load_config, record_failed_logon};
     use crate::credential::{Credential, FIELD_COUNT, credential_field_descriptor_at};
     use crate::dll::DllRef;
     use crate::ffi_guard::guard;
-    use crate::gate::{Mode, Scenario};
+    use crate::gate::Mode;
     use crate::log::log_event;
+    use crate::sync::lock;
     use crate::wide::{WideNul, widen};
     use crate::worker::start_worker_thread;
 
@@ -120,9 +122,7 @@ mod windows_impl {
         }
 
         fn lock(&self) -> MutexGuard<'_, SessionState> {
-            self.state
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
+            lock(&self.state)
         }
 
         /// Milliseconds since the provider was loaded.
@@ -290,30 +290,16 @@ mod windows_impl {
         while unsafe { *text.add(length) } != 0 {
             length += 1;
         }
-        if length == 0 {
-            return String::new();
-        }
         // SAFETY: the first `length` units are valid and not NUL.
         let wide = unsafe { core::slice::from_raw_parts(text, length) };
-        let mut bytes = vec![0u8; length * 3 + 1];
-        // SAFETY: the output buffer is large enough for any UTF-8 expansion of
-        // the UTF-16 input (3 bytes per unit at most).
-        let written =
-            unsafe { WideCharToMultiByte(CP_UTF8, 0, wide, Some(&mut bytes), PCSTR::null(), None) };
-        if written <= 0 {
-            return String::new();
-        }
-        bytes.truncate(written as usize);
-        String::from_utf8(bytes).unwrap_or_default()
+        String::from_utf16_lossy(wide)
     }
 
     /// UTF-8 SID of the configured account, empty when it cannot be resolved.
     pub fn configured_user_sid() -> String {
-        let mut config = Config::default();
-        let mut error = String::new();
-        if load_config(&mut config, &mut error) != ConfigState::Ok {
+        let Ok(config) = load_config() else {
             return String::new();
-        }
+        };
 
         let account = widen(&config.user);
         let domain = widen(&config.domain);
@@ -386,6 +372,11 @@ mod windows_impl {
         result
     }
 
+    /// Every optional COM method the tile does not expose.
+    fn not_implemented<T>() -> WinResult<T> {
+        guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+    }
+
     /// The COM provider object: `ICredentialProvider` +
     /// `ICredentialProviderSetUserArray`.
     #[implement(ICredentialProvider, ICredentialProviderSetUserArray)]
@@ -442,9 +433,9 @@ mod windows_impl {
             let cpus = session_scenario(&self.session);
             // Defense in depth: `Advise` and `SetUsageScenario` both get here,
             // so only the two supported scenarios may start a claim.
-            let scenario = match cpus {
-                CPUS_LOGON => Scenario::Logon,
-                CPUS_UNLOCK_WORKSTATION => Scenario::Unlock,
+            let purpose = match cpus {
+                CPUS_LOGON => Purpose::Logon,
+                CPUS_UNLOCK_WORKSTATION => Purpose::Unlock,
                 _ => {
                     log_event("worker", "skipped=unsupported_scenario");
                     return;
@@ -454,13 +445,13 @@ mod windows_impl {
             // scenario alone is not proof of a cold boot. A session of the
             // configured user selects unlock; without one, only a fresh boot
             // selects logon. A failed WTS query or an unsupported state is off.
-            let mode = crate::gate::evaluate(scenario);
+            let mode = crate::gate::evaluate(purpose);
             if let Mode::Off(reason) = mode {
                 log_event(
                     "scenario",
                     &format!(
                         "cpus={} mode=off reason={}",
-                        scenario.label(),
+                        purpose.as_str(),
                         reason.label()
                     ),
                 );
@@ -479,7 +470,7 @@ mod windows_impl {
             }
             log_event(
                 "scenario",
-                &format!("cpus={} mode={}", scenario.label(), mode.label()),
+                &format!("cpus={} mode={}", purpose.as_str(), mode.label()),
             );
             start_worker_thread(&self.session, mode, generation);
         }
@@ -572,10 +563,7 @@ mod windows_impl {
             if index != 0 || !session_is_armed(&self.session) {
                 return Err(E_INVALIDARG.into());
             }
-            let mut slot = self
-                .credential
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut slot = lock(&self.credential);
             if slot.is_none() {
                 let credential: crate::bindings::Windows::Win32::UI::Shell::ICredentialProviderCredential2 =
                     Credential::new(Arc::clone(&self.session)).into();
@@ -603,16 +591,8 @@ mod windows_impl {
 
             // The credential keeps its own Session reference and never calls
             // back into the provider, so releasing it here is safe.
-            let _ = self
-                .credential
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .take();
-            let _ = self
-                .user_array
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .take();
+            let _ = lock(&self.credential).take();
+            let _ = lock(&self.user_array).take();
 
             log_event("provider_unload", "");
             // `_dll_ref` drops after this function returns.
@@ -635,7 +615,7 @@ mod windows_impl {
             &self,
             _pcpcs: *const crate::bindings::Windows::Win32::UI::Shell::CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION,
         ) -> WinResult<()> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn Advise(
@@ -690,10 +670,7 @@ mod windows_impl {
                     let Some(users) = users.cloned() else {
                         return Err(E_INVALIDARG.into());
                     };
-                    let mut slot = self
-                        .user_array
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let mut slot = lock(&self.user_array);
                     *slot = Some(users);
                     Ok(())
                 },

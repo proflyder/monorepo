@@ -11,11 +11,11 @@ mod auth;
 mod base64;
 mod config;
 mod error;
-mod json;
 mod purpose;
 mod request;
 mod response;
 mod secret;
+mod wire;
 
 pub use auth::{
     claim_mac_message, claim_mac_message_for_purpose, constant_time_equal, grant_mac_message,

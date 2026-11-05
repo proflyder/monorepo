@@ -1,5 +1,7 @@
 //! Service URL parsing and machine configuration validation.
 
+use http::Uri;
+
 use crate::Error;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -30,73 +32,45 @@ pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
         return Err(Error::new("service url contains whitespace"));
     }
 
-    let (tls, default_port, rest) = if let Some(rest) = url.strip_prefix("http://") {
-        (false, 80, rest)
-    } else if let Some(rest) = url.strip_prefix("https://") {
-        (true, 443, rest)
+    let (tls, default_port) = if url.starts_with("http://") {
+        (false, 80)
+    } else if url.starts_with("https://") {
+        (true, 443)
     } else {
         return Err(Error::new(
             "service url must start with http:// or https://",
         ));
     };
-    if rest.is_empty() {
-        return Err(Error::new("service url without host"));
-    }
-    if rest.bytes().any(|c| matches!(c, b'?' | b'#' | b'@')) {
+    if url.bytes().any(|c| matches!(c, b'?' | b'#' | b'@')) {
         return Err(Error::new(
             "service url must not carry credentials, query or fragment",
         ));
     }
 
-    let mut out = ServiceEndpoint {
-        tls,
-        port: default_port,
-        ..ServiceEndpoint::default()
-    };
-    let (authority, slash) = rest
-        .find('/')
-        .map_or((rest, None), |slash| (&rest[..slash], Some(slash)));
-    if let Some(slash) = slash {
-        rest[slash..]
-            .trim_end_matches('/')
-            .clone_into(&mut out.prefix);
-        if out.prefix.contains("//") {
-            return Err(Error::new("service url path has an empty segment"));
-        }
-    }
-    if authority.is_empty() {
-        return Err(Error::new("service url without host"));
-    }
+    let uri: Uri = url
+        .parse()
+        .map_err(|_| Error::new("service url is not a valid URI"))?;
+    let authority = uri
+        .authority()
+        .ok_or(Error::new("service url without host"))?;
+    let port = parse_port(authority.as_str(), default_port)?;
 
-    let (host, port_text) = if authority.starts_with('[') {
-        let close = authority
-            .find(']')
+    let host = authority.host();
+    let host = if let Some(rest) = host.strip_prefix('[') {
+        let literal = rest
+            .strip_suffix(']')
             .ok_or(Error::new("service url has an unterminated IPv6 literal"))?;
-        let host = &authority[1..close];
-        let port_text = if close + 1 < authority.len() {
-            if authority.as_bytes()[close + 1] != b':' {
-                return Err(Error::new(
-                    "service url has trailing data after IPv6 literal",
-                ));
-            }
-            &authority[close + 2..]
-        } else {
-            ""
-        };
-        if host.is_empty() {
+        if literal.is_empty() {
             return Err(Error::new("service url without host"));
         }
-        if !host
+        if !literal
             .bytes()
             .all(|c| c.is_ascii_hexdigit() || c == b':' || c == b'.')
         {
             return Err(Error::new("service url has an invalid IPv6 literal"));
         }
-        (host, port_text)
+        literal
     } else {
-        let (host, port_text) = authority.rfind(':').map_or((authority, ""), |colon| {
-            (&authority[..colon], &authority[colon + 1..])
-        });
         if host.is_empty() {
             return Err(Error::new("service url without host"));
         }
@@ -112,28 +86,54 @@ pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
         if host.starts_with('.') || host.ends_with('.') || host.contains("..") {
             return Err(Error::new("service url host has an empty label"));
         }
-        (host, port_text)
+        host
     };
 
-    if !port_text.is_empty() {
-        if port_text.len() > 5 {
-            return Err(Error::new("service url port is too long"));
+    let prefix = if uri.path() == "/" {
+        ""
+    } else {
+        let prefix = uri.path().trim_end_matches('/');
+        if prefix.contains("//") {
+            return Err(Error::new("service url path has an empty segment"));
         }
-        let mut value: u32 = 0;
-        for c in port_text.bytes() {
-            if !c.is_ascii_digit() {
-                return Err(Error::new("service url port is not numeric"));
-            }
-            value = value * 10 + u32::from(c - b'0');
-        }
-        if value == 0 || value > 65535 {
-            return Err(Error::new("service url port out of range"));
-        }
-        out.port = value as u16;
-    }
+        prefix
+    };
 
-    host.clone_into(&mut out.host);
-    Ok(out)
+    Ok(ServiceEndpoint {
+        tls,
+        host: host.to_owned(),
+        port,
+        prefix: prefix.to_owned(),
+    })
+}
+
+/// Port after the host of an authority. Rejects non-numeric and out-of-range
+/// values instead of letting `http::Uri` silently truncate them.
+fn parse_port(authority: &str, default_port: u16) -> Result<u16, Error> {
+    let port_text = if let Some(rest) = authority.strip_prefix('[') {
+        let close = rest
+            .find(']')
+            .ok_or(Error::new("service url has an unterminated IPv6 literal"))?;
+        &rest[close + 1..]
+    } else {
+        authority.rfind(':').map_or("", |colon| &authority[colon..])
+    };
+    let Some(text) = port_text.strip_prefix(':') else {
+        return Ok(default_port);
+    };
+    if text.is_empty() {
+        return Ok(default_port);
+    }
+    if text.len() > 5 || !text.bytes().all(|c| c.is_ascii_digit()) {
+        return Err(Error::new("service url port is not numeric"));
+    }
+    let port: u16 = text
+        .parse()
+        .map_err(|_| Error::new("service url port out of range"))?;
+    if port == 0 {
+        return Err(Error::new("service url port out of range"));
+    }
+    Ok(port)
 }
 
 /// Validates the whole machine configuration and normalizes the URL. The
@@ -175,17 +175,7 @@ pub fn validate_config(
         ));
     }
 
-    let endpoint = parse_service_url(service_url)?;
-    let mut result = String::new();
-    result.push_str(if endpoint.tls { "https://" } else { "http://" });
-    push_host(&mut result, &endpoint.host);
-    let default_port = if endpoint.tls { 443 } else { 80 };
-    if endpoint.port != default_port {
-        result.push(':');
-        result.push_str(&endpoint.port.to_string());
-    }
-    result.push_str(&endpoint.prefix);
-    Ok(result)
+    Ok(render(&parse_service_url(service_url)?, false))
 }
 
 /// Log-safe service URL for log lines: scheme, host and port only, no path.
@@ -193,11 +183,27 @@ pub fn redact_service_url(url: &str) -> String {
     let Ok(endpoint) = parse_service_url(url) else {
         return "invalid-url".to_owned();
     };
+    render(
+        &ServiceEndpoint {
+            prefix: String::new(),
+            ..endpoint
+        },
+        true,
+    )
+}
+
+/// `scheme://host[:port][prefix]`; `explicit_port` keeps the port even when it
+/// is the scheme default (the log always shows it).
+fn render(endpoint: &ServiceEndpoint, explicit_port: bool) -> String {
     let mut result = String::new();
     result.push_str(if endpoint.tls { "https://" } else { "http://" });
     push_host(&mut result, &endpoint.host);
-    result.push(':');
-    result.push_str(&endpoint.port.to_string());
+    let default_port = if endpoint.tls { 443 } else { 80 };
+    if explicit_port || endpoint.port != default_port {
+        result.push(':');
+        result.push_str(&endpoint.port.to_string());
+    }
+    result.push_str(&endpoint.prefix);
     result
 }
 

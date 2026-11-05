@@ -84,7 +84,7 @@ Service URL, имя машины и учётная запись задаёт п�
 
 | файл | назначение |
 |---|---|
-| `crates/protocol/` | переносимый слой: base64, HMAC-сообщения, разбор JSON, проверка MAC, конфиг |
+| `crates/protocol/` | переносимый слой: `serde`/`serde_json`, `base64`, HMAC-сообщения, проверка MAC, `http::Uri`-конфиг |
 | `crates/provider/src/provider.rs` | `ICredentialProvider`, общее состояние `Session`, бюджет |
 | `crates/provider/src/gate.rs` | режим `logon`/`unlock`/`off` по WTS-сессии, аптайму и сценарию |
 | `crates/provider/src/credential.rs` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |
@@ -159,9 +159,14 @@ rustfmt/clippy для host- и Windows-целей (aspect переключает
 
 ### Win32-привязки
 
+Переносимый слой использует стандартный стек (решение 40): `serde` и
+`serde_json` с `deny_unknown_fields`, `base64`, `thiserror`, `http::Uri`
+и `ricardo-secret` (zeroizing-пароль и redacted `Debug`). Собственных
+JSON/base64/ошибочных типов в решении нет.
+
 `crates/*/src/bindings.rs` сгенерированы `windows-bindgen 0.63.0` из фильтров
-`crates/*/bindings.txt` (`--no-comment --implement`); поэтому в зависимостях
-только `windows-core` и `windows-link`, без крейта `windows`. Генерация не
+`crates/*/bindings.txt` (`--no-comment --implement`); поэтому для Win32
+достаточно `windows-core` и `windows-link`, без крейта `windows`. Генерация не
 входит в сборку. После изменения фильтров:
 
 ```bash
@@ -261,7 +266,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 
 События: `provider_load/unload`, `scenario`, `worker`, `config`, `secret`,
 `http`, `challenge`, `claim`, `grant`, `armed`, `cancel`, `serialization`,
-`serialization_config`, `serialization_secret`, `report_result`. В режиме
+`serialization_config`, `serialization_secret`, `report_result`. События
+идут через `tracing`, но строку рендерит провайдерский слой в Win32-писатель:
+формат, ротация и отсутствие stderr — часть контракта LogonUI. В режиме
 `unlock` отказы (`denied`) не пишутся — за ночь их были бы тысячи; ошибки
 пишутся с подавлением повторов, остановка и `grant result=granted
 purpose=unlock` — всегда. Пароль, ключ и MAC в журнал не попадают; все

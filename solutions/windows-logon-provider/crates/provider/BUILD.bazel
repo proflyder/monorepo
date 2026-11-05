@@ -15,8 +15,12 @@ rust_shared_library(
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
         "//solutions/windows-logon-provider/crates/protocol:logon_protocol",
+        "@crates//:thiserror",
+        "@crates//:tracing",
+        "@crates//:tracing-subscriber",
         "@crates//:windows-core",
         "@crates//:windows-link",
+        "@crates//:zeroize",
     ],
 )
 
@@ -34,6 +38,7 @@ rust_library(
     }),
     deps = [
         "//solutions/windows-logon-provider/crates/protocol:logon_protocol",
+        "@crates//:thiserror",
     ],
 )
 
@@ -46,6 +51,11 @@ rust_test(
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
+    deps = [
+        "//solutions/windows-logon-provider/crates/protocol:logon_protocol",
+        "@crates//:thiserror",
+        "@crates//:zeroize",
+    ],
 )
 
 # Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.

@@ -414,7 +414,14 @@
     а не `reqwest`/`tokio`: это техническое исключение из общего стека
     крейтов (решение 40), а не отказ от него. Провайдер — член единого
     корневого Cargo workspace (решение 40), своих `Cargo.lock` и
-    `rust-toolchain.toml` у решения больше нет.
+    `rust-toolchain.toml` у решения больше нет. Переносимый слой использует
+    стандартный стек: `serde`/`serde_json` (`deny_unknown_fields`),
+    `base64`, `thiserror`, `http::Uri` для URL и `ricardo-secret` для
+    zeroizing-секрета (unix-часть `ricardo-secret` под `cfg(unix)`, поэтому
+    крейт собирается под `x86_64-pc-windows-gnu`). Журнал идёт через
+    `tracing`, но с собственным слоем и Win32-писателем: формат строки,
+    ротация 256 KiB и запись без stderr — контракт LogonUI, а не
+    универсальный формат `ricardo-telemetry`.
 
 40. **Единый Rust workspace и общий core-слой.** Весь first-party Rust
     (Pulsar, BLE gateway, Windows logon provider, станционные helper'ы)

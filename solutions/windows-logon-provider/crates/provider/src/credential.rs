@@ -66,7 +66,9 @@ mod windows_impl {
     };
     use windows_core::{BOOL, GUID, HRESULT, PCWSTR, PWSTR, Ref, Result as WinResult, implement};
 
-    use crate::config::{Config, ConfigState, load_config, load_secret, zero_wide};
+    use zeroize::Zeroize;
+
+    use crate::config::{load_config, load_secret};
     use crate::ffi_guard::guard;
     use crate::kerb::{self, KERB_INTERACTIVE_LOGON, KERB_WORKSTATION_UNLOCK_LOGON};
     use crate::log::log_event;
@@ -74,6 +76,7 @@ mod windows_impl {
         PROVIDER_CLSID, Session, cancel_session, configured_user_sid, consume_arming,
         notify_session_changed, session_note_failed_logon, session_scenario,
     };
+    use crate::sync::lock;
     use crate::wide::{WideNul, widen};
 
     const CPGSR: CREDENTIAL_PROVIDER_GET_SERIALIZATION_RESPONSE = CPGSR_NO_CREDENTIAL_NOT_FINISHED;
@@ -83,7 +86,7 @@ mod windows_impl {
 
     impl Drop for WipedWide {
         fn drop(&mut self) {
-            zero_wide(&mut self.0);
+            self.0.zeroize();
         }
     }
 
@@ -131,9 +134,8 @@ mod windows_impl {
             return Err(E_INVALIDARG.into());
         };
         // SAFETY: CoTaskMemAlloc returns a suitably aligned block for any type.
-        let copy =
-            unsafe { CoTaskMemAlloc(core::mem::size_of::<CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR>()) }
-                as *mut CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR;
+        let copy = unsafe { CoTaskMemAlloc(size_of::<CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR>()) }
+            as *mut CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR;
         if copy.is_null() {
             return Err(E_OUTOFMEMORY.into());
         }
@@ -247,12 +249,13 @@ mod windows_impl {
 
     /// Builds the packed credential. `Err` is a log-safe `HRESULT`.
     fn serialize(cpus: CREDENTIAL_PROVIDER_USAGE_SCENARIO) -> Result<(Vec<u8>, u32), HRESULT> {
-        let mut config = Config::default();
-        let mut error = String::new();
-        if load_config(&mut config, &mut error) != ConfigState::Ok {
-            log_event("serialization_config", &format!("error={error}"));
-            return Err(E_FAIL);
-        }
+        let config = match load_config() {
+            Ok(config) => config,
+            Err(error) => {
+                log_event("serialization_config", &format!("error={}", error.detail()));
+                return Err(E_FAIL);
+            }
+        };
 
         let secret = match load_secret() {
             Ok(secret) => secret,
@@ -295,11 +298,16 @@ mod windows_impl {
         let package = match retrieve_negotiate_auth_package() {
             Ok(package) => package,
             Err(error) => {
-                crate::config::zero_bytes(&mut packed);
+                packed.zeroize();
                 return Err(error);
             }
         };
         Ok((packed, package))
+    }
+
+    /// Optional COM methods the tile does not expose.
+    fn not_implemented<T>() -> WinResult<T> {
+        guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
     }
 
     /// The single auto-logon tile.
@@ -322,9 +330,7 @@ mod windows_impl {
         fn lock_events(
             &self,
         ) -> std::sync::MutexGuard<'_, Option<ICredentialProviderCredentialEvents>> {
-            self.events
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
+            lock(&self.events)
         }
 
         fn set_deselected(&self) -> WinResult<()> {
@@ -387,7 +393,7 @@ mod windows_impl {
             // SAFETY: CoTaskMemAlloc returns a suitably aligned block.
             let buffer = unsafe { CoTaskMemAlloc(packed.len()) } as *mut u8;
             if buffer.is_null() {
-                crate::config::zero_bytes(&mut packed);
+                packed.zeroize();
                 notify_session_changed(&self.session);
                 return Ok(());
             }
@@ -402,7 +408,7 @@ mod windows_impl {
             }
             // LogonUI owns the CoTaskMem copy; the local one must not linger in
             // the Rust heap with the protected password inside.
-            crate::config::zero_bytes(&mut packed);
+            packed.zeroize();
             Ok(())
         }
     }
@@ -493,7 +499,7 @@ mod windows_impl {
             &self,
             _dwfieldid: u32,
         ) -> WinResult<crate::bindings::Windows::Win32::Graphics::Gdi::HBITMAP> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn GetCheckboxValue(
@@ -515,7 +521,7 @@ mod windows_impl {
         }
 
         fn GetSubmitButtonValue(&self, _dwfieldid: u32) -> WinResult<u32> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn GetComboBoxValueCount(
@@ -524,27 +530,27 @@ mod windows_impl {
             _pcitems: *mut u32,
             _pdwselecteditem: *mut u32,
         ) -> WinResult<()> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn GetComboBoxValueAt(&self, _dwfieldid: u32, _dwitem: u32) -> WinResult<PWSTR> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn SetStringValue(&self, _dwfieldid: u32, _psz: &PCWSTR) -> WinResult<()> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn SetCheckboxValue(&self, _dwfieldid: u32, _bchecked: BOOL) -> WinResult<()> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn SetComboBoxSelectedValue(&self, _dwfieldid: u32, _dwselecteditem: u32) -> WinResult<()> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn CommandLinkClicked(&self, _dwfieldid: u32) -> WinResult<()> {
-            guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
+            not_implemented()
         }
 
         fn GetSerialization(

@@ -17,8 +17,9 @@
 |---|---|
 | `ricardo-telemetry` | bootstrap `tracing` + `tracing-subscriber`: `LevelFilter` (`RUST_LOG` как уровень), stderr или append-файл, локальное время до старта рантайма, дополнительные `Layer` (Pulsar подключит ESPHome-sink). |
 | `ricardo-runtime` | `shutdown_signal()` (SIGTERM/SIGINT) и `Supervisor` над `CancellationToken` + `TaskTracker`: единый способ запустить долгоживущие задачи и дождаться их на shutdown. |
-| `ricardo-secret` | `Secret`/`Token`: `Zeroize`-буферы, `Debug` без значения, сравнение через `subtle::ConstantTimeEq`, `load_or_create` с файлом `0600` в каталоге `0700`, генераторы `numeric(n)` и `hex(n)`. |
+| `ricardo-secret` | `Secret`/`Token`: `Zeroize`-буферы, `Debug` без значения, сравнение через `subtle::ConstantTimeEq`; файловые `load_or_create` (`0600`/`0700`) и генераторы `numeric(n)`/`hex(n)` — unix-only, чтобы крейт собирался под `x86_64-pc-windows-gnu`. |
 | `ricardo-http` | axum bearer-авторизация на `ricardo-secret::Token` (`with_bearer`) и `serve(listener, router, CancellationToken)` с graceful shutdown. |
 
-Крейты добавляются только под реального потребителя: сейчас это BLE gateway;
-Pulsar и logon provider подключают нужные части отдельными шагами.
+Крейты добавляются только под реального потребителя: BLE gateway — первый
+потребитель всего слоя, logon provider использует переносимые `Secret`/
+`Token` из `ricardo-secret`.

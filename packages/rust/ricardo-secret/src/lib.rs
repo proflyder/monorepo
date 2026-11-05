@@ -6,9 +6,15 @@
 //! by the station daemons: a `0600` file inside a `0700` directory.
 
 use std::fmt;
+use std::io;
+
+#[cfg(unix)]
 use std::fs::{self, DirBuilder, OpenOptions};
-use std::io::{self, Write};
+#[cfg(unix)]
+use std::io::Write;
+#[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
 
 use subtle::ConstantTimeEq;
@@ -43,7 +49,7 @@ impl Secret {
     /// Constant-time comparison against an untrusted candidate.
     #[must_use]
     pub fn ct_eq(&self, candidate: impl AsRef<[u8]>) -> bool {
-        self.value.as_bytes().ct_eq(candidate.as_ref()).into()
+        self.as_bytes().ct_eq(candidate.as_ref()).into()
     }
 }
 
@@ -105,6 +111,7 @@ impl Eq for Token {}
 /// The file is trimmed; an empty result is treated as missing. A generated
 /// value is written as `value\n` with mode `0600`, and the parent directory is
 /// created with mode `0700`.
+#[cfg(unix)]
 pub fn load_or_create<G>(path: &Path, generate: G) -> io::Result<Secret>
 where
     G: FnOnce() -> io::Result<Secret>,
@@ -115,6 +122,7 @@ where
 /// Like [`load_or_create`], but lets the caller normalise the file contents
 /// before accepting them. Returning `None` (or an empty string) regenerates
 /// the token.
+#[cfg(unix)]
 pub fn load_or_create_with<R, G>(path: &Path, normalize: R, generate: G) -> io::Result<Secret>
 where
     R: FnOnce(&str) -> Option<String>,
@@ -136,6 +144,7 @@ where
 }
 
 /// Load or generate a hex token of `bytes` random bytes (`2 * bytes` chars).
+#[cfg(unix)]
 pub fn load_or_create_hex(path: &Path, bytes: usize) -> io::Result<Token> {
     load_or_create(path, || hex(bytes)).map(|secret| Token::new(secret.expose()))
 }
@@ -165,6 +174,7 @@ pub fn hex(bytes: usize) -> io::Result<Secret> {
 }
 
 /// Write `secret` to `path` as `secret\n` with mode `0600`.
+#[cfg(unix)]
 fn write_secret(path: &Path, secret: &Secret) -> io::Result<()> {
     let mut file = OpenOptions::new()
         .write(true)
@@ -178,6 +188,7 @@ fn write_secret(path: &Path, secret: &Secret) -> io::Result<()> {
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
 }
 
+#[cfg(unix)]
 fn ensure_private_directory(path: &Path) -> io::Result<()> {
     let directory = directory_of(path);
     let mut builder = DirBuilder::new();
@@ -186,6 +197,7 @@ fn ensure_private_directory(path: &Path) -> io::Result<()> {
     fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
 }
 
+#[cfg(unix)]
 fn tighten_permissions(path: &Path) -> io::Result<()> {
     let mode = fs::metadata(path)?.permissions().mode() & 0o777;
     if mode != 0o600 {
@@ -194,6 +206,7 @@ fn tighten_permissions(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn directory_of(path: &Path) -> PathBuf {
     path.parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -217,7 +230,7 @@ fn uniform_below(bound: u32) -> u32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
