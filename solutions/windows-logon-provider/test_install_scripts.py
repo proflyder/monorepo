@@ -262,11 +262,11 @@ class ProviderSourceTests(unittest.TestCase):
         start = provider.split("fn start_worker_once(", 1)[1].split(
             "\n        fn set_usage_scenario", 1
         )[0]
-        self.assertIn("crate::gate::evaluate(scenario)", start)
+        self.assertIn("crate::gate::evaluate(purpose)", start)
         self.assertIn("cpus={} mode={}", start)
         self.assertIn("cpus={} mode=off reason={}", start)
         # A denied gate must return before the network thread is created.
-        gate_at = start.index("crate::gate::evaluate(scenario)")
+        gate_at = start.index("crate::gate::evaluate(purpose)")
         self.assertLess(
             gate_at, start.index("start_worker_thread(&self.session, mode, generation)")
         )
