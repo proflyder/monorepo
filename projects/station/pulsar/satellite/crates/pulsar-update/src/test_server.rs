@@ -1,11 +1,10 @@
-//! Local HTTPS server for the client and updater tests: rustls with the test CA of tests/data
-//! (`ca.pem` signed `server.pem` for DNS:localhost; `other-ca.pem` signed nothing here).
+//! Локальный HTTPS-сервер для тестов клиента и установщика: rustls с тестовым CA из
+//! tests/data. Файлы вшиты в тестовый бинарь (`include_str!`), поэтому нет двойственности
+//! CARGO_MANIFEST_DIR / runfiles.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use rustls::server::Acceptor;
 use rustls::{ProtocolVersion, ServerConfig, SupportedProtocolVersion};
@@ -15,24 +14,30 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio_rustls::LazyConfigAcceptor;
 
-pub fn data(name: &str) -> PathBuf {
-    // Под Bazel тест исполняется из runfiles-дерева, поэтому путь к данным
-    // берётся из PULSAR_MANIFEST_DIR относительно текущего каталога; Cargo
-    // переменную не выставляет и использует CARGO_MANIFEST_DIR.
-    std::env::var_os("PULSAR_MANIFEST_DIR")
-        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
-        .join("tests/data")
-        .join(name)
+const SERVER_PEM: &str = include_str!("../tests/data/server.pem");
+const SERVER_KEY: &str = include_str!("../tests/data/server.key");
+const CA_PEM: &str = include_str!("../tests/data/ca.pem");
+
+/// Путь к тестовому CA на диске (клиент читает бандл из файла, как на станции).
+pub fn ca_file() -> PathBuf {
+    static CA: OnceLock<PathBuf> = OnceLock::new();
+    CA.get_or_init(|| {
+        let path =
+            std::env::temp_dir().join(format!("pulsar-update-test-ca-{}.pem", std::process::id()));
+        std::fs::write(&path, CA_PEM).expect("write test CA");
+        path
+    })
+    .clone()
 }
 
-/// What the connection does after the response bytes.
+/// Что соединение делает после ответа.
 #[derive(Clone, Copy)]
 pub enum End {
-    /// TLS close_notify, then close.
+    /// TLS close_notify, затем закрыть.
     Close,
-    /// Close without close_notify.
+    /// Закрыть без close_notify.
     Drop,
-    /// Keep the connection open without sending more.
+    /// Держать соединение открытым, ничего не присылая.
     Hang,
 }
 
@@ -69,26 +74,24 @@ pub type Session = (Option<String>, Option<ProtocolVersion>);
 
 pub struct Server {
     pub port: u16,
-    /// Request heads in arrival order.
-    pub requests: Rc<RefCell<Vec<String>>>,
-    /// SNI and negotiated version of each completed handshake.
-    pub sessions: Rc<RefCell<Vec<Session>>>,
-    routes: Rc<RefCell<HashMap<String, Reply>>>,
+    /// Заголовки запросов в порядке прихода.
+    pub requests: Arc<std::sync::Mutex<Vec<String>>>,
+    /// SNI и согласованная версия каждого завершённого handshake.
+    pub sessions: Arc<std::sync::Mutex<Vec<Session>>>,
+    routes: Arc<std::sync::Mutex<HashMap<String, Reply>>>,
 }
 
 impl Server {
-    /// Serves TLS 1.2 and 1.3 on 127.0.0.1 from a task of the current LocalSet; unknown paths get
-    /// a 404.
+    /// TLS 1.2 и 1.3 на 127.0.0.1 из задачи текущего LocalSet; неизвестный путь — 404.
     pub async fn start() -> Self {
         Self::start_with(rustls::DEFAULT_VERSIONS).await
     }
 
     pub async fn start_with(versions: &[&'static SupportedProtocolVersion]) -> Self {
-        let certs: Vec<_> = CertificateDer::pem_file_iter(data("server.pem"))
-            .expect("server.pem")
+        let certs: Vec<_> = CertificateDer::pem_slice_iter(SERVER_PEM.as_bytes())
             .collect::<Result<_, _>>()
             .expect("server.pem");
-        let key = PrivateKeyDer::from_pem_file(data("server.key")).expect("server.key");
+        let key = PrivateKeyDer::from_pem_slice(SERVER_KEY.as_bytes()).expect("server.key");
         let provider = Arc::new(rustls::crypto::ring::default_provider());
         let config = ServerConfig::builder_with_provider(provider)
             .with_protocol_versions(versions)
@@ -101,9 +104,9 @@ impl Server {
         let port = listener.local_addr().expect("local addr").port();
         let server = Self {
             port,
-            requests: Rc::default(),
-            sessions: Rc::default(),
-            routes: Rc::default(),
+            requests: Arc::default(),
+            sessions: Arc::default(),
+            routes: Arc::default(),
         };
         let (requests, sessions, routes) = (
             server.requests.clone(),
@@ -127,12 +130,13 @@ impl Server {
                         return;
                     };
                     let sni = start.client_hello().server_name().map(str::to_owned);
-                    // Fails when the client rejects the certificate.
+                    // Ошибка — клиент не принял сертификат.
                     let Ok(mut tls) = start.into_stream(config).await else {
                         return;
                     };
                     sessions
-                        .borrow_mut()
+                        .lock()
+                        .expect("sessions")
                         .push((sni, tls.get_ref().1.protocol_version()));
                     let mut head = Vec::new();
                     let mut buf = [0u8; 4096];
@@ -144,8 +148,8 @@ impl Server {
                     }
                     let head = String::from_utf8_lossy(&head).into_owned();
                     let path = head.split(' ').nth(1).unwrap_or_default().to_owned();
-                    requests.borrow_mut().push(head);
-                    let reply = routes.borrow().get(&path).cloned();
+                    requests.lock().expect("requests").push(head);
+                    let reply = routes.lock().expect("routes").get(&path).cloned();
                     let reply = reply.unwrap_or_else(|| {
                         raw("HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found")
                     });
@@ -166,10 +170,17 @@ impl Server {
     }
 
     pub fn route(&self, path: &str, reply: Reply) {
-        self.routes.borrow_mut().insert(path.into(), reply);
+        self.routes
+            .lock()
+            .expect("routes")
+            .insert(path.into(), reply);
     }
 
     pub fn url(&self, path: &str) -> String {
         format!("https://localhost:{}{path}", self.port)
+    }
+
+    pub fn requests(&self) -> Vec<String> {
+        self.requests.lock().expect("requests").clone()
     }
 }

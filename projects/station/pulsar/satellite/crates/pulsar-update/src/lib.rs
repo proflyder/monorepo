@@ -1,28 +1,37 @@
-//! pulsar updates from an OCI artifact in GHCR (Home Assistant "Firmware" update entity): finds the
-//! latest image, reads its version and layer digests from the manifest, downloads
-//! `pulsar-<arch>.bin`, checks the layer digest, the image's `SHA256SUMS` and that it runs here
-//! (`--version`), then replaces the installed binary (kept as `.prev`). A plain `owner/repo` still
-//! uses GitHub Releases. The caller exits the daemon afterwards; `supervise.sh` starts the new
-//! binary and rolls back to `.prev` if it crash-loops. HTTPS is rustls on the runtime thread; file
-//! work runs on blocking threads.
+//! Обновления pulsar из OCI-артефакта в GHCR: сущность «Firmware» в Home Assistant находит
+//! последний релиз, читает версию и digest слоёв из манифеста, скачивает
+//! `pulsar-<arch>.bin`, проверяет digest слоя, `SHA256SUMS` и запуск (`--version`), затем
+//! подменяет установленный бинарник (прежний остаётся как `.prev`). После установки демон
+//! завершается: `supervise.sh` запускает новый бинарник и откатывается на `.prev`, если тот
+//! уходит в crash-loop. HTTPS — reqwest на rustls (ring) в потоке рантайма; файловая работа
+//! идёт на blocking-потоках.
+
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
-/// For update_probe only, not part of the crate's public API.
-#[doc(hidden)]
-pub mod https;
-mod json;
+mod actor;
+mod error;
+mod http;
+mod installer;
+mod release;
+mod source;
 #[allow(unsafe_code)]
 mod sys;
 #[cfg(test)]
 mod test_server;
-mod updater;
+#[cfg(test)]
+mod test_source;
 mod version;
 
-/// Источник обновлений демона — публичный OCI-пакет в GHCR, который публикует монорепозиторий
-/// (`proflyder/monorepo`); upstream им никогда не бывает.
-pub const UPDATE_REPO: &str = "ghcr.io/proflyder/pulsar-firmware";
+pub use actor::{RequestId, UPDATE_REPO, UpdateEvent, UpdaterHandle, arch, spawn};
+pub use error::UpdateError;
+pub use http::Progress;
+pub use release::{Digest, Layer, Release};
+pub use source::{Oci, OciConfig, ReleaseSource};
+pub use version::{Version, release_newer};
 
-pub use updater::{Layer, Release, UpdateEvent, UpdaterHandle, arch, spawn};
-pub use version::release_newer;
+/// sync(2): подменённый бинарник и `.prev` доходят до флеша до выхода демона.
+pub(crate) fn sync() {
+    sys::sync();
+}

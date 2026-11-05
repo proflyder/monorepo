@@ -6,15 +6,24 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
+    "//packages/rust/ricardo-actor:ricardo_actor",
     "//packages/rust/ricardo-linux:ricardo_linux",
     "@crates//:libc",
+    "@crates//:reqwest",
     "@crates//:ring",
     "@crates//:rustls",
     "@crates//:rustls-pki-types",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
     "@crates//:tokio",
     "@crates//:tokio-rustls",
+    "@crates//:tokio-util",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
+
+# tests/data вшит в тестовый бинарь через include_str! (сертификаты локального сервера).
+TEST_DATA = glob(["tests/data/**"])
 
 rust_library(
     name = "pulsar_update",
@@ -22,7 +31,7 @@ rust_library(
         ["src/**/*.rs"],
         exclude = ["src/bin/**"],
     ),
-    compile_data = glob(["tests/golden/**"], allow_empty = True),
+    compile_data = glob(["tests/golden/**"], allow_empty = True) + TEST_DATA,
     edition = "2024",
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
@@ -35,7 +44,10 @@ rust_binary(
     edition = "2024",
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = DEPS + [":pulsar_update"],
+    deps = DEPS + [
+        ":pulsar_update",
+        "@crates//:clap",
+    ],
 )
 
 # The integration test runs the update_probe binary at runtime. Cargo exports
@@ -50,23 +62,17 @@ rust_test(
     lint_config = ":workspace_lints",
     env = {
         "CARGO_BIN_EXE_update_probe": "$(rootpath :update_probe)",
-        "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar-update",
     },
     target_compatible_with = LINUX,
     deps = DEPS + [":pulsar_update"],
 )
 
-# test_server.rs reads tests/data at runtime; the test environment points
-# CARGO_MANIFEST_DIR-style lookups at the runfiles tree.
 rust_test(
     name = "pulsar_update_unit_tests",
     crate = ":pulsar_update",
-    data = glob(["tests/data/**"]),
+    compile_data = glob(["tests/golden/**"], allow_empty = True) + TEST_DATA,
     edition = "2024",
     lint_config = ":workspace_lints",
-    env = {
-        "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar-update",
-    },
     target_compatible_with = LINUX,
     deps = ["@crates//:tokio"],
 )

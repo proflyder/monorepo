@@ -1,9 +1,85 @@
-//! Release tags are vMAJOR.MINOR.PATCH. A build describes itself (`git describe`) as the tag, as
-//! `<tag>-N-g<hash>[-dirty]` after it, or as a bare hash without tags.
+//! Версия релиза: тег `vMAJOR.MINOR.PATCH` и `git describe`-строка сборки
+//! (`v1.2.3-4-gabc1234`, `v1.2.3-dirty`) или голый хеш без тегов.
 
-/// MAJOR.MINOR.PATCH of `s`, which is the version itself or has a `-…` suffix. The numbers are
-/// read like C `sscanf("%d.%d.%d")` after an optional leading `v` (C++ `parse_version`).
-fn parse_version(s: &str) -> Option<[i32; 3]> {
+use std::fmt;
+
+/// Разобранная версия: исходный текст тега и три числа для сравнения.
+///
+/// Числа читаются как C `sscanf("%d.%d.%d")` после необязательного `v` — этой же
+/// семантикой пользовался удалённый C++ пробник (`tests/golden/versions.txt`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Version {
+    text: String,
+    numbers: [i32; 3],
+}
+
+impl Version {
+    /// Тег или `describe`-строка; `None`, если первые три числа не читаются.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Some(Self {
+            text: text.to_owned(),
+            numbers: parse_numbers(text)?,
+        })
+    }
+
+    /// Тег OCI-релиза: ровно `vX.Y.Z` из цифр, без суффиксов и ведущих пробелов.
+    pub(crate) fn parse_tag(text: &str) -> Option<Self> {
+        let rest = text.strip_prefix('v')?;
+        let mut parts = rest.split('.');
+        let (Some(a), Some(b), Some(c), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return None;
+        };
+        let digit = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+        if !(digit(a) && digit(b) && digit(c)) {
+            return None;
+        }
+        Self::parse(text)
+    }
+
+    /// Тег или `describe`-строка как она пришла (для HA, `update_attempt` и `--version`).
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+
+    /// Это более новый релиз, чем `current`: `(newer, current_known)`. Неразобранная
+    /// текущая версия (голый хеш сборки) сравнивается как строка, и автообновление
+    /// такой сборке не предлагается.
+    #[must_use]
+    pub fn is_newer_than(&self, current: &str) -> (bool, bool) {
+        match Self::parse(current) {
+            Some(cur) => (self.numbers > cur.numbers, true),
+            None => (self.text != current, false),
+        }
+    }
+
+    #[cfg(test)]
+    fn numbers(&self) -> [i32; 3] {
+        self.numbers
+    }
+}
+
+impl fmt::Display for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+/// `latest` новее `current`: `(newer, current_known)`. Граница с Home Assistant: значение
+/// сенсора обновления приходит строкой и может быть мусором.
+#[must_use]
+pub fn release_newer(latest: &str, current: &str) -> (bool, bool) {
+    Version::parse(latest).map_or_else(
+        || (false, Version::parse(current).is_some()),
+        |latest| latest.is_newer_than(current),
+    )
+}
+
+/// MAJOR.MINOR.PATCH из `s`, у которой может быть `-`-суффикс.
+fn parse_numbers(s: &str) -> Option<[i32; 3]> {
     let s = s.as_bytes();
     let mut pos = usize::from(s.first() == Some(&b'v'));
     let mut v = [0; 3];
@@ -22,8 +98,7 @@ fn parse_version(s: &str) -> Option<[i32; 3]> {
     }
 }
 
-/// `%d`: leading C whitespace, an optional sign, at least one digit; saturates at the `i32`
-/// bounds (out of range is undefined for sscanf).
+/// `%d`: ведущие пробелы C, знак, хотя бы одна цифра; насыщение на границах `i32`.
 fn scan_int(s: &[u8], pos: &mut usize) -> Option<i32> {
     let mut p = *pos;
     while s
@@ -50,24 +125,13 @@ fn scan_int(s: &[u8], pos: &mut usize) -> Option<i32> {
     Some(n.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32)
 }
 
-/// `latest` is a newer release than `current`: `(newer, current_known)`. `current_known`:
-/// `current` parsed; otherwise `latest != current` decides (and automatic installs are off).
-pub fn release_newer(latest: &str, current: &str) -> (bool, bool) {
-    let cur = parse_version(current);
-    let known = cur.is_some();
-    let Some(l) = parse_version(latest) else {
-        return (false, known);
-    };
-    cur.map_or_else(|| (latest != current, false), |c| (l > c, true))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn versions_table_of_the_cxx_probe() {
-        // The cases of C++ `update_probe versions` with its results (tests/golden/versions.txt).
+        // Строки C++ `update_probe versions` (tests/golden/versions.txt).
         let cases = [
             ("v1.2.4", "v1.2.3", (true, true)),
             ("v1.2.3", "v1.2.3", (false, true)),
@@ -85,22 +149,34 @@ mod tests {
 
     #[test]
     fn parse_like_sscanf() {
-        assert_eq!(parse_version("v1.2.3"), Some([1, 2, 3]));
-        assert_eq!(parse_version("1.2.3"), Some([1, 2, 3]));
-        assert_eq!(parse_version("v1.2.3-4-gabc"), Some([1, 2, 3]));
-        assert_eq!(parse_version("v1.2.3-dirty"), Some([1, 2, 3]));
-        // %d skips whitespace and takes a sign.
-        assert_eq!(parse_version("v 1.+2.\t-3"), Some([1, 2, -3]));
-        assert_eq!(parse_version("v1.2.3x"), None);
-        assert_eq!(parse_version("v1.2.3.4"), None);
-        assert_eq!(parse_version("v1.2"), None);
-        assert_eq!(parse_version("vv1.2.3"), None);
-        assert_eq!(parse_version("v1..3"), None);
-        assert_eq!(parse_version(""), None);
-        assert_eq!(parse_version("v99999999999.0.0"), Some([i32::MAX, 0, 0]));
-        // Only the triple counts: a build after the tag is not older than the tag.
+        let numbers = |s| Version::parse(s).map(|v| v.numbers());
+        assert_eq!(numbers("v1.2.3"), Some([1, 2, 3]));
+        assert_eq!(numbers("1.2.3"), Some([1, 2, 3]));
+        assert_eq!(numbers("v1.2.3-4-gabc"), Some([1, 2, 3]));
+        assert_eq!(numbers("v1.2.3-dirty"), Some([1, 2, 3]));
+        // `%d` пропускает пробелы и принимает знак.
+        assert_eq!(numbers("v 1.+2.\t-3"), Some([1, 2, -3]));
+        assert_eq!(numbers("v1.2.3x"), None);
+        assert_eq!(numbers("v1.2.3.4"), None);
+        assert_eq!(numbers("v1.2"), None);
+        assert_eq!(numbers("vv1.2.3"), None);
+        assert_eq!(numbers("v1..3"), None);
+        assert_eq!(numbers(""), None);
+        assert_eq!(numbers("v99999999999.0.0"), Some([i32::MAX, 0, 0]));
+        // Считается только тройка: сборка после тега не старше тега.
         assert_eq!(release_newer("v1.2.3", "v1.2.2-7-gdeadbee"), (true, true));
         assert_eq!(release_newer("v1.2.3", "6ac30be-dirty"), (true, false));
         assert_eq!(release_newer("6ac30be", "6ac30be"), (false, false));
+    }
+
+    #[test]
+    fn oci_tags_are_strict() {
+        assert_eq!(
+            Version::parse_tag("v1.2.3").map(|v| v.as_str().to_owned()),
+            Some("v1.2.3".into())
+        );
+        for tag in ["1.2.3", "v1.2", "v1.2.3-rc1", "latest", "v1.2.x", ""] {
+            assert_eq!(Version::parse_tag(tag), None, "{tag}");
+        }
     }
 }
