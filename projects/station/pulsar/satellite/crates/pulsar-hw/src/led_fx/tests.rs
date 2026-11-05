@@ -65,9 +65,9 @@ impl Seq {
     fn enter(&mut self, kind: &str, idx: i64, n: usize) {
         let key = Some((kind.to_owned(), idx, n));
         if self.key != key {
-            *self = Seq {
+            *self = Self {
                 key,
-                ..Seq::default()
+                ..Self::default()
             };
         }
     }
@@ -77,9 +77,10 @@ impl Seq {
 fn frames_match_the_cpp_renderer() {
     // Под Bazel тест идёт из runfiles-дерева: PULSAR_MANIFEST_DIR задаёт путь
     // от текущего каталога, cargo оставляет прежний CARGO_MANIFEST_DIR.
-    let root = std::env::var_os("PULSAR_MANIFEST_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let root = std::env::var_os("PULSAR_MANIFEST_DIR").map_or_else(
+        || std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        std::path::PathBuf::from,
+    );
     let text = std::fs::read_to_string(root.join("tests/golden/led_fx.txt")).expect("golden file");
     let mut seq = Seq::default();
     let mut lines = 0;

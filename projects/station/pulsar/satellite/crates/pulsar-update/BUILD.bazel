@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -5,12 +6,12 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
-    "@pulsar_crates//:libc",
-    "@pulsar_crates//:ring",
-    "@pulsar_crates//:rustls",
-    "@pulsar_crates//:rustls-pki-types",
-    "@pulsar_crates//:tokio",
-    "@pulsar_crates//:tokio-rustls",
+    "@crates//:libc",
+    "@crates//:ring",
+    "@crates//:rustls",
+    "@crates//:rustls-pki-types",
+    "@crates//:tokio",
+    "@crates//:tokio-rustls",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
 
@@ -22,6 +23,7 @@ rust_library(
     ),
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS,
 )
@@ -30,6 +32,7 @@ rust_binary(
     name = "update_probe",
     srcs = ["src/bin/update_probe.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS + [":pulsar_update"],
 )
@@ -43,6 +46,7 @@ rust_test(
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     data = [":update_probe"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     env = {
         "CARGO_BIN_EXE_update_probe": "$(rootpath :update_probe)",
         "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar-update",
@@ -58,9 +62,17 @@ rust_test(
     crate = ":pulsar_update",
     data = glob(["tests/data/**"]),
     edition = "2024",
+    lint_config = ":workspace_lints",
     env = {
         "PULSAR_MANIFEST_DIR": "projects/station/pulsar/satellite/crates/pulsar-update",
     },
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:tokio"],
+    deps = ["@crates//:tokio"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

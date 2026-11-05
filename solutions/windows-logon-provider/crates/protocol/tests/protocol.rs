@@ -1,5 +1,7 @@
 //! Protocol vectors and fail-closed branches from `PROTOCOL.md`.
 
+use std::fmt::Write as _;
+
 use logon_protocol::{
     ClaimOutcome, Purpose, b64_decode, b64_encode, challenge_request_json, claim_mac_message,
     claim_mac_message_for_purpose, claim_request_json, claim_request_json_for_purpose,
@@ -15,9 +17,9 @@ fn byte_range(first: u8, last: u8) -> Vec<u8> {
 fn make_claim_body(granted: bool, grant_id: &str, mac: &str) -> String {
     let mut body = format!("{{\"granted\":{granted}");
     if !grant_id.is_empty() {
-        body.push_str(&format!(",\"grantId\":\"{grant_id}\""));
+        let _ = write!(body, ",\"grantId\":\"{grant_id}\"");
     }
-    body.push_str(&format!(",\"mac\":\"{mac}\"}}"));
+    let _ = write!(body, ",\"mac\":\"{mac}\"}}");
     body
 }
 

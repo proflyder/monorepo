@@ -410,5 +410,33 @@
     ставит pinned Bazelisk вместо архива кросс-компилятора. MIT-фрагмент
     упаковки KERB — в `crates/provider/src/kerb.rs`.
     `VERSION` поднят до `1.1.0`: поведение и формат OCI-артефакта те же.
+    Сети провайдер достигает через WinHTTP (сетевой стек ОС внутри LogonUI),
+    а не `reqwest`/`tokio`: это техническое исключение из общего стека
+    крейтов (решение 40), а не отказ от него. Провайдер — член единого
+    корневого Cargo workspace (решение 40), своих `Cargo.lock` и
+    `rust-toolchain.toml` у решения больше нет.
+
+40. **Единый Rust workspace и общий core-слой.** Весь first-party Rust
+    (Pulsar, BLE gateway, Windows logon provider, станционные helper'ы)
+    живёт в одном корневом Cargo workspace: `/Cargo.toml`,
+    `/Cargo.lock`, `/rust-toolchain.toml`, один `@crates//` в Bazel. Новый
+    Rust-крейт добавляется членом этого workspace, а не отдельным
+    workspace'ом; точные пины — только в `[workspace.dependencies]`,
+    линты — в `[workspace.lints]` (Cargo и Bazel через
+    `extract_cargo_lints` линтуют один набор).
+    Код с двумя и более потребителями выносится в `packages/rust/`; пакет
+    не импортирует `projects/**` и не содержит проектных endpoint'ов или
+    путей БД. Стандартный стек крейтов вместо самописных реализаций:
+    `tokio` (runtime/io/time), `tracing`, `thiserror`/`anyhow`, `clap`,
+    `serde`/`serde_json`, `axum`, `reqwest` с `rustls`, `prost`,
+    `zbus`, `base64`/`hex`/`subtle`, `tokio-util`. Самописные HTTP-,
+    JSON-, CLI- и логгеры, ручной base64/hex и собственные примитивы
+    синхронизации не добавляются.
+    Технические исключения: Windows logon provider использует WinHTTP как
+    сетевой стек ОС внутри LogonUI и не тянет `tokio`; DSP/FFI-код
+    (ALSA, VQE, Sendspin, microWakeWord) остаётся на `libc`/`libloading` и
+    `unsafe` по правилам Pulsar. Pulsar остаётся частью workspace;
+    upstream-патчи адаптируются вручную: манифесты upstream мапятся на
+    корневой workspace, версии переносятся в `[workspace.dependencies]`.
 
 Меняется решение — обновить этот файл и `STATE.md`.

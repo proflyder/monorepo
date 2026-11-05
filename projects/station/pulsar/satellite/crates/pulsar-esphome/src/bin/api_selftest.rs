@@ -40,10 +40,9 @@ const BUILD_TIME: &str = match option_env!("PULSAR_BUILD_TIME") {
 /// C atoi: leading digits (after an optional sign), anything else is 0.
 fn atoi(s: &str) -> i64 {
     let s = s.trim_start();
-    let (neg, d) = match s.strip_prefix('-') {
-        Some(d) => (true, d),
-        None => (false, s.strip_prefix('+').unwrap_or(s)),
-    };
+    let (neg, d) = s
+        .strip_prefix('-')
+        .map_or_else(|| (false, s.strip_prefix('+').unwrap_or(s)), |d| (true, d));
     let n = d.bytes().take_while(u8::is_ascii_digit).fold(0i64, |n, b| {
         n.saturating_mul(10).saturating_add(i64::from(b - b'0'))
     });
@@ -185,7 +184,7 @@ impl Echo {
                 seconds,
             } => println!("HOOK led_show '{effect}' '{color}' {seconds}"),
             ApiEvent::Time { epoch, posix_tz } => {
-                println!("HOOK time epoch={epoch} tz='{posix_tz}'")
+                println!("HOOK time epoch={epoch} tz='{posix_tz}'");
             }
             ApiEvent::VoiceStartFailed { .. } => println!("HOOK voice_start_failed"),
             ApiEvent::VoiceAudioOverflow { .. } => println!("HOOK voice_audio_overflow"),

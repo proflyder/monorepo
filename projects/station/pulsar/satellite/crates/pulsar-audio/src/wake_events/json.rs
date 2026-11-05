@@ -4,35 +4,37 @@
 //! kept in the order they appear. Numbers parse as `f64`; the callers convert to integers where
 //! the contract fixes one.
 
+use std::fmt::Write as _;
+
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Json {
+pub enum Json {
     Null,
     Bool(bool),
     Num(f64),
     Str(String),
-    Arr(Vec<Json>),
-    Obj(Vec<(String, Json)>),
+    Arr(Vec<Self>),
+    Obj(Vec<(String, Self)>),
 }
 
 impl Json {
     /// The value of an object member; None for other values and missing keys.
-    pub(crate) fn get(&self, key: &str) -> Option<&Json> {
+    pub(crate) fn get(&self, key: &str) -> Option<&Self> {
         match self {
-            Json::Obj(fields) => fields.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+            Self::Obj(fields) => fields.iter().find(|(k, _)| k == key).map(|(_, v)| v),
             _ => None,
         }
     }
 
     pub(crate) fn as_str(&self) -> Option<&str> {
         match self {
-            Json::Str(s) => Some(s),
+            Self::Str(s) => Some(s),
             _ => None,
         }
     }
 
     pub(crate) fn as_f64(&self) -> Option<f64> {
         match self {
-            Json::Num(v) => Some(*v),
+            Self::Num(v) => Some(*v),
             _ => None,
         }
     }
@@ -44,14 +46,14 @@ impl Json {
 
     pub(crate) fn as_bool(&self) -> Option<bool> {
         match self {
-            Json::Bool(b) => Some(*b),
+            Self::Bool(b) => Some(*b),
             _ => None,
         }
     }
 }
 
 /// Parses one JSON value (surrounding white space allowed); None when malformed.
-pub(crate) fn parse(text: &str) -> Option<Json> {
+pub fn parse(text: &str) -> Option<Json> {
     let mut p = Parser {
         b: text.as_bytes(),
         i: 0,
@@ -226,7 +228,7 @@ fn utf8_len(first: u8) -> usize {
 }
 
 /// The JSON string literal of `s`.
-pub(crate) fn escape(s: &str) -> String {
+pub fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for c in s.chars() {
@@ -236,7 +238,9 @@ pub(crate) fn escape(s: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
             c => out.push(c),
         }
     }

@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
@@ -8,9 +9,17 @@ rust_binary(
     name = "cp-selftest",
     srcs = glob(["src/**/*.rs"]),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
-        "@logon_crates//:windows-core",
-        "@logon_crates//:windows-link",
+        "@crates//:windows-core",
+        "@crates//:windows-link",
     ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

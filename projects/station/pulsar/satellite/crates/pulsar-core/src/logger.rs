@@ -59,7 +59,9 @@ pub fn set_log_sink(min_level: Option<Level>, notify: Option<Arc<Notify>>) {
 /// `module_path!()` (their crate name does not start with "pulsar"); before or after
 /// `init_logger`.
 pub fn add_own_target(prefix: &'static str) {
-    let mut own = OWN_TARGETS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut own = OWN_TARGETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if !own.contains(&prefix) {
         own.push(prefix);
     }
@@ -96,7 +98,9 @@ thread_local! {
 }
 
 fn global() -> MutexGuard<'static, Global> {
-    GLOBAL.lock().unwrap_or_else(|e| e.into_inner())
+    GLOBAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// log's max level is the more verbose of stderr and sink, so disabled records are dropped in
@@ -138,7 +142,9 @@ fn is_foreign(target: &str) -> bool {
     if target.starts_with("pulsar") {
         return false;
     }
-    let own = OWN_TARGETS.lock().unwrap_or_else(|e| e.into_inner());
+    let own = OWN_TARGETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     !own.iter().any(|p| {
         target
             .strip_prefix(p)
@@ -273,17 +279,14 @@ impl Core {
     }
 
     fn set_sink(&mut self, min_level: Option<Level>, notify: Option<Arc<Notify>>) {
-        match (min_level, notify) {
-            (Some(level), Some(notify)) => {
-                self.sink_level = level_num(level);
-                self.sink_notify = Some(notify);
-            }
-            _ => {
-                self.sink_level = SINK_OFF;
-                self.sink_notify = None;
-                self.sink_queue.clear();
-                self.sink_dropped = 0;
-            }
+        if let (Some(level), Some(notify)) = (min_level, notify) {
+            self.sink_level = level_num(level);
+            self.sink_notify = Some(notify);
+        } else {
+            self.sink_level = SINK_OFF;
+            self.sink_notify = None;
+            self.sink_queue.clear();
+            self.sink_dropped = 0;
         }
     }
 
@@ -357,18 +360,19 @@ impl Core {
         let Some(last) = self.last.take() else {
             return false;
         };
-        let mut notify = false;
-        if last.repeats > 0 {
+        let notify = if last.repeats > 0 {
             let msg = format!("last message repeated {} times", last.repeats);
-            notify = self.emit(
+            self.emit(
                 last.level,
                 basename(&last.file),
                 last.line,
                 &msg,
                 last.to_sink,
                 out,
-            );
-        }
+            )
+        } else {
+            false
+        };
         self.last = Some(Last { repeats: 0, ..last });
         notify
     }
@@ -447,6 +451,7 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
+#[allow(clippy::significant_drop_tightening)] // the guard must outlive the `&mut *g` reborrow
 fn write_record(
     buf: &mut String,
     args: &std::fmt::Arguments<'_>,

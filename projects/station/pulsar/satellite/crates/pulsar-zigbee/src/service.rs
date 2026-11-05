@@ -60,6 +60,7 @@ pub enum ZigbeeEvent {
     FlashOutcome { failed_version: u32 },
 }
 
+#[derive(Clone, Copy)]
 enum Cmd {
     Join,
     Leave,
@@ -107,13 +108,13 @@ impl ZigbeeHandle {
 }
 
 /// How the actor reaches the radio; tests replace both.
-pub(crate) struct Backend {
+pub struct Backend {
     pub open: OpenFn,
     pub flash: FlashFn,
 }
 
-pub(crate) type OpenFn = Box<dyn FnMut(&RadioLines) -> Option<Link>>;
-pub(crate) type FlashFn =
+pub type OpenFn = Box<dyn FnMut(&RadioLines) -> Option<Link>>;
+pub type FlashFn =
     Arc<dyn Fn(&RadioLines, &[u8], &mut dyn FnMut(f32)) -> Result<(), String> + Send + Sync>;
 
 /// Starts the role. The initial status ("off", "starting" or "error: cannot open the radio") is
@@ -129,7 +130,7 @@ pub fn spawn(cfg: ZigbeeConfig, mode: Mode) -> (ZigbeeHandle, UnboundedReceiver<
     )
 }
 
-pub(crate) fn spawn_with(
+pub fn spawn_with(
     cfg: ZigbeeConfig,
     mode: Mode,
     backend: Backend,
@@ -250,7 +251,7 @@ impl Hooks for CoordHooks<'_> {
 
 /// What to do with the firmware the radio reported (C++ `on_firmware`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Decision {
+pub enum Decision {
     /// The role's image runs: `FlashOutcome { 0 }`, then the role.
     Run,
     /// Same family, but the role's image was not taken earlier: keep what runs.
@@ -261,14 +262,11 @@ pub(crate) enum Decision {
 
 /// `want`: the role's image version, None without a readable image (then only the family
 /// counts).
-pub(crate) fn decide(version: u32, want: Option<u32>, mode: Mode, failed_version: u32) -> Decision {
+pub fn decide(version: u32, want: Option<u32>, mode: Mode, failed_version: u32) -> Decision {
     // The role's image decides, as maind does it for the gateway: another version of the same
     // firmware is replaced too (a pulsar update brings a new build).
     let same_family = (version >> 24) as u8 == role(mode).family;
-    let matches = match want {
-        Some(w) => version == w,
-        None => same_family,
-    };
+    let matches = want.map_or(same_family, |w| version == w);
     if matches {
         Decision::Run
     } else if same_family && want.unwrap_or(0) == failed_version {
@@ -613,7 +611,7 @@ impl Service {
         cmds: &mut UnboundedReceiver<Cmd>,
         flash_rx: &mut UnboundedReceiver<FlashMsg>,
     ) -> Wake {
-        let Service {
+        let Self {
             timers,
             link,
             coord,

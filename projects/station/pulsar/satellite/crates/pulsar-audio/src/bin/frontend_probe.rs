@@ -12,7 +12,7 @@
 
 use std::fs::File;
 use std::io::{BufWriter, Seek as _, SeekFrom, Write as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -111,11 +111,11 @@ struct Recorder {
 }
 
 impl Recorder {
-    fn create(path: PathBuf, m: &Model, seconds: u64) -> std::io::Result<Recorder> {
+    fn create(path: PathBuf, m: &Model, seconds: u64) -> std::io::Result<Self> {
         let mut file = BufWriter::new(File::create(&path)?);
         let channels = m.capture_channels as u16;
         file.write_all(&wav_header(channels, m.capture_rate, 0))?;
-        Ok(Recorder {
+        Ok(Self {
             file,
             path,
             channels,
@@ -217,8 +217,8 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
     let native = if custom { "alisa" } else { &a.wake };
     let (h, mut rx) = pulsar_audio::spawn(
         m,
-        PathBuf::from(format!("{MODELS}{native}")),
-        custom.then(|| PathBuf::from(RICARDO_MODEL)),
+        &PathBuf::from(format!("{MODELS}{native}")),
+        custom.then(|| Path::new(RICARDO_MODEL)),
         custom,
         Some(PathBuf::from(COMMAND_MODEL)),
         None,

@@ -2,6 +2,9 @@
 /bazel-*
 /.bazel-cache/
 
+# Root Cargo workspace build output (one target/ for every Rust crate).
+/target/
+
 # Private and historical machine data
 /snapshots/
 /secrets/

@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -5,10 +6,10 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
-    "@pulsar_crates//:libc",
-    "@pulsar_crates//:libloading",
-    "@pulsar_crates//:log",
-    "@pulsar_crates//:tokio",
+    "@crates//:libc",
+    "@crates//:libloading",
+    "@crates//:log",
+    "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
@@ -21,6 +22,7 @@ rust_library(
     ),
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS,
 )
@@ -29,6 +31,7 @@ rust_binary(
     name = "player_probe",
     srcs = ["src/bin/player_probe.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS + [":pulsar_media"],
 )
@@ -38,6 +41,7 @@ rust_test(
     srcs = ["tests/mixer_golden.rs"],
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS + [":pulsar_media"],
 )
@@ -46,6 +50,14 @@ rust_test(
     name = "pulsar_media_unit_tests",
     crate = ":pulsar_media",
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:tokio"],
+    deps = ["@crates//:tokio"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

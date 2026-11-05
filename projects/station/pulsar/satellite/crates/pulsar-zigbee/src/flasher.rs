@@ -117,14 +117,14 @@ struct Port {
 }
 
 impl Port {
-    fn open(tty: &str) -> io::Result<Port> {
+    fn open(tty: &str) -> io::Result<Self> {
         let file = sys::open_tty(tty, false)?;
         // Never write menu keys or an image into a regular file.
         sys::ensure_tty(&file)?;
         // As the C++ flasher: a port that refuses the settings is still tried.
         let _ = sys::set_raw_115200(&file, false);
         sys::flush_io(&file);
-        Ok(Port { file })
+        Ok(Self { file })
     }
 
     fn put(&mut self, mut b: &[u8]) -> bool {

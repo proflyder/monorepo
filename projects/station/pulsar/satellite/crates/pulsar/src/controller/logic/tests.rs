@@ -408,6 +408,7 @@ fn volume_click_gating() {
 
 #[test]
 fn idle_and_auto_update() {
+    use AutoUpdate::*;
     let idle = |phase, a, r, m, ss, z| idle_for_update(phase, a, r, m, ss, z);
     assert!(idle(
         Phase::Idle,
@@ -482,7 +483,6 @@ fn idle_and_auto_update() {
         true
     ));
 
-    use AutoUpdate::*;
     let cur = "v1.0.0";
     assert_eq!(auto_update(true, "v1.1.0", false, cur, "", true), Install);
     assert_eq!(auto_update(true, "v1.1.0", false, cur, "", false), WaitIdle);

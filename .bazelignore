@@ -11,4 +11,6 @@ projects/station/resources
 projects/station/pulsar/satellite/target
 projects/station/pulsar/satellite/build
 projects/station/pulsar/satellite/third_party/src
+# Cargo output of the root workspace (all Rust crates share one target/).
+target
 snapshots

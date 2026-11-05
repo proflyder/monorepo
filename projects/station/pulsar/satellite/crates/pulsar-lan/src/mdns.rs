@@ -101,21 +101,21 @@ impl MdnsHandle {
 /// Opens the responder for "<host>.local". When another responder holds 5353 without
 /// SO_REUSEADDR/SO_REUSEPORT, it falls back to an ephemeral port: announcements still go out,
 /// queries are not heard. Err (logged) if no socket could be bound.
-pub fn spawn(host: String) -> Result<MdnsHandle, String> {
+pub fn spawn(host: &str) -> Result<MdnsHandle, String> {
     start(host, None)
 }
 
 /// `spawn` plus a channel of every question answered (lan_probe).
-pub fn spawn_traced(host: String) -> Result<(MdnsHandle, UnboundedReceiver<Answered>), String> {
+pub fn spawn_traced(host: &str) -> Result<(MdnsHandle, UnboundedReceiver<Answered>), String> {
     let (tx, rx) = unbounded_channel();
     start(host, Some(tx)).map(|h| (h, rx))
 }
 
-fn start(host: String, trace: Option<UnboundedSender<Answered>>) -> Result<MdnsHandle, String> {
+fn start(host: &str, trace: Option<UnboundedSender<Answered>>) -> Result<MdnsHandle, String> {
     let sock = open_socket()?;
     let ip = Rc::new(Cell::new(Ipv4Addr::UNSPECIFIED));
     let mut r = Responder {
-        records: Records::new(&host),
+        records: Records::new(host),
         sock,
         ip: ip.clone(),
         ifindex: 0,
@@ -332,25 +332,22 @@ impl Responder {
         let Ok(best) = net::best_interface_checked() else {
             return false;
         };
-        match best {
-            Some(best) => {
-                changed = best.addr != self.records.ip || best.index != self.ifindex;
-                if changed {
-                    info!("mdns: using {} {}", best.name, best.addr);
-                }
-                self.records.ip = best.addr;
-                self.ifindex = best.index;
-                self.ifname = best.name;
+        if let Some(best) = best {
+            changed = best.addr != self.records.ip || best.index != self.ifindex;
+            if changed {
+                info!("mdns: using {} {}", best.name, best.addr);
             }
-            None => {
-                changed = !self.records.ip.is_unspecified();
-                if changed {
-                    info!("mdns: no usable IPv4 address");
-                }
-                self.records.ip = Ipv4Addr::UNSPECIFIED;
-                self.ifindex = 0;
-                self.ifname.clear();
+            self.records.ip = best.addr;
+            self.ifindex = best.index;
+            self.ifname = best.name;
+        } else {
+            changed = !self.records.ip.is_unspecified();
+            if changed {
+                info!("mdns: no usable IPv4 address");
             }
+            self.records.ip = Ipv4Addr::UNSPECIFIED;
+            self.ifindex = 0;
+            self.ifname.clear();
         }
         self.ip.set(self.records.ip);
         changed

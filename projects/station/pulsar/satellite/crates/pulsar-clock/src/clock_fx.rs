@@ -358,10 +358,10 @@ mod tests {
                 Anim::Listening | Anim::Thinking | Anim::Speaking | Anim::Ringing
             );
             assert_eq!(loops(a), looping);
-            if !looping {
-                assert_eq!(render(a, duration_ms(a)), Frame::default());
-            } else {
+            if looping {
                 assert_eq!(render(a, 37), render(a, 37 + 3 * duration_ms(a)));
+            } else {
+                assert_eq!(render(a, duration_ms(a)), Frame::default());
             }
         }
     }

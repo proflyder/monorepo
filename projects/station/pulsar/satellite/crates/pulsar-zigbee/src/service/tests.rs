@@ -91,7 +91,7 @@ fn coord_state() -> Vec<u8> {
 
 impl Rig {
     /// `fws`: what the radio runs at each opening (the last one repeats); `open_fails`: no tty.
-    fn spawn(mode: Mode, fws: &[Fw], failed_version: u32, open_fails: bool) -> Rig {
+    fn spawn(mode: Mode, fws: &[Fw], failed_version: u32, open_fails: bool) -> Self {
         let dir = Lines::new();
         let router_image = dir.dir().join("zigbee-router.ybl");
         let coordinator_image = dir.dir().join("zigbee-coordinator.ybl");
@@ -148,7 +148,7 @@ impl Rig {
         let (handle, mut rx) = spawn_with(cfg, mode, Backend { open, flash });
         let initial = handle.status();
         assert_eq!(rx.try_recv(), Ok(ZigbeeEvent::Changed));
-        Rig {
+        Self {
             gate,
             joined: Rc::new(Cell::new(false)),
             initial,

@@ -93,7 +93,7 @@ mod golden {
     const TEXT: &str = include_str!("../tests/golden/cxx_reference.txt");
 
     /// The fields after the tag of every line tagged `tag`.
-    pub(crate) fn lines(tag: &str) -> Vec<Vec<&'static str>> {
+    pub fn lines(tag: &str) -> Vec<Vec<&'static str>> {
         TEXT.lines()
             .filter_map(|l| {
                 let mut f = l.split_whitespace();
@@ -102,7 +102,7 @@ mod golden {
             .collect()
     }
 
-    pub(crate) fn f32(hex: &str) -> f32 {
+    pub fn f32(hex: &str) -> f32 {
         f32::from_bits(u32::from_str_radix(hex, 16).unwrap())
     }
 }

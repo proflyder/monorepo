@@ -140,7 +140,7 @@ pub enum Noise {
 
 impl Noise {
     pub fn in_handshake(&self) -> bool {
-        !matches!(self, Noise::Data(_))
+        !matches!(self, Self::Data(_))
     }
 
     /// Client hello: queues the server hello (chosen protocol 0x01, node name and MAC, which
@@ -166,14 +166,14 @@ impl Noise {
             .psk(0, psk)?
             .prologue(&prologue)?
             .build_responder()?;
-        *self = Noise::Handshake(Box::new(hs));
+        *self = Self::Handshake(Box::new(hs));
         Ok(())
     }
 
     /// The initiator's `psk, e` message (after its 0x00 status byte); queues our `e, ee` and
     /// switches to transport mode.
     pub fn handshake(&mut self, body: &[u8], out: &mut Vec<u8>) -> Result<(), HandshakeError> {
-        let Noise::Handshake(hs) = self else {
+        let Self::Handshake(hs) = self else {
             return Err(HandshakeError::Reject("Handshake error"));
         };
         if hs.is_my_turn() {
@@ -206,13 +206,13 @@ impl Noise {
             _ => return Err(HandshakeError::Reject("Handshake error")),
         };
         append_noise_raw(out, &[&reply[..n + 1]]);
-        let Noise::Handshake(hs) = std::mem::replace(self, Noise::ClientHello) else {
+        let Self::Handshake(hs) = std::mem::replace(self, Self::ClientHello) else {
             unreachable!("checked above");
         };
         let ts = hs
             .into_transport_mode()
             .map_err(|_| HandshakeError::SplitFailed)?;
-        *self = Noise::Data(Box::new(ts));
+        *self = Self::Data(Box::new(ts));
         Ok(())
     }
 
@@ -223,7 +223,7 @@ impl Noise {
         body: &[u8],
         buf: &mut Vec<u8>,
     ) -> Result<(u32, Range<usize>), &'static str> {
-        let Noise::Data(ts) = self else {
+        let Self::Data(ts) = self else {
             return Err("noise decrypt failed");
         };
         if buf.len() < body.len() {
@@ -251,7 +251,7 @@ impl Noise {
         msg: &[u8],
         scratch: &mut Vec<u8>,
     ) -> Result<(), EncryptError> {
-        let Noise::Data(ts) = self else {
+        let Self::Data(ts) = self else {
             return Err(EncryptError::NotReady);
         };
         let body = 4 + msg.len();
@@ -264,23 +264,20 @@ impl Noise {
         scratch.extend_from_slice(msg);
         let start = out.len();
         out.resize(start + 3 + body + NOISE_MAC, 0);
-        match ts.write_message(scratch, &mut out[start + 3..]) {
-            Ok(n) => {
-                out[start] = 0x01;
-                out[start + 1..start + 3].copy_from_slice(&(n as u16).to_be_bytes());
-                out.truncate(start + 3 + n);
-                Ok(())
-            }
-            Err(_) => {
-                out.truncate(start);
-                Err(EncryptError::Failed)
-            }
+        if let Ok(n) = ts.write_message(scratch, &mut out[start + 3..]) {
+            out[start] = 0x01;
+            out[start + 1..start + 3].copy_from_slice(&(n as u16).to_be_bytes());
+            out.truncate(start + 3 + n);
+            Ok(())
+        } else {
+            out.truncate(start);
+            Err(EncryptError::Failed)
         }
     }
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use super::*;
 
     pub const NAME: &str = "yandex-midi-test";

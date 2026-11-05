@@ -9,7 +9,7 @@ mod media;
 mod voice;
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use log::{debug, error, info, warn};
 use pulsar_audio::{FrontendEvent, Outcome};
@@ -325,7 +325,7 @@ fn light_rgb(l: &pulsar_esphome::LightState) -> Rgb {
 impl Controller {
     /// Loads the settings and starts every service. Err (to be logged by the caller, exit 1):
     /// an invalid `PULSAR_PORT_OFFSET`, or the API server could not bind its port.
-    pub fn start(model: &'static Model, state_path: PathBuf) -> Result<Controller, String> {
+    pub fn start(model: &'static Model, state_path: PathBuf) -> Result<Self, String> {
         // Before anything starts: a SIGTERM during the start-up still ends the daemon cleanly.
         let term = signal(SignalKind::terminate()).map_err(|e| format!("signals: {e}"))?;
         let int = signal(SignalKind::interrupt()).map_err(|e| format!("signals: {e}"))?;
@@ -464,13 +464,12 @@ impl Controller {
         );
         st.volume = volume;
         // Changes made while starting are written like any other (StateFile, 1 s later).
-        let mut changed = false;
+        let mut changed = migrated;
         if migrated {
             info!(
                 "volume {:.3} from an earlier build -> {:.3}",
                 st.volume_legacy, st.volume
             );
-            changed = true;
         }
         mixer.set_volume(st.volume);
         mixer.set_muted(st.muted);
@@ -502,7 +501,7 @@ impl Controller {
             }
         }
         let (updater, updater_rx) =
-            pulsar_update::spawn(pulsar_update::UPDATE_REPO.into(), VERSION.into());
+            pulsar_update::spawn(pulsar_update::UPDATE_REPO.into(), VERSION);
 
         let (input, input_rx) = match pulsar_hw::spawn_input(model) {
             Ok((h, rx)) => (Some(h), Some(rx)),
@@ -515,16 +514,16 @@ impl Controller {
         let custom_wake = st.wake_word == "ricardo";
         let (mic, mic_rx) = pulsar_audio::spawn(
             model,
-            if custom_wake {
+            &if custom_wake {
                 // Native spotters stay available for a rollback to «Алиса»/«Яндекс».
                 model_dir("alisa")
             } else {
                 model_dir(&st.wake_word)
             },
-            Some(PathBuf::from(RICARDO_MODEL)),
+            Some(Path::new(RICARDO_MODEL)),
             custom_wake,
             Some(PathBuf::from(COMMAND_MODEL)),
-            Some(pulsar_audio::WakeEventOptions {
+            Some(&pulsar_audio::WakeEventOptions {
                 dir: logic::in_dir(&dir, WAKE_EVENTS_DIR),
                 version: VERSION.into(),
                 model: PathBuf::from(RICARDO_MODEL),
@@ -557,31 +556,28 @@ impl Controller {
 
         // A test instance (port offset) stays invisible to HA and Music Assistant.
         let mdns = if ports.offset == 0 {
-            match mdns::spawn(id.name.clone()) {
-                Ok(m) => {
+            if let Ok(m) = mdns::spawn(&id.name) {
+                m.add_service(MdnsService {
+                    service: "_esphomelib._tcp".into(),
+                    instance: id.name.clone(),
+                    port: ports.api,
+                    txt: api.mdns_txt(),
+                });
+                if sendspin.is_some() {
                     m.add_service(MdnsService {
-                        service: "_esphomelib._tcp".into(),
+                        service: "_sendspin._tcp".into(),
                         instance: id.name.clone(),
-                        port: ports.api,
-                        txt: api.mdns_txt(),
+                        port: ports.sendspin,
+                        txt: vec![
+                            "path=/sendspin".into(),
+                            format!("name={}", id.friendly_name),
+                        ],
                     });
-                    if sendspin.is_some() {
-                        m.add_service(MdnsService {
-                            service: "_sendspin._tcp".into(),
-                            instance: id.name.clone(),
-                            port: ports.sendspin,
-                            txt: vec![
-                                "path=/sendspin".into(),
-                                format!("name={}", id.friendly_name),
-                            ],
-                        });
-                    }
-                    Some(m)
                 }
-                Err(_) => {
-                    warn!("api: mDNS advertising unavailable");
-                    None
-                }
+                Some(m)
+            } else {
+                warn!("api: mDNS advertising unavailable");
+                None
             }
         } else {
             None
@@ -624,7 +620,7 @@ impl Controller {
             (Some(h), Some(rx))
         };
 
-        let mut c = Controller {
+        let mut c = Self {
             sendspin,
             zigbee,
             updater,

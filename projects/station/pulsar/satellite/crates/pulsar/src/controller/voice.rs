@@ -55,7 +55,7 @@ impl Controller {
                         && !self.timer_ringing
                         && !self.mic_muted()
                     {
-                        self.start_pipeline("", false, Vec::new(), Vec::new(), None);
+                        self.start_pipeline("", false, &[], &[], None);
                     }
                     self.end_announce();
                 }
@@ -146,13 +146,13 @@ impl Controller {
         }
         // Without the HA pipeline this station could win and stay silent: it does not take part.
         if !self.arbitration_on() || !self.api.voice_subscribed() {
-            return self.answer_wake(phrase, preroll, Vec::new(), endpoint_prior, rec);
+            return self.answer_wake(phrase, &preroll, &[], endpoint_prior, rec);
         }
         self.arbitrating = true;
         self.wake_pending = rec;
         // A station that lost the previous wake word may win this one.
         self.commands_blocked_until_ms = 0;
-        self.arb_phrase = phrase.to_owned();
+        phrase.clone_into(&mut self.arb_phrase);
         self.arb_level = level_db;
         self.arb_audio = preroll;
         // Everything after this point is live post-wake speech held during the decision; the
@@ -168,8 +168,8 @@ impl Controller {
     fn answer_wake(
         &mut self,
         phrase: &str,
-        preroll: Vec<i16>,
-        live: Vec<i16>,
+        preroll: &[i16],
+        live: &[i16],
         endpoint_prior: Option<EndpointPrior>,
         rec: Option<WakeRecord>,
     ) {
@@ -239,7 +239,7 @@ impl Controller {
         // chunk between the preroll and live audio.
         let phrase = self.arb_phrase.clone();
         let rec = self.wake_pending.take();
-        self.answer_wake(&phrase, audio, live, prior, rec);
+        self.answer_wake(&phrase, &audio, &live, prior, rec);
         if self.phase != Phase::Listening {
             self.mic.set_streaming(false); // no dialog started (e.g. HA gone)
         }
@@ -281,8 +281,8 @@ impl Controller {
         &mut self,
         phrase: &str,
         earcon: bool,
-        preroll: Vec<i16>,
-        live: Vec<i16>,
+        preroll: &[i16],
+        live: &[i16],
         endpoint_prior: Option<EndpointPrior>,
     ) {
         // The button, a continued conversation or HA's start_conversation win.
@@ -301,7 +301,7 @@ impl Controller {
         self.run.start();
         self.stop_sent = false;
         self.endpoint = if Self::local_endpointing_enabled() {
-            endpoint_prior.and_then(|p| EndpointRun::new(p, &preroll, &live))
+            endpoint_prior.and_then(|p| EndpointRun::new(p, preroll, live))
         } else {
             None
         };
@@ -370,7 +370,7 @@ impl Controller {
         );
         if !earcon
             && self.phase == Phase::Listening
-            && self.endpoint.as_mut().is_some_and(|r| r.take_end())
+            && self.endpoint.as_mut().is_some_and(EndpointRun::take_end)
         {
             self.send_endpoint_end();
         }
@@ -443,7 +443,7 @@ impl Controller {
             .on_event(ev, get("continue_conversation") == "1");
         match ev {
             VaEvent::RunStart => {
-                self.tts_url = get("url").to_owned();
+                get("url").clone_into(&mut self.tts_url);
                 self.tts_played = false;
             }
             VaEvent::SttStart => {
@@ -489,7 +489,7 @@ impl Controller {
             VaEvent::TtsStart => self.tts_report_owed = true,
             VaEvent::TtsEnd => {
                 if !get("url").is_empty() {
-                    self.tts_url = get("url").to_owned();
+                    get("url").clone_into(&mut self.tts_url);
                 }
                 self.play_tts();
             }
@@ -559,7 +559,7 @@ impl Controller {
             self.st.followup_duration_s,
             self.timer_ringing || self.mic_muted(),
         ) {
-            self.start_pipeline("", false, Vec::new(), Vec::new(), None);
+            self.start_pipeline("", false, &[], &[], None);
             if self.phase == Phase::Listening {
                 self.followup = followup.next_turn();
             }
@@ -692,7 +692,7 @@ impl Controller {
             self.interrupt_speech();
             return self.finish_interaction();
         }
-        self.start_pipeline("", true, Vec::new(), Vec::new(), None);
+        self.start_pipeline("", true, &[], &[], None);
     }
 
     // ---------------- announcements ----------------
@@ -871,7 +871,9 @@ impl Controller {
             self.player.state(Channel::Music),
             self.music_paused_ms,
             self.sendspin_streaming(),
-            self.sendspin.as_ref().is_some_and(|ss| ss.connected()),
+            self.sendspin
+                .as_ref()
+                .is_some_and(pulsar_sendspin::SendspinHandle::connected),
             self.sendspin_ended_ms,
         )
     }
@@ -879,13 +881,12 @@ impl Controller {
     /// True when something was playing. Reads the player and Sendspin states before the
     /// commands (neither changes them synchronously, as in C++).
     fn music_pause(&self) -> bool {
-        let mut paused = false;
-        if matches!(
+        let mut paused = matches!(
             self.player.state(Channel::Music),
             PlayState::Playing | PlayState::Loading
-        ) {
+        );
+        if paused {
             self.player.pause(Channel::Music);
-            paused = true;
         }
         if let Some(ss) = &self.sendspin
             && ss.streaming()

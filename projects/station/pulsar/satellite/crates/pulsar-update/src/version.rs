@@ -58,11 +58,7 @@ pub fn release_newer(latest: &str, current: &str) -> (bool, bool) {
     let Some(l) = parse_version(latest) else {
         return (false, known);
     };
-    match cur {
-        // The same release or a build after it is not older: only a greater triple is newer.
-        Some(c) => (l > c, true),
-        None => (latest != current, false),
-    }
+    cur.map_or_else(|| (latest != current, false), |c| (l > c, true))
 }
 
 #[cfg(test)]

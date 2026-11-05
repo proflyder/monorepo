@@ -139,9 +139,8 @@ fn verify_claim_response_with(
     // Compare the MAC as bytes; encoding the expected value and decoding it
     // again would only add a step that cannot fail.
     let expected = hmac_sha256_b64(key, &mac_message(granted, grant_id));
-    let expected = match b64_decode(&expected) {
-        Ok(expected) => expected,
-        Err(_) => return ClaimResult::fail(ClaimOutcome::InvalidMac, "local mac encoding failed"),
+    let Ok(expected) = b64_decode(&expected) else {
+        return ClaimResult::fail(ClaimOutcome::InvalidMac, "local mac encoding failed");
     };
     if !constant_time_equal(&received, &expected) {
         return ClaimResult::fail(ClaimOutcome::InvalidMac, "mac mismatch");

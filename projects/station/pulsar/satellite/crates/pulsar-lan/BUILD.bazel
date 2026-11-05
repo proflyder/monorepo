@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -5,10 +6,10 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
-    "@pulsar_crates//:libc",
-    "@pulsar_crates//:log",
-    "@pulsar_crates//:socket2",
-    "@pulsar_crates//:tokio",
+    "@crates//:libc",
+    "@crates//:log",
+    "@crates//:socket2",
+    "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
 
@@ -20,6 +21,7 @@ rust_library(
     ),
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS,
 )
@@ -28,6 +30,7 @@ rust_binary(
     name = "lan_probe",
     srcs = ["src/bin/lan_probe.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS + [":pulsar_lan"],
 )
@@ -36,6 +39,14 @@ rust_test(
     name = "pulsar_lan_unit_tests",
     crate = ":pulsar_lan",
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:tokio"],
+    deps = ["@crates//:tokio"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

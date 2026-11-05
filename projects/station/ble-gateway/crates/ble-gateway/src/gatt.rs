@@ -97,12 +97,16 @@ impl Characteristic {
         self.inner
             .value
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
     pub fn set_value(&self, value: &[u8]) {
-        *self.inner.value.lock().unwrap_or_else(|e| e.into_inner()) = value.to_vec();
+        *self
+            .inner
+            .value
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = value.to_vec();
     }
 
     pub fn notifying(&self) -> bool {
@@ -164,11 +168,11 @@ impl Characteristic {
         Vec::new()
     }
 
+    // zbus deserializes D-Bus arguments into owned values; a reference cannot implement the
+    // required `Type`/`Deserialize` contract.
+    #[allow(clippy::needless_pass_by_value)]
     #[zbus(name = "ReadValue")]
-    async fn read_value(
-        &self,
-        options: HashMap<String, OwnedValue>,
-    ) -> Result<Vec<u8>, BluezError> {
+    fn read_value(&self, options: HashMap<String, OwnedValue>) -> Result<Vec<u8>, BluezError> {
         let offset = Self::offset(&options);
         let value = self.value();
         if offset < 0 || offset as usize > value.len() {
@@ -191,9 +195,13 @@ impl Characteristic {
         match self.uuid.as_str() {
             CHAR_SSID | CHAR_PSK | CHAR_TOKEN => {
                 {
-                    let mut current = self.inner.value.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut current = self
+                        .inner
+                        .value
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     if offset == 0 {
-                        *current = value.clone();
+                        value.clone_into(&mut current);
                     } else {
                         let offset = offset as usize;
                         if offset > current.len() {
@@ -230,7 +238,7 @@ impl Characteristic {
     }
 
     #[zbus(name = "StopNotify")]
-    async fn stop_notify(&self) -> Result<(), BluezError> {
+    fn stop_notify(&self) -> Result<(), BluezError> {
         self.set_notifying(false);
         Ok(())
     }
@@ -578,13 +586,10 @@ mod tests {
             .await
             .expect("write offset");
         assert_eq!(characteristic.value(), b"HomeWiFi");
-        let read = characteristic
-            .read_value(offset4)
-            .await
-            .expect("read offset");
+        let read = characteristic.read_value(offset4).expect("read offset");
         assert_eq!(read, b"WiFi");
         let offset99 = HashMap::from([("offset".to_string(), OwnedValue::from(99i32))]);
-        assert!(characteristic.read_value(offset99).await.is_err());
+        assert!(characteristic.read_value(offset99).is_err());
         let offset600 = HashMap::from([("offset".to_string(), OwnedValue::from(600i32))]);
         assert!(
             characteristic
@@ -623,7 +628,6 @@ mod tests {
 
         let read = characteristic
             .read_value(offset8)
-            .await
             .expect("read with uint16 offset");
         assert_eq!(read, b"123");
 
@@ -631,7 +635,7 @@ mod tests {
             "offset".to_string(),
             OwnedValue::try_from(Value::U16(20)).expect("owned u16"),
         )]);
-        assert!(characteristic.read_value(past_end.clone()).await.is_err());
+        assert!(characteristic.read_value(past_end.clone()).is_err());
         assert!(
             characteristic
                 .write_value(b"x".to_vec(), past_end)
@@ -648,7 +652,7 @@ mod tests {
             Characteristic::new(gateway.clone(), 4, CHAR_STATUS, &["read", "notify"]);
         characteristic.start_notify().await.expect("start notify");
         assert!(characteristic.notifying());
-        characteristic.stop_notify().await.expect("stop notify");
+        characteristic.stop_notify().expect("stop notify");
         assert!(!characteristic.notifying());
         assert!(
             characteristic

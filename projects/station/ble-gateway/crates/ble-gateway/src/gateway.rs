@@ -166,7 +166,9 @@ impl Gateway {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub(crate) fn lock_state(&self) -> std::sync::MutexGuard<'_, State> {
@@ -205,6 +207,7 @@ impl Gateway {
         let status_file = {
             let mut state = self.lock();
             state.status = status.to_string();
+            drop(state);
             self.status_file.clone()
         };
         logf!(self.logger, "status: {status}");
@@ -482,7 +485,7 @@ pub fn create_private_dir(path: &Path) -> std::io::Result<()> {
 pub fn trim_token(value: &str) -> String {
     value
         .chars()
-        .filter(|c| c.is_ascii_digit())
+        .filter(char::is_ascii_digit)
         .take(12)
         .collect()
 }

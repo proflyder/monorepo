@@ -2,33 +2,33 @@
 //! the OCI manifest. Only what those need; no dependency of its own.
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum Json {
+pub enum Json {
     Null,
     Bool(bool),
     Number(f64),
     String(String),
-    Array(Vec<Json>),
-    Object(Vec<(String, Json)>),
+    Array(Vec<Self>),
+    Object(Vec<(String, Self)>),
 }
 
 impl Json {
-    pub(crate) fn get(&self, key: &str) -> Option<&Json> {
+    pub(crate) fn get(&self, key: &str) -> Option<&Self> {
         match self {
-            Json::Object(fields) => fields.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+            Self::Object(fields) => fields.iter().find(|(k, _)| k == key).map(|(_, v)| v),
             _ => None,
         }
     }
 
     pub(crate) fn as_str(&self) -> Option<&str> {
         match self {
-            Json::String(s) => Some(s),
+            Self::String(s) => Some(s),
             _ => None,
         }
     }
 
-    pub(crate) fn as_array(&self) -> Option<&[Json]> {
+    pub(crate) fn as_array(&self) -> Option<&[Self]> {
         match self {
-            Json::Array(items) => Some(items),
+            Self::Array(items) => Some(items),
             _ => None,
         }
     }
@@ -38,7 +38,7 @@ impl Json {
 const MAX_DEPTH: u32 = 32;
 
 /// The whole input must be one JSON value (surrounding whitespace allowed).
-pub(crate) fn parse(input: &[u8]) -> Option<Json> {
+pub fn parse(input: &[u8]) -> Option<Json> {
     let mut p = Parser { s: input, i: 0 };
     p.ws();
     let v = p.value(0)?;

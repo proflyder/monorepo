@@ -33,9 +33,9 @@ pub enum Kind {
 impl Kind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Kind::Hit => "hit",
-            Kind::Near => "near",
-            Kind::Miss => "miss",
+            Self::Hit => "hit",
+            Self::Near => "near",
+            Self::Miss => "miss",
         }
     }
 }
@@ -54,12 +54,12 @@ pub enum Outcome {
 impl Outcome {
     pub fn as_str(self) -> &'static str {
         match self {
-            Outcome::Answered => "answered",
-            Outcome::EmptyStt => "empty_stt",
-            Outcome::Cancelled => "cancelled",
-            Outcome::Error => "error",
-            Outcome::DryRun => "dry_run",
-            Outcome::ArbiterLost => "arbiter_lost",
+            Self::Answered => "answered",
+            Self::EmptyStt => "empty_stt",
+            Self::Cancelled => "cancelled",
+            Self::Error => "error",
+            Self::DryRun => "dry_run",
+            Self::ArbiterLost => "arbiter_lost",
         }
     }
 }
@@ -96,13 +96,12 @@ pub fn manifest_thresholds(text: &str) -> Option<Thresholds> {
 /// Reads the thresholds for `model`; the bool tells whether the manifest was used.
 pub fn thresholds_for(model: &Path) -> (Thresholds, bool) {
     let path = model.with_extension("json");
-    match std::fs::read_to_string(&path) {
-        Ok(text) => match manifest_thresholds(&text) {
-            Some(t) => (t, true),
-            None => (Thresholds::default(), false),
+    std::fs::read_to_string(&path).map_or_else(
+        |_| (Thresholds::default(), false),
+        |text| {
+            manifest_thresholds(&text).map_or_else(|| (Thresholds::default(), false), |t| (t, true))
         },
-        Err(_) => (Thresholds::default(), false),
-    }
+    )
 }
 
 /// Milliseconds since the Unix epoch (wall clock, for ids and sidecars; the audio path uses the

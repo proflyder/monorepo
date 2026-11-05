@@ -126,35 +126,35 @@ pub enum VaEvent {
 }
 
 impl VaEvent {
-    const CODES: [(u32, VaEvent); 16] = [
-        (0, VaEvent::Error),
-        (1, VaEvent::RunStart),
-        (2, VaEvent::RunEnd),
-        (3, VaEvent::SttStart),
-        (4, VaEvent::SttEnd),
-        (5, VaEvent::IntentStart),
-        (6, VaEvent::IntentEnd),
-        (7, VaEvent::TtsStart),
-        (8, VaEvent::TtsEnd),
-        (9, VaEvent::WakeWordStart),
-        (10, VaEvent::WakeWordEnd),
-        (11, VaEvent::SttVadStart),
-        (12, VaEvent::SttVadEnd),
-        (98, VaEvent::TtsStreamStart),
-        (99, VaEvent::TtsStreamEnd),
-        (100, VaEvent::IntentProgress),
+    const CODES: [(u32, Self); 16] = [
+        (0, Self::Error),
+        (1, Self::RunStart),
+        (2, Self::RunEnd),
+        (3, Self::SttStart),
+        (4, Self::SttEnd),
+        (5, Self::IntentStart),
+        (6, Self::IntentEnd),
+        (7, Self::TtsStart),
+        (8, Self::TtsEnd),
+        (9, Self::WakeWordStart),
+        (10, Self::WakeWordEnd),
+        (11, Self::SttVadStart),
+        (12, Self::SttVadEnd),
+        (98, Self::TtsStreamStart),
+        (99, Self::TtsStreamEnd),
+        (100, Self::IntentProgress),
     ];
 
     pub fn from_code(code: u32) -> Self {
         Self::CODES
             .iter()
             .find(|(c, _)| *c == code)
-            .map_or(VaEvent::Unknown(code), |&(_, e)| e)
+            .map_or(Self::Unknown(code), |&(_, e)| e)
     }
 
     pub fn code(self) -> u32 {
         match self {
-            VaEvent::Unknown(c) => c,
+            Self::Unknown(c) => c,
             e => Self::CODES
                 .iter()
                 .find(|(_, x)| *x == e)

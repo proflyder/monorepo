@@ -10,10 +10,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 /// fail-closed (no tile, no armed session) and the shared locks tolerate
 /// poisoning, so continuing after the unwind is safe.
 pub fn guard<T>(body: impl FnOnce() -> T, on_panic: impl FnOnce() -> T) -> T {
-    match catch_unwind(AssertUnwindSafe(body)) {
-        Ok(value) => value,
-        Err(_) => on_panic(),
-    }
+    catch_unwind(AssertUnwindSafe(body)).unwrap_or_else(|_| on_panic())
 }
 
 #[cfg(test)]

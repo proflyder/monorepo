@@ -12,10 +12,9 @@ use super::*;
 // CARGO_MANIFEST_DIR сборочного экшена не существует; PULSAR_MANIFEST_DIR
 // задаёт путь относительно текущего каталога теста. Cargo его не выставляет,
 // поэтому там работает прежний CARGO_MANIFEST_DIR.
-fn dir() -> std::path::PathBuf {
+fn dir() -> PathBuf {
     std::env::var_os("PULSAR_MANIFEST_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+        .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
         .join("tests/golden/settings")
 }
 
@@ -131,7 +130,7 @@ fn load_then_save_matches_cxx() {
 }
 
 /// A fresh directory under the system temp dir, removed on drop.
-struct TmpDir(std::path::PathBuf);
+struct TmpDir(PathBuf);
 
 impl TmpDir {
     fn new() -> Self {

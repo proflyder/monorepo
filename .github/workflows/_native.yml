@@ -235,7 +235,7 @@ jobs:
           # Action-output disk cache (.bazelrc only); the key tracks both the
           # Rust workspace and the pinned zig/Windows toolchain platform.
           path: ~/.cache/bazel-disk
-          key: bazel-logon-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'solutions/windows-logon-provider/Cargo.lock', 'solutions/windows-logon-provider/crate-universe.lock', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
+          key: bazel-logon-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
           restore-keys: |
             bazel-logon-${{ runner.os }}-
             bazel-${{ runner.os }}-
@@ -338,7 +338,7 @@ jobs:
           # Action-output disk cache (.bazelrc only); keyed like the pulsar-bazel
           # unit so both restore the same Rust/C++ objects.
           path: ~/.cache/bazel-disk
-          key: bazel-pulsar-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/station/pulsar/satellite/Cargo.lock', 'projects/station/pulsar/satellite/crate-universe.lock') }}
+          key: bazel-pulsar-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-keys: |
             bazel-pulsar-${{ runner.os }}-
             bazel-${{ runner.os }}-

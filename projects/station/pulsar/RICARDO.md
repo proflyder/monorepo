@@ -8,6 +8,24 @@ latest such release, the current one is recorded in the monorepo `docs/STATE.md`
 Base: `Morvex885/pulsar` `v0.5.4`, merged with the earlier upstream merges kept in history.
 Deliberate deviations from upstream are listed below.
 
+## Upstream merge и Cargo.toml
+
+Pulsar — член единого корневого Cargo workspace: `projects/station/pulsar/satellite`
+своего `Cargo.toml` (workspace), `Cargo.lock`, `crate-universe.lock` и
+`rust-toolchain.toml` больше не имеет. Upstream-патч (`git diff vA..vB` →
+`git apply -3`) применяется как обычно, но его правки манифестов переносятся
+вручную:
+
+- версии и фичи из upstream `[workspace.dependencies]` добавляются или
+  обновляются в корневом `/Cargo.toml`; манифесты крейтов остаются с
+  `{ workspace = true }`;
+- общий `[workspace.package]` (edition 2024, лицензия) и `[workspace.lints]`
+  — тоже в корне; upstream-правки `[profile.*]` мапятся на `release`/`station`
+  в корневом файле, а реальные флаги артефактов задаёт Bazel;
+- после переноса — `cargo metadata` (пересобрать `/Cargo.lock`),
+  `CARGO_BAZEL_REPIN=1 bazel build ...` (пересобрать `/crate-universe.lock`) и
+  обычный PR.
+
 ## What this profile keeps
 
 - ESPHome Native API satellite and Sendspin / Music Assistant endpoint.

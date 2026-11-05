@@ -135,16 +135,16 @@ enum Content {
 impl Content {
     fn since(&self) -> i64 {
         match self {
-            Content::Text { since, .. } | Content::Face { since, .. } => *since,
+            Self::Text { since, .. } | Self::Face { since, .. } => *since,
         }
     }
 
     /// Frame step while it moves; 0 = static.
     fn step(&self, scroll_ms: i64) -> i64 {
         match self {
-            Content::Text { cells, .. } if cells.len() > DIGITS => scroll_ms,
-            Content::Face { face, .. } if *face == font::FACE_BLINK => font::BLINK_STEP_MS,
-            Content::Face { face, .. } if *face == font::FACE_ALL => font::FACE_CYCLE_MS,
+            Self::Text { cells, .. } if cells.len() > DIGITS => scroll_ms,
+            Self::Face { face, .. } if *face == font::FACE_BLINK => font::BLINK_STEP_MS,
+            Self::Face { face, .. } if *face == font::FACE_ALL => font::FACE_CYCLE_MS,
             _ => 0,
         }
     }
@@ -152,8 +152,8 @@ impl Content {
     fn glyphs(&self, now: i64, scroll_ms: i64) -> (Glyphs, bool) {
         let t = now - self.since();
         match self {
-            Content::Text { cells, .. } => font::text_glyphs(cells, t, scroll_ms),
-            Content::Face { face, .. } => (font::face_glyphs(*face, t), false),
+            Self::Text { cells, .. } => font::text_glyphs(cells, t, scroll_ms),
+            Self::Face { face, .. } => (font::face_glyphs(*face, t), false),
         }
     }
 }
@@ -286,15 +286,15 @@ impl Layers {
     }
 
     fn set_face(&mut self, index: i32, now: i64) {
-        if !(0..font::FACE_COUNT).contains(&index) {
-            if matches!(self.base, Some(Content::Face { .. })) {
-                self.base = None;
-            }
-        } else {
+        if (0..font::FACE_COUNT).contains(&index) {
             self.base = Some(Content::Face {
                 face: index,
                 since: now,
             });
+        } else {
+            if matches!(self.base, Some(Content::Face { .. })) {
+                self.base = None;
+            }
         }
     }
 
@@ -536,7 +536,7 @@ impl Leds {
 
     /// The segments, colon and centre LEDs of `model`; aux LEDs are switched off once. None
     /// (logged) when no segment exists.
-    fn open(model: &Model) -> Option<Leds> {
+    fn open(model: &Model) -> Option<Self> {
         let mut found = 0;
         let seg = std::array::from_fn(|d| {
             std::array::from_fn(|s| {
@@ -608,7 +608,7 @@ impl Leds {
                 "segment brightness"
             }
         );
-        Some(Leds {
+        Some(Self {
             seg,
             colon,
             center,

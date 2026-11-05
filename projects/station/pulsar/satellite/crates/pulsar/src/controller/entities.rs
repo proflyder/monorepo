@@ -117,10 +117,10 @@ impl Controller {
             // Only on a change: setenv races with threads reading the environment (GLib).
             if tz != self.applied_tz {
                 pulsar_core::tz::set_tz(tz);
-                self.applied_tz = tz.to_owned();
+                tz.clone_into(&mut self.applied_tz);
             }
             if tz != self.st.tz {
-                self.st.tz = tz.to_owned();
+                tz.clone_into(&mut self.st.tz);
                 self.persist();
             }
         }

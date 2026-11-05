@@ -35,7 +35,7 @@ struct Pending {
 }
 
 /// Ring and capture state of one processing thread.
-pub(crate) struct Capture {
+pub struct Capture {
     frame: usize,
     ring: Vec<i16>,
     next: usize,

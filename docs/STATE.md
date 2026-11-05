@@ -185,7 +185,11 @@
 - Pulsar собирается в монорепо: исходники лежат в `projects/station/pulsar`,
   сборка — Bazel (Rust + герметичный zig cc-toolchain + sendspin-cpp из
   `http_archive`); монорепо собирает его в CI-юнитах `pulsar-bazel` и `pulsar`
-  (`_bazel.yml`/`_native.yml`). Pulsar — publishable native-юнит общего `deploy-home` с
+  (`_bazel.yml`/`_native.yml`). Весь first-party Rust (Pulsar, BLE gateway,
+  Windows logon provider, voice-recorder helper) — один корневой Cargo
+  workspace: `/Cargo.toml`, `/Cargo.lock`, `/rust-toolchain.toml`, один
+  `@crates//` и общие `[workspace.lints]` (решение 40). Pulsar — publishable
+  native-юнит общего `deploy-home` с
   `publish_when` по `projects/station/pulsar/VERSION`: только изменение этого
   файла на `develop` запускает `native-build` → `publish-native` →
   OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`).

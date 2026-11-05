@@ -389,10 +389,7 @@ fn main() -> ExitCode {
                 _ = sigterm.recv() => Step::Signal,
                 _ = sighup.recv() => Step::Signal,
                 key = probe.timers.next() => probe.timer(key),
-                ev = rx.recv() => match ev {
-                    Some(ev) => probe.event(ev),
-                    None => Step::Exit,
-                },
+                ev = rx.recv() => ev.map_or(Step::Exit, |ev| probe.event(ev)),
             };
             if !matches!(step, Step::Continue) {
                 return step;

@@ -2,7 +2,7 @@
 //! request each one makes inside its callback.
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct StreamParams {
+pub struct StreamParams {
     /// sendspin::SendspinCodecFormat value.
     pub codec: u8,
     pub rate: u32,
@@ -12,7 +12,7 @@ pub(crate) struct StreamParams {
 
 /// Library events of its main loop thread.
 #[derive(Debug)]
-pub(crate) enum LibEvent {
+pub enum LibEvent {
     /// `playing`: None when the update carries no playback state.
     Group {
         playing: Option<bool>,
@@ -55,7 +55,7 @@ pub(crate) enum LibEvent {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SinkRequest {
+pub enum SinkRequest {
     Configure { rate: u32, channels: u8, bits: u8 },
     Release,
 }
@@ -65,7 +65,7 @@ pub(crate) enum SinkRequest {
 /// (player_role.cpp signal_stream_start, sync_task.cpp). Audio written before the configure
 /// would be discarded unreported while the library counts it as buffered, shifting playback
 /// timing. As in the C++ callbacks; the actor only logs and holds.
-pub(crate) fn sink_request(ev: &LibEvent) -> Option<SinkRequest> {
+pub fn sink_request(ev: &LibEvent) -> Option<SinkRequest> {
     match ev {
         LibEvent::StreamStart(Some(p)) => Some(SinkRequest::Configure {
             rate: p.rate,

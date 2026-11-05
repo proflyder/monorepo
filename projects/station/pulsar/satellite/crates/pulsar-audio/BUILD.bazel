@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
@@ -14,8 +15,9 @@ cargo_build_script(
     srcs = ["build.rs"],
     data = glob(["ricardo/**"]),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@pulsar_crates//:cc"],
+    deps = ["@crates//:cc"],
 )
 
 rust_library(
@@ -26,14 +28,15 @@ rust_library(
     ),
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_audio_build_script",
-        "@pulsar_crates//:libc",
-        "@pulsar_crates//:libloading",
-        "@pulsar_crates//:log",
-        "@pulsar_crates//:ring",
-        "@pulsar_crates//:tokio",
+        "@crates//:libc",
+        "@crates//:libloading",
+        "@crates//:log",
+        "@crates//:ring",
+        "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
     ],
@@ -44,14 +47,15 @@ rust_test(
     srcs = ["tests/spectrum_golden.rs"],
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_audio",
-        "@pulsar_crates//:libc",
-        "@pulsar_crates//:libloading",
-        "@pulsar_crates//:log",
-        "@pulsar_crates//:ring",
-        "@pulsar_crates//:tokio",
+        "@crates//:libc",
+        "@crates//:libloading",
+        "@crates//:log",
+        "@crates//:ring",
+        "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
     ],
@@ -61,6 +65,7 @@ rust_test(
     name = "pulsar_audio_unit_tests",
     crate = ":pulsar_audio",
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
 )
 
@@ -68,14 +73,15 @@ rust_binary(
     name = "frontend_probe",
     srcs = ["src/bin/frontend_probe.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_audio",
-        "@pulsar_crates//:libc",
-        "@pulsar_crates//:libloading",
-        "@pulsar_crates//:log",
-        "@pulsar_crates//:ring",
-        "@pulsar_crates//:tokio",
+        "@crates//:libc",
+        "@crates//:libloading",
+        "@crates//:log",
+        "@crates//:ring",
+        "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
     ],
@@ -85,15 +91,23 @@ rust_binary(
     name = "ww_offline",
     srcs = ["src/bin/ww_offline.rs"],
     edition = "2024",
+    lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_audio",
-        "@pulsar_crates//:libc",
-        "@pulsar_crates//:libloading",
-        "@pulsar_crates//:log",
-        "@pulsar_crates//:ring",
-        "@pulsar_crates//:tokio",
+        "@crates//:libc",
+        "@crates//:libloading",
+        "@crates//:log",
+        "@crates//:ring",
+        "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
     ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
 )

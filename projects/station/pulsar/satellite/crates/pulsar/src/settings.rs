@@ -122,13 +122,10 @@ impl Default for Settings {
 impl Settings {
     /// Reads `path` over the current values; false when it cannot be read.
     pub fn load(&mut self, path: &Path) -> bool {
-        match std::fs::read(path) {
-            Ok(text) => {
-                self.parse(&text);
-                true
-            }
-            Err(_) => false,
-        }
+        std::fs::read(path).is_ok_and(|text| {
+            self.parse(&text);
+            true
+        })
     }
 
     /// The C++ `Settings::load` loop: lines split at '\n' only (a '\r' stays in the value), the

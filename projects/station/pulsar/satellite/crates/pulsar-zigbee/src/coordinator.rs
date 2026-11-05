@@ -149,7 +149,7 @@ pub struct Network {
 
 impl Default for Network {
     fn default() -> Self {
-        Network {
+        Self {
             formed: false,
             forming: false,
             pan: 0xFFFF,
@@ -183,7 +183,7 @@ pub struct NetworkConfig {
 
 impl Default for NetworkConfig {
     fn default() -> Self {
-        NetworkConfig {
+        Self {
             channel: 15,
             pan: 0xFFFF,
             ext_pan: 0,
@@ -265,8 +265,8 @@ impl Coordinator {
     /// set before [`Coordinator::start`]; nothing else runs until then. Events the link had
     /// already queued are the coordinator's (as in C++, where `start` took over the link's
     /// callbacks in the same dispatch).
-    pub fn new(link: Link) -> Coordinator {
-        Coordinator {
+    pub fn new(link: Link) -> Self {
+        Self {
             link,
             timers: Timers::new(),
             started: false,
@@ -574,18 +574,15 @@ impl Coordinator {
             // Simple_Desc_req
             0x0004 => {
                 put_le16(&mut r, me);
-                match b.get(2).and_then(|ep| self.endpoints.get(ep)) {
-                    Some(d) => {
-                        let mut desc = Vec::new();
-                        put_descriptor(&mut desc, d);
-                        // Small: 8 bytes plus two bytes per cluster, at most 32 + 32.
-                        r.push(desc.len() as u8);
-                        r.extend_from_slice(&desc);
-                    }
-                    None => {
-                        r[1] = ZDO_NOT_ACTIVE;
-                        r.push(0);
-                    }
+                if let Some(d) = b.get(2).and_then(|ep| self.endpoints.get(ep)) {
+                    let mut desc = Vec::new();
+                    put_descriptor(&mut desc, d);
+                    // Small: 8 bytes plus two bytes per cluster, at most 32 + 32.
+                    r.push(desc.len() as u8);
+                    r.extend_from_slice(&desc);
+                } else {
+                    r[1] = ZDO_NOT_ACTIVE;
+                    r.push(0);
                 }
             }
             // Active_EP_req

@@ -16,7 +16,7 @@ fn max(a: f32, b: f32) -> f32 {
 }
 
 /// Gain after `frames` frames of the ramp from `gain` toward `target` (rate 0 counts as 48 kHz).
-pub(crate) fn ramp_end_gain(gain: f32, target: f32, rate: u32, frames: u32) -> f32 {
+pub fn ramp_end_gain(gain: f32, target: f32, rate: u32, frames: u32) -> f32 {
     let rate = if rate != 0 { rate } else { 48000 };
     let step = 1.0 / (RAMP_SEC * rate as f32);
     let d = step * frames as f32;
@@ -29,7 +29,7 @@ pub(crate) fn ramp_end_gain(gain: f32, target: f32, rate: u32, frames: u32) -> f
 
 /// Scales `frames` interleaved S16_LE frames of `data` into `out`, ramping from `gain` toward
 /// `target` one step per frame (`rate` must not be 0). Samples round to nearest even, as lrintf.
-pub(crate) fn scale_s16(
+pub fn scale_s16(
     data: &[u8],
     frames: usize,
     channels: usize,

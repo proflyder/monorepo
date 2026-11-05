@@ -65,7 +65,7 @@ jobs:
           # Action-output disk cache (.bazelrc only). The unit is per-unit keyed
           # so a small unit cannot evict the large Pulsar build.
           path: ~/.cache/bazel-disk
-          key: bazel-${{ inputs.unit }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/station/pulsar/satellite/Cargo.lock', 'projects/station/pulsar/satellite/crate-universe.lock') }}
+          key: bazel-${{ inputs.unit }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-keys: |
             bazel-${{ inputs.unit }}-${{ runner.os }}-
             bazel-${{ runner.os }}-

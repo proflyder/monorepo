@@ -36,10 +36,10 @@ impl Channel {
         self as usize
     }
 
-    fn from_index(i: usize) -> Option<Channel> {
+    fn from_index(i: usize) -> Option<Self> {
         match i {
-            0 => Some(Channel::Music),
-            1 => Some(Channel::Announce),
+            0 => Some(Self::Music),
+            1 => Some(Self::Announce),
             _ => None,
         }
     }
@@ -57,21 +57,21 @@ pub enum PlayState {
 impl PlayState {
     fn name(self) -> &'static str {
         match self {
-            PlayState::Idle => "IDLE",
-            PlayState::Loading => "LOADING",
-            PlayState::Playing => "PLAYING",
-            PlayState::Paused => "PAUSED",
-            PlayState::Error => "ERROR",
+            Self::Idle => "IDLE",
+            Self::Loading => "LOADING",
+            Self::Playing => "PLAYING",
+            Self::Paused => "PAUSED",
+            Self::Error => "ERROR",
         }
     }
 
-    fn from_u8(v: u8) -> PlayState {
+    fn from_u8(v: u8) -> Self {
         match v {
-            1 => PlayState::Loading,
-            2 => PlayState::Playing,
-            3 => PlayState::Paused,
-            4 => PlayState::Error,
-            _ => PlayState::Idle,
+            1 => Self::Loading,
+            2 => Self::Playing,
+            3 => Self::Paused,
+            4 => Self::Error,
+            _ => Self::Idle,
         }
     }
 }
@@ -116,7 +116,7 @@ const RAMP_MS: u32 = 20;
 
 /// GstState values the player sets or compares.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum GstState {
+pub enum GstState {
     Null = 1,
     Paused = 3,
     Playing = 4,
@@ -124,7 +124,7 @@ pub(crate) enum GstState {
 
 /// A bus message, as far as the player reads it.
 #[derive(Debug)]
-pub(crate) enum Msg {
+pub enum Msg {
     Eos,
     Error(ErrorInfo),
     Warning(String),
@@ -139,7 +139,7 @@ pub(crate) enum Msg {
 
 /// A GError from an error / warning message.
 #[derive(Debug)]
-pub(crate) struct ErrorInfo {
+pub struct ErrorInfo {
     pub(crate) message: String,
     pub(crate) debug: Option<String>,
     /// (domain quark, code); None when the message carried no GError.
@@ -148,7 +148,7 @@ pub(crate) struct ErrorInfo {
 
 /// GLib timeouts of the state machine.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Timer {
+pub enum Timer {
     Retry(Channel),
     Ramp(Channel),
 }
@@ -156,23 +156,23 @@ pub(crate) enum Timer {
 impl Timer {
     fn tag(self) -> usize {
         match self {
-            Timer::Retry(ch) => ch.index() * 2,
-            Timer::Ramp(ch) => ch.index() * 2 + 1,
+            Self::Retry(ch) => ch.index() * 2,
+            Self::Ramp(ch) => ch.index() * 2 + 1,
         }
     }
 
-    fn from_tag(tag: usize) -> Option<Timer> {
+    fn from_tag(tag: usize) -> Option<Self> {
         let ch = Channel::from_index(tag / 2)?;
         Some(if tag.is_multiple_of(2) {
-            Timer::Retry(ch)
+            Self::Retry(ch)
         } else {
-            Timer::Ramp(ch)
+            Self::Ramp(ch)
         })
     }
 }
 
 /// http(s)://, file:// or other uris pass unchanged; an absolute path becomes file://.
-pub(crate) fn to_uri(u: &str) -> Cow<'_, str> {
+pub fn to_uri(u: &str) -> Cow<'_, str> {
     if u.contains("://") {
         Cow::Borrowed(u)
     } else if u.starts_with('/') {
@@ -184,7 +184,7 @@ pub(crate) fn to_uri(u: &str) -> Cow<'_, str> {
 
 /// souphttpsrc (1.14) writes the libsoup status into the error's debug text as
 /// "<reason> (<status>), URL: <uri>, Redirect to: ..."; -1 when there is none.
-pub(crate) fn soup_status(dbg: Option<&str>) -> i32 {
+pub fn soup_status(dbg: Option<&str>) -> i32 {
     let Some(dbg) = dbg else { return -1 };
     let Some(p) = dbg.find("), URL: ") else {
         return -1;
@@ -205,7 +205,7 @@ pub(crate) fn soup_status(dbg: Option<&str>) -> i32 {
 
 /// MUSIC http(s) streams only: the network may come back, a local file or a TTS answer will not
 /// (and a late answer is worse than none). `url` as given to play().
-pub(crate) fn retryable(
+pub fn retryable(
     ch: Channel,
     url: &str,
     err: &ErrorInfo,
@@ -231,7 +231,7 @@ pub(crate) fn retryable(
 
 /// The next retry of a url that failed `retries` times so far and last (re)started at
 /// `started_ms`: (retries including this one, delay in ms), None when they are used up.
-pub(crate) fn next_retry(retries: u32, started_ms: i64, now_ms: i64) -> Option<(u32, u32)> {
+pub fn next_retry(retries: u32, started_ms: i64, now_ms: i64) -> Option<(u32, u32)> {
     let retries = if now_ms - started_ms >= RETRY_RESET_MS {
         0
     } else {
@@ -248,7 +248,7 @@ fn clamp_gain(gain: f32) -> f64 {
 }
 
 /// What the state machine does to GStreamer (and GLib timeouts); faked by the tests.
-pub(crate) trait Backend: Send {
+pub trait Backend: Send {
     /// false on GST_STATE_CHANGE_FAILURE.
     fn set_state(&mut self, ch: Channel, s: GstState) -> bool;
     fn set_uri(&mut self, ch: Channel, uri: &str);
@@ -277,7 +277,7 @@ pub(crate) trait Backend: Send {
 }
 
 /// State shared by the handle (runtime thread) and the GLib thread.
-pub(crate) struct Shared {
+pub struct Shared {
     /// PlayState per channel; written by the GLib thread only, before the State event.
     states: [AtomicU8; 2],
     /// Per channel: the play() whose Done is still owed.
@@ -286,8 +286,8 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
-    fn new(events: UnboundedSender<PlayerEvent>) -> Shared {
-        Shared {
+    fn new(events: UnboundedSender<PlayerEvent>) -> Self {
+        Self {
             states: [AtomicU8::new(0), AtomicU8::new(0)],
             pending: Mutex::new([None, None]),
             events,
@@ -318,6 +318,7 @@ impl Shared {
         let mut p = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
         if p[ch.index()] == Some(id) {
             p[ch.index()] = None;
+            drop(p);
             self.send(PlayerEvent::Done { id, ok });
         }
     }
@@ -352,8 +353,8 @@ struct Chan {
 }
 
 impl Chan {
-    fn new() -> Chan {
-        Chan {
+    fn new() -> Self {
+        Self {
             urls: Vec::new(),
             index: 0,
             item: PlayId(0),
@@ -375,7 +376,7 @@ impl Chan {
 }
 
 /// The player's state machine; runs on the GLib thread.
-pub(crate) struct Machine {
+pub struct Machine {
     backend: Box<dyn Backend>,
     shared: Arc<Shared>,
     chans: [Chan; 2],
@@ -384,8 +385,8 @@ pub(crate) struct Machine {
 }
 
 impl Machine {
-    fn new(backend: Box<dyn Backend>, shared: Arc<Shared>) -> Machine {
-        Machine {
+    fn new(backend: Box<dyn Backend>, shared: Arc<Shared>) -> Self {
+        Self {
             backend,
             shared,
             chans: [Chan::new(), Chan::new()],
@@ -789,7 +790,7 @@ fn with_machine<R>(f: impl FnOnce(&mut Machine) -> R) -> Option<R> {
 }
 
 /// Bus watch of channel `tag`.
-pub(crate) fn on_bus(tag: usize, msg: &gst::Message) {
+pub fn on_bus(tag: usize, msg: &gst::Message) {
     let Some(ch) = Channel::from_index(tag) else {
         return;
     };
@@ -807,7 +808,7 @@ fn on_out(ev: OutEvent) {
 }
 
 /// GLib timeout `tag`; true keeps it.
-pub(crate) fn on_timer(tag: usize) -> bool {
+pub fn on_timer(tag: usize) -> bool {
     Timer::from_tag(tag)
         .and_then(|t| with_machine(|m| m.on_timer(t)))
         .unwrap_or(false)
@@ -1038,8 +1039,8 @@ pub fn spawn(model: &'static Model) -> (PlayerHandle, UnboundedReceiver<PlayerEv
 }
 
 impl PlayerHandle {
-    fn new(shared: Arc<Shared>, exec: Option<Box<dyn Exec>>) -> PlayerHandle {
-        PlayerHandle {
+    fn new(shared: Arc<Shared>, exec: Option<Box<dyn Exec>>) -> Self {
+        Self {
             inner: Rc::new(Inner {
                 shared,
                 next_id: Cell::new(1),
@@ -1344,7 +1345,7 @@ mod tests {
     }
 
     impl Rig {
-        fn new() -> Rig {
+        fn new() -> Self {
             let (tx, rx) = unbounded_channel();
             let shared = Arc::new(Shared::new(tx));
             let fake = Arc::new(Mutex::new(Fake::default()));
@@ -1354,7 +1355,7 @@ mod tests {
             )));
             let queue = Rc::new(RefCell::new(VecDeque::new()));
             let h = PlayerHandle::new(shared, Some(Box::new(QueueExec(Rc::clone(&queue)))));
-            Rig { h, rx, queue, fake }
+            Self { h, rx, queue, fake }
         }
 
         fn pump(&self) {

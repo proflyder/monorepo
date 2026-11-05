@@ -29,8 +29,8 @@ pub struct Mixer {
 impl Mixer {
     /// Card 0; adopts the current raw value when it reads as > 0, else the volume stays 0.5 (0.1
     /// with software volume).
-    pub fn open(model: &'static Model) -> Mixer {
-        let mut mixer = Mixer {
+    pub fn open(model: &'static Model) -> Self {
+        let mut mixer = Self {
             model,
             ctl: None,
             // No hardware master: the controller applies this gain to the player channels.

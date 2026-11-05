@@ -8,18 +8,18 @@ use std::sync::OnceLock;
 
 use libloading::os::unix::{Library, RTLD_GLOBAL, RTLD_NOW};
 
-pub(crate) const SONAME: &str = "libasound.so.2";
+pub const SONAME: &str = "libasound.so.2";
 
-pub(crate) const STREAM_PLAYBACK: c_int = 0;
-pub(crate) const STREAM_CAPTURE: c_int = 1;
-pub(crate) const PCM_NONBLOCK: c_int = 0x1;
-pub(crate) const ACCESS_RW_INTERLEAVED: c_int = 3;
-pub(crate) const FORMAT_S16_LE: c_int = 2;
-pub(crate) const FORMAT_S32_LE: c_int = 10;
-pub(crate) const FORMAT_S24_3LE: c_int = 32;
+pub const STREAM_PLAYBACK: c_int = 0;
+pub const STREAM_CAPTURE: c_int = 1;
+pub const PCM_NONBLOCK: c_int = 0x1;
+pub const ACCESS_RW_INTERLEAVED: c_int = 3;
+pub const FORMAT_S16_LE: c_int = 2;
+pub const FORMAT_S32_LE: c_int = 10;
+pub const FORMAT_S24_3LE: c_int = 32;
 const CTL_ELEM_IFACE_MIXER: c_int = 2;
 // snd_ctl_elem_value_t holds 128 integers; alsa-lib asserts (aborts) on a larger index.
-pub(crate) const CTL_MAX_INTEGERS: usize = 128;
+pub const CTL_MAX_INTEGERS: usize = 128;
 
 type Pcm = c_void;
 type HwP = c_void;
@@ -37,7 +37,7 @@ type Sframes = c_long;
 // never reads the tail.
 type ErrorHandler = unsafe extern "C" fn(*const c_char, c_int, *const c_char, c_int, *const c_char);
 
-pub(crate) struct Lib {
+pub struct Lib {
     _lib: Library,
     modern_aliases: bool,
     strerror: unsafe extern "C" fn(c_int) -> *const c_char,
@@ -97,12 +97,10 @@ pub(crate) struct Lib {
     value_set_integer: unsafe extern "C" fn(*mut ElemValue, c_uint, c_long),
 }
 
-fn dl_error(e: libloading::Error) -> String {
+fn dl_error(e: &libloading::Error) -> String {
     // The source carries dlerror()'s text ("<file>: cannot open shared object file: ...").
-    match e.source() {
-        Some(src) => src.to_string(),
-        None => e.to_string(),
-    }
+    e.source()
+        .map_or_else(|| e.to_string(), ToString::to_string)
 }
 
 /// Resolves `name` (NUL-terminated) as a function pointer of type `T`.
@@ -112,7 +110,7 @@ fn dl_error(e: libloading::Error) -> String {
 unsafe fn sym<T: Copy>(lib: &Library, name: &CStr) -> Result<T, String> {
     // SAFETY: the caller guarantees T matches the symbol's prototype; the pointer is only used
     // while `lib` stays loaded (Lib keeps it for the life of the process).
-    unsafe { lib.get::<T>(name).map(|s| *s).map_err(dl_error) }
+    unsafe { lib.get::<T>(name).map(|s| *s).map_err(|e| dl_error(&e)) }
 }
 
 /// The current hw_params ABI: the `__snd_*` alias where the library exports one, else the plain
@@ -125,7 +123,7 @@ unsafe fn modern<T: Copy>(lib: &Library, alias: &CStr, plain: &CStr) -> Result<T
     unsafe { sym(lib, alias).or_else(|_| sym(lib, plain)) }
 }
 
-pub(crate) fn load_from(soname: &str) -> Result<Lib, String> {
+pub fn load_from(soname: &str) -> Result<Lib, String> {
     // Midi firmware images with a 32-bit userland ship a versioned libasound (ALSA_0.9 +
     // ALSA_0.9.0rc4). There the plain names of the hw_params get / set_*_near functions can bind
     // to the ALSA_0.9 compat entries, which take values instead of pointers (period / buffer
@@ -136,7 +134,8 @@ pub(crate) fn load_from(soname: &str) -> Result<Lib, String> {
     // directly linked C++ daemon did.
     //
     // SAFETY: libasound's initialisers have no preconditions; it is never unloaded.
-    let lib = unsafe { Library::open(Some(soname), RTLD_NOW | RTLD_GLOBAL) }.map_err(dl_error)?;
+    let lib =
+        unsafe { Library::open(Some(soname), RTLD_NOW | RTLD_GLOBAL) }.map_err(|e| dl_error(&e))?;
     // SAFETY: every `sym`/`modern` type below is the prototype from alsa/pcm.h, alsa/control.h
     // and alsa/error.h, with snd_pcm_uframes_t = unsigned long, snd_pcm_sframes_t = long and the
     // enums as int.
@@ -223,7 +222,7 @@ pub(crate) fn load_from(soname: &str) -> Result<Lib, String> {
 /// Set by pulsar_alsa::init before the first load; empty = the loader's soname lookup.
 static LIB_PATH: OnceLock<&'static str> = OnceLock::new();
 
-pub(crate) fn set_library_path(path: &'static str) {
+pub fn set_library_path(path: &'static str) {
     // First setting wins: a later call would be too late for the already-loaded library.
     let _ = LIB_PATH.set(path);
 }
@@ -231,7 +230,7 @@ pub(crate) fn set_library_path(path: &'static str) {
 // Logged once: later calls only see -ENOENT.
 static LIB: OnceLock<Result<Lib, String>> = OnceLock::new();
 
-pub(crate) fn lib() -> Result<&'static Lib, &'static str> {
+pub fn lib() -> Result<&'static Lib, &'static str> {
     LIB.get_or_init(|| {
         let path = LIB_PATH.get().copied().unwrap_or_default();
         let path = if path.is_empty() { SONAME } else { path };
@@ -339,7 +338,7 @@ unsafe extern "C" fn quiet_handler(
 }
 
 /// An open snd_pcm_t; closed on drop.
-pub(crate) struct RawPcm {
+pub struct RawPcm {
     lib: &'static Lib,
     pcm: NonNull<Pcm>,
 }
@@ -356,7 +355,7 @@ impl Drop for RawPcm {
 }
 
 /// snd_pcm_hw_params_t from snd_pcm_hw_params_malloc.
-pub(crate) struct HwParams {
+pub struct HwParams {
     lib: &'static Lib,
     p: NonNull<HwP>,
 }
@@ -397,7 +396,7 @@ impl Drop for HwParams {
 }
 
 /// snd_pcm_sw_params_t from snd_pcm_sw_params_malloc.
-pub(crate) struct SwParams {
+pub struct SwParams {
     lib: &'static Lib,
     p: NonNull<SwP>,
 }
@@ -637,7 +636,7 @@ fn sframes(n: Sframes) -> Result<usize, i32> {
 }
 
 /// An open snd_ctl_t; closed on drop.
-pub(crate) struct RawCtl {
+pub struct RawCtl {
     lib: &'static Lib,
     ctl: NonNull<Ctl>,
 }
@@ -653,7 +652,7 @@ impl Drop for RawCtl {
 }
 
 /// A snd_ctl_elem_value_t naming a mixer element; freed on drop.
-pub(crate) struct MixerValue {
+pub struct MixerValue {
     lib: &'static Lib,
     v: NonNull<ElemValue>,
 }
@@ -745,6 +744,6 @@ impl RawCtl {
 }
 
 /// NUL-terminated copy of a device / element name (Err for an interior NUL).
-pub(crate) fn c_name(name: &str) -> Result<CString, i32> {
+pub fn c_name(name: &str) -> Result<CString, i32> {
     CString::new(name).map_err(|_| -libc::EINVAL)
 }

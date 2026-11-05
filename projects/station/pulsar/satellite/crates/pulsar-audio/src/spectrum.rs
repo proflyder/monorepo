@@ -47,25 +47,25 @@ struct C32 {
 }
 
 impl C32 {
-    fn add(self, o: C32) -> C32 {
-        C32 {
+    fn add(self, o: Self) -> Self {
+        Self {
             re: self.re + o.re,
             im: self.im + o.im,
         }
     }
 
-    fn sub(self, o: C32) -> C32 {
-        C32 {
+    fn sub(self, o: Self) -> Self {
+        Self {
             re: self.re - o.re,
             im: self.im - o.im,
         }
     }
 
     /// libc++ multiplies std::complex<float> as `_Complex float`: (ac - bd, ad + bc), not fused.
-    fn mul(self, o: C32) -> C32 {
+    fn mul(self, o: Self) -> Self {
         let (ac, bd) = (self.re * o.re, self.im * o.im);
         let (ad, bc) = (self.re * o.im, self.im * o.re);
-        C32 {
+        Self {
             re: ac - bd,
             im: ad + bc,
         }
@@ -96,7 +96,7 @@ pub struct SpectrumAnalyzer {
 impl SpectrumAnalyzer {
     /// `chunk_frames` capture frames at `rate` per call.
     pub fn new(rate: u32, chunk_frames: usize) -> Self {
-        let mut a = SpectrumAnalyzer {
+        let mut a = Self {
             decim: 0,
             chunk_samples: 0,
             buffered: 0,

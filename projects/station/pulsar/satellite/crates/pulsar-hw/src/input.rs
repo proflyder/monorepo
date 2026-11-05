@@ -349,7 +349,7 @@ impl Machine {
     /// A due key timer. The C++ loop handled fd events before the timers of the same wake-up,
     /// so `queued` first takes the events the devices already have (without waiting); a timer
     /// they cancelled or re-armed (a release, a new press) does not fire.
-    fn on_tick(&mut self, t: Tick, queued: impl FnOnce(&mut Machine)) {
+    fn on_tick(&mut self, t: Tick, queued: impl FnOnce(&mut Self)) {
         let generation = self.generation[t as usize];
         queued(self);
         if self.generation[t as usize] == generation {

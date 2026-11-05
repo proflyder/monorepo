@@ -9,9 +9,10 @@
 
 ## Workspace
 
-`satellite/` — Cargo workspace: `Cargo.toml`, `Cargo.lock` (коммитится; сборка, clippy и тесты
-идут с `--locked`), `rust-toolchain.toml`; сборка, fmt/clippy/тесты и кросс-сборки — Bazel
-(`BUILD.bazel` в `satellite/` и `crates/*`, toolchain и C/C++ — в корневом `MODULE.bazel`).
+`satellite/` — крейты Pulsar; манифесты, `Cargo.lock` (коммитится; сборка, clippy и тесты
+идут с `--locked`) и `rust-toolchain.toml` — общие, в корне монорепозитория (`/Cargo.toml`,
+`/rust-toolchain.toml`). Сборка, fmt/clippy/тесты и кросс-сборки — Bazel (`BUILD.bazel` в
+`satellite/` и `crates/*`, toolchain, `@crates//` и C/C++ — в корневом `MODULE.bazel`).
 
 | Крейт | Ответственность |
 |---|---|

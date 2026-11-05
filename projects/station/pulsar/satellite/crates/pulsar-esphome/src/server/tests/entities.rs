@@ -884,7 +884,7 @@ async fn pending_batch_does_not_read_more_input() {
         .run_until(async {
             let (id, cfg) = selftest("now");
             let (_h, rx, port) = start_with(id, cfg);
-            super::MAX_RBUF.with(|m| m.set(0));
+            MAX_RBUF.with(|m| m.set(0));
             let sock = TcpSocket::new_v4().unwrap();
             sock.set_recv_buffer_size(4096).unwrap();
             let s = sock
@@ -899,7 +899,7 @@ async fn pending_batch_does_not_read_more_input() {
             }
             // Never reads; keeps sending until the server closes it or the writes block.
             for _ in 0..200 {
-                let w = tokio::time::timeout(Duration::from_millis(100), p.s.write_all(&req));
+                let w = timeout(Duration::from_millis(100), p.s.write_all(&req));
                 match w.await {
                     Ok(Ok(())) => {}
                     _ => break,
@@ -908,7 +908,7 @@ async fn pending_batch_does_not_read_more_input() {
                     break;
                 }
             }
-            let max = super::MAX_RBUF.with(|m| m.get());
+            let max = MAX_RBUF.with(Cell::get);
             assert!(max > 0);
             assert!(
                 max <= READ_PER_WAKEUP + req.len(),

@@ -53,12 +53,13 @@ pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
         port: default_port,
         ..ServiceEndpoint::default()
     };
-    let (authority, slash) = match rest.find('/') {
-        Some(slash) => (&rest[..slash], Some(slash)),
-        None => (rest, None),
-    };
+    let (authority, slash) = rest
+        .find('/')
+        .map_or((rest, None), |slash| (&rest[..slash], Some(slash)));
     if let Some(slash) = slash {
-        out.prefix = rest[slash..].trim_end_matches('/').to_owned();
+        rest[slash..]
+            .trim_end_matches('/')
+            .clone_into(&mut out.prefix);
         if out.prefix.contains("//") {
             return Err(Error::new("service url path has an empty segment"));
         }
@@ -72,15 +73,16 @@ pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
             .find(']')
             .ok_or(Error::new("service url has an unterminated IPv6 literal"))?;
         let host = &authority[1..close];
-        let mut port_text = "";
-        if close + 1 < authority.len() {
+        let port_text = if close + 1 < authority.len() {
             if authority.as_bytes()[close + 1] != b':' {
                 return Err(Error::new(
                     "service url has trailing data after IPv6 literal",
                 ));
             }
-            port_text = &authority[close + 2..];
-        }
+            &authority[close + 2..]
+        } else {
+            ""
+        };
         if host.is_empty() {
             return Err(Error::new("service url without host"));
         }
@@ -92,10 +94,9 @@ pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
         }
         (host, port_text)
     } else {
-        let (host, port_text) = match authority.rfind(':') {
-            Some(colon) => (&authority[..colon], &authority[colon + 1..]),
-            None => (authority, ""),
-        };
+        let (host, port_text) = authority.rfind(':').map_or((authority, ""), |colon| {
+            (&authority[..colon], &authority[colon + 1..])
+        });
         if host.is_empty() {
             return Err(Error::new("service url without host"));
         }
@@ -131,7 +132,7 @@ pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
         out.port = value as u16;
     }
 
-    out.host = host.to_owned();
+    host.clone_into(&mut out.host);
     Ok(out)
 }
 

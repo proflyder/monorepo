@@ -2,9 +2,9 @@
 name = "logon_provider"
 description = "Windows Credential Provider (COM in-proc server) for Ricardo Komp Logon"
 version = "0.1.0"
-edition = "2024"
-license = "AGPL-3.0-only"
-publish = false
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
@@ -17,3 +17,6 @@ logon_protocol = { path = "../protocol" }
 [target.'cfg(windows)'.dependencies]
 windows-core = { workspace = true }
 windows-link = { workspace = true }
+
+[lints]
+workspace = true

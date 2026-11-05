@@ -86,7 +86,7 @@ pub(super) fn clamp01(v: f32) -> f32 {
 }
 
 /// A publish_* call of the handle, applied by the actor.
-pub(crate) enum Publish {
+pub enum Publish {
     Media(MediaState, f32, bool),
     Switch(SwitchId, bool),
     BinarySensor(BinarySensorId, bool),
