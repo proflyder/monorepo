@@ -21,9 +21,14 @@ go_library(
 
 go_test(
     name = "proxy_test",
-    srcs = ["proxy_test.go"],
+    srcs = [
+        "contract_test.go",
+        "proxy_test.go",
+    ],
+    data = glob(["testdata/contract/*.json"]),
     embed = [":proxy"],
     deps = [
+        "//packages/go/contracttest",
         "//solutions/voice-proxy/internal/hermes",
         "//solutions/voice-proxy/internal/sanitize",
         "//solutions/voice-proxy/internal/sse",

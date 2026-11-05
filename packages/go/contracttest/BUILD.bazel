@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "contracttest",
+    srcs = ["contracttest.go"],
+    importpath = "ricardo.local/monorepo/packages/go/contracttest",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "contracttest_test",
+    srcs = ["contracttest_test.go"],
+    embed = [":contracttest"],
+)

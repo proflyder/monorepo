@@ -1,0 +1,53 @@
+{
+  "name": "claim_denied_vector",
+  "description": "PROTOCOL.md test vector without a grant: a correctly signed claim is answered 200 granted=false with the published denied MAC. A forged MAC burns the nonce and is rejected with 401.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/claim",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "mac": "+YedSn/aeRZqRNKKzkUS8Dy2aq/dVLkXbh9iX91L9XU=",
+          "machine": "komp",
+          "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "granted": false,
+          "mac": "I6ClmYKmmfO6wodeKXOobAtJj/SgQ7C/ieNumDYrj1Y="
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/claim",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "mac": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          "machine": "komp",
+          "nonce": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8="
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized"
+        }
+      }
+    }
+  ]
+}

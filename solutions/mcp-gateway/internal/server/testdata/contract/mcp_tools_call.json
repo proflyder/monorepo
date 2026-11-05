@@ -1,0 +1,87 @@
+{
+  "name": "mcp_tools_call",
+  "description": "MCP tools/call for the read-only infra_overview tool against a fake catalog: the result shape is a single text block with speech and structured details.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"logging\":{},\"resources\":{\"listChanged\":true},\"tools\":{\"listChanged\":true}},\"protocolVersion\":\"2025-06-18\",\"serverInfo\":{\"name\":\"mcp-gateway\",\"title\":\"Infra gateway\",\"version\":\"contract\"}}}\n\n"
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_overview"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\n  \\\"speech\\\": \\\"Каталог: 1 сервисов. Топология в деталях.\\\",\\n  \\\"details\\\": {\\n    \\\"catalog\\\": \\\"# Каталог сервисов\\\\n\\\\n## scheduler\\\\n- aliases: планировщик, scheduler\\\\n- workload: Deployment home/scheduler\\\\n- restart: allowed; warning: Contract restart warning.\\\\n\\\\n\\\",\\n    \\\"overview\\\": \\\"## Contract topology\\\\nOne fake service.\\\\n\\\"\\n  }\\n}\"}],\"structuredContent\":{\"speech\":\"Каталог: 1 сервисов. Топология в деталях.\",\"details\":{\"catalog\":\"# Каталог сервисов\\n\\n## scheduler\\n- aliases: планировщик, scheduler\\n- workload: Deployment home/scheduler\\n- restart: allowed; warning: Contract restart warning.\\n\\n\",\"overview\":\"## Contract topology\\nOne fake service.\\n\"}}}}\n\n"
+      }
+    }
+  ]
+}

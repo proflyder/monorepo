@@ -21,9 +21,12 @@ go_library(
 go_test(
     name = "wakegrant_test",
     srcs = [
+        "contract_test.go",
         "mac_test.go",
         "machines_test.go",
         "service_test.go",
     ],
+    data = glob(["testdata/contract/*.json"]),
     embed = [":wakegrant"],
+    deps = ["//packages/go/contracttest"],
 )

@@ -1,0 +1,121 @@
+{
+  "name": "auth_rejection",
+  "description": "Missing or wrong bearer tokens are rejected before the MCP or voice handler runs. /mcp and /v1/voice/* use separate tokens and both answer the JSON error envelope with 401 and a WWW-Authenticate challenge.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json",
+          "Www-Authenticate": "Bearer realm=\"mcp-gateway\""
+        },
+        "body": {
+          "error": "unauthorized"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer wrong-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json",
+          "Www-Authenticate": "Bearer realm=\"mcp-gateway\""
+        },
+        "body": {
+          "error": "unauthorized"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json",
+          "Www-Authenticate": "Bearer realm=\"mcp-gateway\""
+        },
+        "body": {
+          "error": "unauthorized"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/voice/state",
+        "headers": {
+          "Authorization": "Bearer wrong-token"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json",
+          "Www-Authenticate": "Bearer realm=\"mcp-gateway-voice\""
+        },
+        "body": {
+          "error": "unauthorized"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/voice/state"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json",
+          "Www-Authenticate": "Bearer realm=\"mcp-gateway-voice\""
+        },
+        "body": {
+          "error": "unauthorized"
+        }
+      }
+    }
+  ]
+}

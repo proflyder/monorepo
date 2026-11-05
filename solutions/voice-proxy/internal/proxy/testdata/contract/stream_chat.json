@@ -1,0 +1,33 @@
+{
+  "name": "stream_chat",
+  "description": "Streaming POST /v1/chat/completions: a fake Hermes SSE stream is sanitised and relayed byte-for-byte, keeping only speech deltas, the finish frame and the [DONE] sentinel.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "messages": [
+            {
+              "content": "привет",
+              "role": "user"
+            }
+          ],
+          "model": "hermes-agent",
+          "stream": true
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Cache-Control": "no-cache",
+          "Content-Type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1000,\"id\":\"chatcmpl-contract\",\"model\":\"hermes-agent\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"Привет.\"},\"finish_reason\":null,\"index\":0}],\"created\":1000,\"id\":\"chatcmpl-contract\",\"model\":\"hermes-agent\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1000,\"id\":\"chatcmpl-contract\",\"model\":\"hermes-agent\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "upstream_error",
+  "description": "When Hermes answers with an error, the proxy relays the upstream status and normalised error body instead of inventing a reply.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "messages": [
+            {
+              "content": "привет",
+              "role": "user"
+            }
+          ],
+          "model": "boom"
+        }
+      },
+      "response": {
+        "status": 502,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": {
+            "message": "upstream exploded",
+            "type": "upstream_error"
+          }
+        }
+      }
+    }
+  ]
+}

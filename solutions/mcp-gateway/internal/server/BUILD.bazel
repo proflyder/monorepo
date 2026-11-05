@@ -10,7 +10,17 @@ go_library(
 
 go_test(
     name = "server_test",
-    srcs = ["server_test.go"],
+    srcs = [
+        "contract_test.go",
+        "server_test.go",
+    ],
+    data = glob(["testdata/contract/*.json"]),
     embed = [":server"],
-    deps = ["@com_github_modelcontextprotocol_go_sdk//mcp"],
+    deps = [
+        "//packages/go/contracttest",
+        "//solutions/mcp-gateway/internal/catalog",
+        "//solutions/mcp-gateway/internal/group",
+        "//solutions/mcp-gateway/internal/tools",
+        "@com_github_modelcontextprotocol_go_sdk//mcp",
+    ],
 )

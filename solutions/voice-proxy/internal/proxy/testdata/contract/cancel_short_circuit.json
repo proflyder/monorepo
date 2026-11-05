@@ -1,0 +1,51 @@
+{
+  "name": "cancel_short_circuit",
+  "description": "A final user message that is exactly a registered cancel phrase is answered locally with silence and the cancel completion id; Hermes is never called. The created timestamp is normalised to <any> because the handler has no clock seam.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "messages": [
+            {
+              "content": "Отмена!",
+              "role": "user"
+            }
+          ],
+          "model": "hermes-agent"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": " ",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": "<any>",
+          "id": "chatcmpl-ricardo-cancel",
+          "model": "hermes-agent",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      }
+    }
+  ]
+}
