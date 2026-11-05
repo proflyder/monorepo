@@ -558,7 +558,7 @@ impl Controller {
 
     pub(super) fn publish_update(&self) {
         let release = self.release.as_ref();
-        let version = release.map_or("", |r| r.version.as_str());
+        let version = release.map_or("", |r| r.version().as_str());
         // latest == current hides the offer: nothing newer, or not checked yet.
         let offer = !version.is_empty() && pulsar_update::release_newer(version, VERSION).0;
         self.api.publish_update(&UpdateState {
@@ -568,7 +568,7 @@ impl Controller {
             current_version: VERSION.into(),
             latest_version: if offer { version } else { VERSION }.into(),
             title: "pulsar".into(),
-            release_url: release.map_or_else(String::new, |r| r.url.clone()),
+            release_url: release.map_or_else(String::new, |r| r.page_url().to_owned()),
         });
     }
 
@@ -580,7 +580,7 @@ impl Controller {
     }
 
     fn release_version(&self) -> &str {
-        self.release.as_ref().map_or("", |r| r.version.as_str())
+        self.release.as_ref().map_or("", |r| r.version().as_str())
     }
 
     fn idle_for_update(&self) -> bool {
@@ -628,15 +628,16 @@ impl Controller {
         let Some(r) = self.release.clone() else {
             return;
         };
-        warn!("installing release {} ({why})", r.version);
-        let previous = std::mem::replace(&mut self.st.update_attempt, r.version.clone());
+        warn!("installing release {} ({why})", r.version());
+        let previous =
+            std::mem::replace(&mut self.st.update_attempt, r.version().as_str().to_owned());
         // On disk before the updater can replace the binary: still set under another version
         // after a restart, it tells that the release was rolled back. Without it a bad release
         // would carry no marker and automatic updates would install it again.
         if !self.persist_now() {
             warn!(
                 "update to {}: update_attempt not written to state.conf, install refused",
-                r.version
+                r.version()
             );
             self.st.update_attempt = previous;
             self.install_failed();
@@ -646,7 +647,7 @@ impl Controller {
         self.clock.set_updating(true);
         self.update_progress = 0.0;
         self.publish_update();
-        self.install_version.clone_from(&r.version);
+        r.version().as_str().clone_into(&mut self.install_version);
         if let Some(id) = self.updater.install(r, binary) {
             self.install_id = Some(id);
         }
@@ -678,8 +679,8 @@ impl Controller {
                 match result {
                     Err(e) => info!("update check: {e}"),
                     Ok(r) => {
-                        if r.version != self.release_version() {
-                            info!("latest release {} (running {VERSION})", r.version);
+                        if r.version().as_str() != self.release_version() {
+                            info!("latest release {} (running {VERSION})", r.version());
                         }
                         self.release = Some(r);
                         self.publish_update();
@@ -703,9 +704,9 @@ impl Controller {
                         self.publish_update();
                         self.timers.set(Tk::UpdateExit, 500);
                     }
-                    Err((err, fatal)) => {
+                    Err(err) => {
                         error!("update to {version} failed: {err}");
-                        if !fatal {
+                        if !err.fatal() {
                             // A network failure: the next check tries again.
                             self.st.update_attempt.clear();
                             // Left set by a crash, it would make automatic updates skip it. A

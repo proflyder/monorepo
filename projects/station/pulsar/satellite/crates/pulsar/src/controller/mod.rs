@@ -20,7 +20,7 @@ use pulsar_lan::arbiter::{self, ArbiterEvent, ArbiterHandle};
 use pulsar_lan::mdns::{self, MdnsHandle, MdnsService};
 use pulsar_media::{Channel, Mixer, PlayId, PlayState, PlayerEvent, PlayerHandle};
 use pulsar_sendspin::{SendspinConfig, SendspinEvent, SendspinHandle};
-use pulsar_update::{Release, UpdateEvent, UpdaterHandle};
+use pulsar_update::{Release, RequestId, UpdateEvent, UpdaterHandle};
 use pulsar_zigbee::{ZigbeeConfig, ZigbeeEvent, ZigbeeHandle};
 use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -274,9 +274,9 @@ pub struct Controller {
     update_progress: f32,
     /// A check whose `Checked` has not been handled yet (C++ `Updater::busy()` until its
     /// callback ran).
-    pending_check: Option<u64>,
+    pending_check: Option<RequestId>,
     /// An install whose `Installed` has not been handled yet.
-    install_id: Option<u64>,
+    install_id: Option<RequestId>,
     /// Version being installed (for the messages of its outcome).
     install_version: String,
     /// Last Zigbee status line published.

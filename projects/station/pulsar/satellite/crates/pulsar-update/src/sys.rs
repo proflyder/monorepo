@@ -1,8 +1,9 @@
-//! libc calls of the updater.
+//! Вызовы libc установщика.
 
-/// sync(2): the swapped binary and its `.prev` reach the flash before the daemon exits (a power
-/// cut right after an update must not leave a truncated binary).
+/// sync(2): подменённый бинарник и `.prev` доходят до флеша до выхода демона (обрыв
+/// питания сразу после обновления не должен оставить обрезанный бинарник).
 pub fn sync() {
-    // SAFETY: sync() takes no arguments, touches no memory of this process and cannot fail.
+    // SAFETY: sync() не принимает аргументов, не трогает память процесса и не может
+    // вернуть ошибку.
     unsafe { libc::sync() }
 }

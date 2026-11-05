@@ -190,15 +190,15 @@ ssh root@<ip> 'cd /data/pulsar && cp pulsar pulsar.prev &&
 1. **Имена ассетов** — постоянны, см. [«CI и релизы»](#ci-и-релизы).
 2. **Поиск последнего релиза** — OCI-манифест `https://ghcr.io/v2/proflyder/pulsar-firmware/manifests/latest`
    (анонимный pull-token), аннотация `org.opencontainers.image.version` и слои по
-   `org.opencontainers.image.title`. GitHub REST API не используется: его лимит 60 запросов в час
-   на публичный IP исчерпывается станциями за общим выходом VPN / CGNAT. Путь `owner/repo`
-   (GitHub release) сохранён в коде только для upstream-совместимости и тестов.
+   `org.opencontainers.image.title`. GitHub REST API и GitHub Releases не используются: лимит
+   60 запросов в час на публичный IP исчерпывается станциями за общим выходом VPN / CGNAT.
+   Клиент — `reqwest` (HTTP/1, rustls с провайдером ring) с корнями из CA-бандла прошивки.
 3. **Маркер `update_attempt=<tag>` в `state.conf`** записывается на диск до подмены бинарника и
    стирается новым бинарником, если его версия равна `<tag>`. Маркер, оставшийся под другой
    версией, значит, что релиз не встал: откат `supervise.sh` или фатальная ошибка установки
-   (`fatal` в `UpdateEvent::Installed`, `pulsar-update/src/updater.rs`; после нефатальной маркер
-   стирается). Автообновление этот тег больше не ставит (вручную — можно). Ключ читают и пишут
-   разные версии демона.
+   (`UpdateError::fatal`, `pulsar-update/src/error.rs`; после нефатальной маркер стирается).
+   Автообновление этот тег больше не ставит (вручную — можно). Ключ читают и пишут разные версии
+   демона.
 
 ## Правила installer/
 

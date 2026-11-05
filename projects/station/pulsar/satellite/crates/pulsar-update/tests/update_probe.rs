@@ -1,11 +1,10 @@
-//! `update_probe` output against the C++ probe. tests/golden/versions.txt is the stdout of the
-//! C++ `update_probe versions` (tag rust-port-base, built for the host with zig c++).
+//! `update_probe` против C++ пробника: tests/golden/versions.txt — stdout C++
+//! `update_probe versions` (тег rust-port-base, сборка хоста zig c++).
 
 use std::process::Command;
 
 fn probe(args: &[&str]) -> std::process::Output {
-    // Cargo задаёт CARGO_BIN_EXE_* и при компиляции, и при запуске; Bazel —
-    // только через env теста (см. BUILD.bazel), поэтому читаем его в рантайме.
+    // Cargo задаёт CARGO_BIN_EXE_*; Bazel — только через env теста (см. BUILD.bazel).
     let binary = std::env::var("CARGO_BIN_EXE_update_probe").expect("CARGO_BIN_EXE_update_probe");
     Command::new(binary)
         .args(args)
@@ -27,19 +26,14 @@ fn versions_table_matches_the_cxx_probe() {
 fn usage() {
     for args in [
         &[][..],
-        &["get"],
+        &["download"],
         &["check", "a", "b"],
-        &["install", "v1"],
+        &["install"],
         &["bogus"],
     ] {
         let out = probe(args);
         assert_eq!(out.status.code(), Some(2), "{args:?}");
         let err = String::from_utf8_lossy(&out.stderr);
-        assert!(
-            err.ends_with(
-                " versions | get <url> | check [owner/repo | ghcr.io/owner/name] | install <version> <bin_url> <sums_url> <binary>\n"
-            ),
-            "{err}"
-        );
+        assert!(err.contains("Usage:"), "{err}");
     }
 }

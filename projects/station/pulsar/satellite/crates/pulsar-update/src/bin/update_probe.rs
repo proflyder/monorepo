@@ -1,48 +1,66 @@
-//! Updater probe: exercises the HTTPS client and the release updater without the daemon.
+//! Пробник обновлений: проверяет OCI-источник и апдейтер без демона.
 //! usage: update_probe versions
-//!          release_newer() table for a few describe strings (no network)
-//!        update_probe get <https_url>
-//!          status, size and sha256 of the body (redirects followed)
+//!          таблица release_newer() для нескольких describe-строк (без сети)
 //!        update_probe check [owner/repo | ghcr.io/owner/name]
-//!          latest release as the daemon sees it (default: this fork)
-//!        update_probe install <version> <bin_url> <sums_url> <binary>
-//!          downloads, verifies and swaps <binary> (keeps <binary dir>/pulsar.prev), as the daemon
-//!          does for a release named <version>
+//!          последний релиз и его слои так, как их видит демон
+//!        update_probe download <title> [repo]
+//!          скачивает слой последнего релиза и проверяет его digest
+//!        update_probe install --binary <path> [repo]
+//!          проверяет последний релиз и ставит его в <path> (как демон)
+
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
-use pulsar_update::https::{self, CA_BUNDLE, HttpsResponse, Tls};
-use pulsar_update::{Release, UpdateEvent};
+use clap::{Parser, Subcommand};
+use pulsar_update::{Oci, OciConfig, Release, ReleaseSource, UpdateError, UpdateEvent, arch};
+use tokio_util::sync::CancellationToken;
 
-const REPO: &str = pulsar_update::UPDATE_REPO;
+#[derive(Parser)]
+#[command(about = "pulsar updater probe")]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Таблица сравнения версий (без сети).
+    Versions,
+    /// Последний релиз и его слои.
+    Check {
+        #[arg(default_value = pulsar_update::UPDATE_REPO)]
+        repo: String,
+    },
+    /// Скачать слой последнего релиза и проверить digest.
+    Download {
+        title: String,
+        #[arg(default_value = pulsar_update::UPDATE_REPO)]
+        repo: String,
+    },
+    /// Проверить и установить последний релиз в бинарь.
+    Install {
+        #[arg(long)]
+        binary: PathBuf,
+        #[arg(default_value = pulsar_update::UPDATE_REPO)]
+        repo: String,
+    },
+}
 
 fn main() -> ExitCode {
-    let raw: Vec<std::ffi::OsString> = std::env::args_os().collect();
-    let args: Vec<String> = raw
-        .iter()
-        .map(|a| a.to_string_lossy().into_owned())
-        .collect();
-    match (args.get(1).map(String::as_str), args.len()) {
-        (Some("versions"), _) => versions(),
-        (Some("get"), 3) => run(get(&args[2])),
-        (Some("check"), 2 | 3) => run(check(args.get(2).map_or(REPO, String::as_str))),
-        // The binary path as given (not necessarily UTF-8).
-        (Some("install"), 6) => run(install(&args[2..5], PathBuf::from(&raw[5]))),
-        _ => {
-            eprintln!(
-                "usage: {} versions | get <url> | check [owner/repo | ghcr.io/owner/name] | install <version> <bin_url> <sums_url> <binary>",
-                args.first().map_or("update_probe", String::as_str)
-            );
-            ExitCode::from(2)
-        }
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Versions => versions(),
+        Command::Check { repo } => run(check(&repo)),
+        Command::Download { title, repo } => run(download(&repo, &title)),
+        Command::Install { binary, repo } => run(install(&repo, binary)),
     }
 }
 
-/// Lines to stdout; a closed pipe is not an error worth a panic here.
+/// Строки в stdout; закрытый pipe не повод для паники.
 fn out(bytes: &[u8]) {
     let _ = std::io::stdout().write_all(bytes);
 }
@@ -70,112 +88,152 @@ fn versions() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// The updater is an actor of a current-thread runtime's LocalSet, as in the daemon.
-fn run(fut: impl Future<Output = ExitCode>) -> ExitCode {
-    let rt = match tokio::runtime::Builder::new_current_thread()
+/// Апдейтер — актор current-thread рантайма в LocalSet, как в демоне.
+fn run(future: impl Future<Output = ExitCode>) -> ExitCode {
+    let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
     {
-        Ok(rt) => rt,
+        Ok(runtime) => runtime,
         Err(e) => {
             eprintln!("tokio runtime: {e}");
             return ExitCode::FAILURE;
         }
     };
-    tokio::task::LocalSet::new().block_on(&rt, fut)
+    tokio::task::LocalSet::new().block_on(&runtime, future)
 }
 
-async fn get(url: &str) -> ExitCode {
-    let r = match Tls::load(Path::new(CA_BUNDLE)) {
-        Ok(tls) => {
-            https::https_get(
-                &tls,
-                url,
-                &["User-Agent: pulsar-update-probe"],
-                64 << 20,
-                None,
-                None,
-                5,
+fn sha256_hex(data: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let digest = ring::digest::digest(&ring::digest::SHA256, data);
+    let mut out = String::with_capacity(64);
+    for byte in digest.as_ref() {
+        out.push(char::from(HEX[usize::from(byte >> 4)]));
+        out.push(char::from(HEX[usize::from(byte & 15)]));
+    }
+    out
+}
+
+fn source(repo: &str) -> Result<Oci, UpdateError> {
+    Oci::new(&OciConfig::ghcr(repo.into(), "probe", arch()))
+}
+
+async fn latest(repo: &str) -> Result<Release, UpdateError> {
+    source(repo)?.latest(&CancellationToken::new()).await
+}
+
+async fn check(repo: &str) -> ExitCode {
+    match latest(repo).await {
+        Ok(release) => {
+            out(format!(
+                "version {}\nurl {}\n",
+                release.version(),
+                release.page_url()
             )
-            .await
+            .as_bytes());
+            for layer in release.layers() {
+                out(format!("layer {} {}\n", layer.title, layer.digest()).as_bytes());
+            }
+            ExitCode::SUCCESS
         }
-        Err(error) => HttpsResponse {
-            error,
-            ..Default::default()
-        },
+        Err(error) => {
+            out(format!("error: {error}\n").as_bytes());
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn download(repo: &str, title: &str) -> ExitCode {
+    let release = match latest(repo).await {
+        Ok(release) => release,
+        Err(error) => {
+            out(format!("error: {error}\n").as_bytes());
+            return ExitCode::FAILURE;
+        }
     };
-    let error = if r.error.is_empty() { "" } else { ", error: " };
+    let Some(layer) = release.layers().iter().find(|layer| layer.title == title) else {
+        out(format!("error: release has no {title} layer\n").as_bytes());
+        return ExitCode::FAILURE;
+    };
+    let source = match source(repo) {
+        Ok(source) => source,
+        Err(error) => {
+            out(format!("error: {error}\n").as_bytes());
+            return ExitCode::FAILURE;
+        }
+    };
+    let body = match source
+        .download(layer, 64 << 20, None, &CancellationToken::new())
+        .await
+    {
+        Ok(Some(body)) => body,
+        Ok(None) => {
+            out(format!("error: {title}: HTTP 404\n").as_bytes());
+            return ExitCode::FAILURE;
+        }
+        Err(error) => {
+            out(format!("error: {error}\n").as_bytes());
+            return ExitCode::FAILURE;
+        }
+    };
+    let hex = sha256_hex(&body);
+    let expected = layer.digest().to_string();
     out(format!(
-        "status {}, {} bytes, sha256 {}{error}{}\n",
-        r.status,
-        r.body.len(),
-        https::sha256_hex(&r.body),
-        r.error
+        "layer {title}\nbytes {}\nsha256 {expected}\nmatches {}\n",
+        body.len(),
+        u8::from(expected == format!("sha256:{hex}"))
     )
     .as_bytes());
-    if r.status != 200 {
-        // printf("%.400s"): up to 400 bytes, cut at a NUL.
-        let body = &r.body[..r.body.len().min(400)];
-        let text = body.split(|&b| b == 0).next().unwrap_or_default();
-        out(text);
-        out(b"\n");
-    }
-    if r.status == 200 {
+    if expected == format!("sha256:{hex}") {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
 }
 
-async fn check(repo: &str) -> ExitCode {
-    let (up, mut events) = pulsar_update::spawn(repo.into(), "probe");
-    up.check();
-    while let Some(ev) = events.recv().await {
-        if let UpdateEvent::Checked { result, .. } = ev {
-            return match result {
-                Ok(r) => {
-                    out(format!(
-                        "version {}\nurl {}\nbin {}\nsums {}\n",
-                        r.version, r.url, r.bin_url, r.sums_url
-                    )
-                    .as_bytes());
-                    ExitCode::SUCCESS
+async fn install(repo: &str, binary: PathBuf) -> ExitCode {
+    let (updater, mut events) = pulsar_update::spawn(repo.into(), "probe");
+    let Some(check_id) = updater.check() else {
+        out(b"error: updater is busy\n");
+        return ExitCode::FAILURE;
+    };
+    let mut release = None;
+    while let Some(event) = events.recv().await {
+        match event {
+            UpdateEvent::Checked { id, result } if id == check_id => match result {
+                Ok(found) => {
+                    release = Some(found);
+                    break;
                 }
-                Err(e) => {
-                    out(format!("error: {e}\n").as_bytes());
-                    ExitCode::FAILURE
+                Err(error) => {
+                    out(format!("error: {error}\n").as_bytes());
+                    return ExitCode::FAILURE;
                 }
-            };
+            },
+            _ => {}
         }
     }
-    ExitCode::FAILURE
-}
-
-async fn install(args: &[String], binary: PathBuf) -> ExitCode {
-    let [version, bin_url, sums_url] = args else {
-        return ExitCode::from(2);
+    let Some(release) = release else {
+        return ExitCode::FAILURE;
     };
-    let (up, mut events) = pulsar_update::spawn(REPO.into(), "probe");
-    let r = Release {
-        version: version.clone(),
-        url: String::new(),
-        bin_url: bin_url.clone(),
-        sums_url: sums_url.clone(),
-        oci_repo: None,
-        layers: Vec::new(),
+    out(format!("version {}\n", release.version()).as_bytes());
+    let Some(_install_id) = updater.install(release, binary) else {
+        out(b"error: updater is busy\n");
+        return ExitCode::FAILURE;
     };
-    up.install(r, binary);
-    while let Some(ev) = events.recv().await {
-        match ev {
-            UpdateEvent::Progress { value, .. } => out(format!("progress {value:.0}\n").as_bytes()),
+    while let Some(event) = events.recv().await {
+        match event {
+            UpdateEvent::Progress { value, .. } => {
+                out(format!("progress {value:.0}\n").as_bytes());
+            }
             UpdateEvent::Installed { result, .. } => {
                 return match result {
                     Ok(()) => {
                         out(b"installed\n");
                         ExitCode::SUCCESS
                     }
-                    Err((e, fatal)) => {
-                        out(format!("error (fatal={}): {e}\n", u8::from(fatal)).as_bytes());
+                    Err(error) => {
+                        print_error(&error);
                         ExitCode::FAILURE
                     }
                 };
@@ -184,4 +242,8 @@ async fn install(args: &[String], binary: PathBuf) -> ExitCode {
         }
     }
     ExitCode::FAILURE
+}
+
+fn print_error(error: &UpdateError) {
+    out(format!("error (fatal={}): {error}\n", u8::from(error.fatal())).as_bytes());
 }
