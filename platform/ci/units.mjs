@@ -847,6 +847,19 @@ export const config = {
     },
 
     {
+      id: "vaultwarden",
+      platform: "python",
+      title: "projects/home/kubernetes/vaultwarden (password manager, admin deploy)",
+      paths: [
+        "projects/home/kubernetes/vaultwarden/**",
+        "projects/home/kubernetes/cloudflare_dns.py",
+      ],
+      python: {
+        suites: ["projects/home/kubernetes/vaultwarden"],
+      },
+    },
+
+    {
       id: "external-secrets",
       platform: "python",
       title: "projects/home/kubernetes/external-secrets (OpenBao wiring)",
@@ -861,6 +874,7 @@ export const config = {
         "projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml",
         "projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml",
         "projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml",
+        "projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml",
       ],
       python: {
         suites: ["projects/home/kubernetes/external-secrets"],

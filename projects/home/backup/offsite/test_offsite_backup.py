@@ -276,6 +276,13 @@ class OffsiteBackupTests(unittest.TestCase):
             self.storage / "pvc-ghi_currency-bot_currency-bot-data" / "currency.db",
             "rates",
         )
+        vault = self.storage / "pvc-jkl_vaultwarden_vaultwarden-data"
+        make_sqlite(vault / "db.sqlite3", "users")
+        (vault / "rsa_key.pem").write_text("jwt-signing-placeholder", encoding="utf-8")
+        (vault / "attachments" / "u1").mkdir(parents=True)
+        (vault / "attachments" / "u1" / "a1").write_bytes(b"attachment")
+        (vault / "icon_cache").mkdir()
+        (vault / "icon_cache" / "x.png").write_bytes(b"icon")
 
         self.backups = [
             {
@@ -426,6 +433,19 @@ class OffsiteBackupTests(unittest.TestCase):
         self.assertNotIn("secret", str(raised.exception))
         metrics = self.metrics.read_text(encoding="utf-8")
         self.assertIn("home_offsite_backup_last_run_success 0", metrics)
+
+    def test_vaultwarden_db_is_online_copied_and_state_is_tarred(self) -> None:
+        cfg, _stub = self.config()
+        staging = self.root / "vw-staging"
+        staging.mkdir()
+        records = backup.copy_vaultwarden(cfg, staging)
+        self.assertEqual([r.path for r in records],
+                         ["sqlite/vaultwarden.sqlite3", "vaultwarden/files.tar"])
+        with tarfile.open(staging / "vaultwarden" / "files.tar") as archive:
+            names = sorted(archive.getnames())
+        self.assertIn("rsa_key.pem", names)
+        self.assertIn("attachments/u1/a1", names)
+        self.assertFalse(any(n.startswith(("icon_cache", "db.sqlite3")) for n in names))
 
     def test_pvc_paths_are_resolved_by_suffix(self) -> None:
         scheduler = backup.find_pvc_file(

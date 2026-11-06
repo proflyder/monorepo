@@ -145,6 +145,12 @@
   Secrets, TLS и служебные Secrets контроллеров. Файлы —
   `projects/home/kubernetes/openbao/` и
   `projects/home/kubernetes/external-secrets/`.
+- Vaultwarden `1.37.5` (образ по digest) в namespace `vaultwarden`,
+  `https://passwords.home.example.com/` (LAN/VPN): менеджер паролей для
+  человека, клиенты Bitwarden. Регистрация закрыта, `/admin` включён (хэш
+  токена — `secret/k8s/vaultwarden/vaultwarden-admin` через ESO), egress только DNS,
+  SQLite на PVC `vaultwarden-data` (`local-retain`), ежедневно в offsite.
+  Файлы — `projects/home/kubernetes/vaultwarden/`.
 
 ## CI/CD и образы
 

@@ -26,6 +26,8 @@ MANIFESTS = {
          ("currency-bot", "cloudflared-tunnel"): "k8s/currency-bot/cloudflared-tunnel"},
     (ROOT / "projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml"):
         {("home-assistant", "wakegrant"): "k8s/home-assistant/wakegrant"},
+    (ROOT / "projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml"):
+        {("vaultwarden", "vaultwarden-admin"): "k8s/vaultwarden/vaultwarden-admin"},
 }
 
 

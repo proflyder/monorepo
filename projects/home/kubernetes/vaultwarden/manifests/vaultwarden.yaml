@@ -1,0 +1,157 @@
+# Vaultwarden: Bitwarden-compatible password manager (official Bitwarden apps,
+# browser extensions and `bw` CLI point at https://${PASSWORDS_HOST}/).
+#
+# TEMPLATE rendered by deploy.sh:
+#   VAULTWARDEN_IMAGE  upstream image pinned by digest (versions.sh)
+#   PASSWORDS_HOST     private host under the home suffix
+#
+# One SQLite writer on one local-retain volume (`vaultwarden-data`): database,
+# attachments, sends and the JWT signing key. The offsite backup picks the
+# volume up by its `_vaultwarden_vaultwarden-data` suffix.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vaultwarden-data
+  namespace: vaultwarden
+  labels:
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vaultwarden
+  namespace: vaultwarden
+  labels:
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 1
+  # SQLite is single-writer: never two pods against the same volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vaultwarden
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vaultwarden
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vaultwarden
+          image: ${VAULTWARDEN_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DOMAIN
+              value: https://${PASSWORDS_HOST}
+            - name: DATA_FOLDER
+              value: /data
+            - name: ROCKET_ADDRESS
+              value: 0.0.0.0
+            # Unprivileged port: the container runs as nobody.
+            - name: ROCKET_PORT
+              value: "8080"
+            # Accounts only by invitation from /admin; without SMTP an
+            # invited address may register directly.
+            - name: SIGNUPS_ALLOWED
+              value: "false"
+            - name: INVITATIONS_ALLOWED
+              value: "true"
+            - name: PASSWORD_HINTS_ALLOWED
+              value: "false"
+            - name: SHOW_PASSWORD_HINT
+              value: "false"
+            # No outbound traffic (see network-policies.yaml).
+            - name: ICON_SERVICE
+              value: internal
+            - name: DISABLE_ICON_DOWNLOAD
+              value: "true"
+            # /admin settings stay declarative: config.json is not used.
+            - name: CONFIG_FILE
+              value: /tmp/config.json
+            - name: IP_HEADER
+              value: X-Forwarded-For
+            - name: LOG_LEVEL
+              value: warn
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-admin
+                  key: ADMIN_TOKEN
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /alive
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: vaultwarden-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vaultwarden
+  namespace: vaultwarden
+  labels:
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vaultwarden
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

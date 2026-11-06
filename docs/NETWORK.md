@@ -192,7 +192,8 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
   `https://alarms.home.example.com/` (scheduler),
   `https://control.home.example.com/` (ha-control),
   `https://currency.home.example.com/` (currency-bot API, Bearer),
-  `https://vault.home.example.com/` (OpenBao UI/API)
+  `https://vault.home.example.com/` (OpenBao UI/API),
+  `https://passwords.home.example.com/` (Vaultwarden, клиенты Bitwarden)
 - Публично (Cloudflare Tunnel): `https://tg.example.com/telegram/webhook`
   (currency-bot), остальные пути — 404.
 - Grafana требует login; анонимный доступ выключен.

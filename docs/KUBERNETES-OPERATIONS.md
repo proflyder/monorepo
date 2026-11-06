@@ -275,6 +275,9 @@ Grafana admin password — `secrets/kubernetes-research/grafana-password`.
   `alarms.home.example.com` → `home-assistant/scheduler:8098`,
   `control.home.example.com` → `home-assistant/ha-control:8099`,
   `currency.home.example.com` → `currency-bot/currency-bot:8080`.
+  Собственные маршруты (`deploy.sh` своих каталогов): `vault.home.example.com`
+  → `openbao/openbao:8200`, `passwords.home.example.com` →
+  `vaultwarden/vaultwarden:8080`.
 - Все маршруты и сертификат — в namespace `traefik`; `allowCrossNamespace`
   разрешает Service из `monitoring`/`home-assistant`/`currency-bot`. Solver-Secret
   `cloudflare-api-token` живёт в namespace `cert-manager`, потому что

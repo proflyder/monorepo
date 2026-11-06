@@ -338,6 +338,21 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
 не создают и не перезаписывают эти Secrets. `--bootstrap-secrets` у
 `ingress/deploy.sh` — только для первой установки без OpenBao/ESO.
 
+## Vaultwarden (менеджер паролей)
+
+`https://passwords.<home-domain>/` (LAN/VPN), клиенты Bitwarden (Self-hosted,
+Server URL — этот адрес). Файлы, первый вход, смена пароля `/admin` и
+восстановление — `projects/home/kubernetes/vaultwarden/README.md`.
+
+```bash
+KUBECONFIG=<admin kubeconfig> projects/home/kubernetes/vaultwarden/deploy.sh
+kubectl -n vaultwarden get pod,pvc,externalsecret
+kubectl -n vaultwarden logs deploy/vaultwarden --tail=50
+```
+
+Пароль `/admin` — `secret/infra/vaultwarden/admin`; в под попадает только
+Argon2id-хэш (`secret/k8s/vaultwarden/vaultwarden-admin`).
+
 ## Внешний heartbeat (dead-man switch)
 
 `Watchdog` уходит на Cloudflare Worker `solutions/heartbeat`: ping раз в

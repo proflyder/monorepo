@@ -117,60 +117,8 @@ else
     echo "Cloudflare token file not readable: $CLOUDFLARE_API_TOKEN_FILE" >&2
     exit 1
   }
-  python3 - "$CLOUDFLARE_API_TOKEN_FILE" "$VAULT_HOST" "$NODE_IP" <<'PY'
-import json
-import sys
-import urllib.error
-import urllib.request
-
-token_file, name, address = sys.argv[1], sys.argv[2], sys.argv[3]
-token = None
-with open(token_file, encoding="utf-8") as handle:
-    for line in handle:
-        line = line.strip()
-        if line.startswith("CLOUDFLARE_API_TOKEN="):
-            token = line.split("=", 1)[1].strip().strip('"').strip("'")
-            break
-if not token:
-    sys.exit("CLOUDFLARE_API_TOKEN is missing in %s" % token_file)
-
-BASE = "https://api.cloudflare.com/client/v4"
-
-
-def call(method, path, body=None):
-    data = json.dumps(body).encode() if body is not None else None
-    request = urllib.request.Request(
-        BASE + path, data=data, method=method,
-        headers={"Authorization": "Bearer " + token,
-                 "Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        sys.exit("Cloudflare API %s %s failed: %s" % (
-            method, path, error.read().decode(errors="replace")))
-
-
-zones = call("GET", "/zones?per_page=50")["result"]
-matches = [zone for zone in zones
-           if name == zone["name"] or name.endswith("." + zone["name"])]
-if not matches:
-    sys.exit("no Cloudflare zone contains %s" % name)
-zone = max(matches, key=lambda entry: len(entry["name"]))
-
-records = call("GET", "/zones/%s/dns_records?type=A&name=%s" % (zone["id"], name))["result"]
-body = {"type": "A", "name": name, "content": address, "ttl": 1, "proxied": False}
-if records:
-    record = records[0]
-    if record["content"] == address and record.get("proxied") is False:
-        print("DNS A %s -> %s already set (DNS only)" % (name, address))
-    else:
-        call("PUT", "/zones/%s/dns_records/%s" % (zone["id"], record["id"]), body)
-        print("DNS A %s -> %s updated (DNS only)" % (name, address))
-else:
-    call("POST", "/zones/%s/dns_records" % zone["id"], body)
-    print("DNS A %s -> %s created (DNS only)" % (name, address))
-PY
+  python3 "$ROOT/projects/home/kubernetes/cloudflare_dns.py" \
+    "$CLOUDFLARE_API_TOKEN_FILE" "$VAULT_HOST" "$NODE_IP"
 fi
 
 # ----- HTTPS route ---------------------------------------------------------
