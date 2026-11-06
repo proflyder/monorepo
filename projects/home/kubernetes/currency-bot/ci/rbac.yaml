@@ -19,6 +19,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list", "watch"]
+  # `home-deploy prepull` pulls new images with short-lived Pods before
+  # apply. Not a new capability: this identity already creates Jobs and
+  # Deployments, which create Pods from any image.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list"]
