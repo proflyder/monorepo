@@ -1,15 +1,9 @@
 package(default_visibility = ["//visibility:public"])
 
-# The deployed scheduler is the Rust crate's binary. The Go binary below stays
-# buildable as the digest rollback reference and for its golden tests.
+# The deployed scheduler is the Rust crate's binary.
 alias(
     name = "scheduler",
     actual = "//solutions/scheduler/crates/scheduler:scheduler",
-)
-
-alias(
-    name = "scheduler_go",
-    actual = "//solutions/scheduler/cmd/scheduler",
 )
 
 filegroup(
@@ -22,7 +16,15 @@ filegroup(
     srcs = ["testdata/ids.json"],
 )
 
-# Textual v1 SQL dump produced by the Go store test (-update-export).
+# Frozen golden HTTP fixtures captured from the former Go implementation. The
+# Rust contract runner replays them; they are data, not Go tests.
+filegroup(
+    name = "contract_fixtures",
+    srcs = glob(["testdata/contract/*.json"]),
+)
+
+# Textual v1 SQL dump produced by the former Go store test (-update-export).
+# Kept as the rollback-compatibility vector for the PVC format.
 filegroup(
     name = "go_database_dump",
     srcs = ["testdata/go_v1.sql"],

@@ -1,25 +1,14 @@
 package(default_visibility = ["//visibility:public"])
 
-# The deployed bridge is the Rust crate's binary. The Go binary stays buildable
-# as the digest rollback reference and owns the golden fixtures.
+# The deployed executors are the Rust crate's binaries.
 alias(
     name = "ha-bridge",
     actual = "//solutions/ha-bridge/crates/ha-bridge:ha-bridge",
 )
 
 alias(
-    name = "ha-bridge_go",
-    actual = "//solutions/ha-bridge/cmd/ha-bridge",
-)
-
-alias(
     name = "ha-control",
     actual = "//solutions/ha-bridge/crates/ha-bridge:ha-control",
-)
-
-alias(
-    name = "ha-control_go",
-    actual = "//solutions/ha-bridge/cmd/ha-control",
 )
 
 filegroup(

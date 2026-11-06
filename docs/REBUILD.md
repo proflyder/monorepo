@@ -214,7 +214,7 @@ sqlite3 -readonly "$B/scheduler-data/scheduler.db" 'pragma integrity_check'
 `manifests/scheduler.yaml`, свой временный token-файл, порт только на
 `127.0.0.1`. HA bridge не запускать: без consumer события не доставляются.
 Сравнить `GetStatus`, `ListSchedules`, `ListTimers` стенда и live
-(`POST /ricardo.v1.SchedulerService/<Method>`, `Authorization: Bearer`) по
+(`POST /home.v1.SchedulerService/<Method>`, `Authorization: Bearer`) по
 `id`, `revision`, `nextDueUnix`, `payloadJson`. Затем удалить контейнер и
 копию БД.
 

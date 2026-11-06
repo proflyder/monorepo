@@ -14,7 +14,7 @@ use crate::config::Config;
 /// timeout; keeping the client lower avoids overlapping calls.
 const TIMEOUT: Duration = Duration::from_secs(4);
 
-const GET_STATUS_PATH: &str = "/ricardo.v1.SchedulerService/GetStatus";
+const GET_STATUS_PATH: &str = "/home.v1.SchedulerService/GetStatus";
 
 /// `scheduler -healthcheck`: authenticated `GetStatus` must report ready.
 pub async fn run_healthcheck() -> ExitCode {
@@ -135,7 +135,7 @@ mod tests {
             .expect("bind");
         let address = listener.local_addr().expect("addr");
         let app = Router::new().route(
-            "/ricardo.v1.SchedulerService/GetStatus",
+            "/home.v1.SchedulerService/GetStatus",
             post(move || async move { (status, body) }),
         );
         tokio::spawn(async move { axum::serve(listener, app).await.expect("serve") });

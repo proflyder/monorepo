@@ -230,7 +230,7 @@ class RestTransportTests(unittest.TestCase):
     def test_connect_command_uses_secret_bearer_and_rpc_path(self):
         command = REST["scheduler_rpc"]
         self.assertEqual(command["method"], "POST")
-        self.assertIn("/ricardo.v1.SchedulerService/{{ method }}", command["url"])
+        self.assertIn("/home.v1.SchedulerService/{{ method }}", command["url"])
         self.assertIn("input_text.scheduler_endpoint", command["url"])
         self.assertEqual(command["headers"]["Authorization"], "__SECRET__")
         self.assertIn("payload_json", command["payload"])

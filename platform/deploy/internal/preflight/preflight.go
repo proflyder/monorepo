@@ -113,7 +113,7 @@ func Run(options Options) int {
 	}
 
 	code, status := post(client,
-		strings.TrimRight(options.SchedulerURL, "/")+"/ricardo.v1.SchedulerService/GetStatus",
+		strings.TrimRight(options.SchedulerURL, "/")+"/home.v1.SchedulerService/GetStatus",
 		schedulerToken, "{}")
 	statusObject, isObject := status.(map[string]interface{})
 	if code != 200 || !isObject {

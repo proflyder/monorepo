@@ -6,15 +6,15 @@ Durable планировщик будильников, напоминаний, �
 Android, будущий агент) забирает событие, выполняет действие и подтверждает
 его.
 
-Статус: durable core, Connect API, legacy `AlarmService` facade, тесты и
+Статус: durable core, Connect API, `AlarmService` facade, тесты и
 K3s-деплой. scheduler — действующий владелец будильников, таймеров и
 напоминаний; HA выполняет звук по событиям исполнителя. Android-клиент —
 `projects/mobile/android`.
 
-Работающий процесс и контейнерный образ — Rust-крейт `crates/scheduler`
-(static `x86_64-unknown-linux-musl`, `rules_rust`). Go-код (`cmd/`, `app/`,
-`internal/`) сохранён как эталон контракта, владелец golden-фикстур и
-источник для отката образа по digest; он больше не входит в деплой.
+Процесс и контейнерный образ — Rust-крейт `crates/scheduler`
+(static `x86_64-unknown-linux-musl`, `rules_rust`). Go-реализация удалена;
+golden-фикстуры `testdata/contract` и `testdata/go_v1.sql` остаются
+замороженными данными.
 
 ## Компоненты Rust-сервиса
 
@@ -29,19 +29,18 @@ crates/scheduler/
   src/health.rs             -healthcheck / -status для distroless
   src/main.rs               entrypoint
 
-cmd/scheduler/            Go-эталон entrypoint (не деплоится)
-app/                      Go-эталон сборки процесса (не деплоится)
-internal/                 Go-эталон: config, idgen, planner, store, engine, api
-scripts/generate-proto.sh перегенерация checked-in Go stubs
+testdata/contract/          замороженные golden HTTP-фикстуры
+testdata/planner/, ids.json замороженные векторы recurrence/ids
+testdata/go_v1.sql          замороженный дамп схемы v1 (совместимость PVC)
 ```
 
-Legacy `ricardo.v1.AlarmService` отдаётся на том же listener, что и
-`SchedulerService`. `//solutions/alarm/cmd/alarm` — тот же engine под именем
-процесса `alarm`, не второй планировщик.
+`home.v1.AlarmService` отдаётся на том же listener и той же реализации, что и
+`home.v1.SchedulerService`; это facade над теми же schedules, не второй
+планировщик.
 
 ## Контракт
 
-`packages/proto/ricardo/v1/scheduler.proto`, package `ricardo.v1`,
+`packages/proto/home/v1/scheduler.proto`, package `home.v1`,
 service `SchedulerService`:
 
 - schedules: `CreateSchedule`, `GetSchedule`, `ListSchedules`,
@@ -62,7 +61,7 @@ decimal string (стандартный protobuf JSON). Пустые/дефолт
 
 Один listener отдаёт Connect unary (JSON и binary) и gRPC-Web по HTTP/1.1.
 Отдельного REST API нет. `Content-Type: application/json` +
-`/ricardo.v1.SchedulerService/<Method>` — это Connect JSON, а не hand-written
+`/home.v1.SchedulerService/<Method>` — это Connect JSON, а не hand-written
 REST.
 
 Отличие Rust-сервиса от прежнего Go: `connectrpc` собран только с feature
@@ -214,8 +213,8 @@ Hermes/HA. Группы `scheduler.*` в gateway пока нет; когда п�
 
 ## Хранилище
 
-SQLite (`modernc.org/sqlite`, pure Go, без CGO), WAL, `busy_timeout`,
-одно соединение (`MaxOpenConns=1`) => один writer. Tick выполняет
+SQLite через `home-sqlite` (`rusqlite`, bundled), WAL, `busy_timeout`,
+одно соединение => один writer. Tick выполняет
 event-insert и advance источника в одной транзакции. `BEGIN IMMEDIATE`
 не нужен, пока процесс один; второй процесс на той же БД не поддерживается.
 Schema version проверяется: БД новее бинарника отвергается.
@@ -246,18 +245,16 @@ SCHEDULER_CONSUMERS=ha-bridge,android       (optional allowlist)
 ## Сборка и проверки
 
 ```bash
-go test ./solutions/scheduler/... ./solutions/alarm/... ./packages/...
+cargo test -p scheduler
+cargo clippy -p scheduler --all-targets -- -D warnings
 
-bazel build //solutions/scheduler/... //solutions/alarm/... //packages/proto/...
-bazel test  //solutions/scheduler/... //solutions/alarm/...
+bazel test //solutions/scheduler/... //packages/proto/...
 ```
 
-Go stubs лежат в репозитории, поэтому `go test` работает без Bazel. Bazel не
-генерирует те же Go-типы повторно: `packages/proto/ricardo/v1/BUILD.bazel`
-собирает checked-in `.pb.go` через `go_library`, а `proto_library` остаётся
-схемой. Перегенерация — `solutions/scheduler/scripts/generate-proto.sh`.
+`proto_library` в `packages/proto/home/v1` остаётся канонической схемой;
+Rust-стабы перегенерируются `packages/rust/home-proto/generate.sh`.
 
-## Legacy AlarmService facade
+## AlarmService facade
 
 Все 8 RPC `AlarmService` реализованы поверх того же store
 (`kind=SCHEDULE_KIND_ALARM`). `Alarm.revision` (поле 12, additive) даёт

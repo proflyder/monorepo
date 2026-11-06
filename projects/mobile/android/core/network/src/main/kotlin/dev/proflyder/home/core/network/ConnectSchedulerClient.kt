@@ -58,7 +58,7 @@ interface SchedulerClient {
 }
 
 /**
- * Connect unary JSON/HTTP client for ricardo.v1.SchedulerService.
+ * Connect unary JSON/HTTP client for home.v1.SchedulerService.
  *
  * Security properties:
  *  - redirects (HTTP and HTTPS) are disabled; a bearer token can never be

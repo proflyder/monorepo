@@ -476,23 +476,26 @@
       Prometheus, Loki, Alertmanager; ошибка Transient/Permanent), а также
       `voice-contract` и `wakegrant-protocol` (общий с logon-provider).
     * Стек решения 40 плюс `rusqlite`, `rmcp`, `kube`, `russh`, `jiff`.
-      RPC `ricardo.v1` — официальный `connectrpc` (connect-rust) с
-      рантаймом сообщений `buffa`. Один listener отдаёт Connect JSON/binary,
-      gRPC и gRPC-Web. `tonic` Connect-протокол не поддерживает. Для
-      сервисов `ricardo.v1` вместо `prost` используется `buffa`. Bearer
+      RPC — официальный `connectrpc` (connect-rust) с рантаймом сообщений
+      `buffa`. Один listener отдаёт Connect JSON/binary и gRPC-Web.
+      `tonic` Connect-протокол не поддерживает. Для сервисов `home.v1`
+      вместо `prost` используется `buffa`. Bearer
       проверяется через `connectrpc::Interceptor`, а не tower-слоем: иначе
       gRPC получает `Unknown` вместо `Unauthenticated`. Лимиты тела (1 MiB) и
       таймауты задаются явно.
       Серверы работают на multi-thread runtime, Pulsar явно строит
       `current_thread`.
-    * Сохраняются внешние контракты: пути `/ricardo.v1.*` и protojson,
+    * Внешний контракт — `home.v1` (пути `/home.v1.*`), protojson,
       UUIDv5 и dedupe-ключи, схема БД v1 (миграция на месте), имена env,
-      имена и схемы MCP-инструментов, кадры SSE, метрики.
-      Эталон — golden-фикстуры `testdata/contract/` рядом с Go-кодом;
-      Rust-реализация проходит их до переключения.
+      имена и схемы MCP-инструментов, кадры SSE, метрики. Прежний
+      `ricardo.v1` не сохранялся как алиас: Android, HA, ingress verify и
+      preflight переведены одновременно с сервером.
+      Эталон — golden-фикстуры `testdata/contract/`; после удаления Go они
+      остаются замороженными данными и проходят на Rust-реализации.
     * Порядок: core → wakegrant (пилот) → voice-proxy → scheduler +
       исполнители HA → mcp-gateway → currency-bot. Каждый сервис — отдельный
-      PR, откат — Go-образ по digest до удаления Go-кода.
+      PR. Go-код scheduler, ha-bridge/ha-control и alarm удалён; откат
+      сервисов — прежний образ; mcp-gateway и currency-bot пока на Go.
     * На Go остаются `platform/deploy`, Bazel-инструменты Android,
       Pulsar installer (upstream) и health-exporter: там Rust ничего не даёт.
 

@@ -214,6 +214,10 @@ export const config = {
       title: "solutions/scheduler (Rust service) + home deployment",
       paths: [
         "solutions/scheduler/**",
+        // Shared Rust crates and the home.v1 schema the service is generated
+        // from; a change here rebuilds the scheduler.
+        "packages/rust/**",
+        "packages/proto/**",
         // The deploy tooling that renders this unit's manifests.
         "platform/deploy/**",
       ],
@@ -231,9 +235,9 @@ export const config = {
         env_file: "scheduler.env",
         externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
-      // The deployed service is the Rust crate. The Go sources stay in the tree
-      // as the digest rollback and the fixture owner, so their Bazel tests keep
-      // running until they are deleted.
+      // The deployed service is the Rust crate; the former Go implementation
+      // is deleted, and the golden fixtures under solutions/scheduler/testdata
+      // are frozen data.
       bazel: {
         roots: [
           "//solutions/scheduler",
@@ -246,13 +250,6 @@ export const config = {
           "//solutions/scheduler/crates/scheduler:go_database_test",
           "//solutions/scheduler/crates/scheduler:clippy",
           "//solutions/scheduler/crates/scheduler:rustfmt",
-          "//solutions/scheduler/internal/config:config_test",
-          "//solutions/scheduler/internal/idgen:idgen_test",
-          "//solutions/scheduler/internal/planner:planner_test",
-          "//solutions/scheduler/internal/api:api_test",
-          "//solutions/scheduler/internal/engine:engine_test",
-          "//solutions/scheduler/internal/store:store_test",
-          "//solutions/scheduler/cmd/scheduler:scheduler_test",
         ],
         build_targets: [
           "//solutions/scheduler/...",
@@ -408,8 +405,8 @@ export const config = {
         externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
       // Both deployed services are the Rust crate: ha-bridge and ha-control.
-      // The Go binaries stay in the tree as the digest rollback and golden
-      // fixture owner, so their Bazel tests keep running.
+      // The former Go implementation is deleted; testdata/ holds frozen golden
+      // vectors for the Rust tests.
       bazel: {
         roots: [
           "//solutions/ha-bridge",
@@ -423,33 +420,11 @@ export const config = {
           "//solutions/ha-bridge/crates/ha-bridge:rustfmt",
           "//packages/rust:clippy",
           "//packages/rust:rustfmt",
-          "//solutions/ha-bridge/internal/bridge:bridge_test",
-          "//solutions/ha-bridge/internal/ledger:ledger_test",
-          "//solutions/ha-bridge/internal/config:config_test",
-          "//solutions/ha-bridge/internal/catalog:catalog_test",
-          "//solutions/ha-bridge/internal/catalogapi:catalogapi_test",
-          "//solutions/ha-bridge/internal/control:control_test",
-          "//solutions/ha-bridge/internal/discovery:discovery_test",
-          "//solutions/ha-bridge/cmd/ha-bridge:ha-bridge_test",
-          "//solutions/ha-bridge/cmd/ha-control:ha-control_test",
         ],
         build_targets: [
           "//solutions/ha-bridge/...",
           "//projects/home/kubernetes/scheduler/...",
         ],
-      },
-    },
-
-    {
-      id: "alarm",
-      platform: "go",
-      title: "solutions/alarm (legacy AlarmService facade)",
-      paths: ["solutions/alarm/**"],
-      go: {
-        module: ".",
-        packages: ["./solutions/alarm/..."],
-        race: false,
-        build: ["./solutions/alarm/cmd/alarm"],
       },
     },
 

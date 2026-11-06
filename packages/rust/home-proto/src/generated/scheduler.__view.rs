@@ -177,10 +177,10 @@ impl<'__a> ::serde::Serialize for WallTimeView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for WallTimeView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "WallTime";
-    const FULL_NAME: &'static str = "ricardo.v1.WallTime";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.WallTime";
+    const FULL_NAME: &'static str = "home.v1.WallTime";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.WallTime";
 }
 ::buffa::impl_default_view_instance!(WallTimeView);
 ::buffa::impl_view_reborrow!(WallTimeView);
@@ -925,10 +925,10 @@ impl<'__a> ::serde::Serialize for ScheduleView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ScheduleView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "Schedule";
-    const FULL_NAME: &'static str = "ricardo.v1.Schedule";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Schedule";
+    const FULL_NAME: &'static str = "home.v1.Schedule";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Schedule";
 }
 ::buffa::impl_default_view_instance!(ScheduleView);
 ::buffa::impl_view_reborrow!(ScheduleView);
@@ -1473,10 +1473,10 @@ impl<'__a> ::serde::Serialize for TimerView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for TimerView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "Timer";
-    const FULL_NAME: &'static str = "ricardo.v1.Timer";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Timer";
+    const FULL_NAME: &'static str = "home.v1.Timer";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Timer";
 }
 ::buffa::impl_default_view_instance!(TimerView);
 ::buffa::impl_view_reborrow!(TimerView);
@@ -2161,10 +2161,10 @@ impl<'__a> ::serde::Serialize for DueEventView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for DueEventView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DueEvent";
-    const FULL_NAME: &'static str = "ricardo.v1.DueEvent";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DueEvent";
+    const FULL_NAME: &'static str = "home.v1.DueEvent";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DueEvent";
 }
 ::buffa::impl_default_view_instance!(DueEventView);
 ::buffa::impl_view_reborrow!(DueEventView);
@@ -2772,10 +2772,10 @@ impl<'__a> ::serde::Serialize for CreateScheduleRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CreateScheduleRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.CreateScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateScheduleRequest";
 }
 ::buffa::impl_default_view_instance!(CreateScheduleRequestView);
 ::buffa::impl_view_reborrow!(CreateScheduleRequestView);
@@ -3114,10 +3114,10 @@ impl<'__a> ::serde::Serialize for CreateScheduleResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CreateScheduleResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.CreateScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateScheduleResponse";
 }
 ::buffa::impl_default_view_instance!(CreateScheduleResponseView);
 ::buffa::impl_view_reborrow!(CreateScheduleResponseView);
@@ -3365,10 +3365,10 @@ impl<'__a> ::serde::Serialize for GetScheduleRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetScheduleRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.GetScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetScheduleRequest";
 }
 ::buffa::impl_default_view_instance!(GetScheduleRequestView);
 ::buffa::impl_view_reborrow!(GetScheduleRequestView);
@@ -3656,10 +3656,10 @@ impl<'__a> ::serde::Serialize for GetScheduleResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetScheduleResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.GetScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetScheduleResponse";
 }
 ::buffa::impl_default_view_instance!(GetScheduleResponseView);
 ::buffa::impl_view_reborrow!(GetScheduleResponseView);
@@ -3942,10 +3942,10 @@ impl<'__a> ::serde::Serialize for ListSchedulesRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListSchedulesRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListSchedulesRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListSchedulesRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListSchedulesRequest";
+    const FULL_NAME: &'static str = "home.v1.ListSchedulesRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListSchedulesRequest";
 }
 ::buffa::impl_default_view_instance!(ListSchedulesRequestView);
 ::buffa::impl_view_reborrow!(ListSchedulesRequestView);
@@ -4232,10 +4232,10 @@ impl<'__a> ::serde::Serialize for ListSchedulesResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListSchedulesResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListSchedulesResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListSchedulesResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListSchedulesResponse";
+    const FULL_NAME: &'static str = "home.v1.ListSchedulesResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListSchedulesResponse";
 }
 ::buffa::impl_default_view_instance!(ListSchedulesResponseView);
 ::buffa::impl_view_reborrow!(ListSchedulesResponseView);
@@ -4553,10 +4553,10 @@ impl<'__a> ::serde::Serialize for UpdateScheduleRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for UpdateScheduleRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.UpdateScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateScheduleRequest";
 }
 ::buffa::impl_default_view_instance!(UpdateScheduleRequestView);
 ::buffa::impl_view_reborrow!(UpdateScheduleRequestView);
@@ -4854,10 +4854,10 @@ impl<'__a> ::serde::Serialize for UpdateScheduleResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for UpdateScheduleResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.UpdateScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateScheduleResponse";
 }
 ::buffa::impl_default_view_instance!(UpdateScheduleResponseView);
 ::buffa::impl_view_reborrow!(UpdateScheduleResponseView);
@@ -5111,10 +5111,10 @@ impl<'__a> ::serde::Serialize for DeleteScheduleRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for DeleteScheduleRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.DeleteScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteScheduleRequest";
 }
 ::buffa::impl_default_view_instance!(DeleteScheduleRequestView);
 ::buffa::impl_view_reborrow!(DeleteScheduleRequestView);
@@ -5366,10 +5366,10 @@ impl<'__a> ::serde::Serialize for DeleteScheduleResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for DeleteScheduleResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.DeleteScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteScheduleResponse";
 }
 ::buffa::impl_default_view_instance!(DeleteScheduleResponseView);
 ::buffa::impl_view_reborrow!(DeleteScheduleResponseView);
@@ -5640,10 +5640,10 @@ impl<'__a> ::serde::Serialize for SetScheduleEnabledRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SetScheduleEnabledRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetScheduleEnabledRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SetScheduleEnabledRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetScheduleEnabledRequest";
+    const FULL_NAME: &'static str = "home.v1.SetScheduleEnabledRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetScheduleEnabledRequest";
 }
 ::buffa::impl_default_view_instance!(SetScheduleEnabledRequestView);
 ::buffa::impl_view_reborrow!(SetScheduleEnabledRequestView);
@@ -5936,10 +5936,10 @@ impl<'__a> ::serde::Serialize for SetScheduleEnabledResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SetScheduleEnabledResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetScheduleEnabledResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SetScheduleEnabledResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetScheduleEnabledResponse";
+    const FULL_NAME: &'static str = "home.v1.SetScheduleEnabledResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetScheduleEnabledResponse";
 }
 ::buffa::impl_default_view_instance!(SetScheduleEnabledResponseView);
 ::buffa::impl_view_reborrow!(SetScheduleEnabledResponseView);
@@ -6218,10 +6218,10 @@ impl<'__a> ::serde::Serialize for SnoozeScheduleRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SnoozeScheduleRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.SnoozeScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeScheduleRequest";
 }
 ::buffa::impl_default_view_instance!(SnoozeScheduleRequestView);
 ::buffa::impl_view_reborrow!(SnoozeScheduleRequestView);
@@ -6571,10 +6571,10 @@ impl<'__a> ::serde::Serialize for SnoozeScheduleResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SnoozeScheduleResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.SnoozeScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeScheduleResponse";
 }
 ::buffa::impl_default_view_instance!(SnoozeScheduleResponseView);
 ::buffa::impl_view_reborrow!(SnoozeScheduleResponseView);
@@ -6837,10 +6837,10 @@ impl<'__a> ::serde::Serialize for StopScheduleRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for StopScheduleRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.StopScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.StopScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopScheduleRequest";
 }
 ::buffa::impl_default_view_instance!(StopScheduleRequestView);
 ::buffa::impl_view_reborrow!(StopScheduleRequestView);
@@ -7128,10 +7128,10 @@ impl<'__a> ::serde::Serialize for StopScheduleResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for StopScheduleResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.StopScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.StopScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopScheduleResponse";
 }
 ::buffa::impl_default_view_instance!(StopScheduleResponseView);
 ::buffa::impl_view_reborrow!(StopScheduleResponseView);
@@ -7427,10 +7427,10 @@ impl<'__a> ::serde::Serialize for StartTimerRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for StartTimerRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StartTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.StartTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StartTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.StartTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StartTimerRequest";
 }
 ::buffa::impl_default_view_instance!(StartTimerRequestView);
 ::buffa::impl_view_reborrow!(StartTimerRequestView);
@@ -7722,10 +7722,10 @@ impl<'__a> ::serde::Serialize for StartTimerResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for StartTimerResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StartTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.StartTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StartTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.StartTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StartTimerResponse";
 }
 ::buffa::impl_default_view_instance!(StartTimerResponseView);
 ::buffa::impl_view_reborrow!(StartTimerResponseView);
@@ -7973,10 +7973,10 @@ impl<'__a> ::serde::Serialize for GetTimerRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetTimerRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.GetTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetTimerRequest";
 }
 ::buffa::impl_default_view_instance!(GetTimerRequestView);
 ::buffa::impl_view_reborrow!(GetTimerRequestView);
@@ -8254,10 +8254,10 @@ impl<'__a> ::serde::Serialize for GetTimerResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetTimerResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.GetTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetTimerResponse";
 }
 ::buffa::impl_default_view_instance!(GetTimerResponseView);
 ::buffa::impl_view_reborrow!(GetTimerResponseView);
@@ -8503,10 +8503,10 @@ impl<'__a> ::serde::Serialize for ListTimersRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListTimersRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListTimersRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListTimersRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListTimersRequest";
+    const FULL_NAME: &'static str = "home.v1.ListTimersRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListTimersRequest";
 }
 ::buffa::impl_default_view_instance!(ListTimersRequestView);
 ::buffa::impl_view_reborrow!(ListTimersRequestView);
@@ -8777,10 +8777,10 @@ impl<'__a> ::serde::Serialize for ListTimersResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListTimersResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListTimersResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListTimersResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListTimersResponse";
+    const FULL_NAME: &'static str = "home.v1.ListTimersResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListTimersResponse";
 }
 ::buffa::impl_default_view_instance!(ListTimersResponseView);
 ::buffa::impl_view_reborrow!(ListTimersResponseView);
@@ -9028,10 +9028,10 @@ impl<'__a> ::serde::Serialize for PauseTimerRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for PauseTimerRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "PauseTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.PauseTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.PauseTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.PauseTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.PauseTimerRequest";
 }
 ::buffa::impl_default_view_instance!(PauseTimerRequestView);
 ::buffa::impl_view_reborrow!(PauseTimerRequestView);
@@ -9311,10 +9311,10 @@ impl<'__a> ::serde::Serialize for PauseTimerResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for PauseTimerResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "PauseTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.PauseTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.PauseTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.PauseTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.PauseTimerResponse";
 }
 ::buffa::impl_default_view_instance!(PauseTimerResponseView);
 ::buffa::impl_view_reborrow!(PauseTimerResponseView);
@@ -9562,10 +9562,10 @@ impl<'__a> ::serde::Serialize for ResumeTimerRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ResumeTimerRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ResumeTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ResumeTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ResumeTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.ResumeTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ResumeTimerRequest";
 }
 ::buffa::impl_default_view_instance!(ResumeTimerRequestView);
 ::buffa::impl_view_reborrow!(ResumeTimerRequestView);
@@ -9851,10 +9851,10 @@ impl<'__a> ::serde::Serialize for ResumeTimerResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ResumeTimerResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ResumeTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ResumeTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ResumeTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.ResumeTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ResumeTimerResponse";
 }
 ::buffa::impl_default_view_instance!(ResumeTimerResponseView);
 ::buffa::impl_view_reborrow!(ResumeTimerResponseView);
@@ -10102,10 +10102,10 @@ impl<'__a> ::serde::Serialize for CancelTimerRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CancelTimerRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.CancelTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTimerRequest";
 }
 ::buffa::impl_default_view_instance!(CancelTimerRequestView);
 ::buffa::impl_view_reborrow!(CancelTimerRequestView);
@@ -10391,10 +10391,10 @@ impl<'__a> ::serde::Serialize for CancelTimerResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CancelTimerResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.CancelTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTimerResponse";
 }
 ::buffa::impl_default_view_instance!(CancelTimerResponseView);
 ::buffa::impl_view_reborrow!(CancelTimerResponseView);
@@ -10721,10 +10721,10 @@ impl<'__a> ::serde::Serialize for ListDueEventsRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListDueEventsRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListDueEventsRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListDueEventsRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListDueEventsRequest";
+    const FULL_NAME: &'static str = "home.v1.ListDueEventsRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListDueEventsRequest";
 }
 ::buffa::impl_default_view_instance!(ListDueEventsRequestView);
 ::buffa::impl_view_reborrow!(ListDueEventsRequestView);
@@ -11024,10 +11024,10 @@ impl<'__a> ::serde::Serialize for ListDueEventsResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListDueEventsResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListDueEventsResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListDueEventsResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListDueEventsResponse";
+    const FULL_NAME: &'static str = "home.v1.ListDueEventsResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListDueEventsResponse";
 }
 ::buffa::impl_default_view_instance!(ListDueEventsResponseView);
 ::buffa::impl_view_reborrow!(ListDueEventsResponseView);
@@ -11365,10 +11365,10 @@ impl<'__a> ::serde::Serialize for EnqueueTaskRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for EnqueueTaskRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "EnqueueTaskRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.EnqueueTaskRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.EnqueueTaskRequest";
+    const FULL_NAME: &'static str = "home.v1.EnqueueTaskRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.EnqueueTaskRequest";
 }
 ::buffa::impl_default_view_instance!(EnqueueTaskRequestView);
 ::buffa::impl_view_reborrow!(EnqueueTaskRequestView);
@@ -11682,10 +11682,10 @@ impl<'__a> ::serde::Serialize for EnqueueTaskResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for EnqueueTaskResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "EnqueueTaskResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.EnqueueTaskResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.EnqueueTaskResponse";
+    const FULL_NAME: &'static str = "home.v1.EnqueueTaskResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.EnqueueTaskResponse";
 }
 ::buffa::impl_default_view_instance!(EnqueueTaskResponseView);
 ::buffa::impl_view_reborrow!(EnqueueTaskResponseView);
@@ -11933,10 +11933,10 @@ impl<'__a> ::serde::Serialize for CancelTaskRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CancelTaskRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTaskRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTaskRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTaskRequest";
+    const FULL_NAME: &'static str = "home.v1.CancelTaskRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTaskRequest";
 }
 ::buffa::impl_default_view_instance!(CancelTaskRequestView);
 ::buffa::impl_view_reborrow!(CancelTaskRequestView);
@@ -12218,10 +12218,10 @@ impl<'__a> ::serde::Serialize for CancelTaskResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CancelTaskResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTaskResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTaskResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTaskResponse";
+    const FULL_NAME: &'static str = "home.v1.CancelTaskResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTaskResponse";
 }
 ::buffa::impl_default_view_instance!(CancelTaskResponseView);
 ::buffa::impl_view_reborrow!(CancelTaskResponseView);
@@ -12540,10 +12540,10 @@ impl<'__a> ::serde::Serialize for AckEventRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for AckEventRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "AckEventRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.AckEventRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.AckEventRequest";
+    const FULL_NAME: &'static str = "home.v1.AckEventRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.AckEventRequest";
 }
 ::buffa::impl_default_view_instance!(AckEventRequestView);
 ::buffa::impl_view_reborrow!(AckEventRequestView);
@@ -12840,10 +12840,10 @@ impl<'__a> ::serde::Serialize for AckEventResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for AckEventResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "AckEventResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.AckEventResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.AckEventResponse";
+    const FULL_NAME: &'static str = "home.v1.AckEventResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.AckEventResponse";
 }
 ::buffa::impl_default_view_instance!(AckEventResponseView);
 ::buffa::impl_view_reborrow!(AckEventResponseView);
@@ -13070,10 +13070,10 @@ impl<'__a> ::serde::Serialize for GetStatusRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetStatusRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetStatusRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetStatusRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetStatusRequest";
+    const FULL_NAME: &'static str = "home.v1.GetStatusRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetStatusRequest";
 }
 ::buffa::impl_default_view_instance!(GetStatusRequestView);
 ::buffa::impl_view_reborrow!(GetStatusRequestView);
@@ -13704,10 +13704,10 @@ impl<'__a> ::serde::Serialize for GetStatusResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetStatusResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetStatusResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetStatusResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetStatusResponse";
+    const FULL_NAME: &'static str = "home.v1.GetStatusResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetStatusResponse";
 }
 ::buffa::impl_default_view_instance!(GetStatusResponseView);
 ::buffa::impl_view_reborrow!(GetStatusResponseView);
@@ -14088,10 +14088,10 @@ impl<'__a> ::serde::Serialize for QueueInfoView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for QueueInfoView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "QueueInfo";
-    const FULL_NAME: &'static str = "ricardo.v1.QueueInfo";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.QueueInfo";
+    const FULL_NAME: &'static str = "home.v1.QueueInfo";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.QueueInfo";
 }
 ::buffa::impl_default_view_instance!(QueueInfoView);
 ::buffa::impl_view_reborrow!(QueueInfoView);
@@ -14410,10 +14410,10 @@ impl<'__a> ::serde::Serialize for ConsumerStatusView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ConsumerStatusView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ConsumerStatus";
-    const FULL_NAME: &'static str = "ricardo.v1.ConsumerStatus";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ConsumerStatus";
+    const FULL_NAME: &'static str = "home.v1.ConsumerStatus";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ConsumerStatus";
 }
 ::buffa::impl_default_view_instance!(ConsumerStatusView);
 ::buffa::impl_view_reborrow!(ConsumerStatusView);

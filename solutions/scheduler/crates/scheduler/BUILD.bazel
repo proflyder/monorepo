@@ -59,8 +59,8 @@ rust_binary(
     deps = LIB_DEPS + [":scheduler_lib"],
 )
 
-# The golden tables stay owned by solutions/scheduler: the test reads the Go
-# fixtures at runtime instead of embedding a second copy.
+# The frozen golden tables stay in solutions/scheduler; the test reads them at
+# runtime instead of embedding a second copy.
 rust_test(
     name = "unit_tests",
     crate = ":scheduler_lib",
@@ -80,7 +80,7 @@ rust_test(
 rust_test(
     name = "contract_tests",
     srcs = ["tests/contract.rs"],
-    data = ["//solutions/scheduler/internal/api:contract_fixtures"],
+    data = ["//solutions/scheduler:contract_fixtures"],
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = LIB_DEPS + [

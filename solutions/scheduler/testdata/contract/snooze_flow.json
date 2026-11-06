@@ -1,0 +1,370 @@
+{
+  "name": "snooze_flow",
+  "description": "Snooze after a DELIVERED ack queues an immediate STOP plus a delayed FIRE with snoozeSeq=1 and extends the window; both are leased and the STOP is acked. A 1440-minute snooze is due exactly when the next daily occurrence fires; one tick must coalesce the regular occurrence into the still-ringing snoozed one: only the snoozed FIRE is leased, the active occurrence stays the original one and nextDueUnix moves to the following day.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "wake",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "nextDueUnix": "1767339000",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "1",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      },
+      "capture": {
+        "scheduleId": "schedule.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767339000",
+              "dueUnix": "1767339000",
+              "id": "{{fireEventId}}",
+              "label": "wake",
+              "leaseUntilUnix": "1767339060",
+              "occurrenceUnix": "1767339000",
+              "payloadJson": "{}",
+              "queue": "home",
+              "sourceId": "{{scheduleId}}",
+              "sourceKind": "SOURCE_KIND_ALARM",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "alarm.fire"
+            }
+          ]
+        }
+      },
+      "capture": {
+        "fireEventId": "events[0].id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/AckEvent",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "eventId": "{{fireEventId}}",
+          "outcome": "ACK_OUTCOME_DELIVERED"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_DELIVERED",
+            "ackedUnix": "1767339000",
+            "action": "EVENT_ACTION_FIRE",
+            "attempts": 1,
+            "createdUnix": "1767339000",
+            "dueUnix": "1767339000",
+            "id": "{{fireEventId}}",
+            "label": "wake",
+            "occurrenceUnix": "1767339000",
+            "payloadJson": "{}",
+            "queue": "home",
+            "sourceId": "{{scheduleId}}",
+            "sourceKind": "SOURCE_KIND_ALARM",
+            "state": "EVENT_STATE_DELIVERED",
+            "taskType": "alarm.fire"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/SnoozeSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{scheduleId}}",
+          "minutes": 1440
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767339000",
+            "dueUnix": "1767425400",
+            "id": "{{snoozeEventId}}",
+            "label": "wake",
+            "occurrenceUnix": "1767339000",
+            "payloadJson": "{}",
+            "queue": "home",
+            "snoozeSeq": 1,
+            "sourceId": "{{scheduleId}}",
+            "sourceKind": "SOURCE_KIND_ALARM",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "alarm.fire"
+          },
+          "schedule": {
+            "activeOccurrenceUnix": "1767339000",
+            "activeUntilUnix": "1767426300",
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "lastFiredUnix": "1767339000",
+            "nextDueUnix": "1767425400",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "3",
+            "snoozeCount": "1",
+            "snoozeUntilUnix": "1767425400",
+            "timezone": "UTC",
+            "updatedUnix": "1767339000"
+          }
+        }
+      },
+      "capture": {
+        "snoozeEventId": "event.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_STOP",
+              "attempts": 1,
+              "createdUnix": "1767339000",
+              "detail": "snoozed for 1440 minutes",
+              "dueUnix": "1767339000",
+              "id": "{{stopEventId}}",
+              "label": "wake",
+              "leaseUntilUnix": "1767339060",
+              "occurrenceUnix": "1767339000",
+              "payloadJson": "{}",
+              "queue": "home",
+              "snoozeSeq": 1,
+              "sourceId": "{{scheduleId}}",
+              "sourceKind": "SOURCE_KIND_ALARM",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "alarm.stop"
+            }
+          ]
+        }
+      },
+      "capture": {
+        "stopEventId": "events[0].id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/AckEvent",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "eventId": "{{stopEventId}}",
+          "outcome": "ACK_OUTCOME_DELIVERED"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_DELIVERED",
+            "ackedUnix": "1767339000",
+            "action": "EVENT_ACTION_STOP",
+            "attempts": 1,
+            "createdUnix": "1767339000",
+            "detail": "snoozed for 1440 minutes",
+            "dueUnix": "1767339000",
+            "id": "{{stopEventId}}",
+            "label": "wake",
+            "occurrenceUnix": "1767339000",
+            "payloadJson": "{}",
+            "queue": "home",
+            "snoozeSeq": 1,
+            "sourceId": "{{scheduleId}}",
+            "sourceKind": "SOURCE_KIND_ALARM",
+            "state": "EVENT_STATE_DELIVERED",
+            "taskType": "alarm.stop"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767339000",
+              "dueUnix": "1767425400",
+              "id": "{{snoozeEventId}}",
+              "label": "wake",
+              "leaseUntilUnix": "1767425460",
+              "occurrenceUnix": "1767339000",
+              "payloadJson": "{}",
+              "queue": "home",
+              "snoozeSeq": 1,
+              "sourceId": "{{scheduleId}}",
+              "sourceKind": "SOURCE_KIND_ALARM",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "alarm.fire"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/GetSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{scheduleId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "activeOccurrenceUnix": "1767339000",
+            "activeUntilUnix": "1767426300",
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "lastFiredUnix": "1767339000",
+            "nextDueUnix": "1767511800",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "5",
+            "snoozeCount": "1",
+            "timezone": "UTC",
+            "updatedUnix": "1767425400"
+          }
+        }
+      }
+    }
+  ]
+}

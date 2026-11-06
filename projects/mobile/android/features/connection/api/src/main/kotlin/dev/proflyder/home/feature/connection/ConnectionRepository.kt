@@ -20,7 +20,7 @@ interface ConnectionRepository {
     /** Fetches and activates the latest Remote Config values. */
     suspend fun refreshRemoteConfig()
 
-    /** Calls ricardo.v1.SchedulerService/GetStatus; never uses mock data. */
+    /** Calls home.v1.SchedulerService/GetStatus; never uses mock data. */
     suspend fun testConnection(): Outcome<SchedulerStatus>
 }
 

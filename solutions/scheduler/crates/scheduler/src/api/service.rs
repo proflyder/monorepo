@@ -1,4 +1,4 @@
-//! `ricardo.v1.SchedulerService` implementation.
+//! `home.v1.SchedulerService` implementation.
 
 use std::sync::Arc;
 

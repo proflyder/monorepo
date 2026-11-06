@@ -30,7 +30,7 @@ Windows-десктоп «комп» (WoL, OpenSSH forced command) настраи
 `solutions/scheduler` — server-authoritative планировщик: SQLite durable
 очереди (`home` для alarms/reminders/timers, `tasks` для one-shot
 `EnqueueTask`), lease/ack, Connect/gRPC API. Внешний брокер (Kafka) не
-используется; версия контракта — `packages/proto/ricardo/v1/scheduler.proto`.
+используется; версия контракта — `packages/proto/home/v1/scheduler.proto`.
 
 `solutions/ha-bridge` — исполнитель: забирает только `home`, вызывает
 allowlisted HA scripts (`alarm_start`, `schedule_announce`, `alarm_stop`),

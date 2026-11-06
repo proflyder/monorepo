@@ -1,0 +1,160 @@
+{
+  "name": "tick_occurrence_fire",
+  "description": "A tick at the due instant emits exactly one PENDING FIRE with task_type alarm.fire, queue home and the wall occurrence; the schedule advances to the next day with revision+1 and a ringing window; a second tick at the same instant does not create a second event.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "wake",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "nextDueUnix": "1767339000",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "1",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      },
+      "capture": {
+        "scheduleId": "schedule.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767339000",
+              "dueUnix": "1767339000",
+              "id": "{{eventId}}",
+              "label": "wake",
+              "leaseUntilUnix": "1767339060",
+              "occurrenceUnix": "1767339000",
+              "payloadJson": "{}",
+              "queue": "home",
+              "sourceId": "{{scheduleId}}",
+              "sourceKind": "SOURCE_KIND_ALARM",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "alarm.fire"
+            }
+          ]
+        }
+      },
+      "capture": {
+        "eventId": "events[0].id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/GetSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{scheduleId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "activeOccurrenceUnix": "1767339000",
+            "activeUntilUnix": "1767339900",
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "lastFiredUnix": "1767339000",
+            "nextDueUnix": "1767425400",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "2",
+            "timezone": "UTC",
+            "updatedUnix": "1767339000"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      }
+    }
+  ]
+}

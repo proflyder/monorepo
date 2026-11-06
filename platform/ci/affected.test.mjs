@@ -217,7 +217,7 @@ test("android fixture: matrix entries are flat strings", () => {
 
 function fakeDeps(_root, unit) {
   // Directory of a real Go package, as `go list -deps` reports it.
-  const shared = new Set([path.join(REPO, "packages", "proto", "ricardo", "v1")]);
+  const shared = new Set([path.join(REPO, "packages", "go", "contracttest")]);
   const own = new Set([path.join(REPO, unit.id)]);
   // `sched` imports the shared package, nothing else does.
   if (unit.id === "sched") {
@@ -229,7 +229,7 @@ function fakeDeps(_root, unit) {
 test("go: only importing unit is selected", () => {
   const config = affected.loadConfig(fixtureConfig);
   const result = withDeps({ goPackageDirs: fakeDeps }, () =>
-    affected.route(config, ["packages/proto/ricardo/v1/scheduler.pb.go"], {
+    affected.route(config, ["packages/go/contracttest/contracttest.go"], {
       root: REPO,
       base: "b",
     }),
@@ -671,9 +671,12 @@ test("deploy: docs-only change deploys nothing", () => {
 test("deploy: scheduler change deploys only scheduler", () => {
   const config = affected.loadConfig();
   const result = routeReal(
-    ["solutions/scheduler/app/run.go"],
+    ["solutions/scheduler/crates/scheduler/src/api/service.rs"],
     undefined,
-    { affectedRules: () => new Set(["//solutions/scheduler/app:app"]) },
+    {
+      affectedRules: () =>
+        new Set(["//solutions/scheduler/crates/scheduler:scheduler_lib"]),
+    },
   );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["scheduler"]);
@@ -721,9 +724,12 @@ test("deploy: currency-bot manifest change deploys it", () => {
 test("deploy: ha-bridge change deploys bridge and control", () => {
   const config = affected.loadConfig();
   const result = routeReal(
-    ["solutions/ha-bridge/internal/bridge/bridge.go"],
+    ["solutions/ha-bridge/crates/ha-bridge/src/bridge.rs"],
     undefined,
-    { affectedRules: () => new Set(["//solutions/ha-bridge/internal/bridge:bridge"]) },
+    {
+      affectedRules: () =>
+        new Set(["//solutions/ha-bridge/crates/ha-bridge:ha-bridge"]),
+    },
   );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
@@ -746,18 +752,17 @@ test("deploy: Rust ha-control crate change deploys both services", () => {
   assert.equal(entries[0].images, "ha-bridge ha-control");
 });
 
-test("deploy: shared go package deploys ha-bridge", () => {
-  // ha-bridge is a Bazel unit now, and its Go targets (the rollback binaries
-  // and the golden fixture owners) still depend on the shared proto package,
-  // so the unit declares those dependency paths explicitly.
+test("deploy: shared proto package deploys scheduler and ha-bridge", () => {
+  // Both Rust services are generated from the shared home.v1 schema, so both
+  // units declare the proto path explicitly.
   const config = affected.loadConfig();
   const result = routeReal(
-    ["packages/proto/ricardo/v1/scheduler.pb.go"],
+    ["packages/proto/home/v1/scheduler.proto"],
     undefined,
     { affectedRules: () => new Set() },
   );
   const entries = affected.deployEntries(result, config);
-  assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
+  assert.deepEqual(entries.map((entry) => entry.id), ["scheduler", "ha-bridge"]);
 });
 
 test("deploy: hermes change selects its images", () => {
@@ -1566,17 +1571,17 @@ test("platform bazel routing: a native toolchain and a scheduler change select b
   const result = withDeps({ goPackageDirs: () => new Set() }, () =>
     affected.route(
       config,
-      ["platform/bazel/zig/repositories.bzl", "solutions/scheduler/app/run.go"],
+      ["platform/bazel/zig/repositories.bzl", "solutions/scheduler/crates/scheduler/src/api/service.rs"],
       {
         root: REPO,
         base: "b",
-        graph: { affectedRules: () => new Set(["//solutions/scheduler/app:app"]) },
+        graph: { affectedRules: () => new Set(["//solutions/scheduler/crates/scheduler:scheduler_lib"]) },
       },
     ),
   );
   assert.deepEqual(result.changed, [
     "platform/bazel#native",
-    "solutions/scheduler/app/run.go",
+    "solutions/scheduler/crates/scheduler/src/api/service.rs",
   ]);
   assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
     "logon-provider",

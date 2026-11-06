@@ -104,7 +104,7 @@ tower = { version = "=0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "=0.6.11", default-features = false, features = ["limit", "timeout"] }
 http-body-util = "=0.1.5"
 tempfile = "=3.27.0"
-# ricardo.v1 over the official Connect runtime: `connectrpc` transports and
+# home.v1 over the official Connect runtime: `connectrpc` transports and
 # serves the protocol, `buffa` owns protobuf messages and protojson
 # (DECISIONS 41, spike #134). Only the client and JSON codec are needed by the
 # home services' executor/queue clients.

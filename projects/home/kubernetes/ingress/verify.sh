@@ -84,7 +84,7 @@ if [[ -r "$SCHEDULER_TOKEN_FILE" ]]; then
     --resolve "alarms.$HOME_DOMAIN:443:$NODE_IP" \
     -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
     -d '{}' \
-    "https://alarms.$HOME_DOMAIN/ricardo.v1.SchedulerService/GetStatus" || true)
+    "https://alarms.$HOME_DOMAIN/home.v1.SchedulerService/GetStatus" || true)
   check "scheduler GetStatus" "200" "$status"
 else
   echo "SKIP scheduler/control bearer checks (no $SCHEDULER_TOKEN_FILE)"

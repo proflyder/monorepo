@@ -95,7 +95,7 @@ func newFakeHome(t *testing.T) *fakeHome {
 				return
 			}
 			_ = json.NewEncoder(writer).Encode(home.states)
-		case "/ricardo.v1.SchedulerService/GetStatus":
+		case "/home.v1.SchedulerService/GetStatus":
 			if home.statusErr != 0 {
 				http.Error(writer, "boom", home.statusErr)
 				return

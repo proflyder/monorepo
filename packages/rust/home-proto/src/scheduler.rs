@@ -1,4 +1,4 @@
-//! Minimal Connect-JSON client for `ricardo.v1.SchedulerService`.
+//! Minimal Connect-JSON client for `home.v1.SchedulerService`.
 //!
 //! It covers only the durable event surface used by executors and producers:
 //! `EnqueueTask`, `ListDueEvents`, `AckEvent` and `GetStatus`. It never owns
@@ -79,7 +79,7 @@ impl std::fmt::Debug for SchedulerClient {
 
 impl SchedulerClient {
     /// Build a client. `base_url` is the scheduler base
-    /// (`http://127.0.0.1:8098`); a trailing `/ricardo.v1.SchedulerService`
+    /// (`http://127.0.0.1:8098`); a trailing `/home.v1.SchedulerService`
     /// is tolerated, like the Go client.
     pub fn new(base_url: &str, token: Token, timeout: Duration) -> Result<Self, SchedulerError> {
         Self::build(base_url, token, timeout, || {
@@ -120,7 +120,7 @@ impl SchedulerClient {
     ) -> Result<Self, SchedulerError> {
         let base = base_url.trim().trim_end_matches('/');
         let base = base
-            .strip_suffix("/ricardo.v1.SchedulerService")
+            .strip_suffix("/home.v1.SchedulerService")
             .unwrap_or(base);
         let uri: Uri = base.parse().map_err(|_| SchedulerError::InvalidUrl)?;
         if uri.scheme_str().is_none() || uri.authority().is_none() {
@@ -338,10 +338,7 @@ mod tests {
             .expect("enqueue");
         assert_eq!(event.id, "ev_1");
         let calls = calls.lock().expect("lock");
-        assert_eq!(
-            calls.paths,
-            vec!["/ricardo.v1.SchedulerService/EnqueueTask"]
-        );
+        assert_eq!(calls.paths, vec!["/home.v1.SchedulerService/EnqueueTask"]);
         assert_eq!(calls.auth, vec!["Bearer sched-token"]);
         assert_eq!(calls.bodies[0]["taskType"], "test.ping");
         assert_eq!(calls.bodies[0]["queue"], "tasks");
@@ -397,7 +394,7 @@ mod tests {
     async fn base_url_may_carry_the_service_suffix() {
         let (base, _calls) = serve().await;
         let client = SchedulerClient::new(
-            &format!("{base}/ricardo.v1.SchedulerService/"),
+            &format!("{base}/home.v1.SchedulerService/"),
             Token::new("sched-token"),
             Duration::from_secs(1),
         )

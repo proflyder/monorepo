@@ -1,4 +1,4 @@
-//! `ricardo.v1.AlarmService` wire-compatible facade over alarm schedules.
+//! `home.v1.AlarmService` wire-compatible facade over alarm schedules.
 
 use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 use home_proto::v1 as proto;

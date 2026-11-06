@@ -1390,7 +1390,7 @@ currency_rates:
     - stop: "currency rates"
       response_variable: currency_result
 
-# --- Schedules: canonical ricardo.v1.SchedulerService client (2026-10-29) ---
+# --- Schedules: canonical home.v1.SchedulerService client (2026-10-29) ---
 # Authoritative alarm/reminder/timer state lives in the durable scheduler.
 # Home Assistant only speaks, executes audio through ha-bridge, and calls the
 # Connect JSON API. Notes stay in HA todo and are unchanged.
@@ -1401,7 +1401,7 @@ currency_rates:
 
 scheduler_rpc:
   alias: "Scheduler: Connect JSON RPC"
-  description: "Call one ricardo.v1.SchedulerService RPC and normalize success/error. Never speaks or logs endpoint/token values."
+  description: "Call one home.v1.SchedulerService RPC and normalize success/error. Never speaks or logs endpoint/token values."
   mode: parallel
   max: 20
   fields:

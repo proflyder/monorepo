@@ -21,7 +21,7 @@ wire-поведение (методы, пути, статусы, значимы�
     {
       "request": {
         "method": "POST",
-        "path": "/ricardo.v1.SchedulerService/CreateSchedule",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
         "headers": {"Authorization": "Bearer fake-token", "Content-Type": "application/json"},
         "body": {"label": "wake", "idempotencyKey": "k1"}
       },

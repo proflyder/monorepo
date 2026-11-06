@@ -307,14 +307,14 @@ impl Alarm {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Alarm";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Alarm";
 }
 ::buffa::impl_default_instance!(Alarm);
 impl ::buffa::MessageName for Alarm {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "Alarm";
-    const FULL_NAME: &'static str = "ricardo.v1.Alarm";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Alarm";
+    const FULL_NAME: &'static str = "home.v1.Alarm";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Alarm";
 }
 impl ::buffa::Message for Alarm {
     /// Returns the total encoded size in bytes.
@@ -588,7 +588,7 @@ impl ::buffa::Message for Alarm {
     }
 }
 impl ::buffa::ExtensionSet for Alarm {
-    const PROTO_FQN: &'static str = "ricardo.v1.Alarm";
+    const PROTO_FQN: &'static str = "home.v1.Alarm";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -611,7 +611,7 @@ impl ::buffa::json_helpers::ProtoElemJson for Alarm {
 }
 #[doc(hidden)]
 pub const __ALARM_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.Alarm",
+    type_url: "type.googleapis.com/home.v1.Alarm",
     to_json: ::buffa::type_registry::any_to_json::<Alarm>,
     from_json: ::buffa::type_registry::any_from_json::<Alarm>,
     is_wkt: false,
@@ -691,14 +691,14 @@ impl CreateAlarmRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateAlarmRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateAlarmRequest";
 }
 ::buffa::impl_default_instance!(CreateAlarmRequest);
 impl ::buffa::MessageName for CreateAlarmRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.CreateAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateAlarmRequest";
 }
 impl ::buffa::Message for CreateAlarmRequest {
     /// Returns the total encoded size in bytes.
@@ -900,7 +900,7 @@ impl ::buffa::Message for CreateAlarmRequest {
     }
 }
 impl ::buffa::ExtensionSet for CreateAlarmRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.CreateAlarmRequest";
+    const PROTO_FQN: &'static str = "home.v1.CreateAlarmRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -923,7 +923,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CreateAlarmRequest {
 }
 #[doc(hidden)]
 pub const __CREATE_ALARM_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CreateAlarmRequest",
+    type_url: "type.googleapis.com/home.v1.CreateAlarmRequest",
     to_json: ::buffa::type_registry::any_to_json::<CreateAlarmRequest>,
     from_json: ::buffa::type_registry::any_from_json::<CreateAlarmRequest>,
     is_wkt: false,
@@ -952,14 +952,14 @@ impl CreateAlarmResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateAlarmResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateAlarmResponse";
 }
 ::buffa::impl_default_instance!(CreateAlarmResponse);
 impl ::buffa::MessageName for CreateAlarmResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.CreateAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateAlarmResponse";
 }
 impl ::buffa::Message for CreateAlarmResponse {
     /// Returns the total encoded size in bytes.
@@ -1037,7 +1037,7 @@ impl ::buffa::Message for CreateAlarmResponse {
     }
 }
 impl ::buffa::ExtensionSet for CreateAlarmResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.CreateAlarmResponse";
+    const PROTO_FQN: &'static str = "home.v1.CreateAlarmResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1060,7 +1060,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CreateAlarmResponse {
 }
 #[doc(hidden)]
 pub const __CREATE_ALARM_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CreateAlarmResponse",
+    type_url: "type.googleapis.com/home.v1.CreateAlarmResponse",
     to_json: ::buffa::type_registry::any_to_json::<CreateAlarmResponse>,
     from_json: ::buffa::type_registry::any_from_json::<CreateAlarmResponse>,
     is_wkt: false,
@@ -1090,14 +1090,14 @@ impl GetAlarmRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetAlarmRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetAlarmRequest";
 }
 ::buffa::impl_default_instance!(GetAlarmRequest);
 impl ::buffa::MessageName for GetAlarmRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.GetAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetAlarmRequest";
 }
 impl ::buffa::Message for GetAlarmRequest {
     /// Returns the total encoded size in bytes.
@@ -1161,7 +1161,7 @@ impl ::buffa::Message for GetAlarmRequest {
     }
 }
 impl ::buffa::ExtensionSet for GetAlarmRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetAlarmRequest";
+    const PROTO_FQN: &'static str = "home.v1.GetAlarmRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1184,7 +1184,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetAlarmRequest {
 }
 #[doc(hidden)]
 pub const __GET_ALARM_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetAlarmRequest",
+    type_url: "type.googleapis.com/home.v1.GetAlarmRequest",
     to_json: ::buffa::type_registry::any_to_json::<GetAlarmRequest>,
     from_json: ::buffa::type_registry::any_from_json::<GetAlarmRequest>,
     is_wkt: false,
@@ -1213,14 +1213,14 @@ impl GetAlarmResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetAlarmResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetAlarmResponse";
 }
 ::buffa::impl_default_instance!(GetAlarmResponse);
 impl ::buffa::MessageName for GetAlarmResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.GetAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetAlarmResponse";
 }
 impl ::buffa::Message for GetAlarmResponse {
     /// Returns the total encoded size in bytes.
@@ -1298,7 +1298,7 @@ impl ::buffa::Message for GetAlarmResponse {
     }
 }
 impl ::buffa::ExtensionSet for GetAlarmResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetAlarmResponse";
+    const PROTO_FQN: &'static str = "home.v1.GetAlarmResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1321,7 +1321,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetAlarmResponse {
 }
 #[doc(hidden)]
 pub const __GET_ALARM_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetAlarmResponse",
+    type_url: "type.googleapis.com/home.v1.GetAlarmResponse",
     to_json: ::buffa::type_registry::any_to_json::<GetAlarmResponse>,
     from_json: ::buffa::type_registry::any_from_json::<GetAlarmResponse>,
     is_wkt: false,
@@ -1354,14 +1354,14 @@ impl ListAlarmsRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListAlarmsRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListAlarmsRequest";
 }
 ::buffa::impl_default_instance!(ListAlarmsRequest);
 impl ::buffa::MessageName for ListAlarmsRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListAlarmsRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListAlarmsRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListAlarmsRequest";
+    const FULL_NAME: &'static str = "home.v1.ListAlarmsRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListAlarmsRequest";
 }
 impl ::buffa::Message for ListAlarmsRequest {
     /// Returns the total encoded size in bytes.
@@ -1425,7 +1425,7 @@ impl ::buffa::Message for ListAlarmsRequest {
     }
 }
 impl ::buffa::ExtensionSet for ListAlarmsRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListAlarmsRequest";
+    const PROTO_FQN: &'static str = "home.v1.ListAlarmsRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1448,7 +1448,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListAlarmsRequest {
 }
 #[doc(hidden)]
 pub const __LIST_ALARMS_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListAlarmsRequest",
+    type_url: "type.googleapis.com/home.v1.ListAlarmsRequest",
     to_json: ::buffa::type_registry::any_to_json::<ListAlarmsRequest>,
     from_json: ::buffa::type_registry::any_from_json::<ListAlarmsRequest>,
     is_wkt: false,
@@ -1478,14 +1478,14 @@ impl ListAlarmsResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListAlarmsResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListAlarmsResponse";
 }
 ::buffa::impl_default_instance!(ListAlarmsResponse);
 impl ::buffa::MessageName for ListAlarmsResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListAlarmsResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListAlarmsResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListAlarmsResponse";
+    const FULL_NAME: &'static str = "home.v1.ListAlarmsResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListAlarmsResponse";
 }
 impl ::buffa::Message for ListAlarmsResponse {
     /// Returns the total encoded size in bytes.
@@ -1564,7 +1564,7 @@ impl ::buffa::Message for ListAlarmsResponse {
     }
 }
 impl ::buffa::ExtensionSet for ListAlarmsResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListAlarmsResponse";
+    const PROTO_FQN: &'static str = "home.v1.ListAlarmsResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1587,7 +1587,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListAlarmsResponse {
 }
 #[doc(hidden)]
 pub const __LIST_ALARMS_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListAlarmsResponse",
+    type_url: "type.googleapis.com/home.v1.ListAlarmsResponse",
     to_json: ::buffa::type_registry::any_to_json::<ListAlarmsResponse>,
     from_json: ::buffa::type_registry::any_from_json::<ListAlarmsResponse>,
     is_wkt: false,
@@ -1616,14 +1616,14 @@ impl UpdateAlarmRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateAlarmRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateAlarmRequest";
 }
 ::buffa::impl_default_instance!(UpdateAlarmRequest);
 impl ::buffa::MessageName for UpdateAlarmRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.UpdateAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateAlarmRequest";
 }
 impl ::buffa::Message for UpdateAlarmRequest {
     /// Returns the total encoded size in bytes.
@@ -1701,7 +1701,7 @@ impl ::buffa::Message for UpdateAlarmRequest {
     }
 }
 impl ::buffa::ExtensionSet for UpdateAlarmRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.UpdateAlarmRequest";
+    const PROTO_FQN: &'static str = "home.v1.UpdateAlarmRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1724,7 +1724,7 @@ impl ::buffa::json_helpers::ProtoElemJson for UpdateAlarmRequest {
 }
 #[doc(hidden)]
 pub const __UPDATE_ALARM_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.UpdateAlarmRequest",
+    type_url: "type.googleapis.com/home.v1.UpdateAlarmRequest",
     to_json: ::buffa::type_registry::any_to_json::<UpdateAlarmRequest>,
     from_json: ::buffa::type_registry::any_from_json::<UpdateAlarmRequest>,
     is_wkt: false,
@@ -1753,14 +1753,14 @@ impl UpdateAlarmResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateAlarmResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateAlarmResponse";
 }
 ::buffa::impl_default_instance!(UpdateAlarmResponse);
 impl ::buffa::MessageName for UpdateAlarmResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.UpdateAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateAlarmResponse";
 }
 impl ::buffa::Message for UpdateAlarmResponse {
     /// Returns the total encoded size in bytes.
@@ -1838,7 +1838,7 @@ impl ::buffa::Message for UpdateAlarmResponse {
     }
 }
 impl ::buffa::ExtensionSet for UpdateAlarmResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.UpdateAlarmResponse";
+    const PROTO_FQN: &'static str = "home.v1.UpdateAlarmResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1861,7 +1861,7 @@ impl ::buffa::json_helpers::ProtoElemJson for UpdateAlarmResponse {
 }
 #[doc(hidden)]
 pub const __UPDATE_ALARM_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.UpdateAlarmResponse",
+    type_url: "type.googleapis.com/home.v1.UpdateAlarmResponse",
     to_json: ::buffa::type_registry::any_to_json::<UpdateAlarmResponse>,
     from_json: ::buffa::type_registry::any_from_json::<UpdateAlarmResponse>,
     is_wkt: false,
@@ -1891,14 +1891,14 @@ impl DeleteAlarmRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteAlarmRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteAlarmRequest";
 }
 ::buffa::impl_default_instance!(DeleteAlarmRequest);
 impl ::buffa::MessageName for DeleteAlarmRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.DeleteAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteAlarmRequest";
 }
 impl ::buffa::Message for DeleteAlarmRequest {
     /// Returns the total encoded size in bytes.
@@ -1962,7 +1962,7 @@ impl ::buffa::Message for DeleteAlarmRequest {
     }
 }
 impl ::buffa::ExtensionSet for DeleteAlarmRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.DeleteAlarmRequest";
+    const PROTO_FQN: &'static str = "home.v1.DeleteAlarmRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1985,7 +1985,7 @@ impl ::buffa::json_helpers::ProtoElemJson for DeleteAlarmRequest {
 }
 #[doc(hidden)]
 pub const __DELETE_ALARM_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.DeleteAlarmRequest",
+    type_url: "type.googleapis.com/home.v1.DeleteAlarmRequest",
     to_json: ::buffa::type_registry::any_to_json::<DeleteAlarmRequest>,
     from_json: ::buffa::type_registry::any_from_json::<DeleteAlarmRequest>,
     is_wkt: false,
@@ -2015,14 +2015,14 @@ impl DeleteAlarmResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteAlarmResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteAlarmResponse";
 }
 ::buffa::impl_default_instance!(DeleteAlarmResponse);
 impl ::buffa::MessageName for DeleteAlarmResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.DeleteAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteAlarmResponse";
 }
 impl ::buffa::Message for DeleteAlarmResponse {
     /// Returns the total encoded size in bytes.
@@ -2086,7 +2086,7 @@ impl ::buffa::Message for DeleteAlarmResponse {
     }
 }
 impl ::buffa::ExtensionSet for DeleteAlarmResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.DeleteAlarmResponse";
+    const PROTO_FQN: &'static str = "home.v1.DeleteAlarmResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2109,7 +2109,7 @@ impl ::buffa::json_helpers::ProtoElemJson for DeleteAlarmResponse {
 }
 #[doc(hidden)]
 pub const __DELETE_ALARM_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.DeleteAlarmResponse",
+    type_url: "type.googleapis.com/home.v1.DeleteAlarmResponse",
     to_json: ::buffa::type_registry::any_to_json::<DeleteAlarmResponse>,
     from_json: ::buffa::type_registry::any_from_json::<DeleteAlarmResponse>,
     is_wkt: false,
@@ -2149,14 +2149,14 @@ impl SetAlarmEnabledRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetAlarmEnabledRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetAlarmEnabledRequest";
 }
 ::buffa::impl_default_instance!(SetAlarmEnabledRequest);
 impl ::buffa::MessageName for SetAlarmEnabledRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetAlarmEnabledRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SetAlarmEnabledRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetAlarmEnabledRequest";
+    const FULL_NAME: &'static str = "home.v1.SetAlarmEnabledRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetAlarmEnabledRequest";
 }
 impl ::buffa::Message for SetAlarmEnabledRequest {
     /// Returns the total encoded size in bytes.
@@ -2234,7 +2234,7 @@ impl ::buffa::Message for SetAlarmEnabledRequest {
     }
 }
 impl ::buffa::ExtensionSet for SetAlarmEnabledRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.SetAlarmEnabledRequest";
+    const PROTO_FQN: &'static str = "home.v1.SetAlarmEnabledRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2257,7 +2257,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SetAlarmEnabledRequest {
 }
 #[doc(hidden)]
 pub const __SET_ALARM_ENABLED_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SetAlarmEnabledRequest",
+    type_url: "type.googleapis.com/home.v1.SetAlarmEnabledRequest",
     to_json: ::buffa::type_registry::any_to_json::<SetAlarmEnabledRequest>,
     from_json: ::buffa::type_registry::any_from_json::<SetAlarmEnabledRequest>,
     is_wkt: false,
@@ -2286,14 +2286,14 @@ impl SetAlarmEnabledResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetAlarmEnabledResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetAlarmEnabledResponse";
 }
 ::buffa::impl_default_instance!(SetAlarmEnabledResponse);
 impl ::buffa::MessageName for SetAlarmEnabledResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetAlarmEnabledResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SetAlarmEnabledResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetAlarmEnabledResponse";
+    const FULL_NAME: &'static str = "home.v1.SetAlarmEnabledResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetAlarmEnabledResponse";
 }
 impl ::buffa::Message for SetAlarmEnabledResponse {
     /// Returns the total encoded size in bytes.
@@ -2371,7 +2371,7 @@ impl ::buffa::Message for SetAlarmEnabledResponse {
     }
 }
 impl ::buffa::ExtensionSet for SetAlarmEnabledResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.SetAlarmEnabledResponse";
+    const PROTO_FQN: &'static str = "home.v1.SetAlarmEnabledResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2394,7 +2394,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SetAlarmEnabledResponse {
 }
 #[doc(hidden)]
 pub const __SET_ALARM_ENABLED_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SetAlarmEnabledResponse",
+    type_url: "type.googleapis.com/home.v1.SetAlarmEnabledResponse",
     to_json: ::buffa::type_registry::any_to_json::<SetAlarmEnabledResponse>,
     from_json: ::buffa::type_registry::any_from_json::<SetAlarmEnabledResponse>,
     is_wkt: false,
@@ -2436,14 +2436,14 @@ impl SnoozeAlarmRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeAlarmRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeAlarmRequest";
 }
 ::buffa::impl_default_instance!(SnoozeAlarmRequest);
 impl ::buffa::MessageName for SnoozeAlarmRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.SnoozeAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeAlarmRequest";
 }
 impl ::buffa::Message for SnoozeAlarmRequest {
     /// Returns the total encoded size in bytes.
@@ -2521,7 +2521,7 @@ impl ::buffa::Message for SnoozeAlarmRequest {
     }
 }
 impl ::buffa::ExtensionSet for SnoozeAlarmRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.SnoozeAlarmRequest";
+    const PROTO_FQN: &'static str = "home.v1.SnoozeAlarmRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2544,7 +2544,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SnoozeAlarmRequest {
 }
 #[doc(hidden)]
 pub const __SNOOZE_ALARM_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SnoozeAlarmRequest",
+    type_url: "type.googleapis.com/home.v1.SnoozeAlarmRequest",
     to_json: ::buffa::type_registry::any_to_json::<SnoozeAlarmRequest>,
     from_json: ::buffa::type_registry::any_from_json::<SnoozeAlarmRequest>,
     is_wkt: false,
@@ -2573,14 +2573,14 @@ impl SnoozeAlarmResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeAlarmResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeAlarmResponse";
 }
 ::buffa::impl_default_instance!(SnoozeAlarmResponse);
 impl ::buffa::MessageName for SnoozeAlarmResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.SnoozeAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeAlarmResponse";
 }
 impl ::buffa::Message for SnoozeAlarmResponse {
     /// Returns the total encoded size in bytes.
@@ -2658,7 +2658,7 @@ impl ::buffa::Message for SnoozeAlarmResponse {
     }
 }
 impl ::buffa::ExtensionSet for SnoozeAlarmResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.SnoozeAlarmResponse";
+    const PROTO_FQN: &'static str = "home.v1.SnoozeAlarmResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2681,7 +2681,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SnoozeAlarmResponse {
 }
 #[doc(hidden)]
 pub const __SNOOZE_ALARM_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SnoozeAlarmResponse",
+    type_url: "type.googleapis.com/home.v1.SnoozeAlarmResponse",
     to_json: ::buffa::type_registry::any_to_json::<SnoozeAlarmResponse>,
     from_json: ::buffa::type_registry::any_from_json::<SnoozeAlarmResponse>,
     is_wkt: false,
@@ -2711,14 +2711,14 @@ impl StopAlarmRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopAlarmRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopAlarmRequest";
 }
 ::buffa::impl_default_instance!(StopAlarmRequest);
 impl ::buffa::MessageName for StopAlarmRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.StopAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.StopAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopAlarmRequest";
 }
 impl ::buffa::Message for StopAlarmRequest {
     /// Returns the total encoded size in bytes.
@@ -2782,7 +2782,7 @@ impl ::buffa::Message for StopAlarmRequest {
     }
 }
 impl ::buffa::ExtensionSet for StopAlarmRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.StopAlarmRequest";
+    const PROTO_FQN: &'static str = "home.v1.StopAlarmRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2805,7 +2805,7 @@ impl ::buffa::json_helpers::ProtoElemJson for StopAlarmRequest {
 }
 #[doc(hidden)]
 pub const __STOP_ALARM_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.StopAlarmRequest",
+    type_url: "type.googleapis.com/home.v1.StopAlarmRequest",
     to_json: ::buffa::type_registry::any_to_json::<StopAlarmRequest>,
     from_json: ::buffa::type_registry::any_from_json::<StopAlarmRequest>,
     is_wkt: false,
@@ -2834,14 +2834,14 @@ impl StopAlarmResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopAlarmResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopAlarmResponse";
 }
 ::buffa::impl_default_instance!(StopAlarmResponse);
 impl ::buffa::MessageName for StopAlarmResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.StopAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.StopAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopAlarmResponse";
 }
 impl ::buffa::Message for StopAlarmResponse {
     /// Returns the total encoded size in bytes.
@@ -2919,7 +2919,7 @@ impl ::buffa::Message for StopAlarmResponse {
     }
 }
 impl ::buffa::ExtensionSet for StopAlarmResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.StopAlarmResponse";
+    const PROTO_FQN: &'static str = "home.v1.StopAlarmResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2942,7 +2942,7 @@ impl ::buffa::json_helpers::ProtoElemJson for StopAlarmResponse {
 }
 #[doc(hidden)]
 pub const __STOP_ALARM_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.StopAlarmResponse",
+    type_url: "type.googleapis.com/home.v1.StopAlarmResponse",
     to_json: ::buffa::type_registry::any_to_json::<StopAlarmResponse>,
     from_json: ::buffa::type_registry::any_from_json::<StopAlarmResponse>,
     is_wkt: false,

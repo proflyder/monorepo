@@ -117,7 +117,7 @@ impl Config {
             true,
         )?;
         let scheduler_url = scheduler_url
-            .strip_suffix("/ricardo.v1.SchedulerService")
+            .strip_suffix("/home.v1.SchedulerService")
             .map_or(scheduler_url.clone(), str::to_owned);
         let ha_url = base_url("HA_URL", getenv("HA_URL").as_deref(), true)?;
 

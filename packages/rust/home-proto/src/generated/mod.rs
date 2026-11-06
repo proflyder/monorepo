@@ -3,11 +3,11 @@
 #[allow(non_camel_case_types, dead_code, unused_imports, unused_qualifications, clippy::derivable_impls, clippy::match_single_binding, clippy::uninlined_format_args, clippy::doc_lazy_continuation, clippy::module_inception, impl_trait_redundant_captures)]
 #[rustfmt::skip]
 #[allow(clippy::all, clippy::pedantic, clippy::nursery)]
-pub mod ricardo {
+pub mod home {
     use super::*;
     #[allow(non_camel_case_types, dead_code, unused_imports, unused_qualifications, clippy::derivable_impls, clippy::match_single_binding, clippy::uninlined_format_args, clippy::doc_lazy_continuation, clippy::module_inception, impl_trait_redundant_captures)]
     pub mod v1 {
         use super::*;
-        include!("ricardo.v1.mod.rs");
+        include!("home.v1.mod.rs");
     }
 }
