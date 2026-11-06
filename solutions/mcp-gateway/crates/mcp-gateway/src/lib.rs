@@ -1,5 +1,9 @@
-//! Platform clients of the MCP gateway.
+//! Clients and pure domain of the MCP gateway.
 //!
+//! * [`domain`] — the pure, I/O-free core: catalog, speech, redaction, alert
+//!   matching, status/report assembly and in-memory state with an injected
+//!   clock. The golden vectors in `solutions/mcp-gateway/testdata/vectors` are
+//!   the port contract.
 //! * [`kubernetes`] — a small read-mostly Kubernetes REST client with the
 //!   in-cluster ServiceAccount token re-read on every request and exactly one
 //!   mutation (the rollout restart annotation patch). The gateway deliberately
@@ -13,6 +17,7 @@
 //! classified as [`ErrorKind::Transient`] or [`ErrorKind::Permanent`] the same
 //! way as the rest of the home services.
 
+pub mod domain;
 pub mod kubernetes;
 pub mod ssh;
 

@@ -39,6 +39,10 @@ serde = { version = "=1.0.229", default-features = false, features = ["std", "de
 # `raw_value`: контракт v1 wake-событий пишет числа в формате `%.6`/`%.3`, а не
 # кратчайшим представлением `f64`; литерал поля собирается как `RawValue`.
 serde_json = { version = "=1.0.154", default-features = false, features = ["std", "raw_value"] }
+# Деплойментные YAML-каталоги mcp-gateway (`catalog.yaml`, `bb-targets.yaml`).
+# `serde_yaml` — единственная зрелая derive-совместимая реализация YAML 1.1/1.2
+# без C-зависимостей; порт Go-кода читает тот же формат (`go.yaml.in/yaml/v2`).
+serde_yaml = "=0.9.34"
 # Form-encoded bodies in tests of the Telegram client; reqwest already depends
 # on the same version for `RequestBuilder::form`.
 serde_urlencoded = "=0.7.1"
