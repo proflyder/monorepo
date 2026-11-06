@@ -1,0 +1,3 @@
+#!/bin/sh
+# Scripts call `bazel`; mise installs Bazelisk under its own name.
+exec bazelisk "$@"

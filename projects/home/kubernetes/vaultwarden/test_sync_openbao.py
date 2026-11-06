@@ -137,6 +137,13 @@ class Sync(unittest.TestCase):
             self.assertEqual(public.split()[:2], key.with_suffix(".pub").read_text().split()[:2])
             self.assertTrue(fp.startswith("SHA256:"))
 
+    def test_bootstrap_skipped_without_recovery_material(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp) / "openbao"
+            base.mkdir()
+            (base / "operator.token").write_text("s.op\n")
+            self.assertIsNone(s.bootstrap(pathlib.Path(tmp), "https://vault.example.test"))
+
     def test_bootstrap_item(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = pathlib.Path(tmp) / "openbao"

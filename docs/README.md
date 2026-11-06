@@ -21,6 +21,8 @@
 | [`REBUILD.md`](REBUILD.md) | восстановление после потери host/VM/станции |
 | [`TESTING.md`](TESTING.md) | hermetic и live-проверки |
 | [`GIT.md`](GIT.md) | ветки, pull request, защита и выкладка |
+| [`WORKSTATION.md`](WORKSTATION.md) | рабочее место за одну команду: mise, токен OpenBao, SSH |
+| [`SECRETS.md`](SECRETS.md) | каталог путей OpenBao (имена, без значений) |
 
 ## Политики и дизайн
 

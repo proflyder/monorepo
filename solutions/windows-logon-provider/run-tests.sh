@@ -8,8 +8,7 @@ cd "$(dirname "$0")"
 
 ROOT="$(cd ../.. && pwd)"
 
-# A linked worktree has no (git-ignored) secrets/ directory, so fall back to the
-# main checkout that owns the shared Git directory.
+# Bazelisk comes from mise (`mise install`, see mise.toml).
 bazel_bin() {
   if [[ -n "${BAZELISK:-}" ]]; then
     printf '%s\n' "$BAZELISK"
@@ -19,20 +18,11 @@ bazel_bin() {
     type -P bazel
     return 0
   fi
-  if [[ -x "$ROOT/local-data/local-tools/bazelisk" ]]; then
-    printf '%s\n' "$ROOT/local-data/local-tools/bazelisk"
+  if type -P bazelisk >/dev/null 2>&1; then
+    type -P bazelisk
     return 0
   fi
-  local common main_root
-  common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=
-  if [[ -n "$common" ]]; then
-    main_root=$(dirname "$common")
-    if [[ -x "$main_root/local-data/local-tools/bazelisk" ]]; then
-      printf '%s\n' "$main_root/local-data/local-tools/bazelisk"
-      return 0
-    fi
-  fi
-  echo "bazel/bazelisk not found; set BAZELISK" >&2
+  echo "bazel/bazelisk not found: run \`mise install\` or set BAZELISK" >&2
   return 1
 }
 

@@ -27,7 +27,7 @@ name: deploy-home
 # unverified image falls back to building exactly as before, and the chosen
 # path is recorded in the job summary.
 #
-# The push also runs `warm-caches`, which saves the shared setup-go/setup-bazel
+# The push also runs `warm-caches`, which saves the shared Go/setup-bazel
 # caches under the keys PR jobs restore (CI itself no longer runs on develop).
 #
 # Push runs only the conservative preserve mode. Mode changes (execute, shadow,
@@ -82,9 +82,6 @@ env:
   # Linux_x86_64.
   CRANE_VERSION: "v0.22.1"
   CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
-  KUBECTL_VERSION: "v1.35.0"
-  KUBECTL_SHA256: "a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989"
-  HELM_VERSION: "v4.1.4"
   DEPLOY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'preserve' }}
   HERMES_SIMULATE_SMOKE_FAILURE: ${{ (github.event_name == 'workflow_dispatch' && inputs.simulate_hermes_failure) && '1' || '0' }}
   # Public DNS name of the VPN and the OpenBao address are private values: they
@@ -100,12 +97,9 @@ jobs:
   # no secrets and no VPN; it never runs on workflow_dispatch.
   #
   # Cache keys are derived by the actions themselves from their inputs:
-  #   * setup-go (same version/inputs as `_go.yml`): key is
-  #     `setup-go-<os>-<arch>-<imageOS>-go-<versionSpec>-<hash(cache-dependency-path)>`.
-  #     The inputs below are byte-identical to `_go.yml` (`go-version: 1.27.x`,
-  #     the same two go.sum files), so a PR that does not change go.sum
-  #     restores exactly this key. setup-go v6.5.0 has no restore-keys, so only
-  #     the exact file hash matches - a PR changing go.sum starts cold.
+  #   * Go (mise.toml) + actions/cache, same key as `_go.yml`:
+  #     `go-<os>-<hash(go.sum, ble-gateway/go.sum)>` with restore-keys
+  #     `go-<os>-`, so a PR changing go.sum still restores the closest cache.
   #   * setup-bazel (same version/inputs as the PR jobs): keys are
   #     `setup-bazel-<cache-version>-<platform>-<arch>-<name>-<hash>`, with
   #     name `bazelisk` (hash of `.bazelversion`) and `repository` (hash of
@@ -126,16 +120,21 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      # Identical to `_go.yml`: same action, go-version input and dependency
-      # paths, so the saved key matches what every Go PR job restores.
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      # Identical to `_go.yml`: Go from mise.toml and the same cache key, so the
+      # cache saved here on develop is what every Go PR job restores.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          # go.work requires a newer toolchain than the root go.mod minimum;
-          # this is `_go.yml`'s `go_version` default, which ci.yml never overrides.
-          go-version: "1.27.x"
-          cache-dependency-path: |
-            go.sum
-            projects/station/ble-gateway/go.sum
+          version: 2026.11.3
+          install_args: "go"
+          cache: true
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'projects/station/ble-gateway/go.sum') }}
+          restore-keys: go-${{ runner.os }}-
 
       - name: Download root modules
         run: go mod download
@@ -417,16 +416,13 @@ jobs:
           fi
           echo "selected mode: $DEPLOY_MODE for ${{ matrix.id }}"
 
-      - name: Install pinned kubectl
-        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5.2.0
+      # kubectl and helm: versions and checksums from mise.toml/mise.lock.
+      - name: Install pinned kubectl and helm
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          version: ${{ env.KUBECTL_VERSION }}
-          checksum: ${{ env.KUBECTL_SHA256 }}
-
-      - name: Install pinned helm
-        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-        with:
-          version: ${{ env.HELM_VERSION }}
+          version: 2026.11.3
+          install_args: "kubectl helm"
+          cache: true
 
       # Pinned Bazelisk on PATH (`bazel`) plus its Bzlmod/repository caches.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1

@@ -89,9 +89,12 @@ if (git("status", "--porcelain")) {
   process.stderr.write("Push blocked: commit or stash changes before the publication audit.\n");
   process.exit(1);
 }
-// `secrets/` is ignored, so a linked worktree has no copy of it: also look in
-// the main checkout that owns the shared Git directory.
-const mainRoot = path.dirname(git("rev-parse", "--path-format=absolute", "--git-common-dir"));
+// gitleaks comes from mise.toml: on PATH when mise is activated, otherwise
+// resolved through `mise which` (hooks also run from non-interactive shells).
+const miseWhich = (tool) => {
+  const found = spawnSync("mise", ["which", tool], { cwd: root, encoding: "utf8" });
+  return found.status === 0 ? found.stdout.trim() : "";
+};
 const isFile = (candidate) => {
   try {
     return fs.statSync(candidate).isFile();
@@ -99,13 +102,11 @@ const isFile = (candidate) => {
     return false;
   }
 };
-const scanner = [
-  which("gitleaks"),
-  path.join(root, "secrets", "local-tools", "gitleaks"),
-  path.join(mainRoot, "secrets", "local-tools", "gitleaks"),
-].find((candidate) => candidate && isFile(candidate));
+const scanner = [which("gitleaks"), miseWhich("gitleaks")].find(
+  (candidate) => candidate && isFile(candidate),
+);
 if (!scanner) {
-  process.stderr.write("Push blocked: install gitleaks before publishing.\n");
+  process.stderr.write("Push blocked: gitleaks not found; run `mise install`.\n");
   process.exit(1);
 }
 for (const sha of pushed) {

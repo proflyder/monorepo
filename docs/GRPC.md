@@ -146,7 +146,7 @@ Rust-стабы (`connectrpc-build` + `buffa`) **лежат в репозито�
 требуют protoc. Перегенерация и проверка:
 
 ```bash
-PROTOC=local-data/local-tools/protoc/bin/protoc packages/rust/home-proto/generate.sh
+mise exec -- packages/rust/home-proto/generate.sh   # protoc 33.4 из mise.toml
 packages/rust/home-proto/generate.sh --check
 ```
 

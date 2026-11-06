@@ -78,7 +78,7 @@ process scheduler — Rust-крейт `solutions/scheduler/crates/scheduler`.
 | HA-конфиг | YAML | существующий контур, не переписывать ради модности |
 | Pulsar (станция) | Rust (`rules_rust`, Zig cross) | first-party форк upstream, сборка Bazel |
 | `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; члены общего корневого Cargo workspace, host-тесты и armhf-кросс через Bazel |
-| CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node есть в раннере, без setup-python/pip; локально — `node` |
+| CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node из `mise.toml` (CI — `jdx/mise-action`), без pip; локально — `mise install` |
 | Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
 | `platform/deploy` (`home-deploy`) и runtime health exporter | Go | все инструменты деплоя и in-cluster Job/экспортер — один distroless-бинарник, без Python в кластере (решение 35) |
 | задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |

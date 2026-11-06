@@ -116,10 +116,6 @@ permissions:
   contents: read
 
 env:
-  # Official ORAS release used to publish a unit's OCI artifact. sha256 is the
-  # GitHub release asset digest for linux_amd64.
-  ORAS_VERSION: "1.3.6"
-  ORAS_SHA256: "66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0"
   # Official crane (google/go-containerregistry): resolves and re-tags a digest
   # without pulling it. Same pins as deploy-home.
   CRANE_VERSION: "v0.22.1"
@@ -423,10 +419,20 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      # Go from mise.toml (version and checksum shared with the workstation).
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          go-version: "1.27.x"
-          cache-dependency-path: ${{ inputs.workdir }}/installer/go.sum
+          version: 2026.11.3
+          install_args: "go"
+          cache: true
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-installer-${{ runner.os }}-${{ hashFiles(format('{0}/installer/go.sum', inputs.workdir)) }}
+          restore-keys: go-installer-${{ runner.os }}-
 
       - name: vet + test
         working-directory: ${{ inputs.workdir }}/installer
@@ -592,15 +598,12 @@ jobs:
           name: ${{ inputs.unit }}
           path: ${{ runner.temp }}/artifact
 
-      - name: Install pinned oras
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" \
-            "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
-          echo "${ORAS_SHA256}  ${archive}" | sha256sum -c -
-          tar -xzf "$archive" -C "$RUNNER_TEMP" oras
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      # oras publishes the OCI artifact; version and sha256 from mise.toml/mise.lock.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install_args: "oras"
+          cache: true
 
       # The build-once identity is the git tree: a PR builds its merge ref, whose
       # tree equals the squash commit's tree while `develop` did not move.

@@ -277,25 +277,25 @@ kubectl -n openbao logs job/snapshot-manual
 delete), orphan, period 30 дней.
 
 Секреты владельца (SSH-ключи, CA, бэкап-пароли, admin kubeconfig) — в
-`secret/infra/*`; в `secrets/` остаются описание (`README.md`), каталог
-`catalog.json` «старый файл → путь#поле» и bootstrap OpenBao. Скрипт, читающий
-файл вида `secrets/home/ingress.env`, запускать после временного восстановления:
+`secret/infra/*`; каталог путей — `docs/SECRETS.md`, рабочее место и задачи
+mise — `docs/WORKSTATION.md`. Скрипт, читающий файл вида
+`secrets/home/ingress.env`, запускать после временного восстановления:
 
 ```bash
-projects/home/kubernetes/openbao/materialize.py home/ingress.env   # или --all
-projects/home/kubernetes/openbao/materialize.py --clean home/ingress.env
+mise run secrets:file home/ingress.env    # или -- --all
+mise run secrets:clean home/ingress.env
+mise run secrets:check                    # каталог ↔ OpenBao
 ```
 
-Не-секретные локальные данные (бэкапы, датасеты, логи, `local-tools`) —
-`local-data/` (git-ignored).
+Не-секретные локальные данные (бэкапы, датасеты, логи) — `local-data/`
+(git-ignored); инструменты — `mise install`.
 
 ```bash
-export BAO_ADDR=https://vault.<home-domain> BAO_TOKEN=$(cat secrets/openbao/operator.token)
-bao token lookup            # ttl; любое использование продлевает period
-bao token renew             # если долго не использовался
-bao kv get secret/ci/deploy-home   # запись — GET → merge → POST с cas
-# отзыв: bao token revoke -self; новый — admin: auth/token/create-orphan
-#   policies=operator-kv period=720h
+# BAO_ADDR уже в окружении mise; токен — только на время команды
+BAO_TOKEN=$(cat secrets/openbao/operator.token) bao token lookup
+BAO_TOKEN=$(cat secrets/openbao/operator.token) bao kv get secret/ci/deploy-home
+# новый токен машины: mise run secrets:login (пароль + TOTP); каждая задача
+# secrets:* продлевает period 30 дней
 ```
 
 Пароль человека задаёт сам пользователь и меняет через UI
@@ -573,8 +573,7 @@ publish), анонимный `oras pull` работает без токена. �
 решения окажется приватным: **профиль владельца → Packages → `<пакет>` →
 Package settings → Danger Zone → Change visibility → Public**.
 
-Получение (Mac/Linux оператора; нужны `oras` и авторизованный `gh`; `oras`
-можно положить в `local-data/local-tools/`):
+Получение (Mac/Linux оператора; `oras` и `gh` — из `mise install`, `gh` авторизован):
 
 ```bash
 cd solutions/windows-logon-provider

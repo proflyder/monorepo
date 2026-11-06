@@ -5,7 +5,7 @@
 # Admin action from the operator's Mac, like OpenBao: the namespace is
 # cluster-scoped and the route lives in the `traefik` namespace.
 #
-# Private inputs (git-ignored; restore with openbao/materialize.py if absent):
+# Private inputs (git-ignored; restore with `mise run secrets:file` if absent):
 #   KUBECONFIG                       admin kubeconfig (required unless --render-only)
 #   secrets/home/ingress.env         HOME_DOMAIN, LAN_CIDR, NODE_IP
 #   secrets/home/vpn/cloudflare.env  CLOUDFLARE_API_TOKEN (DNS record)

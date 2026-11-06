@@ -22,8 +22,7 @@ kubeconfig, Terraform, Wi-Fi/BLE станции). Локальный `secrets/` 
 | Hermes `auth.json`/`.env` | HA/MA tokens, OAuth | доступ к HA/MA/LLM |
 
 Файл, который ещё читает локальный скрипт (`secrets/home/*.env` и т.п.),
-временно восстанавливает `projects/home/kubernetes/openbao/materialize.py`
-(`--clean` убирает). Источник правды — OpenBao; ручные правки Kubernetes
+временно восстанавливает `mise run secrets:file` (`secrets:clean` убирает). Источник правды — OpenBao; ручные правки Kubernetes
 Secret перезапишет ESO.
 
 ## Средний риск

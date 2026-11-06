@@ -127,9 +127,8 @@ System + Administrators полный доступ, больше никого.
 Провайдер — Rust: `rules_rust` собирает `x86_64-pc-windows-gnu`, линкует
 герметичный zig 0.14.1 `cc_toolchain` из `MODULE.bazel` (mingw-w64/UCRT,
 статический CRT). Windows SDK, Visual Studio и отдельный mingw-тулчейн не
-нужны; Bazel и Bazelisk — корневой build contract репозитория. Локально Bazelisk лежит в
-`local-data/local-tools/bazelisk` (скрипты находят его сами), либо `bazel` на
-`PATH`/`BAZELISK`.
+нужны; Bazel и Bazelisk — корневой build contract репозитория. Bazelisk ставит
+`mise install` (скрипты находят его в `PATH`), либо задаётся `BAZELISK`.
 
 ```bash
 solutions/windows-logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe
@@ -196,7 +195,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 Оператор на Mac/Linux получает артефакт по версии или digest:
 
 ```bash
-# нужны oras и авторизованный gh; oras можно положить в local-data/local-tools/
+# нужны oras и авторизованный gh (оба — из `mise install`)
 solutions/windows-logon-provider/fetch.sh 1.1.0
 solutions/windows-logon-provider/fetch.sh sha256:<digest>   # рекомендуемый pin
 ```
