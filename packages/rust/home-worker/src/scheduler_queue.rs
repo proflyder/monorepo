@@ -69,8 +69,10 @@ impl From<DueEvent> for Event {
     fn from(event: DueEvent) -> Self {
         Self {
             id: event.id,
+            source_id: event.source_id,
             task_type: event.task_type,
             queue: event.queue,
+            label: event.label,
             payload: event.payload_json,
             action: action_of(&event.action),
             source: source_of(event.source_kind.to_i32()),
@@ -120,6 +122,7 @@ mod tests {
     fn due_event_maps_all_executor_fields() {
         let event = Event::from(DueEvent {
             id: "ev_1".to_owned(),
+            source_id: "alarm-1".to_owned(),
             task_type: "alarm.fire".to_owned(),
             queue: "home".to_owned(),
             payload_json: "{\"label\":\"wake\"}".to_owned(),
@@ -132,6 +135,7 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(event.id, "ev_1");
+        assert_eq!(event.source_id, "alarm-1");
         assert_eq!(event.task_type, "alarm.fire");
         assert_eq!(event.queue, "home");
         assert_eq!(event.action, Action::Stop);

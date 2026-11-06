@@ -15,8 +15,12 @@ go_library(
 
 go_test(
     name = "bridge_test",
-    srcs = ["bridge_test.go"],
+    srcs = [
+        "bridge_test.go",
+        "golden_vectors_test.go",
+    ],
     embed = [":bridge"],
+    data = ["//solutions/ha-bridge:event_vectors"],
     deps = [
         "//packages/go/httpapi",
         "//packages/go/scheduler",

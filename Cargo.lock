@@ -794,6 +794,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "ha-bridge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "home-config",
+ "home-contracttest",
+ "home-ha",
+ "home-proto",
+ "home-runtime",
+ "home-secret",
+ "home-telemetry",
+ "home-worker",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

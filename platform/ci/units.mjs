@@ -382,10 +382,16 @@ export const config = {
 
     {
       id: "ha-bridge",
-      platform: "go",
-      title: "solutions/ha-bridge (home executor + ha-control)",
+      platform: "bazel",
+      title: "solutions/ha-bridge (Rust home executor + Go ha-control)",
       paths: [
         "solutions/ha-bridge/**",
+        // Direct dependencies of the Rust executor and the remaining Go
+        // ha-control binary: a change here rebuilds the unit even though the
+        // Bazel graph only sees it through its own targets.
+        "packages/go/**",
+        "packages/proto/**",
+        "packages/rust/**",
         // The deploy tooling that renders the shared scheduler manifests.
         "platform/deploy/**",
       ],
@@ -401,13 +407,35 @@ export const config = {
         env_file: "scheduler.env",
         externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
-      go: {
-        module: ".",
-        packages: ["./solutions/ha-bridge/..."],
-        race: true,
-        build: [
-          "./solutions/ha-bridge/cmd/ha-bridge",
-          "./solutions/ha-bridge/cmd/ha-control",
+      // The deployed ha-bridge is the Rust crate. ha-control is still Go, so
+      // its Bazel tests and binaries keep building until the next PR; the Go
+      // ha-bridge stays as the digest rollback and golden fixture owner.
+      bazel: {
+        roots: [
+          "//solutions/ha-bridge",
+          "//packages/rust",
+          "//projects/home/kubernetes/scheduler",
+        ],
+        test_targets: [
+          "//solutions/ha-bridge/crates/ha-bridge:unit_tests",
+          "//solutions/ha-bridge/crates/ha-bridge:golden_tests",
+          "//solutions/ha-bridge/crates/ha-bridge:clippy",
+          "//solutions/ha-bridge/crates/ha-bridge:rustfmt",
+          "//packages/rust:clippy",
+          "//packages/rust:rustfmt",
+          "//solutions/ha-bridge/internal/bridge:bridge_test",
+          "//solutions/ha-bridge/internal/ledger:ledger_test",
+          "//solutions/ha-bridge/internal/config:config_test",
+          "//solutions/ha-bridge/internal/catalog:catalog_test",
+          "//solutions/ha-bridge/internal/catalogapi:catalogapi_test",
+          "//solutions/ha-bridge/internal/control:control_test",
+          "//solutions/ha-bridge/internal/discovery:discovery_test",
+          "//solutions/ha-bridge/cmd/ha-bridge:ha-bridge_test",
+          "//solutions/ha-bridge/cmd/ha-control:ha-control_test",
+        ],
+        build_targets: [
+          "//solutions/ha-bridge/...",
+          "//projects/home/kubernetes/scheduler/...",
         ],
       },
     },

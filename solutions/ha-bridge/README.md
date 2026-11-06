@@ -8,6 +8,23 @@ script и подтверждает доставку только после HTTP
 `schedule_announce`, `alarm_stop`). Мост не создаёт, не включает и не
 импортирует расписания. Домашний инстанс — `projects/home/kubernetes/scheduler/`.
 
+## Реализация
+
+Развёрнутый бинарь — Rust-крейт
+`solutions/ha-bridge/crates/ha-bridge` (`ha-bridge`): домен
+`plan/order/stop/announce`, ledger JSON v1 с атомарной записью, `Handler`
+поверх общего `home-worker` на очереди `home`, клиенты `home-ha` и
+`home-proto`, конфиг 1:1 с Go и те же `-healthcheck`. Образ собирается
+`rust_service_image` (static musl, uid 65534, entrypoint
+`/usr/local/bin/ha-bridge`), путь ledger на PVC не изменился
+(`/data/ledger.json`).
+
+Go-код (`cmd/ha-bridge`, `internal/`) остаётся в дереве как эталон отката по
+digest и владелец golden-векторов. `solutions/ha-bridge/testdata/events/*.json`
+и `testdata/ledger/v1.json` генерируются Go-тестами (`-update`) и читаются
+Rust-тестами; любое расхождение поведения ломает обе стороны. ha-control пока
+остаётся Go-бинарём.
+
 ## Границы
 
 - Планировщик владеет расписаниями, таймерами, occurrence state, lease/ack и
@@ -148,7 +165,7 @@ TLS-проверка всегда включена. URL с `user:pass@` откл
 Dry-run (по умолчанию; только `GetStatus` и, при наличии токена, `GET /api/`):
 
 ```bash
-go run ./solutions/ha-bridge/cmd/ha-bridge
+cargo run -p ha-bridge
 ```
 
 Execute:
@@ -156,7 +173,16 @@ Execute:
 ```bash
 BRIDGE_EXECUTE=true \
 BRIDGE_LEDGER_PATH=/var/lib/ha-bridge/ledger.json \
-go run ./solutions/ha-bridge/cmd/ha-bridge
+cargo run -p ha-bridge
+```
+
+Проверки и golden-векторы:
+
+```bash
+cargo test -p ha-bridge
+go test ./solutions/ha-bridge/...
+# перегенерировать фикстуры из Go-эталона
+go test ./solutions/ha-bridge/internal/bridge ./solutions/ha-bridge/internal/ledger -update
 ```
 
 Bazel:

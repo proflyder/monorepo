@@ -2,8 +2,8 @@ load("//platform/bazel/oci:service_image.bzl", "rust_service_image", "service_im
 
 # Container images for the home scheduler stack.
 #
-# The scheduler is the Rust crate rebuilt for static musl; the other services
-# are static linux/amd64 Go binaries. Each image is one binary on top of a
+# The scheduler and ha-bridge are Rust crates rebuilt for static musl; the
+# other services are static linux/amd64 Go binaries. Each image is one binary on top of a
 # digest-pinned distroless base (MODULE.bazel `distroless_static`). There are
 # no RUN steps and no package manager, so the images are assembled hermetically
 # on any host (macOS workstation or the GitHub runner) and never need a Docker
@@ -15,9 +15,9 @@ rust_service_image(
     repo = "ghcr.io/proflyder/scheduler",
 )
 
-service_image(
+rust_service_image(
     name = "ha-bridge",
-    binary = "//solutions/ha-bridge/cmd/ha-bridge",
+    crate_binary = "//solutions/ha-bridge/crates/ha-bridge:ha-bridge",
     repo = "ghcr.io/proflyder/ha-bridge",
 )
 

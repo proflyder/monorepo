@@ -1,0 +1,129 @@
+[
+  {
+    "name": "stop silences the active alarm",
+    "event": {
+      "action": "EVENT_ACTION_STOP",
+      "dueUnix": "1700000120",
+      "id": "evt-a-stop",
+      "label": "Wake up",
+      "occurrenceUnix": "1700000000",
+      "queue": "home",
+      "sourceId": "alarm-a",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "activeAlarm": {
+      "sourceId": "alarm-a",
+      "eventId": "evt-a-fire",
+      "occurrenceUnix": 1700000000,
+      "fireDueUnix": 1700000060,
+      "sinceUnix": 1700000060
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_DELIVERED",
+      "detail": "home assistant accepted alarm_stop",
+      "script": "alarm_stop",
+      "variables": {
+        "event_id": "evt-a-stop",
+        "expected_event_id": "evt-a-fire",
+        "expected_source_id": "alarm-a",
+        "kind": "alarm",
+        "label": "Wake up",
+        "reason": "scheduler_stop",
+        "source_id": "alarm-a"
+      }
+    }
+  },
+  {
+    "name": "stop without an active marker is skipped",
+    "event": {
+      "action": "EVENT_ACTION_STOP",
+      "id": "evt-stale-stop",
+      "label": "Gone",
+      "queue": "home",
+      "sourceId": "alarm-gone",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_SKIPPED",
+      "detail": "stop ignored: source or occurrence does not match the active alarm started by this bridge"
+    }
+  },
+  {
+    "name": "stop for an older occurrence is skipped",
+    "event": {
+      "action": "EVENT_ACTION_STOP",
+      "dueUnix": "1700004000",
+      "id": "evt-old-stop",
+      "label": "Wake up",
+      "occurrenceUnix": "1600000000",
+      "queue": "home",
+      "sourceId": "alarm-a",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "activeAlarm": {
+      "sourceId": "alarm-a",
+      "eventId": "evt-new-fire",
+      "occurrenceUnix": 1700003600,
+      "fireDueUnix": 1700003600,
+      "sinceUnix": 1700003600
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_SKIPPED",
+      "detail": "stop ignored: source or occurrence does not match the active alarm started by this bridge"
+    }
+  },
+  {
+    "name": "stop before the snoozed re-fire due is skipped",
+    "event": {
+      "action": "EVENT_ACTION_STOP",
+      "dueUnix": "1700000300",
+      "id": "evt-early-stop",
+      "label": "Wake up",
+      "occurrenceUnix": "1700000000",
+      "queue": "home",
+      "sourceId": "alarm-a",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "activeAlarm": {
+      "sourceId": "alarm-a",
+      "eventId": "evt-refire",
+      "occurrenceUnix": 1700000000,
+      "fireDueUnix": 1700000600,
+      "sinceUnix": 1700000600
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_SKIPPED",
+      "detail": "stop ignored: source or occurrence does not match the active alarm started by this bridge"
+    }
+  },
+  {
+    "name": "timer stop is skipped without a global stop",
+    "event": {
+      "action": "EVENT_ACTION_STOP",
+      "id": "evt-timer-stop",
+      "label": "Пицца",
+      "queue": "home",
+      "sourceId": "timer-1",
+      "sourceKind": "SOURCE_KIND_TIMER"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_SKIPPED",
+      "detail": "timer/reminder announcements are one-shot; no safe global HA stop exists"
+    }
+  },
+  {
+    "name": "reminder stop is skipped without a global stop",
+    "event": {
+      "action": "EVENT_ACTION_STOP",
+      "id": "evt-reminder-stop",
+      "label": "Позвонить",
+      "queue": "home",
+      "sourceId": "reminder-1",
+      "sourceKind": "SOURCE_KIND_REMINDER"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_SKIPPED",
+      "detail": "timer/reminder announcements are one-shot; no safe global HA stop exists"
+    }
+  }
+]

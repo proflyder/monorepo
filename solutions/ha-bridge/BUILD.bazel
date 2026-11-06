@@ -1,0 +1,23 @@
+package(default_visibility = ["//visibility:public"])
+
+# The deployed bridge is the Rust crate's binary. The Go binary stays buildable
+# as the digest rollback reference and owns the golden fixtures.
+alias(
+    name = "ha-bridge",
+    actual = "//solutions/ha-bridge/crates/ha-bridge:ha-bridge",
+)
+
+alias(
+    name = "ha-bridge_go",
+    actual = "//solutions/ha-bridge/cmd/ha-bridge",
+)
+
+filegroup(
+    name = "event_vectors",
+    srcs = glob(["testdata/events/*.json"]),
+)
+
+filegroup(
+    name = "ledger_vectors",
+    srcs = ["testdata/ledger/v1.json"],
+)

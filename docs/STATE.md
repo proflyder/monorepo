@@ -492,7 +492,11 @@
 - `solutions/ha-bridge` работает в режиме execute на очереди `home`
   (`BRIDGE_EXECUTE=true`, 1 реплика, ledger на PVC `ha-bridge-data`), зовёт
   allowlisted HA scripts; второй исполнитель не запущен. Dry-run Job
-  (`ha-bridge-dryrun`) остаётся одноразовой проверкой.
+  (`ha-bridge-dryrun`) остаётся одноразовой проверкой. Исполнитель — Rust-крейт
+  `solutions/ha-bridge/crates/ha-bridge` (static musl, `rules_rust`, uid 65534,
+  тот же `/data/ledger.json`); Go-код `cmd/`, `internal/` остаётся для отката
+  по digest и владеет golden-фикстурами `testdata/events` и
+  `testdata/ledger`. ha-control пока Go.
 - Действующий владелец будильников, таймеров и напоминаний — scheduler.
   Старые HA-планировщики и их вспомогательные поля удалены из исходников и
   живой конфигурации; оставшиеся недоступные записи реестра очищены.

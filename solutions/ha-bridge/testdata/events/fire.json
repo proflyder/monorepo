@@ -1,0 +1,93 @@
+[
+  {
+    "name": "alarm fire uses alarm_start",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_DELIVERED",
+      "detail": "home assistant accepted alarm_start",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-alarm",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  },
+  {
+    "name": "legacy unspecified action is fire",
+    "event": {
+      "action": "EVENT_ACTION_UNSPECIFIED",
+      "id": "evt-legacy",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_DELIVERED",
+      "detail": "home assistant accepted alarm_start",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-legacy",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  },
+  {
+    "name": "timer fire announces the label",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-timer",
+      "label": "Пицца",
+      "queue": "home",
+      "sourceId": "timer-1",
+      "sourceKind": "SOURCE_KIND_TIMER"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_DELIVERED",
+      "detail": "home assistant accepted schedule_announce",
+      "script": "schedule_announce",
+      "variables": {
+        "chime": true,
+        "event_id": "evt-timer",
+        "kind": "timer",
+        "label": "Пицца",
+        "message": "Пицца",
+        "source_id": "timer-1"
+      }
+    }
+  },
+  {
+    "name": "reminder without a label announces the kind",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-reminder",
+      "queue": "home",
+      "sourceId": "reminder-1",
+      "sourceKind": "SOURCE_KIND_REMINDER"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_DELIVERED",
+      "detail": "home assistant accepted schedule_announce",
+      "script": "schedule_announce",
+      "variables": {
+        "chime": true,
+        "event_id": "evt-reminder",
+        "kind": "reminder",
+        "label": "",
+        "message": "Reminder",
+        "source_id": "reminder-1"
+      }
+    }
+  }
+]

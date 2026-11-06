@@ -1,0 +1,111 @@
+[
+  {
+    "name": "generic task fire is rejected",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-task",
+      "queue": "home",
+      "sourceKind": "SOURCE_KIND_TASK",
+      "taskType": "generic.ping"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "generic task events are not Home Assistant actions (task_type=\"generic.ping\"); the HA executor must not lease the \"tasks\" queue"
+    }
+  },
+  {
+    "name": "generic task stop is rejected",
+    "event": {
+      "action": "EVENT_ACTION_STOP",
+      "id": "evt-task-stop",
+      "queue": "home",
+      "sourceKind": "SOURCE_KIND_TASK",
+      "taskType": "generic.ping"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "unsupported event kind=\"task\" action=\"STOP\""
+    }
+  },
+  {
+    "name": "scenario fire is rejected",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-scenario",
+      "queue": "home",
+      "sourceId": "scenario-1",
+      "sourceKind": "SOURCE_KIND_SCENARIO"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "unsupported event kind=\"scenario\" action=\"FIRE\""
+    }
+  },
+  {
+    "name": "unspecified kind is rejected",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-unknown",
+      "queue": "home"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "unsupported event kind=\"\" action=\"FIRE\""
+    }
+  },
+  {
+    "name": "unknown action is rejected",
+    "event": {
+      "action": 99,
+      "id": "evt-action",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "unsupported event kind=\"alarm\" action=\"ENUM-99\""
+    }
+  },
+  {
+    "name": "unknown source kind is rejected",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-source",
+      "queue": "home",
+      "sourceId": "src-1",
+      "sourceKind": 77
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "unsupported event kind=\"enum-77\" action=\"FIRE\""
+    }
+  },
+  {
+    "name": "foreign queue is rejected",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-foreign",
+      "label": "Wake up",
+      "queue": "tasks",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "event queue \"tasks\" does not match the configured queue \"home\""
+    }
+  },
+  {
+    "name": "event without id is ignored",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "",
+      "queue": "home",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "expected": {
+      "outcome": "RETRY"
+    }
+  }
+]

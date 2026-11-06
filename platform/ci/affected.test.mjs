@@ -720,26 +720,25 @@ test("deploy: currency-bot manifest change deploys it", () => {
 
 test("deploy: ha-bridge change deploys bridge and control", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["solutions/ha-bridge/internal/bridge/bridge.go"]);
+  const result = routeReal(
+    ["solutions/ha-bridge/internal/bridge/bridge.go"],
+    undefined,
+    { affectedRules: () => new Set(["//solutions/ha-bridge/internal/bridge:bridge"]) },
+  );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
   assert.equal(entries[0].images, "ha-bridge ha-control");
   assert.equal(entries[0].workloads, "ha-bridge ha-control");
 });
 
-test("deploy: shared go package deploys its remaining Go importers", () => {
+test("deploy: shared go package deploys ha-bridge", () => {
+  // ha-bridge is a Bazel unit now, and its Go targets (ha-control, the Go
+  // rollback binary and the golden tests) still depend on the shared proto
+  // package, so the unit declares those dependency paths explicitly.
   const config = affected.loadConfig();
-  const shared = new Set([path.join(REPO, "packages", "proto", "ricardo", "v1")]);
-  const deps = (_root, unit) => {
-    const own = new Set([path.join(REPO, unit.goModule, unit.goPackages[0])]);
-    if (unit.id === "ha-bridge") {
-      return new Set([...own, ...shared]);
-    }
-    return own;
-  };
   const result = routeReal(
     ["packages/proto/ricardo/v1/scheduler.pb.go"],
-    deps,
+    undefined,
     { affectedRules: () => new Set() },
   );
   const entries = affected.deployEntries(result, config);
@@ -1457,16 +1456,17 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "voice-proxy",
     "scheduler",
     "wakegrant",
+    "ha-bridge",
     "ble-gateway",
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  // scheduler and wakegrant are Bazel deploy units now, so a Rust toolchain pin
-  // change legitimately rebuilds and rolls them; the native-only units are not
-  // deployed.
+  // scheduler, wakegrant and ha-bridge are Rust Bazel deploy units now, so a
+  // Rust toolchain pin change legitimately rebuilds and rolls them; the
+  // native-only units are not deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
-    ["scheduler", "wakegrant"],
+    ["scheduler", "wakegrant", "ha-bridge"],
   );
   assert.equal(result.androidDistribute, false);
 });

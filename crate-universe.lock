@@ -1,5 +1,5 @@
 {
-  "checksum": "9eaacfbdfeccd9f64f070794039b794960ce93c30f8a26103d8c5ece95973764",
+  "checksum": "5f7a5c4a3b9fb09449c4651facd9b00f5092a03cb1e77e07f327700eb54c9ccb",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3882,6 +3882,67 @@
         }
       ],
       "version": "0.4.3"
+    },
+    "ha-bridge 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ha_bridge",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "ha-bridge",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ha_bridge",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "hashbrown 0.15.5": {
       "common_attrs": {
@@ -9083,8 +9144,36 @@
       "common_attrs": {
         "deps": [
           {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "connectrpc 0.9.1",
+            "target": "connectrpc"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
             "id": "jiff 0.2.39",
             "target": "jiff"
+          },
+          {
+            "id": "reqwest 0.12.28",
+            "target": "reqwest"
+          },
+          {
+            "id": "rusqlite 0.41.1",
+            "target": "rusqlite"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
           },
           {
             "id": "serde_json 1.0.154",
@@ -9095,12 +9184,42 @@
             "target": "sha1_smol"
           },
           {
+            "id": "sha2 0.11.1",
+            "target": "sha2"
+          },
+          {
+            "id": "subtle 2.6.1",
+            "target": "subtle"
+          },
+          {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
           },
           {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
             "id": "uuid 1.29.0",
             "target": "uuid"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
           }
         ],
         "edition": "2024"
@@ -14743,6 +14862,7 @@
     "ble-gateway 0.2.0": "projects/station/ble-gateway/crates/ble-gateway",
     "cp_selftest 0.1.0": "solutions/windows-logon-provider/crates/cp-selftest",
     "esphome-proto 0.0.0": "projects/station/pulsar/satellite/crates/esphome-proto",
+    "ha-bridge 0.1.0": "solutions/ha-bridge/crates/ha-bridge",
     "home-actor 0.1.0": "packages/rust/home-actor",
     "home-config 0.1.0": "packages/rust/home-config",
     "home-contracttest 0.1.0": "packages/rust/home-contracttest",

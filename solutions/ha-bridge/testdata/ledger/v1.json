@@ -1,0 +1,77 @@
+{
+  "clockUnix": 1767225600,
+  "canonical": "{\"version\":1,\"receipts\":{\"evt-11111111-1111-5111-8111-111111111111\":{\"eventId\":\"evt-11111111-1111-5111-8111-111111111111\",\"sourceId\":\"alarm-1\",\"action\":\"FIRE\",\"script\":\"alarm_start\",\"completedUnix\":1767225000},\"evt-22222222-2222-5222-8222-222222222222\":{\"eventId\":\"evt-22222222-2222-5222-8222-222222222222\",\"sourceId\":\"alarm-2\",\"action\":\"STOP\",\"script\":\"alarm_stop\",\"completedUnix\":1767225300}},\"activeAlarm\":{\"sourceId\":\"alarm-1\",\"eventId\":\"evt-11111111-1111-5111-8111-111111111111\",\"occurrenceUnix\":1767224700,\"fireDueUnix\":1767225000,\"sinceUnix\":1767225000}}",
+  "replay": [
+    {
+      "eventId": "evt-11111111-1111-5111-8111-111111111111",
+      "sourceId": "alarm-1",
+      "action": "FIRE",
+      "script": "alarm_start",
+      "completedUnix": 1767225000
+    },
+    {
+      "eventId": "evt-22222222-2222-5222-8222-222222222222",
+      "sourceId": "alarm-2",
+      "action": "STOP",
+      "script": "alarm_stop",
+      "completedUnix": 1767225300
+    }
+  ],
+  "activeAlarm": {
+    "sourceId": "alarm-1",
+    "eventId": "evt-11111111-1111-5111-8111-111111111111",
+    "occurrenceUnix": 1767224700,
+    "fireDueUnix": 1767225000,
+    "sinceUnix": 1767225000
+  },
+  "prune": {
+    "retentionSeconds": 2592000,
+    "receipts": [
+      {
+        "eventId": "old",
+        "sourceId": "",
+        "action": "",
+        "script": "",
+        "completedUnix": 1764633599
+      },
+      {
+        "eventId": "edge",
+        "sourceId": "",
+        "action": "",
+        "script": "",
+        "completedUnix": 1764633600
+      },
+      {
+        "eventId": "new",
+        "sourceId": "",
+        "action": "",
+        "script": "",
+        "completedUnix": 1767225600
+      }
+    ],
+    "expectedKept": [
+      "edge",
+      "new"
+    ]
+  },
+  "trim": {
+    "maxReceipts": 20000,
+    "count": 20005,
+    "firstCompletedUnix": 1767000000,
+    "step": 1,
+    "expectedKept": 20000,
+    "expectedRemoved": 5
+  },
+  "invalid": [
+    {
+      "name": "corrupt",
+      "body": "{not json",
+      "error": "is corrupt"
+    },
+    {
+      "name": "unsupported version",
+      "body": "{\"version\":99,\"receipts\":{}}",
+      "error": "unsupported version 99"
+    }
+  ]
+}

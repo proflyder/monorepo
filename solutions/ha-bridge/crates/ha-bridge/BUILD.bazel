@@ -1,0 +1,102 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Kept in sync with [package].version in Cargo.toml.
+PACKAGE_VERSION = "0.1.0"
+
+LIB_DEPS = [
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-ha:home_ha",
+    "//packages/rust/home-proto:home_proto",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "//packages/rust/home-worker:home_worker",
+    "@crates//:anyhow",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
+]
+
+rust_library(
+    name = "ha_bridge_lib",
+    crate_name = "ha_bridge",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    deps = LIB_DEPS,
+)
+
+# The deployed binary. The image rebuilds it for static musl; this target is
+# also what host tests and `cargo run -p ha-bridge` use.
+rust_binary(
+    name = "ha-bridge",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    deps = LIB_DEPS + [":ha_bridge_lib"],
+)
+
+# The Go bridge stays in the tree as the digest rollback and the golden
+# fixture owner, so the vectors live under //solutions/ha-bridge.
+rust_test(
+    name = "unit_tests",
+    crate = ":ha_bridge_lib",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:axum",
+        "@crates//:tempfile",
+    ],
+)
+
+rust_test(
+    name = "golden_tests",
+    srcs = ["tests/golden.rs"],
+    data = [
+        "//solutions/ha-bridge:event_vectors",
+        "//solutions/ha-bridge:ledger_vectors",
+    ],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        ":ha_bridge_lib",
+        "@crates//:tempfile",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":ha_bridge_lib",
+        ":ha-bridge",
+        ":golden_tests",
+    ],
+)
+
+# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = [
+        ":ha_bridge_lib",
+        ":ha-bridge",
+        ":golden_tests",
+    ],
+)
