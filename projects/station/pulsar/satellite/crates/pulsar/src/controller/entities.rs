@@ -1,12 +1,13 @@
 //! HA connection and entities, buttons, the light sensor, Zigbee and updates (controller.cpp
 //! "HA connection", "entities", "updates").
 
+use pulsar_clock::ClockMusicStyle;
 use pulsar_core::now_ms;
 use pulsar_esphome::{
     ActionId, ApiEvent, BinarySensorId, ButtonId, EventId, LightState, NumberId, SelectId,
     SensorId, SwitchId, TextId, TextSensorId, UpdateCommand, UpdateState,
 };
-use pulsar_hw::{Button, InputEvent, Press};
+use pulsar_hw::{Button, CaseColor, InputEvent, MusicStyle, Press, VoiceColor};
 use pulsar_media::Channel;
 use pulsar_update::UpdateEvent;
 use pulsar_zigbee::{Mode, ZigbeeEvent};
@@ -14,7 +15,8 @@ use tracing::{error, info, warn};
 
 use super::logic::{self, AutoUpdate, cxx_clamp, cxx_max, cxx_min};
 use super::{
-    Controller, ExitReason, Tk, UPDATE_IDLE_RETRY_MS, clock_face_index, light_rgb, model_dir,
+    Controller, ExitReason, Tk, UPDATE_IDLE_RETRY_MS, clock_face, light_effect, light_rgb,
+    model_dir,
 };
 use crate::version::VERSION;
 
@@ -46,7 +48,7 @@ impl Controller {
                 effect,
                 color,
                 seconds,
-            } => self.on_led_show(effect, &color, seconds),
+            } => self.on_led_show(&effect, &color, seconds),
             ApiEvent::Time { epoch, posix_tz } => self.on_time(epoch, &posix_tz),
             ApiEvent::Restart => self.on_restart(),
             ApiEvent::VoiceStartFailed { run } => self.on_voice_start_failed(run),
@@ -86,10 +88,10 @@ impl Controller {
             NumberId::FollowupDuration,
             self.st.followup_duration_s as f32,
         );
-        api.publish_select(SelectId::MusicViz, &self.st.music_viz);
-        api.publish_select(SelectId::ClockMusic, &self.st.clock_music);
+        api.publish_select(SelectId::MusicViz, self.st.music_viz.as_str());
+        api.publish_select(SelectId::ClockMusic, self.st.clock_music.as_str());
         api.publish_select(SelectId::CaseColor, self.case_color_option());
-        api.publish_select(SelectId::VoiceColor, self.st.voice_color.label());
+        api.publish_select(SelectId::VoiceColor, self.st.voice_color.as_str());
         if let Some(z) = &self.zigbee {
             api.publish_select(
                 SelectId::ZigbeeMode,
@@ -303,31 +305,30 @@ impl Controller {
                 self.exit = Some(ExitReason::ZigbeeRoleChanged);
             }
             SelectId::MusicViz => {
-                self.leds.set_music_style(option.clone());
-                self.api.publish_select(id, &option);
-                self.st.music_viz = option;
+                let style: MusicStyle = option.parse().unwrap_or(self.st.music_viz);
+                self.leds.set_music_style(style);
+                self.api.publish_select(id, option.as_str());
+                self.st.music_viz = style;
                 self.persist();
                 self.update_music();
             }
             SelectId::ClockMusic => {
-                self.clock.set_music_style(option.clone());
-                self.api.publish_select(id, &option);
-                self.st.clock_music = option;
+                let style: ClockMusicStyle = option.parse().unwrap_or(self.st.clock_music);
+                self.clock.set_music_style(style);
+                self.api.publish_select(id, option.as_str());
+                self.st.clock_music = style;
                 self.persist();
                 self.update_music();
             }
             SelectId::CaseColor => {
                 let stem = if option == "None" { "" } else { &option };
-                self.st.led_case_color = if self.leds.set_case_color(stem) {
-                    stem.to_owned()
-                } else {
-                    String::new()
-                };
+                self.leds.set_case_color(CaseColor::new(stem));
+                self.st.led_case_color = stem.to_owned();
                 self.api.publish_select(id, self.case_color_option());
                 self.persist();
             }
             SelectId::ClockFace => {
-                self.clock.set_face(clock_face_index(&option));
+                self.clock.set_face(clock_face(&option));
                 self.api.publish_select(id, &option);
                 let clears_text = option != "None" && !self.clock_text.is_empty();
                 self.clock_face = option;
@@ -337,9 +338,9 @@ impl Controller {
                 }
             }
             SelectId::VoiceColor => {
-                let color = pulsar_hw::VoiceColor::from_label(&option);
+                let color: VoiceColor = option.parse().unwrap_or(self.st.voice_color);
                 self.leds.set_voice_color(color);
-                self.api.publish_select(id, color.label());
+                self.api.publish_select(id, color.as_str());
                 self.st.voice_color = color;
                 self.persist();
             }
@@ -381,12 +382,11 @@ impl Controller {
         if text {
             self.clock.show_temporary_text(value, seconds);
         } else {
-            self.clock
-                .show_temporary_face(clock_face_index(&value), seconds);
+            self.clock.show_temporary_face(clock_face(&value), seconds);
         }
     }
 
-    fn on_led_show(&mut self, effect: String, color: &str, seconds: i32) {
+    fn on_led_show(&mut self, effect: &str, color: &str, seconds: i32) {
         if effect.is_empty() && color.is_empty() {
             return self.leds.clear_temporary();
         }
@@ -398,17 +398,17 @@ impl Controller {
             "leds: show '{effect}' #{:02x}{:02x}{:02x}, {seconds} s requested",
             rgb.r, rgb.g, rgb.b
         );
-        self.leds.show_temporary(effect, rgb, seconds);
+        self.leds.show_temporary(light_effect(effect), rgb, seconds);
     }
 
     fn on_light(&mut self, l: LightState, transition_ms: u32) {
-        let effect = if l.effect == "None" {
-            String::new()
-        } else {
-            l.effect.clone()
-        };
-        self.leds
-            .set_user_light(l.on, light_rgb(&l), l.brightness, effect, transition_ms);
+        self.leds.set_user_light(
+            l.on,
+            light_rgb(&l),
+            l.brightness,
+            light_effect(&l.effect),
+            transition_ms,
+        );
         self.st.light = l;
         self.persist();
         self.update_music();

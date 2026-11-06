@@ -54,10 +54,10 @@ pub struct Settings {
     pub auto_update: bool,
     /// Wake arbitration with other pulsar stations.
     pub nearest_answers: bool,
-    /// One of `pulsar_hw::music_styles()`.
-    pub music_viz: String,
-    /// One of `pulsar_clock::music_styles()`.
-    pub clock_music: String,
+    /// Стиль визуализации музыки кольца.
+    pub music_viz: pulsar_hw::MusicStyle,
+    /// Стиль музыки часов.
+    pub clock_music: pulsar_clock::ClockMusicStyle,
     /// 0.25..4
     pub led_speed: f32,
     /// Listening / thinking / speaking shown on the ring and the clock.
@@ -102,8 +102,8 @@ impl Default for Settings {
             auto_update: false,
             // One station in this installation: the 250 ms arbitration window only adds latency.
             nearest_answers: false,
-            music_viz: "All styles".into(),
-            clock_music: "Off".into(),
+            music_viz: pulsar_hw::MusicStyle::All,
+            clock_music: pulsar_clock::ClockMusicStyle::Off,
             led_speed: 1.0,
             voice_indication: true,
             wake_preroll: true,
@@ -170,8 +170,12 @@ impl Settings {
                 b"update_attempt" => self.update_attempt = v,
                 b"zigbee_role" => self.zigbee_role = pulsar_zigbee::parse_mode(&v),
                 b"zigbee_flash_failed" => self.zigbee_flash_failed = strtoul_hex(&v) as u32,
-                b"music_viz" => self.music_viz = v,
-                b"clock_music" => self.clock_music = v,
+                b"music_viz" => {
+                    self.music_viz = v.parse().unwrap_or(pulsar_hw::MusicStyle::All);
+                }
+                b"clock_music" => {
+                    self.clock_music = v.parse().unwrap_or(pulsar_clock::ClockMusicStyle::Off);
+                }
                 b"led_speed" => {
                     self.led_speed = if fv.is_finite() {
                         fv.clamp(0.25, 4.0)
@@ -189,15 +193,9 @@ impl Settings {
                 b"wake_event_recording" => self.wake_recording = on,
                 b"wake_dry_run" => self.wake_dry_run = on,
                 b"led_case_color" => self.led_case_color = v,
-                b"voice_color" => self.voice_color = pulsar_hw::VoiceColor::from_label(&v),
+                b"voice_color" => self.voice_color = v.parse().unwrap_or_default(),
                 _ => {}
             }
-        }
-        if !pulsar_hw::music_styles().contains(&self.music_viz.as_str()) {
-            self.music_viz = "All styles".into();
-        }
-        if !pulsar_clock::music_styles().contains(&self.clock_music.as_str()) {
-            self.clock_music = "Off".into();
         }
     }
 
@@ -234,12 +232,12 @@ impl Settings {
             pulsar_zigbee::role(self.zigbee_role).name,
             self.zigbee_flash_failed,
             b(self.nearest_answers),
-            self.music_viz,
+            self.music_viz.as_str(),
             f(self.led_speed),
             b(self.voice_indication),
             self.led_case_color,
-            self.voice_color.label(),
-            self.clock_music,
+            self.voice_color.as_str(),
+            self.clock_music.as_str(),
             b(self.wake_preroll),
             b(self.clock_auto_brightness),
             self.followup_duration_s,

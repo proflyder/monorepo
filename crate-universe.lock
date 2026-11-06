@@ -1,5 +1,5 @@
 {
-  "checksum": "8387d4c4c77540b9811b56dc9575b51d706224c75d12bd599220430e69564e1c",
+  "checksum": "5448af3723f3108bd4bf1188268743eb51bb29eb553735d0f16f4ed54319868d",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7174,6 +7174,10 @@
             "target": "libc"
           },
           {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
             "id": "tokio 1.54.1",
             "target": "tokio"
           },
@@ -7283,6 +7287,33 @@
       ],
       "version": "0.0.0"
     },
+    "pulsar-model 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_model",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-model",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_model",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
     "pulsar-sendspin 0.0.0": {
       "build_script_attrs": {
         "deps": [
@@ -7330,6 +7361,27 @@
           "BuildScript": {
             "crate_name": "build_script_build",
             "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
+    "pulsar-ui 0.0.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_ui",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-ui",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_ui",
+            "crate_root": "src/lib.rs"
           }
         }
       ],
@@ -13764,7 +13816,9 @@
     "pulsar-hw 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-hw",
     "pulsar-mdns 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-mdns",
     "pulsar-media 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-media",
+    "pulsar-model 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-model",
     "pulsar-sendspin 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-sendspin",
+    "pulsar-ui 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-ui",
     "pulsar-update 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-update",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
     "ricardo-voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",

@@ -1,4 +1,4 @@
-//! 4-digit 7-segment clock, one sysfs LED per segment (names per `Model`).
+//! 4-digit 7-segment clock, one sysfs LED per segment (names per `Model`), and the clock actor.
 //!
 //! Station Midi: two aw21036/aw21012 chips on i2c 3-0037 / 3-0021,
 //! /sys/class/leds/cucumber:white:clock-<seg><digit>.
@@ -30,91 +30,38 @@
 //! (`Model::clock_center`). No global current: maind dims through the per-segment brightness
 //! value (0..255), and so do we.
 //!
-//! Content, first active wins: pairing code (even when disabled) > volume number > voice state
-//! (TIMER_RING always, LISTENING / THINKING / SPEAKING with voice indication on) > update install
-//! (dark) > one-shot > timer countdown > temporary layer > Text / Face > music levels > time.
-//! Disabled: dark.
+//! Layers and their priority live in `pulsar-ui`; this module owns the sysfs output and timers.
 
 use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd as _;
 use std::path::PathBuf;
 
 use home_linux as sysfs;
-use pulsar_core::{
-    AmbientDimmer, ClockShot, MUSIC_STALE_MS, MusicFrame, SENDSPIN_FRESH_MS, Timers, UiState,
-    now_ms,
-};
+use pulsar_core::{AmbientDimmer, ClockShot, MusicFrame, Timers, UiState, now_ms};
 use pulsar_model::ClockPanel;
+use pulsar_ui::font::DIGITS;
+use pulsar_ui::{ClockFace, ClockLayers, ClockMusicStyle, Frame, MusicSource, Wall};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::clock_fx::{self, Anim, Frame, clamp};
-use crate::font::{self, Cell, DIGITS, Glyphs};
-use crate::sys::{self, Wall};
+use crate::sys;
 
 const SEGS: usize = 7; // a..g
 const TICK_MS: i64 = 250;
 /// Every 20 ticks (~5 s) all segments are rewritten even if unchanged (sysfs state may be
 /// changed by others); animation frames in between do not count.
 const FULL_REWRITE_TICKS: u32 = 20;
-const FLASH_MS: i64 = 1500;
-const CODE_PAGE_MS: i64 = 2000;
 /// Lowest current / brightness that still lights the segments.
 const MIN_LEVEL: i32 = 2;
-const TEMPORARY_MS: i64 = 5000;
-const TEMPORARY_MAX_S: i64 = 3600;
-/// Animation frame step (the stock patterns use 20 ms frames).
-const FX_FRAME_MS: i64 = 20;
-/// Level meter redraw while shown.
-const MUSIC_FRAME_MS: i64 = 40;
-/// Meters fall with this time constant.
-const MUSIC_RELEASE_MS: f32 = 250.0;
-/// Each digit's meter spans the recent range of its two bands: the range follows peaks and dips
-/// at once and closes in on the current value with this time constant. A mixed song keeps a
-/// nearly constant spectral tilt and moves by only a few dB, which on a fixed scale left every
-/// song looking alike (measured on a Midi: +-0.15 of 3 segments per digit).
-const RANGE_TAU_MS: f32 = 3000.0;
-/// Narrowest range, in band units: ~7 dB on the speaker reference (45 dB scale), ~9 dB on
-/// Sendspin (60 dB scale); keeps steady passages from blowing noise up to full height.
-const MIN_RANGE: f32 = 0.15;
-/// A source's ranges start over after this long without it.
-const RANGE_KEEP_MS: i64 = 10_000;
-/// Decay step across a gap (frames come every ~33 ms).
-const RANGE_MAX_STEP_MS: i64 = 100;
-/// While the meters are shown, the time takes over for the last `VIZ_TIME_MS` of every cycle.
-const VIZ_CYCLE_MS: i64 = 30_000;
-const VIZ_TIME_MS: i64 = 3000;
-
-const MUSIC_STYLES: [&str; 2] = ["Off", "Levels"];
 
 /// Names of `set_face` indices: the 17 static faces, then "Blink", "All faces".
-pub fn face_names() -> &'static [&'static str] {
-    &font::FACE_NAMES
+pub fn face_names() -> [&'static str; ClockFace::ALL.len()] {
+    ClockFace::ALL.map(ClockFace::as_str)
 }
 
 /// Clock music styles ("Clock music" select).
-pub fn music_styles() -> &'static [&'static str] {
-    &MUSIC_STYLES
-}
-
-fn shot_anim(s: ClockShot) -> Anim {
-    match s {
-        ClockShot::Boot => Anim::Boot,
-        ClockShot::Pause => Anim::Pause,
-        ClockShot::Next => Anim::Next,
-        ClockShot::Previous => Anim::Previous,
-    }
-}
-
-fn glyph_frame(g: Glyphs, colon: bool) -> Frame {
-    let mut f = Frame::default();
-    for (seg, glyph) in f.seg.iter_mut().zip(g) {
-        for (s, v) in seg.iter_mut().enumerate() {
-            *v = if glyph >> s & 1 != 0 { 255 } else { 0 };
-        }
-    }
-    f.colon = if colon { 255 } else { 0 };
-    f
+pub fn music_styles() -> [&'static str; ClockMusicStyle::ALL.len()] {
+    ClockMusicStyle::ALL.map(ClockMusicStyle::as_str)
 }
 
 /// Output level (chip current on the Midi, value of a lit segment on the Lite 2) for the user
@@ -125,384 +72,6 @@ fn level(user_bri: f32, ambient: f32) -> i32 {
         return 0;
     }
     ((255.0 * user_bri * ambient).round() as i32).clamp(MIN_LEVEL, 255)
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum Content {
-    Text { cells: Vec<Cell>, since: i64 },
-    Face { face: i32, since: i64 },
-}
-
-impl Content {
-    fn since(&self) -> i64 {
-        match self {
-            Self::Text { since, .. } | Self::Face { since, .. } => *since,
-        }
-    }
-
-    /// Frame step while it moves; 0 = static.
-    fn step(&self, scroll_ms: i64) -> i64 {
-        match self {
-            Self::Text { cells, .. } if cells.len() > DIGITS => scroll_ms,
-            Self::Face { face, .. } if *face == font::FACE_BLINK => font::BLINK_STEP_MS,
-            Self::Face { face, .. } if *face == font::FACE_ALL => font::FACE_CYCLE_MS,
-            _ => 0,
-        }
-    }
-
-    fn glyphs(&self, now: i64, scroll_ms: i64) -> (Glyphs, bool) {
-        let t = now - self.since();
-        match self {
-            Self::Text { cells, .. } => font::text_glyphs(cells, t, scroll_ms),
-            Self::Face { face, .. } => (font::face_glyphs(*face, t), false),
-        }
-    }
-}
-
-/// Recent band range of one music source, per digit.
-#[derive(Clone, Copy, Debug)]
-struct Range {
-    lo: [f32; DIGITS],
-    hi: [f32; DIGITS],
-    /// Last frame of this source.
-    last_ms: i64,
-}
-
-impl Default for Range {
-    fn default() -> Self {
-        Self {
-            lo: [0.0; DIGITS],
-            hi: [0.0; DIGITS],
-            last_ms: i64::MIN / 2,
-        }
-    }
-}
-
-/// Everything the clock shows, without the output: which layer wins and its frame at a time.
-#[derive(Debug)]
-struct Layers {
-    enabled: bool,
-    /// Monotonic ms of a running countdown; 0 = none.
-    timer_end: i64,
-    /// ms left of a paused countdown; 0 = none.
-    timer_paused: i64,
-    flash_until: i64,
-    flash_value: i32,
-    /// Pairing code shown instead of anything else (empty = none).
-    code: String,
-    code_since: i64,
-    /// Text / Select entities.
-    base: Option<Content>,
-    /// Temporary layer (actions).
-    overlay: Option<Content>,
-    overlay_until: i64,
-    scroll_ms: i64,
-    ui: UiState,
-    voice_indication: bool,
-    /// Voice state / ringing.
-    voice: Option<Anim>,
-    voice_t0: i64,
-    /// One-shot (boot, player).
-    shot: Option<Anim>,
-    shot_t0: i64,
-    updating: bool,
-    levels_on: bool,
-    media: bool,
-    viz: bool,
-    /// Per digit, 0..1 within its range.
-    mus_in: [f32; DIGITS],
-    mus_shown: [f32; DIGITS],
-    /// Speaker reference, Sendspin.
-    ranges: [Range; 2],
-    mus_in_ms: i64,
-    sendspin_until: i64,
-    mus_drawn_ms: i64,
-    viz_t0: i64,
-}
-
-impl Layers {
-    fn new() -> Self {
-        Self {
-            enabled: true,
-            timer_end: 0,
-            timer_paused: 0,
-            flash_until: 0,
-            flash_value: 0,
-            code: String::new(),
-            code_since: 0,
-            base: None,
-            overlay: None,
-            overlay_until: 0,
-            scroll_ms: 400,
-            ui: UiState::Idle,
-            voice_indication: true,
-            voice: None,
-            voice_t0: 0,
-            shot: None,
-            shot_t0: 0,
-            updating: false,
-            levels_on: false,
-            media: false,
-            viz: false,
-            mus_in: [0.0; DIGITS],
-            mus_shown: [0.0; DIGITS],
-            ranges: [Range::default(); 2],
-            mus_in_ms: 0,
-            sendspin_until: 0,
-            mus_drawn_ms: 0,
-            viz_t0: 0,
-        }
-    }
-
-    fn set_timer(&mut self, ms_left: i64, running: bool, now: i64) {
-        self.timer_end = if ms_left > 0 && running {
-            now + ms_left
-        } else {
-            0
-        };
-        self.timer_paused = if ms_left > 0 && !running { ms_left } else { 0 };
-    }
-
-    fn flash_number(&mut self, value: i32, now: i64) {
-        self.flash_value = value.clamp(-999, 9999);
-        self.flash_until = now + FLASH_MS;
-    }
-
-    fn show_code(&mut self, digits: String, now: i64) {
-        self.code = digits;
-        self.code_since = now;
-    }
-
-    fn set_text(&mut self, utf8: &str, now: i64) {
-        let cells = font::layout_text(utf8.as_bytes());
-        if cells.is_empty() {
-            // Non-empty text without cells (only ':') still replaces the face, as the
-            // controller does.
-            if matches!(self.base, Some(Content::Text { .. })) || !utf8.is_empty() {
-                self.base = None;
-            }
-        } else {
-            self.base = Some(Content::Text { cells, since: now });
-        }
-    }
-
-    fn set_face(&mut self, index: i32, now: i64) {
-        if (0..font::FACE_COUNT).contains(&index) {
-            self.base = Some(Content::Face {
-                face: index,
-                since: now,
-            });
-        } else {
-            if matches!(self.base, Some(Content::Face { .. })) {
-                self.base = None;
-            }
-        }
-    }
-
-    fn set_scroll_ms(&mut self, ms: i32) {
-        self.scroll_ms = i64::from(ms.clamp(100, 2000));
-    }
-
-    fn show_temporary_text(&mut self, utf8: &str, seconds: i32, now: i64) {
-        let cells = font::layout_text(utf8.as_bytes());
-        if cells.is_empty() {
-            self.overlay = None;
-            return;
-        }
-        let n = cells.len() as i64;
-        let digits = DIGITS as i64;
-        self.overlay_until = now
-            + if seconds > 0 {
-                i64::from(seconds).min(TEMPORARY_MAX_S) * 1000
-            } else if n > digits {
-                (n + digits) * self.scroll_ms
-            } else {
-                TEMPORARY_MS
-            };
-        self.overlay = Some(Content::Text { cells, since: now });
-    }
-
-    fn show_temporary_face(&mut self, index: i32, seconds: i32, now: i64) {
-        if !(0..font::FACE_COUNT).contains(&index) {
-            self.overlay = None;
-            return;
-        }
-        self.overlay_until = now
-            + if seconds > 0 {
-                i64::from(seconds).min(TEMPORARY_MAX_S) * 1000
-            } else {
-                TEMPORARY_MS
-            };
-        self.overlay = Some(Content::Face {
-            face: index,
-            since: now,
-        });
-    }
-
-    fn update_voice(&mut self, now: i64) {
-        let a = match self.ui {
-            UiState::Listening if self.voice_indication => Some(Anim::Listening),
-            UiState::Thinking if self.voice_indication => Some(Anim::Thinking),
-            UiState::Speaking if self.voice_indication => Some(Anim::Speaking),
-            UiState::TimerRing => Some(Anim::Ringing),
-            _ => None,
-        };
-        if a == self.voice {
-            return;
-        }
-        self.voice = a;
-        self.voice_t0 = now;
-    }
-
-    fn set_ui_state(&mut self, s: UiState, now: i64) {
-        self.ui = s;
-        self.update_voice(now);
-    }
-
-    fn set_voice_indication(&mut self, on: bool, now: i64) {
-        self.voice_indication = on;
-        self.update_voice(now);
-    }
-
-    fn play(&mut self, s: ClockShot, now: i64) {
-        self.shot = Some(shot_anim(s));
-        self.shot_t0 = now;
-    }
-
-    fn music_frame(&mut self, f: &MusicFrame, from_sendspin: bool, now: i64) {
-        if from_sendspin {
-            self.sendspin_until = now + SENDSPIN_FRESH_MS;
-        } else if now < self.sendspin_until {
-            return;
-        }
-        // The sources use different scales, so each keeps its own ranges. Music Assistant
-        // restarts the Sendspin stream on every seek / skip (~0.7 s without frames; the speaker
-        // reference fills in meanwhile): a range survives such an interlude frozen, and starts
-        // over only after RANGE_KEEP_MS without frames of its source.
-        let r = &mut self.ranges[usize::from(from_sendspin)];
-        let gap = now - r.last_ms;
-        let restart = gap >= RANGE_KEEP_MS;
-        let k = if restart {
-            0.0
-        } else {
-            (-(gap.min(RANGE_MAX_STEP_MS) as f32) / RANGE_TAU_MS).exp()
-        };
-        for i in 0..DIGITS {
-            let x = (f.bands[2 * i] + f.bands[2 * i + 1]) / 2.0;
-            let (lo, hi) = (&mut r.lo[i], &mut r.hi[i]);
-            if restart {
-                *lo = x;
-                *hi = x;
-            } else {
-                // Fused like the clang-built reference (see clock_fx.rs).
-                *hi = if x > *hi { x } else { (*hi - x).mul_add(k, x) };
-                *lo = if x < *lo { x } else { (*lo - x).mul_add(k, x) };
-            }
-            // A range narrower than MIN_RANGE is widened around its centre but kept inside
-            // 0..1, so silence (bands at 0) stays dark instead of showing the middle of the
-            // meter.
-            let span = (*hi - *lo).max(MIN_RANGE);
-            let base = clamp((*hi + *lo - span) / 2.0, 0.0, 1.0 - span);
-            self.mus_in[i] = clamp((x - base) / span, 0.0, 1.0);
-        }
-        r.last_ms = now;
-        self.mus_in_ms = now;
-    }
-
-    /// The frame to show at `now` and the ms to its next change before the tick (0 = none).
-    /// `wall` is only asked when the time is shown.
-    fn compose(&mut self, now: i64, wall: impl FnOnce() -> Wall) -> (Frame, i64) {
-        if self.overlay.is_some() && now >= self.overlay_until {
-            self.overlay = None;
-        }
-        if let Some(s) = self.shot
-            && now - self.shot_t0 >= clock_fx::duration_ms(s)
-        {
-            self.shot = None;
-        }
-        let eligible = self.levels_on && self.media && now - self.mus_in_ms < MUSIC_STALE_MS;
-        if eligible && !self.viz {
-            self.viz_t0 = now;
-            self.mus_drawn_ms = now;
-            self.mus_shown = [0.0; DIGITS];
-        }
-        self.viz = eligible;
-        if !self.code.is_empty() {
-            let g = font::code_glyphs(self.code.as_bytes(), now - self.code_since, CODE_PAGE_MS);
-            return (glyph_frame(g, false), 0);
-        }
-        if !self.enabled {
-            return (Frame::default(), 0);
-        }
-        let frame_step = |t0: i64| FX_FRAME_MS - (now - t0) % FX_FRAME_MS;
-        if now < self.flash_until {
-            let g = font::number_glyphs(self.flash_value);
-            (glyph_frame(g, false), self.flash_until - now)
-        } else if let Some(v) = self.voice {
-            (
-                clock_fx::render(v, now - self.voice_t0),
-                frame_step(self.voice_t0),
-            )
-        } else if self.updating {
-            // Dark until the new binary takes over.
-            (Frame::default(), 0)
-        } else if let Some(s) = self.shot {
-            let end = self.shot_t0 + clock_fx::duration_ms(s);
-            let next = frame_step(self.shot_t0).min(end - now).max(1);
-            (clock_fx::render(s, now - self.shot_t0), next)
-        } else if self.timer_end != 0 || self.timer_paused != 0 {
-            let left_ms = if self.timer_end != 0 {
-                self.timer_end - now
-            } else {
-                self.timer_paused
-            };
-            let left = ((left_ms + 999) / 1000).max(0);
-            let mut g = font::timer_glyphs(left);
-            // Blinks at 00:00.
-            let blink_off = (now / 500) % 2 != 0;
-            let colon = left > 0 || !blink_off;
-            if left == 0 && blink_off {
-                g = [0; DIGITS];
-            }
-            (glyph_frame(g, colon), 0)
-        } else if let Some((c, is_overlay)) = self
-            .overlay
-            .as_ref()
-            .map(|c| (c, true))
-            .or(self.base.as_ref().map(|c| (c, false)))
-        {
-            let (g, colon) = c.glyphs(now, self.scroll_ms);
-            let step = c.step(self.scroll_ms);
-            let mut next = if step != 0 {
-                step - (now - c.since()) % step
-            } else {
-                0
-            };
-            // Also fires when the temporary layer ends, so a single scroll pass does not show
-            // the start of a second one until the next tick.
-            if is_overlay {
-                let left = self.overlay_until - now;
-                next = if step != 0 { next.min(left) } else { left }.max(1);
-            }
-            (glyph_frame(g, colon), next)
-        } else if self.viz && (now - self.viz_t0) % VIZ_CYCLE_MS < VIZ_CYCLE_MS - VIZ_TIME_MS {
-            let k = (-((now - self.mus_drawn_ms) as f32) / MUSIC_RELEASE_MS).exp();
-            for (shown, &input) in self.mus_shown.iter_mut().zip(&self.mus_in) {
-                // std::max(in, shown * k): NaN in either keeps `in`, as C++ does.
-                let decayed = *shown * k;
-                *shown = if input < decayed { decayed } else { input };
-            }
-            self.mus_drawn_ms = now;
-            (clock_fx::levels(&self.mus_shown), MUSIC_FRAME_MS)
-        } else {
-            let w = wall();
-            // Colon on for the first half of every second.
-            (
-                glyph_frame(font::time_glyphs(w.hour, w.min), w.first_half),
-                0,
-            )
-        }
-    }
 }
 
 /// The open sysfs attributes and what was last written to them (-1 = unknown).
@@ -693,17 +262,17 @@ enum Cmd {
     ShowCode(String),
     ClearCode,
     SetText(String),
-    SetFace(i32),
+    SetFace(ClockFace),
     SetScrollMs(i32),
     ShowTemporaryText(String, i32),
-    ShowTemporaryFace(i32, i32),
+    ShowTemporaryFace(ClockFace, i32),
     SetUiState(UiState),
     SetVoiceIndication(bool),
     Play(ClockShot),
     SetUpdating(bool),
-    SetMusicStyle(String),
+    SetMusicStyle(ClockMusicStyle),
     SetMediaPlaying(bool),
-    MusicFrame(MusicFrame, bool),
+    MusicFrame(MusicFrame, MusicSource),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -714,7 +283,7 @@ enum Timer {
 }
 
 struct Clock {
-    layers: Layers,
+    layers: ClockLayers,
     leds: Leds,
     user_bri: f32,
     /// < 0: unknown, no auto-dimming (only logged).
@@ -744,7 +313,7 @@ impl Clock {
     }
 
     fn refresh(&mut self) {
-        let (frame, next) = self.layers.compose(now_ms(), sys::wall);
+        let (frame, next) = self.layers.compose(now_ms(), wall);
         self.leds.draw(&frame);
         self.timers.cancel(Timer::Anim);
         if next > 0 {
@@ -756,7 +325,7 @@ impl Clock {
         let now = now_ms();
         let l = &mut self.layers;
         match cmd {
-            Cmd::SetEnabled(on) => l.enabled = on,
+            Cmd::SetEnabled(on) => l.set_enabled(on),
             Cmd::SetBrightness(b) => {
                 // NaN counts as full brightness, as std::max(0, std::min(1, b)) did.
                 self.user_bri = if b.is_nan() { 1.0 } else { b.clamp(0.0, 1.0) };
@@ -774,21 +343,21 @@ impl Clock {
             Cmd::SetTimer { ms_left, running } => l.set_timer(ms_left, running, now),
             Cmd::FlashNumber(v) => l.flash_number(v, now),
             Cmd::ShowCode(digits) => l.show_code(digits, now),
-            Cmd::ClearCode => l.code.clear(),
+            Cmd::ClearCode => l.clear_code(),
             Cmd::SetText(s) => l.set_text(&s, now),
-            Cmd::SetFace(i) => l.set_face(i, now),
+            Cmd::SetFace(face) => l.set_face(face, now),
             Cmd::SetScrollMs(ms) => l.set_scroll_ms(ms),
             Cmd::ShowTemporaryText(s, secs) => l.show_temporary_text(&s, secs, now),
-            Cmd::ShowTemporaryFace(i, secs) => l.show_temporary_face(i, secs, now),
+            Cmd::ShowTemporaryFace(face, secs) => l.show_temporary_face(face, secs, now),
             Cmd::SetUiState(s) => l.set_ui_state(s, now),
             Cmd::SetVoiceIndication(on) => l.set_voice_indication(on, now),
             Cmd::Play(s) => l.play(s, now),
-            Cmd::SetUpdating(on) => l.updating = on,
-            Cmd::SetMusicStyle(style) => l.levels_on = style == "Levels",
-            Cmd::SetMediaPlaying(on) => l.media = on,
-            Cmd::MusicFrame(f, from_sendspin) => {
+            Cmd::SetUpdating(on) => l.set_updating(on),
+            Cmd::SetMusicStyle(style) => l.set_music_style(style),
+            Cmd::SetMediaPlaying(on) => l.set_media_playing(on),
+            Cmd::MusicFrame(f, source) => {
                 // Frames only feed the meters; the frame timer draws them.
-                l.music_frame(&f, from_sendspin, now);
+                l.music_frame(&f, source, now);
                 return;
             }
         }
@@ -849,7 +418,7 @@ pub fn spawn(panel: Option<&'static ClockPanel>) -> ClockHandle {
         return ClockHandle { tx: None };
     };
     let mut clock = Clock {
-        layers: Layers::new(),
+        layers: ClockLayers::new(),
         leds,
         user_bri: 1.0,
         lux: -1.0,
@@ -918,14 +487,14 @@ impl ClockHandle {
     /// Custom text (Text entity), UTF-8: one cell per character, ':' lights the colon after the
     /// preceding character instead of taking a cell; up to 4 cells are shown static and
     /// centred, longer text scrolls right-to-left in a loop. `set_text` and `set_face` replace
-    /// each other; `set_text("")` / `set_face(-1)` clear only their own kind.
+    /// each other; `set_text("")` / `set_face(ClockFace::None)` clear only their own kind.
     pub fn set_text(&self, utf8: String) {
         self.send(Cmd::SetText(utf8));
     }
 
-    /// Index into `face_names()`; -1 = none.
-    pub fn set_face(&self, index: i32) {
-        self.send(Cmd::SetFace(index));
+    /// Face of `face_names()`; `ClockFace::None` = no face.
+    pub fn set_face(&self, face: ClockFace) {
+        self.send(Cmd::SetFace(face));
     }
 
     /// Scroll step, clamped to 100..2000 ms.
@@ -934,14 +503,16 @@ impl ClockHandle {
     }
 
     /// Temporary layer above the text / face. `seconds <= 0`: one pass of a scrolling text, 5 s
-    /// otherwise; capped at 3600 s. Replaces the previous layer; "" removes it.
+    /// otherwise; capped at 3600 s. Replaces the previous layer; `ClockFace::None` or "" removes
+    /// it.
     pub fn show_temporary_text(&self, utf8: String, seconds: i32) {
         self.send(Cmd::ShowTemporaryText(utf8, seconds));
     }
 
-    /// As `show_temporary_text` with a face; `seconds <= 0`: 5 s; -1 removes the layer.
-    pub fn show_temporary_face(&self, index: i32, seconds: i32) {
-        self.send(Cmd::ShowTemporaryFace(index, seconds));
+    /// As `show_temporary_text` with a face; `seconds <= 0`: 5 s; `ClockFace::None` removes the
+    /// layer.
+    pub fn show_temporary_face(&self, face: ClockFace, seconds: i32) {
+        self.send(Cmd::ShowTemporaryFace(face, seconds));
     }
 
     pub fn set_ui_state(&self, s: UiState) {
@@ -962,8 +533,7 @@ impl ClockHandle {
         self.send(Cmd::SetUpdating(on));
     }
 
-    /// One of `music_styles()`.
-    pub fn set_music_style(&self, style: String) {
+    pub fn set_music_style(&self, style: ClockMusicStyle) {
         self.send(Cmd::SetMusicStyle(style));
     }
 
@@ -975,8 +545,17 @@ impl ClockHandle {
     /// speaker reference while they keep coming. Shown only while media plays and the style is
     /// not "Off".
     pub fn music_frame(&self, f: MusicFrame, from_sendspin: bool) {
-        self.send(Cmd::MusicFrame(f, from_sendspin));
+        let source = if from_sendspin {
+            MusicSource::Sendspin
+        } else {
+            MusicSource::Speaker
+        };
+        self.send(Cmd::MusicFrame(f, source));
     }
+}
+
+fn wall() -> Wall {
+    sys::wall()
 }
 
 #[cfg(test)]

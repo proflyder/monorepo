@@ -121,8 +121,9 @@ impl Controller {
         // The speaker-reference analysis only runs while its result can be shown.
         self.mic.set_music_analysis(
             media
-                && ((self.st.music_viz != "Off" && !self.st.light.on)
-                    || (self.st.clock_music != "Off" && self.st.clock_on)),
+                && ((self.st.music_viz != pulsar_hw::MusicStyle::Off && !self.st.light.on)
+                    || (self.st.clock_music != pulsar_clock::ClockMusicStyle::Off
+                        && self.st.clock_on)),
         );
     }
 

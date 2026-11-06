@@ -10,6 +10,7 @@ libc = { workspace = true }
 tracing = { workspace = true }
 pulsar-core = { path = "../pulsar-core" }
 pulsar-model = { path = "../pulsar-model" }
+pulsar-ui = { path = "../pulsar-ui" }
 home-linux = { path = "../../../../../../packages/rust/home-linux" }
 tokio = { workspace = true }
 

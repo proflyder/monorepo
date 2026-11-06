@@ -21,9 +21,11 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use pulsar_clock::ClockHandle;
+use pulsar_clock::{ClockFace, ClockHandle, ClockMusicStyle};
 use pulsar_core::{AmbientDimmer, ClockShot, MusicFrame, UiState};
-use pulsar_hw::{Button, InputEvent, InputHandle, LedsHandle, Press, Rgb};
+use pulsar_hw::{
+    Button, CaseColor, Effect, InputEvent, InputHandle, LedsHandle, MusicStyle, Press, Rgb,
+};
 use pulsar_model::{ClockPanel, DeviceProfile, LedBackend, Leds, StripLayout};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::task::LocalSet;
@@ -363,15 +365,15 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
     }));
     let l = leds.clone();
     steps.push(step("mic unmuted", move || l.set_muted(false)));
-    for &e in pulsar_hw::effect_names() {
-        const WHITE: [&str; 7] = [
-            "Rainbow",
-            "Color loop",
-            "Fire",
-            "Aurora",
-            "Lava lamp",
-            "Candle",
-            "Night light",
+    for e in Effect::ALL {
+        const WHITE: [Effect; 7] = [
+            Effect::Rainbow,
+            Effect::ColorLoop,
+            Effect::Fire,
+            Effect::Aurora,
+            Effect::LavaLamp,
+            Effect::Candle,
+            Effect::NightLight,
         ];
         let col = if WHITE.contains(&e) {
             Rgb {
@@ -387,25 +389,25 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
             }
         };
         let l = leds.clone();
-        steps.push(step(format!("IDLE user {e}"), move || {
+        steps.push(step(format!("IDLE user {}", e.as_str()), move || {
             l.set_ui_state(UiState::Idle);
-            l.set_user_light(true, col, 0.6, e.to_owned(), 0);
+            l.set_user_light(true, col, 0.6, e, 0);
         }));
     }
     let l = leds.clone();
     let mut red = step("solid red, full brightness", move || {
-        l.set_user_light(true, Rgb { r: 255, g: 0, b: 0 }, 1.0, String::new(), 0);
+        l.set_user_light(true, Rgb { r: 255, g: 0, b: 0 }, 1.0, Effect::Solid, 0);
     });
     red.check = Some([FULL_FB, 0, 0]);
     steps.push(red);
     let l = leds.clone();
     steps.push(step("led_show Comet green 3 s", move || {
-        l.show_temporary("Comet".into(), Rgb { r: 0, g: 255, b: 0 }, 3);
+        l.show_temporary(Effect::Comet, Rgb { r: 0, g: 255, b: 0 }, 3);
     }));
     let l = leds.clone();
     steps.push(step("show_volume 0.2 (user light off)", move || {
         l.clear_temporary();
-        l.set_user_light(false, Rgb { r: 0, g: 0, b: 0 }, 0.0, String::new(), 0);
+        l.set_user_light(false, Rgb { r: 0, g: 0, b: 0 }, 0.0, Effect::Solid, 0);
         l.show_volume(0.2);
     }));
     for v in [0.6f32, 1.0] {
@@ -414,13 +416,14 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
             l.show_volume(v);
         }));
     }
-    for &style in &pulsar_hw::music_styles()[2..] {
+    for style in &MusicStyle::ALL[2..] {
+        let style = *style;
         let l = leds.clone();
         let m = Rc::clone(music);
-        steps.push(step(format!("music {style}"), move || {
+        steps.push(step(format!("music {}", style.as_str()), move || {
             m.set(true);
             l.set_media_playing(true);
-            l.set_music_style(style.to_owned());
+            l.set_music_style(style);
         }));
     }
     if let Some(c) = pulsar_hw::case_colors().into_iter().next() {
@@ -435,10 +438,10 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
                     b: 255,
                 },
                 0.6,
-                String::new(),
+                Effect::Solid,
                 0,
             );
-            l.set_case_color(&c);
+            l.set_case_color(CaseColor::new(&c));
         }));
     }
     let l = leds.clone();
@@ -446,8 +449,8 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
     steps.push(step("music off, light off, no case colour", move || {
         m.set(false);
         l.set_media_playing(false);
-        l.set_user_light(false, Rgb { r: 0, g: 0, b: 0 }, 0.0, String::new(), 0);
-        l.set_case_color("");
+        l.set_user_light(false, Rgb { r: 0, g: 0, b: 0 }, 0.0, Effect::Solid, 0);
+        l.set_case_color(CaseColor::new(""));
     }));
     // Shown above the lamp and music for 15 s: last of the LED steps.
     let l = leds.clone();
@@ -896,13 +899,15 @@ fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHan
     ));
     let c = clock.clone();
     steps.push(with_check(
-        step("clock face Smiley", move || c.set_face(0)),
+        step("clock face Smiley", move || {
+            c.set_face(ClockFace::Static(0));
+        }),
         |m| expect_masks(m, "Smiley", &[SMILEY]),
     ));
     let c = clock.clone();
     steps.push(with_check(
         step("clock face cleared, code 123456", move || {
-            c.set_face(-1);
+            c.set_face(ClockFace::None);
             c.show_code("123456".into());
         }),
         // Pages every 2 s: "123-", then "-456".
@@ -927,14 +932,14 @@ fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHan
     steps.push(step("clock music Levels", move || {
         m.set(true);
         c.set_media_playing(true);
-        c.set_music_style("Levels".into());
+        c.set_music_style(ClockMusicStyle::Levels);
     }));
     let c = clock.clone();
     let m = Rc::clone(music);
     steps.push(with_check(
         step("clock music Off", move || {
             m.set(false);
-            c.set_music_style("Off".into());
+            c.set_music_style(ClockMusicStyle::Off);
             c.set_media_playing(false);
         }),
         expect_time,

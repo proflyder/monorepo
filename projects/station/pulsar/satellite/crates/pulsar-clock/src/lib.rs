@@ -5,11 +5,10 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 mod clock;
-mod clock_fx;
-mod font;
 mod light_sensor;
 #[allow(unsafe_code)]
 mod sys;
 
 pub use clock::{ClockHandle, face_names, music_styles, panel_present, spawn};
 pub use light_sensor::spawn_light_sensor;
+pub use pulsar_ui::{ClockFace, ClockMusicStyle};
