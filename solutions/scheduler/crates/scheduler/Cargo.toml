@@ -10,20 +10,35 @@ publish.workspace = true
 name = "scheduler"
 path = "src/lib.rs"
 
+[[bin]]
+name = "scheduler"
+path = "src/main.rs"
+
 [dependencies]
+anyhow = { workspace = true }
 axum = { workspace = true }
 connectrpc = { workspace = true }
+home-config = { path = "../../../../packages/rust/home-config" }
+home-http = { path = "../../../../packages/rust/home-http" }
 home-proto = { path = "../../../../packages/rust/home-proto" }
+home-runtime = { path = "../../../../packages/rust/home-runtime" }
+home-secret = { path = "../../../../packages/rust/home-secret" }
 home-sqlite = { path = "../../../../packages/rust/home-sqlite" }
+home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
 http = { workspace = true }
 jiff = { workspace = true }
+reqwest = { workspace = true }
 rusqlite = { workspace = true }
+rustls = { workspace = true }
 sha1_smol = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 subtle = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

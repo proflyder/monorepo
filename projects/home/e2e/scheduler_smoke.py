@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Local process E2E: real scheduler + real ha-bridge + fake Home Assistant.
 
-This test is hermetic: it builds both Go binaries into a temporary directory,
-starts the scheduler with a temporary SQLite database and dummy bearer tokens,
-and serves a fake HA on loopback. It never contacts live HA, ADB or
-the station, and it never touches a production scheduler database.
+This test is hermetic: it builds the Rust scheduler and the Go bridge into a
+temporary directory, starts the scheduler with a temporary SQLite database and
+dummy bearer tokens, and serves a fake HA on loopback. It never contacts live
+HA, ADB or the station, and it never touches a production scheduler database.
 
 What it verifies end to end:
 
@@ -220,35 +220,61 @@ class Process:
 
 
 def build_binaries(target: Path) -> tuple[Path, Path]:
-    binaries = {
-        "scheduler": "./solutions/scheduler/cmd/scheduler",
-        "ha-bridge": "./solutions/ha-bridge/cmd/ha-bridge",
-    }
-    built: dict[str, Path] = {}
-    for name, package in binaries.items():
-        destination = target / name
-        result = subprocess.run(
-            ["go", "build", "-o", str(destination), package],
-            cwd=ROOT,
-            env=clean_env(),
-            text=True,
-            capture_output=True,
-            timeout=300,
+    """Builds the Rust scheduler and the Go bridge.
+
+    The scheduler is the deployed Rust binary; the bridge is still Go, so the
+    test exercises the real cross-language contract.
+    """
+    target_dir = target / "cargo-target"
+    env = clean_env()
+    env["CARGO_TARGET_DIR"] = str(target_dir)
+    result = subprocess.run(
+        ["cargo", "build", "--quiet", "-p", "scheduler", "--bin", "scheduler"],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=600,
+    )
+    if result.returncode != 0:
+        raise Failure(
+            f"cargo build -p scheduler failed:\n{result.stdout}\n{result.stderr}"
         )
-        if result.returncode != 0:
-            raise Failure(f"go build {package} failed:\n{result.stdout}\n{result.stderr}")
-        built[name] = destination
+    built: dict[str, Path] = {"scheduler": target_dir / "debug" / "scheduler"}
+
+    bridge_package = "./solutions/ha-bridge/cmd/ha-bridge"
+    destination = target / "ha-bridge"
+    result = subprocess.run(
+        ["go", "build", "-o", str(destination), bridge_package],
+        cwd=ROOT,
+        env=clean_env(),
+        text=True,
+        capture_output=True,
+        timeout=300,
+    )
+    if result.returncode != 0:
+        raise Failure(
+            f"go build {bridge_package} failed:\n{result.stdout}\n{result.stderr}"
+        )
+    built["ha-bridge"] = destination
     return built["scheduler"], built["ha-bridge"]
 
 
 def scheduler_base(process: Process, timeout: float = 30.0) -> str:
-    pattern = re.compile(r"addr=([0-9.]+:\d+)")
+    # The Rust service logs JSON (`"addr":"127.0.0.1:port"`); the Go service
+    # logged `addr=...`. Accept both so the smoke test is not tied to one
+    # implementation during the cutover.
+    patterns = (
+        re.compile(r'"addr":"([0-9.]+:\d+)"'),
+        re.compile(r"addr=([0-9.]+:\d+)"),
+    )
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         for line in list(process.lines):
-            match = pattern.search(line)
-            if match:
-                return "http://" + match.group(1)
+            for pattern in patterns:
+                match = pattern.search(line)
+                if match:
+                    return "http://" + match.group(1)
         if process.proc.poll() is not None:
             raise Failure(f"scheduler exited early:\n{process.output()}")
         time.sleep(POLL)

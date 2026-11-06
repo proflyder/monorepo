@@ -157,9 +157,9 @@
   kubectl → K3s API `6443`, HTTPS → Traefik/OpenBao `443`. Режимы
   (`preserve`/`execute`/`shadow`/`control-*`) — только через
   `workflow_dispatch`.
-- scheduler, ha-bridge, ha-control — собственные distroless-образы,
-  собираемые Bazel `rules_oci` и адресуемые по digest в
-  `ghcr.io/proflyder/<name>@sha256:…`; CI пушит их job-scoped
+- scheduler (Rust, static musl), ha-bridge, ha-control — собственные
+  distroless-образы, собираемые Bazel `rules_oci`/`rules_rust` и адресуемые по
+  digest в `ghcr.io/proflyder/<name>@sha256:…`; CI пушит их job-scoped
   `GITHUB_TOKEN`, живой узел импортирует те же digest'ы в containerd.
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), без pull-secret.
@@ -483,7 +483,12 @@
 - `solutions/scheduler` задеплоен в K3s `home-assistant`: один под, SQLite на
   PVC `scheduler-data` (`local-retain`), NodePort `30098`, bearer обязателен,
   readiness/liveness — аутентифицированный `-healthcheck`. Состояние
-  переживает рестарт пода.
+  переживает рестарт пода. С cutover PR 4 процесс — Rust-крейт
+  `solutions/scheduler/crates/scheduler` (static musl, `rules_rust`), а Go-код
+  `cmd/`, `app/`, `internal/` остаётся в дереве для отката по digest и владеет
+  golden-фикстурами. Отличие от Go-транспорта: Connect JSON/binary и
+  gRPC-Web по HTTP/1.1 работают, gRPC over h2c пока не отдаётся (connectrpc
+  собран только с `json`).
 - `solutions/ha-bridge` работает в режиме execute на очереди `home`
   (`BRIDGE_EXECUTE=true`, 1 реплика, ledger на PVC `ha-bridge-data`), зовёт
   allowlisted HA scripts; второй исполнитель не запущен. Dry-run Job

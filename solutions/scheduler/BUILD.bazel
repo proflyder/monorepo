@@ -1,7 +1,14 @@
 package(default_visibility = ["//visibility:public"])
 
+# The deployed scheduler is the Rust crate's binary. The Go binary below stays
+# buildable as the digest rollback reference and for its golden tests.
 alias(
     name = "scheduler",
+    actual = "//solutions/scheduler/crates/scheduler:scheduler",
+)
+
+alias(
+    name = "scheduler_go",
     actual = "//solutions/scheduler/cmd/scheduler",
 )
 

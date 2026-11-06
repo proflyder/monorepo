@@ -1,32 +1,62 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
-load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
 
 package(default_visibility = ["//visibility:public"])
 
+# Kept in sync with [package].version in Cargo.toml. Bazel does not derive
+# env!("CARGO_PKG_VERSION"); without this the deployed binary reports 0.0.0.
+PACKAGE_VERSION = "0.1.0"
+
 LIB_DEPS = [
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-http:home_http",
     "//packages/rust/home-proto:home_proto",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
     "//packages/rust/home-sqlite:home_sqlite",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "@crates//:anyhow",
     "@crates//:axum",
     "@crates//:connectrpc",
     "@crates//:http",
     "@crates//:jiff",
+    "@crates//:reqwest",
     "@crates//:rusqlite",
+    "@crates//:rustls",
     "@crates//:serde_json",
     "@crates//:sha1_smol",
     "@crates//:sha2",
     "@crates//:subtle",
     "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
     "@crates//:tower",
+    "@crates//:tracing",
     "@crates//:uuid",
 ]
 
 rust_library(
     name = "scheduler_lib",
     crate_name = "scheduler",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
     edition = "2024",
     lint_config = ":workspace_lints",
+    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
     deps = LIB_DEPS,
+)
+
+# The deployed binary. The image rebuilds it for static musl; this target is
+# also what host tests and `cargo run -p scheduler` use.
+rust_binary(
+    name = "scheduler",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    deps = LIB_DEPS + [":scheduler_lib"],
 )
 
 # The golden tables stay owned by solutions/scheduler: the test reads the Go
@@ -56,7 +86,6 @@ rust_test(
     deps = LIB_DEPS + [
         ":scheduler_lib",
         "//packages/rust/home-contracttest:home_contracttest",
-        "@crates//:tokio",
     ],
 )
 
@@ -83,6 +112,7 @@ rustfmt_test(
     name = "rustfmt",
     targets = [
         ":scheduler_lib",
+        ":scheduler",
         ":contract_tests",
         ":go_database_test",
     ],
@@ -93,6 +123,7 @@ rust_clippy_test(
     name = "clippy",
     targets = [
         ":scheduler_lib",
+        ":scheduler",
         ":contract_tests",
         ":go_database_test",
     ],
