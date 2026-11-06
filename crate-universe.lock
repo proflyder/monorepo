@@ -1,5 +1,5 @@
 {
-  "checksum": "fce3625a876d2be1651903f1b769241be4f72cdec2eac1d16e025af035f9762e",
+  "checksum": "3f6a28e56a2b1f2ecda3309f10e5639dccc8120b9f59f0a2e9c9c8d67d4226b0",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -146,6 +146,7 @@
     "cfg(target_os = \"haiku\")": [],
     "cfg(target_os = \"hermit\")": [],
     "cfg(target_os = \"netbsd\")": [],
+    "cfg(target_os = \"redox\")": [],
     "cfg(target_os = \"solaris\")": [],
     "cfg(target_os = \"vxworks\")": [],
     "cfg(target_os = \"wasi\")": [],
@@ -2979,6 +2980,103 @@
       ],
       "version": "0.4.8"
     },
+    "currency-bot 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "jiff 0.2.39",
+            "target": "jiff"
+          },
+          {
+            "id": "prometheus-client 0.25.2",
+            "target": "prometheus_client"
+          },
+          {
+            "id": "regex 1.13.1",
+            "target": "regex"
+          },
+          {
+            "id": "reqwest 0.12.28",
+            "target": "reqwest"
+          },
+          {
+            "id": "rusqlite 0.41.1",
+            "target": "rusqlite"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "http-body-util 0.1.5",
+            "target": "http_body_util"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          },
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "currency_bot",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "currency-bot",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "currency_bot",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "curve25519-dalek 4.1.3": {
       "build_script_attrs": {
         "deps": [
@@ -3685,6 +3783,35 @@
         }
       ],
       "version": "0.2.7"
+    },
+    "dtoa 1.0.11": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "dtoa",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "dtoa",
+      "package_url": "https://github.com/dtolnay/dtoa",
+      "repository": {
+        "Http": {
+          "sha256": "4c3cf4824e2d5f025c7b531afcb2325364084a16806f6d47fbc1f5fbd9960590",
+          "url": "https://static.crates.io/crates/dtoa/1.0.11/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dtoa",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.11"
     },
     "ecdsa 0.17.0": {
       "common_attrs": {
@@ -8559,6 +8686,45 @@
       ],
       "version": "0.8.3"
     },
+    "lock_api 0.4.14": {
+      "common_attrs": {
+        "crate_features": [
+          "atomic_usize",
+          "default"
+        ],
+        "deps": [
+          {
+            "id": "scopeguard 1.2.0",
+            "target": "scopeguard"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "lock_api",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "lock_api",
+      "package_url": "https://github.com/Amanieu/parking_lot",
+      "repository": {
+        "Http": {
+          "sha256": "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965",
+          "url": "https://static.crates.io/crates/lock_api/0.4.14/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lock_api",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.14"
+    },
     "log 0.4.34": {
       "common_attrs": {
         "crate_features": [
@@ -9794,6 +9960,119 @@
       ],
       "version": "2.2.1"
     },
+    "parking_lot 0.12.5": {
+      "common_attrs": {
+        "crate_features": [
+          "default"
+        ],
+        "deps": [
+          {
+            "id": "lock_api 0.4.14",
+            "target": "lock_api"
+          },
+          {
+            "id": "parking_lot_core 0.9.12",
+            "target": "parking_lot_core"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "parking_lot",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "parking_lot",
+      "package_url": "https://github.com/Amanieu/parking_lot",
+      "repository": {
+        "Http": {
+          "sha256": "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a",
+          "url": "https://static.crates.io/crates/parking_lot/0.12.5/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "parking_lot",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.12.5"
+    },
+    "parking_lot_core 0.9.12": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.5",
+              "target": "cfg_if"
+            },
+            {
+              "id": "smallvec 1.16.4",
+              "target": "smallvec"
+            }
+          ],
+          "selects": {
+            "cfg(target_os = \"redox\")": [
+              {
+                "id": "redox_syscall 0.5.18",
+                "target": "syscall"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.191",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-link 0.2.1",
+                "target": "windows_link"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "parking_lot_core",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "parking_lot_core",
+      "package_url": "https://github.com/Amanieu/parking_lot",
+      "repository": {
+        "Http": {
+          "sha256": "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1",
+          "url": "https://static.crates.io/crates/parking_lot_core/0.9.12/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "parking_lot_core",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.9.12"
+    },
     "password-hash 0.6.1": {
       "common_attrs": {
         "edition": "2024"
@@ -10780,6 +11059,108 @@
         }
       ],
       "version": "1.0.107"
+    },
+    "prometheus-client 0.25.2": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "dtoa 1.0.11",
+            "target": "dtoa"
+          },
+          {
+            "id": "itoa 1.0.18",
+            "target": "itoa"
+          },
+          {
+            "id": "parking_lot 0.12.5",
+            "target": "parking_lot"
+          }
+        ],
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ],
+        "proc_macro_deps": [
+          {
+            "id": "prometheus-client-derive-encode 0.5.1",
+            "target": "prometheus_client_derive_encode"
+          }
+        ]
+      },
+      "library_target_name": "prometheus_client",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "prometheus-client",
+      "package_url": "https://github.com/prometheus/client_rust",
+      "repository": {
+        "Http": {
+          "sha256": "6d150ad7bf80e60f45769d18a0a8c01028ab8f56355f33ed7bfce3a31f82e696",
+          "url": "https://static.crates.io/crates/prometheus-client/0.25.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prometheus_client",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.25.2"
+    },
+    "prometheus-client-derive-encode 0.5.1": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 3.0.9",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "prometheus_client_derive_encode",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "prometheus-client-derive-encode",
+      "package_url": "https://github.com/prometheus/client_rust",
+      "repository": {
+        "Http": {
+          "sha256": "01e34894696ff94f64a20c2c373a6440903e9c2789a303d68ec6e6f953f890e4",
+          "url": "https://static.crates.io/crates/prometheus-client-derive-encode/0.5.1/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "prometheus_client_derive_encode",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.5.1"
     },
     "prost 0.14.4": {
       "common_attrs": {
@@ -11930,6 +12311,40 @@
         }
       ],
       "version": "0.10.1"
+    },
+    "redox_syscall 0.5.18": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "bitflags 2.13.2",
+            "target": "bitflags"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "syscall",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "redox_syscall",
+      "package_url": "https://gitlab.redox-os.org/redox-os/syscall",
+      "repository": {
+        "Http": {
+          "sha256": "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d",
+          "url": "https://static.crates.io/crates/redox_syscall/0.5.18/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "syscall",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.5.18"
     },
     "regex 1.13.1": {
       "common_attrs": {
@@ -13547,6 +13962,35 @@
         }
       ],
       "version": "0.1.0"
+    },
+    "scopeguard 1.2.0": {
+      "common_attrs": {
+        "edition": "2015"
+      },
+      "library_target_name": "scopeguard",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "scopeguard",
+      "package_url": "https://github.com/bluss/scopeguard",
+      "repository": {
+        "Http": {
+          "sha256": "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49",
+          "url": "https://static.crates.io/crates/scopeguard/1.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "scopeguard",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.2.0"
     },
     "scrypt 0.12.0": {
       "common_attrs": {
@@ -20200,6 +20644,7 @@
     "libc 0.2.191",
     "libloading 0.9.0",
     "log 0.4.34",
+    "prometheus-client 0.25.2",
     "prost 0.14.4",
     "regex 1.13.1",
     "reqwest 0.12.28",
@@ -20243,6 +20688,7 @@
   "workspace_members": {
     "ble-gateway 0.2.0": "projects/station/ble-gateway/crates/ble-gateway",
     "cp_selftest 0.1.0": "solutions/windows-logon-provider/crates/cp-selftest",
+    "currency-bot 0.1.0": "solutions/currency-bot/crates/currency-bot",
     "esphome-proto 0.0.0": "projects/station/pulsar/satellite/crates/esphome-proto",
     "ha-bridge 0.1.0": "solutions/ha-bridge/crates/ha-bridge",
     "home-actor 0.1.0": "packages/rust/home-actor",

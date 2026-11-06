@@ -16,6 +16,7 @@ members = [
     "solutions/scheduler/crates/*",
     "solutions/ha-bridge/crates/*",
     "solutions/mcp-gateway/crates/*",
+    "solutions/currency-bot/crates/*",
 ]
 resolver = "3"
 
@@ -110,6 +111,11 @@ sha1_smol = "=1.0.1"
 jiff = { version = "=0.2.39", default-features = false, features = ["std", "tzdb-bundle-always"] }
 tower = { version = "=0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "=0.6.11", default-features = false, features = ["limit", "timeout"] }
+# Prometheus exposition for the home services (DECISIONS 41). Pure Rust, no C.
+# The registry is built locally, so no global default registry or process/go
+# collectors leak into the service: only the `currency_bot_*` families are
+# exported. Pin so the dashboard's names, labels and buckets are auditable.
+prometheus-client = { version = "=0.25.2", default-features = false }
 http-body-util = "=0.1.5"
 tempfile = "=3.27.0"
 # home.v1 over the official Connect runtime: `connectrpc` transports and
