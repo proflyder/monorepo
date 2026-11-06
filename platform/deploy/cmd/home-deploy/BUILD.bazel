@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "home-deploy_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/platform/deploy/cmd/home-deploy",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/cmd/home-deploy",
     visibility = ["//visibility:private"],
     deps = [
         "//platform/deploy/internal/buildid",

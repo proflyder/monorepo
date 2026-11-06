@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/importer"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/store"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/importer"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/store"
 )
 
 func main() {

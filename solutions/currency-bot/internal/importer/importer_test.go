@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/store"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/store"
 )
 
 func openStore(t *testing.T) *store.Store {

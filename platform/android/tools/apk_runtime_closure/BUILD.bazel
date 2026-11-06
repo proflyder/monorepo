@@ -10,7 +10,7 @@ go_binary(
 go_library(
     name = "apk_runtime_closure_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/platform/android/tools/apk_runtime_closure",
+    importpath = "github.com/proflyder/monorepo/platform/android/tools/apk_runtime_closure",
     visibility = ["//visibility:private"],
 )
 

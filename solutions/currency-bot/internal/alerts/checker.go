@@ -9,7 +9,7 @@ import (
 	"math"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
 )
 
 // HistoryStore supplies historical records for threshold lookbacks.

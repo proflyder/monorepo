@@ -7,7 +7,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/redact"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/redact"
 )
 
 // ReportGroup is the infra.report tool group.

@@ -14,7 +14,7 @@ import (
 	"os"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/config"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/config"
 )
 
 const healthcheckTimeout = 4 * time.Second

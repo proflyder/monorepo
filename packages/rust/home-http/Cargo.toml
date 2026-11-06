@@ -1,6 +1,6 @@
 [package]
-name = "ricardo-http"
-description = "axum bearer authentication and graceful HTTP serving on ricardo-secret tokens"
+name = "home-http"
+description = "axum bearer authentication and graceful HTTP serving on home-secret tokens"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ publish.workspace = true
 
 [dependencies]
 axum = { workspace = true }
-ricardo-secret = { path = "../ricardo-secret" }
+home-secret = { path = "../home-secret" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/config"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/config"
 )
 
 func runStatus() int {

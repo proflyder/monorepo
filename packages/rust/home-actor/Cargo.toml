@@ -1,15 +1,14 @@
 [package]
-name = "ricardo-runtime"
-description = "Shutdown signals and a CancellationToken/TaskTracker supervisor"
+name = "home-actor"
+description = "Non-blocking, cloneable command handle for actors"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
 [dependencies]
+home-runtime = { path = "../home-runtime" }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/metrics"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/service"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/store"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/metrics"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/service"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/store"
 )
 
 var testNow = time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)

@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/app"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/app"
 )
 
 func main() {

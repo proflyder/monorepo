@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "preflight",
     srcs = ["preflight.go"],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/preflight",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/preflight",
 )
 
 go_test(

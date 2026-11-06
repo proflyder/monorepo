@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/scheduler"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/queue"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
+	"github.com/proflyder/monorepo/packages/go/scheduler"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/queue"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 func newProducer(t *testing.T, address string) *queue.Producer {

@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "hermes",
     srcs = ["upstream.go"],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/hermes",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/hermes",
 )
 
 go_test(

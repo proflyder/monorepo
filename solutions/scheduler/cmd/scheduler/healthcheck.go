@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/scheduler/internal/config"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/config"
 )
 
 // healthcheckTimeout bounds a single probe. Kubernetes gives the probe a

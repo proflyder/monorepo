@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/contracttest"
+	"github.com/proflyder/monorepo/packages/go/contracttest"
 )
 
 const contractToken = "contract-issuer-token"

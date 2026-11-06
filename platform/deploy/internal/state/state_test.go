@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/platform/deploy/internal/kube"
+	"github.com/proflyder/monorepo/platform/deploy/internal/kube"
 )
 
 type fakeKubectl struct {

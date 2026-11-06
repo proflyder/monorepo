@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/config"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/config"
 )
 
 // env builds a LookupEnv from a map: absent keys behave like an unset variable.

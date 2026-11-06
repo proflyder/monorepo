@@ -4,7 +4,7 @@
 
 use core::fmt;
 
-use ricardo_secret::Secret;
+use home_secret::Secret;
 use serde::Deserialize;
 use zeroize::Zeroizing;
 

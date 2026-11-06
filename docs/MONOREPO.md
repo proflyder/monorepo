@@ -154,8 +154,8 @@ gateway, Windows logon provider и станционный helper. Общий
 edition 2024 и `rust-version`, `[workspace.lints]` — единый набор rust/clippy
 предупреждений (CI собирает с `-D warnings`). Общий код с двумя и более
 потребителями живёт в `packages/rust/`; solution/package не импортирует
-project. Сейчас там `ricardo-telemetry`, `ricardo-runtime`, `ricardo-actor`,
-`ricardo-linux`, `ricardo-secret` и `ricardo-http` — bootstrap логов,
+project. Сейчас там `home-telemetry`, `home-runtime`, `home-actor`,
+`home-linux`, `home-secret` и `home-http` — bootstrap логов,
 shutdown/supervisor, handle актора, errno и sysfs, zeroizing-токены и
 axum bearer/serve; BLE gateway — первый потребитель, Pulsar использует их в
 демоне.
@@ -183,7 +183,7 @@ sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'
 `solutions/windows-logon-provider` — Rust-компонент на том же Bazel:
 `crates/protocol` (переносимый слой), `crates/provider` (COM DLL) и
 `crates/cp-selftest` (self-test): `serde`/`serde_json`, `base64`,
-`thiserror`, `http::Uri` и `ricardo-secret` в protocol; `tracing` с
+`thiserror`, `http::Uri` и `home-secret` в protocol; `tracing` с
 провайдерским Win32-писателем журнала в DLL. `MODULE.bazel` добавляет
 `x86_64-pc-windows-gnu` в Rust-тулчейн и регистрирует zig cc_toolchain
 (`platform/bazel/windows:x86_64_windows`), поэтому DLL линкуется без Visual

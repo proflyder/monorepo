@@ -10,8 +10,8 @@ use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use ricardo_runtime::Supervisor;
-use ricardo_secret::Token;
+use home_runtime::Supervisor;
+use home_secret::Token;
 use serde::Serialize;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
@@ -35,12 +35,12 @@ pub fn router(gateway: Arc<Gateway>, token: Token) -> Router {
         .route("/bluetooth/on", post(bluetooth_on))
         .route("/bluetooth/off", post(bluetooth_off))
         .with_state(gateway);
-    ricardo_http::with_bearer(router, token)
+    home_http::with_bearer(router, token)
 }
 
 /// Load the bearer token, bind and spawn the control server.
 pub async fn start(gateway: &Arc<Gateway>, config: &Config, supervisor: &Supervisor) -> Result<()> {
-    let token = ricardo_secret::load_or_create_hex(&config.control_token_file, 32)
+    let token = home_secret::load_or_create_hex(&config.control_token_file, 32)
         .with_context(|| format!("load control token {}", config.control_token_file.display()))?;
     let listener = TcpListener::bind(&config.control_addr)
         .await
@@ -49,7 +49,7 @@ pub async fn start(gateway: &Arc<Gateway>, config: &Config, supervisor: &Supervi
     let router = router(gateway.clone(), token);
     let shutdown = supervisor.token();
     supervisor.spawn("control-http", async move {
-        if let Err(error) = ricardo_http::serve(listener, router, shutdown).await {
+        if let Err(error) = home_http::serve(listener, router, shutdown).await {
             warn!(%error, "control HTTP stopped");
         }
     });
@@ -100,7 +100,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let address = listener.local_addr().expect("address");
         let shutdown = CancellationToken::new();
-        tokio::spawn(ricardo_http::serve(
+        tokio::spawn(home_http::serve(
             listener,
             router(context.gateway.clone(), Token::new(TOKEN)),
             shutdown.clone(),

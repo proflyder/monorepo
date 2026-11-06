@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/config"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/config"
 )
 
 const healthcheckTimeout = 4 * time.Second

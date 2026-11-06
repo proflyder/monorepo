@@ -30,8 +30,8 @@
 | `pulsar-update` | бэкенд сущности обновления «Firmware» в HA |
 
 Общие примитивы с другими программами монорепозитория живут в `packages/rust/`:
-`ricardo-runtime` (Supervisor), `ricardo-actor` (Handle/channel), `ricardo-telemetry`
-(bootstrap `tracing`), `ricardo-linux` (errno и запись sysfs). Крейт Pulsar их только использует.
+`home-runtime` (Supervisor), `home-actor` (Handle/channel), `home-telemetry`
+(bootstrap `tracing`), `home-linux` (errno и запись sysfs). Крейт Pulsar их только использует.
 
 `third_party/` — только сборка sendspin-cpp.
 
@@ -80,7 +80,7 @@ flowchart LR
 
 1. В процессе один рантайм tokio `current_thread` и `LocalSet`. Все асинхронные задачи
    порождаются через `pulsar_core::supervisor().spawn_local(...)` — общий
-   `ricardo_runtime::Supervisor` (по одному на поток) над `TaskTracker` +
+   `home_runtime::Supervisor` (по одному на поток) над `TaskTracker` +
    `CancellationToken`, который в конце
    останавливает акторов и возвращает имена не завершившихся. `tokio::spawn` не используется
    (`tokio::task::spawn_blocking` этим правилом не запрещён; блокирующие циклы — п. 4).
@@ -118,19 +118,19 @@ flowchart LR
    sink на потоке sendspin-cpp). Наружу они отправляют данные через `UnboundedSender`, команды
    получают через атомики, `Mutex` или `std::sync::mpsc`.
 5. Актор завершается, когда закрыт его канал команд (все handle уничтожены), и при выходе
-   убирает за собой. Общий примитив — `ricardo_actor::Handle<C>`: `send(&self, C)` не
+   убирает за собой. Общий примитив — `home_actor::Handle<C>`: `send(&self, C)` не
    блокирует, канал закрывается после последнего handle. Потоки
    останавливаются в `Drop` своего владельца (флаг + join); исключения описаны у кода.
 6. Не держать `RefCell`-borrow через `.await`. Состояние актора хранится по значению в его задаче.
 7. Логи пишутся через `tracing::{debug,info,warn,error}!`. Бэкенд — слой `pulsar-core` поверх
-   `ricardo-telemetry`: сохраняет C++-формат stderr `HH:MM:SS.mmm L file:line msg` (обрезка
+   `home-telemetry`: сохраняет C++-формат stderr `HH:MM:SS.mmm L file:line msg` (обрезка
    1023 байта, склейка повторов раз в 30 с) и ESPHome-sink `[W][file.rs:12]: msg`; записи
    сторонних крейтов через `log` приходят мостом `tracing-log`. Утилита, чей крейт-бинарь назван
    не `pulsar*`, вызывает `pulsar_core::add_own_target(module_path!())` (рядом с
    `init_logger()`, порядок не важен), иначе её записи считаются чужими.
 8. `unsafe` и все вызовы `libc` (включая `std::env::set_var`) живут только в модулях
    `sys.rs` / `ffi.rs` (в `pulsar-media` таким же FFI-модулем служит `gst.rs`),
-   `pulsar-core/src/compat.rs`, `packages/rust/ricardo-linux` (sysfs `pwrite`) и в обработчике
+   `pulsar-core/src/compat.rs`, `packages/rust/home-linux` (sysfs `pwrite`) и в обработчике
    крашей.
    - В каждом крейте `#![deny(unsafe_op_in_unsafe_fn)]`, у каждого блока `unsafe` — комментарий
      `// SAFETY:`.
@@ -400,7 +400,7 @@ flowchart LR
 тип `Digest`, а не строка; `UpdateError` несёт признак `fatal` (фатальный релиз или ошибка,
 заслуживающая повтора). Порты: `ReleaseSource` (OCI/GHCR на reqwest, анонимный pull-token и
 манифест `latest`) и `Installer` (файловая система, проба `<staged> --version`). `pulsar-update`
-собирает их в актор на `ricardo_actor::Handle`; задание — отдельная задача супервизора с
+собирает их в актор на `home_actor::Handle`; задание — отдельная задача супервизора с
 `CancellationToken`, поэтому выход демона отменяет загрузку и пробу.
 
 - `check()`/`install()`: `None` = занят, запрос не принят, события не будет; `Some(id)` — `RequestId`

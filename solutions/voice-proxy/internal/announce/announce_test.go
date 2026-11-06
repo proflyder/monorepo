@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/announce"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/announce"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 func newAnnouncer(t *testing.T, address string) *announce.Announcer {

@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/profile"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
 // Logger is the structural log surface; spoken text is never logged.

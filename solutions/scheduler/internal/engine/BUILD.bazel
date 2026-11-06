@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "engine",
     srcs = ["engine.go"],
-    importpath = "ricardo.local/monorepo/solutions/scheduler/internal/engine",
+    importpath = "github.com/proflyder/monorepo/solutions/scheduler/internal/engine",
     deps = ["//solutions/scheduler/internal/store"],
 )
 

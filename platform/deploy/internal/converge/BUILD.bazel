@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "converge",
     srcs = ["converge.go"],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/converge",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/converge",
     deps = [
         "//platform/deploy/internal/kube",
         "@in_yaml_go_yaml_v2//:yaml",

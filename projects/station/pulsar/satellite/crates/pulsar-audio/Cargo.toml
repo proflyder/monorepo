@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-ricardo-linux = { path = "../../../../../../packages/rust/ricardo-linux" }
+home-linux = { path = "../../../../../../packages/rust/home-linux" }
 
 libc = { workspace = true }
 libloading = { workspace = true }

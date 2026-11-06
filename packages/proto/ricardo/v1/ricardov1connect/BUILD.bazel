@@ -8,7 +8,7 @@ go_library(
         "alarms.connect.go",
         "scheduler.connect.go",
     ],
-    importpath = "ricardo.local/monorepo/packages/proto/ricardo/v1/ricardov1connect",
+    importpath = "github.com/proflyder/monorepo/packages/proto/ricardo/v1/ricardov1connect",
     deps = [
         "//packages/proto/ricardo/v1:ricardo",
         "@com_connectrpc_connect//:connect",

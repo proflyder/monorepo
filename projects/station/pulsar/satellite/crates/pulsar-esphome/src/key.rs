@@ -63,7 +63,7 @@ pub fn trim(s: &[u8]) -> &[u8] {
     &s[start..end]
 }
 
-pub use ricardo_linux::io_error_text as os_error_text;
+pub use home_linux::io_error_text as os_error_text;
 
 /// Reads the key file. Missing / empty file or the all-zeros key: no key. A file that cannot be
 /// read or is not base64 of 32 bytes fails closed: someone meant to enable encryption, so there

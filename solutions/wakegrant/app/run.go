@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
-	"ricardo.local/monorepo/solutions/wakegrant/internal/config"
-	"ricardo.local/monorepo/solutions/wakegrant/internal/wakegrant"
+	"github.com/proflyder/monorepo/solutions/wakegrant/internal/config"
+	"github.com/proflyder/monorepo/solutions/wakegrant/internal/wakegrant"
 )
 
 // Version is the reported implementation version.

@@ -13,8 +13,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Context;
-use ricardo_runtime::Supervisor;
-use ricardo_secret::Secret;
+use home_runtime::Supervisor;
+use home_secret::Secret;
 use tokio::sync::{Mutex as AsyncMutex, mpsc, watch};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;

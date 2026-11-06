@@ -112,7 +112,7 @@ fn led_value(model: &Model, s: &LedStrip, color: &str, i: i32) -> i32 {
     );
     std::fs::read_to_string(&path)
         .ok()
-        .and_then(|v| ricardo_linux::trim(&v).parse().ok())
+        .and_then(|v| home_linux::trim(&v).parse().ok())
         .unwrap_or(0)
 }
 
@@ -163,7 +163,7 @@ fn fb_mode(model: &Model, s: &LedStrip) -> bool {
     let name = std::fs::read_to_string(format!("/sys/class/graphics/{dev}/name"))
         .ok()
         .unwrap_or_default();
-    trigger.contains(&format!("[{}]", s.trigger)) && ricardo_linux::trim(&name) == s.fb_name
+    trigger.contains(&format!("[{}]", s.trigger)) && home_linux::trim(&name) == s.fb_name
 }
 
 /// The strip's framebuffer as RGB per LED; None when it cannot be read.
@@ -606,7 +606,7 @@ const SMILEY: [u8; 4] = [0x40, 0x18, 0x0C, 0x40];
 fn read_trimmed(path: &str) -> Option<String> {
     std::fs::read_to_string(path)
         .ok()
-        .map(|s| ricardo_linux::trim(&s).to_owned())
+        .map(|s| home_linux::trim(&s).to_owned())
 }
 
 fn seg_name(model: &Model, digit: usize, seg: usize) -> String {
@@ -938,7 +938,7 @@ fn restore_current(saved: Option<[String; 2]>) {
     let Some(saved) = saved else { return };
     for (p, v) in MIDI_CURRENT.iter().zip(&saved) {
         if !v.is_empty() {
-            ricardo_linux::write_file(p, v);
+            home_linux::write_file(p, v);
         }
     }
     say(&format!("restored clock current {}/{}", saved[0], saved[1]));

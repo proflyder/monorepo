@@ -4,13 +4,12 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPS = [
-    "@crates//:time",
-    "@crates//:tracing",
-    "@crates//:tracing-subscriber",
+    "//packages/rust/home-runtime:home_runtime",
+    "@crates//:tokio",
 ]
 
 rust_library(
-    name = "ricardo_telemetry",
+    name = "home_actor",
     srcs = ["src/lib.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -19,10 +18,10 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
-    crate = ":ricardo_telemetry",
+    crate = ":home_actor",
     edition = "2024",
     lint_config = ":workspace_lints",
-    deps = DEPS + ["@crates//:tokio"],
+    deps = DEPS,
 )
 
 # Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.

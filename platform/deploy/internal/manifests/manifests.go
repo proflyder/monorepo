@@ -14,7 +14,7 @@ import (
 
 	yaml "go.yaml.in/yaml/v2"
 
-	"ricardo.local/monorepo/platform/deploy/internal/envfile"
+	"github.com/proflyder/monorepo/platform/deploy/internal/envfile"
 )
 
 // ExternalSecretNames reads multi-document manifests and returns every

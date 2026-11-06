@@ -19,9 +19,9 @@ import (
 	"strings"
 	"sync"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/proxy"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/profile"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/proxy"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
 // Speech phrases.

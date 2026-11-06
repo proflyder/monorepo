@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/alerts"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/alerts"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
 )
 
 var now = time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)

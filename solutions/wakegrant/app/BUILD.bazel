@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "app",
     srcs = ["run.go"],
-    importpath = "ricardo.local/monorepo/solutions/wakegrant/app",
+    importpath = "github.com/proflyder/monorepo/solutions/wakegrant/app",
     deps = [
         "//solutions/wakegrant/internal/config",
         "//solutions/wakegrant/internal/wakegrant",

@@ -8,7 +8,7 @@
 
 use std::cell::RefCell;
 
-use ricardo_runtime::Supervisor;
+use home_runtime::Supervisor;
 
 thread_local! {
     static SUPERVISOR: RefCell<Option<Supervisor>> = const { RefCell::new(None) };

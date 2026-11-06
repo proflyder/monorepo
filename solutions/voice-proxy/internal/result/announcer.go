@@ -22,8 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/profile"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
 // Speech phrases. They never end with a question: HA's

@@ -9,7 +9,7 @@
   schedules (`kind=SCHEDULE_KIND_ALARM`). Не второй планировщик.
 
 `package ricardo.v1`, `go_package` →
-`ricardo.local/monorepo/packages/proto/ricardo/v1`.
+`github.com/proflyder/monorepo/packages/proto/ricardo/v1`.
 
 ## Транспорт
 

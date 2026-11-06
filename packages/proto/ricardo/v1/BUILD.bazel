@@ -37,7 +37,7 @@ go_library(
         "alarms.pb.go",
         "scheduler.pb.go",
     ],
-    importpath = "ricardo.local/monorepo/packages/proto/ricardo/v1",
+    importpath = "github.com/proflyder/monorepo/packages/proto/ricardo/v1",
     deps = [
         "@org_golang_google_protobuf//reflect/protoreflect",
         "@org_golang_google_protobuf//runtime/protoimpl",

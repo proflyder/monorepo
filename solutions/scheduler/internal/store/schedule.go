@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
-	"ricardo.local/monorepo/solutions/scheduler/internal/idgen"
-	"ricardo.local/monorepo/solutions/scheduler/internal/planner"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/idgen"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/planner"
 )
 
 const scheduleCols = `id, kind, label, timezone, at_hour, at_minute, at_second, once_date,

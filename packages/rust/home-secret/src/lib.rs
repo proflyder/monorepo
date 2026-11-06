@@ -240,10 +240,8 @@ mod tests {
 
     fn temp_dir(tag: &str) -> PathBuf {
         let unique = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "ricardo-secret-{tag}-{}-{unique}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("home-secret-{tag}-{}-{unique}", std::process::id()));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
     }

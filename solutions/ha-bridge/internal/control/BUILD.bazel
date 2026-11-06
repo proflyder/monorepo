@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "control",
     srcs = ["control.go"],
-    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/control",
+    importpath = "github.com/proflyder/monorepo/solutions/ha-bridge/internal/control",
     visibility = ["//solutions/ha-bridge:__subpackages__"],
     deps = [
         "//packages/go/httpapi",

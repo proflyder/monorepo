@@ -14,4 +14,4 @@ pub use input::{Button, InputEvent, InputHandle, Press, spawn_input};
 pub use led_fx::VoiceColor;
 pub use leds::{LedsHandle, Rgb, case_colors, effect_names, music_styles, spawn_leds};
 
-use ricardo_linux::io_error_text as errstr;
+use home_linux::io_error_text as errstr;

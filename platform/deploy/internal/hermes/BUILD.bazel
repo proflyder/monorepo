@@ -8,7 +8,7 @@ go_library(
         "rollout.go",
         "smoke.go",
     ],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/hermes",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/hermes",
     deps = ["@in_yaml_go_yaml_v2//:yaml"],
 )
 

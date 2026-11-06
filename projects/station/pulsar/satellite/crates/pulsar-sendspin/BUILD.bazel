@@ -12,7 +12,7 @@ LINUX = ["@platforms//os:linux"]
 STATION = ["@zig_0_14_1//:station"]
 
 DEPS = [
-    "//packages/rust/ricardo-linux:ricardo_linux",
+    "//packages/rust/home-linux:home_linux",
     "@crates//:libc",
     "@crates//:tracing",
     "@crates//:tokio",

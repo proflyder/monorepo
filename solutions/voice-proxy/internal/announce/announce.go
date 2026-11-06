@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/ha"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/packages/go/ha"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
 // Announcer speaks text through Home Assistant.

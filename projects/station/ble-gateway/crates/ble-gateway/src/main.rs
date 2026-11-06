@@ -5,8 +5,8 @@ use ble_gateway::cli::Config;
 use ble_gateway::gateway::{Gateway, normalize_token};
 use ble_gateway::wifi::WpaClient;
 use clap::Parser;
-use ricardo_runtime::{Supervisor, shutdown_signal};
-use ricardo_telemetry::{LevelFilter, TelemetryBuilder, local_offset};
+use home_runtime::{Supervisor, shutdown_signal};
+use home_telemetry::{LevelFilter, TelemetryBuilder, local_offset};
 use tracing::{error, info};
 
 fn main() -> ExitCode {
@@ -45,8 +45,8 @@ fn main() -> ExitCode {
 }
 
 async fn run(config: Config) -> anyhow::Result<()> {
-    let token = ricardo_secret::load_or_create_with(&config.token_file, normalize_token, || {
-        ricardo_secret::numeric(6)
+    let token = home_secret::load_or_create_with(&config.token_file, normalize_token, || {
+        home_secret::numeric(6)
     })
     .with_context(|| format!("token file {}", config.token_file.display()))?;
     info!(path = %config.token_file.display(), "device token ready");

@@ -9,7 +9,7 @@ use axum::extract::Request;
 use axum::http::{StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use ricardo_secret::Token;
+use home_secret::Token;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;

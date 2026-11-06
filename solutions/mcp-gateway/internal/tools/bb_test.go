@@ -9,9 +9,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/agentmode"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/bb"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/pending"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/agentmode"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/bb"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/pending"
 )
 
 type fakeBB struct {

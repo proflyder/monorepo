@@ -8,7 +8,7 @@ import (
 	"math"
 	"strings"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
 )
 
 // Format builds the rates message, optionally with alert sections (warnings

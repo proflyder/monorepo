@@ -217,12 +217,12 @@ fn open_dev(name: &str, quiet: bool) -> Option<AsyncFd<Evdev>> {
 fn open_mute_gpio(dir: &str, gpio: u32, quiet: bool) -> Option<File> {
     let line = format!("{dir}/gpio{gpio}");
     if !Path::new(&line).exists() {
-        ricardo_linux::write_file(format!("{dir}/export"), &gpio.to_string());
+        home_linux::write_file(format!("{dir}/export"), &gpio.to_string());
     }
     let direction = std::fs::read_to_string(format!("{line}/direction"))
         .ok()
         .unwrap_or_default();
-    let direction = ricardo_linux::trim(&direction);
+    let direction = home_linux::trim(&direction);
     if direction != "in" {
         if !quiet {
             warn!("input: gpio{gpio} is not an input ('{direction}'), no mute switch");

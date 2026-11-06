@@ -1,5 +1,5 @@
 [package]
-name = "ricardo-linux"
+name = "home-linux"
 description = "Small Unix/Linux helpers: errno text and sysfs attributes"
 version = "0.1.0"
 edition.workspace = true

@@ -10,7 +10,7 @@ go_binary(
 go_library(
     name = "lint_runner_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/platform/android/tools/lint_runner",
+    importpath = "github.com/proflyder/monorepo/platform/android/tools/lint_runner",
     visibility = ["//visibility:private"],
 )
 

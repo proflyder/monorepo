@@ -3,13 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPS = [
-    "//packages/rust/ricardo-runtime:ricardo_runtime",
-    "@crates//:tokio",
-]
+DEPS = ["@crates//:rustix"]
 
 rust_library(
-    name = "ricardo_actor",
+    name = "home_linux",
     srcs = ["src/lib.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -18,7 +15,7 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
-    crate = ":ricardo_actor",
+    crate = ":home_linux",
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = DEPS,

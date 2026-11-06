@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "announce",
     srcs = ["announce.go"],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/announce",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/announce",
     deps = [
         "//packages/go/ha",
         "//solutions/voice-proxy/internal/sanitize",

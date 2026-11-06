@@ -6,8 +6,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-ricardo-actor = { path = "../../../../../../packages/rust/ricardo-actor" }
-ricardo-linux = { path = "../../../../../../packages/rust/ricardo-linux" }
+home-actor = { path = "../../../../../../packages/rust/home-actor" }
+home-linux = { path = "../../../../../../packages/rust/home-linux" }
 
 clap = { workspace = true }
 libc = { workspace = true }

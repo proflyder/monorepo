@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"ricardo.local/monorepo/packages/go/httpapi"
+	"github.com/proflyder/monorepo/packages/go/httpapi"
 )
 
 // maxResponseBytes bounds how much of a scheduler response is read.

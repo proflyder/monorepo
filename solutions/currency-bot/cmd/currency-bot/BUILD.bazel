@@ -10,6 +10,6 @@ go_binary(
 go_library(
     name = "currency-bot_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/solutions/currency-bot/cmd/currency-bot",
+    importpath = "github.com/proflyder/monorepo/solutions/currency-bot/cmd/currency-bot",
     deps = ["//solutions/currency-bot/internal/app"],
 )

@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "health-exporter_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/projects/home-assistant/deploy/health-exporter/cmd/health-exporter",
+    importpath = "github.com/proflyder/monorepo/projects/home-assistant/deploy/health-exporter/cmd/health-exporter",
     visibility = ["//visibility:private"],
 )
 

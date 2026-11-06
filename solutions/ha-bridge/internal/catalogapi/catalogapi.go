@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/discovery"
+	"github.com/proflyder/monorepo/solutions/ha-bridge/internal/discovery"
 )
 
 // Source yields the discovered catalog.

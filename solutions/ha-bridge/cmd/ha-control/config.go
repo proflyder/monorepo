@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
+	"github.com/proflyder/monorepo/solutions/ha-bridge/internal/catalog"
 	"strconv"
 	"strings"
 	"time"

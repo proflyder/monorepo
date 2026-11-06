@@ -245,7 +245,7 @@ fn run() -> u8 {
     0
 }
 
-use ricardo_linux::io_error_text as strerror;
+use home_linux::io_error_text as strerror;
 
 /// Leading whitespace, sign and decimal digits of `s`: (value, bytes used); (0, 0) without
 /// digits, as strtoul / atoi.

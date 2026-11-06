@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/hermes"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sse"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/hermes"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sse"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 // ---------------------------------------------------------------- helpers ---

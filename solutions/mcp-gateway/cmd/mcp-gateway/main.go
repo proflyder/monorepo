@@ -9,7 +9,7 @@ import (
 	"syscall"
 	_ "time/tzdata" // embed IANA data: the image is distroless
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/app"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/app"
 )
 
 func main() {

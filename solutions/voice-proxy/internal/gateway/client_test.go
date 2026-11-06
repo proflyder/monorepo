@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/gateway"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/gateway"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 // TestUtterancePostsTextAndProfile: the utterance route carries the text, the

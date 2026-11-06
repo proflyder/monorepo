@@ -73,4 +73,4 @@ pub struct RadioLines {
     pub boot: String,
 }
 
-pub(crate) use ricardo_linux::io_error_text as os_error_text;
+pub(crate) use home_linux::io_error_text as os_error_text;

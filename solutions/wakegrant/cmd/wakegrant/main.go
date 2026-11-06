@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"ricardo.local/monorepo/solutions/wakegrant/app"
+	"github.com/proflyder/monorepo/solutions/wakegrant/app"
 )
 
 func main() {

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/hermes"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/hermes"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
 const (

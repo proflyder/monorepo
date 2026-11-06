@@ -11,7 +11,7 @@ go_library(
         "logger.go",
         "stream.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/proxy",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/proxy",
     deps = [
         "//solutions/voice-proxy/internal/hermes",
         "//solutions/voice-proxy/internal/sanitize",

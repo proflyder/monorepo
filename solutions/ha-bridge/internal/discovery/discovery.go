@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/ha"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
+	"github.com/proflyder/monorepo/packages/go/ha"
+	"github.com/proflyder/monorepo/solutions/ha-bridge/internal/catalog"
 )
 
 // HomeAssistant is the read surface discovery needs.

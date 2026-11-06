@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/metrics"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/service"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/store"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/metrics"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/service"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/store"
 )
 
 // HistoryStore is the subset of the store used by the HTTP API.

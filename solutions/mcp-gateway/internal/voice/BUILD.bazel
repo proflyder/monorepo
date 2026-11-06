@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "voice",
     srcs = ["voice.go"],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/voice",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/internal/voice",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
     deps = [
         "//solutions/mcp-gateway/internal/agentmode",

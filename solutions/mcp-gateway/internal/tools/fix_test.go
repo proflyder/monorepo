@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/pending"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/kubernetes"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/pending"
 )
 
 func prepareScheduler(t *testing.T, d *Deps) (string, prepareDetail, *fakeKube, *fakeTimers) {

@@ -6,7 +6,7 @@ go_library(
         "client.go",
         "error.go",
     ],
-    importpath = "ricardo.local/monorepo/packages/go/httpapi",
+    importpath = "github.com/proflyder/monorepo/packages/go/httpapi",
     visibility = ["//visibility:public"],
 )
 

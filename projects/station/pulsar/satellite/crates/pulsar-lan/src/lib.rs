@@ -9,4 +9,4 @@ pub mod mdns;
 #[allow(unsafe_code)]
 mod sys;
 
-pub(crate) use ricardo_linux::io_error_text as errstr;
+pub(crate) use home_linux::io_error_text as errstr;

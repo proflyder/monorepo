@@ -5,7 +5,7 @@ use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use ricardo_actor::Handle;
+use home_actor::Handle;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio_util::sync::CancellationToken;
 
@@ -142,7 +142,7 @@ fn spawn_source<S: ReleaseSource + 'static>(
     arch: &'static str,
 ) -> (UpdaterHandle, UnboundedReceiver<UpdateEvent>) {
     let installer = Installer::new(arch);
-    let (commands, commands_rx) = ricardo_actor::channel();
+    let (commands, commands_rx) = home_actor::channel();
     let (events, events_rx) = unbounded_channel();
     let busy = Rc::new(Cell::new(false));
     pulsar_core::supervisor().spawn_local(

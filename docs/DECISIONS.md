@@ -419,12 +419,12 @@
     корневого Cargo workspace (решение 40), своих `Cargo.lock` и
     `rust-toolchain.toml` у решения больше нет. Переносимый слой использует
     стандартный стек: `serde`/`serde_json` (`deny_unknown_fields`),
-    `base64`, `thiserror`, `http::Uri` для URL и `ricardo-secret` для
-    zeroizing-секрета (unix-часть `ricardo-secret` под `cfg(unix)`, поэтому
+    `base64`, `thiserror`, `http::Uri` для URL и `home-secret` для
+    zeroizing-секрета (unix-часть `home-secret` под `cfg(unix)`, поэтому
     крейт собирается под `x86_64-pc-windows-gnu`). Журнал идёт через
     `tracing`, но с собственным слоем и Win32-писателем: формат строки,
     ротация 256 KiB и запись без stderr — контракт LogonUI, а не
-    универсальный формат `ricardo-telemetry`.
+    универсальный формат `home-telemetry`.
 
 40. **Единый Rust workspace и общий core-слой.** Весь first-party Rust
     (Pulsar, BLE gateway, Windows logon provider, станционные helper'ы)
@@ -436,9 +436,9 @@
     `extract_cargo_lints` линтуют один набор).
     Код с двумя и более потребителями выносится в `packages/rust/`; пакет
     не импортирует `projects/**` и не содержит проектных endpoint'ов или
-    путей БД. Общие примитивы станции и серверов — `ricardo-runtime`
+    путей БД. Общие примитивы станции и серверов — `home-runtime`
     (`Supervisor`: `spawn` для `Send`, `spawn_local` для `!Send`),
-    `ricardo-actor` (`Handle`/`channel`) и `ricardo-linux` (errno, sysfs
+    `home-actor` (`Handle`/`channel`) и `home-linux` (errno, sysfs
     поверх `rustix`); они не привязаны к `!Send` и не диктуют рантайм.
     Стандартный стек крейтов вместо самописных реализаций:
     `tokio` (runtime/io/time), `tracing`, `thiserror`/`anyhow`, `clap`,
@@ -452,6 +452,9 @@
     `unsafe` по правилам Pulsar. Pulsar остаётся частью workspace;
     upstream-патчи адаптируются вручную: манифесты upstream мапятся на
     корневой workspace, версии переносятся в `[workspace.dependencies]`.
+    Имя голосового ассистента не используется в идентификаторах кода
+    (крейты, пакеты, модули): ассистента могут переименовать; общие крейты —
+    `home-*`.
 
 41. **Сервисы домашней платформы — Rust поверх общего core-слоя.**
     Долгоживущие first-party сервисы (scheduler, исполнители HA, voice-proxy,
@@ -465,11 +468,11 @@
       `store`, `api`, `bin`. Wire-схема (prost) не служит доменной моделью
       и схемой хранения: преобразования живут в `api`/`store`.
     * Общие крейты по мере появления двух потребителей:
-      `ricardo-config` (env + `*_FILE` + границы значений),
-      `ricardo-sqlite` (single-writer, миграции), `ricardo-queue` (durable
+      `home-config` (env + `*_FILE` + границы значений),
+      `home-sqlite` (single-writer, миграции), `home-queue` (durable
       outbox: dedupe → детерминированный id, lease/ack/attempts,
-      идемпотентность), `ricardo-worker` (цикл lease → handle → ack с
-      backoff), `ricardo-proto`, `ricardo-clients` (HA, Telegram,
+      идемпотентность), `home-worker` (цикл lease → handle → ack с
+      backoff), `home-proto`, `home-clients` (HA, Telegram,
       Prometheus, Loki, Alertmanager; ошибка Transient/Permanent), а также
       `voice-contract` и `wakegrant-protocol` (общий с logon-provider).
     * Стек решения 40 плюс `rusqlite`, `rmcp`, `kube`, `russh`, `jiff`.

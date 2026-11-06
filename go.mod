@@ -1,4 +1,4 @@
-module ricardo.local/monorepo
+module github.com/proflyder/monorepo
 
 go 1.26.2
 

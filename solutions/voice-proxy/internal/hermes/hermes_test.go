@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/hermes"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/hermes"
 )
 
 // TestHTTPErrorsNormalizeLegacyStringOrHTMLAndKeepValidError mirrors

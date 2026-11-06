@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "importer",
     srcs = ["importer.go"],
-    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/importer",
+    importpath = "github.com/proflyder/monorepo/solutions/currency-bot/internal/importer",
     deps = [
         "//solutions/currency-bot/internal/model",
         "//solutions/currency-bot/internal/store",

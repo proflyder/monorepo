@@ -23,8 +23,8 @@ import (
 	"sort"
 	"strings"
 
-	"ricardo.local/monorepo/platform/deploy/internal/buildid"
-	"ricardo.local/monorepo/platform/deploy/internal/envfile"
+	"github.com/proflyder/monorepo/platform/deploy/internal/buildid"
+	"github.com/proflyder/monorepo/platform/deploy/internal/envfile"
 )
 
 // RolloutKey is the placeholder that the `render --rollout-key` flag fills with

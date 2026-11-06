@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"testing"
 
-	"ricardo.local/monorepo/packages/go/scheduler"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
+	"github.com/proflyder/monorepo/packages/go/scheduler"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 // goldenPayload is the on-wire voice.announce payload. Its keys, order and value

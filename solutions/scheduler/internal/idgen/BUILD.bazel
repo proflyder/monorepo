@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "idgen",
     srcs = ["idgen.go"],
-    importpath = "ricardo.local/monorepo/solutions/scheduler/internal/idgen",
+    importpath = "github.com/proflyder/monorepo/solutions/scheduler/internal/idgen",
 )
 
 go_test(

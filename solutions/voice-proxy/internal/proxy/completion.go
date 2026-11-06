@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/hermes"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sse"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/hermes"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sse"
 )
 
 // send relays a buffered response. The status/body pair goes through the same

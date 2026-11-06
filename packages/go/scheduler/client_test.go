@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/httpapi"
+	"github.com/proflyder/monorepo/packages/go/httpapi"
 )
 
 const testToken = "scheduler-secret-token"

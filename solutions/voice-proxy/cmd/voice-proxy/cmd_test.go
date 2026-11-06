@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/config"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/config"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 // TestStatusHasNoToken pins the distroless diagnostic contract: -status carries

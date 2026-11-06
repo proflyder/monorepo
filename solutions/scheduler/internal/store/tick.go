@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
-	"ricardo.local/monorepo/solutions/scheduler/internal/planner"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/planner"
 )
 
 const (

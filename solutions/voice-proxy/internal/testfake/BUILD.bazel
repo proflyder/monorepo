@@ -6,5 +6,5 @@ go_library(
     name = "testfake",
     testonly = True,
     srcs = ["testfake.go"],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/testfake",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake",
 )

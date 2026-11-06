@@ -10,7 +10,7 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use ricardo_linux as sysfs;
+use home_linux as sysfs;
 use tracing::{error, info};
 
 use crate::{RadioLines, os_error_text, sys};

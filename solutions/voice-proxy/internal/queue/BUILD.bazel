@@ -8,7 +8,7 @@ go_library(
         "consumer.go",
         "producer.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/queue",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/queue",
     deps = [
         "//packages/go/scheduler",
         "//solutions/voice-proxy/internal/profile",
