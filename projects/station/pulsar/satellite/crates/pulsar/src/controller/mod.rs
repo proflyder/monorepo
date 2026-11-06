@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use pulsar_audio::{FrontendEvent, Outcome};
 use pulsar_core::model::Model;
 use pulsar_core::{ClockShot, Timers, UiState, now_ms};
-use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, WakeWordInfo};
+use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, Capabilities, WakeWordInfo};
 use pulsar_hw::{InputEvent, InputHandle, LedsHandle, Rgb};
 use pulsar_lan::arbiter::{self, ArbiterEvent, ArbiterHandle};
 use pulsar_lan::mdns::{self, MdnsHandle, MdnsService};
@@ -374,8 +374,32 @@ impl Controller {
                 None
             }
         };
+        let voice_colors: Vec<String> = pulsar_hw::VoiceColor::ALL
+            .iter()
+            .map(|c| c.label().to_owned())
+            .collect();
+        let zigbee_modes: Vec<String> = if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
+            Vec::new()
+        } else {
+            pulsar_zigbee::ROLES
+                .iter()
+                .map(|r| r.label.to_owned())
+                .collect()
+        };
+        let capabilities = Capabilities {
+            clock: model.has_clock || pulsar_clock::panel_present(model),
+            lux: model.has_lux || lux_rx.is_some(),
+            auto_brightness: lux_rx.is_some(),
+            wake_preroll: !model.wake_preroll.is_empty(),
+            hw_mic_mute: !model.mute_input.is_empty() || model.mute_gpio != 0,
+            buttons: model.has_button_events(),
+            case_colors: case_colors.len() > 1,
+            voice_colors: !voice_colors.is_empty(),
+            zigbee: !zigbee_modes.is_empty(),
+        };
         let cfg = ApiConfig {
             port: ports.api,
+            capabilities,
             wake_words: vec![
                 WakeWordInfo {
                     id: "alisa".into(),
@@ -399,25 +423,9 @@ impl Controller {
             music_styles: strings(pulsar_hw::music_styles()),
             case_colors: with_none(case_colors.clone()),
             clock_music_styles: strings(pulsar_clock::music_styles()),
-            voice_colors: pulsar_hw::VoiceColor::ALL
-                .iter()
-                .map(|c| c.label().to_owned())
-                .collect(),
-            zigbee_modes: if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
-                Vec::new()
-            } else {
-                pulsar_zigbee::ROLES
-                    .iter()
-                    .map(|r| r.label.to_owned())
-                    .collect()
-            },
-            has_clock: model.has_clock || pulsar_clock::panel_present(model),
-            has_lux: model.has_lux || lux_rx.is_some(),
-            has_wake_preroll: !model.wake_preroll.is_empty(),
-            has_hw_mic_mute: !model.mute_input.is_empty() || model.mute_gpio != 0,
-            has_buttons: model.has_button_events(),
+            voice_colors,
+            zigbee_modes,
             key_path: Some(logic::in_dir(&dir, "api_key")),
-            has_auto_brightness: lux_rx.is_some(),
         };
         // The C++ server bound its port last (ApiServer::start); here the bind comes first, so
         // a failure exits before the hardware starts. Nothing reaches the server before `run`.

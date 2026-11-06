@@ -1,0 +1,35 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPS = [
+    "@crates//:base64",
+    "@crates//:prost",
+    "@crates//:snow",
+    "@crates//:zeroize",
+]
+
+rust_library(
+    name = "esphome_proto",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = glob(["tests/golden/**"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "esphome_proto_unit_tests",
+    crate = ":esphome_proto",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

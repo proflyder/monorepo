@@ -1,34 +1,57 @@
-//! Framing of the native API. The first byte a client sends chooses it: 0x00 plaintext
-//! (`[0x00][len varint][type varint][message]`), 0x01 Noise.
+//! Фрейминг Native API. Первый байт клиента выбирает режим: 0x00 — plaintext
+//! (`[0x00][varint len][varint type][message]`), 0x01 — Noise.
 //!
-//! ESPHome's Noise transport: frames are `[0x01][len BE16][payload]`. The first client frame is
-//! a "client hello" (contents reserved, bound into the handshake through the prologue), the
-//! server answers with a server hello, then one NNpsk0 round trip whose frames start with a
-//! status byte (0 = ok, 1 = reject + reason text). Data frames carry an encrypted
+//! Noise-транспорт ESPHome: кадры `[0x01][len BE16][payload]`. Первый кадр клиента —
+//! «client hello» (содержимое зарезервировано, привязывается к handshake через prologue),
+//! сервер отвечает server hello, затем один обмен NNpsk0, кадры которого начинаются со
+//! status-байта (0 = ok, 1 = отказ + текст причины). Data-кадры несут зашифрованный
 //! `[type BE16][len BE16][message]`.
 
 use std::ops::Range;
 
+use prost::encoding::{decode_varint, encode_varint};
 use snow::{HandshakeState, TransportState};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::key::Psk;
-use crate::proto::{get_varint, put_varint};
-
-/// Larger plaintext frames are absurd: the client is dropped.
+/// Слишком большие plaintext-кадры бессмысленны: клиент отбрасывается.
 pub const MAX_FRAME: usize = 1 << 20;
 pub const NOISE_PROTOCOL: &str = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
 const NOISE_MAC: usize = 16;
 const NOISE_MAX_FRAME: usize = 0xffff;
-/// Hello and handshake frames are short (NNpsk0: 48-byte messages); a longer one is refused.
+/// Hello и handshake-кадры короткие (NNpsk0: сообщения по 48 байт); более длинный отвергается.
 const HANDSHAKE_MAX: usize = 128;
 const DH_LEN: usize = 32;
-/// "varint len + varint type" can take 20 bytes after the indicator; a header that does not
-/// parse within them never will.
+/// «varint len + varint type» занимает до 20 байт после индикатора; заголовок, не разобранный
+/// за них, не разберётся уже никогда.
 const PLAIN_HEADER_MAX: usize = 21;
+
+/// Предварительный ключ Noise: 32 байта из `api_key`, обнуляются при drop.
+#[derive(Clone, Default, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+pub struct Psk([u8; 32]);
+
+impl Psk {
+    pub fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.0.iter().all(|&b| b == 0)
+    }
+}
+
+impl std::fmt::Debug for Psk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Psk(***)")
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Plain<'a> {
-    /// Wait for more bytes.
+    /// Ждать ещё байт.
     Incomplete,
     BadPreamble,
     MalformedHeader,
@@ -40,13 +63,13 @@ pub enum Plain<'a> {
     },
 }
 
-/// Parses one plaintext frame at the start of `p` (non-empty).
+/// Разбирает один plaintext-кадр в начале `p` (непустой).
 pub fn parse_plain(p: &[u8]) -> Plain<'_> {
     if p[0] != 0x00 {
         return Plain::BadPreamble;
     }
     let mut q = 1;
-    let (Some(len), Some(msg_type)) = (get_varint(p, &mut q), get_varint(p, &mut q)) else {
+    let (Some(len), Some(msg_type)) = (varint(p, &mut q), varint(p, &mut q)) else {
         return if p.len() > PLAIN_HEADER_MAX {
             Plain::MalformedHeader
         } else {
@@ -68,9 +91,22 @@ pub fn parse_plain(p: &[u8]) -> Plain<'_> {
 
 pub fn append_plain(out: &mut Vec<u8>, msg_type: u32, msg: &[u8]) {
     out.push(0x00);
-    put_varint(out, msg.len() as u64);
-    put_varint(out, u64::from(msg_type));
+    encode_varint(msg.len() as u64, out);
+    encode_varint(u64::from(msg_type), out);
     out.extend_from_slice(msg);
+}
+
+/// Декодирует один varint в `p[*pos..]`, сдвигая `pos`. `None`, если обрезан или длиннее 10
+/// байт (у декодера prost те же ограничения).
+fn varint(p: &[u8], pos: &mut usize) -> Option<u64> {
+    if *pos >= p.len() {
+        return None;
+    }
+    let mut slice = &p[*pos..];
+    let before = slice.len();
+    let v = decode_varint(&mut slice).ok()?;
+    *pos += before - slice.len();
+    Some(v)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -81,7 +117,7 @@ pub enum NoiseFrame<'a> {
     Frame { body: &'a [u8], used: usize },
 }
 
-/// Parses one Noise frame at the start of `p` (non-empty).
+/// Разбирает один Noise-кадр в начале `p` (непустой).
 pub fn parse_noise(p: &[u8], in_handshake: bool) -> NoiseFrame<'_> {
     if p[0] != 0x01 {
         return NoiseFrame::BadIndicator;
@@ -102,7 +138,7 @@ pub fn parse_noise(p: &[u8], in_handshake: bool) -> NoiseFrame<'_> {
     }
 }
 
-/// A frame outside the cipher: hellos, handshake messages, rejections.
+/// Кадр вне шифра: hello, сообщения handshake, отказы.
 pub fn append_noise_raw(out: &mut Vec<u8>, payload: &[&[u8]]) {
     let len: usize = payload.iter().map(|p| p.len()).sum();
     out.push(0x01);
@@ -114,9 +150,9 @@ pub fn append_noise_raw(out: &mut Vec<u8>, payload: &[&[u8]]) {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HandshakeError {
-    /// Reject with this text.
+    /// Отказать с этим текстом.
     Reject(&'static str),
-    /// The client's handshake message did not verify: a wrong key (`mac`) or a protocol error.
+    /// Handshake-сообщение клиента не проверилось: неверный ключ (`mac`) или ошибка протокола.
     ReadFailed {
         mac: bool,
     },
@@ -125,13 +161,13 @@ pub enum HandshakeError {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum EncryptError {
-    /// The handshake has not finished: the message is dropped.
+    /// Handshake не завершён: сообщение отбрасывается.
     NotReady,
     TooLarge,
     Failed,
 }
 
-/// The responder side of one connection.
+/// Сторона-респондер одного соединения.
 pub enum Noise {
     ClientHello,
     Handshake(Box<HandshakeState>),
@@ -143,9 +179,13 @@ impl Noise {
         !matches!(self, Self::Data(_))
     }
 
-    /// Client hello: queues the server hello (chosen protocol 0x01, node name and MAC, which
-    /// aioesphomeapi checks against what HA expects before the handshake) and prepares the
-    /// NNpsk0 responder with the prologue "NoiseAPIInit" + BE16 length + the client hello.
+    pub fn is_client_hello(&self) -> bool {
+        matches!(self, Self::ClientHello)
+    }
+
+    /// Client hello: ставит в очередь server hello (выбранный протокол 0x01, имя узла и MAC,
+    /// которые aioesphomeapi сверяет с ожиданиями HA до handshake) и готовит NNpsk0-респондер
+    /// с prologue «NoiseAPIInit» + BE16-длина + client hello.
     pub fn start(
         &mut self,
         client_hello: &[u8],
@@ -163,15 +203,15 @@ impl Noise {
         prologue.extend_from_slice(&(client_hello.len() as u16).to_be_bytes());
         prologue.extend_from_slice(client_hello);
         let hs = snow::Builder::new(NOISE_PROTOCOL.parse()?)
-            .psk(0, psk)?
+            .psk(0, psk.as_bytes())?
             .prologue(&prologue)?
             .build_responder()?;
         *self = Self::Handshake(Box::new(hs));
         Ok(())
     }
 
-    /// The initiator's `psk, e` message (after its 0x00 status byte); queues our `e, ee` and
-    /// switches to transport mode.
+    /// Сообщение инициатора `psk, e` (после его status-байта 0x00); ставит в очередь наш `e, ee`
+    /// и переходит в transport-режим.
     pub fn handshake(&mut self, body: &[u8], out: &mut Vec<u8>) -> Result<(), HandshakeError> {
         let Self::Handshake(hs) = self else {
             return Err(HandshakeError::Reject("Handshake error"));
@@ -185,9 +225,9 @@ impl Noise {
         if status != 0x00 {
             return Err(HandshakeError::Reject("Bad handshake error byte"));
         }
-        // noise-c (the C++ server) refused a truncated message and a null ephemeral key before
-        // any MAC check: those are protocol errors, not a wrong key. snow would report the
-        // first as a decryption failure and accept the second.
+        // noise-c (C++-сервер) отвергал обрезанное сообщение и нулевой эфемерный ключ до
+        // проверки MAC: это ошибки протокола, а не неверный ключ. snow первое назвал бы
+        // ошибкой расшифровки, а второе принял бы.
         if msg.len() < DH_LEN + NOISE_MAC || msg[..DH_LEN].iter().all(|&b| b == 0) {
             return Err(HandshakeError::ReadFailed { mac: false });
         }
@@ -216,8 +256,8 @@ impl Noise {
         Ok(())
     }
 
-    /// Decrypts a data frame into `buf`; returns the message type and the message's range in
-    /// `buf`, or the reason to drop the client.
+    /// Расшифровывает data-кадр в `buf`; возвращает тип сообщения и диапазон сообщения в `buf`
+    /// либо причину отбросить клиента.
     pub fn decrypt(
         &mut self,
         body: &[u8],
@@ -243,7 +283,7 @@ impl Noise {
         Ok((msg_type, 4..4 + len))
     }
 
-    /// Appends one encrypted data frame; `scratch` holds the plaintext meanwhile.
+    /// Дописывает один зашифрованный data-кадр; `scratch` временно хранит открытый текст.
     pub fn append_encrypted(
         &mut self,
         out: &mut Vec<u8>,
@@ -283,19 +323,19 @@ pub mod tests {
     pub const NAME: &str = "yandex-midi-test";
     pub const MAC: &str = "aabbccddeeff";
 
-    /// The client side of ESPHome's Noise transport (aioesphomeapi's role), on snow.
+    /// Клиентская сторона Noise-транспорта ESPHome (роль aioesphomeapi) на snow.
     pub struct Initiator {
         pub hs: Option<HandshakeState>,
         pub ts: Option<TransportState>,
     }
 
     impl Initiator {
-        /// Client hello (empty) + the first handshake message, as aioesphomeapi sends them.
+        /// Client hello (пустой) + первое handshake-сообщение, как их шлёт aioesphomeapi.
         pub fn new(psk: &Psk) -> (Self, Vec<u8>) {
             let mut prologue = b"NoiseAPIInit".to_vec();
             prologue.extend_from_slice(&[0, 0]);
             let mut hs = snow::Builder::new(NOISE_PROTOCOL.parse().unwrap())
-                .psk(0, psk)
+                .psk(0, psk.as_bytes())
                 .unwrap()
                 .prologue(&prologue)
                 .unwrap()
@@ -316,7 +356,7 @@ pub mod tests {
             )
         }
 
-        /// Reads the server's handshake message (status byte first).
+        /// Читает handshake-сообщение сервера (сначала status-байт).
         pub fn finish(&mut self, body: &[u8]) -> Result<(), String> {
             if body.first() != Some(&0x00) {
                 return Err(String::from_utf8_lossy(&body[1..]).into_owned());
@@ -360,7 +400,7 @@ pub mod tests {
         }
     }
 
-    /// Splits a byte stream of Noise frames.
+    /// Разбивает поток байт на Noise-кадры.
     pub fn noise_bodies(mut p: &[u8]) -> Vec<Vec<u8>> {
         let mut v = Vec::new();
         while !p.is_empty() {
@@ -411,7 +451,7 @@ pub mod tests {
             panic!();
         };
         assert_eq!((msg.len(), used), (200, second.len()));
-        // Every truncation of a valid frame waits for more bytes.
+        // Любое усечение валидного кадра ждёт ещё байт.
         for n in 1..second.len() {
             assert_eq!(parse_plain(&second[..n]), Plain::Incomplete, "{n}");
         }
@@ -421,26 +461,26 @@ pub mod tests {
 
     #[test]
     fn plain_header_limits() {
-        // 1 MiB is accepted (waiting for the body), one byte more is not.
+        // 1 MiB принимается (ждём тело), на байт больше — нет.
         let mut p = vec![0u8];
-        put_varint(&mut p, MAX_FRAME as u64);
-        put_varint(&mut p, 9);
+        encode_varint(MAX_FRAME as u64, &mut p);
+        encode_varint(9, &mut p);
         assert_eq!(parse_plain(&p), Plain::Incomplete);
         let mut p = vec![0u8];
-        put_varint(&mut p, MAX_FRAME as u64 + 1);
-        put_varint(&mut p, 9);
+        encode_varint(MAX_FRAME as u64 + 1, &mut p);
+        encode_varint(9, &mut p);
         assert_eq!(parse_plain(&p), Plain::TooLarge);
         let mut p = vec![0u8];
-        put_varint(&mut p, u64::MAX);
-        put_varint(&mut p, 9);
+        encode_varint(u64::MAX, &mut p);
+        encode_varint(9, &mut p);
         assert_eq!(parse_plain(&p), Plain::TooLarge);
-        // A header that never terminates: incomplete up to 21 bytes, malformed after.
+        // Заголовок, который не заканчивается: неполный до 21 байта, дальше — malformed.
         let mut p = vec![0u8];
         p.extend_from_slice(&[0x80; 20]);
         assert_eq!(parse_plain(&p), Plain::Incomplete);
         p.push(0x80);
         assert_eq!(parse_plain(&p), Plain::MalformedHeader);
-        // An 11-byte varint is malformed even when it ends.
+        // 11-байтовый varint — malformed, даже если заканчивается.
         let mut p = vec![0u8, 1];
         p.extend_from_slice(&[0xff; 10]);
         p.extend_from_slice(&[0x01; 10]);
@@ -474,7 +514,7 @@ pub mod tests {
 
     #[test]
     fn noise_handshake_and_data_both_ways() {
-        let psk: Psk = std::array::from_fn(|i| i as u8 * 7);
+        let psk = Psk::new(std::array::from_fn(|i| i as u8 * 7));
         let (mut client, hello) = Initiator::new(&psk);
         let (mut noise, out, r) = server_frames(&psk, &hello);
         r.unwrap();
@@ -522,7 +562,7 @@ pub mod tests {
         assert_eq!(client.decrypt(&bodies[0]), (90, b"\x08\x01".to_vec()));
         assert_eq!(client.decrypt(&bodies[1]), (106, big));
 
-        // A tampered frame and a short one drop the client.
+        // Испорченный и короткий кадры отбрасывают клиента.
         let mut frame = client.encrypt(7, b"");
         let last = frame.len() - 1;
         frame[last] ^= 1;
@@ -534,13 +574,13 @@ pub mod tests {
 
     #[test]
     fn noise_data_length_checks() {
-        let psk = [3u8; 32];
+        let psk = Psk::new([3u8; 32]);
         let (mut client, hello) = Initiator::new(&psk);
         let (mut noise, out, r) = server_frames(&psk, &hello);
         r.unwrap();
         client.finish(&noise_bodies(&out)[1]).unwrap();
         let mut buf = Vec::new();
-        // Three plaintext bytes: no room for type and length.
+        // Три байта открытого текста: нет места для типа и длины.
         let ts = client.ts.as_mut().unwrap();
         let mut ct = [0u8; 64];
         let n = ts.write_message(b"\x00\x07\x00", &mut ct).unwrap();
@@ -548,13 +588,13 @@ pub mod tests {
             noise.decrypt(&ct[..n], &mut buf),
             Err("short noise message")
         );
-        // A length past the decrypted bytes.
+        // Длина за пределами расшифрованных байт.
         let n = ts.write_message(b"\x00\x07\x00\x02a", &mut ct).unwrap();
         assert_eq!(
             noise.decrypt(&ct[..n], &mut buf),
             Err("bad noise message length")
         );
-        // Trailing bytes after the declared length are ignored.
+        // Хвост после объявленной длины игнорируется.
         let n = ts.write_message(b"\x00\x07\x00\x01ab", &mut ct).unwrap();
         let (t, range) = noise.decrypt(&ct[..n], &mut buf).unwrap();
         assert_eq!((t, &buf[range]), (7, &b"a"[..]));
@@ -566,17 +606,17 @@ pub mod tests {
 
     #[test]
     fn wrong_psk_is_a_mac_failure() {
-        let (_, hello) = Initiator::new(&[1u8; 32]);
-        let (noise, out, r) = server_frames(&[2u8; 32], &hello);
+        let (_, hello) = Initiator::new(&Psk::new([1u8; 32]));
+        let (noise, out, r) = server_frames(&Psk::new([2u8; 32]), &hello);
         assert_eq!(r, Err(HandshakeError::ReadFailed { mac: true }));
         assert!(noise.in_handshake());
-        // Only the server hello went out.
+        // Наружу ушёл только server hello.
         assert_eq!(noise_bodies(&out).len(), 1);
     }
 
     #[test]
     fn handshake_rejections() {
-        let psk = [0u8; 32];
+        let psk = Psk::new([0u8; 32]);
         let check = |body: &[u8]| {
             let mut noise = Noise::ClientHello;
             let mut out = Vec::new();
@@ -591,7 +631,7 @@ pub mod tests {
             check(b"\x01abc"),
             Err(HandshakeError::Reject("Bad handshake error byte"))
         );
-        // Truncated messages and a null ephemeral key are protocol errors, as in noise-c.
+        // Обрезанные сообщения и нулевой эфемерный ключ — ошибки протокола, как в noise-c.
         assert_eq!(
             check(&[0u8; 1 + 31]),
             Err(HandshakeError::ReadFailed { mac: false })
@@ -602,11 +642,11 @@ pub mod tests {
         let mut msg = vec![0u8];
         msg.extend_from_slice(&[0u8; 32 + 16]);
         assert_eq!(check(&msg), Err(HandshakeError::ReadFailed { mac: false }));
-        // Garbage of the right length fails the MAC.
+        // Мусор нужной длины не проходит MAC.
         let mut msg = vec![0u8];
         msg.extend_from_slice(&[9u8; 32 + 16]);
         assert_eq!(check(&msg), Err(HandshakeError::ReadFailed { mac: true }));
-        // Before the client hello.
+        // До client hello.
         let mut out = Vec::new();
         assert_eq!(
             Noise::ClientHello.handshake(b"\x00", &mut out),
@@ -616,9 +656,9 @@ pub mod tests {
 
     #[test]
     fn prologue_binds_the_client_hello() {
-        // The initiator's prologue assumes an empty client hello; a server that saw another
-        // one derives other keys.
-        let psk = [4u8; 32];
+        // Prologue инициатора рассчитан на пустой client hello; сервер, увидевший другой,
+        // выведет другие ключи.
+        let psk = Psk::new([4u8; 32]);
         let (_, hello) = Initiator::new(&psk);
         let mut noise = Noise::ClientHello;
         let mut out = Vec::new();

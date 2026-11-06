@@ -6,10 +6,14 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
+    "//projects/station/pulsar/satellite/crates/esphome-proto:esphome_proto",
+    "//packages/rust/home-actor:home_actor",
     "//packages/rust/home-linux:home_linux",
+    "@crates//:getrandom",
     "@crates//:libc",
+    "@crates//:prost",
+    "@crates//:thiserror",
     "@crates//:tracing",
-    "@crates//:snow",
     "@crates//:socket2",
     "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
@@ -52,7 +56,7 @@ rust_test(
     edition = "2024",
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@crates//:tokio"],
+    deps = ["@crates//:snow", "@crates//:tokio"],
 )
 
 # Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.

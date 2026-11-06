@@ -1,80 +1,89 @@
-//! ESPHome native API server: exposes the speaker to Home Assistant as an assist satellite,
-//! media player and auxiliary entities (port 6053; plaintext until a Noise key is provisioned,
-//! then Noise). Several clients may connect (HA, log viewers, probes): states go to every
-//! client subscribed to them, the voice pipeline to one owner.
+//! Сервер ESPHome Native API: открывает колонку Home Assistant как assist satellite,
+//! media player и вспомогательные сущности (порт 6053; plaintext, пока не провижинен ключ
+//! Noise, затем Noise). Клиентов может быть несколько (HA, просмотрщик логов, пробы):
+//! состояния идут каждому подписчику, голосовой пайплайн — одному владельцу.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
-mod frame;
+mod error;
 mod key;
-mod proto;
 mod server;
-#[allow(unsafe_code)]
-mod sys;
+mod transport;
 mod types;
+mod voice;
 
 use std::rc::Rc;
 
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use home_actor::Handle;
+use tokio::sync::mpsc::UnboundedReceiver;
 
-use server::{Cmd, Publish, Shared};
+pub use error::SpawnError;
+pub use esphome_proto::entity::{
+    ActionId, BinarySensorId, ButtonId, Capabilities, EventId, NumberId, SelectId, SensorId,
+    SwitchId, TextId, TextSensorId,
+};
+pub use server::{ESPHOME_VERSION, PROJECT_NAME, mac_plain, txt_records};
 pub use types::*;
 
-/// Binds the API port (all IPv4 interfaces), reads the encryption key and starts the server
-/// actor on the current `LocalSet`. Err (already logged) when the port cannot be bound.
+use server::{Cmd, Publish, Shared};
+
+/// Привязывает порт API, читает ключ шифрования и запускает актор в текущем `LocalSet`.
 pub fn spawn(
     id: DeviceIdentity,
     cfg: ApiConfig,
-) -> Result<(ApiHandle, UnboundedReceiver<ApiEvent>), String> {
-    let s = server::spawn(id, cfg)?;
-    Ok((
-        ApiHandle {
-            cmds: s.cmds,
-            shared: s.shared,
-        },
-        s.events,
-    ))
+) -> Result<(ApiHandle, UnboundedReceiver<ApiEvent>), SpawnError> {
+    server::spawn(id, cfg)
 }
 
-/// Commands to the server actor; the server stops (DisconnectRequest to every client, port
-/// closed) when the last clone is dropped.
+/// Команды актору сервера; сервер останавливается (DisconnectRequest каждому клиенту, порт
+/// закрыт), когда падает последний клон.
 #[derive(Clone)]
 pub struct ApiHandle {
-    cmds: UnboundedSender<Cmd>,
+    cmds: Handle<Cmd>,
     shared: Rc<Shared>,
+    /// Один `Rc` на клон handle: его падение — сигнал актору завершиться.
+    live: Rc<()>,
+}
+
+impl Drop for ApiHandle {
+    fn drop(&mut self) {
+        if Rc::strong_count(&self.live) == 1 {
+            // Актор держит свой конец канала, поэтому закрытия канала мало: шлём остановку.
+            let _ = self.cmds.send(Cmd::Shutdown);
+        }
+    }
 }
 
 impl ApiHandle {
-    /// Some client completed hello.
+    /// Какой-то клиент завершил hello.
     ///
-    /// Unlike the C++ server, a write error or a client that stopped reading never closes a
-    /// client inside a call of this handle: the actor does the I/O, so right after
+    /// В отличие от C++-сервера, ошибка записи или клиент, переставший читать, никогда не
+    /// закрывают клиента внутри вызова этого handle: I/O делает актор, поэтому сразу после
     /// `voice_request_start` / `voice_request_stop` / `voice_send_audio` /
-    /// `voice_announce_finished` / `publish_*` / `fire_event` the getters still return the
-    /// previous state, and the outcome
-    /// arrives as events (`VoiceStartFailed`, `VoiceAudioOverflow`, `VoiceSubscribed(false)`
-    /// possibly followed by `VoiceSubscribed(true)` when another client takes the pipeline over,
-    /// `ClientDisconnected`). The actor updates the getters before it sends those events.
+    /// `voice_announce_finished` / `publish_*` / `fire_event` геттеры ещё возвращают прежнее
+    /// состояние, а исход приходит событиями (`VoiceStartFailed`, `VoiceAudioOverflow`,
+    /// `VoiceSubscribed(false)`, возможно затем `VoiceSubscribed(true)`, когда пайплайн
+    /// забирает другой клиент, `ClientDisconnected`). Актор обновляет геттеры до отправки
+    /// этих событий.
     pub fn connected(&self) -> bool {
         self.shared.connected.get()
     }
 
-    /// A client owns the voice pipeline (see `connected` for when it changes).
+    /// Клиент владеет голосовым пайплайном (см. `connected`, когда это меняется).
     pub fn voice_subscribed(&self) -> bool {
         self.shared.voice_subscribed.get()
     }
 
-    /// TXT records of `_esphomelib._tcp` for the current key state: computed by `spawn`, then
-    /// by the actor 100 ms after a client changed the key, before `MdnsTxtChanged`.
+    /// TXT-записи `_esphomelib._tcp` для текущего состояния ключа: вычислены в `spawn`, затем
+    /// актором через 100 мс после смены ключа клиентом, до `MdnsTxtChanged`.
     pub fn mdns_txt(&self) -> Vec<String> {
         self.shared.mdns_txt.borrow().clone()
     }
 
-    /// Starts a pipeline run (VoiceAssistantRequest start=true) on the voice owner; an empty
-    /// phrase means started by the button or to continue a conversation. Returns the run id
-    /// (1, 2, …) that `VoiceStartFailed` and `VoiceAudioOverflow` carry when they happen
-    /// during this run.
+    /// Запускает run пайплайна (VoiceAssistantRequest start=true) у владельца голоса; пустая
+    /// фраза — запуск кнопкой или продолжение разговора. Возвращает id run (1, 2, …), который
+    /// несут `VoiceStartFailed` и `VoiceAudioOverflow`, если случились в этом run.
     pub fn voice_request_start(&self, wake_word_phrase: &str) -> u64 {
         let run = self.shared.run_seq.get() + 1;
         self.shared.run_seq.set(run);
@@ -89,42 +98,42 @@ impl ApiHandle {
         self.send(Cmd::VoiceRequestStop);
     }
 
-    /// 16 kHz mono samples while the pipeline listens. When the link to the owner falls 256 KiB
-    /// behind, the server ends the run (start=false), sends `VoiceAudioOverflow` and drops audio
-    /// until the next `voice_request_start`.
+    /// 16 кГц моно, пока пайплайн слушает. Когда связь с владельцем отстаёт на 256 КиБ,
+    /// сервер завершает run (start=false), шлёт `VoiceAudioOverflow` и отбрасывает аудио до
+    /// следующего `voice_request_start`.
     pub fn voice_send_audio(&self, pcm: Vec<i16>) {
         self.send(Cmd::VoiceSendAudio(pcm));
     }
 
-    /// Graceful end of the microphone audio (`VoiceAssistantAudio.end = true`). Home Assistant
-    /// treats it as `handle_stop(False)` and finishes the current stage on what it already has,
-    /// unlike [`Self::voice_request_stop`], which sends `VoiceAssistantRequest.start = false`
-    /// (an abort). The detector in the controller sends at most one per dialog.
+    /// Мягкий конец микрофонного аудио (`VoiceAssistantAudio.end = true`). HA трактует его как
+    /// `handle_stop(False)` и завершает текущую стадию на том, что уже есть, в отличие от
+    /// [`Self::voice_request_stop`], который шлёт `VoiceAssistantRequest.start = false`
+    /// (abort). Детектор в контроллере шлёт не более одного за диалог.
     pub fn voice_send_audio_end(&self) {
         self.send(Cmd::VoiceAudioEnd);
     }
 
-    /// VoiceAssistantAnnounceFinished for an HA announcement.
+    /// VoiceAssistantAnnounceFinished для анонса HA.
     pub fn voice_announce_finished(&self, success: bool) {
         self.send(Cmd::VoiceAnnounceFinished(success));
     }
 
-    /// The same message for the current run's TTS answer (HA stays "responding" from TTS_START
-    /// until it arrives). Like stop and audio, dropped once the voice owner changed until the
-    /// next `voice_request_start`: it belongs to the previous owner's run.
+    /// То же сообщение для TTS-ответа текущего run (HA остаётся "responding" с TTS_START до
+    /// его прихода). Как stop и audio, отбрасывается после смены владельца до следующего
+    /// `voice_request_start`: команда относится к run прошлого владельца.
     pub fn voice_answer_finished(&self, success: bool) {
         self.send(Cmd::VoiceAnswerFinished(success));
     }
 
-    /// The wake word ids reported as active to HA from now on.
+    /// Wake word id, сообщаемые HA как активные с этого момента.
     pub fn set_active_wake_words(&self, ids: Vec<String>) {
         self.send(Cmd::SetActiveWakeWords(ids));
     }
 
-    // State publishing: the server keeps the last value of each entity (replayed to a client
-    // when it subscribes to states) and sends it to every state subscriber.
+    // Публикация состояний: сервер хранит последнее значение каждой сущности (replay при
+    // подписке на состояния) и шлёт его каждому подписчику.
 
-    /// Volume is clamped to 0..1.
+    /// Громкость обрезается до 0..1.
     pub fn publish_media(&self, st: MediaState, volume: f32, muted: bool) {
         self.publish(Publish::Media(st, volume, muted));
     }
@@ -153,7 +162,7 @@ impl ApiHandle {
         self.publish(Publish::Select(id, s.to_owned()));
     }
 
-    /// Sent only when the Zigbee entities exist (`ApiConfig::zigbee_modes` not empty).
+    /// Отправляется, только когда Zigbee-сущности есть (`ApiConfig::zigbee_modes` непуст).
     pub fn publish_text_sensor(&self, id: TextSensorId, s: &str) {
         self.publish(Publish::TextSensor(id, s.to_owned()));
     }
@@ -162,8 +171,8 @@ impl ApiHandle {
         self.publish(Publish::Light(st.clone()));
     }
 
-    /// An event of the Button entity ("action", "action_long", "volume_up", "volume_down");
-    /// dropped without a state subscriber, like the C++ server.
+    /// Событие сущности Button ("action", "action_long", "volume_up", "volume_down");
+    /// без подписчика на состояния отбрасывается, как в C++-сервере.
     pub fn fire_event(&self, id: EventId, event_type: &str) {
         self.publish(Publish::Event(id, event_type.to_owned()));
     }
@@ -177,7 +186,7 @@ impl ApiHandle {
     }
 
     fn send(&self, cmd: Cmd) {
-        // Fails only once the actor is gone (runtime shutting down).
+        // Не удалось только если актор уже завершился (runtime гасится).
         let _ = self.cmds.send(cmd);
     }
 }

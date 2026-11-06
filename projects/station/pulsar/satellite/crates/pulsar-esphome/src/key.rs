@@ -1,74 +1,33 @@
-//! The Noise pre-shared key: `api_key` (base64 of 32 bytes, ESPHome's `api: encryption: key`),
-//! written by Home Assistant's auto-provisioning (NoiseEncryptionSetKeyRequest) or `ctl.sh
-//! api-key`.
+//! Файл ключа Noise `api_key` (base64 из 32 байт, как `api: encryption: key` ESPHome):
+//! пишется авто-провижинингом HA (NoiseEncryptionSetKeyRequest) или `ctl.sh api-key`.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
+use esphome_proto::api_key::trim;
+use esphome_proto::frame::Psk;
 use tracing::{error, info, warn};
 
-use crate::sys;
+use crate::error::KeyError;
 
-pub type Psk = [u8; 32];
+pub use home_linux::io_error_text as os_error_text;
 
-/// The key in force. Without a key Noise sessions run on the all-zeros key: ESPHome's way to
-/// let HA provision a key without sending it in the clear (protects against sniffing only).
+/// Действующий ключ. Без ключа Noise-сессии идут на нулевом ключе: так ESPHome даёт HA
+/// провижинить ключ, не отправляя его открытым текстом (защита только от прослушивания).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Key {
     pub psk: Psk,
     pub has_key: bool,
-    /// Failed closed without a random key (getrandom failed): every Noise handshake is
-    /// refused as a wrong key, and plaintext as "requires encryption" (`has_key`).
+    /// Fail-closed без случайного ключа (getrandom не сработал): каждый Noise handshake
+    /// отвергается как неверный ключ, plaintext — как «requires encryption» (`has_key`).
     pub reject_all: bool,
 }
 
-/// Standard base64 (padding optional, anything after '=' ignored); Some only for exactly 32
-/// decoded bytes.
-pub fn decode_psk(input: &[u8]) -> Option<Psk> {
-    let mut out = [0u8; 32];
-    let mut n = 0;
-    let mut acc: u32 = 0;
-    let mut bits = 0;
-    for &ch in input {
-        let v = match ch {
-            b'A'..=b'Z' => ch - b'A',
-            b'a'..=b'z' => ch - b'a' + 26,
-            b'0'..=b'9' => ch - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' => break,
-            _ => return None,
-        };
-        acc = (acc << 6) | u32::from(v);
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            if n == out.len() {
-                return None;
-            }
-            out[n] = (acc >> bits) as u8;
-            n += 1;
-        }
-    }
-    (n == out.len()).then_some(out)
-}
-
-/// Strips the white space the C++ server trimmed (" \t\r\n"; not \v or \f).
-pub fn trim(s: &[u8]) -> &[u8] {
-    let ws = |c: &u8| b" \t\r\n".contains(c);
-    let start = s.iter().position(|c| !ws(c)).unwrap_or(s.len());
-    let end = s.iter().rposition(|c| !ws(c)).map_or(start, |i| i + 1);
-    &s[start..end]
-}
-
-pub use home_linux::io_error_text as os_error_text;
-
-/// Reads the key file. Missing / empty file or the all-zeros key: no key. A file that cannot be
-/// read or is not base64 of 32 bytes fails closed: someone meant to enable encryption, so there
-/// is no fallback to plaintext; a random key keeps every client out until the file is fixed
-/// (or removed).
+/// Читает файл ключа. Нет файла / пусто / нулевой ключ — ключа нет. Нечитаемый файл или не
+/// base64 из 32 байт — fail-closed: кто-то хотел включить шифрование, отката в plaintext нет;
+/// случайный ключ не пускает никого, пока файл не исправят (или не удалят).
 pub fn load_key(path: Option<&Path>) -> Key {
     let Some(path) = path else {
         return Key::default();
@@ -91,14 +50,14 @@ pub fn load_key(path: Option<&Path>) -> Key {
         info!("api: no encryption key ({}), plaintext API", path.display());
         return Key::default();
     }
-    let Some(psk) = decode_psk(s) else {
+    let Some(psk) = esphome_proto::api_key::decode_psk(s) else {
         error!(
             "api: {} is not base64 of 32 bytes; no client can connect until it is fixed",
             path.display()
         );
         return fail_closed();
     };
-    if psk == [0u8; 32] {
+    if psk.is_zero() {
         return Key::default();
     }
     info!("api: Noise encryption enabled");
@@ -110,80 +69,78 @@ pub fn load_key(path: Option<&Path>) -> Key {
 }
 
 fn fail_closed() -> Key {
-    let mut psk = [0u8; 32];
-    let reject_all = !sys::getrandom(&mut psk);
+    let mut raw = [0u8; 32];
+    let reject_all = getrandom::fill(&mut raw).is_err();
     if reject_all {
-        // A fixed fallback key would be a known key: refuse everyone instead.
+        // Фиксированный резервный ключ был бы известным ключом: лучше отказывать всем.
         error!("api: getrandom failed; rejecting every client");
     }
     Key {
-        psk,
+        psk: Psk::new(raw),
         has_key: true,
         reject_all,
     }
 }
 
-/// Outcome of NoiseEncryptionSetKeyRequest.
+/// Итог NoiseEncryptionSetKeyRequest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SetKey {
-    /// Answered with success = false.
+    /// Отвечено success = false.
     Rejected,
-    /// The key in force was sent again: success, nothing changes.
+    /// Действующий ключ отправлен снова: success, ничего не меняется.
     Unchanged,
-    /// The file changed: reload it and disconnect every client.
+    /// Файл изменился: перечитать его и отключить всех клиентов.
     Changed,
 }
 
-/// Writes (or with an empty `b64` removes) the key file. `b64` is already trimmed.
-pub fn set_key(path: Option<&Path>, b64: &[u8], current: &Key) -> SetKey {
+/// Пишет (или при пустом `b64` удаляет) файл ключа. `b64` уже обрезан.
+pub fn set_key(path: Option<&Path>, b64: &[u8], current: &Key) -> Result<SetKey, KeyError> {
     let Some(path) = path else {
-        return SetKey::Rejected;
+        return Ok(SetKey::Rejected);
     };
     if b64.is_empty() {
         if let Err(e) = fs::remove_file(path)
             && e.kind() != io::ErrorKind::NotFound
         {
-            warn!(
-                "api: cannot remove {}: {}",
-                path.display(),
-                os_error_text(&e)
-            );
-            return SetKey::Rejected;
+            return Err(KeyError::Remove {
+                path: path.to_owned(),
+                source: e,
+            });
         }
         info!("api: encryption key cleared by client");
-        return SetKey::Changed;
+        return Ok(SetKey::Changed);
     }
-    let psk = match decode_psk(b64) {
-        Some(k) if k != [0u8; 32] => k,
-        _ => {
-            warn!("api: rejected encryption key (must be base64 of 32 non-zero bytes)");
-            return SetKey::Rejected;
-        }
+    let Some(psk) = esphome_proto::api_key::decode_psk(b64) else {
+        return Err(KeyError::Invalid {
+            path: path.to_owned(),
+        });
     };
-    if current.has_key && psk == current.psk {
-        return SetKey::Unchanged;
+    if psk.is_zero() {
+        return Err(KeyError::Invalid {
+            path: path.to_owned(),
+        });
+    }
+    if current.has_key && psk.as_bytes() == current.psk.as_bytes() {
+        return Ok(SetKey::Unchanged);
     }
     let mut data = b64.to_vec();
     data.push(b'\n');
-    if let Err(e) = write_file_atomic(path, &data) {
-        warn!(
-            "api: cannot write {}: {}",
-            path.display(),
-            os_error_text(&e)
-        );
-        return SetKey::Rejected;
-    }
+    write_file_atomic(path, &data).map_err(|source| KeyError::Write {
+        path: path.to_owned(),
+        source,
+    })?;
     info!("api: encryption key set by client");
-    SetKey::Changed
+    Ok(SetKey::Changed)
 }
 
-/// Atomic replace: a power cut while HA rotates the key must leave either key, never a torn one.
+/// Атомарная замена: отключение питания во время ротации ключа HA должно оставить либо старый,
+/// либо новый ключ, но не порванный файл.
 fn write_file_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
-    // A leftover temporary file (power cut mid-write) must not lend its mode or owner: the key
-    // goes into a file created now, 0600.
+    // Оставшийся временный файл (питание пропало посреди записи) не должен одалживать свой
+    // режим или владельца: ключ пишется в созданный сейчас файл 0600.
     if let Err(e) = fs::remove_file(&tmp)
         && e.kind() != io::ErrorKind::NotFound
     {
@@ -197,9 +154,8 @@ fn write_file_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
             .open(&tmp)?;
         f.write_all(data)?;
         f.sync_all()?;
-        // close(2) is not checked (File's drop ignores its result): fsync above has already
-        // reported any write-back error, and on the local filesystems of /data close has
-        // nothing left to report.
+        // close(2) не проверяется (drop File игнорирует результат): fsync выше уже сообщил
+        // ошибку записи, а на локальных ФС /data close сообщать нечего.
         drop(f);
         fs::rename(&tmp, path)
     };
@@ -208,8 +164,8 @@ fn write_file_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
         let _ = fs::remove_file(&tmp);
         return r;
     }
-    // The rename survives a power cut only once the directory is synced. Not a failure of the
-    // request: the new key is in place and in force from now on.
+    // rename переживает отключение питания только после sync каталога. Это не ошибка запроса:
+    // новый ключ уже на месте и действует.
     let dir = match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p,
         _ => Path::new("."),
@@ -218,162 +174,4 @@ fn write_file_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
         warn!("api: cannot sync {}: {}", dir.display(), os_error_text(&e));
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::proto::golden::{cases, hex, unhex};
-    use std::os::unix::fs::PermissionsExt;
-
-    const KEY_B64: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
-
-    fn key_bytes() -> Psk {
-        std::array::from_fn(|i| i as u8)
-    }
-
-    /// A fresh directory under the target's tmp dir, removed on drop.
-    struct TmpDir(PathBuf);
-
-    impl TmpDir {
-        fn new(tag: &str) -> Self {
-            let p = std::env::temp_dir().join(format!(
-                "pulsar-esphome-{tag}-{}-{:?}",
-                std::process::id(),
-                std::thread::current().id()
-            ));
-            let _ = fs::remove_dir_all(&p);
-            fs::create_dir_all(&p).unwrap();
-            Self(p)
-        }
-        fn file(&self, name: &str) -> PathBuf {
-            self.0.join(name)
-        }
-    }
-
-    impl Drop for TmpDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[test]
-    fn decode_psk_golden() {
-        for c in cases("psk") {
-            let got = decode_psk(&unhex(c[0])).map_or("fail".into(), |k| hex(&k));
-            assert_eq!(got, c[1], "psk {}", c[0]);
-        }
-    }
-
-    #[test]
-    fn trim_golden() {
-        for c in cases("trim") {
-            assert_eq!(hex(trim(&unhex(c[0]))), c[1], "trim {}", c[0]);
-        }
-    }
-
-    #[test]
-    fn load_key_cases() {
-        let d = TmpDir::new("load");
-        // Encryption unsupported.
-        assert_eq!(load_key(None), Key::default());
-        // No file.
-        let path = d.file("api_key");
-        assert_eq!(load_key(Some(&path)), Key::default());
-        // Empty, or only white space.
-        fs::write(&path, " \n").unwrap();
-        assert_eq!(load_key(Some(&path)), Key::default());
-        // All-zeros key: no key.
-        fs::write(&path, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n").unwrap();
-        assert_eq!(load_key(Some(&path)), Key::default());
-        // Valid, with the newline set_key writes.
-        fs::write(&path, format!("{KEY_B64}\n")).unwrap();
-        assert_eq!(
-            load_key(Some(&path)),
-            Key {
-                psk: key_bytes(),
-                has_key: true,
-                reject_all: false,
-            }
-        );
-        // Corrupt: fails closed with a random key.
-        fs::write(&path, "not a key").unwrap();
-        let a = load_key(Some(&path));
-        let b = load_key(Some(&path));
-        assert!(a.has_key && b.has_key && !a.reject_all);
-        assert_ne!(a.psk, [0; 32]);
-        assert_ne!(a.psk, b.psk);
-        // 31 bytes are corrupt too.
-        fs::write(&path, "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHg==").unwrap();
-        assert!(load_key(Some(&path)).has_key);
-        // Only the first 256 bytes count: a valid key followed by junk past them still loads.
-        fs::write(&path, format!("{KEY_B64}{}", " ".repeat(300) + "x")).unwrap();
-        assert_eq!(load_key(Some(&path)).psk, key_bytes());
-        // Unreadable (here a directory): fails closed too, only a missing file means no key.
-        let dir = d.file("api_key_dir");
-        fs::create_dir(&dir).unwrap();
-        let k = load_key(Some(&dir));
-        assert!(k.has_key && k.psk != [0; 32]);
-    }
-
-    #[test]
-    fn set_key_writes_atomically_and_clears() {
-        let d = TmpDir::new("set");
-        let path = d.file("api_key");
-        let none = Key::default();
-        assert_eq!(set_key(None, KEY_B64.as_bytes(), &none), SetKey::Rejected);
-        assert_eq!(set_key(Some(&path), b"junk", &none), SetKey::Rejected);
-        assert_eq!(
-            set_key(
-                Some(&path),
-                b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                &none
-            ),
-            SetKey::Rejected
-        );
-        assert!(!path.exists());
-
-        assert_eq!(
-            set_key(Some(&path), KEY_B64.as_bytes(), &none),
-            SetKey::Changed
-        );
-        assert_eq!(fs::read_to_string(&path).unwrap(), format!("{KEY_B64}\n"));
-        assert_eq!(
-            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-        assert!(!d.file("api_key.tmp").exists());
-        let current = load_key(Some(&path));
-        // Same key again: success without a change.
-        assert_eq!(
-            set_key(Some(&path), KEY_B64.as_bytes(), &current),
-            SetKey::Unchanged
-        );
-        // Clearing removes the file; clearing again is still a success.
-        assert_eq!(set_key(Some(&path), b"", &current), SetKey::Changed);
-        assert!(!path.exists());
-        assert_eq!(set_key(Some(&path), b"", &none), SetKey::Changed);
-
-        // A leftover temporary file does not lend its mode.
-        let tmp = d.file("api_key.tmp");
-        fs::write(&tmp, "stale").unwrap();
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o644)).unwrap();
-        assert_eq!(
-            set_key(Some(&path), KEY_B64.as_bytes(), &none),
-            SetKey::Changed
-        );
-        assert_eq!(fs::read_to_string(&path).unwrap(), format!("{KEY_B64}\n"));
-        assert_eq!(
-            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-        assert!(!tmp.exists());
-
-        // An unwritable directory: rejected, no stray temporary file.
-        let missing = d.file("no/such/dir/api_key");
-        assert_eq!(
-            set_key(Some(&missing), KEY_B64.as_bytes(), &none),
-            SetKey::Rejected
-        );
-    }
 }

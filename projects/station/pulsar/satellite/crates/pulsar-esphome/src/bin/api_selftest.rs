@@ -24,9 +24,9 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use pulsar_esphome::{
-    ApiConfig, ApiEvent, ApiHandle, BinarySensorId, ButtonId, DeviceIdentity, EventId, LightState,
-    MediaCommand, MediaState, NumberId, SelectId, SensorId, SwitchId, TextId, TextSensorId,
-    WakeWordInfo, spawn,
+    ApiConfig, ApiEvent, ApiHandle, BinarySensorId, ButtonId, Capabilities, DeviceIdentity,
+    EventId, LightState, MediaCommand, MediaState, NumberId, SelectId, SensorId, SwitchId, TextId,
+    TextSensorId, WakeWordInfo, spawn,
 };
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::{Instant, interval_at, sleep_until};
@@ -304,12 +304,17 @@ async fn run(port: u16, name: String, run_s: i64, key_path: Option<PathBuf>) -> 
         clock_music_styles: strings(&["Off", "Levels"]),
         voice_colors: strings(&["Violet", "Blue"]),
         zigbee_modes: strings(&["Coordinator", "Router"]),
-        has_clock: true,
-        has_lux: true,
-        has_wake_preroll: true,
-        has_hw_mic_mute: true,
-        has_buttons: true,
-        has_auto_brightness: true,
+        capabilities: Capabilities {
+            clock: true,
+            lux: true,
+            auto_brightness: true,
+            wake_preroll: true,
+            hw_mic_mute: true,
+            buttons: true,
+            case_colors: true,
+            voice_colors: true,
+            zigbee: true,
+        },
         key_path,
     };
     let Ok((api, mut events)) = spawn(id, cfg) else {

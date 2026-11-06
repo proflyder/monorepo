@@ -1,36 +1,38 @@
-//! Public types of the API server: the device, its configuration, the entity ids and the
-//! values exchanged with Home Assistant. Numeric values are the protocol's (api.proto /
-//! aioesphomeapi), as in the C++ `api_server.h`.
+//! Доменные типы сервера: устройство, конфигурация, события для контроллера и значения
+//! сущностей. Числовые значения — протокольные (api.proto / aioesphomeapi), как в C++
+//! `api_server.h`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use esphome_proto::entity::{Capabilities, EntityOptions};
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DeviceIdentity {
-    /// Hostname-like, e.g. "yandex-midi-nq3g" (at most 31 characters).
+    /// Похоже на hostname, например "yandex-midi-nq3g" (не длиннее 31 символа).
     pub name: String,
-    /// E.g. "Яндекс Станция Миди".
+    /// Например, "Яндекс Станция Миди".
     pub friendly_name: String,
     /// wlan0, "AA:BB:CC:DD:EE:FF".
     pub mac: String,
     /// "Yandex Station Midi".
     pub model: String,
-    /// Devicetree codename, e.g. "cucumber".
+    /// Codename из devicetree, например "cucumber".
     pub board: String,
     /// "Yandex".
     pub manufacturer: String,
     pub project_version: String,
-    /// DeviceInfo compilation_time, in the format of C++ `__DATE__ ", " __TIME__`.
+    /// DeviceInfo compilation_time в формате C++ `__DATE__ ", " __TIME__`.
     pub compilation_time: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WakeWordInfo {
-    /// E.g. "alisa".
+    /// Например, "alisa".
     pub id: String,
-    /// E.g. "Алиса".
+    /// Например, "Алиса".
     pub phrase: String,
-    /// E.g. ["ru"].
+    /// Например, ["ru"].
     pub languages: Vec<String>,
 }
 
@@ -38,42 +40,29 @@ pub struct WakeWordInfo {
 pub struct ApiConfig {
     /// 6053.
     pub port: u16,
-    /// Wake words available on the device.
+    /// Какие сущности есть у модели. Заполняется контроллером один раз.
+    pub capabilities: Capabilities,
+    /// Доступные на устройстве wake word.
     pub wake_words: Vec<WakeWordInfo>,
-    /// Initially active ids.
+    /// Активные id на старте.
     pub active_wake_words: Vec<String>,
-    /// Ring light effects, besides "None".
+    /// Эффекты кольца, кроме "None".
     pub light_effects: Vec<String>,
-    /// Select «Clock face» options, "None" first.
+    /// Опции select «Clock face», "None" первой.
     pub clock_faces: Vec<String>,
-    /// Select «Music visualization» options.
+    /// Опции select «Music visualization».
     pub music_styles: Vec<String>,
-    /// Select «Case color» options, "None" first.
+    /// Опции select «Case color», "None" первой.
     pub case_colors: Vec<String>,
-    /// Select «Clock music» options.
+    /// Опции select «Clock music».
     pub clock_music_styles: Vec<String>,
-    /// Select «Voice color» options (Violet / Blue); empty: no entity.
+    /// Опции select «Voice color» (Violet / Blue); пусто — сущности нет.
     pub voice_colors: Vec<String>,
-    /// Select «Zigbee role» options; empty: no Zigbee entities (no radio).
+    /// Опции select «Zigbee role»; пусто — Zigbee-сущностей нет (нет радио).
     pub zigbee_modes: Vec<String>,
-    /// false: no Clock display / Clock brightness / Clock auto brightness / Clock text speed /
-    /// Clock text / Clock face / Clock music entities, no clock_show_text / clock_show_face
-    /// actions, none of their states sent.
-    pub has_clock: bool,
-    /// false: no Illuminance sensor or lux states.
-    pub has_lux: bool,
-    /// false: no Clock auto brightness switch or its states (listed only with `has_clock` as
-    /// well).
-    pub has_auto_brightness: bool,
-    /// The model has wake-word pre-roll rules: the switch "Command right after wake word".
-    pub has_wake_preroll: bool,
-    /// The model has a readable hardware microphone mute switch/key.
-    pub has_hw_mic_mute: bool,
-    /// The model has the action button and volume keys (the Event «Button» entity).
-    pub has_buttons: bool,
-    /// File holding the Noise encryption key (base64 of 32 bytes, as ESPHome's `api: encryption:
-    /// key`). Missing or empty file: plaintext (and provisioning with the all-zeros key). HA may
-    /// set or rotate it with NoiseEncryptionSetKeyRequest. None: encryption unsupported.
+    /// Файл ключа шифрования Noise (base64 из 32 байт, как ESPHome `api: encryption: key`).
+    /// Нет файла или он пуст — plaintext (и провижининг нулевым ключом). `None` — шифрование
+    /// не поддерживается.
     pub key_path: Option<PathBuf>,
 }
 
@@ -81,6 +70,7 @@ impl Default for ApiConfig {
     fn default() -> Self {
         Self {
             port: 6053,
+            capabilities: Capabilities::default(),
             wake_words: Vec::new(),
             active_wake_words: Vec::new(),
             light_effects: Vec::new(),
@@ -90,18 +80,27 @@ impl Default for ApiConfig {
             clock_music_styles: Vec::new(),
             voice_colors: Vec::new(),
             zigbee_modes: Vec::new(),
-            has_clock: true,
-            has_lux: true,
-            has_wake_preroll: true,
-            has_hw_mic_mute: true,
-            has_buttons: true,
-            has_auto_brightness: true,
             key_path: None,
         }
     }
 }
 
-/// aioesphomeapi VoiceAssistantEventType; `code()` is the value on the wire.
+impl ApiConfig {
+    /// Только списки опций, которые нужны для ListEntities.
+    pub fn entity_options(&self) -> EntityOptions<'_> {
+        EntityOptions {
+            light_effects: &self.light_effects,
+            clock_faces: &self.clock_faces,
+            music_styles: &self.music_styles,
+            case_colors: &self.case_colors,
+            clock_music_styles: &self.clock_music_styles,
+            voice_colors: &self.voice_colors,
+            zigbee_modes: &self.zigbee_modes,
+        }
+    }
+}
+
+/// aioesphomeapi VoiceAssistantEventType; `code()` — значение на проводе.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum VaEvent {
     Error,
@@ -120,8 +119,8 @@ pub enum VaEvent {
     TtsStreamStart,
     TtsStreamEnd,
     IntentProgress,
-    /// A type newer than this build. Still a pipeline event: the C++ controller re-armed its
-    /// LISTENING / PROCESSING watchdog on any event, whatever the type.
+    /// Тип новее этой сборки. Всё равно событие пайплайна: C++-контроллер перезапускал
+    /// watchdog LISTENING / PROCESSING на любом событии.
     Unknown(u32),
 }
 
@@ -224,7 +223,7 @@ pub enum MediaCommand {
     TurnOff = 13,
 }
 
-/// MediaPlayerCommandRequest: each field only when HA set it.
+/// MediaPlayerCommandRequest: каждое поле только если HA его задала.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MediaCommandRequest {
     pub command: Option<MediaCommand>,
@@ -238,11 +237,11 @@ pub struct LightState {
     pub on: bool,
     /// 0..1.
     pub brightness: f32,
-    /// 0..1 each.
+    /// 0..1 каждое.
     pub r: f32,
     pub g: f32,
     pub b: f32,
-    /// "" or "None" means no effect.
+    /// "" или "None" — без эффекта.
     pub effect: String,
 }
 
@@ -259,105 +258,6 @@ impl Default for LightState {
     }
 }
 
-// Auxiliary entities. Their keys are stable and owned by the server.
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SwitchId {
-    Microphones = 1,
-    Clock = 2,
-    AutoUpdate = 3,
-    NearestAnswers = 4,
-    VoiceIndication = 5,
-    WakePreroll = 6,
-    ClockAutoBrightness = 7,
-    WakeEventRecording = 8,
-    WakeDryRun = 9,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SensorId {
-    Illuminance = 1,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BinarySensorId {
-    HwMicMute = 1,
-}
-
-/// Верхняя граница «Follow-up duration», с: с запасом меньше 15 с, после которых HA сам
-/// заканчивает ожидание речи.
-// см. docs/voice.md, «Голосовой ассистент HA (ESPHome)»
-pub const FOLLOWUP_DURATION_MAX_S: u32 = 10;
-
-/// «Follow-up duration» из команды HA или `state.conf` — целые секунды 0..=MAX; `None` для NaN и
-/// бесконечности (значение не меняется).
-pub fn followup_duration_s(v: f32) -> Option<u32> {
-    v.is_finite()
-        .then(|| v.round().clamp(0.0, FOLLOWUP_DURATION_MAX_S as f32) as u32)
-}
-
-/// Яркость часов 0..100 %, прокрутка часов 100..2000 мс, скорость LED 0.25..4 ×, follow-up 0..10 с.
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum NumberId {
-    ClockBrightness = 1,
-    ClockScroll = 2,
-    LedSpeed = 3,
-    FollowupDuration = 4,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TextId {
-    ClockText = 1,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SelectId {
-    ClockFace = 1,
-    ZigbeeMode = 2,
-    MusicViz = 3,
-    CaseColor = 4,
-    ClockMusic = 5,
-    VoiceColor = 6,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ButtonId {
-    ZigbeeJoin = 1,
-    ZigbeeLeave = 2,
-    /// «Wake: ложное срабатывание».
-    WakeFalseAlarm = 3,
-    /// «Wake: не услышала».
-    WakeMissed = 4,
-}
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TextSensorId {
-    Zigbee = 1,
-}
-
-/// User-defined actions; arguments (text | face, seconds).
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ActionId {
-    ClockShowText = 1,
-    ClockShowFace = 2,
-}
-
-/// Event types: "action", "action_long", "volume_up", "volume_down".
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum EventId {
-    Button = 1,
-}
-
 /// "Firmware" update entity command (api.proto UpdateCommand).
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -367,7 +267,7 @@ pub enum UpdateCommand {
     Check = 2,
 }
 
-/// UpdateStateResponse of the "Firmware" entity.
+/// UpdateStateResponse сущности "Firmware".
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct UpdateState {
     pub in_progress: bool,
@@ -375,24 +275,36 @@ pub struct UpdateState {
     /// 0..100.
     pub progress: f32,
     pub current_version: String,
-    /// Equals `current_version` when there is nothing newer (or nothing checked yet).
+    /// Равна `current_version`, когда новее ничего нет (или ещё не проверяли).
     pub latest_version: String,
     pub title: String,
     pub release_url: String,
 }
 
-/// What Home Assistant (or another API client) asked for or reported; the C++ `ApiHooks`.
+/// Верхняя граница «Follow-up duration», с: с запасом меньше 15 с, после которых HA сам
+/// заканчивает ожидание речи.
+// см. docs/voice.md, «Голосовой ассистент HA (ESPHome)»
+pub const FOLLOWUP_DURATION_MAX_S: u32 = esphome_proto::entity::FOLLOWUP_DURATION_MAX_S;
+
+/// «Follow-up duration» из команды HA или `state.conf` — целые секунды 0..=MAX; `None` для NaN и
+/// бесконечности (значение не меняется).
+pub fn followup_duration_s(v: f32) -> Option<u32> {
+    v.is_finite()
+        .then(|| v.round().clamp(0.0, FOLLOWUP_DURATION_MAX_S as f32) as u32)
+}
+
+/// Что Home Assistant (или другой клиент API) попросила или сообщила; C++ `ApiHooks`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ApiEvent {
-    /// A client completed hello (sent for each client).
+    /// Клиент завершил hello (событие на каждого клиента).
     ClientConnected {
         client_info: String,
     },
-    /// The last client past hello disconnected.
+    /// Последний клиент после hello отключился.
     ClientDisconnected,
-    /// The voice pipeline owner appeared / went away. The owner is the most recent client still
-    /// subscribed to the voice assistant; when ownership moves between clients (a newer
-    /// subscriber, or the owner leaving while an older subscriber remains), false precedes true.
+    /// Владелец голосового пайплайна появился / исчез. Владелец — самый свежий клиент,
+    /// всё ещё подписанный на голосового ассистента; при передаче владения между клиентами
+    /// false предшествует true.
     VoiceSubscribed(bool),
     VoiceEvent {
         event: VaEvent,
@@ -400,55 +312,59 @@ pub enum ApiEvent {
     },
     Announce(AnnounceRequest),
     Timer(TimerInfo),
-    /// HA changed the active wake words (ids known, non-empty). The reported active set changes
-    /// only through `ApiHandle::set_active_wake_words`.
+    /// HA изменила активные wake word (id известны, непусты). Сообщаемый набор меняется только
+    /// через `ApiHandle::set_active_wake_words`.
     ActiveWakeWords(Vec<String>),
     MediaCommand(MediaCommandRequest),
     Switch(SwitchId, bool),
     Button(ButtonId),
-    /// `transition_ms`: the command's transition length, ESPHome's default (1 s) without one.
+    /// `transition_ms`: длина перехода команды, по умолчанию ESPHome (1 с) без неё.
     Light {
         state: LightState,
         transition_ms: u32,
     },
     Number(NumberId, f32),
-    /// At most 64 UTF-8 characters.
+    /// Не длиннее 64 символов UTF-8.
     Text(TextId, String),
-    /// One of the select's options.
+    /// Одна из опций select.
     Select(SelectId, String),
-    /// User-defined action: `value` is the text (at most 64 characters) or the face ("" or one
-    /// of `ApiConfig::clock_faces`).
+    /// Пользовательское действие: `value` — текст (не длиннее 64 символов) или лицо ("" или
+    /// одно из `ApiConfig::clock_faces`).
     Action {
         id: ActionId,
         value: String,
         seconds: i32,
     },
-    /// Action led_show: effect "" (solid colour) or one of `ApiConfig::light_effects`.
+    /// Action led_show: эффект "" (сплошной цвет) или один из `ApiConfig::light_effects`.
     LedShow {
         effect: String,
         color: String,
         seconds: i32,
     },
-    /// Time from HA (GetTimeResponse); `posix_tz` is a POSIX TZ string (e.g. "MSK-3"), may be
-    /// empty.
+    /// Время от HA (GetTimeResponse); `posix_tz` — POSIX TZ-строка (например, "MSK-3"), может
+    /// быть пустой.
     Time {
         epoch: u32,
         posix_tz: String,
     },
-    /// "Restart" button: the daemon should exit 0 (supervise.sh restarts it).
+    /// Кнопка "Restart": демон должен выйти с кодом 0 (supervise.sh перезапустит).
     Restart,
-    /// HA answered the voice run's VoiceAssistantRequest(start) with an error: no pipeline
-    /// runs.
+    /// HA ответила ошибкой на VoiceAssistantRequest(start): пайплайн не запущен.
     VoiceStartFailed {
         run: u64,
     },
-    /// The link to HA fell too far behind to carry mic audio; the server already sent
-    /// VoiceAssistantRequest(start=false), the controller should end the run locally.
+    /// Связь с HA отстала слишком сильно для микрофонного аудио; сервер уже отправил
+    /// VoiceAssistantRequest(start=false), контроллер должен завершить run локально.
     VoiceAudioOverflow {
         run: u64,
     },
-    /// Update entity: install the offered release or check for one now.
+    /// Update entity: установить предложенный релиз или проверить сейчас.
     Update(UpdateCommand),
-    /// The encryption key changed: the TXT records of `_esphomelib._tcp` to advertise now.
+    /// Ключ шифрования изменился: TXT-записи `_esphomelib._tcp`, которые нужно объявить.
     MdnsTxtChanged(Vec<String>),
 }
+
+pub use esphome_proto::entity::{
+    ActionId, BinarySensorId, ButtonId, EventId, NumberId, SelectId, SensorId, SwitchId, TextId,
+    TextSensorId,
+};
