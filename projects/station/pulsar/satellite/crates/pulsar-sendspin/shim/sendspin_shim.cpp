@@ -2,7 +2,10 @@
 // lives in the Rust service; this file only maps the C ABI onto sendspin-cpp.
 #include "sendspin_shim.h"
 
+#include <cstdarg>
 #include <cstddef>
+#include <cstdio>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -203,6 +206,35 @@ struct ss_client {
   ss::SendspinClient client;
   ss::ControllerRole *controller = nullptr;
 };
+
+// sendspin-cpp is compiled with -Dfprintf=pulsar_filtered_fprintf: its host log writes every line
+// with fprintf(stderr, ...), and this redirects them through the Rust redactor first, so a pairing
+// PSK id or an SP: token never reaches the daemon log.
+extern "C" size_t pulsar_redact_line(const uint8_t *input, size_t len, uint8_t *out, size_t cap);
+
+extern "C" int pulsar_filtered_fprintf(FILE *stream, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  if (stream != stderr) {
+    const int n = vfprintf(stream, fmt, ap);
+    va_end(ap);
+    return n;
+  }
+  char input[4096];
+  const int n = vsnprintf(input, sizeof(input), fmt, ap);
+  va_end(ap);
+  if (n < 0) return n;
+  char output[4096];
+  const size_t len = strnlen(input, sizeof(input));
+  size_t m = pulsar_redact_line(reinterpret_cast<const uint8_t *>(input), len,
+                                reinterpret_cast<uint8_t *>(output), sizeof(output));
+  // A truncated line keeps its terminator so the daemon log stays line-oriented.
+  if (m == sizeof(output) && output[m - 1] != '\n') {
+    output[m - 1] = '\n';
+  }
+  if (m) fwrite(output, 1, m, stderr);
+  return n;
+}
 
 extern "C" {
 

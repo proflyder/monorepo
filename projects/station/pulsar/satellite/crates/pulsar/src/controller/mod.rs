@@ -462,7 +462,13 @@ impl Controller {
             0,
         );
 
-        let mut mixer = Mixer::open(&model.audio.playback, &model.volume);
+        let mut mixer = match Mixer::open(&model.audio.playback, &model.volume) {
+            Ok(mixer) => mixer,
+            Err(e) => {
+                error!("mixer: {e}");
+                Mixer::fallback(&model.volume)
+            }
+        };
         if !mixer.available() {
             warn!("mixer unavailable");
         }

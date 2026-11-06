@@ -3,9 +3,12 @@
 //! the stream end, seen on a Midi). A stream end without it is held this long, so a restart does
 //! not flap the HA media state and the music displays. The audio itself stops at once (the sink
 //! is released on every end).
+//!
+//! [`Status`] is the one place the handle, the actor and the visualizer read the published state
+//! from; [`StreamHold`] is its only writer for `streaming`.
 
-use std::cell::Cell;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use pulsar_core::Timers;
 use tracing::info;
@@ -21,34 +24,63 @@ pub enum Key {
 
 pub const STREAM_END_HOLD_MS: u64 = 1000;
 
-/// Each method returns the `Stream(..)` event to send, if any; `streaming` (the handle's getter)
-/// is already updated when it returns.
+/// State published to the handle and the callbacks.
+pub struct Status {
+    streaming: AtomicBool,
+    /// false once the owner tears the service down: no events, no visualizer frames.
+    enabled: AtomicBool,
+}
+
+impl Status {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            streaming: AtomicBool::new(false),
+            enabled: AtomicBool::new(true),
+        })
+    }
+
+    pub fn streaming(&self) -> bool {
+        self.streaming.load(Ordering::Relaxed)
+    }
+
+    /// The library's visualizer drain thread checks this before sending a `MusicFrame`.
+    pub fn enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn disable(&self) {
+        self.enabled.store(false, Ordering::Relaxed);
+    }
+}
+
+/// Each method returns the `Stream(..)` event to send, if any; `status.streaming` (the handle's
+/// getter) is already updated when it returns.
 pub struct StreamHold {
-    streaming: Rc<Cell<bool>>,
+    status: Arc<Status>,
     group_stopped: bool,
 }
 
 impl StreamHold {
-    pub(crate) fn new(streaming: Rc<Cell<bool>>) -> Self {
+    pub fn new(status: Arc<Status>) -> Self {
         Self {
-            streaming,
+            status,
             group_stopped: false,
         }
     }
 
-    pub(crate) fn start(&mut self, timers: &mut Timers<Key>) -> Option<bool> {
+    pub fn start(&mut self, timers: &mut Timers<Key>) -> Option<bool> {
         self.group_stopped = false;
         timers.cancel(Key::StreamEnd);
-        if self.streaming.get() {
+        if self.status.streaming() {
             return None;
         }
-        self.streaming.set(true);
+        self.status.streaming.store(true, Ordering::Relaxed);
         Some(true)
     }
 
     /// `hold` = false: the owner is tearing the service down, end at once.
-    pub(crate) fn end(&mut self, timers: &mut Timers<Key>, hold: bool) -> Option<bool> {
-        if !self.streaming.get() || timers.is_set(Key::StreamEnd) {
+    pub fn end(&mut self, timers: &mut Timers<Key>, hold: bool) -> Option<bool> {
+        if !self.status.streaming() || timers.is_set(Key::StreamEnd) {
             return None;
         }
         if self.group_stopped || !hold {
@@ -59,7 +91,7 @@ impl StreamHold {
     }
 
     /// A group update that carries a playback state.
-    pub(crate) fn group(&mut self, playing: bool, timers: &mut Timers<Key>) -> Option<bool> {
+    pub fn group(&mut self, playing: bool, timers: &mut Timers<Key>) -> Option<bool> {
         self.group_stopped = !playing;
         if self.group_stopped && timers.is_set(Key::StreamEnd) {
             return self.finish(timers);
@@ -68,13 +100,13 @@ impl StreamHold {
     }
 
     /// The hold ran out, or the server disconnected.
-    pub(crate) fn finish(&mut self, timers: &mut Timers<Key>) -> Option<bool> {
+    pub fn finish(&mut self, timers: &mut Timers<Key>) -> Option<bool> {
         timers.cancel(Key::StreamEnd);
-        if !self.streaming.get() {
+        if !self.status.streaming() {
             return None;
         }
         info!("sendspin: stream end");
-        self.streaming.set(false);
+        self.status.streaming.store(false, Ordering::Relaxed);
         Some(false)
     }
 }
@@ -90,17 +122,21 @@ mod tests {
     struct Rig {
         timers: Timers<Key>,
         hold: StreamHold,
-        streaming: Rc<Cell<bool>>,
+        status: Arc<Status>,
     }
 
     impl Rig {
         fn new() -> Self {
-            let streaming = Rc::new(Cell::new(false));
+            let status = Status::new();
             Self {
                 timers: Timers::new(),
-                hold: StreamHold::new(streaming.clone()),
-                streaming,
+                hold: StreamHold::new(Arc::clone(&status)),
+                status,
             }
+        }
+
+        fn streaming(&self) -> bool {
+            self.status.streaming()
         }
 
         /// What the actor does when the timer fires: None if nothing fires within `within`.
@@ -117,13 +153,13 @@ mod tests {
     async fn end_without_stopped_is_held_one_second() {
         let mut r = Rig::new();
         assert_eq!(r.hold.start(&mut r.timers), Some(true));
-        assert!(r.streaming.get());
+        assert!(r.streaming());
         let t0 = Instant::now();
         assert_eq!(r.hold.end(&mut r.timers, true), None);
-        assert!(r.streaming.get());
+        assert!(r.streaming());
         assert_eq!(r.fire(Duration::from_secs(5)).await, Some(Some(false)));
         assert_eq!(t0.elapsed(), Duration::from_millis(STREAM_END_HOLD_MS));
-        assert!(!r.streaming.get());
+        assert!(!r.streaming());
         // A second end (sendspin-cpp's stop()) changes nothing.
         assert_eq!(r.hold.end(&mut r.timers, true), None);
         assert_eq!(r.fire(Duration::from_secs(5)).await, None);
@@ -136,9 +172,9 @@ mod tests {
         assert_eq!(r.hold.end(&mut r.timers, true), None);
         advance(Duration::from_millis(10)).await;
         assert_eq!(r.hold.start(&mut r.timers), None);
-        assert!(r.streaming.get());
+        assert!(r.streaming());
         assert_eq!(r.fire(Duration::from_secs(5)).await, None);
-        assert!(r.streaming.get());
+        assert!(r.streaming());
         // The next end is held again from its own time.
         let t0 = Instant::now();
         assert_eq!(r.hold.end(&mut r.timers, true), None);
@@ -153,9 +189,9 @@ mod tests {
         // "playing" changes nothing; "stopped" without a held end only marks the group.
         assert_eq!(r.hold.group(true, &mut r.timers), None);
         assert_eq!(r.hold.group(false, &mut r.timers), None);
-        assert!(r.streaming.get());
+        assert!(r.streaming());
         assert_eq!(r.hold.end(&mut r.timers, true), Some(false));
-        assert!(!r.streaming.get());
+        assert!(!r.streaming());
         assert_eq!(r.fire(Duration::from_secs(5)).await, None);
     }
 
@@ -165,9 +201,9 @@ mod tests {
         assert_eq!(r.hold.start(&mut r.timers), Some(true));
         assert_eq!(r.hold.end(&mut r.timers, true), None);
         advance(Duration::from_millis(300)).await;
-        assert!(r.streaming.get());
+        assert!(r.streaming());
         assert_eq!(r.hold.group(false, &mut r.timers), Some(false));
-        assert!(!r.streaming.get());
+        assert!(!r.streaming());
         assert_eq!(r.fire(Duration::from_secs(5)).await, None);
     }
 
@@ -178,7 +214,7 @@ mod tests {
         assert_eq!(r.hold.start(&mut r.timers), Some(true));
         // The stop belonged to the previous stream: this end is held.
         assert_eq!(r.hold.end(&mut r.timers, true), None);
-        assert!(r.streaming.get());
+        assert!(r.streaming());
         assert_eq!(r.fire(Duration::from_secs(5)).await, Some(Some(false)));
     }
 
@@ -189,7 +225,7 @@ mod tests {
         assert_eq!(r.hold.end(&mut r.timers, true), None);
         advance(Duration::from_millis(100)).await;
         assert_eq!(r.hold.finish(&mut r.timers), Some(false));
-        assert!(!r.streaming.get());
+        assert!(!r.streaming());
         assert_eq!(r.fire(Duration::from_secs(5)).await, None);
         // Disconnect while streaming (no end yet) also ends it; idle: nothing.
         assert_eq!(r.hold.start(&mut r.timers), Some(true));
@@ -202,6 +238,6 @@ mod tests {
         let mut r = Rig::new();
         assert_eq!(r.hold.start(&mut r.timers), Some(true));
         assert_eq!(r.hold.end(&mut r.timers, false), Some(false));
-        assert!(!r.streaming.get());
+        assert!(!r.streaming());
     }
 }

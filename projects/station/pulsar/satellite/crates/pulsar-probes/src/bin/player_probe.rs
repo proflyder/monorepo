@@ -253,7 +253,13 @@ fn main() -> ExitCode {
     model.audio.playback.apply_env();
     pulsar_alsa::init(model.audio.playback.alsa_lib());
     // Test sounds only with the volume capped: without the control there is no cap.
-    let mut mx = Mixer::open(&model.audio.playback, &model.volume);
+    let mut mx = match Mixer::open(&model.audio.playback, &model.volume) {
+        Ok(mixer) => mixer,
+        Err(e) => {
+            println!("mixer: {e}");
+            Mixer::fallback(&model.volume)
+        }
+    };
     let software = model.volume.software_volume;
     let ctl = (!software)
         .then(|| pulsar_alsa::Ctl::open("hw:0").ok())

@@ -22,7 +22,7 @@ use std::sync::LazyLock;
 use libloading::os::unix::{Library, RTLD_GLOBAL, RTLD_NOW};
 use tracing::{error, info, warn};
 
-use crate::player::{ErrorInfo, Msg};
+use crate::core::{ErrorInfo, Msg};
 
 type Gp = *mut c_void;
 type GSourceFunc = unsafe extern "C" fn(Gp) -> c_int;
@@ -450,7 +450,7 @@ pub fn idle_add(api: &Api, call: Call) {
 }
 
 unsafe extern "C" fn on_timeout(user: Gp) -> c_int {
-    c_int::from(crate::player::on_timer(user.addr()))
+    c_int::from(crate::core::on_timer(user.addr()))
 }
 
 /// A GLib timeout calling `player::on_timer(tag)` every `ms` while it returns true.
@@ -635,7 +635,7 @@ pub struct Message {
 
 unsafe extern "C" fn on_bus(_bus: Gp, msg: Gp, user: Gp) -> c_int {
     if let (Some(api), Some(msg)) = (load(), NonNull::new(msg)) {
-        crate::player::on_bus(user.addr(), &Message { api, msg });
+        crate::core::on_bus(user.addr(), &Message { api, msg });
     }
     1 // keep the watch
 }

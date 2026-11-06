@@ -63,7 +63,9 @@ cc_library(
         "src",
         "src/host",
     ],
-    copts = ["-std=c++20"],
+    # The host log writes direct to stderr; this sends its lines through the shim redactor
+    # (Rust-side secret filter) without changing the vendored sources.
+    copts = ["-std=c++20", "-Dfprintf=pulsar_filtered_fprintf"],
     defines = _ROLES + [
         "ARDUINOJSON_ENABLE_STD_STRING=1",
         "ARDUINOJSON_USE_LONG_LONG=1",
