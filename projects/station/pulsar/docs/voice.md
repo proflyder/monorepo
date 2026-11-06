@@ -91,7 +91,7 @@ maind играет звук громкости (sound 45, SimpleVolumeTonePlayer
 `LevelDb::from_mean_square` в
 [`pulsar-dsp/src/level.rs`](../satellite/crates/pulsar-dsp/src/level.rs) — единственная точка
 округления. Почему выбран именно этот выход VQE, объяснено в комментарии в
-[`pulsar-audio/src/frontend.rs`](../satellite/crates/pulsar-audio/src/frontend.rs).
+[`pulsar-audio/src/frontend/mod.rs`](../satellite/crates/pulsar-audio/src/frontend/mod.rs).
 
 ## Пре-ролл: методика измерения
 
@@ -101,8 +101,8 @@ maind играет звук громкости (sound 45, SimpleVolumeTonePlayer
 
 1. Замер: `frontend_probe` на станции, один говорящий в 1–2 м, отдельные слова для каждой модели
    wake word. На каждое срабатывание печатается строка `wake timing:`; смысл полей — в коде у
-   `first_stage_age` (функция `processing`), `LevelHistory::speech_end`, `preroll_chunks` и
-   `Chunks` в `frontend.rs`.
+   `first_stage_age` (`Processing`), `LevelHistory::speech_end`, `preroll_chunks` и
+   `Chunks` в `frontend/processing.rs`.
 2. Значение берут с недолётом, чтобы само слово не попало в STT (HA его не вырезает, см.
    [«Голосовой ассистент HA (ESPHome)»](#голосовой-ассистент-ha-esphome)). Если слова заметно
    громче шумового пола (Лайт 2), берут самый короткий замер по громким словам. Если слова у
