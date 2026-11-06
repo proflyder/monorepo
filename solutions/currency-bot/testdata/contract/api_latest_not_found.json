@@ -1,0 +1,30 @@
+{
+  "name": "api_latest_not_found",
+  "description": "404 envelope for an empty history table.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/latest",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Not Found",
+          "errorCode": "NOT_FOUND",
+          "message": "No currency rates found in database",
+          "path": "/api/latest",
+          "service": "CurrencyHistoryController.getLatest",
+          "status": 404,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    }
+  ]
+}

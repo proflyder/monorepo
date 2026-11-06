@@ -15,6 +15,9 @@ JSON API.
   The `buy`/`sell` labels in the Telegram message are **deliberately inverted**
   relative to the model: "Покупка" prints `sell`,
   "Продажа" prints `buy`.
+  A non-2xx response or a body larger than 10 MiB fails the job instead of
+  being parsed. A non-positive or non-finite rate is skipped by the threshold
+  check, so a broken historical row cannot produce a `+Inf` alert.
 - **Alerts only.** The scheduled job does **not** broadcast rates. It sends a
   message only when at least one threshold fires. `/help` still claims an hourly
   broadcast; the text is kept verbatim for compatibility.
@@ -80,7 +83,7 @@ There is no `.env` loader and no secret has a default.
 |---|---|---|---|
 | `GET` | `/` | none | `Hello World!` compatibility probe. |
 | `GET` | `/healthz` | none | Liveness. |
-| `GET` | `/readyz` | none | Readiness; pings SQLite. |
+| `GET` | `/readyz` | none | Readiness; pings SQLite and, when `WEBHOOK_URL` is set, the Telegram webhook registration. |
 | `GET` | `/metrics` | none | Prometheus text exposition. |
 | `GET` | `/api/history` | Bearer | Full history or a filtered range. |
 | `GET` | `/api/latest` | Bearer | Newest stored snapshot (`404` when empty). |
@@ -91,7 +94,8 @@ Auth is `Authorization: Bearer <API_TOKEN>` with a constant-time comparison.
 
 `/api/history` filters:
 
-- `?date=YYYY-MM-DD` → `[00:00Z, next midnight]`, inclusive on both ends;
+- `?date=YYYY-MM-DD` → `[00:00Z, next midnight)`, so a record at exactly
+  `00:00:00.000` belongs only to that day;
 - `?from=RFC3339&to=RFC3339` (both required) → inclusive range;
 - otherwise the full history, newest first.
 
@@ -127,8 +131,10 @@ Only `POST /telegram/webhook` is served. Requests must carry
 `X-Telegram-Bot-Api-Secret-Token: <WEBHOOK_SECRET>` (constant-time compare);
 otherwise `401`. A request with a valid secret always gets `200 OK`, even when
 the JSON is malformed or handling fails: Telegram retries every non-2xx
-response, which would re-run `/trigger`. Those failures are logged only. The
-webhook is intended to be exposed through a Cloudflare Tunnel.
+response, which would re-run `/trigger`. `/trigger` is acknowledged first and
+runs in the background, and a seen `update_id` is ignored, so a retried update
+cannot fetch and send twice. Failures are logged only. The webhook is intended
+to be exposed through a Cloudflare Tunnel.
 
 Commands are matched by prefix:
 `/trigger`, `/start`, `/help`. Replies go to the chat that sent the command, and
@@ -187,8 +193,22 @@ bazel test  //solutions/currency-bot/...
 ```
 
 Tests are hermetic: `httptest` fakes cover Telegram and kurs.kz, SQLite uses a
-temporary file, and the parser fixture in `internal/rates/testdata` is a captured
-kurs.kz response with names, addresses, phones and coordinates stripped.
+temporary file, and the parser fixture is a captured kurs.kz response with names,
+addresses, phones and coordinates stripped.
+
+`testdata/` is the language-neutral contract used when the service is ported to
+Rust:
+
+- `testdata/contract/*.json` — HTTP goldens in the `packages/go/contracttest`
+  format (exact paths, statuses, significant headers, bodies);
+- `testdata/vectors/*.json` — domain vectors for parsing/IQR/best-five, alert
+  thresholds and dedup, exact Telegram HTML (including `.x5` rounding),
+  command texts and schedules (UTC, Asia/Almaty and DST);
+- `testdata/store/schema_v1.sql` — schema v1 with sample rows; the store test
+  loads it, reads the rows and inserts again.
+
+Regenerate with `go test ./solutions/currency-bot/internal/<pkg> -update`; the
+Rust port must replay the committed bytes unchanged.
 
 The OCI image follows the scheduler pattern: one static linux/amd64 binary on
 the digest-pinned distroless base, built without a Docker daemon. Targets:

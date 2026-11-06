@@ -53,7 +53,8 @@ func toRecordDTO(record model.Record) recordDTO {
 }
 
 // handleHistory implements GET /api/history. Precedence: date wins; otherwise
-// from+to; from-only or to-only silently fall back to the full history.
+// from+to. A lone from or to is rejected: silently returning the whole history
+// makes a malformed client request look successful and can be very expensive.
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	dateParam := query.Get("date")
@@ -70,7 +71,10 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		start := day.UTC()
-		end := start.Add(24 * time.Hour)
+		// Timestamps are stored with millisecond precision, so ending one
+		// millisecond before the next midnight keeps 00:00:00.000 in exactly
+		// one day instead of both.
+		end := start.Add(24*time.Hour - time.Millisecond)
 		from, to = &start, &end
 	case fromParam != "" && toParam != "":
 		start, err := time.Parse(time.RFC3339, fromParam)
@@ -86,6 +90,10 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		from, to = &start, &end
+	case fromParam != "" || toParam != "":
+		s.writeError(w, r, http.StatusBadRequest, "Bad Request",
+			"Invalid range: both from and to are required", "BAD_REQUEST", "CurrencyHistoryController.getHistory", nil)
+		return
 	}
 
 	var (

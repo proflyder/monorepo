@@ -11,7 +11,14 @@ go_library(
 
 go_test(
     name = "message_test",
-    srcs = ["format_test.go"],
+    srcs = [
+        "format_test.go",
+        "vector_test.go",
+    ],
+    data = ["//solutions/currency-bot/testdata:vectors"],
     embed = [":message"],
-    deps = ["//solutions/currency-bot/internal/model"],
+    deps = [
+        "//solutions/currency-bot/internal/golden",
+        "//solutions/currency-bot/internal/model",
+    ],
 )

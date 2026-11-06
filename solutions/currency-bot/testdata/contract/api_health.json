@@ -1,0 +1,36 @@
+{
+  "name": "api_health",
+  "description": "Liveness and readiness bodies. Ready means the store ping succeeded and, in production, the Telegram webhook is registered.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/healthz"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "status": "ok"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/readyz"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "status": "ready"
+        }
+      }
+    }
+  ]
+}

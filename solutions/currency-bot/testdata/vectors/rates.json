@@ -1,0 +1,157 @@
+{
+  "parse_cases": [
+    {
+      "name": "live_fixture",
+      "html": "<!doctype html>\n<html><head><title>kurs.kz fixture (anonymized)</title></head>\n<body>\n<script type=\"text/javascript\">\nvar punkts = [{\"id\":1,\"name\":\"Punkt 1\",\"data\":{\"USD\":[453.5,454.5],\"RUB\":[5.38,5.43]}},{\"id\":2,\"name\":\"Punkt 2\",\"data\":{\"USD\":[453.7,454.7],\"RUB\":[5.38,5.43]}},{\"id\":3,\"name\":\"Punkt 3\",\"data\":{\"USD\":[453.3,455],\"RUB\":[5.37,5.49]}},{\"id\":4,\"name\":\"Punkt 4\",\"data\":{\"USD\":[452,455],\"RUB\":[5.35,5.47]}},{\"id\":5,\"name\":\"Punkt 5\",\"data\":{\"USD\":[452,455],\"RUB\":[5.35,5.47]}},{\"id\":6,\"name\":\"Punkt 6\",\"data\":{\"USD\":[452.5,455],\"RUB\":[5.35,5.47]}},{\"id\":7,\"name\":\"Punkt 7\",\"data\":{\"USD\":[454,454.7],\"RUB\":[5.38,5.43]}},{\"id\":8,\"name\":\"Punkt 8\",\"data\":{\"USD\":[453.5,454.5],\"RUB\":[5.38,5.42]}},{\"id\":9,\"name\":\"Punkt 9\",\"data\":{\"USD\":[452,455],\"RUB\":[5.35,5.48]}},{\"id\":10,\"name\":\"Punkt 10\",\"data\":{\"USD\":[453.8,454.7],\"RUB\":[5.37,5.42]}},{\"id\":11,\"name\":\"Punkt 11\",\"data\":{\"USD\":[454,455],\"RUB\":[5.35,5.45]}},{\"id\":12,\"name\":\"Punkt 12\",\"data\":{\"USD\":[454,455],\"RUB\":[5.37,5.43]}}];\n</script>\n</body></html>\n",
+      "rates": {
+        "usd": {
+          "buy": 453.9,
+          "sell": 454.62
+        },
+        "rub": {
+          "buy": 5.378,
+          "sell": 5.426
+        }
+      }
+    },
+    {
+      "name": "missing_marker",
+      "html": "<html>no rates here</html>",
+      "error": true
+    },
+    {
+      "name": "data_object_skips_entry",
+      "html": "<script>var punkts = [{\"name\":\"a\",\"data\":{}},{\"name\":\"b\",\"data\":{\"USD\":[10,11],\"RUB\":[1,2]}}];</script>",
+      "rates": {
+        "usd": {
+          "buy": 10,
+          "sell": 11
+        },
+        "rub": {
+          "buy": 1,
+          "sell": 2
+        }
+      }
+    },
+    {
+      "name": "zero_quote_dropped",
+      "html": "<script>var punkts = [{\"data\":{\"USD\":[0,0],\"RUB\":[0,0]}},{\"data\":{\"USD\":[10,11],\"RUB\":[1,2]}}];</script>",
+      "rates": {
+        "usd": {
+          "buy": 10,
+          "sell": 11
+        },
+        "rub": {
+          "buy": 1,
+          "sell": 2
+        }
+      }
+    },
+    {
+      "name": "missing_rub_fails",
+      "html": "<script>var punkts = [{\"data\":{\"USD\":[10,11]}}];</script>",
+      "error": true
+    },
+    {
+      "name": "numeric_strings_accepted",
+      "html": "<script>var punkts = [{\"data\":{\"USD\":[\"10.5\",\"11.5\"],\"RUB\":[\"1.5\",\"2.5\"]}}];</script>",
+      "rates": {
+        "usd": {
+          "buy": 10.5,
+          "sell": 11.5
+        },
+        "rub": {
+          "buy": 1.5,
+          "sell": 2.5
+        }
+      }
+    },
+    {
+      "name": "short_array_rejected",
+      "html": "<script>var punkts = [{\"data\":{\"USD\":[10],\"RUB\":[1,2]}}];</script>",
+      "error": true
+    }
+  ],
+  "outlier_cases": [
+    {
+      "name": "keeps_small_samples",
+      "input": [
+        1,
+        2,
+        3,
+        5000
+      ],
+      "want": [
+        1,
+        2,
+        3,
+        5000
+      ]
+    },
+    {
+      "name": "drops_typo",
+      "input": [
+        100,
+        101,
+        102,
+        103,
+        5000,
+        104,
+        105,
+        106,
+        107,
+        108
+      ],
+      "want": [
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108
+      ]
+    }
+  ],
+  "best_average_cases": [
+    {
+      "name": "ascending_top_five",
+      "values": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "ascending": true,
+      "want": 3
+    },
+    {
+      "name": "descending_top_five",
+      "values": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "ascending": false,
+      "want": 5
+    },
+    {
+      "name": "fewer_than_five",
+      "values": [
+        10,
+        20
+      ],
+      "ascending": true,
+      "want": 15
+    }
+  ]
+}

@@ -7,11 +7,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
 	secretHeader = "X-Telegram-Bot-Api-Secret-Token"
 	maxWebhook   = 1 << 20
+	// triggerTimeout bounds the background /trigger pipeline after the
+	// webhook has already been acknowledged.
+	triggerTimeout = 25 * time.Second
 )
 
 const startMessage = `👋 Привет! Я бот для отслеживания курсов валют.
@@ -81,6 +85,12 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.markUpdateSeen(update.UpdateID) {
+		s.opts.Logger.Info("ignoring duplicate telegram update", "update_id", update.UpdateID)
+		writeJSON(w, http.StatusOK, "OK")
+		return
+	}
+
 	msg := update.message()
 	if msg == nil {
 		writeJSON(w, http.StatusOK, "OK")
@@ -105,7 +115,16 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	var handleErr error
 	switch {
 	case strings.HasPrefix(text, "/trigger"):
-		handleErr = s.handleTriggerCommand(r.Context(), chatID)
+		// A fetch plus send can take tens of seconds, close to Telegram's
+		// timeout. Acknowledge first and run the pipeline in the background;
+		// the update_id guard above makes a retried update a no-op.
+		s.dispatch(func() {
+			runCtx, cancel := context.WithTimeout(s.opts.BaseContext, triggerTimeout)
+			defer cancel()
+			if err := s.handleTriggerCommand(runCtx, chatID); err != nil {
+				s.opts.Logger.Error("telegram webhook failed", "error", err, "step", "handle telegram command")
+			}
+		})
 	case strings.HasPrefix(text, "/start"):
 		handleErr = s.opts.Sender.Send(r.Context(), chatID, startMessage)
 	case strings.HasPrefix(text, "/help"):
@@ -127,4 +146,3 @@ func (s *Server) handleTriggerCommand(ctx context.Context, chatID string) error 
 	}
 	return nil
 }
-

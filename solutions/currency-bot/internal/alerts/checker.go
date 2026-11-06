@@ -106,10 +106,17 @@ func (c *Checker) process(ctx context.Context, candidate *model.Alert, period mo
 	}
 }
 
-// evaluate mirrors checkPairThresholds: inclusive thresholds, direction DOWN
-// for zero/NaN, and no guard against a zero historical rate (Infinity wins,
-// NaN does not alert).
+// evaluate mirrors checkPairThresholds: inclusive thresholds and direction
+// DOWN for zero/NaN. Rates must be finite and positive; a zero or broken
+// historical row would otherwise divide by zero and emit an alert with
+// change=+Inf (and "+Inf" in the Telegram message).
 func (c *Checker) evaluate(period model.Period, pair model.Pair, rateType model.RateType, current, historical float64) *model.Alert {
+	if !validRate(current) || !validRate(historical) {
+		c.Logger.Warn("skipping threshold check with invalid rate",
+			"pair", pair, "rate_type", rateType, "period", period.Name,
+			"current", current, "historical", historical)
+		return nil
+	}
 	changePercent := (current - historical) / historical * 100.0
 	absChange := math.Abs(changePercent)
 	level := model.Level("")
@@ -142,9 +149,21 @@ func (c *Checker) evaluate(period model.Period, pair model.Pair, rateType model.
 	}
 }
 
+// validRate reports whether a rate can be used in a percentage comparison.
+func validRate(rate float64) bool {
+	return rate > 0 && !math.IsNaN(rate) && !math.IsInf(rate, 0)
+}
+
 // shouldSend implements the five deduplication rules.
 func shouldSend(candidate model.Alert, last *model.SentAlert, period model.Period) bool {
 	if last == nil {
+		return true
+	}
+	// A zero or non-finite rate_at_alert (imported or corrupted row) cannot
+	// define the re-alert band: without the guard the division yields +Inf and
+	// every candidate is sent. Treat such a row as absent so the new alert is
+	// still delivered and the good value replaces it.
+	if !validRate(last.RateAtAlert) {
 		return true
 	}
 	if last.Level == model.Warning && candidate.Level == model.Critical {

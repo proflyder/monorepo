@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "run.go",
         "schedule.go",
+        "webhook.go",
     ],
     importpath = "github.com/proflyder/monorepo/solutions/currency-bot/internal/app",
     deps = [
@@ -23,6 +24,12 @@ go_library(
 
 go_test(
     name = "app_test",
-    srcs = ["schedule_test.go"],
+    srcs = [
+        "schedule_test.go",
+        "vector_test.go",
+        "webhook_test.go",
+    ],
+    data = ["//solutions/currency-bot/testdata:vectors"],
     embed = [":app"],
+    deps = ["//solutions/currency-bot/internal/golden"],
 )

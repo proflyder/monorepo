@@ -161,3 +161,42 @@ func TestRunFetchAndSendFailures(t *testing.T) {
 		t.Fatal("send failure must propagate")
 	}
 }
+
+type cancellingSender struct{ cancel context.CancelFunc }
+
+func (s cancellingSender) Send(context.Context, string, string) error {
+	s.cancel()
+	return nil
+}
+
+type ctxRecordingRecorder struct {
+	ctxErr   error
+	recorded int
+}
+
+func (r *ctxRecordingRecorder) RecordSentAlert(ctx context.Context, _ model.SentAlert) error {
+	r.ctxErr = ctx.Err()
+	r.recorded++
+	return nil
+}
+
+func TestRunRecordsAlertsAfterCallerContextCancelled(t *testing.T) {
+	history := &fakeHistory{before: model.Record{Timestamp: now.Add(-time.Hour), Rates: ratesAt(100)}, beforeOK: true}
+	checker := alerts.New(history, &fakeSent{}, DiscardLogger(), func() time.Time { return now })
+	recorder := &ctxRecordingRecorder{}
+	ctx, cancel := context.WithCancel(context.Background())
+	svc := &Service{
+		Source: &fakeSource{rates: ratesAt(103)}, History: history, Checker: checker,
+		Recorder: recorder, Sender: cancellingSender{cancel: cancel},
+		Logger: DiscardLogger(), Now: func() time.Time { return now },
+	}
+	if err := svc.Run(ctx, "trigger", "1", true, false); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.recorded == 0 {
+		t.Fatal("expected sent alerts to be recorded")
+	}
+	if recorder.ctxErr != nil {
+		t.Fatalf("dedup recording used a cancelled context: %v", recorder.ctxErr)
+	}
+}

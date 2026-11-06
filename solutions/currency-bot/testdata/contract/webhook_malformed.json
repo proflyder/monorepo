@@ -1,0 +1,24 @@
+{
+  "name": "webhook_malformed",
+  "description": "Malformed JSON is acknowledged with 200 \"OK\" and has no side effects; Telegram must not retry it.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": "{not json"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    }
+  ]
+}

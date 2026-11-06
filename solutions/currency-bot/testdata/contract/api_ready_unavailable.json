@@ -1,0 +1,21 @@
+{
+  "name": "api_ready_unavailable",
+  "description": "Readiness 503 while the store is unavailable.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/readyz"
+      },
+      "response": {
+        "status": 503,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "status": "unavailable"
+        }
+      }
+    }
+  ]
+}

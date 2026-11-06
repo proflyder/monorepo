@@ -14,7 +14,18 @@ go_library(
 
 go_test(
     name = "store_test",
-    srcs = ["store_test.go"],
+    srcs = [
+        "schema_test.go",
+        "store_test.go",
+        "vector_test.go",
+    ],
+    data = [
+        "//solutions/currency-bot/testdata:store_schema",
+        "//solutions/currency-bot/testdata:vectors",
+    ],
     embed = [":store"],
-    deps = ["//solutions/currency-bot/internal/model"],
+    deps = [
+        "//solutions/currency-bot/internal/golden",
+        "//solutions/currency-bot/internal/model",
+    ],
 )

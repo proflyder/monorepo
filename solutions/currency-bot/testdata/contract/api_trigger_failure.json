@@ -1,0 +1,36 @@
+{
+  "name": "api_trigger_failure",
+  "description": "502 envelope when the upstream fetch fails; chatId and executionTimeMs live in details, executionTimeMs is normalized.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/trigger",
+        "headers": {
+          "Authorization": "Bearer test-api-key",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 502,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "details": {
+            "chatId": "123",
+            "executionTimeMs": "<any>"
+          },
+          "error": "Bad Gateway",
+          "errorCode": "EXTERNAL_SERVICE_ERROR",
+          "message": "Failed to update and send currency rates: parse exploded",
+          "path": "/api/trigger",
+          "service": "TriggerController.triggerCurrencyUpdate",
+          "status": 502,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    }
+  ]
+}

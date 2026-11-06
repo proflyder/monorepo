@@ -117,6 +117,12 @@ func (s *Service) Run(ctx context.Context, job, chatID string, forceNotification
 		s.Logger.Error("failed to send message to telegram", "chat_id", chatID, "error", err)
 		return err
 	}
+	// The message is already delivered, so recording the dedup rows must not be
+	// cancelled by the caller's request context: otherwise a client disconnect
+	// after a successful send leaves no record and the same alert is sent again
+	// on the next run.
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
 	for _, alert := range candidates {
 		record := model.SentAlert{
 			Key:           alert.Key(),
@@ -126,7 +132,7 @@ func (s *Service) Run(ctx context.Context, job, chatID string, forceNotification
 			ChangePercent: alert.ChangePercent,
 			SentAt:        now,
 		}
-		if err := s.Recorder.RecordSentAlert(ctx, record); err != nil {
+		if err := s.Recorder.RecordSentAlert(recordCtx, record); err != nil {
 			s.Logger.Error("failed to record sent alert", "pair", alert.Pair, "error", err)
 		}
 	}

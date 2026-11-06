@@ -20,9 +20,19 @@ go_library(
 
 go_test(
     name = "server_test",
-    srcs = ["server_test.go"],
+    srcs = [
+        "contract_test.go",
+        "server_test.go",
+        "vector_test.go",
+    ],
+    data = [
+        "//solutions/currency-bot/testdata:contract",
+        "//solutions/currency-bot/testdata:vectors",
+    ],
     embed = [":server"],
     deps = [
+        "//packages/go/contracttest",
+        "//solutions/currency-bot/internal/golden",
         "//solutions/currency-bot/internal/metrics",
         "//solutions/currency-bot/internal/model",
         "//solutions/currency-bot/internal/service",

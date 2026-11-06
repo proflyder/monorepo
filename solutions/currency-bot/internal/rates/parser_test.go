@@ -2,7 +2,10 @@ package rates
 
 import (
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
@@ -134,4 +137,49 @@ func assertClose(t *testing.T, label string, got, want float64) {
 	if math.Abs(got-want) > 1e-9 {
 		t.Fatalf("%s = %v, want %v", label, got, want)
 	}
+}
+
+const minimalRatesHTML = `<script>var punkts = [{"data":{"USD":[10,11],"RUB":[1,2]}}];</script>`
+
+func TestFetchRejectsNon2xx(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "anti-bot page", http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	fetcher := NewFetcher(server.URL, server.Client(), nil)
+	if _, err := fetcher.Fetch(t.Context()); err == nil {
+		t.Fatal("non-2xx response must fail instead of being parsed")
+	} else if !strings.Contains(err.Error(), "403") {
+		t.Fatalf("error should mention the status: %v", err)
+	}
+}
+
+func TestFetchRejectsOversizedBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(make([]byte, maxResponseBytes+1))
+	}))
+	defer server.Close()
+
+	fetcher := NewFetcher(server.URL, server.Client(), nil)
+	if _, err := fetcher.Fetch(t.Context()); err == nil {
+		t.Fatal("oversized response must fail")
+	} else if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFetchParsesSuccessfulResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(minimalRatesHTML))
+	}))
+	defer server.Close()
+
+	fetcher := NewFetcher(server.URL, server.Client(), nil)
+	got, err := fetcher.Fetch(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertClose(t, "usd buy", got.USDToKZT.Buy, 10)
+	assertClose(t, "rub sell", got.RUBToKZT.Sell, 2)
 }

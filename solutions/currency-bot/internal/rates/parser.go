@@ -23,6 +23,11 @@ import (
 // DefaultURL is the live rates page.
 const DefaultURL = "https://kurs.kz"
 
+// maxResponseBytes caps the downloaded page. The pod has a 128Mi memory
+// limit, so an unbounded io.ReadAll of a broken or hostile response could
+// restart the service.
+const maxResponseBytes = 10 << 20
+
 // punktsPattern mirrors the Kotlin regex, including the lazy match: the first
 // `];` after the array opening bracket terminates the literal.
 var punktsPattern = regexp.MustCompile(`(?s)var punkts = (\[.*?\]);`)
@@ -67,9 +72,17 @@ func (f *Fetcher) Fetch(ctx context.Context) (model.Rates, error) {
 		return model.Rates{}, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return model.Rates{}, fmt.Errorf("kurs.kz returned HTTP %d: %w", resp.StatusCode, errFetch)
+	}
+	// Read at most one byte over the cap so an oversized body is detected
+	// instead of silently truncated.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return model.Rates{}, err
+	}
+	if len(body) > maxResponseBytes {
+		return model.Rates{}, fmt.Errorf("kurs.kz response exceeds %d bytes: %w", maxResponseBytes, errFetch)
 	}
 	f.Logger.Debug("received kurs.kz response", "bytes", len(body), "status", resp.StatusCode)
 	return Parse(string(body), f.Logger)
@@ -142,6 +155,8 @@ type parseError string
 func (e parseError) Error() string { return string(e) }
 
 const errParse parseError = "kurs.kz parse error"
+
+const errFetch parseError = "kurs.kz fetch error"
 
 func nameOrUnknown(name string) string {
 	if name == "" {
