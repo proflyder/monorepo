@@ -750,19 +750,32 @@ test("deploy: hermes upstream revision bump deploys the hermes unit", () => {
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
 });
 
-test("deploy: voice-proxy solution change runs its go unit and deploys hermes", () => {
+test("deploy: voice-proxy solution change runs its bazel unit and deploys hermes", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["solutions/voice-proxy/app/run.go"]);
-  assert.deepEqual(result.routes.go.units.map((unit) => unit.id), ["voice-proxy"]);
+  const result = affected.route(
+    config,
+    ["solutions/voice-proxy/crates/voice-proxy/src/api.rs"],
+    { root: REPO, base: "b", graph: { affectedRules: () => new Set() } },
+  );
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["voice-proxy"]);
+  assert.deepEqual(result.routes.go.units, []);
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
 });
 
-test("deploy: shared go package change reaches the hermes deploy unit", () => {
+test("deploy: a shared rust crate change reaches the hermes deploy unit", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["packages/go/ha/ha.go"]);
-  const entries = affected.deployEntries(result, config);
-  assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
+  const result = affected.route(
+    config,
+    ["packages/rust/home-ha/src/lib.rs"],
+    {
+      root: REPO,
+      base: "b",
+      graph: { affectedRules: () => new Set(["//packages/rust/home-ha:home_ha"]) },
+    },
+  );
+  const entries = affected.deployEntries(result, config).map((entry) => entry.id);
+  assert.ok(entries.includes("hermes"), entries.join(","));
 });
 
 test("deploy: ci workflow change runs checks but deploys nothing", () => {
@@ -1416,6 +1429,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "pulsar",
   ]);
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
+    "voice-proxy",
     "wakegrant",
     "ble-gateway",
     "pulsar-bazel",

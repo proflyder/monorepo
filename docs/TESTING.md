@@ -142,7 +142,8 @@ python3 -m unittest projects/home/kubernetes/mcp-gateway/test_deploy.py -v
 python3 -m unittest projects/home/proxmox/test_bb_dispatch.py -v
 
 # голос: маршрут по профилю, fail-closed, cancel guard, announce, очередь
-go test -race ./solutions/voice-proxy/...
+cargo test -p voice-proxy
+bazel test //solutions/voice-proxy/crates/voice-proxy:unit_tests
 python3 -m unittest projects/home-assistant/deploy/test_voice_routing_contract.py -v
 
 # деплой-инструменты, Hermes rollout/render-config и health exporter

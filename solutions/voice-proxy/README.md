@@ -1,7 +1,9 @@
 # voice-proxy
 
 An OpenAI-compatible passthrough that makes assistant replies safe for
-Piper TTS. It is deployed as a distroless image next to Hermes.
+Piper TTS. It is a Rust service (`crates/voice-proxy`) on the shared
+`packages/rust` core layer, deployed as a static-musl distroless image next to
+Hermes.
 
 ```text
 Home Assistant conversation agent
@@ -51,7 +53,7 @@ boundary. The default bind is loopback.
 
 ## Sanitising
 
-`SanitizeText` removes whole citation parentheses, unwraps Markdown links,
+`sanitize_text` removes whole citation parentheses, unwraps Markdown links,
 deletes bare URLs, strips `#`/list prefixes and `*_` backtick `~` marks,
 drops empty parentheses and collapses whitespace. `StreamingSanitizer` releases
 complete sentences only at a boundary outside links/parentheses and followed by
@@ -145,9 +147,8 @@ consumer additionally needs routing.
 
 Those keys, the queue names and the idempotency key are a wire contract: a
 consumer built against this format can drain any producer's events. The golden
-test in `internal/queue/golden_test.go` pins the exact payload bytes and feeds
-them back to the consumer. When enqueueing fails the answer is announced
-directly.
+test in `domain::queue_payload` pins the exact payload bytes and feeds them
+back to the consumer. When enqueueing fails the answer is announced directly.
 
 **Consumer** (`voice-proxy-home`, lease 120 s, one event at a time):
 
@@ -227,24 +228,49 @@ Logs go to stderr as `voice-proxy: <message>`, with an uppercase `ERROR` level
 for real failures so the rollout log scan keeps working. They carry outcome,
 profile, counts and timings only — never recognised speech.
 
+## Architecture
+
+```text
+crates/voice-proxy/src
+  domain/    pure logic, no I/O: sanitize, cancel, profile, routing table,
+             announce shaping, queue payload, Clock
+  openai     typed chat/completions requests, chunks and responses;
+             unknown fields travel through #[serde(flatten)]
+  relay      upstream reqwest client and the incremental SSE subset
+  services   HA (profile, state, announcements), gateway, router, late
+             answers, updates poller, durable queue producer/consumer
+  api        axum surface: cancel guard -> routing -> reasoning effort ->
+             buffered or streaming relay
+  config     clap + env contract, *_FILE re-read on every use
+  app        Supervisor composition root; health  -healthcheck probe
+```
+
+`home-worker` owns the lease -> handle -> ack loop; the consumer supplies a
+`Gate` (profile + idle station) and a `Handler` (stale/empty/announce). Clock
+and token sources are injected, so the domain is deterministic in tests and a
+rotated mounted secret is picked up without a restart.
+
 ## Tests
 
 ```text
-go test -race -count=1 ./solutions/voice-proxy/...
-bazel build //solutions/voice-proxy/...
+cargo test -p voice-proxy
+bazel test //solutions/voice-proxy/crates/voice-proxy:unit_tests
+bazel build //solutions/voice-proxy:voice-proxy_image
 ```
 
-Behaviour is pinned by table-driven tests next to each package: one case per
-branch of `SanitizeText`, `EnsureNotQuestion` and `AnnounceText`, plus a
+Behaviour is pinned by table-driven tests next to each module: one case per
+branch of `sanitize_text`, `ensure_not_question` and `announce_text`, plus a
 streaming test that feeds the same text char-by-char and at every split index.
-`internal/queue/golden_test.go` pins the `voice.announce` payload bytes and feeds
-them to the consumer. HTTP dependencies are recorded by the shared
-`internal/testfake` package (Home Assistant, Hermes upstream, gateway and
-scheduler).
+`domain::queue_payload` pins the `voice.announce` payload bytes and feeds them
+to the consumer. HTTP dependencies are local `axum` servers in the unit tests
+(Home Assistant, Hermes upstream, gateway and scheduler); the golden HTTP
+fixtures in `testdata/contract/` are replayed by `home-contracttest` without
+changes.
 
 ## Status
 
-Deployed: the Hermes unit runs this binary in the `voice-proxy` container as a
-Bazel `rules_oci`/distroless image. It covers config, sanitising, SSE, upstream
+Deployed: the Hermes unit runs this binary in the `voice-proxy` container,
+built by Bazel `rules_rust` (static `x86_64-unknown-linux-musl`) and
+`rules_oci`/distroless. It covers config, sanitising, SSE, upstream
 passthrough, routing, the result announcer, the dispatcher updates poller, the
 durable queue producer and consumer, `-healthcheck` and `-status`.

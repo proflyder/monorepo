@@ -3,7 +3,7 @@ name: _images
 # Reusable container-image build for one deployable CI unit. Called once per
 # affected deployable unit from ci.yml.
 #
-#   bazel  - hermetic distroless images assembled by rules_oci from the Go
+#   bazel  - hermetic distroless images assembled by rules_oci from Go or Rust
 #            binaries (//projects/home/kubernetes/scheduler:<image>_image)
 #   docker - Dockerfile-based images (the Hermes gateway), built reproducibly
 #            through `projects/home-assistant/deploy/images/hermes/build.sh`

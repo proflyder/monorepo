@@ -143,7 +143,7 @@ backup. Выполнять только при остановленном gatewa
 ```bash
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
 go test -race ./platform/deploy/... ./projects/home-assistant/deploy/health-exporter/...
-go test -race ./solutions/voice-proxy/...
+cargo test -p voice-proxy
 helm lint projects/home-assistant/deploy/chart
 helm lint projects/home-assistant/observability/chart
 ```

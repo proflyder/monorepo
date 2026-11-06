@@ -1,0 +1,52 @@
+[package]
+name = "voice-proxy"
+description = "OpenAI-compatible passthrough that makes assistant replies safe for Piper TTS"
+version = "0.3.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "voice_proxy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "voice-proxy"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+bytes = { workspace = true }
+caseless = { workspace = true }
+clap = { workspace = true }
+futures-core = { workspace = true }
+home-config = { path = "../../../../packages/rust/home-config" }
+home-ha = { path = "../../../../packages/rust/home-ha" }
+home-http = { path = "../../../../packages/rust/home-http" }
+home-proto = { path = "../../../../packages/rust/home-proto" }
+home-runtime = { path = "../../../../packages/rust/home-runtime" }
+home-secret = { path = "../../../../packages/rust/home-secret" }
+home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
+home-worker = { path = "../../../../packages/rust/home-worker" }
+regex = { workspace = true }
+reqwest = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+unicode-normalization = { workspace = true }
+voice-contract = { path = "../../../../packages/rust/voice-contract" }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+home-contracttest = { path = "../../../../packages/rust/home-contracttest" }
+tower = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true
