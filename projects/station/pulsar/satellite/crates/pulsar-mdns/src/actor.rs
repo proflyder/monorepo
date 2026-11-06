@@ -1,29 +1,19 @@
-//! Minimal mDNS (RFC 6762/6763) responder advertising DNS-SD service instances over IPv4 under
-//! one host name. Answers PTR/SRV/TXT/A/ANY queries for each service, its instance and
-//! "<host>.local", lists every service type in "_services._dns-sd._udp.local", announces on
-//! start, on `add_service`/`set_txt` and when the address or link changes (rtnetlink, with a
-//! 30 s poll as fallback), and sends goodbyes when the last handle is dropped.
+//! The responder actor: one UDP socket, rtnetlink and the announcement schedule. The DNS packets
+//! themselves are built by the pure `dns` module.
 
-mod dns;
-#[cfg(test)]
-mod tests;
-
-use std::cell::Cell;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::os::fd::{AsFd, OwnedFd};
-use std::rc::Rc;
+use std::os::fd::{AsFd as _, OwnedFd};
 
 use pulsar_core::{Timers, net};
-use socket2::{Domain, SockRef, Socket, Type};
+use socket2::{Domain, InterfaceIndexOrAddress, SockRef, Socket, Type};
 use tokio::io::unix::AsyncFd;
 use tokio::net::UdpSocket;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-use tracing::{debug, error, info, warn};
+use tokio::sync::mpsc::UnboundedReceiver;
+use tracing::{Level, debug, error, info, warn};
 
-use crate::errstr;
-use crate::sys::{self, MreqOpt};
-use dns::{Dest, GROUP, MAX_SERVICES, MDNS_PORT, Records, Service};
+use crate::dns::{Dest, GROUP, MAX_SERVICES, MDNS_PORT, Records, Service};
+use crate::{MdnsError, MdnsHandle, sys};
 
 /// RFC 6762 8.3: at least two announcements one second apart; three (0, +1 s, +3 s) also cover
 /// a Wi-Fi link that is still settling after a reconnect.
@@ -31,9 +21,12 @@ const ANNOUNCE_AGAIN_MS: [u64; 2] = [1000, 3000];
 /// Fallback for missed netlink events; announces only on an actual change.
 const POLL_MS: u64 = 30_000;
 /// A burst of netlink events (DHCP renew, reconnect) is handled once, after it settles.
-const SETTLE_MS: u64 = 1500;
+const SETTLE_MS: u64 = 1_500;
 const RX_BUF: usize = 9000;
 const NETLINK_BUF: usize = 8192;
+
+/// `tracing` target of the per-question diagnostics `lan_probe mdns` reads.
+pub const ANSWERED_TARGET: &str = "pulsar_mdns::answered";
 
 pub struct MdnsService {
     /// e.g. "_esphomelib._tcp"
@@ -45,86 +38,23 @@ pub struct MdnsService {
     pub txt: Vec<String>,
 }
 
-/// How a query was answered.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Reply {
-    /// Source port other than 5353: straight to the sender, question and id echoed.
-    Legacy,
-    /// QU bit: to the sender.
-    Unicast,
-    Multicast,
-}
-
-/// A question the responder answered (`spawn_traced`, for lan_probe).
-#[derive(Clone, Debug)]
-pub struct Answered {
-    pub from: SocketAddrV4,
-    /// Lowercase, dotted.
-    pub name: String,
-    pub qtype: u16,
-    pub reply: Reply,
-}
-
-enum Cmd {
+pub enum Cmd {
     AddService(MdnsService),
     SetTxt(String, Vec<String>),
 }
 
-#[derive(Clone)]
-pub struct MdnsHandle {
-    cmds: UnboundedSender<Cmd>,
-    ip: Rc<Cell<Ipv4Addr>>,
-}
-
-impl MdnsHandle {
-    /// Advertises another service on the same host (A record). Services added right after
-    /// `spawn`, before the actor first runs, go out with the start announcement (C++
-    /// `add_service` before `start()`); later ones are announced at once. At most 7 services.
-    pub fn add_service(&self, s: MdnsService) {
-        let _ = self.cmds.send(Cmd::AddService(s));
-    }
-
-    /// Replaces the TXT strings of a service added earlier (e.g. "_esphomelib._tcp") and
-    /// announces it.
-    pub fn set_txt(&self, service: &str, txt: Vec<String>) {
-        let _ = self.cmds.send(Cmd::SetTxt(service.to_owned(), txt));
-    }
-
-    /// The IPv4 address being advertised: chosen in `spawn`, then kept up to date by the actor
-    /// (netlink, 30 s poll).
-    pub fn ipv4(&self) -> Option<Ipv4Addr> {
-        let ip = self.ip.get();
-        (!ip.is_unspecified()).then_some(ip)
-    }
-}
-
-/// Opens the responder for "<host>.local". When another responder holds 5353 without
-/// SO_REUSEADDR/SO_REUSEPORT, it falls back to an ephemeral port: announcements still go out,
-/// queries are not heard. Err (logged) if no socket could be bound.
-pub fn spawn(host: &str) -> Result<MdnsHandle, String> {
-    start(host, None)
-}
-
-/// `spawn` plus a channel of every question answered (lan_probe).
-pub fn spawn_traced(host: &str) -> Result<(MdnsHandle, UnboundedReceiver<Answered>), String> {
-    let (tx, rx) = unbounded_channel();
-    start(host, Some(tx)).map(|h| (h, rx))
-}
-
-fn start(host: &str, trace: Option<UnboundedSender<Answered>>) -> Result<MdnsHandle, String> {
+/// Opens the responder and starts its actor on the current `LocalSet`.
+pub fn start(host: &str) -> Result<MdnsHandle, MdnsError> {
     let sock = open_socket()?;
-    let ip = Rc::new(Cell::new(Ipv4Addr::UNSPECIFIED));
     let mut r = Responder {
         records: Records::new(host),
         sock,
-        ip: ip.clone(),
         ifindex: 0,
         ifname: String::new(),
         join_failed: false,
         link_flags: Vec::new(),
         change_forced: false,
         timers: Timers::new(),
-        trace,
     };
     r.refresh_iface();
     r.join_group();
@@ -134,25 +64,19 @@ fn start(host: &str, trace: Option<UnboundedSender<Answered>>) -> Result<MdnsHan
         Err(e) => {
             warn!(
                 "mdns: rtnetlink unavailable ({}); relying on the 30 s poll",
-                errstr(&e)
+                crate::errstr(&e)
             );
             None
         }
     };
-    let (tx, rx) = unbounded_channel();
+    let (cmds, rx) = home_actor::channel();
     pulsar_core::supervisor().spawn_local("mdns", r.run(rx, netlink));
-    Ok(MdnsHandle { cmds: tx, ip })
+    Ok(MdnsHandle { cmds })
 }
 
-fn fail(what: &str, e: &io::Error) -> String {
-    let msg = format!("mdns: {what}: {}", errstr(e));
-    error!("{msg}");
-    msg
-}
-
-fn open_socket() -> Result<UdpSocket, String> {
-    let sock = Socket::new(Domain::IPV4, Type::DGRAM.nonblocking(), None)
-        .map_err(|e| fail("socket", &e))?;
+fn open_socket() -> Result<UdpSocket, MdnsError> {
+    let sock =
+        Socket::new(Domain::IPV4, Type::DGRAM.nonblocking(), None).map_err(MdnsError::Socket)?;
     // Shared with any other responder on the station (and lan_probe next to the daemon).
     let _ = sock.set_reuse_address(true);
     let _ = sock.set_reuse_port(true);
@@ -160,10 +84,13 @@ fn open_socket() -> Result<UdpSocket, String> {
     let _ = sock.set_multicast_loop_v4(true);
     let any = |port| SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port).into();
     if let Err(e) = sock.bind(&any(MDNS_PORT)) {
-        warn!("mdns: bind :5353 failed ({}); announcing only", errstr(&e));
-        sock.bind(&any(0)).map_err(|e| fail("bind", &e))?;
+        warn!(
+            "mdns: bind :5353 failed ({}); announcing only",
+            crate::errstr(&e)
+        );
+        sock.bind(&any(0)).map_err(MdnsError::Bind)?;
     }
-    UdpSocket::from_std(sock.into()).map_err(|e| fail("socket", &e))
+    UdpSocket::from_std(sock.into()).map_err(MdnsError::Socket)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -188,8 +115,6 @@ const UP_RUNNING: u32 = (libc::IFF_UP | libc::IFF_RUNNING) as u32;
 struct Responder {
     records: Records,
     sock: UdpSocket,
-    /// Read by the handles (`ipv4`); always equal to `records.ip`.
-    ip: Rc<Cell<Ipv4Addr>>,
     ifindex: u32,
     ifname: String,
     join_failed: bool,
@@ -197,7 +122,6 @@ struct Responder {
     link_flags: Vec<(i32, u32)>,
     change_forced: bool,
     timers: Timers<Timer>,
-    trace: Option<UnboundedSender<Answered>>,
 }
 
 impl Responder {
@@ -227,6 +151,7 @@ impl Responder {
                 r = self.sock.recv_from(&mut buf) => self.on_datagram(r, &buf),
             }
         }
+        // The last handle is gone: withdraw the records.
         self.announce(true);
     }
 
@@ -290,7 +215,7 @@ impl Responder {
         // A plain sendto: tokio's try_send_to drops datagrams until the reactor has first seen
         // the socket writable, which would lose the start announcement.
         if let Err(e) = SockRef::from(&self.sock).send_to(pkt, &to.into()) {
-            debug!("mdns: sendto: {}", errstr(&e));
+            debug!("mdns: sendto: {}", crate::errstr(&e));
         }
     }
 
@@ -299,28 +224,29 @@ impl Responder {
             Ok(v) => v,
             Err(e) => {
                 if e.kind() != io::ErrorKind::Interrupted {
-                    debug!("mdns: recv: {}", errstr(&e));
+                    debug!("mdns: recv: {}", crate::errstr(&e));
                 }
                 return;
             }
         };
         let SocketAddr::V4(from) = from else { return };
-        let trace = self.trace.as_ref();
-        for resp in self.records.answer(&buf[..n], from.port(), trace.is_some()) {
+        let trace = tracing::enabled!(target: ANSWERED_TARGET, Level::DEBUG);
+        for resp in self.records.answer(&buf[..n], from.port(), trace) {
             let to = match resp.dest {
                 Dest::Sender => from,
                 Dest::Group => SocketAddrV4::new(GROUP, MDNS_PORT),
             };
             self.send_to(&resp.packet, to);
-            if let Some(trace) = trace {
-                for (name, qtype) in resp.questions {
-                    let _ = trace.send(Answered {
-                        from,
-                        name,
-                        qtype,
-                        reply: resp.reply,
-                    });
-                }
+            for (name, qtype) in resp.questions {
+                let from_text = from.to_string();
+                debug!(
+                    target: ANSWERED_TARGET,
+                    from = from_text.as_str(),
+                    name = name.as_str(),
+                    qtype,
+                    reply = resp.reply.as_str(),
+                    "answered"
+                );
             }
         }
     }
@@ -349,7 +275,6 @@ impl Responder {
             self.ifindex = 0;
             self.ifname.clear();
         }
-        self.ip.set(self.records.ip);
         changed
     }
 
@@ -360,35 +285,39 @@ impl Responder {
         if self.ifindex == 0 {
             return;
         }
-        let fd = self.sock.as_fd();
-        let (ip, idx) = (self.records.ip, self.ifindex);
-        let failed = match sys::set_mreqn(fd, MreqOpt::AddMembership, GROUP, ip, idx) {
-            Ok(()) => false,
-            Err(e) if e.kind() == io::ErrorKind::AddrInUse => false,
-            Err(e) => {
-                if !self.join_failed {
-                    warn!("mdns: IP_ADD_MEMBERSHIP on {}: {}", self.ifname, errstr(&e));
+        let sock = SockRef::from(&self.sock);
+        let failed =
+            match sock.join_multicast_v4_n(&GROUP, &InterfaceIndexOrAddress::Index(self.ifindex)) {
+                Ok(()) => false,
+                Err(e) if e.kind() == io::ErrorKind::AddrInUse => false,
+                Err(e) => {
+                    if !self.join_failed {
+                        warn!(
+                            "mdns: IP_ADD_MEMBERSHIP on {}: {}",
+                            self.ifname,
+                            crate::errstr(&e)
+                        );
+                    }
+                    true
                 }
-                true
-            }
-        };
+            };
         if !failed && self.join_failed {
             info!("mdns: joined the multicast group on {}", self.ifname);
         }
         self.join_failed = failed;
-        if let Err(e) = sys::set_mreqn(fd, MreqOpt::MulticastIf, GROUP, ip, idx) {
-            debug!("mdns: IP_MULTICAST_IF: {}", errstr(&e));
+        if let Err(e) = sock.set_multicast_if_v4(&self.records.ip) {
+            debug!("mdns: IP_MULTICAST_IF: {}", crate::errstr(&e));
         }
     }
 
     /// Re-reads the interface, re-asserts the multicast membership and, on a change or when
     /// forced (a link came back up), announces again.
     fn check_network(&mut self, force_announce: bool) {
-        let (old_idx, old_ip) = (self.ifindex, self.records.ip);
+        let old_idx = self.ifindex;
         let changed = self.refresh_iface();
         if changed && old_idx != 0 {
-            let fd = self.sock.as_fd();
-            let _ = sys::set_mreqn(fd, MreqOpt::DropMembership, GROUP, old_ip, old_idx);
+            let _ = SockRef::from(&self.sock)
+                .leave_multicast_v4_n(&GROUP, &InterfaceIndexOrAddress::Index(old_idx));
         }
         self.join_group();
         if changed || force_announce {
@@ -499,3 +428,6 @@ fn parse_netlink(mut left: &[u8], events: &mut Vec<LinkEvent>) {
         left = &left[aligned.min(left.len())..];
     }
 }
+
+#[cfg(test)]
+mod tests;

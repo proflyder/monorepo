@@ -14,7 +14,8 @@ pulsar-clock = { path = "../pulsar-clock" }
 pulsar-core = { path = "../pulsar-core" }
 pulsar-esphome = { path = "../pulsar-esphome" }
 pulsar-hw = { path = "../pulsar-hw" }
-pulsar-lan = { path = "../pulsar-lan" }
+pulsar-arbiter = { path = "../pulsar-arbiter" }
+pulsar-mdns = { path = "../pulsar-mdns" }
 pulsar-media = { path = "../pulsar-media" }
 pulsar-sendspin = { path = "../pulsar-sendspin" }
 pulsar-update = { path = "../pulsar-update" }

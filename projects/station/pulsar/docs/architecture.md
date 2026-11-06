@@ -20,7 +20,8 @@
 | `pulsar-core` | общие части: слои `tracing` (stderr-контракт и ESPHome-sink), супервизор акторов, таймеры, `Model` (описание железа модели), громкость, мелкие общие типы |
 | `pulsar-alsa` | libasound прошивки, загружаемая через dlopen; обёртки PCM / ctl |
 | `pulsar-esphome` | сервер ESPHome Native API (plaintext / Noise) |
-| `pulsar-lan` | mDNS-респондер и арбитр wake word между станциями |
+| `pulsar-mdns` | mDNS-респондер: чистое DNS-ядро и UDP/rtnetlink-адаптер |
+| `pulsar-arbiter` | арбитр wake word между станциями: протокол, стратегия и UDP-актор |
 | `pulsar-audio` | микрофонный фронтенд (захват → VQE Яндекса → спотеры → поток 16 кГц) и музыкальные признаки опорного сигнала динамика |
 | `pulsar-media` | воспроизведение через GStreamer прошивки (каналы Music / Announce) и `Mixer` |
 | `pulsar-sendspin` | Sendspin-плеер на sendspin-cpp через C-шим `shim/` (см. [«Линковка C++ (sendspin-cpp)»](#линковка-c-sendspin-cpp)) |
@@ -244,17 +245,25 @@ flowchart LR
   событие `MdnsTxtChanged`. IP для сенсора «IP address» берётся из
   `pulsar_core::net::best_interface()`.
 
-### `pulsar-lan`
+### `pulsar-mdns`
 
-- mDNS: если 5353 занят без `SO_REUSEADDR`/`SO_REUSEPORT`, респондер берёт эфемерный порт и только
+- Чистое ядро `dns` строит пакеты из типизированных записей и отвечает на вопросы; `actor` — UDP,
+  rtnetlink и серия анонсов. Своего потока нет: актор живёт в общем `LocalSet`.
+- Если 5353 занят без `SO_REUSEADDR`/`SO_REUSEPORT`, респондер берёт эфемерный порт и только
   анонсирует. `add_service`/`set_txt` сразу после `spawn` (до первого запуска актора) уходят в
-  стартовый анонс; `ipv4()` они не меняют.
-- Арбитр: сокет не открылся → warn, `ok() = false`, `claim(decide = true)` сразу даёт
-  `Decided { won: true, peers: 0 }`. `decide = false` — только рассылка (busy-claim при звонке
-  таймера). Уже отправленный `Decided` может прийти и после `cancel()`: контроллер забывает свой
-  `claim_id` при cancel и сопоставляет события по id.
-- `spawn_traced` (только для `lan_probe`): тот же сервис плюс канал отвеченных вопросов mDNS /
-  принятых чужих claims.
+  стартовый анонс.
+- Диагностика `lan_probe mdns` — события `tracing` с target `pulsar_mdns::answered`; отдельного
+  канала в публичном API нет.
+
+### `pulsar-arbiter`
+
+- Проводной формат (`wire`) и решение (`strategy`) — чистые функции; `actor` владеет broadcast-
+  сокетом и таймерами. Формат общий с C++-бинарями `.prev` и не меняется.
+- Сокет не открылся → warn, `ok() = false`, `claim(decide = true)` сразу даёт
+  `Decided { won: true, peers: 0 }` (стратегия `Solo`). `decide = false` — только рассылка
+  (busy-claim при звонке таймера). Уже отправленный `Decided` может прийти и после `cancel()`:
+  контроллер забывает свой `ClaimId` при cancel и сопоставляет события по id.
+- Диагностика `lan_probe` — событие `tracing` с target `pulsar_arbiter::claim`.
 
 ### `pulsar-audio`
 
