@@ -9,7 +9,7 @@ go_library(
         "auth.go",
         "service.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/scheduler/internal/api",
+    importpath = "github.com/proflyder/monorepo/solutions/scheduler/internal/api",
     deps = [
         "//packages/proto/ricardo/v1:ricardo",
         "//packages/proto/ricardo/v1/ricardov1connect",

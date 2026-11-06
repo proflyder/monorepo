@@ -1,5 +1,5 @@
 {
-  "checksum": "232b601f9054098f6234064d25ec94eb58eec690321ff8420c7b31e798c21789",
+  "checksum": "a435f70c5962211f10480893af429f5e478bfad7b6a741ba73784683248c144f",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3171,6 +3171,214 @@
       ],
       "version": "0.13.0"
     },
+    "home-actor 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_actor",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-actor",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_actor",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "home-http 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_http",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-http",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_http",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "home-linux 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "rustix 1.1.6",
+            "target": "rustix"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_linux",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-linux",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_linux",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "home-runtime 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_runtime",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-runtime",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_runtime",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "home-secret 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "getrandom 0.3.4",
+            "target": "getrandom"
+          },
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "subtle 2.6.1",
+            "target": "subtle"
+          },
+          {
+            "id": "zeroize 1.9.1",
+            "target": "zeroize"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_secret",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-secret",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_secret",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "home-telemetry 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "time 0.3.55",
+            "target": "time"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
+            "id": "tracing-subscriber 0.3.23",
+            "target": "tracing_subscriber"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_telemetry",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-telemetry",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_telemetry",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "http 1.5.0": {
       "common_attrs": {
         "crate_features": [
@@ -6079,214 +6287,6 @@
         }
       ],
       "version": "0.12.28"
-    },
-    "ricardo-actor 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          }
-        ],
-        "edition": "2024"
-      },
-      "library_target_name": "ricardo_actor",
-      "license": "AGPL-3.0-only",
-      "license_ids": [
-        "AGPL-3.0"
-      ],
-      "name": "ricardo-actor",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ricardo_actor",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
-    },
-    "ricardo-http 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "axum 0.8.9",
-            "target": "axum"
-          },
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          },
-          {
-            "id": "tokio-util 0.7.20",
-            "target": "tokio_util"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          }
-        ],
-        "edition": "2024"
-      },
-      "library_target_name": "ricardo_http",
-      "license": "AGPL-3.0-only",
-      "license_ids": [
-        "AGPL-3.0"
-      ],
-      "name": "ricardo-http",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ricardo_http",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
-    },
-    "ricardo-linux 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "rustix 1.1.6",
-            "target": "rustix"
-          }
-        ],
-        "edition": "2024"
-      },
-      "library_target_name": "ricardo_linux",
-      "license": "AGPL-3.0-only",
-      "license_ids": [
-        "AGPL-3.0"
-      ],
-      "name": "ricardo-linux",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ricardo_linux",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
-    },
-    "ricardo-runtime 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          },
-          {
-            "id": "tokio-util 0.7.20",
-            "target": "tokio_util"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          }
-        ],
-        "edition": "2024"
-      },
-      "library_target_name": "ricardo_runtime",
-      "license": "AGPL-3.0-only",
-      "license_ids": [
-        "AGPL-3.0"
-      ],
-      "name": "ricardo-runtime",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ricardo_runtime",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
-    },
-    "ricardo-secret 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "getrandom 0.3.4",
-            "target": "getrandom"
-          },
-          {
-            "id": "hex 0.4.3",
-            "target": "hex"
-          },
-          {
-            "id": "subtle 2.6.1",
-            "target": "subtle"
-          },
-          {
-            "id": "zeroize 1.9.1",
-            "target": "zeroize"
-          }
-        ],
-        "edition": "2024"
-      },
-      "library_target_name": "ricardo_secret",
-      "license": "AGPL-3.0-only",
-      "license_ids": [
-        "AGPL-3.0"
-      ],
-      "name": "ricardo-secret",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ricardo_secret",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
-    },
-    "ricardo-telemetry 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "time 0.3.55",
-            "target": "time"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          },
-          {
-            "id": "tracing-subscriber 0.3.23",
-            "target": "tracing_subscriber"
-          }
-        ],
-        "deps_dev": [
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          }
-        ],
-        "edition": "2024"
-      },
-      "library_target_name": "ricardo_telemetry",
-      "license": "AGPL-3.0-only",
-      "license_ids": [
-        "AGPL-3.0"
-      ],
-      "name": "ricardo-telemetry",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ricardo_telemetry",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
     },
     "ricardo-voicestream 0.1.0": {
       "common_attrs": {
@@ -11717,6 +11717,12 @@
   "workspace_members": {
     "ble-gateway 0.2.0": "projects/station/ble-gateway/crates/ble-gateway",
     "cp_selftest 0.1.0": "solutions/windows-logon-provider/crates/cp-selftest",
+    "home-actor 0.1.0": "packages/rust/home-actor",
+    "home-http 0.1.0": "packages/rust/home-http",
+    "home-linux 0.1.0": "packages/rust/home-linux",
+    "home-runtime 0.1.0": "packages/rust/home-runtime",
+    "home-secret 0.1.0": "packages/rust/home-secret",
+    "home-telemetry 0.1.0": "packages/rust/home-telemetry",
     "logon_protocol 0.1.0": "solutions/windows-logon-provider/crates/protocol",
     "logon_provider 0.1.0": "solutions/windows-logon-provider/crates/provider",
     "pulsar 0.0.0": "projects/station/pulsar/satellite/crates/pulsar",
@@ -11731,12 +11737,6 @@
     "pulsar-sendspin 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-sendspin",
     "pulsar-update 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-update",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
-    "ricardo-actor 0.1.0": "packages/rust/ricardo-actor",
-    "ricardo-http 0.1.0": "packages/rust/ricardo-http",
-    "ricardo-linux 0.1.0": "packages/rust/ricardo-linux",
-    "ricardo-runtime 0.1.0": "packages/rust/ricardo-runtime",
-    "ricardo-secret 0.1.0": "packages/rust/ricardo-secret",
-    "ricardo-telemetry 0.1.0": "packages/rust/ricardo-telemetry",
     "ricardo-voicestream 0.1.0": "projects/station/tools/voice-recorder/helper"
   }
 }

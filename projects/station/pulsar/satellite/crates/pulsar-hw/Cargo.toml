@@ -10,7 +10,7 @@ libc = { workspace = true }
 tracing = { workspace = true }
 pulsar-clock = { path = "../pulsar-clock" }
 pulsar-core = { path = "../pulsar-core" }
-ricardo-linux = { path = "../../../../../../packages/rust/ricardo-linux" }
+home-linux = { path = "../../../../../../packages/rust/home-linux" }
 tokio = { workspace = true }
 
 [dev-dependencies]

@@ -8,10 +8,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ricardo.local/monorepo/packages/go/contracttest"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/group"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/tools"
+	"github.com/proflyder/monorepo/packages/go/contracttest"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/catalog"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/group"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/tools"
 )
 
 const contractCatalog = `

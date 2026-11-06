@@ -14,9 +14,9 @@ DEPS = [
     "@crates//:tokio-util",
     "@crates//:tracing",
     "@crates//:zbus",
-    "//packages/rust/ricardo-http:ricardo_http",
-    "//packages/rust/ricardo-runtime:ricardo_runtime",
-    "//packages/rust/ricardo-secret:ricardo_secret",
+    "//packages/rust/home-http:home_http",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
 ]
 
 rust_library(
@@ -57,7 +57,7 @@ rust_binary(
     }),
     deps = DEPS + [
         ":ble_gateway",
-        "//packages/rust/ricardo-telemetry:ricardo_telemetry",
+        "//packages/rust/home-telemetry:home_telemetry",
     ],
 )
 

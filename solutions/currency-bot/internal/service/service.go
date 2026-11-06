@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/alerts"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/message"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/alerts"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/message"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
 )
 
 // RatesSource fetches the current rates.

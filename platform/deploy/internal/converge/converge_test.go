@@ -11,7 +11,7 @@ import (
 
 	yaml "go.yaml.in/yaml/v2"
 
-	"ricardo.local/monorepo/platform/deploy/internal/kube"
+	"github.com/proflyder/monorepo/platform/deploy/internal/kube"
 )
 
 // repoRoot walks up from this test file to the module root (the directory that

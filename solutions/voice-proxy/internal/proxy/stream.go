@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sse"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sse"
 )
 
 var (

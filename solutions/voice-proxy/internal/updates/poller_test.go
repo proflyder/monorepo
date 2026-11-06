@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/announce"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/announce"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/profile"
 )
 
 type fetchCall struct {

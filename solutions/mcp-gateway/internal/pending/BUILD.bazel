@@ -6,7 +6,7 @@ go_library(
         "keyed.go",
         "pending.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/pending",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/internal/pending",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
 )
 

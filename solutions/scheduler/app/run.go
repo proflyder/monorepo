@@ -12,10 +12,10 @@ import (
 	"os"
 	"time"
 
-	"ricardo.local/monorepo/solutions/scheduler/internal/api"
-	"ricardo.local/monorepo/solutions/scheduler/internal/config"
-	"ricardo.local/monorepo/solutions/scheduler/internal/engine"
-	"ricardo.local/monorepo/solutions/scheduler/internal/store"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/api"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/config"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/engine"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/store"
 )
 
 // Version is reported by GetStatus.

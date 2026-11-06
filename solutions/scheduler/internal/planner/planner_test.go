@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
 )
 
 func daily(tz string, h, m int) Rule {

@@ -8,7 +8,7 @@ go_library(
         "ssh.go",
         "targets.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/bb",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/internal/bb",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
     deps = [
         "@in_yaml_go_yaml_v2//:yaml",

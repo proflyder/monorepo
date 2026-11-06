@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
 )
 
 type exchangeRateDTO struct {

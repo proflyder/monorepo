@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
 // TestSanitizeText covers every branch of the cleaning pipeline: citations,

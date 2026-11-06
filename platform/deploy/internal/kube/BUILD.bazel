@@ -5,5 +5,5 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "kube",
     srcs = ["kube.go"],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/kube",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/kube",
 )

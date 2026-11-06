@@ -14,7 +14,7 @@ go_library(
         "store.go",
         "waiter.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/wakegrant/internal/wakegrant",
+    importpath = "github.com/proflyder/monorepo/solutions/wakegrant/internal/wakegrant",
     deps = ["@org_modernc_sqlite//:sqlite"],
 )
 

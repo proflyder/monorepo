@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "runtimevalues",
     srcs = ["runtimevalues.go"],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/runtimevalues",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/runtimevalues",
     deps = ["@in_yaml_go_yaml_v2//:yaml"],
 )
 

@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "sanitize",
     srcs = ["sanitize.go"],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize",
     deps = [
         "@org_golang_x_text//cases",
         "@org_golang_x_text//unicode/norm",

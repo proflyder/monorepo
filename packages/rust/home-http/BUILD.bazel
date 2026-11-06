@@ -4,14 +4,15 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPS = [
-    "@crates//:getrandom",
-    "@crates//:hex",
-    "@crates//:subtle",
-    "@crates//:zeroize",
+    "@crates//:axum",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
+    "//packages/rust/home-secret:home_secret",
 ]
 
 rust_library(
-    name = "ricardo_secret",
+    name = "home_http",
     srcs = ["src/lib.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -20,7 +21,7 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
-    crate = ":ricardo_secret",
+    crate = ":home_http",
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = DEPS,

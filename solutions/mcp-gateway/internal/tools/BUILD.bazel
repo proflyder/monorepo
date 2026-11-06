@@ -10,7 +10,7 @@ go_library(
         "report.go",
         "tools.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/tools",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/internal/tools",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
     deps = [
         "//solutions/mcp-gateway/internal/agentmode",

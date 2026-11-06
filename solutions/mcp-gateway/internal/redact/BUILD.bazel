@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "redact",
     srcs = ["redact.go"],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/redact",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/internal/redact",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
 )
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/packages/go/contracttest"
+	"github.com/proflyder/monorepo/packages/go/contracttest"
 )
 
 // TestContractFixtures replays the proxy's external HTTP contract. The runner

@@ -13,7 +13,7 @@ go_library(
         "healthcheck.go",
         "main.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/ha-bridge/cmd/ha-control",
+    importpath = "github.com/proflyder/monorepo/solutions/ha-bridge/cmd/ha-control",
     visibility = ["//visibility:private"],
     deps = [
         "//packages/go/ha",

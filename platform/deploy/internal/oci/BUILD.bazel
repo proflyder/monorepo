@@ -9,7 +9,7 @@ go_library(
         "json.go",
         "oci.go",
     ],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/oci",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/oci",
 )
 
 # The committed fixture and the archives the Python helper produced are the

@@ -158,9 +158,9 @@ ble-gateway [OPTIONS]
   D-Bus-эквивалента запуска ALSA-моста/агента).
 - `button` — разбор 32-bit `input_event` без `unsafe` и чистый автомат
   жестов на `tokio::time::Instant` (тесты на `tokio::time::pause`).
-- `control` — axum + `ricardo-http` bearer; маршруты/поля те же, что читает
+- `control` — axum + `home-http` bearer; маршруты/поля те же, что читает
   `projects/home-assistant/ha-voice`.
-- Логи — `tracing` через `ricardo-telemetry`: локальное время, stderr или
+- Логи — `tracing` через `home-telemetry`: локальное время, stderr или
   append-файл. Формат строк отличается от старого Go/ручного логгера.
 
 ## HTTP control (для HA)

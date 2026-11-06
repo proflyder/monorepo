@@ -3,10 +3,15 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPS = ["@crates//:rustix"]
+DEPS = [
+    "@crates//:getrandom",
+    "@crates//:hex",
+    "@crates//:subtle",
+    "@crates//:zeroize",
+]
 
 rust_library(
-    name = "ricardo_linux",
+    name = "home_secret",
     srcs = ["src/lib.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -15,7 +20,7 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
-    crate = ":ricardo_linux",
+    crate = ":home_secret",
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = DEPS,

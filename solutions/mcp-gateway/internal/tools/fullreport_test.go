@@ -9,9 +9,9 @@ import (
 	_ "time/tzdata" // keep IANA zone assertions independent of host zoneinfo
 	"unicode/utf8"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/catalog"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/checks"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/kubernetes"
 )
 
 func healthyReportDeps(t *testing.T) *Deps {

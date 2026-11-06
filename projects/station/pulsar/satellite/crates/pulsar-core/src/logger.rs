@@ -3,7 +3,7 @@
 //! and a bounded sink queue that the ESPHome server streams to API clients
 //! (SubscribeLogs).
 //!
-//! [`init_logger`] installs [`PulsarLayer`] through [`ricardo_telemetry`] and
+//! [`init_logger`] installs [`PulsarLayer`] through [`home_telemetry`] and
 //! bridges records of third-party crates (`log`, e.g. rustls) with
 //! `tracing-log`. Pulsar crates themselves log with `tracing` macros.
 
@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ricardo_telemetry::TelemetryBuilder;
+use home_telemetry::TelemetryBuilder;
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Metadata};
 use tracing_subscriber::filter::LevelFilter;

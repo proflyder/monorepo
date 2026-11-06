@@ -10,7 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/bb"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/bb"
 )
 
 // BB tool-group names. They mirror the infra.read/infra.fix split: reading

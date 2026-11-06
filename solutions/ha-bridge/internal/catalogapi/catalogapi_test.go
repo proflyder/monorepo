@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/catalog"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/discovery"
+	"github.com/proflyder/monorepo/solutions/ha-bridge/internal/catalog"
+	"github.com/proflyder/monorepo/solutions/ha-bridge/internal/discovery"
 )
 
 type fakeSource struct {

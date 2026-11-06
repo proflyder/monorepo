@@ -499,6 +499,8 @@ type Schedule struct {
 	// lease/ack state. 0 when idle. Stop and snooze stay available after a
 	// DELIVERED ack until active_until_unix passes; a one-shot schedule that is
 	// disabled/exhausted can still be snoozed while its window is active.
+	// RingWindow is the maximum ring duration: when it expires the scheduler
+	// queues a durable STOP for this occurrence and cancels its pending FIRE.
 	ActiveOccurrenceUnix int64 `protobuf:"varint,18,opt,name=active_occurrence_unix,json=activeOccurrenceUnix,proto3" json:"active_occurrence_unix,omitempty"`
 	ActiveUntilUnix      int64 `protobuf:"varint,19,opt,name=active_until_unix,json=activeUntilUnix,proto3" json:"active_until_unix,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -3351,7 +3353,7 @@ const file_ricardo_v1_scheduler_proto_rawDesc = "" +
 	"\vEnqueueTask\x12\x1e.ricardo.v1.EnqueueTaskRequest\x1a\x1f.ricardo.v1.EnqueueTaskResponse\x12K\n" +
 	"\n" +
 	"CancelTask\x12\x1d.ricardo.v1.CancelTaskRequest\x1a\x1e.ricardo.v1.CancelTaskResponse\x12H\n" +
-	"\tGetStatus\x12\x1c.ricardo.v1.GetStatusRequest\x1a\x1d.ricardo.v1.GetStatusResponseB<Z:ricardo.local/monorepo/packages/proto/ricardo/v1;ricardov1b\x06proto3"
+	"\tGetStatus\x12\x1c.ricardo.v1.GetStatusRequest\x1a\x1d.ricardo.v1.GetStatusResponseBCZAgithub.com/proflyder/monorepo/packages/proto/ricardo/v1;ricardov1b\x06proto3"
 
 var (
 	file_ricardo_v1_scheduler_proto_rawDescOnce sync.Once

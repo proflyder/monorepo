@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
 )
 
 // AlarmService preserves the existing ricardo.v1.AlarmService wire API on top

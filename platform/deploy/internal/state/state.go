@@ -32,7 +32,7 @@ import (
 	"strconv"
 	"strings"
 
-	"ricardo.local/monorepo/platform/deploy/internal/kube"
+	"github.com/proflyder/monorepo/platform/deploy/internal/kube"
 )
 
 // Record remembers the live Deployment name (or its absence) and clears the

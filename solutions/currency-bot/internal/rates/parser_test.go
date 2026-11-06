@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
 )
 
 func TestParseLiveFixture(t *testing.T) {

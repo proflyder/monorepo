@@ -10,7 +10,7 @@ go_binary(
 go_library(
     name = "google_services_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/platform/android/tools/google_services",
+    importpath = "github.com/proflyder/monorepo/platform/android/tools/google_services",
     visibility = ["//visibility:private"],
 )
 

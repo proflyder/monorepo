@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "envfile",
     srcs = ["envfile.go"],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/envfile",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/envfile",
 )
 
 go_test(

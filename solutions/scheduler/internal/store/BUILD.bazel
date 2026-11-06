@@ -12,7 +12,7 @@ go_library(
         "tick.go",
         "timer.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/scheduler/internal/store",
+    importpath = "github.com/proflyder/monorepo/solutions/scheduler/internal/store",
     deps = [
         "//packages/proto/ricardo/v1:ricardo",
         "//solutions/scheduler/internal/idgen",

@@ -32,7 +32,7 @@ import (
 
 	yaml "go.yaml.in/yaml/v2"
 
-	"ricardo.local/monorepo/platform/deploy/internal/kube"
+	"github.com/proflyder/monorepo/platform/deploy/internal/kube"
 )
 
 // Options is one converge request.

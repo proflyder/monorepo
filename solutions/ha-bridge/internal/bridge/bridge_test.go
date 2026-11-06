@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/httpapi"
-	"ricardo.local/monorepo/packages/go/scheduler"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/config"
-	"ricardo.local/monorepo/solutions/ha-bridge/internal/ledger"
+	"github.com/proflyder/monorepo/packages/go/httpapi"
+	"github.com/proflyder/monorepo/packages/go/scheduler"
+	"github.com/proflyder/monorepo/solutions/ha-bridge/internal/config"
+	"github.com/proflyder/monorepo/solutions/ha-bridge/internal/ledger"
 )
 
 type ackCall struct {

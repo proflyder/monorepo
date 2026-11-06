@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	"ricardo.local/monorepo/solutions/wakegrant/internal/config"
+	"github.com/proflyder/monorepo/solutions/wakegrant/internal/config"
 )
 
 const healthcheckTimeout = 4 * time.Second

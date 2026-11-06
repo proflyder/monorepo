@@ -6,7 +6,7 @@ go_library(
         "healthcheck.go",
         "main.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/cmd/mcp-gateway",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/cmd/mcp-gateway",
     visibility = ["//visibility:private"],
     deps = [
         "//solutions/mcp-gateway/app",

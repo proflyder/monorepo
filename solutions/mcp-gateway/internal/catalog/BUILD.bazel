@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "catalog",
     srcs = ["catalog.go"],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/internal/catalog",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
     deps = ["@in_yaml_go_yaml_v2//:yaml"],
 )

@@ -8,7 +8,7 @@ go_library(
         "healthcheck.go",
         "main.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/wakegrant/cmd/wakegrant",
+    importpath = "github.com/proflyder/monorepo/solutions/wakegrant/cmd/wakegrant",
     visibility = ["//visibility:private"],
     deps = [
         "//solutions/wakegrant/app",

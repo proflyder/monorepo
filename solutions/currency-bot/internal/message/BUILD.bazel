@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "message",
     srcs = ["format.go"],
-    importpath = "ricardo.local/monorepo/solutions/currency-bot/internal/message",
+    importpath = "github.com/proflyder/monorepo/solutions/currency-bot/internal/message",
     deps = ["//solutions/currency-bot/internal/model"],
 )
 

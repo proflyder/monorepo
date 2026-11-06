@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/scheduler"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
+	"github.com/proflyder/monorepo/packages/go/scheduler"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/profile"
 )
 
 // Defaults.

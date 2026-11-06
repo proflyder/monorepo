@@ -3,7 +3,7 @@ package queue
 import (
 	"testing"
 
-	"ricardo.local/monorepo/packages/go/scheduler"
+	"github.com/proflyder/monorepo/packages/go/scheduler"
 )
 
 func TestMissingCreatedTimeIsUnknownNotEpoch(t *testing.T) {

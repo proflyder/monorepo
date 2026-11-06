@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/platform/deploy/internal/envfile"
+	"github.com/proflyder/monorepo/platform/deploy/internal/envfile"
 )
 
 // repoRoot walks up from this test file to the module root (the directory that

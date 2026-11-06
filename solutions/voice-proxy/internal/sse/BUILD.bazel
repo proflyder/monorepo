@@ -8,7 +8,7 @@ go_library(
         "reader.go",
         "writer.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/sse",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/sse",
 )
 
 go_test(

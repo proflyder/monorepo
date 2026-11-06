@@ -9,7 +9,7 @@ go_library(
         "main.go",
         "status.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/cmd/voice-proxy",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/cmd/voice-proxy",
     visibility = ["//visibility:private"],
     deps = [
         "//solutions/voice-proxy/app",

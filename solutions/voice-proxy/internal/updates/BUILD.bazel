@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "updates",
     srcs = ["poller.go"],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/updates",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/updates",
     deps = [
         "//solutions/voice-proxy/internal/profile",
         "//solutions/voice-proxy/internal/sanitize",

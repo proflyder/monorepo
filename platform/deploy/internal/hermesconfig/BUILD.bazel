@@ -8,7 +8,7 @@ go_library(
         "diff.go",
         "hermesconfig.go",
     ],
-    importpath = "ricardo.local/monorepo/platform/deploy/internal/hermesconfig",
+    importpath = "github.com/proflyder/monorepo/platform/deploy/internal/hermesconfig",
     deps = ["@in_yaml_go_yaml_v2//:yaml"],
 )
 

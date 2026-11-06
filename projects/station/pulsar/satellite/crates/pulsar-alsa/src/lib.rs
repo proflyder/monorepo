@@ -38,7 +38,7 @@ pub fn has_modern_aliases() -> bool {
 /// snd_strerror; without libasound, the C library's text for the errno.
 pub fn strerror(err: i32) -> String {
     ffi::lib().map_or_else(
-        |_| ricardo_linux::errno_text(err.saturating_neg()),
+        |_| home_linux::errno_text(err.saturating_neg()),
         |lib| lib.strerror(err),
     )
 }
@@ -275,7 +275,7 @@ pub fn set_mixer_integer(name: &str, values: &[i64]) -> Result<(), i32> {
 /// both before and after a device is opened.
 pub fn enable_output(model: &Model) {
     for path in model.amp_enable_paths {
-        if !ricardo_linux::write_file(path, "1\n") {
+        if !home_linux::write_file(path, "1\n") {
             tracing::warn!("amp: cannot write '{path}'");
         }
     }

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/store"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/store"
 )
 
 // HistoryResult summarises a CURRENCY_HISTORY import.

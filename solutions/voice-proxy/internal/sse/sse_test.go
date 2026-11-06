@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sse"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sse"
 )
 
 // TestSSEMultilineCRLFCommentsAndUnicode covers multiline data, CRLF, a

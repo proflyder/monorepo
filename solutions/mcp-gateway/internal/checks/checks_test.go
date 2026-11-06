@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/catalog"
 )
 
 func TestTCPCheck(t *testing.T) {

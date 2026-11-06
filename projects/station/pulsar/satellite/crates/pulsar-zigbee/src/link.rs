@@ -12,8 +12,8 @@ use std::future::poll_fn;
 use std::io::{self, Read as _, Write as _};
 use std::task::{Context, Poll, Waker};
 
+use home_linux as sysfs;
 use pulsar_core::Timers;
-use ricardo_linux as sysfs;
 use tokio::io::unix::AsyncFd;
 use tracing::{error, info, warn};
 

@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
 )
 
 // MaxLookaheadDays bounds recurrence search. Every supported repeat kind has a

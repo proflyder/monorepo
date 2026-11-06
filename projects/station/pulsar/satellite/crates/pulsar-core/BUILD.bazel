@@ -8,8 +8,8 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
-    "//packages/rust/ricardo-runtime:ricardo_runtime",
-    "//packages/rust/ricardo-telemetry:ricardo_telemetry",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-telemetry:home_telemetry",
     "@crates//:libc",
     "@crates//:log",
     "@crates//:tokio",

@@ -13,7 +13,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	ricardov1connect "ricardo.local/monorepo/packages/proto/ricardo/v1/ricardov1connect"
+	ricardov1connect "github.com/proflyder/monorepo/packages/proto/ricardo/v1/ricardov1connect"
 )
 
 const (

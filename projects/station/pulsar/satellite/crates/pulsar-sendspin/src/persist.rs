@@ -22,7 +22,7 @@ fn path(dir: &Path, key: &OsStr) -> PathBuf {
     PathBuf::from(p)
 }
 
-use ricardo_linux::io_error_text as errstr;
+use home_linux::io_error_text as errstr;
 
 /// mkdir 0700, not recursive; an existing entry counts as success.
 pub fn ensure_dir(dir: &Path) -> bool {

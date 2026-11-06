@@ -14,7 +14,7 @@ go_library(
         "healthcheck.go",
         "main.go",
     ],
-    importpath = "ricardo.local/monorepo/solutions/scheduler/cmd/scheduler",
+    importpath = "github.com/proflyder/monorepo/solutions/scheduler/cmd/scheduler",
     visibility = ["//visibility:private"],
     deps = [
         "//solutions/scheduler/app",

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/scheduler/internal/store"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/store"
 )
 
 func TestReadinessReflectsFailuresOnSameClock(t *testing.T) {

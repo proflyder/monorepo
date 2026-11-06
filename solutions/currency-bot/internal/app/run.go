@@ -12,14 +12,14 @@ import (
 	"time"
 	_ "time/tzdata" // embed IANA data for minimal hosts
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/alerts"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/config"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/metrics"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/rates"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/server"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/service"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/store"
-	"ricardo.local/monorepo/solutions/currency-bot/internal/telegram"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/alerts"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/config"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/metrics"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/rates"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/server"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/service"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/store"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/telegram"
 )
 
 const (

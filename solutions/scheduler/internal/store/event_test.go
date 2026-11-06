@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
 )
 
 func fireOne(t *testing.T, st *Store, now time.Time) *ricardov1.DueEvent {

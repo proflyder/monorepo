@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/announce"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/gateway"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/profile"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/proxy"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/result"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/router"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sse"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/testfake"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/announce"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/gateway"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/profile"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/proxy"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/result"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/router"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sse"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/testfake"
 )
 
 type pipeline struct {

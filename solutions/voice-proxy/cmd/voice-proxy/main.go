@@ -15,7 +15,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"ricardo.local/monorepo/solutions/voice-proxy/app"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/app"
 )
 
 func main() {

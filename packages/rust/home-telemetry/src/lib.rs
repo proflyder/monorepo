@@ -311,7 +311,7 @@ mod tests {
 
     fn temp_path(tag: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
-            "ricardo-telemetry-{tag}-{}-{}.log",
+            "home-telemetry-{tag}-{}-{}.log",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

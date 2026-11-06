@@ -95,7 +95,7 @@ rust_binary(
     target_compatible_with = LINUX,
     deps = [
         ":pulsar_audio",
-        "//packages/rust/ricardo-linux:ricardo_linux",
+        "//packages/rust/home-linux:home_linux",
         "@crates//:libc",
         "@crates//:libloading",
         "@crates//:tracing",

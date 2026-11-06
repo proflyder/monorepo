@@ -625,7 +625,7 @@ impl Output {
             Sink::Sysfs(files) => {
                 for (k, f) in files.iter().enumerate() {
                     if !have_last || px[k] != self.last[k] {
-                        ricardo_linux::write_int_fd(f.as_raw_fd(), i32::from(px[k]));
+                        home_linux::write_int_fd(f.as_raw_fd(), i32::from(px[k]));
                     }
                 }
             }
@@ -712,7 +712,7 @@ fn open_strip_fb(model: &Model, s: &LedStrip) -> Option<Framebuffer> {
     let name = std::fs::read_to_string(format!("/sys/class/graphics/{dev}/name"))
         .ok()
         .unwrap_or_default();
-    let name = ricardo_linux::trim(&name);
+    let name = home_linux::trim(&name);
     if name != s.fb_name {
         warn!("leds: {} is '{name}', expected '{}'", s.fb_dev, s.fb_name);
         return None;

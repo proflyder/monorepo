@@ -9,7 +9,7 @@ import (
 	"syscall"
 	_ "time/tzdata" // embed IANA data for minimal hosts
 
-	"ricardo.local/monorepo/solutions/scheduler/app"
+	"github.com/proflyder/monorepo/solutions/scheduler/app"
 )
 
 func main() {

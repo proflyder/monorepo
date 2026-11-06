@@ -143,10 +143,10 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
- "ricardo-http",
- "ricardo-runtime",
- "ricardo-secret",
- "ricardo-telemetry",
+ "home-http",
+ "home-runtime",
+ "home-secret",
+ "home-telemetry",
  "serde",
  "serde_json",
  "thiserror",
@@ -637,6 +637,61 @@ dependencies = [
 ]
 
 [[package]]
+name = "home-actor"
+version = "0.1.0"
+dependencies = [
+ "home-runtime",
+ "tokio",
+]
+
+[[package]]
+name = "home-http"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "home-secret",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "home-linux"
+version = "0.1.0"
+dependencies = [
+ "rustix",
+]
+
+[[package]]
+name = "home-runtime"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "home-secret"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "hex",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "home-telemetry"
+version = "0.1.0"
+dependencies = [
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "http"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -941,8 +996,8 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "hmac",
+ "home-secret",
  "http",
- "ricardo-secret",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -1125,10 +1180,10 @@ dependencies = [
 name = "pulsar-alsa"
 version = "0.0.0"
 dependencies = [
+ "home-linux",
  "libc",
  "libloading",
  "pulsar-core",
- "ricardo-linux",
  "tracing",
 ]
 
@@ -1137,11 +1192,11 @@ name = "pulsar-audio"
 version = "0.0.0"
 dependencies = [
  "cc",
+ "home-linux",
  "libc",
  "libloading",
  "pulsar-alsa",
  "pulsar-core",
- "ricardo-linux",
  "ring",
  "tokio",
  "tracing",
@@ -1151,9 +1206,9 @@ dependencies = [
 name = "pulsar-clock"
 version = "0.0.0"
 dependencies = [
+ "home-linux",
  "libc",
  "pulsar-core",
- "ricardo-linux",
  "tokio",
  "tracing",
 ]
@@ -1162,10 +1217,10 @@ dependencies = [
 name = "pulsar-core"
 version = "0.0.0"
 dependencies = [
+ "home-runtime",
+ "home-telemetry",
  "libc",
  "log",
- "ricardo-runtime",
- "ricardo-telemetry",
  "tokio",
  "tracing",
  "tracing-log",
@@ -1176,9 +1231,9 @@ dependencies = [
 name = "pulsar-esphome"
 version = "0.0.0"
 dependencies = [
+ "home-linux",
  "libc",
  "pulsar-core",
- "ricardo-linux",
  "snow",
  "socket2",
  "tokio",
@@ -1189,10 +1244,10 @@ dependencies = [
 name = "pulsar-hw"
 version = "0.0.0"
 dependencies = [
+ "home-linux",
  "libc",
  "pulsar-clock",
  "pulsar-core",
- "ricardo-linux",
  "tokio",
  "tracing",
 ]
@@ -1201,10 +1256,10 @@ dependencies = [
 name = "pulsar-lan"
 version = "0.0.0"
 dependencies = [
+ "home-actor",
+ "home-linux",
  "libc",
  "pulsar-core",
- "ricardo-actor",
- "ricardo-linux",
  "socket2",
  "tokio",
  "tracing",
@@ -1227,10 +1282,10 @@ name = "pulsar-sendspin"
 version = "0.0.0"
 dependencies = [
  "cc",
+ "home-linux",
  "libc",
  "pulsar-alsa",
  "pulsar-core",
- "ricardo-linux",
  "tokio",
  "tracing",
 ]
@@ -1240,11 +1295,11 @@ name = "pulsar-update"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "home-actor",
+ "home-linux",
  "libc",
  "pulsar-core",
  "reqwest",
- "ricardo-actor",
- "ricardo-linux",
  "ring",
  "rustls",
  "rustls-pki-types",
@@ -1260,9 +1315,9 @@ dependencies = [
 name = "pulsar-zigbee"
 version = "0.0.0"
 dependencies = [
+ "home-linux",
  "libc",
  "pulsar-core",
- "ricardo-linux",
  "socket2",
  "tokio",
  "tracing",
@@ -1323,61 +1378,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "ricardo-actor"
-version = "0.1.0"
-dependencies = [
- "ricardo-runtime",
- "tokio",
-]
-
-[[package]]
-name = "ricardo-http"
-version = "0.1.0"
-dependencies = [
- "axum",
- "ricardo-secret",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "ricardo-linux"
-version = "0.1.0"
-dependencies = [
- "rustix",
-]
-
-[[package]]
-name = "ricardo-runtime"
-version = "0.1.0"
-dependencies = [
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "ricardo-secret"
-version = "0.1.0"
-dependencies = [
- "getrandom 0.3.4",
- "hex",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "ricardo-telemetry"
-version = "0.1.0"
-dependencies = [
- "time",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

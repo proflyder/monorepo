@@ -16,8 +16,8 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/agentmode"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/bb"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/agentmode"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/bb"
 )
 
 type fakeDispatcher struct {

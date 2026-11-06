@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn write_int_fd_and_write_file() {
-        let dir = std::env::temp_dir().join(format!("ricardo-linux-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("home-linux-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("value");
         std::fs::write(&path, b"0").unwrap();

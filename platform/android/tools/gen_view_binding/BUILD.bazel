@@ -10,7 +10,7 @@ go_binary(
 go_library(
     name = "gen_view_binding_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/platform/android/tools/gen_view_binding",
+    importpath = "github.com/proflyder/monorepo/platform/android/tools/gen_view_binding",
     visibility = ["//visibility:private"],
 )
 

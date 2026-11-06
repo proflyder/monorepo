@@ -7,7 +7,7 @@ go_library(
         "decode.go",
         "event.go",
     ],
-    importpath = "ricardo.local/monorepo/packages/go/scheduler",
+    importpath = "github.com/proflyder/monorepo/packages/go/scheduler",
     visibility = ["//visibility:public"],
     deps = ["//packages/go/httpapi"],
 )

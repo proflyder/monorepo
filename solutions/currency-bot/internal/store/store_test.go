@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/solutions/currency-bot/internal/model"
+	"github.com/proflyder/monorepo/solutions/currency-bot/internal/model"
 )
 
 func openTest(t *testing.T) *Store {

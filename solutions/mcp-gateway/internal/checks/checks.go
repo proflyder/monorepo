@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/catalog"
 )
 
 // DefaultTimeout bounds one external check.

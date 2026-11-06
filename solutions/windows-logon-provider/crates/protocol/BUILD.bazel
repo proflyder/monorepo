@@ -21,7 +21,7 @@ rust_library(
         "@crates//:subtle",
         "@crates//:thiserror",
         "@crates//:zeroize",
-        "//packages/rust/ricardo-secret:ricardo_secret",
+        "//packages/rust/home-secret:home_secret",
     ],
 )
 

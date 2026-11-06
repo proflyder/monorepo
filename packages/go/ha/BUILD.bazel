@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ha",
     srcs = ["client.go"],
-    importpath = "ricardo.local/monorepo/packages/go/ha",
+    importpath = "github.com/proflyder/monorepo/packages/go/ha",
     visibility = ["//visibility:public"],
     deps = ["//packages/go/httpapi"],
 )

@@ -8,8 +8,8 @@ publish.workspace = true
 [dependencies]
 libc = { workspace = true }
 log = { workspace = true }
-ricardo-runtime = { path = "../../../../../../packages/rust/ricardo-runtime" }
-ricardo-telemetry = { path = "../../../../../../packages/rust/ricardo-telemetry" }
+home-runtime = { path = "../../../../../../packages/rust/home-runtime" }
+home-telemetry = { path = "../../../../../../packages/rust/home-telemetry" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-log = { workspace = true }

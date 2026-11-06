@@ -161,7 +161,7 @@ rustfmt/clippy для host- и Windows-целей (aspect переключает
 
 Переносимый слой использует стандартный стек (решение 40): `serde` и
 `serde_json` с `deny_unknown_fields`, `base64`, `thiserror`, `http::Uri`
-и `ricardo-secret` (zeroizing-пароль и redacted `Debug`). Собственных
+и `home-secret` (zeroizing-пароль и redacted `Debug`). Собственных
 JSON/base64/ошибочных типов в решении нет.
 
 `crates/*/src/bindings.rs` сгенерированы `windows-bindgen 0.63.0` из фильтров

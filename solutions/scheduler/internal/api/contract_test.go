@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"ricardo.local/monorepo/packages/go/contracttest"
-	"ricardo.local/monorepo/solutions/scheduler/internal/engine"
-	"ricardo.local/monorepo/solutions/scheduler/internal/store"
+	"github.com/proflyder/monorepo/packages/go/contracttest"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/engine"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/store"
 )
 
 const contractToken = "contract-test-token"

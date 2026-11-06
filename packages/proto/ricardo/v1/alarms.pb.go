@@ -1057,7 +1057,7 @@ const file_ricardo_v1_alarms_proto_rawDesc = "" +
 	"\vDeleteAlarm\x12\x1e.ricardo.v1.DeleteAlarmRequest\x1a\x1f.ricardo.v1.DeleteAlarmResponse\x12Z\n" +
 	"\x0fSetAlarmEnabled\x12\".ricardo.v1.SetAlarmEnabledRequest\x1a#.ricardo.v1.SetAlarmEnabledResponse\x12N\n" +
 	"\vSnoozeAlarm\x12\x1e.ricardo.v1.SnoozeAlarmRequest\x1a\x1f.ricardo.v1.SnoozeAlarmResponse\x12H\n" +
-	"\tStopAlarm\x12\x1c.ricardo.v1.StopAlarmRequest\x1a\x1d.ricardo.v1.StopAlarmResponseB<Z:ricardo.local/monorepo/packages/proto/ricardo/v1;ricardov1b\x06proto3"
+	"\tStopAlarm\x12\x1c.ricardo.v1.StopAlarmRequest\x1a\x1d.ricardo.v1.StopAlarmResponseBCZAgithub.com/proflyder/monorepo/packages/proto/ricardo/v1;ricardov1b\x06proto3"
 
 var (
 	file_ricardo_v1_alarms_proto_rawDescOnce sync.Once

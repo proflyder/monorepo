@@ -8,8 +8,8 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
+	v1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
 	http "net/http"
-	v1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
 	strings "strings"
 )
 

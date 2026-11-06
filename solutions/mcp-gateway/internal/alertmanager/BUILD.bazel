@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "alertmanager",
     srcs = ["client.go"],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/internal/alertmanager",
     visibility = ["//solutions/mcp-gateway:__subpackages__"],
 )
 

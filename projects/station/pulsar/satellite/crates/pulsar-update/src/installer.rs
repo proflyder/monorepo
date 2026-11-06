@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use ricardo_linux::io_error_text as os_text;
+use home_linux::io_error_text as os_text;
 use tokio::io::AsyncReadExt as _;
 use tokio::process::Command;
 use tokio::time::Instant;

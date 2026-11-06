@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/metrics"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/metrics"
 )
 
 // Options wires the HTTP server.

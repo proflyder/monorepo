@@ -39,12 +39,12 @@ use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd as _;
 use std::path::PathBuf;
 
+use home_linux as sysfs;
 use pulsar_core::model::Model;
 use pulsar_core::{
     AmbientDimmer, ClockShot, MUSIC_STALE_MS, MusicFrame, SENDSPIN_FRESH_MS, Timers, UiState,
     now_ms,
 };
-use ricardo_linux as sysfs;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 

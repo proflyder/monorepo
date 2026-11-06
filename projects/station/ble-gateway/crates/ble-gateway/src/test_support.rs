@@ -191,7 +191,7 @@ impl TestGateway {
         let gateway = Gateway::new(
             config,
             timings,
-            ricardo_secret::Secret::new("123456"),
+            home_secret::Secret::new("123456"),
             credentials,
             ble,
             bluetooth,

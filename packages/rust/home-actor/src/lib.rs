@@ -6,8 +6,8 @@
 //! (the command channel closes).
 //!
 //! The handle itself is generic over `Send`; the actor task is spawned by the
-//! caller through [`ricardo_runtime::Supervisor::spawn`] or
-//! [`ricardo_runtime::Supervisor::spawn_local`].
+//! caller through [`home_runtime::Supervisor::spawn`] or
+//! [`home_runtime::Supervisor::spawn_local`].
 
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 

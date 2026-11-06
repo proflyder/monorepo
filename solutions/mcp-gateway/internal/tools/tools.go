@@ -15,16 +15,16 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/agentmode"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/alertmanager"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/bb"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/catalog"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/checks"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/kubernetes"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/loki"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/metrics"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/pending"
-	"ricardo.local/monorepo/solutions/mcp-gateway/internal/prometheus"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/agentmode"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/alertmanager"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/bb"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/catalog"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/checks"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/kubernetes"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/loki"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/metrics"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/pending"
+	"github.com/proflyder/monorepo/solutions/mcp-gateway/internal/prometheus"
 )
 
 // Generic tool-group names enabled from configuration.

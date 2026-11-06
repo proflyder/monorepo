@@ -6,8 +6,8 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
-    "//packages/rust/ricardo-actor:ricardo_actor",
-    "//packages/rust/ricardo-linux:ricardo_linux",
+    "//packages/rust/home-actor:home_actor",
+    "//packages/rust/home-linux:home_linux",
     "@crates//:libc",
     "@crates//:tracing",
     "@crates//:socket2",

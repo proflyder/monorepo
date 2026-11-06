@@ -192,12 +192,12 @@
   Windows logon provider, voice-recorder helper) — один корневой Cargo
   workspace: `/Cargo.toml`, `/Cargo.lock`, `/rust-toolchain.toml`, один
   `@crates//` и общие `[workspace.lints]` (решение 40). Общий core-слой —
-  `packages/rust`: `ricardo-telemetry` (tracing/фильтр/локальное время),
-  `ricardo-runtime` (SIGTERM/SIGINT + `Supervisor` на
-  `CancellationToken`/`TaskTracker`, `spawn`/`spawn_local`), `ricardo-actor`
-  (`Handle`/`channel`; спавн через `Supervisor`), `ricardo-linux` (errno и sysfs
-  поверх `rustix`), `ricardo-secret` (zeroize/0600/0700, constant-time) и
-  `ricardo-http` (axum bearer + graceful serve). Pulsar пишет логи через
+  `packages/rust`: `home-telemetry` (tracing/фильтр/локальное время),
+  `home-runtime` (SIGTERM/SIGINT + `Supervisor` на
+  `CancellationToken`/`TaskTracker`, `spawn`/`spawn_local`), `home-actor`
+  (`Handle`/`channel`; спавн через `Supervisor`), `home-linux` (errno и sysfs
+  поверх `rustix`), `home-secret` (zeroize/0600/0700, constant-time) и
+  `home-http` (axum bearer + graceful serve). Pulsar пишет логи через
   `tracing`; stderr-формат C++ и ESPHome-sink сохранены слоями
   `pulsar-core`, записи сторонних крейтов идут мостом `tracing-log`. BLE gateway
   переписан на них: нативный control-сокет `wpa_supplicant`, `zbus` proxies,

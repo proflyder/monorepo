@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "catalogapi",
     srcs = ["catalogapi.go"],
-    importpath = "ricardo.local/monorepo/solutions/ha-bridge/internal/catalogapi",
+    importpath = "github.com/proflyder/monorepo/solutions/ha-bridge/internal/catalogapi",
     visibility = ["//solutions/ha-bridge:__subpackages__"],
     deps = ["//solutions/ha-bridge/internal/discovery"],
 )

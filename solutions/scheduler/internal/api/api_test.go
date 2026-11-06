@@ -18,10 +18,10 @@ import (
 	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/proto"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
-	ricardov1connect "ricardo.local/monorepo/packages/proto/ricardo/v1/ricardov1connect"
-	"ricardo.local/monorepo/solutions/scheduler/internal/engine"
-	"ricardo.local/monorepo/solutions/scheduler/internal/store"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
+	ricardov1connect "github.com/proflyder/monorepo/packages/proto/ricardo/v1/ricardov1connect"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/engine"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/store"
 )
 
 const testToken = "test-token"

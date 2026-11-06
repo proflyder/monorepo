@@ -11,7 +11,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	ricardov1 "ricardo.local/monorepo/packages/proto/ricardo/v1"
+	ricardov1 "github.com/proflyder/monorepo/packages/proto/ricardo/v1"
 )
 
 var testBase = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)

@@ -9,7 +9,7 @@ go_binary(
 go_library(
     name = "alarm_lib",
     srcs = ["main.go"],
-    importpath = "ricardo.local/monorepo/solutions/alarm/cmd/alarm",
+    importpath = "github.com/proflyder/monorepo/solutions/alarm/cmd/alarm",
     visibility = ["//visibility:private"],
     deps = ["//solutions/scheduler/app"],
 )

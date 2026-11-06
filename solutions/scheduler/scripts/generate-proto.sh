@@ -17,8 +17,8 @@ cd "$root"
 protoc="${PROTOC:-protoc}"
 "$protoc" \
   -I packages/proto \
-  --go_out=. --go_opt=module=ricardo.local/monorepo \
-  --connect-go_out=. --connect-go_opt=module=ricardo.local/monorepo \
+  --go_out=. --go_opt=module=github.com/proflyder/monorepo \
+  --connect-go_out=. --connect-go_opt=module=github.com/proflyder/monorepo \
   packages/proto/ricardo/v1/alarms.proto \
   packages/proto/ricardo/v1/scheduler.proto
 

@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 go_library(
     name = "router",
     srcs = ["router.go"],
-    importpath = "ricardo.local/monorepo/solutions/voice-proxy/internal/router",
+    importpath = "github.com/proflyder/monorepo/solutions/voice-proxy/internal/router",
     deps = [
         "//solutions/voice-proxy/internal/profile",
         "//solutions/voice-proxy/internal/proxy",

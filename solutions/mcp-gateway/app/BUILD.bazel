@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library")
 go_library(
     name = "app",
     srcs = ["run.go"],
-    importpath = "ricardo.local/monorepo/solutions/mcp-gateway/app",
+    importpath = "github.com/proflyder/monorepo/solutions/mcp-gateway/app",
     visibility = ["//visibility:public"],
     deps = [
         "//solutions/mcp-gateway/internal/agentmode",

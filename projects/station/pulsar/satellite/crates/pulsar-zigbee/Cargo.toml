@@ -9,7 +9,7 @@ publish.workspace = true
 libc = { workspace = true }
 tracing = { workspace = true }
 pulsar-core = { path = "../pulsar-core" }
-ricardo-linux = { path = "../../../../../../packages/rust/ricardo-linux" }
+home-linux = { path = "../../../../../../packages/rust/home-linux" }
 socket2 = { workspace = true }
 tokio = { workspace = true }
 

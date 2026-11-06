@@ -19,8 +19,8 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
 
-	"ricardo.local/monorepo/packages/go/ha"
-	"ricardo.local/monorepo/solutions/voice-proxy/internal/sanitize"
+	"github.com/proflyder/monorepo/packages/go/ha"
+	"github.com/proflyder/monorepo/solutions/voice-proxy/internal/sanitize"
 )
 
 // Routing profiles.

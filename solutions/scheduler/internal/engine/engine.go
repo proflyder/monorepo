@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"ricardo.local/monorepo/solutions/scheduler/internal/store"
+	"github.com/proflyder/monorepo/solutions/scheduler/internal/store"
 )
 
 // Status is the last observed tick state.
