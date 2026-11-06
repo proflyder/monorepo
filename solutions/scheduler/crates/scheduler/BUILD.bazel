@@ -1,0 +1,57 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_DEPS = [
+    "@crates//:jiff",
+    "@crates//:serde_json",
+    "@crates//:sha1_smol",
+    "@crates//:thiserror",
+    "@crates//:uuid",
+]
+
+rust_library(
+    name = "scheduler_lib",
+    crate_name = "scheduler",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS,
+)
+
+# The golden tables stay owned by solutions/scheduler: the test reads the Go
+# fixtures at runtime instead of embedding a second copy.
+rust_test(
+    name = "unit_tests",
+    crate = ":scheduler_lib",
+    compile_data = [
+        "//solutions/scheduler:ids_vectors",
+        "//solutions/scheduler:planner_vectors",
+    ],
+    data = [
+        "//solutions/scheduler:ids_vectors",
+        "//solutions/scheduler:planner_vectors",
+    ],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [":scheduler_lib"],
+)
+
+# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = [":scheduler_lib"],
+)

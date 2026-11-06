@@ -195,6 +195,24 @@ export const config = {
       },
     },
     {
+      id: "scheduler-rust",
+      platform: "bazel",
+      title: "solutions/scheduler/crates (Rust port, tests only until cutover)",
+      paths: ["solutions/scheduler/crates/**", "solutions/scheduler/testdata/**"],
+      // The Rust scheduler is not deployed yet: the Go `scheduler` unit still
+      // owns the image and the Deployment. Golden vectors in testdata are
+      // shared with the Go tests.
+      bazel: {
+        roots: ["//solutions/scheduler/crates/scheduler", "//packages/rust"],
+        test_targets: [
+          "//solutions/scheduler/crates/scheduler:unit_tests",
+          "//solutions/scheduler/crates/scheduler:clippy",
+          "//solutions/scheduler/crates/scheduler:rustfmt",
+        ],
+        build_targets: ["//solutions/scheduler/crates/scheduler/..."],
+      },
+    },
+    {
       id: "health-exporter",
       platform: "go",
       title: "projects/home-assistant/deploy/health-exporter (runtime chart)",
