@@ -148,10 +148,7 @@ pub fn parse_go_duration(value: &str) -> Result<Duration, String> {
     if text.is_empty() {
         return Err("expected a duration such as 1s or 1h30m".to_owned());
     }
-    let unsigned = match text.strip_prefix(['+', '-']) {
-        Some(rest) => rest,
-        None => text,
-    };
+    let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
     if text.starts_with('-') && !unsigned.is_empty() {
         return Err("duration must not be negative".to_owned());
     }
