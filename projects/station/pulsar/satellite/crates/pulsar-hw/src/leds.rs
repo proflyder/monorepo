@@ -20,6 +20,7 @@ use std::fs::File;
 use std::io;
 use std::os::fd::AsRawFd as _;
 
+use home_linux::{Framebuffer, I2c};
 use pulsar_core::{MusicFrame, Timers, UiState};
 use pulsar_model::{LedBackend, Leds, StripLayout};
 use pulsar_ui::{
@@ -28,8 +29,6 @@ use pulsar_ui::{
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::Instant;
 use tracing::{error, info, warn};
-
-use crate::sys::{Framebuffer, I2c};
 
 /// ~30 fps while animating (stock 20 ms frames resampled by time).
 const FRAME_MS: u64 = 33;
@@ -269,33 +268,7 @@ impl LedsHandle {
 pub fn spawn_leds(leds: &'static Leds) -> LedsHandle {
     let n = usize::try_from(leds.ring.count).unwrap_or(0);
     let nlogo = leds.logo.as_ref().map_or(0, |l| l.count as usize);
-    let sysfs_sink = || {
-        open_sysfs(leds, n, nlogo).map_or_else(
-            || {
-                warn!("LEDs unavailable");
-                Sink::None
-            },
-            |files| {
-                info!("leds: driving {n} ring + {nlogo} logo LEDs via sysfs brightness");
-                Sink::Sysfs(files)
-            },
-        )
-    };
-    let sink = match leds.ring.backend {
-        LedBackend::I2c { dev, addr } => open_i2c(dev, addr, n, nlogo).map_or_else(
-            || Sink::None,
-            |sink| {
-                info!("leds: driving {n} ring LEDs via i2c {dev}@0x{addr:02x}");
-                sink
-            },
-        ),
-        LedBackend::Framebuffer { .. } => open_fb(leds, nlogo).map_or_else(sysfs_sink, |fb| {
-            info!("leds: driving {n} ring + {nlogo} logo LEDs via framebuffer");
-            fb
-        }),
-        LedBackend::Sysfs => sysfs_sink(),
-    };
-    let opened = !matches!(sink, Sink::None);
+    let (sink, opened) = open_sink(leds, n, nlogo);
     let (tx, rx) = unbounded_channel();
     let comp = Compositor::new(n, nlogo);
     let out = Output::new(sink, n, nlogo);
@@ -303,7 +276,40 @@ pub fn spawn_leds(leds: &'static Leds) -> LedsHandle {
     LedsHandle { tx }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Выбирает приёмник по backend модели один раз при старте актора.
+fn open_sink(leds: &Leds, n: usize, nlogo: usize) -> (Box<dyn LedSink>, bool) {
+    fn sysfs(leds: &Leds, n: usize, nlogo: usize) -> (Box<dyn LedSink>, bool) {
+        open_sysfs(leds, n, nlogo).map_or_else(
+            || {
+                warn!("LEDs unavailable");
+                (Box::new(NullSink) as Box<dyn LedSink>, false)
+            },
+            |files| {
+                info!("leds: driving {n} ring + {nlogo} logo LEDs via sysfs brightness");
+                (Box::new(files), true)
+            },
+        )
+    }
+    match leds.ring.backend {
+        LedBackend::I2c { dev, addr } => open_i2c(dev, addr, n, nlogo).map_or_else(
+            || (Box::new(NullSink) as Box<dyn LedSink>, false),
+            |sink| {
+                info!("leds: driving {n} ring LEDs via i2c {dev}@0x{addr:02x}");
+                (Box::new(sink), true)
+            },
+        ),
+        LedBackend::Framebuffer { .. } => open_fb(leds, n, nlogo).map_or_else(
+            || sysfs(leds, n, nlogo),
+            |fb| {
+                info!("leds: driving {n} ring + {nlogo} logo LEDs via framebuffer");
+                (Box::new(fb), true)
+            },
+        ),
+        LedBackend::Sysfs => sysfs(leds, n, nlogo),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TimerKey {
     /// Repeating while the content moves.
     Frame,
@@ -390,33 +396,35 @@ fn frame(comp: &mut Compositor, out: &mut Output, timers: &mut Timers<TimerKey>,
 }
 
 // -------------------------------------------------------------------------------------------------
-// Output
+// Порты вывода
 
-#[allow(
-    clippy::large_enum_variant,
-    reason = "one per process; the framebuffer variant is the one in use"
-)]
-enum Sink {
-    None,
-    Fb {
-        ring: Framebuffer,
-        logo: Option<Framebuffer>,
-    },
-    /// IS31FL3236-compatible 18-channel controller (6 RGB pixels).
-    I2c {
-        dev: I2c,
-        addr: u16,
-    },
-    /// [ring r,g,b x n][logo r,g,b x nlogo]
-    Sysfs(Vec<File>),
-    /// Host tests: (time, pixels) of every write that changed something.
-    #[cfg(test)]
-    Capture(Captured),
+/// Ошибка вывода светодиодов. `Io` — отказ устройства, `ShortWrite` — драйвер принял не весь
+/// кадр (повтор отправит пиксели заново).
+#[derive(Debug, thiserror::Error)]
+pub enum LedError {
+    #[error("{0}")]
+    Io(#[from] io::Error),
+    #[error("short framebuffer write: {0} of {1} bytes")]
+    ShortWrite(usize, usize),
 }
 
-/// (time, pixels) of the writes a test sink saw.
-#[cfg(test)]
-type Captured = std::rc::Rc<std::cell::RefCell<Vec<(i64, Vec<u8>)>>>;
+/// Приёмник кадра кольца (+ логотипа): рамка, шина I²C, sysfs brightness или заглушка. Кадр
+/// передаётся в порядке [кольцо, логотип]; реализация сама решает, какие пиксели изменились.
+pub trait LedSink {
+    fn write(&mut self, px: &[Rgb]) -> Result<(), LedError>;
+
+    /// Забыть последний кадр: следующая запись отправит все пиксели.
+    fn invalidate(&mut self) {}
+}
+
+/// Светодиодов нет: состояние и цвет корпуса работают, вывода нет.
+struct NullSink;
+
+impl LedSink for NullSink {
+    fn write(&mut self, _: &[Rgb]) -> Result<(), LedError> {
+        Ok(())
+    }
+}
 
 #[derive(Default)]
 struct WriteWarn {
@@ -424,140 +432,8 @@ struct WriteWarn {
     suppressed: u32,
 }
 
-struct Output {
-    sink: Sink,
-    n: usize,
-    /// Last written pixels (RGB); `has_last` false = rewrite everything.
-    last: Vec<u8>,
-    has_last: bool,
-    bgr: Vec<u8>,
-    /// fb0 / fb1 write warnings.
-    warn: [WriteWarn; 2],
-}
-
-impl Output {
-    fn new(sink: Sink, n: usize, nlogo: usize) -> Self {
-        Self {
-            sink,
-            n,
-            last: vec![0; (n + nlogo) * 3],
-            has_last: false,
-            bgr: Vec::with_capacity(n.max(nlogo) * 3),
-            warn: Default::default(),
-        }
-    }
-
-    fn forget_last(&mut self) {
-        self.has_last = false;
-    }
-
-    fn clear(&mut self, now: i64) {
-        let off = vec![0u8; self.last.len()];
-        self.has_last = false;
-        self.write(&off, now);
-    }
-
-    /// Writes changed pixels; true when a sink reported an error and the frame should be retried.
-    fn write(&mut self, px: &[u8], now: i64) -> bool {
-        let split = self.n * 3;
-        let have_last = self.has_last;
-        let mut failed = false;
-        match &mut self.sink {
-            Sink::None => {}
-            #[cfg(test)]
-            Sink::Capture(frames) => {
-                if !have_last || px != &self.last[..] {
-                    frames.borrow_mut().push((now, px.to_vec()));
-                }
-            }
-            Sink::Fb { ring, logo } => {
-                if !have_last || px[..split] != self.last[..split] {
-                    failed |= !write_fb(
-                        ring,
-                        &px[..split],
-                        &mut self.bgr,
-                        &mut self.warn[0],
-                        "ring fb",
-                        now,
-                    );
-                }
-                if let Some(logo) = logo
-                    && (!have_last || px[split..] != self.last[split..])
-                {
-                    failed |= !write_fb(
-                        logo,
-                        &px[split..],
-                        &mut self.bgr,
-                        &mut self.warn[1],
-                        "logo fb",
-                        now,
-                    );
-                }
-            }
-            Sink::I2c { dev, addr } => {
-                if !have_last || px[..split] != self.last[..split] {
-                    let mut bgr = [0u8; 18];
-                    for (i, p) in px[..split].as_chunks::<3>().0.iter().enumerate() {
-                        bgr[i * 3..i * 3 + 3].copy_from_slice(&[p[2], p[1], p[0]]);
-                    }
-                    // 0x01: first PWM register; 0x25 = 0xAA latches the frame.
-                    let r = dev
-                        .write_register(*addr, 0x01, &bgr)
-                        .and_then(|()| dev.write_register(*addr, 0x25, &[0xaa]));
-                    if let Err(e) = r {
-                        warn_write(&mut self.warn[0], "i2c", &e, now);
-                        // Keep `last` as it was: the retry must send these pixels again.
-                        return true;
-                    }
-                }
-            }
-            Sink::Sysfs(files) => {
-                for (k, f) in files.iter().enumerate() {
-                    if !have_last || px[k] != self.last[k] {
-                        home_linux::write_int_fd(f.as_raw_fd(), i32::from(px[k]));
-                    }
-                }
-            }
-        }
-        if failed {
-            // Keep `last` as it was, so the retry does not skip these pixels.
-            return true;
-        }
-        self.last.copy_from_slice(px);
-        self.has_last = true;
-        false
-    }
-}
-
-/// Writes RGB pixels to a framebuffer as BGR and latches them.
-fn write_fb(
-    fb: &mut Framebuffer,
-    px: &[u8],
-    bgr: &mut Vec<u8>,
-    w: &mut WriteWarn,
-    what: &str,
-    now: i64,
-) -> bool {
-    bgr.clear();
-    for p in px.as_chunks::<3>().0 {
-        bgr.extend_from_slice(&[p[2], p[1], p[0]]);
-    }
-    let ok = match fb.write(bgr) {
-        Ok(k) if k == bgr.len() => true,
-        Ok(_) => {
-            warn_write(w, what, &io::Error::from(io::ErrorKind::WriteZero), now);
-            false
-        }
-        Err(e) => {
-            warn_write(w, what, &e, now);
-            false
-        }
-    };
-    fb.pan();
-    ok
-}
-
-fn warn_write(w: &mut WriteWarn, what: &str, err: &io::Error, now: i64) {
+/// Ограничитель частоты одинаковых предупреждений на один приёмник.
+fn log_write(w: &mut WriteWarn, what: &str, err: &LedError, now: i64) {
     if let Some(t) = w.last
         && now - t < WARN_EVERY_MS
     {
@@ -565,12 +441,222 @@ fn warn_write(w: &mut WriteWarn, what: &str, err: &io::Error, now: i64) {
         return;
     }
     warn!(
-        "leds: {what} write: {} ({} similar suppressed)",
-        crate::errstr(err),
+        "leds: {what} write: {err} ({} similar suppressed)",
         w.suppressed
     );
     w.last = Some(now);
     w.suppressed = 0;
+}
+
+struct FrameBufferSink {
+    ring: Framebuffer,
+    logo: Option<Framebuffer>,
+    n: usize,
+    last: Vec<Rgb>,
+    has_last: bool,
+    bgr: Vec<u8>,
+    warn: [WriteWarn; 2],
+    epoch: Instant,
+}
+
+impl FrameBufferSink {
+    fn now(&self) -> i64 {
+        i64::try_from(self.epoch.elapsed().as_millis()).unwrap_or(i64::MAX)
+    }
+
+    /// RGB в BGR и `pwrite` + `FBIOPAN_DISPLAY` на полосу.
+    fn write_strip(
+        fb: &mut Framebuffer,
+        px: &[Rgb],
+        bgr: &mut Vec<u8>,
+        w: &mut WriteWarn,
+        what: &str,
+        now: i64,
+    ) -> bool {
+        bgr.clear();
+        for p in px {
+            bgr.extend_from_slice(&[p.b, p.g, p.r]);
+        }
+        let r = match fb.write(bgr) {
+            Ok(k) if k == bgr.len() => Ok(()),
+            Ok(k) => Err(LedError::ShortWrite(k, bgr.len())),
+            Err(e) => Err(LedError::Io(e)),
+        };
+        if let Err(e) = &r {
+            log_write(w, what, e, now);
+        }
+        fb.pan();
+        r.is_ok()
+    }
+}
+
+impl LedSink for FrameBufferSink {
+    fn write(&mut self, px: &[Rgb]) -> Result<(), LedError> {
+        let now = self.now();
+        let split = self.n;
+        let mut ok = true;
+        if !self.has_last || px[..split] != self.last[..split] {
+            ok &= Self::write_strip(
+                &mut self.ring,
+                &px[..split],
+                &mut self.bgr,
+                &mut self.warn[0],
+                "ring fb",
+                now,
+            );
+        }
+        if let Some(logo) = &mut self.logo
+            && (!self.has_last || px[split..] != self.last[split..])
+        {
+            ok &= Self::write_strip(
+                logo,
+                &px[split..],
+                &mut self.bgr,
+                &mut self.warn[1],
+                "logo fb",
+                now,
+            );
+        }
+        if !ok {
+            return Err(LedError::Io(io::Error::from(io::ErrorKind::Other)));
+        }
+        self.last.clear();
+        self.last.extend_from_slice(px);
+        self.has_last = true;
+        Ok(())
+    }
+
+    fn invalidate(&mut self) {
+        self.has_last = false;
+    }
+}
+
+/// IS31FL3236-compatible 18-channel controller (6 RGB pixels).
+struct I2cSink {
+    dev: I2c,
+    addr: u16,
+    n: usize,
+    last: Vec<Rgb>,
+    has_last: bool,
+    warn: WriteWarn,
+    epoch: Instant,
+}
+
+impl LedSink for I2cSink {
+    fn write(&mut self, px: &[Rgb]) -> Result<(), LedError> {
+        let ring = &px[..self.n];
+        if self.has_last && ring == &self.last[..] {
+            return Ok(());
+        }
+        let mut bgr = [0u8; 18];
+        for (i, p) in ring.iter().enumerate() {
+            bgr[i * 3..i * 3 + 3].copy_from_slice(&[p.b, p.g, p.r]);
+        }
+        // 0x01: first PWM register; 0x25 = 0xAA latches the frame.
+        let r = self
+            .dev
+            .write_register(self.addr, 0x01, &bgr)
+            .and_then(|()| self.dev.write_register(self.addr, 0x25, &[0xaa]));
+        if let Err(e) = r {
+            let now = i64::try_from(self.epoch.elapsed().as_millis()).unwrap_or(i64::MAX);
+            log_write(&mut self.warn, "i2c", &LedError::Io(e), now);
+            // `last` остаётся прежним: повтор отправит эти пиксели снова.
+            return Err(LedError::Io(io::Error::from(io::ErrorKind::Other)));
+        }
+        self.last.clear();
+        self.last.extend_from_slice(ring);
+        self.has_last = true;
+        Ok(())
+    }
+
+    fn invalidate(&mut self) {
+        self.has_last = false;
+    }
+}
+
+/// [ring r,g,b x n][logo r,g,b x nlogo] в sysfs brightness; пишутся только изменившиеся
+/// каналы.
+struct SysfsSink {
+    files: Vec<File>,
+    last: Vec<u8>,
+    has_last: bool,
+}
+
+impl LedSink for SysfsSink {
+    fn write(&mut self, px: &[Rgb]) -> Result<(), LedError> {
+        for (i, f) in self.files.iter().enumerate() {
+            let p = px[i / 3];
+            let v = match i % 3 {
+                0 => p.r,
+                1 => p.g,
+                _ => p.b,
+            };
+            if self.has_last && self.last[i] == v {
+                continue;
+            }
+            if !home_linux::write_int_fd(f.as_raw_fd(), i32::from(v)) {
+                return Err(LedError::Io(io::Error::from(io::ErrorKind::Other)));
+            }
+            self.last[i] = v;
+        }
+        self.has_last = true;
+        Ok(())
+    }
+
+    fn invalidate(&mut self) {
+        self.has_last = false;
+    }
+}
+
+struct Output {
+    sink: Box<dyn LedSink>,
+    /// Последний записанный кадр (RGB); `has_last` false = переписать всё.
+    last: Vec<u8>,
+    has_last: bool,
+    rgb: Vec<Rgb>,
+}
+
+impl Output {
+    fn new(sink: Box<dyn LedSink>, n: usize, nlogo: usize) -> Self {
+        Self {
+            sink,
+            last: vec![0; (n + nlogo) * 3],
+            has_last: false,
+            rgb: Vec::with_capacity(n + nlogo),
+        }
+    }
+
+    fn forget_last(&mut self) {
+        self.has_last = false;
+        self.sink.invalidate();
+    }
+
+    fn clear(&mut self, now: i64) {
+        let off = vec![0u8; self.last.len()];
+        self.has_last = false;
+        self.sink.invalidate();
+        self.write(&off, now);
+    }
+
+    /// Writes changed pixels; true when a sink reported an error and the frame should be retried.
+    fn write(&mut self, px: &[u8], _now: i64) -> bool {
+        if self.has_last && px == &self.last[..] {
+            return false;
+        }
+        self.rgb.clear();
+        self.rgb.extend(px.as_chunks::<3>().0.iter().map(|p| Rgb {
+            r: p[0],
+            g: p[1],
+            b: p[2],
+        }));
+        if self.sink.write(&self.rgb).is_err() {
+            // Keep `last` as it was, so the retry does not skip these pixels.
+            return true;
+        }
+        self.last.copy_from_slice(px);
+        self.has_last = true;
+        false
+    }
 }
 
 fn led_name(leds: &Leds, s: &StripLayout, color: &str, i: i32) -> String {
@@ -622,7 +708,7 @@ fn open_strip_fb(leds: &Leds, s: &StripLayout) -> Option<Framebuffer> {
 
 /// IS31FL3236-compatible controller: enable the output stage, set every channel's current and
 /// clear the PWM registers; the stock firmware sends the same three writes.
-fn open_i2c(dev_name: &str, addr: u16, n: usize, nlogo: usize) -> Option<Sink> {
+fn open_i2c(dev_name: &str, addr: u16, n: usize, nlogo: usize) -> Option<I2cSink> {
     if n != 6 || nlogo != 0 {
         warn!("leds: i2c backend expects 6 ring LEDs and no logo ({n} + {nlogo})");
         return None;
@@ -643,10 +729,18 @@ fn open_i2c(dev_name: &str, addr: u16, n: usize, nlogo: usize) -> Option<Sink> {
         warn!("leds: init {dev_name}@0x{addr:02x}: {}", crate::errstr(&e));
         return None;
     }
-    Some(Sink::I2c { dev, addr })
+    Some(I2cSink {
+        dev,
+        addr,
+        n,
+        last: Vec::new(),
+        has_last: false,
+        warn: WriteWarn::default(),
+        epoch: Instant::now(),
+    })
 }
 
-fn open_fb(leds: &Leds, nlogo: usize) -> Option<Sink> {
+fn open_fb(leds: &Leds, n: usize, nlogo: usize) -> Option<FrameBufferSink> {
     let ring = open_strip_fb(leds, &leds.ring);
     let logo = if nlogo > 0 {
         leds.logo.as_ref().and_then(|l| open_strip_fb(leds, l))
@@ -657,10 +751,19 @@ fn open_fb(leds: &Leds, nlogo: usize) -> Option<Sink> {
     if nlogo > 0 && logo.is_none() {
         return None;
     }
-    Some(Sink::Fb { ring, logo })
+    Some(FrameBufferSink {
+        ring,
+        logo,
+        n,
+        last: Vec::new(),
+        has_last: false,
+        bgr: Vec::with_capacity(n.max(nlogo) * 3),
+        warn: Default::default(),
+        epoch: Instant::now(),
+    })
 }
 
-fn open_sysfs(leds: &Leds, n: usize, nlogo: usize) -> Option<Vec<File>> {
+fn open_sysfs(leds: &Leds, n: usize, nlogo: usize) -> Option<SysfsSink> {
     let mut files = Vec::with_capacity((n + nlogo) * 3);
     for i in 0..n + nlogo {
         for c in ["red", "green", "blue"] {
@@ -678,7 +781,11 @@ fn open_sysfs(leds: &Leds, n: usize, nlogo: usize) -> Option<Vec<File>> {
             }
         }
     }
-    Some(files)
+    Some(SysfsSink {
+        last: vec![0; files.len()],
+        files,
+        has_last: false,
+    })
 }
 
 #[cfg(test)]

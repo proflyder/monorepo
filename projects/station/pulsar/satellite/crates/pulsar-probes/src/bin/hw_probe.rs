@@ -21,6 +21,7 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use clap::{Parser, Subcommand};
 use pulsar_clock::{ClockFace, ClockHandle, ClockMusicStyle};
 use pulsar_core::{AmbientDimmer, ClockShot, MusicFrame, UiState};
 use pulsar_hw::{
@@ -30,9 +31,43 @@ use pulsar_model::{ClockPanel, DeviceProfile, LedBackend, Leds, StripLayout};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::task::LocalSet;
 
-const USAGE: &str = "usage: hw_probe leds [state_ms=2000] | input [seconds=15] | \
-                     clock [state_ms=2000] | light [seconds=10] | \
-                     all [input_seconds=15] [state_ms=2000]";
+#[derive(Parser)]
+#[command(about = "Hardware probe of the station, run with the daemon stopped")]
+struct Cli {
+    #[command(subcommand)]
+    cmd: Cmd,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Cycle LED states, effects, music styles and dump sysfs.
+    Leds {
+        #[arg(default_value_t = 2000)]
+        state_ms: u64,
+    },
+    /// Print buttons and the mute switch.
+    Input {
+        #[arg(default_value_t = 15)]
+        seconds: u64,
+    },
+    /// Time, number, timer, levels, animations, text, face, code, music levels.
+    Clock {
+        #[arg(default_value_t = 2000)]
+        state_ms: u64,
+    },
+    /// Print the light sensor every second.
+    Light {
+        #[arg(default_value_t = 10)]
+        seconds: u64,
+    },
+    /// The LED/clock steps, then input and lux (the whole C++ hw_probe).
+    All {
+        #[arg(default_value_t = 15)]
+        input_seconds: u64,
+        #[arg(default_value_t = 2000)]
+        state_ms: u64,
+    },
+}
 
 /// Output byte of a full-brightness channel without ambient dimming: 255 x the 80 % cap.
 const FULL_FB: u8 = 204;
@@ -45,20 +80,7 @@ fn say(line: &str) {
 fn main() -> ExitCode {
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let arg = |i: usize, default: u64| args.get(i).map_or(Some(default), |s| s.parse::<u64>().ok());
-    let cmd = args.first().map_or("", String::as_str);
-    let (a, b) = match cmd {
-        "leds" | "clock" => (arg(1, 2000), Some(0)),
-        "input" => (arg(1, 15), Some(0)),
-        "light" => (arg(1, 10), Some(0)),
-        "all" => (arg(1, 15), arg(2, 2000)),
-        _ => (None, None),
-    };
-    let (Some(a), Some(b)) = (a, b) else {
-        eprintln!("{USAGE}");
-        return ExitCode::from(2);
-    };
+    let cli = Cli::parse();
     let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::FAILURE;
     };
@@ -75,12 +97,15 @@ fn main() -> ExitCode {
     };
     let local = LocalSet::new();
     let ok = local.block_on(&rt, async {
-        let ok = match cmd {
-            "leds" => leds(model, a).await,
-            "input" => input(model, a).await,
-            "clock" => clock(model, a).await,
-            "light" => light(a).await,
-            _ => all(model, a, b).await,
+        let ok = match cli.cmd {
+            Cmd::Leds { state_ms } => leds(model, state_ms).await,
+            Cmd::Input { seconds } => input(model, seconds).await,
+            Cmd::Clock { state_ms } => clock(model, state_ms).await,
+            Cmd::Light { seconds } => light(seconds).await,
+            Cmd::All {
+                input_seconds,
+                state_ms,
+            } => all(model, input_seconds, state_ms).await,
         };
         pulsar_core::supervisor()
             .shutdown(Duration::from_secs(3))

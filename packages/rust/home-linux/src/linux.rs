@@ -1,14 +1,16 @@
-//! Every libc call of the crate: framebuffer and evdev ioctls, non-blocking evdev reads. The
-//! ioctl numbers mean these requests only on their own device types, so they are methods of
-//! `Framebuffer` and `Evdev`, which can only be created by opening such a node.
+//! Linux kernel ABIs shared by the station daemons: framebuffer, i2c-dev, evdev and the local
+//! wall clock. The ioctl numbers and struct layouts are kernel ABI, not library constants, so
+//! they are reproduced here byte for byte.
+//!
+//! This is the only module of the crate with raw `libc`/`ioctl` calls; every block carries a
+//! `// SAFETY:` note explaining why the file it is called on makes the request valid.
 
 use std::fs::File;
 use std::io;
-use std::os::fd::{AsRawFd, RawFd};
-use std::os::unix::fs::{FileExt as _, OpenOptionsExt as _};
+use std::os::fd::{AsFd as _, AsRawFd, RawFd};
+use std::os::unix::fs::OpenOptionsExt as _;
 
-use tokio::io::Interest;
-use tokio::io::unix::AsyncFd;
+use rustix::ioctl::{Getter, Opcode, opcode};
 
 /// `struct fb_var_screeninfo` (linux/fb.h): 40 32-bit fields. Only handed back to the driver
 /// (FBIOPAN_DISPLAY takes the offsets read by FBIOGET_VSCREENINFO), never interpreted.
@@ -18,8 +20,34 @@ struct FbVarScreeninfo([u32; 40]);
 
 const _: () = assert!(size_of::<FbVarScreeninfo>() == 160);
 
-const FBIOGET_VSCREENINFO: libc::Ioctl = 0x4600;
-const FBIOPAN_DISPLAY: libc::Ioctl = 0x4606;
+const FBIOGET_VSCREENINFO: Opcode = 0x4600;
+const FBIOPAN_DISPLAY: Opcode = 0x4606;
+
+/// `ioctl` argument for FBIOPAN_DISPLAY: the driver may update the variable screen info.
+struct PanDisplay<'a>(&'a mut FbVarScreeninfo);
+
+// SAFETY: the opcode is the kernel's _IOW('F', 6, fb_var_screeninfo) and the argument is exactly
+// one writable fb_var_screeninfo; PanDisplay is only built for an open framebuffer node.
+unsafe impl rustix::ioctl::Ioctl for PanDisplay<'_> {
+    type Output = ();
+
+    const IS_MUTATING: bool = true;
+
+    fn opcode(&self) -> Opcode {
+        FBIOPAN_DISPLAY
+    }
+
+    fn as_ptr(&mut self) -> *mut core::ffi::c_void {
+        std::ptr::from_mut(self.0).cast()
+    }
+
+    unsafe fn output_from_ptr(
+        _: rustix::ioctl::IoctlOutput,
+        _: *mut core::ffi::c_void,
+    ) -> Result<(), rustix::io::Errno> {
+        Ok(())
+    }
+}
 
 /// An open framebuffer device (/dev/fbN) with its variable screen info.
 pub struct Framebuffer {
@@ -31,41 +59,31 @@ impl Framebuffer {
     /// Opens `path` read-write; the caller has checked by its sysfs name that it is the
     /// expected framebuffer. FBIOGET_VSCREENINFO failing keeps a zeroed screen info, as in the
     /// C++ daemon.
-    pub fn open(path: &str) -> io::Result<Self> {
+    pub fn open(path: impl AsRef<std::path::Path>) -> io::Result<Self> {
         let file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
             .open(path)?;
-        let mut var = FbVarScreeninfo([0; 40]);
         // SAFETY: `file` is a framebuffer device (Framebuffer is only created here, for an fb
-        // node), for which this request writes one fb_var_screeninfo; `var` is a writable value
-        // of the kernel's size.
-        unsafe {
-            libc::ioctl(
-                file.as_raw_fd(),
-                FBIOGET_VSCREENINFO,
-                std::ptr::from_mut(&mut var),
-            )
-        };
+        // node), for which this request writes one fb_var_screeninfo; Getter hands a value of
+        // the kernel's size. A failure keeps a zeroed screen info, as in the C++ daemon.
+        let var = unsafe {
+            rustix::ioctl::ioctl(&file, Getter::<FBIOGET_VSCREENINFO, FbVarScreeninfo>::new())
+        }
+        .unwrap_or(FbVarScreeninfo([0; 40]));
         Ok(Self { file, var })
     }
 
     /// pwrite(2) at offset 0.
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
-        self.file.write_at(buf, 0)
+        rustix::io::pwrite(&self.file, buf, 0).map_err(io::Error::from)
     }
 
     /// FBIOPAN_DISPLAY: makes the ledfb driver push the framebuffer to the LEDs.
     pub fn pan(&mut self) {
         // SAFETY: as in open(): a framebuffer device, which reads (and may update) the
-        // fb_var_screeninfo `var` points to.
-        unsafe {
-            libc::ioctl(
-                self.file.as_raw_fd(),
-                FBIOPAN_DISPLAY,
-                std::ptr::from_mut(&mut self.var),
-            )
-        };
+        // fb_var_screeninfo `PanDisplay` points to.
+        let _ = unsafe { rustix::ioctl::ioctl(&self.file, PanDisplay(&mut self.var)) };
     }
 }
 
@@ -165,15 +183,13 @@ pub const EMPTY_EVENT: RawInputEvent = RawInputEvent {
     value: 0,
 };
 
-/// `_IOC(_IOC_READ, 'E', nr, len)` of linux/input.h.
-const fn evioc_read(nr: u32, len: usize) -> libc::Ioctl {
-    ((2u32 << 30) | ((len as u32) << 16) | ((b'E' as u32) << 8) | nr) as libc::Ioctl
-}
-
 /// Key state bitmap (KEY_MAX = 0x2ff), little-endian bit order.
 pub type KeyBits = [u8; 0x300 / 8];
 /// Switch state bitmap (SW_MAX = 0x10), padded to one long like the kernel copies it.
 pub type SwBits = [u8; 8];
+
+const EVIOCGKEY: Opcode = opcode::read::<KeyBits>(b'E', 0x18);
+const EVIOCGSW: Opcode = opcode::read::<SwBits>(b'E', 0x1b);
 
 /// An open evdev node (/dev/input/eventN), read-only and non-blocking.
 pub struct Evdev(File);
@@ -195,45 +211,70 @@ impl Evdev {
     }
 
     /// Registers the device with the runtime's reactor for reading.
-    pub fn into_async(self) -> io::Result<AsyncFd<Self>> {
+    pub fn into_async(self) -> io::Result<tokio::io::unix::AsyncFd<Self>> {
         // SAFETY: the AsyncFd owns the file and never replaces it, so its descriptor stays open
         // and refers to the same file description until the AsyncFd is dropped.
-        Ok(unsafe { AsyncFd::register_with_interest(self, Interest::READABLE) }?)
+        Ok(unsafe {
+            tokio::io::unix::AsyncFd::register_with_interest(self, tokio::io::Interest::READABLE)
+        }?)
     }
 
     /// One read(2) of whole events; Ok(0) at end of file.
     pub fn read_events(&self, buf: &mut [RawInputEvent]) -> io::Result<usize> {
-        // SAFETY: `buf` is writable for its full byte length; RawInputEvent is plain data, so
-        // any bytes the kernel writes form valid values.
-        let n = unsafe { libc::read(self.as_raw_fd(), buf.as_mut_ptr().cast(), size_of_val(buf)) };
-        usize::try_from(n).map_or_else(
-            |_| Err(io::Error::last_os_error()),
-            |n| Ok(n / size_of::<RawInputEvent>()),
-        )
-    }
-
-    fn eviocg<const N: usize>(&self, nr: u32) -> io::Result<[u8; N]> {
-        let mut bits = [0u8; N];
-        // SAFETY: `self` is an evdev node (Evdev is only created by open()), for which this
-        // request copies at most `N` bytes, the length encoded in it, into `bits`, which is
-        // writable for `N` bytes.
-        let r = unsafe { libc::ioctl(self.as_raw_fd(), evioc_read(nr, N), bits.as_mut_ptr()) };
-        if r < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(bits)
-        }
+        // SAFETY: RawInputEvent is plain data, so viewing the same writable allocation as bytes
+        // is valid; the kernel may write any bit pattern into the event fields.
+        let bytes = unsafe {
+            std::slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), size_of_val(buf))
+        };
+        let n = rustix::io::read(self.0.as_fd(), bytes).map_err(io::Error::from)?;
+        Ok(n / size_of::<RawInputEvent>())
     }
 
     /// EVIOCGKEY: keys currently held.
     pub fn key_state(&self) -> io::Result<KeyBits> {
-        self.eviocg(0x18)
+        // SAFETY: `self` is an evdev node (Evdev is only created by open()), and EVIOCGKEY is
+        // the kernel's _IOR('E', 0x18, [u8; 96]); Getter supplies an array of that size.
+        unsafe { rustix::ioctl::ioctl(&self.0, Getter::<EVIOCGKEY, KeyBits>::new()) }
+            .map_err(io::Error::from)
     }
 
     /// EVIOCGSW: switch states.
     pub fn switch_state(&self) -> io::Result<SwBits> {
-        self.eviocg(0x1b)
+        // SAFETY: see key_state(); EVIOCGSW copies up to one long (8 bytes here).
+        unsafe { rustix::ioctl::ioctl(&self.0, Getter::<EVIOCGSW, SwBits>::new()) }
+            .map_err(io::Error::from)
     }
+}
+
+/// `clock_gettime(CLOCK_REALTIME)` broken down by `localtime_r`, i.e. in the process TZ (the
+/// stations have no /etc/localtime or zoneinfo: without TZ from Home Assistant this is UTC).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WallTime {
+    pub hour: i32,
+    pub min: i32,
+    /// Within the first half of the current second.
+    pub first_half: bool,
+}
+
+pub fn wall_time() -> WallTime {
+    let ts = rustix::time::clock_gettime(rustix::time::ClockId::Realtime);
+    let seconds = ts.tv_sec as libc::time_t;
+    let mut tm = zeroed_tm();
+    // SAFETY: both pointers refer to live locals; localtime_r is the thread-safe variant and
+    // always returns its `tm` argument on Linux.
+    if unsafe { libc::localtime_r(&seconds, &mut tm) }.is_null() {
+        tm = zeroed_tm();
+    }
+    WallTime {
+        hour: tm.tm_hour,
+        min: tm.tm_min,
+        first_half: ts.tv_nsec < 500_000_000,
+    }
+}
+
+fn zeroed_tm() -> libc::tm {
+    // SAFETY: an all-zero `tm` is a valid value (integers and a nullable `tm_zone` pointer).
+    unsafe { std::mem::zeroed() }
 }
 
 #[cfg(test)]
@@ -243,7 +284,14 @@ mod tests {
     #[test]
     fn evdev_ioctl_numbers_match_the_kernel_macros() {
         // EVIOCGKEY(96) and EVIOCGSW(8) as computed by the C preprocessor.
-        assert_eq!(evioc_read(0x18, 96) as u64, 0x8060_4518);
-        assert_eq!(evioc_read(0x1b, 8) as u64, 0x8008_451b);
+        assert_eq!(EVIOCGKEY as u64, 0x8060_4518);
+        assert_eq!(EVIOCGSW as u64, 0x8008_451b);
+    }
+
+    #[test]
+    fn wall_time_is_a_plausible_local_time() {
+        let w = wall_time();
+        assert!((0..24).contains(&w.hour), "{w:?}");
+        assert!((0..60).contains(&w.min), "{w:?}");
     }
 }

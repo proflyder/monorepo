@@ -1,0 +1,76 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "//packages/rust/home-linux:home_linux",
+    "@crates//:anyhow",
+    "@crates//:clap",
+    "@crates//:ring",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
+    "@crates//:tracing-subscriber",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+    "//projects/station/pulsar/satellite/crates/pulsar-arbiter:pulsar_arbiter",
+    "//projects/station/pulsar/satellite/crates/pulsar-audio:pulsar_audio",
+    "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-esphome:pulsar_esphome",
+    "//projects/station/pulsar/satellite/crates/pulsar-hw:pulsar_hw",
+    "//projects/station/pulsar/satellite/crates/pulsar-mdns:pulsar_mdns",
+    "//projects/station/pulsar/satellite/crates/pulsar-media:pulsar_media",
+    "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
+    "//projects/station/pulsar/satellite/crates/pulsar-sendspin:pulsar_sendspin",
+    "//projects/station/pulsar/satellite/crates/pulsar-update:pulsar_update",
+    "//projects/station/pulsar/satellite/crates/pulsar-zigbee:pulsar_zigbee",
+]
+
+# Target names are the historical binary names: docs, skills and tools/ refer to them.
+[
+    rust_binary(
+        name = name,
+        srcs = ["src/bin/%s.rs" % name],
+        edition = "2024",
+        lint_config = ":workspace_lints",
+        target_compatible_with = LINUX,
+        deps = DEPS,
+    )
+    for name in [
+        "alsa_abi_probe",
+        "api_selftest",
+        "frontend_probe",
+        "hw_probe",
+        "lan_probe",
+        "player_probe",
+        "sendspin_probe",
+        "update_probe",
+        "ww_offline",
+        "zigbee_probe",
+    ]
+]
+
+# Runs the update_probe binary at runtime. Cargo exports CARGO_BIN_EXE_<bin>;
+# Bazel does not, so it is passed through `env` and the binary is a runfile.
+rust_test(
+    name = "update_probe_test",
+    srcs = ["tests/update_probe.rs"],
+    compile_data = glob(["tests/golden/**"]),
+    data = [":update_probe"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    env = {
+        "CARGO_BIN_EXE_update_probe": "$(rootpath :update_probe)",
+    },
+    target_compatible_with = LINUX,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

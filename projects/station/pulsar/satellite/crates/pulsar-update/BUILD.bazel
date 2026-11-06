@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,34 +38,6 @@ rust_library(
     deps = DEPS,
 )
 
-rust_binary(
-    name = "update_probe",
-    srcs = ["src/bin/update_probe.rs"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    target_compatible_with = LINUX,
-    deps = DEPS + [
-        ":pulsar_update",
-        "@crates//:clap",
-    ],
-)
-
-# The integration test runs the update_probe binary at runtime. Cargo exports
-# CARGO_BIN_EXE_<bin>; Bazel does not, so it is passed through `env` and the
-# binary is a runfile.
-rust_test(
-    name = "update_probe_test",
-    srcs = ["tests/update_probe.rs"],
-    compile_data = glob(["tests/golden/**"], allow_empty = True),
-    data = [":update_probe"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    env = {
-        "CARGO_BIN_EXE_update_probe": "$(rootpath :update_probe)",
-    },
-    target_compatible_with = LINUX,
-    deps = DEPS + [":pulsar_update"],
-)
 
 rust_test(
     name = "pulsar_update_unit_tests",

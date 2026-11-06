@@ -8,6 +8,15 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
+#[cfg(target_os = "linux")]
+#[allow(unsafe_code)]
+mod linux;
+
+#[cfg(target_os = "linux")]
+pub use linux::{
+    EMPTY_EVENT, Evdev, Framebuffer, I2c, KeyBits, RawInputEvent, SwBits, WallTime, wall_time,
+};
+
 use std::fs::OpenOptions;
 use std::io::Write as _;
 use std::os::fd::RawFd;

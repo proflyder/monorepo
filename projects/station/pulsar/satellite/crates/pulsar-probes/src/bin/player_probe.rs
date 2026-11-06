@@ -18,6 +18,7 @@
 use std::process::{Command, ExitCode};
 use std::sync::Mutex;
 
+use clap::Parser;
 use pulsar_core::Timers;
 use pulsar_media::{Channel, Mixer, PlayId, PlayState, PlayerEvent, spawn};
 use tokio::signal::unix::{SignalKind, signal};
@@ -233,15 +234,17 @@ impl Probe {
     }
 }
 
+#[derive(Parser)]
+#[command(about = "Player/Mixer probe, run with the daemon stopped")]
+struct Cli {
+    music_uri: String,
+    announce_file: String,
+    http_base: String,
+    https_url: Option<String>,
+}
+
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 4 {
-        eprintln!(
-            "usage: {} <music_uri> <announce_file> <http_base> [https_url]",
-            args[0]
-        );
-        return ExitCode::from(2);
-    }
+    let args = Cli::parse();
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
     let t0 = pulsar_core::now_ms();
@@ -365,10 +368,10 @@ fn main() -> ExitCode {
     let duck: f32 = master * 0.08;
     let mut probe = Probe {
         t0,
-        music: args[1].clone(),
-        announce: args[2].clone(),
-        http: args[3].clone(),
-        https: args.get(4).cloned().unwrap_or_default(),
+        music: args.music_uri.clone(),
+        announce: args.announce_file.clone(),
+        http: args.http_base.clone(),
+        https: args.https_url.unwrap_or_default(),
         player,
         timers: Timers::new(),
         music_id: None,

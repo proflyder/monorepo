@@ -1,5 +1,5 @@
 {
-  "checksum": "b3570b439164adf91fc2065cf646f2e8eabdc06f8871fc4e8f36666bc7fe156e",
+  "checksum": "7b1a061ad063bdf3cfeafc81c1827e145c3b8a6145e83d9d695a952a01ff5120",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4155,8 +4155,16 @@
       "common_attrs": {
         "deps": [
           {
+            "id": "libc 0.2.191",
+            "target": "libc"
+          },
+          {
             "id": "rustix 1.1.6",
             "target": "rustix"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
           }
         ],
         "edition": "2024"
@@ -6986,8 +6994,8 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "libc 0.2.191",
-            "target": "libc"
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
           },
           {
             "id": "tokio 1.54.1",
@@ -7125,12 +7133,12 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "libc 0.2.191",
-            "target": "libc"
-          },
-          {
             "id": "serde_json 1.0.154",
             "target": "serde_json"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
           },
           {
             "id": "tokio 1.54.1",
@@ -7267,6 +7275,49 @@
           }
         }
       ],
+      "version": "0.0.0"
+    },
+    "pulsar-probes 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "clap 4.6.7",
+            "target": "clap"
+          },
+          {
+            "id": "ring 0.17.14",
+            "target": "ring"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
+            "id": "tracing-subscriber 0.3.23",
+            "target": "tracing_subscriber"
+          }
+        ],
+        "edition": "2024"
+      },
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-probes",
+      "repository": null,
+      "targets": [],
       "version": "0.0.0"
     },
     "pulsar-sendspin 0.0.0": {
@@ -8131,7 +8182,8 @@
           "common": [
             "alloc",
             "fs",
-            "std"
+            "std",
+            "time"
           ],
           "selects": {
             "aarch64-apple-darwin": [
@@ -14122,6 +14174,7 @@
     "pulsar-mdns 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-mdns",
     "pulsar-media 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-media",
     "pulsar-model 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-model",
+    "pulsar-probes 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-probes",
     "pulsar-sendspin 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-sendspin",
     "pulsar-ui 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-ui",
     "pulsar-update 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-update",

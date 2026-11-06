@@ -1,6 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -71,44 +71,7 @@ rust_test(
     target_compatible_with = LINUX,
 )
 
-rust_binary(
-    name = "frontend_probe",
-    srcs = ["src/bin/frontend_probe.rs"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    target_compatible_with = LINUX,
-    deps = [
-        ":pulsar_audio",
-        "@crates//:libc",
-        "@crates//:libloading",
-        "@crates//:tracing",
-        "@crates//:ring",
-        "@crates//:tokio",
-        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
-        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
-        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
-    ],
-)
 
-rust_binary(
-    name = "ww_offline",
-    srcs = ["src/bin/ww_offline.rs"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    target_compatible_with = LINUX,
-    deps = [
-        ":pulsar_audio",
-        "//packages/rust/home-linux:home_linux",
-        "@crates//:libc",
-        "@crates//:libloading",
-        "@crates//:tracing",
-        "@crates//:ring",
-        "@crates//:tokio",
-        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
-        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
-        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
-    ],
-)
 
 # Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(

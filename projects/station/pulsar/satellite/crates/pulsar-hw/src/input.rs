@@ -30,6 +30,7 @@ use std::os::unix::fs::FileExt as _;
 use std::path::Path;
 use std::rc::Rc;
 
+use home_linux::{EMPTY_EVENT, Evdev, KeyBits, RawInputEvent, SwBits};
 use pulsar_core::Timers;
 use pulsar_model::{Input, MuteSwitch};
 use tokio::io::Interest;
@@ -37,8 +38,6 @@ use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
-
-use crate::sys::{self, Evdev, KeyBits, RawInputEvent, SwBits};
 
 const EV_SYN: u16 = 0x00;
 const EV_KEY: u16 = 0x01;
@@ -63,6 +62,14 @@ const GPIO_POLL_MS: u64 = 100;
 // closer than 300 ms to the previous one are dropped.
 const MIN_ACTION_PRESS_MS: i64 = 56;
 const MIN_ACTION_GAP_MS: i64 = 300;
+
+/// Ошибка запуска ввода: ни одного устройства кнопок/мьюта не открылось; актор потом сам
+/// повторяет поиск каждые 3 с.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum InputError {
+    #[error("input devices unavailable")]
+    Unavailable,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Button {
@@ -107,7 +114,7 @@ impl InputHandle {
 /// again every 3 s.
 pub fn spawn_input(
     input: &'static Input,
-) -> Result<(InputHandle, UnboundedReceiver<InputEvent>), String> {
+) -> Result<(InputHandle, UnboundedReceiver<InputEvent>), InputError> {
     let keys = open_dev(input.keys_device, false);
     let mute = match input.mute {
         Some(MuteSwitch::Device(name)) => open_dev(name, false),
@@ -118,7 +125,7 @@ pub fn spawn_input(
         _ => None,
     };
     if keys.is_none() && mute.is_none() && mute_gpio.is_none() {
-        return Err("input devices unavailable".to_owned());
+        return Err(InputError::Unavailable);
     }
     let muted = Rc::new(Cell::new(false));
     let (tx, rx) = unbounded_channel();
@@ -662,7 +669,7 @@ async fn readable(fd: Option<&AsyncFd<Evdev>>) -> io::Result<()> {
 }
 
 async fn run(mut m: Machine, mut devs: Devices, mut alive: UnboundedReceiver<()>) {
-    let mut buf = [sys::EMPTY_EVENT; 16];
+    let mut buf = [EMPTY_EVENT; 16];
     loop {
         tokio::select! {
             biased;

@@ -16,10 +16,10 @@ description: >-
 
 ## 2. Утилита на станции
 
-`zigbee_probe` (`satellite/crates/pulsar-zigbee/src/bin/zigbee_probe.rs`):
+`zigbee_probe` (`satellite/crates/pulsar-probes/src/bin/zigbee_probe.rs`):
 `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux
-//projects/station/pulsar/satellite/crates/pulsar-zigbee:zigbee_probe` →
-`bazel-bin/projects/station/pulsar/satellite/crates/pulsar-zigbee/zigbee_probe`
+//projects/station/pulsar/satellite/crates/pulsar-probes:zigbee_probe` →
+`bazel-bin/projects/station/pulsar/satellite/crates/pulsar-probes/zigbee_probe`
 (`AGENTS.md`, «Сборка и проверки»). Режимы:
 
 - `zigbee_probe info` — версия работающей прошивки;

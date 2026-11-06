@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use clap::{Parser, value_parser};
 use pulsar_audio::{FrontendEvent, FrontendStats};
 use pulsar_model::{Capture, DeviceProfile};
 use tokio::sync::mpsc::unbounded_channel;
@@ -24,8 +25,6 @@ use tokio::time::{Instant, MissedTickBehavior};
 const MODELS: &str = "/system/vendor/quasar/spotter_models/activation/";
 const COMMAND_MODEL: &str = "/system/vendor/quasar/spotter_models/command";
 const RICARDO_MODEL: &str = "/data/pulsar/wakewords/ru_ricardo_mww.tflite";
-const USAGE: &str = "usage: frontend_probe [seconds=30] [--wake alisa|yandex|ricardo] [--stream] [--music] [--commands] [--record <wav> <seconds>]";
-
 macro_rules! out {
     ($($arg:tt)*) => {{
         let _ = writeln!(std::io::stdout(), $($arg)*);
@@ -41,44 +40,38 @@ struct Args {
     record: Option<(PathBuf, u64)>,
 }
 
-fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
-    let mut a = Args {
-        seconds: 30,
-        wake: "alisa".into(),
-        stream: false,
-        music: false,
-        commands: false,
-        record: None,
-    };
-    let secs = |s: Option<String>| -> Result<u64, String> {
-        let s = s.ok_or("missing seconds")?;
-        s.parse()
-            .ok()
-            .filter(|&n| n > 0)
-            .ok_or(format!("bad seconds: {s}"))
-    };
-    let mut seconds_seen = false;
-    while let Some(arg) = it.next() {
-        match arg.as_str() {
-            "--wake" => match it.next().as_deref() {
-                Some(w @ ("alisa" | "yandex" | "ricardo")) => a.wake = w.into(),
-                other => return Err(format!("bad --wake: {}", other.unwrap_or(""))),
-            },
-            "--stream" => a.stream = true,
-            "--music" => a.music = true,
-            "--commands" => a.commands = true,
-            "--record" => {
-                let path = it.next().ok_or("--record: missing wav")?;
-                a.record = Some((PathBuf::from(path), secs(it.next())?));
-            }
-            s if !seconds_seen && !s.starts_with('-') => {
-                a.seconds = secs(Some(arg))?;
-                seconds_seen = true;
-            }
-            s => return Err(format!("unknown argument: {s}")),
+#[derive(Parser)]
+#[command(about = "Microphone front end without the daemon (stop the service first)")]
+struct Cli {
+    #[arg(value_parser = value_parser!(u64).range(1..))]
+    seconds: Option<u64>,
+    #[arg(long, default_value = "alisa", value_parser = ["alisa", "yandex", "ricardo"])]
+    wake: String,
+    #[arg(long)]
+    stream: bool,
+    #[arg(long)]
+    music: bool,
+    #[arg(long)]
+    commands: bool,
+    /// Write the first <seconds> of raw capture as a WAV.
+    #[arg(long, num_args = 2, value_names = ["WAV", "SECONDS"])]
+    record: Option<Vec<String>>,
+}
+
+impl Cli {
+    fn into_args(self) -> Args {
+        let record = self
+            .record
+            .map(|r| (PathBuf::from(&r[0]), r[1].parse().unwrap()));
+        Args {
+            seconds: self.seconds.unwrap_or(30),
+            wake: self.wake,
+            stream: self.stream,
+            music: self.music,
+            commands: self.commands,
+            record,
         }
     }
-    Ok(a)
 }
 
 /// 44-byte header of a PCM S16LE WAV.
@@ -165,13 +158,7 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     };
     pulsar_alsa::init(&m.audio.playback);
-    let args = match parse_args(std::env::args().skip(1)) {
-        Ok(a) => a,
-        Err(e) => {
-            let _ = writeln!(std::io::stderr(), "{e}\n{USAGE}");
-            return ExitCode::from(2);
-        }
-    };
+    let args = Cli::parse().into_args();
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()
@@ -355,8 +342,9 @@ fn on(b: bool) -> &'static str {
 mod tests {
     use super::*;
 
-    fn args(s: &str) -> Result<Args, String> {
-        parse_args(s.split_whitespace().map(String::from))
+    fn args(s: &str) -> Result<Args, clap::Error> {
+        Cli::try_parse_from(std::iter::once("frontend_probe").chain(s.split_whitespace()))
+            .map(Cli::into_args)
     }
 
     #[test]

@@ -15,7 +15,7 @@ fn ev(type_: u16, code: u16, value: i32) -> RawInputEvent {
         type_,
         code,
         value,
-        ..sys::EMPTY_EVENT
+        ..EMPTY_EVENT
     }
 }
 
@@ -388,4 +388,16 @@ fn mute_gpio_is_an_active_low_input() {
     std::fs::write(line.join("value"), "1\n").unwrap();
     assert!(!gpio_muted(&f).unwrap());
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Missing input devices are looked up again every 3 s (the actor's reopen tick).
+#[tokio::test(start_paused = true)]
+async fn reopen_timer_fires_every_three_seconds() {
+    let mut r = Rig::new();
+    r.m.arm_repeating(Tick::Reopen, REOPEN_MS, REOPEN_MS);
+    let start = Instant::now();
+    assert_eq!(r.m.timers.next().await, Tick::Reopen);
+    assert_eq!(start.elapsed(), Duration::from_millis(REOPEN_MS));
+    assert_eq!(r.m.timers.next().await, Tick::Reopen);
+    assert_eq!(start.elapsed(), Duration::from_millis(2 * REOPEN_MS));
 }

@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -71,17 +71,103 @@ fn case_colors_are_sorted_json_stems() {
     assert!(case_colors_in("/nonexistent/").is_empty());
 }
 
-/// The actor on a capture sink.
-fn spawn_capture(n: usize, nlogo: usize) -> (LedsHandle, Captured, JoinHandle<()>) {
-    let frames = Rc::new(RefCell::new(Vec::new()));
-    let out = Output::new(Sink::Capture(Rc::clone(&frames)), n, nlogo);
+/// (time, pixels) of the writes a test sink saw.
+type Captured = Rc<RefCell<Vec<(i64, Vec<u8>)>>>;
+
+/// Тестовый приёмник: записывает каждый кадр (RGB) и время от своего старта.
+struct Recording {
+    frames: Captured,
+    epoch: Instant,
+}
+
+impl LedSink for Recording {
+    fn write(&mut self, px: &[Rgb]) -> Result<(), LedError> {
+        let now = i64::try_from(self.epoch.elapsed().as_millis()).unwrap_or(i64::MAX);
+        let bytes = px.iter().flat_map(|p| [p.r, p.g, p.b]).collect();
+        self.frames.borrow_mut().push((now, bytes));
+        Ok(())
+    }
+}
+
+/// Приёмник с переключаемым отказом; `attempts` считает все попытки.
+struct Flaky {
+    inner: Recording,
+    fail: Rc<Cell<bool>>,
+    attempts: Rc<Cell<u32>>,
+}
+
+impl LedSink for Flaky {
+    fn write(&mut self, px: &[Rgb]) -> Result<(), LedError> {
+        self.attempts.set(self.attempts.get() + 1);
+        if self.fail.get() {
+            return Err(LedError::Io(io::Error::from(io::ErrorKind::Other)));
+        }
+        self.inner.write(px)
+    }
+}
+
+fn spawn_with_sink(n: usize, nlogo: usize, sink: Box<dyn LedSink>) -> (LedsHandle, JoinHandle<()>) {
+    let out = Output::new(sink, n, nlogo);
     let (tx, rx) = unbounded_channel();
     let task = tokio::task::spawn_local(run(Compositor::new(n, nlogo), out, rx, true));
-    (LedsHandle { tx }, frames, task)
+    (LedsHandle { tx }, task)
+}
+
+/// The actor on a recording sink.
+fn spawn_capture(n: usize, nlogo: usize) -> (LedsHandle, Captured, JoinHandle<()>) {
+    let frames = Rc::new(RefCell::new(Vec::new()));
+    let sink = Recording {
+        frames: Rc::clone(&frames),
+        epoch: Instant::now(),
+    };
+    let (leds, task) = spawn_with_sink(n, nlogo, Box::new(sink));
+    (leds, frames, task)
 }
 
 async fn sleep_ms(ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
+}
+
+/// A failed static write is retried after 1 s even though nothing changes.
+#[tokio::test(start_paused = true)]
+async fn failed_static_frame_is_retried_after_a_second() {
+    let frames = Rc::new(RefCell::new(Vec::new()));
+    let fail = Rc::new(Cell::new(true));
+    let attempts = Rc::new(Cell::new(0));
+    let sink = Flaky {
+        inner: Recording {
+            frames: Rc::clone(&frames),
+            epoch: Instant::now(),
+        },
+        fail: Rc::clone(&fail),
+        attempts: Rc::clone(&attempts),
+    };
+    let mut out = Output::new(Box::new(sink), 3, 0);
+    let mut comp = Compositor::new(3, 0);
+    comp.start_at(0);
+    comp.apply(
+        LedCommand::UserLight {
+            on: true,
+            color: Rgb { r: 255, g: 0, b: 0 },
+            brightness: 1.0,
+            effect: Effect::Solid,
+            transition_ms: 0,
+        },
+        0,
+    );
+    let mut timers = Timers::new();
+    frame(&mut comp, &mut out, &mut timers, 0);
+    assert_eq!(approvals(&frames), 0, "the write failed");
+    assert!(timers.is_set(TimerKey::Retry), "retry armed");
+    assert_eq!(attempts.get(), 1);
+    fail.set(false);
+    assert_eq!(timers.next().await, TimerKey::Retry);
+    frame(&mut comp, &mut out, &mut timers, 1000);
+    assert_eq!(approvals(&frames), 1, "the retry was written");
+}
+
+fn approvals(frames: &Captured) -> usize {
+    frames.borrow().len()
 }
 
 #[tokio::test(start_paused = true)]
