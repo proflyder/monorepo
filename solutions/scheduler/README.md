@@ -6,24 +6,33 @@ Durable планировщик будильников, напоминаний, �
 Android, будущий агент) забирает событие, выполняет действие и подтверждает
 его.
 
-Статус: durable core, Connect/gRPC API, legacy `AlarmService` facade, тесты и
+Статус: durable core, Connect API, legacy `AlarmService` facade, тесты и
 K3s-деплой. scheduler — действующий владелец будильников, таймеров и
 напоминаний; HA выполняет звук по событиям исполнителя. Android-клиент —
 `projects/mobile/android`.
 
-## Компоненты
+Работающий процесс и контейнерный образ — Rust-крейт `crates/scheduler`
+(static `x86_64-unknown-linux-musl`, `rules_rust`). Go-код (`cmd/`, `app/`,
+`internal/`) сохранён как эталон контракта, владелец golden-фикстур и
+источник для отката образа по digest; он больше не входит в деплой.
+
+## Компоненты Rust-сервиса
 
 ```text
-solutions/scheduler/
-  cmd/scheduler/            entrypoint (scheduler)
-  app/                      общая сборка процесса (используется и alarm)
-  internal/config/          env, валидация, loopback-default
-  internal/idgen/           UUIDv7 ресурсы, UUIDv5 события
-  internal/planner/         чистая рекуррентность + IANA/DST
-  internal/store/           SQLite schema, транзакции, tick, outbox
-  internal/engine/          tick loop, purge, readiness
-  internal/api/             Connect/gRPC handlers, auth, alarm facade
-  scripts/generate-proto.sh перегенерация checked-in Go stubs
+crates/scheduler/
+  src/domain/               чистая рекуррентность, ids, hashes, validation
+  src/store/                SQLite schema, транзакции, tick, outbox, purge
+  src/api/                  Connect handlers, bearer auth, alarm facade
+  src/config.rs             env 1:1 с Go (SCHEDULER_* + legacy ALARM_*)
+  src/engine.rs             tick/purge loop, readiness на home-runtime
+  src/app.rs                composition root, graceful shutdown
+  src/health.rs             -healthcheck / -status для distroless
+  src/main.rs               entrypoint
+
+cmd/scheduler/            Go-эталон entrypoint (не деплоится)
+app/                      Go-эталон сборки процесса (не деплоится)
+internal/                 Go-эталон: config, idgen, planner, store, engine, api
+scripts/generate-proto.sh перегенерация checked-in Go stubs
 ```
 
 Legacy `ricardo.v1.AlarmService` отдаётся на том же listener, что и
@@ -51,16 +60,37 @@ decimal string (стандартный protobuf JSON). Пустые/дефолт
 
 ### Транспорты
 
-Один listener отдаёт **все три протокола** через connect-go handlers:
-Connect unary (JSON и binary), gRPC over HTTP/2 (включая h2c) и gRPC-Web.
+Один listener отдаёт Connect unary (JSON и binary) и gRPC-Web по HTTP/1.1.
 Отдельного REST API нет. `Content-Type: application/json` +
 `/ricardo.v1.SchedulerService/<Method>` — это Connect JSON, а не hand-written
-REST. Для gRPC нужен HTTP/2; h2c работает на loopback/LAN, TLS-termination —
-задача deployment-слоя.
+REST.
+
+Отличие Rust-сервиса от прежнего Go: `connectrpc` собран только с feature
+`json` (без `hyper/http2`), поэтому gRPC over h2c сейчас не отдаётся. gRPC-Web
+и Connect unary работают; живых клиентов, которым нужен h2c, не было.
+Добавление h2c — отдельное решение с проверкой зависимостей образа.
 
 Auth: `Authorization: Bearer <token>` на каждом RPC. Сравнение
 constant-time по SHA-256; токен не логируется. `SCHEDULER_CONSUMERS`
 опционально ограничивает `consumer_id` allowlist.
+
+### Env и образ
+
+Переменные окружения и их приоритеты — 1:1 с Go: `SCHEDULER_DB_PATH`,
+`SCHEDULER_LISTEN`, `SCHEDULER_TIMEZONE`, `SCHEDULER_TOKEN(_FILE)`,
+`SCHEDULER_CONSUMERS`, `SCHEDULER_MISSED_GRACE_SECONDS`,
+`SCHEDULER_RING_WINDOW_SECONDS`, `SCHEDULER_EVENT_RETENTION_SECONDS`,
+`SCHEDULER_MAX_TIMER_SECONDS`, `SCHEDULER_MAX_TIMERS`,
+`SCHEDULER_MAX_PAYLOAD_BYTES`, `SCHEDULER_EVENT_MAX_ATTEMPTS`,
+`SCHEDULER_TICK_MS`; legacy `ALARM_DB_PATH/LISTEN/TIMEZONE` — fallback.
+`SCHEDULER_TOKEN` побеждает `SCHEDULER_TOKEN_FILE`.
+
+Образ `//projects/home/kubernetes/scheduler:scheduler_image` — static musl
+бинарь на distroless, `user 65534:65534`, entrypoint
+`/usr/local/bin/scheduler`. Durable база — `/data/scheduler.db`; UID и
+права PVC совпадают с прежним Go-образом, поэтому существующий том
+открывается без миграции. `scheduler -healthcheck` и `scheduler -status`
+читают токен из файла и не кладут его в аргументы.
 
 ## Recurrence и DST
 

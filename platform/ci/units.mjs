@@ -156,7 +156,7 @@ export const config = {
   // the scheduler/bridge binaries and the Kubernetes deployment manifests.
   deploy_control: {
     units: ["scheduler", "ha-bridge"],
-    paths: ["projects/home/kubernetes/scheduler/**"],
+    paths: ["solutions/scheduler/**", "projects/home/kubernetes/scheduler/**"],
   },
 
   units: [
@@ -195,30 +195,6 @@ export const config = {
       },
     },
     {
-      id: "scheduler-rust",
-      platform: "bazel",
-      title: "solutions/scheduler/crates (Rust port, tests only until cutover)",
-      paths: [
-        "solutions/scheduler/crates/**",
-        "solutions/scheduler/testdata/**",
-        "solutions/scheduler/internal/api/testdata/contract/**",
-      ],
-      // The Rust scheduler is not deployed yet: the Go `scheduler` unit still
-      // owns the image and the Deployment. Golden vectors in testdata are
-      // shared with the Go tests.
-      bazel: {
-        roots: ["//solutions/scheduler/crates/scheduler", "//packages/rust"],
-        test_targets: [
-          "//solutions/scheduler/crates/scheduler:unit_tests",
-          "//solutions/scheduler/crates/scheduler:contract_tests",
-          "//solutions/scheduler/crates/scheduler:go_database_test",
-          "//solutions/scheduler/crates/scheduler:clippy",
-          "//solutions/scheduler/crates/scheduler:rustfmt",
-        ],
-        build_targets: ["//solutions/scheduler/crates/scheduler/..."],
-      },
-    },
-    {
       id: "health-exporter",
       platform: "go",
       title: "projects/home-assistant/deploy/health-exporter (runtime chart)",
@@ -234,8 +210,8 @@ export const config = {
     },
     {
       id: "scheduler",
-      platform: "go",
-      title: "solutions/scheduler (scheduler service)",
+      platform: "bazel",
+      title: "solutions/scheduler (Rust service) + home deployment",
       paths: [
         "solutions/scheduler/**",
         // The deploy tooling that renders this unit's manifests.
@@ -255,11 +231,33 @@ export const config = {
         env_file: "scheduler.env",
         externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
-      go: {
-        module: ".",
-        packages: ["./solutions/scheduler/..."],
-        race: true,
-        build: ["./solutions/scheduler/cmd/scheduler"],
+      // The deployed service is the Rust crate. The Go sources stay in the tree
+      // as the digest rollback and the fixture owner, so their Bazel tests keep
+      // running until they are deleted.
+      bazel: {
+        roots: [
+          "//solutions/scheduler",
+          "//packages/rust",
+          "//projects/home/kubernetes/scheduler",
+        ],
+        test_targets: [
+          "//solutions/scheduler/crates/scheduler:unit_tests",
+          "//solutions/scheduler/crates/scheduler:contract_tests",
+          "//solutions/scheduler/crates/scheduler:go_database_test",
+          "//solutions/scheduler/crates/scheduler:clippy",
+          "//solutions/scheduler/crates/scheduler:rustfmt",
+          "//solutions/scheduler/internal/config:config_test",
+          "//solutions/scheduler/internal/idgen:idgen_test",
+          "//solutions/scheduler/internal/planner:planner_test",
+          "//solutions/scheduler/internal/api:api_test",
+          "//solutions/scheduler/internal/engine:engine_test",
+          "//solutions/scheduler/internal/store:store_test",
+          "//solutions/scheduler/cmd/scheduler:scheduler_test",
+        ],
+        build_targets: [
+          "//solutions/scheduler/...",
+          "//projects/home/kubernetes/scheduler/...",
+        ],
       },
     },
 

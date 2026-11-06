@@ -1,17 +1,19 @@
-//! Pure scheduler domain.
+//! Scheduler crate.
 //!
-//! This crate owns the semantics of the scheduler without I/O: recurrence in
-//! IANA time zones, occurrence and ringing-window rules, stable identifiers,
-//! canonical idempotency hashes and input validation. It deliberately has no
-//! dependency on the protobuf types, SQLite or the network; the later `store`
-//! and `api` layers convert to and from their wire representation.
-//!
-//! The behaviour mirrors the former Go implementation byte for byte: the
-//! `testdata/planner/*.json` and `testdata/ids.json` vectors under
+//! The domain, store and API layers mirror the former Go implementation byte
+//! for byte: the `testdata/planner/*.json` and `testdata/ids.json` vectors under
 //! `solutions/scheduler` are the shared golden tables.
+//!
+//! [`config`], [`engine`], [`app`] and [`health`] turn those layers into the
+//! deployed process. They are the only modules that touch the environment, the
+//! clock, the async runtime or the network beyond the Connect handler.
 
 #![deny(missing_debug_implementations)]
 
 pub mod api;
+pub mod app;
+pub mod config;
 pub mod domain;
+pub mod engine;
+pub mod health;
 pub mod store;

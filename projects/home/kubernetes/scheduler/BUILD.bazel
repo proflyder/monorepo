@@ -1,16 +1,17 @@
-load("//platform/bazel/oci:service_image.bzl", "service_image")
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image", "service_image")
 
 # Container images for the home scheduler stack.
 #
-# Each image contains exactly one static linux/amd64 Go binary on top of a
+# The scheduler is the Rust crate rebuilt for static musl; the other services
+# are static linux/amd64 Go binaries. Each image is one binary on top of a
 # digest-pinned distroless base (MODULE.bazel `distroless_static`). There are
 # no RUN steps and no package manager, so the images are assembled hermetically
 # on any host (macOS workstation or the GitHub runner) and never need a Docker
 # daemon to build. Runtime manifests reference images by digest, never by tag.
 
-service_image(
+rust_service_image(
     name = "scheduler",
-    binary = "//solutions/scheduler/cmd/scheduler",
+    crate_binary = "//solutions/scheduler/crates/scheduler:scheduler",
     repo = "ghcr.io/proflyder/scheduler",
 )
 

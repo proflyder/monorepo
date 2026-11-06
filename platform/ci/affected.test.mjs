@@ -654,11 +654,11 @@ test("real repo: github format is a valid JSON payload", async () => {
   }
 });
 
-function routeReal(changed, deps) {
+function routeReal(changed, deps, graph = null) {
   const config = affected.loadConfig();
   return withDeps(
     { goPackageDirs: deps ?? (() => new Set()) },
-    () => affected.route(config, changed, { root: REPO, base: "b" }),
+    () => affected.route(config, changed, { root: REPO, base: "b", graph }),
   );
 }
 
@@ -670,11 +670,32 @@ test("deploy: docs-only change deploys nothing", () => {
 
 test("deploy: scheduler change deploys only scheduler", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["solutions/scheduler/app/run.go"]);
+  const result = routeReal(
+    ["solutions/scheduler/app/run.go"],
+    undefined,
+    { affectedRules: () => new Set(["//solutions/scheduler/app:app"]) },
+  );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["scheduler"]);
   assert.equal(entries[0].namespace, "home-assistant");
   assert.equal(entries[0].target_root, "//projects/home/kubernetes/scheduler");
+});
+
+test("deploy: scheduler Rust crate change deploys scheduler", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(
+    ["solutions/scheduler/crates/scheduler/src/app.rs"],
+    undefined,
+    {
+      affectedRules: () =>
+        new Set(["//solutions/scheduler/crates/scheduler:scheduler"]),
+    },
+  );
+  assert.deepEqual(result.routes.go.units, []);
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["scheduler"]);
+  assert.equal(result.deployControl, true);
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id), ["scheduler"]);
 });
 
 test("deploy: currency-bot change deploys its namespace", () => {
@@ -706,19 +727,23 @@ test("deploy: ha-bridge change deploys bridge and control", () => {
   assert.equal(entries[0].workloads, "ha-bridge ha-control");
 });
 
-test("deploy: shared go package deploys every importer", () => {
+test("deploy: shared go package deploys its remaining Go importers", () => {
   const config = affected.loadConfig();
   const shared = new Set([path.join(REPO, "packages", "proto", "ricardo", "v1")]);
   const deps = (_root, unit) => {
     const own = new Set([path.join(REPO, unit.goModule, unit.goPackages[0])]);
-    if (unit.id === "scheduler" || unit.id === "ha-bridge") {
+    if (unit.id === "ha-bridge") {
       return new Set([...own, ...shared]);
     }
     return own;
   };
-  const result = routeReal(["packages/proto/ricardo/v1/scheduler.pb.go"], deps);
+  const result = routeReal(
+    ["packages/proto/ricardo/v1/scheduler.pb.go"],
+    deps,
+    { affectedRules: () => new Set() },
+  );
   const entries = affected.deployEntries(result, config);
-  assert.deepEqual(entries.map((entry) => entry.id), ["scheduler", "ha-bridge"]);
+  assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
 });
 
 test("deploy: hermes change selects its images", () => {
@@ -1430,17 +1455,18 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
   ]);
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
     "voice-proxy",
-    "scheduler-rust",
+    "scheduler",
     "wakegrant",
     "ble-gateway",
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  // wakegrant is a Bazel deploy unit now, so a Rust toolchain pin change
-  // legitimately rebuilds and rolls it; the native-only units are not deployed.
+  // scheduler and wakegrant are Bazel deploy units now, so a Rust toolchain pin
+  // change legitimately rebuilds and rolls them; the native-only units are not
+  // deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
-    ["wakegrant"],
+    ["scheduler", "wakegrant"],
   );
   assert.equal(result.androidDistribute, false);
 });
@@ -1520,8 +1546,19 @@ test("platform bazel routing: other files under platform/bazel stay global", () 
   assert.equal(result.routes.android.mode, "all");
 });
 
-test("platform bazel routing: a native toolchain and a go change select both", () => {
-  const result = routeReal(["platform/bazel/zig/repositories.bzl", "solutions/scheduler/app/run.go"]);
+test("platform bazel routing: a native toolchain and a scheduler change select both", () => {
+  const config = affected.loadConfig();
+  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+    affected.route(
+      config,
+      ["platform/bazel/zig/repositories.bzl", "solutions/scheduler/app/run.go"],
+      {
+        root: REPO,
+        base: "b",
+        graph: { affectedRules: () => new Set(["//solutions/scheduler/app:app"]) },
+      },
+    ),
+  );
   assert.deepEqual(result.changed, [
     "platform/bazel#native",
     "solutions/scheduler/app/run.go",
@@ -1530,7 +1567,8 @@ test("platform bazel routing: a native toolchain and a go change select both", (
     "logon-provider",
     "pulsar",
   ]);
-  assert.deepEqual(result.routes.go.units.map((unit) => unit.id), ["scheduler"]);
+  assert.deepEqual(result.routes.go.units, []);
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["scheduler"]);
   assert.deepEqual(result.routes.android.units, []);
 });
 

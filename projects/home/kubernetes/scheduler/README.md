@@ -23,10 +23,12 @@ projects/home/kubernetes/scheduler/BUILD.bazel
   :ha-control_image  :ha-control_load  :ha-control_push   ghcr.io/proflyder/ha-control
 ```
 
-- `rules_oci` assembles one static linux/amd64 Go binary on
+- `rules_oci` assembles one static linux/amd64 binary on
   `gcr.io/distroless/static-debian12:nonroot`, pinned by digest in
-  `MODULE.bazel`. No Docker daemon and no `RUN` steps are involved, so the same
-  targets build on macOS and on the GitHub runner.
+  `MODULE.bazel`. The scheduler binary comes from the Rust crate
+  `//solutions/scheduler/crates/scheduler:scheduler` via `rules_rust` (static
+  musl); `ha-bridge`/`ha-control` are Go. No Docker daemon and no `RUN` steps
+  are involved, so the same targets build on macOS and on the GitHub runner.
 - `home-deploy oci` (`platform/deploy`, decision 35) reads the resulting OCI
   layout: its `digest` prints the manifest digest, `pack` writes an OCI archive
   for `ctr images import` and `docker` a docker archive for local smoke tests. The image is

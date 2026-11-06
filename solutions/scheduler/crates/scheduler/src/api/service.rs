@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 use home_proto::v1 as proto;
+use home_sqlite::SqliteError;
 use proto::SchedulerService;
 
 use crate::domain::Clock;
@@ -90,6 +91,24 @@ impl Service {
     pub fn map<T>(result: Result<T, StoreError>) -> Result<T, ConnectError> {
         result.map_err(ConnectError::from)
     }
+
+    /// Runs one store operation on the blocking pool.
+    ///
+    /// The store talks to a single SQLite writer thread and can block on the
+    /// connection mutex; calling it directly from a handler would stall the
+    /// async runtime. `spawn_blocking` keeps every RPC (and the engine's
+    /// tick/purge) off the reactor threads.
+    pub async fn store_call<T, F>(&self, call: F) -> Result<T, ConnectError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Store) -> Result<T, StoreError> + Send + 'static,
+    {
+        let store = Arc::clone(&self.store);
+        tokio::task::spawn_blocking(move || call(&store))
+            .await
+            .map_err(|_| ConnectError::from(StoreError::Sqlite(SqliteError::Panicked)))?
+            .map_err(ConnectError::from)
+    }
 }
 
 fn response<T>(message: T) -> ServiceResult<T> {
@@ -105,11 +124,11 @@ impl SchedulerService for Service {
     {
         let message = request.to_owned_message();
         let schedule = create_view_to_schedule(&message);
-        let created = Self::map(self.store.create_schedule(
-            &schedule,
-            &message.idempotency_key,
-            self.now_unix(),
-        ))?;
+        let now = self.now_unix();
+        let key = message.idempotency_key.clone();
+        let created = self
+            .store_call(move |store| store.create_schedule(&schedule, &key, now))
+            .await?;
         response(proto::CreateScheduleResponse {
             schedule: schedule_to_proto(&created).into(),
             ..proto::CreateScheduleResponse::default()
@@ -122,7 +141,10 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::GetScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::GetScheduleResponse> + Send + use<'a>>
     {
-        let schedule = Self::map(self.store.get_schedule(request.id))?;
+        let id = request.id.to_owned();
+        let schedule = self
+            .store_call(move |store| store.get_schedule(&id))
+            .await?;
         response(proto::GetScheduleResponse {
             schedule: schedule_to_proto(&schedule).into(),
             ..proto::GetScheduleResponse::default()
@@ -136,7 +158,10 @@ impl SchedulerService for Service {
     ) -> ServiceResult<impl connectrpc::Encodable<proto::ListSchedulesResponse> + Send + use<'a>>
     {
         let kind = super::convert::schedule_kind(request.kind.to_i32());
-        let schedules = Self::map(self.store.list_schedules(request.include_disabled, kind))?;
+        let include_disabled = request.include_disabled;
+        let schedules = self
+            .store_call(move |store| store.list_schedules(include_disabled, kind))
+            .await?;
         response(proto::ListSchedulesResponse {
             schedules: schedules.iter().map(schedule_to_proto).collect(),
             ..proto::ListSchedulesResponse::default()
@@ -159,11 +184,11 @@ impl SchedulerService for Service {
             ));
         }
         let schedule = view_to_schedule(view);
-        let updated = Self::map(self.store.update_schedule(
-            &schedule,
-            message.expected_revision,
-            self.now_unix(),
-        ))?;
+        let expected_revision = message.expected_revision;
+        let now = self.now_unix();
+        let updated = self
+            .store_call(move |store| store.update_schedule(&schedule, expected_revision, now))
+            .await?;
         response(proto::UpdateScheduleResponse {
             schedule: schedule_to_proto(&updated).into(),
             ..proto::UpdateScheduleResponse::default()
@@ -176,7 +201,11 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::DeleteScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::DeleteScheduleResponse> + Send + use<'a>>
     {
-        let deleted = Self::map(self.store.delete_schedule(request.id, self.now_unix()))?;
+        let id = request.id.to_owned();
+        let now = self.now_unix();
+        let deleted = self
+            .store_call(move |store| store.delete_schedule(&id, now))
+            .await?;
         response(proto::DeleteScheduleResponse {
             deleted,
             ..proto::DeleteScheduleResponse::default()
@@ -189,11 +218,12 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::SetScheduleEnabledRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::SetScheduleEnabledResponse> + Send + use<'a>>
     {
-        let schedule = Self::map(self.store.set_schedule_enabled(
-            request.id,
-            request.enabled,
-            self.now_unix(),
-        ))?;
+        let id = request.id.to_owned();
+        let enabled = request.enabled;
+        let now = self.now_unix();
+        let schedule = self
+            .store_call(move |store| store.set_schedule_enabled(&id, enabled, now))
+            .await?;
         response(proto::SetScheduleEnabledResponse {
             schedule: schedule_to_proto(&schedule).into(),
             ..proto::SetScheduleEnabledResponse::default()
@@ -206,11 +236,12 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::SnoozeScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::SnoozeScheduleResponse> + Send + use<'a>>
     {
-        let (schedule, event) = Self::map(self.store.snooze_schedule(
-            request.id,
-            request.minutes,
-            self.now_unix(),
-        ))?;
+        let id = request.id.to_owned();
+        let minutes = request.minutes;
+        let now = self.now_unix();
+        let (schedule, event) = self
+            .store_call(move |store| store.snooze_schedule(&id, minutes, now))
+            .await?;
         response(proto::SnoozeScheduleResponse {
             schedule: schedule_to_proto(&schedule).into(),
             event: event_to_proto(&event).into(),
@@ -224,7 +255,11 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::StopScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::StopScheduleResponse> + Send + use<'a>>
     {
-        let schedule = Self::map(self.store.stop_schedule(request.id, self.now_unix()))?;
+        let id = request.id.to_owned();
+        let now = self.now_unix();
+        let schedule = self
+            .store_call(move |store| store.stop_schedule(&id, now))
+            .await?;
         response(proto::StopScheduleResponse {
             schedule: schedule_to_proto(&schedule).into(),
             ..proto::StopScheduleResponse::default()
@@ -236,12 +271,13 @@ impl SchedulerService for Service {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::StartTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::StartTimerResponse> + Send + use<'a>> {
-        let timer = Self::map(self.store.start_timer(
-            request.label,
-            request.duration_seconds,
-            request.idempotency_key,
-            self.now_unix(),
-        ))?;
+        let label = request.label.to_owned();
+        let duration_seconds = request.duration_seconds;
+        let key = request.idempotency_key.to_owned();
+        let now = self.now_unix();
+        let timer = self
+            .store_call(move |store| store.start_timer(&label, duration_seconds, &key, now))
+            .await?;
         response(proto::StartTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::StartTimerResponse::default()
@@ -253,7 +289,8 @@ impl SchedulerService for Service {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::GetTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::GetTimerResponse> + Send + use<'a>> {
-        let timer = Self::map(self.store.get_timer(request.id))?;
+        let id = request.id.to_owned();
+        let timer = self.store_call(move |store| store.get_timer(&id)).await?;
         response(proto::GetTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::GetTimerResponse::default()
@@ -265,7 +302,10 @@ impl SchedulerService for Service {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::ListTimersRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::ListTimersResponse> + Send + use<'a>> {
-        let timers = Self::map(self.store.list_timers(request.include_finished))?;
+        let include_finished = request.include_finished;
+        let timers = self
+            .store_call(move |store| store.list_timers(include_finished))
+            .await?;
         response(proto::ListTimersResponse {
             timers: timers.iter().map(timer_to_proto).collect(),
             ..proto::ListTimersResponse::default()
@@ -277,7 +317,11 @@ impl SchedulerService for Service {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::PauseTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::PauseTimerResponse> + Send + use<'a>> {
-        let timer = Self::map(self.store.pause_timer(request.id, self.now_unix()))?;
+        let id = request.id.to_owned();
+        let now = self.now_unix();
+        let timer = self
+            .store_call(move |store| store.pause_timer(&id, now))
+            .await?;
         response(proto::PauseTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::PauseTimerResponse::default()
@@ -290,7 +334,11 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::ResumeTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::ResumeTimerResponse> + Send + use<'a>>
     {
-        let timer = Self::map(self.store.resume_timer(request.id, self.now_unix()))?;
+        let id = request.id.to_owned();
+        let now = self.now_unix();
+        let timer = self
+            .store_call(move |store| store.resume_timer(&id, now))
+            .await?;
         response(proto::ResumeTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::ResumeTimerResponse::default()
@@ -303,7 +351,11 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::CancelTimerRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::CancelTimerResponse> + Send + use<'a>>
     {
-        let timer = Self::map(self.store.cancel_timer(request.id, self.now_unix()))?;
+        let id = request.id.to_owned();
+        let now = self.now_unix();
+        let timer = self
+            .store_call(move |store| store.cancel_timer(&id, now))
+            .await?;
         response(proto::CancelTimerResponse {
             timer: timer_to_proto(&timer).into(),
             ..proto::CancelTimerResponse::default()
@@ -317,13 +369,16 @@ impl SchedulerService for Service {
     ) -> ServiceResult<impl connectrpc::Encodable<proto::ListDueEventsResponse> + Send + use<'a>>
     {
         self.check_consumer(request.consumer_id)?;
-        let events = Self::map(self.store.list_due_events(
-            request.consumer_id,
-            request.lease_seconds,
-            request.limit,
-            request.queue,
-            self.now_unix(),
-        ))?;
+        let consumer = request.consumer_id.to_owned();
+        let lease_seconds = request.lease_seconds;
+        let limit = request.limit;
+        let queue = request.queue.to_owned();
+        let now = self.now_unix();
+        let events = self
+            .store_call(move |store| {
+                store.list_due_events(&consumer, lease_seconds, limit, &queue, now)
+            })
+            .await?;
         response(proto::ListDueEventsResponse {
             events: events.iter().map(event_to_proto).collect(),
             ..proto::ListDueEventsResponse::default()
@@ -336,13 +391,14 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::AckEventRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::AckEventResponse> + Send + use<'a>> {
         self.check_consumer(request.consumer_id)?;
-        let event = Self::map(self.store.ack_event(
-            request.event_id,
-            request.consumer_id,
-            ack_outcome(request.outcome.to_i32()),
-            request.detail,
-            self.now_unix(),
-        ))?;
+        let event_id = request.event_id.to_owned();
+        let consumer = request.consumer_id.to_owned();
+        let outcome = ack_outcome(request.outcome.to_i32());
+        let detail = request.detail.to_owned();
+        let now = self.now_unix();
+        let event = self
+            .store_call(move |store| store.ack_event(&event_id, &consumer, outcome, &detail, now))
+            .await?;
         response(proto::AckEventResponse {
             event: event_to_proto(&event).into(),
             ..proto::AckEventResponse::default()
@@ -355,14 +411,17 @@ impl SchedulerService for Service {
         request: ServiceRequest<'_, proto::EnqueueTaskRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::EnqueueTaskResponse> + Send + use<'a>>
     {
-        let event = Self::map(self.store.enqueue_task(
-            request.task_type,
-            request.payload_json,
-            request.queue,
-            request.run_at_unix,
-            request.idempotency_key,
-            self.now_unix(),
-        ))?;
+        let task_type = request.task_type.to_owned();
+        let payload = request.payload_json.to_owned();
+        let queue = request.queue.to_owned();
+        let run_at_unix = request.run_at_unix;
+        let key = request.idempotency_key.to_owned();
+        let now = self.now_unix();
+        let event = self
+            .store_call(move |store| {
+                store.enqueue_task(&task_type, &payload, &queue, run_at_unix, &key, now)
+            })
+            .await?;
         response(proto::EnqueueTaskResponse {
             event: event_to_proto(&event).into(),
             ..proto::EnqueueTaskResponse::default()
@@ -374,7 +433,11 @@ impl SchedulerService for Service {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::CancelTaskRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::CancelTaskResponse> + Send + use<'a>> {
-        let event = Self::map(self.store.cancel_task(request.event_id, self.now_unix()))?;
+        let event_id = request.event_id.to_owned();
+        let now = self.now_unix();
+        let event = self
+            .store_call(move |store| store.cancel_task(&event_id, now))
+            .await?;
         response(proto::CancelTaskResponse {
             event: event_to_proto(&event).into(),
             ..proto::CancelTaskResponse::default()
@@ -387,7 +450,7 @@ impl SchedulerService for Service {
         _request: ServiceRequest<'_, proto::GetStatusRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::GetStatusResponse> + Send + use<'a>> {
         let now = self.now_unix();
-        let status = Self::map(self.store.status(now))?;
+        let status = self.store_call(move |store| store.status(now)).await?;
         let engine = (self.engine)();
         let consumers = status
             .consumers

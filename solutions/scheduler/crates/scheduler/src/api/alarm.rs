@@ -22,12 +22,12 @@ impl AlarmFacade {
         Self { inner }
     }
 
-    fn get_alarm_schedule(&self, id: &str) -> Result<Schedule, ConnectError> {
+    async fn get_alarm_schedule(&self, id: &str) -> Result<Schedule, ConnectError> {
+        let id = id.to_owned();
         let schedule = self
             .inner
-            .store()
-            .get_schedule(id)
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.get_schedule(&id))
+            .await?;
         if schedule.kind != ScheduleKind::Alarm {
             return Err(ConnectError::not_found("alarm not found"));
         }
@@ -72,11 +72,11 @@ impl AlarmService for AlarmFacade {
             enabled: request.enabled,
             ..Schedule::default()
         };
+        let now = self.inner.now_unix();
         let created = self
             .inner
-            .store()
-            .create_schedule(&schedule, "", self.inner.now_unix())
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.create_schedule(&schedule, "", now))
+            .await?;
         response(proto::CreateAlarmResponse {
             alarm: schedule_to_alarm(&created).into(),
             ..proto::CreateAlarmResponse::default()
@@ -88,7 +88,7 @@ impl AlarmService for AlarmFacade {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::GetAlarmRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::GetAlarmResponse> + Send + use<'a>> {
-        let schedule = self.get_alarm_schedule(request.id)?;
+        let schedule = self.get_alarm_schedule(request.id).await?;
         response(proto::GetAlarmResponse {
             alarm: schedule_to_alarm(&schedule).into(),
             ..proto::GetAlarmResponse::default()
@@ -100,11 +100,11 @@ impl AlarmService for AlarmFacade {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::ListAlarmsRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::ListAlarmsResponse> + Send + use<'a>> {
+        let include_disabled = request.include_disabled;
         let schedules = self
             .inner
-            .store()
-            .list_schedules(request.include_disabled, ScheduleKind::Alarm)
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.list_schedules(include_disabled, ScheduleKind::Alarm))
+            .await?;
         response(proto::ListAlarmsResponse {
             alarms: schedules.iter().map(schedule_to_alarm).collect(),
             ..proto::ListAlarmsResponse::default()
@@ -124,13 +124,14 @@ impl AlarmService for AlarmFacade {
         if alarm.id.is_empty() {
             return Err(ConnectError::invalid_argument("alarm.id is required"));
         }
-        self.get_alarm_schedule(&alarm.id)?;
+        self.get_alarm_schedule(&alarm.id).await?;
+        let revision = alarm.revision;
         let schedule = alarm_to_schedule(alarm).map_err(ConnectError::invalid_argument)?;
+        let now = self.inner.now_unix();
         let updated = self
             .inner
-            .store()
-            .update_schedule(&schedule, alarm.revision, self.inner.now_unix())
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.update_schedule(&schedule, revision, now))
+            .await?;
         response(proto::UpdateAlarmResponse {
             alarm: schedule_to_alarm(&updated).into(),
             ..proto::UpdateAlarmResponse::default()
@@ -143,12 +144,13 @@ impl AlarmService for AlarmFacade {
         request: ServiceRequest<'_, proto::DeleteAlarmRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::DeleteAlarmResponse> + Send + use<'a>>
     {
-        let schedule = self.get_alarm_schedule(request.id)?;
+        let schedule = self.get_alarm_schedule(request.id).await?;
+        let id = schedule.id.clone();
+        let now = self.inner.now_unix();
         let deleted = self
             .inner
-            .store()
-            .delete_schedule(&schedule.id, self.inner.now_unix())
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.delete_schedule(&id, now))
+            .await?;
         response(proto::DeleteAlarmResponse {
             deleted,
             ..proto::DeleteAlarmResponse::default()
@@ -161,12 +163,14 @@ impl AlarmService for AlarmFacade {
         request: ServiceRequest<'_, proto::SetAlarmEnabledRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::SetAlarmEnabledResponse> + Send + use<'a>>
     {
-        let schedule = self.get_alarm_schedule(request.id)?;
+        let schedule = self.get_alarm_schedule(request.id).await?;
+        let id = schedule.id.clone();
+        let enabled = request.enabled;
+        let now = self.inner.now_unix();
         let updated = self
             .inner
-            .store()
-            .set_schedule_enabled(&schedule.id, request.enabled, self.inner.now_unix())
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.set_schedule_enabled(&id, enabled, now))
+            .await?;
         response(proto::SetAlarmEnabledResponse {
             alarm: schedule_to_alarm(&updated).into(),
             ..proto::SetAlarmEnabledResponse::default()
@@ -179,12 +183,14 @@ impl AlarmService for AlarmFacade {
         request: ServiceRequest<'_, proto::SnoozeAlarmRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::SnoozeAlarmResponse> + Send + use<'a>>
     {
-        let schedule = self.get_alarm_schedule(request.id)?;
+        let schedule = self.get_alarm_schedule(request.id).await?;
+        let id = schedule.id.clone();
+        let minutes = request.minutes;
+        let now = self.inner.now_unix();
         let (updated, _) = self
             .inner
-            .store()
-            .snooze_schedule(&schedule.id, request.minutes, self.inner.now_unix())
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.snooze_schedule(&id, minutes, now))
+            .await?;
         response(proto::SnoozeAlarmResponse {
             alarm: schedule_to_alarm(&updated).into(),
             ..proto::SnoozeAlarmResponse::default()
@@ -196,12 +202,13 @@ impl AlarmService for AlarmFacade {
         _ctx: RequestContext,
         request: ServiceRequest<'_, proto::StopAlarmRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::StopAlarmResponse> + Send + use<'a>> {
-        let schedule = self.get_alarm_schedule(request.id)?;
+        let schedule = self.get_alarm_schedule(request.id).await?;
+        let id = schedule.id.clone();
+        let now = self.inner.now_unix();
         let updated = self
             .inner
-            .store()
-            .stop_schedule(&schedule.id, self.inner.now_unix())
-            .map_err(ConnectError::from)?;
+            .store_call(move |store| store.stop_schedule(&id, now))
+            .await?;
         response(proto::StopAlarmResponse {
             alarm: schedule_to_alarm(&updated).into(),
             ..proto::StopAlarmResponse::default()
