@@ -33,6 +33,15 @@ kind: KubeletConfiguration
 imageMaximumGCAge: 48h
 KUBELET
 chmod 600 /srv/k3s/runtime/agent/etc/kubelet.conf.d/50-image-gc.conf
+# Parallel image pulls: one deploy may roll many freshly pushed images, and the
+# default serial queue made later images wait minutes (deploy run 42188744175).
+cat > /srv/k3s/runtime/agent/etc/kubelet.conf.d/50-image-pull.conf <<'KUBELET'
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+serializeImagePulls: false
+maxParallelImagePulls: 4
+KUBELET
+chmod 600 /srv/k3s/runtime/agent/etc/kubelet.conf.d/50-image-pull.conf
 curl -fsSL --retry 3 https://get.k3s.io -o /srv/k3s/recovery/install-k3s.sh
 INSTALL_K3S_VERSION="$K3S_VERSION" sh /srv/k3s/recovery/install-k3s.sh
 for attempt in $(seq 1 90); do

@@ -17,6 +17,7 @@ go_library(
         "//platform/deploy/internal/manifests",
         "//platform/deploy/internal/oci",
         "//platform/deploy/internal/preflight",
+        "//platform/deploy/internal/prepull",
         "//platform/deploy/internal/render",
         "//platform/deploy/internal/runtimevalues",
         "//platform/deploy/internal/state",

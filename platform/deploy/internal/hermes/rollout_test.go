@@ -556,6 +556,9 @@ func rolloutRunner(t *testing.T, scenario *helmScenario, calls *[]Command) Runne
 	return fakeRunner(func(command Command) Result {
 		joined := strings.Join(command.Args, " ")
 		switch {
+		case strings.Contains(joined, "get pod prepull-"):
+			// Every prepulled image is already on the node.
+			return Result{Stdout: `{"status":{"containerStatuses":[{"imageID":"sha256:on-node","state":{}}]}}`}
 		case strings.Contains(joined, "get deployment hermes"):
 			payload := map[string]interface{}{
 				"spec": map[string]interface{}{
@@ -806,5 +809,43 @@ func TestLogScanIgnoresLowercaseRetryNotes(t *testing.T) {
 		if len(VoiceProxyLogErrors(line)) != 1 {
 			t.Fatalf("real error not flagged: %q", line)
 		}
+	}
+}
+
+func TestRunPrepullsEveryImageBeforeTheUpgrade(t *testing.T) {
+	options := testOptions(t)
+	writeValuesFile(t, &options)
+	options.AssistAttempt = func() (map[string]interface{}, error) {
+		return map[string]interface{}{"ok": true, "speech": "Готов."}, nil
+	}
+	scenario := &helmScenario{
+		liveImages:   map[string]string{"gateway": proxyDigest, "voice-proxy": proxyDigest},
+		exporterLive: map[string]string{"health-exporter": exportDigest},
+		revision:     3,
+	}
+	var calls []Command
+	if code, err := Run(rolloutRunner(t, scenario, &calls), options); err != nil || code != 0 {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	created, cleanup, upgrade := 0, -1, -1
+	for i, call := range calls {
+		joined := strings.Join(call.Args, " ")
+		switch {
+		case contains(call.Args, "run") && strings.Contains(joined, "prepull-"):
+			if upgrade >= 0 {
+				t.Fatal("prepull ran after the upgrade")
+			}
+			created++
+		case strings.Contains(joined, "delete pod -l home-deploy/prepull="):
+			cleanup = i
+		case contains(call.Args, "upgrade") && upgrade < 0:
+			upgrade = i
+		}
+	}
+	if created != 4 {
+		t.Fatalf("prepull pods = %d, want hermes, voice-proxy, exporter and smoke", created)
+	}
+	if cleanup < 0 || upgrade < 0 || cleanup > upgrade {
+		t.Fatalf("cleanup=%d upgrade=%d: prepull pods must be gone before the upgrade", cleanup, upgrade)
 	}
 }

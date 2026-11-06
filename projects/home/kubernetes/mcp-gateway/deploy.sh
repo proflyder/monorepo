@@ -262,11 +262,18 @@ converge_deployment() {
     --summary-file "${DEPLOY_SUMMARY_FILE:-}"
 }
 
+# Pull the new images onto the node first (parallel kubelet pulls): the rollout
+# timeout below then measures only the start of the new version, not a slow
+# registry (run 42188744175 rolled back while images were still downloading).
+echo "== prepulling images"
+home_deploy prepull --kubectl "$KUBECTL" --namespace "$NS" --timeout 600s \
+  --image "$IMAGE_REF"
+
 echo "== applying mcp-gateway"
 record_before mcp-gateway
 converge_deployment mcp-gateway "$RENDER_DIR/deployment.yaml"
 mark_applied mcp-gateway
-$KUBECTL -n "$NS" rollout status deployment/mcp-gateway --timeout=180s
+$KUBECTL -n "$NS" rollout status deployment/mcp-gateway --timeout=600s
 
 # The image is distroless; -healthcheck loads the mounted configuration (token,
 # catalog, groups) and calls /healthz on loopback, so a broken mount or token
