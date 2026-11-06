@@ -13,6 +13,7 @@ restic before it leaves the K3s node:
 | `scheduler` | online SQLite copy of the scheduler database |
 | `currency_bot` | online SQLite copies from the currency-bot PVC |
 | `ha_bridge` | `ledger.json` from the ha-bridge PVC |
+| `vaultwarden` | online SQLite copy of the vault + tar of attachments, sends and the JWT key |
 | `ha` | newest automatic HA backup, already encrypted by Home Assistant |
 | `bb` | full `bb server export` from CT 103 (bb.db, auth secret, plugins, attachments), optional |
 

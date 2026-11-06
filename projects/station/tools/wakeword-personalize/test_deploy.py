@@ -14,13 +14,13 @@ class DeployProfileTests(unittest.TestCase):
     def test_pin_checked_and_manifest_renamed_without_modifying_archive(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            base = root / "secrets/model-registry/v2"
+            base = root / "local-data/model-registry/v2"
             base.mkdir(parents=True)
             model = b"fixture-personal-model"
             (base / "model.tflite").write_bytes(model)
             original = {"model": "personal.tflite", "micro": {"probability_cutoff": .9, "sliding_window_size": 10}}
             (base / "model.json").write_text(json.dumps(original))
-            profile = {"model_path": "secrets/model-registry/v2/model.tflite", "manifest_path": "secrets/model-registry/v2/model.json",
+            profile = {"model_path": "local-data/model-registry/v2/model.tflite", "manifest_path": "local-data/model-registry/v2/model.json",
                        "model_sha256": hashlib.sha256(model).hexdigest(), "probability_cutoff": .9, "sliding_window_size": 10}
             data, metadata = deploy.payload(profile, root)
             self.assertEqual(data, model)

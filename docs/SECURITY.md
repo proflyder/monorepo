@@ -81,7 +81,7 @@
 `secrets/` — 700, файлы 600. Реестр — `SENSITIVE-DATA.md`.
 
 - `secrets/NETWORK.md` — реальные IP/порты/VPN/HTTPS.
-- `secrets/CREDENTIALS.md` — SSH/ADB/сервисные пароли.
+- `secrets/README.md` — SSH/ADB/сервисные пароли.
 - `secrets/certs/` — приватные сертификаты/ключи.
 - QR/DPP отключён; прежний материал — только в private recovery archive.
 - `secrets/kubernetes-research/` — kubeconfig, values, Grafana password.
@@ -95,6 +95,16 @@
 - Wi-Fi profile — 0600, вне Git.
 
 Не коммитить, не синхронизировать без шифрования, не печатать в чат.
+
+## Vaultwarden
+
+- `https://passwords.<home-suffix>/`, только LAN/VPN (`home-allowlist`).
+- Регистрация закрыта, вход — мастер-пароль владельца (+2FA в аккаунте).
+  Хранилище шифруется на клиенте; сервер видит только шифротекст.
+- `/admin` включён; в поде только Argon2id-хэш токена, пароль — в OpenBao
+  `secret/infra/vaultwarden/admin`.
+- NetworkPolicy: вход только с узла/LAN на 8080, выход только DNS — сервер не
+  может ничего отправить наружу.
 
 ## OpenBao
 

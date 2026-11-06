@@ -128,7 +128,7 @@ System + Administrators полный доступ, больше никого.
 герметичный zig 0.14.1 `cc_toolchain` из `MODULE.bazel` (mingw-w64/UCRT,
 статический CRT). Windows SDK, Visual Studio и отдельный mingw-тулчейн не
 нужны; Bazel и Bazelisk — корневой build contract репозитория. Локально Bazelisk лежит в
-`secrets/local-tools/bazelisk` (скрипты находят его сами), либо `bazel` на
+`local-data/local-tools/bazelisk` (скрипты находят его сами), либо `bazel` на
 `PATH`/`BAZELISK`.
 
 ```bash
@@ -196,7 +196,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 Оператор на Mac/Linux получает артефакт по версии или digest:
 
 ```bash
-# нужны oras и авторизованный gh; oras можно положить в secrets/local-tools/
+# нужны oras и авторизованный gh; oras можно положить в local-data/local-tools/
 solutions/windows-logon-provider/fetch.sh 1.1.0
 solutions/windows-logon-provider/fetch.sh sha256:<digest>   # рекомендуемый pin
 ```

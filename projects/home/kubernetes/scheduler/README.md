@@ -172,7 +172,7 @@ Endpoints (private values in `secrets/home/scheduler.env`):
 - `./backup.sh [dir]` records the real replica counts, scales both writers to 0,
   fails closed if a writer pod remains, copies both volumes, writes SHA-256
   sums, and restores the recorded counts. Default output is
-  `secrets/local/backups/scheduler/<timestamp>`; never inside the repo tree.
+  `local-data/local/backups/scheduler/<timestamp>`; never inside the repo tree.
 
 ## Operation
 

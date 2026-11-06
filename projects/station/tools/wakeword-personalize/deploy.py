@@ -18,7 +18,7 @@ ENTITIES = ["assist_satellite.iandeks_stantsiia_midi_assist_satellite", "media_p
 def payload(profile, root=ROOT):
     root = Path(root).resolve()
     paths = [(root / profile[key]).resolve() for key in ["model_path", "manifest_path"]]
-    if not all(p.is_relative_to((root / "secrets/model-registry").resolve()) for p in paths):
+    if not all(p.is_relative_to((root / "local-data/model-registry").resolve()) for p in paths):
         raise ValueError("Only private registered models can be deployed with this profile")
     model = paths[0].read_bytes()
     if hashlib.sha256(model).hexdigest() != profile["model_sha256"]:
@@ -34,7 +34,7 @@ def payload(profile, root=ROOT):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--profile", type=Path, default=ROOT / "projects/station/configs/wakeword-personal.json")
-    p.add_argument("--connection", type=Path, default=ROOT / "secrets/voice-recorder/connection.json")
+    p.add_argument("--connection", type=Path, default=ROOT / "local-data/voice-recorder/connection.json")
     p.add_argument("--ha-url", required=True)
     p.add_argument("--ha-token-file", type=Path, default=ROOT / "secrets/home/ha.token")
     args = p.parse_args()
@@ -56,7 +56,7 @@ def main():
     before = remote("test ! -d /tmp/ricardo-voice-recorder.lock && test -f /data/pulsar/enabled && pidof pulsar >/dev/null && "
                     "sha256sum /data/pulsar/pulsar /data/pulsar/wakewords/ru_ricardo_mww.tflite").decode().splitlines()
     ident = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-    journal = ROOT / "secrets/model-deployments" / ident
+    journal = ROOT / "local-data/model-deployments" / ident
     journal.mkdir(parents=True, mode=0o700)
     backup = "/data/pulsar/backups/model-" + ident
     stage = "/tmp/ricardo-model-" + ident
@@ -106,7 +106,7 @@ mv /data/pulsar/wakewords/ru_ricardo_mww.json.new /data/pulsar/wakewords/ru_rica
             raise RuntimeError("Unexpected binary/model hash after deployment")
         record.update(status="deployed", after_hashes=after)
         save()
-        registry = ROOT / "secrets/model-registry/ricardo"
+        registry = ROOT / "local-data/model-registry/ricardo"
         (registry / "active.json").write_text(json.dumps(record, ensure_ascii=False, indent=2))
         print("Deployed:", profile["registry_version"], "HA and MA available; binary unchanged.")
     except Exception:

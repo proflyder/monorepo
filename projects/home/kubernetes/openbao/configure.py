@@ -119,11 +119,22 @@ path "secret/metadata/k8s/*" {
 path "secret/metadata/k8s" {
   capabilities = ["list"]
 }
+# Owner workstation and infrastructure credentials (SSH keys, CAs, backup
+# passwords, admin kubeconfigs); catalogue — secrets/README.md on the Mac.
+path "secret/data/infra/*" {
+  capabilities = ["create", "read", "update", "patch"]
+}
+path "secret/metadata/infra/*" {
+  capabilities = ["read", "list"]
+}
+path "secret/metadata/infra" {
+  capabilities = ["list"]
+}
 """
 
 OPERATOR_KV_POLICY = """\
 # Operator automation (a periodic orphan token kept only on the owner's Mac):
-# create/update application and CI secrets, never delete them, and nothing
+# create/update application, CI and infra secrets, never delete them, and nothing
 # outside KV (no sys/*, auth, policies, unseal, users). Token self-renew,
 # lookup and revoke come from the default policy.
 path "secret/data/ci/*" {
@@ -142,6 +153,17 @@ path "secret/metadata/ci" {
   capabilities = ["list"]
 }
 path "secret/metadata/k8s" {
+  capabilities = ["list"]
+}
+# Owner workstation and infrastructure credentials (SSH keys, CAs, backup
+# passwords, admin kubeconfigs); catalogue — secrets/README.md on the Mac.
+path "secret/data/infra/*" {
+  capabilities = ["create", "read", "update", "patch"]
+}
+path "secret/metadata/infra/*" {
+  capabilities = ["read", "list"]
+}
+path "secret/metadata/infra" {
   capabilities = ["list"]
 }
 """

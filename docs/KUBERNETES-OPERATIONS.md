@@ -35,8 +35,8 @@ sudo systemctl status k3s
 С Mac:
 
 ```bash
-ssh -N -i secrets/proxmox-install/proxmox_admin \
-  -o UserKnownHostsFile=secrets/proxmox-install/guest-known_hosts \
+ssh -N -i ~/.ssh/home-lab/proxmox_admin \
+  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_k3s \
   -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.27
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 kubectl get pods -A
@@ -73,7 +73,7 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 ```bash
 # chart приложений и dashboard — из репозитория
 helm upgrade --install runtime projects/home-assistant/deploy/chart \
-  -n home-assistant -f secrets/kubernetes-research/runtime-values.yaml \
+  -n home-assistant -f local-data/kubernetes-research/runtime-values.yaml \
   --wait --timeout 5m
 
 helm upgrade --install ha-observability \
@@ -154,7 +154,7 @@ Helm при удалении объекта из релиза делает GET �
 ```bash
 KUBECONFIG=secrets/kubernetes-research/kubeconfig \
   home-deploy hermes rollout \
-    --values-file secrets/kubernetes-research/runtime-values.yaml \
+    --values-file local-data/kubernetes-research/runtime-values.yaml \
     --hermes-digest sha256:… --voice-proxy-digest sha256:… \
     --exporter-digest sha256:… \
     --smoke-image ghcr.io/proflyder/home-deploy@sha256:… \
@@ -275,6 +275,9 @@ Grafana admin password — `secrets/kubernetes-research/grafana-password`.
   `alarms.home.example.com` → `home-assistant/scheduler:8098`,
   `control.home.example.com` → `home-assistant/ha-control:8099`,
   `currency.home.example.com` → `currency-bot/currency-bot:8080`.
+  Собственные маршруты (`deploy.sh` своих каталогов): `vault.home.example.com`
+  → `openbao/openbao:8200`, `passwords.home.example.com` →
+  `vaultwarden/vaultwarden:8080`.
 - Все маршруты и сертификат — в namespace `traefik`; `allowCrossNamespace`
   разрешает Service из `monitoring`/`home-assistant`/`currency-bot`. Solver-Secret
   `cloudflare-api-token` живёт в namespace `cert-manager`, потому что

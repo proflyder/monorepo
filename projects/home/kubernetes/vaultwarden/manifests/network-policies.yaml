@@ -1,0 +1,53 @@
+# TEMPLATE: NODE_LAN_IP and LAN_CIDR come from the private ingress env.
+#
+# K3s enforces NetworkPolicies (kube-router). Traefik runs with hostNetwork,
+# so its connections arrive from the node address (or keep the LAN client
+# address); kubelet probes come from the node as well. Nothing else talks to
+# Vaultwarden.
+#
+# Egress is DNS only: icon downloads and SMTP are disabled, mobile push relay
+# is not configured, so the server never needs the Internet. A vault without
+# outbound access cannot exfiltrate anything even if compromised.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vaultwarden-ingress
+  namespace: vaultwarden
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vaultwarden
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+        - ipBlock:
+            cidr: ${LAN_CIDR}
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vaultwarden-egress
+  namespace: vaultwarden
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vaultwarden
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

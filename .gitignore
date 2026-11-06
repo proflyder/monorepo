@@ -8,6 +8,7 @@
 # Private and historical machine data
 /snapshots/
 /secrets/
+/local-data/
 /backups/
 /logs/
 /archive/

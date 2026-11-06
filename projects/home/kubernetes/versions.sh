@@ -23,6 +23,9 @@ CERT_MANAGER_CHART_VERSION=v1.21.3
 OPENBAO_CHART_VERSION=0.30.6
 OPENBAO_IMAGE_VERSION=2.7.2
 OPENBAO_IMAGE_DIGEST=sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+# Vaultwarden (Bitwarden-compatible password manager): upstream image by digest.
+VAULTWARDEN_IMAGE_VERSION=1.37.5
+VAULTWARDEN_IMAGE_DIGEST=sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f
 # External Secrets Operator: chart and image pinned; the image is referenced by
 # digest in values/external-secrets.yaml so a moving tag cannot slip in.
 EXTERNAL_SECRETS_CHART_VERSION=2.14.0

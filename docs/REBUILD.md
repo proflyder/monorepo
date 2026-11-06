@@ -14,7 +14,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 - `secrets/proxmox-install/` — ISO, install settings, SSH keys, TF state,
   Wi-Fi profile.
 - `secrets/kubernetes-research/` — kubeconfig, private values.
-- `secrets/local/backups/`, `secrets/local/snapshots/station/` — станция
+- `secrets/local/backups/`, `local-data/local/snapshots/station/` — станция
   (`/data`, `/etc`, оригиналы, модели wake word).
 - `secrets/openbao/` — recovery keys, seal key, username; `secrets/home/vpn/` —
   CA и клиентские сертификаты VPN.
@@ -102,7 +102,7 @@ Hermes auth старой копией.
 
 ## 4. Станция
 
-- ADB/SSH: только LAN; пароль — `secrets/CREDENTIALS.md`.
+- ADB/SSH: только LAN; пароль — `secrets/README.md`.
 - Pulsar: `/data/pulsar`; бинарник — `ghcr.io/proflyder/pulsar-firmware:<version>`
   (установка — `deploy-station` или `pulsar-install`), модель —
   `artifacts/wakeword/`, откат — `pulsar.prev`.
@@ -201,10 +201,10 @@ SHA-256 каждое поле ExternalSecret с live Secret и в конце о�
 
 ### Scheduler из SQLite
 
-Источник — каталог `backup.sh` (`secrets/local/backups/scheduler/<ts>`):
+Источник — каталог `backup.sh` (`local-data/local/backups/scheduler/<ts>`):
 
 ```bash
-B=secrets/local/backups/scheduler/<ts>
+B=local-data/local/backups/scheduler/<ts>
 (cd "$B" && shasum -a 256 -c SHA256SUMS)
 sqlite3 -readonly "$B/scheduler-data/scheduler.db" 'pragma integrity_check'
 ```

@@ -40,11 +40,11 @@ projects/station/tools/voice-recorder/build-helper.sh
 ```
 
 Другой Zig: `ZIG=/path/to/zig .../build-helper.sh`. Бинарник и target cache
-остаются в `secrets/local-tools/voice-recorder-target/`. Версии зависимостей
+остаются в `local-data/local-tools/voice-recorder-target/`. Версии зависимостей
 helper закреплены в корневом `/Cargo.lock` (общий workspace). Сборка armhf; для
 других моделей ABI необходимо отдельно проверить до запуска.
 
-Создайте приватный `secrets/voice-recorder/connection.json` (chmod 600):
+Создайте приватный `local-data/voice-recorder/connection.json` (chmod 600):
 
 ```json
 {
@@ -57,7 +57,7 @@ helper закреплены в корневом `/Cargo.lock` (общий worksp
 
 Подставьте реальные локальные адреса вне Git. Если действующий SSH настроен
 по паролю, вместо `ssh_key` задайте `credentials` с абсолютным путём к
-локальному `secrets/CREDENTIALS.md`: читается поле таблицы `SSH-пароль`.
+локальному `secrets/README.md`: читается поле таблицы `SSH-пароль`.
 Пароль не копируется в конфигурацию, subprocess arguments, браузер или код.
 Незнакомый/изменившийся SSH host key отклоняется; не отключайте эту проверку.
 Ключи и настройки доступа инструмент не устанавливает.
@@ -91,7 +91,7 @@ helper закреплены в корневом `/Cargo.lock` (общий worksp
 
 Каждый дубль: отдельный WAV + JSON (блок, train/test, сеанс, заметка,
 число кадров, peak, длительность, SHA256, прерывание и исключение).
-По умолчанию: `secrets/voice-recorder/recordings/`. Нет автоматической
+По умолчанию: `local-data/voice-recorder/recordings/`. Нет автоматической
 нормализации, удаления шума, нарезки по тишине или выгрузки в облако.
 Запись после VQE подходит для детектора, но не позволяет восстановить
 исходные микрофонные каналы или диагностировать потерянный VQE шёпот.
@@ -130,7 +130,7 @@ projects/station/tools/voice-recorder/start.command --recover-device
 3. Остановите локальный сервер Ctrl+C. Автозапуска на Mac нет.
 4. Исходники можно удалить целиком из `projects/station/tools/voice-recorder/`;
    убрать его строку из агрегатора тестов и ссылку из tools/README.md. Игнорируемые записи и кэш под
-   `secrets/voice-recorder/` / `secrets/local-tools/voice-recorder-target/`
+   `local-data/voice-recorder/` / `local-data/local-tools/voice-recorder-target/`
    удалять отдельно только после решения, что они больше не нужны.
 
 При перезагрузке станции `/tmp` очищается и запускается обычный штатный

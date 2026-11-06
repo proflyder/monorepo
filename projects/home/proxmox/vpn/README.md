@@ -137,8 +137,8 @@ pct exec 102 -- ls -l /etc/letsencrypt/renewal-hooks/deploy/
 ```bash
 python3 projects/home/proxmox/vpn/vpnusers.py <user> \
   --pve 192.0.2.26 \
-  --ssh-key secrets/proxmox-install/proxmox_admin \
-  --known-hosts secrets/proxmox-install/known_hosts
+  --ssh-key ~/.ssh/home-lab/proxmox_admin \
+  --known-hosts ~/.ssh/home-lab/known_hosts_pve
 ```
 
 Скрипт генерирует пароль и TOTP-секрет, обновляет
@@ -178,8 +178,8 @@ certbot не затрагиваются.
 # один раз: создать CA и положить на CT client-ca.pem + CRL
 python3 projects/home/proxmox/vpn/vpncerts.py init-ca \
   --pve 192.0.2.26 \
-  --ssh-key secrets/proxmox-install/proxmox_admin \
-  --known-hosts secrets/proxmox-install/known_hosts
+  --ssh-key ~/.ssh/home-lab/proxmox_admin \
+  --known-hosts ~/.ssh/home-lab/known_hosts_pve
 
 # выпустить сертификат; --device задаёт только имя файлов
 python3 projects/home/proxmox/vpn/vpncerts.py issue <user> --device phone

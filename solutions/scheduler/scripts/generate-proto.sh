@@ -7,7 +7,7 @@
 #   protoc-gen-connect-go v1.21.x (connectrpc.com/connect/cmd/protoc-gen-connect-go)
 #
 # Example:
-#   PATH=secrets/local-tools/protoc/bin:secrets/local-tools/bin:$PATH \
+#   PATH=local-data/local-tools/protoc/bin:local-data/local-tools/bin:$PATH \
 #     solutions/scheduler/scripts/generate-proto.sh
 set -euo pipefail
 

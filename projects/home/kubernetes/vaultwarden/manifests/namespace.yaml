@@ -1,0 +1,7 @@
+# Applied by deploy.sh (admin). Cluster-scoped, so never by CI.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vaultwarden
+  labels:
+    app.kubernetes.io/part-of: ricardo-home

@@ -1,6 +1,6 @@
 # Proxmox / HAOS / K3s: установка и переустановка
 
-Текущие факты — `STATE.md`. Реальные IP/MAC — `secrets/proxmox-install/install-settings.md`.
+Текущие факты — `STATE.md`. Реальные IP/MAC — `local-data/proxmox-install/install-settings.md`.
 Приватная копия Wi-Fi-профиля и recovery — в `secrets/`.
 
 ## Текущая конфигурация
@@ -30,7 +30,7 @@ CT 103 bb        192.0.2.30   2 vCPU / 2 GiB / 16 GiB, Debian 13, bb server
 **Установщик стирает весь NVMe.** Сначала проверить backup и приватные
 IP/MAC. Ethernet и локальная консоль — на время установки.
 
-1. Записать локальный ISO `secrets/proxmox-install/proxmox-ve_9.2-1.iso`.
+1. Записать локальный ISO `local-data/proxmox-install/proxmox-ve_9.2-1.iso`.
 2. Boot UEFI; Install Proxmox VE; диск `nvme0n1`.
 3. ext4: `maxroot=64`, `swapsize=8`, `minfree=16`; остальное — LVM-thin.
 4. Country Kazakhstan, timezone `Asia/Almaty`, keyboard US.

@@ -145,6 +145,12 @@
   Secrets, TLS и служебные Secrets контроллеров. Файлы —
   `projects/home/kubernetes/openbao/` и
   `projects/home/kubernetes/external-secrets/`.
+- Vaultwarden `1.37.5` (образ по digest) в namespace `vaultwarden`,
+  `https://passwords.home.example.com/` (LAN/VPN): менеджер паролей для
+  человека, клиенты Bitwarden. Регистрация закрыта, `/admin` включён (хэш
+  токена — `secret/k8s/vaultwarden/vaultwarden-admin` через ESO), egress только DNS,
+  SQLite на PVC `vaultwarden-data` (`local-retain`), ежедневно в offsite.
+  Файлы — `projects/home/kubernetes/vaultwarden/`.
 
 ## CI/CD и образы
 
@@ -323,11 +329,11 @@
   независимый ambient и живая приёмка ещё нужны.
 - Device backup пары v24 до установки v27:
   `/data/pulsar/backups/model-20261030T160858Z-f28772d8`; независимая private
-  копия — `secrets/local/backups/wakeword-v24-pre-v27-20261030T160839Z/`.
+  копия — `local-data/local/backups/wakeword-v24-pre-v27-20261030T160839Z/`.
   Все веса сохранены private на Mac и WSL; installed-запись и hashes —
-  `secrets/model-registry/ricardo/active.json`.
-- Актуальная уточнённая разметка и PCM: `secrets/datasets/ricardo-fixed-20261030/`;
-  исходный приватный датасет — `secrets/datasets/ricardo-20261029/`
+  `local-data/model-registry/ricardo/active.json`.
+- Актуальная уточнённая разметка и PCM: `local-data/datasets/ricardo-fixed-20261030/`;
+  исходный приватный датасет — `local-data/datasets/ricardo-20261029/`
   (WAV, PCM-контексты, разметка по версиям, SHA256).
 - Проверено: live wake 0.904, HA pipeline/TTS, HAOS reboot, Sendspin/MA
   reconnect и station reboot. Supervised `reload` завершает Sendspin-сессию
@@ -588,7 +594,7 @@
   `currency-bot` (uid `currency-bot`).
 - VPS: сервисов нет, nginx на домене отдаёт только 404 (certbot продлевает
   сертификат), наружу открыты лишь 22/80/443. Backup конфигов и данных —
-  `secrets/currency-bot/vps-backup/`.
+  `local-data/currency-bot/vps-backup/`.
   Приватные материалы — `secrets/currency-bot/` (VPS ssh
   key/config, CSV/DB, tunnel token, Cloudflare tunnel API token, `k8s.env`) и
   `secrets/home/currency-bot.env`.
@@ -708,7 +714,7 @@
 
 ## Приватное / backups
 
-- `secrets/NETWORK.md` — реальные IP/порты; `secrets/CREDENTIALS.md` — доступы.
+- `secrets/NETWORK.md` — реальные IP/порты; `secrets/README.md` — доступы.
 - `secrets/kubernetes-research/` — kubeconfig, private values, Grafana
   password. Полные бэкапы хоста/VM на Mac не хранятся: их покрывают vzdump и
   offsite (ниже).

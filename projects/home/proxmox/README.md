@@ -44,7 +44,7 @@ SSH host keys при смене config-drive instance ID.
 `authorize.sh HOST KEY KNOWN_HOSTS` запускается интерактивно на Mac после установки
 PVE: добавляет отдельный ключ через ssh-copy-id и проверяет доступ. Fingerprint
 обязательно сравнить с физической консолью. Приватный wrapper с параметрами
-находится в `secrets/proxmox-install/authorize-proxmox.sh`.
+находится в `local-data/proxmox-install/authorize-proxmox.sh`.
 
 Проверки: `python3 -m unittest discover -s projects/home/proxmox -v` и
 `bash -n projects/home/proxmox/authorize.sh`.

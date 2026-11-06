@@ -496,4 +496,13 @@
     * На Go остаются `platform/deploy`, Bazel-инструменты Android,
       Pulsar installer (upstream) и health-exporter: там Rust ничего не даёт.
 
+42. **Менеджер паролей — self-hosted Vaultwarden.** Для доступа человека к
+    паролям и копии секретов на устройствах используется Vaultwarden в K3s
+    (`passwords.<home-domain>`, только LAN/VPN), а не облачный Bitwarden или
+    1Password: бесплатно, без лимитов на вложения, данные дома. Офлайн-кэш
+    клиентов Bitwarden и ежедневный offsite-бэкап закрывают потерю сервера.
+    OpenBao остаётся источником правды для машинных секретов; Vaultwarden
+    получает их копию отдельной синхронизацией. Регистрация закрыта, egress
+    только DNS, `/admin` включён с Argon2id-хэшем токена из OpenBao.
+
 Меняется решение — обновить этот файл и `STATE.md`.
