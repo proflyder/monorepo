@@ -408,10 +408,10 @@ impl<'__a> ::serde::Serialize for AlarmView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for AlarmView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "Alarm";
-    const FULL_NAME: &'static str = "ricardo.v1.Alarm";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Alarm";
+    const FULL_NAME: &'static str = "home.v1.Alarm";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Alarm";
 }
 ::buffa::impl_default_view_instance!(AlarmView);
 ::buffa::impl_view_reborrow!(AlarmView);
@@ -873,10 +873,10 @@ impl<'__a> ::serde::Serialize for CreateAlarmRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CreateAlarmRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.CreateAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateAlarmRequest";
 }
 ::buffa::impl_default_view_instance!(CreateAlarmRequestView);
 ::buffa::impl_view_reborrow!(CreateAlarmRequestView);
@@ -1192,10 +1192,10 @@ impl<'__a> ::serde::Serialize for CreateAlarmResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for CreateAlarmResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.CreateAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateAlarmResponse";
 }
 ::buffa::impl_default_view_instance!(CreateAlarmResponseView);
 ::buffa::impl_view_reborrow!(CreateAlarmResponseView);
@@ -1443,10 +1443,10 @@ impl<'__a> ::serde::Serialize for GetAlarmRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetAlarmRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.GetAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetAlarmRequest";
 }
 ::buffa::impl_default_view_instance!(GetAlarmRequestView);
 ::buffa::impl_view_reborrow!(GetAlarmRequestView);
@@ -1724,10 +1724,10 @@ impl<'__a> ::serde::Serialize for GetAlarmResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for GetAlarmResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.GetAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetAlarmResponse";
 }
 ::buffa::impl_default_view_instance!(GetAlarmResponseView);
 ::buffa::impl_view_reborrow!(GetAlarmResponseView);
@@ -1973,10 +1973,10 @@ impl<'__a> ::serde::Serialize for ListAlarmsRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListAlarmsRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListAlarmsRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListAlarmsRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListAlarmsRequest";
+    const FULL_NAME: &'static str = "home.v1.ListAlarmsRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListAlarmsRequest";
 }
 ::buffa::impl_default_view_instance!(ListAlarmsRequestView);
 ::buffa::impl_view_reborrow!(ListAlarmsRequestView);
@@ -2247,10 +2247,10 @@ impl<'__a> ::serde::Serialize for ListAlarmsResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for ListAlarmsResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListAlarmsResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListAlarmsResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListAlarmsResponse";
+    const FULL_NAME: &'static str = "home.v1.ListAlarmsResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListAlarmsResponse";
 }
 ::buffa::impl_default_view_instance!(ListAlarmsResponseView);
 ::buffa::impl_view_reborrow!(ListAlarmsResponseView);
@@ -2532,10 +2532,10 @@ impl<'__a> ::serde::Serialize for UpdateAlarmRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for UpdateAlarmRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.UpdateAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateAlarmRequest";
 }
 ::buffa::impl_default_view_instance!(UpdateAlarmRequestView);
 ::buffa::impl_view_reborrow!(UpdateAlarmRequestView);
@@ -2823,10 +2823,10 @@ impl<'__a> ::serde::Serialize for UpdateAlarmResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for UpdateAlarmResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.UpdateAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateAlarmResponse";
 }
 ::buffa::impl_default_view_instance!(UpdateAlarmResponseView);
 ::buffa::impl_view_reborrow!(UpdateAlarmResponseView);
@@ -3074,10 +3074,10 @@ impl<'__a> ::serde::Serialize for DeleteAlarmRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for DeleteAlarmRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.DeleteAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteAlarmRequest";
 }
 ::buffa::impl_default_view_instance!(DeleteAlarmRequestView);
 ::buffa::impl_view_reborrow!(DeleteAlarmRequestView);
@@ -3329,10 +3329,10 @@ impl<'__a> ::serde::Serialize for DeleteAlarmResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for DeleteAlarmResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.DeleteAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteAlarmResponse";
 }
 ::buffa::impl_default_view_instance!(DeleteAlarmResponseView);
 ::buffa::impl_view_reborrow!(DeleteAlarmResponseView);
@@ -3603,10 +3603,10 @@ impl<'__a> ::serde::Serialize for SetAlarmEnabledRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SetAlarmEnabledRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetAlarmEnabledRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SetAlarmEnabledRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetAlarmEnabledRequest";
+    const FULL_NAME: &'static str = "home.v1.SetAlarmEnabledRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetAlarmEnabledRequest";
 }
 ::buffa::impl_default_view_instance!(SetAlarmEnabledRequestView);
 ::buffa::impl_view_reborrow!(SetAlarmEnabledRequestView);
@@ -3897,10 +3897,10 @@ impl<'__a> ::serde::Serialize for SetAlarmEnabledResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SetAlarmEnabledResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetAlarmEnabledResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SetAlarmEnabledResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetAlarmEnabledResponse";
+    const FULL_NAME: &'static str = "home.v1.SetAlarmEnabledResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetAlarmEnabledResponse";
 }
 ::buffa::impl_default_view_instance!(SetAlarmEnabledResponseView);
 ::buffa::impl_view_reborrow!(SetAlarmEnabledResponseView);
@@ -4173,10 +4173,10 @@ impl<'__a> ::serde::Serialize for SnoozeAlarmRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SnoozeAlarmRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.SnoozeAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeAlarmRequest";
 }
 ::buffa::impl_default_view_instance!(SnoozeAlarmRequestView);
 ::buffa::impl_view_reborrow!(SnoozeAlarmRequestView);
@@ -4469,10 +4469,10 @@ impl<'__a> ::serde::Serialize for SnoozeAlarmResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for SnoozeAlarmResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.SnoozeAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeAlarmResponse";
 }
 ::buffa::impl_default_view_instance!(SnoozeAlarmResponseView);
 ::buffa::impl_view_reborrow!(SnoozeAlarmResponseView);
@@ -4720,10 +4720,10 @@ impl<'__a> ::serde::Serialize for StopAlarmRequestView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for StopAlarmRequestView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopAlarmRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.StopAlarmRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopAlarmRequest";
+    const FULL_NAME: &'static str = "home.v1.StopAlarmRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopAlarmRequest";
 }
 ::buffa::impl_default_view_instance!(StopAlarmRequestView);
 ::buffa::impl_view_reborrow!(StopAlarmRequestView);
@@ -5001,10 +5001,10 @@ impl<'__a> ::serde::Serialize for StopAlarmResponseView<'__a> {
     }
 }
 impl<'a> ::buffa::MessageName for StopAlarmResponseView<'a> {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopAlarmResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.StopAlarmResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopAlarmResponse";
+    const FULL_NAME: &'static str = "home.v1.StopAlarmResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopAlarmResponse";
 }
 ::buffa::impl_default_view_instance!(StopAlarmResponseView);
 ::buffa::impl_view_reborrow!(StopAlarmResponseView);

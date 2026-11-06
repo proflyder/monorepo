@@ -1,6 +1,6 @@
 package dev.proflyder.home.core.model
 
-/** Domain models mirroring the frozen ricardo.v1 scheduler contract. */
+/** Domain models mirroring the frozen home.v1 scheduler contract. */
 enum class ScheduleKind {
     UNSPECIFIED,
     ALARM,

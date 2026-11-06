@@ -1,6 +1,6 @@
 # Scheduler deployment (home K3s)
 
-Durable `ricardo.v1.SchedulerService` plus the Home Assistant executors
+Durable `home.v1.SchedulerService` plus the Home Assistant executors
 (`ha-bridge`, `ha-control`) on the single-node `lab-k3s` cluster.
 
 - `solutions/scheduler` owns schedules, timers, occurrences, outbox and leases.
@@ -28,8 +28,8 @@ projects/home/kubernetes/scheduler/BUILD.bazel
   `MODULE.bazel`. The scheduler binary comes from the Rust crate
   `//solutions/scheduler/crates/scheduler:scheduler` via `rules_rust` (static
   musl); `ha-bridge` and `ha-control` are the two binaries of
-  `//solutions/ha-bridge/crates/ha-bridge`, also rebuilt for static musl. The Go
-  binaries remain buildable for digest rollback. No Docker daemon and no `RUN` steps
+  `//solutions/ha-bridge/crates/ha-bridge`, also rebuilt for static musl. The
+  former Go implementations are deleted. No Docker daemon and no `RUN` steps
   are involved, so the same targets build on macOS and on the GitHub runner.
 - `home-deploy oci` (`platform/deploy`, decision 35) reads the resulting OCI
   layout: its `digest` prints the manifest digest, `pack` writes an OCI archive
@@ -210,7 +210,7 @@ kubectl only — no SSH and no root helper.
 - `plan` routes the pushed range (`before..sha`) through the CI unit map
   (`platform/ci/units.mjs`) and produces the affected **deployable** units
   (`deploy.images` / `deploy.workloads`). A documentation-only push deploys
-  nothing; a shared Go package change deploys every importer; an unknown or
+  nothing; a shared proto/Rust package change deploys its importers; an unknown or
   zero `before` falls back to every deployable unit.
 - The deploy matrix runs affected units in parallel; each unit is
   serialised by `concurrency: deploy-home-<unit>` and never cancelled.

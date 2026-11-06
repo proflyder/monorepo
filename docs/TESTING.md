@@ -89,7 +89,7 @@ go vet ./solutions/...
 Тесты scheduler/bridge герметичны: SQLite — во временном каталоге, scheduler,
 HA и Connect-клиенты — через `httptest`/фейки; живые HA, ADB и
 устройство не используются. Scheduler API отдаёт Connect JSON на
-`/ricardo.v1.SchedulerService/<Method>`; bridge проверяется как настоящий
+`/home.v1.SchedulerService/<Method>`; bridge проверяется как настоящий
 клиент этого контракта.
 
 Heartbeat Worker тестируется встроенным Node-раннером без npm:
@@ -190,7 +190,7 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
   //projects/mobile/android:android_tests \
   //projects/mobile/android/app:main_activity_smoke_test \
   //projects/mobile/android:app \
-  //solutions/scheduler/... //solutions/alarm/... //packages/proto/... \
+  //solutions/scheduler/... //solutions/ha-bridge/... //packages/proto/... \
   --nocache_test_results --test_output=errors
 ./local-data/local-tools/bazelisk build //projects/mobile/android:app
 # debug APK: bazel-bin/projects/mobile/android/app/app.apk
@@ -486,7 +486,7 @@ platform/ci/affected.sh --base origin/develop --format json
 platform/ci/affected.sh --base HEAD~3 --format text
 
 # имитация конкретного изменения без коммита
-platform/ci/affected.sh --changed-file solutions/scheduler/internal/store/tick.go
+platform/ci/affected.sh --changed-file solutions/scheduler/crates/scheduler/src/store/tick.rs
 platform/ci/affected.sh --changed-file packages/kotlin/core/src/main/kotlin/.../TimeText.kt
 
 # принудительно все юниты (то же, что workflow_dispatch)

@@ -759,118 +759,118 @@ for ::buffa::view::OwnedView<__buffa::view::GetStatusResponseView<'static>> {
     }
 }
 /// Full service name for this service.
-pub const SCHEDULER_SERVICE_SERVICE_NAME: &str = "ricardo.v1.SchedulerService";
+pub const SCHEDULER_SERVICE_SERVICE_NAME: &str = "home.v1.SchedulerService";
 /// Static [`Spec`](::connectrpc::Spec) for the `CreateSchedule` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_CREATE_SCHEDULE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/CreateSchedule",
+        "/home.v1.SchedulerService/CreateSchedule",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `GetSchedule` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_GET_SCHEDULE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/GetSchedule",
+        "/home.v1.SchedulerService/GetSchedule",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `ListSchedules` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_LIST_SCHEDULES_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/ListSchedules",
+        "/home.v1.SchedulerService/ListSchedules",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `UpdateSchedule` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_UPDATE_SCHEDULE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/UpdateSchedule",
+        "/home.v1.SchedulerService/UpdateSchedule",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `DeleteSchedule` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_DELETE_SCHEDULE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/DeleteSchedule",
+        "/home.v1.SchedulerService/DeleteSchedule",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `SetScheduleEnabled` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_SET_SCHEDULE_ENABLED_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/SetScheduleEnabled",
+        "/home.v1.SchedulerService/SetScheduleEnabled",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `SnoozeSchedule` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_SNOOZE_SCHEDULE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/SnoozeSchedule",
+        "/home.v1.SchedulerService/SnoozeSchedule",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `StopSchedule` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_STOP_SCHEDULE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/StopSchedule",
+        "/home.v1.SchedulerService/StopSchedule",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `StartTimer` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_START_TIMER_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/StartTimer",
+        "/home.v1.SchedulerService/StartTimer",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `GetTimer` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_GET_TIMER_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/GetTimer",
+        "/home.v1.SchedulerService/GetTimer",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `ListTimers` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_LIST_TIMERS_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/ListTimers",
+        "/home.v1.SchedulerService/ListTimers",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `PauseTimer` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_PAUSE_TIMER_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/PauseTimer",
+        "/home.v1.SchedulerService/PauseTimer",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `ResumeTimer` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_RESUME_TIMER_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/ResumeTimer",
+        "/home.v1.SchedulerService/ResumeTimer",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `CancelTimer` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_CANCEL_TIMER_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/CancelTimer",
+        "/home.v1.SchedulerService/CancelTimer",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `ListDueEvents` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_LIST_DUE_EVENTS_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/ListDueEvents",
+        "/home.v1.SchedulerService/ListDueEvents",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `AckEvent` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_ACK_EVENT_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/AckEvent",
+        "/home.v1.SchedulerService/AckEvent",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `EnqueueTask` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_ENQUEUE_TASK_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/EnqueueTask",
+        "/home.v1.SchedulerService/EnqueueTask",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `CancelTask` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_CANCEL_TASK_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/CancelTask",
+        "/home.v1.SchedulerService/CancelTask",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `GetStatus` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_GET_STATUS_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.SchedulerService/GetStatus",
+        "/home.v1.SchedulerService/GetStatus",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
@@ -1828,7 +1828,7 @@ impl<T: SchedulerService> ::connectrpc::Dispatcher for SchedulerServiceServer<T>
         &self,
         path: &str,
     ) -> Option<::connectrpc::dispatcher::codegen::MethodDescriptor> {
-        let method = path.strip_prefix("ricardo.v1.SchedulerService/")?;
+        let method = path.strip_prefix("home.v1.SchedulerService/")?;
         match method {
             "CreateSchedule" => {
                 Some(
@@ -1954,7 +1954,7 @@ impl<T: SchedulerService> ::connectrpc::Dispatcher for SchedulerServiceServer<T>
         request: ::connectrpc::Payload,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::UnaryResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.SchedulerService/") else {
+        let Some(method) = path.strip_prefix("home.v1.SchedulerService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_unary(path);
         };
         let _ = (&ctx, &request, &format);
@@ -2297,7 +2297,7 @@ impl<T: SchedulerService> ::connectrpc::Dispatcher for SchedulerServiceServer<T>
         request: ::buffa::bytes::Bytes,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::StreamingResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.SchedulerService/") else {
+        let Some(method) = path.strip_prefix("home.v1.SchedulerService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_streaming(path);
         };
         let _ = (&ctx, &request, &format);
@@ -2312,7 +2312,7 @@ impl<T: SchedulerService> ::connectrpc::Dispatcher for SchedulerServiceServer<T>
         requests: ::connectrpc::dispatcher::codegen::RequestStream,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::UnaryResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.SchedulerService/") else {
+        let Some(method) = path.strip_prefix("home.v1.SchedulerService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_unary(path);
         };
         let _ = (&ctx, &requests, &format);
@@ -2327,7 +2327,7 @@ impl<T: SchedulerService> ::connectrpc::Dispatcher for SchedulerServiceServer<T>
         requests: ::connectrpc::dispatcher::codegen::RequestStream,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::StreamingResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.SchedulerService/") else {
+        let Some(method) = path.strip_prefix("home.v1.SchedulerService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_streaming(path);
         };
         let _ = (&ctx, &requests, &format);
@@ -2415,7 +2415,7 @@ where
     pub fn config_mut(&mut self) -> &mut ::connectrpc::client::ClientConfig {
         &mut self.config
     }
-    /// Call the CreateSchedule RPC. Sends a request to /ricardo.v1.SchedulerService/CreateSchedule.
+    /// Call the CreateSchedule RPC. Sends a request to /home.v1.SchedulerService/CreateSchedule.
     pub async fn create_schedule(
         &self,
         request: CreateScheduleRequest,
@@ -2452,7 +2452,7 @@ where
             )
             .await
     }
-    /// Call the GetSchedule RPC. Sends a request to /ricardo.v1.SchedulerService/GetSchedule.
+    /// Call the GetSchedule RPC. Sends a request to /home.v1.SchedulerService/GetSchedule.
     pub async fn get_schedule(
         &self,
         request: GetScheduleRequest,
@@ -2489,7 +2489,7 @@ where
             )
             .await
     }
-    /// Call the ListSchedules RPC. Sends a request to /ricardo.v1.SchedulerService/ListSchedules.
+    /// Call the ListSchedules RPC. Sends a request to /home.v1.SchedulerService/ListSchedules.
     pub async fn list_schedules(
         &self,
         request: ListSchedulesRequest,
@@ -2526,7 +2526,7 @@ where
             )
             .await
     }
-    /// Call the UpdateSchedule RPC. Sends a request to /ricardo.v1.SchedulerService/UpdateSchedule.
+    /// Call the UpdateSchedule RPC. Sends a request to /home.v1.SchedulerService/UpdateSchedule.
     pub async fn update_schedule(
         &self,
         request: UpdateScheduleRequest,
@@ -2563,7 +2563,7 @@ where
             )
             .await
     }
-    /// Call the DeleteSchedule RPC. Sends a request to /ricardo.v1.SchedulerService/DeleteSchedule.
+    /// Call the DeleteSchedule RPC. Sends a request to /home.v1.SchedulerService/DeleteSchedule.
     pub async fn delete_schedule(
         &self,
         request: DeleteScheduleRequest,
@@ -2600,7 +2600,7 @@ where
             )
             .await
     }
-    /// Call the SetScheduleEnabled RPC. Sends a request to /ricardo.v1.SchedulerService/SetScheduleEnabled.
+    /// Call the SetScheduleEnabled RPC. Sends a request to /home.v1.SchedulerService/SetScheduleEnabled.
     pub async fn set_schedule_enabled(
         &self,
         request: SetScheduleEnabledRequest,
@@ -2641,7 +2641,7 @@ where
             )
             .await
     }
-    /// Call the SnoozeSchedule RPC. Sends a request to /ricardo.v1.SchedulerService/SnoozeSchedule.
+    /// Call the SnoozeSchedule RPC. Sends a request to /home.v1.SchedulerService/SnoozeSchedule.
     pub async fn snooze_schedule(
         &self,
         request: SnoozeScheduleRequest,
@@ -2678,7 +2678,7 @@ where
             )
             .await
     }
-    /// Call the StopSchedule RPC. Sends a request to /ricardo.v1.SchedulerService/StopSchedule.
+    /// Call the StopSchedule RPC. Sends a request to /home.v1.SchedulerService/StopSchedule.
     pub async fn stop_schedule(
         &self,
         request: StopScheduleRequest,
@@ -2715,7 +2715,7 @@ where
             )
             .await
     }
-    /// Call the StartTimer RPC. Sends a request to /ricardo.v1.SchedulerService/StartTimer.
+    /// Call the StartTimer RPC. Sends a request to /home.v1.SchedulerService/StartTimer.
     pub async fn start_timer(
         &self,
         request: StartTimerRequest,
@@ -2752,7 +2752,7 @@ where
             )
             .await
     }
-    /// Call the GetTimer RPC. Sends a request to /ricardo.v1.SchedulerService/GetTimer.
+    /// Call the GetTimer RPC. Sends a request to /home.v1.SchedulerService/GetTimer.
     pub async fn get_timer(
         &self,
         request: GetTimerRequest,
@@ -2789,7 +2789,7 @@ where
             )
             .await
     }
-    /// Call the ListTimers RPC. Sends a request to /ricardo.v1.SchedulerService/ListTimers.
+    /// Call the ListTimers RPC. Sends a request to /home.v1.SchedulerService/ListTimers.
     pub async fn list_timers(
         &self,
         request: ListTimersRequest,
@@ -2826,7 +2826,7 @@ where
             )
             .await
     }
-    /// Call the PauseTimer RPC. Sends a request to /ricardo.v1.SchedulerService/PauseTimer.
+    /// Call the PauseTimer RPC. Sends a request to /home.v1.SchedulerService/PauseTimer.
     pub async fn pause_timer(
         &self,
         request: PauseTimerRequest,
@@ -2863,7 +2863,7 @@ where
             )
             .await
     }
-    /// Call the ResumeTimer RPC. Sends a request to /ricardo.v1.SchedulerService/ResumeTimer.
+    /// Call the ResumeTimer RPC. Sends a request to /home.v1.SchedulerService/ResumeTimer.
     pub async fn resume_timer(
         &self,
         request: ResumeTimerRequest,
@@ -2900,7 +2900,7 @@ where
             )
             .await
     }
-    /// Call the CancelTimer RPC. Sends a request to /ricardo.v1.SchedulerService/CancelTimer.
+    /// Call the CancelTimer RPC. Sends a request to /home.v1.SchedulerService/CancelTimer.
     pub async fn cancel_timer(
         &self,
         request: CancelTimerRequest,
@@ -2937,7 +2937,7 @@ where
             )
             .await
     }
-    /// Call the ListDueEvents RPC. Sends a request to /ricardo.v1.SchedulerService/ListDueEvents.
+    /// Call the ListDueEvents RPC. Sends a request to /home.v1.SchedulerService/ListDueEvents.
     pub async fn list_due_events(
         &self,
         request: ListDueEventsRequest,
@@ -2974,7 +2974,7 @@ where
             )
             .await
     }
-    /// Call the AckEvent RPC. Sends a request to /ricardo.v1.SchedulerService/AckEvent.
+    /// Call the AckEvent RPC. Sends a request to /home.v1.SchedulerService/AckEvent.
     pub async fn ack_event(
         &self,
         request: AckEventRequest,
@@ -3011,7 +3011,7 @@ where
             )
             .await
     }
-    /// Call the EnqueueTask RPC. Sends a request to /ricardo.v1.SchedulerService/EnqueueTask.
+    /// Call the EnqueueTask RPC. Sends a request to /home.v1.SchedulerService/EnqueueTask.
     pub async fn enqueue_task(
         &self,
         request: EnqueueTaskRequest,
@@ -3048,7 +3048,7 @@ where
             )
             .await
     }
-    /// Call the CancelTask RPC. Sends a request to /ricardo.v1.SchedulerService/CancelTask.
+    /// Call the CancelTask RPC. Sends a request to /home.v1.SchedulerService/CancelTask.
     pub async fn cancel_task(
         &self,
         request: CancelTaskRequest,
@@ -3085,7 +3085,7 @@ where
             )
             .await
     }
-    /// Call the GetStatus RPC. Sends a request to /ricardo.v1.SchedulerService/GetStatus.
+    /// Call the GetStatus RPC. Sends a request to /home.v1.SchedulerService/GetStatus.
     pub async fn get_status(
         &self,
         request: GetStatusRequest,

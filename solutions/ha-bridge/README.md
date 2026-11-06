@@ -1,6 +1,6 @@
 # ha-bridge
 
-Исполнитель (executor) durable-планировщика `ricardo.v1.SchedulerService` для
+Исполнитель (executor) durable-планировщика `home.v1.SchedulerService` для
 Home Assistant. Забирает события из очереди `home`, вызывает allowlisted HA
 script и подтверждает доставку только после HTTP 2xx от Home Assistant.
 
@@ -14,22 +14,20 @@ script и подтверждает доставку только после HTTP
 `solutions/ha-bridge/crates/ha-bridge` (`ha-bridge`): домен
 `plan/order/stop/announce`, ledger JSON v1 с атомарной записью, `Handler`
 поверх общего `home-worker` на очереди `home`, клиенты `home-ha` и
-`home-proto`, конфиг 1:1 с Go и те же `-healthcheck`. Образ собирается
+`home-proto`, конфиг и те же `-healthcheck`. Образ собирается
 `rust_service_image` (static musl, uid 65534, entrypoint
 `/usr/local/bin/ha-bridge`), путь ledger на PVC не изменился
 (`/data/ledger.json`).
 
-Go-код (`cmd/ha-bridge`, `internal/`) остаётся в дереве как эталон отката по
-digest и владелец golden-векторов. `solutions/ha-bridge/testdata/events/*.json`
-и `testdata/ledger/v1.json` генерируются Go-тестами (`-update`) и читаются
-Rust-тестами; любое расхождение поведения ломает обе стороны.
+Go-код удалён. `solutions/ha-bridge/testdata/events/*.json` и
+`testdata/ledger/v1.json` — замороженные golden-векторы, снятые с прежней
+Go-реализации; Rust-тесты читают их без изменений.
 
 `ha-control` — второй `[[bin]]` того же крейта (`src/ha_control.rs`): каталог
-`GET /v1/catalog`, discovery с TTL-кэшем, `Handler` на очереди `control`,
-`-healthcheck` и тот же HTTP-контракт, что у Go. Векторы каталога
-(`testdata/catalog/states.json`, `templates/*.txt`, `catalog.json`) генерируются
-Go-тестом `internal/catalogapi -update` и читаются Rust-тестом. Go-бинарник
-`cmd/ha-control` тоже остаётся в дереве для отката по digest.
+`GET /v1/catalog`, discovery с TTL-кэшем, `Handler` на очереди `control` и
+`-healthcheck`. Векторы каталога (`testdata/catalog/states.json`,
+`templates/*.txt`, `catalog.json`) — замороженные golden-данные и читаются
+Rust-тестом.
 
 ## Границы
 
@@ -48,7 +46,7 @@ Go-тестом `internal/catalogapi -update` и читаются Rust-тест�
 
 ```text
 scheduler (SQLite durable outbox)
-  │  Connect JSON POST /ricardo.v1.SchedulerService/ListDueEvents  (queue="home")
+  │  Connect JSON POST /home.v1.SchedulerService/ListDueEvents  (queue="home")
   │  Authorization: Bearer <scheduler token>
   ▼
 ha-bridge (этот solution)  ──►  Home Assistant REST
@@ -56,7 +54,7 @@ ha-bridge (этот solution)  ──►  Home Assistant REST
   │  entity_id: script.<configured>
   │  variables: label/kind/message/chime/event_id/source_id
   ▼
-Connect JSON POST /ricardo.v1.SchedulerService/AckEvent
+Connect JSON POST /home.v1.SchedulerService/AckEvent
   DELIVERED только после 2xx от HA; FAILED только для неисполнимых событий
 ```
 
@@ -128,7 +126,7 @@ FIRE (например, после snooze re-fire) не останавливае
 | Переменная | Обяз. | По умолчанию | Смысл |
 | --- | --- | --- | --- |
 | `HA_URL` | да | — | База HA, `http(s)://host:port`, без credentials/query |
-| `SCHEDULER_ENDPOINT` | да | — | База scheduler; допускается суффикс `/ricardo.v1.SchedulerService` |
+| `SCHEDULER_ENDPOINT` | да | — | База scheduler; допускается суффикс `/home.v1.SchedulerService` |
 | `SCHEDULER_TOKEN` / `SCHEDULER_TOKEN_FILE` | да | — | Bearer для scheduler |
 | `HA_TOKEN` / `HA_TOKEN_FILE` | в execute | — | Bearer для HA; в dry-run опционален |
 | `BRIDGE_CONSUMER_ID` | да | — | Стабильный id `[A-Za-z0-9._-]{1,64}` |
@@ -186,15 +184,13 @@ cargo run -p ha-bridge
 
 ```bash
 cargo test -p ha-bridge
-go test ./solutions/ha-bridge/...
-# перегенерировать фикстуры из Go-эталона
-go test ./solutions/ha-bridge/internal/bridge ./solutions/ha-bridge/internal/ledger -update
+cargo clippy -p ha-bridge --all-targets -- -D warnings
 ```
 
 Bazel:
 
 ```bash
-bazel build //solutions/ha-bridge/cmd/ha-bridge
+bazel build //solutions/ha-bridge/...
 bazel test //solutions/ha-bridge/...
 ```
 
@@ -234,7 +230,7 @@ bazel test //solutions/ha-bridge/...
 
 ## Тесты
 
-`go test ./solutions/ha-bridge/...` (и `-race`) покрывает:
+`cargo test -p ha-bridge` покрывает:
 
 - конфигурацию: очередь/tasks, токен-файлы, запрет URL credentials, бюджет lease;
 - Connect JSON: путь, заголовки, `queue`, int64-строки и enum-name/number,

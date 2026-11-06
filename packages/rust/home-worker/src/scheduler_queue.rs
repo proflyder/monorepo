@@ -8,7 +8,7 @@ use home_proto::v1::{AckOutcome, DueEvent, EventAction, ListDueEventsRequest, So
 
 use super::{Ack, AckOutcome as Outcome, Action, Event, LeaseRequest, Queue, QueueError, Source};
 
-/// Durable queue backed by `ricardo.v1.SchedulerService`.
+/// Durable queue backed by `home.v1.SchedulerService`.
 #[derive(Debug, Clone)]
 pub struct SchedulerQueue {
     client: SchedulerClient,

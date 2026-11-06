@@ -101,7 +101,7 @@ class ConnectSchedulerClientTest {
 
         val request = server.takeRequest(2, TimeUnit.SECONDS)!!
         assertEquals("POST", request.method)
-        assertEquals("/ricardo.v1.SchedulerService/GetStatus", request.path)
+        assertEquals("/home.v1.SchedulerService/GetStatus", request.path)
         assertEquals("application/json", request.getHeader("Content-Type"))
         assertEquals("1", request.getHeader("Connect-Protocol-Version"))
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
@@ -188,7 +188,7 @@ class ConnectSchedulerClientTest {
         // bearer in the header only, Connect headers set.
         val request = seen.single()
         assertEquals(server.hostName, request.url.host)
-        assertEquals("/ricardo.v1.SchedulerService/GetStatus", request.url.encodedPath)
+        assertEquals("/home.v1.SchedulerService/GetStatus", request.url.encodedPath)
         assertEquals("Bearer test-token", request.header("Authorization"))
         assertEquals("1", request.header("Connect-Protocol-Version"))
         assertFalse(request.url.toString().contains("test-token"))
@@ -202,7 +202,7 @@ class ConnectSchedulerClientTest {
         assertEquals("evt-1", (result as Outcome.Success).value)
 
         val request = server.takeRequest(2, TimeUnit.SECONDS)!!
-        assertEquals("/ricardo.v1.SchedulerService/EnqueueTask", request.path)
+        assertEquals("/home.v1.SchedulerService/EnqueueTask", request.path)
         val body = json.parseToJsonElement(request.body.readUtf8()).jsonObject
         assertEquals("home.control", body.getValue("taskType").jsonPrimitive.content)
         assertEquals("control", body.getValue("queue").jsonPrimitive.content)
@@ -377,7 +377,7 @@ class ConnectSchedulerClientTest {
         store.set(defaultConfig(path = "api"))
         server.enqueue(MockResponse().setResponseCode(200).setBody("""{"nowUnix":"1"}"""))
         client().getStatus()
-        assertEquals("/api/ricardo.v1.SchedulerService/GetStatus", server.takeRequest().path)
+        assertEquals("/api/home.v1.SchedulerService/GetStatus", server.takeRequest().path)
     }
 
     @Test

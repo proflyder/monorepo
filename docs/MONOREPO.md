@@ -60,16 +60,16 @@ projects/home:
   android             Connect JSON → LAN/VPN HTTPS endpoint
 ```
 
-Одновременно `scheduler` и `alarm` на одной БД не запускаются: это один
-engine, два entrypoint-а для совместимости.
+Go-реализации `scheduler`, `alarm` и `ha-bridge` удалены: единственный
+process scheduler — Rust-крейт `solutions/scheduler/crates/scheduler`.
 
 ## Решения по языкам
 
 | Слой | Язык | Почему |
 |---|---|---|
-| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `currency-bot` | Rust (цель, решение 41); `voice-proxy` уже Rust, остальные пока Go | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
+| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `currency-bot` | Rust (цель, решение 41); `scheduler`, `ha-bridge`/`ha-control` и `voice-proxy` уже Rust, `mcp-gateway` и `currency-bot` пока Go | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
 | `voice-proxy` | Rust (решение 41) | `domain`/`openai`/`relay`/`services` на общем `home-*` слое: `home-config`, `home-ha`, `home-proto`, `home-worker`, `voice-contract`, `home-contracttest`; golden-фикстуры и байты payload очереди перенесены без изменений, статический musl-образ |
-| `wakegrant` | Rust (решение 41, пилот) | первый потребитель общего core-слоя: `wakegrant-protocol`, `ricardo-config`, `ricardo-sqlite`, `ricardo-contracttest`; статический musl-образ, Go-код удалён |
+| `wakegrant` | Rust (решение 41, пилот) | первый потребитель общего core-слоя: `wakegrant-protocol`, `home-config`, `home-sqlite`, `home-contracttest`; статический musl-образ, Go-код удалён |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
@@ -128,7 +128,7 @@ android (меняется Maven/APK-замыкание). Если меняютс
 `platform/bazel/windows/**` — только `native` (`platform/bazel#native`).
 Подробности и белый список флагов — `docs/TESTING.md`.
 
-Чистый checkout поддерживает `go test ./solutions/scheduler/... ./solutions/alarm/... ./packages/...`;
+Чистый checkout поддерживает `go test ./solutions/... ./packages/...` (Go-часть scheduler и ha-bridge удалена);
 Pulsar installer — отдельный Go-модуль, проверяется с `GOWORK=off`.
 `make test` пропускает (`SKIP`) тесты, которым нужны игнорируемые локальные
 источники (см. `docs/TESTING.md`).
@@ -136,8 +136,8 @@ Pulsar installer — отдельный Go-модуль, проверяется 
 Команды:
 
 ```bash
-bazel build //solutions/scheduler/... //solutions/alarm/... //packages/proto/...
-bazel test  //solutions/scheduler/... //solutions/alarm/...
+bazel build //solutions/scheduler/... //solutions/ha-bridge/... //packages/proto/...
+bazel test  //solutions/scheduler/... //solutions/ha-bridge/...
 
 bazel test //packages/...
 bazel run //:gazelle
@@ -203,24 +203,23 @@ provenance); домашний ПК только читает готовый dige
 
 ## gRPC / Connect
 
-Канонические контракты — `packages/proto/ricardo/v1/scheduler.proto`
-(`SchedulerService`, основной) и `alarms.proto` (`AlarmService`, legacy
-facade). Один listener отдаёт Connect JSON/binary, gRPC (HTTP/2, h2c) и
-gRPC-Web; отдельного REST API нет. Go stubs лежат в репозитории и
-перегенерируются pinned-скриптом
-`solutions/scheduler/scripts/generate-proto.sh`; Bazel собирает их через
-`go_library` и не дублирует кодогенерацию. Подробности — `GRPC.md`.
+Канонические контракты — `packages/proto/home/v1/scheduler.proto`
+(`home.v1.SchedulerService`, основной) и `alarms.proto`
+(`home.v1.AlarmService`, legacy facade). Один listener отдаёт Connect
+JSON/binary и gRPC-Web по HTTP/1.1; отдельного REST API нет. Rust-стабы
+лежат в репозитории и перегенерируются pinned-скриптом
+`packages/rust/home-proto/generate.sh`; `proto_library` остаётся канонической
+схемой. Подробности — `GRPC.md`.
 
 ## Границы
 
 - HA/Pulsar: звонок, рингтон, TTS, громкость, restore source.
 - `solutions/scheduler`: durable schedules, timers, outbox, generic queue,
   leases/ack, server clock.
-- `solutions/alarm`: legacy `AlarmService` view над тем же engine.
 - `solutions/ha-bridge`: executor adapter; арендует `queue=home`, вызывает HA
   scripts, подтверждает события. Не владеет расписанием.
-- `packages/go`: общие клиенты (`httpapi`, `ha`, `scheduler`) без проектной
-  привязки; endpoints, очереди и entity id задаёт потребитель, а не пакет.
+- `packages/go`: оставшиеся общие Go-пакеты (например, `contracttest`) без
+  проектной привязки. Go-клиенты scheduler удалены вместе с Go-сервером.
 - `solutions/bb-home-dispatcher` и `solutions/bb-profiles`: плагины bb, а не
   сервисы. Диспетчер ничего не знает о проектах, кроме ответов `profiles`;
   профиль и allowlist провайдеров/машин живут только в `profiles`, голосовой

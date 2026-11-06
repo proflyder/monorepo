@@ -113,7 +113,7 @@ impl ControlConfig {
         )
         .map_err(|error| control_error(&error))?;
         let scheduler_url = scheduler_url
-            .strip_suffix("/ricardo.v1.SchedulerService")
+            .strip_suffix("/home.v1.SchedulerService")
             .map_or(scheduler_url.clone(), str::to_owned);
 
         let ha_token = require_token(getenv, read_file, "HA_TOKEN")?;
@@ -330,7 +330,7 @@ mod tests {
             ("HA_TOKEN", "h"),
             (
                 "SCHEDULER_ENDPOINT",
-                "http://192.0.2.27:8098/ricardo.v1.SchedulerService",
+                "http://192.0.2.27:8098/home.v1.SchedulerService",
             ),
             ("SCHEDULER_TOKEN", "s"),
             ("CONTROL_TOKEN", "c"),

@@ -8,7 +8,7 @@ views:
         content: |
           ## Будильники
           Источник истины — серверный планировщик
-          `ricardo.v1.SchedulerService`, а не списки Home Assistant.
+          `home.v1.SchedulerService`, а не списки Home Assistant.
           Создавайте, включайте и удаляйте будильники в приложении Android или
           голосом: «Рикардо, поставь будильник на 7:30 по будням».
 

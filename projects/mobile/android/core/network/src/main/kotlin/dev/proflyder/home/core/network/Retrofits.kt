@@ -19,9 +19,9 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 
-/** Connect unary calls of ricardo.v1.SchedulerService: POST <prefix>/ricardo.v1.SchedulerService/<Method>. */
+/** Connect unary calls of home.v1.SchedulerService: POST <prefix>/home.v1.SchedulerService/<Method>. */
 internal interface SchedulerApi {
-    @POST("ricardo.v1.SchedulerService/{method}")
+    @POST("home.v1.SchedulerService/{method}")
     suspend fun call(@Path("method") method: String, @Body body: JsonObject): Response<JsonElement>
 }
 

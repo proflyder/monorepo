@@ -1252,14 +1252,14 @@ impl WallTime {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.WallTime";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.WallTime";
 }
 ::buffa::impl_default_instance!(WallTime);
 impl ::buffa::MessageName for WallTime {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "WallTime";
-    const FULL_NAME: &'static str = "ricardo.v1.WallTime";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.WallTime";
+    const FULL_NAME: &'static str = "home.v1.WallTime";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.WallTime";
 }
 impl ::buffa::Message for WallTime {
     /// Returns the total encoded size in bytes.
@@ -1351,7 +1351,7 @@ impl ::buffa::Message for WallTime {
     }
 }
 impl ::buffa::ExtensionSet for WallTime {
-    const PROTO_FQN: &'static str = "ricardo.v1.WallTime";
+    const PROTO_FQN: &'static str = "home.v1.WallTime";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1374,7 +1374,7 @@ impl ::buffa::json_helpers::ProtoElemJson for WallTime {
 }
 #[doc(hidden)]
 pub const __WALL_TIME_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.WallTime",
+    type_url: "type.googleapis.com/home.v1.WallTime",
     to_json: ::buffa::type_registry::any_to_json::<WallTime>,
     from_json: ::buffa::type_registry::any_from_json::<WallTime>,
     is_wkt: false,
@@ -1583,14 +1583,14 @@ impl Schedule {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Schedule";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Schedule";
 }
 ::buffa::impl_default_instance!(Schedule);
 impl ::buffa::MessageName for Schedule {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "Schedule";
-    const FULL_NAME: &'static str = "ricardo.v1.Schedule";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Schedule";
+    const FULL_NAME: &'static str = "home.v1.Schedule";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Schedule";
 }
 impl ::buffa::Message for Schedule {
     /// Returns the total encoded size in bytes.
@@ -1988,7 +1988,7 @@ impl ::buffa::Message for Schedule {
     }
 }
 impl ::buffa::ExtensionSet for Schedule {
-    const PROTO_FQN: &'static str = "ricardo.v1.Schedule";
+    const PROTO_FQN: &'static str = "home.v1.Schedule";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2011,7 +2011,7 @@ impl ::buffa::json_helpers::ProtoElemJson for Schedule {
 }
 #[doc(hidden)]
 pub const __SCHEDULE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.Schedule",
+    type_url: "type.googleapis.com/home.v1.Schedule",
     to_json: ::buffa::type_registry::any_to_json::<Schedule>,
     from_json: ::buffa::type_registry::any_from_json::<Schedule>,
     is_wkt: false,
@@ -2114,14 +2114,14 @@ impl Timer {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Timer";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Timer";
 }
 ::buffa::impl_default_instance!(Timer);
 impl ::buffa::MessageName for Timer {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "Timer";
-    const FULL_NAME: &'static str = "ricardo.v1.Timer";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.Timer";
+    const FULL_NAME: &'static str = "home.v1.Timer";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.Timer";
 }
 impl ::buffa::Message for Timer {
     /// Returns the total encoded size in bytes.
@@ -2309,7 +2309,7 @@ impl ::buffa::Message for Timer {
     }
 }
 impl ::buffa::ExtensionSet for Timer {
-    const PROTO_FQN: &'static str = "ricardo.v1.Timer";
+    const PROTO_FQN: &'static str = "home.v1.Timer";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2332,7 +2332,7 @@ impl ::buffa::json_helpers::ProtoElemJson for Timer {
 }
 #[doc(hidden)]
 pub const __TIMER_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.Timer",
+    type_url: "type.googleapis.com/home.v1.Timer",
     to_json: ::buffa::type_registry::any_to_json::<Timer>,
     from_json: ::buffa::type_registry::any_from_json::<Timer>,
     is_wkt: false,
@@ -2535,14 +2535,14 @@ impl DueEvent {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DueEvent";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DueEvent";
 }
 ::buffa::impl_default_instance!(DueEvent);
 impl ::buffa::MessageName for DueEvent {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DueEvent";
-    const FULL_NAME: &'static str = "ricardo.v1.DueEvent";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DueEvent";
+    const FULL_NAME: &'static str = "home.v1.DueEvent";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DueEvent";
 }
 impl ::buffa::Message for DueEvent {
     /// Returns the total encoded size in bytes.
@@ -2879,7 +2879,7 @@ impl ::buffa::Message for DueEvent {
     }
 }
 impl ::buffa::ExtensionSet for DueEvent {
-    const PROTO_FQN: &'static str = "ricardo.v1.DueEvent";
+    const PROTO_FQN: &'static str = "home.v1.DueEvent";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -2902,7 +2902,7 @@ impl ::buffa::json_helpers::ProtoElemJson for DueEvent {
 }
 #[doc(hidden)]
 pub const __DUE_EVENT_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.DueEvent",
+    type_url: "type.googleapis.com/home.v1.DueEvent",
     to_json: ::buffa::type_registry::any_to_json::<DueEvent>,
     from_json: ::buffa::type_registry::any_from_json::<DueEvent>,
     is_wkt: false,
@@ -3012,14 +3012,14 @@ impl CreateScheduleRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateScheduleRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateScheduleRequest";
 }
 ::buffa::impl_default_instance!(CreateScheduleRequest);
 impl ::buffa::MessageName for CreateScheduleRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.CreateScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateScheduleRequest";
 }
 impl ::buffa::Message for CreateScheduleRequest {
     /// Returns the total encoded size in bytes.
@@ -3285,7 +3285,7 @@ impl ::buffa::Message for CreateScheduleRequest {
     }
 }
 impl ::buffa::ExtensionSet for CreateScheduleRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.CreateScheduleRequest";
+    const PROTO_FQN: &'static str = "home.v1.CreateScheduleRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -3308,7 +3308,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CreateScheduleRequest {
 }
 #[doc(hidden)]
 pub const __CREATE_SCHEDULE_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CreateScheduleRequest",
+    type_url: "type.googleapis.com/home.v1.CreateScheduleRequest",
     to_json: ::buffa::type_registry::any_to_json::<CreateScheduleRequest>,
     from_json: ::buffa::type_registry::any_from_json::<CreateScheduleRequest>,
     is_wkt: false,
@@ -3339,14 +3339,14 @@ impl CreateScheduleResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateScheduleResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateScheduleResponse";
 }
 ::buffa::impl_default_instance!(CreateScheduleResponse);
 impl ::buffa::MessageName for CreateScheduleResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CreateScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CreateScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CreateScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.CreateScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CreateScheduleResponse";
 }
 impl ::buffa::Message for CreateScheduleResponse {
     /// Returns the total encoded size in bytes.
@@ -3424,7 +3424,7 @@ impl ::buffa::Message for CreateScheduleResponse {
     }
 }
 impl ::buffa::ExtensionSet for CreateScheduleResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.CreateScheduleResponse";
+    const PROTO_FQN: &'static str = "home.v1.CreateScheduleResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -3447,7 +3447,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CreateScheduleResponse {
 }
 #[doc(hidden)]
 pub const __CREATE_SCHEDULE_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CreateScheduleResponse",
+    type_url: "type.googleapis.com/home.v1.CreateScheduleResponse",
     to_json: ::buffa::type_registry::any_to_json::<CreateScheduleResponse>,
     from_json: ::buffa::type_registry::any_from_json::<CreateScheduleResponse>,
     is_wkt: false,
@@ -3477,14 +3477,14 @@ impl GetScheduleRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetScheduleRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetScheduleRequest";
 }
 ::buffa::impl_default_instance!(GetScheduleRequest);
 impl ::buffa::MessageName for GetScheduleRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.GetScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetScheduleRequest";
 }
 impl ::buffa::Message for GetScheduleRequest {
     /// Returns the total encoded size in bytes.
@@ -3548,7 +3548,7 @@ impl ::buffa::Message for GetScheduleRequest {
     }
 }
 impl ::buffa::ExtensionSet for GetScheduleRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetScheduleRequest";
+    const PROTO_FQN: &'static str = "home.v1.GetScheduleRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -3571,7 +3571,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetScheduleRequest {
 }
 #[doc(hidden)]
 pub const __GET_SCHEDULE_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetScheduleRequest",
+    type_url: "type.googleapis.com/home.v1.GetScheduleRequest",
     to_json: ::buffa::type_registry::any_to_json::<GetScheduleRequest>,
     from_json: ::buffa::type_registry::any_from_json::<GetScheduleRequest>,
     is_wkt: false,
@@ -3600,14 +3600,14 @@ impl GetScheduleResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetScheduleResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetScheduleResponse";
 }
 ::buffa::impl_default_instance!(GetScheduleResponse);
 impl ::buffa::MessageName for GetScheduleResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.GetScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetScheduleResponse";
 }
 impl ::buffa::Message for GetScheduleResponse {
     /// Returns the total encoded size in bytes.
@@ -3685,7 +3685,7 @@ impl ::buffa::Message for GetScheduleResponse {
     }
 }
 impl ::buffa::ExtensionSet for GetScheduleResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetScheduleResponse";
+    const PROTO_FQN: &'static str = "home.v1.GetScheduleResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -3708,7 +3708,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetScheduleResponse {
 }
 #[doc(hidden)]
 pub const __GET_SCHEDULE_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetScheduleResponse",
+    type_url: "type.googleapis.com/home.v1.GetScheduleResponse",
     to_json: ::buffa::type_registry::any_to_json::<GetScheduleResponse>,
     from_json: ::buffa::type_registry::any_from_json::<GetScheduleResponse>,
     is_wkt: false,
@@ -3751,14 +3751,14 @@ impl ListSchedulesRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListSchedulesRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListSchedulesRequest";
 }
 ::buffa::impl_default_instance!(ListSchedulesRequest);
 impl ::buffa::MessageName for ListSchedulesRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListSchedulesRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListSchedulesRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListSchedulesRequest";
+    const FULL_NAME: &'static str = "home.v1.ListSchedulesRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListSchedulesRequest";
 }
 impl ::buffa::Message for ListSchedulesRequest {
     /// Returns the total encoded size in bytes.
@@ -3842,7 +3842,7 @@ impl ::buffa::Message for ListSchedulesRequest {
     }
 }
 impl ::buffa::ExtensionSet for ListSchedulesRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListSchedulesRequest";
+    const PROTO_FQN: &'static str = "home.v1.ListSchedulesRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -3865,7 +3865,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListSchedulesRequest {
 }
 #[doc(hidden)]
 pub const __LIST_SCHEDULES_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListSchedulesRequest",
+    type_url: "type.googleapis.com/home.v1.ListSchedulesRequest",
     to_json: ::buffa::type_registry::any_to_json::<ListSchedulesRequest>,
     from_json: ::buffa::type_registry::any_from_json::<ListSchedulesRequest>,
     is_wkt: false,
@@ -3897,14 +3897,14 @@ impl ListSchedulesResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListSchedulesResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListSchedulesResponse";
 }
 ::buffa::impl_default_instance!(ListSchedulesResponse);
 impl ::buffa::MessageName for ListSchedulesResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListSchedulesResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListSchedulesResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListSchedulesResponse";
+    const FULL_NAME: &'static str = "home.v1.ListSchedulesResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListSchedulesResponse";
 }
 impl ::buffa::Message for ListSchedulesResponse {
     /// Returns the total encoded size in bytes.
@@ -3983,7 +3983,7 @@ impl ::buffa::Message for ListSchedulesResponse {
     }
 }
 impl ::buffa::ExtensionSet for ListSchedulesResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListSchedulesResponse";
+    const PROTO_FQN: &'static str = "home.v1.ListSchedulesResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4006,7 +4006,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListSchedulesResponse {
 }
 #[doc(hidden)]
 pub const __LIST_SCHEDULES_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListSchedulesResponse",
+    type_url: "type.googleapis.com/home.v1.ListSchedulesResponse",
     to_json: ::buffa::type_registry::any_to_json::<ListSchedulesResponse>,
     from_json: ::buffa::type_registry::any_from_json::<ListSchedulesResponse>,
     is_wkt: false,
@@ -4049,14 +4049,14 @@ impl UpdateScheduleRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateScheduleRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateScheduleRequest";
 }
 ::buffa::impl_default_instance!(UpdateScheduleRequest);
 impl ::buffa::MessageName for UpdateScheduleRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.UpdateScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateScheduleRequest";
 }
 impl ::buffa::Message for UpdateScheduleRequest {
     /// Returns the total encoded size in bytes.
@@ -4150,7 +4150,7 @@ impl ::buffa::Message for UpdateScheduleRequest {
     }
 }
 impl ::buffa::ExtensionSet for UpdateScheduleRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.UpdateScheduleRequest";
+    const PROTO_FQN: &'static str = "home.v1.UpdateScheduleRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4173,7 +4173,7 @@ impl ::buffa::json_helpers::ProtoElemJson for UpdateScheduleRequest {
 }
 #[doc(hidden)]
 pub const __UPDATE_SCHEDULE_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.UpdateScheduleRequest",
+    type_url: "type.googleapis.com/home.v1.UpdateScheduleRequest",
     to_json: ::buffa::type_registry::any_to_json::<UpdateScheduleRequest>,
     from_json: ::buffa::type_registry::any_from_json::<UpdateScheduleRequest>,
     is_wkt: false,
@@ -4204,14 +4204,14 @@ impl UpdateScheduleResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateScheduleResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateScheduleResponse";
 }
 ::buffa::impl_default_instance!(UpdateScheduleResponse);
 impl ::buffa::MessageName for UpdateScheduleResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "UpdateScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.UpdateScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.UpdateScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.UpdateScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.UpdateScheduleResponse";
 }
 impl ::buffa::Message for UpdateScheduleResponse {
     /// Returns the total encoded size in bytes.
@@ -4289,7 +4289,7 @@ impl ::buffa::Message for UpdateScheduleResponse {
     }
 }
 impl ::buffa::ExtensionSet for UpdateScheduleResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.UpdateScheduleResponse";
+    const PROTO_FQN: &'static str = "home.v1.UpdateScheduleResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4312,7 +4312,7 @@ impl ::buffa::json_helpers::ProtoElemJson for UpdateScheduleResponse {
 }
 #[doc(hidden)]
 pub const __UPDATE_SCHEDULE_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.UpdateScheduleResponse",
+    type_url: "type.googleapis.com/home.v1.UpdateScheduleResponse",
     to_json: ::buffa::type_registry::any_to_json::<UpdateScheduleResponse>,
     from_json: ::buffa::type_registry::any_from_json::<UpdateScheduleResponse>,
     is_wkt: false,
@@ -4342,14 +4342,14 @@ impl DeleteScheduleRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteScheduleRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteScheduleRequest";
 }
 ::buffa::impl_default_instance!(DeleteScheduleRequest);
 impl ::buffa::MessageName for DeleteScheduleRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.DeleteScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteScheduleRequest";
 }
 impl ::buffa::Message for DeleteScheduleRequest {
     /// Returns the total encoded size in bytes.
@@ -4413,7 +4413,7 @@ impl ::buffa::Message for DeleteScheduleRequest {
     }
 }
 impl ::buffa::ExtensionSet for DeleteScheduleRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.DeleteScheduleRequest";
+    const PROTO_FQN: &'static str = "home.v1.DeleteScheduleRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4436,7 +4436,7 @@ impl ::buffa::json_helpers::ProtoElemJson for DeleteScheduleRequest {
 }
 #[doc(hidden)]
 pub const __DELETE_SCHEDULE_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.DeleteScheduleRequest",
+    type_url: "type.googleapis.com/home.v1.DeleteScheduleRequest",
     to_json: ::buffa::type_registry::any_to_json::<DeleteScheduleRequest>,
     from_json: ::buffa::type_registry::any_from_json::<DeleteScheduleRequest>,
     is_wkt: false,
@@ -4466,14 +4466,14 @@ impl DeleteScheduleResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteScheduleResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteScheduleResponse";
 }
 ::buffa::impl_default_instance!(DeleteScheduleResponse);
 impl ::buffa::MessageName for DeleteScheduleResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "DeleteScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.DeleteScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.DeleteScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.DeleteScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.DeleteScheduleResponse";
 }
 impl ::buffa::Message for DeleteScheduleResponse {
     /// Returns the total encoded size in bytes.
@@ -4537,7 +4537,7 @@ impl ::buffa::Message for DeleteScheduleResponse {
     }
 }
 impl ::buffa::ExtensionSet for DeleteScheduleResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.DeleteScheduleResponse";
+    const PROTO_FQN: &'static str = "home.v1.DeleteScheduleResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4560,7 +4560,7 @@ impl ::buffa::json_helpers::ProtoElemJson for DeleteScheduleResponse {
 }
 #[doc(hidden)]
 pub const __DELETE_SCHEDULE_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.DeleteScheduleResponse",
+    type_url: "type.googleapis.com/home.v1.DeleteScheduleResponse",
     to_json: ::buffa::type_registry::any_to_json::<DeleteScheduleResponse>,
     from_json: ::buffa::type_registry::any_from_json::<DeleteScheduleResponse>,
     is_wkt: false,
@@ -4600,14 +4600,14 @@ impl SetScheduleEnabledRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetScheduleEnabledRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetScheduleEnabledRequest";
 }
 ::buffa::impl_default_instance!(SetScheduleEnabledRequest);
 impl ::buffa::MessageName for SetScheduleEnabledRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetScheduleEnabledRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SetScheduleEnabledRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetScheduleEnabledRequest";
+    const FULL_NAME: &'static str = "home.v1.SetScheduleEnabledRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetScheduleEnabledRequest";
 }
 impl ::buffa::Message for SetScheduleEnabledRequest {
     /// Returns the total encoded size in bytes.
@@ -4685,7 +4685,7 @@ impl ::buffa::Message for SetScheduleEnabledRequest {
     }
 }
 impl ::buffa::ExtensionSet for SetScheduleEnabledRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.SetScheduleEnabledRequest";
+    const PROTO_FQN: &'static str = "home.v1.SetScheduleEnabledRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4708,7 +4708,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SetScheduleEnabledRequest {
 }
 #[doc(hidden)]
 pub const __SET_SCHEDULE_ENABLED_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SetScheduleEnabledRequest",
+    type_url: "type.googleapis.com/home.v1.SetScheduleEnabledRequest",
     to_json: ::buffa::type_registry::any_to_json::<SetScheduleEnabledRequest>,
     from_json: ::buffa::type_registry::any_from_json::<SetScheduleEnabledRequest>,
     is_wkt: false,
@@ -4739,14 +4739,14 @@ impl SetScheduleEnabledResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetScheduleEnabledResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetScheduleEnabledResponse";
 }
 ::buffa::impl_default_instance!(SetScheduleEnabledResponse);
 impl ::buffa::MessageName for SetScheduleEnabledResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SetScheduleEnabledResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SetScheduleEnabledResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SetScheduleEnabledResponse";
+    const FULL_NAME: &'static str = "home.v1.SetScheduleEnabledResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SetScheduleEnabledResponse";
 }
 impl ::buffa::Message for SetScheduleEnabledResponse {
     /// Returns the total encoded size in bytes.
@@ -4824,7 +4824,7 @@ impl ::buffa::Message for SetScheduleEnabledResponse {
     }
 }
 impl ::buffa::ExtensionSet for SetScheduleEnabledResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.SetScheduleEnabledResponse";
+    const PROTO_FQN: &'static str = "home.v1.SetScheduleEnabledResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4847,7 +4847,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SetScheduleEnabledResponse {
 }
 #[doc(hidden)]
 pub const __SET_SCHEDULE_ENABLED_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SetScheduleEnabledResponse",
+    type_url: "type.googleapis.com/home.v1.SetScheduleEnabledResponse",
     to_json: ::buffa::type_registry::any_to_json::<SetScheduleEnabledResponse>,
     from_json: ::buffa::type_registry::any_from_json::<SetScheduleEnabledResponse>,
     is_wkt: false,
@@ -4889,14 +4889,14 @@ impl SnoozeScheduleRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeScheduleRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeScheduleRequest";
 }
 ::buffa::impl_default_instance!(SnoozeScheduleRequest);
 impl ::buffa::MessageName for SnoozeScheduleRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.SnoozeScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeScheduleRequest";
 }
 impl ::buffa::Message for SnoozeScheduleRequest {
     /// Returns the total encoded size in bytes.
@@ -4974,7 +4974,7 @@ impl ::buffa::Message for SnoozeScheduleRequest {
     }
 }
 impl ::buffa::ExtensionSet for SnoozeScheduleRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.SnoozeScheduleRequest";
+    const PROTO_FQN: &'static str = "home.v1.SnoozeScheduleRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -4997,7 +4997,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SnoozeScheduleRequest {
 }
 #[doc(hidden)]
 pub const __SNOOZE_SCHEDULE_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SnoozeScheduleRequest",
+    type_url: "type.googleapis.com/home.v1.SnoozeScheduleRequest",
     to_json: ::buffa::type_registry::any_to_json::<SnoozeScheduleRequest>,
     from_json: ::buffa::type_registry::any_from_json::<SnoozeScheduleRequest>,
     is_wkt: false,
@@ -5037,14 +5037,14 @@ impl SnoozeScheduleResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeScheduleResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeScheduleResponse";
 }
 ::buffa::impl_default_instance!(SnoozeScheduleResponse);
 impl ::buffa::MessageName for SnoozeScheduleResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "SnoozeScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.SnoozeScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.SnoozeScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.SnoozeScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.SnoozeScheduleResponse";
 }
 impl ::buffa::Message for SnoozeScheduleResponse {
     /// Returns the total encoded size in bytes.
@@ -5150,7 +5150,7 @@ impl ::buffa::Message for SnoozeScheduleResponse {
     }
 }
 impl ::buffa::ExtensionSet for SnoozeScheduleResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.SnoozeScheduleResponse";
+    const PROTO_FQN: &'static str = "home.v1.SnoozeScheduleResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -5173,7 +5173,7 @@ impl ::buffa::json_helpers::ProtoElemJson for SnoozeScheduleResponse {
 }
 #[doc(hidden)]
 pub const __SNOOZE_SCHEDULE_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.SnoozeScheduleResponse",
+    type_url: "type.googleapis.com/home.v1.SnoozeScheduleResponse",
     to_json: ::buffa::type_registry::any_to_json::<SnoozeScheduleResponse>,
     from_json: ::buffa::type_registry::any_from_json::<SnoozeScheduleResponse>,
     is_wkt: false,
@@ -5203,14 +5203,14 @@ impl StopScheduleRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopScheduleRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopScheduleRequest";
 }
 ::buffa::impl_default_instance!(StopScheduleRequest);
 impl ::buffa::MessageName for StopScheduleRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopScheduleRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.StopScheduleRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopScheduleRequest";
+    const FULL_NAME: &'static str = "home.v1.StopScheduleRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopScheduleRequest";
 }
 impl ::buffa::Message for StopScheduleRequest {
     /// Returns the total encoded size in bytes.
@@ -5274,7 +5274,7 @@ impl ::buffa::Message for StopScheduleRequest {
     }
 }
 impl ::buffa::ExtensionSet for StopScheduleRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.StopScheduleRequest";
+    const PROTO_FQN: &'static str = "home.v1.StopScheduleRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -5297,7 +5297,7 @@ impl ::buffa::json_helpers::ProtoElemJson for StopScheduleRequest {
 }
 #[doc(hidden)]
 pub const __STOP_SCHEDULE_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.StopScheduleRequest",
+    type_url: "type.googleapis.com/home.v1.StopScheduleRequest",
     to_json: ::buffa::type_registry::any_to_json::<StopScheduleRequest>,
     from_json: ::buffa::type_registry::any_from_json::<StopScheduleRequest>,
     is_wkt: false,
@@ -5326,14 +5326,14 @@ impl StopScheduleResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopScheduleResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopScheduleResponse";
 }
 ::buffa::impl_default_instance!(StopScheduleResponse);
 impl ::buffa::MessageName for StopScheduleResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StopScheduleResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.StopScheduleResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StopScheduleResponse";
+    const FULL_NAME: &'static str = "home.v1.StopScheduleResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StopScheduleResponse";
 }
 impl ::buffa::Message for StopScheduleResponse {
     /// Returns the total encoded size in bytes.
@@ -5411,7 +5411,7 @@ impl ::buffa::Message for StopScheduleResponse {
     }
 }
 impl ::buffa::ExtensionSet for StopScheduleResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.StopScheduleResponse";
+    const PROTO_FQN: &'static str = "home.v1.StopScheduleResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -5434,7 +5434,7 @@ impl ::buffa::json_helpers::ProtoElemJson for StopScheduleResponse {
 }
 #[doc(hidden)]
 pub const __STOP_SCHEDULE_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.StopScheduleResponse",
+    type_url: "type.googleapis.com/home.v1.StopScheduleResponse",
     to_json: ::buffa::type_registry::any_to_json::<StopScheduleResponse>,
     from_json: ::buffa::type_registry::any_from_json::<StopScheduleResponse>,
     is_wkt: false,
@@ -5486,14 +5486,14 @@ impl StartTimerRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StartTimerRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StartTimerRequest";
 }
 ::buffa::impl_default_instance!(StartTimerRequest);
 impl ::buffa::MessageName for StartTimerRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StartTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.StartTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StartTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.StartTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StartTimerRequest";
 }
 impl ::buffa::Message for StartTimerRequest {
     /// Returns the total encoded size in bytes.
@@ -5589,7 +5589,7 @@ impl ::buffa::Message for StartTimerRequest {
     }
 }
 impl ::buffa::ExtensionSet for StartTimerRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.StartTimerRequest";
+    const PROTO_FQN: &'static str = "home.v1.StartTimerRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -5612,7 +5612,7 @@ impl ::buffa::json_helpers::ProtoElemJson for StartTimerRequest {
 }
 #[doc(hidden)]
 pub const __START_TIMER_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.StartTimerRequest",
+    type_url: "type.googleapis.com/home.v1.StartTimerRequest",
     to_json: ::buffa::type_registry::any_to_json::<StartTimerRequest>,
     from_json: ::buffa::type_registry::any_from_json::<StartTimerRequest>,
     is_wkt: false,
@@ -5641,14 +5641,14 @@ impl StartTimerResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StartTimerResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StartTimerResponse";
 }
 ::buffa::impl_default_instance!(StartTimerResponse);
 impl ::buffa::MessageName for StartTimerResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "StartTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.StartTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.StartTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.StartTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.StartTimerResponse";
 }
 impl ::buffa::Message for StartTimerResponse {
     /// Returns the total encoded size in bytes.
@@ -5726,7 +5726,7 @@ impl ::buffa::Message for StartTimerResponse {
     }
 }
 impl ::buffa::ExtensionSet for StartTimerResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.StartTimerResponse";
+    const PROTO_FQN: &'static str = "home.v1.StartTimerResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -5749,7 +5749,7 @@ impl ::buffa::json_helpers::ProtoElemJson for StartTimerResponse {
 }
 #[doc(hidden)]
 pub const __START_TIMER_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.StartTimerResponse",
+    type_url: "type.googleapis.com/home.v1.StartTimerResponse",
     to_json: ::buffa::type_registry::any_to_json::<StartTimerResponse>,
     from_json: ::buffa::type_registry::any_from_json::<StartTimerResponse>,
     is_wkt: false,
@@ -5779,14 +5779,14 @@ impl GetTimerRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetTimerRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetTimerRequest";
 }
 ::buffa::impl_default_instance!(GetTimerRequest);
 impl ::buffa::MessageName for GetTimerRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.GetTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetTimerRequest";
 }
 impl ::buffa::Message for GetTimerRequest {
     /// Returns the total encoded size in bytes.
@@ -5850,7 +5850,7 @@ impl ::buffa::Message for GetTimerRequest {
     }
 }
 impl ::buffa::ExtensionSet for GetTimerRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetTimerRequest";
+    const PROTO_FQN: &'static str = "home.v1.GetTimerRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -5873,7 +5873,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetTimerRequest {
 }
 #[doc(hidden)]
 pub const __GET_TIMER_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetTimerRequest",
+    type_url: "type.googleapis.com/home.v1.GetTimerRequest",
     to_json: ::buffa::type_registry::any_to_json::<GetTimerRequest>,
     from_json: ::buffa::type_registry::any_from_json::<GetTimerRequest>,
     is_wkt: false,
@@ -5902,14 +5902,14 @@ impl GetTimerResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetTimerResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetTimerResponse";
 }
 ::buffa::impl_default_instance!(GetTimerResponse);
 impl ::buffa::MessageName for GetTimerResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.GetTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetTimerResponse";
 }
 impl ::buffa::Message for GetTimerResponse {
     /// Returns the total encoded size in bytes.
@@ -5987,7 +5987,7 @@ impl ::buffa::Message for GetTimerResponse {
     }
 }
 impl ::buffa::ExtensionSet for GetTimerResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetTimerResponse";
+    const PROTO_FQN: &'static str = "home.v1.GetTimerResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6010,7 +6010,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetTimerResponse {
 }
 #[doc(hidden)]
 pub const __GET_TIMER_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetTimerResponse",
+    type_url: "type.googleapis.com/home.v1.GetTimerResponse",
     to_json: ::buffa::type_registry::any_to_json::<GetTimerResponse>,
     from_json: ::buffa::type_registry::any_from_json::<GetTimerResponse>,
     is_wkt: false,
@@ -6043,14 +6043,14 @@ impl ListTimersRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListTimersRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListTimersRequest";
 }
 ::buffa::impl_default_instance!(ListTimersRequest);
 impl ::buffa::MessageName for ListTimersRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListTimersRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListTimersRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListTimersRequest";
+    const FULL_NAME: &'static str = "home.v1.ListTimersRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListTimersRequest";
 }
 impl ::buffa::Message for ListTimersRequest {
     /// Returns the total encoded size in bytes.
@@ -6114,7 +6114,7 @@ impl ::buffa::Message for ListTimersRequest {
     }
 }
 impl ::buffa::ExtensionSet for ListTimersRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListTimersRequest";
+    const PROTO_FQN: &'static str = "home.v1.ListTimersRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6137,7 +6137,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListTimersRequest {
 }
 #[doc(hidden)]
 pub const __LIST_TIMERS_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListTimersRequest",
+    type_url: "type.googleapis.com/home.v1.ListTimersRequest",
     to_json: ::buffa::type_registry::any_to_json::<ListTimersRequest>,
     from_json: ::buffa::type_registry::any_from_json::<ListTimersRequest>,
     is_wkt: false,
@@ -6167,14 +6167,14 @@ impl ListTimersResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListTimersResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListTimersResponse";
 }
 ::buffa::impl_default_instance!(ListTimersResponse);
 impl ::buffa::MessageName for ListTimersResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListTimersResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListTimersResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListTimersResponse";
+    const FULL_NAME: &'static str = "home.v1.ListTimersResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListTimersResponse";
 }
 impl ::buffa::Message for ListTimersResponse {
     /// Returns the total encoded size in bytes.
@@ -6253,7 +6253,7 @@ impl ::buffa::Message for ListTimersResponse {
     }
 }
 impl ::buffa::ExtensionSet for ListTimersResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListTimersResponse";
+    const PROTO_FQN: &'static str = "home.v1.ListTimersResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6276,7 +6276,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListTimersResponse {
 }
 #[doc(hidden)]
 pub const __LIST_TIMERS_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListTimersResponse",
+    type_url: "type.googleapis.com/home.v1.ListTimersResponse",
     to_json: ::buffa::type_registry::any_to_json::<ListTimersResponse>,
     from_json: ::buffa::type_registry::any_from_json::<ListTimersResponse>,
     is_wkt: false,
@@ -6306,14 +6306,14 @@ impl PauseTimerRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.PauseTimerRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.PauseTimerRequest";
 }
 ::buffa::impl_default_instance!(PauseTimerRequest);
 impl ::buffa::MessageName for PauseTimerRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "PauseTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.PauseTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.PauseTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.PauseTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.PauseTimerRequest";
 }
 impl ::buffa::Message for PauseTimerRequest {
     /// Returns the total encoded size in bytes.
@@ -6377,7 +6377,7 @@ impl ::buffa::Message for PauseTimerRequest {
     }
 }
 impl ::buffa::ExtensionSet for PauseTimerRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.PauseTimerRequest";
+    const PROTO_FQN: &'static str = "home.v1.PauseTimerRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6400,7 +6400,7 @@ impl ::buffa::json_helpers::ProtoElemJson for PauseTimerRequest {
 }
 #[doc(hidden)]
 pub const __PAUSE_TIMER_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.PauseTimerRequest",
+    type_url: "type.googleapis.com/home.v1.PauseTimerRequest",
     to_json: ::buffa::type_registry::any_to_json::<PauseTimerRequest>,
     from_json: ::buffa::type_registry::any_from_json::<PauseTimerRequest>,
     is_wkt: false,
@@ -6429,14 +6429,14 @@ impl PauseTimerResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.PauseTimerResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.PauseTimerResponse";
 }
 ::buffa::impl_default_instance!(PauseTimerResponse);
 impl ::buffa::MessageName for PauseTimerResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "PauseTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.PauseTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.PauseTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.PauseTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.PauseTimerResponse";
 }
 impl ::buffa::Message for PauseTimerResponse {
     /// Returns the total encoded size in bytes.
@@ -6514,7 +6514,7 @@ impl ::buffa::Message for PauseTimerResponse {
     }
 }
 impl ::buffa::ExtensionSet for PauseTimerResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.PauseTimerResponse";
+    const PROTO_FQN: &'static str = "home.v1.PauseTimerResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6537,7 +6537,7 @@ impl ::buffa::json_helpers::ProtoElemJson for PauseTimerResponse {
 }
 #[doc(hidden)]
 pub const __PAUSE_TIMER_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.PauseTimerResponse",
+    type_url: "type.googleapis.com/home.v1.PauseTimerResponse",
     to_json: ::buffa::type_registry::any_to_json::<PauseTimerResponse>,
     from_json: ::buffa::type_registry::any_from_json::<PauseTimerResponse>,
     is_wkt: false,
@@ -6567,14 +6567,14 @@ impl ResumeTimerRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ResumeTimerRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ResumeTimerRequest";
 }
 ::buffa::impl_default_instance!(ResumeTimerRequest);
 impl ::buffa::MessageName for ResumeTimerRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ResumeTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ResumeTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ResumeTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.ResumeTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ResumeTimerRequest";
 }
 impl ::buffa::Message for ResumeTimerRequest {
     /// Returns the total encoded size in bytes.
@@ -6638,7 +6638,7 @@ impl ::buffa::Message for ResumeTimerRequest {
     }
 }
 impl ::buffa::ExtensionSet for ResumeTimerRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.ResumeTimerRequest";
+    const PROTO_FQN: &'static str = "home.v1.ResumeTimerRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6661,7 +6661,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ResumeTimerRequest {
 }
 #[doc(hidden)]
 pub const __RESUME_TIMER_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ResumeTimerRequest",
+    type_url: "type.googleapis.com/home.v1.ResumeTimerRequest",
     to_json: ::buffa::type_registry::any_to_json::<ResumeTimerRequest>,
     from_json: ::buffa::type_registry::any_from_json::<ResumeTimerRequest>,
     is_wkt: false,
@@ -6690,14 +6690,14 @@ impl ResumeTimerResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ResumeTimerResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ResumeTimerResponse";
 }
 ::buffa::impl_default_instance!(ResumeTimerResponse);
 impl ::buffa::MessageName for ResumeTimerResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ResumeTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ResumeTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ResumeTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.ResumeTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ResumeTimerResponse";
 }
 impl ::buffa::Message for ResumeTimerResponse {
     /// Returns the total encoded size in bytes.
@@ -6775,7 +6775,7 @@ impl ::buffa::Message for ResumeTimerResponse {
     }
 }
 impl ::buffa::ExtensionSet for ResumeTimerResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.ResumeTimerResponse";
+    const PROTO_FQN: &'static str = "home.v1.ResumeTimerResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6798,7 +6798,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ResumeTimerResponse {
 }
 #[doc(hidden)]
 pub const __RESUME_TIMER_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ResumeTimerResponse",
+    type_url: "type.googleapis.com/home.v1.ResumeTimerResponse",
     to_json: ::buffa::type_registry::any_to_json::<ResumeTimerResponse>,
     from_json: ::buffa::type_registry::any_from_json::<ResumeTimerResponse>,
     is_wkt: false,
@@ -6828,14 +6828,14 @@ impl CancelTimerRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTimerRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTimerRequest";
 }
 ::buffa::impl_default_instance!(CancelTimerRequest);
 impl ::buffa::MessageName for CancelTimerRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTimerRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTimerRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTimerRequest";
+    const FULL_NAME: &'static str = "home.v1.CancelTimerRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTimerRequest";
 }
 impl ::buffa::Message for CancelTimerRequest {
     /// Returns the total encoded size in bytes.
@@ -6899,7 +6899,7 @@ impl ::buffa::Message for CancelTimerRequest {
     }
 }
 impl ::buffa::ExtensionSet for CancelTimerRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.CancelTimerRequest";
+    const PROTO_FQN: &'static str = "home.v1.CancelTimerRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -6922,7 +6922,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CancelTimerRequest {
 }
 #[doc(hidden)]
 pub const __CANCEL_TIMER_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CancelTimerRequest",
+    type_url: "type.googleapis.com/home.v1.CancelTimerRequest",
     to_json: ::buffa::type_registry::any_to_json::<CancelTimerRequest>,
     from_json: ::buffa::type_registry::any_from_json::<CancelTimerRequest>,
     is_wkt: false,
@@ -6951,14 +6951,14 @@ impl CancelTimerResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTimerResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTimerResponse";
 }
 ::buffa::impl_default_instance!(CancelTimerResponse);
 impl ::buffa::MessageName for CancelTimerResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTimerResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTimerResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTimerResponse";
+    const FULL_NAME: &'static str = "home.v1.CancelTimerResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTimerResponse";
 }
 impl ::buffa::Message for CancelTimerResponse {
     /// Returns the total encoded size in bytes.
@@ -7036,7 +7036,7 @@ impl ::buffa::Message for CancelTimerResponse {
     }
 }
 impl ::buffa::ExtensionSet for CancelTimerResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.CancelTimerResponse";
+    const PROTO_FQN: &'static str = "home.v1.CancelTimerResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -7059,7 +7059,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CancelTimerResponse {
 }
 #[doc(hidden)]
 pub const __CANCEL_TIMER_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CancelTimerResponse",
+    type_url: "type.googleapis.com/home.v1.CancelTimerResponse",
     to_json: ::buffa::type_registry::any_to_json::<CancelTimerResponse>,
     from_json: ::buffa::type_registry::any_from_json::<CancelTimerResponse>,
     is_wkt: false,
@@ -7125,14 +7125,14 @@ impl ListDueEventsRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListDueEventsRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListDueEventsRequest";
 }
 ::buffa::impl_default_instance!(ListDueEventsRequest);
 impl ::buffa::MessageName for ListDueEventsRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListDueEventsRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.ListDueEventsRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListDueEventsRequest";
+    const FULL_NAME: &'static str = "home.v1.ListDueEventsRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListDueEventsRequest";
 }
 impl ::buffa::Message for ListDueEventsRequest {
     /// Returns the total encoded size in bytes.
@@ -7238,7 +7238,7 @@ impl ::buffa::Message for ListDueEventsRequest {
     }
 }
 impl ::buffa::ExtensionSet for ListDueEventsRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListDueEventsRequest";
+    const PROTO_FQN: &'static str = "home.v1.ListDueEventsRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -7261,7 +7261,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListDueEventsRequest {
 }
 #[doc(hidden)]
 pub const __LIST_DUE_EVENTS_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListDueEventsRequest",
+    type_url: "type.googleapis.com/home.v1.ListDueEventsRequest",
     to_json: ::buffa::type_registry::any_to_json::<ListDueEventsRequest>,
     from_json: ::buffa::type_registry::any_from_json::<ListDueEventsRequest>,
     is_wkt: false,
@@ -7291,14 +7291,14 @@ impl ListDueEventsResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListDueEventsResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListDueEventsResponse";
 }
 ::buffa::impl_default_instance!(ListDueEventsResponse);
 impl ::buffa::MessageName for ListDueEventsResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ListDueEventsResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.ListDueEventsResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ListDueEventsResponse";
+    const FULL_NAME: &'static str = "home.v1.ListDueEventsResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ListDueEventsResponse";
 }
 impl ::buffa::Message for ListDueEventsResponse {
     /// Returns the total encoded size in bytes.
@@ -7377,7 +7377,7 @@ impl ::buffa::Message for ListDueEventsResponse {
     }
 }
 impl ::buffa::ExtensionSet for ListDueEventsResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.ListDueEventsResponse";
+    const PROTO_FQN: &'static str = "home.v1.ListDueEventsResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -7400,7 +7400,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ListDueEventsResponse {
 }
 #[doc(hidden)]
 pub const __LIST_DUE_EVENTS_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ListDueEventsResponse",
+    type_url: "type.googleapis.com/home.v1.ListDueEventsResponse",
     to_json: ::buffa::type_registry::any_to_json::<ListDueEventsResponse>,
     from_json: ::buffa::type_registry::any_from_json::<ListDueEventsResponse>,
     is_wkt: false,
@@ -7476,14 +7476,14 @@ impl EnqueueTaskRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.EnqueueTaskRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.EnqueueTaskRequest";
 }
 ::buffa::impl_default_instance!(EnqueueTaskRequest);
 impl ::buffa::MessageName for EnqueueTaskRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "EnqueueTaskRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.EnqueueTaskRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.EnqueueTaskRequest";
+    const FULL_NAME: &'static str = "home.v1.EnqueueTaskRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.EnqueueTaskRequest";
 }
 impl ::buffa::Message for EnqueueTaskRequest {
     /// Returns the total encoded size in bytes.
@@ -7605,7 +7605,7 @@ impl ::buffa::Message for EnqueueTaskRequest {
     }
 }
 impl ::buffa::ExtensionSet for EnqueueTaskRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.EnqueueTaskRequest";
+    const PROTO_FQN: &'static str = "home.v1.EnqueueTaskRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -7628,7 +7628,7 @@ impl ::buffa::json_helpers::ProtoElemJson for EnqueueTaskRequest {
 }
 #[doc(hidden)]
 pub const __ENQUEUE_TASK_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.EnqueueTaskRequest",
+    type_url: "type.googleapis.com/home.v1.EnqueueTaskRequest",
     to_json: ::buffa::type_registry::any_to_json::<EnqueueTaskRequest>,
     from_json: ::buffa::type_registry::any_from_json::<EnqueueTaskRequest>,
     is_wkt: false,
@@ -7657,14 +7657,14 @@ impl EnqueueTaskResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.EnqueueTaskResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.EnqueueTaskResponse";
 }
 ::buffa::impl_default_instance!(EnqueueTaskResponse);
 impl ::buffa::MessageName for EnqueueTaskResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "EnqueueTaskResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.EnqueueTaskResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.EnqueueTaskResponse";
+    const FULL_NAME: &'static str = "home.v1.EnqueueTaskResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.EnqueueTaskResponse";
 }
 impl ::buffa::Message for EnqueueTaskResponse {
     /// Returns the total encoded size in bytes.
@@ -7742,7 +7742,7 @@ impl ::buffa::Message for EnqueueTaskResponse {
     }
 }
 impl ::buffa::ExtensionSet for EnqueueTaskResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.EnqueueTaskResponse";
+    const PROTO_FQN: &'static str = "home.v1.EnqueueTaskResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -7765,7 +7765,7 @@ impl ::buffa::json_helpers::ProtoElemJson for EnqueueTaskResponse {
 }
 #[doc(hidden)]
 pub const __ENQUEUE_TASK_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.EnqueueTaskResponse",
+    type_url: "type.googleapis.com/home.v1.EnqueueTaskResponse",
     to_json: ::buffa::type_registry::any_to_json::<EnqueueTaskResponse>,
     from_json: ::buffa::type_registry::any_from_json::<EnqueueTaskResponse>,
     is_wkt: false,
@@ -7796,14 +7796,14 @@ impl CancelTaskRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTaskRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTaskRequest";
 }
 ::buffa::impl_default_instance!(CancelTaskRequest);
 impl ::buffa::MessageName for CancelTaskRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTaskRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTaskRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTaskRequest";
+    const FULL_NAME: &'static str = "home.v1.CancelTaskRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTaskRequest";
 }
 impl ::buffa::Message for CancelTaskRequest {
     /// Returns the total encoded size in bytes.
@@ -7867,7 +7867,7 @@ impl ::buffa::Message for CancelTaskRequest {
     }
 }
 impl ::buffa::ExtensionSet for CancelTaskRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.CancelTaskRequest";
+    const PROTO_FQN: &'static str = "home.v1.CancelTaskRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -7890,7 +7890,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CancelTaskRequest {
 }
 #[doc(hidden)]
 pub const __CANCEL_TASK_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CancelTaskRequest",
+    type_url: "type.googleapis.com/home.v1.CancelTaskRequest",
     to_json: ::buffa::type_registry::any_to_json::<CancelTaskRequest>,
     from_json: ::buffa::type_registry::any_from_json::<CancelTaskRequest>,
     is_wkt: false,
@@ -7921,14 +7921,14 @@ impl CancelTaskResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTaskResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTaskResponse";
 }
 ::buffa::impl_default_instance!(CancelTaskResponse);
 impl ::buffa::MessageName for CancelTaskResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "CancelTaskResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.CancelTaskResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.CancelTaskResponse";
+    const FULL_NAME: &'static str = "home.v1.CancelTaskResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.CancelTaskResponse";
 }
 impl ::buffa::Message for CancelTaskResponse {
     /// Returns the total encoded size in bytes.
@@ -8006,7 +8006,7 @@ impl ::buffa::Message for CancelTaskResponse {
     }
 }
 impl ::buffa::ExtensionSet for CancelTaskResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.CancelTaskResponse";
+    const PROTO_FQN: &'static str = "home.v1.CancelTaskResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -8029,7 +8029,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CancelTaskResponse {
 }
 #[doc(hidden)]
 pub const __CANCEL_TASK_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.CancelTaskResponse",
+    type_url: "type.googleapis.com/home.v1.CancelTaskResponse",
     to_json: ::buffa::type_registry::any_to_json::<CancelTaskResponse>,
     from_json: ::buffa::type_registry::any_from_json::<CancelTaskResponse>,
     is_wkt: false,
@@ -8091,14 +8091,14 @@ impl AckEventRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.AckEventRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.AckEventRequest";
 }
 ::buffa::impl_default_instance!(AckEventRequest);
 impl ::buffa::MessageName for AckEventRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "AckEventRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.AckEventRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.AckEventRequest";
+    const FULL_NAME: &'static str = "home.v1.AckEventRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.AckEventRequest";
 }
 impl ::buffa::Message for AckEventRequest {
     /// Returns the total encoded size in bytes.
@@ -8212,7 +8212,7 @@ impl ::buffa::Message for AckEventRequest {
     }
 }
 impl ::buffa::ExtensionSet for AckEventRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.AckEventRequest";
+    const PROTO_FQN: &'static str = "home.v1.AckEventRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -8235,7 +8235,7 @@ impl ::buffa::json_helpers::ProtoElemJson for AckEventRequest {
 }
 #[doc(hidden)]
 pub const __ACK_EVENT_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.AckEventRequest",
+    type_url: "type.googleapis.com/home.v1.AckEventRequest",
     to_json: ::buffa::type_registry::any_to_json::<AckEventRequest>,
     from_json: ::buffa::type_registry::any_from_json::<AckEventRequest>,
     is_wkt: false,
@@ -8264,14 +8264,14 @@ impl AckEventResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.AckEventResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.AckEventResponse";
 }
 ::buffa::impl_default_instance!(AckEventResponse);
 impl ::buffa::MessageName for AckEventResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "AckEventResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.AckEventResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.AckEventResponse";
+    const FULL_NAME: &'static str = "home.v1.AckEventResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.AckEventResponse";
 }
 impl ::buffa::Message for AckEventResponse {
     /// Returns the total encoded size in bytes.
@@ -8349,7 +8349,7 @@ impl ::buffa::Message for AckEventResponse {
     }
 }
 impl ::buffa::ExtensionSet for AckEventResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.AckEventResponse";
+    const PROTO_FQN: &'static str = "home.v1.AckEventResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -8372,7 +8372,7 @@ impl ::buffa::json_helpers::ProtoElemJson for AckEventResponse {
 }
 #[doc(hidden)]
 pub const __ACK_EVENT_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.AckEventResponse",
+    type_url: "type.googleapis.com/home.v1.AckEventResponse",
     to_json: ::buffa::type_registry::any_to_json::<AckEventResponse>,
     from_json: ::buffa::type_registry::any_from_json::<AckEventResponse>,
     is_wkt: false,
@@ -8395,14 +8395,14 @@ impl GetStatusRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetStatusRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetStatusRequest";
 }
 ::buffa::impl_default_instance!(GetStatusRequest);
 impl ::buffa::MessageName for GetStatusRequest {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetStatusRequest";
-    const FULL_NAME: &'static str = "ricardo.v1.GetStatusRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetStatusRequest";
+    const FULL_NAME: &'static str = "home.v1.GetStatusRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetStatusRequest";
 }
 impl ::buffa::Message for GetStatusRequest {
     /// Returns the total encoded size in bytes.
@@ -8452,7 +8452,7 @@ impl ::buffa::Message for GetStatusRequest {
     }
 }
 impl ::buffa::ExtensionSet for GetStatusRequest {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetStatusRequest";
+    const PROTO_FQN: &'static str = "home.v1.GetStatusRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -8475,7 +8475,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetStatusRequest {
 }
 #[doc(hidden)]
 pub const __GET_STATUS_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetStatusRequest",
+    type_url: "type.googleapis.com/home.v1.GetStatusRequest",
     to_json: ::buffa::type_registry::any_to_json::<GetStatusRequest>,
     from_json: ::buffa::type_registry::any_from_json::<GetStatusRequest>,
     is_wkt: false,
@@ -8642,14 +8642,14 @@ impl GetStatusResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetStatusResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetStatusResponse";
 }
 ::buffa::impl_default_instance!(GetStatusResponse);
 impl ::buffa::MessageName for GetStatusResponse {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "GetStatusResponse";
-    const FULL_NAME: &'static str = "ricardo.v1.GetStatusResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.GetStatusResponse";
+    const FULL_NAME: &'static str = "home.v1.GetStatusResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.GetStatusResponse";
 }
 impl ::buffa::Message for GetStatusResponse {
     /// Returns the total encoded size in bytes.
@@ -8953,7 +8953,7 @@ impl ::buffa::Message for GetStatusResponse {
     }
 }
 impl ::buffa::ExtensionSet for GetStatusResponse {
-    const PROTO_FQN: &'static str = "ricardo.v1.GetStatusResponse";
+    const PROTO_FQN: &'static str = "home.v1.GetStatusResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -8976,7 +8976,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetStatusResponse {
 }
 #[doc(hidden)]
 pub const __GET_STATUS_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.GetStatusResponse",
+    type_url: "type.googleapis.com/home.v1.GetStatusResponse",
     to_json: ::buffa::type_registry::any_to_json::<GetStatusResponse>,
     from_json: ::buffa::type_registry::any_from_json::<GetStatusResponse>,
     is_wkt: false,
@@ -9024,14 +9024,14 @@ impl QueueInfo {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.QueueInfo";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.QueueInfo";
 }
 ::buffa::impl_default_instance!(QueueInfo);
 impl ::buffa::MessageName for QueueInfo {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "QueueInfo";
-    const FULL_NAME: &'static str = "ricardo.v1.QueueInfo";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.QueueInfo";
+    const FULL_NAME: &'static str = "home.v1.QueueInfo";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.QueueInfo";
 }
 impl ::buffa::Message for QueueInfo {
     /// Returns the total encoded size in bytes.
@@ -9123,7 +9123,7 @@ impl ::buffa::Message for QueueInfo {
     }
 }
 impl ::buffa::ExtensionSet for QueueInfo {
-    const PROTO_FQN: &'static str = "ricardo.v1.QueueInfo";
+    const PROTO_FQN: &'static str = "home.v1.QueueInfo";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -9146,7 +9146,7 @@ impl ::buffa::json_helpers::ProtoElemJson for QueueInfo {
 }
 #[doc(hidden)]
 pub const __QUEUE_INFO_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.QueueInfo",
+    type_url: "type.googleapis.com/home.v1.QueueInfo",
     to_json: ::buffa::type_registry::any_to_json::<QueueInfo>,
     from_json: ::buffa::type_registry::any_from_json::<QueueInfo>,
     is_wkt: false,
@@ -9207,14 +9207,14 @@ impl ConsumerStatus {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ConsumerStatus";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ConsumerStatus";
 }
 ::buffa::impl_default_instance!(ConsumerStatus);
 impl ::buffa::MessageName for ConsumerStatus {
-    const PACKAGE: &'static str = "ricardo.v1";
+    const PACKAGE: &'static str = "home.v1";
     const NAME: &'static str = "ConsumerStatus";
-    const FULL_NAME: &'static str = "ricardo.v1.ConsumerStatus";
-    const TYPE_URL: &'static str = "type.googleapis.com/ricardo.v1.ConsumerStatus";
+    const FULL_NAME: &'static str = "home.v1.ConsumerStatus";
+    const TYPE_URL: &'static str = "type.googleapis.com/home.v1.ConsumerStatus";
 }
 impl ::buffa::Message for ConsumerStatus {
     /// Returns the total encoded size in bytes.
@@ -9320,7 +9320,7 @@ impl ::buffa::Message for ConsumerStatus {
     }
 }
 impl ::buffa::ExtensionSet for ConsumerStatus {
-    const PROTO_FQN: &'static str = "ricardo.v1.ConsumerStatus";
+    const PROTO_FQN: &'static str = "home.v1.ConsumerStatus";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -9343,7 +9343,7 @@ impl ::buffa::json_helpers::ProtoElemJson for ConsumerStatus {
 }
 #[doc(hidden)]
 pub const __CONSUMER_STATUS_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/ricardo.v1.ConsumerStatus",
+    type_url: "type.googleapis.com/home.v1.ConsumerStatus",
     to_json: ::buffa::type_registry::any_to_json::<ConsumerStatus>,
     from_json: ::buffa::type_registry::any_from_json::<ConsumerStatus>,
     is_wkt: false,

@@ -319,52 +319,52 @@ for ::buffa::view::OwnedView<__buffa::view::StopAlarmResponseView<'static>> {
     }
 }
 /// Full service name for this service.
-pub const ALARM_SERVICE_SERVICE_NAME: &str = "ricardo.v1.AlarmService";
+pub const ALARM_SERVICE_SERVICE_NAME: &str = "home.v1.AlarmService";
 /// Static [`Spec`](::connectrpc::Spec) for the `CreateAlarm` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_CREATE_ALARM_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/CreateAlarm",
+        "/home.v1.AlarmService/CreateAlarm",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `GetAlarm` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_GET_ALARM_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/GetAlarm",
+        "/home.v1.AlarmService/GetAlarm",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `ListAlarms` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_LIST_ALARMS_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/ListAlarms",
+        "/home.v1.AlarmService/ListAlarms",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `UpdateAlarm` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_UPDATE_ALARM_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/UpdateAlarm",
+        "/home.v1.AlarmService/UpdateAlarm",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `DeleteAlarm` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_DELETE_ALARM_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/DeleteAlarm",
+        "/home.v1.AlarmService/DeleteAlarm",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `SetAlarmEnabled` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_SET_ALARM_ENABLED_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/SetAlarmEnabled",
+        "/home.v1.AlarmService/SetAlarmEnabled",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `SnoozeAlarm` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_SNOOZE_ALARM_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/SnoozeAlarm",
+        "/home.v1.AlarmService/SnoozeAlarm",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `StopAlarm` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const ALARM_SERVICE_STOP_ALARM_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
-        "/ricardo.v1.AlarmService/StopAlarm",
+        "/home.v1.AlarmService/StopAlarm",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
@@ -847,7 +847,7 @@ impl<T: AlarmService> ::connectrpc::Dispatcher for AlarmServiceServer<T> {
         &self,
         path: &str,
     ) -> Option<::connectrpc::dispatcher::codegen::MethodDescriptor> {
-        let method = path.strip_prefix("ricardo.v1.AlarmService/")?;
+        let method = path.strip_prefix("home.v1.AlarmService/")?;
         match method {
             "CreateAlarm" => {
                 Some(
@@ -907,7 +907,7 @@ impl<T: AlarmService> ::connectrpc::Dispatcher for AlarmServiceServer<T> {
         request: ::connectrpc::Payload,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::UnaryResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.AlarmService/") else {
+        let Some(method) = path.strip_prefix("home.v1.AlarmService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_unary(path);
         };
         let _ = (&ctx, &request, &format);
@@ -1060,7 +1060,7 @@ impl<T: AlarmService> ::connectrpc::Dispatcher for AlarmServiceServer<T> {
         request: ::buffa::bytes::Bytes,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::StreamingResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.AlarmService/") else {
+        let Some(method) = path.strip_prefix("home.v1.AlarmService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_streaming(path);
         };
         let _ = (&ctx, &request, &format);
@@ -1075,7 +1075,7 @@ impl<T: AlarmService> ::connectrpc::Dispatcher for AlarmServiceServer<T> {
         requests: ::connectrpc::dispatcher::codegen::RequestStream,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::UnaryResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.AlarmService/") else {
+        let Some(method) = path.strip_prefix("home.v1.AlarmService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_unary(path);
         };
         let _ = (&ctx, &requests, &format);
@@ -1090,7 +1090,7 @@ impl<T: AlarmService> ::connectrpc::Dispatcher for AlarmServiceServer<T> {
         requests: ::connectrpc::dispatcher::codegen::RequestStream,
         format: ::connectrpc::CodecFormat,
     ) -> ::connectrpc::dispatcher::codegen::StreamingResult {
-        let Some(method) = path.strip_prefix("ricardo.v1.AlarmService/") else {
+        let Some(method) = path.strip_prefix("home.v1.AlarmService/") else {
             return ::connectrpc::dispatcher::codegen::unimplemented_streaming(path);
         };
         let _ = (&ctx, &requests, &format);
@@ -1178,7 +1178,7 @@ where
     pub fn config_mut(&mut self) -> &mut ::connectrpc::client::ClientConfig {
         &mut self.config
     }
-    /// Call the CreateAlarm RPC. Sends a request to /ricardo.v1.AlarmService/CreateAlarm.
+    /// Call the CreateAlarm RPC. Sends a request to /home.v1.AlarmService/CreateAlarm.
     pub async fn create_alarm(
         &self,
         request: CreateAlarmRequest,
@@ -1215,7 +1215,7 @@ where
             )
             .await
     }
-    /// Call the GetAlarm RPC. Sends a request to /ricardo.v1.AlarmService/GetAlarm.
+    /// Call the GetAlarm RPC. Sends a request to /home.v1.AlarmService/GetAlarm.
     pub async fn get_alarm(
         &self,
         request: GetAlarmRequest,
@@ -1252,7 +1252,7 @@ where
             )
             .await
     }
-    /// Call the ListAlarms RPC. Sends a request to /ricardo.v1.AlarmService/ListAlarms.
+    /// Call the ListAlarms RPC. Sends a request to /home.v1.AlarmService/ListAlarms.
     pub async fn list_alarms(
         &self,
         request: ListAlarmsRequest,
@@ -1289,7 +1289,7 @@ where
             )
             .await
     }
-    /// Call the UpdateAlarm RPC. Sends a request to /ricardo.v1.AlarmService/UpdateAlarm.
+    /// Call the UpdateAlarm RPC. Sends a request to /home.v1.AlarmService/UpdateAlarm.
     pub async fn update_alarm(
         &self,
         request: UpdateAlarmRequest,
@@ -1326,7 +1326,7 @@ where
             )
             .await
     }
-    /// Call the DeleteAlarm RPC. Sends a request to /ricardo.v1.AlarmService/DeleteAlarm.
+    /// Call the DeleteAlarm RPC. Sends a request to /home.v1.AlarmService/DeleteAlarm.
     pub async fn delete_alarm(
         &self,
         request: DeleteAlarmRequest,
@@ -1363,7 +1363,7 @@ where
             )
             .await
     }
-    /// Call the SetAlarmEnabled RPC. Sends a request to /ricardo.v1.AlarmService/SetAlarmEnabled.
+    /// Call the SetAlarmEnabled RPC. Sends a request to /home.v1.AlarmService/SetAlarmEnabled.
     pub async fn set_alarm_enabled(
         &self,
         request: SetAlarmEnabledRequest,
@@ -1400,7 +1400,7 @@ where
             )
             .await
     }
-    /// Call the SnoozeAlarm RPC. Sends a request to /ricardo.v1.AlarmService/SnoozeAlarm.
+    /// Call the SnoozeAlarm RPC. Sends a request to /home.v1.AlarmService/SnoozeAlarm.
     pub async fn snooze_alarm(
         &self,
         request: SnoozeAlarmRequest,
@@ -1437,7 +1437,7 @@ where
             )
             .await
     }
-    /// Call the StopAlarm RPC. Sends a request to /ricardo.v1.AlarmService/StopAlarm.
+    /// Call the StopAlarm RPC. Sends a request to /home.v1.AlarmService/StopAlarm.
     pub async fn stop_alarm(
         &self,
         request: StopAlarmRequest,

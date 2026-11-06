@@ -21,8 +21,8 @@ class ServerEndpointTest {
         assertFalse(endpoint.portExplicit)
         assertEquals("https://home.example.com", endpoint.baseUrl())
         assertEquals(
-            "https://home.example.com/ricardo.v1.SchedulerService/GetStatus",
-            endpoint.rpcUrl("ricardo.v1.SchedulerService", "GetStatus"),
+            "https://home.example.com/home.v1.SchedulerService/GetStatus",
+            endpoint.rpcUrl("home.v1.SchedulerService", "GetStatus"),
         )
     }
 

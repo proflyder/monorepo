@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Regenerate the checked-in ricardo.v1 Rust stubs.
+# Regenerate the checked-in home.v1 Rust stubs.
 #
-# The generated code is committed (like the Go stubs in packages/proto) so a
-# plain `cargo build`/`bazel build` needs neither protoc nor a build.rs. This
-# script drives connectrpc-build from a throwaway Cargo project because
+# The generated code is committed (like the Android JSON mapping) so a plain
+# `cargo build`/`bazel build` needs neither protoc nor a build.rs. This script
+# drives connectrpc-build from a throwaway Cargo project because
 # connectrpc-build is a build-script library, not a protoc plugin.
 #
 # Requirements (not committed; install into an ignored tools directory):
@@ -30,8 +30,8 @@ scratch="$(mktemp -d "${TMPDIR:-/tmp}/home-proto-gen.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 
 mkdir -p "$scratch/src" "$scratch/proto"
-cp "$root/packages/proto/ricardo/v1/scheduler.proto" "$scratch/proto/"
-cp "$root/packages/proto/ricardo/v1/alarms.proto" "$scratch/proto/"
+cp "$root/packages/proto/home/v1/scheduler.proto" "$scratch/proto/"
+cp "$root/packages/proto/home/v1/alarms.proto" "$scratch/proto/"
 
 cat > "$scratch/Cargo.toml" <<'EOF'
 [package]
@@ -50,7 +50,7 @@ cat > "$scratch/build.rs" <<'EOF'
 fn main() {
     let out = std::env::var("GEN_OUT").expect("GEN_OUT");
     connectrpc_build::Config::new()
-        .files(&["proto/scheduler.proto", "proto/alarms.proto"])
+        .files(&["scheduler.proto", "alarms.proto"])
         .includes(&["proto"])
         .out_dir(&out)
         .include_file("mod.rs")
@@ -75,10 +75,10 @@ CARGO_TARGET_DIR="$scratch/target" GEN_OUT="$out" PROTOC="$protoc" \
 
 # connectrpc-build emits an `include!` with an absolute OUT_DIR. Commit a
 # relative include instead so the stubs work from the crate source tree.
-perl -0pi -e 's/include!\(concat!\(env!\("OUT_DIR"\), "\/ricardo\.v1\.mod\.rs"\)\);/include!("ricardo.v1.mod.rs");/' "$out/mod.rs"
+perl -0pi -e 's/include!\(concat!\(env!\("OUT_DIR"\), "\/home\.v1\.mod\.rs"\)\);/include!("home.v1.mod.rs");/' "$out/mod.rs"
 # The generated files are formatted by the generator; keep rustfmt from
 # rewriting two megabytes on every `cargo fmt --all`.
-perl -0pi -e 's/^pub mod ricardo/#[rustfmt::skip]\n#[allow(clippy::all, clippy::pedantic, clippy::nursery)]\npub mod ricardo/m' "$out/mod.rs"
+perl -0pi -e 's/^pub mod home/#[rustfmt::skip]\n#[allow(clippy::all, clippy::pedantic, clippy::nursery)]\npub mod home/m' "$out/mod.rs"
 
 if [[ "$mode" == "--check" ]]; then
   # Compare only the generated sources; the throwaway project leaves no

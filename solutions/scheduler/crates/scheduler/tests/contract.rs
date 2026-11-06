@@ -1,7 +1,7 @@
-//! Replays the Go golden HTTP fixtures against the Rust Connect server.
+//! Replays the frozen golden HTTP fixtures against the Rust Connect server.
 //!
-//! The fixtures stay owned by `solutions/scheduler/internal/api/testdata`;
-//! this test reads them in place instead of keeping a second copy.
+//! The fixtures live in `solutions/scheduler/testdata/contract`; they were
+//! captured from the former Go implementation and are now frozen data.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -37,8 +37,8 @@ fn envs() -> &'static Mutex<HashMap<String, Arc<Env>>> {
 
 fn fixtures() -> PathBuf {
     std::env::var_os("CARGO_MANIFEST_DIR").map_or_else(
-        || PathBuf::from("solutions/scheduler/internal/api/testdata/contract"),
-        |manifest| PathBuf::from(manifest).join("../../internal/api/testdata/contract"),
+        || PathBuf::from("solutions/scheduler/testdata/contract"),
+        |manifest| PathBuf::from(manifest).join("../../testdata/contract"),
     )
 }
 

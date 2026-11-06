@@ -1,0 +1,23 @@
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# gazelle:proto disable
+
+# The canonical home.v1 schema. Language bindings are generated outside Bazel:
+# the Rust stubs are committed in packages/rust/home-proto/src/generated, and
+# Android maps the JSON contract by hand (core/network SchedulerJson.kt).
+proto_library(
+    name = "alarms_proto",
+    srcs = ["alarms.proto"],
+)
+
+proto_library(
+    name = "scheduler_proto",
+    srcs = ["scheduler.proto"],
+)
+
+filegroup(
+    name = "protos",
+    srcs = glob(["*.proto"]),
+)

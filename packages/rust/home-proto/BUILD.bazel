@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Generated ricardo.v1 Connect/buffa code plus the scheduler client. The
+# Generated home.v1 Connect/buffa code plus the scheduler client. The
 # generated sources are checked in; there is deliberately no build.rs.
 DEPS = [
     "@crates//:buffa",
@@ -39,22 +39,6 @@ rust_test(
     deps = DEPS + [
         "@crates//:axum",
         "@crates//:serde_json",
-        "@crates//:tempfile",
-        "@crates//:tokio",
-    ],
-)
-
-# Starts the real Go scheduler from the source tree. Bazel's sandbox has no Go
-# toolchain, so this target is manual: run it with cargo (see the file header).
-rust_test(
-    name = "go_integration",
-    srcs = ["tests/go_scheduler.rs"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    tags = ["manual"],
-    deps = [
-        ":home_proto",
-        "//packages/rust/home-secret:home_secret",
         "@crates//:tempfile",
         "@crates//:tokio",
     ],

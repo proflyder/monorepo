@@ -95,7 +95,7 @@ English-only.
   none are embedded in the app or the repository. The token remains
   device-local and is never part of Remote Config.
 - Transport: Retrofit on OkHttp, Connect unary JSON
-  (`POST {endpoint}/ricardo.v1.SchedulerService/{RPC}`), protobuf JSON field
+  (`POST {endpoint}/home.v1.SchedulerService/{RPC}`), protobuf JSON field
   names, `int64` as decimal strings. `Authorization: Bearer` is sent in the
   header only.
 - Direct LAN `http://` is a deliberate private-network trade-off and is allowed

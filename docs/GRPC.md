@@ -9,8 +9,8 @@ Connect/gRPC, outbox, auth; бинари `ha-bridge` (очередь `home`) и 
 ## Канонические контракты
 
 ```text
-packages/proto/ricardo/v1/scheduler.proto   SchedulerService (основной)
-packages/proto/ricardo/v1/alarms.proto      AlarmService (legacy facade)
+packages/proto/home/v1/scheduler.proto   home.v1.SchedulerService (основной)
+packages/proto/home/v1/alarms.proto      home.v1.AlarmService (legacy facade)
 ```
 
 `SchedulerService` — один protobuf-контракт для расписаний, таймеров,
@@ -37,14 +37,17 @@ Streaming (`WatchEvents`) не реализован; unary-контракта д
 ## Транспорт
 
 Один listener (`SCHEDULER_LISTEN`, по умолчанию `127.0.0.1:8098`) отдаёт
-все протоколы через connect-go handlers:
+протоколы через официальный Rust `connectrpc` (фича `json`, чтобы не тянуть
+HTTP/2 в прошивку станции):
 
 - **Connect unary** — JSON (`application/json`) и binary
   (`application/proto`);
-- **gRPC** — HTTP/2, включая h2c на loopback/LAN;
-- **gRPC-Web** — для браузерных клиентов за прокси.
+- **gRPC-Web** — для браузерных клиентов за прокси (HTTP/1.1);
+- **gRPC over h2c** сейчас не отдаётся: живых клиентов на нём нет (Android,
+  HA, bridge и healthcheck используют Connect JSON). Возврат возможен
+  отдельной `h2`-зависимостью без изменения контракта.
 
-Отдельного REST-фасада нет: `/ricardo.v1.SchedulerService/CreateSchedule` с
+Отдельного REST-фасада нет: `/home.v1.SchedulerService/CreateSchedule` с
 JSON body — это Connect JSON поверх того же protobuf, а не hand-written API.
 TLS/проксирование наружу — задача deployment-слоя; встроенного TLS нет.
 
@@ -58,7 +61,7 @@ TLS/проксирование наружу — задача deployment-слоя
 Пример (loopback, тестовый токен подставляется из окружения; не логируется):
 
 ```bash
-curl -sS http://127.0.0.1:8098/ricardo.v1.SchedulerService/CreateSchedule \
+curl -sS http://127.0.0.1:8098/home.v1.SchedulerService/CreateSchedule \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $SCHEDULER_TOKEN" \
   -d '{"label":"wake","kind":"SCHEDULE_KIND_ALARM","timezone":"UTC",
@@ -138,19 +141,19 @@ curl -sS http://127.0.0.1:8098/ricardo.v1.SchedulerService/CreateSchedule \
 
 ## Сгенерированные исходники
 
-Go stubs (`.pb.go`, `.connect.go`) **лежат в репозитории**, чтобы
-`go test ./packages/...` работал без Bazel и protoc. Перегенерация:
+Rust-стабы (`connectrpc-build` + `buffa`) **лежат в репозитории**
+(`packages/rust/home-proto/src/generated`), поэтому `cargo`/`bazel build` не
+требуют protoc. Перегенерация и проверка:
 
 ```bash
-PATH=local-data/local-tools/protoc/bin:local-data/local-tools/bin:$PATH \
-  solutions/scheduler/scripts/generate-proto.sh
+PROTOC=local-data/local-tools/protoc/bin/protoc packages/rust/home-proto/generate.sh
+packages/rust/home-proto/generate.sh --check
 ```
 
-Pinned toolchain: protoc 33.4, protoc-gen-go v1.36.x, protoc-gen-connect-go
-v1.21.x. Bazel не генерирует те же Go-типы повторно:
-`packages/proto/ricardo/v1/BUILD.bazel` собирает checked-in файлы через
-`go_library`; `proto_library` остаётся канонической схемой. Прежние публичные
-target-имена (`alarms_go_proto`, `scheduler_go_proto`) сохранены как aliases.
+Android использует ручной protobuf-JSON маппинг
+(`projects/mobile/android/core/network`); Go-стабы удалены вместе с Go-сервером.
+`packages/proto/home/v1/BUILD.bazel` держит `proto_library` как каноническую
+схему для descriptor tooling и других языков.
 
 ## Клиенты
 

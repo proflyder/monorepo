@@ -1,0 +1,210 @@
+{
+  "name": "update_during_ring",
+  "description": "Updating the rule while its occurrence is ringing closes the old occurrence with one durable STOP (detail rule_changed) that carries the old label/payload; the returned revision accounts for the close; a repeated Stop does not emit a second STOP.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "wake",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "nextDueUnix": "1767339000",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "1",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      },
+      "capture": {
+        "scheduleId": "schedule.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/UpdateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "expectedRevision": 2,
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 45
+            },
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake up",
+            "repeat": "REPEAT_KIND_DAILY",
+            "timezone": "UTC"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 45
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake up",
+            "lastFiredUnix": "1767339000",
+            "nextDueUnix": "1767339900",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "4",
+            "timezone": "UTC",
+            "updatedUnix": "1767339000"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_STOP",
+              "attempts": 1,
+              "createdUnix": "1767339000",
+              "detail": "rule_changed",
+              "dueUnix": "1767339000",
+              "id": "{{stopEventId}}",
+              "label": "wake",
+              "leaseUntilUnix": "1767339060",
+              "occurrenceUnix": "1767339000",
+              "payloadJson": "{}",
+              "queue": "home",
+              "sourceId": "{{scheduleId}}",
+              "sourceKind": "SOURCE_KIND_ALARM",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "alarm.stop"
+            }
+          ]
+        }
+      },
+      "capture": {
+        "stopEventId": "events[0].id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/StopSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{scheduleId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 45
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake up",
+            "lastFiredUnix": "1767339000",
+            "nextDueUnix": "1767339900",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "4",
+            "timezone": "UTC",
+            "updatedUnix": "1767339000"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      }
+    }
+  ]
+}

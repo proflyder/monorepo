@@ -431,7 +431,7 @@ wakegrant_bearer: "Bearer <issuer_token>"
 нет реального адреса.
 
 `switch.komp` — обычная `switch`-сущность без ролевых меток. Каталог
-ha-control берёт все не скрытые switch'и (`solutions/ha-bridge/internal/catalog/rules.go`),
+ha-control берёт все не скрытые switch'и (`solutions/ha-bridge/crates/ha-bridge/src/catalog/`),
 поэтому «Комп» появляется в каталоге ha-control и на вкладке «Дом» в Android
 как штатный on/off без изменений Go-кода. `on` = сенсор ping'а `on`. В
 шаблонной сущности задан `default_entity_id: switch.komp`: кириллическое имя
@@ -444,14 +444,14 @@ ha-control берёт все не скрытые switch'и (`solutions/ha-bridge
 ## Будильники, таймеры, напоминания, заметки
 
 Текущее состояние — [STATE.md](../../../docs/STATE.md); команды — [OPERATIONS.md](../../../docs/OPERATIONS.md).
-Источник истины — `ricardo.v1.SchedulerService`, не локальные todo/timer
+Источник истины — `home.v1.SchedulerService`, не локальные todo/timer
 helpers. Home Assistant остаётся звуковым исполнителем.
 
 ### Канонический путь
 
 ```text
 голос / Android
-  → ricardo.v1.SchedulerService (SQLite, durable outbox)
+  → home.v1.SchedulerService (SQLite, durable outbox)
   → событие очереди home
   → ha-bridge (Connect JSON, lease/ack)
   → script.alarm_start | script.schedule_announce | script.alarm_stop
@@ -461,7 +461,7 @@ helpers. Home Assistant остаётся звуковым исполнителе
 HA-клиент использует Connect JSON:
 
 ```text
-POST {scheduler_endpoint}/ricardo.v1.SchedulerService/{RPC}
+POST {scheduler_endpoint}/home.v1.SchedulerService/{RPC}
 Authorization: Bearer <token>
 Content-Type: application/json
 Connect-Protocol-Version: 1
@@ -488,7 +488,7 @@ input_text.scheduler_active_kind
 не является restore-entity и после restart HA иначе вернулся бы к
 TEST-NET-заглушке. Live-значение — реальный scheduler NodePort/LAN base URL
 (в текущем deployment NodePort `30098`, например
-`http://<scheduler-node>:30098`), без `/ricardo.v1...` и без завершающего
+`http://<scheduler-node>:30098`), без `/home.v1...` и без завершающего
 слэша.
 
 В `secrets.yaml` (не коммитить):

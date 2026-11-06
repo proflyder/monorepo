@@ -489,10 +489,11 @@
 - `solutions/scheduler` задеплоен в K3s `home-assistant`: один под, SQLite на
   PVC `scheduler-data` (`local-retain`), NodePort `30098`, bearer обязателен,
   readiness/liveness — аутентифицированный `-healthcheck`. Состояние
-  переживает рестарт пода. С cutover PR 4 процесс — Rust-крейт
-  `solutions/scheduler/crates/scheduler` (static musl, `rules_rust`), а Go-код
-  `cmd/`, `app/`, `internal/` остаётся в дереве для отката по digest и владеет
-  golden-фикстурами. Отличие от Go-транспорта: Connect JSON/binary и
+  переживает рестарт пода. Процесс — Rust-крейт
+  `solutions/scheduler/crates/scheduler` (static musl, `rules_rust`); Go-код
+  удалён, golden-фикстуры перенесены в `solutions/scheduler/testdata` как
+  замороженные данные. Контракт — `packages/proto/home/v1` (`home.v1`),
+  единый для scheduler, bridge, Android и HA. Connect JSON/binary и
   gRPC-Web по HTTP/1.1 работают, gRPC over h2c пока не отдаётся (connectrpc
   собран только с `json`).
 - `solutions/ha-bridge` работает в режиме execute на очереди `home`
@@ -500,9 +501,9 @@
   allowlisted HA scripts; второй исполнитель не запущен. Dry-run Job
   (`ha-bridge-dryrun`) остаётся одноразовой проверкой. Исполнитель — Rust-крейт
   `solutions/ha-bridge/crates/ha-bridge` (static musl, `rules_rust`, uid 65534,
-  тот же `/data/ledger.json`); Go-код `cmd/`, `internal/` остаётся для отката
-  по digest и владеет golden-фикстурами `testdata/events`,
-  `testdata/ledger` и `testdata/catalog`.
+  тот же `/data/ledger.json`); Go-код удалён, golden-векторы
+  `testdata/events`, `testdata/ledger` и `testdata/catalog` — замороженные
+  данные для Rust-тестов.
 - Действующий владелец будильников, таймеров и напоминаний — scheduler.
   Старые HA-планировщики и их вспомогательные поля удалены из исходников и
   живой конфигурации; оставшиеся недоступные записи реестра очищены.

@@ -87,7 +87,7 @@ mod tests {
             .expect("bind");
         let address = listener.local_addr().expect("addr");
         let app = Router::new().route(
-            "/ricardo.v1.SchedulerService/GetStatus",
+            "/home.v1.SchedulerService/GetStatus",
             post(move || async move {
                 (
                     StatusCode::OK,

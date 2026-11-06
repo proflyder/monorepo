@@ -87,7 +87,7 @@ def scheduler_token() -> str:
 
 def rpc(method: str, payload: dict) -> dict:
     req = urllib.request.Request(
-        f"{SCHEDULER_URL}/ricardo.v1.SchedulerService/{method}",
+        f"{SCHEDULER_URL}/home.v1.SchedulerService/{method}",
         data=json.dumps(payload).encode(),
         method="POST",
         headers={

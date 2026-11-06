@@ -1,0 +1,254 @@
+{
+  "name": "schedule_validation_errors",
+  "description": "Rule validation and request validation return connect code invalid_argument with the stable error text and HTTP 400: reminder with a recurring repeat, unknown timezone, weekday outside 1..7, invalid payloadJson, label over 200 bytes, empty id and hour outside 0..23.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 9,
+            "minute": 0
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_REMINDER",
+          "label": "call mom",
+          "onceDate": "2026-02-01",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: reminders must use REPEAT_KIND_ONCE"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "wake",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "Mars/Olympus"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: invalid schedule rule: unknown timezone \"Mars/Olympus\""
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "weekday zero",
+          "repeat": "REPEAT_KIND_CUSTOM",
+          "timezone": "UTC",
+          "weekdays": [
+            0
+          ]
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: invalid schedule rule: weekday 0 outside 1..7"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "weekday eight",
+          "repeat": "REPEAT_KIND_CUSTOM",
+          "timezone": "UTC",
+          "weekdays": [
+            8
+          ]
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: invalid schedule rule: weekday 8 outside 1..7"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "bad payload",
+          "payloadJson": "{",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: payload_json must be valid JSON"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: label exceeds 200 bytes"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/GetSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": ""
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: id is required"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 24,
+            "minute": 0
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "late hour",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: invalid schedule rule: hour 24 outside 0..23"
+        }
+      }
+    }
+  ]
+}

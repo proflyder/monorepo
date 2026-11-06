@@ -22,7 +22,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
- * Explicit protobuf-JSON mapping for ricardo.v1.
+ * Explicit protobuf-JSON mapping for home.v1.
  *
  * Enums are sent by their proto names and int64 values are decimal strings, as
  * required by the Connect JSON codec. Parsing is intentionally tolerant of
@@ -30,7 +30,7 @@ import kotlinx.serialization.json.put
  * versions, and of unknown enum values (mapped to UNSPECIFIED).
  */
 object SchedulerJson {
-    const val SERVICE = "ricardo.v1.SchedulerService"
+    const val SERVICE = "home.v1.SchedulerService"
 
     fun createScheduleRequest(draft: ScheduleDraft): JsonObject = buildJsonObject {
         put("label", draft.label)
