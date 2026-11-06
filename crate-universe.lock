@@ -1,5 +1,5 @@
 {
-  "checksum": "36856656873829799701770aafa2122aad6066be7ce83cb8713016c236799788",
+  "checksum": "b3570b439164adf91fc2065cf646f2e8eabdc06f8871fc4e8f36666bc7fe156e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -191,6 +191,45 @@
         }
       ],
       "version": "0.5.2"
+    },
+    "aho-corasick 1.1.5": {
+      "common_attrs": {
+        "crate_features": [
+          "perf-literal",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "aho_corasick",
+      "license": "Unlicense OR MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "aho-corasick",
+      "package_url": "https://github.com/BurntSushi/aho-corasick",
+      "repository": {
+        "Http": {
+          "sha256": "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba",
+          "url": "https://static.crates.io/crates/aho-corasick/1.1.5/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "aho_corasick",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.1.5"
     },
     "anstyle 1.0.14": {
       "common_attrs": {
@@ -1076,6 +1115,40 @@
         }
       ],
       "version": "1.12.1"
+    },
+    "caseless 0.2.2": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "unicode-normalization 0.1.26",
+            "target": "unicode_normalization"
+          }
+        ],
+        "edition": "2015"
+      },
+      "library_target_name": "caseless",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "caseless",
+      "package_url": "https://github.com/unicode-rs/rust-caseless",
+      "repository": {
+        "Http": {
+          "sha256": "8b6fd507454086c8edfd769ca6ada439193cdb209c7681712ef6275cccbfe5d8",
+          "url": "https://static.crates.io/crates/caseless/0.2.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "caseless",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.2"
     },
     "cc 1.10.0": {
       "common_attrs": {
@@ -7486,6 +7559,178 @@
       ],
       "version": "6.0.0"
     },
+    "regex 1.13.1": {
+      "common_attrs": {
+        "crate_features": [
+          "perf",
+          "perf-backtrack",
+          "perf-cache",
+          "perf-dfa",
+          "perf-inline",
+          "perf-literal",
+          "perf-onepass",
+          "std",
+          "unicode",
+          "unicode-age",
+          "unicode-bool",
+          "unicode-case",
+          "unicode-gencat",
+          "unicode-perl",
+          "unicode-script",
+          "unicode-segment"
+        ],
+        "deps": [
+          {
+            "id": "aho-corasick 1.1.5",
+            "target": "aho_corasick"
+          },
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          },
+          {
+            "id": "regex-automata 0.4.18",
+            "target": "regex_automata"
+          },
+          {
+            "id": "regex-syntax 0.8.11",
+            "target": "regex_syntax"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "regex",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "regex",
+      "package_url": "https://github.com/rust-lang/regex",
+      "repository": {
+        "Http": {
+          "sha256": "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d",
+          "url": "https://static.crates.io/crates/regex/1.13.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "regex",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.13.1"
+    },
+    "regex-automata 0.4.18": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "dfa-onepass",
+          "hybrid",
+          "meta",
+          "nfa-backtrack",
+          "nfa-pikevm",
+          "nfa-thompson",
+          "perf-inline",
+          "perf-literal",
+          "perf-literal-multisubstring",
+          "perf-literal-substring",
+          "std",
+          "syntax",
+          "unicode",
+          "unicode-age",
+          "unicode-bool",
+          "unicode-case",
+          "unicode-gencat",
+          "unicode-perl",
+          "unicode-script",
+          "unicode-segment",
+          "unicode-word-boundary"
+        ],
+        "deps": [
+          {
+            "id": "aho-corasick 1.1.5",
+            "target": "aho_corasick"
+          },
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          },
+          {
+            "id": "regex-syntax 0.8.11",
+            "target": "regex_syntax"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "regex_automata",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "regex-automata",
+      "package_url": "https://github.com/rust-lang/regex",
+      "repository": {
+        "Http": {
+          "sha256": "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2",
+          "url": "https://static.crates.io/crates/regex-automata/0.4.18/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "regex_automata",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.18"
+    },
+    "regex-syntax 0.8.11": {
+      "common_attrs": {
+        "crate_features": [
+          "std",
+          "unicode",
+          "unicode-age",
+          "unicode-bool",
+          "unicode-case",
+          "unicode-gencat",
+          "unicode-perl",
+          "unicode-script",
+          "unicode-segment"
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "regex_syntax",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "regex-syntax",
+      "package_url": "https://github.com/rust-lang/regex",
+      "repository": {
+        "Http": {
+          "sha256": "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4",
+          "url": "https://static.crates.io/crates/regex-syntax/0.8.11/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "regex_syntax",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.11"
+    },
     "reqwest 0.12.28": {
       "common_attrs": {
         "crate_features": [
@@ -9883,6 +10128,40 @@
       ],
       "version": "0.8.5"
     },
+    "tinyvec 1.13.3": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default"
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "tinyvec",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE.md",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT",
+        "Zlib"
+      ],
+      "name": "tinyvec",
+      "package_url": "https://github.com/Lokathor/tinyvec",
+      "repository": {
+        "Http": {
+          "sha256": "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee",
+          "url": "https://static.crates.io/crates/tinyvec/1.13.3/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tinyvec",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.13.3"
+    },
     "tokio 1.54.1": {
       "common_attrs": {
         "crate_features": {
@@ -10984,6 +11263,46 @@
       ],
       "version": "1.0.27"
     },
+    "unicode-normalization 0.1.26": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "tinyvec 1.13.3",
+            "target": "tinyvec"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "unicode_normalization",
+      "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT",
+        "Unicode-3.0"
+      ],
+      "name": "unicode-normalization",
+      "package_url": "https://github.com/unicode-rs/unicode-normalization",
+      "repository": {
+        "Http": {
+          "sha256": "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d",
+          "url": "https://static.crates.io/crates/unicode-normalization/0.1.26/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "unicode_normalization",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.26"
+    },
     "universal-hash 0.5.1": {
       "common_attrs": {
         "deps": [
@@ -11335,6 +11654,107 @@
         }
       ],
       "version": "0.1.0"
+    },
+    "voice-proxy 0.3.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "bytes 1.12.1",
+            "target": "bytes"
+          },
+          {
+            "id": "caseless 0.2.2",
+            "target": "caseless"
+          },
+          {
+            "id": "clap 4.6.7",
+            "target": "clap"
+          },
+          {
+            "id": "futures-core 0.3.34",
+            "target": "futures_core"
+          },
+          {
+            "id": "regex 1.13.1",
+            "target": "regex"
+          },
+          {
+            "id": "reqwest 0.12.28",
+            "target": "reqwest"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "time 0.3.55",
+            "target": "time"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
+            "id": "unicode-normalization 0.1.26",
+            "target": "unicode_normalization"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "http-body-util 0.1.5",
+            "target": "http_body_util"
+          },
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "voice_proxy",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "voice-proxy",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "voice_proxy",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.3.0"
     },
     "wakegrant 0.1.0": {
       "common_attrs": {
@@ -13626,9 +14046,12 @@
     "backon 1.6.0",
     "base64 0.22.1",
     "buffa 0.9.2",
+    "bytes 1.12.1",
+    "caseless 0.2.2",
     "cc 1.10.0",
     "clap 4.6.7",
     "connectrpc 0.9.1",
+    "futures-core 0.3.34",
     "getrandom 0.3.4",
     "hex 0.4.3",
     "hmac 0.13.0",
@@ -13638,6 +14061,7 @@
     "libloading 0.9.0",
     "log 0.4.34",
     "prost 0.14.4",
+    "regex 1.13.1",
     "reqwest 0.12.28",
     "ring 0.17.14",
     "rusqlite 0.41.1",
@@ -13660,6 +14084,7 @@
     "tracing 0.1.44",
     "tracing-log 0.2.0",
     "tracing-subscriber 0.3.23",
+    "unicode-normalization 0.1.26",
     "uuid 1.29.0",
     "windows-core 0.62.2",
     "windows-link 0.2.1",
@@ -13703,6 +14128,7 @@
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
     "ricardo-voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",
     "voice-contract 0.1.0": "packages/rust/voice-contract",
+    "voice-proxy 0.3.0": "solutions/voice-proxy/crates/voice-proxy",
     "wakegrant 0.1.0": "solutions/wakegrant/crates/wakegrant",
     "wakegrant-protocol 0.1.0": "packages/rust/wakegrant-protocol"
   }

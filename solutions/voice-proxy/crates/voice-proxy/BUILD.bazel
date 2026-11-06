@@ -1,0 +1,92 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_DEPS = [
+    "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:bytes",
+    "@crates//:caseless",
+    "@crates//:clap",
+    "@crates//:futures-core",
+    "@crates//:regex",
+    "@crates//:reqwest",
+    "@crates//:rustls",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+    "@crates//:time",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
+    "@crates//:unicode-normalization",
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-ha:home_ha",
+    "//packages/rust/home-http:home_http",
+    "//packages/rust/home-proto:home_proto",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "//packages/rust/home-worker:home_worker",
+    "//packages/rust/voice-contract:voice_contract",
+]
+
+rust_library(
+    name = "voice_proxy_lib",
+    crate_name = "voice_proxy",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS,
+)
+
+rust_binary(
+    name = "voice-proxy",
+    srcs = ["src/main.rs"],
+    # The image runs the release-shaped binary: no debug tables or symbols.
+    rustc_flags = ["-C", "strip=symbols"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [":voice_proxy_lib"],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":voice_proxy_lib",
+    data = ["//solutions/voice-proxy:contract_fixtures"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:http-body-util",
+        "@crates//:tower",
+        "//packages/rust/home-contracttest:home_contracttest",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":voice_proxy_lib",
+        ":voice-proxy",
+    ],
+)
+
+# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = [
+        ":voice_proxy_lib",
+        ":voice-proxy",
+    ],
+)

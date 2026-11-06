@@ -194,6 +194,9 @@ pub struct ResultResponse {
     pub speech: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// Sequence of the completed turn, used as the queue idempotency key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_seq: Option<i64>,
 }
 
 /// Debug view of the agent-conversation switch.
@@ -368,6 +371,15 @@ mod tests {
         assert_eq!(response.status, "idle");
         assert_eq!(response.speech.as_deref(), Some("Готово, тесты починены."));
         assert_eq!(response.text.as_deref(), Some("details"));
+        assert_eq!(response.completed_seq, None);
+        assert_eq!(round_trip(&response), wire);
+    }
+
+    #[test]
+    fn result_response_carries_the_completed_sequence() {
+        let wire = json!({"status": "done", "speech": "Готово.", "completedSeq": 42});
+        let response: ResultResponse = serde_json::from_value(wire.clone()).expect("parse");
+        assert_eq!(response.completed_seq, Some(42));
         assert_eq!(round_trip(&response), wire);
     }
 

@@ -1,14 +1,19 @@
-load("//platform/bazel/oci:service_image.bzl", "service_image")
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 package(default_visibility = ["//visibility:public"])
 
-# One static linux/amd64 binary on the digest-pinned distroless base, built
-# hermetically without a Docker daemon. Distroless has no shell, so the
+# Static x86_64-unknown-linux-musl binary on the digest-pinned distroless base,
+# built hermetically without a Docker daemon. Distroless has no shell, so the
 # container is diagnosed with `voice-proxy -healthcheck` / `-status`.
-service_image(
+rust_service_image(
     name = "voice-proxy",
-    binary = "//solutions/voice-proxy/cmd/voice-proxy",
+    crate_binary = "//solutions/voice-proxy/crates/voice-proxy:voice-proxy",
     repo = "ghcr.io/proflyder/voice-proxy",
+)
+
+filegroup(
+    name = "contract_fixtures",
+    srcs = glob(["testdata/contract/*.json"]),
 )
 
 filegroup(

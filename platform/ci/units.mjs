@@ -178,17 +178,20 @@ export const config = {
     },
     {
       id: "voice-proxy",
-      platform: "go",
-      title: "solutions/voice-proxy (TTS-safe OpenAI passthrough)",
+      platform: "bazel",
+      title: "solutions/voice-proxy (Rust TTS-safe OpenAI passthrough)",
       paths: ["solutions/voice-proxy/**"],
-      // Tests and the Bazel image targets only. The image is deployed by the
-      // `hermes` unit below: both containers share one Helm release, one smoke
-      // and one rollback, so a second deploy unit would race on `runtime`.
-      go: {
-        module: ".",
-        packages: ["./solutions/voice-proxy/..."],
-        race: true,
-        build: ["./solutions/voice-proxy/cmd/voice-proxy"],
+      // Rust service: host fmt/clippy/tests plus the static musl image. A
+      // shared `packages/rust` edit reaches the unit through the Bazel loading
+      // graph.
+      bazel: {
+        roots: ["//solutions/voice-proxy", "//packages/rust"],
+        test_targets: [
+          "//solutions/voice-proxy/crates/voice-proxy:unit_tests",
+          "//solutions/voice-proxy/crates/voice-proxy:clippy",
+          "//solutions/voice-proxy/crates/voice-proxy:rustfmt",
+        ],
+        build_targets: ["//solutions/voice-proxy/..."],
       },
     },
     {
@@ -541,13 +544,13 @@ export const config = {
         // The Dockerfile, the pinned upstream `revision`, the reproducible
         // build wrapper and its verification script are this image's inputs.
         "projects/home-assistant/deploy/images/hermes/**",
-        // The voice-proxy Go solution and the shared clients it compiles into
-        // the deployed binary. The `voice-proxy` go unit runs the tests; this
-        // unit owns the deploy. `packages/go/**` is explicit because a deploy
-        // unit is selected only from its own platform route (a python unit has
-        // no `go list` closure), so the shared-client closure never reaches it.
+        // The voice-proxy Rust solution and the shared crates it compiles into
+        // the deployed binary. The `voice-proxy` Bazel unit runs the tests; this
+        // unit owns the deploy. `packages/rust/**` is explicit because a
+        // python unit has no Bazel reverse-dependency closure of its own, so a
+        // shared-crate change never reaches the deploy unit otherwise.
         "solutions/voice-proxy/**",
-        "packages/go/**",
+        "packages/rust/**",
         // The runtime chart's Go health exporter is part of this deploy unit.
         "projects/home-assistant/deploy/health-exporter/**",
         "projects/home-assistant/deploy/chart/**",

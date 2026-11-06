@@ -172,8 +172,8 @@
   не вызывает rollout. Слои кэшируются в GHCR
   (`hermes:buildcache`, запись только у job'ов с правом записи), apt повторяет
   запросы к snapshot и установку пакетов — кэш и повторы не влияют на digest.
-  `voice-proxy` — Go-сервис
-  `solutions/voice-proxy`, собираемый Bazel `rules_oci` (distroless) и
+  `voice-proxy` — Rust-сервис `solutions/voice-proxy/crates/voice-proxy`,
+  собираемый Bazel `rules_rust` + `rules_oci` (static musl, distroless) и
   пушимый байт-в-байт через `oci_push`. Health exporter — отдельный
   Go-образ `ghcr.io/proflyder/health-exporter`. `deploy-home` (builder `mixed`, карта
   `deploy.bazel_images`) собирает и пушит gateway, proxy, exporter и
@@ -364,7 +364,7 @@
   восстанавливает последнее значение, первый старт — «Личный». Профиль влияет
   только на свободную речь: локальные бытовые команды работают в обоих.
 - **Маршрут речи.** Локальные intents остаются в HA. Остальное идёт в
-  `voice-proxy` (Go, `solutions/voice-proxy`, distroless), который читает
+  `voice-proxy` (Rust, `solutions/voice-proxy`, distroless), который читает
   профиль из HA и вызывает `mcp-gateway` `POST /v1/voice/utterance`:
   - профиль не прочитан/неизвестен → «Не могу подтвердить профиль.»,
     Hermes не вызывается;
@@ -640,7 +640,7 @@
   озвучивания (ходы владельца не возвращаются), `/v1/voice/state` — отладочное
   состояние режима.
 - **Очередь озвучивания.** Поздние ответы агентов не звучат из потока
-  запроса: Go-voice-proxy (`solutions/voice-proxy`) ставит `EnqueueTask`
+  запроса: voice-proxy (`solutions/voice-proxy`) ставит `EnqueueTask`
   `voice.announce` в durable очередь
   `voice-work`/`voice-personal` (idempotency key `voice:<thread>:<seq>`), а
   один consumer `voice-proxy-home` арендует событие только когда спутник
