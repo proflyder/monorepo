@@ -67,6 +67,23 @@ projects/home/kubernetes/openbao/materialize.py --clean home/ingress.env home/vp
 3. Приложения Bitwarden: при входе выбрать Self-hosted, Server URL
    `https://passwords.<home-domain>`. Вне дома — через VPN.
 
+## Копия секретов OpenBao
+
+`sync_openbao.py` копирует все пути `secret/{ci,k8s,infra}/*` в папку `OpenBao`:
+Secure Note `openbao:<path>` (короткие значения — скрытые поля, длинные —
+вложения), отдельные SSH key items `ssh:infra/ssh/...` для SSH-агента
+Bitwarden и `openbao:bootstrap` (operator token, recovery keys, seal key из
+`secrets/openbao/`). Идемпотентно (поле `_digest`), удалённые в OpenBao записи
+только отмечаются. Править — в OpenBao, затем перезапуск:
+
+```bash
+bw config server https://passwords.<home-domain> && bw login   # один раз
+export BW_SESSION=$(bw unlock --raw)
+BAO_ADDR=https://vault.<home-domain> projects/home/kubernetes/vaultwarden/sync_openbao.py --dry-run
+BAO_ADDR=https://vault.<home-domain> projects/home/kubernetes/vaultwarden/sync_openbao.py
+bw lock
+```
+
 ## Восстановление
 
 Из offsite (`restic restore`): `sqlite/vaultwarden.sqlite3` → `db.sqlite3`,
