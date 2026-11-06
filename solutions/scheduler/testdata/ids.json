@@ -1,0 +1,81 @@
+{
+  "events": [
+    {
+      "name": "alarm occurrence",
+      "dedupeKey": "trigger:1:sched-alarm:1767339000:0",
+      "uuid": "688bb4d2-d91c-5751-9e62-32f4ec146479"
+    },
+    {
+      "name": "reminder occurrence",
+      "dedupeKey": "trigger:2:sched-reminder:1767339000:0",
+      "uuid": "c5cf29fc-00b6-5502-8029-86fc72e2f42f"
+    },
+    {
+      "name": "timer literal kind",
+      "dedupeKey": "trigger:timer:timer-1:1767269100:0",
+      "uuid": "d1bcbe01-0863-56c7-9077-bc40b21804f4"
+    },
+    {
+      "name": "scenario occurrence",
+      "dedupeKey": "trigger:4:sched-scenario:1767339000:0",
+      "uuid": "e36db73a-357f-5394-b936-607a1ac6f9c5"
+    },
+    {
+      "name": "control stop schedule",
+      "dedupeKey": "control:stop:sched-alarm:1767339000:0",
+      "uuid": "bb89e904-eed9-511c-b5c8-65939ee92e29"
+    },
+    {
+      "name": "control stop schedule snooze",
+      "dedupeKey": "control:stop:sched-alarm:1767339000:1",
+      "uuid": "2496ddf1-437b-5938-a28b-3a3c033b04ea"
+    },
+    {
+      "name": "snoozed fire",
+      "dedupeKey": "trigger:1:sched-alarm:1767339000:1",
+      "uuid": "3b23a82d-e8ed-545d-a7f9-98c6852f635c"
+    },
+    {
+      "name": "expiry stop",
+      "dedupeKey": "expiry:stop:1:sched-alarm:1767339000",
+      "uuid": "94eacba5-b324-510c-aa58-9f15dbb3f2f1"
+    },
+    {
+      "name": "timer cancel stop",
+      "dedupeKey": "control:stop:timer:timer-1:1767269100",
+      "uuid": "7577ac60-2aca-5d2d-bd21-49dff59b03e7"
+    },
+    {
+      "name": "task event",
+      "dedupeKey": "task:019b796d-d600-77c5-89f1-c06bc947cfc7:0",
+      "uuid": "e9531bdc-2c7a-5cf6-9aed-8641fd538f0e"
+    }
+  ],
+  "hashes": [
+    {
+      "name": "canonical daily alarm",
+      "canonical": "schedule|wake|1|UTC||7|30|0|2||true|{}",
+      "sha1": "b9add2e9dd506dd05051ebbc84f6754c847203f7"
+    },
+    {
+      "name": "canonical custom weekdays sorted",
+      "canonical": "schedule|gym|1|Asia/Almaty||6|15|5|5|1,3,5|false|{\"source\":\"test\"}",
+      "sha1": "b12ba56ff9a4e6e28de52314022e7a324b06fa3c"
+    },
+    {
+      "name": "canonical once reminder",
+      "canonical": "schedule|call mom|2|Europe/Berlin|2026-02-01|9|0|0|1||true|{}",
+      "sha1": "6c0e889f97819c1efd540a87040976b809bc9272"
+    },
+    {
+      "name": "canonical timer",
+      "canonical": "timer|tea|300",
+      "sha1": "e1e186c6ed4982ac31d2edb8413a294b5d1f06f3"
+    },
+    {
+      "name": "canonical task",
+      "canonical": "task|notify.push|tasks|{\"text\":\"hi\"}|1767268800",
+      "sha1": "6b65b732aeaae6f5356ab927a9f91e3042edfd37"
+    }
+  ]
+}

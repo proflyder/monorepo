@@ -1,0 +1,201 @@
+{
+  "name": "get_status_shape",
+  "description": "GetStatus is an honest snapshot: version, schemaVersion, nowUnix, pending/leased counters, enabled schedules, running timers, consumers with alive, and the built-in home/tasks/scenario queues. scenarioExecutionSupported and other false/zero fields are omitted by protojson until they become true/non-zero.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "wake",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "<uuid>",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "nextDueUnix": "1767339000",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "1",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/StartTimer",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "durationSeconds": "300",
+          "label": "tea"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "timer": {
+            "createdUnix": "1767268800",
+            "dueUnix": "1767269100",
+            "durationSeconds": "300",
+            "id": "<uuid>",
+            "label": "tea",
+            "revision": "1",
+            "state": "TIMER_STATE_RUNNING",
+            "updatedUnix": "1767268800"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/EnqueueTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "idempotencyKey": "status-task",
+          "taskType": "notify.push"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268800",
+            "id": "<uuid>",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "tasks"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767268800",
+              "dueUnix": "1767268800",
+              "id": "<uuid>",
+              "leaseUntilUnix": "1767268860",
+              "payloadJson": "{}",
+              "queue": "tasks",
+              "sourceId": "<uuid>",
+              "sourceKind": "SOURCE_KIND_TASK",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "notify.push"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/GetStatus",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumers": [
+            {
+              "alive": true,
+              "consumerId": "home-1",
+              "lastSeenUnix": "1767268800"
+            }
+          ],
+          "enabledSchedules": 1,
+          "leasedEvents": 1,
+          "nowUnix": "1767268800",
+          "queues": [
+            {
+              "name": "home"
+            },
+            {
+              "name": "scenario"
+            },
+            {
+              "leased": 1,
+              "name": "tasks"
+            }
+          ],
+          "ready": true,
+          "runningTimers": 1,
+          "schemaVersion": 1,
+          "version": "test"
+        }
+      }
+    }
+  ]
+}

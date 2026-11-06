@@ -1,0 +1,26 @@
+[
+  {
+    "name": "skipped civil date",
+    "rule": {
+      "timezone": "Pacific/Apia",
+      "hour": 8,
+      "minute": 0,
+      "second": 0,
+      "repeat": "REPEAT_KIND_DAILY"
+    },
+    "afterUnix": 1325196000,
+    "expectedUnix": 1325268000
+  },
+  {
+    "name": "after skipped date",
+    "rule": {
+      "timezone": "Pacific/Apia",
+      "hour": 8,
+      "minute": 0,
+      "second": 0,
+      "repeat": "REPEAT_KIND_DAILY"
+    },
+    "afterUnix": 1325246400,
+    "expectedUnix": 1325268000
+  }
+]

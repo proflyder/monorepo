@@ -1,0 +1,131 @@
+{
+  "name": "schedule_enable_toggle",
+  "description": "Disabling a schedule clears nextDueUnix to 0; enabling it recomputes the next occurrence from the fixed clock (not from the old due time) and bumps the revision by one per change.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 7,
+            "minute": 30
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_ALARM",
+          "label": "wake",
+          "repeat": "REPEAT_KIND_DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "nextDueUnix": "1767339000",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "1",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      },
+      "capture": {
+        "scheduleId": "schedule.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/SetScheduleEnabled",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "enabled": false,
+          "id": "{{scheduleId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "2",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/SetScheduleEnabled",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "enabled": true,
+          "id": "{{scheduleId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 7,
+              "minute": 30
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "wake",
+            "nextDueUnix": "1767339000",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_DAILY",
+            "revision": "3",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      }
+    }
+  ]
+}

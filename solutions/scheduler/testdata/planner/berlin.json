@@ -1,0 +1,38 @@
+[
+  {
+    "name": "spring gap skipped",
+    "rule": {
+      "timezone": "Europe/Berlin",
+      "hour": 2,
+      "minute": 30,
+      "second": 0,
+      "repeat": "REPEAT_KIND_DAILY"
+    },
+    "afterUnix": 1774699200,
+    "expectedUnix": 1774830600
+  },
+  {
+    "name": "fall fold earliest",
+    "rule": {
+      "timezone": "Europe/Berlin",
+      "hour": 2,
+      "minute": 30,
+      "second": 0,
+      "repeat": "REPEAT_KIND_DAILY"
+    },
+    "afterUnix": 1792843200,
+    "expectedUnix": 1792888200
+  },
+  {
+    "name": "summer daily",
+    "rule": {
+      "timezone": "Europe/Berlin",
+      "hour": 7,
+      "minute": 0,
+      "second": 0,
+      "repeat": "REPEAT_KIND_DAILY"
+    },
+    "afterUnix": 1782864000,
+    "expectedUnix": 1782882000
+  }
+]

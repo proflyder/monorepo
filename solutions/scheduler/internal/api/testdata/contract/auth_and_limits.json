@@ -1,0 +1,112 @@
+{
+  "name": "auth_and_limits",
+  "description": "Every RPC needs Authorization: Bearer <token> (401 otherwise); a consumer outside the configured allowlist is 403 permission_denied; an unknown procedure is 404; limit above 200 is 400 invalid_argument. The 1 MiB body limit is covered by TestBodyLimit because an inline fixture of that size would bloat the repository.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/GetStatus",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "unauthenticated",
+          "message": "unauthenticated"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/GetStatus",
+        "headers": {
+          "Authorization": "Bearer wrong-token",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "unauthenticated",
+          "message": "unauthenticated"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "other"
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "permission_denied",
+          "message": "consumer not allowed"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/UnknownMethod",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "body": 404
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "limit": 201
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "invalid_argument",
+          "message": "invalid argument: limit must be 1..200"
+        }
+      }
+    }
+  ]
+}

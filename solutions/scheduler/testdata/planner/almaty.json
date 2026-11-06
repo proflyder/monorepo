@@ -1,0 +1,26 @@
+[
+  {
+    "name": "daily",
+    "rule": {
+      "timezone": "Asia/Almaty",
+      "hour": 7,
+      "minute": 30,
+      "second": 0,
+      "repeat": "REPEAT_KIND_DAILY"
+    },
+    "afterUnix": 1767268800,
+    "expectedUnix": 1767321000
+  },
+  {
+    "name": "evening",
+    "rule": {
+      "timezone": "Asia/Almaty",
+      "hour": 21,
+      "minute": 0,
+      "second": 0,
+      "repeat": "REPEAT_KIND_DAILY"
+    },
+    "afterUnix": 1780272000,
+    "expectedUnix": 1780329600
+  }
+]

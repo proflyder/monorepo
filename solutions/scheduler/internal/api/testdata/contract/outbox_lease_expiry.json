@@ -1,0 +1,184 @@
+{
+  "name": "outbox_lease_expiry",
+  "description": "With MaxAttempts=2 an expired lease returns the same event id with attempts=2; a second expiry marks it FAILED with detail lease attempts exhausted; a later ack is an idempotent replay of the terminal FAILED event and does not resurrect it. The clock advances between steps.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/EnqueueTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "idempotencyKey": "lease-k",
+          "payloadJson": "{}",
+          "taskType": "notify.push"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268800",
+            "id": "{{eventId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "notify.push"
+          }
+        }
+      },
+      "capture": {
+        "eventId": "event.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "leaseSeconds": 30,
+          "queue": "tasks"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767268800",
+              "dueUnix": "1767268800",
+              "id": "{{eventId}}",
+              "leaseUntilUnix": "1767268830",
+              "payloadJson": "{}",
+              "queue": "tasks",
+              "sourceId": "<uuid>",
+              "sourceKind": "SOURCE_KIND_TASK",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "notify.push"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "leaseSeconds": 30,
+          "queue": "tasks"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 2,
+              "createdUnix": "1767268800",
+              "detail": "lease expired",
+              "dueUnix": "1767268800",
+              "id": "{{eventId}}",
+              "leaseUntilUnix": "1767268861",
+              "payloadJson": "{}",
+              "queue": "tasks",
+              "sourceId": "<uuid>",
+              "sourceKind": "SOURCE_KIND_TASK",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "notify.push"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "leaseSeconds": 30,
+          "queue": "tasks"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/AckEvent",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "eventId": "{{eventId}}",
+          "outcome": "ACK_OUTCOME_DELIVERED"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_FAILED",
+            "ackedUnix": "1767268862",
+            "action": "EVENT_ACTION_FIRE",
+            "attempts": 2,
+            "createdUnix": "1767268800",
+            "detail": "lease attempts exhausted",
+            "dueUnix": "1767268800",
+            "id": "{{eventId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_FAILED",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -233,6 +233,19 @@ func (s *Store) tickSchedule(ctx context.Context, tx *sql.Tx, sch *ricardov1.Sch
 	if occ <= 0 {
 		return nil
 	}
+	// A long snooze can reach the next occurrence of the same rule. The
+	// snoozed occurrence is already ringing (activateSnoozes runs before the
+	// schedule batch), so firing the regular occurrence here would emit two
+	// FIRE events in one tick and overwrite the active window of the first.
+	// Coalesce the regular occurrence into the ringing one: advance the rule
+	// past now without touching the active/snooze window.
+	if sch.GetActiveOccurrenceUnix() > 0 && sch.GetActiveUntilUnix() > now.Unix() {
+		next, exhausted, err := s.fastForward(rule, now)
+		if err != nil {
+			return err
+		}
+		return s.advanceSchedule(ctx, tx, sch, next, exhausted, now, false)
+	}
 	late := now.Unix() - occ
 	if late > int64(s.cfg.MissedGrace.Seconds()) {
 		if _, _, err := s.insertEvent(ctx, tx, eventInsert{

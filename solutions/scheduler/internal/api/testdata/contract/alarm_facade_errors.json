@@ -1,0 +1,175 @@
+{
+  "name": "alarm_facade_errors",
+  "description": "The AlarmService facade only accepts ALARM schedules: GetAlarm on a reminder id is 404; UpdateAlarm with a stale Alarm.revision is 409 aborted with the current/expected revision text; SnoozeAlarm outside the ringing window is 400 failed_precondition.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "at": {
+            "hour": 9,
+            "minute": 0
+          },
+          "enabled": true,
+          "kind": "SCHEDULE_KIND_REMINDER",
+          "label": "call mom",
+          "onceDate": "2026-02-01",
+          "repeat": "REPEAT_KIND_ONCE",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 9
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{reminderId}}",
+            "kind": "SCHEDULE_KIND_REMINDER",
+            "label": "call mom",
+            "nextDueUnix": "1769936400",
+            "onceDate": "2026-02-01",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_ONCE",
+            "revision": "1",
+            "timezone": "UTC",
+            "updatedUnix": "1767268800"
+          }
+        }
+      },
+      "capture": {
+        "reminderId": "schedule.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.AlarmService/GetAlarm",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{reminderId}}"
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "not_found",
+          "message": "alarm not found"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.AlarmService/CreateAlarm",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "enabled": true,
+          "hour": 7,
+          "label": "wake",
+          "minute": 30,
+          "repeat": "DAILY",
+          "timezone": "UTC"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "alarm": {
+            "enabled": true,
+            "hour": 7,
+            "id": "{{alarmId}}",
+            "label": "wake",
+            "minute": 30,
+            "nextRunUnix": "1767339000",
+            "repeat": "DAILY",
+            "revision": "1",
+            "timezone": "UTC"
+          }
+        }
+      },
+      "capture": {
+        "alarmId": "alarm.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.AlarmService/UpdateAlarm",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "alarm": {
+            "enabled": true,
+            "hour": 8,
+            "id": "{{alarmId}}",
+            "label": "wake up",
+            "minute": 0,
+            "repeat": "DAILY",
+            "revision": "99",
+            "timezone": "UTC"
+          }
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "aborted",
+          "message": "revision conflict: current revision 1, expected 99"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.AlarmService/SnoozeAlarm",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{alarmId}}",
+          "minutes": 5
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "failed_precondition",
+          "message": "precondition failed: schedule is not ringing"
+        }
+      }
+    }
+  ]
+}
