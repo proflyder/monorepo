@@ -3,6 +3,7 @@ package alerts
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -239,5 +240,43 @@ func TestPartialHistoryStillReturnsAlerts(t *testing.T) {
 	}
 	if len(alerts) == 0 {
 		t.Fatal("expected HOUR alerts from the only available period")
+	}
+}
+
+func TestInvalidHistoricalRateDoesNotAlert(t *testing.T) {
+	for _, historical := range []float64{0, -100, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		history := &fakeHistory{now: fixedNow, byDuration: historyAt(fixedNow, time.Hour, historical)}
+		checker := newChecker(history, newFakeSent())
+		alerts, err := checker.Check(context.Background(), pureRates(100), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(alerts) != 0 {
+			t.Fatalf("historical %v produced alerts: %+v", historical, alerts)
+		}
+	}
+}
+
+func TestInvalidCurrentRateDoesNotAlert(t *testing.T) {
+	for _, current := range []float64{0, math.NaN(), math.Inf(1)} {
+		history := &fakeHistory{now: fixedNow, byDuration: historyAt(fixedNow, time.Hour, 100)}
+		checker := newChecker(history, newFakeSent())
+		alerts, err := checker.Check(context.Background(), pureRates(current), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(alerts) != 0 {
+			t.Fatalf("current %v produced alerts: %+v", current, alerts)
+		}
+	}
+}
+
+func TestDedupWithBrokenLastRateStillSends(t *testing.T) {
+	key := model.AlertKey{Pair: model.USDToKZT, Period: "HOUR", RateType: model.Sell}
+	for _, rate := range []float64{0, -1, math.NaN(), math.Inf(1)} {
+		last := &model.SentAlert{Key: key, Level: model.Warning, Direction: model.Up, RateAtAlert: rate}
+		if !shouldSend(candidate(model.Warning, model.Up, 100.6), last, model.Periods[0]) {
+			t.Fatalf("broken rate_at_alert %v must not suppress the alert", rate)
+		}
 	}
 }

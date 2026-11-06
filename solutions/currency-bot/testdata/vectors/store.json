@@ -1,0 +1,119 @@
+{
+  "records": [
+    {
+      "timestamp": "2026-10-31T12:00:00Z",
+      "usd_buy": 500,
+      "usd_sell": 501,
+      "rub_buy": 5,
+      "rub_sell": 5.1
+    },
+    {
+      "timestamp": "2026-10-31T11:30:00Z",
+      "usd_buy": 499,
+      "usd_sell": 500,
+      "rub_buy": 4.99,
+      "rub_sell": 5.09
+    },
+    {
+      "timestamp": "2026-10-31T09:00:00Z",
+      "usd_buy": 498,
+      "usd_sell": 499,
+      "rub_buy": 4.98,
+      "rub_sell": 5.08
+    },
+    {
+      "timestamp": "2026-10-30T12:00:00Z",
+      "usd_buy": 497,
+      "usd_sell": 498,
+      "rub_buy": 4.97,
+      "rub_sell": 5.07
+    },
+    {
+      "timestamp": "2026-09-26T00:00:00Z",
+      "usd_buy": 490,
+      "usd_sell": 491,
+      "rub_buy": 4.9,
+      "rub_sell": 5
+    }
+  ],
+  "sent_alerts": [
+    {
+      "pair": "USD_TO_KZT",
+      "period": "HOUR",
+      "rate_type": "SELL",
+      "level": "WARNING",
+      "direction": "UP",
+      "rate_at_alert": 500,
+      "change_percent": 0.6
+    },
+    {
+      "pair": "RUB_TO_KZT",
+      "period": "DAY",
+      "rate_type": "BUY",
+      "level": "CRITICAL",
+      "direction": "DOWN",
+      "rate_at_alert": 5,
+      "change_percent": -2.1
+    }
+  ],
+  "record_before": [
+    {
+      "name": "exact_match",
+      "cutoff": "2026-10-31T12:00:00Z",
+      "found": true,
+      "timestamp": "2026-10-31T12:00:00Z"
+    },
+    {
+      "name": "not_closest",
+      "cutoff": "2026-10-31T11:00:00Z",
+      "found": true,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "name": "before_everything",
+      "cutoff": "2026-09-25T00:00:00Z",
+      "found": false
+    }
+  ],
+  "ranges": [
+    {
+      "name": "inclusive_boundaries",
+      "from": "2026-10-31T00:00:00Z",
+      "to": "2026-11-01T00:00:00Z",
+      "timestamps": [
+        "2026-10-31T12:00:00Z",
+        "2026-10-31T11:30:00Z",
+        "2026-10-31T09:00:00Z"
+      ]
+    },
+    {
+      "name": "single_record",
+      "from": "2026-10-31T11:00:00Z",
+      "to": "2026-10-31T11:30:00Z",
+      "timestamps": [
+        "2026-10-31T11:30:00Z"
+      ]
+    }
+  ],
+  "latest": "2026-10-31T12:00:00Z",
+  "cleanup": {
+    "name": "retention_35_days",
+    "retention_hours": 840,
+    "now": "2026-10-31T12:00:00Z",
+    "removed": 1,
+    "remaining": [
+      "2026-10-31T12:00:00Z",
+      "2026-10-31T11:30:00Z",
+      "2026-10-31T09:00:00Z",
+      "2026-10-30T12:00:00Z"
+    ]
+  },
+  "delete_count": 5,
+  "sent_upsert": {
+    "level": "CRITICAL",
+    "rate": 501,
+    "count": 2,
+    "cleared": true,
+    "other_survives": true
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "api_history_shape",
+  "description": "Exact records JSON: newest first, totalCount, RFC3339Nano UTC timestamps and the usdToKzt/rubToKzt field names used by Home Assistant.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "records": [
+            {
+              "rates": {
+                "rubToKzt": {
+                  "buy": 5.05,
+                  "sell": 5.15
+                },
+                "usdToKzt": {
+                  "buy": 500.1,
+                  "sell": 501.2
+                }
+              },
+              "timestamp": "2026-10-31T12:00:00Z"
+            },
+            {
+              "rates": {
+                "rubToKzt": {
+                  "buy": 4.99,
+                  "sell": 5.09
+                },
+                "usdToKzt": {
+                  "buy": 499.5,
+                  "sell": 500.25
+                }
+              },
+              "timestamp": "2026-10-31T11:00:00Z"
+            }
+          ],
+          "totalCount": 2
+        }
+      }
+    }
+  ]
+}

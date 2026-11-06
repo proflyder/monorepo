@@ -1,0 +1,201 @@
+{
+  "name": "webhook_commands",
+  "description": "Command dispatch is prefix-based (/helpme is /help); foreign chats, edited messages, channel posts and non-message updates are acknowledged with 200 \"OK\". update_id is omitted so the dedup guard does not hide steps.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "message": {
+            "chat": {
+              "id": 123
+            },
+            "text": "/start"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "message": {
+            "chat": {
+              "id": 123
+            },
+            "text": "/help"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "message": {
+            "chat": {
+              "id": 123
+            },
+            "text": "/helpme"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "message": {
+            "chat": {
+              "id": 123
+            },
+            "text": "hello"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "message": {
+            "chat": {
+              "id": 999
+            },
+            "text": "/start"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "edited_message": {
+            "chat": {
+              "id": 123
+            },
+            "text": "/start"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "channel_post": {
+            "chat": {
+              "id": -100999
+            },
+            "text": "/help"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/telegram/webhook",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Telegram-Bot-Api-Secret-Token": "test-secret"
+        },
+        "body": {
+          "update_id": 5
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "OK"
+      }
+    }
+  ]
+}

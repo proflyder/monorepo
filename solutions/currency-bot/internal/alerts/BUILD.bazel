@@ -11,7 +11,14 @@ go_library(
 
 go_test(
     name = "alerts_test",
-    srcs = ["checker_test.go"],
+    srcs = [
+        "checker_test.go",
+        "vector_test.go",
+    ],
+    data = ["//solutions/currency-bot/testdata:vectors"],
     embed = [":alerts"],
-    deps = ["//solutions/currency-bot/internal/model"],
+    deps = [
+        "//solutions/currency-bot/internal/golden",
+        "//solutions/currency-bot/internal/model",
+    ],
 )

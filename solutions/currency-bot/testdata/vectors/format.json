@@ -1,0 +1,225 @@
+{
+  "cases": [
+    {
+      "name": "no_alerts",
+      "rates": {
+        "usd": {
+          "buy": 485.5,
+          "sell": 487.2
+        },
+        "rub": {
+          "buy": 4.85,
+          "sell": 4.92
+        }
+      },
+      "alerts": null,
+      "text": "💱 <b>Курсы валют на kurs.kz</b>\n\n🇺🇸 <b>USD → KZT</b>\n💵 Покупка: <code>487.20</code> ₸\n💸 Продажа: <code>485.50</code> ₸\n\n🇷🇺 <b>RUB → KZT</b>\n💵 Покупка: <code>4.92</code> ₸\n💸 Продажа: <code>4.85</code> ₸\n"
+    },
+    {
+      "name": "warning_up_sell",
+      "rates": {
+        "usd": {
+          "buy": 485.5,
+          "sell": 487.2
+        },
+        "rub": {
+          "buy": 4.85,
+          "sell": 4.92
+        }
+      },
+      "alerts": [
+        {
+          "level": "WARNING",
+          "period": "HOUR",
+          "pair": "USD_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "UP",
+          "change_percent": 0.8,
+          "old_rate": 480,
+          "new_rate": 483.84
+        }
+      ],
+      "text": "💱 <b>Курсы валют на kurs.kz</b>\n\n🇺🇸 <b>USD → KZT</b>\n💵 Покупка: <code>487.20</code> ₸\n💸 Продажа: <code>485.50</code> ₸\n\n🇷🇺 <b>RUB → KZT</b>\n💵 Покупка: <code>4.92</code> ₸\n💸 Продажа: <code>4.85</code> ₸\n\n━━━━━━━━\n⚠️ <b>ПРЕДУПРЕЖДЕНИЯ</b>\n\n📈 🇺🇸 <b>USD → KZT</b> (продажа) вырос на <code>0.80%</code> за час\n   <code>480.00</code> ₸ → <code>483.84</code> ₸\n\n"
+    },
+    {
+      "name": "buy_label_inverted",
+      "rates": {
+        "usd": {
+          "buy": 485.5,
+          "sell": 487.2
+        },
+        "rub": {
+          "buy": 4.85,
+          "sell": 4.92
+        }
+      },
+      "alerts": [
+        {
+          "level": "WARNING",
+          "period": "DAY",
+          "pair": "USD_TO_KZT",
+          "rate_type": "BUY",
+          "direction": "UP",
+          "change_percent": 1.2,
+          "old_rate": 480,
+          "new_rate": 485.76
+        }
+      ],
+      "text": "💱 <b>Курсы валют на kurs.kz</b>\n\n🇺🇸 <b>USD → KZT</b>\n💵 Покупка: <code>487.20</code> ₸\n💸 Продажа: <code>485.50</code> ₸\n\n🇷🇺 <b>RUB → KZT</b>\n💵 Покупка: <code>4.92</code> ₸\n💸 Продажа: <code>4.85</code> ₸\n\n━━━━━━━━\n⚠️ <b>ПРЕДУПРЕЖДЕНИЯ</b>\n\n📈 🇺🇸 <b>USD → KZT</b> (покупка) вырос на <code>1.20%</code> за сутки\n   <code>480.00</code> ₸ → <code>485.76</code> ₸\n\n"
+    },
+    {
+      "name": "critical_down",
+      "rates": {
+        "usd": {
+          "buy": 485.5,
+          "sell": 487.2
+        },
+        "rub": {
+          "buy": 4.85,
+          "sell": 4.92
+        }
+      },
+      "alerts": [
+        {
+          "level": "CRITICAL",
+          "period": "DAY",
+          "pair": "USD_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "DOWN",
+          "change_percent": -2.5,
+          "old_rate": 500,
+          "new_rate": 487.5
+        }
+      ],
+      "text": "💱 <b>Курсы валют на kurs.kz</b>\n\n🇺🇸 <b>USD → KZT</b>\n💵 Покупка: <code>487.20</code> ₸\n💸 Продажа: <code>485.50</code> ₸\n\n🇷🇺 <b>RUB → KZT</b>\n💵 Покупка: <code>4.92</code> ₸\n💸 Продажа: <code>4.85</code> ₸\n\n━━━━━━━━\n🚨 <b>КРИТИЧЕСКИЕ ИЗМЕНЕНИЯ</b>\n\n📉 🇺🇸 <b>USD → KZT</b> (продажа) упал на <code>2.50%</code> за сутки\n   <code>500.00</code> ₸ → <code>487.50</code> ₸\n\n"
+    },
+    {
+      "name": "warnings_before_critical",
+      "rates": {
+        "usd": {
+          "buy": 485.5,
+          "sell": 487.2
+        },
+        "rub": {
+          "buy": 4.85,
+          "sell": 4.92
+        }
+      },
+      "alerts": [
+        {
+          "level": "CRITICAL",
+          "period": "DAY",
+          "pair": "USD_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "DOWN",
+          "change_percent": 2.5,
+          "old_rate": 500,
+          "new_rate": 487.5
+        },
+        {
+          "level": "WARNING",
+          "period": "HOUR",
+          "pair": "USD_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "UP",
+          "change_percent": 0.8,
+          "old_rate": 480,
+          "new_rate": 483.84
+        }
+      ],
+      "text": "💱 <b>Курсы валют на kurs.kz</b>\n\n🇺🇸 <b>USD → KZT</b>\n💵 Покупка: <code>487.20</code> ₸\n💸 Продажа: <code>485.50</code> ₸\n\n🇷🇺 <b>RUB → KZT</b>\n💵 Покупка: <code>4.92</code> ₸\n💸 Продажа: <code>4.85</code> ₸\n\n━━━━━━━━\n⚠️ <b>ПРЕДУПРЕЖДЕНИЯ</b>\n\n📈 🇺🇸 <b>USD → KZT</b> (продажа) вырос на <code>0.80%</code> за час\n   <code>480.00</code> ₸ → <code>483.84</code> ₸\n\n\n━━━━━━━━\n🚨 <b>КРИТИЧЕСКИЕ ИЗМЕНЕНИЯ</b>\n\n📉 🇺🇸 <b>USD → KZT</b> (продажа) упал на <code>2.50%</code> за сутки\n   <code>500.00</code> ₸ → <code>487.50</code> ₸\n\n"
+    },
+    {
+      "name": "all_periods",
+      "rates": {
+        "usd": {
+          "buy": 485.5,
+          "sell": 487.2
+        },
+        "rub": {
+          "buy": 4.85,
+          "sell": 4.92
+        }
+      },
+      "alerts": [
+        {
+          "level": "WARNING",
+          "period": "HOUR",
+          "pair": "USD_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "UP",
+          "change_percent": 0.8,
+          "old_rate": 480,
+          "new_rate": 483.84
+        },
+        {
+          "level": "WARNING",
+          "period": "DAY",
+          "pair": "USD_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "UP",
+          "change_percent": 1.2,
+          "old_rate": 480,
+          "new_rate": 485.76
+        },
+        {
+          "level": "WARNING",
+          "period": "WEEK",
+          "pair": "RUB_TO_KZT",
+          "rate_type": "BUY",
+          "direction": "DOWN",
+          "change_percent": -2.1,
+          "old_rate": 5,
+          "new_rate": 4.895
+        },
+        {
+          "level": "WARNING",
+          "period": "MONTH",
+          "pair": "RUB_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "UP",
+          "change_percent": 3.1,
+          "old_rate": 5,
+          "new_rate": 5.155
+        }
+      ],
+      "text": "💱 <b>Курсы валют на kurs.kz</b>\n\n🇺🇸 <b>USD → KZT</b>\n💵 Покупка: <code>487.20</code> ₸\n💸 Продажа: <code>485.50</code> ₸\n\n🇷🇺 <b>RUB → KZT</b>\n💵 Покупка: <code>4.92</code> ₸\n💸 Продажа: <code>4.85</code> ₸\n\n━━━━━━━━\n⚠️ <b>ПРЕДУПРЕЖДЕНИЯ</b>\n\n📈 🇺🇸 <b>USD → KZT</b> (продажа) вырос на <code>0.80%</code> за час\n   <code>480.00</code> ₸ → <code>483.84</code> ₸\n\n📈 🇺🇸 <b>USD → KZT</b> (продажа) вырос на <code>1.20%</code> за сутки\n   <code>480.00</code> ₸ → <code>485.76</code> ₸\n\n📉 🇷🇺 <b>RUB → KZT</b> (покупка) упал на <code>2.10%</code> за неделю\n   <code>5.00</code> ₸ → <code>4.89</code> ₸\n\n📈 🇷🇺 <b>RUB → KZT</b> (продажа) вырос на <code>3.10%</code> за месяц\n   <code>5.00</code> ₸ → <code>5.16</code> ₸\n\n"
+    },
+    {
+      "name": "x5_rates_and_change",
+      "rates": {
+        "usd": {
+          "buy": 1.005,
+          "sell": 2.675
+        },
+        "rub": {
+          "buy": 0.125,
+          "sell": 480.005
+        }
+      },
+      "alerts": [
+        {
+          "level": "WARNING",
+          "period": "HOUR",
+          "pair": "USD_TO_KZT",
+          "rate_type": "SELL",
+          "direction": "UP",
+          "change_percent": 0.805,
+          "old_rate": 1.005,
+          "new_rate": 1.015
+        },
+        {
+          "level": "CRITICAL",
+          "period": "MONTH",
+          "pair": "RUB_TO_KZT",
+          "rate_type": "BUY",
+          "direction": "DOWN",
+          "change_percent": -2.675,
+          "old_rate": 2.675,
+          "new_rate": 2.595
+        }
+      ],
+      "text": "💱 <b>Курсы валют на kurs.kz</b>\n\n🇺🇸 <b>USD → KZT</b>\n💵 Покупка: <code>2.67</code> ₸\n💸 Продажа: <code>1.00</code> ₸\n\n🇷🇺 <b>RUB → KZT</b>\n💵 Покупка: <code>480.00</code> ₸\n💸 Продажа: <code>0.12</code> ₸\n\n━━━━━━━━\n⚠️ <b>ПРЕДУПРЕЖДЕНИЯ</b>\n\n📈 🇺🇸 <b>USD → KZT</b> (продажа) вырос на <code>0.81%</code> за час\n   <code>1.00</code> ₸ → <code>1.01</code> ₸\n\n\n━━━━━━━━\n🚨 <b>КРИТИЧЕСКИЕ ИЗМЕНЕНИЯ</b>\n\n📉 🇷🇺 <b>RUB → KZT</b> (покупка) упал на <code>2.67%</code> за месяц\n   <code>2.67</code> ₸ → <code>2.60</code> ₸\n\n"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "api_trigger_success",
+  "description": "POST /api/trigger forces a send to the chatId from the body; executionTimeMs is normalized to <any>.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/trigger",
+        "headers": {
+          "Authorization": "Bearer test-api-key",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "chatId": "-100999"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "executionTimeMs": "<any>",
+          "message": "Currency rates updated and sent to Telegram successfully"
+        }
+      }
+    }
+  ]
+}

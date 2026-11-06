@@ -1,0 +1,25 @@
+{
+  "name": "api_delete_history",
+  "description": "DELETE /api/history returns the deleted count and its message.",
+  "steps": [
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/api/history",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "deletedCount": 3,
+          "message": "Successfully deleted 3 currency history records"
+        }
+      }
+    }
+  ]
+}

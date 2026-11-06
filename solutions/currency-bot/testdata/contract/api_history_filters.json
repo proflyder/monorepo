@@ -1,0 +1,111 @@
+{
+  "name": "api_history_filters",
+  "description": "date=2026-03-18 uses [00:00Z, next midnight) so the 19th 00:00 record is excluded; from/to are both inclusive.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history?date=2026-03-18",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "records": [
+            {
+              "rates": {
+                "rubToKzt": {
+                  "buy": 5,
+                  "sell": 5.1
+                },
+                "usdToKzt": {
+                  "buy": 502,
+                  "sell": 503
+                }
+              },
+              "timestamp": "2026-03-18T12:00:00Z"
+            },
+            {
+              "rates": {
+                "rubToKzt": {
+                  "buy": 4.9,
+                  "sell": 5
+                },
+                "usdToKzt": {
+                  "buy": 501,
+                  "sell": 502
+                }
+              },
+              "timestamp": "2026-03-18T00:00:00Z"
+            }
+          ],
+          "totalCount": 2
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history?from=2026-03-17T00:00:00Z&to=2026-03-18T12:00:00Z",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "records": [
+            {
+              "rates": {
+                "rubToKzt": {
+                  "buy": 5,
+                  "sell": 5.1
+                },
+                "usdToKzt": {
+                  "buy": 502,
+                  "sell": 503
+                }
+              },
+              "timestamp": "2026-03-18T12:00:00Z"
+            },
+            {
+              "rates": {
+                "rubToKzt": {
+                  "buy": 4.9,
+                  "sell": 5
+                },
+                "usdToKzt": {
+                  "buy": 501,
+                  "sell": 502
+                }
+              },
+              "timestamp": "2026-03-18T00:00:00Z"
+            },
+            {
+              "rates": {
+                "rubToKzt": {
+                  "buy": 4.8,
+                  "sell": 4.9
+                },
+                "usdToKzt": {
+                  "buy": 500,
+                  "sell": 501
+                }
+              },
+              "timestamp": "2026-03-17T23:59:59.999Z"
+            }
+          ],
+          "totalCount": 3
+        }
+      }
+    }
+  ]
+}

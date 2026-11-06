@@ -60,6 +60,9 @@ func Run(ctx context.Context, name string) error {
 		Now:      time.Now,
 	}
 
+	webhook := newWebhookStatus(cfg.WebhookURL != "")
+	srvCtx, stopSrv := context.WithCancel(ctx)
+	defer stopSrv()
 	srv := server.New(server.Options{
 		APIToken:      cfg.APIToken,
 		WebhookSecret: cfg.WebhookSecret,
@@ -71,14 +74,18 @@ func Run(ctx context.Context, name string) error {
 		Metrics:       m,
 		Logger:        logger,
 		Now:           time.Now,
+		BaseContext:   srvCtx,
+		// Readiness covers only the store: a Telegram outage must not take the
+		// history API out of the Service. Webhook registration retries in the
+		// background and is visible in the logs.
+		Ready: st.Ping,
 	})
 
 	if cfg.WebhookURL != "" {
-		registerCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		if err := tg.SetWebhook(registerCtx, cfg.WebhookURL, cfg.WebhookSecret); err != nil {
-			logger.Error("failed to register telegram webhook", "error", err)
+		set := func(registerCtx context.Context) error {
+			return tg.SetWebhook(registerCtx, cfg.WebhookURL, cfg.WebhookSecret)
 		}
-		cancel()
+		go registerWebhook(ctx, set, webhook, logger, time.Second, time.Minute)
 	}
 
 	apiSrv := &http.Server{
@@ -156,6 +163,9 @@ func Run(ctx context.Context, name string) error {
 		runErr = err
 	}
 	stopJobs()
+	stopSrv()
+	// Drain background webhook /trigger runs before the deferred store close.
+	_ = srv.Wait(shutdownCtx)
 	if errors.Is(runErr, http.ErrServerClosed) {
 		runErr = nil
 	}

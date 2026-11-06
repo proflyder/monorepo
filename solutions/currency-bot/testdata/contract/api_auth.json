@@ -1,0 +1,94 @@
+{
+  "name": "api_auth",
+  "description": "Bearer validation: missing, wrong, no Bearer prefix and a valid token. The envelope has a fixed clock, so even timestamp is exact.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized",
+          "errorCode": "UNAUTHORIZED",
+          "message": "Authentication required: Invalid or missing API key",
+          "path": "/api/history",
+          "service": "auth",
+          "status": 401,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history",
+        "headers": {
+          "Authorization": "Bearer wrong"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized",
+          "errorCode": "UNAUTHORIZED",
+          "message": "Authentication required: Invalid or missing API key",
+          "path": "/api/history",
+          "service": "auth",
+          "status": 401,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history",
+        "headers": {
+          "Authorization": "test-api-key"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized",
+          "errorCode": "UNAUTHORIZED",
+          "message": "Authentication required: Invalid or missing API key",
+          "path": "/api/history",
+          "service": "auth",
+          "status": 401,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "records": [],
+          "totalCount": 0
+        }
+      }
+    }
+  ]
+}

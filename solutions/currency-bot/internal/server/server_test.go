@@ -32,7 +32,13 @@ type fakeStore struct {
 func (f *fakeStore) AllRecords(context.Context) ([]model.Record, error) { return f.records, nil }
 func (f *fakeStore) RecordsByDateRange(_ context.Context, from, to time.Time) ([]model.Record, error) {
 	f.ranged, f.from, f.to = true, from, to
-	return f.records, nil
+	out := make([]model.Record, 0, len(f.records))
+	for _, record := range f.records {
+		if !record.Timestamp.Before(from) && !record.Timestamp.After(to) {
+			out = append(out, record)
+		}
+	}
+	return out, nil
 }
 func (f *fakeStore) LatestRecord(context.Context) (model.Record, error) {
 	if f.latestErr != nil {
@@ -108,6 +114,8 @@ func newHarness(records ...model.Record) *harness {
 		Metrics:       metrics.New(),
 		Logger:        service.DiscardLogger(),
 		Now:           func() time.Time { return testNow },
+		// Run webhook work synchronously so assertions see its effects.
+		Dispatch: func(fn func()) { fn() },
 	})
 	return &harness{server: srv, store: st, sender: sender, source: source}
 }
@@ -200,7 +208,8 @@ func TestHistoryDateAndRangeFilters(t *testing.T) {
 	if rec.Code != http.StatusOK || !h.store.ranged {
 		t.Fatalf("date filter not applied: %d ranged=%v", rec.Code, h.store.ranged)
 	}
-	if !h.store.from.Equal(time.Date(2026, 3, 18, 0, 0, 0, 0, time.UTC)) || !h.store.to.Equal(time.Date(2026, 3, 19, 0, 0, 0, 0, time.UTC)) {
+	if !h.store.from.Equal(time.Date(2026, 3, 18, 0, 0, 0, 0, time.UTC)) ||
+		!h.store.to.Equal(time.Date(2026, 3, 19, 0, 0, 0, 0, time.UTC).Add(-time.Millisecond)) {
 		t.Fatalf("date bounds = %v..%v", h.store.from, h.store.to)
 	}
 
@@ -212,8 +221,17 @@ func TestHistoryDateAndRangeFilters(t *testing.T) {
 
 	h.store.ranged = false
 	rec = h.api(http.MethodGet, "/api/history?from=2026-03-01T00:00:00Z", nil, "test-api-key")
-	if rec.Code != http.StatusOK || h.store.ranged {
-		t.Fatalf("from-only must return full history, ranged=%v", h.store.ranged)
+	if rec.Code != http.StatusBadRequest || h.store.ranged {
+		t.Fatalf("from-only must be rejected, status=%d ranged=%v", rec.Code, h.store.ranged)
+	}
+	if got := decodeError(t, rec); got.ErrorCode != "BAD_REQUEST" {
+		t.Fatalf("from-only envelope = %+v", got)
+	}
+
+	h.store.ranged = false
+	rec = h.api(http.MethodGet, "/api/history?to=2026-03-01T00:00:00Z", nil, "test-api-key")
+	if rec.Code != http.StatusBadRequest || h.store.ranged {
+		t.Fatalf("to-only must be rejected, status=%d ranged=%v", rec.Code, h.store.ranged)
 	}
 
 	rec = h.api(http.MethodGet, "/api/history?date=not-a-date", nil, "test-api-key")
@@ -463,5 +481,97 @@ func TestWebhookEditedMessageAndMalformed(t *testing.T) {
 	rec = h.webhook("test-secret", updateBody(123, "/start"))
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `"OK"` {
 		t.Fatalf("delivery failure must still answer 200: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHistoryDateExcludesNextMidnight(t *testing.T) {
+	midnight := time.Date(2026, 3, 19, 0, 0, 0, 0, time.UTC)
+	day := time.Date(2026, 3, 18, 12, 0, 0, 0, time.UTC)
+	h := newHarness(
+		model.Record{Timestamp: midnight, Rates: model.Rates{}},
+		model.Record{Timestamp: day, Rates: model.Rates{}},
+	)
+	rec := h.api(http.MethodGet, "/api/history?date=2026-03-18", nil, "test-api-key")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var got historyResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalCount != 1 || got.Records[0].Timestamp != "2026-03-18T12:00:00Z" {
+		t.Fatalf("next midnight leaked into the previous day: %+v", got)
+	}
+}
+
+func TestReadinessReflectsReadyFunc(t *testing.T) {
+	h := newHarness()
+	h.server.opts.Ready = func(context.Context) error { return errors.New("webhook not registered") }
+	rec := h.api(http.MethodGet, "/readyz", nil, "")
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness = %d, want 503", rec.Code)
+	}
+	var got map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["status"] != "unavailable" {
+		t.Fatalf("readiness body = %+v", got)
+	}
+}
+
+func TestWebhookDeduplicatesUpdateID(t *testing.T) {
+	h := newHarness()
+	body := updateBody(123, "/trigger")
+	for i := 0; i < 2; i++ {
+		if rec := h.webhook("test-secret", body); rec.Code != http.StatusOK {
+			t.Fatalf("attempt %d status = %d", i, rec.Code)
+		}
+	}
+	if len(h.sender.sent) != 1 {
+		t.Fatalf("retried update must not run the pipeline again, sent %d", len(h.sender.sent))
+	}
+
+	body2 := []byte(`{"update_id":2,"message":{"chat":{"id":123},"text":"/trigger"}}`)
+	if rec := h.webhook("test-secret", body2); rec.Code != http.StatusOK {
+		t.Fatalf("new update status = %d", rec.Code)
+	}
+	if len(h.sender.sent) != 2 {
+		t.Fatalf("a new update id must run the pipeline, sent %d", len(h.sender.sent))
+	}
+}
+
+func TestWebhookAcknowledgesTriggerBeforePipeline(t *testing.T) {
+	h := newHarness()
+	var queued []func()
+	h.server.opts.Dispatch = func(fn func()) { queued = append(queued, fn) }
+
+	rec := h.webhook("test-secret", updateBody(123, "/trigger"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if len(h.sender.sent) != 0 {
+		t.Fatal("webhook must answer before the pipeline runs")
+	}
+	if len(queued) != 1 {
+		t.Fatalf("expected one queued pipeline, got %d", len(queued))
+	}
+	queued[0]()
+	if len(h.sender.sent) != 1 {
+		t.Fatalf("queued pipeline should send one message, got %d", len(h.sender.sent))
+	}
+}
+
+func TestHTTPMetricRouteIsBounded(t *testing.T) {
+	h := newHarness()
+	h.api(http.MethodGet, "/scanner-one", nil, "")
+	h.api(http.MethodGet, "/scanner-two", nil, "")
+	rec := h.api(http.MethodGet, "/metrics", nil, "")
+	body := rec.Body.String()
+	if strings.Contains(body, "scanner-one") || strings.Contains(body, "scanner-two") {
+		t.Fatalf("raw path leaked into the route label:\n%s", body)
+	}
+	if !strings.Contains(body, `route="GET /"`) {
+		t.Fatalf("matched route label missing:\n%s", body)
 	}
 }

@@ -1,0 +1,223 @@
+{
+  "thresholds": [
+    {
+      "name": "warning_up",
+      "current": 100.59,
+      "historical": 100,
+      "period": "HOUR",
+      "want": {
+        "level": "WARNING",
+        "direction": "UP",
+        "change_percent": 0.5900000000000034
+      }
+    },
+    {
+      "name": "critical_up",
+      "current": 103.09,
+      "historical": 100,
+      "period": "HOUR",
+      "want": {
+        "level": "CRITICAL",
+        "direction": "UP",
+        "change_percent": 3.0900000000000034
+      }
+    },
+    {
+      "name": "warning_down",
+      "current": 99.41,
+      "historical": 100,
+      "period": "HOUR",
+      "want": {
+        "level": "WARNING",
+        "direction": "DOWN",
+        "change_percent": -0.5900000000000034
+      }
+    },
+    {
+      "name": "below_warning",
+      "current": 100.1,
+      "historical": 100,
+      "period": "HOUR"
+    },
+    {
+      "name": "inclusive_critical",
+      "current": 101,
+      "historical": 100,
+      "period": "HOUR",
+      "want": {
+        "level": "CRITICAL",
+        "direction": "UP",
+        "change_percent": 1
+      }
+    },
+    {
+      "name": "half_percent_boundary",
+      "current": 100.505,
+      "historical": 100,
+      "period": "HOUR",
+      "want": {
+        "level": "WARNING",
+        "direction": "UP",
+        "change_percent": 0.5049999999999955
+      }
+    },
+    {
+      "name": "zero_historical",
+      "current": 100,
+      "historical": 0,
+      "period": "HOUR"
+    },
+    {
+      "name": "negative_historical",
+      "current": 100,
+      "historical": -100,
+      "period": "HOUR"
+    },
+    {
+      "name": "nan_historical",
+      "current": 100,
+      "historical": "NaN",
+      "period": "HOUR"
+    },
+    {
+      "name": "inf_historical",
+      "current": 100,
+      "historical": "+Inf",
+      "period": "HOUR"
+    },
+    {
+      "name": "neg_inf_historical",
+      "current": 100,
+      "historical": "-Inf",
+      "period": "HOUR"
+    },
+    {
+      "name": "zero_current",
+      "current": 0,
+      "historical": 100,
+      "period": "HOUR"
+    },
+    {
+      "name": "nan_current",
+      "current": "NaN",
+      "historical": 100,
+      "period": "HOUR"
+    },
+    {
+      "name": "inf_current",
+      "current": "+Inf",
+      "historical": 100,
+      "period": "HOUR"
+    }
+  ],
+  "dedup": [
+    {
+      "name": "no_previous",
+      "candidate": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 100.6
+      },
+      "period": "HOUR",
+      "send": true
+    },
+    {
+      "name": "escalation",
+      "candidate": {
+        "level": "CRITICAL",
+        "direction": "UP",
+        "rate": 100.6
+      },
+      "last": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 100.6
+      },
+      "period": "HOUR",
+      "send": true
+    },
+    {
+      "name": "direction_flip",
+      "candidate": {
+        "level": "WARNING",
+        "direction": "DOWN",
+        "rate": 100.6
+      },
+      "last": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 100.6
+      },
+      "period": "HOUR",
+      "send": true
+    },
+    {
+      "name": "move_beyond_band",
+      "candidate": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 498
+      },
+      "last": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 495
+      },
+      "period": "HOUR",
+      "send": true
+    },
+    {
+      "name": "suppressed",
+      "candidate": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 498
+      },
+      "last": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 498
+      },
+      "period": "HOUR",
+      "send": false
+    },
+    {
+      "name": "zero_last_rate",
+      "candidate": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 498
+      },
+      "last": {
+        "level": "WARNING",
+        "direction": "UP",
+        "rate": 0
+      },
+      "period": "HOUR",
+      "send": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "four_alert_slots",
+      "current": 100.59,
+      "historical": 100,
+      "alerts": 4,
+      "clears": 0
+    },
+    {
+      "name": "no_thresholds_clears_all",
+      "current": 100.01,
+      "historical": 100,
+      "alerts": 0,
+      "clears": 4
+    },
+    {
+      "name": "broken_history_clears_all",
+      "current": 100,
+      "historical": 0,
+      "alerts": 0,
+      "clears": 4
+    }
+  ]
+}

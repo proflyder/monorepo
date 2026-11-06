@@ -1,0 +1,126 @@
+{
+  "name": "api_history_errors",
+  "description": "400 envelopes for malformed filters and for a lone from or to (silently returning the whole history is no longer allowed).",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history?date=not-a-date",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Bad Request",
+          "errorCode": "BAD_REQUEST",
+          "message": "Invalid date: expected YYYY-MM-DD",
+          "path": "/api/history",
+          "service": "CurrencyHistoryController.getHistory",
+          "status": 400,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history?from=not-a-time&to=2026-03-18T23:59:59Z",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Bad Request",
+          "errorCode": "BAD_REQUEST",
+          "message": "Invalid from: expected RFC3339",
+          "path": "/api/history",
+          "service": "CurrencyHistoryController.getHistory",
+          "status": 400,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history?from=2026-03-01T00:00:00Z&to=not-a-time",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Bad Request",
+          "errorCode": "BAD_REQUEST",
+          "message": "Invalid to: expected RFC3339",
+          "path": "/api/history",
+          "service": "CurrencyHistoryController.getHistory",
+          "status": 400,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history?from=2026-03-01T00:00:00Z",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Bad Request",
+          "errorCode": "BAD_REQUEST",
+          "message": "Invalid range: both from and to are required",
+          "path": "/api/history",
+          "service": "CurrencyHistoryController.getHistory",
+          "status": 400,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/history?to=2026-03-01T00:00:00Z",
+        "headers": {
+          "Authorization": "Bearer test-api-key"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "Bad Request",
+          "errorCode": "BAD_REQUEST",
+          "message": "Invalid range: both from and to are required",
+          "path": "/api/history",
+          "service": "CurrencyHistoryController.getHistory",
+          "status": 400,
+          "timestamp": "2026-10-31T12:00:00Z"
+        }
+      }
+    }
+  ]
+}

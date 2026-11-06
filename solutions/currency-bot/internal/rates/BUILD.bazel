@@ -11,8 +11,18 @@ go_library(
 
 go_test(
     name = "rates_test",
-    srcs = ["parser_test.go"],
-    data = ["testdata/kurskz.html"],
+    srcs = [
+        "parser_test.go",
+        "vector_test.go",
+    ],
+    data = [
+        "testdata/kurskz.html",
+        "//solutions/currency-bot/testdata:rates_html",
+        "//solutions/currency-bot/testdata:vectors",
+    ],
     embed = [":rates"],
-    deps = ["//solutions/currency-bot/internal/model"],
+    deps = [
+        "//solutions/currency-bot/internal/golden",
+        "//solutions/currency-bot/internal/model",
+    ],
 )

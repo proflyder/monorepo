@@ -1,0 +1,21 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "contract",
+    srcs = glob(["contract/*.json"]),
+)
+
+filegroup(
+    name = "vectors",
+    srcs = glob(["vectors/*.json"]),
+)
+
+filegroup(
+    name = "rates_html",
+    srcs = ["rates/kurskz.html"],
+)
+
+filegroup(
+    name = "store_schema",
+    srcs = ["store/schema_v1.sql"],
+)
