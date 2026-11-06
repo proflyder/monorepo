@@ -1,5 +1,5 @@
 {
-  "checksum": "11270669b101b1173ff45ed23054009a6064c37bc92eb5666374b4feeedae48b",
+  "checksum": "b1cff6428ce6af291a54502ec0d09d85410bab73e41f03d7d0eaa498c72e4df3",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -10406,6 +10406,10 @@
           {
             "id": "rusqlite 0.41.1",
             "target": "rusqlite"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
           },
           {
             "id": "serde 1.0.229",

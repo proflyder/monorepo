@@ -2250,6 +2250,7 @@ dependencies = [
  "http-body-util",
  "reqwest",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror",

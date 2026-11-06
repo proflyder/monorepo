@@ -28,6 +28,7 @@ home-sqlite = { path = "../../../../packages/rust/home-sqlite" }
 home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
