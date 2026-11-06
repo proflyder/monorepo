@@ -47,6 +47,7 @@ class Materialize(unittest.TestCase):
         fake.field.side_effect = lambda p, f: self.values[(p, f)]
         with mock.patch.object(materialize, "Bao", return_value=fake), \
              mock.patch.object(materialize, "token", return_value="t"), \
+             mock.patch.object(materialize, "renew") as self.renewed, \
              mock.patch.dict("os.environ", {"BAO_ADDR": "http://bao"}), \
              mock.patch("sys.stdout", new=io.StringIO()) as out:
             materialize.main(["--catalog", str(self.catalog), "--dest", str(self.dest), *args])
@@ -62,6 +63,20 @@ class Materialize(unittest.TestCase):
         self.run_main("--clean", "--all")
         self.assertFalse(env.exists())
         self.assertFalse((self.dest / "vpn/ca").exists())
+
+    def test_write_renews_token_and_clean_does_not(self):
+        self.run_main("--all")
+        self.renewed.assert_called_once_with("http://bao", "t")
+        self.run_main("--clean", "--all")
+        self.renewed.assert_not_called()
+
+    def test_address_falls_back_to_secrets_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (pathlib.Path(tmp) / "openbao").mkdir()
+            (pathlib.Path(tmp) / "openbao" / "addr").write_text("https://vault.example.test\n")
+            with mock.patch.object(materialize, "SECRETS", pathlib.Path(tmp)), \
+                 mock.patch.dict("os.environ", {}, clear=True):
+                self.assertEqual(materialize.address(), "https://vault.example.test")
 
     def test_prefix_selects_directory(self):
         self.run_main("home")

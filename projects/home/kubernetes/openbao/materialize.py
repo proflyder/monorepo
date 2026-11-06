@@ -9,8 +9,9 @@ Scripts that still read files such as secrets/home/ingress.env run after
     ...                                      # use the files
     materialize.py --clean home/ingress.env  # or --clean --all
 
-Auth: BAO_ADDR (required) and BAO_TOKEN, else secrets/openbao/operator.token
-(policy operator-kv reads secret/{ci,k8s,infra}/*). Values never go to
+Auth: BAO_ADDR, else secrets/openbao/addr; BAO_TOKEN, else
+secrets/openbao/operator.token (policy operator-kv reads secret/{ci,k8s,infra}/*).
+Every run renews the periodic operator token, so regular use keeps it alive. Values never go to
 stdout; files are written 0600 in 0700 directories.
 """
 from __future__ import annotations
@@ -100,6 +101,24 @@ class Bao:
         return self.cache[path][field]
 
 
+def address() -> str | None:
+    if os.environ.get("BAO_ADDR"):
+        return os.environ["BAO_ADDR"]
+    path = SECRETS / "openbao" / "addr"
+    return path.read_text().strip() if path.is_file() else None
+
+
+def renew(addr: str, bao_token: str) -> None:
+    """Best effort: extend the periodic token (default policy allows renew-self)."""
+    req = urllib.request.Request(f"{addr.rstrip('/')}/v1/auth/token/renew-self",
+                                 data=b"{}", method="POST",
+                                 headers={"X-Vault-Token": bao_token})
+    try:
+        urllib.request.urlopen(req, timeout=20).close()
+    except (urllib.error.URLError, OSError):
+        print("warning: token renew-self failed", file=sys.stderr)
+
+
 def token() -> str:
     if os.environ.get("BAO_TOKEN"):
         return os.environ["BAO_TOKEN"]
@@ -128,10 +147,12 @@ def main(argv: list[str] | None = None) -> int:
                 target.unlink(missing_ok=True)
             print(f"removed {entry['file']}")
         return 0
-    addr = os.environ.get("BAO_ADDR")
+    addr = address()
     if not addr:
-        ap.error("set BAO_ADDR (https://vault.<home-domain>)")
-    bao = Bao(addr, token())
+        ap.error("set BAO_ADDR or write secrets/openbao/addr (https://vault.<home-domain>)")
+    bao_token = token()
+    renew(addr, bao_token)
+    bao = Bao(addr, bao_token)
     for entry in entries:
         value = bao.field(entry["path"], entry["field"])
         target = safe_target(args.dest, entry["file"])

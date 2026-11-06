@@ -130,6 +130,26 @@ Pulsar развиваем поверх актуального общего со�
 Сохранять on-device «Рикардо», pre-roll, ALSA ABI shim, mute, HA/MA,
 duck/resume и передачу wake-команд в HA. Текущая версия — в `docs/STATE.md`.
 
+## Секреты: только OpenBao
+
+- Единственный источник секретов — OpenBao (`secret/k8s/*` для ESO,
+  `secret/ci/*` для CI, `secret/infra/*` для доступа владельца). Локально
+  лежат только `secrets/openbao/operator.token` (политика `operator-kv`:
+  чтение/запись `secret/{ci,k8s,infra}/*`, без delete), `secrets/openbao/addr`
+  и SSH-ключи `~/.ssh/home-lab/`. Карта путей — `secrets/README.md` и
+  `secrets/catalog.json`.
+- Агент сам берёт нужный секрет: скрипту, читающему файл `secrets/<…>`,
+  файл временно восстанавливает
+  `projects/home/kubernetes/openbao/materialize.py <file>` (в основной копии),
+  после работы — `materialize.py --clean <file>`. Значения не печатать и не
+  копировать в другие файлы, логи, чат, worktree.
+- Запись: GET → merge → POST с `options.cas`. Новый секрет — сразу в OpenBao
+  плюс строка в `secrets/README.md`; локальные копии не создавать.
+- Admin OpenBao (политики, auth) — только по запросу человека; recovery keys и
+  seal key на диске больше не хранятся (копии у владельца в Bitwarden).
+- После изменений в OpenBao владелец обновляет копию в Vaultwarden:
+  `projects/home/kubernetes/vaultwarden/sync_openbao.py` (нужен `BW_SESSION`).
+
 ## Документация и приватные данные
 
 - `docs/STATE.md` — текущие факты; `OPERATIONS.md` — актуальные команды;

@@ -84,8 +84,10 @@ Cloudflare (DNS only), IngressRoute. `--skip-dns` не трогает DNS.
 recovery keys + root token. Затем `configure.py` применяет конфигурацию, а
 начальный root-токен **отзывается** и удаляется из файла.
 
-Recovery keys — единственный путь выпустить новый root-токен. Их нужно
-сохранить вне узла (менеджер паролей/офлайн-носитель).
+Recovery keys — единственный путь выпустить новый root-токен. После
+bootstrap `init.json` и `seal.key` переносятся в менеджер паролей (Bitwarden
+`Home recovery`) и удаляются с диска; `deploy.sh` без локального `seal.key`
+сохраняет живой Secret `openbao-seal` и никогда не генерирует ключ поверх него.
 
 ### Временный root-токен на OpenBao 2.7
 
