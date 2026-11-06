@@ -13,7 +13,7 @@
 //!
 //! The decision itself is pure and host-tested; the WTS query is Windows-only.
 
-use logon_protocol::Purpose;
+use wakegrant_protocol::Purpose;
 
 /// Cold-boot window from `GetTickCount64()`: a logon grant is considered only
 /// within the first 10 minutes after boot. Lives next to the worker budget in
@@ -167,7 +167,7 @@ mod imp {
 
     use crate::config::{ConfigError, load_config};
 
-    use logon_protocol::Purpose;
+    use wakegrant_protocol::Purpose;
 
     use super::{Mode, OffReason, WtsSession, mode_for_sessions};
 

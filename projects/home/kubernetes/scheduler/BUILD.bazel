@@ -1,4 +1,4 @@
-load(":images.bzl", "service_image")
+load("//platform/bazel/oci:service_image.bzl", "service_image")
 
 # Container images for the home scheduler stack.
 #

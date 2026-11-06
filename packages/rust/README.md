@@ -15,13 +15,18 @@
 
 | Крейт | Назначение |
 |---|---|
-| `home-telemetry` | bootstrap `tracing` + `tracing-subscriber`: `LevelFilter` (`RUST_LOG` как уровень), stderr или append-файл, локальное время до старта рантайма, дополнительные `Layer`, отключение встроенного `fmt`-слоя (`without_default_layer`) для собственного формата. |
+| `home-telemetry` | bootstrap `tracing` + `tracing-subscriber`: `LevelFilter` (`RUST_LOG` как уровень), stderr или append-файл, локальное время до старта рантайма, дополнительные `Layer`, отключение встроенного `fmt`-слоя (`without_default_layer`) для собственного формата; `LogFormat::{Text,Json}` и JSON-события в духе Go `slog`. |
 | `home-runtime` | `shutdown_signal()` (SIGTERM/SIGINT) и `Supervisor` над `CancellationToken` + `TaskTracker`: `spawn(name, fut)` для `Send`-задач, `spawn_local(name, fut)` для `!Send` внутри `LocalSet`, именованный реестр и `shutdown(timeout) -> Vec<&'static str>` с именами не завершившихся. |
 | `home-actor` | `Handle<C>` (`Clone`, `send(&self, C)`, `is_closed`) и `channel()` — канал команд актора; актор завершается с закрытием канала. Спавн задачи — через `home-runtime::Supervisor`, примитив не привязан к `!Send`. |
 | `home-linux` | Unix-хелперы: `errno_text`/`io_error_text` (C `strerror` без `(os error N)`) и sysfs `write_file`/`write_int_fd`/`trim` поверх `rustix`; `unsafe` только внутри крейта. |
 | `home-secret` | `Secret`/`Token`: `Zeroize`-буферы, `Debug` без значения, сравнение через `subtle::ConstantTimeEq`; файловые `load_or_create` (`0600`/`0700`) и генераторы `numeric(n)`/`hex(n)` — unix-only, чтобы крейт собирался под `x86_64-pc-windows-gnu`. |
-| `home-http` | axum bearer-авторизация на `home-secret::Token` (`with_bearer`) и `serve(listener, router, CancellationToken)` с graceful shutdown. |
+| `home-http` | axum bearer-авторизация на `home-secret::Token` (`with_bearer`, JSON-ошибка 401), `healthz`, лимит тела и request timeout поверх `tower-http`; `serve`/`serve_with_connect_info` с graceful shutdown. |
+| `home-config` | `clap` derive с `env`: секрет из `NAME`/`NAME_FILE` (без значения в ошибке), listen-адрес, длительности и целые с границами, `LOG_LEVEL`. |
+| `home-sqlite` | `rusqlite` (bundled) за single-writer потоком: `Db::call`/`call_blocking`, прагмы WAL/busy_timeout/foreign_keys и упорядоченные миграции через `schema_meta` (совместимо с Go v2). |
+| `home-contracttest` | Rust-раннер нормативного формата `packages/go/contracttest`: `axum::Router` через `tower::ServiceExt::oneshot`, capture/`{{name}}`, `<uuid>`/`<base64-32>`/`<any>`, структурное и побайтное сравнение. |
+| `wakegrant-protocol` | Переносимый wire-слой wakegrant (v1 и `logon`/`unlock`): HMAC-SHA256 сообщения, purpose, base64, serde-запросы/ответы и проверка MAC; без I/O и tokio, собирается под Windows. |
 
 Крейты добавляются только под реального потребителя: BLE gateway — первый
-потребитель всего слоя, logon provider использует переносимые `Secret`/
-`Token` из `home-secret`.
+потребитель runtime-слоя, logon provider использует `home-secret` и
+`wakegrant-protocol`, а `solutions/wakegrant` — первый потребитель
+`home-config`, `home-sqlite` и `home-contracttest`.

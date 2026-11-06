@@ -10,8 +10,8 @@ exports_files([
 
 # Host-portable targets: protocol and the provider's safe core.
 _HOST_TARGETS = [
-    "//solutions/windows-logon-provider/crates/protocol:logon_protocol",
-    "//solutions/windows-logon-provider/crates/protocol:logon_protocol_tests",
+    "//packages/rust/wakegrant-protocol:wakegrant_protocol",
+    "//packages/rust/wakegrant-protocol:protocol_tests",
     "//solutions/windows-logon-provider/crates/provider:provider_host",
     "//solutions/windows-logon-provider/crates/provider:provider_host_tests",
 ]

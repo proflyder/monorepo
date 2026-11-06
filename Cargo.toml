@@ -11,6 +11,7 @@ members = [
     "projects/station/pulsar/satellite/crates/*",
     "projects/station/tools/voice-recorder/helper",
     "solutions/windows-logon-provider/crates/*",
+    "solutions/wakegrant/crates/*",
 ]
 resolver = "3"
 
@@ -24,16 +25,16 @@ publish = false
 # `dep = { workspace = true }` (dev-dependencies add `features = ["test-util"]`
 # to tokio). Upstream Pulsar patches that touch Cargo.toml map their pins here.
 [workspace.dependencies]
-tokio = { version = "=1.54.1", default-features = false, features = ["rt", "net", "time", "sync", "macros", "signal", "process", "io-util", "fs"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "rt-multi-thread", "net", "time", "sync", "macros", "signal", "process", "io-util", "fs"] }
 tokio-util = { version = "=0.7.20", default-features = false, features = ["rt"] }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"] }
 tracing-log = { version = "=0.2.0", default-features = false, features = ["log-tracer", "std"] }
-tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["fmt", "registry", "std"] }
+tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["fmt", "json", "registry", "std"] }
 thiserror = "=2.0.21"
 serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "=1.0.154", default-features = false, features = ["std"] }
 anyhow = "=1.0.104"
-clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "env", "help", "usage", "error-context"] }
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
 # HTTP-клиент станции (pulsar-update): только HTTP/1, rustls с провайдером ring и
 # собственными корнями из CA-бандла прошивки. aws-lc-rs не собирается
@@ -68,6 +69,15 @@ zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }
 # std::time cannot format local calendar timestamps without unsafe libc calls;
 # `time` keeps the BLE gateway log format identical to the former Go daemon.
 time = { version = "=0.3.55", default-features = false, features = ["std", "formatting", "local-offset", "macros"] }
+# Server-side configuration and SQLite/HTTP primitives for the home services
+# (DECISIONS 41). `rusqlite` is bundled so the static musl image carries its
+# own SQLite.
+rusqlite = { version = "=0.41.1", features = ["bundled"] }
+uuid = { version = "=1.29.0", features = ["v4"] }
+tower = { version = "=0.5.3", default-features = false, features = ["util"] }
+tower-http = { version = "=0.6.11", default-features = false, features = ["limit", "timeout"] }
+http-body-util = "=0.1.5"
+tempfile = "=3.27.0"
 hmac = "=0.13.0"
 sha2 = "=0.11.1"
 subtle = "=2.6.1"

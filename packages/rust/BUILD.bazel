@@ -7,6 +7,10 @@ package(default_visibility = ["//visibility:public"])
 _ALL_TARGETS = [
     "//packages/rust/home-actor:home_actor",
     "//packages/rust/home-actor:unit_tests",
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-config:unit_tests",
+    "//packages/rust/home-contracttest:home_contracttest",
+    "//packages/rust/home-contracttest:unit_tests",
     "//packages/rust/home-http:home_http",
     "//packages/rust/home-http:unit_tests",
     "//packages/rust/home-linux:home_linux",
@@ -15,8 +19,12 @@ _ALL_TARGETS = [
     "//packages/rust/home-runtime:unit_tests",
     "//packages/rust/home-secret:home_secret",
     "//packages/rust/home-secret:unit_tests",
+    "//packages/rust/home-sqlite:home_sqlite",
+    "//packages/rust/home-sqlite:unit_tests",
     "//packages/rust/home-telemetry:home_telemetry",
     "//packages/rust/home-telemetry:unit_tests",
+    "//packages/rust/wakegrant-protocol:wakegrant_protocol",
+    "//packages/rust/wakegrant-protocol:protocol_tests",
 ]
 
 rustfmt_test(

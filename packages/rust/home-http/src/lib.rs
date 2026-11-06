@@ -4,15 +4,45 @@
 //! Bearer <token>` check; [`serve`] owns the `axum::serve` call and stops
 //! accepting connections when the supplied [`CancellationToken`] fires.
 
+use axum::Json;
 use axum::Router;
 use axum::extract::Request;
 use axum::http::{StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use home_secret::Token;
+use serde_json::json;
+use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::timeout::TimeoutLayer;
 use tracing::debug;
+
+/// Plain-text readiness route: `200 ok\n`, matching the Go services.
+// `axum`'s `Handler` is implemented for async functions; there is simply
+// nothing to await in a static readiness body.
+#[allow(clippy::unused_async)]
+pub async fn healthz() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        "ok\n",
+    )
+}
+
+/// Rejects request bodies larger than `bytes` with `413 Payload Too Large`.
+pub fn with_body_limit(router: Router, bytes: usize) -> Router {
+    router.layer(RequestBodyLimitLayer::new(bytes))
+}
+
+/// Caps the time a request may take; the layer answers `408 Request Timeout`.
+pub fn with_timeout(router: Router, timeout: Duration) -> Router {
+    router.layer(TimeoutLayer::with_status_code(
+        StatusCode::REQUEST_TIMEOUT,
+        timeout,
+    ))
+}
 
 /// Reject requests whose `Authorization` header is not `Bearer <token>`.
 pub async fn require_bearer(token: Token, request: Request, next: Next) -> Response {
@@ -25,7 +55,11 @@ pub async fn require_bearer(token: Token, request: Request, next: Next) -> Respo
         .is_some_and(|candidate| token.ct_eq(candidate));
     if !authorized {
         debug!("rejected control request: missing or invalid bearer token");
-        return StatusCode::UNAUTHORIZED.into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Unauthorized" })),
+        )
+            .into_response();
     }
     next.run(request).await
 }
@@ -52,8 +86,24 @@ pub async fn serve(
         .await
 }
 
+/// Like [`serve`], but handlers can extract `ConnectInfo<SocketAddr>` — the
+/// per-source-IP rate limiter needs the peer address.
+pub async fn serve_with_connect_info(
+    listener: TcpListener,
+    router: Router,
+    shutdown: CancellationToken,
+) -> std::io::Result<()> {
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move { shutdown.cancelled().await })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
     use std::time::Duration;
 
     use axum::routing::get;
@@ -68,12 +118,13 @@ mod tests {
         Router::new().route("/status", get(|| async { "ok" }))
     }
 
-    async fn round_trip(address: std::net::SocketAddr, authorization: Option<&str>) -> String {
+    async fn round_trip(address: SocketAddr, path: &str, authorization: Option<&str>) -> String {
+        let path = path.to_owned();
         let mut stream = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect(address))
             .await
             .expect("connect timeout")
             .expect("connect");
-        let mut request = String::from("GET /status HTTP/1.1\r\nHost: localhost\r\n");
+        let mut request = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n");
         if let Some(value) = authorization {
             request.push_str("Authorization: ");
             request.push_str(value);
@@ -101,17 +152,63 @@ mod tests {
             serve_shutdown,
         ));
 
-        let accepted = round_trip(address, Some(&format!("Bearer {TOKEN}"))).await;
+        let accepted = round_trip(address, "/status", Some(&format!("Bearer {TOKEN}"))).await;
         assert!(accepted.starts_with("HTTP/1.1 200"), "{accepted}");
 
-        let missing = round_trip(address, None).await;
+        let missing = round_trip(address, "/status", None).await;
         assert!(missing.starts_with("HTTP/1.1 401"), "{missing}");
 
-        let wrong = round_trip(address, Some("Bearer nope")).await;
+        let wrong = round_trip(address, "/status", Some("Bearer nope")).await;
         assert!(wrong.starts_with("HTTP/1.1 401"), "{wrong}");
 
-        let scheme = round_trip(address, Some(TOKEN)).await;
+        let scheme = round_trip(address, "/status", Some(TOKEN)).await;
         assert!(scheme.starts_with("HTTP/1.1 401"), "{scheme}");
+
+        shutdown.cancel();
+        tokio::time::timeout(Duration::from_secs(2), server)
+            .await
+            .expect("server stops")
+            .expect("server task")
+            .expect("serve");
+    }
+
+    #[tokio::test]
+    async fn healthz_and_body_limit() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("address");
+        let shutdown = CancellationToken::new();
+        let router = with_body_limit(
+            Router::new().route("/healthz", get(healthz)).route(
+                "/echo",
+                axum::routing::post(|body: String| async move { body }),
+            ),
+            16,
+        );
+        let server = tokio::spawn(serve(listener, router, shutdown.clone()));
+
+        let health = round_trip(address, "/healthz", None).await;
+        assert!(health.starts_with("HTTP/1.1 200"), "{health}");
+        assert!(health.contains("text/plain; charset=utf-8"), "{health}");
+        assert!(health.ends_with("ok\n"), "{health}");
+
+        let mut stream = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect(address))
+            .await
+            .expect("connect timeout")
+            .expect("connect");
+        let body = "0123456789abcdefghijklmnopqrstuvwxyz";
+        let request = format!(
+            "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(request.as_bytes()).await.expect("write");
+        let mut response = Vec::new();
+        tokio::time::timeout(Duration::from_secs(2), stream.read_to_end(&mut response))
+            .await
+            .expect("read timeout")
+            .expect("read");
+        let response = String::from_utf8_lossy(&response);
+        assert!(response.starts_with("HTTP/1.1 413"), "{response}");
 
         shutdown.cancel();
         tokio::time::timeout(Duration::from_secs(2), server)

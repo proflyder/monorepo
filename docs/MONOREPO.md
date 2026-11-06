@@ -66,7 +66,8 @@ engine, два entrypoint-а для совместимости.
 
 | Слой | Язык | Почему |
 |---|---|---|
-| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `wakegrant`, `currency-bot` | Rust (цель, решение 41); сейчас Go | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
+| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `currency-bot` | Rust (цель, решение 41); сейчас Go | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
+| `wakegrant` | Rust (решение 41, пилот) | первый потребитель общего core-слоя: `wakegrant-protocol`, `ricardo-config`, `ricardo-sqlite`, `ricardo-contracttest`; статический musl-образ, Go-код удалён |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
@@ -167,7 +168,8 @@ crate-пакет объявляет `extract_cargo_lints(... workspace = "//:Car
 передаёт его в `lint_config`, поэтому `cargo clippy` и `rust_clippy_test`
 линтуют ровно `[workspace.lints]`. `MODULE.bazel` держит объединённый набор
 `supported_platform_triples` (host macOS/Linux, обе станционные архитектуры,
-`x86_64-pc-windows-gnu`).
+`x86_64-pc-windows-gnu` и статический `x86_64-unknown-linux-musl` для
+сервисных образов).
 
 `projects/station/pulsar` — Rust-хост на `rules_rust`: BUILD-цели лежат в
 `satellite/crates/*`, а тесты/fmt/clippy идут юнитом `pulsar-bazel`
@@ -181,10 +183,11 @@ sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'
 локальные каталоги (`secrets`, `resources`, …).
 
 `solutions/windows-logon-provider` — Rust-компонент на том же Bazel:
-`crates/protocol` (переносимый слой), `crates/provider` (COM DLL) и
-`crates/cp-selftest` (self-test): `serde`/`serde_json`, `base64`,
-`thiserror`, `http::Uri` и `home-secret` в protocol; `tracing` с
-провайдерским Win32-писателем журнала в DLL. `MODULE.bazel` добавляет
+`packages/rust/wakegrant-protocol` (переносимый слой, общий с сервисом),
+`crates/provider` (COM DLL) и `crates/cp-selftest` (self-test):
+`serde`/`serde_json`, `base64`, `thiserror`, `http::Uri` и `home-secret` в
+protocol; `tracing` с провайдерским Win32-писателем журнала в DLL.
+`MODULE.bazel` добавляет
 `x86_64-pc-windows-gnu` в Rust-тулчейн и регистрирует zig cc_toolchain
 (`platform/bazel/windows:x86_64_windows`), поэтому DLL линкуется без Visual
 Studio и Windows SDK. Два патча rules_rust добавляют gnu-трипль и убирают

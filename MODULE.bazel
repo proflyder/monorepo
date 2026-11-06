@@ -15,6 +15,7 @@ single_version_override(
     module_name = "rules_rust",
     patch_strip = 1,
     patches = [
+        "//platform/bazel/zig:rules_rust_musl_triples.patch",
         "//platform/bazel/windows:rules_rust_windows_gnu_triples.patch",
         "//platform/bazel/windows:rules_rust_windows_gnu_rustc.patch",
     ],
@@ -130,9 +131,47 @@ rust.toolchain(
     ],
     versions = ["1.99.1"],
 )
+
+# Static musl service images (wakegrant and the other home services).
+# rules_rust gives x86_64-unknown-linux-musl the same constraints as the glibc
+# host triple (os:linux + cpu:x86_64), so on a Linux exec host the glibc
+# toolchain also matched //platform/bazel/zig:x86_64_musl_linux and won by
+# registration order (glibc std, undefined `gnu_get_libc_version`). These
+# repository sets require the zig `musl` constraint, so host builds never see
+# them, and they are registered before `@rust_toolchains//:all` so the musl
+# platform always resolves to them. One set per exec host: CI (Linux x86_64)
+# and the Mac (Apple silicon).
+[
+    rust.repository_set(
+        name = "rust_musl_" + exec_name,
+        edition = "2024",
+        exec_triple = exec_triple,
+        # The zig cc driver owns the musl crt/libc; telling rustc not to add
+        # its self-contained copy avoids a duplicate `_start`.
+        extra_rustc_flags = [
+            "-C",
+            "link-self-contained=no",
+        ],
+        target_compatible_with = [
+            "@platforms//cpu:x86_64",
+            "@platforms//os:linux",
+            "@zig_0_14_1//:musl",
+        ],
+        target_triple = "x86_64-unknown-linux-musl",
+        versions = ["1.99.1"],
+    )
+    for exec_name, exec_triple in [
+        ("linux_x86_64", "x86_64-unknown-linux-gnu"),
+        ("darwin_aarch64", "aarch64-apple-darwin"),
+    ]
+]
 use_repo(rust, "rust_toolchains")
 
-register_toolchains("@rust_toolchains//:all")
+register_toolchains(
+    "@rust_toolchains//:rust_musl_linux_x86_64__x86_64-unknown-linux-musl__stable",
+    "@rust_toolchains//:rust_musl_darwin_aarch64__x86_64-unknown-linux-musl__stable",
+    "@rust_toolchains//:all",
+)
 
 # Third-party C/C++ of the station's Sendspin player, pinned to the revisions in
 # satellite/third_party/fetch.sh (sendspin-cpp's own host build). The archives
@@ -223,6 +262,7 @@ register_toolchains(
     "@zig_0_14_1//:aarch64_toolchain",
     "@zig_0_14_1//:armhf_toolchain",
     "@zig_0_14_1//:windows_x86_64_toolchain",
+    "@zig_0_14_1//:x86_64_musl_toolchain",
 )
 
 # External crates of the single first-party Cargo workspace (/Cargo.toml).
@@ -244,6 +284,7 @@ crate.from_cargo(
         "x86_64-apple-darwin",
         "x86_64-pc-windows-gnu",
         "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
     ],
 )
 use_repo(crate, "crates")

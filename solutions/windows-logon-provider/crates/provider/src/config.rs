@@ -102,7 +102,9 @@ mod imp {
 
     use crate::wide::WideNul;
 
-    use logon_protocol::{MachineSecret, parse_secret_json, validate_config};
+    use wakegrant_protocol::{MachineSecret, parse_secret_json};
+
+    use super::validate_config;
 
     use zeroize::Zeroize;
 
@@ -434,5 +436,324 @@ mod tests {
         // SAFETY: `raw` is a live 4-byte buffer.
         unsafe { secure_zero_raw(raw.as_mut_ptr(), raw.len()) };
         assert_eq!(raw, [0, 0, 0, 0]);
+    }
+}
+
+/// Client-side service URL handling. The provider owns this because it is
+/// registry/install configuration, not part of the shared wire protocol.
+pub mod endpoint {
+    use ::http::Uri;
+
+    use wakegrant_protocol::Error;
+
+    #[derive(Debug, Clone, Default, PartialEq, Eq)]
+    pub struct ServiceEndpoint {
+        pub tls: bool,
+        /// DNS name, IPv4 or IPv6 literal without brackets.
+        pub host: String,
+        pub port: u16,
+        /// `""` or `"/path"` without a trailing slash.
+        pub prefix: String,
+    }
+
+    fn is_lower_alnum_dash(c: u8) -> bool {
+        c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-'
+    }
+
+    fn has_control_or_space(text: &str) -> bool {
+        text.bytes().any(|c| c < 0x20 || c == 0x7f || c == b' ')
+    }
+
+    /// Parses `http://host[:port][/path]` or `https://...`. Rejects userinfo,
+    /// queries, fragments, whitespace and control characters.
+    pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
+        if url.len() > 512 {
+            return Err(Error::new("service url too long"));
+        }
+        if has_control_or_space(url) {
+            return Err(Error::new("service url contains whitespace"));
+        }
+
+        let (tls, default_port) = if url.starts_with("http://") {
+            (false, 80)
+        } else if url.starts_with("https://") {
+            (true, 443)
+        } else {
+            return Err(Error::new(
+                "service url must start with http:// or https://",
+            ));
+        };
+        if url.bytes().any(|c| matches!(c, b'?' | b'#' | b'@')) {
+            return Err(Error::new(
+                "service url must not carry credentials, query or fragment",
+            ));
+        }
+
+        let uri: Uri = url
+            .parse()
+            .map_err(|_| Error::new("service url is not a valid URI"))?;
+        let authority = uri
+            .authority()
+            .ok_or(Error::new("service url without host"))?;
+        let port = parse_port(authority.as_str(), default_port)?;
+
+        let host = authority.host();
+        let host = if let Some(rest) = host.strip_prefix('[') {
+            let literal = rest
+                .strip_suffix(']')
+                .ok_or(Error::new("service url has an unterminated IPv6 literal"))?;
+            if literal.is_empty() {
+                return Err(Error::new("service url without host"));
+            }
+            if !literal
+                .bytes()
+                .all(|c| c.is_ascii_hexdigit() || c == b':' || c == b'.')
+            {
+                return Err(Error::new("service url has an invalid IPv6 literal"));
+            }
+            literal
+        } else {
+            if host.is_empty() {
+                return Err(Error::new("service url without host"));
+            }
+            if host.len() > 253 {
+                return Err(Error::new("service url host too long"));
+            }
+            if !host
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-')
+            {
+                return Err(Error::new("service url has an invalid host character"));
+            }
+            if host.starts_with('.') || host.ends_with('.') || host.contains("..") {
+                return Err(Error::new("service url host has an empty label"));
+            }
+            host
+        };
+
+        let prefix = if uri.path() == "/" {
+            ""
+        } else {
+            let prefix = uri.path().trim_end_matches('/');
+            if prefix.contains("//") {
+                return Err(Error::new("service url path has an empty segment"));
+            }
+            prefix
+        };
+
+        Ok(ServiceEndpoint {
+            tls,
+            host: host.to_owned(),
+            port,
+            prefix: prefix.to_owned(),
+        })
+    }
+
+    /// Port after the host of an authority. Rejects non-numeric and out-of-range
+    /// values instead of letting `http::Uri` silently truncate them.
+    fn parse_port(authority: &str, default_port: u16) -> Result<u16, Error> {
+        let port_text = if let Some(rest) = authority.strip_prefix('[') {
+            let close = rest
+                .find(']')
+                .ok_or(Error::new("service url has an unterminated IPv6 literal"))?;
+            &rest[close + 1..]
+        } else {
+            authority.rfind(':').map_or("", |colon| &authority[colon..])
+        };
+        let Some(text) = port_text.strip_prefix(':') else {
+            return Ok(default_port);
+        };
+        if text.is_empty() {
+            return Ok(default_port);
+        }
+        if text.len() > 5 || !text.bytes().all(|c| c.is_ascii_digit()) {
+            return Err(Error::new("service url port is not numeric"));
+        }
+        let port: u16 = text
+            .parse()
+            .map_err(|_| Error::new("service url port out of range"))?;
+        if port == 0 {
+            return Err(Error::new("service url port out of range"));
+        }
+        Ok(port)
+    }
+
+    /// Validates the whole machine configuration and normalizes the URL. The
+    /// error is log-safe.
+    pub fn validate_config(
+        service_url: &str,
+        machine: &str,
+        user: &str,
+        domain: &str,
+    ) -> Result<String, Error> {
+        if machine.is_empty() || machine.len() > 32 {
+            return Err(Error::new("machine must be 1..32 characters"));
+        }
+        if !machine.bytes().all(is_lower_alnum_dash) {
+            return Err(Error::new("machine must match ^[a-z0-9-]{1,32}$"));
+        }
+
+        if user.is_empty() || user.len() > 256 {
+            return Err(Error::new("UserName must be 1..256 characters"));
+        }
+        if user.bytes().any(|c| matches!(c, b'\\' | b'"' | b'@')) {
+            return Err(Error::new("UserName must not contain '\\', '\"' or '@'"));
+        }
+        if has_control_or_space(user) {
+            return Err(Error::new(
+                "UserName contains whitespace or control characters",
+            ));
+        }
+
+        if domain.is_empty() || domain.len() > 256 {
+            return Err(Error::new("Domain must be 1..256 characters"));
+        }
+        if domain.bytes().any(|c| matches!(c, b'\\' | b'"')) {
+            return Err(Error::new("Domain must not contain '\\' or '\"'"));
+        }
+        if has_control_or_space(domain) {
+            return Err(Error::new(
+                "Domain contains whitespace or control characters",
+            ));
+        }
+
+        Ok(render(&parse_service_url(service_url)?, false))
+    }
+
+    /// Log-safe service URL for log lines: scheme, host and port only, no path.
+    pub fn redact_service_url(url: &str) -> String {
+        let Ok(endpoint) = parse_service_url(url) else {
+            return "invalid-url".to_owned();
+        };
+        render(
+            &ServiceEndpoint {
+                prefix: String::new(),
+                ..endpoint
+            },
+            true,
+        )
+    }
+
+    /// `scheme://host[:port][prefix]`; `explicit_port` keeps the port even when it
+    /// is the scheme default (the log always shows it).
+    fn render(endpoint: &ServiceEndpoint, explicit_port: bool) -> String {
+        let mut result = String::new();
+        result.push_str(if endpoint.tls { "https://" } else { "http://" });
+        push_host(&mut result, &endpoint.host);
+        let default_port = if endpoint.tls { 443 } else { 80 };
+        if explicit_port || endpoint.port != default_port {
+            result.push(':');
+            result.push_str(&endpoint.port.to_string());
+        }
+        result.push_str(&endpoint.prefix);
+        result
+    }
+
+    fn push_host(out: &mut String, host: &str) {
+        if host.contains(':') {
+            out.push('[');
+            out.push_str(host);
+            out.push(']');
+        } else {
+            out.push_str(host);
+        }
+    }
+
+    /// Request target path for an endpoint, e.g. `/v1/claim` or `/gw/v1/claim`.
+    pub fn endpoint_path(endpoint: &ServiceEndpoint, path: &str) -> String {
+        let mut result = endpoint.prefix.clone();
+        if !path.starts_with('/') {
+            result.push('/');
+        }
+        result.push_str(path);
+        result
+    }
+}
+
+pub use endpoint::{
+    ServiceEndpoint, endpoint_path, parse_service_url, redact_service_url, validate_config,
+};
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::endpoint::{
+        ServiceEndpoint, endpoint_path, parse_service_url, redact_service_url, validate_config,
+    };
+
+    #[test]
+    fn service_urls_are_validated_and_normalized() {
+        assert_eq!(
+            validate_config("http://192.0.2.27:30130", "komp", "pl", ".").unwrap(),
+            "http://192.0.2.27:30130"
+        );
+        assert_eq!(
+            validate_config("https://home.example:8443/wake/", "komp-2", "pl", ".").unwrap(),
+            "https://home.example:8443/wake"
+        );
+        assert_eq!(
+            validate_config("http://[fd00::1]:30130", "komp", "pl", ".").unwrap(),
+            "http://[fd00::1]:30130"
+        );
+
+        let invalid = [
+            ("", "komp", "pl", "."),
+            ("ftp://192.0.2.27", "komp", "pl", "."),
+            ("192.0.2.27:30130", "komp", "pl", "."),
+            ("http://", "komp", "pl", "."),
+            ("http://192.0.2.27:0", "komp", "pl", "."),
+            ("http://192.0.2.27:70000", "komp", "pl", "."),
+            ("http://192.0.2.27:abc", "komp", "pl", "."),
+            ("http://user:pass@192.0.2.27", "komp", "pl", "."),
+            ("http://192.0.2.27/?x=1", "komp", "pl", "."),
+            ("http://192.0.2.27/#frag", "komp", "pl", "."),
+            ("http://192.0.2.27/a//b", "komp", "pl", "."),
+            ("http://192.0.2.27 /x", "komp", "pl", "."),
+            ("http://192.0.2.27", "", "pl", "."),
+            ("http://192.0.2.27", "Komp", "pl", "."),
+            ("http://192.0.2.27", "komp_1", "pl", "."),
+            ("http://192.0.2.27", "komp", "", "."),
+            ("http://192.0.2.27", "komp", "p l", "."),
+            ("http://192.0.2.27", "komp", "a\\b", "."),
+            ("http://192.0.2.27", "komp", "pl", ""),
+            ("http://192.0.2.27", "komp", "pl", "a b"),
+            (
+                "http://192.0.2.27",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "pl",
+                ".",
+            ),
+        ];
+        for (url, machine, user, domain) in invalid {
+            let error = validate_config(url, machine, user, domain)
+                .expect_err(&format!("accepted {url} {machine} {user} {domain:?}"));
+            assert!(!error.detail().is_empty());
+        }
+
+        let endpoint = parse_service_url("http://192.0.2.27:30130/wake").expect("valid url");
+        assert_eq!(
+            endpoint,
+            ServiceEndpoint {
+                tls: false,
+                host: "192.0.2.27".to_owned(),
+                port: 30130,
+                prefix: "/wake".to_owned(),
+            }
+        );
+        assert_eq!(endpoint_path(&endpoint, "/v1/claim"), "/wake/v1/claim");
+
+        let endpoint = parse_service_url("https://example.lan").expect("valid url");
+        assert_eq!(endpoint.port, 443);
+        assert!(endpoint.tls);
+        assert_eq!(endpoint_path(&endpoint, "/v1/claim"), "/v1/claim");
+
+        let endpoint = parse_service_url("http://[fd00::1]").expect("valid url");
+        assert_eq!(endpoint.host, "fd00::1");
+        assert_eq!(endpoint.port, 80);
+
+        assert_eq!(
+            redact_service_url("http://192.0.2.27:30130/secret/path"),
+            "http://192.0.2.27:30130"
+        );
+        assert_eq!(redact_service_url("not a url"), "invalid-url");
     }
 }

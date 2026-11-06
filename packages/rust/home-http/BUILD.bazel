@@ -3,10 +3,16 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+# axum middleware/layers used by the home services: bearer auth, health,
+# body-size limit, request timeout and graceful serving.
 DEPS = [
     "@crates//:axum",
+    "@crates//:http",
     "@crates//:tokio",
     "@crates//:tokio-util",
+    "@crates//:tower",
+    "@crates//:tower-http",
+    "@crates//:serde_json",
     "@crates//:tracing",
     "//packages/rust/home-secret:home_secret",
 ]

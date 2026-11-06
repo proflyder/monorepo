@@ -20,7 +20,18 @@ def _zig_cc_toolchain_config_impl(ctx):
     # execroot-relative.
     base = ctx.attr.sdk_root
 
-    if ctx.attr.target_os == "windows":
+    if ctx.attr.libc == "musl":
+        include_dirs = [
+            base + "/lib/libc/include/generic-musl",
+            base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-musl",
+            base + "/lib/libc/include/" + ctx.attr.includes_arch + "-linux-any",
+            base + "/lib/libc/include/any-linux-any",
+            base + "/lib/libcxx/include",
+            base + "/lib/libcxxabi/include",
+            base + "/lib/include",
+        ]
+        target_libc = "musl"
+    elif ctx.attr.target_os == "windows":
         # mingw-w64/UCRT headers plus zig's libc++ for C++ sources. The
         # Windows provider itself is pure Rust; these paths keep a future C/C++
         # dependency compilable with the same toolchain.
@@ -108,6 +119,7 @@ _zig_cc_toolchain_config = rule(
         "cpu": attr.string(mandatory = True),
         "includes_arch": attr.string(mandatory = True),
         "prefix": attr.string(mandatory = True),
+        "libc": attr.string(default = "glibc"),
         "sdk_root": attr.string(mandatory = True),
         "target": attr.string(mandatory = True),
         "target_os": attr.string(default = "linux"),
@@ -115,11 +127,12 @@ _zig_cc_toolchain_config = rule(
     provides = [CcToolchainConfigInfo],
 )
 
-def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with, target_os = "linux"):
+def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with, libc = "glibc", target_os = "linux"):
     """Declares the config, cc_toolchain and Bazel toolchain for one target."""
     triple = {
         "aarch64": "aarch64-linux-gnu.2.36",
         "armv7": "arm-linux-gnueabihf.2.23",
+        "x86_64_musl": "x86_64-linux-musl",
         "x86_64_windows": "x86_64-windows-gnu",
     }[cpu]
 
@@ -127,6 +140,7 @@ def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with,
         name = name + "_config",
         cpu = cpu,
         includes_arch = includes_arch,
+        libc = libc,
         prefix = "tool_" + name,
         sdk_root = sdk_root,
         target = triple,

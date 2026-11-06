@@ -1416,11 +1416,17 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "pulsar",
   ]);
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
+    "wakegrant",
     "ble-gateway",
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  assert.deepEqual(affected.deployEntries(result, config), []);
+  // wakegrant is a Bazel deploy unit now, so a Rust toolchain pin change
+  // legitimately rebuilds and rolls it; the native-only units are not deployed.
+  assert.deepEqual(
+    affected.deployEntries(result, config).map((entry) => entry.id),
+    ["wakegrant"],
+  );
   assert.equal(result.androidDistribute, false);
 });
 

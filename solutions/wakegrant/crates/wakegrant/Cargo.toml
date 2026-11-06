@@ -1,0 +1,48 @@
+[package]
+name = "wakegrant"
+description = "One-time logon/unlock grants for a machine controlled by Home Assistant"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "wakegrant"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wakegrant"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true }
+getrandom = { workspace = true }
+home-config = { path = "../../../../packages/rust/home-config" }
+home-http = { path = "../../../../packages/rust/home-http" }
+home-runtime = { path = "../../../../packages/rust/home-runtime" }
+home-secret = { path = "../../../../packages/rust/home-secret" }
+home-sqlite = { path = "../../../../packages/rust/home-sqlite" }
+home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
+reqwest = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+wakegrant-protocol = { path = "../../../../packages/rust/wakegrant-protocol" }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+home-contracttest = { path = "../../../../packages/rust/home-contracttest" }
+tower = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

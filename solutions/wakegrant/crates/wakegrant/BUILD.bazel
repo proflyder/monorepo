@@ -1,0 +1,89 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_DEPS = [
+    "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:clap",
+    "@crates//:getrandom",
+    "@crates//:rusqlite",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+    "@crates//:time",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
+    "@crates//:uuid",
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-http:home_http",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-sqlite:home_sqlite",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "//packages/rust/wakegrant-protocol:wakegrant_protocol",
+]
+
+rust_library(
+    name = "wakegrant_lib",
+    crate_name = "wakegrant",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS,
+)
+
+rust_binary(
+    name = "wakegrant",
+    srcs = ["src/main.rs"],
+    # The image runs the release-shaped binary: no debug tables or symbols.
+    rustc_flags = ["-C", "strip=symbols"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:reqwest",
+        ":wakegrant_lib",
+    ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":wakegrant_lib",
+    data = ["//solutions/wakegrant:contract_fixtures"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:http-body-util",
+        "@crates//:tower",
+        "//packages/rust/home-contracttest:home_contracttest",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":wakegrant_lib",
+        ":wakegrant",
+    ],
+)
+
+# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = [
+        ":wakegrant_lib",
+        ":wakegrant",
+    ],
+)
