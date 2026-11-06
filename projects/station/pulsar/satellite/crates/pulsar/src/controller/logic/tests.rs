@@ -53,9 +53,14 @@ fn state_dir_as_cxx() {
 
 #[test]
 fn identity_from_mac() {
-    let midi = pulsar_core::model::model_from_compatible(b"yandex,cucumber\0").unwrap();
-    let lite = pulsar_core::model::model_from_compatible(b"yandex,plum\0").unwrap();
-    let id = identity(midi, "aa:bb:cc:dd:Ee:0f", "v1.2.3", "Jan  1 2026, 00:00:00");
+    let midi = pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap();
+    let lite = pulsar_model::profile_from_compatible(b"yandex,plum\0").unwrap();
+    let id = identity(
+        &midi.identity,
+        "aa:bb:cc:dd:Ee:0f",
+        "v1.2.3",
+        "Jan  1 2026, 00:00:00",
+    );
     assert_eq!(
         id,
         DeviceIdentity {
@@ -69,15 +74,18 @@ fn identity_from_mac() {
             compilation_time: "Jan  1 2026, 00:00:00".into(),
         }
     );
-    let id = identity(lite, "00:11:22:33:44:55", "unknown", "unknown");
+    let id = identity(&lite.identity, "00:11:22:33:44:55", "unknown", "unknown");
     assert_eq!(
         (id.name.as_str(), id.board.as_str()),
         ("yandex-lite2-334455", "plum")
     );
     // No wlan0: the prefix alone, an empty MAC.
-    let id = identity(lite, "", "v1", "t");
+    let id = identity(&lite.identity, "", "v1", "t");
     assert_eq!((id.name.as_str(), id.mac.as_str()), ("yandex-lite2-", ""));
-    assert_eq!(identity(lite, "a:b", "v1", "t").name, "yandex-lite2-ab");
+    assert_eq!(
+        identity(&lite.identity, "a:b", "v1", "t").name,
+        "yandex-lite2-ab"
+    );
 }
 
 #[test]
@@ -727,4 +735,51 @@ fn followup_silence_is_quiet_only_before_speech() {
     assert!(!f.silent("stt-stream-failed"));
     f.on_event(VaEvent::SttVadStart, false);
     assert!(!f.silent("stt-no-text-recognized"));
+}
+
+/// Снимок ключевых решений для каждой из пяти моделей: какие сущности HA получает при пустом
+/// пробе железа (`panel_present`/`lux_present` = false).
+#[test]
+fn capabilities_per_model() {
+    let mini = pulsar_model::profile_from_dt_id(b"axg_s420_v03\0").unwrap();
+    let profiles = [
+        pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap(),
+        pulsar_model::profile_from_compatible(b"yandex,plum\0").unwrap(),
+        pulsar_model::profile_from_compatible(b"yandex,station-mini2\0").unwrap(),
+        mini,
+        pulsar_model::profile_from_compatible(b"yandex,bergamot\0").unwrap(),
+    ];
+    let want = [
+        // codename, clock, lux, wake_preroll, hw_mic_mute, buttons, zigbee
+        ("cucumber", true, true, true, true, true, true),
+        ("plum", true, true, true, true, true, false),
+        ("station-mini2", false, false, true, true, true, false),
+        ("yandexmini", false, false, false, false, false, false),
+        ("bergamot", false, true, true, true, true, false),
+    ];
+    for (profile, want) in profiles.into_iter().zip(want) {
+        let c = capabilities(profile, false, false, true, true, profile.zigbee.is_some());
+        assert_eq!(
+            (
+                profile.identity.codename,
+                c.clock,
+                c.lux,
+                c.wake_preroll,
+                c.hw_mic_mute,
+                c.buttons,
+                c.zigbee
+            ),
+            want
+        );
+        // auto_brightness follows the sensor that actually opened.
+        assert!(!c.auto_brightness);
+        assert!(c.case_colors && c.voice_colors);
+    }
+    // Optional panel/sensor that did open: the entities appear.
+    let mini3 = pulsar_model::profile_from_compatible(b"yandex,bergamot\0").unwrap();
+    let c = capabilities(mini3, true, true, false, false, true);
+    assert!(c.clock && c.lux && c.auto_brightness);
+    let mini2 = pulsar_model::profile_from_compatible(b"yandex,station-mini2\0").unwrap();
+    let c = capabilities(mini2, true, true, false, false, false);
+    assert!(c.clock && c.lux && c.auto_brightness);
 }

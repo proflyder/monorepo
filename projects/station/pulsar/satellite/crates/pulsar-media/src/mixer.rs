@@ -9,8 +9,8 @@
 //! int as there): state.conf values written by one binary are read by the other (`.prev`).
 
 use pulsar_alsa::{Ctl, Pcm, Stream};
-use pulsar_core::model::Model;
 use pulsar_core::volume::{clamp_unit, from_raw, to_raw};
+use pulsar_model::{Playback, VolumeCurve};
 use tracing::{debug, error, info};
 
 const MASTER: &str = "Master Playback Volume";
@@ -20,7 +20,7 @@ const MASTER: &str = "Master Playback Volume";
 /// контрола нет: `available()` истинно, и контроллер применяет громкость как усиление каналов.
 /// Не актор: `set_*` применяется синхронно, геттеры сразу видят новое значение.
 pub struct Mixer {
-    model: &'static Model,
+    curve: &'static VolumeCurve,
     ctl: Option<Ctl>,
     volume: f32,
     muted: bool,
@@ -29,15 +29,15 @@ pub struct Mixer {
 impl Mixer {
     /// Card 0; adopts the current raw value when it reads as > 0, else the volume stays 0.5 (0.1
     /// with software volume).
-    pub fn open(model: &'static Model) -> Self {
+    pub fn open(playback: &'static Playback, curve: &'static VolumeCurve) -> Self {
         let mut mixer = Self {
-            model,
+            curve,
             ctl: None,
             // No hardware master: the controller applies this gain to the player channels.
-            volume: if model.software_volume { 0.1 } else { 0.5 },
+            volume: if curve.software_volume { 0.1 } else { 0.5 },
             muted: false,
         };
-        if model.software_volume {
+        if curve.software_volume {
             info!("mixer: software volume");
             return mixer;
         }
@@ -50,7 +50,7 @@ impl Mixer {
         };
         if !ctl.mixer_exists(MASTER) {
             // Opening the softvol PCM once creates the control.
-            drop(Pcm::open(model.playback_pcm, Stream::Playback, true));
+            drop(Pcm::open(playback.pcm, Stream::Playback, true));
             if !ctl.mixer_exists(MASTER) {
                 error!("mixer: control '{MASTER}' not found");
                 return mixer;
@@ -58,7 +58,7 @@ impl Mixer {
         }
         if let Ok(raw) = ctl.read_integer(MASTER, 0) {
             if raw > 0 {
-                mixer.volume = from_raw(model, raw);
+                mixer.volume = from_raw(curve, raw);
             }
             info!("mixer: master raw={raw} -> volume {:.2}", mixer.volume);
         }
@@ -67,7 +67,7 @@ impl Mixer {
     }
 
     pub fn available(&self) -> bool {
-        self.model.software_volume || self.ctl.is_some()
+        self.curve.software_volume || self.ctl.is_some()
     }
 
     /// 0..1
@@ -96,7 +96,7 @@ impl Mixer {
         let raw = if self.muted {
             0
         } else {
-            to_raw(self.model, self.volume)
+            to_raw(self.curve, self.volume)
         };
         if let Err(rc) = ctl.write_integers(MASTER, &[raw, raw]) {
             error!("mixer: write {raw}: {}", pulsar_alsa::strerror(rc));
@@ -113,11 +113,13 @@ impl Mixer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pulsar_core::model::model_from_compatible;
     use pulsar_core::volume::{step_alice, step_level};
+    use pulsar_model::profile_from_compatible;
 
-    fn midi() -> &'static Model {
-        model_from_compatible(b"yandex,cucumber\0").unwrap()
+    fn midi() -> &'static VolumeCurve {
+        &profile_from_compatible(b"yandex,cucumber\0")
+            .unwrap()
+            .volume
     }
 
     #[test]
@@ -128,7 +130,7 @@ mod tests {
             b"yandex,station-mini2\0",
             b"yandex,bergamot\0",
         ] {
-            let m = model_from_compatible(c).unwrap();
+            let m = &profile_from_compatible(c).unwrap().volume;
             for k in 0..=20 {
                 let v = k as f32 / 20.0;
                 assert_eq!(step_level(m, v, true), (k + 1).min(20) as f32 / 20.0);

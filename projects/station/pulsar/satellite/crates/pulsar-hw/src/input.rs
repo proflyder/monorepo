@@ -31,7 +31,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use pulsar_core::Timers;
-use pulsar_core::model::Model;
+use pulsar_model::{Input, MuteSwitch};
 use tokio::io::Interest;
 use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -106,25 +106,27 @@ impl InputHandle {
 /// GPIO `Model::mute_gpio`); Err when none opened. Missing or vanished devices are looked up
 /// again every 3 s.
 pub fn spawn_input(
-    model: &'static Model,
+    input: &'static Input,
 ) -> Result<(InputHandle, UnboundedReceiver<InputEvent>), String> {
-    let keys = (!model.keys_input.is_empty())
-        .then(|| open_dev(model.keys_input, false))
-        .flatten();
-    let mute = (!model.mute_input.is_empty())
-        .then(|| open_dev(model.mute_input, false))
-        .flatten();
-    let mute_gpio = if model.mute_gpio == 0 {
-        None
-    } else {
-        open_mute_gpio(GPIO_DIR, model.mute_gpio, false)
+    let keys = open_dev(input.keys_device, false);
+    let mute = match input.mute {
+        Some(MuteSwitch::Device(name)) => open_dev(name, false),
+        _ => None,
+    };
+    let mute_gpio = match input.mute {
+        Some(MuteSwitch::Gpio(number)) => open_mute_gpio(GPIO_DIR, number, false),
+        _ => None,
     };
     if keys.is_none() && mute.is_none() && mute_gpio.is_none() {
         return Err("input devices unavailable".to_owned());
     }
     let muted = Rc::new(Cell::new(false));
     let (tx, rx) = unbounded_channel();
-    let mut m = Machine::new(Rc::clone(&muted), tx, model.action_key, model.mute_key);
+    let mute_key = match input.mute {
+        Some(MuteSwitch::Key(code)) => Some(code),
+        _ => None,
+    };
+    let mut m = Machine::new(Rc::clone(&muted), tx, input.action_key, mute_key);
     // The state the controller starts from: no event for it.
     if let Some(fd) = &mute {
         m.read_mute_state(fd.get_ref().switch_state(), false);
@@ -146,7 +148,7 @@ pub fn spawn_input(
     }
     let (alive_tx, alive_rx) = unbounded_channel();
     let devs = Devices {
-        model,
+        input,
         keys,
         mute,
         mute_gpio,
@@ -284,10 +286,10 @@ struct Machine {
     epoch: Instant,
     muted: Rc<Cell<bool>>,
     tx: UnboundedSender<InputEvent>,
-    /// KEY_VOICECOMMAND of this model; 0: no action button.
-    action_key: u16,
-    /// Momentary mic mute button of this model (`Model::mute_key`); 0: none.
-    mute_key: u16,
+    /// KEY_VOICECOMMAND of this model; None: no action button.
+    action_key: Option<u16>,
+    /// Momentary mic mute button of this model; None: none.
+    mute_key: Option<u16>,
     /// Press time; None = not pressed.
     action_down: Option<i64>,
     last_action_ms: Option<i64>,
@@ -314,8 +316,8 @@ impl Machine {
     fn new(
         muted: Rc<Cell<bool>>,
         tx: UnboundedSender<InputEvent>,
-        action_key: u16,
-        mute_key: u16,
+        action_key: Option<u16>,
+        mute_key: Option<u16>,
     ) -> Self {
         Self {
             timers: Timers::new(),
@@ -390,7 +392,9 @@ impl Machine {
 
     fn on_key(&mut self, code: u16, value: i32) {
         let now = self.now();
-        if self.mute_key != 0 && code == self.mute_key {
+        if let Some(k) = self.mute_key
+            && code == k
+        {
             // value 1 is the press; 2 is autorepeat and 0 the release.
             if value == 1 {
                 info!("input: mute button");
@@ -398,7 +402,9 @@ impl Machine {
             }
             return;
         }
-        if self.action_key != 0 && code == self.action_key {
+        if let Some(k) = self.action_key
+            && code == k
+        {
             if value == 1 && self.action_down.is_none() {
                 self.action_down = Some(now);
                 self.action_long_sent = false;
@@ -513,8 +519,11 @@ impl Machine {
                 return;
             }
         };
-        if self.action_key != 0 && self.action_down.is_some() && !test_bit(&b, self.action_key) {
-            self.on_key(self.action_key, 0);
+        if let Some(k) = self.action_key
+            && self.action_down.is_some()
+            && !test_bit(&b, k)
+        {
+            self.on_key(k, 0);
         }
         if let Some(code) = self.repeat_code
             && !test_bit(&b, code)
@@ -571,10 +580,10 @@ impl Machine {
 }
 
 struct Devices {
-    model: &'static Model,
+    input: &'static Input,
     keys: Option<AsyncFd<Evdev>>,
     mute: Option<AsyncFd<Evdev>>,
-    /// Value file of `Model::mute_gpio`.
+    /// Value file of `MuteSwitch::Gpio`.
     mute_gpio: Option<File>,
 }
 
@@ -600,18 +609,22 @@ impl Devices {
     /// Devices that were missing at start or vanished (ENODEV) are looked up again.
     fn reopen_missing(&mut self, m: &mut Machine) {
         if self.keys.is_none() {
-            self.keys = open_dev(self.model.keys_input, true);
+            self.keys = open_dev(self.input.keys_device, true);
             m.keys_dropped = false;
         }
-        if self.mute.is_none() && !self.model.mute_input.is_empty() {
-            self.mute = open_dev(self.model.mute_input, true);
+        if self.mute.is_none()
+            && let Some(MuteSwitch::Device(name)) = self.input.mute
+        {
+            self.mute = open_dev(name, true);
             m.mute_dropped = false;
             if let Some(fd) = &self.mute {
                 m.read_mute_state(fd.get_ref().switch_state(), true);
             }
         }
-        if self.mute_gpio.is_none() && self.model.mute_gpio != 0 {
-            self.mute_gpio = open_mute_gpio(GPIO_DIR, self.model.mute_gpio, true);
+        if self.mute_gpio.is_none()
+            && let Some(MuteSwitch::Gpio(number)) = self.input.mute
+        {
+            self.mute_gpio = open_mute_gpio(GPIO_DIR, number, true);
             if self.mute_gpio.is_some() {
                 m.arm_repeating(Tick::MuteGpio, GPIO_POLL_MS, GPIO_POLL_MS);
                 self.poll_mute_gpio(m);
@@ -627,11 +640,11 @@ impl Devices {
         match gpio_muted(f) {
             Ok(v) => m.set_muted(v, true),
             Err(e) => {
-                error!(
-                    "input: read gpio{}: {}",
-                    self.model.mute_gpio,
-                    crate::errstr(&e)
-                );
+                let number = match self.input.mute {
+                    Some(MuteSwitch::Gpio(number)) => number,
+                    _ => 0,
+                };
+                error!("input: read gpio{number}: {}", crate::errstr(&e));
                 self.mute_gpio = None;
                 m.disarm(Tick::MuteGpio);
             }

@@ -1,5 +1,5 @@
 //! Shared runtime pieces of the pulsar daemon: logging, the actor supervisor and timers,
-//! network helpers, the per-model hardware description and small types used across services.
+//! network helpers, volume curves and small types used across services.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
@@ -9,7 +9,6 @@ mod ambient;
 mod compat;
 pub mod fmt;
 mod logger;
-pub mod model;
 pub mod net;
 pub mod runtime;
 #[allow(unsafe_code)]

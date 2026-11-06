@@ -37,8 +37,14 @@ impl Rig {
 
     fn with_keys(action_key: u16, mute_key: u16) -> Self {
         let (tx, rx) = unbounded_channel();
+        let opt = |code: u16| (code != 0).then_some(code);
         Self {
-            m: Machine::new(Rc::new(Cell::new(false)), tx, action_key, mute_key),
+            m: Machine::new(
+                Rc::new(Cell::new(false)),
+                tx,
+                opt(action_key),
+                opt(mute_key),
+            ),
             rx,
             keys: Ok([0; 96]),
             sw: Ok([0; 8]),

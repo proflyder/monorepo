@@ -30,15 +30,15 @@ const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 fn main() -> ExitCode {
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
-    let model = pulsar_core::model::detect_model().filter(|m| !m.zigbee_tty.is_empty());
-    let Some(model) = model else {
+    let radio = pulsar_model::detect_profile().and_then(|p| p.zigbee.as_ref());
+    let Some(radio) = radio else {
         error!("no Zigbee radio on this model");
         return ExitCode::FAILURE;
     };
     let lines = RadioLines {
-        tty: model.zigbee_tty.into(),
-        reset: model.zigbee_reset.into(),
-        boot: model.zigbee_boot.into(),
+        tty: radio.tty.into(),
+        reset: radio.reset.into(),
+        boot: radio.boot.into(),
     };
     // OS strings: an image path need not be UTF-8.
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();

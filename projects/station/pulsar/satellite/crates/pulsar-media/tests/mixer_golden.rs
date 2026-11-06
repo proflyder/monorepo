@@ -13,8 +13,8 @@
 //! `-target arm-linux-gnueabihf.2.30 -mcpu=cortex_a53`, -O2) printed identical files on a Midi and
 //! a Lite 2, where this test, cross-built, also passed.
 
-use pulsar_core::model::{Model, VolumePoint, model_from_compatible};
 use pulsar_core::volume;
+use pulsar_model::{VolumeCurve, VolumePoint, profile_from_compatible};
 
 const fn vp(level: i32, raw: i32) -> VolumePoint {
     VolumePoint { level, raw }
@@ -31,19 +31,18 @@ static MULTI: [VolumePoint; 6] = [
 static OFFSET: [VolumePoint; 3] = [vp(0, 10), vp(5, 128), vp(10, 255)];
 static SINGLE: [VolumePoint; 1] = [vp(0, 0)];
 
-fn with_map(base: &Model, map: &'static [VolumePoint]) -> Model {
-    Model {
-        volume_map: map,
-        ..*base
-    }
+fn with_map(base: &VolumeCurve, map: &'static [VolumePoint]) -> VolumeCurve {
+    VolumeCurve { map, ..*base }
 }
 
 #[test]
 fn curves_match_cxx() {
-    let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-    let lite2 = model_from_compatible(b"yandex,plum\0").unwrap();
+    let midi = &profile_from_compatible(b"yandex,cucumber\0")
+        .unwrap()
+        .volume;
+    let lite2 = &profile_from_compatible(b"yandex,plum\0").unwrap().volume;
     // Both stations have the stock map.
-    assert_eq!(midi.volume_map, lite2.volume_map);
+    assert_eq!(midi.map, lite2.map);
     let (multi, offset, single) = (
         with_map(midi, &MULTI),
         with_map(midi, &OFFSET),
@@ -102,7 +101,7 @@ fn curves_match_cxx() {
 
 #[test]
 fn stock_curve_landmarks() {
-    let m = model_from_compatible(b"yandex,plum\0").unwrap();
+    let m = &profile_from_compatible(b"yandex,plum\0").unwrap().volume;
     // The port's station tests cap the volume at 0.2, i.e. raw 82.
     assert_eq!(volume::to_raw(m, 0.2), 82);
     assert_eq!(volume::to_raw(m, 0.0), 0);
@@ -115,7 +114,9 @@ fn stock_curve_landmarks() {
 
 #[test]
 fn mini3_curve_landmarks() {
-    let m = model_from_compatible(b"yandex,bergamot\0").unwrap();
+    let m = &profile_from_compatible(b"yandex,bergamot\0")
+        .unwrap()
+        .volume;
     // Mini 3 stock map: 0 -> 0, 1 -> 33, 20 -> 255 (not the Lite 2's).
     assert_eq!(volume::to_raw(m, 0.0), 0);
     assert_eq!(volume::to_raw(m, 0.01), 33);
@@ -131,7 +132,9 @@ fn mini3_curve_landmarks() {
 fn mini2_curve_has_no_lowest_step() {
     // Linear in percent, no jump to a lowest step: low HA volumes stay low (the C++ curve made
     // any volume of a two-point map full volume).
-    let m = model_from_compatible(b"yandex,station-mini2\0").unwrap();
+    let m = &profile_from_compatible(b"yandex,station-mini2\0")
+        .unwrap()
+        .volume;
     assert_eq!(volume::to_raw(m, 0.01), 3);
     assert_eq!(volume::to_raw(m, 0.05), 13);
     assert_eq!(volume::to_raw(m, 0.2), 51);

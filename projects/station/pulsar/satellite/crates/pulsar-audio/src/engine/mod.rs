@@ -283,7 +283,7 @@ impl Engine {
     /// dlopen, VQE for the model's preset, the wake word spotter (required) and the command spotter
     /// (optional: a warning without it). Errors are logged; None = no front-end.
     pub fn start(
-        model: &pulsar_core::model::Model,
+        capture: &pulsar_model::Capture,
         wake_dir: &Path,
         custom_wake_model: Option<&Path>,
         command_dir: Option<&Path>,
@@ -303,8 +303,8 @@ impl Engine {
                 return None;
             }
         };
-        let preset = model.vqe_preset;
-        let (nmic, nspk) = (model.mic_channels.len(), model.spk_channels.len());
+        let preset = capture.vqe_preset;
+        let (nmic, nspk) = (capture.mic_channels.len(), capture.spk_channels.len());
         let vqe = match Vqe::new(&lib, preset, Path::new(VQE_MODELS), nmic, nspk) {
             Ok(vqe) => vqe,
             Err((step, e)) => {
@@ -379,7 +379,7 @@ impl Engine {
         self.wake.init(&self.lib, dir, VQE_OMNI_WITH_GAIN)
     }
 
-    /// Id of the current wake word model (`Model::wake_preroll` key).
+    /// Id of the current wake word model (`Preroll` key).
     pub fn wake_id(&self) -> &str {
         &self.wake_id
     }

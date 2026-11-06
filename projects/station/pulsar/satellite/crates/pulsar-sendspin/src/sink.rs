@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU32, Ordering::SeqCst};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use pulsar_alsa::{Format, HwRequest, Pcm};
-use pulsar_core::model::Model;
+use pulsar_model::Playback;
 use tracing::{debug, error, info};
 
 use crate::ffi::now_us;
@@ -41,7 +41,7 @@ pub(crate) struct Sink {
 /// Audio thread state (under `Sink::io`).
 struct Io {
     /// Playback PCM and output gates of the model.
-    model: &'static Model,
+    playback: &'static Playback,
     pcm: Option<Pcm>,
     active: bool,
     want_rate: u32,
@@ -73,10 +73,10 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Sink {
-    pub(crate) fn new(model: &'static Model) -> Self {
+    pub(crate) fn new(playback: &'static Playback) -> Self {
         Self {
             io: Mutex::new(Io {
-                model,
+                playback,
                 pcm: None,
                 active: false,
                 want_rate: 0,
@@ -371,7 +371,7 @@ impl Io {
             }
         };
         let mut opened = false;
-        let res = pulsar_alsa::open_playback(self.model)
+        let res = pulsar_alsa::open_playback(self.playback)
             .map_err(|e| ("open", e))
             .and_then(|mut pcm| {
                 opened = true;
@@ -403,7 +403,7 @@ impl Io {
                 if !self.open_failed_logged {
                     error!(
                         "sendspin: ALSA '{}' {step} failed for {} Hz/{} ch/{} bit: {}",
-                        self.model.playback_pcm,
+                        self.playback.pcm,
                         self.want_rate,
                         self.want_channels,
                         self.want_bits,
@@ -412,7 +412,7 @@ impl Io {
                 }
                 self.open_failed_logged = true;
                 if opened {
-                    info!("sendspin: ALSA '{}' closed", self.model.playback_pcm);
+                    info!("sendspin: ALSA '{}' closed", self.playback.pcm);
                 }
                 self.next_open_us = now + REOPEN_RETRY_US;
                 return false;
@@ -432,7 +432,7 @@ impl Io {
         self.stats_us = now;
         info!(
             "sendspin: ALSA '{}' open {} Hz/{} ch/{} bit (period {period}, buffer {buffer} frames = {:.0} ms)",
-            self.model.playback_pcm,
+            self.playback.pcm,
             self.rate,
             self.channels,
             self.bits,
@@ -443,7 +443,7 @@ impl Io {
 
     fn close(&mut self) {
         if self.pcm.take().is_some() {
-            info!("sendspin: ALSA '{}' closed", self.model.playback_pcm);
+            info!("sendspin: ALSA '{}' closed", self.playback.pcm);
         }
     }
 

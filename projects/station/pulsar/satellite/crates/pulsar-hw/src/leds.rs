@@ -29,8 +29,8 @@ use std::fs::File;
 use std::io;
 use std::os::fd::AsRawFd as _;
 
-use pulsar_core::model::{LedStrip, Model};
 use pulsar_core::{AmbientDimmer, MUSIC_STALE_MS, MusicFrame, SENDSPIN_FRESH_MS, Timers, UiState};
+use pulsar_model::{LedBackend, Leds, StripLayout};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::Instant;
 use tracing::{error, info, warn};
@@ -401,29 +401,34 @@ impl LedsHandle {
 
 /// Opens the framebuffers (or the sysfs fallback) and starts the actor. Without either the
 /// output is a no-op ("LEDs unavailable"); state and case colour still work.
-pub fn spawn_leds(model: &'static Model) -> LedsHandle {
-    let n = usize::try_from(model.ring.count).unwrap_or(0);
-    let nlogo = usize::try_from(model.logo.count).unwrap_or(0);
-    let sink = if !model.ring.i2c_dev.is_empty() {
-        open_i2c(model, n, nlogo).map_or_else(
-            || Sink::None,
-            |sink| {
-                info!(
-                    "leds: driving {n} ring LEDs via i2c {}@0x{:02x}",
-                    model.ring.i2c_dev, model.ring.i2c_addr
-                );
-                sink
+pub fn spawn_leds(leds: &'static Leds) -> LedsHandle {
+    let n = usize::try_from(leds.ring.count).unwrap_or(0);
+    let nlogo = leds.logo.as_ref().map_or(0, |l| l.count as usize);
+    let sysfs_sink = || {
+        open_sysfs(leds, n, nlogo).map_or_else(
+            || {
+                warn!("LEDs unavailable");
+                Sink::None
+            },
+            |files| {
+                info!("leds: driving {n} ring + {nlogo} logo LEDs via sysfs brightness");
+                Sink::Sysfs(files)
             },
         )
-    } else if let Some(fb) = open_fb(model, nlogo) {
-        info!("leds: driving {n} ring + {nlogo} logo LEDs via framebuffer");
-        fb
-    } else if let Some(files) = open_sysfs(model, n, nlogo) {
-        info!("leds: driving {n} ring + {nlogo} logo LEDs via sysfs brightness");
-        Sink::Sysfs(files)
-    } else {
-        warn!("LEDs unavailable");
-        Sink::None
+    };
+    let sink = match leds.ring.backend {
+        LedBackend::I2c { dev, addr } => open_i2c(dev, addr, n, nlogo).map_or_else(
+            || Sink::None,
+            |sink| {
+                info!("leds: driving {n} ring LEDs via i2c {dev}@0x{addr:02x}");
+                sink
+            },
+        ),
+        LedBackend::Framebuffer { .. } => open_fb(leds, nlogo).map_or_else(sysfs_sink, |fb| {
+            info!("leds: driving {n} ring + {nlogo} logo LEDs via framebuffer");
+            fb
+        }),
+        LedBackend::Sysfs => sysfs_sink(),
     };
     let opened = !matches!(sink, Sink::None);
     let (tx, rx) = unbounded_channel();
@@ -684,12 +689,12 @@ fn warn_write(w: &mut WriteWarn, what: &str, err: &io::Error, now: i64) {
     w.suppressed = 0;
 }
 
-fn led_name(model: &Model, s: &LedStrip, color: &str, i: i32) -> String {
+fn led_name(leds: &Leds, s: &StripLayout, color: &str, i: i32) -> String {
     format!(
         "{}:{color}:{}{}",
-        model.led_prefix,
+        leds.prefix,
         s.sysfs_kind,
-        s.first_index + i
+        s.first_index as i32 + i
     )
 }
 
@@ -699,28 +704,33 @@ fn trigger_is(led: &str, trig: &str) -> bool {
 }
 
 /// Opens one strip's framebuffer if its trigger is active and the fb has the expected name.
-fn open_strip_fb(model: &Model, s: &LedStrip) -> Option<Framebuffer> {
-    if s.fb_dev.is_empty() {
-        return None; // sysfs-only ring (Mini 2)
-    }
-    let red0 = led_name(model, s, "red", 0);
-    if !trigger_is(&red0, s.trigger) {
-        warn!("leds: trigger {} not active on {red0}", s.trigger);
+fn open_strip_fb(leds: &Leds, s: &StripLayout) -> Option<Framebuffer> {
+    let LedBackend::Framebuffer {
+        dev: fb_dev,
+        name: fb_name,
+        trigger,
+    } = s.backend
+    else {
+        return None; // sysfs-only ring (Mini 2) or I²C (Mini)
+    };
+    let red0 = led_name(leds, s, "red", 0);
+    if !trigger_is(&red0, trigger) {
+        warn!("leds: trigger {trigger} not active on {red0}");
         return None;
     }
-    let dev = s.fb_dev.rsplit('/').next().unwrap_or(s.fb_dev);
+    let dev = fb_dev.rsplit('/').next().unwrap_or(fb_dev);
     let name = std::fs::read_to_string(format!("/sys/class/graphics/{dev}/name"))
         .ok()
         .unwrap_or_default();
     let name = home_linux::trim(&name);
-    if name != s.fb_name {
-        warn!("leds: {} is '{name}', expected '{}'", s.fb_dev, s.fb_name);
+    if name != fb_name {
+        warn!("leds: {fb_dev} is '{name}', expected '{fb_name}'");
         return None;
     }
-    match Framebuffer::open(s.fb_dev) {
+    match Framebuffer::open(fb_dev) {
         Ok(fb) => Some(fb),
         Err(e) => {
-            warn!("leds: open {}: {}", s.fb_dev, crate::errstr(&e));
+            warn!("leds: open {fb_dev}: {}", crate::errstr(&e));
             None
         }
     }
@@ -728,39 +738,34 @@ fn open_strip_fb(model: &Model, s: &LedStrip) -> Option<Framebuffer> {
 
 /// IS31FL3236-compatible controller: enable the output stage, set every channel's current and
 /// clear the PWM registers; the stock firmware sends the same three writes.
-fn open_i2c(model: &Model, n: usize, nlogo: usize) -> Option<Sink> {
+fn open_i2c(dev_name: &str, addr: u16, n: usize, nlogo: usize) -> Option<Sink> {
     if n != 6 || nlogo != 0 {
         warn!("leds: i2c backend expects 6 ring LEDs and no logo ({n} + {nlogo})");
         return None;
     }
-    let dev = match I2c::open(model.ring.i2c_dev) {
+    let dev = match I2c::open(dev_name) {
         Ok(dev) => dev,
         Err(e) => {
-            warn!("leds: open {}: {}", model.ring.i2c_dev, crate::errstr(&e));
+            warn!("leds: open {dev_name}: {}", crate::errstr(&e));
             return None;
         }
     };
-    let addr = model.ring.i2c_addr;
     let imax = [3u8; 18];
     if let Err(e) = dev
         .write_register(addr, 0x00, &[1])
         .and_then(|()| dev.write_register(addr, 0x26, &imax))
         .and_then(|()| dev.write_register(addr, 0x4b, &[1]))
     {
-        warn!(
-            "leds: init {}@0x{addr:02x}: {}",
-            model.ring.i2c_dev,
-            crate::errstr(&e)
-        );
+        warn!("leds: init {dev_name}@0x{addr:02x}: {}", crate::errstr(&e));
         return None;
     }
     Some(Sink::I2c { dev, addr })
 }
 
-fn open_fb(model: &Model, nlogo: usize) -> Option<Sink> {
-    let ring = open_strip_fb(model, &model.ring);
+fn open_fb(leds: &Leds, nlogo: usize) -> Option<Sink> {
+    let ring = open_strip_fb(leds, &leds.ring);
     let logo = if nlogo > 0 {
-        open_strip_fb(model, &model.logo)
+        leds.logo.as_ref().and_then(|l| open_strip_fb(leds, l))
     } else {
         None
     };
@@ -771,14 +776,14 @@ fn open_fb(model: &Model, nlogo: usize) -> Option<Sink> {
     Some(Sink::Fb { ring, logo })
 }
 
-fn open_sysfs(model: &Model, n: usize, nlogo: usize) -> Option<Vec<File>> {
+fn open_sysfs(leds: &Leds, n: usize, nlogo: usize) -> Option<Vec<File>> {
     let mut files = Vec::with_capacity((n + nlogo) * 3);
     for i in 0..n + nlogo {
         for c in ["red", "green", "blue"] {
             let name = if i < n {
-                led_name(model, &model.ring, c, i as i32)
+                led_name(leds, &leds.ring, c, i as i32)
             } else {
-                led_name(model, &model.logo, c, (i - n) as i32)
+                led_name(leds, leds.logo.as_ref()?, c, (i - n) as i32)
             };
             let path = format!("{LED_DIR}{name}/brightness");
             if let Ok(f) = std::fs::OpenOptions::new().write(true).open(&path) {

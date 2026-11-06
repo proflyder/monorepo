@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use pulsar_alsa::{Ctl, Pcm, Stream};
 use pulsar_core::MusicFrame;
-use pulsar_core::model::Model;
+use pulsar_model::{DeviceProfile, Playback, VolumeCurve};
 use pulsar_sendspin::{SendspinConfig, SendspinEvent, Transport};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::Instant;
@@ -58,8 +58,8 @@ struct VolumeCap {
 
 impl VolumeCap {
     /// Ok(None): no such control (the Mini's software volume), nothing to cap.
-    fn apply(model: &Model) -> Result<Option<Self>, String> {
-        if model.software_volume {
+    fn apply(playback: &Playback, curve: &VolumeCurve) -> Result<Option<Self>, String> {
+        if curve.software_volume {
             println!("volume: software (0.2)");
             return Ok(None);
         }
@@ -72,7 +72,7 @@ impl VolumeCap {
         };
         if !ctl.mixer_exists(MASTER) {
             // Opening the softvol PCM once creates the control.
-            drop(Pcm::open(model.playback_pcm, Stream::Playback, true));
+            drop(Pcm::open(playback.pcm, Stream::Playback, true));
             if !ctl.mixer_exists(MASTER) {
                 println!("volume: no '{MASTER}' on hw:0, not capped");
                 return Ok(None);
@@ -126,13 +126,13 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let Some(model) = pulsar_core::model::detect_model() else {
+    let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::FAILURE;
     };
-    pulsar_alsa::init(model);
+    pulsar_alsa::init(&model.audio.playback);
     // As in the daemon (the player sets it): alsa-lib's own messages only at debug level.
     pulsar_alsa::quiet_error_handler();
-    let cap = match VolumeCap::apply(model) {
+    let cap = match VolumeCap::apply(&model.audio.playback, &model.volume) {
         Ok(cap) => cap,
         Err(e) => {
             eprintln!("{e}");
@@ -183,7 +183,7 @@ fn main() -> ExitCode {
     }
 }
 
-async fn run(args: &Args, model: &'static Model) -> Result<Counts, String> {
+async fn run(args: &Args, model: &'static DeviceProfile) -> Result<Counts, String> {
     if let Some(parent) = args.state_dir.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
@@ -194,11 +194,11 @@ async fn run(args: &Args, model: &'static Model) -> Result<Counts, String> {
         software_version: "probe".into(),
         mac: String::new(),
         state_dir: args.state_dir.clone(),
-        model,
+        playback: &model.audio.playback,
         port: args.port,
     };
     let volume = 0.2;
-    let master = pulsar_core::volume::master_gain(model, volume);
+    let master = pulsar_core::volume::master_gain(&model.volume, volume);
     let (handle, mut events) = pulsar_sendspin::spawn(cfg, volume, false, master)?;
     let mut term = signal(SignalKind::terminate()).map_err(|e| format!("signal: {e}"))?;
     let mut int = signal(SignalKind::interrupt()).map_err(|e| format!("signal: {e}"))?;

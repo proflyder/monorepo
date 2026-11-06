@@ -4,6 +4,8 @@ use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use pulsar_model::{DeviceProfile, profile_from_compatible};
+
 const NOW: i64 = 1_000_000;
 
 fn wall() -> Wall {
@@ -407,21 +409,25 @@ fn temp_root(name: &str) -> PathBuf {
     p
 }
 
-fn base_model(compatible: &[u8]) -> &'static Model {
-    pulsar_core::model::model_from_compatible(compatible).unwrap()
+fn base_model(compatible: &[u8]) -> &'static DeviceProfile {
+    profile_from_compatible(compatible).unwrap()
+}
+
+fn base_panel(compatible: &[u8]) -> &'static ClockPanel {
+    base_model(compatible).clock.as_ref().unwrap()
 }
 
 /// A stock model whose clock LEDs live under a fresh temp dir ("<root>/<prefix><led>"); one
-/// static pair per call site, since `spawn` takes a `&'static Model`.
+/// static pair per call site, since `spawn` takes a `&'static ClockPanel`.
 macro_rules! temp_model {
     ($name:literal, $compatible:literal, $prefix:literal) => {{
         static DIR: LazyLock<String> =
             LazyLock::new(|| format!("{}/{}", temp_root($name).display(), $prefix));
-        static MODEL: LazyLock<Model> = LazyLock::new(|| Model {
-            clock_dir: DIR.as_str(),
-            ..*base_model($compatible)
+        static PANEL: LazyLock<ClockPanel> = LazyLock::new(|| ClockPanel {
+            dir: DIR.as_str(),
+            ..*base_panel($compatible)
         });
-        let model: &'static Model = &MODEL;
+        let model: &'static ClockPanel = &PANEL;
         let root = Root(Path::new(DIR.as_str()).parent().unwrap().to_owned());
         (model, root)
     }};
@@ -435,7 +441,7 @@ fn take(path: &Path) -> String {
 }
 
 /// Every clock LED of `m` (Lite 2 layout) created; the segment files per digit.
-fn create_lite2(m: &Model, root: &Root) -> Vec<Vec<PathBuf>> {
+fn create_lite2(m: &ClockPanel, root: &Root) -> Vec<Vec<PathBuf>> {
     let segs = (0..DIGITS)
         .map(|d| {
             (0..SEGS)
@@ -443,12 +449,7 @@ fn create_lite2(m: &Model, root: &Root) -> Vec<Vec<PathBuf>> {
                 .collect()
         })
         .collect();
-    for name in m
-        .clock_colon
-        .iter()
-        .chain(m.clock_aux)
-        .chain([&m.clock_center])
-    {
+    for name in m.colon.iter().chain(m.aux).chain(m.center.iter()) {
         root.led("clock", name);
     }
     segs
@@ -543,7 +544,7 @@ async fn actor_draws_commands_and_stops_with_the_handles() {
     let local = tokio::task::LocalSet::new();
     local
         .run_until(async {
-            let clock = spawn(m);
+            let clock = spawn(Some(m));
             let other = clock.clone();
             clock.set_text("1234".into());
             other.show_code("8".into());
@@ -601,7 +602,7 @@ async fn auto_brightness_off_ignores_the_light() {
     let local = tokio::task::LocalSet::new();
     local
         .run_until(async {
-            let clock = spawn(m);
+            let clock = spawn(Some(m));
             assert_eq!(take(&current), "255");
             // Dark room, auto brightness on: 0.02 of full.
             clock.set_ambient_lux(0.0);
@@ -639,7 +640,7 @@ async fn unavailable_clock_is_a_no_op() {
     let local = tokio::task::LocalSet::new();
     local
         .run_until(async {
-            let clock = spawn(m);
+            let clock = spawn(Some(m));
             clock.set_text("1234".into());
             clock.play(ClockShot::Boot);
             assert!(

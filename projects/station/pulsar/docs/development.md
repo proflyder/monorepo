@@ -115,8 +115,8 @@ go -C installer run . <ip>[:port]    # установить или обнови�
 В чекауте установщик сначала сам вызывает `make` (с `--ssh` — и `ssh/build.sh`). Флаги — usage в
 [`../installer/main.go`](../installer/main.go).
 
-**Детект модели — три места, которые должны совпадать:** демон (`detect_model()` в
-[`../satellite/crates/pulsar-core/src/model.rs`](../satellite/crates/pulsar-core/src/model.rs)),
+**Детект модели — три места, которые должны совпадать:** демон (`detect_profile()` в
+[`../satellite/crates/pulsar-model/src/detect.rs`](../satellite/crates/pulsar-model/src/detect.rs)),
 установщик (`modelName()` / `abis()` / `stationCode()` и особый маркер Мини в `probe()` в
 [`../installer/probe.go`](../installer/probe.go)) и
 [`../satellite/deploy/boot.sh`](../satellite/deploy/boot.sh) (список кодовых имён `yandex,<codename>`

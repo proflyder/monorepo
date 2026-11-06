@@ -1,5 +1,5 @@
-//! Audio playback through the GStreamer build bundled with the Yandex firmware into the model's
-//! ALSA playback PCM (`Model::playback_pcm`: dmix + softvol). Two independent channels:
+//! Audio playback through the GStreamer build bundled with the Yandex firmware into the
+//! ALSA playback PCM (`Playback::pcm`: dmix + softvol). Two independent channels:
 //!   Music    - media_player content, can be paused / ducked.
 //!   Announce - TTS, announcements, earcons; plays over (ducked) music. Decoded by its playbin,
 //!              played by the writer of [`crate::pcm_out`] instead of an alsasink.
@@ -20,7 +20,7 @@ use std::thread::JoinHandle;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::{debug, error, info, warn};
 
-use pulsar_core::model::Model;
+use pulsar_model::Playback;
 
 use crate::gst::{self, Api, Call, MainLoop, Pipeline};
 use crate::pcm_out::{self, OutEvent, Output};
@@ -817,7 +817,7 @@ pub fn on_timer(tag: usize) -> bool {
 /// The firmware's GStreamer: one playbin per channel.
 struct GstBackend {
     api: &'static Api,
-    model: &'static Model,
+    playback: &'static Playback,
     // Dropped before `out`: the pipelines are in NULL when the output closes the fdsink's fd.
     pipes: [Pipeline; 2],
     out: Output,
@@ -829,13 +829,13 @@ impl Backend for GstBackend {
         // the amplifier off when another client closes meanwhile: the gates go on here and again
         // in `music_playing`. ANNOUNCE is not played by GStreamer (pcm_out opens the PCM itself).
         if s == GstState::Playing && ch == Channel::Music {
-            pulsar_alsa::enable_output(self.model);
+            pulsar_alsa::enable_output(self.playback);
         }
         self.pipes[ch.index()].set_state(s as i32)
     }
 
     fn music_playing(&mut self) {
-        pulsar_alsa::enable_output(self.model);
+        pulsar_alsa::enable_output(self.playback);
     }
 
     fn set_uri(&mut self, ch: Channel, uri: &str) {
@@ -935,9 +935,9 @@ impl Drop for GlibThread {
 // The fdsink of ANNOUNCE's output (pcm_out); playsink converts to its caps.
 const OUT_SINK: &CStr = c"pcmout";
 
-fn new_pipeline(api: &'static Api, ch: Channel, model: &'static Model) -> Option<Pipeline> {
+fn new_pipeline(api: &'static Api, ch: Channel, playback: &'static Playback) -> Option<Pipeline> {
     let sink = match ch {
-        Channel::Music => format!("alsasink device={}", model.playback_pcm),
+        Channel::Music => format!("alsasink device={}", playback.pcm),
         Channel::Announce => format!(
             "capsfilter caps=\\\"{}\\\" ! fdsink name={} sync=false",
             pcm_out::CAPS,
@@ -957,7 +957,7 @@ fn new_pipeline(api: &'static Api, ch: Channel, model: &'static Model) -> Option
 }
 
 /// dlopen + gst_init + static plugin registration + the GLib thread (C++ Player::init).
-fn start(shared: &Arc<Shared>, model: &'static Model) -> Option<GlibThread> {
+fn start(shared: &Arc<Shared>, playback: &'static Playback) -> Option<GlibThread> {
     // One player per process: its GLib thread owns the default main context.
     static STARTED: AtomicBool = AtomicBool::new(false);
     if STARTED.swap(true, Ordering::Relaxed) {
@@ -972,18 +972,18 @@ fn start(shared: &Arc<Shared>, model: &'static Model) -> Option<GlibThread> {
         return None;
     }
     let pipes = [
-        new_pipeline(api, Channel::Music, model)?,
-        new_pipeline(api, Channel::Announce, model)?,
+        new_pipeline(api, Channel::Music, playback)?,
+        new_pipeline(api, Channel::Announce, playback)?,
     ];
     let out = Output::spawn(
-        model,
+        playback,
         Box::new(move |ev| gst::idle_add(api, Box::new(move || on_out(ev)))),
     )?;
     let main_loop = Arc::new(MainLoop::new(api)?);
     let machine = Machine::new(
         Box::new(GstBackend {
             api,
-            model,
+            playback,
             pipes,
             out,
         }),
@@ -1025,13 +1025,13 @@ pub struct PlayerHandle {
     inner: Rc<Inner>,
 }
 
-/// Starts the player on the model's ALSA PCM (`Model::playback_pcm`) with its output gates. A
+/// Starts the player on the playback's ALSA PCM (`Playback::pcm`) with its output gates. A
 /// failed dlopen / gst_init is logged ("player init failed") and gives a degraded handle: every
 /// play() ends with Done(false) at once and state() stays Idle.
-pub fn spawn(model: &'static Model) -> (PlayerHandle, UnboundedReceiver<PlayerEvent>) {
+pub fn spawn(playback: &'static Playback) -> (PlayerHandle, UnboundedReceiver<PlayerEvent>) {
     let (tx, rx) = unbounded_channel();
     let shared = Arc::new(Shared::new(tx));
-    let exec = start(&shared, model).map(|t| Box::new(t) as Box<dyn Exec>);
+    let exec = start(&shared, playback).map(|t| Box::new(t) as Box<dyn Exec>);
     if exec.is_none() {
         error!("player init failed");
     }
@@ -1939,8 +1939,8 @@ mod tests {
     #[test]
     fn degraded_player_fails_every_play_at_once() {
         // No firmware GStreamer on the host: spawn() gives the degraded handle.
-        let model = pulsar_core::model::model_from_compatible(b"yandex,cucumber\0").unwrap();
-        let (h, mut rx) = spawn(model);
+        let profile = pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap();
+        let (h, mut rx) = spawn(&profile.audio.playback);
         let a = h.play(Music, urls(&["/a.mp3"]));
         assert_eq!(rx.try_recv().unwrap(), Done { id: a, ok: false });
         h.pause(Music);

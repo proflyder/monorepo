@@ -10,6 +10,7 @@ LINUX = ["@platforms//os:linux"]
 DEPS = [
     "//packages/rust/home-runtime:home_runtime",
     "//packages/rust/home-telemetry:home_telemetry",
+    "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     "@crates//:libc",
     "@crates//:log",
     "@crates//:tokio",

@@ -17,13 +17,14 @@ fn main() -> std::io::Result<()> {
         std::process::exit(0);
     });
     pulsar_core::init_logger(); // stderr only
-    let model = pulsar_core::model::detect_model().expect("unsupported station");
+    let model = pulsar_model::detect_profile().expect("unsupported station");
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()?;
     rt.block_on(async {
         let (front, mut events) = pulsar_audio::spawn(
-            model,
+            &model.audio.capture,
+            model.wake_preroll.as_ref(),
             Path::new("/system/vendor/quasar/spotter_models/activation/alisa"),
             None,
             false,
