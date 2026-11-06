@@ -32,12 +32,14 @@
 | `pulsar-ui` | чистый домен интерфейса: рендер эффектов LED, анимации и шрифт часов, композиция слоёв обоих устройств, доменные типы (`Effect`, `MusicStyle`, `ClockFace`), общий `MusicSource` |
 | `pulsar-hw` | актор кольца LED / логотипа, sysfs/fb/i2c и кнопки; рендер — в `pulsar-ui` |
 | `pulsar-clock` | актор часов, sysfs-вывод и датчик освещённости; слои и анимации — в `pulsar-ui` |
-| `pulsar-zigbee` | радио Zigbee Миди: роли и прошивка радио; внутренний API — в `//!` `src/lib.rs` |
+| `pulsar-zbhci` | транспорт радио Zigbee Миди: кадрирование zbhci, линк и reset/boot (tty — `home-linux`) |
+| `pulsar-deconz` | протокол deCONZ: SLIP, параметры и сервер для ZHA / Zigbee2MQTT |
+| `pulsar-zigbee` | радио Zigbee Миди: роли, координатор, роутер, прошивка и сервис; внутренний API — в `//!` `src/lib.rs` |
 | `pulsar-update` | бэкенд сущности обновления «Firmware» в HA |
 
 Общие примитивы с другими программами монорепозитория живут в `packages/rust/`:
 `home-runtime` (Supervisor), `home-actor` (Handle/channel), `home-telemetry`
-(bootstrap `tracing`), `home-linux` (errno, запись sysfs и Linux ABI: framebuffer, i2c-dev, evdev, локальное время). Крейт Pulsar их только использует.
+(bootstrap `tracing`), `home-linux` (errno, запись sysfs, tty и Linux ABI: framebuffer, i2c-dev, evdev, локальное время). Крейт Pulsar их только использует.
 
 `third_party/` — только сборка sendspin-cpp.
 

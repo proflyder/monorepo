@@ -8,8 +8,11 @@ skill `zigbee-radio`, правила для живых станций — [stati
 На Миди радио работает на собственной прошивке pulsar: это либо координатор сети с протоколом
 deCONZ для Zigbee2MQTT / ZHA, либо роутер в чужой сети (например, Zigbee2MQTT). Где что лежит:
 
-- `../satellite/crates/pulsar-zigbee/` — хост: сервис ролей, линк, координатор, сервер deCONZ,
-  роутер, флешер. Карта крейта и внутренний API описаны в `//!` в
+- `../satellite/crates/pulsar-zbhci/` — транспорт: кадрирование zbhci, линк с ACK и ретраями,
+  линии reset/boot. Открытие tty и termios — в `../../packages/rust/home-linux/`.
+- `../satellite/crates/pulsar-deconz/` — протокол deCONZ: SLIP, checksum, параметры, сервер на TCP.
+- `../satellite/crates/pulsar-zigbee/` — оркестрация: роли, координатор, роутер, флешер, сервис.
+  Карта крейтов и внутренний API описаны в `//!` в
   [`lib.rs`](../satellite/crates/pulsar-zigbee/src/lib.rs).
 - `../radio/` — прошивки pulsar на Telink Zigbee SDK (коммит закреплён в
   [`build.sh`](../radio/build.sh)), лицензия Apache-2.0 (см.
@@ -157,7 +160,7 @@ little endian. Раскладки фреймов описаны только в 
 ## Клиенты deCONZ
 
 Поведение внешних клиентов, под которое подстроен сервер deCONZ
-([`deconz.rs`](../satellite/crates/pulsar-zigbee/src/deconz.rs)):
+([`server.rs`](../satellite/crates/pulsar-deconz/src/server.rs)):
 
 - zigpy-deconz (ZHA) при прошивке ConBee III 0x26780900 и протоколе 0x0106 сканирует энергию
   через ZDO к координатору. Команды update_neighbor, watchdog TTL и source routes он при этом не

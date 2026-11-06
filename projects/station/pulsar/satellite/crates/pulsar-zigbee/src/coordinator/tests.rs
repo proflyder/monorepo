@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use super::*;
-use crate::link::BOOT_IND;
 use crate::test_util::{Radio, absent_lines, assert_golden, hex, link_pair, poll_once};
+use pulsar_zbhci::frame::BOOT_IND;
 
 /// The hooks print what the C++ harness printed.
 #[derive(Default)]
@@ -12,7 +12,7 @@ struct Rec {
 }
 
 impl Hooks for Rec {
-    fn received(&mut self, _: &mut Coordinator, f: &ApsFrame) {
+    fn received(&mut self, _: &mut dyn Ncp, f: &ApsFrame) {
         writeln!(
             self.out,
             "received src={:04x} dst={:04x} group={} src_ep={} dst_ep={} profile={:04x} cluster={:04x} lqi={} rssi={} data={}",
@@ -30,11 +30,11 @@ impl Hooks for Rec {
         .unwrap();
     }
 
-    fn sent(&mut self, _: &mut Coordinator, handle: u32, status: u8) {
+    fn sent(&mut self, _: &mut dyn Ncp, handle: u32, status: u8) {
         writeln!(self.out, "sent {handle:08x} {status:02x}").unwrap();
     }
 
-    fn changed(&mut self, c: &mut Coordinator) {
+    fn changed(&mut self, c: &mut dyn Ncp) {
         let n = c.network();
         writeln!(
             self.out,
@@ -55,7 +55,7 @@ impl Hooks for Rec {
         .unwrap();
     }
 
-    fn formed(&mut self, _: &mut Coordinator, ok: bool) {
+    fn formed(&mut self, _: &mut dyn Ncp, ok: bool) {
         writeln!(self.out, "formed ok={}", u8::from(ok)).unwrap();
     }
 }

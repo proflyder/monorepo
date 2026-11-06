@@ -14,12 +14,12 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
-use pulsar_zigbee::RadioLines;
-use pulsar_zigbee::bytes::{get_be16, get_be32};
-use pulsar_zigbee::coordinator::{ApsFrame, Coordinator, Hooks};
-use pulsar_zigbee::deconz::DeconzServer;
+use pulsar_deconz::{ApsFrame, Hooks, Ncp, Server};
+use pulsar_zbhci::bytes::{get_be16, get_be32};
+use pulsar_zbhci::link::{Link, LinkEvent, SysfsLines};
+use pulsar_zigbee::RadioPaths;
+use pulsar_zigbee::coordinator::Coordinator;
 use pulsar_zigbee::flasher::{radio_flash, ybl_load};
-use pulsar_zigbee::link::{Link, LinkEvent};
 use tracing::{debug, error, info};
 
 const APP_INFO_REQ: u16 = 0x0900;
@@ -35,7 +35,7 @@ fn main() -> ExitCode {
         error!("no Zigbee radio on this model");
         return ExitCode::FAILURE;
     };
-    let lines = RadioLines {
+    let lines = RadioPaths {
         tty: radio.tty.into(),
         reset: radio.reset.into(),
         boot: radio.boot.into(),
@@ -65,13 +65,20 @@ enum Cmd {
     Flash { image: PathBuf },
 }
 
+fn open_link(lines: &RadioPaths) -> Result<Link, pulsar_zbhci::RadioError> {
+    Link::open(
+        &lines.tty,
+        Box::new(SysfsLines::new(lines.reset.clone(), lines.boot.clone())),
+    )
+}
+
 /// The coordinator's hooks: log, then the deCONZ server's.
 struct ProbeHooks<'a> {
-    server: &'a mut DeconzServer,
+    server: &'a mut Server,
 }
 
 impl Hooks for ProbeHooks<'_> {
-    fn received(&mut self, coord: &mut Coordinator, f: &ApsFrame) {
+    fn received(&mut self, coord: &mut dyn Ncp, f: &ApsFrame) {
         info!(
             "rx 0x{:04x}:{} -> {}0x{:04x}:{} profile 0x{:04x} cluster 0x{:04x} {} bytes lqi {} rssi {}",
             f.src,
@@ -88,12 +95,12 @@ impl Hooks for ProbeHooks<'_> {
         self.server.received(coord, f);
     }
 
-    fn sent(&mut self, coord: &mut Coordinator, handle: u32, status: u8) {
+    fn sent(&mut self, coord: &mut dyn Ncp, handle: u32, status: u8) {
         info!("sent {handle:08x}: status 0x{status:02x}");
         self.server.sent(coord, handle, status);
     }
 
-    fn changed(&mut self, coord: &mut Coordinator) {
+    fn changed(&mut self, coord: &mut dyn Ncp) {
         let n = coord.network();
         info!(
             "ready {} formed {} PAN 0x{:04x} channel {} IEEE {:016x}",
@@ -106,13 +113,13 @@ impl Hooks for ProbeHooks<'_> {
         self.server.changed(coord);
     }
 
-    fn formed(&mut self, coord: &mut Coordinator, ok: bool) {
+    fn formed(&mut self, coord: &mut dyn Ncp, ok: bool) {
         self.server.formed(coord, ok);
     }
 }
 
 /// Runs the link, the coordinator and a deCONZ server on `port` until killed.
-fn server_mode(lines: &RadioLines, port: u16) -> ExitCode {
+fn server_mode(lines: &RadioPaths, port: u16) -> ExitCode {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -125,12 +132,17 @@ fn server_mode(lines: &RadioLines, port: u16) -> ExitCode {
     };
     rt.block_on(async {
         // The port first: without it the radio is not touched (as the C++ probe).
-        let mut server = DeconzServer::new(port);
+        let mut server = Server::new(port);
         if !server.start() {
+            // start() logged the bind/listen failure.
             return ExitCode::FAILURE;
         }
-        let Some(link) = Link::open(lines) else {
-            return ExitCode::FAILURE;
+        let link = match open_link(lines) {
+            Ok(link) => link,
+            Err(e) => {
+                error!("zigbee: {e}");
+                return ExitCode::FAILURE;
+            }
         };
         let mut coord = Coordinator::new(link);
         server.attach(&mut coord);
@@ -148,7 +160,7 @@ fn server_mode(lines: &RadioLines, port: u16) -> ExitCode {
 
 /// Resets the radio and asks its application which firmware it is; prints
 /// `version=… family=… manufacturer=… image_type=… size=…`.
-fn info_mode(lines: &RadioLines) -> ExitCode {
+fn info_mode(lines: &RadioPaths) -> ExitCode {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -160,8 +172,12 @@ fn info_mode(lines: &RadioLines) -> ExitCode {
         }
     };
     rt.block_on(async {
-        let Some(mut link) = Link::open(lines) else {
-            return ExitCode::FAILURE;
+        let mut link = match open_link(lines) {
+            Ok(link) => link,
+            Err(e) => {
+                error!("zigbee: {e}");
+                return ExitCode::FAILURE;
+            }
         };
         let timeout = tokio::time::sleep(ANSWER_TIMEOUT);
         tokio::pin!(timeout);
@@ -195,7 +211,7 @@ fn info_mode(lines: &RadioLines) -> ExitCode {
     })
 }
 
-fn flash_mode(lines: &RadioLines, path: &Path) -> ExitCode {
+fn flash_mode(lines: &RadioPaths, path: &Path) -> ExitCode {
     let (image, info) = match ybl_load(path) {
         Ok(v) => v,
         Err(e) => {
@@ -208,9 +224,15 @@ fn flash_mode(lines: &RadioLines, path: &Path) -> ExitCode {
         path.display(),
         info.version
     );
-    match radio_flash(lines, &image, &mut |p| debug!("{} %", (p * 100.0) as i32)) {
+    match radio_flash(
+        &lines.tty,
+        &mut SysfsLines::new(lines.reset.clone(), lines.boot.clone()),
+        &image,
+        &mut |p| debug!("{} %", (p * 100.0) as i32),
+    ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
+            // radio_flash already logged `zigbee flash: …`.
             error!("{e}");
             ExitCode::FAILURE
         }

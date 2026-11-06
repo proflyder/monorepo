@@ -11,11 +11,19 @@
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
 mod linux;
+#[cfg(target_os = "linux")]
+#[allow(unsafe_code)]
+mod tty;
 
 #[cfg(target_os = "linux")]
 pub use linux::{
     EMPTY_EVENT, Evdev, Framebuffer, I2c, KeyBits, RawInputEvent, SwBits, WallTime, wall_time,
 };
+#[cfg(target_os = "linux")]
+pub use tty::{AsyncTty, Tty};
+#[cfg(all(target_os = "linux", feature = "testing"))]
+#[allow(unsafe_code)]
+pub mod testing;
 
 use std::fs::OpenOptions;
 use std::io::Write as _;

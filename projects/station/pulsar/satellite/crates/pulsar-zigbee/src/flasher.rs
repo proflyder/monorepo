@@ -4,16 +4,15 @@
 //! 128-byte blocks, CRC-16 or checksum as the receiver asks). This is maind's own update path
 //! (ncp_manager.cpp updateFirmware); the bootloader itself (flash 0..0x7FFF) is never written.
 
-use std::fs::File;
 use std::io::{self, Read as _, Write as _};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use home_linux as sysfs;
+use home_linux::{Tty, io_error_text};
 use tracing::{error, info};
 
-use crate::{RadioLines, os_error_text, sys};
+use pulsar_zbhci::link::RadioLines;
 
 const SOH: u8 = 0x01;
 const EOT: u8 = 0x04;
@@ -33,6 +32,31 @@ pub struct YblInfo {
     pub version: u32,
     pub manufacturer: u16,
     pub image_type: u16,
+}
+
+/// Why an image was not written. The text is what the daemon logs and the probe prints.
+#[derive(Debug, thiserror::Error)]
+pub enum FlashError {
+    #[error("cannot read {path}")]
+    Read { path: String },
+    #[error("{path}: {reason}")]
+    Invalid { path: String, reason: &'static str },
+    #[error("cannot open {path}: {errno}")]
+    Open { path: String, errno: String },
+    #[error("cannot drive the radio's reset/boot lines")]
+    Lines,
+    #[error("no bootloader prompt (got '{0}')")]
+    NoPrompt(String),
+    #[error("bootloader did not start XMODEM")]
+    NoXmodem,
+    #[error("bootloader cancelled the transfer at block {0}")]
+    Cancelled(usize),
+    #[error("block {0} not acknowledged")]
+    BlockUnacked(usize),
+    #[error("end of transfer not acknowledged")]
+    EotUnacked,
+    #[error("thread: {0}")]
+    Thread(String),
 }
 
 fn le32(p: &[u8]) -> u32 {
@@ -98,9 +122,11 @@ pub fn ybl_parse(f: &[u8]) -> Result<YblInfo, &'static str> {
 }
 
 /// Reads and checks an image file. Errors name the path.
-pub fn ybl_load(path: &Path) -> Result<(Vec<u8>, YblInfo), String> {
-    let Ok(mut f) = File::open(path) else {
-        return Err(format!("cannot read {}", path.display()));
+pub fn ybl_load(path: &Path) -> Result<(Vec<u8>, YblInfo), FlashError> {
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return Err(FlashError::Read {
+            path: path.display().to_string(),
+        });
     };
     // What a failing read left is checked as it is (a directory reads as empty), as the C++
     // stream did.
@@ -108,28 +134,35 @@ pub fn ybl_load(path: &Path) -> Result<(Vec<u8>, YblInfo), String> {
     let _ = f.read_to_end(&mut file);
     match ybl_parse(&file) {
         Ok(info) => Ok((file, info)),
-        Err(e) => Err(format!("{}: {e}", path.display())),
+        Err(reason) => Err(FlashError::Invalid {
+            path: path.display().to_string(),
+            reason,
+        }),
     }
 }
 
 struct Port {
-    file: File,
+    tty: Tty,
 }
 
 impl Port {
-    fn open(tty: &str) -> io::Result<Self> {
-        let file = sys::open_tty(tty, false)?;
+    fn open(tty: &str) -> Result<Self, FlashError> {
+        let open = |e: io::Error| FlashError::Open {
+            path: tty.to_owned(),
+            errno: io_error_text(&e),
+        };
+        let tty = Tty::open(tty, false).map_err(open)?;
         // Never write menu keys or an image into a regular file.
-        sys::ensure_tty(&file)?;
+        tty.ensure_tty().map_err(open)?;
         // As the C++ flasher: a port that refuses the settings is still tried.
-        let _ = sys::set_raw_115200(&file, false);
-        sys::flush_io(&file);
-        Ok(Self { file })
+        let _ = tty.configure_raw_115200(false);
+        tty.flush_io();
+        Ok(Self { tty })
     }
 
     fn put(&mut self, mut b: &[u8]) -> bool {
         while !b.is_empty() {
-            match self.file.write(b) {
+            match self.tty.write(b) {
                 Ok(n @ 1..) => b = &b[n..],
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 _ => return false,
@@ -140,11 +173,11 @@ impl Port {
 
     /// Next byte within `ms`.
     fn get(&mut self, ms: i32) -> Option<u8> {
-        if !sys::wait_readable(&self.file, ms) {
+        if !self.tty.wait_readable(ms) {
             return None;
         }
         let mut c = [0u8];
-        match self.file.read(&mut c) {
+        match self.tty.read(&mut c) {
             Ok(1) => Some(c[0]),
             _ => None,
         }
@@ -172,7 +205,7 @@ fn printable(seen: &[u8]) -> String {
     String::from_utf8_lossy(seen).replace('\n', "|")
 }
 
-fn fail(why: String) -> Result<(), String> {
+fn fail(why: FlashError) -> Result<(), FlashError> {
     error!("zigbee flash: {why}");
     Err(why)
 }
@@ -184,24 +217,25 @@ fn fail(why: String) -> Result<(), String> {
 /// that is never acknowledged, it stays in the bootloader until the next reset (the service's
 /// next bring-up).
 pub fn radio_flash(
-    lines: &RadioLines,
+    tty: &str,
+    lines: &mut dyn RadioLines,
     image: &[u8],
     progress: &mut dyn FnMut(f32),
-) -> Result<(), String> {
-    let mut port = match Port::open(&lines.tty) {
-        Ok(p) => p,
-        Err(e) => return fail(format!("cannot open {}: {}", lines.tty, os_error_text(&e))),
+) -> Result<(), FlashError> {
+    let mut port = match Port::open(tty) {
+        Ok(port) => port,
+        Err(e) => return fail(e),
     };
 
     // Bootloader entry exactly as maind (zb_control): boot and reset asserted, reset released
     // after 100 ms, boot 100 ms later.
-    if !sysfs::write_file(&lines.boot, "1") || !sysfs::write_file(&lines.reset, "1") {
-        return fail("cannot drive the radio's reset/boot lines".into());
+    if !lines.set_boot(true) || !lines.set_reset(true) {
+        return fail(FlashError::Lines);
     }
     sleep(Duration::from_millis(100));
-    sysfs::write_file(&lines.reset, "0");
+    lines.set_reset(false);
     sleep(Duration::from_millis(100));
-    sysfs::write_file(&lines.boot, "0");
+    lines.set_boot(false);
 
     let mut seen = Vec::new();
     let mut menu = false;
@@ -216,10 +250,10 @@ pub fn radio_flash(
     }
     if !menu {
         // Not in the bootloader: the application keeps running (or a reset brings it back).
-        sysfs::write_file(&lines.reset, "1");
+        lines.set_reset(true);
         sleep(Duration::from_millis(100));
-        sysfs::write_file(&lines.reset, "0");
-        return fail(format!("no bootloader prompt (got '{}')", printable(&seen)));
+        lines.set_reset(false);
+        return fail(FlashError::NoPrompt(printable(&seen)));
     }
     info!("zigbee flash: bootloader: {}", printable(&seen));
 
@@ -234,7 +268,7 @@ pub fn radio_flash(
         }
         if Instant::now() > deadline {
             port.put(b"2");
-            return fail("bootloader did not start XMODEM".into());
+            return fail(FlashError::NoXmodem);
         }
     };
 
@@ -267,10 +301,7 @@ pub fn radio_flash(
                     break;
                 }
                 Some(CAN) if port.get(1000) == Some(CAN) => {
-                    return fail(format!(
-                        "bootloader cancelled the transfer at block {}",
-                        b + 1
-                    ));
+                    return fail(FlashError::Cancelled(b + 1));
                 }
                 _ => {}
             }
@@ -279,7 +310,7 @@ pub fn radio_flash(
             for _ in 0..3 {
                 port.put(&[CAN]);
             }
-            return fail(format!("block {} not acknowledged", b + 1));
+            return fail(FlashError::BlockUnacked(b + 1));
         }
         progress((b + 1) as f32 / blocks as f32);
     }
@@ -292,7 +323,7 @@ pub fn radio_flash(
         }
     }
     if !done {
-        return fail("end of transfer not acknowledged".into());
+        return fail(FlashError::EotUnacked);
     }
 
     seen.clear();

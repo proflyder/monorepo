@@ -610,7 +610,7 @@ impl Controller {
         let (zigbee, zigbee_rx) = match model.zigbee.as_ref() {
             Some(radio) if ENABLE_ZIGBEE => {
                 let zcfg = ZigbeeConfig {
-                    lines: pulsar_zigbee::RadioLines {
+                    lines: pulsar_zigbee::RadioPaths {
                         tty: radio.tty.into(),
                         reset: radio.reset.into(),
                         boot: radio.boot.into(),

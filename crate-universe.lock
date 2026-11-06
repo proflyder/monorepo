@@ -1,5 +1,5 @@
 {
-  "checksum": "6973c8c296beeee1c458abffb506dffa875673b36c373b18e2dd8b86eb65f10e",
+  "checksum": "00a6b7669e87fa9b408cad6c7cda089c9096443583b4e2cd927984a4cc2cb1a5",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6310,6 +6310,9 @@
     },
     "home-linux 0.1.0": {
       "common_attrs": {
+        "crate_features": [
+          "testing"
+        ],
         "deps": [
           {
             "id": "libc 0.2.191",
@@ -11107,6 +11110,49 @@
       ],
       "version": "0.0.0"
     },
+    "pulsar-deconz 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "libc 0.2.191",
+            "target": "libc"
+          },
+          {
+            "id": "socket2 0.6.5",
+            "target": "socket2"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_deconz",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-deconz",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_deconz",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
     "pulsar-dsp 0.0.0": {
       "common_attrs": {
         "edition": "2024"
@@ -11610,16 +11656,47 @@
       ],
       "version": "0.0.0"
     },
+    "pulsar-zbhci 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_zbhci",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-zbhci",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_zbhci",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
     "pulsar-zigbee 0.0.0": {
       "common_attrs": {
         "deps": [
           {
-            "id": "libc 0.2.191",
-            "target": "libc"
-          },
-          {
-            "id": "socket2 0.6.5",
-            "target": "socket2"
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
           },
           {
             "id": "tokio 1.54.1",
@@ -11628,6 +11705,12 @@
           {
             "id": "tracing 0.1.44",
             "target": "tracing"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "libc 0.2.191",
+            "target": "libc"
           }
         ],
         "edition": "2024"
@@ -12924,8 +13007,10 @@
         "crate_features": {
           "common": [
             "alloc",
+            "event",
             "fs",
             "std",
+            "termios",
             "time"
           ],
           "selects": {
@@ -20090,6 +20175,7 @@
     "pulsar-audio 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-audio",
     "pulsar-clock 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-clock",
     "pulsar-core 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-core",
+    "pulsar-deconz 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-deconz",
     "pulsar-dsp 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-dsp",
     "pulsar-esphome 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-esphome",
     "pulsar-hw 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-hw",
@@ -20102,6 +20188,7 @@
     "pulsar-ui 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-ui",
     "pulsar-update 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-update",
     "pulsar-wake-events 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-wake-events",
+    "pulsar-zbhci 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zbhci",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
     "ricardo-voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",
     "scheduler 0.1.0": "solutions/scheduler/crates/scheduler",

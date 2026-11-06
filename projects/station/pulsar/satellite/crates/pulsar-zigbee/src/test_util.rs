@@ -5,13 +5,14 @@ use std::pin::{Pin, pin};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::task::{Context, Poll, Waker};
 
+use pulsar_zbhci::frame::build_frame;
+use pulsar_zbhci::link::{Link, SysfsLines};
 use tokio::io::{AsyncRead, AsyncWrite, DuplexStream, ReadBuf};
 
-use crate::RadioLines;
-use crate::link::{ACK, Link, build_frame};
+use crate::RadioPaths;
 
-/// Polls `f` once; None if it is not ready. Used to run the link and the radio in lock-step from
-/// a single task, so that paused time only moves when the test says so.
+/// Polls `f` once; None if it is not ready. Runs the link and the radio in lock-step from a
+/// single task, so that paused time only moves when the test says so.
 pub fn poll_once<F: Future>(f: F) -> Option<F::Output> {
     let mut f = pin!(f);
     match f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
@@ -82,7 +83,7 @@ impl Radio {
 
     pub(crate) fn ack(&mut self, ty: u16, status: u8) {
         let [t0, t1] = ty.to_be_bytes();
-        self.send(ACK, &[t0, t1, status, 0]);
+        self.send(0x8000, &[t0, t1, status, 0]);
     }
 
     pub(crate) fn write_raw(&mut self, mut b: &[u8]) {
@@ -97,10 +98,14 @@ impl Radio {
 }
 
 /// A link (reset as at open) and the radio's end of its wire.
-pub fn link_pair(lines: &RadioLines) -> (Link, Radio) {
+pub fn link_pair(lines: &RadioPaths) -> (Link, Radio) {
     let (a, b) = tokio::io::duplex(1 << 16);
     (
-        Link::over(a, lines),
+        Link::with_io(
+            a,
+            lines.tty.clone(),
+            Box::new(SysfsLines::new(lines.reset.clone(), lines.boot.clone())),
+        ),
         Radio {
             io: b,
             rx: Vec::new(),
@@ -109,8 +114,8 @@ pub fn link_pair(lines: &RadioLines) -> (Link, Radio) {
 }
 
 /// Reset / boot files that do not exist: the link boots at once without driving anything.
-pub fn absent_lines() -> RadioLines {
-    RadioLines {
+pub fn absent_lines() -> RadioPaths {
+    RadioPaths {
         tty: String::new(),
         reset: "/nonexistent/zb-reset/value".into(),
         boot: "/nonexistent/zb-boot/value".into(),
@@ -137,9 +142,9 @@ impl Lines {
         Self { dir }
     }
 
-    pub(crate) fn radio_lines(&self) -> RadioLines {
+    pub(crate) fn radio_lines(&self) -> RadioPaths {
         let path = |f: &str| self.dir.join(f).to_string_lossy().into_owned();
-        RadioLines {
+        RadioPaths {
             tty: String::new(),
             reset: path("reset"),
             boot: path("boot"),
@@ -162,6 +167,8 @@ impl Drop for Lines {
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
+
+pub use home_linux::testing::open_pty;
 
 /// A valid .ybl image of `version` (0x200 bytes + CRC-32 trailer).
 pub fn ybl_image(version: u32) -> Vec<u8> {

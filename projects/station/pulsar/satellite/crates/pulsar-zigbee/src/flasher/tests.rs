@@ -1,11 +1,29 @@
 use std::collections::HashSet;
 use std::fmt::Write as _;
-use std::fs::File;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::*;
-use crate::test_util::{Lines, assert_golden, hex};
+use pulsar_zbhci::link::SysfsLines;
+
+use crate::RadioPaths;
+use home_linux::Tty;
+
+use crate::test_util::{Lines, assert_golden, hex, open_pty};
+
+/// The real flasher with the sysfs lines of `paths`.
+fn flash(
+    paths: &RadioPaths,
+    image: &[u8],
+    progress: &mut dyn FnMut(f32),
+) -> Result<(), FlashError> {
+    radio_flash(
+        &paths.tty,
+        &mut SysfsLines::new(paths.reset.clone(), paths.boot.clone()),
+        image,
+        progress,
+    )
+}
 
 fn pattern(n: usize, mul: usize, add: usize) -> Vec<u8> {
     (0..n).map(|i| (i * mul + add) as u8).collect()
@@ -104,17 +122,17 @@ fn ybl_load_names_the_path() {
     let bad = dir.join("bad.ybl");
     std::fs::write(&bad, b"nope").unwrap();
     assert_eq!(
-        ybl_load(&bad).unwrap_err(),
+        ybl_load(&bad).unwrap_err().to_string(),
         format!("{}: file too short", bad.display())
     );
     let missing = dir.join("missing.ybl");
     assert_eq!(
-        ybl_load(&missing).unwrap_err(),
+        ybl_load(&missing).unwrap_err().to_string(),
         format!("cannot read {}", missing.display())
     );
     // A directory opens and reads as nothing, as with the C++ stream.
     assert_eq!(
-        ybl_load(&dir).unwrap_err(),
+        ybl_load(&dir).unwrap_err().to_string(),
         format!("{}: file too short", dir.display())
     );
 }
@@ -129,9 +147,9 @@ fn refuses_a_path_that_is_not_a_tty() {
         .to_string_lossy()
         .into_owned();
     std::fs::write(&l.tty, "").unwrap();
-    let err = radio_flash(&l, &[1, 2, 3], &mut |_| {}).unwrap_err();
+    let err = flash(&l, &[1, 2, 3], &mut |_| {}).unwrap_err();
     assert_eq!(
-        err,
+        err.to_string(),
         format!("cannot open {}: Inappropriate ioctl for device", l.tty)
     );
     assert_eq!(std::fs::read(&l.tty).unwrap(), b"");
@@ -166,7 +184,7 @@ const BASE: Script = Script {
 };
 
 /// The bootloader as the C++ harness emulated it; returns every byte the flasher wrote.
-fn emulate(master: &File, s: &Script, done: &AtomicBool) -> Vec<u8> {
+fn emulate(master: &Tty, s: &Script, done: &AtomicBool) -> Vec<u8> {
     let mut rx = Vec::new();
     let put = |t: &[u8]| {
         let mut m = master;
@@ -174,7 +192,7 @@ fn emulate(master: &File, s: &Script, done: &AtomicBool) -> Vec<u8> {
     };
     let get = |rx: &mut Vec<u8>, mut ms: i32| -> Option<u8> {
         loop {
-            if sys::wait_readable(master, 50) {
+            if master.wait_readable(50) {
                 let mut c = [0u8];
                 let mut m = master;
                 return match m.read(&mut c) {
@@ -270,19 +288,18 @@ fn emulate(master: &File, s: &Script, done: &AtomicBool) -> Vec<u8> {
 /// radio_flash against the emulated bootloader on a pseudo-terminal: result, progress, the reset
 /// / boot lines and the byte stream must be those of the C++ flasher (tests/golden/flash.txt).
 fn flash_case(s: Script) {
-    let (master, slave) = sys::open_pty().unwrap();
+    let (master, slave) = open_pty().unwrap();
     let lines = Lines::new();
     let mut l = lines.radio_lines();
     l.tty = slave;
     let done = Arc::new(AtomicBool::new(false));
     let emu = {
         let done = done.clone();
-        let master = master.try_clone().unwrap();
         std::thread::spawn(move || emulate(&master, &s, &done))
     };
     let image = pattern(s.image_size, 31, 5);
     let mut progress = String::new();
-    let result = radio_flash(&l, &image, &mut |p| {
+    let result = flash(&l, &image, &mut |p| {
         let _ = write!(progress, " {p:.6}");
     });
     done.store(true, Ordering::Relaxed);
@@ -379,14 +396,14 @@ fn flash_without_xmodem_start() {
 
 #[test]
 fn flash_refuses_undrivable_lines() {
-    let (mut master, slave) = sys::open_pty().unwrap();
-    let l = RadioLines {
+    let (mut master, slave) = open_pty().unwrap();
+    let l = RadioPaths {
         tty: slave,
         reset: "/nonexistent/zb-reset/value".into(),
         boot: "/nonexistent/zb-boot/value".into(),
     };
-    let err = radio_flash(&l, &[1, 2, 3], &mut |_| {}).unwrap_err();
-    assert_eq!(err, "cannot drive the radio's reset/boot lines");
+    let err = flash(&l, &[1, 2, 3], &mut |_| {}).unwrap_err();
+    assert_eq!(err.to_string(), "cannot drive the radio's reset/boot lines");
     // Nothing reached the radio: the closed slave reads as EIO (or end), never as data.
     let mut buf = [0u8; 16];
     assert!(!matches!(io::Read::read(&mut master, &mut buf), Ok(n) if n > 0));

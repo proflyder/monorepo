@@ -7,12 +7,12 @@ LINUX = ["@platforms//os:linux"]
 
 DEPS = [
     "//packages/rust/home-linux:home_linux",
-    "@crates//:libc",
-    "@crates//:tracing",
-    "@crates//:socket2",
-    "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
-    "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
+    "//projects/station/pulsar/satellite/crates/pulsar-deconz:pulsar_deconz",
+    "//projects/station/pulsar/satellite/crates/pulsar-zbhci:pulsar_zbhci",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tracing",
 ]
 
 rust_library(
@@ -29,13 +29,26 @@ rust_library(
 )
 
 
+# The unit tests use the test-only pty helpers: the testing variant replaces the normal
+# home-linux (same crate name, both would be `--extern home_linux`).
+TEST_DEPS = [
+    d
+    for d in DEPS
+    if d != "//packages/rust/home-linux:home_linux"
+] + ["//packages/rust/home-linux:home_linux_testing"]
+
 rust_test(
     name = "pulsar_zigbee_unit_tests",
-    crate = ":pulsar_zigbee",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    crate_root = "src/lib.rs",
+    compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = ["@crates//:tokio"],
+    deps = TEST_DEPS,
 )
 
 # Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
