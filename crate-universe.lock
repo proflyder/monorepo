@@ -1,5 +1,5 @@
 {
-  "checksum": "57da017adf61c07a2fda0525ec02a8aaee5c18dbe2f537bbdff8f1f9d54f5ba2",
+  "checksum": "9eaacfbdfeccd9f64f070794039b794960ce93c30f8a26103d8c5ece95973764",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -114,6 +114,7 @@
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-linux-musl"
     ],
+    "cfg(not(target_has_atomic = \"ptr\"))": [],
     "cfg(target_arch = \"wasm32\")": [],
     "cfg(target_arch = \"x86_64\")": [
       "x86_64-apple-darwin",
@@ -802,6 +803,35 @@
         }
       ],
       "version": "0.23.1"
+    },
+    "bitflags 1.3.2": {
+      "common_attrs": {
+        "edition": "2018"
+      },
+      "library_target_name": "bitflags",
+      "license": "MIT/Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "bitflags",
+      "package_url": "https://github.com/bitflags/bitflags",
+      "repository": {
+        "Http": {
+          "sha256": "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a",
+          "url": "https://static.crates.io/crates/bitflags/1.3.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitflags",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.3.2"
     },
     "bitflags 2.13.2": {
       "common_attrs": {
@@ -2093,6 +2123,151 @@
         }
       ],
       "version": "0.1.1"
+    },
+    "defmt 1.2.0": {
+      "build_script_attrs": {
+        "links": "defmt"
+      },
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "bitflags 1.3.2",
+            "target": "bitflags"
+          }
+        ],
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ],
+        "proc_macro_deps": [
+          {
+            "id": "defmt-macros 1.2.0",
+            "target": "defmt_macros"
+          }
+        ]
+      },
+      "library_target_name": "defmt",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "defmt",
+      "package_url": "https://github.com/knurling-rs/defmt",
+      "repository": {
+        "Http": {
+          "sha256": "e4a0795ac740cb54d7b3775c9c17345f6aaecf884c01733b39d6017738e0e3e1",
+          "url": "https://static.crates.io/crates/defmt/1.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "defmt",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "1.2.0"
+    },
+    "defmt-macros 1.2.0": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "defmt-parser 1.1.0",
+            "target": "defmt_parser"
+          },
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 3.0.9",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "defmt_macros",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "defmt-macros",
+      "package_url": "https://github.com/knurling-rs/defmt",
+      "repository": {
+        "Http": {
+          "sha256": "840bb056bd99c495c9188198a258ab787c79f306d864db3e6e8451442d6d8366",
+          "url": "https://static.crates.io/crates/defmt-macros/1.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "defmt_macros",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "1.2.0"
+    },
+    "defmt-parser 1.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "defmt_parser",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "defmt-parser",
+      "package_url": "https://github.com/knurling-rs/defmt",
+      "repository": {
+        "Http": {
+          "sha256": "71958f69fb2de856c5dd51ac9377e986ca1aa5919f931bf5395a807277f889a0",
+          "url": "https://static.crates.io/crates/defmt-parser/1.1.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "defmt_parser",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.1.0"
     },
     "deranged 0.5.9": {
       "common_attrs": {
@@ -5585,6 +5760,188 @@
       ],
       "version": "1.0.18"
     },
+    "jiff 0.2.39": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "std",
+          "tzdb-bundle-always"
+        ],
+        "deps": {
+          "common": [
+            {
+              "alias": "jcore",
+              "id": "jiff-core 0.1.2",
+              "target": "jiff_core"
+            },
+            {
+              "id": "jiff-tzdb 0.1.9",
+              "target": "jiff_tzdb"
+            }
+          ],
+          "selects": {
+            "cfg(not(target_has_atomic = \"ptr\"))": [
+              {
+                "id": "portable-atomic 1.15.0",
+                "target": "portable_atomic"
+              },
+              {
+                "id": "portable-atomic-util 0.2.8",
+                "target": "portable_atomic_util"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [],
+          "selects": {
+            "cfg(any())": [
+              {
+                "id": "jiff-static 0.2.39",
+                "target": "jiff_static"
+              }
+            ]
+          }
+        }
+      },
+      "library_target_name": "jiff",
+      "license": "Unlicense OR MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "jiff",
+      "package_url": "https://github.com/BurntSushi/jiff",
+      "repository": {
+        "Http": {
+          "sha256": "3ac703058abac89e5c39b0b879dce2b6b14a4ba36600c7e7e3d0c60a6883ef3c",
+          "url": "https://static.crates.io/crates/jiff/0.2.39/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "jiff",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.39"
+    },
+    "jiff-core 0.1.2": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std",
+          "tz-fat"
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "jiff_core",
+      "license": "Unlicense OR MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "jiff-core",
+      "package_url": "https://github.com/BurntSushi/jiff",
+      "repository": {
+        "Http": {
+          "sha256": "aee43309eb53bafb8c36d35d6e444769c8f8e6206a9fbf7546f5db9d7d4a0e93",
+          "url": "https://static.crates.io/crates/jiff-core/0.1.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "jiff_core",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.2"
+    },
+    "jiff-static 0.2.39": {
+      "common_attrs": {
+        "deps": [
+          {
+            "alias": "jcore",
+            "id": "jiff-core 0.1.2",
+            "target": "jiff_core"
+          },
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 2.0.119",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "jiff_static",
+      "license": "Unlicense OR MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "jiff-static",
+      "package_url": "https://github.com/BurntSushi/jiff",
+      "repository": {
+        "Http": {
+          "sha256": "6dc32470c67eb7d0e9ccb74303fa925313dc04cecb1aa048beaa6f391e36a93d",
+          "url": "https://static.crates.io/crates/jiff-static/0.2.39/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "jiff_static",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.39"
+    },
+    "jiff-tzdb 0.1.9": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "jiff_tzdb",
+      "license": "Unlicense OR MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "jiff-tzdb",
+      "package_url": "https://github.com/BurntSushi/jiff",
+      "repository": {
+        "Http": {
+          "sha256": "fa8377070c6bae868759445e5a77f66d84f0b72f3a054bfb00e6d038b8282da7",
+          "url": "https://static.crates.io/crates/jiff-tzdb/0.1.9/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "jiff_tzdb",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.9"
+    },
     "js-sys 0.3.107": {
       "common_attrs": {
         "deps": [
@@ -6578,6 +6935,90 @@
         }
       ],
       "version": "0.8.0"
+    },
+    "portable-atomic 1.15.0": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "edition": "2018",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "portable_atomic",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "portable-atomic",
+      "package_url": "https://github.com/taiki-e/portable-atomic",
+      "repository": {
+        "Http": {
+          "sha256": "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85",
+          "url": "https://static.crates.io/crates/portable-atomic/1.15.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "portable_atomic",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "1.15.0"
+    },
+    "portable-atomic-util 0.2.8": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "portable-atomic 1.15.0",
+            "target": "portable_atomic"
+          }
+        ],
+        "edition": "2018",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "portable_atomic_util",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "portable-atomic-util",
+      "package_url": "https://github.com/taiki-e/portable-atomic-util",
+      "repository": {
+        "Http": {
+          "sha256": "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715",
+          "url": "https://static.crates.io/crates/portable-atomic-util/0.2.8/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "portable_atomic_util",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.2.8"
     },
     "potential_utf 0.1.6": {
       "common_attrs": {
@@ -8638,6 +9079,49 @@
       ],
       "version": "1.0.23"
     },
+    "scheduler 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "jiff 0.2.39",
+            "target": "jiff"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "sha1_smol 1.0.1",
+            "target": "sha1_smol"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "uuid 1.29.0",
+            "target": "uuid"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "scheduler",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "scheduler",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "scheduler",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "semver 1.0.28": {
       "common_attrs": {
         "crate_features": [
@@ -9863,7 +10347,7 @@
               "target": "fastrand"
             },
             {
-              "id": "getrandom 0.3.4",
+              "id": "getrandom 0.4.3",
               "target": "getrandom"
             },
             {
@@ -14216,6 +14700,7 @@
     "hmac 0.13.0",
     "http 1.5.0",
     "http-body-util 0.1.5",
+    "jiff 0.2.39",
     "libc 0.2.191",
     "libloading 0.9.0",
     "log 0.4.34",
@@ -14229,6 +14714,7 @@
     "rustls-pki-types 1.15.1",
     "serde 1.0.229",
     "serde_json 1.0.154",
+    "sha1_smol 1.0.1",
     "sha2 0.11.1",
     "snow 0.10.0",
     "socket2 0.6.5",
@@ -14289,6 +14775,7 @@
     "pulsar-wake-events 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-wake-events",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
     "ricardo-voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",
+    "scheduler 0.1.0": "solutions/scheduler/crates/scheduler",
     "voice-contract 0.1.0": "packages/rust/voice-contract",
     "voice-proxy 0.3.0": "solutions/voice-proxy/crates/voice-proxy",
     "wakegrant 0.1.0": "solutions/wakegrant/crates/wakegrant",

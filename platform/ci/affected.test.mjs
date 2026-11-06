@@ -1430,6 +1430,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
   ]);
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
     "voice-proxy",
+    "scheduler-rust",
     "wakegrant",
     "ble-gateway",
     "pulsar-bazel",

@@ -13,6 +13,7 @@ members = [
     "solutions/windows-logon-provider/crates/*",
     "solutions/wakegrant/crates/*",
     "solutions/voice-proxy/crates/*",
+    "solutions/scheduler/crates/*",
 ]
 resolver = "3"
 
@@ -89,6 +90,11 @@ rusqlite = { version = "=0.41.1", features = ["bundled"] }
 # Scheduler ids (DECISIONS 41): `v5` reproduces Go's UUIDv5/DNS event ids and
 # `v7` the same 36-character time-ordered format as `uuid.NewV7`.
 uuid = { version = "=1.29.0", features = ["v4", "v5", "v7"] }
+# SHA-1 of canonical idempotency requests (DECISIONS 41): the same digest the
+# Go store persisted, so a restarted or migrated scheduler replays keys. It is
+# already in the lock as `uuid`'s own v5 digest; declaring it directly avoids
+# a second SHA-1 implementation.
+sha1_smol = "=1.0.1"
 # IANA time zones with a bundled tzdb (no system tzdata on the station image):
 # `tzdb-bundle-always` keeps DST/gap/fold behaviour reproducible. Pinned so a
 # tzdb update cannot change scheduler occurrences silently.

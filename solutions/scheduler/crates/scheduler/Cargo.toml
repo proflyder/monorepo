@@ -1,0 +1,21 @@
+[package]
+name = "scheduler"
+description = "Pure scheduler domain: recurrence, occurrences, ids and canonical request hashes"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "scheduler"
+path = "src/lib.rs"
+
+[dependencies]
+jiff = { workspace = true }
+sha1_smol = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true
