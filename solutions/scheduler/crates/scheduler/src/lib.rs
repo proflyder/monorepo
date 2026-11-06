@@ -12,4 +12,6 @@
 
 #![deny(missing_debug_implementations)]
 
+pub mod api;
 pub mod domain;
+pub mod store;

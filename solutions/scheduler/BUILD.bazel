@@ -14,3 +14,9 @@ filegroup(
     name = "ids_vectors",
     srcs = ["testdata/ids.json"],
 )
+
+# Textual v1 SQL dump produced by the Go store test (-update-export).
+filegroup(
+    name = "go_database_dump",
+    srcs = ["testdata/go_v1.sql"],
+)

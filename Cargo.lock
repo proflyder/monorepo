@@ -2030,10 +2030,22 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 name = "scheduler"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "connectrpc",
+ "home-contracttest",
+ "home-proto",
+ "home-sqlite",
+ "http",
  "jiff",
+ "rusqlite",
  "serde_json",
  "sha1_smol",
+ "sha2 0.11.1",
+ "subtle",
+ "tempfile",
  "thiserror",
+ "tokio",
+ "tower",
  "uuid",
 ]
 

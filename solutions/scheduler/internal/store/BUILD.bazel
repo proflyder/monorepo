@@ -25,6 +25,7 @@ go_test(
     name = "store_test",
     srcs = [
         "event_test.go",
+        "export_test.go",
         "ids_vectors_test.go",
         "schedule_test.go",
         "store_test.go",

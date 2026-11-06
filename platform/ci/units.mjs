@@ -198,7 +198,11 @@ export const config = {
       id: "scheduler-rust",
       platform: "bazel",
       title: "solutions/scheduler/crates (Rust port, tests only until cutover)",
-      paths: ["solutions/scheduler/crates/**", "solutions/scheduler/testdata/**"],
+      paths: [
+        "solutions/scheduler/crates/**",
+        "solutions/scheduler/testdata/**",
+        "solutions/scheduler/internal/api/testdata/contract/**",
+      ],
       // The Rust scheduler is not deployed yet: the Go `scheduler` unit still
       // owns the image and the Deployment. Golden vectors in testdata are
       // shared with the Go tests.
@@ -206,6 +210,8 @@ export const config = {
         roots: ["//solutions/scheduler/crates/scheduler", "//packages/rust"],
         test_targets: [
           "//solutions/scheduler/crates/scheduler:unit_tests",
+          "//solutions/scheduler/crates/scheduler:contract_tests",
+          "//solutions/scheduler/crates/scheduler:go_database_test",
           "//solutions/scheduler/crates/scheduler:clippy",
           "//solutions/scheduler/crates/scheduler:rustfmt",
         ],
