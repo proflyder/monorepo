@@ -81,7 +81,7 @@
 `secrets/` — 700, файлы 600. Реестр — `SENSITIVE-DATA.md`.
 
 - `secrets/NETWORK.md` — реальные IP/порты/VPN/HTTPS.
-- `secrets/CREDENTIALS.md` — SSH/ADB/сервисные пароли.
+- `secrets/README.md` — SSH/ADB/сервисные пароли.
 - `secrets/certs/` — приватные сертификаты/ключи.
 - QR/DPP отключён; прежний материал — только в private recovery archive.
 - `secrets/kubernetes-research/` — kubeconfig, values, Grafana password.

@@ -6,9 +6,9 @@ import sys
 from urllib.request import urlopen
 
 HERE = Path(__file__).resolve().parent
-CONFIG = HERE.parents[3] / "secrets/voice-recorder/connection.json"
+CONFIG = HERE.parents[3] / "local-data/voice-recorder/connection.json"
 if not CONFIG.is_file():
-    sys.exit("Создайте secrets/voice-recorder/connection.json по README инструмента.")
+    sys.exit("Создайте local-data/voice-recorder/connection.json по README инструмента.")
 config = json.loads(CONFIG.read_text())
 if not any(a in sys.argv for a in ["--recover-device", "--remove-device"]):
     url = "http://127.0.0.1:" + str(config.get("port", 8765))

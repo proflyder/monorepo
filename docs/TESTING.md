@@ -158,7 +158,7 @@ python3 -m unittest discover -s projects/home-assistant/hermes -p 'test_*.py' -v
 Bazel-гейты отдельные:
 
 ```bash
-# backend-таргеты (нужен Bazelisk; локально — secrets/local-tools/bazelisk)
+# backend-таргеты (нужен Bazelisk; локально — local-data/local-tools/bazelisk)
 bazel test //solutions/... //packages/...
 
 # Rust-хост Pulsar (Linux; на macOS цели пропускаются через
@@ -186,23 +186,23 @@ Android-сборка/тесты требуют Android SDK и выполняют
 
 ```bash
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-./secrets/local-tools/bazelisk test \
+./local-data/local-tools/bazelisk test \
   //projects/mobile/android:android_tests \
   //projects/mobile/android/app:main_activity_smoke_test \
   //projects/mobile/android:app \
   //solutions/scheduler/... //solutions/alarm/... //packages/proto/... \
   --nocache_test_results --test_output=errors
-./secrets/local-tools/bazelisk build //projects/mobile/android:app
+./local-data/local-tools/bazelisk build //projects/mobile/android:app
 # debug APK: bazel-bin/projects/mobile/android/app/app.apk
 
 # Android Lint (separate CI unit `android / android-lint`, not in android_tests)
 # needs cmdline-tools 23.0.
-./secrets/local-tools/bazelisk test //projects/mobile/android:android_lint
+./local-data/local-tools/bazelisk test //projects/mobile/android:android_lint
 
 # Bazel-инструменты Android (Go, exec-конфигурация): генераторы
 # ViewBinding/google-services, lint runner и APK closure; их тесты входят
 # в android_tests.
-./secrets/local-tools/bazelisk test //platform/android/...
+./local-data/local-tools/bazelisk test //platform/android/...
 go vet ./platform/android/...
 ```
 
@@ -235,7 +235,7 @@ python3 -m unittest discover -s . -p 'test_*.py' -v   # статический �
 ```
 
 Bazel и Rust/zig-тулчейн приходят из `MODULE.bazel`; на macOS/Linux Bazelisk
-ищется в `PATH`, затем в `secrets/local-tools/bazelisk` (в linked worktree —
+ищется в `PATH`, затем в `local-data/local-tools/bazelisk` (в linked worktree —
 в главном checkout'е), либо задаётся `BAZELISK`. Отдельного mingw-архива и
 host clang++ нет: `build.sh` собирает
 `//solutions/windows-logon-provider/crates/provider:provider` под

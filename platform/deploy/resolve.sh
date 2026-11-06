@@ -10,9 +10,9 @@
 # Resolution order:
 #   1. $HOME_DEPLOY (set by CI after one `bazel build` per job, or by a caller)
 #   2. `home-deploy` on PATH (an installed/operator binary)
-#   3. secrets/local-tools/home-deploy in this checkout
-#   4. secrets/local-tools/home-deploy in the main checkout that owns the shared
-#      Git directory: a linked worktree has no (git-ignored) secrets/ directory
+#   3. local-data/local-tools/home-deploy in this checkout
+#   4. local-data/local-tools/home-deploy in the main checkout that owns the shared
+#      Git directory: a linked worktree has no (git-ignored) local-data/ directory
 #   5. bazel run //platform/deploy/cmd/home-deploy --, when Bazel is available
 #
 # Every step is optional, so the manual macOS workstation flow and the CI runner
@@ -27,7 +27,7 @@ home_deploy_root() {
 }
 
 # home_deploy_main_root prints the directory of the main checkout that owns the
-# shared Git directory, so a linked worktree can still find secrets/local-tools.
+# shared Git directory, so a linked worktree can still find local-data/local-tools.
 home_deploy_main_root() {
   local common
   common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
@@ -48,14 +48,14 @@ home_deploy_bazel() {
     return 0
   fi
   root=$(home_deploy_root)
-  candidate="$root/secrets/local-tools/bazelisk"
+  candidate="$root/local-data/local-tools/bazelisk"
   if [ -x "$candidate" ]; then
     printf '%s\n' "$candidate"
     return 0
   fi
   main_root=$(home_deploy_main_root "$root" 2>/dev/null) || main_root=
-  if [ -n "$main_root" ] && [ -x "$main_root/secrets/local-tools/bazelisk" ]; then
-    printf '%s\n' "$main_root/secrets/local-tools/bazelisk"
+  if [ -n "$main_root" ] && [ -x "$main_root/local-data/local-tools/bazelisk" ]; then
+    printf '%s\n' "$main_root/local-data/local-tools/bazelisk"
     return 0
   fi
   return 1
@@ -75,7 +75,7 @@ home_deploy() {
 
   root=$(home_deploy_root)
   for candidate in \
-    "$root/secrets/local-tools/home-deploy" \
+    "$root/local-data/local-tools/home-deploy" \
     "$root/bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy"; do
     if [ -x "$candidate" ]; then
       "$candidate" "$@"
@@ -84,8 +84,8 @@ home_deploy() {
   done
 
   main_root=$(home_deploy_main_root "$root" 2>/dev/null) || main_root=
-  if [ -n "$main_root" ] && [ -x "$main_root/secrets/local-tools/home-deploy" ]; then
-    "$main_root/secrets/local-tools/home-deploy" "$@"
+  if [ -n "$main_root" ] && [ -x "$main_root/local-data/local-tools/home-deploy" ]; then
+    "$main_root/local-data/local-tools/home-deploy" "$@"
     return $?
   fi
 
@@ -96,6 +96,6 @@ home_deploy() {
 
   echo "home-deploy not found: build it with" >&2
   echo "  bazel build //platform/deploy/cmd/home-deploy --platforms=@rules_go//go/toolchain:linux_amd64" >&2
-  echo "and install it under secrets/local-tools/, or set HOME_DEPLOY to its path" >&2
+  echo "and install it under local-data/local-tools/, or set HOME_DEPLOY to its path" >&2
   return 127
 }

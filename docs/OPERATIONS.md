@@ -11,12 +11,12 @@ adb devices
 ssh -i ~/.ssh/ricardo_station_ed25519 root@192.0.2.13   # ключ; пароль — fallback
 
 # Proxmox / K3s / HAOS: один ключ из secrets/proxmox-install/
-ssh -i secrets/proxmox-install/proxmox_admin \
-  -o UserKnownHostsFile=secrets/proxmox-install/known_hosts root@192.0.2.26
-ssh -i secrets/proxmox-install/proxmox_admin \
-  -o UserKnownHostsFile=secrets/proxmox-install/guest-known_hosts labuser@192.0.2.27
-ssh -p 22222 -i secrets/proxmox-install/proxmox_admin \
-  -o UserKnownHostsFile=secrets/proxmox-install/haos-known_hosts root@192.0.2.28
+ssh -i ~/.ssh/home-lab/proxmox_admin \
+  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_pve root@192.0.2.26
+ssh -i ~/.ssh/home-lab/proxmox_admin \
+  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_k3s labuser@192.0.2.27
+ssh -p 22222 -i ~/.ssh/home-lab/proxmox_admin \
+  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_haos root@192.0.2.28
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 ```
 
@@ -65,8 +65,8 @@ pct exec 102 -- sh -c \
 ```bash
 python3 projects/home/proxmox/vpn/vpnusers.py <user> \
   --pve 192.0.2.26 \
-  --ssh-key secrets/proxmox-install/proxmox_admin \
-  --known-hosts secrets/proxmox-install/known_hosts
+  --ssh-key ~/.ssh/home-lab/proxmox_admin \
+  --known-hosts ~/.ssh/home-lab/known_hosts_pve
 # повторная выдача: --force
 ```
 
@@ -80,16 +80,16 @@ python3 projects/home/proxmox/vpn/vpnusers.py <user> \
 ```bash
 # один раз: частный CA; приватный ключ остаётся только на Mac
 python3 projects/home/proxmox/vpn/vpncerts.py init-ca \
-  --pve 192.0.2.26 --ssh-key secrets/proxmox-install/proxmox_admin \
-  --known-hosts secrets/proxmox-install/known_hosts
+  --pve 192.0.2.26 --ssh-key ~/.ssh/home-lab/proxmox_admin \
+  --known-hosts ~/.ssh/home-lab/known_hosts_pve
 
 # выпуск: p12 + legacy p12 + пароль импорта рядом (600)
 python3 projects/home/proxmox/vpn/vpncerts.py issue <user> --device phone
 
 # отзыв по serial или .p12; обновляет CRL на CT и перезагружает ocserv
 python3 projects/home/proxmox/vpn/vpncerts.py revoke <serial|file.p12> \
-  --pve 192.0.2.26 --ssh-key secrets/proxmox-install/proxmox_admin \
-  --known-hosts secrets/proxmox-install/known_hosts
+  --pve 192.0.2.26 --ssh-key ~/.ssh/home-lab/proxmox_admin \
+  --known-hosts ~/.ssh/home-lab/known_hosts_pve
 
 python3 projects/home/proxmox/vpn/vpncerts.py list
 ```
@@ -112,8 +112,8 @@ K3s API) и работает kubectl под ServiceAccount `ci-deploy` в
 # 1. отозвать сертификат CI (CRL обновится на CT, ocserv перезагрузится)
 python3 projects/home/proxmox/vpn/vpncerts.py revoke \
   secrets/home/vpn/clients/ci-github.p12 \
-  --pve 192.0.2.26 --ssh-key secrets/proxmox-install/proxmox_admin \
-  --known-hosts secrets/proxmox-install/known_hosts
+  --pve 192.0.2.26 --ssh-key ~/.ssh/home-lab/proxmox_admin \
+  --known-hosts ~/.ssh/home-lab/known_hosts_pve
 
 # 2. отозвать Kubernetes-доступ: удалить долгоживущий token Secret
 kubectl -n home-assistant delete secret ci-deploy-token
@@ -273,7 +273,21 @@ kubectl -n openbao logs job/snapshot-manual
 ```
 
 Операторский токен для KV (без входа человека): `secrets/openbao/operator.token`,
-политика `operator-kv` (`configure.py`), orphan, period 30 дней.
+политика `operator-kv` (`configure.py`: `secret/{ci,k8s,infra}/*`, без
+delete), orphan, period 30 дней.
+
+Секреты владельца (SSH-ключи, CA, бэкап-пароли, admin kubeconfig) — в
+`secret/infra/*`; в `secrets/` остаются описание (`README.md`), каталог
+`catalog.json` «старый файл → путь#поле» и bootstrap OpenBao. Скрипт, читающий
+файл вида `secrets/home/ingress.env`, запускать после временного восстановления:
+
+```bash
+projects/home/kubernetes/openbao/materialize.py home/ingress.env   # или --all
+projects/home/kubernetes/openbao/materialize.py --clean home/ingress.env
+```
+
+Не-секретные локальные данные (бэкапы, датасеты, логи, `local-tools`) —
+`local-data/` (git-ignored).
 
 ```bash
 export BAO_ADDR=https://vault.<home-domain> BAO_TOKEN=$(cat secrets/openbao/operator.token)
@@ -545,7 +559,7 @@ publish), анонимный `oras pull` работает без токена. �
 Package settings → Danger Zone → Change visibility → Public**.
 
 Получение (Mac/Linux оператора; нужны `oras` и авторизованный `gh`; `oras`
-можно положить в `secrets/local-tools/`):
+можно положить в `local-data/local-tools/`):
 
 ```bash
 cd solutions/windows-logon-provider
@@ -822,25 +836,25 @@ Pulsar пишет `/data/pulsar/wake-events/`; сбор и разметка — 
 # снимок новых событий + stats.json (busybox tar по ssh, без rsync)
 python3 projects/station/tools/wakeword-personalize/station_events.py collect \
   --host 192.0.2.13 --ssh-key ~/.ssh/ricardo_station_ed25519 \
-  --dest secrets/datasets/station-events
+  --dest local-data/datasets/station-events
 
 # разбор и метки (локальный labels.json, оригиналы не меняются)
 python3 projects/station/tools/wakeword-personalize/station_events.py report \
-  --events secrets/datasets/station-events
+  --events local-data/datasets/station-events
 python3 projects/station/tools/wakeword-personalize/station_events.py review \
-  --events secrets/datasets/station-events
+  --events local-data/datasets/station-events
 python3 projects/station/tools/wakeword-personalize/station_events.py label \
-  --events secrets/datasets/station-events --id EVENT_ID --label false
+  --events local-data/datasets/station-events --id EVENT_ID --label false
 
 # manifest для finetune.py --extra-manifest
 python3 projects/station/tools/wakeword-personalize/station_events.py to-manifest \
-  --events secrets/datasets/station-events \
+  --events local-data/datasets/station-events \
   --output PRIVATE_RUN/station-manifest.json
 
 # калибровка cutoff/window по replay и запись micro.* в манифест модели
 python3 projects/station/tools/wakeword-personalize/calibrate.py \
   --model PRIVATE_MODEL/ru_ricardo_mww.tflite \
-  --positives PRIVATE_RUN/recordings --events secrets/datasets/station-events \
+  --positives PRIVATE_RUN/recordings --events local-data/datasets/station-events \
   --manifest PRIVATE_MODEL/ru_ricardo_mww.json
 ```
 
@@ -958,10 +972,10 @@ Deploy, пауза и запуск исполнителя — `projects/home/kub
 Короткие команды (приватные значения в `secrets/home/scheduler.env`):
 
 ```bash
-# ключ ноды: secrets/proxmox-install/proxmox_admin (labuser@<node>);
+# ключ ноды: ~/.ssh/home-lab/proxmox_admin (labuser@<node>);
 # образы собираются Bazel и импортируются в containerd по SSH, применяются kubectl.
 # сборка + применение, режим исполнителя сохраняется
-NODE_SSH=labuser@<node> SSH_KEY=secrets/proxmox-install/proxmox_admin \
+NODE_SSH=labuser@<node> SSH_KEY=~/.ssh/home-lab/proxmox_admin \
   projects/home/kubernetes/scheduler/deploy.sh
 
 # только один юнит (scheduler | ha-bridge | ha-control)
@@ -1098,7 +1112,7 @@ home-deploy state rollback \
 ```
 
 Старый VPS-деплой снесён, откат только внутри K3s (выше) или fix forward;
-H2-оригинал и конфиги — `secrets/currency-bot/vps-backup/`. Удаление
+H2-оригинал и конфиги — `local-data/currency-bot/vps-backup/`. Удаление
 PVC/namespace — только после backup SQLite.
 
 ## Egress / карантин

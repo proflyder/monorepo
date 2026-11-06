@@ -11,7 +11,7 @@
 - Активный профиль — `projects/station/configs/wakeword-personal.json`
   (`v27-ambient-capacity-sel22-20261030`); его SHA256 закреплён в профиле.
   Персональные модели и обучаемые веса — private в
-  `secrets/model-registry/ricardo/`, вне Git.
+  `local-data/model-registry/ricardo/`, вне Git.
 - Откат: `projects/station/configs/wakeword-v24.json` (best-known) и
   `projects/station/configs/wakeword-v22.json`; исходная v1 — профиль
   `wakeword-baseline.json` и `artifacts/wakeword/ricardo-v1/`.
@@ -20,7 +20,7 @@
   с v24. Живая приёмка всех манер речи и независимый ambient ещё нужны;
   установка model-only не является приёмкой.
 - Записи и нарезанные PCM-контексты с разметкой по версиям сохранены в
-  `secrets/datasets/`, вне Git. Случайные аугментации сохранены как массивы
+  `local-data/datasets/`, вне Git. Случайные аугментации сохранены как массивы
   признаков и воспроизводятся по рецептам/seed.
 - Бинарник и device-откат (`pulsar.prev`) — `/data/pulsar`.
 - Изменяемые исходники — `projects/station/pulsar/` (монорепозиторий).

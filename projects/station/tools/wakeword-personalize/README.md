@@ -98,13 +98,13 @@ calibrate → deploy`. Записи, метрики и манифесты ост
 
 ```sh
 python station_events.py collect --host 192.0.2.13 --ssh-key PRIVATE_KEY \
-  --dest secrets/datasets/station-events
-python station_events.py review --events secrets/datasets/station-events
-python station_events.py label --events secrets/datasets/station-events \
+  --dest local-data/datasets/station-events
+python station_events.py review --events local-data/datasets/station-events
+python station_events.py label --events local-data/datasets/station-events \
   --id EVENT_ID --label false        # false | true | missed
-python station_events.py report --events secrets/datasets/station-events \
+python station_events.py report --events local-data/datasets/station-events \
   --output PRIVATE_RUN/station-report.json
-python station_events.py to-manifest --events secrets/datasets/station-events \
+python station_events.py to-manifest --events local-data/datasets/station-events \
   --output PRIVATE_RUN/station-manifest.json
 ```
 
@@ -151,7 +151,7 @@ bucket «station false positives» (12.5% батча вместе с личны�
 
 ```sh
 python calibrate.py --model PRIVATE_MODEL_DIR/ru_ricardo_mww.tflite \
-  --positives PRIVATE_RUN/recordings --events secrets/datasets/station-events \
+  --positives PRIVATE_RUN/recordings --events local-data/datasets/station-events \
   --output PRIVATE_RUN/calibration.json --manifest PRIVATE_MODEL_DIR/ru_ricardo_mww.json
 ```
 
@@ -196,7 +196,7 @@ Replay моделирует порог 0.9, окно 10, warm-up 100 frames и �
 
 ## Реестр версий и checkpoint
 
-Основной приватный реестр на Mac: `secrets/model-registry/ricardo/`.
+Основной приватный реестр на Mac: `local-data/model-registry/ricardo/`.
 В нём отдельные каталоги исходной модели, персональных кандидатов и
 технических smoke-моделей. `index.json` — список версий, `VERSION.json`
 внутри каждой версии — происхождение и инвентарь, `SHA256SUMS` — проверки
@@ -259,9 +259,9 @@ python deploy.py --ha-url http://192.0.2.28:8123 \
 его версия, ключи, firmware и конфигурация HA не обновляются. Проверяются
 HA Assist и MA, hash бинарника и установленной модели; при неуспехе
 предпринимается откат к сохранённой паре. При сетевом отказе смотрите
-приватный журнал в secrets/model-deployments, а не запускайте второй deploy.
+приватный журнал в local-data/model-deployments, а не запускайте второй deploy.
 
-secrets/model-registry/ricardo/active.json фиксирует последний успешный
+local-data/model-registry/ricardo/active.json фиксирует последний успешный
 выбор; регистрационный VERSION.json старых архивов не переписывается.
 Копия прежней модели на станции остаётся в /data/pulsar/backups/model-*.
 Применение не заменяет живой приёмки голосом и проверки ложных срабатываний.
@@ -373,8 +373,8 @@ python finetune.py --trainer "$TRAINER" --run "$PRIVATE_RUN" \
 
 ## Приватные данные
 
-Данные, registry и результаты wake word — `secrets/wakeword/` (вне Git);
-точка входа — `secrets/wakeword/README.md`. Не объединяйте архивы вслепую:
+Данные, registry и результаты wake word — `local-data/wakeword/` (вне Git);
+точка входа — `local-data/wakeword/README.md`. Не объединяйте архивы вслепую:
 они могут содержать пересекающиеся записи; разбиение конкретного эксперимента
 определяет его manifest.
 

@@ -19,16 +19,16 @@ bazel_bin() {
     type -P bazel
     return 0
   fi
-  if [[ -x "$ROOT/secrets/local-tools/bazelisk" ]]; then
-    printf '%s\n' "$ROOT/secrets/local-tools/bazelisk"
+  if [[ -x "$ROOT/local-data/local-tools/bazelisk" ]]; then
+    printf '%s\n' "$ROOT/local-data/local-tools/bazelisk"
     return 0
   fi
   local common main_root
   common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=
   if [[ -n "$common" ]]; then
     main_root=$(dirname "$common")
-    if [[ -x "$main_root/secrets/local-tools/bazelisk" ]]; then
-      printf '%s\n' "$main_root/secrets/local-tools/bazelisk"
+    if [[ -x "$main_root/local-data/local-tools/bazelisk" ]]; then
+      printf '%s\n' "$main_root/local-data/local-tools/bazelisk"
       return 0
     fi
   fi

@@ -228,6 +228,7 @@ class OperatorPolicyTests(unittest.TestCase):
             self.assertNotIn(f'"{forbidden}"', policy)
         self.assertIn('path "secret/data/ci/*"', policy)
         self.assertIn('path "secret/data/k8s/*"', policy)
+        self.assertIn('path "secret/data/infra/*"', policy)
 
 
 if __name__ == "__main__":

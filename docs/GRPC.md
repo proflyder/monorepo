@@ -142,7 +142,7 @@ Go stubs (`.pb.go`, `.connect.go`) **лежат в репозитории**, ч�
 `go test ./packages/...` работал без Bazel и protoc. Перегенерация:
 
 ```bash
-PATH=secrets/local-tools/protoc/bin:secrets/local-tools/bin:$PATH \
+PATH=local-data/local-tools/protoc/bin:local-data/local-tools/bin:$PATH \
   solutions/scheduler/scripts/generate-proto.sh
 ```
 

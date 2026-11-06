@@ -54,7 +54,7 @@ IP прежний, HA voice subscription и Sendspin восстановилис�
 Следовательно, зависание **не воспроизводится каждым reboot**.
 
 Логи обоих boot скопированы в private
-`secrets/proxmox-install/station-network-diag-warm-test.tar.gz`.
+`local-data/proxmox-install/station-network-diag-warm-test.tar.gz`.
 Временный startup hook/arming flag удалены; оригинал rootkeeper восстановлен
 с проверкой хэша. Драйвер, DPP policy и Wi-Fi profiles не менялись.
 
