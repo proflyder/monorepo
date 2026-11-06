@@ -1,0 +1,13 @@
+switch.voice_profile|
+scene.morning|Гостиная
+scene.movie|Гостиная
+script.blackout|
+script.work_mode|Кабинет
+script.long_room|кккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккк
+light.bedside_lamp|Спальня
+light.strip|Гостиная
+light.hall|
+light.color_lamp|Спальня
+light.onoff|Кухня
+switch.desk_fan|Кабинет
+switch.long_room|кккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккккк

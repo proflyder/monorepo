@@ -12,6 +12,16 @@ alias(
     actual = "//solutions/ha-bridge/cmd/ha-bridge",
 )
 
+alias(
+    name = "ha-control",
+    actual = "//solutions/ha-bridge/crates/ha-bridge:ha-control",
+)
+
+alias(
+    name = "ha-control_go",
+    actual = "//solutions/ha-bridge/cmd/ha-control",
+)
+
 filegroup(
     name = "event_vectors",
     srcs = glob(["testdata/events/*.json"]),
@@ -20,4 +30,9 @@ filegroup(
 filegroup(
     name = "ledger_vectors",
     srcs = ["testdata/ledger/v1.json"],
+)
+
+filegroup(
+    name = "catalog_vectors",
+    srcs = glob(["testdata/catalog/**"]),
 )

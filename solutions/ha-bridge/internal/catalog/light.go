@@ -67,6 +67,14 @@ func NewLight(in LightInput) *Light {
 	if !l.Brightness {
 		return nil
 	}
+	// The active mode decides which live values are meaningful, so resolve it
+	// before filling any of them.
+	switch strings.ToLower(in.ColorMode) {
+	case "color_temp":
+		l.Mode = "color_temp"
+	case "hs", "xy", "rgb", "rgbw", "rgbww":
+		l.Mode = "color"
+	}
 	if l.ColorTemp {
 		l.MinKelvin, l.MaxKelvin = in.MinKelvin, in.MaxKelvin
 		if l.MinKelvin <= 0 || l.MaxKelvin <= l.MinKelvin {
@@ -75,12 +83,6 @@ func NewLight(in LightInput) *Light {
 		if l.Mode != "color" && in.Kelvin >= l.MinKelvin && in.Kelvin <= l.MaxKelvin {
 			l.Kelvin = in.Kelvin
 		}
-	}
-	switch strings.ToLower(in.ColorMode) {
-	case "color_temp":
-		l.Mode = "color_temp"
-	case "hs", "xy", "rgb", "rgbw", "rgbww":
-		l.Mode = "color"
 	}
 	if in.Brightness >= 0 {
 		l.BrightnessPct = int(math.Round(float64(in.Brightness) * 100 / 255))

@@ -57,10 +57,15 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		Exclude:       cfg.Exclude,
 	}, cfg.CacheTTL, logger)
 
+	// Bound every phase of a request, like the scheduler listener. Without
+	// these a slow or idle client can pin a handler and a connection forever.
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           catalogapi.Handler(provider, cfg.ControlToken, logger),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	errc := make(chan error, 2)
 	go func() {

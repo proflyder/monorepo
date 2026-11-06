@@ -1,0 +1,177 @@
+[
+  {
+    "entity_id": "switch.voice_profile",
+    "state": "off",
+    "attributes": {
+      "friendly_name": "Профиль"
+    }
+  },
+  {
+    "entity_id": "scene.morning",
+    "state": "2026-01-01T08:00:00+00:00",
+    "attributes": {
+      "friendly_name": "Доброе утро",
+      "icon": "mdi:weather-sunny"
+    }
+  },
+  {
+    "entity_id": "scene.movie",
+    "state": "2026-01-01T00:00:00+00:00",
+    "attributes": {
+      "friendly_name": "Кино",
+      "icon": "mdi:movie"
+    }
+  },
+  {
+    "entity_id": "script.alarm_start",
+    "state": "off",
+    "attributes": {
+      "friendly_name": "Alarm start",
+      "icon": "mdi:alarm"
+    }
+  },
+  {
+    "entity_id": "script.blackout",
+    "state": "off",
+    "attributes": {
+      "friendly_name": "Blackout"
+    }
+  },
+  {
+    "entity_id": "script.work_mode",
+    "state": "off",
+    "attributes": {
+      "friendly_name": "Work mode",
+      "icon": "mdi:laptop"
+    }
+  },
+  {
+    "entity_id": "script.long_room",
+    "state": "off",
+    "attributes": {
+      "friendly_name": "жжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжж"
+    }
+  },
+  {
+    "entity_id": "light.bedside_lamp",
+    "state": "on",
+    "attributes": {
+      "brightness": 128,
+      "color_mode": "color_temp",
+      "color_temp_kelvin": 3000,
+      "friendly_name": "Лампа у кровати",
+      "hs_color": [
+        30,
+        60
+      ],
+      "icon": "mdi:lightbulb-outline",
+      "max_color_temp_kelvin": 6500,
+      "min_color_temp_kelvin": 1700,
+      "supported_color_modes": [
+        "color_temp",
+        "hs"
+      ]
+    }
+  },
+  {
+    "entity_id": "light.strip",
+    "state": "on",
+    "attributes": {
+      "brightness": 255,
+      "color_mode": "hs",
+      "friendly_name": "Подсветка",
+      "hs_color": [
+        359.6,
+        50
+      ],
+      "supported_color_modes": [
+        "hs"
+      ]
+    }
+  },
+  {
+    "entity_id": "light.hall",
+    "state": "off",
+    "attributes": {
+      "friendly_name": "жжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжж",
+      "supported_color_modes": [
+        "brightness"
+      ]
+    }
+  },
+  {
+    "entity_id": "light.color_lamp",
+    "state": "on",
+    "attributes": {
+      "brightness": 64,
+      "color_mode": "xy",
+      "color_temp_kelvin": 2700,
+      "friendly_name": "Цветная лампа",
+      "hs_color": [
+        120,
+        80
+      ],
+      "max_color_temp_kelvin": 6500,
+      "min_color_temp_kelvin": 2000,
+      "supported_color_modes": [
+        "color_temp",
+        "xy"
+      ]
+    }
+  },
+  {
+    "entity_id": "light.onoff",
+    "state": "on",
+    "attributes": {
+      "friendly_name": "Розетка-лампа",
+      "supported_color_modes": [
+        "onoff"
+      ]
+    }
+  },
+  {
+    "entity_id": "light.unknown",
+    "state": "unknown",
+    "attributes": {
+      "friendly_name": "Пропавшая лампа",
+      "supported_color_modes": [
+        "brightness"
+      ]
+    }
+  },
+  {
+    "entity_id": "switch.desk_fan",
+    "state": "unavailable",
+    "attributes": {
+      "friendly_name": "Вентилятор"
+    }
+  },
+  {
+    "entity_id": "switch.router_child_lock",
+    "state": "off",
+    "attributes": {
+      "friendly_name": "Child lock"
+    }
+  },
+  {
+    "entity_id": "light.secret",
+    "state": "on",
+    "attributes": {
+      "friendly_name": "Секрет"
+    }
+  },
+  {
+    "entity_id": "sensor.temp",
+    "state": "21",
+    "attributes": {
+      "friendly_name": "Температура"
+    }
+  },
+  {
+    "entity_id": "switch.long_room",
+    "state": "on",
+    "attributes": {
+      "friendly_name": "Длинная комната"
+    }
+  }
+]

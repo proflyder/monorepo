@@ -53,4 +53,11 @@ func TestInactiveModeValuesAreDropped(t *testing.T) {
 	if l := NewLight(in); l.Mode != "color" || l.Kelvin != 0 || l.Hue != 30 || l.Saturation != 60 {
 		t.Errorf("color mode = %+v", l)
 	}
+	// A color-mode lamp reports an hs_color and (sometimes) a stale
+	// color_temp_kelvin; the Kelvin value belongs to another mode and must not
+	// be published. The active mode has to be resolved before that check.
+	in.ColorMode, in.Kelvin = "hs", 4000
+	if l := NewLight(in); l.Mode != "color" || l.Kelvin != 0 || l.Hue != 30 || l.Saturation != 60 {
+		t.Errorf("color mode with a stale kelvin = %+v", l)
+	}
 }

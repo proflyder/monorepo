@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Raw is one discovered Home Assistant entity before filtering.
@@ -213,9 +214,13 @@ func iconOf(icon string) string {
 	return icon
 }
 
+// truncate bounds display text by characters, not bytes. Cutting a UTF-8
+// string by bytes can split a multi-byte character (Cyrillic titles and room
+// names are common), and JSON then replaces the broken tail with U+FFFD.
 func truncate(text string) string {
-	if len(text) > maxText {
-		return text[:maxText]
+	if utf8.RuneCountInString(text) > maxText {
+		runes := []rune(text)
+		return string(runes[:maxText])
 	}
 	return text
 }

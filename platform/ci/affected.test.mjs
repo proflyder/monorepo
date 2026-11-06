@@ -731,10 +731,25 @@ test("deploy: ha-bridge change deploys bridge and control", () => {
   assert.equal(entries[0].workloads, "ha-bridge ha-control");
 });
 
+test("deploy: Rust ha-control crate change deploys both services", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(
+    ["solutions/ha-bridge/crates/ha-bridge/src/control.rs"],
+    undefined,
+    {
+      affectedRules: () =>
+        new Set(["//solutions/ha-bridge/crates/ha-bridge:ha-control"]),
+    },
+  );
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
+  assert.equal(entries[0].images, "ha-bridge ha-control");
+});
+
 test("deploy: shared go package deploys ha-bridge", () => {
-  // ha-bridge is a Bazel unit now, and its Go targets (ha-control, the Go
-  // rollback binary and the golden tests) still depend on the shared proto
-  // package, so the unit declares those dependency paths explicitly.
+  // ha-bridge is a Bazel unit now, and its Go targets (the rollback binaries
+  // and the golden fixture owners) still depend on the shared proto package,
+  // so the unit declares those dependency paths explicitly.
   const config = affected.loadConfig();
   const result = routeReal(
     ["packages/proto/ricardo/v1/scheduler.pb.go"],

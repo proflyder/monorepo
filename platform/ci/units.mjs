@@ -383,12 +383,12 @@ export const config = {
     {
       id: "ha-bridge",
       platform: "bazel",
-      title: "solutions/ha-bridge (Rust home executor + Go ha-control)",
+      title: "solutions/ha-bridge (Rust home executor + Rust ha-control)",
       paths: [
         "solutions/ha-bridge/**",
-        // Direct dependencies of the Rust executor and the remaining Go
-        // ha-control binary: a change here rebuilds the unit even though the
-        // Bazel graph only sees it through its own targets.
+        // Direct dependencies of the Rust executors: a change here rebuilds
+        // the unit even though the Bazel graph only sees it through its own
+        // targets.
         "packages/go/**",
         "packages/proto/**",
         "packages/rust/**",
@@ -407,9 +407,9 @@ export const config = {
         env_file: "scheduler.env",
         externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
-      // The deployed ha-bridge is the Rust crate. ha-control is still Go, so
-      // its Bazel tests and binaries keep building until the next PR; the Go
-      // ha-bridge stays as the digest rollback and golden fixture owner.
+      // Both deployed services are the Rust crate: ha-bridge and ha-control.
+      // The Go binaries stay in the tree as the digest rollback and golden
+      // fixture owner, so their Bazel tests keep running.
       bazel: {
         roots: [
           "//solutions/ha-bridge",

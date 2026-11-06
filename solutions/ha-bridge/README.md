@@ -22,8 +22,14 @@ script и подтверждает доставку только после HTTP
 Go-код (`cmd/ha-bridge`, `internal/`) остаётся в дереве как эталон отката по
 digest и владелец golden-векторов. `solutions/ha-bridge/testdata/events/*.json`
 и `testdata/ledger/v1.json` генерируются Go-тестами (`-update`) и читаются
-Rust-тестами; любое расхождение поведения ломает обе стороны. ha-control пока
-остаётся Go-бинарём.
+Rust-тестами; любое расхождение поведения ломает обе стороны.
+
+`ha-control` — второй `[[bin]]` того же крейта (`src/ha_control.rs`): каталог
+`GET /v1/catalog`, discovery с TTL-кэшем, `Handler` на очереди `control`,
+`-healthcheck` и тот же HTTP-контракт, что у Go. Векторы каталога
+(`testdata/catalog/states.json`, `templates/*.txt`, `catalog.json`) генерируются
+Go-тестом `internal/catalogapi -update` и читаются Rust-тестом. Go-бинарник
+`cmd/ha-control` тоже остаётся в дереве для отката по digest.
 
 ## Границы
 
@@ -273,7 +279,8 @@ ledger) — `projects/home/e2e/scheduler_smoke.py`; живой звук и cutov
 
 ## ha-control: каталог устройств и сценариев для телефона
 
-`cmd/ha-control` — **отдельный** бинарь того же solution. Алармовый `ha-bridge`
+`ha-control` — **отдельный** бинарь того же крейта (`cargo run -p ha-bridge --
+--bin ha-control`, Bazel `//solutions/ha-bridge/crates/ha-bridge:ha-control`). Алармовый `ha-bridge`
 остаётся без listener и без изменений поведения; `ha-control` решает другую
 задачу: дать телефону список управляемых сценариев и устройств и исполнить
 команды, которые телефон кладёт в планировщик.
@@ -386,9 +393,14 @@ kind, title, room, icon, actions[], state("on"/"off", устройства и п
 развёрнут только каталог (`CONTROL_EXECUTE=false`).
 
 ```bash
-CONTROL_EXECUTE=true go run ./solutions/ha-bridge/cmd/ha-control
+CONTROL_EXECUTE=true cargo run -p ha-bridge --bin ha-control
 bazel test //solutions/ha-bridge/...
 ```
+
+HTTP-сервер ограничен таймаутом запроса (30 s), а каталог режет Title/Room по
+символам, не по байтам: кириллица больше не превращается в U+FFFD. `Light.Mode`
+определяется до текущих значений, поэтому лампа в режиме `color` не отдаёт
+устаревший `kelvin`.
 
 ### Настройка света
 

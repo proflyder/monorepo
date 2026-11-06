@@ -495,8 +495,8 @@
   (`ha-bridge-dryrun`) остаётся одноразовой проверкой. Исполнитель — Rust-крейт
   `solutions/ha-bridge/crates/ha-bridge` (static musl, `rules_rust`, uid 65534,
   тот же `/data/ledger.json`); Go-код `cmd/`, `internal/` остаётся для отката
-  по digest и владеет golden-фикстурами `testdata/events` и
-  `testdata/ledger`. ha-control пока Go.
+  по digest и владеет golden-фикстурами `testdata/events`,
+  `testdata/ledger` и `testdata/catalog`.
 - Действующий владелец будильников, таймеров и напоминаний — scheduler.
   Старые HA-планировщики и их вспомогательные поля удалены из исходников и
   живой конфигурации; оставшиеся недоступные записи реестра очищены.
@@ -521,7 +521,8 @@
 - Deploy/rollback: `projects/home/kubernetes/scheduler/` (manifest templates,
   render, preflight, backup). Приватные значения — `secrets/home/scheduler.env`;
   rendered manifests — `secrets/local/rendered/`.
-- `ha-control` (тот же solution) развёрнут отдельным Deployment: каталог
+- `ha-control` (второй бинарь того же Rust-крейта, static musl, uid 65534,
+  entrypoint `/usr/local/bin/ha-control`) развёрнут отдельным Deployment: каталог
   `GET /v1/catalog` из live HA, очередь `control`; `CONTROL_EXECUTE=true`,
   consumer `ha-control-home` в allowlist планировщика рядом с
   `ha-bridge-home`. Скрипты попадают в каталог только с нативной меткой HA
@@ -529,7 +530,10 @@
   назначена `script.work_mode` и `script.blackout`. Живой каталог: 2 сценария
   + 15 light/switch, служебные скрипты отсутствуют. LAN NodePort `30099`,
   HTTPS `https://control.home.example.com` (LAN/VPN). Доставка
-  at-least-once, не exactly-once.
+  at-least-once, не exactly-once. Go-бинарник `cmd/ha-control` остаётся для
+  отката по digest; Rust-контракт каталога закреплён `testdata/catalog`.
+  Title/Room режутся по символам (не по байтам), `Light.Mode` определяется до
+  live-значений, HTTP-сервер ограничен таймаутом запроса.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
   `INTERNET`, debug-signed). Вкладки **Home**, Alarms, Timers, Reminders,

@@ -9,12 +9,16 @@ PACKAGE_VERSION = "0.1.0"
 LIB_DEPS = [
     "//packages/rust/home-config:home_config",
     "//packages/rust/home-ha:home_ha",
+    "//packages/rust/home-http:home_http",
     "//packages/rust/home-proto:home_proto",
     "//packages/rust/home-runtime:home_runtime",
     "//packages/rust/home-secret:home_secret",
     "//packages/rust/home-telemetry:home_telemetry",
     "//packages/rust/home-worker:home_worker",
     "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:reqwest",
+    "@crates//:rustls",
     "@crates//:serde",
     "@crates//:serde_json",
     "@crates//:thiserror",
@@ -28,7 +32,10 @@ rust_library(
     crate_name = "ha_bridge",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.rs"],
+        exclude = [
+            "src/main.rs",
+            "src/ha_control.rs",
+        ],
     ),
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -47,6 +54,17 @@ rust_binary(
     deps = LIB_DEPS + [":ha_bridge_lib"],
 )
 
+# The second binary of the same crate: the catalog server and the `control`
+# queue executor.
+rust_binary(
+    name = "ha-control",
+    srcs = ["src/ha_control.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    deps = LIB_DEPS + [":ha_bridge_lib"],
+)
+
 # The Go bridge stays in the tree as the digest rollback and the golden
 # fixture owner, so the vectors live under //solutions/ha-bridge.
 rust_test(
@@ -55,7 +73,6 @@ rust_test(
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = LIB_DEPS + [
-        "@crates//:axum",
         "@crates//:tempfile",
     ],
 )
@@ -64,6 +81,7 @@ rust_test(
     name = "golden_tests",
     srcs = ["tests/golden.rs"],
     data = [
+        "//solutions/ha-bridge:catalog_vectors",
         "//solutions/ha-bridge:event_vectors",
         "//solutions/ha-bridge:ledger_vectors",
     ],
@@ -72,6 +90,7 @@ rust_test(
     deps = LIB_DEPS + [
         ":ha_bridge_lib",
         "@crates//:tempfile",
+        "@crates//:tower",
     ],
 )
 
@@ -87,6 +106,7 @@ rustfmt_test(
     targets = [
         ":ha_bridge_lib",
         ":ha-bridge",
+        ":ha-control",
         ":golden_tests",
     ],
 )
@@ -97,6 +117,7 @@ rust_clippy_test(
     targets = [
         ":ha_bridge_lib",
         ":ha-bridge",
+        ":ha-control",
         ":golden_tests",
     ],
 )

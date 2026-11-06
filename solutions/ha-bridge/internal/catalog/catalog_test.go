@@ -3,6 +3,7 @@ package catalog
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func raws() []Raw {
@@ -134,6 +135,23 @@ func TestTitleFallsBackToEntityId(t *testing.T) {
 	e := Build([]Raw{{Entity: "light.reading_corner", State: "on"}}, Rules{ScenarioLabel: "scenario", ProfileLabel: "voice_profile"})
 	if len(e) != 1 || e[0].Title != "Reading corner" {
 		t.Fatalf("%+v", e)
+	}
+}
+
+// Titles and rooms are bounded by characters. A byte slice used to split a
+// multi-byte character and JSON turned the tail into U+FFFD.
+func TestTruncateKeepsUTF8Intact(t *testing.T) {
+	long := strings.Repeat("ж", maxText+10)
+	if got := truncate(long); utf8.RuneCountInString(got) != maxText || !utf8.ValidString(got) {
+		t.Fatalf("truncate = %d runes, valid=%v", utf8.RuneCountInString(got), utf8.ValidString(got))
+	}
+	entries := Build([]Raw{{
+		Entity: "light.lamp", State: "on", Name: strings.Repeat("Ж", maxText+5),
+		Room: strings.Repeat("к", maxText+5),
+	}}, Rules{ScenarioLabel: "scenario", ProfileLabel: "voice_profile"})
+	if len(entries) != 1 || !utf8.ValidString(entries[0].Title) || !utf8.ValidString(entries[0].Room) ||
+		utf8.RuneCountInString(entries[0].Title) != maxText || utf8.RuneCountInString(entries[0].Room) != maxText {
+		t.Fatalf("entry = %+v", entries)
 	}
 }
 
