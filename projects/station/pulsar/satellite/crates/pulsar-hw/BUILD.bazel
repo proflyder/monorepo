@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,11 +7,10 @@ LINUX = ["@platforms//os:linux"]
 
 DEPS = [
     "//packages/rust/home-linux:home_linux",
-    "@crates//:libc",
+    "@crates//:thiserror",
     "@crates//:serde_json",
     "@crates//:tracing",
     "@crates//:tokio",
-    "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
     "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     "//projects/station/pulsar/satellite/crates/pulsar-ui:pulsar_ui",
@@ -29,14 +28,6 @@ rust_library(
     deps = DEPS,
 )
 
-rust_binary(
-    name = "hw_probe",
-    srcs = ["src/bin/hw_probe.rs"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    target_compatible_with = LINUX,
-    deps = DEPS + [":pulsar_hw"],
-)
 
 rust_test(
     name = "pulsar_hw_unit_tests",

@@ -8,12 +8,12 @@
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-use std::ffi::OsString;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use clap::{Parser, Subcommand};
 use pulsar_zigbee::RadioLines;
 use pulsar_zigbee::bytes::{get_be16, get_be32};
 use pulsar_zigbee::coordinator::{ApsFrame, Coordinator, Hooks};
@@ -40,35 +40,29 @@ fn main() -> ExitCode {
         reset: radio.reset.into(),
         boot: radio.boot.into(),
     };
-    // OS strings: an image path need not be UTF-8.
-    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
-    match &args[..] {
-        [cmd] if cmd == "info" => info_mode(&lines),
-        [cmd, image] if cmd == "flash" => flash_mode(&lines, &PathBuf::from(image)),
-        [] => server_mode(&lines, 6639),
-        [port] => server_mode(&lines, atoi(&port.to_string_lossy()) as u16),
-        _ => {
-            eprintln!("usage: zigbee_probe [port] | info | flash <image.ybl>");
-            ExitCode::from(2)
-        }
+    let cli = Cli::parse();
+    match cli.cmd {
+        Some(Cmd::Info) => info_mode(&lines),
+        Some(Cmd::Flash { image }) => flash_mode(&lines, &image),
+        None => server_mode(&lines, cli.port.unwrap_or(6639)),
     }
 }
 
-/// C atoi, as the C++ probe read its port: leading digits (with a sign), else 0.
-fn atoi(s: &str) -> i32 {
-    let s = s.trim_start();
-    let (neg, digits) = match s.as_bytes().first() {
-        Some(b'-') => (true, &s[1..]),
-        Some(b'+') => (false, &s[1..]),
-        _ => (false, s),
-    };
-    let v = digits
-        .bytes()
-        .take_while(u8::is_ascii_digit)
-        .fold(0i32, |v, d| {
-            v.wrapping_mul(10).wrapping_add(i32::from(d - b'0'))
-        });
-    if neg { v.wrapping_neg() } else { v }
+#[derive(Parser)]
+#[command(about = "Zigbee radio without the daemon")]
+struct Cli {
+    /// deCONZ server port (default 6639).
+    port: Option<u16>,
+    #[command(subcommand)]
+    cmd: Option<Cmd>,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// The running firmware (0x0900).
+    Info,
+    /// Write a radio firmware image.
+    Flash { image: PathBuf },
 }
 
 /// The coordinator's hooks: log, then the deCONZ server's.

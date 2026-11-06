@@ -9,8 +9,27 @@ use pulsar_core::Timers;
 use tokio::sync::mpsc;
 use tracing::info;
 
+use crate::clock::{ClockError, Lux};
+
 const IIO_DIR: &str = "/sys/bus/iio/devices/";
 const SENSOR_NAME: &str = "ltr308als01";
+
+/// Датчик освещённости: одно чтение люксов.
+pub trait LightSensor {
+    fn read(&mut self) -> Result<Lux, ClockError>;
+}
+
+/// Sysfs-датчик iio `ltr308als01`.
+struct SysfsLightSensor {
+    dir: PathBuf,
+}
+
+impl LightSensor for SysfsLightSensor {
+    fn read(&mut self) -> Result<Lux, ClockError> {
+        read_lux(&self.dir)
+            .ok_or_else(|| ClockError::SensorUnreadable(format!("{}/", self.dir.display())))
+    }
+}
 
 /// strtod's numeric prefix (after leading white space) of a decimal sysfs value; None when
 /// there is none. Decimal only: no inf / nan / hex forms, which sysfs never gives.
@@ -78,20 +97,24 @@ fn find(iio_dir: &Path) -> Option<PathBuf> {
 /// Finds the sensor and polls it every `period_ms`; the first reading is in the channel when
 /// this returns. The poller stops once the receiver is dropped. Err when the sensor is missing
 /// or unreadable; the caller logs it (a missing sensor is normal on some stations).
-pub fn spawn_light_sensor(period_ms: u64) -> Result<mpsc::UnboundedReceiver<f32>, String> {
+pub fn spawn_light_sensor(period_ms: u64) -> Result<mpsc::UnboundedReceiver<Lux>, ClockError> {
     spawn_in(Path::new(IIO_DIR), period_ms)
 }
 
-fn spawn_in(iio_dir: &Path, period_ms: u64) -> Result<mpsc::UnboundedReceiver<f32>, String> {
-    let Some(dir) = find(iio_dir) else {
-        return Err(format!("light: iio device {SENSOR_NAME} not found"));
-    };
-    let Some(lux) = read_lux(&dir) else {
-        return Err(format!("light: cannot read {}/", dir.display()));
-    };
+fn spawn_in(iio_dir: &Path, period_ms: u64) -> Result<mpsc::UnboundedReceiver<Lux>, ClockError> {
+    let dir = find(iio_dir).ok_or_else(|| ClockError::SensorMissing(SENSOR_NAME.to_owned()))?;
+    let mut sensor = SysfsLightSensor { dir: dir.clone() };
+    let lux = sensor.read()?;
     info!("light: {}/ ({lux:.2} lx)", dir.display());
+    Ok(spawn_poller(sensor, period_ms))
+}
+
+fn spawn_poller(
+    mut sensor: impl LightSensor + 'static,
+    period_ms: u64,
+) -> mpsc::UnboundedReceiver<Lux> {
     let (tx, rx) = mpsc::unbounded_channel();
-    if let Some(lux) = read_lux(&dir) {
+    if let Ok(lux) = sensor.read() {
         let _ = tx.send(lux);
     }
     pulsar_core::supervisor().spawn_local("light", async move {
@@ -102,7 +125,7 @@ fn spawn_in(iio_dir: &Path, period_ms: u64) -> Result<mpsc::UnboundedReceiver<f3
             tokio::select! {
                 biased;
                 () = timers.next() => {
-                    if let Some(lux) = read_lux(&dir)
+                    if let Ok(lux) = sensor.read()
                         && tx.send(lux).is_err()
                     {
                         break;
@@ -112,7 +135,7 @@ fn spawn_in(iio_dir: &Path, period_ms: u64) -> Result<mpsc::UnboundedReceiver<f3
             }
         }
     });
-    Ok(rx)
+    rx
 }
 
 #[cfg(test)]
@@ -204,12 +227,12 @@ mod tests {
         let t = TempDir::new();
         t.device("iio:device0", &[("name", "other\n")]);
         assert_eq!(
-            spawn_in(&t.0, 1000).unwrap_err(),
+            spawn_in(&t.0, 1000).unwrap_err().to_string(),
             "light: iio device ltr308als01 not found"
         );
         let d = t.device("iio:device1", &[("name", "ltr308als01\n")]);
         assert_eq!(
-            spawn_in(&t.0, 1000).unwrap_err(),
+            spawn_in(&t.0, 1000).unwrap_err().to_string(),
             format!("light: cannot read {}/", d.display())
         );
         assert!(spawn_in(&t.0.join("nope"), 1000).is_err());

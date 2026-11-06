@@ -6,9 +6,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-libc = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
-pulsar-clock = { path = "../pulsar-clock" }
 pulsar-core = { path = "../pulsar-core" }
 pulsar-model = { path = "../pulsar-model" }
 pulsar-ui = { path = "../pulsar-ui" }

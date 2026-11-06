@@ -16,6 +16,7 @@ use std::io::{BufReader, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use clap::Parser;
 use pulsar_audio::engine::{
     Lib, LoadError, SPOTTER_RATE, SPOTTER_TO_VQE, SPOTTER_TYPES, Spotter, SpotterConf, VQE_MODELS,
     Vqe, VqeStep, preload_deps, spotter_layout,
@@ -33,6 +34,14 @@ macro_rules! out {
 
 fn main() -> ExitCode {
     ExitCode::from(run())
+}
+
+#[derive(Parser)]
+#[command(about = "Offline evaluation of a stock spotter model on a device recording")]
+struct Cli {
+    wav: PathBuf,
+    #[arg(default_value = DEFAULT_MODEL)]
+    model_dir: PathBuf,
 }
 
 fn run() -> u8 {
@@ -66,18 +75,8 @@ fn run() -> u8 {
         );
         return 2;
     }
-    let args: Vec<_> = std::env::args_os().collect();
-    if args.len() < 2 {
-        let argv0 = args
-            .first()
-            .map(|a| a.to_string_lossy())
-            .unwrap_or_default();
-        let _ = writeln!(std::io::stderr(), "usage: {argv0} wav [model_dir]");
-        return 2;
-    }
-    let model_dir = args
-        .get(2)
-        .map_or_else(|| PathBuf::from(DEFAULT_MODEL), PathBuf::from);
+    let args = Cli::parse();
+    let model_dir = args.model_dir;
     // Unlike the C++ tool, also runs on the Lite 2 without LD_LIBRARY_PATH (libiconv.so).
     let _ = preload_deps();
     let lib = match Lib::load() {
@@ -91,7 +90,7 @@ fn run() -> u8 {
             return 1;
         }
     };
-    let mut f = match File::open(&args[1]) {
+    let mut f = match File::open(&args.wav) {
         Ok(f) => BufReader::new(f),
         Err(e) => {
             let _ = writeln!(std::io::stderr(), "wav: {}", strerror(&e));

@@ -38,13 +38,52 @@ use std::path::PathBuf;
 
 use home_linux as sysfs;
 use pulsar_core::{AmbientDimmer, ClockShot, MusicFrame, Timers, UiState, now_ms};
-use pulsar_model::ClockPanel;
+pub use pulsar_model::ClockPanel as PanelLayout;
 use pulsar_ui::font::DIGITS;
 use pulsar_ui::{ClockFace, ClockLayers, ClockMusicStyle, Frame, MusicSource, Wall};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::sys;
+/// Ошибка часов и светодатчика.
+#[derive(Debug, thiserror::Error)]
+pub enum ClockError {
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("light: iio device {0} not found")]
+    SensorMissing(String),
+    #[error("light: cannot read {0}")]
+    SensorUnreadable(String),
+}
+
+/// Панель 7-сегментных часов. `draw` получает кадр и уровень выхода (ток чипов на Midy,
+/// значение зажжённого сегмента на Lite 2); пишутся только изменения.
+pub trait ClockPanel {
+    fn draw(&mut self, frame: &Frame, level: i32) -> Result<(), ClockError>;
+
+    /// Забыть последние записанные значения: следующий кадр перепишет всё.
+    fn invalidate(&mut self) {}
+}
+
+/// Освещённость в люксах.
+pub type Lux = f32;
+
+/// Источник времени в TZ процесса.
+pub trait WallClock {
+    fn now(&self) -> Wall;
+}
+
+struct SystemClock;
+
+impl WallClock for SystemClock {
+    fn now(&self) -> Wall {
+        let w = home_linux::wall_time();
+        Wall {
+            hour: w.hour,
+            min: w.min,
+            first_half: w.first_half,
+        }
+    }
+}
 
 const SEGS: usize = 7; // a..g
 const TICK_MS: i64 = 250;
@@ -94,19 +133,19 @@ fn write_int(f: &File, v: i32) -> bool {
 }
 
 impl Leds {
-    fn seg_name(panel: &ClockPanel, digit: usize, seg: usize) -> String {
+    fn seg_name(panel: &PanelLayout, digit: usize, seg: usize) -> String {
         let letter = char::from_u32(panel.seg_base as u32 + seg as u32).unwrap_or('?');
         format!("{letter}{}", panel.pos_base + digit as i32)
     }
 
-    fn open_led(panel: &ClockPanel, name: &str) -> Option<File> {
+    fn open_led(panel: &PanelLayout, name: &str) -> Option<File> {
         let path = format!("{}{name}/brightness", panel.dir);
         OpenOptions::new().write(true).open(path).ok()
     }
 
     /// The segments, colon and centre LEDs of `panel`; aux LEDs are switched off once. None
     /// (logged) when no segment exists.
-    fn open(panel: &ClockPanel) -> Option<Self> {
+    fn open(panel: &PanelLayout) -> Option<Self> {
         let mut found = 0;
         let seg = std::array::from_fn(|d| {
             std::array::from_fn(|s| {
@@ -252,6 +291,18 @@ impl Leds {
     }
 }
 
+impl ClockPanel for Leds {
+    fn draw(&mut self, frame: &Frame, level: i32) -> Result<(), ClockError> {
+        self.set_level(level);
+        Self::draw(self, frame);
+        Ok(())
+    }
+
+    fn invalidate(&mut self) {
+        self.forget_written();
+    }
+}
+
 enum Cmd {
     SetEnabled(bool),
     SetBrightness(f32),
@@ -284,7 +335,10 @@ enum Timer {
 
 struct Clock {
     layers: ClockLayers,
-    leds: Leds,
+    panel: Box<dyn ClockPanel>,
+    wall: Box<dyn WallClock>,
+    /// Уровень, уже переданный панели; для лога изменений.
+    level: i32,
     user_bri: f32,
     /// < 0: unknown, no auto-dimming (only logged).
     lux: f32,
@@ -297,24 +351,25 @@ struct Clock {
 }
 
 impl Clock {
-    fn apply_level(&mut self) {
+    fn refresh(&mut self) {
         let ambient = if self.auto_bri {
             self.dimmer.factor()
         } else {
             1.0
         };
         let lvl = level(self.user_bri, ambient);
-        if self.leds.set_level(lvl) {
+        if lvl != self.level {
             debug!(
                 "clock: level={lvl} (user {:.2}, lux {:.1})",
                 self.user_bri, self.lux
             );
+            self.level = lvl;
         }
-    }
-
-    fn refresh(&mut self) {
-        let (frame, next) = self.layers.compose(now_ms(), wall);
-        self.leds.draw(&frame);
+        let wall = self.wall.now();
+        let (frame, next) = self.layers.compose(now_ms(), || wall);
+        if let Err(e) = self.panel.draw(&frame, lvl) {
+            warn!("clock: draw: {e}");
+        }
         self.timers.cancel(Timer::Anim);
         if next > 0 {
             self.timers.set(Timer::Anim, next as u64);
@@ -329,16 +384,13 @@ impl Clock {
             Cmd::SetBrightness(b) => {
                 // NaN counts as full brightness, as std::max(0, std::min(1, b)) did.
                 self.user_bri = if b.is_nan() { 1.0 } else { b.clamp(0.0, 1.0) };
-                self.apply_level();
             }
             Cmd::SetAmbientLux(lux) => {
                 self.lux = lux.max(0.0);
                 self.dimmer.update(self.lux);
-                self.apply_level();
             }
             Cmd::SetAutoBrightness(on) => {
                 self.auto_bri = on;
-                self.apply_level();
             }
             Cmd::SetTimer { ms_left, running } => l.set_timer(ms_left, running, now),
             Cmd::FlashNumber(v) => l.flash_number(v, now),
@@ -372,7 +424,7 @@ impl Clock {
                     if t == Timer::Tick {
                         self.refreshes = self.refreshes.wrapping_add(1);
                         if self.refreshes.is_multiple_of(FULL_REWRITE_TICKS) {
-                            self.leds.forget_written();
+                            self.panel.invalidate();
                         }
                     }
                     self.refresh();
@@ -387,8 +439,8 @@ impl Clock {
 }
 
 /// Whether any clock segment of `panel` exists in sysfs (decides the clock entities of a model
-/// whose panel may be missing, `ClockPanel::optional`).
-pub fn panel_present(panel: &ClockPanel) -> bool {
+/// whose panel may be missing, `PanelLayout::optional`).
+pub fn panel_present(panel: &PanelLayout) -> bool {
     (0..DIGITS).any(|d| {
         (0..SEGS).any(|s| {
             let led = format!("{}{}/brightness", panel.dir, Leds::seg_name(panel, d, s));
@@ -406,7 +458,7 @@ pub struct ClockHandle {
 
 /// Opens the clock LEDs of `panel` (sysfs `<dir><segment><position>`) and starts the clock
 /// actor, which stops when every handle is dropped. Without a panel: no-op handle.
-pub fn spawn(panel: Option<&'static ClockPanel>) -> ClockHandle {
+pub fn spawn(panel: Option<&'static PanelLayout>) -> ClockHandle {
     // None means the model has no display at all (the Mini): no sysfs probe.
     let Some(panel) = panel else {
         return ClockHandle { tx: None };
@@ -417,9 +469,15 @@ pub fn spawn(panel: Option<&'static ClockPanel>) -> ClockHandle {
         }
         return ClockHandle { tx: None };
     };
+    spawn_actor(Box::new(leds), Box::new(SystemClock))
+}
+
+fn spawn_actor(panel: Box<dyn ClockPanel>, wall: Box<dyn WallClock>) -> ClockHandle {
     let mut clock = Clock {
         layers: ClockLayers::new(),
-        leds,
+        panel,
+        wall,
+        level: -1,
         user_bri: 1.0,
         lux: -1.0,
         dimmer: AmbientDimmer::new(),
@@ -429,11 +487,15 @@ pub fn spawn(panel: Option<&'static ClockPanel>) -> ClockHandle {
     };
     let tick = TICK_MS as u64;
     clock.timers.set_repeating(Timer::Tick, tick, tick);
-    clock.apply_level();
     clock.refresh();
     let (tx, rx) = mpsc::unbounded_channel();
     pulsar_core::supervisor().spawn_local("clock", clock.run(rx));
     ClockHandle { tx: Some(tx) }
+}
+
+#[cfg(test)]
+pub fn spawn_with(panel: Box<dyn ClockPanel>, wall: Box<dyn WallClock>) -> ClockHandle {
+    spawn_actor(panel, wall)
 }
 
 impl ClockHandle {
@@ -552,10 +614,6 @@ impl ClockHandle {
         };
         self.send(Cmd::MusicFrame(f, source));
     }
-}
-
-fn wall() -> Wall {
-    sys::wall()
 }
 
 #[cfg(test)]

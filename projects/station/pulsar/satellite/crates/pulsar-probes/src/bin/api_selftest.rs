@@ -17,6 +17,7 @@
 //!  - every 2 s the illuminance sensor is published and a button "action" event fired;
 //!  - the "Restart" button stops the test (exit 0).
 
+use clap::Parser;
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -35,18 +36,6 @@ const BUILD_TIME: &str = match option_env!("PULSAR_BUILD_TIME") {
     Some(v) => v,
     None => "unknown",
 };
-
-/// C atoi: leading digits (after an optional sign), anything else is 0.
-fn atoi(s: &str) -> i64 {
-    let s = s.trim_start();
-    let (neg, d) = s
-        .strip_prefix('-')
-        .map_or_else(|| (false, s.strip_prefix('+').unwrap_or(s)), |d| (true, d));
-    let n = d.bytes().take_while(u8::is_ascii_digit).fold(0i64, |n, b| {
-        n.saturating_mul(10).saturating_add(i64::from(b - b'0'))
-    });
-    if neg { -n } else { n }
-}
 
 fn read_mac() -> String {
     match std::fs::read_to_string("/sys/class/net/wlan0/address") {
@@ -238,15 +227,21 @@ async fn voice_run(api: ApiHandle, stopped: Rc<Cell<bool>>) {
     api.voice_request_stop();
 }
 
+#[derive(Parser)]
+#[command(about = "ESPHome API self-test server for a real client (no mDNS)")]
+struct Cli {
+    #[arg(default_value_t = 16053)]
+    port: u16,
+    #[arg(default_value = "pulsar-selftest")]
+    name: String,
+    #[arg(default_value_t = 120)]
+    run_seconds: i64,
+    key_file: Option<PathBuf>,
+}
+
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
-    let port = args.get(1).map_or(16053, |a| atoi(a) as u16);
-    let name = args
-        .get(2)
-        .cloned()
-        .unwrap_or_else(|| "pulsar-selftest".into());
-    let run_s = args.get(3).map_or(120, |a| atoi(a));
-    let key_path = args.get(4).map(PathBuf::from);
+    let cli = Cli::parse();
+    let (port, name, run_s, key_path) = (cli.port, cli.name, cli.run_seconds, cli.key_file);
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
     // Как в демоне: см. docs/architecture.md, «Модель исполнения», п. 1.

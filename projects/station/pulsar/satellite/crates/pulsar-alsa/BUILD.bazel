@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,14 +26,6 @@ rust_library(
     deps = DEPS,
 )
 
-rust_binary(
-    name = "alsa_abi_probe",
-    srcs = ["src/bin/alsa_abi_probe.rs"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    target_compatible_with = LINUX,
-    deps = DEPS + [":pulsar_alsa"],
-)
 
 rust_test(
     name = "pulsar_alsa_unit_tests",

@@ -6,9 +6,10 @@
 
 mod clock;
 mod light_sensor;
-#[allow(unsafe_code)]
-mod sys;
 
-pub use clock::{ClockHandle, face_names, music_styles, panel_present, spawn};
-pub use light_sensor::spawn_light_sensor;
+pub use clock::{
+    ClockError, ClockHandle, ClockPanel, Lux, WallClock, face_names, music_styles, panel_present,
+    spawn,
+};
+pub use light_sensor::{LightSensor, spawn_light_sensor};
 pub use pulsar_ui::{ClockFace, ClockMusicStyle};

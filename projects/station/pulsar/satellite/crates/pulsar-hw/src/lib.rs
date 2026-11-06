@@ -6,11 +6,11 @@
 
 mod input;
 mod leds;
-#[allow(unsafe_code)]
-mod sys;
 
-pub use input::{Button, InputEvent, InputHandle, Press, spawn_input};
-pub use leds::{LedsHandle, case_colors, effect_names, music_styles, spawn_leds};
+pub use input::{Button, InputError, InputEvent, InputHandle, Press, spawn_input};
+pub use leds::{
+    LedError, LedSink, LedsHandle, case_colors, effect_names, music_styles, spawn_leds,
+};
 pub use pulsar_ui::{CaseColor, Effect, MusicStyle, Rgb, VoiceColor};
 
 use home_linux::io_error_text as errstr;

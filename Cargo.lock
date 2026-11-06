@@ -870,7 +870,9 @@ dependencies = [
 name = "home-linux"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "rustix",
+ "tokio",
 ]
 
 [[package]]
@@ -1531,10 +1533,10 @@ name = "pulsar-clock"
 version = "0.0.0"
 dependencies = [
  "home-linux",
- "libc",
  "pulsar-core",
  "pulsar-model",
  "pulsar-ui",
+ "thiserror",
  "tokio",
  "tracing",
 ]
@@ -1577,12 +1579,11 @@ name = "pulsar-hw"
 version = "0.0.0"
 dependencies = [
  "home-linux",
- "libc",
- "pulsar-clock",
  "pulsar-core",
  "pulsar-model",
  "pulsar-ui",
  "serde_json",
+ "thiserror",
  "tokio",
  "tracing",
 ]
@@ -1619,6 +1620,33 @@ name = "pulsar-model"
 version = "0.0.0"
 dependencies = [
  "tracing",
+]
+
+[[package]]
+name = "pulsar-probes"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "home-linux",
+ "pulsar-alsa",
+ "pulsar-arbiter",
+ "pulsar-audio",
+ "pulsar-clock",
+ "pulsar-core",
+ "pulsar-esphome",
+ "pulsar-hw",
+ "pulsar-mdns",
+ "pulsar-media",
+ "pulsar-model",
+ "pulsar-sendspin",
+ "pulsar-update",
+ "pulsar-zigbee",
+ "ring",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

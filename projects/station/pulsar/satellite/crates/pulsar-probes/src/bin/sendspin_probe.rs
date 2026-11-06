@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
+use clap::Parser;
 use pulsar_alsa::{Ctl, Pcm, Stream};
 use pulsar_core::MusicFrame;
 use pulsar_model::{DeviceProfile, Playback, VolumeCurve};
@@ -25,29 +26,17 @@ const MASTER: &str = "Master Playback Volume";
 const MAX_RAW: i64 = 82;
 const TRANSPORT_AFTER: Duration = Duration::from_secs(3);
 
+#[derive(Parser)]
+#[command(about = "Sendspin player without the daemon (stop the service first)")]
 struct Args {
+    #[arg(default_value_t = 18928)]
     port: u16,
+    #[arg(default_value = "pulsar-test")]
     name: String,
+    #[arg(default_value_t = 120)]
     seconds: u64,
+    #[arg(default_value = "/tmp/pulsar-test/sendspin")]
     state_dir: PathBuf,
-}
-
-fn parse_args() -> Result<Args, String> {
-    let a: Vec<String> = std::env::args().skip(1).collect();
-    if a.len() > 4 || a.first().is_some_and(|s| s == "-h" || s == "--help") {
-        return Err(
-            "usage: sendspin_probe [port=18928] [name=pulsar-test] [seconds=120] \
-                    [state_dir=/tmp/pulsar-test/sendspin]"
-                .into(),
-        );
-    }
-    let arg = |i: usize, default: &str| a.get(i).map_or(default, String::as_str).to_owned();
-    Ok(Args {
-        port: arg(0, "18928").parse().map_err(|e| format!("port: {e}"))?,
-        name: arg(1, "pulsar-test"),
-        seconds: arg(2, "120").parse().map_err(|e| format!("seconds: {e}"))?,
-        state_dir: PathBuf::from(arg(3, "/tmp/pulsar-test/sendspin")),
-    })
 }
 
 /// "Master Playback Volume" capped for the run, restored on drop.
@@ -119,13 +108,7 @@ struct Counts {
 fn main() -> ExitCode {
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
-    let args = match parse_args() {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("{e}");
-            return ExitCode::from(2);
-        }
-    };
+    let args = Args::parse();
     let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::FAILURE;
     };

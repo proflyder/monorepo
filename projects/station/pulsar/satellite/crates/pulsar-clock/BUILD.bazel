@@ -7,7 +7,7 @@ LINUX = ["@platforms//os:linux"]
 
 DEPS = [
     "//packages/rust/home-linux:home_linux",
-    "@crates//:libc",
+    "@crates//:thiserror",
     "@crates//:tracing",
     "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",

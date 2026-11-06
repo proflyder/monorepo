@@ -52,21 +52,21 @@ fn base_model(compatible: &[u8]) -> &'static DeviceProfile {
     profile_from_compatible(compatible).unwrap()
 }
 
-fn base_panel(compatible: &[u8]) -> &'static ClockPanel {
+fn base_panel(compatible: &[u8]) -> &'static PanelLayout {
     base_model(compatible).clock.as_ref().unwrap()
 }
 
 /// A stock model whose clock LEDs live under a fresh temp dir ("<root>/<prefix><led>"); one
-/// static pair per call site, since `spawn` takes a `&'static ClockPanel`.
+/// static pair per call site, since `spawn` takes a `&'static PanelLayout`.
 macro_rules! temp_model {
     ($name:literal, $compatible:literal, $prefix:literal) => {{
         static DIR: LazyLock<String> =
             LazyLock::new(|| format!("{}/{}", temp_root($name).display(), $prefix));
-        static PANEL: LazyLock<ClockPanel> = LazyLock::new(|| ClockPanel {
+        static PANEL: LazyLock<PanelLayout> = LazyLock::new(|| PanelLayout {
             dir: DIR.as_str(),
             ..*base_panel($compatible)
         });
-        let model: &'static ClockPanel = &PANEL;
+        let model: &'static PanelLayout = &PANEL;
         let root = Root(Path::new(DIR.as_str()).parent().unwrap().to_owned());
         (model, root)
     }};
@@ -80,7 +80,7 @@ fn take(path: &Path) -> String {
 }
 
 /// Every clock LED of `m` (Lite 2 layout) created; the segment files per digit.
-fn create_lite2(m: &ClockPanel, root: &Root) -> Vec<Vec<PathBuf>> {
+fn create_lite2(m: &PanelLayout, root: &Root) -> Vec<Vec<PathBuf>> {
     let segs = (0..DIGITS)
         .map(|d| {
             (0..SEGS)
@@ -180,7 +180,7 @@ fn missing_leds_and_chip_current_dedup() {
 async fn actor_draws_commands_and_stops_with_the_handles() {
     let (m, root) = temp_model!("actor", b"yandex,plum\0", "clock");
     let segs = create_lite2(m, &root);
-    let local = tokio::task::LocalSet::new();
+    let local = LocalSet::new();
     local
         .run_until(async {
             let clock = spawn(Some(m));
@@ -238,7 +238,7 @@ async fn auto_brightness_off_ignores_the_light() {
         }
         panic!("no level written");
     };
-    let local = tokio::task::LocalSet::new();
+    let local = LocalSet::new();
     local
         .run_until(async {
             let clock = spawn(Some(m));
@@ -276,7 +276,7 @@ async fn auto_brightness_off_ignores_the_light() {
 #[tokio::test]
 async fn unavailable_clock_is_a_no_op() {
     let (m, _root) = temp_model!("none", b"yandex,plum\0", "none-");
-    let local = tokio::task::LocalSet::new();
+    let local = LocalSet::new();
     local
         .run_until(async {
             let clock = spawn(Some(m));
@@ -296,4 +296,68 @@ async fn unavailable_clock_is_a_no_op() {
 fn names() {
     assert_eq!(music_styles(), ["Off", "Levels"]);
     assert_eq!(face_names().len(), 19);
+}
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use tokio::task::LocalSet;
+
+/// Панель-запись: кадры, уровни и число полных перезаписей.
+#[derive(Clone, Default)]
+struct RecordingPanel {
+    frames: Rc<RefCell<Vec<(Frame, i32)>>>,
+    invalidations: Rc<RefCell<u32>>,
+}
+
+impl ClockPanel for RecordingPanel {
+    fn draw(&mut self, frame: &Frame, level: i32) -> Result<(), ClockError> {
+        self.frames.borrow_mut().push((*frame, level));
+        Ok(())
+    }
+
+    fn invalidate(&mut self) {
+        *self.invalidations.borrow_mut() += 1;
+    }
+}
+
+struct Fixed;
+
+impl WallClock for Fixed {
+    fn now(&self) -> Wall {
+        Wall {
+            hour: 12,
+            min: 34,
+            first_half: true,
+        }
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn fixed_wall_draws_the_time_and_ticks_rewrite_every_20() {
+    LocalSet::new()
+        .run_until(async {
+            let panel = RecordingPanel::default();
+            let frames = Rc::clone(&panel.frames);
+            let invalidations = Rc::clone(&panel.invalidations);
+            let clock = spawn_with(Box::new(panel), Box::new(Fixed));
+            assert_eq!(
+                frames.borrow().first().unwrap().0,
+                glyph_frame([0x06, 0x5b, 0x4f, 0x66], true)
+            );
+            assert_eq!(frames.borrow()[0].1, 255);
+            // 19 ticks: no forced rewrite; the 20th forgets the cache.
+            tokio::time::sleep(Duration::from_millis(19 * 250)).await;
+            assert_eq!(*invalidations.borrow(), 0);
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            assert_eq!(*invalidations.borrow(), 1);
+            drop(clock);
+            assert!(
+                pulsar_core::supervisor()
+                    .shutdown(Duration::from_secs(1))
+                    .await
+                    .is_empty()
+            );
+        })
+        .await;
 }

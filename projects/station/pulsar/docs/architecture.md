@@ -34,11 +34,12 @@
 
 Общие примитивы с другими программами монорепозитория живут в `packages/rust/`:
 `home-runtime` (Supervisor), `home-actor` (Handle/channel), `home-telemetry`
-(bootstrap `tracing`), `home-linux` (errno и запись sysfs). Крейт Pulsar их только использует.
+(bootstrap `tracing`), `home-linux` (errno, запись sysfs и Linux ABI: framebuffer, i2c-dev, evdev, локальное время). Крейт Pulsar их только использует.
 
 `third_party/` — только сборка sendspin-cpp.
 
-Утилиты — `crates/<крейт>/src/bin/<имя>.rs`; аргументы — в `//!` каждой утилиты.
+Диагностические утилиты — отдельный крейт `crates/pulsar-probes/src/bin/<имя>.rs`; аргументы
+разбирает `clap`, справка — `--help`. Библиотечные крейты бинарей не содержат.
 
 | Утилита | Назначение |
 |---|---|

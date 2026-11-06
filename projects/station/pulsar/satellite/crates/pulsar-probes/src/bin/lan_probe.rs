@@ -18,6 +18,7 @@ use std::io::Write as _;
 use std::process::ExitCode;
 use std::time::Duration;
 
+use clap::{Parser, Subcommand};
 use pulsar_arbiter::{ArbiterEvent, Claim, spawn};
 use pulsar_mdns::{MdnsService, spawn as mdns_spawn};
 use tokio::signal::unix::{Signal, SignalKind, signal};
@@ -28,12 +29,6 @@ use tracing::{Event, Subscriber};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::{Context, Layer};
 use tracing_subscriber::prelude::*;
-
-const USAGE: &str = "usage:
-  lan_probe mdns <host> <service> <port> <seconds> [txt...]
-  lan_probe claim <station> <port> <wake> <level> [busy]
-  lan_probe claim-on-peer <station> <port> <wake> <level> [timeout_s=60] [delay_ms=0]
-  lan_probe listen <port> <seconds>";
 
 /// A decision comes 250 ms after the claim.
 const DECISION_WAIT: Duration = Duration::from_secs(5);
@@ -135,7 +130,18 @@ impl<S: Subscriber> Layer<S> for Capture {
     }
 }
 
+/// `0`/`1`/`busy` as the old positional argument.
+fn parse_busy(s: &str) -> Result<bool, String> {
+    match s {
+        "0" | "false" => Ok(false),
+        "1" | "true" | "busy" => Ok(true),
+        _ => Err(format!("busy: {s}")),
+    }
+}
+
+#[derive(Subcommand)]
 enum Mode {
+    /// Responder for <host>.local with one service; prints every answered question.
     Mdns {
         host: String,
         service: String,
@@ -143,71 +149,39 @@ enum Mode {
         seconds: u64,
         txt: Vec<String>,
     },
+    /// Claim at once and print the decision.
     Claim {
         station: String,
         port: u16,
         wake: String,
         level: f32,
+        #[arg(value_parser = parse_busy, default_value = "0")]
         busy: bool,
     },
+    /// Claim when another station's claim arrives (or delay_ms later).
     ClaimOnPeer {
         station: String,
         port: u16,
         wake: String,
         level: f32,
+        #[arg(default_value_t = 60)]
         timeout_s: u64,
+        #[arg(default_value_t = 0)]
         delay_ms: u64,
     },
-    Listen {
-        port: u16,
-        seconds: u64,
-    },
+    /// Print every claim received.
+    Listen { port: u16, seconds: u64 },
 }
 
-fn parse_args(a: &[String]) -> Option<Mode> {
-    let s = |i: usize| a.get(i).cloned();
-    let num = |i: usize| a.get(i)?.parse().ok();
-    match (a.first()?.as_str(), a.len()) {
-        ("mdns", 5..) => Some(Mode::Mdns {
-            host: s(1)?,
-            service: s(2)?,
-            port: a[3].parse().ok()?,
-            seconds: num(4)?,
-            txt: a[5..].to_vec(),
-        }),
-        ("claim", 5..=6) => Some(Mode::Claim {
-            station: s(1)?,
-            port: a[2].parse().ok()?,
-            wake: s(3)?,
-            level: a[4].parse().ok()?,
-            busy: match a.get(5).map(String::as_str) {
-                None | Some("0") => false,
-                Some("1" | "busy") => true,
-                Some(_) => return None,
-            },
-        }),
-        ("claim-on-peer", 5..=7) => Some(Mode::ClaimOnPeer {
-            station: s(1)?,
-            port: a[2].parse().ok()?,
-            wake: s(3)?,
-            level: a[4].parse().ok()?,
-            timeout_s: if a.len() > 5 { num(5)? } else { 60 },
-            delay_ms: if a.len() > 6 { num(6)? } else { 0 },
-        }),
-        ("listen", 3) => Some(Mode::Listen {
-            port: a[1].parse().ok()?,
-            seconds: num(2)?,
-        }),
-        _ => None,
-    }
+#[derive(Parser)]
+#[command(about = "LAN arbitration and mDNS probe")]
+struct Cli {
+    #[command(subcommand)]
+    mode: Mode,
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let Some(mode) = parse_args(&args) else {
-        eprintln!("{USAGE}");
-        return ExitCode::from(2);
-    };
+    let mode = Cli::parse().mode;
     let (diag_tx, diag) = unbounded_channel();
     tracing_subscriber::registry()
         .with(
