@@ -26,8 +26,9 @@
 | `pulsar-audio` | микрофонный фронтенд (захват → VQE Яндекса → спотеры → поток 16 кГц) и музыкальные признаки опорного сигнала динамика |
 | `pulsar-media` | воспроизведение через GStreamer прошивки (каналы Music / Announce) и `Mixer` |
 | `pulsar-sendspin` | Sendspin-плеер на sendspin-cpp через C-шим `shim/` (см. [«Линковка C++ (sendspin-cpp)»](#линковка-c-sendspin-cpp)) |
-| `pulsar-hw` | кольцо LED / логотип и кнопки |
-| `pulsar-clock` | часы, их стоковые анимации, шрифт, датчик освещённости |
+| `pulsar-ui` | чистый домен интерфейса: рендер эффектов LED, анимации и шрифт часов, композиция слоёв обоих устройств, доменные типы (`Effect`, `MusicStyle`, `ClockFace`), общий `MusicSource` |
+| `pulsar-hw` | актор кольца LED / логотипа, sysfs/fb/i2c и кнопки; рендер — в `pulsar-ui` |
+| `pulsar-clock` | актор часов, sysfs-вывод и датчик освещённости; слои и анимации — в `pulsar-ui` |
 | `pulsar-zigbee` | радио Zigbee Миди: роли и прошивка радио; внутренний API — в `//!` `src/lib.rs` |
 | `pulsar-update` | бэкенд сущности обновления «Firmware» в HA |
 
@@ -150,10 +151,11 @@ flowchart LR
   операций на 1–2 ulp. У такого места — комментарий с причиной. Сливания не добавлять и не
   убирать.
 - Расстановку `mul_add` фиксируют golden-тесты: `pulsar-audio` `tests/spectrum_golden.rs`,
-  `pulsar-clock` `clock_fx.rs`, `pulsar-hw` `led_fx/tests.rs`, `pulsar-media`
-  `tests/mixer_golden.rs`, `pulsar-core` `ambient.rs`. Без теста, но по тому же правилу: уровень
-  wake (`frontend.rs`, `mean_square`), энергии `ww_offline`, матрица цвета корпуса (`leds.rs`),
-  диапазоны музыки часов (`clock.rs`), число громкости на часах (`controller/media.rs`).
+  `pulsar-ui` `led_fx/tests.rs` и `clock_fx.rs`, `pulsar-media` `tests/mixer_golden.rs`,
+  `pulsar-core` `ambient.rs`. Без теста, но по тому же правилу: уровень wake (`frontend.rs`,
+  `mean_square`), энергии `ww_offline`, матрица цвета корпуса (`pulsar-ui/src/leds.rs`),
+  диапазоны музыки часов (`pulsar-ui/src/clock.rs`), число громкости на часах
+  (`controller/media.rs`).
 - armhf-сборка даёт аппаратный `vfma` для `mul_add` только с `-C target-cpu=cortex-a53` (его
   ставит toolchain в `MODULE.bazel`, см. [«Линковка C++ (sendspin-cpp)»](#линковка-c-sendspin-cpp)). Без флага
   (например, ручной `cargo build --target armv7-unknown-linux-gnueabihf`) `mul_add` становится
@@ -390,8 +392,9 @@ flowchart LR
 ### `pulsar-hw` и `pulsar-clock`
 
 - Ошибка открытия framebuffer / sysfs логируется («LEDs unavailable», «clock unavailable»), вывод
-  становится no-op, состояние работает. `set_case_color` синхронно грузит матрицу из
-  `/system/vendor/quasar/ledconfigs/<stem>.json` и работает и без открытых LED.
+  становится no-op, состояние работает. `set_case_color` только шлёт команду, матрицу из
+  `/system/vendor/quasar/ledconfigs/<stem>.json` читает актор; без открытых LED коррекция тоже
+  работает.
 - `spawn_input` отдаёт `Err`, если не открылось ни одно устройство.
 - `spawn_light_sensor` отдаёт первое значение сразу.
 

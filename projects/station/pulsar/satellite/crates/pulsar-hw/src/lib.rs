@@ -5,13 +5,12 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 mod input;
-mod led_fx;
 mod leds;
 #[allow(unsafe_code)]
 mod sys;
 
 pub use input::{Button, InputEvent, InputHandle, Press, spawn_input};
-pub use led_fx::VoiceColor;
-pub use leds::{LedsHandle, Rgb, case_colors, effect_names, music_styles, spawn_leds};
+pub use leds::{LedsHandle, case_colors, effect_names, music_styles, spawn_leds};
+pub use pulsar_ui::{CaseColor, Effect, MusicStyle, Rgb, VoiceColor};
 
 use home_linux::io_error_text as errstr;

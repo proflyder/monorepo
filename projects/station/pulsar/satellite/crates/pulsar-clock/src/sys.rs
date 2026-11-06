@@ -1,13 +1,6 @@
 //! Every libc call of the crate.
 
-/// Local wall-clock time for the display.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Wall {
-    pub hour: i32,
-    pub min: i32,
-    /// Within the first half of the current second.
-    pub first_half: bool,
-}
+use pulsar_ui::Wall;
 
 /// CLOCK_REALTIME broken down by localtime_r, i.e. in the process TZ (the stations have no
 /// /etc/localtime or zoneinfo: without TZ from Home Assistant this is UTC).

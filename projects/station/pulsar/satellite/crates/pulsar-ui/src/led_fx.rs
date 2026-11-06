@@ -18,7 +18,11 @@
 //! (`VoiceColor`) can move them to blue. The error pulse, the timer ring and the one-shots keep
 //! their own measured colours.
 
+use std::convert::Infallible;
 use std::ops::{Add, Mul};
+use std::str::FromStr;
+
+use crate::Effect;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Col {
@@ -256,19 +260,10 @@ impl VoiceColor {
     pub const ALL: [Self; 2] = [Self::Violet, Self::Blue];
 
     /// `state.conf` (`voice_color=`) and the ESPHome option.
-    pub fn label(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Violet => "Violet",
             Self::Blue => "Blue",
-        }
-    }
-
-    /// Anything but "Blue" is the stock violet: an unknown key in `state.conf` must not change
-    /// the look.
-    pub fn from_label(s: &str) -> Self {
-        match s {
-            "Blue" => Self::Blue,
-            _ => Self::Violet,
         }
     }
 
@@ -277,6 +272,19 @@ impl VoiceColor {
             Self::Violet => VIOLET,
             Self::Blue => BLUE,
         }
+    }
+}
+
+/// Anything but "Blue" is the stock violet: an unknown key in `state.conf` must not change the
+/// look.
+impl FromStr for VoiceColor {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "Blue" => Self::Blue,
+            _ => Self::Violet,
+        })
     }
 }
 
@@ -603,7 +611,7 @@ impl Default for EffectState {
 /// t: effect phase in s (speed-scaled), dt: its step since the previous frame. bri scales the
 /// result. Returns true if the content moves (needs further frames).
 pub fn effect(
-    name: &str,
+    effect: Effect,
     c: Col,
     bri: f32,
     t: f64,
@@ -613,22 +621,22 @@ pub fn effect(
 ) -> bool {
     let n = out.len();
     let nf = n as f32;
-    match name {
-        "Rainbow" => {
+    match effect {
+        Effect::Rainbow => {
             for (i, o) in out.iter_mut().enumerate() {
                 *o = hsv(((t / 6.0) % 1.0) as f32 + i as f32 / nf, 1.0, 1.0) * bri;
             }
             true
         }
-        "Breathe" => {
+        Effect::Breathe => {
             fill(out, c * (bri * 0.9f32.mul_add(wave(t, 4.0), 0.1)));
             true
         }
-        "Color loop" => {
+        Effect::ColorLoop => {
             fill(out, hsv(((t / 20.0) % 1.0) as f32, 1.0, 1.0) * bri);
             true
         }
-        "Comet" => {
+        Effect::Comet => {
             let head = ((t / 2.0) % 1.0) as f32 * nf;
             let len = (0.4 * nf).max(1.5);
             for (i, o) in out.iter_mut().enumerate() {
@@ -643,7 +651,7 @@ pub fn effect(
             }
             true
         }
-        "Twinkle" => {
+        Effect::Twinkle => {
             if st.age.len() != n {
                 st.age = vec![-1.0; n];
             }
@@ -670,7 +678,7 @@ pub fn effect(
             }
             true
         }
-        "Fire" => {
+        Effect::Fire => {
             for (i, o) in out.iter_mut().enumerate() {
                 let heat = 0.65f32.mul_add(noise(0.35 * i as f32, 2.5 * t), 0.35);
                 let col = if heat < 0.33 {
@@ -692,7 +700,7 @@ pub fn effect(
             }
             true
         }
-        "Aurora" => {
+        Effect::Aurora => {
             for (i, o) in out.iter_mut().enumerate() {
                 let x = i as f32 / nf;
                 let s1 = (TAU * (x + ((t / 17.0) % 1.0) as f32)).sin();
@@ -703,7 +711,7 @@ pub fn effect(
             }
             true
         }
-        "Lava lamp" => {
+        Effect::LavaLamp => {
             const COL: [u32; 4] = [0xfe3200, 0xfe0065, 0x5800fe, 0x00fe1e];
             const PHASE: [f64; 4] = [0.0, 0.25, 0.5, 0.75];
             const VEL: [f64; 4] = [0.013, -0.021, 0.017, -0.029];
@@ -729,7 +737,7 @@ pub fn effect(
             }
             true
         }
-        "Candle" => {
+        Effect::Candle => {
             let g = 0.04f32.mul_add(
                 noise(7.0, 8.0 * t),
                 0.08f32.mul_add(noise(0.0, 0.6 * t), 0.88),
@@ -741,11 +749,11 @@ pub fn effect(
             }
             true
         }
-        "Night light" => {
+        Effect::NightLight => {
             fill(out, stock(0xd4ffbf, 1.0) * bri);
             false
         }
-        _ => {
+        Effect::Solid => {
             fill(out, c * bri);
             false
         }

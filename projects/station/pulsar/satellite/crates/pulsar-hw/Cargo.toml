@@ -11,6 +11,8 @@ tracing = { workspace = true }
 pulsar-clock = { path = "../pulsar-clock" }
 pulsar-core = { path = "../pulsar-core" }
 pulsar-model = { path = "../pulsar-model" }
+pulsar-ui = { path = "../pulsar-ui" }
+serde_json = { workspace = true }
 home-linux = { path = "../../../../../../packages/rust/home-linux" }
 tokio = { workspace = true }
 

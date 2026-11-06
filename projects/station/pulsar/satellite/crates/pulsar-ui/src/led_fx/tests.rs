@@ -8,18 +8,20 @@
 
 use super::*;
 
-const EFFECTS: [&str; 11] = [
-    "Rainbow",
-    "Breathe",
-    "Color loop",
-    "Comet",
-    "Twinkle",
-    "Fire",
-    "Aurora",
-    "Lava lamp",
-    "Candle",
-    "Night light",
-    "",
+use crate::Effect;
+
+const EFFECTS: [Effect; 11] = [
+    Effect::Rainbow,
+    Effect::Breathe,
+    Effect::ColorLoop,
+    Effect::Comet,
+    Effect::Twinkle,
+    Effect::Fire,
+    Effect::Aurora,
+    Effect::LavaLamp,
+    Effect::Candle,
+    Effect::NightLight,
+    Effect::Solid,
 ];
 
 fn bits(s: &str) -> u32 {
@@ -75,13 +77,7 @@ impl Seq {
 
 #[test]
 fn frames_match_the_cpp_renderer() {
-    // Под Bazel тест идёт из runfiles-дерева: PULSAR_MANIFEST_DIR задаёт путь
-    // от текущего каталога, cargo оставляет прежний CARGO_MANIFEST_DIR.
-    let root = std::env::var_os("PULSAR_MANIFEST_DIR").map_or_else(
-        || std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-        std::path::PathBuf::from,
-    );
-    let text = std::fs::read_to_string(root.join("tests/golden/led_fx.txt")).expect("golden file");
+    let text = include_str!("../../tests/golden/led_fx.txt");
     let mut seq = Seq::default();
     let mut lines = 0;
     for line in text.lines() {
@@ -177,14 +173,14 @@ fn blue_is_violet_with_red_and_green_exchanged() {
 
 #[test]
 fn voice_color_labels_round_trip_and_default_to_the_stock_look() {
-    assert_eq!(VoiceColor::ALL.map(VoiceColor::label), ["Violet", "Blue"]);
+    assert_eq!(VoiceColor::ALL.map(VoiceColor::as_str), ["Violet", "Blue"]);
     for c in VoiceColor::ALL {
-        assert_eq!(VoiceColor::from_label(c.label()), c);
+        assert_eq!(c.as_str().parse(), Ok(c));
     }
     assert_eq!(VoiceColor::default(), VoiceColor::Violet);
     // An unknown or absent state.conf value keeps the stock violet.
     for s in ["", "violet", "Violet ", "red"] {
-        assert_eq!(VoiceColor::from_label(s), VoiceColor::Violet, "{s:?}");
+        assert_eq!(s.parse(), Ok(VoiceColor::Violet), "{s:?}");
     }
 }
 

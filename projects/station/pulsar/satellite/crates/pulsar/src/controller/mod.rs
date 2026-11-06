@@ -16,7 +16,7 @@ use pulsar_arbiter::{ArbiterEvent, ArbiterHandle, ClaimId};
 use pulsar_audio::{FrontendEvent, Outcome};
 use pulsar_core::{ClockShot, Timers, UiState, now_ms};
 use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, WakeWordInfo};
-use pulsar_hw::{InputEvent, InputHandle, LedsHandle, Rgb};
+use pulsar_hw::{CaseColor, Effect, InputEvent, InputHandle, LedsHandle, Rgb};
 use pulsar_mdns as mdns;
 use pulsar_mdns::{MdnsHandle, MdnsService};
 use pulsar_media::{Channel, Mixer, PlayId, PlayState, PlayerEvent, PlayerHandle};
@@ -299,12 +299,14 @@ fn read_line(path: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Index in `pulsar_clock::face_names()`; -1 for "None" / "".
-fn clock_face_index(name: &str) -> i32 {
-    pulsar_clock::face_names()
-        .iter()
-        .position(|&n| n == name)
-        .map_or(-1, |i| i as i32)
+/// Face from the option text; "None" / "" / unknown clear it (the stock "no face").
+fn clock_face(name: &str) -> pulsar_clock::ClockFace {
+    name.parse().unwrap_or(pulsar_clock::ClockFace::None)
+}
+
+/// Effect from `state.conf` / HA; unknown or "" is the plain colour.
+fn light_effect(name: &str) -> Effect {
+    name.parse().unwrap_or_default()
 }
 
 fn model_dir(id: &str) -> PathBuf {
@@ -378,7 +380,7 @@ impl Controller {
         };
         let voice_colors: Vec<String> = pulsar_hw::VoiceColor::ALL
             .iter()
-            .map(|c| c.label().to_owned())
+            .map(|c| c.as_str().to_owned())
             .collect();
         let zigbee_modes: Vec<String> = match model.zigbee.as_ref() {
             Some(_) if ENABLE_ZIGBEE => pulsar_zigbee::ROLES
@@ -420,11 +422,11 @@ impl Controller {
                 },
             ],
             active_wake_words: vec![st.wake_word.clone()],
-            light_effects: strings(pulsar_hw::effect_names()),
-            clock_faces: with_none(strings(pulsar_clock::face_names())),
-            music_styles: strings(pulsar_hw::music_styles()),
+            light_effects: strings(&pulsar_hw::effect_names()),
+            clock_faces: with_none(strings(&pulsar_clock::face_names())),
+            music_styles: strings(&pulsar_hw::music_styles()),
             case_colors: with_none(case_colors.clone()),
-            clock_music_styles: strings(pulsar_clock::music_styles()),
+            clock_music_styles: strings(&pulsar_clock::music_styles()),
             voice_colors,
             zigbee_modes,
             key_path: Some(logic::in_dir(&dir, "api_key")),
@@ -447,16 +449,16 @@ impl Controller {
         clock.set_auto_brightness(st.clock_auto_brightness);
         clock.set_scroll_ms(st.clock_scroll_ms);
         clock.set_voice_indication(st.voice_indication);
-        clock.set_music_style(st.clock_music.clone());
+        clock.set_music_style(st.clock_music);
         leds.set_speed(st.led_speed);
         leds.set_voice_indication(st.voice_indication);
         leds.set_voice_color(st.voice_color);
-        leds.set_music_style(st.music_viz.clone());
+        leds.set_music_style(st.music_viz);
         leds.set_user_light(
             st.light.on,
             light_rgb(&st.light),
             st.light.brightness,
-            st.light.effect.clone(),
+            light_effect(&st.light.effect),
             0,
         );
 
@@ -492,8 +494,10 @@ impl Controller {
                     st.led_case_color
                 );
             }
-            // Leds logs an unreadable file.
-            if !listed || !leds.set_case_color(&st.led_case_color) {
+            if listed {
+                // The actor reads the file; an unreadable one leaves the correction off.
+                leds.set_case_color(CaseColor::new(&st.led_case_color));
+            } else {
                 st.led_case_color.clear();
                 changed = true;
             }
