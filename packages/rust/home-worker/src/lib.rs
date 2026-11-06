@@ -37,8 +37,13 @@ pub use scheduler_queue::SchedulerQueue;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Event {
     pub id: String,
+    /// Scheduler source identity (schedule/timer/task id).
+    pub source_id: String,
     pub task_type: String,
     pub queue: String,
+    /// Human-facing label of the occurrence (alarm name, reminder text). It is
+    /// display data, not an identifier.
+    pub label: String,
     /// Opaque `payload_json`. Treat it as data only, never as a service call
     /// or entity identifier.
     pub payload: String,
@@ -497,8 +502,10 @@ mod tests {
     fn event(id: &str) -> Event {
         Event {
             id: id.to_owned(),
+            source_id: "source-1".to_owned(),
             task_type: "test.ping".to_owned(),
             queue: "test".to_owned(),
+            label: String::new(),
             payload: "{}".to_owned(),
             action: Action::Fire,
             source: Source::Task,

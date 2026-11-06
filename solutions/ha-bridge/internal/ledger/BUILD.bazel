@@ -9,6 +9,10 @@ go_library(
 
 go_test(
     name = "ledger_test",
-    srcs = ["ledger_test.go"],
+    srcs = [
+        "golden_vectors_test.go",
+        "ledger_test.go",
+    ],
     embed = [":ledger"],
+    data = ["//solutions/ha-bridge:ledger_vectors"],
 )

@@ -1,0 +1,157 @@
+[
+  {
+    "name": "duplicate delivery is acknowledged without a side effect",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "seen": true,
+    "expected": {
+      "outcome": "ACK_OUTCOME_DELIVERED",
+      "detail": "duplicate delivery; Home Assistant side effect already applied"
+    }
+  },
+  {
+    "name": "permanent HA rejection fails the event",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "haError": "permanent-404",
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "home assistant rejected the call: call script: status=404",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-alarm",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  },
+  {
+    "name": "transient HA failure leaves the event for retry",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "haError": "transient-500",
+    "expected": {
+      "outcome": "RETRY",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-alarm",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  },
+  {
+    "name": "unauthorized below the attempt limit is retried",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "attempts": 9,
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "haError": "permanent-401",
+    "expected": {
+      "outcome": "RETRY",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-alarm",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  },
+  {
+    "name": "unauthorized at the attempt limit is failed",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "attempts": 10,
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "haError": "permanent-401",
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "home assistant call failed repeatedly: call script: status=401",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-alarm",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  },
+  {
+    "name": "forbidden at the attempt limit is failed",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "attempts": 10,
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "haError": "permanent-403",
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "home assistant call failed repeatedly: call script: status=403",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-alarm",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  },
+  {
+    "name": "permanent rejection ignores the attempt limit",
+    "event": {
+      "action": "EVENT_ACTION_FIRE",
+      "id": "evt-alarm",
+      "label": "Wake up",
+      "queue": "home",
+      "sourceId": "alarm-1",
+      "sourceKind": "SOURCE_KIND_ALARM"
+    },
+    "haError": "permanent-400",
+    "expected": {
+      "outcome": "ACK_OUTCOME_FAILED",
+      "detail": "home assistant rejected the call: call script: status=400",
+      "script": "alarm_start",
+      "variables": {
+        "event_id": "evt-alarm",
+        "kind": "alarm",
+        "label": "Wake up",
+        "source_id": "alarm-1"
+      }
+    }
+  }
+]
