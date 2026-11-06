@@ -7,8 +7,8 @@
 use pulsar_core::Timers;
 use tracing::{info, warn};
 
-use crate::bytes::get_be16;
-use crate::link::{AckTag, Link, LinkEvent};
+use pulsar_zbhci::bytes::get_be16;
+use pulsar_zbhci::link::{AckTag, Link, LinkEvent};
 
 const STEER: u16 = 0x0002;
 const FACTORY_NEW: u16 = 0x0005;
@@ -228,8 +228,8 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::link::BOOT_IND;
     use crate::test_util::{Radio, absent_lines, assert_golden, hex, link_pair, poll_once};
+    use pulsar_zbhci::frame::BOOT_IND;
 
     /// Drives a router and the radio in lock-step, recording what the C++ harness printed.
     struct Run {

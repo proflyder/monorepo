@@ -2465,6 +2465,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar-deconz"
+version = "0.0.0"
+dependencies = [
+ "home-linux",
+ "libc",
+ "pulsar-zbhci",
+ "pulsar-zigbee",
+ "socket2",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "pulsar-dsp"
 version = "0.0.0"
 dependencies = [
@@ -2561,6 +2575,7 @@ dependencies = [
  "pulsar-audio",
  "pulsar-clock",
  "pulsar-core",
+ "pulsar-deconz",
  "pulsar-dsp",
  "pulsar-esphome",
  "pulsar-hw",
@@ -2569,6 +2584,7 @@ dependencies = [
  "pulsar-model",
  "pulsar-sendspin",
  "pulsar-update",
+ "pulsar-zbhci",
  "pulsar-zigbee",
  "ring",
  "tokio",
@@ -2636,14 +2652,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar-zbhci"
+version = "0.0.0"
+dependencies = [
+ "home-linux",
+ "pulsar-core",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "pulsar-zigbee"
 version = "0.0.0"
 dependencies = [
  "home-linux",
  "libc",
  "pulsar-core",
- "pulsar-model",
- "socket2",
+ "pulsar-deconz",
+ "pulsar-zbhci",
+ "thiserror",
  "tokio",
  "tracing",
 ]

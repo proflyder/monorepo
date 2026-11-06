@@ -98,7 +98,7 @@ impl Controller {
                 pulsar_zigbee::role(self.st.zigbee_role).label,
             );
             // Not through the "zigbee: …" dedup of Changed: its cache stays as it is.
-            api.publish_text_sensor(TextSensorId::Zigbee, &z.status());
+            api.publish_text_sensor(TextSensorId::Zigbee, &z.status().to_string());
         }
         api.publish_light(&self.st.light);
         if self.last_lux_published >= 0.0 {
@@ -534,7 +534,7 @@ impl Controller {
                 let Some(z) = &self.zigbee else {
                     return;
                 };
-                let s = z.status();
+                let s = z.status().to_string();
                 if s == self.zigbee_status {
                     return;
                 }

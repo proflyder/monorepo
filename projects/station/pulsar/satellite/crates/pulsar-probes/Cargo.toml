@@ -16,6 +16,7 @@ pulsar-arbiter = { path = "../pulsar-arbiter" }
 pulsar-audio = { path = "../pulsar-audio" }
 pulsar-clock = { path = "../pulsar-clock" }
 pulsar-core = { path = "../pulsar-core" }
+pulsar-deconz = { path = "../pulsar-deconz" }
 pulsar-dsp = { path = "../pulsar-dsp" }
 pulsar-esphome = { path = "../pulsar-esphome" }
 pulsar-hw = { path = "../pulsar-hw" }
@@ -24,6 +25,7 @@ pulsar-media = { path = "../pulsar-media" }
 pulsar-model = { path = "../pulsar-model" }
 pulsar-sendspin = { path = "../pulsar-sendspin" }
 pulsar-update = { path = "../pulsar-update" }
+pulsar-zbhci = { path = "../pulsar-zbhci" }
 pulsar-zigbee = { path = "../pulsar-zigbee" }
 ring = { workspace = true }
 tokio = { workspace = true }

@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
+use std::io;
 use std::rc::Rc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -7,8 +8,9 @@ use std::time::Duration;
 use tokio::task::LocalSet;
 
 use super::*;
-use crate::bytes::put_le16;
-use crate::test_util::{Lines, Radio, absent_lines, link_pair, ybl_image};
+use crate::test_util::{Lines, Radio as WireRadio, absent_lines, link_pair, ybl_image};
+use pulsar_zbhci::bytes::put_le16;
+use pulsar_zbhci::link::RadioError;
 
 const ROUTER_IMAGE: u32 = 0x5001_0203;
 const COORD_IMAGE: u32 = 0x5101_0203;
@@ -57,12 +59,67 @@ enum Fw {
     Silent,
 }
 
-struct Rig {
-    radios: Rc<RefCell<Vec<(Radio, Fw)>>>,
+struct FakeRadio {
+    radios: Rc<RefCell<Vec<(WireRadio, Fw)>>>,
     fws: Rc<RefCell<VecDeque<Fw>>>,
+    open_fails: bool,
+}
+
+impl Radio for FakeRadio {
+    fn open(&mut self, _: &RadioPaths) -> Result<Link, RadioError> {
+        if self.open_fails {
+            return Err(RadioError::Open {
+                path: String::new(),
+                source: io::Error::from_raw_os_error(2),
+            });
+        }
+        let (link, radio) = link_pair(&absent_lines());
+        let mut q = self.fws.borrow_mut();
+        let fw = if q.len() > 1 {
+            q.pop_front()
+        } else {
+            q.front().cloned()
+        };
+        self.radios.borrow_mut().push((radio, fw.unwrap()));
+        Ok(link)
+    }
+}
+
+type Gate = Arc<(Mutex<bool>, std::sync::Condvar)>;
+
+struct FakeFlasher {
     flashed: Arc<Mutex<u32>>,
     /// The fake flasher finishes only once this is set.
-    gate: Arc<(Mutex<bool>, std::sync::Condvar)>,
+    gate: Gate,
+}
+
+impl Flasher for FakeFlasher {
+    fn flash(
+        &self,
+        _: &RadioPaths,
+        image: &[u8],
+        progress: &mut dyn FnMut(f32),
+    ) -> Result<(), FlashError> {
+        assert!(crate::flasher::ybl_parse(image).is_ok());
+        let (open, cv) = &*self.gate;
+        let mut open = open.lock().unwrap();
+        while !*open {
+            open = cv.wait(open).unwrap();
+        }
+        drop(open);
+        for i in 0..=100 {
+            progress(i as f32 / 100.0);
+        }
+        *self.flashed.lock().unwrap() += 1;
+        Ok(())
+    }
+}
+
+struct Rig {
+    radios: Rc<RefCell<Vec<(WireRadio, Fw)>>>,
+    fws: Rc<RefCell<VecDeque<Fw>>>,
+    flashed: Arc<Mutex<u32>>,
+    gate: Gate,
     /// The router firmware reports itself on a network.
     joined: Rc<Cell<bool>>,
     /// Status when spawn returned; its Changed is taken off the channel.
@@ -97,46 +154,19 @@ impl Rig {
         let coordinator_image = dir.dir().join("zigbee-coordinator.ybl");
         std::fs::write(&router_image, ybl_image(ROUTER_IMAGE)).unwrap();
         std::fs::write(&coordinator_image, ybl_image(COORD_IMAGE)).unwrap();
-        let radios: Rc<RefCell<Vec<(Radio, Fw)>>> = Rc::default();
-        let fw_queue: Rc<RefCell<VecDeque<Fw>>> =
+        let radios: Rc<RefCell<Vec<(WireRadio, Fw)>>> = Rc::default();
+        let fws_queue: Rc<RefCell<VecDeque<Fw>>> =
             Rc::new(RefCell::new(fws.iter().cloned().collect()));
         let flashed = Arc::new(Mutex::new(0));
         let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
-        let open = {
-            let radios = radios.clone();
-            let fw_queue = fw_queue.clone();
-            Box::new(move |_: &RadioLines| {
-                if open_fails {
-                    return None;
-                }
-                let (link, radio) = link_pair(&absent_lines());
-                let mut q = fw_queue.borrow_mut();
-                let fw = if q.len() > 1 {
-                    q.pop_front()
-                } else {
-                    q.front().cloned()
-                };
-                radios.borrow_mut().push((radio, fw.unwrap()));
-                Some(link)
-            })
+        let radio = FakeRadio {
+            radios: radios.clone(),
+            fws: fws_queue.clone(),
+            open_fails,
         };
-        let flash: FlashFn = {
-            let flashed = flashed.clone();
-            let gate = gate.clone();
-            Arc::new(move |_, image, progress| {
-                assert!(crate::flasher::ybl_parse(image).is_ok());
-                let (open, cv) = &*gate;
-                let mut open = open.lock().unwrap();
-                while !*open {
-                    open = cv.wait(open).unwrap();
-                }
-                drop(open);
-                for i in 0..=100 {
-                    progress(i as f32 / 100.0);
-                }
-                *flashed.lock().unwrap() += 1;
-                Ok(())
-            })
+        let flasher = FakeFlasher {
+            flashed: flashed.clone(),
+            gate: gate.clone(),
         };
         let cfg = ZigbeeConfig {
             lines: absent_lines(),
@@ -145,15 +175,15 @@ impl Rig {
             deconz_port: 0,
             failed_version,
         };
-        let (handle, mut rx) = spawn_with(cfg, mode, Backend { open, flash });
-        let initial = handle.status();
+        let (handle, mut rx) = spawn_with(cfg, mode, Box::new(radio), Arc::new(flasher));
+        let initial = handle.status().to_string();
         assert_eq!(rx.try_recv(), Ok(ZigbeeEvent::Changed));
         Self {
             gate,
             joined: Rc::new(Cell::new(false)),
             initial,
             radios,
-            fws: fw_queue,
+            fws: fws_queue,
             flashed,
             dir,
             rx,
@@ -216,6 +246,10 @@ impl Rig {
         std::mem::take(&mut self.seen)
     }
 
+    fn status(&self) -> String {
+        self.handle.status().to_string()
+    }
+
     fn opens(&self) -> usize {
         self.radios.borrow().len()
     }
@@ -270,7 +304,7 @@ async fn router_runs_joins_and_leaves() {
         r.handle.leave();
         r.pump().await;
         assert!(r.take().is_empty());
-        assert_eq!(r.handle.status(), "router: not in a network");
+        assert_eq!(r.status(), "router: not in a network");
         // Joined (0x8906, then the channel from 0x8045).
         r.joined.set(true);
         {
@@ -283,7 +317,7 @@ async fn router_runs_joins_and_leaves() {
         }
         r.pump().await;
         assert_eq!(
-            r.handle.status(),
+            r.status(),
             "router: in network 0x1A62 as 0x4F21, channel 15"
         );
         assert!(!r.handle.flashing());
@@ -314,7 +348,7 @@ async fn other_firmware_is_written_then_identified() {
             seen.iter().filter(|s| *s == "outcome 0x00000000").count(),
             1
         );
-        assert_eq!(r.handle.status(), "router: not in a network");
+        assert_eq!(r.status(), "router: not in a network");
         assert!(!r.handle.flashing());
         assert_eq!(*r.flashed.lock().unwrap(), 1);
         assert_eq!(r.opens(), 2);
@@ -385,11 +419,7 @@ async fn silent_radio_is_written_or_asked_again() {
         r.pump().await;
         assert!(r.handle.flashing());
         r.after_flash().await;
-        assert!(
-            r.handle.status().starts_with("router: "),
-            "{}",
-            r.handle.status()
-        );
+        assert!(r.status().starts_with("router: "), "{}", r.status());
 
         // Silent, and its image was given up on: asked again after 60 s.
         let mut r = Rig::spawn(Mode::Router, &[Fw::Silent], ROUTER_IMAGE, false);
@@ -397,7 +427,7 @@ async fn silent_radio_is_written_or_asked_again() {
         tokio::time::advance(Duration::from_millis(10_000)).await;
         r.pump().await;
         assert_eq!(
-            r.handle.status(),
+            r.status(),
             "error: the radio did not take firmware 0x50010203; not written again"
         );
         tokio::time::advance(Duration::from_millis(59_999)).await;
@@ -406,7 +436,7 @@ async fn silent_radio_is_written_or_asked_again() {
         tokio::time::advance(Duration::from_millis(1)).await;
         r.pump().await;
         assert_eq!(r.opens(), 2);
-        assert_eq!(r.handle.status(), "starting");
+        assert_eq!(r.status(), "starting");
         let _ = &r.fws;
     })
     .await;
@@ -430,6 +460,20 @@ async fn coordinator_runs_with_its_deconz_server() {
     .await;
 }
 
+struct NoRadio;
+impl Radio for NoRadio {
+    fn open(&mut self, _: &RadioPaths) -> Result<Link, RadioError> {
+        unreachable!()
+    }
+}
+
+struct NoFlasher;
+impl Flasher for NoFlasher {
+    fn flash(&self, _: &RadioPaths, _: &[u8], _: &mut dyn FnMut(f32)) -> Result<(), FlashError> {
+        unreachable!()
+    }
+}
+
 #[test]
 fn status_texts() {
     let (ev, _rx) = unbounded_channel();
@@ -443,40 +487,39 @@ fn status_texts() {
             failed_version: 0,
         },
         mode: Mode::Coordinator,
-        backend: Backend {
-            open: Box::new(|_| None),
-            flash: Arc::new(|_, _, _| Ok(())),
-        },
+        radio: Box::new(NoRadio),
+        flasher: Arc::new(NoFlasher),
         shared: Rc::new(Shared {
-            status: RefCell::new(String::new()),
+            status: RefCell::new(Status::Off),
             flashing: Cell::new(false),
         }),
         events: ev,
-        phase: Phase::Off,
-        error: String::new(),
-        progress: 0.0,
+        state: State::Off,
         flashes: 0,
         timers: Timers::new(),
-        flasher: None,
+        thread: None,
         flash_tx,
-        link: None,
-        coord: None,
-        deconz: None,
-        router: None,
     };
-    assert_eq!(s.status(), "off");
-    s.phase = Phase::Starting;
-    assert_eq!(s.status(), "starting");
-    s.phase = Phase::Flashing;
-    s.progress = 0.374;
-    assert_eq!(s.status(), "writing Coordinator firmware: 37 %");
-    s.phase = Phase::Failed;
-    s.error = "cannot open the deCONZ port".into();
-    assert_eq!(s.status(), "error: cannot open the deCONZ port");
-    s.phase = Phase::Running;
-    assert_eq!(s.status(), "coordinator: radio not ready");
+    assert_eq!(s.status().to_string(), "off");
+    let (link, _radio) = link_pair(&absent_lines());
+    s.state = State::Starting(Box::new(link));
+    assert_eq!(s.status().to_string(), "starting");
+    s.state = State::Flashing { progress: 0.374 };
+    assert_eq!(s.status().to_string(), "writing Coordinator firmware: 37 %");
+    s.state = State::Failed {
+        error: "cannot open the deCONZ port".into(),
+    };
+    assert_eq!(s.status().to_string(), "error: cannot open the deCONZ port");
+    let (link, _radio) = link_pair(&absent_lines());
+    s.state = State::Running(Role::Coordinator {
+        coord: Box::new(Coordinator::new(link)),
+        deconz: Box::new(DeconzServer::new(0)),
+    });
+    assert_eq!(s.status().to_string(), "coordinator: radio not ready");
+    let (link, _radio) = link_pair(&absent_lines());
     s.mode = Mode::Router;
-    assert_eq!(s.status(), "router: radio not ready");
+    s.state = State::Running(Role::Router(Box::new(Router::new(link))));
+    assert_eq!(s.status().to_string(), "router: radio not ready");
 }
 
 #[tokio::test(start_paused = true)]

@@ -19,6 +19,7 @@ DEPS = [
     "//projects/station/pulsar/satellite/crates/pulsar-audio:pulsar_audio",
     "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-deconz:pulsar_deconz",
     "//projects/station/pulsar/satellite/crates/pulsar-dsp:pulsar_dsp",
     "//projects/station/pulsar/satellite/crates/pulsar-esphome:pulsar_esphome",
     "//projects/station/pulsar/satellite/crates/pulsar-hw:pulsar_hw",
@@ -27,6 +28,7 @@ DEPS = [
     "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     "//projects/station/pulsar/satellite/crates/pulsar-sendspin:pulsar_sendspin",
     "//projects/station/pulsar/satellite/crates/pulsar-update:pulsar_update",
+    "//projects/station/pulsar/satellite/crates/pulsar-zbhci:pulsar_zbhci",
     "//projects/station/pulsar/satellite/crates/pulsar-zigbee:pulsar_zigbee",
 ]
 

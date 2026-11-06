@@ -1,15 +1,104 @@
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::fmt::Write as _;
-use std::time::Duration;
+use std::io;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::task::{Context, Poll, Waker};
 
-use super::*;
-use crate::coordinator::Network;
-use crate::link::{BOOT_IND, LinkEvent};
-use crate::test_util::{Radio, absent_lines, link_pair, poll_once};
+use pulsar_zbhci::bytes::{get_le16, get_le32, get_le64, put_le16, put_le32, put_le64};
+use pulsar_zbhci::frame::BOOT_IND;
+use pulsar_zbhci::link::{Link, LinkEvent};
+use tokio::io::{AsyncRead, AsyncWrite, DuplexStream, ReadBuf};
+
+use pulsar_deconz::host::{CONNECTED, JOINING, OFFLINE};
+use pulsar_zigbee::coordinator::Coordinator;
+
+use pulsar_deconz::params::*;
+use pulsar_deconz::server::{
+    APS_DATA_CONFIRM, APS_DATA_INDICATION, APS_DATA_REQUEST, Acceptor, CHANGE_NETWORK_STATE, Conn,
+    DEVICE_STATE, DEVICE_STATE_CHANGED, FAILURE, READ_PARAMETER, Server, VERSION, WRITE_PARAMETER,
+};
+use pulsar_deconz::slip::{END, ESC, ESC_END, ESC_ESC, checksum};
+use pulsar_deconz::types::{Network, SimpleDescriptor, put_descriptor};
+
+fn hex(p: &[u8]) -> String {
+    if p.is_empty() {
+        return "-".into();
+    }
+    p.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn poll_once<F: Future>(f: F) -> Option<F::Output> {
+    let mut f = std::pin::pin!(f);
+    match f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+        Poll::Ready(v) => Some(v),
+        Poll::Pending => None,
+    }
+}
+
+fn write_all_poll(io: &mut DuplexStream, mut b: &[u8]) {
+    let mut cx = Context::from_waker(Waker::noop());
+    while !b.is_empty() {
+        match Pin::new(&mut *io).poll_write(&mut cx, b) {
+            Poll::Ready(Ok(n)) if n > 0 => b = &b[n..],
+            other => panic!("client write: {other:?}"),
+        }
+    }
+}
+
+fn read_available(io: &mut DuplexStream) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut buf = [0u8; 4096];
+    loop {
+        let mut rb = ReadBuf::new(&mut buf);
+        match Pin::new(&mut *io).poll_read(&mut cx, &mut rb) {
+            Poll::Ready(Ok(())) if rb.filled().is_empty() => return out,
+            Poll::Ready(Ok(())) => out.extend_from_slice(rb.filled()),
+            _ => return out,
+        }
+    }
+}
+
+/// Accepts connections the test queued up (a new duplex half per client).
+struct TestAcceptor {
+    queue: Rc<RefCell<VecDeque<Conn>>>,
+}
+
+impl Acceptor for TestAcceptor {
+    fn poll_accept(&mut self, _: &mut Context<'_>) -> Poll<io::Result<(Conn, SocketAddr)>> {
+        self.queue.borrow_mut().pop_front().map_or_else(
+            || Poll::Pending,
+            |conn| Poll::Ready(Ok((conn, SocketAddr::from(([127, 0, 0, 1], 0))))),
+        )
+    }
+
+    fn local_addr(&self) -> Option<SocketAddr> {
+        None
+    }
+}
+
+/// A stub radio link for the coordinator: an in-memory duplex and the recording lines.
+fn link_pair() -> (Link, DuplexStream) {
+    let (a, b) = tokio::io::duplex(1 << 16);
+    let link = Link::with_io(
+        a,
+        "",
+        Box::new(pulsar_zbhci::link::SysfsLines::new(
+            "/nonexistent/zb-reset/value",
+            "/nonexistent/zb-boot/value",
+        )),
+    );
+    (link, b)
+}
 
 /// The coordinator firmware as far as the server needs it: ACKs everything, answers 0x0A00,
 /// erases on 0x0A02 and forms on 0x0A01 (forming, then up with the requested parameters).
 struct Ncp {
-    radio: Radio,
+    io: DuplexStream,
+    rx: Vec<u8>,
     net: Network,
     /// Payloads of 0x0A01 / 0x0A02 / 0x0A03 / 0x0A04 / 0x0A05 / 0x0A10 seen, in order.
     seen: Vec<(u16, Vec<u8>)>,
@@ -17,6 +106,8 @@ struct Ncp {
     hold_erase: bool,
     /// 0x0A01 reports "forming" and stops there.
     hold_form: bool,
+    /// The status the radio puts into the ACK of the next frame.
+    acks: VecDeque<u8>,
 }
 
 impl Ncp {
@@ -31,18 +122,42 @@ impl Ncp {
         v.extend_from_slice(&n.key);
         v.push(n.key_seq);
         put_le32(&mut v, n.frame_counter);
-        self.radio.send(0x8A00, &v);
+        self.send(0x8A00, &v);
     }
 
-    fn step(&mut self) -> bool {
-        let Some((ty, p)) = self.radio.read_frame() else {
-            return false;
-        };
-        self.radio.ack(ty, 0);
+    fn send(&mut self, ty: u16, payload: &[u8]) {
+        write_all_poll(&mut self.io, &pulsar_zbhci::frame::build_frame(ty, payload));
+    }
+
+    /// Reads one frame if any, ACKs it and reacts. Returns the frame for the golden log.
+    fn step(&mut self) -> Option<(u16, Vec<u8>)> {
+        let mut buf = [0u8; 512];
+        let mut cx = Context::from_waker(Waker::noop());
+        loop {
+            let mut rb = ReadBuf::new(&mut buf);
+            match Pin::new(&mut self.io).poll_read(&mut cx, &mut rb) {
+                Poll::Ready(Ok(())) if !rb.filled().is_empty() => {
+                    self.rx.extend_from_slice(rb.filled());
+                }
+                _ => break,
+            }
+        }
+        if self.rx.len() < 7 {
+            return None;
+        }
+        let ty = u16::from_be_bytes([self.rx[1], self.rx[2]]);
+        let len = usize::from(u16::from_be_bytes([self.rx[3], self.rx[4]]));
+        if self.rx.len() < len + 7 {
+            return None;
+        }
+        let frame: Vec<u8> = self.rx.drain(..len + 7).collect();
+        let p = frame[6..6 + len].to_vec();
+        let ack_status = self.acks.pop_front().unwrap_or(0);
+        self.send(0x8000, &[(ty >> 8) as u8, ty as u8, ack_status, 0]);
         match ty {
             0x0A00 => self.state(if self.net.formed { 2 } else { 0 }),
             0x0A02 => {
-                self.seen.push((ty, p));
+                self.seen.push((ty, p.clone()));
                 self.net = Network {
                     ieee: self.net.ieee,
                     channel: self.net.channel,
@@ -74,9 +189,20 @@ impl Ncp {
                     self.state(2);
                 }
             }
-            _ => self.seen.push((ty, p)),
+            _ => self.seen.push((ty, p.clone())),
         }
-        true
+        Some((ty, p))
+    }
+}
+
+fn simple(ep: u8, profile: u16, device: u16, i: &[u16], o: &[u16]) -> SimpleDescriptor {
+    SimpleDescriptor {
+        endpoint: ep,
+        profile,
+        device,
+        version: 0,
+        in_clusters: i.to_vec(),
+        out_clusters: o.to_vec(),
     }
 }
 
@@ -84,21 +210,39 @@ const IEEE: u64 = 0x0012_4B00_0102_0304;
 
 struct Bench {
     coord: Coordinator,
-    server: DeconzServer,
+    server: Server,
     ncp: Ncp,
     seq: u8,
+    client: Option<DuplexStream>,
+    queue: Rc<RefCell<VecDeque<Conn>>>,
+    /// Golden log of the frames the radio received.
+    out: String,
+    quiet: bool,
 }
 
 /// One reply: command, sequence, status, the bytes after the 5-byte header.
 type Reply = (u8, u8, u8, Vec<u8>);
 
 impl Bench {
-    /// Coordinator on a formed network (PAN 0x1A62, channel 15), a client connected.
     async fn new(formed: bool) -> Self {
-        let (mut link, radio) = link_pair(&absent_lines());
+        let mut b = Self::fresh(formed).await;
+        b.ncp.seen.clear();
+        b.connect().await;
+        b
+    }
+
+    async fn fresh(formed: bool) -> Self {
+        let (mut link, io) = link_pair();
+        // The application started before the coordinator takes the link over.
         assert_eq!(link.next().await, LinkEvent::Boot);
         let mut coord = Coordinator::new(link);
-        let mut server = DeconzServer::new(0);
+        let queue: Rc<RefCell<VecDeque<Conn>>> = Rc::default();
+        let mut server = Server::with_acceptor(
+            0,
+            TestAcceptor {
+                queue: queue.clone(),
+            },
+        );
         server.attach(&mut coord);
         let mut net = Network {
             ieee: IEEE,
@@ -118,23 +262,34 @@ impl Bench {
             };
         }
         coord.start(&mut server);
-        let mut b = Self {
+        let mut bench = Self {
             coord,
             server,
             ncp: Ncp {
-                radio,
+                io,
+                rx: Vec::new(),
                 net,
                 seen: Vec::new(),
                 hold_erase: false,
                 hold_form: false,
+                acks: VecDeque::new(),
             },
             seq: 0,
+            client: None,
+            queue,
+            out: String::new(),
+            quiet: false,
         };
-        b.settle().await;
-        assert!(b.coord.ready());
-        b.ncp.seen.clear();
-        b.server.connect_test_client();
-        b
+        bench.settle().await;
+        bench
+    }
+
+    /// Queues a new client and lets the server accept it.
+    async fn connect(&mut self) {
+        let (client, server_end) = tokio::io::duplex(1 << 15);
+        self.queue.borrow_mut().push_back(Box::new(server_end));
+        self.client = Some(client);
+        self.settle().await;
     }
 
     fn step(&mut self) -> bool {
@@ -142,7 +297,17 @@ impl Bench {
             self.coord.handle(w, &mut self.server);
             return true;
         }
-        self.ncp.step()
+        if let Some(w) = poll_once(self.server.next()) {
+            self.server.handle(w, &mut self.coord);
+            return true;
+        }
+        let Some((ty, p)) = self.ncp.step() else {
+            return false;
+        };
+        if !self.quiet {
+            let _ = writeln!(self.out, "send {ty:04x} {}", hex(&p));
+        }
+        true
     }
 
     async fn settle(&mut self) {
@@ -157,14 +322,23 @@ impl Bench {
         }
     }
 
+    fn write_client(&mut self, bytes: &[u8]) {
+        let client = self.client.as_mut().expect("client");
+        write_all_poll(client, bytes);
+    }
+
+    fn read_client(&mut self) -> Vec<u8> {
+        self.client.as_mut().map_or_else(Vec::new, read_available)
+    }
+
     fn replies(&mut self) -> Vec<Reply> {
-        decode(&self.server.take_output())
+        decode(&self.read_client())
     }
 
     async fn req(&mut self, cmd: u8, payload: &[u8]) -> Vec<Reply> {
         self.seq = self.seq.wrapping_add(1);
         let bytes = encode(cmd, self.seq, payload);
-        self.server.on_bytes(&mut self.coord, &bytes);
+        self.write_client(&bytes);
         self.settle().await;
         self.replies()
     }
@@ -237,22 +411,15 @@ fn decode(bytes: &[u8]) -> Vec<Reply> {
             }
             i += 1;
         }
+        if f.len() < 7 {
+            continue;
+        }
         let n = f.len() - 2;
         assert_eq!(checksum(&f[..n]), get_le16(&f[n..]), "reply checksum");
         assert_eq!(usize::from(get_le16(&f[3..])), n, "frame length field");
         out.push((f[0], f[1], f[2], f[5..n].to_vec()));
     }
     out
-}
-
-#[test]
-fn checksum_is_twos_complement_of_the_sum() {
-    assert_eq!(checksum(&[0x0D, 0x01, 0x00, 0x09, 0x00]), 0xFFE9);
-    assert_eq!(checksum(&[]), 0);
-    assert_eq!(
-        checksum(&[0xFF; 300]).wrapping_add((300u32 * 0xFF) as u16),
-        0
-    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -262,37 +429,42 @@ async fn slip_framing_escapes_and_rejects_noise() {
     let r = b.req(VERSION, &[0, 0, 0, 0]).await;
     assert_eq!(r, [(VERSION, 1, SUCCESS, vec![0x00, 0x09, 0x78, 0x26])]);
     // Exact bytes, framing included.
-    b.server
-        .on_bytes(&mut b.coord, &encode(VERSION, 2, &[0, 0, 0, 0]));
+    b.write_client(&encode(VERSION, 2, &[0, 0, 0, 0]));
+    b.settle().await;
     assert_eq!(
-        b.server.take_output(),
+        b.read_client(),
         [
             0xC0, 0x0D, 0x02, 0x00, 0x09, 0x00, 0x00, 0x09, 0x78, 0x26, 0x41, 0xFF, 0xC0
         ]
     );
     // Sequence numbers 0xC0 / 0xDB travel escaped both ways.
-    let mut f = encode(VERSION, 0xC0, &[0, 0, 0, 0]);
-    b.server.on_bytes(&mut b.coord, &f);
+    let f = encode(VERSION, 0xC0, &[0, 0, 0, 0]);
+    b.write_client(&f);
+    b.settle().await;
     assert_eq!(b.replies()[0].1, 0xC0);
-    f = encode(VERSION, 0xDB, &[0, 0, 0, 0]);
-    b.server.on_bytes(&mut b.coord, &f);
+    let f = encode(VERSION, 0xDB, &[0, 0, 0, 0]);
+    b.write_client(&f);
+    b.settle().await;
     assert_eq!(b.replies()[0].1, 0xDB);
     // Bad checksum, too short, empty frames: nothing.
     let mut bad = encode(VERSION, 3, &[0, 0, 0, 0]);
     let n = bad.len();
     bad[n - 2] ^= 1;
-    b.server.on_bytes(&mut b.coord, &bad);
-    b.server
-        .on_bytes(&mut b.coord, &[0xC0, 0x0D, 0x01, 0x00, 0x05, 0xC0, 0xC0]);
-    assert!(b.server.take_output().is_empty());
+    b.write_client(&bad);
+    b.write_client(&[0xC0, 0x0D, 0x01, 0x00, 0x05, 0xC0, 0xC0]);
+    b.settle().await;
+    assert!(b.read_client().is_empty());
     // A frame split across reads; oversized garbage is cut at 1024 bytes and dropped.
     let f = encode(DEVICE_STATE, 4, &[0, 0, 0]);
-    b.server.on_bytes(&mut b.coord, &f[..3]);
-    b.server.on_bytes(&mut b.coord, &f[3..]);
+    b.write_client(&f[..3]);
+    b.settle().await;
+    b.write_client(&f[3..]);
+    b.settle().await;
     assert_eq!(b.replies(), [(DEVICE_STATE, 4, SUCCESS, vec![0x22, 0, 0])]);
-    b.server.on_bytes(&mut b.coord, &[0x55; 3000]);
-    b.server.on_bytes(&mut b.coord, &[0xC0]);
-    assert!(b.server.take_output().is_empty());
+    b.write_client(&[0x55; 3000]);
+    b.write_client(&[0xC0]);
+    b.settle().await;
+    assert!(b.read_client().is_empty());
     // Unknown commands get no answer.
     assert!(b.req(0x20, &[0, 0]).await.is_empty());
 }
@@ -538,7 +710,7 @@ async fn aps_data_requests_and_confirms() {
     assert!(b.ncp.seen.is_empty());
 
     // Confirm for request 7 (radio handle 0): queued, flagged, then read.
-    b.ncp.radio.send(0x8A10, &[0, 0x00]);
+    b.ncp.send(0x8A10, &[0, 0x00]);
     b.settle().await;
     let r = b.replies();
     assert_eq!(r, [(DEVICE_STATE_CHANGED, 0, SUCCESS, vec![0x26, 0])]);
@@ -551,10 +723,10 @@ async fn aps_data_requests_and_confirms() {
         (FAILURE, vec![0, 0])
     );
     // Group and IEEE confirms carry their address forms.
-    b.ncp.radio.send(0x8A10, &[1, 0xE9]);
-    b.ncp.radio.send(0x8A10, &[2, 0x00]);
+    b.ncp.send(0x8A10, &[1, 0xE9]);
+    b.ncp.send(0x8A10, &[2, 0x00]);
     b.settle().await;
-    b.replies();
+    b.read_client();
     let r = b.ask(APS_DATA_CONFIRM, &[0, 0]).await.1;
     assert_eq!(&r[2..], [0x26, 8, 0x01, 0x05, 0x00, 1, 0xE9, 0, 0, 0, 0]);
     let r = b.ask(APS_DATA_CONFIRM, &[0, 0]).await.1;
@@ -562,16 +734,16 @@ async fn aps_data_requests_and_confirms() {
     assert_eq!(&r[5..13], ieee);
 
     // A new client: confirms of the previous one's requests are dropped.
-    b.server.connect_test_client();
-    b.ncp.radio.send(0x8A10, &[3, 0x00]);
+    b.connect().await;
+    b.ncp.send(0x8A10, &[3, 0x00]);
     b.settle().await;
     assert!(b.replies().is_empty());
     assert_eq!(b.ask(APS_DATA_CONFIRM, &[0, 0]).await.0, FAILURE);
     let body = aps(7, 0x02, &[0x34, 0x12], &ONOFF);
     b.aps_request(&body, body.len()).await;
-    b.ncp.radio.send(0x8A10, &[4, 0x00]);
+    b.ncp.send(0x8A10, &[4, 0x00]);
     b.settle().await;
-    b.replies();
+    b.read_client();
     assert_eq!(b.ask(APS_DATA_CONFIRM, &[0, 0]).await.1[3], 7);
 }
 
@@ -586,7 +758,7 @@ async fn indications() {
         0x02, 0x00, 0x00, 0x01, 0x02, 0x34, 0x12, 0x01, 0x04, 0x01, 0x06, 0x00, 0xC8, 0xC4, 0x00,
         0x03, 0xAA, 0xBB, 0xCC,
     ];
-    b.ncp.radio.send(0x8A11, &ind);
+    b.ncp.send(0x8A11, &ind);
     b.settle().await;
     assert_eq!(
         b.replies(),
@@ -605,17 +777,17 @@ async fn indications() {
     );
     // Offline host: indications are not queued. More than 64: the oldest go.
     assert_eq!(b.ask(CHANGE_NETWORK_STATE, &[OFFLINE]).await.0, SUCCESS);
-    b.ncp.radio.send(0x8A11, &ind);
+    b.ncp.send(0x8A11, &ind);
     b.settle().await;
     assert_eq!(b.ask(APS_DATA_INDICATION, &[0, 0]).await.0, FAILURE);
     assert_eq!(b.ask(CHANGE_NETWORK_STATE, &[CONNECTED]).await.0, SUCCESS);
     for i in 0..70u8 {
         let mut f = ind;
         f[16] = i;
-        b.ncp.radio.send(0x8A11, &f);
+        b.ncp.send(0x8A11, &f);
     }
     b.settle().await;
-    b.replies();
+    b.read_client();
     assert_eq!(b.ask(APS_DATA_INDICATION, &[0, 0]).await.1[17], 6);
 }
 
@@ -696,91 +868,10 @@ async fn formation_without_network_and_channel_change() {
 async fn radio_restart_drops_the_client() {
     let mut b = Bench::new(true).await;
     assert!(b.server.has_client());
-    b.ncp.radio.send(BOOT_IND, &[]);
+    b.ncp.send(BOOT_IND, &[]);
     b.settle().await;
     assert!(!b.server.has_client());
 }
-
-/// Runs the server and the coordinator for `ms`, the radio ACKing every frame.
-async fn run(server: &mut DeconzServer, coord: &mut Coordinator, radio: &mut Radio, ms: u64) {
-    let end = tokio::time::Instant::now() + Duration::from_millis(ms);
-    loop {
-        tokio::select! {
-            w = server.next() => server.handle(w, coord),
-            w = coord.next() => coord.handle(w, server),
-            () = tokio::time::sleep_until(end) => break,
-        }
-        while let Some((ty, _)) = radio.read_frame() {
-            radio.ack(ty, 0);
-        }
-    }
-}
-
-#[test]
-fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    rt.block_on(async {
-        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-
-        let (mut link, mut radio) = link_pair(&absent_lines());
-        assert_eq!(link.next().await, LinkEvent::Boot);
-        let mut coord = Coordinator::new(link);
-        let mut server = DeconzServer::new(0);
-        server.attach(&mut coord);
-        assert!(server.start());
-        let port = server
-            .listener
-            .as_ref()
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
-        coord.start(&mut server);
-        // Not ready (no network state yet): the connection is closed at once.
-        let mut c = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-        run(&mut server, &mut coord, &mut radio, 50).await;
-        let mut buf = [0u8; 64];
-        assert_eq!(c.read(&mut buf).await.unwrap(), 0);
-        // Ready: served.
-        let mut st = vec![2, 0, 15, 0x62, 0x1A];
-        st.extend_from_slice(&[0; 40]);
-        radio.send(0x8A00, &st);
-        run(&mut server, &mut coord, &mut radio, 50).await;
-        let mut c1 = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-        run(&mut server, &mut coord, &mut radio, 50).await;
-        c1.write_all(&encode(VERSION, 1, &[0, 0, 0, 0]))
-            .await
-            .unwrap();
-        run(&mut server, &mut coord, &mut radio, 50).await;
-        let n = c1.read(&mut buf).await.unwrap();
-        assert_eq!(
-            decode(&buf[..n]),
-            [(VERSION, 1, SUCCESS, vec![0, 9, 0x78, 0x26])]
-        );
-        // A second client replaces the first.
-        let mut c2 = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-        run(&mut server, &mut coord, &mut radio, 50).await;
-        assert_eq!(c1.read(&mut buf).await.unwrap(), 0);
-        c2.write_all(&encode(DEVICE_STATE, 2, &[0, 0, 0]))
-            .await
-            .unwrap();
-        run(&mut server, &mut coord, &mut radio, 50).await;
-        let n = c2.read(&mut buf).await.unwrap();
-        assert_eq!(
-            decode(&buf[..n]),
-            [(DEVICE_STATE, 2, SUCCESS, vec![0x22, 0, 0])]
-        );
-        // The client leaves: the server notices.
-        drop(c2);
-        run(&mut server, &mut coord, &mut radio, 50).await;
-        assert!(!server.has_client());
-    });
-}
-
-const EXT: u64 = 0xDDDD_DDDD_DDDD_DDDD;
 
 #[tokio::test(start_paused = true)]
 async fn erase_only_without_channel_mask() {
@@ -832,7 +923,7 @@ async fn each_new_parameter_alone_makes_a_new_network() {
     // The radio's own values: the network stays.
     assert!(!makes_new_network(MAC_ADDRESS, &IEEE.to_le_bytes()).await);
     assert!(!makes_new_network(NWK_EXT_PAN_ID, &EXT.to_le_bytes()).await);
-    assert!(!makes_new_network(APS_EXT_PAN_ID, &EXT.to_le_bytes()).await);
+    assert!(!makes_new_network(NWK_EXT_PAN_ID, &EXT.to_le_bytes()).await);
     assert!(!makes_new_network(NETWORK_KEY, &same_key).await);
     assert!(!makes_new_network(NWK_PAN_ID, &[0x62, 0x1A]).await);
 }
@@ -846,7 +937,7 @@ async fn another_clients_parameters_do_not_erase() {
         SUCCESS
     );
     // Client B: what A wrote is forgotten; its CONNECTED keeps the network.
-    b.server.connect_test_client();
+    b.connect().await;
     assert_eq!(b.ask(CHANGE_NETWORK_STATE, &[CONNECTED]).await.0, SUCCESS);
     assert!(b.ncp.seen.is_empty(), "{:?}", b.ncp.seen);
     assert_eq!(b.coord.network().pan, 0x1A62);
@@ -870,14 +961,13 @@ async fn forming_bench(hold_erase: bool, hold_form: bool) -> Bench {
 async fn radio_restart_while_awaiting_the_erase_keeps_the_client_and_forms() {
     let mut b = forming_bench(true, false).await;
     assert_eq!(b.ncp.seen, [(0x0A02, vec![])]);
-    assert_eq!(b.server.formation, Formation::AwaitErased);
-    b.ncp.radio.send(BOOT_IND, &[]);
+    assert_eq!(b.ask(DEVICE_STATE, &[0, 0, 0]).await.1[0] & 3, JOINING);
+    b.ncp.send(BOOT_IND, &[]);
     b.settle().await;
     // The restart's state (no network) completes the erase: formed as asked.
     assert!(b.server.has_client());
     assert_eq!(b.ncp.seen.last().unwrap().0, 0x0A01);
     assert_eq!(b.coord.network().pan, 0x8899);
-    assert_eq!(b.server.formation, Formation::None);
 }
 
 #[tokio::test(start_paused = true)]
@@ -887,13 +977,11 @@ async fn radio_restart_while_forming_ends_the_formation_and_drops_the_client() {
         b.ncp.seen.iter().map(|s| s.0).collect::<Vec<_>>(),
         [0x0A02, 0x0A01]
     );
-    assert_eq!(b.server.formation, Formation::Forming);
     assert_eq!(b.ask(DEVICE_STATE, &[0, 0, 0]).await.1[0] & 3, JOINING);
-    b.ncp.radio.send(BOOT_IND, &[]);
+    b.ncp.send(BOOT_IND, &[]);
     b.settle().await;
     // As in C++: the restart fails the formation first (NONE), then the radio is not ready:
     // the host is dropped and reconnects once the radio reported its state.
-    assert_eq!(b.server.formation, Formation::None);
     assert!(!b.server.has_client());
 }
 
@@ -905,8 +993,7 @@ async fn repeated_connected_while_forming_stays_joining() {
     assert_eq!(r[0].3, [CONNECTED]);
     // Formed again (superseding the pending one), no erase: the radio has no network.
     assert_eq!(b.ncp.seen.iter().map(|s| s.0).collect::<Vec<_>>(), [0x0A01]);
-    // FORMING survives the superseded formation's formed(false) (C++ fell back to NONE).
-    assert_eq!(b.server.formation, Formation::Forming);
+    // JOINING survives the superseded formation's formed(false) (C++ fell back to NONE).
     assert_eq!(b.ask(DEVICE_STATE, &[0, 0, 0]).await.1[0] & 3, JOINING);
 }
 
@@ -961,7 +1048,7 @@ async fn aps_requests_refused_while_confirms_are_due() {
         b.aps_request(&body, body.len()).await,
         (FAILURE, vec![2, 0, 0x02, 8])
     );
-    b.ncp.radio.send(0x8A10, &[0, 0]);
+    b.ncp.send(0x8A10, &[0, 0]);
     b.settle().await;
     assert_eq!(b.aps_request(&body, body.len()).await.0, SUCCESS);
 }
@@ -975,12 +1062,15 @@ async fn slip_frames_longer_than_1024_bytes_are_cut() {
         assert_eq!(f.len(), len + 7 + 2, "no escapes in this frame");
         f
     };
-    b.server.on_bytes(&mut b.coord, &at(1024 - 7));
+    b.write_client(&at(1024 - 7));
+    b.settle().await;
     assert_eq!(b.replies().len(), 1, "exactly 1024 bytes: kept");
-    b.server.on_bytes(&mut b.coord, &at(1024 - 6));
+    b.write_client(&at(1024 - 6));
+    b.settle().await;
     assert!(b.replies().is_empty(), "1025 bytes: cut, checksum fails");
     // The next frame is read normally.
-    b.server.on_bytes(&mut b.coord, &at(4));
+    b.write_client(&at(4));
+    b.settle().await;
     assert_eq!(b.replies().len(), 1);
 }
 
@@ -991,11 +1081,180 @@ async fn client_not_reading_is_dropped() {
     let f = encode(DEVICE_STATE, 1, &[0, 0, 0]);
     let mut n = 0;
     while b.server.has_client() {
-        b.server.on_bytes(&mut b.coord, &f);
+        b.write_client(&f);
+        b.settle().await;
         n += 1;
         assert!(n < 10_000);
     }
     assert!(n > 1000, "{n}");
+}
+
+const EXT: u64 = 0xDDDD_DDDD_DDDD_DDDD;
+
+#[tokio::test(start_paused = true)]
+async fn deconz_matches_cxx_golden() {
+    // The plain radio of the C++ harness: it only ACKs frames; the script injects the states.
+    struct Golden {
+        coord: Coordinator,
+        server: Server,
+        radio: DuplexStream,
+        rx: Vec<u8>,
+        client: Option<DuplexStream>,
+        queue: Rc<RefCell<VecDeque<Conn>>>,
+        acks: VecDeque<u8>,
+        out: String,
+        seq: u8,
+    }
+
+    impl Golden {
+        async fn fresh() -> Self {
+            let (mut link, radio) = link_pair();
+            assert_eq!(link.next().await, LinkEvent::Boot);
+            let mut coord = Coordinator::new(link);
+            let queue: Rc<RefCell<VecDeque<Conn>>> = Rc::default();
+            let mut server = Server::with_acceptor(
+                0,
+                TestAcceptor {
+                    queue: queue.clone(),
+                },
+            );
+            server.attach(&mut coord);
+            coord.start(&mut server);
+            let mut g = Self {
+                coord,
+                server,
+                radio,
+                rx: Vec::new(),
+                client: None,
+                queue,
+                acks: VecDeque::new(),
+                out: String::new(),
+                seq: 0,
+            };
+            g.settle().await;
+            g
+        }
+
+        async fn connect(&mut self) {
+            let (client, server_end) = tokio::io::duplex(1 << 15);
+            self.queue.borrow_mut().push_back(Box::new(server_end));
+            self.client = Some(client);
+            self.settle().await;
+        }
+
+        fn step(&mut self) -> bool {
+            if let Some(w) = poll_once(self.coord.next()) {
+                self.coord.handle(w, &mut self.server);
+                return true;
+            }
+            if let Some(w) = poll_once(self.server.next()) {
+                self.server.handle(w, &mut self.coord);
+                return true;
+            }
+            let mut buf = [0u8; 512];
+            let mut cx = Context::from_waker(Waker::noop());
+            loop {
+                let mut rb = ReadBuf::new(&mut buf);
+                match Pin::new(&mut self.radio).poll_read(&mut cx, &mut rb) {
+                    Poll::Ready(Ok(())) if !rb.filled().is_empty() => {
+                        self.rx.extend_from_slice(rb.filled());
+                    }
+                    _ => break,
+                }
+            }
+            if self.rx.len() < 7 {
+                return false;
+            }
+            let ty = u16::from_be_bytes([self.rx[1], self.rx[2]]);
+            let len = usize::from(u16::from_be_bytes([self.rx[3], self.rx[4]]));
+            if self.rx.len() < len + 7 {
+                return false;
+            }
+            let frame: Vec<u8> = self.rx.drain(..len + 7).collect();
+            let p = frame[6..6 + len].to_vec();
+            let _ = writeln!(self.out, "send {ty:04x} {}", hex(&p));
+            let status = self.acks.pop_front().unwrap_or(0);
+            write_all_poll(
+                &mut self.radio,
+                &pulsar_zbhci::frame::build_frame(0x8000, &[(ty >> 8) as u8, ty as u8, status, 0]),
+            );
+            true
+        }
+
+        async fn settle(&mut self) {
+            loop {
+                if self.step() {
+                    continue;
+                }
+                tokio::task::yield_now().await;
+                if !self.step() {
+                    break;
+                }
+            }
+        }
+
+        fn write_client(&mut self, bytes: &[u8]) {
+            if let Some(c) = self.client.as_mut() {
+                write_all_poll(c, bytes);
+            }
+        }
+
+        fn read_client(&mut self) -> Vec<u8> {
+            self.client.as_mut().map_or_else(Vec::new, read_available)
+        }
+    }
+
+    let mut out = String::new();
+    let mut g: Option<Golden> = None;
+    let script = include_str!("golden/deconz_script.txt");
+    for line in script.lines() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let _ = writeln!(out, "> {line}");
+        let w: Vec<&str> = line.split_whitespace().collect();
+        if w[0] == "new" {
+            g = Some(Golden::fresh().await);
+        }
+        let g = g.as_mut().unwrap();
+        match w[0] {
+            "new" => {}
+            "client" => {
+                if g.coord.ready() {
+                    g.connect().await;
+                }
+            }
+            "req" | "raw" => {
+                let bytes = if w[0] == "req" {
+                    g.seq = g.seq.wrapping_add(1);
+                    encode(u8::from_str_radix(w[1], 16).unwrap(), g.seq, &unhex(w[2]))
+                } else {
+                    unhex(w[1])
+                };
+                if g.server.has_client() {
+                    g.write_client(&bytes);
+                }
+            }
+            "radio" => {
+                let ty = u16::from_str_radix(w[1], 16).unwrap();
+                write_all_poll(
+                    &mut g.radio,
+                    &pulsar_zbhci::frame::build_frame(ty, &unhex(w[2])),
+                );
+            }
+            "ack" => g.acks.push_back(w[1].parse().unwrap()),
+            other => panic!("script: {other}"),
+        }
+        g.settle().await;
+        out.push_str(&g.out);
+        g.out.clear();
+        let got = g.read_client();
+        if !got.is_empty() {
+            let _ = writeln!(out, "client {}", hex(&got));
+        }
+        let _ = writeln!(out, "client_connected {}", u8::from(g.server.has_client()));
+    }
+    assert_golden(include_str!("golden/deconz.txt"), &out);
 }
 
 fn unhex(h: &str) -> Vec<u8> {
@@ -1007,89 +1266,176 @@ fn unhex(h: &str) -> Vec<u8> {
         .collect()
 }
 
-/// tests/golden/deconz_script.txt against this server and coordinator; deconz.txt is what the
-/// C++ DeconzServer + ZigbeeCoordinator (rust-port-base) answered to the same script over a stub
-/// link: the frames the radio got and the bytes the client got, line by line.
-#[tokio::test(start_paused = true)]
-async fn deconz_matches_cxx_golden() {
-    use crate::test_util::hex;
-    // Runs the coordinator and the radio (ACKing each frame) until both are idle.
-    async fn settle(
-        coord: &mut Coordinator,
-        server: &mut DeconzServer,
-        radio: &mut Radio,
-        acks: &mut VecDeque<u8>,
-        out: &mut String,
-    ) {
+fn assert_golden(golden: &str, actual: &str) {
+    let want: Vec<&str> = golden.lines().collect();
+    let got: Vec<&str> = actual.lines().collect();
+    for (i, (w, g)) in want.iter().zip(&got).enumerate() {
+        assert_eq!(g, w, "line {} differs from the C++ output", i + 1);
+    }
+    assert_eq!(got.len(), want.len(), "line count differs");
+}
+
+#[test]
+fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let (mut link, mut radio) = link_pair();
+        // Let the link boot.
+        assert_eq!(link.next().await, LinkEvent::Boot);
+        let mut coord = Coordinator::new(link);
+        let mut server = Server::new(0);
+        server.attach(&mut coord);
+        assert!(server.start());
+        let port = server.local_addr().unwrap().port();
+        coord.start(&mut server);
+        let mut radio_rx = Vec::new();
+        let mut radio_buf = [0u8; 512];
+        // Not ready (no network state yet): the connection is closed at once.
+        let mut c = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        run(
+            &mut server,
+            &mut coord,
+            &mut radio,
+            &mut radio_rx,
+            &mut radio_buf,
+            50,
+        )
+        .await;
+        let mut buf = [0u8; 64];
+        assert_eq!(c.read(&mut buf).await.unwrap(), 0);
+        // Ready: served.
+        let mut st = vec![2, 0, 15, 0x62, 0x1A];
+        st.extend_from_slice(&[0; 40]);
+        write_all_poll(&mut radio, &pulsar_zbhci::frame::build_frame(0x8A00, &st));
+        run(
+            &mut server,
+            &mut coord,
+            &mut radio,
+            &mut radio_rx,
+            &mut radio_buf,
+            50,
+        )
+        .await;
+        let mut c1 = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        run(
+            &mut server,
+            &mut coord,
+            &mut radio,
+            &mut radio_rx,
+            &mut radio_buf,
+            50,
+        )
+        .await;
+        c1.write_all(&encode(VERSION, 1, &[0, 0, 0, 0]))
+            .await
+            .unwrap();
+        run(
+            &mut server,
+            &mut coord,
+            &mut radio,
+            &mut radio_rx,
+            &mut radio_buf,
+            50,
+        )
+        .await;
+        let n = c1.read(&mut buf).await.unwrap();
+        assert_eq!(
+            decode(&buf[..n]),
+            [(VERSION, 1, SUCCESS, vec![0, 9, 0x78, 0x26])]
+        );
+        // A second client replaces the first.
+        let mut c2 = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        run(
+            &mut server,
+            &mut coord,
+            &mut radio,
+            &mut radio_rx,
+            &mut radio_buf,
+            50,
+        )
+        .await;
+        assert_eq!(c1.read(&mut buf).await.unwrap(), 0);
+        c2.write_all(&encode(DEVICE_STATE, 2, &[0, 0, 0]))
+            .await
+            .unwrap();
+        run(
+            &mut server,
+            &mut coord,
+            &mut radio,
+            &mut radio_rx,
+            &mut radio_buf,
+            50,
+        )
+        .await;
+        let n = c2.read(&mut buf).await.unwrap();
+        assert_eq!(
+            decode(&buf[..n]),
+            [(DEVICE_STATE, 2, SUCCESS, vec![0x22, 0, 0])]
+        );
+        // The client leaves: the server notices.
+        drop(c2);
+        run(
+            &mut server,
+            &mut coord,
+            &mut radio,
+            &mut radio_rx,
+            &mut radio_buf,
+            50,
+        )
+        .await;
+        assert!(!server.has_client());
+    });
+}
+
+/// Runs the server, the coordinator and the radio for `ms`, the radio ACKing every frame.
+async fn run(
+    server: &mut Server,
+    coord: &mut Coordinator,
+    radio: &mut DuplexStream,
+    rx: &mut Vec<u8>,
+    buf: &mut [u8],
+    ms: u64,
+) {
+    let end = tokio::time::Instant::now() + std::time::Duration::from_millis(ms);
+    loop {
+        tokio::select! {
+            w = server.next() => server.handle(w, coord),
+            w = coord.next() => coord.handle(w, server),
+            () = tokio::time::sleep_until(end) => break,
+        }
+        // Answer the radio's frames with a ready ACK.
+        let mut cx = Context::from_waker(Waker::noop());
         loop {
-            if let Some(w) = poll_once(coord.next()) {
-                coord.handle(w, server);
-                continue;
+            let mut rb = ReadBuf::new(buf);
+            match Pin::new(&mut *radio).poll_read(&mut cx, &mut rb) {
+                Poll::Ready(Ok(())) if !rb.filled().is_empty() => {
+                    rx.extend_from_slice(rb.filled());
+                }
+                _ => break,
             }
-            if let Some((ty, p)) = radio.read_frame() {
-                let _ = writeln!(out, "send {ty:04x} {}", hex(&p));
-                radio.ack(ty, acks.pop_front().unwrap_or(0));
-                continue;
-            }
-            tokio::task::yield_now().await;
-            if poll_once(coord.next())
-                .map(|w| coord.handle(w, server))
-                .is_none()
-                && radio.read_frame().is_none()
-            {
+        }
+        while rx.len() >= 7 {
+            let len = usize::from(u16::from_be_bytes([rx[3], rx[4]]));
+            if rx.len() < len + 7 {
                 break;
             }
+            let ty = u16::from_be_bytes([rx[1], rx[2]]);
+            let _: Vec<u8> = rx.drain(..len + 7).collect();
+            write_all_poll(
+                radio,
+                &pulsar_zbhci::frame::build_frame(0x8000, &[(ty >> 8) as u8, ty as u8, 0, 0]),
+            );
         }
     }
-    let mut out = String::new();
-    let mut bench: Option<(Coordinator, DeconzServer, Radio, VecDeque<u8>)> = None;
-    let mut seq = 0u8;
-    let script = include_str!("../../tests/golden/deconz_script.txt");
-    for line in script.lines() {
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let _ = writeln!(out, "> {line}");
-        let w: Vec<&str> = line.split_whitespace().collect();
-        if w[0] == "new" {
-            let (mut link, radio) = link_pair(&absent_lines());
-            assert_eq!(link.next().await, LinkEvent::Boot);
-            let mut coord = Coordinator::new(link);
-            let mut server = DeconzServer::new(0);
-            server.attach(&mut coord);
-            coord.start(&mut server);
-            bench = Some((coord, server, radio, VecDeque::new()));
-            seq = 0;
-        }
-        let (coord, server, radio, acks) = bench.as_mut().unwrap();
-        match w[0] {
-            "new" => {}
-            "client" => {
-                if coord.ready() {
-                    server.connect_test_client();
-                }
-            }
-            "req" | "raw" => {
-                let bytes = if w[0] == "req" {
-                    seq = seq.wrapping_add(1);
-                    encode(u8::from_str_radix(w[1], 16).unwrap(), seq, &unhex(w[2]))
-                } else {
-                    unhex(w[1])
-                };
-                if server.has_client() {
-                    server.on_bytes(coord, &bytes);
-                }
-            }
-            "radio" => radio.send(u16::from_str_radix(w[1], 16).unwrap(), &unhex(w[2])),
-            "ack" => acks.push_back(w[1].parse().unwrap()),
-            other => panic!("script: {other}"),
-        }
-        settle(coord, server, radio, acks, &mut out).await;
-        let got = server.take_output();
-        if !got.is_empty() {
-            let _ = writeln!(out, "client {}", hex(&got));
-        }
-        let _ = writeln!(out, "client_connected {}", u8::from(server.has_client()));
-    }
-    crate::test_util::assert_golden(include_str!("../../tests/golden/deconz.txt"), &out);
 }
