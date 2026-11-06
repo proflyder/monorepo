@@ -55,6 +55,7 @@ case "$args" in
   *"get deployment ha-bridge -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-bridge","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-control"*) exit "${MOCK_CONTROL_EXISTS:-0}" ;;
   *"get deployment ha-bridge"*) exit 0 ;;
+  *"get pod prepull-"*) printf '%s' '{"status":{"containerStatuses":[{"imageID":"sha256:on-node","state":{}}]}}'; exit 0 ;;
   *"get externalsecret"*) printf '%s' 'True'; exit 0 ;;
   *"get secret"*) exit 0 ;;
   *"exec deploy/scheduler"*status*)

@@ -376,12 +376,20 @@ for s in scheduler-auth ha-bridge-ha; do
   fi
 done
 
+# Pull the new images onto the node first (parallel kubelet pulls): the rollout
+# timeout below then measures only the start of the new version, not a slow
+# registry (run 42188744175 rolled back while images were still downloading).
+echo "== prepulling images"
+home_deploy prepull --kubectl "$KUBECTL" --namespace "$NS" --timeout 600s \
+  --image "$(get_image_ref scheduler)" --image "$(get_image_ref ha-bridge)" \
+  --image "$(get_image_ref ha-control)" --image "$PREFLIGHT_IMAGE"
+
 if $WANT_SCHEDULER; then
   echo "== applying scheduler"
   record_before scheduler
   converge_deployment scheduler "$RENDER_DIR/scheduler.yaml" --preserve-replicas
   mark_applied scheduler
-  $KUBECTL -n "$NS" rollout status deployment/scheduler --timeout=180s
+  $KUBECTL -n "$NS" rollout status deployment/scheduler --timeout=600s
   $KUBECTL -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
   echo "scheduler authenticated readiness: ok"
 fi
@@ -461,7 +469,7 @@ if $WANT_CONTROL; then
   fi
 
   if [[ "$($KUBECTL -n "$NS" get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
-    $KUBECTL -n "$NS" rollout status deployment/ha-control --timeout=180s
+    $KUBECTL -n "$NS" rollout status deployment/ha-control --timeout=600s
     $KUBECTL -n "$NS" exec deployment/ha-control -- /usr/local/bin/ha-control -healthcheck
     echo "ha-control authenticated readiness: ok"
   fi
@@ -483,7 +491,7 @@ if $WANT_BRIDGE; then
     echo "== existing ha-bridge: preserving mode/replicas, converging build $BUILD_ID"
     converge_deployment ha-bridge "$RENDER_DIR/bridge.yaml" --preserve-env --preserve-replicas
     if [[ "$($KUBECTL -n "$NS" get deployment ha-bridge -o jsonpath='{.spec.replicas}')" != "0" ]]; then
-      $KUBECTL -n "$NS" rollout status deployment/ha-bridge --timeout=180s
+      $KUBECTL -n "$NS" rollout status deployment/ha-bridge --timeout=600s
     fi
   fi
   mark_applied ha-bridge
@@ -511,7 +519,7 @@ preflight_cluster() {
   $KUBECTL -n "$NS" delete job "$PREFLIGHT_JOB" --ignore-not-found >/dev/null
   $KUBECTL apply -f "$RENDER_DIR/preflight-job.yaml" >/dev/null
   local rc=0
-  $KUBECTL -n "$NS" wait --for=condition=complete "job/$PREFLIGHT_JOB" --timeout=180s || rc=$?
+  $KUBECTL -n "$NS" wait --for=condition=complete "job/$PREFLIGHT_JOB" --timeout=600s || rc=$?
   $KUBECTL -n "$NS" logs "job/$PREFLIGHT_JOB" || true
   $KUBECTL -n "$NS" delete job "$PREFLIGHT_JOB" --ignore-not-found >/dev/null
   [[ $rc == 0 ]] || { echo "preflight failed inside the cluster" >&2; exit 1; }
@@ -536,7 +544,7 @@ if [[ "$MODE" == "execute" ]]; then
   echo "== starting long-lived executor"
   $KUBECTL -n "$NS" set env deployment/ha-bridge BRIDGE_EXECUTE=true
   $KUBECTL -n "$NS" scale deployment/ha-bridge --replicas=1
-  $KUBECTL -n "$NS" rollout status deployment/ha-bridge --timeout=180s
+  $KUBECTL -n "$NS" rollout status deployment/ha-bridge --timeout=600s
   $KUBECTL -n "$NS" exec deployment/ha-bridge -- /usr/local/bin/ha-bridge -healthcheck
   echo "ha-bridge authenticated readiness: ok"
 fi

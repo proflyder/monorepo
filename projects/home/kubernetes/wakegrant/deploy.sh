@@ -196,6 +196,13 @@ mark_applied() {
   home_deploy state mark --state-dir "$DEPLOY_STATE_DIR" --name "$1"
 }
 
+# Pull the new images onto the node first (parallel kubelet pulls): the rollout
+# timeout below then measures only the start of the new version, not a slow
+# registry (run 42188744175 rolled back while images were still downloading).
+echo "== prepulling images"
+home_deploy prepull --kubectl "$KUBECTL" --namespace "$NS" --timeout 600s \
+  --image "$IMAGE_REF"
+
 echo "== applying wakegrant"
 record_before wakegrant
 # The rollout annotation is content-addressed: an identical deploy leaves
@@ -223,7 +230,7 @@ if [[ -n "${DEPLOY_SUMMARY_FILE:-}" ]]; then
   printf '%s\t%s\n' wakegrant "$status" >> "$DEPLOY_SUMMARY_FILE"
 fi
 mark_applied wakegrant
-$KUBECTL -n "$NS" rollout status deployment/wakegrant --timeout=180s
+$KUBECTL -n "$NS" rollout status deployment/wakegrant --timeout=600s
 
 # The image is distroless; -healthcheck loads the mounted configuration (token
 # and machines) and calls /healthz on loopback, so a broken mount fails the
