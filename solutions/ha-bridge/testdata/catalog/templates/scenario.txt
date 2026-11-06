@@ -1,0 +1,3 @@
+script.blackout
+script.work_mode
+script.long_room

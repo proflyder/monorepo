@@ -256,7 +256,7 @@ fn required_lease_seconds(
 }
 
 /// Resolve `NAME_FILE` first, then `NAME`. `Ok(None)` means neither is set.
-fn token(
+pub(crate) fn token(
     getenv: &dyn Fn(&str) -> Option<String>,
     read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
     name: &'static str,
@@ -274,7 +274,11 @@ fn token(
     Ok(non_empty(getenv(name)).map(Token::new))
 }
 
-fn base_url(name: &str, raw: Option<&str>, required: bool) -> Result<String, ConfigError> {
+pub(crate) fn base_url(
+    name: &str,
+    raw: Option<&str>,
+    required: bool,
+) -> Result<String, ConfigError> {
     let Some(raw) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
         if required {
             return Err(ConfigError::Required(name.to_owned()));
@@ -326,7 +330,7 @@ fn script_value(
     }
 }
 
-fn bool_value(
+pub(crate) fn bool_value(
     getenv: &dyn Fn(&str) -> Option<String>,
     name: &str,
     default: bool,
@@ -364,7 +368,7 @@ fn integer(
         .map_err(|_| ConfigError::Invalid(format!("{name} must be within {min}..{max}")))
 }
 
-fn duration_value(
+pub(crate) fn duration_value(
     getenv: &dyn Fn(&str) -> Option<String>,
     name: &str,
     default: Duration,
@@ -385,7 +389,7 @@ fn path_value(getenv: &dyn Fn(&str) -> Option<String>, name: &str) -> Option<Pat
     non_empty(getenv(name)).map(PathBuf::from)
 }
 
-fn non_empty(raw: Option<String>) -> Option<String> {
+pub(crate) fn non_empty(raw: Option<String>) -> Option<String> {
     raw.map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
 }

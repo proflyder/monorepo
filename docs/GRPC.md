@@ -1,8 +1,9 @@
 # gRPC / Connect contract
 
 Статус: **развёрнуто**. `solutions/scheduler` — durable SQLite engine,
-Connect/gRPC, outbox, auth; `ha-bridge` (очередь `home`) и `cmd/ha-control`
-(каталог Home, очередь `control`) работают в K3s; HA-звук остаётся у HA, а
+Connect/gRPC, outbox, auth; бинари `ha-bridge` (очередь `home`) и `ha-control`
+(каталог Home, очередь `control`) Rust-крейта `solutions/ha-bridge/crates/ha-bridge`
+работают в K3s; HA-звук остаётся у HA, а
 расписания принадлежат scheduler. Android-клиент использует тот же контракт.
 
 ## Канонические контракты

@@ -14,15 +14,23 @@ path = "src/lib.rs"
 name = "ha-bridge"
 path = "src/main.rs"
 
+[[bin]]
+name = "ha-control"
+path = "src/ha_control.rs"
+
 [dependencies]
 anyhow = { workspace = true }
+axum = { workspace = true }
 home-config = { path = "../../../../packages/rust/home-config" }
 home-ha = { path = "../../../../packages/rust/home-ha" }
+home-http = { path = "../../../../packages/rust/home-http" }
 home-proto = { path = "../../../../packages/rust/home-proto" }
 home-runtime = { path = "../../../../packages/rust/home-runtime" }
 home-secret = { path = "../../../../packages/rust/home-secret" }
 home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
 home-worker = { path = "../../../../packages/rust/home-worker" }
+reqwest = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -34,6 +42,7 @@ tracing = { workspace = true }
 axum = { workspace = true }
 home-contracttest = { path = "../../../../packages/rust/home-contracttest" }
 tempfile = { workspace = true }
+tower = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]

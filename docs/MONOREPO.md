@@ -11,7 +11,8 @@
 solutions/               переиспользуемые решения
   scheduler/             durable scheduler, SQLite queues, Connect/gRPC
   alarm/                 тот же engine под именем процесса alarm
-  ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler (+ cmd/ha-control)
+  ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler
+                         (Rust-крейт: бинари ha-bridge и ha-control)
   mcp-gateway/           MCP Streamable HTTP: infra.read / infra.fix / infra.report
   currency-bot/          курсы kurs.kz, алерты, Telegram webhook
   voice-proxy/           OpenAI-совместимый прокси для Piper TTS
@@ -43,8 +44,8 @@ archive/                  исторические материалы
   scheduling и очередей, а не отдельные планировщики;
 - `projects/station` и `projects/home-assistant` независимы;
 - `projects/home` — их композиция плюс домашний scheduler и HA bridge;
-- `solutions/ha-bridge` арендует только `queue=home`; `cmd/ha-control` — только
-  `queue=control` и каталог Home;
+- `solutions/ha-bridge` арендует только `queue=home`; бинарь `ha-control`
+  того же крейта — только `queue=control` и каталог Home;
 - один и тот же код не копируется между проектами;
 - project-specific секреты не попадают в solution.
 

@@ -16,7 +16,9 @@ use serde_json::{Map, Value};
 use tempfile::tempdir;
 
 use ha_bridge::bridge::{Bridge, HaClient};
+use ha_bridge::catalog_api;
 use ha_bridge::config::Config;
+use ha_bridge::discovery::{CatalogSource, HomeAssistant, Provider};
 use ha_bridge::ledger::{ActiveAlarm, Ledger, Receipt};
 
 fn testdata_dir() -> PathBuf {
@@ -411,4 +413,254 @@ fn ledger_vectors_match_the_go_ledger() {
             invalid.name
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// ha-control catalog vectors
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct CatalogFixture {
+    rules: CatalogRules,
+    responses: std::collections::BTreeMap<String, CatalogResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogRules {
+    #[serde(rename = "scenarioLabel")]
+    scenario_label: String,
+    #[serde(rename = "profileLabel")]
+    profile_label: String,
+    #[serde(default)]
+    exclude: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogResponse {
+    status: u16,
+    #[serde(default)]
+    body: String,
+    #[serde(rename = "wwwAuthenticate", default)]
+    www_authenticate: String,
+}
+
+/// The Go discovery double: states plus the four read-only templates.
+struct FakeDiscovery {
+    entities: Vec<home_ha::Entity>,
+    areas: String,
+    hidden: String,
+    scenario: String,
+    profile: String,
+    down: std::sync::atomic::AtomicBool,
+    scenario_down: std::sync::atomic::AtomicBool,
+}
+
+impl FakeDiscovery {
+    fn down(&self) -> bool {
+        self.down.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn scenario_down(&self) -> bool {
+        self.scenario_down.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl HomeAssistant for FakeDiscovery {
+    async fn entities(&self) -> Result<Vec<home_ha::Entity>, Error> {
+        if self.down() {
+            return Err(Error::Status {
+                op: "read entities",
+                status: 500,
+                message: String::new(),
+            });
+        }
+        Ok(self.entities.clone())
+    }
+
+    async fn render_template(&self, template: &str) -> Result<String, Error> {
+        if self.down() {
+            return Err(Error::Status {
+                op: "render template",
+                status: 500,
+                message: String::new(),
+            });
+        }
+        if template.contains("area_name") {
+            return Ok(self.areas.clone());
+        }
+        if template.contains("is_hidden_entity") {
+            return Ok(self.hidden.clone());
+        }
+        if template.contains("label_entities('scenario')") {
+            if self.scenario_down() {
+                return Err(Error::Status {
+                    op: "render template",
+                    status: 500,
+                    message: String::new(),
+                });
+            }
+            return Ok(self.scenario.clone());
+        }
+        if template.contains("label_entities('voice_profile')") {
+            return Ok(self.profile.clone());
+        }
+        Err(Error::Invalid {
+            op: "render template",
+            detail: "unexpected template".to_owned(),
+        })
+    }
+}
+
+fn catalog_request(router: axum::Router, auth: Option<&str>) -> (u16, String, String) {
+    use axum::body::Body;
+    use axum::http::{Request, header};
+    use tower::ServiceExt as _;
+
+    let mut request = Request::builder().uri("/v1/catalog");
+    if let Some(auth) = auth {
+        request = request.header(header::AUTHORIZATION, auth);
+    }
+    let request = request.body(Body::empty()).expect("request");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    runtime.block_on(async move {
+        let response = router.oneshot(request).await.expect("response");
+        let status = response.status().as_u16();
+        let www = response
+            .headers()
+            .get(header::WWW_AUTHENTICATE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        let body = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .expect("body");
+        (status, String::from_utf8_lossy(&body).into_owned(), www)
+    })
+}
+
+fn assert_catalog_response(actual: &(u16, String, String), expected: &CatalogResponse, name: &str) {
+    assert_eq!(actual.0, expected.status, "{name}: status");
+    assert_eq!(
+        actual.1.trim_end_matches('\n'),
+        expected.body.trim_end_matches('\n'),
+        "{name}: body"
+    );
+    assert_eq!(
+        actual.2, expected.www_authenticate,
+        "{name}: WWW-Authenticate"
+    );
+}
+
+#[test]
+fn catalog_vectors_match_the_go_server() {
+    let dir = testdata_dir().join("catalog");
+    let fixture: CatalogFixture =
+        serde_json::from_value(read_json(&dir.join("catalog.json"))).expect("catalog fixture");
+    let states = std::fs::read(dir.join("states.json")).expect("states");
+    let entities: Vec<home_ha::Entity> = serde_json::from_slice(&states).expect("decode states");
+    assert_eq!(
+        fixture.rules.scenario_label, "scenario",
+        "the fixture is indexed by the Go rules"
+    );
+    assert_eq!(fixture.rules.profile_label, "voice_profile");
+    let template = |name: &str| {
+        std::fs::read_to_string(dir.join("templates").join(format!("{name}.txt")))
+            .unwrap_or_else(|error| panic!("read template {name}: {error}"))
+    };
+    let make = || {
+        Arc::new(FakeDiscovery {
+            entities: entities.clone(),
+            areas: template("areas"),
+            hidden: template("hidden"),
+            scenario: template("scenario"),
+            profile: template("profile"),
+            down: std::sync::atomic::AtomicBool::new(false),
+            scenario_down: std::sync::atomic::AtomicBool::new(false),
+        })
+    };
+    let rules = ha_bridge::catalog::Rules {
+        scenario_label: fixture.rules.scenario_label.clone(),
+        profile_label: fixture.rules.profile_label.clone(),
+        exclude: fixture.rules.exclude.clone(),
+    };
+    let token = || home_secret::Token::new("control-secret");
+
+    // Live catalog.
+    let ha = make();
+    let provider = Arc::new(Provider::new(
+        Arc::clone(&ha),
+        rules.clone(),
+        Duration::from_secs(3600),
+    ));
+    let source: Arc<dyn CatalogSource> = provider;
+    assert_catalog_response(
+        &catalog_request(
+            catalog_api::router(Arc::clone(&source), token()),
+            Some("Bearer control-secret"),
+        ),
+        &fixture.responses["live"],
+        "live",
+    );
+
+    // Missing and wrong bearer.
+    assert_catalog_response(
+        &catalog_request(catalog_api::router(Arc::clone(&source), token()), None),
+        &fixture.responses["unauthorized"],
+        "unauthorized",
+    );
+
+    // We already have a live snapshot; simulate a cached last-good catalog.
+    let stale_source: Arc<dyn CatalogSource> = Arc::new(Provider::new(
+        Arc::clone(&ha),
+        rules.clone(),
+        Duration::from_secs(0),
+    ));
+    let stale_router = catalog_api::router(Arc::clone(&stale_source), token());
+    let live = catalog_request(stale_router.clone(), Some("Bearer control-secret"));
+    assert_eq!(live.0, 200, "the first stale-provider request is live");
+    ha.down.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_catalog_response(
+        &catalog_request(stale_router, Some("Bearer control-secret")),
+        &fixture.responses["stale"],
+        "stale",
+    );
+    ha.down.store(false, std::sync::atomic::Ordering::SeqCst);
+
+    // Scenario label outage: no scripts, devices and scenes stay.
+    let outage_ha = make();
+    outage_ha
+        .scenario_down
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let outage_source: Arc<dyn CatalogSource> = Arc::new(Provider::new(
+        Arc::clone(&outage_ha),
+        rules.clone(),
+        Duration::from_secs(0),
+    ));
+    assert_catalog_response(
+        &catalog_request(
+            catalog_api::router(outage_source, token()),
+            Some("Bearer control-secret"),
+        ),
+        &fixture.responses["scenarioLabelOutage"],
+        "scenarioLabelOutage",
+    );
+
+    // Nothing discovered and Home Assistant is down: 502.
+    let down_ha = make();
+    down_ha
+        .down
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let down_source: Arc<dyn CatalogSource> =
+        Arc::new(Provider::new(down_ha, rules, Duration::from_secs(0)));
+    assert_catalog_response(
+        &catalog_request(
+            catalog_api::router(down_source, token()),
+            Some("Bearer control-secret"),
+        ),
+        &fixture.responses["unreachable"],
+        "unreachable",
+    );
 }

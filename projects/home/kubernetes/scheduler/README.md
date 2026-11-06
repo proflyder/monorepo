@@ -27,7 +27,9 @@ projects/home/kubernetes/scheduler/BUILD.bazel
   `gcr.io/distroless/static-debian12:nonroot`, pinned by digest in
   `MODULE.bazel`. The scheduler binary comes from the Rust crate
   `//solutions/scheduler/crates/scheduler:scheduler` via `rules_rust` (static
-  musl); `ha-bridge`/`ha-control` are Go. No Docker daemon and no `RUN` steps
+  musl); `ha-bridge` and `ha-control` are the two binaries of
+  `//solutions/ha-bridge/crates/ha-bridge`, also rebuilt for static musl. The Go
+  binaries remain buildable for digest rollback. No Docker daemon and no `RUN` steps
   are involved, so the same targets build on macOS and on the GitHub runner.
 - `home-deploy oci` (`platform/deploy`, decision 35) reads the resulting OCI
   layout: its `digest` prints the manifest digest, `pack` writes an OCI archive
