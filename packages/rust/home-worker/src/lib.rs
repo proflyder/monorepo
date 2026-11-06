@@ -5,10 +5,14 @@
 //! and leaves the domain decisions to a [`Handler`]:
 //!
 //! * [`Queue`] leases due events and reports a terminal outcome;
-//! * [`Handler`] answers [`Outcome::Delivered`], [`Outcome::Skipped`] or
-//!   [`Outcome::Retry`]. `Retry` does **not** ack: the lease expires and the
+//! * [`Handler`] answers [`Outcome::Delivered`], [`Outcome::Failed`],
+//!   [`Outcome::Skipped`] or [`Outcome::Retry`]. `Failed` acks the event as
+//!   terminal `FAILED` (a structural error that a retry cannot fix), `Skipped`
+//!   acks `SKIPPED`, and `Retry` does **not** ack: the lease expires and the
 //!   scheduler returns the event to `PENDING`, exactly like voice-proxy on a
 //!   failed announcement;
+//! * [`Handler::order`] may reorder one leased batch before it is handled;
+//!   ha-bridge uses it for "stop before fire" inside a batch;
 //! * an optional [`Gate`] ("may this executor take work right now?") is
 //!   checked before every lease — voice-proxy uses it for an idle station;
 //! * queue errors back off exponentially (with a ceiling) and cancellation is
@@ -82,6 +86,10 @@ pub enum AckOutcome {
 pub enum Outcome {
     /// The event was handled; ack `DELIVERED` with an optional detail.
     Delivered(String),
+    /// The event is structurally unusable; ack `FAILED` with an optional
+    /// detail. The scheduler records `FAILED` as terminal, so the lease is not
+    /// retried.
+    Failed(String),
     /// The event is not applicable; ack `SKIPPED` with an optional detail.
     Skipped(String),
     /// Leave the event leased and unacked; expiry returns it to `PENDING`.
@@ -142,6 +150,14 @@ pub trait Queue: Send + Sync {
 /// The domain action for one event.
 pub trait Handler: Send + Sync {
     fn handle(&self, event: &Event) -> impl Future<Output = Outcome> + Send;
+
+    /// Reorder or filter one leased batch before any event is handled.
+    ///
+    /// The default is a no-op, so the batch keeps the server order. The hook
+    /// runs once per non-empty lease and may not block: it is synchronous
+    /// because the only intended use is ordering (for example source order,
+    /// then `due_unix`, with `STOP` ahead of `FIRE`).
+    fn order(&self, _events: &mut Vec<Event>) {}
 }
 
 /// An optional "can this executor take work now?" predicate.
@@ -268,6 +284,9 @@ where
                 continue;
             }
 
+            let mut events = events;
+            self.handler.order(&mut events);
+
             for event in events {
                 if cancel.is_cancelled() {
                     return;
@@ -281,6 +300,12 @@ where
                         event_id: event.id,
                         consumer_id: self.config.lease.consumer_id.clone(),
                         outcome: AckOutcome::Delivered,
+                        detail,
+                    },
+                    Outcome::Failed(detail) => Ack {
+                        event_id: event.id,
+                        consumer_id: self.config.lease.consumer_id.clone(),
+                        outcome: AckOutcome::Failed,
                         detail,
                     },
                     Outcome::Skipped(detail) => Ack {
@@ -430,6 +455,29 @@ mod tests {
         }
     }
 
+    struct OrderingHandler {
+        seen: Mutex<Vec<String>>,
+    }
+
+    impl OrderingHandler {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                seen: Mutex::new(Vec::new()),
+            })
+        }
+    }
+
+    impl Handler for Arc<OrderingHandler> {
+        fn handle(&self, event: &Event) -> impl Future<Output = Outcome> + Send {
+            self.seen.lock().expect("lock").push(event.id.clone());
+            std::future::ready(Outcome::Delivered(String::new()))
+        }
+
+        fn order(&self, events: &mut Vec<Event>) {
+            events.reverse();
+        }
+    }
+
     struct ClosedGate;
 
     impl Gate for ClosedGate {
@@ -509,6 +557,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn failed_outcome_acks_failed() {
+        let queue = FakeQueue::with(vec![Ok(vec![event("ev_1")])]);
+        let handler = FakeHandler::with(vec![Outcome::Failed("bad payload".to_owned())]);
+        let worker = Worker::new(queue.clone(), handler, config());
+        let cancel = CancellationToken::new();
+        let run = tokio::spawn({
+            let cancel = cancel.clone();
+            async move { worker.run(cancel).await }
+        });
+        wait_for(|| queue.ack_count() == 1).await;
+        cancel.cancel();
+        run.await.expect("join");
+        assert_eq!(queue.acked()[0].outcome, AckOutcome::Failed);
+        assert_eq!(queue.acked()[0].detail, "bad payload");
+    }
+
+    #[tokio::test]
     async fn skipped_outcome_acks_skipped() {
         let queue = FakeQueue::with(vec![Ok(vec![event("ev_1")])]);
         let handler = FakeHandler::with(vec![Outcome::Skipped("stale".to_owned())]);
@@ -571,6 +636,28 @@ mod tests {
         wait_for(|| queue.ack_count() == 1).await;
         cancel.cancel();
         run.await.expect("join");
+    }
+
+    #[tokio::test]
+    async fn the_order_hook_reorders_the_batch_before_handling() {
+        let queue = FakeQueue::with(vec![Ok(vec![event("ev_1"), event("ev_2")])]);
+        let handler = OrderingHandler::new();
+        let worker = Worker::new(queue.clone(), handler.clone(), config());
+        let cancel = CancellationToken::new();
+        let run = tokio::spawn({
+            let cancel = cancel.clone();
+            async move { worker.run(cancel).await }
+        });
+        wait_for(|| queue.ack_count() == 2).await;
+        cancel.cancel();
+        run.await.expect("join");
+        assert_eq!(
+            *handler.seen.lock().expect("lock"),
+            vec!["ev_2".to_owned(), "ev_1".to_owned()]
+        );
+        let acks = queue.acked();
+        assert_eq!(acks[0].event_id, "ev_2");
+        assert_eq!(acks[1].event_id, "ev_1");
     }
 
     #[tokio::test]

@@ -1,9 +1,13 @@
 //! Narrow Home Assistant REST client shared by the home services.
 //!
-//! It calls scripts and services, reads one entity state, renders a template
-//! and probes `/api/`. The scheduler owns schedule state; Home Assistant only
-//! performs the side effect, so nothing here knows about schedules, queues or
-//! MCP.
+//! It calls scripts and services, reads one entity state or the whole state
+//! list, renders a template and probes `/api/`. The scheduler owns schedule
+//! state; Home Assistant only performs the side effect, so nothing here knows
+//! about schedules, queues or MCP.
+//!
+//! A private Home Assistant certificate is supplied as PEM bytes or a file
+//! path ([`Client::new_with_ca_pem`], [`Client::new_with_ca_file`]). The crate
+//! never reads `HA_CA_FILE` itself: a consumer resolves its own environment.
 //!
 //! The crate is project-agnostic: callers pass entity ids, scripts and
 //! variables in. The bearer token is a [`home_secret::Token`] and never appears
@@ -18,7 +22,7 @@ use std::fmt;
 use std::time::Duration;
 
 use home_secret::Token;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 const STATES_PATH: &str = "/api/states";
@@ -26,6 +30,7 @@ const SERVICE_PATH: &str = "/api/services";
 const TEMPLATE_PATH: &str = "/api/template";
 const PING_PATH: &str = "/api/";
 const MAX_STATE_BYTES: usize = 1 << 20;
+const MAX_STATES_BYTES: usize = 8 << 20;
 const MAX_MESSAGE: usize = 200;
 
 /// How a failed call may be retried.
@@ -59,6 +64,8 @@ pub enum Error {
     Decode { op: &'static str },
     #[error("{op}: {detail}")]
     Invalid { op: &'static str, detail: String },
+    #[error("{op}: unusable CA")]
+    Certificate { op: &'static str },
 }
 
 impl Error {
@@ -72,7 +79,9 @@ impl Error {
                 status if status >= 500 => ErrorKind::Transient,
                 _ => ErrorKind::Permanent,
             },
-            Self::Decode { .. } | Self::Invalid { .. } => ErrorKind::Permanent,
+            Self::Decode { .. } | Self::Invalid { .. } | Self::Certificate { .. } => {
+                ErrorKind::Permanent
+            }
         }
     }
 
@@ -114,17 +123,62 @@ impl Client {
         token: Token,
         timeout: Duration,
     ) -> Result<Self, Error> {
+        Self::build(base_url, token, timeout, None)
+    }
+
+    /// Build a client that trusts the given PEM certificate bundle in
+    /// addition to the client's roots.
+    ///
+    /// The workspace `reqwest` uses `rustls-tls-manual-roots`, so the bundle
+    /// is what makes a private Home Assistant certificate usable; public
+    /// CAs are not compiled in.
+    pub fn new_with_ca_pem(
+        base_url: impl Into<String>,
+        token: Token,
+        timeout: Duration,
+        ca_pem: &[u8],
+    ) -> Result<Self, Error> {
+        Self::build(base_url, token, timeout, Some(ca_pem))
+    }
+
+    /// Like [`Client::new_with_ca_pem`], but reads the PEM bundle from `path`.
+    /// The value is never logged.
+    pub fn new_with_ca_file(
+        base_url: impl Into<String>,
+        token: Token,
+        timeout: Duration,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<Self, Error> {
+        let pem = std::fs::read(path).map_err(|_| Error::Certificate { op: "read CA file" })?;
+        Self::build(base_url, token, timeout, Some(&pem))
+    }
+
+    fn build(
+        base_url: impl Into<String>,
+        token: Token,
+        timeout: Duration,
+        ca_pem: Option<&[u8]>,
+    ) -> Result<Self, Error> {
         let _already_installed = rustls::crypto::ring::default_provider().install_default();
-        let http = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .timeout(timeout)
             // An authenticated client must not forward its bearer to a
             // redirect target; a 3xx is surfaced as a status error instead.
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|source| Error::Transport {
-                op: "build client",
-                source,
-            })?;
+            .redirect(reqwest::redirect::Policy::none());
+        if let Some(ca_pem) = ca_pem {
+            let certificates = reqwest::Certificate::from_pem_bundle(ca_pem)
+                .map_err(|_| Error::Certificate { op: "decode CA" })?;
+            if certificates.is_empty() {
+                return Err(Error::Certificate { op: "decode CA" });
+            }
+            for certificate in certificates {
+                builder = builder.add_root_certificate(certificate);
+            }
+        }
+        let http = builder.build().map_err(|source| Error::Transport {
+            op: "build client",
+            source,
+        })?;
         Ok(Self {
             http,
             base_url: base_url.into().trim().trim_end_matches('/').to_owned(),
@@ -163,26 +217,89 @@ impl Client {
         payload.state.ok_or(Error::Decode { op: OP })
     }
 
-    /// Invoke `<domain>.<service>` with `data`. The caller decides which call
-    /// is allowed; this client performs no allowlisting of its own.
-    pub async fn call_service(
+    /// Read every entity with its state and attributes.
+    ///
+    /// The response is the Home Assistant `/api/states` array. Known
+    /// attributes are typed in [`EntityAttributes`]; everything else is kept
+    /// in [`EntityAttributes::other`] as raw JSON, so a caller never loses a
+    /// field it does not model yet.
+    pub async fn entities(&self) -> Result<Vec<Entity>, Error> {
+        const OP: &str = "read entities";
+        let request = self
+            .http
+            .get(format!("{}{STATES_PATH}", self.base_url))
+            .bearer_auth(self.token.expose())
+            .build()
+            .map_err(|source| Error::Transport { op: OP, source })?;
+        let response = self.send(OP, request).await?;
+        let body = response
+            .bytes()
+            .await
+            .map_err(|source| Error::Transport { op: OP, source })?;
+        if body.len() > MAX_STATES_BYTES {
+            return Err(Error::Decode { op: OP });
+        }
+        serde_json::from_slice(&body).map_err(|_| Error::Decode { op: OP })
+    }
+
+    /// Invoke `<domain>.<service>` with any serializable JSON data. The caller
+    /// decides which call is allowed; this client performs no allowlisting of
+    /// its own.
+    ///
+    /// Typed request structs implement `Serialize`, so a caller does not have
+    /// to build a [`Map`] by hand; `Map<String, Value>` still works.
+    pub async fn call_service<D: Serialize>(
         &self,
         domain: &str,
         service: &str,
-        data: Map<String, Value>,
+        data: D,
     ) -> Result<(), Error> {
         const OP: &str = "call service";
-        let (domain, service) = match (valid_identifier(domain), valid_identifier(service)) {
-            (true, true) => (domain, service),
-            _ => {
-                return Err(Error::Invalid {
-                    op: OP,
-                    detail: "empty or invalid service".to_owned(),
-                });
-            }
-        };
+        let (domain, service) = validate_service(OP, domain, service)?;
+        let body = serde_json::to_value(data).map_err(|_| Error::Invalid {
+            op: OP,
+            detail: "encode request".to_owned(),
+        })?;
+        if !body.is_object() {
+            return Err(Error::Invalid {
+                op: OP,
+                detail: "service data must be a JSON object".to_owned(),
+            });
+        }
         let url = format!("{SERVICE_PATH}/{domain}/{service}");
-        self.post_json(OP, &url, Value::Object(data)).await
+        self.post_json(OP, &url, body).await
+    }
+
+    /// Invoke `<domain>.<service>` on one entity with typed extra data. The
+    /// `data` object is merged with `entity_id`.
+    pub async fn call_service_on<D: Serialize>(
+        &self,
+        domain: &str,
+        service: &str,
+        entity: &str,
+        data: D,
+    ) -> Result<(), Error> {
+        const OP: &str = "call service";
+        validate_service(OP, domain, service)?;
+        let entity = entity.trim();
+        if !valid_entity(entity) {
+            return Err(Error::Invalid {
+                op: OP,
+                detail: "empty or invalid entity".to_owned(),
+            });
+        }
+        let Value::Object(mut body) = serde_json::to_value(data).map_err(|_| Error::Invalid {
+            op: OP,
+            detail: "encode request".to_owned(),
+        })?
+        else {
+            return Err(Error::Invalid {
+                op: OP,
+                detail: "service data must be a JSON object".to_owned(),
+            });
+        };
+        body.insert("entity_id".to_owned(), Value::String(entity.to_owned()));
+        self.call_service(domain, service, body).await
     }
 
     /// Run a script entity with variables. `script` may be a bare script name
@@ -282,6 +399,64 @@ impl Client {
             op,
             status,
             message: sanitize(reason, self.token.expose()),
+        })
+    }
+}
+
+/// One entity from `/api/states`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Entity {
+    pub entity_id: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub attributes: EntityAttributes,
+}
+
+impl Entity {
+    /// `attributes.friendly_name` or `""` when absent, matching the Go client.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        self.attributes.friendly_name.as_deref().unwrap_or("")
+    }
+
+    /// `attributes.icon` without the `mdi:` prefix, matching the Go client.
+    #[must_use]
+    pub fn icon(&self) -> &str {
+        let icon = self.attributes.icon.as_deref().unwrap_or("");
+        icon.strip_prefix("mdi:").unwrap_or(icon)
+    }
+}
+
+/// The Home Assistant attributes the catalog needs; every other attribute is
+/// preserved verbatim in [`EntityAttributes::other`].
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(default)]
+pub struct EntityAttributes {
+    pub friendly_name: Option<String>,
+    pub icon: Option<String>,
+    pub supported_color_modes: Vec<String>,
+    pub min_color_temp_kelvin: Option<f64>,
+    pub max_color_temp_kelvin: Option<f64>,
+    pub brightness: Option<f64>,
+    pub color_temp_kelvin: Option<f64>,
+    pub hs_color: Option<Vec<f64>>,
+    pub color_mode: Option<String>,
+    #[serde(flatten)]
+    pub other: Map<String, Value>,
+}
+
+fn validate_service<'a>(
+    op: &'static str,
+    domain: &'a str,
+    service: &'a str,
+) -> Result<(&'a str, &'a str), Error> {
+    if valid_identifier(domain) && valid_identifier(service) {
+        Ok((domain, service))
+    } else {
+        Err(Error::Invalid {
+            op,
+            detail: "empty or invalid service".to_owned(),
         })
     }
 }
@@ -406,6 +581,41 @@ mod tests {
         StatusCode::OK
     }
 
+    async fn entities_route(headers: HeaderMap) -> Response {
+        if !authorized(&headers) {
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+        Json(json!([
+            {
+                "entity_id": "light.kitchen",
+                "state": "on",
+                "attributes": {
+                    "friendly_name": "Кухня",
+                    "icon": "mdi:ceiling-light",
+                    "supported_color_modes": ["color_temp", "hs"],
+                    "min_color_temp_kelvin": 2000,
+                    "max_color_temp_kelvin": 6500,
+                    "brightness": 128,
+                    "color_temp_kelvin": 3000,
+                    "hs_color": [30.0, 80.0],
+                    "color_mode": "color_temp",
+                    "extra_field": {"nested": true}
+                }
+            },
+            {"entity_id": "sensor.station", "state": "idle", "attributes": {}}
+        ]))
+        .into_response()
+    }
+
+    #[derive(serde::Serialize)]
+    struct PlayMedia<'a> {
+        media_content_id: &'a str,
+        media_content_type: &'a str,
+    }
+
+    // Throwaway self-signed test CA (no private key in the tree).
+    const TEST_CA_PEM: &str = include_str!("../testdata/test-ca.pem");
+
     fn client(base_url: &str) -> Client {
         Client::new(base_url, Token::new("voice-token"), Duration::from_secs(1)).expect("client")
     }
@@ -425,6 +635,122 @@ mod tests {
             client(&base).state("sensor.station").await.expect("state"),
             "idle"
         );
+    }
+
+    #[tokio::test]
+    async fn entities_type_known_attributes_and_keep_the_rest() {
+        let app = Router::new().route("/api/states", get(entities_route));
+        let base = serve(app).await;
+        let entities = client(&base).entities().await.expect("entities");
+        assert_eq!(entities.len(), 2);
+        let light = &entities[0];
+        assert_eq!(light.entity_id, "light.kitchen");
+        assert_eq!(light.state, "on");
+        assert_eq!(light.name(), "Кухня");
+        assert_eq!(light.icon(), "ceiling-light");
+        assert_eq!(
+            light.attributes.supported_color_modes,
+            vec!["color_temp".to_owned(), "hs".to_owned()]
+        );
+        assert_eq!(light.attributes.min_color_temp_kelvin, Some(2000.0));
+        assert_eq!(light.attributes.max_color_temp_kelvin, Some(6500.0));
+        assert_eq!(light.attributes.brightness, Some(128.0));
+        assert_eq!(light.attributes.color_temp_kelvin, Some(3000.0));
+        assert_eq!(light.attributes.hs_color, Some(vec![30.0, 80.0]));
+        assert_eq!(light.attributes.color_mode.as_deref(), Some("color_temp"));
+        assert_eq!(light.attributes.other["extra_field"]["nested"], true);
+        assert!(light.attributes.other.get("friendly_name").is_none());
+        assert_eq!(entities[1].name(), "");
+        assert_eq!(entities[1].icon(), "");
+    }
+
+    #[tokio::test]
+    async fn typed_service_data_and_entity_helper_post_the_expected_body() {
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let app = Router::new()
+            .route("/api/services/media_player/play_media", post(service))
+            .route(
+                "/api/services/assist_satellite/start_conversation",
+                post(service),
+            )
+            .with_state(calls.clone());
+        let base = serve(app).await;
+        let client = client(&base);
+        client
+            .call_service(
+                "media_player",
+                "play_media",
+                PlayMedia {
+                    media_content_id: "station",
+                    media_content_type: "music",
+                },
+            )
+            .await
+            .expect("typed service");
+        client
+            .call_service_on(
+                "assist_satellite",
+                "start_conversation",
+                "assist_satellite.kitchen",
+                serde_json::Map::new(),
+            )
+            .await
+            .expect("entity service");
+        let calls = calls.lock().expect("lock");
+        assert_eq!(calls[0]["media_content_id"], "station");
+        assert_eq!(calls[0]["media_content_type"], "music");
+        assert_eq!(calls[1]["entity_id"], "assist_satellite.kitchen");
+    }
+
+    #[tokio::test]
+    async fn a_ca_bundle_is_accepted_from_bytes_and_a_file() {
+        let app = Router::new().route("/api/", get(|| async { "ok" }));
+        let base = serve(app).await;
+        Client::new_with_ca_pem(
+            &base,
+            Token::new("voice-token"),
+            Duration::from_secs(1),
+            TEST_CA_PEM.as_bytes(),
+        )
+        .expect("client with CA bytes")
+        .ping()
+        .await
+        .expect("ping");
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("ca.pem");
+        std::fs::write(&path, TEST_CA_PEM).expect("write CA");
+        Client::new_with_ca_file(
+            &base,
+            Token::new("voice-token"),
+            Duration::from_secs(1),
+            &path,
+        )
+        .expect("client with CA file")
+        .ping()
+        .await
+        .expect("ping");
+    }
+
+    #[test]
+    fn an_unusable_ca_is_a_permanent_error() {
+        let error = Client::new_with_ca_pem(
+            "http://127.0.0.1:1",
+            Token::new("voice-token"),
+            Duration::from_secs(1),
+            b"not a certificate",
+        )
+        .expect_err("bad CA");
+        assert!(matches!(error, Error::Certificate { .. }));
+        assert_eq!(error.kind(), ErrorKind::Permanent);
+        let error = Client::new_with_ca_file(
+            "http://127.0.0.1:1",
+            Token::new("voice-token"),
+            Duration::from_secs(1),
+            "/definitely/not/a/ca.pem",
+        )
+        .expect_err("missing CA");
+        assert!(matches!(error, Error::Certificate { .. }));
     }
 
     #[tokio::test]

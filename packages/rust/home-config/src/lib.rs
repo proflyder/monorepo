@@ -5,11 +5,13 @@
 //! messages safe:
 //!
 //! * [`secret_from_env`] reads a secret from `NAME`, falling back to
-//!   `NAME_FILE` (a mounted Secret). Errors name the variable and never
-//!   contain the value.
+//!   `NAME_FILE` (a mounted Secret). [`secret_from_env_file_first`] is the
+//!   opposite priority used by ha-bridge/ha-control: `NAME_FILE` wins when it
+//!   is set. Errors name the variable and never contain the value.
 //! * [`secret_file`] is the `clap` value parser for a `*_FILE` path.
-//! * [`parse_listen`], [`parse_duration_seconds`] and [`u64_in_range`] bound
-//!   an address or an integer before the service starts.
+//! * [`parse_listen`], [`parse_duration_seconds`], [`parse_go_duration`] and
+//!   [`u64_in_range`] bound an address, a duration or an integer before the
+//!   service starts.
 //!
 //! There is no project-specific path or endpoint here: a solution supplies
 //! its own variable names and defaults.
@@ -40,7 +42,51 @@ pub enum ConfigError {
 /// `NAME_FILE`. A directly set variable wins. Surrounding whitespace is
 /// trimmed, matching the Go services' `TrimSpace` on mounted Secret files.
 pub fn secret_from_env(name: &str) -> Result<Secret, ConfigError> {
-    if let Some(value) = std::env::var_os(name) {
+    secret_from_env_with(name, SecretPriority::EnvFirst)
+}
+
+/// Reads a secret with the `NAME_FILE`-first priority of ha-bridge and
+/// ha-control.
+///
+/// If `NAME_FILE` is set (and not blank), its contents are authoritative: a
+/// read or empty-file error is returned instead of falling back to `NAME`, so
+/// a broken mounted Secret never silently uses an older env value. When
+/// `NAME_FILE` is unset, this behaves like [`secret_from_env`].
+pub fn secret_from_env_file_first(name: &str) -> Result<Secret, ConfigError> {
+    secret_from_env_with(name, SecretPriority::FileFirst)
+}
+
+/// Which variable wins when both `NAME` and `NAME_FILE` are set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecretPriority {
+    /// The directly set variable wins over the mounted file.
+    EnvFirst,
+    /// The mounted file wins over the directly set variable.
+    FileFirst,
+}
+
+/// Reads a required secret with an explicit priority. See
+/// [`secret_from_env`] and [`secret_from_env_file_first`].
+pub fn secret_from_env_with(name: &str, priority: SecretPriority) -> Result<Secret, ConfigError> {
+    let env = std::env::var_os(name);
+    let file = std::env::var_os(format!("{name}_FILE"));
+    if priority == SecretPriority::FileFirst
+        && let Some(path) = &file
+    {
+        let path = path.to_string_lossy();
+        if path.trim().is_empty() {
+            return Err(ConfigError::SecretFile {
+                name: name.to_owned(),
+            });
+        }
+        return secret_file(&path).map_err(|error| match error {
+            ConfigError::Invalid { .. } => ConfigError::SecretFile {
+                name: name.to_owned(),
+            },
+            other => other,
+        });
+    }
+    if let Some(value) = env {
         let value = value.to_string_lossy();
         let trimmed = value.trim();
         if trimmed.is_empty() {
@@ -50,7 +96,7 @@ pub fn secret_from_env(name: &str) -> Result<Secret, ConfigError> {
         }
         return Ok(Secret::new(trimmed));
     }
-    if let Some(path) = std::env::var_os(format!("{name}_FILE")) {
+    if let Some(path) = file {
         return secret_file(&path.to_string_lossy()).map_err(|error| match error {
             ConfigError::Invalid { .. } => ConfigError::SecretFile {
                 name: name.to_owned(),
@@ -88,6 +134,109 @@ pub fn parse_duration_seconds(value: &str) -> Result<Duration, String> {
         .parse()
         .map_err(|_| "expected a whole number of seconds".to_owned())?;
     Ok(Duration::from_secs(seconds))
+}
+
+/// `clap` value parser for a Go-style duration (`1s`, `5m`, `1h30m`,
+/// `250ms`, `1.5s`).
+///
+/// The units are the ones accepted by Go's `time.ParseDuration`: `ns`, `us`,
+/// `µs`, `μs`, `ms`, `s`, `m` and `h`, combined in any order without
+/// separators. `0` is the only unit-less value. Negative durations are
+/// rejected because [`Duration`] is non-negative.
+pub fn parse_go_duration(value: &str) -> Result<Duration, String> {
+    let text = value.trim();
+    if text.is_empty() {
+        return Err("expected a duration such as 1s or 1h30m".to_owned());
+    }
+    let unsigned = match text.strip_prefix(['+', '-']) {
+        Some(rest) => rest,
+        None => text,
+    };
+    if text.starts_with('-') && !unsigned.is_empty() {
+        return Err("duration must not be negative".to_owned());
+    }
+    if unsigned.is_empty() {
+        return Err("expected a duration such as 1s or 1h30m".to_owned());
+    }
+    if unsigned == "0" {
+        return Ok(Duration::ZERO);
+    }
+    let mut rest = unsigned;
+    let mut nanos: u128 = 0;
+    while !rest.is_empty() {
+        let (int, fraction, tail) =
+            split_number(rest).ok_or_else(|| "invalid duration: expected a number".to_owned())?;
+        let (unit, tail) = split_unit(tail)
+            .ok_or_else(|| "invalid duration: expected a unit (ns, us, ms, s, m, h)".to_owned())?;
+        let scale = 10_u128
+            .checked_pow(u32::try_from(fraction.len()).map_err(|_| "duration is too large")?)
+            .ok_or("duration is too large")?;
+        let fract = if fraction.is_empty() {
+            0
+        } else {
+            fraction
+                .parse::<u128>()
+                .map_err(|_| "invalid duration: bad fraction".to_owned())?
+        };
+        let part = int
+            .checked_mul(unit)
+            .and_then(|value| value.checked_add(fract.checked_mul(unit)? / scale))
+            .ok_or("duration is too large")?;
+        nanos = nanos.checked_add(part).ok_or("duration is too large")?;
+        rest = tail;
+    }
+    let seconds = u64::try_from(nanos / 1_000_000_000).map_err(|_| "duration is too large")?;
+    let subsecond = u32::try_from(nanos % 1_000_000_000).expect("nanoseconds fit u32");
+    Ok(Duration::new(seconds, subsecond))
+}
+
+/// Split the decimal prefix of `text` into its integer and fraction digits.
+fn split_number(text: &str) -> Option<(u128, &str, &str)> {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() && bytes[index].is_ascii_digit() {
+        index += 1;
+    }
+    let int_end = index;
+    let fraction = if index < bytes.len() && bytes[index] == b'.' {
+        index += 1;
+        let start = index;
+        while index < bytes.len() && bytes[index].is_ascii_digit() {
+            index += 1;
+        }
+        &text[start..index]
+    } else {
+        ""
+    };
+    if int_end == 0 && fraction.is_empty() {
+        return None;
+    }
+    let int = if int_end == 0 {
+        0
+    } else {
+        text[..int_end].parse().ok()?
+    };
+    Some((int, fraction, &text[index..]))
+}
+
+/// Return the nanosecond multiplier of the Go duration unit at the start of
+/// `text` and the remaining text.
+fn split_unit(text: &str) -> Option<(u128, &str)> {
+    for (unit, nanos) in [
+        ("ns", 1_u128),
+        ("us", 1_000),
+        ("µs", 1_000),
+        ("μs", 1_000),
+        ("ms", 1_000_000),
+        ("s", 1_000_000_000),
+        ("m", 60_000_000_000),
+        ("h", 3_600_000_000_000),
+    ] {
+        if let Some(rest) = text.strip_prefix(unit) {
+            return Some((nanos, rest));
+        }
+    }
+    None
 }
 
 /// `clap` value parser for an inclusive integer range.
@@ -187,6 +336,87 @@ mod tests {
         );
         assert!(parse_duration_seconds("-1").is_err());
         assert!(parse_duration_seconds("1.5").is_err());
+    }
+
+    #[test]
+    fn go_durations_match_time_parse_duration() {
+        for (text, nanos) in [
+            ("0", 0_u64),
+            ("1ns", 1),
+            ("250ms", 250_000_000),
+            ("1s", 1_000_000_000),
+            ("5m", 300_000_000_000),
+            ("1h30m", 5_400_000_000_000),
+            ("1.5s", 1_500_000_000),
+            ("2h45m10.5s", 9_910_500_000_000),
+            ("1us", 1_000),
+            ("1µs", 1_000),
+            ("1μs", 1_000),
+            ("+30s", 30_000_000_000),
+            ("+0", 0),
+        ] {
+            assert_eq!(
+                parse_go_duration(text).expect(text),
+                Duration::from_nanos(nanos),
+                "{text}"
+            );
+        }
+        for text in [
+            "", "+", "-", "1", "-1s", "1x", "1.2.3s", "1sfoo", "ms", ".s",
+        ] {
+            assert!(parse_go_duration(text).is_err(), "{text:?} must fail");
+        }
+    }
+
+    #[test]
+    fn secret_priority_can_prefer_the_mounted_file() {
+        let suffix = std::process::id();
+        let env_only = format!("HOME_CONFIG_TEST_ENV_ONLY_{suffix}");
+        let env_first = format!("HOME_CONFIG_TEST_ENV_FIRST_{suffix}");
+        let file_first = format!("HOME_CONFIG_TEST_FILE_FIRST_{suffix}");
+        let path = temp_file("from-file\n");
+        let path_text = path.to_str().expect("path").to_owned();
+
+        // SAFETY: the names are unique per test, so no other test reads them.
+        unsafe {
+            std::env::set_var(&env_only, "from-env");
+            std::env::set_var(&env_first, "from-env");
+            std::env::set_var(format!("{env_first}_FILE"), &path_text);
+            std::env::set_var(&file_first, "from-env");
+            std::env::set_var(format!("{file_first}_FILE"), &path_text);
+        }
+
+        assert_eq!(
+            secret_from_env(&env_only).expect("env").expose(),
+            "from-env"
+        );
+        assert_eq!(
+            secret_from_env(&env_first).expect("env first").expose(),
+            "from-env"
+        );
+        assert_eq!(
+            secret_from_env_file_first(&file_first)
+                .expect("file first")
+                .expose(),
+            "from-file"
+        );
+
+        // A broken file must not fall back to a stale env value.
+        unsafe {
+            std::env::set_var(format!("{file_first}_FILE"), "/definitely/not/a/secret");
+        }
+        assert!(matches!(
+            secret_from_env_file_first(&file_first),
+            Err(ConfigError::SecretFile { .. })
+        ));
+
+        for name in [&env_only, &env_first, &file_first] {
+            unsafe {
+                std::env::remove_var(name);
+                std::env::remove_var(format!("{name}_FILE"));
+            }
+        }
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

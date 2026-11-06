@@ -33,7 +33,28 @@ impl ReqwestTransport {
         let _already_installed = rustls::crypto::ring::default_provider().install_default();
         Ok(Self::new(reqwest::Client::builder().build()?))
     }
+
+    /// A client that trusts the given PEM bundle. The workspace `reqwest`
+    /// uses manual roots, so this bundle is what makes a private scheduler
+    /// certificate usable.
+    pub fn with_ca_pem(ca_pem: &[u8]) -> Result<Self, CaError> {
+        let _already_installed = rustls::crypto::ring::default_provider().install_default();
+        let certificates = reqwest::Certificate::from_pem_bundle(ca_pem).map_err(|_| CaError)?;
+        if certificates.is_empty() {
+            return Err(CaError);
+        }
+        let mut builder = reqwest::Client::builder();
+        for certificate in certificates {
+            builder = builder.add_root_certificate(certificate);
+        }
+        builder.build().map(Self::new).map_err(|_| CaError)
+    }
 }
+
+/// The PEM bundle contained no usable certificate.
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("invalid CA certificate bundle")]
+pub struct CaError;
 
 impl ClientTransport for ReqwestTransport {
     type ResponseBody = reqwest::Body;
