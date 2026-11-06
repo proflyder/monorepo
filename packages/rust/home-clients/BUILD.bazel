@@ -1,0 +1,39 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Read-only Prometheus, Alertmanager and Loki clients.
+DEPS = [
+    "@crates//:reqwest",
+    "@crates//:rustls",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+    "@crates//:time",
+]
+
+rust_library(
+    name = "home_clients",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":home_clients",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        "@crates//:axum",
+        "@crates//:tokio",
+    ],
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

@@ -1,0 +1,40 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Telegram Bot API sendMessage with HTML chunks.
+DEPS = [
+    "//packages/rust/home-secret:home_secret",
+    "@crates//:reqwest",
+    "@crates//:rustls",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+]
+
+rust_library(
+    name = "home_telegram",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":home_telegram",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        "@crates//:axum",
+        "@crates//:serde_urlencoded",
+        "@crates//:tokio",
+    ],
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

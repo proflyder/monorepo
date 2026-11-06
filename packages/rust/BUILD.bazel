@@ -7,6 +7,8 @@ package(default_visibility = ["//visibility:public"])
 _ALL_TARGETS = [
     "//packages/rust/home-actor:home_actor",
     "//packages/rust/home-actor:unit_tests",
+    "//packages/rust/home-clients:home_clients",
+    "//packages/rust/home-clients:unit_tests",
     "//packages/rust/home-config:home_config",
     "//packages/rust/home-config:unit_tests",
     "//packages/rust/home-contracttest:home_contracttest",
@@ -25,6 +27,8 @@ _ALL_TARGETS = [
     "//packages/rust/home-secret:unit_tests",
     "//packages/rust/home-sqlite:home_sqlite",
     "//packages/rust/home-sqlite:unit_tests",
+    "//packages/rust/home-telegram:home_telegram",
+    "//packages/rust/home-telegram:unit_tests",
     "//packages/rust/home-telemetry:home_telemetry",
     "//packages/rust/home-telemetry:unit_tests",
     "//packages/rust/home-worker:home_worker",

@@ -1,0 +1,47 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Kubernetes REST and bb SSH bridge clients. The binary side of the gateway
+# (MCP transport, tool groups) is added in a later PR; this crate is a library
+# so the clients can be tested on their own.
+DEPS = [
+    "@crates//:base64",
+    "@crates//:hmac",
+    "@crates//:reqwest",
+    "@crates//:russh",
+    "@crates//:rustls",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:sha1",
+    "@crates//:thiserror",
+    "@crates//:time",
+    "@crates//:tokio",
+]
+
+rust_library(
+    name = "mcp_gateway",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":mcp_gateway",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        "@crates//:axum",
+        "@crates//:rand",
+        "@crates//:tempfile",
+    ],
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
