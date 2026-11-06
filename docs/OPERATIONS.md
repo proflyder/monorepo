@@ -304,7 +304,7 @@ bao kv get secret/ci/deploy-home   # запись — GET → merge → POST с 
 рабочем дереве нет. В bootstrap-выводе может остаться путь к нему, но
 источник правды — значение в OpenBao.
 
-Recovery keys — `secrets/openbao/init.json` (600); root уже отозван, новый
+Recovery keys и seal key — у владельца в Bitwarden (`Home recovery`) и в Vaultwarden (`openbao:bootstrap`), не на диске; root уже отозван, новый
 выпускается `bao operator generate-root` из recovery keys. GitHub Environment
 `Home` хранит только VPN-креды, `OPENBAO_ADDR` и (опционально)
 `OPENBAO_ROLE`; `kubeconfig`, `scheduler.env` и runtime values лежат в

@@ -193,7 +193,7 @@ merge PR в develop с новым VERSION
 - HA state — HAOS Supervisor backup.
 - K3s data/PV — `/srv/k3s/runtime`, `/srv/k3s/volumes/*`; `Retain`.
 - OpenBao — raft/backups на отдельных PV, audit — stdout → Loki; recovery keys и seal key —
-  только `secrets/openbao/`.
+  у владельца в Bitwarden (`Home recovery`) и в Vaultwarden (`openbao:bootstrap`), не на диске; живой seal key — Secret `openbao-seal`.
 - bb — SQLite и данные плагинов на CT 103 (`/home/bb/.bb-machines/<host>/`);
   восстанавливаемый артефакт — `bb server export` (`/var/backups/bb`).
   Плагины `profiles`/`home-dispatcher` — path-источники; их состояние в kv,

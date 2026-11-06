@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Copy every OpenBao KV secret into Vaultwarden (one-way, idempotent).
 
-    BW_SESSION=... BAO_ADDR=https://vault.<home-domain> sync_openbao.py [--dry-run]
+    BW_SESSION=... sync_openbao.py [--dry-run]   # BAO_ADDR defaults to secrets/openbao/addr
 
 Layout in the vault (folder ``OpenBao``):
   * one Secure Note per KV path, named ``openbao:<path>`` (e.g.
@@ -287,7 +287,10 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if not os.environ.get("BW_SESSION"):
         ap.error("BW_SESSION is not set: run `bw unlock` first")
-    addr = os.environ.get("BAO_ADDR") or ap.error("set BAO_ADDR")
+    addr_file = args.secrets_dir / "openbao" / "addr"
+    addr = os.environ.get("BAO_ADDR") or (
+        addr_file.read_text().strip() if addr_file.is_file() else None) or ap.error(
+        "set BAO_ADDR or write secrets/openbao/addr")
     token = os.environ.get("BAO_TOKEN") or (
         args.secrets_dir / "openbao" / "operator.token").read_text().strip()
     snapshot = Bao(addr, token).snapshot()

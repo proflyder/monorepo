@@ -13,7 +13,7 @@ kubeconfig, Terraform, Wi-Fi/BLE станции). Локальный `secrets/` 
 |---|---|---|
 | `secrets/README.md`, `secrets/catalog.json` | описание и карта «старый файл → путь#поле» | без значений; IP/MAC |
 | `secrets/NETWORK.md` | реальные LAN IP, порты, VPN/HTTPS | карта сети |
-| `secrets/openbao/` | operator token, seal key, recovery keys, TOTP method id | доступ к OpenBao/root recovery; копия вне OpenBao обязательна |
+| `secrets/openbao/` | operator token, адрес, TOTP method id | постоянный KV-доступ агентов; recovery keys и seal key — только у владельца (Bitwarden `Home recovery`, Vaultwarden `openbao:bootstrap`) |
 | `~/.ssh/home-lab/` | ключ PVE/K3s/HAOS, Комп, VPS + known_hosts | рабочий SSH; копии в `secret/infra/ssh/*` |
 | `local-data/local/backups/`, `local-data/proxmox-install/*.tar*` | бэкапы станции/HA/Wi-Fi | внутри исторические токены/ключи |
 | `/data/quasar/ble-gateway/token` | BLE token | смена Wi-Fi |

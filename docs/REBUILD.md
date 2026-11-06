@@ -16,8 +16,8 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 - `secrets/kubernetes-research/` — kubeconfig, private values.
 - `secrets/local/backups/`, `local-data/local/snapshots/station/` — станция
   (`/data`, `/etc`, оригиналы, модели wake word).
-- `secrets/openbao/` — recovery keys, seal key, username; `secrets/home/vpn/` —
-  CA и клиентские сертификаты VPN.
+- Recovery keys и seal key OpenBao — Bitwarden `Home recovery` (там же пароль
+  restic); остальные секреты (CA VPN и пр.) — в OpenBao/offsite-снапшоте.
 
 Проверять SHA-256, `quick_check`/`integrity_check`. Не публиковать.
 
@@ -175,7 +175,8 @@ projects/home/kubernetes/openbao/restore_drill.py \
   --ssh-config secrets/proxmox-install/ssh_config --ssh-host k3s
 ```
 
-Скрипт берёт тот же pinned image и `static` seal key, восстанавливает snapshot
+Seal key и `init.json` для стенда временно положить из Bitwarden (`--seal-key`,
+`--init-json`) и удалить после. Скрипт берёт тот же pinned image и `static` seal key, восстанавливает snapshot
 (`sys/storage/raft/snapshot-force`), проверяет auto-unseal после restore и
 после рестарта, выпускает root-токен стенда из recovery keys, сверяет по
 SHA-256 каждое поле ExternalSecret с live Secret и в конце отзывает токен и

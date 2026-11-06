@@ -6,7 +6,8 @@
 #   KUBECONFIG                 admin kubeconfig (required)
 #   secrets/home/ingress.env   HOME_DOMAIN, NODE_IP (same file as ingress/)
 #   secrets/home/vpn/cloudflare.env  CLOUDFLARE_API_TOKEN (DNS record)
-#   secrets/openbao/seal.key   created on first run (32 random bytes)
+#   secrets/openbao/seal.key   optional: created on first install only; when
+#                              absent the live Secret openbao-seal is kept
 #
 # Optional environment:
 #   OPENBAO_NODE_SSH  full ssh command for the K3s node, used to create
@@ -14,7 +15,7 @@
 #   OPENBAO_NODE_NAME node name for PV nodeAffinity (default: the only node)
 #   OPENBAO_SKIP_DNS=1  do not touch the Cloudflare A record
 #
-# Idempotent: re-running upgrades the release, refreshes the seal Secret and
+# Idempotent: re-running upgrades the release, keeps the seal Secret and
 # the DNS record, and leaves an initialised/unsealed server untouched.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -61,20 +62,32 @@ trap 'rm -rf "$TMP"' EXIT
 chmod 700 "$TMP"
 
 # ----- seal key and namespace ---------------------------------------------
-if [[ ! -s "$SECRETS_DIR/seal.key" ]]; then
+# The live seal key is the Secret openbao-seal; the owner keeps the only other
+# copy in Bitwarden (`Home recovery`). A local seal.key is used only when it is
+# present (first install or deliberate restore). Never generate a key while
+# the Secret exists: a new random key would make the raft data unopenable.
+kubectl create namespace "$OPENBAO_NS" --dry-run=client -o yaml | kubectl apply -f -
+if kubectl -n "$OPENBAO_NS" get secret openbao-seal >/dev/null 2>&1; then
+  seal_secret_exists=1
+else
+  seal_secret_exists=0
+fi
+if [[ ! -s "$SECRETS_DIR/seal.key" && "$seal_secret_exists" == 0 ]]; then
   openssl rand -out "$SECRETS_DIR/seal.key" 32
   chmod 600 "$SECRETS_DIR/seal.key"
-  echo "generated $SECRETS_DIR/seal.key"
+  echo "generated $SECRETS_DIR/seal.key (first install: copy it to the password manager)"
 fi
-[[ $(wc -c <"$SECRETS_DIR/seal.key" | tr -d ' ') == 32 ]] || {
-  echo "seal key must be exactly 32 bytes: $SECRETS_DIR/seal.key" >&2
-  exit 1
-}
-
-kubectl create namespace "$OPENBAO_NS" --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n "$OPENBAO_NS" create secret generic openbao-seal \
-  --from-file=unseal.key="$SECRETS_DIR/seal.key" \
-  --dry-run=client -o yaml | kubectl apply -f -
+if [[ -s "$SECRETS_DIR/seal.key" ]]; then
+  [[ $(wc -c <"$SECRETS_DIR/seal.key" | tr -d ' ') == 32 ]] || {
+    echo "seal key must be exactly 32 bytes: $SECRETS_DIR/seal.key" >&2
+    exit 1
+  }
+  kubectl -n "$OPENBAO_NS" create secret generic openbao-seal \
+    --from-file=unseal.key="$SECRETS_DIR/seal.key" \
+    --dry-run=client -o yaml | kubectl apply -f -
+else
+  echo "keeping the live Secret openbao-seal (no local seal.key)"
+fi
 
 # ----- local volume directories and PVs -----------------------------------
 NODE_NAME="${OPENBAO_NODE_NAME:-$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')}"

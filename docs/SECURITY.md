@@ -115,10 +115,9 @@
   перезагрузки без человека: компромисс узла даёт и ключ, и данные. Ключ не
   копируется в snapshot. Риск принят владельцем (2026-11-01), KMS не
   планируется; в offsite-бэкапе ключ и raft-снапшоты хранятся раздельно.
-- Recovery keys (5/3) и начальный root-токен — только
-  `secrets/openbao/init.json` (600). Root-токен после bootstrap отозван;
-  новый выпускается процедурой `generate-root` из recovery keys. Recovery
-  keys хранить офлайн/в менеджере паролей, не на узле.
+- Recovery keys (5/3) и seal key — у владельца в Bitwarden (`Home recovery`) и в Vaultwarden (`openbao:bootstrap`), не на диске.
+  Root-токен после bootstrap отозван; новый выпускается процедурой
+  `generate-root` из recovery keys.
 - Человек: `userpass` (имя — `secrets/openbao/username`) → политика `admin` с запретом
   `sys/seal`, `sys/step-down`, `sys/raw/*`, `sys/replication/*`,
   `sys/rotate`, `sys/rekey*`. Вход человека — пароль + обязательный
