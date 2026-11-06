@@ -12,8 +12,6 @@ use std::path::Path;
 use pulsar_dsp::to_s16;
 use tracing::{error, info, warn};
 
-use crate::ricardo::{DetectorError, RicardoWake};
-
 pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
 
 pub const VQE_MODELS: &str = "/system/vendor/quasar/vqe_models";
@@ -113,15 +111,26 @@ pub enum EngineError {
     WakeSpotter(String),
 }
 
-/// Результат подачи чанка детектору Ricardo: три состояния вместо `Option<Result<..>>`.
-#[derive(Debug)]
-pub enum CustomFeed {
-    /// Детектор не загружен (нет модели или `libtflite`).
-    Unavailable,
-    /// Чанк обработан; `score` — взвешенное среднее вероятности окна.
-    Fed { hit: bool, score: f32 },
-    /// Детектор выключил себя; дальше его не кормят.
-    Failed(DetectorError),
+/// Порт движка распознавания: VQE и нативные спотеры. Реализация — [`YandexEngine`] поверх
+/// firmware-библиотеки, тестовая — скрипт, выдающий заданные выходы и события. Детектор Ricardo
+/// живёт за отдельным портом [`crate::frontend::Detector`].
+pub(crate) trait WakeEngine: Send {
+    /// Кадров захвата на один чанк VQE.
+    fn chunk(&self) -> usize;
+    /// Выходных сэмплов на чанк VQE.
+    fn frame(&self) -> usize;
+    /// Один чанк; false после ошибки.
+    fn process(&mut self, mics: &[f32], spk: &[f32]) -> bool;
+    /// Выход VQE-канала `ty` последнего чанка.
+    fn output(&self, ty: i32) -> Option<&[f32]>;
+    /// Подать последний чанк спотеру wake-слова.
+    fn feed_wake(&mut self) -> Spotted;
+    /// Подать последний чанк командному спотеру.
+    fn feed_command(&mut self) -> Vec<String>;
+    /// Переключить модель wake-слова.
+    fn set_wake_model(&mut self, dir: &Path) -> bool;
+    /// id текущей модели (ключ `Preroll`).
+    fn wake_id(&self) -> &str;
 }
 
 /// Where the events of one fed chunk come from (a spotter, or a script in tests).
@@ -268,18 +277,15 @@ impl Slot {
 }
 
 /// The daemon's VQE + wake word spotter + optional command spotter.
-pub(crate) struct Engine {
+pub(crate) struct YandexEngine {
     // Fields drop in declaration order: the spotters first, then the VQE (instance, then its
     // config), as the C++ engine's destructor freed them.
     wake: Slot,
     cmd: Slot,
-    /// Optional on-device Ricardo detector. It is fed by the frontend instead of
-    /// the native spotter while the Ricardo wake word is active.
-    custom: Option<RicardoWake>,
     vqe: Vqe,
     lib: Lib,
     /// Capture frames per VQE chunk.
-    pub chunk: usize,
+    chunk: usize,
     /// VQE output samples per chunk.
     frame: usize,
     /// Id of the wake word model (its directory name, e.g. "alisa").
@@ -294,16 +300,15 @@ fn model_id(dir: &Path) -> String {
         .unwrap_or_default()
 }
 
-impl Engine {
+impl YandexEngine {
     /// dlopen, VQE for the model's preset, the wake word spotter (required) and the command spotter
     /// (optional: a warning without it). Errors are logged; None = no front-end.
-    pub fn start(
+    pub fn start<D>(
         capture: &pulsar_model::Capture,
         wake_dir: &Path,
-        custom_wake_model: Option<&Path>,
         command_dir: Option<&Path>,
-        custom_thresholds: crate::wake_events::Thresholds,
-    ) -> Result<Self, EngineError> {
+        load_detector: impl FnOnce() -> Option<D>,
+    ) -> Result<(Self, Option<D>), EngineError> {
         if let Err(e) = preload_deps() {
             warn!("libtflite: {e}");
         }
@@ -323,17 +328,11 @@ impl Engine {
             return Err(EngineError::VqeShape { chunk, frame });
         };
         info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
-        let custom = custom_wake_model.map(|path| match RicardoWake::new(path) {
-            Ok(mut detector) => {
-                detector.configure(custom_thresholds.cutoff, custom_thresholds.window);
-                info!("Ricardo wake word: {}", path.display());
-                Some(detector)
-            }
-            Err(e) => {
-                error!("Ricardo wake word: {e}");
-                None
-            }
-        });
+        // Порядок обязателен и проверен на Миди: VQE (libyandex_evil) → TFLite/Ricardo → спотеры.
+        // `preload_deps` остаётся в начале, как в старом `Engine::start`; Ricardo же нельзя
+        // ставить ни до VQE, ни после спотеров: обе библиотеки грузятся с RTLD_GLOBAL, и порядок
+        // разрешения глобальных символов должен совпадать с проверенной на станции сборкой.
+        let detector = load_detector();
         let (hit, rej) = (
             lib.event_name(EV_FIRST_STAGE_HIT),
             lib.event_name(EV_REJECTION_2ND),
@@ -352,7 +351,6 @@ impl Engine {
         let mut eng = Self {
             wake: Slot::new("wake word"),
             cmd: Slot::new("command"),
-            custom: custom.flatten(),
             vqe,
             lib,
             chunk: chunk_n,
@@ -368,35 +366,27 @@ impl Engine {
         {
             warn!("command spotter unavailable; voice commands without the wake word are disabled");
         }
-        Ok(eng)
+        Ok((eng, detector))
+    }
+}
+
+impl WakeEngine for YandexEngine {
+    fn chunk(&self) -> usize {
+        self.chunk
     }
 
-    /// Switches the wake word model.
-    pub fn set_wake_model(&mut self, dir: &Path) -> bool {
-        self.wake_id = model_id(dir);
-        self.wake.init(&self.lib, dir, VQE_OMNI_WITH_GAIN)
-    }
-
-    /// Id of the current wake word model (`Preroll` key).
-    pub fn wake_id(&self) -> &str {
-        &self.wake_id
-    }
-
-    /// VQE output samples per chunk.
-    pub fn frame(&self) -> usize {
+    fn frame(&self) -> usize {
         self.frame
     }
 
-    /// One VQE chunk; false after an error (logged).
-    pub fn process(&mut self, mics: &[f32], spk: &[f32]) -> bool {
+    fn process(&mut self, mics: &[f32], spk: &[f32]) -> bool {
         self.vqe
             .process(mics, spk)
             .inspect_err(|e| error!("VQE process: {e}"))
             .is_ok()
     }
 
-    /// VQE output channel `ty` of the last chunk; None after an error (logged).
-    pub fn output(&self, ty: i32) -> Option<&[f32]> {
+    fn output(&self, ty: i32) -> Option<&[f32]> {
         self.vqe
             .output(ty)
             .inspect_err(|e| error!("VQE output: {e}"))
@@ -405,7 +395,7 @@ impl Engine {
 
     /// Feeds the last chunk to the wake word spotter: its confirmed phrases and verifier step
     /// (`Stage::None` when the event ids are not the expected ones).
-    pub fn feed_wake(&mut self) -> Spotted {
+    fn feed_wake(&mut self) -> Spotted {
         let mut s = feed(&self.vqe, self.frame, &mut self.wake);
         if !self.stages {
             s.stage = Stage::None;
@@ -413,20 +403,18 @@ impl Engine {
         s
     }
 
-    /// Feeds one VQE-cleaned chunk to the optional Ricardo detector.
-    pub fn feed_custom(&mut self, pcm: &[i16]) -> CustomFeed {
-        let Some(detector) = self.custom.as_mut() else {
-            return CustomFeed::Unavailable;
-        };
-        match detector.feed(pcm) {
-            Ok((hit, score)) => CustomFeed::Fed { hit, score },
-            Err(e) => CustomFeed::Failed(e),
-        }
+    /// Feeds the last chunk to the command spotter; its confirmed phrases.
+    fn feed_command(&mut self) -> Vec<String> {
+        feed(&self.vqe, self.frame, &mut self.cmd).phrases
     }
 
-    /// Feeds the last chunk to the command spotter; its confirmed phrases.
-    pub fn feed_command(&mut self) -> Vec<String> {
-        feed(&self.vqe, self.frame, &mut self.cmd).phrases
+    fn set_wake_model(&mut self, dir: &Path) -> bool {
+        self.wake_id = model_id(dir);
+        self.wake.init(&self.lib, dir, VQE_OMNI_WITH_GAIN)
+    }
+
+    fn wake_id(&self) -> &str {
+        &self.wake_id
     }
 }
 
