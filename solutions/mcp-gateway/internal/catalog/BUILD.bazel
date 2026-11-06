@@ -10,7 +10,14 @@ go_library(
 
 go_test(
     name = "catalog_test",
-    srcs = ["catalog_test.go"],
-    data = ["//solutions/mcp-gateway/testdata:catalog.example.yaml"],
+    srcs = [
+        "catalog_test.go",
+        "vectors_test.go",
+    ],
+    data = [
+        "//solutions/mcp-gateway/testdata:catalog.example.yaml",
+        "//solutions/mcp-gateway/testdata:vectors",
+    ],
     embed = [":catalog"],
+    deps = ["//solutions/mcp-gateway/internal/golden"],
 )

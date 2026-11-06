@@ -1,0 +1,109 @@
+{
+  "name": "voice_updates",
+  "description": "Dispatcher updates: the bootstrap call returns only the cursor, a poll by cursor returns no history, and a later poll carries items with completedAt; a negative afterSeq is 400.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/updates",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "cursor": 12,
+          "items": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/updates",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 12,
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "cursor": 12,
+          "items": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/updates",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 12,
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "cursor": 42,
+          "items": [
+            {
+              "completedAt": 1700000000000,
+              "seq": 40,
+              "spoken": "Первый ответ."
+            },
+            {
+              "seq": 41,
+              "spoken": "Второй ответ."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/updates",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": -1
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "items": [],
+          "speech": "Не понял запрос.",
+          "status": "failed"
+        }
+      }
+    }
+  ]
+}

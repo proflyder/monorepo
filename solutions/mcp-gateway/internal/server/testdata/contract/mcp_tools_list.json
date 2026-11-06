@@ -1,6 +1,7 @@
 {
   "name": "mcp_tools_list",
   "description": "MCP tools/list with only infra.read enabled: pins the tool names and their input schemas, which is exactly what an LLM client sees. A future implementation must keep the same tool set for the same MCP_GROUPS.",
+  "compare": "semantic",
   "steps": [
     {
       "request": {
@@ -27,10 +28,31 @@
       },
       "response": {
         "status": 200,
+        "format": "sse",
         "headers": {
           "Content-Type": "text/event-stream"
         },
-        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"logging\":{},\"resources\":{\"listChanged\":true},\"tools\":{\"listChanged\":true}},\"protocolVersion\":\"2025-06-18\",\"serverInfo\":{\"name\":\"mcp-gateway\",\"title\":\"Infra gateway\",\"version\":\"contract\"}}}\n\n"
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
       },
       "captureHeaders": {
         "session": "Mcp-Session-Id"
@@ -74,10 +96,156 @@
       },
       "response": {
         "status": 200,
+        "format": "sse",
         "headers": {
           "Content-Type": "text/event-stream"
         },
-        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ttlMs\":0,\"cacheScope\":\"public\",\"tools\":[{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Explain one active alert by Alertmanager fingerprint (full or a prefix of at least 6 characters) or by alert name. Returns its labels and annotations plus the matching catalog service detail, so a follow-up question about an alert can be answered.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"ref\":{\"type\":\"string\",\"description\":\"Alertmanager fingerprint (full or a prefix of at least 6 characters) or the alert name\"}},\"required\":[\"ref\"],\"additionalProperties\":false},\"name\":\"infra_alert\"},{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Recent logs for any catalog service: Loki when the service is ingested there, otherwise Kubernetes pods/log. Secret-like values are redacted before returning.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"spoken service name from the catalog\"},\"since\":{\"type\":\"string\",\"description\":\"how far back to read, for example 15m or 1h (default 15m)\"},\"grep\":{\"type\":\"string\",\"description\":\"case-insensitive substring filter\"},\"limit\":{\"type\":\"integer\",\"description\":\"maximum number of log lines (default 50)\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"name\":\"infra_logs\"},{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Topology overview and the service catalog (spoken aliases, workloads, restart policy) for model context.\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"name\":\"infra_overview\"},{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Run one read-only instant PromQL query. Results are capped; this tool cannot change anything.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"promql\":{\"type\":\"string\",\"description\":\"read-only instant PromQL expression\"}},\"required\":[\"promql\"],\"additionalProperties\":false},\"name\":\"infra_query\"},{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Full infrastructure report across every catalog service. Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"verbose\":{\"type\":\"boolean\",\"description\":\"append a compact versions section (image, age, versions) to the text report\"}},\"additionalProperties\":false},\"name\":\"infra_report\"},{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Detail for one catalog service resolved by spoken name (case and ё-insensitive): workload status, pods, restarts, recent events, Prometheus signals and related alerts.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"spoken service name from the catalog\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"name\":\"infra_service\"},{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"One aggregate infra health check: firing alerts, catalog health signals, Kubernetes workload availability and recent pod restarts. Returns a short Russian speech verdict plus structured details.\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"name\":\"infra_status\"}]}}\n\n"
+        "body": {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "result": {
+            "tools": [
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Explain one active alert by Alertmanager fingerprint (full or a prefix of at least 6 characters) or by alert name. Returns its labels and annotations plus the matching catalog service detail, so a follow-up question about an alert can be answered.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "ref": {
+                      "description": "Alertmanager fingerprint (full or a prefix of at least 6 characters) or the alert name",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ref"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_alert"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Recent logs for any catalog service: Loki when the service is ingested there, otherwise Kubernetes pods/log. Secret-like values are redacted before returning.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "grep": {
+                      "description": "case-insensitive substring filter",
+                      "type": "string"
+                    },
+                    "limit": {
+                      "description": "maximum number of log lines (default 50)",
+                      "type": "integer"
+                    },
+                    "name": {
+                      "description": "spoken service name from the catalog",
+                      "type": "string"
+                    },
+                    "since": {
+                      "description": "how far back to read, for example 15m or 1h (default 15m)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_logs"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Topology overview and the service catalog (spoken aliases, workloads, restart policy) for model context.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "infra_overview"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Run one read-only instant PromQL query. Results are capped; this tool cannot change anything.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "promql": {
+                      "description": "read-only instant PromQL expression",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "promql"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_query"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Full infrastructure report across every catalog service. Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "verbose": {
+                      "description": "append a compact versions section (image, age, versions) to the text report",
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "infra_report"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Detail for one catalog service resolved by spoken name (case and ё-insensitive): workload status, pods, restarts, recent events, Prometheus signals and related alerts.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "description": "spoken service name from the catalog",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_service"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "One aggregate infra health check: firing alerts, catalog health signals, Kubernetes workload availability and recent pod restarts. Returns a short Russian speech verdict plus structured details.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "infra_status"
+              }
+            ]
+          }
+        }
       }
     }
   ]

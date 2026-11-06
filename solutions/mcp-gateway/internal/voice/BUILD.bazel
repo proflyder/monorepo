@@ -15,11 +15,17 @@ go_library(
 
 go_test(
     name = "voice_test",
-    srcs = ["voice_test.go"],
+    srcs = [
+        "contract_test.go",
+        "voice_test.go",
+    ],
+    data = glob(["testdata/contract/*.json"]),
     embed = [":voice"],
     deps = [
+        "//packages/go/contracttest",
         "//solutions/mcp-gateway/internal/agentmode",
         "//solutions/mcp-gateway/internal/bb",
+        "//solutions/mcp-gateway/internal/server",
         "@org_golang_x_time//rate",
     ],
 )

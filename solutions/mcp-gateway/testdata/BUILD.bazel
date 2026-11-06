@@ -4,4 +4,10 @@ exports_files([
     "catalog.example.yaml",
     "report_ok.txt",
     "report_problems.txt",
+    "reference/mcp_tools_list_go_snapshot.json",
 ])
+
+filegroup(
+    name = "vectors",
+    srcs = glob(["vectors/*.json"]),
+)

@@ -36,7 +36,8 @@ services:
 // HTTP and the separate voice token. The runner owns the transcript; this file
 // composes a real MCP server from the infra.read group and a fake catalog.
 func TestContractFixtures(t *testing.T) {
-	contracttest.Run(t, "solutions/mcp-gateway/internal/server/testdata/contract", newContractServer)
+	contracttest.Run(t, "solutions/mcp-gateway/internal/server/testdata/contract", newContractServer,
+		contracttest.WithNormalizer(dropSDKFields))
 }
 
 func newContractServer(t *testing.T, _ string) http.Handler {
@@ -74,4 +75,30 @@ func newContractServer(t *testing.T, _ string) http.Handler {
 		Ready:      func(context.Context) error { return nil },
 		Logger:     discardLogger(),
 	}).Handler()
+}
+
+// dropSDKFields keeps the fixtures language-neutral: the Go SDK's ttlMs,
+// cacheScope, structuredContent and idempotentHint:false are optional and are
+// accepted by the semantic comparison but not required from another SDK.
+func dropSDKFields(_ string, value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"ttlMs", "cacheScope", "structuredContent"} {
+			delete(typed, key)
+		}
+		if idempotent, ok := typed["idempotentHint"].(bool); ok && !idempotent {
+			delete(typed, "idempotentHint")
+		}
+		for key, item := range typed {
+			typed[key] = dropSDKFields("", item)
+		}
+		return typed
+	case []any:
+		for index, item := range typed {
+			typed[index] = dropSDKFields("", item)
+		}
+		return typed
+	default:
+		return value
+	}
 }

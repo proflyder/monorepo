@@ -509,3 +509,17 @@
     только DNS, `/admin` включён с Argon2id-хэшем токена из OpenBao.
 
 Меняется решение — обновить этот файл и `STATE.md`.
+
+43. **MCP-контракт mcp-gateway сверяется семантически.** `initialize`,
+    `tools/list` и `tools/call` сравниваются по смыслу: объекты как
+    подмножества (имена инструментов, описания, `inputSchema`-свойства,
+    аннотации `readOnlyHint`/`destructiveHint`, `speech`/`details` важны),
+    массивы — точно, SSE-обрамление `event: message\ndata: …\n\n` —
+    побайтно. Поля Go SDK `ttlMs`, `cacheScope`, `structuredContent` и
+    `idempotentHint:false` не входят в ожидаемое подмножество, потому что
+    `rmcp` их не эмитит. Байтовыми остаются auth, `/healthz`, `/readyz`,
+    серии `mcp_gateway_*` в `/metrics` и `/v1/voice/*`. Режим реализован
+    одинаково в `packages/go/contracttest` и
+    `packages/rust/home-contracttest` (`compare: semantic`,
+    `response.format: sse`). Справочный байтовый снимок Go-эпохи —
+    `solutions/mcp-gateway/testdata/reference/mcp_tools_list_go_snapshot.json`.

@@ -1,0 +1,378 @@
+{
+  "name": "tools_call_infra_logs",
+  "description": "infra_logs: Loki lines with redaction and grep, UTF-8-safe byte-cap truncation, pods/log fallback, no pods, a Loki error and an invalid since value.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "гермес"
+            },
+            "name": "infra_logs"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Логи Гермес за 15 мин: 2 строк.\",\n  \"details\": {\n    \"service\": \"hermes\",\n    \"source\": \"loki\",\n    \"since\": \"15m0s\",\n    \"lines\": 2,\n    \"text\": \"hermes started\\nAuthorization: Bearer [REDACTED]\\n\",\n    \"truncated\": false\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "grep": "authorization",
+              "name": "гермес"
+            },
+            "name": "infra_logs"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Логи Гермес за 15 мин: 1 строк.\",\n  \"details\": {\n    \"service\": \"hermes\",\n    \"source\": \"loki\",\n    \"since\": \"15m0s\",\n    \"lines\": 1,\n    \"grep\": \"authorization\",\n    \"text\": \"Authorization: Bearer [REDACTED]\\n\",\n    \"truncated\": false\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "гермес"
+            },
+            "name": "infra_logs"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Логи Гермес за 15 мин: 1 строк.\",\n  \"details\": {\n    \"service\": \"hermes\",\n    \"source\": \"loki\",\n    \"since\": \"15m0s\",\n    \"lines\": 1,\n    \"text\": \"абвг\",\n    \"truncated\": true\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "limit": 10,
+              "name": "планировщик"
+            },
+            "name": "infra_logs"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Логи Планировщик за 15 мин: 3 строк.\",\n  \"details\": {\n    \"service\": \"scheduler\",\n    \"source\": \"pods\",\n    \"since\": \"15m0s\",\n    \"lines\": 3,\n    \"text\": \"== scheduler-1/scheduler ==\\ntick ok\\nERROR alarm not fired\\ntick ok\\n== hermes-7d9f8c6b5-x2x4z/scheduler ==\\n\",\n    \"truncated\": false\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "планировщик"
+            },
+            "name": "infra_logs"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Не удалось прочитать логи Планировщик из подов.\",\n  \"details\": {\n    \"error\": \"no pods found for scheduler\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "гермес"
+            },
+            "name": "infra_logs"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Не удалось прочитать логи Гермес из Loki.\",\n  \"details\": {\n    \"error\": \"unexpected EOF\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "гермес",
+              "since": "soon"
+            },
+            "name": "infra_logs"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Не понял период, используйте например 15m или 1h.\",\n  \"details\": {\n    \"since\": \"soon\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

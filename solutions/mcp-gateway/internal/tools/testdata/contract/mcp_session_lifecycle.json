@@ -1,0 +1,153 @@
+{
+  "name": "mcp_session_lifecycle",
+  "description": "MCP Streamable HTTP session lifecycle: a DELETE ends the session, a GET without a session is rejected, a wrong Content-Type is rejected and a call without Mcp-Session-Id is rejected. Status codes are byte-level; JSON bodies are semantic.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/mcp",
+        "headers": {
+          "Authorization": "Bearer mcp-contract-token",
+          "Mcp-Session-Id": "{{session}}"
+        }
+      },
+      "response": {
+        "status": 204
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "text/event-stream",
+          "Authorization": "Bearer mcp-contract-token"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "body": "Bad Request: GET requires an Mcp-Session-Id header\n"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "text/plain"
+        },
+        "body": "hello"
+      },
+      "response": {
+        "status": 415,
+        "headers": {
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "body": "Content-Type must be 'application/json'\n"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "method": "tools/list"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":9,\"error\":{\"code\":0,\"message\":\"method \\\"tools/list\\\" is invalid during session initialization\"}}\n\n"
+      }
+    }
+  ]
+}

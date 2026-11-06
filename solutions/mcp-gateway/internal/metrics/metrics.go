@@ -19,7 +19,6 @@ type Metrics struct {
 	toolTime   *prometheus.HistogramVec
 	httpCount  *prometheus.CounterVec
 	voiceCount *prometheus.CounterVec
-	backendsUp *prometheus.GaugeVec
 }
 
 // New builds an isolated registry so tests never share state.
@@ -48,13 +47,9 @@ func New() *Metrics {
 			Name: "mcp_gateway_voice_utterances_total",
 			Help: "Voice utterances by route and outcome.",
 		}, []string{"route", "outcome"}),
-		backendsUp: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "mcp_gateway_backend_up",
-			Help: "Last observed backend reachability by backend name.",
-		}, []string{"backend"}),
 	}
 	registry.MustRegister(
-		m.actions, m.toolCalls, m.toolTime, m.httpCount, m.voiceCount, m.backendsUp,
+		m.actions, m.toolCalls, m.toolTime, m.httpCount, m.voiceCount,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
@@ -88,13 +83,4 @@ func (m *Metrics) ObserveHTTP(route string, status int) {
 // ObserveVoice counts one routed voice utterance.
 func (m *Metrics) ObserveVoice(route, outcome string) {
 	m.voiceCount.WithLabelValues(route, outcome).Inc()
-}
-
-// SetBackendUp records backend reachability.
-func (m *Metrics) SetBackendUp(backend string, up bool) {
-	value := 0.0
-	if up {
-		value = 1
-	}
-	m.backendsUp.WithLabelValues(backend).Set(value)
 }

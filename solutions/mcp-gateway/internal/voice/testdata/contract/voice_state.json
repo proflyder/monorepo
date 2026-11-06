@@ -1,0 +1,103 @@
+{
+  "name": "voice_state",
+  "description": "The debug state view is off before agent mode, on with the active thread while it is enabled, and off again after exit.",
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/voice/state",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "agentMode": false
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/voice/state",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "agentMode": false
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/voice/state",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "agentMode": true,
+          "threadId": "thr_agent"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/voice/state",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "agentMode": true,
+          "threadId": "thr_agent"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/voice/state",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "agentMode": false
+        }
+      }
+    }
+  ]
+}

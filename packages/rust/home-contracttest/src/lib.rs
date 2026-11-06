@@ -118,6 +118,12 @@ where
             .and_then(Value::as_array)
             .ok_or_else(|| Error::new(&name, 0, "fixture has no steps"))?;
         let router = new_router(&name);
+        let compare_mode = fixture
+            .get("compare")
+            .and_then(Value::as_str)
+            .unwrap_or("exact")
+            .to_owned();
+        validate_compare(&compare_mode).map_err(|detail| Error::new(&name, 0, detail))?;
         let mut captures: BTreeMap<String, String> = BTreeMap::new();
 
         for (index, step) in steps.iter().enumerate() {
@@ -125,7 +131,16 @@ where
             if let Some(hook) = &options.before_step {
                 hook(&name, number);
             }
-            replay_step(&name, number, step, router.clone(), &mut captures, &options).await?;
+            replay_step(
+                &name,
+                number,
+                step,
+                router.clone(),
+                &mut captures,
+                &options,
+                &compare_mode,
+            )
+            .await?;
         }
         scenarios += 1;
     }
@@ -139,6 +154,7 @@ async fn replay_step(
     router: Router,
     captures: &mut BTreeMap<String, String>,
     options: &Options,
+    file_compare: &str,
 ) -> Result<(), Error> {
     let request = step
         .get("request")
@@ -242,7 +258,20 @@ async fn replay_step(
         }
     }
 
-    let parsed = serde_json::from_slice::<Value>(&bytes).ok();
+    let format = expected.get("format").and_then(Value::as_str).unwrap_or("");
+    let payload: &[u8] = if format == "sse" {
+        sse_payload(&bytes).map_err(|detail| Error::new(scenario, number, detail))?
+    } else {
+        &bytes
+    };
+    let compare_mode = step
+        .get("compare")
+        .and_then(Value::as_str)
+        .unwrap_or(file_compare);
+    validate_compare(compare_mode).map_err(|detail| Error::new(scenario, number, detail))?;
+    let semantic = compare_mode == "semantic";
+
+    let parsed = serde_json::from_slice::<Value>(payload).ok();
     if let Some(capture) = step.get("capture").and_then(Value::as_object) {
         let parsed = parsed
             .as_ref()
@@ -291,13 +320,13 @@ async fn replay_step(
     match expected_body {
         Value::String(text) => {
             let text = substitute_text(text, captures, scenario, number)?;
-            if bytes.as_ref() != text.as_bytes() {
+            if payload != text.as_bytes() {
                 return Err(Error::new(
                     scenario,
                     number,
                     format!(
                         "body {:?}, want {:?}",
-                        String::from_utf8_lossy(&bytes),
+                        String::from_utf8_lossy(payload),
                         text
                     ),
                 ));
@@ -310,7 +339,7 @@ async fn replay_step(
                     number,
                     format!(
                         "response is not JSON: {:?}",
-                        String::from_utf8_lossy(&bytes)
+                        String::from_utf8_lossy(payload)
                     ),
                 )
             })?;
@@ -319,10 +348,31 @@ async fn replay_step(
             }
             let mut expected = expected.clone();
             substitute_value(&mut expected, captures, scenario, number)?;
-            compare(&expected, &actual, "", scenario, number)?;
+            compare(&expected, &actual, "", scenario, number, semantic)?;
         }
     }
     Ok(())
+}
+
+const SSE_PREFIX: &str = "event: message\ndata: ";
+const SSE_SUFFIX: &str = "\n\n";
+
+fn sse_payload(bytes: &[u8]) -> Result<&[u8], String> {
+    let text = std::str::from_utf8(bytes).map_err(|error| format!("SSE body: {error}"))?;
+    let inner = text
+        .strip_prefix(SSE_PREFIX)
+        .and_then(|rest| rest.strip_suffix(SSE_SUFFIX))
+        .ok_or_else(|| {
+            format!("expected an SSE frame {SSE_PREFIX:?}…{SSE_SUFFIX:?}, got {text:?}")
+        })?;
+    Ok(inner.as_bytes())
+}
+
+fn validate_compare(mode: &str) -> Result<(), String> {
+    match mode {
+        "exact" | "semantic" => Ok(()),
+        other => Err(format!("unknown compare mode {other:?}")),
+    }
 }
 
 fn substitute_text(
@@ -374,6 +424,7 @@ fn compare(
     path: &str,
     scenario: &str,
     step: usize,
+    semantic: bool,
 ) -> Result<(), Error> {
     match expected {
         Value::String(text) if text == "<uuid>" => {
@@ -481,6 +532,7 @@ fn compare(
                     &format!("{path}[{index}]"),
                     scenario,
                     step,
+                    semantic,
                 )?;
             }
             Ok(())
@@ -493,7 +545,7 @@ fn compare(
                     format!("{}: {actual}, want an object", display_path(path)),
                 ));
             };
-            compare_objects(expected_map, actual_map, path, scenario, step)
+            compare_objects(expected_map, actual_map, path, scenario, step, semantic)
         }
     }
 }
@@ -504,6 +556,7 @@ fn compare_objects(
     path: &str,
     scenario: &str,
     step: usize,
+    semantic: bool,
 ) -> Result<(), Error> {
     for key in expected.keys() {
         if !actual.contains_key(key) {
@@ -514,13 +567,15 @@ fn compare_objects(
             ));
         }
     }
-    for key in actual.keys() {
-        if !expected.contains_key(key) {
-            return Err(Error::new(
-                scenario,
-                step,
-                format!("{}: unexpected key {key:?}", display_path(path)),
-            ));
+    if !semantic {
+        for key in actual.keys() {
+            if !expected.contains_key(key) {
+                return Err(Error::new(
+                    scenario,
+                    step,
+                    format!("{}: unexpected key {key:?}", display_path(path)),
+                ));
+            }
         }
     }
     for (key, expected_value) in expected {
@@ -531,6 +586,7 @@ fn compare_objects(
             &format!("{path}.{key}"),
             scenario,
             step,
+            semantic,
         )?;
     }
     Ok(())
@@ -649,6 +705,73 @@ mod tests {
 
     fn temp_dir() -> tempfile::TempDir {
         tempfile::tempdir().expect("tempdir")
+    }
+
+    #[tokio::test]
+    async fn semantic_compare_ignores_extra_fields_and_keeps_arrays_exact() {
+        let dir = temp_dir();
+        std::fs::write(
+            dir.path().join("semantic.json"),
+            serde_json::to_vec_pretty(&json!({
+                "name": "semantic",
+                "compare": "semantic",
+                "steps": [{
+                    "request": {"method": "POST", "path": "/mcp"},
+                    "response": {
+                        "status": 200,
+                        "format": "sse",
+                        "headers": {"Content-Type": "text/event-stream"},
+                        "body": {"result": {"name": "mcp-gateway", "tools": [{"name": "infra_status"}]}}
+                    }
+                }]
+            }))
+            .expect("fixture"),
+        )
+        .expect("write");
+        let count = run(
+            dir.path(),
+            |_| {
+                Router::new().route(
+                    "/mcp",
+                    post(|| async {
+                        (
+                            [(header::CONTENT_TYPE.as_str(), "text/event-stream")],
+                            "event: message\ndata: {\"result\":{\"name\":\"mcp-gateway\",\"ttlMs\":0,\"tools\":[{\"name\":\"infra_status\",\"inputSchema\":{\"type\":\"object\"}}]}}\n\n",
+                        )
+                    }),
+                )
+            },
+            Options::default(),
+        )
+        .await
+        .expect("fixtures");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn sse_payload_requires_the_exact_envelope() {
+        let payload = sse_payload(b"event: message\ndata: {\"id\":1}\n\n").expect("payload");
+        assert_eq!(payload, b"{\"id\":1}");
+        for broken in [
+            &b"{\"id\":1}"[..],
+            b"event: message\ndata: {}\n",
+            b"event: ping\ndata: {}\n\n",
+        ] {
+            assert!(sse_payload(broken).is_err(), "{broken:?}");
+        }
+    }
+
+    #[test]
+    fn semantic_compare_rejects_missing_keys_and_changed_values() {
+        let expected =
+            json!({"result": {"name": "mcp-gateway", "tools": [{"name": "infra_status"}]}});
+        let actual = json!({"result": {"name": "mcp-gateway", "tools": [{"name": "infra_status"}], "ttlMs": 0}});
+        compare(&expected, &actual, "", "s", 1, true).expect("semantic");
+        assert!(compare(&expected, &actual, "", "s", 1, false).is_err());
+        let changed = json!({"result": {"name": "other", "tools": [{"name": "infra_status"}]}});
+        assert!(compare(&expected, &changed, "", "s", 1, true).is_err());
+        let shorter = json!({"result": {"name": "mcp-gateway", "tools": []}});
+        assert!(compare(&expected, &shorter, "", "s", 1, true).is_err());
     }
 
     #[tokio::test]

@@ -1,0 +1,226 @@
+{
+  "name": "report_inputs",
+  "description": "Входы golden-отчётов: каталог, фейковые поды/нагрузки, проверки и часы в Asia/Almaty должны воспроизвести details.text и speech побайтово. Это замена Go-тесту layoutReportDeps после удаления Go.",
+  "cases": [
+    {
+      "name": "all_ok",
+      "input": {
+        "now": "2026-11-01T12:00:00Z",
+        "timezone": "Asia/Almaty",
+        "catalog": "\ngroup_order: [Голос, Дом, Мониторинг]\nservices:\n  - id: hermes\n    title: Hermes\n    group: Голос\n    aliases: {ru: [гермес], en: [hermes]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: hermes}\n    restart: {allowed: false}\n  - id: prometheus\n    title: Prometheus\n    group: Мониторинг\n    aliases: {ru: [прометеус], en: [prometheus]}\n    kind: k8s\n    namespace: home\n    containers: [prometheus]\n    workload: {kind: StatefulSet, name: prometheus-monitoring-prometheus}\n    restart: {allowed: false}\n  - id: home-assistant\n    title: Home Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [дом, ха], en: [home-assistant]}\n    kind: external\n    checks:\n      - {type: ha_unavailable_summary, label: недоступные сущности, domains: [media_player]}\n    restart: {allowed: false}\n  - id: music-assistant\n    title: Music Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [музыка], en: [music-assistant]}\n    kind: external\n    checks:\n      - {type: tcp, label: API, host: 192.0.2.10, port: 8095}\n    restart: {allowed: false}\n",
+        "workloads": [
+          {
+            "namespace": "home",
+            "kind": "Deployment",
+            "name": "hermes",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          },
+          {
+            "namespace": "home",
+            "kind": "StatefulSet",
+            "name": "prometheus-monitoring-prometheus",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          }
+        ],
+        "pods": [
+          {
+            "namespace": "home",
+            "name": "prometheus-1",
+            "ready": true,
+            "startTime": "2026-10-30T12:00:00Z",
+            "containers": [
+              {
+                "name": "prometheus-config-reloader",
+                "image": "quay.io/prometheus-operator/prometheus-config-reloader:v0.94.2",
+                "ready": true
+              },
+              {
+                "name": "prometheus",
+                "image": "quay.io/prometheus/prometheus:v3.8.0",
+                "ready": true
+              }
+            ]
+          }
+        ],
+        "checks": [
+          {
+            "service": "home-assistant",
+            "type": "ha_unavailable_summary",
+            "label": "недоступные сущности",
+            "ok": true,
+            "value": "0"
+          },
+          {
+            "service": "music-assistant",
+            "type": "tcp",
+            "label": "API",
+            "ok": true
+          }
+        ],
+        "verbose": false
+      },
+      "expected": {
+        "speech": "Всё работает: 4 из 4. Прислать подробности в Telegram?",
+        "text": "Отчёт по инфраструктуре, 01.11 17:00\n✅ Всё работает: 4 из 4\n\nВ норме\n✅ Голос: Hermes\n✅ Дом: Home Assistant, Music Assistant\n✅ Мониторинг: Prometheus"
+      }
+    },
+    {
+      "name": "two_problems",
+      "input": {
+        "now": "2026-11-01T12:00:00Z",
+        "timezone": "Asia/Almaty",
+        "catalog": "\ngroup_order: [Голос, Дом, Мониторинг]\nservices:\n  - id: hermes\n    title: Hermes\n    group: Голос\n    aliases: {ru: [гермес], en: [hermes]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: hermes}\n    restart: {allowed: false}\n  - id: prometheus\n    title: Prometheus\n    group: Мониторинг\n    aliases: {ru: [прометеус], en: [prometheus]}\n    kind: k8s\n    namespace: home\n    containers: [prometheus]\n    workload: {kind: StatefulSet, name: prometheus-monitoring-prometheus}\n    restart: {allowed: false}\n  - id: home-assistant\n    title: Home Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [дом, ха], en: [home-assistant]}\n    kind: external\n    checks:\n      - {type: ha_unavailable_summary, label: недоступные сущности, domains: [media_player]}\n    restart: {allowed: false}\n  - id: music-assistant\n    title: Music Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [музыка], en: [music-assistant]}\n    kind: external\n    checks:\n      - {type: tcp, label: API, host: 192.0.2.10, port: 8095}\n    restart: {allowed: false}\n",
+        "workloads": [
+          {
+            "namespace": "home",
+            "kind": "Deployment",
+            "name": "hermes",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          },
+          {
+            "namespace": "home",
+            "kind": "StatefulSet",
+            "name": "prometheus-monitoring-prometheus",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 0,
+            "available": 0
+          }
+        ],
+        "pods": [
+          {
+            "namespace": "home",
+            "name": "prometheus-1",
+            "ready": true,
+            "startTime": "2026-10-30T12:00:00Z",
+            "containers": [
+              {
+                "name": "prometheus-config-reloader",
+                "image": "quay.io/prometheus-operator/prometheus-config-reloader:v0.94.2",
+                "ready": true
+              },
+              {
+                "name": "prometheus",
+                "image": "quay.io/prometheus/prometheus:v3.8.0",
+                "ready": true
+              }
+            ]
+          }
+        ],
+        "checks": [
+          {
+            "service": "home-assistant",
+            "type": "ha_unavailable_summary",
+            "label": "недоступные сущности",
+            "ok": false,
+            "value": "1",
+            "error": "недоступно сущностей: 1",
+            "details": [
+              "media_player.kitchen"
+            ]
+          },
+          {
+            "service": "music-assistant",
+            "type": "tcp",
+            "label": "API",
+            "ok": true
+          }
+        ],
+        "verbose": false
+      },
+      "expected": {
+        "speech": "Проверено сервисов: 4, работают 2. Проблемы: Prometheus, Home Assistant. Прислать подробности в Telegram?",
+        "text": "Отчёт по инфраструктуре, 01.11 17:00\n⚠️ Есть проблемы: 2 из 4\n\nПроблемы\n❌ Home Assistant — недоступно сущностей: 1 (media_player.kitchen)\n❌ Prometheus — готовы 0 из 1\n   рестартов 1ч: 0\n\nВ норме\n✅ Голос: Hermes\n✅ Дом: Music Assistant"
+      }
+    },
+    {
+      "name": "verbose_versions",
+      "input": {
+        "now": "2026-11-01T12:00:00Z",
+        "timezone": "Asia/Almaty",
+        "catalog": "\ngroup_order: [Голос, Дом, Мониторинг]\nservices:\n  - id: hermes\n    title: Hermes\n    group: Голос\n    aliases: {ru: [гермес], en: [hermes]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: hermes}\n    restart: {allowed: false}\n  - id: prometheus\n    title: Prometheus\n    group: Мониторинг\n    aliases: {ru: [прометеус], en: [prometheus]}\n    kind: k8s\n    namespace: home\n    containers: [prometheus]\n    workload: {kind: StatefulSet, name: prometheus-monitoring-prometheus}\n    restart: {allowed: false}\n  - id: home-assistant\n    title: Home Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [дом, ха], en: [home-assistant]}\n    kind: external\n    checks:\n      - {type: ha_unavailable_summary, label: недоступные сущности, domains: [media_player]}\n    restart: {allowed: false}\n  - id: music-assistant\n    title: Music Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [музыка], en: [music-assistant]}\n    kind: external\n    checks:\n      - {type: tcp, label: API, host: 192.0.2.10, port: 8095}\n    restart: {allowed: false}\n",
+        "workloads": [
+          {
+            "namespace": "home",
+            "kind": "Deployment",
+            "name": "hermes",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          },
+          {
+            "namespace": "home",
+            "kind": "StatefulSet",
+            "name": "prometheus-monitoring-prometheus",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          }
+        ],
+        "pods": [
+          {
+            "namespace": "home",
+            "name": "prometheus-1",
+            "ready": true,
+            "startTime": "2026-10-30T12:00:00Z",
+            "containers": [
+              {
+                "name": "prometheus-config-reloader",
+                "image": "quay.io/prometheus-operator/prometheus-config-reloader:v0.94.2",
+                "ready": true
+              },
+              {
+                "name": "prometheus",
+                "image": "quay.io/prometheus/prometheus:v3.8.0",
+                "ready": true
+              }
+            ]
+          }
+        ],
+        "checks": [
+          {
+            "service": "home-assistant",
+            "type": "ha_unavailable_summary",
+            "label": "недоступные сущности",
+            "ok": true,
+            "value": "0"
+          },
+          {
+            "service": "music-assistant",
+            "type": "tcp",
+            "label": "API",
+            "ok": true
+          }
+        ],
+        "verbose": true
+      },
+      "expected": {
+        "speech": "Всё работает: 4 из 4. Прислать подробности в Telegram?",
+        "text": "Отчёт по инфраструктуре, 01.11 17:00\n✅ Всё работает: 4 из 4\n\nВ норме\n✅ Голос: Hermes\n✅ Дом: Home Assistant, Music Assistant\n✅ Мониторинг: Prometheus\n\nВерсии\nHermes — prometheus-config-reloader:v0.94.2, возраст 2д\nPrometheus — prometheus:v3.8.0, возраст 2д"
+      }
+    }
+  ]
+}

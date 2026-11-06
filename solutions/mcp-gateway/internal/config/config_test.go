@@ -237,6 +237,25 @@ func TestLoadErrors(t *testing.T) {
 			}(),
 			want: "must differ",
 		},
+		"voice bridge timeout too short for updates": {
+			env: func() map[string]string {
+				env := withEnv(baseEnv(), "MCP_VOICE_TOKEN_FILE", "/run/secrets/voice-token")
+				env["MCP_BB_SSH_ADDR"] = "192.0.2.30:22"
+				env["MCP_BB_SSH_KEY_FILE"] = "/run/secrets/bb-key"
+				env["MCP_BB_KNOWN_HOSTS_FILE"] = "/run/secrets/bb-known"
+				env["MCP_BB_DISPATCHER_THREAD_ID"] = "thr_work"
+				env["MCP_BB_TIMEOUT"] = "1s"
+				return env
+			}(),
+			files: func() map[string]string {
+				files := baseFiles()
+				files["/run/secrets/bb-key"] = "key\n"
+				files["/run/secrets/bb-known"] = "host key\n"
+				files["/run/secrets/voice-token"] = "another-token\n"
+				return files
+			}(),
+			want: "MCP_BB_TIMEOUT",
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

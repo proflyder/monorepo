@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -227,6 +228,12 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 		}()
 	}
 
+	if d.Prom == nil && hasStatusSignals(cat) {
+		// One message, not one per signal: details.errors is shown to the model
+		// and repeated identical lines only add noise.
+		addError("сигналы: Prometheus не настроен")
+	}
+
 	for _, service := range cat.Services {
 		service := service
 		for _, sig := range service.Signals {
@@ -243,7 +250,6 @@ func (d *Deps) infraStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 					mu.Lock()
 					detail.Signals = append(detail.Signals, finding)
 					mu.Unlock()
-					addError("сигналы: Prometheus не настроен")
 					return
 				}
 				callCtx, cancel := context.WithTimeout(ctx, d.queryTimeout())
@@ -406,6 +412,19 @@ func statusVerdict(detail statusDetail, issues []string) string {
 	default:
 		return "Проверка неполная: " + detail.Errors[0] + "."
 	}
+}
+
+// hasStatusSignals reports whether any catalog signal participates in the
+// infra_status aggregate.
+func hasStatusSignals(cat *catalog.Catalog) bool {
+	for _, service := range cat.Services {
+		for _, signal := range service.Signals {
+			if signal.Status {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func namespacesOf(cat *catalog.Catalog) []string {
@@ -870,7 +889,7 @@ func (d *Deps) infraLogs(ctx context.Context, _ *mcp.CallToolRequest, in logsInp
 
 	redacted := redact.Text(text)
 	if len(redacted) > d.logByteCap() {
-		redacted = redacted[:d.logByteCap()]
+		redacted = truncateUTF8(redacted, d.logByteCap())
 		detail.Truncated = true
 	}
 	detail.Text = redacted
@@ -1050,4 +1069,26 @@ func boolToInt(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+// truncateUTF8 cuts s to at most limit bytes without splitting a rune. The
+// log body is JSON text, so a cut in the middle of a multi-byte character
+// would surface as U+FFFD in the model's context.
+func truncateUTF8(s string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	// A lone invalid byte in the input must not drop everything.
+	for cut > 0 && !utf8.ValidString(s[:cut]) {
+		_, size := utf8.DecodeLastRuneInString(s[:cut])
+		cut -= size
+	}
+	return s[:cut]
 }

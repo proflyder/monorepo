@@ -46,6 +46,22 @@ const DefaultMaxWait = 25 * time.Second
 // a shorter plugin wait does not shorten the overall long-poll.
 const DefaultUpdatesWait = 10 * time.Second
 
+// UpdatesWaitFor derives the plugin wait from the SSH bridge timeout. One
+// `updates` call must finish before the bridge times out, otherwise every
+// long-poll returns status "failed" whenever MCP_BB_TIMEOUT is short. The
+// returned value leaves one second of headroom and is capped at
+// DefaultUpdatesWait.
+func UpdatesWaitFor(bridgeTimeout time.Duration) time.Duration {
+	wait := bridgeTimeout - time.Second
+	if wait < time.Second {
+		wait = time.Second
+	}
+	if wait > DefaultUpdatesWait {
+		wait = DefaultUpdatesWait
+	}
+	return wait
+}
+
 // Short phrases spoken by the proxy path.
 const (
 	SpeechAgentSent    = "Передал агенту."
@@ -161,11 +177,14 @@ type ResultRequest struct {
 	WaitSeconds int    `json:"waitSeconds"`
 }
 
-// ResultResponse is the turn outcome.
+// ResultResponse is the turn outcome. CompletedSeq is the event sequence of
+// the completed turn; the voice proxy uses it as the idempotency key of its
+// answer queue, so it must be present on every finished turn.
 type ResultResponse struct {
-	Status string `json:"status"`
-	Speech string `json:"speech,omitempty"`
-	Text   string `json:"text,omitempty"`
+	Status       string `json:"status"`
+	Speech       string `json:"speech,omitempty"`
+	Text         string `json:"text,omitempty"`
+	CompletedSeq *int64 `json:"completedSeq,omitempty"`
 }
 
 // StateResponse is the debug view of the agent-conversation switch.
@@ -309,9 +328,10 @@ func (h *Handler) handleResult(w http.ResponseWriter, r *http.Request) {
 		default:
 			h.observe("result", "", result.Status, req.ThreadID, 0)
 			h.write(w, http.StatusOK, ResultResponse{
-				Status: result.Status,
-				Speech: turnSpeech(result),
-				Text:   result.Text,
+				Status:       result.Status,
+				Speech:       turnSpeech(result),
+				Text:         result.Text,
+				CompletedSeq: result.CompletedSeq,
 			})
 			return
 		}

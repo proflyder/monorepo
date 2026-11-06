@@ -1,0 +1,31 @@
+{
+  "name": "voice_updates_errors",
+  "description": "A dispatcher-updates failure is status \"failed\" with empty items and the short speech.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/updates",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 12,
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "items": [],
+          "speech": "Сервер агентов недоступен.",
+          "status": "failed"
+        }
+      }
+    }
+  ]
+}

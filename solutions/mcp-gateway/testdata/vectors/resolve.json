@@ -1,0 +1,79 @@
+{
+  "name": "resolve",
+  "description": "Резолв spoken-имени: точное совпадение, регистр, ё/е, пунктуация, уникальная подстрока и один edit-distance. Неоднозначность и неизвестное имя — ошибка, а не угадывание.",
+  "catalog": "\noverview: |\n  ## Векторная топология\nservices:\n  - id: scheduler\n    title: Планировщик\n    aliases:\n      ru: [планировщик, будильники]\n      en: [scheduler]\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: scheduler}\n    restart: {allowed: true, warning: Будильники могут не сработать.}\n  - id: hermes\n    title: Гермес\n    aliases:\n      ru: [гермес, ассистент]\n      en: [hermes]\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: hermes}\n    restart: {allowed: false}\n  - id: home-assistant\n    title: Home Assistant\n    aliases:\n      ru: [дом, ха]\n      en: [ha]\n    kind: external\n    restart: {allowed: false}\n",
+  "cases": [
+    {
+      "name": "exact_ru",
+      "input": {
+        "name": "планировщик"
+      },
+      "expected": {
+        "service": "scheduler"
+      }
+    },
+    {
+      "name": "case_and_spaces",
+      "input": {
+        "name": "  Планировщик  "
+      },
+      "expected": {
+        "service": "scheduler"
+      }
+    },
+    {
+      "name": "yo_folding",
+      "input": {
+        "name": "ассистент"
+      },
+      "expected": {
+        "service": "hermes"
+      }
+    },
+    {
+      "name": "latin_alias",
+      "input": {
+        "name": "Scheduler"
+      },
+      "expected": {
+        "service": "scheduler"
+      }
+    },
+    {
+      "name": "substring_unique",
+      "input": {
+        "name": "будильник"
+      },
+      "expected": {
+        "service": "scheduler"
+      }
+    },
+    {
+      "name": "one_edit",
+      "input": {
+        "name": "гермесс"
+      },
+      "expected": {
+        "service": "hermes"
+      }
+    },
+    {
+      "name": "unknown",
+      "input": {
+        "name": "нет такого"
+      },
+      "expected": {
+        "error": "unknown service \"нет такого\""
+      }
+    },
+    {
+      "name": "empty",
+      "input": {
+        "name": "   "
+      },
+      "expected": {
+        "error": "empty service name"
+      }
+    }
+  ]
+}

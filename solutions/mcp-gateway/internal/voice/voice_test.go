@@ -419,3 +419,38 @@ func TestUpdatesRejectsNegativeAfterSeq(t *testing.T) {
 		t.Fatal("invalid request reached the bridge")
 	}
 }
+
+func TestResultReturnsCompletedSeqForTheProxyQueue(t *testing.T) {
+	completed := int64(77)
+	dispatcher := &fakeDispatcher{turns: []bb.TurnResultResult{{
+		Status:       "idle",
+		CompletedSeq: &completed,
+		Text:         "done",
+	}}}
+	handler := newTestHandler(dispatcher, agentmode.New(), "").Handler()
+	rec, body := post(t, handler, "/v1/voice/result", ResultRequest{ThreadID: "thr_1", AfterSeq: 42, WaitSeconds: 1})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body["completedSeq"] != float64(77) {
+		t.Fatalf("completedSeq = %v, want 77 (body %v)", body["completedSeq"], body)
+	}
+}
+
+func TestUpdatesWaitForStaysBelowTheBridgeTimeout(t *testing.T) {
+	cases := []struct {
+		timeout time.Duration
+		want    time.Duration
+	}{
+		{2 * time.Second, time.Second},
+		{5 * time.Second, 4 * time.Second},
+		{11 * time.Second, 10 * time.Second},
+		{15 * time.Second, DefaultUpdatesWait},
+		{30 * time.Second, DefaultUpdatesWait},
+	}
+	for _, tc := range cases {
+		if got := UpdatesWaitFor(tc.timeout); got != tc.want {
+			t.Fatalf("UpdatesWaitFor(%s) = %s, want %s", tc.timeout, got, tc.want)
+		}
+	}
+}

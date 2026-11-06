@@ -1,0 +1,427 @@
+{
+  "name": "tools_call_bb_prepare_spawn",
+  "description": "bb_prepare_spawn: a personal alias, a work project and an unknown project (indistinguishable refusal), a disallowed model and effort, an empty task, a validate_spawn refusal and a missing bridge.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "стан лэб",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запустить агента в Station Lab: почини тесты. Подтверждаете?\",\n  \"details\": {\n    \"allowed\": true,\n    \"project\": \"Station Lab\",\n    \"provider\": \"claude-code\",\n    \"model\": \"sonnet\",\n    \"effort\": \"medium\",\n    \"task\": \"почини тесты\",\n    \"expiresAt\": \"2026-11-01T12:01:30Z\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "работа",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Не нашёл такой личный проект.\",\n  \"details\": {\n    \"allowed\": false,\n    \"project\": \"\",\n    \"reason\": \"bb: target not found\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "неизвестный",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Не нашёл такой личный проект.\",\n  \"details\": {\n    \"allowed\": false,\n    \"project\": \"\",\n    \"reason\": \"bb: target not found\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "model": "gpt",
+              "project": "стан лэб",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Эта модель недоступна.\",\n  \"details\": {\n    \"allowed\": false,\n    \"project\": \"\",\n    \"reason\": \"bb: model not found\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "effort": "max",
+              "project": "стан лэб",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Этот уровень усилия недоступен.\",\n  \"details\": {\n    \"allowed\": false,\n    \"project\": \"\",\n    \"reason\": \"bb: reasoning level not supported\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "стан лэб",
+              "task": "   "
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Пустая задача для агента.\",\n  \"details\": {\n    \"allowed\": false,\n    \"project\": \"\",\n    \"reason\": \"empty task\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "стан лэб",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Лимит тредов.\",\n  \"details\": {\n    \"allowed\": false,\n    \"project\": \"\",\n    \"reason\": \"thread_limit\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 10,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "стан лэб",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 10,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Сервер агентов не настроен.\"\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

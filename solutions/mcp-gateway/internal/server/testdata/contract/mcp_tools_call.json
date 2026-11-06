@@ -1,6 +1,7 @@
 {
   "name": "mcp_tools_call",
   "description": "MCP tools/call for the read-only infra_overview tool against a fake catalog: the result shape is a single text block with speech and structured details.",
+  "compare": "semantic",
   "steps": [
     {
       "request": {
@@ -27,10 +28,31 @@
       },
       "response": {
         "status": 200,
+        "format": "sse",
         "headers": {
           "Content-Type": "text/event-stream"
         },
-        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"logging\":{},\"resources\":{\"listChanged\":true},\"tools\":{\"listChanged\":true}},\"protocolVersion\":\"2025-06-18\",\"serverInfo\":{\"name\":\"mcp-gateway\",\"title\":\"Infra gateway\",\"version\":\"contract\"}}}\n\n"
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
       },
       "captureHeaders": {
         "session": "Mcp-Session-Id"
@@ -77,10 +99,22 @@
       },
       "response": {
         "status": 200,
+        "format": "sse",
         "headers": {
           "Content-Type": "text/event-stream"
         },
-        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\n  \\\"speech\\\": \\\"Каталог: 1 сервисов. Топология в деталях.\\\",\\n  \\\"details\\\": {\\n    \\\"catalog\\\": \\\"# Каталог сервисов\\\\n\\\\n## scheduler\\\\n- aliases: планировщик, scheduler\\\\n- workload: Deployment home/scheduler\\\\n- restart: allowed; warning: Contract restart warning.\\\\n\\\\n\\\",\\n    \\\"overview\\\": \\\"## Contract topology\\\\nOne fake service.\\\\n\\\"\\n  }\\n}\"}],\"structuredContent\":{\"speech\":\"Каталог: 1 сервисов. Топология в деталях.\",\"details\":{\"catalog\":\"# Каталог сервисов\\n\\n## scheduler\\n- aliases: планировщик, scheduler\\n- workload: Deployment home/scheduler\\n- restart: allowed; warning: Contract restart warning.\\n\\n\",\"overview\":\"## Contract topology\\nOne fake service.\\n\"}}}}\n\n"
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Каталог: 1 сервисов. Топология в деталях.\",\n  \"details\": {\n    \"catalog\": \"# Каталог сервисов\\n\\n## scheduler\\n- aliases: планировщик, scheduler\\n- workload: Deployment home/scheduler\\n- restart: allowed; warning: Contract restart warning.\\n\\n\",\n    \"overview\": \"## Contract topology\\nOne fake service.\\n\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
       }
     }
   ]

@@ -1,0 +1,62 @@
+{
+  "name": "redact",
+  "description": "Удаление секретов. Значения {{jwt}}, {{token}}, {{hex}} и {{telegram}} подставляются тестом из коротких частей, чтобы длинные токены не лежали в файле. Секрет не должен попадать в вывод даже через capture-группу.",
+  "cases": [
+    {
+      "name": "authorization_header",
+      "input": {
+        "text": "Authorization: Bearer {{token}}"
+      },
+      "expected": "Authorization: Bearer [REDACTED]"
+    },
+    {
+      "name": "bare_bearer",
+      "input": {
+        "text": "bearer {{token}}"
+      },
+      "expected": "bearer [REDACTED]"
+    },
+    {
+      "name": "key_value",
+      "input": {
+        "text": "password={{token}}"
+      },
+      "expected": "password=[REDACTED]"
+    },
+    {
+      "name": "jwt",
+      "input": {
+        "text": "jwt {{jwt}}"
+      },
+      "expected": "jwt [REDACTED]"
+    },
+    {
+      "name": "telegram_bot",
+      "input": {
+        "text": "bot {{telegram}}"
+      },
+      "expected": "bot 123456789:[REDACTED]"
+    },
+    {
+      "name": "hex_blob",
+      "input": {
+        "text": "hash {{hex}}"
+      },
+      "expected": "hash [REDACTED]"
+    },
+    {
+      "name": "ordinary_text",
+      "input": {
+        "text": "Планировщик работает, готовы 1 из 1."
+      },
+      "expected": "Планировщик работает, готовы 1 из 1."
+    },
+    {
+      "name": "timestamp",
+      "input": {
+        "text": "2026-11-01T10:00:00Z level=info msg=started"
+      },
+      "expected": "2026-11-01T10:00:00Z level=info msg=started"
+    }
+  ]
+}

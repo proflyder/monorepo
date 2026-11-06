@@ -212,6 +212,9 @@ func loadBBFiles(cfg *Config, readFile func(string) ([]byte, error)) error {
 		return err
 	}
 	if cfg.VoiceTokenFile != "" {
+		if cfg.BBTimeout < 2*time.Second {
+			return fmt.Errorf("MCP_BB_TIMEOUT must be at least 2s when MCP_VOICE_TOKEN_FILE is set: the updates long-poll needs room below the bridge timeout")
+		}
 		if cfg.BBDispatcherThreadID == "" {
 			return fmt.Errorf("MCP_BB_DISPATCHER_THREAD_ID is required when MCP_VOICE_TOKEN_FILE is set")
 		}

@@ -1,0 +1,367 @@
+{
+  "name": "tools_call_bb_confirm_cancel",
+  "description": "bb_confirm and bb_cancel: no pending, a successful spawn that turns on agent mode, a second confirm, then prepare/cancel/cancel.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "bb_confirm"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Нет отложенного запуска.\",\n  \"details\": {\n    \"started\": false,\n    \"reason\": \"no pending spawn\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "стан лэб",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запустить агента в Station Lab: почини тесты. Подтверждаете?\",\n  \"details\": {\n    \"allowed\": true,\n    \"project\": \"Station Lab\",\n    \"provider\": \"claude-code\",\n    \"model\": \"sonnet\",\n    \"effort\": \"medium\",\n    \"task\": \"почини тесты\",\n    \"expiresAt\": \"2026-11-01T12:01:30Z\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "bb_confirm"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запустил агента. Теперь это режим агента.\",\n  \"details\": {\n    \"started\": true,\n    \"threadId\": \"thr_new\",\n    \"project\": \"Station Lab\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "bb_confirm"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Нет отложенного запуска.\",\n  \"details\": {\n    \"started\": false,\n    \"reason\": \"no pending spawn\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "project": "стан лэб",
+              "task": "почини тесты"
+            },
+            "name": "bb_prepare_spawn"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запустить агента в Station Lab: почини тесты. Подтверждаете?\",\n  \"details\": {\n    \"allowed\": true,\n    \"project\": \"Station Lab\",\n    \"provider\": \"claude-code\",\n    \"model\": \"sonnet\",\n    \"effort\": \"medium\",\n    \"task\": \"почини тесты\",\n    \"expiresAt\": \"2026-11-01T12:01:30Z\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "bb_cancel"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Отменил запуск агента.\",\n  \"details\": {\n    \"cancelled\": true,\n    \"project\": \"Station Lab\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "bb_cancel"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Нечего отменять.\",\n  \"details\": {\n    \"cancelled\": false\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

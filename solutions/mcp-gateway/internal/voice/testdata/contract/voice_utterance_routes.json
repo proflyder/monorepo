@@ -1,0 +1,251 @@
+{
+  "name": "voice_utterance_routes",
+  "description": "Voice routing: personal goes to Hermes, work to the dispatcher thread, an exact exit phrase turns agent mode off, an unknown profile and empty text are 400, agent mode routes personal phrases to the active thread, the exit phrase must match the whole utterance, and a bridge error stays route \"bb\" with ok:false.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "какая погода"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "hermes"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "work",
+          "text": "почини тесты"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 42,
+          "ok": true,
+          "route": "bb",
+          "speech": "Передал в рабочий тред.",
+          "threadId": "thr_work"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "выключи режим агента"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "local",
+          "speech": "Выключил режим агента."
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "личный",
+          "text": "какая погода"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "hermes"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "чужой",
+          "text": "привет"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "local",
+          "speech": "Не понял запрос."
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "   "
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "local",
+          "speech": "Не понял запрос."
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "какая погода"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 42,
+          "ok": true,
+          "route": "bb",
+          "speech": "Передал агенту.",
+          "threadId": "thr_agent"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "выйди из режима агента"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "local",
+          "speech": "Выключил режим агента."
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "не выходи из режима агента"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "hermes"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "work",
+          "text": "почини тесты"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "ok": false,
+          "route": "bb",
+          "speech": "Сервер агентов недоступен.",
+          "threadId": "thr_work"
+        }
+      }
+    }
+  ]
+}

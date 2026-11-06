@@ -1,0 +1,31 @@
+{
+  "name": "voice_result_errors",
+  "description": "A bridge failure on the result route is reported as {\"status\":\"failed\"} with the short spoken line, never as an HTTP error.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/result",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 42,
+          "threadId": "thr_1",
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "speech": "Сервер агентов недоступен.",
+          "status": "failed"
+        }
+      }
+    }
+  ]
+}

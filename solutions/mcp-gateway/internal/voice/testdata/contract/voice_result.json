@@ -1,0 +1,132 @@
+{
+  "name": "voice_result",
+  "description": "Long-polling a turn: done with completedSeq and text, waiting_input with the default speech, failed with the failure speech, running until the deadline, and a negative afterSeq rejected with 400.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/result",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 42,
+          "threadId": "thr_1",
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "completedSeq": 77,
+          "speech": "Готово, тесты починены.",
+          "status": "idle",
+          "text": "details"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/result",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 43,
+          "threadId": "thr_1",
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "speech": "Агент ждёт ответа.",
+          "status": "waiting_input"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/result",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 44,
+          "threadId": "thr_1",
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "speech": "Агент завершил работу с ошибкой.",
+          "status": "failed"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/result",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": 45,
+          "threadId": "thr_1",
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "status": "running"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/result",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "afterSeq": -1,
+          "threadId": "thr_1",
+          "waitSeconds": 1
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "speech": "Не понял запрос.",
+          "status": "failed"
+        }
+      }
+    }
+  ]
+}
