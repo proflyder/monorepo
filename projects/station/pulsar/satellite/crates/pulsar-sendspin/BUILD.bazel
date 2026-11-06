@@ -14,11 +14,13 @@ STATION = ["@zig_0_14_1//:station"]
 DEPS = [
     "//packages/rust/home-linux:home_linux",
     "@crates//:libc",
+    "@crates//:thiserror",
     "@crates//:tracing",
     "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
     "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
+    "//projects/station/pulsar/satellite/crates/pulsar-playback:pulsar_playback",
 ]
 
 # Host build: no PULSAR_SS_BUILD, so build.rs compiles no C++ and leaves cfg

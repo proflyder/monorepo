@@ -5,24 +5,34 @@
 //!
 //! sendspin-cpp is only linked in the station builds (cfg `sendspin_ffi`, set by the Bazel
 //! station configuration; the host build script leaves it unset); elsewhere `spawn` fails with
-//! "sendspin: built without sendspin-cpp".
+//! [`SendspinInitError::Unsupported`]. The event handler, the actor, the stream hold, the
+//! visualizer and the identity store build and are tested on the host without C++.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 use std::path::PathBuf;
 
-// The pure parts below are driven only by the sendspin-cpp build (and the tests).
+use thiserror::Error;
+
+#[cfg_attr(not(sendspin_ffi), allow(dead_code))]
+pub(crate) mod actor;
 #[cfg_attr(not(sendspin_ffi), allow(dead_code))]
 mod event;
 #[cfg_attr(not(sendspin_ffi), allow(dead_code))]
 mod gain;
 #[cfg_attr(not(sendspin_ffi), allow(dead_code))]
-mod hold;
-#[cfg_attr(not(sendspin_ffi), allow(dead_code))]
 mod music;
 #[cfg_attr(not(sendspin_ffi), allow(dead_code))]
-mod persist;
+pub(crate) mod proto;
+#[cfg_attr(not(sendspin_ffi), allow(dead_code))]
+mod secrets;
+#[cfg_attr(not(sendspin_ffi), allow(dead_code))]
+pub(crate) mod state;
+#[cfg_attr(not(sendspin_ffi), allow(dead_code))]
+pub(crate) mod store;
+#[cfg_attr(not(sendspin_ffi), allow(dead_code))]
+pub(crate) mod visualizer;
 
 #[cfg(sendspin_ffi)]
 #[allow(unsafe_code)]
@@ -38,6 +48,17 @@ mod stub;
 pub use service::{SendspinHandle, spawn};
 #[cfg(not(sendspin_ffi))]
 pub use stub::{SendspinHandle, spawn};
+
+pub use store::{FileStore, IdentityStore};
+
+/// Why the Sendspin player did not start.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum SendspinInitError {
+    #[error("sendspin: built without sendspin-cpp")]
+    Unsupported,
+    #[error("sendspin: client start failed")]
+    Start,
+}
 
 pub struct SendspinConfig {
     /// Friendly name shown in Music Assistant.
@@ -81,7 +102,6 @@ pub enum SendspinEvent {
 }
 
 /// Player volume in percent as the protocol carries it (C++ `lround(clamp(v, 0, 1) * 100)`).
-#[cfg_attr(not(sendspin_ffi), allow(dead_code))]
 fn volume_percent(v: f32) -> u8 {
     (v.clamp(0.0, 1.0) * 100.0).round() as u8
 }
@@ -140,9 +160,9 @@ mod tests {
                 .playback,
             port: 0,
         };
-        match spawn(cfg, 0.2, false, 1.0) {
-            Err(e) => assert_eq!(e, "sendspin: built without sendspin-cpp"),
-            Ok(_) => panic!("spawned without sendspin-cpp"),
-        }
+        assert_eq!(
+            spawn(cfg, 0.2, false, 1.0).err(),
+            Some(SendspinInitError::Unsupported)
+        );
     }
 }

@@ -1,0 +1,38 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@crates//:libc",
+    "@crates//:tracing",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+    "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
+]
+
+rust_library(
+    name = "pulsar_playback",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_test(
+    name = "pulsar_playback_unit_tests",
+    crate = ":pulsar_playback",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

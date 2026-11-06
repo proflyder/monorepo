@@ -1,4 +1,4 @@
-//! Build without sendspin-cpp (host `make check`, clippy of the station targets): same API,
+//! Build without sendspin-cpp (host `cargo test`, clippy of the station targets): same API,
 //! `spawn` always fails, so no handle ever exists.
 
 use std::convert::Infallible;
@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use tokio::sync::mpsc::UnboundedReceiver;
 
-use crate::{SendspinConfig, SendspinEvent, Transport};
+use crate::{SendspinConfig, SendspinEvent, SendspinInitError, Transport};
 
 #[derive(Clone)]
 pub struct SendspinHandle {
@@ -17,36 +17,40 @@ pub struct SendspinHandle {
 }
 
 impl SendspinHandle {
-    pub fn streaming(&self) -> bool {
+    fn never<T>(&self) -> T {
         match self.never {}
+    }
+
+    pub fn streaming(&self) -> bool {
+        self.never()
     }
 
     pub fn connected(&self) -> bool {
-        match self.never {}
+        self.never()
     }
 
     pub fn set_duck_gain(&self, _g: f32) {
-        match self.never {}
+        let _: () = self.never();
     }
 
     pub fn report_volume(&self, _volume: f32, _muted: bool) {
-        match self.never {}
+        let _: () = self.never();
     }
 
     pub fn transport(&self, _t: Transport) -> bool {
-        match self.never {}
+        self.never()
     }
 
     pub fn yield_to_local(&self) {
-        match self.never {}
+        let _: () = self.never();
     }
 
     pub fn confirm_pairing_window(&self) {
-        match self.never {}
+        let _: () = self.never();
     }
 
     pub fn goodbye_restart(&self) {
-        match self.never {}
+        let _: () = self.never();
     }
 }
 
@@ -55,6 +59,6 @@ pub fn spawn(
     _volume: f32,
     _muted: bool,
     _master_gain: f32,
-) -> Result<(SendspinHandle, UnboundedReceiver<SendspinEvent>), String> {
-    Err("sendspin: built without sendspin-cpp".into())
+) -> Result<(SendspinHandle, UnboundedReceiver<SendspinEvent>), SendspinInitError> {
+    Err(SendspinInitError::Unsupported)
 }

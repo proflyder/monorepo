@@ -1742,6 +1742,8 @@ dependencies = [
  "pulsar-alsa",
  "pulsar-core",
  "pulsar-model",
+ "pulsar-playback",
+ "thiserror",
  "tokio",
  "tracing",
 ]
@@ -1750,6 +1752,16 @@ dependencies = [
 name = "pulsar-model"
 version = "0.0.0"
 dependencies = [
+ "tracing",
+]
+
+[[package]]
+name = "pulsar-playback"
+version = "0.0.0"
+dependencies = [
+ "libc",
+ "pulsar-alsa",
+ "pulsar-model",
  "tracing",
 ]
 
@@ -1791,6 +1803,8 @@ dependencies = [
  "pulsar-alsa",
  "pulsar-core",
  "pulsar-model",
+ "pulsar-playback",
+ "thiserror",
  "tokio",
  "tracing",
 ]

@@ -8,10 +8,12 @@ publish.workspace = true
 [dependencies]
 libc = { workspace = true }
 libloading = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 pulsar-alsa = { path = "../pulsar-alsa" }
 pulsar-core = { path = "../pulsar-core" }
 pulsar-model = { path = "../pulsar-model" }
+pulsar-playback = { path = "../pulsar-playback" }
 tokio = { workspace = true }
 
 [lints]

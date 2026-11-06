@@ -26,7 +26,8 @@
 | `pulsar-audio` | микрофонный фронтенд (захват → VQE Яндекса → спотеры → поток 16 кГц) и музыкальные признаки опорного сигнала динамика |
 | `pulsar-dsp` | чистый DSP без FFI и модели: типизированное кольцо, уровни dBFS, FFT-спектр, endpoint-детектор, WAV |
 | `pulsar-wake-events` | контракт v1 записи wake-событий: сайдкар/`stats.json` на serde, writer-поток и ретеншн |
-| `pulsar-media` | воспроизведение через GStreamer прошивки (каналы Music / Announce) и `Mixer` |
+| `pulsar-media` | воспроизведение через GStreamer прошивки (каналы Music / Announce) и `Mixer`; чистое ядро, backend GStreamer и ANNOUNCE-вывод разделены |
+| `pulsar-playback` | общий вывод PCM: порт `PcmDevice` (ALSA и fake), открытие/переоткрытие с затворами и backoff, recover после xrun, статистика и политика ANNOUNCE-фида (`OutputTuning`) |
 | `pulsar-sendspin` | Sendspin-плеер на sendspin-cpp через C-шим `shim/` (см. [«Линковка C++ (sendspin-cpp)»](#линковка-c-sendspin-cpp)) |
 | `pulsar-ui` | чистый домен интерфейса: рендер эффектов LED, анимации и шрифт часов, композиция слоёв обоих устройств, доменные типы (`Effect`, `MusicStyle`, `ClockFace`), общий `MusicSource` |
 | `pulsar-hw` | актор кольца LED / логотипа, sysfs/fb/i2c и кнопки; рендер — в `pulsar-ui` |
@@ -365,6 +366,11 @@ flowchart LR
   так: alsasink в GStreamer 1.14 на паузе делает `snd_pcm_drop` (~200 мс речи пропадало на каждой
   паузе по буферизации, пауза длилась ~1,8 с), а с `sync=true` опоздавшие семплы выбрасываются;
   appsink API в библиотеке Midi не экспортирован. fd у `fdsink` меняется только в NULL.
+- Крейт разделён на чистое ядро (`core.rs`: плейлист, ретраи, `PlayState`, `Ramp`,
+  `PlayId`/`Done`), backend GStreamer (`backend.rs` + `gst.rs`) и вывод ANNOUNCE
+  (`pulsar-playback`). GStreamer инициализируется один раз на процесс (`OnceLock`), ошибка —
+  `PlayerInitError`; второй плеер в процессе получает `AlreadyStarted`. `Mixer::open` отдаёт
+  `Result<Mixer, MixerError>`, при ошибке контроллер берёт `Mixer::fallback`.
 - `Mixer::open` берёт raw, только если чтение удалось и raw > 0, иначе громкость 0.5 (0.1 у модели
   с `software_volume`); без контрола
   у модели с `software_volume` (Мини) громкость хранится в памяти, `available() = true`, а
@@ -387,11 +393,20 @@ flowchart LR
 ### `pulsar-sendspin`
 
 - Без sendspin-cpp (host-сборка, cfg `sendspin_ffi` не задан) `spawn` отдаёт
-  `Err("sendspin: built without sendspin-cpp")`.
+  `Err(SendspinInitError::Unsupported)`.
+- Одно состояние: актор, `StreamHold` и визуализатор читают `Status` (одна атомарная пара);
+  `streaming` пишет только `StreamHold`. Все колбэки главного цикла проходят через
+  `EventHandler`: конфигурация sink, лог, событие и край потока — в одном месте.
+- Identity/pairing — за трейтом `IdentityStore`: `FileStore` повторяет формат C++-демона
+  (имена blob-файлов и `unpaired_access` побайтово), `MemoryStore` — для тестов.
 - Конец потока без `stopped` в состоянии группы удерживается 1 с (sink освобождается сразу):
   перезапуск потока сервером (seek / skip) не дёргает состояние медиаплеера в HA и музыкальные
   дисплеи. `stopped` завершает удерживаемый конец сразу.
 - `yield_to_local()` только шлёт `client/leave`, `streaming` синхронно не меняет.
+- Секреты не попадают в лог: `fprintf` библиотеки на станции собран как
+  `-Dfprintf=pulsar_filtered_fprintf` и проходит через Rust-редактор `secrets::redact`
+  (PSK-значение и `SP:`-токены маскируются).
+  Токен никогда не логируется; сопряжение идёт по шестизначному коду на часах/в журнале.
 - Выход по рестарту (`enabled` существует: `ctl.sh restart|reload`, HA Restart, обновление)
   отправляет `client/goodbye` с причиной `restart` до остановки клиента: по протоколу только
   `restart` разрешает серверу (Music Assistant) переподключиться. Библиотечный `stop()` иначе

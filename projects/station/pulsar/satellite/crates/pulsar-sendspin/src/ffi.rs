@@ -197,60 +197,34 @@ pub(crate) fn set_log_level_info() {
     ss_set_log_level(3);
 }
 
+/// The C `fprintf` wrapper of the shim calls this for every line of the library's host log.
+///
+/// # Safety
+/// `input` holds `len` readable bytes; `out` holds `cap` writable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pulsar_redact_line(
+    input: *const u8,
+    len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    // SAFETY: forwarded caller contract.
+    let line = unsafe { std::slice::from_raw_parts(input, len) };
+    let text = String::from_utf8_lossy(line);
+    let redacted = crate::secrets::redact(&text);
+    let bytes = redacted.as_bytes();
+    let n = bytes.len().min(cap);
+    // SAFETY: `out` is writable for `cap` bytes; `n <= cap`.
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, n) };
+    n
+}
+
 /// The library's clock in µs, any thread: deadlines and notify_audio_played timestamps.
 pub(crate) fn now_us() -> i64 {
     ss_now_us()
 }
 
-/// sendspin::SendspinCodecFormat.
-#[derive(Clone, Copy)]
-pub(crate) enum Codec {
-    Flac = 0,
-    Opus = 1,
-    Pcm = 2,
-}
-
-/// sendspin::VisualizerDataType (the ones the service asks for).
-#[derive(Clone, Copy)]
-pub(crate) enum VisType {
-    Beat = 0,
-    Loudness = 1,
-    Spectrum = 3,
-}
-
-/// sendspin::VisualizerSpectrumScale.
-#[derive(Clone, Copy)]
-pub(crate) enum Scale {
-    Log = 1,
-}
-
-/// sendspin::SendspinControllerCommand (transport subset).
-#[derive(Clone, Copy)]
-pub(crate) enum Command {
-    Play = 0,
-    Pause = 1,
-    Stop = 2,
-    Next = 3,
-    Previous = 4,
-}
-
-pub(crate) struct Format {
-    pub codec: Codec,
-    pub channels: u8,
-    pub rate: u32,
-    pub bits: u8,
-}
-
-pub(crate) struct Visualizer<'a> {
-    pub buffer_capacity: usize,
-    pub types: &'a [VisType],
-    pub rate_max: u16,
-    pub bins: u8,
-    pub scale: Scale,
-    pub f_min: u16,
-    pub f_max: u16,
-    pub display_offset_ms: i32,
-}
+pub(crate) use crate::proto::{Codec, Command, Format, Scale, VisType, Visualizer};
 
 pub(crate) struct Config<'a> {
     pub name: &'a str,
