@@ -49,8 +49,8 @@ pub struct SendspinConfig {
     pub mac: String,
     /// Identity / pairing persistence directory (created 0700 if missing, not recursively).
     pub state_dir: PathBuf,
-    /// Model of this station: playback PCM and output gates.
-    pub model: &'static pulsar_core::model::Model,
+    /// Playback PCM and output gates of this station.
+    pub playback: &'static pulsar_model::Playback,
     pub port: u16,
 }
 
@@ -134,7 +134,10 @@ mod tests {
             software_version: String::new(),
             mac: String::new(),
             state_dir: PathBuf::from("/nonexistent"),
-            model: pulsar_core::model::model_from_dt_id(b"axg_s420_v03").unwrap(),
+            playback: &pulsar_model::profile_from_dt_id(b"axg_s420_v03")
+                .unwrap()
+                .audio
+                .playback,
             port: 0,
         };
         match spawn(cfg, 0.2, false, 1.0) {

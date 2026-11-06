@@ -508,7 +508,7 @@ impl Controller {
                     if up { "volume_up" } else { "volume_down" },
                 );
                 self.set_volume(
-                    pulsar_core::volume::step_level(self.model, self.st.volume, up),
+                    pulsar_core::volume::step_level(&self.model.volume, self.st.volume, up),
                     true,
                 );
             }

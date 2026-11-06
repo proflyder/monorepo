@@ -11,6 +11,7 @@ libloading = { workspace = true }
 tracing = { workspace = true }
 pulsar-alsa = { path = "../pulsar-alsa" }
 pulsar-core = { path = "../pulsar-core" }
+pulsar-model = { path = "../pulsar-model" }
 tokio = { workspace = true }
 
 [lints]

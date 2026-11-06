@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use pulsar_alsa::{Format, HwRequest, HwTrace, Pcm, Stream};
 use pulsar_core::MusicFrame;
-use pulsar_core::model::{CaptureFormat, Model, PrerollRule};
+use pulsar_model::{Capture as CaptureLayout, CaptureFormat, Preroll, PrerollRule};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::{error, info, warn};
 
@@ -64,7 +64,7 @@ pub enum FrontendEvent {
         phrase: String,
         level_db: f32,
         /// 16 kHz mono audio from the end of the wake word up to and including the confirming
-        /// chunk, oldest first; empty without values for the model (`Model::wake_preroll`).
+        /// chunk, oldest first; empty without values for the model (`Preroll`).
         /// The `Audio` events after it continue it without a gap until
         /// [`FrontendHandle::wake_handled`].
         preroll: Vec<i16>,
@@ -113,7 +113,8 @@ pub struct FrontendHandle {
 /// the handle works but no event ever comes. A capture device that cannot be opened is retried
 /// every 2 s.
 pub fn spawn(
-    model: &'static Model,
+    capture: &'static CaptureLayout,
+    preroll: Option<&'static Preroll>,
     wake_model_dir: &Path,
     custom_wake_model: Option<&Path>,
     custom_active: bool,
@@ -147,7 +148,7 @@ pub fn spawn(
     };
     let command_dir = command_model_dir.filter(|d| !d.as_os_str().is_empty());
     let started = Engine::start(
-        model,
+        capture,
         wake_model_dir,
         custom_wake_model,
         command_dir.as_deref(),
@@ -156,7 +157,7 @@ pub fn spawn(
     .is_some_and(|eng| {
         inner.frame = eng.frame();
         inner
-            .start_threads(model, eng, tx)
+            .start_threads(capture, preroll, eng, tx)
             .inspect_err(|e| error!("audio threads: {e}"))
             .is_ok()
     });
@@ -209,7 +210,7 @@ impl FrontendHandle {
             .try_update(AcqRel, Acquire, |v| v.checked_sub(1));
     }
 
-    /// Pre-roll in [`FrontendEvent::Wake`] on/off (`Model::wake_preroll`). On by default; the
+    /// Pre-roll in [`FrontendEvent::Wake`] on/off (`Preroll`). On by default; the
     /// stream hold after a `Wake` does not depend on it.
     pub fn set_preroll(&self, on: bool) {
         self.inner.shared.preroll.store(on, Relaxed);
@@ -385,15 +386,16 @@ struct Inner {
 impl Inner {
     fn start_threads(
         &mut self,
-        model: &'static Model,
+        capture: &'static CaptureLayout,
+        preroll: Option<&'static Preroll>,
         eng: Engine,
         tx: UnboundedSender<FrontendEvent>,
     ) -> std::io::Result<()> {
-        let nch = model.capture_channels as usize;
+        let nch = capture.channels as usize;
         let period = eng.chunk;
         let pipe = Arc::new(Pipe {
             // 1 s of audio.
-            fifo: Mutex::new(Fifo::new(nch, period, model.capture_rate as usize)),
+            fifo: Mutex::new(Fifo::new(nch, period, capture.rate as usize)),
             ready: Condvar::new(),
         });
         self.pipe = Some(pipe.clone());
@@ -402,7 +404,7 @@ impl Inner {
         self.threads.push(
             std::thread::Builder::new()
                 .name("audio-capture".into())
-                .spawn(move || capture(model, period, &shared, &p))?,
+                .spawn(move || capture_thread(capture, period, &shared, &p))?,
         );
         let shared = self.shared.clone();
         let wake = self.wake.as_ref().and_then(WakeEventsRuntime::input);
@@ -410,7 +412,7 @@ impl Inner {
             std::thread::Builder::new()
                 .name("audio-process".into())
                 .stack_size(PROCESSING_STACK)
-                .spawn(move || processing(model, eng, &shared, &pipe, &tx, wake))?,
+                .spawn(move || processing(capture, preroll, eng, &shared, &pipe, &tx, wake))?,
         );
         Ok(())
     }
@@ -548,14 +550,14 @@ fn s32_to_s16(src: &[i32], shift: u32, dst: &mut [i16]) {
     }
 }
 
-fn capture(model: &'static Model, period: usize, shared: &Shared, pipe: &Pipe) {
-    let nch = model.capture_channels as usize;
+fn capture_thread(capture: &'static CaptureLayout, period: usize, shared: &Shared, pipe: &Pipe) {
+    let nch = capture.channels as usize;
     let mut pcm: Option<Pcm> = None;
     let mut hw_period = period;
-    let mut buf = CaptureBuf::new(model.capture_format, period * nch);
+    let mut buf = CaptureBuf::new(capture.format, period * nch);
     while shared.running() {
         let Some(p) = pcm.as_mut() else {
-            match open_capture(model, period) {
+            match open_capture(capture, period) {
                 Some((p, per)) => {
                     pcm = Some(p);
                     hw_period = per;
@@ -640,9 +642,9 @@ pub fn hw_outcome(t: &HwTrace, rate: u32) -> Result<(u64, u64), HwFail> {
 /// silent rate mismatch would feed the VQE and spotters wrongly timed audio), period = one VQE
 /// chunk, buffer = 8. The period may differ (the FIFO decouples ALSA periods from VQE chunks).
 /// Returns the PCM and the frames to read at once.
-fn open_capture(model: &Model, period: usize) -> Option<(Pcm, usize)> {
-    let dev = model.capture_pcm;
-    let format = match model.capture_format {
+fn open_capture(capture: &CaptureLayout, period: usize) -> Option<(Pcm, usize)> {
+    let dev = capture.pcm;
+    let format = match capture.format {
         CaptureFormat::S16 => Format::S16Le,
         CaptureFormat::S32 { .. } => Format::S32Le,
     };
@@ -656,19 +658,19 @@ fn open_capture(model: &Model, period: usize) -> Option<(Pcm, usize)> {
     };
     let t = pcm.set_hw_params_traced(&HwRequest {
         format,
-        channels: model.capture_channels,
-        rate: model.capture_rate,
+        channels: capture.channels,
+        rate: capture.rate,
         rate_exact: false,
         period_frames: Some(period as u64),
         buffer_frames: Some(period as u64 * BUFFER_CHUNKS),
     });
-    match hw_outcome(&t, model.capture_rate) {
+    match hw_outcome(&t, capture.rate) {
         Ok((per, buf)) => {
             info!(
                 "capture {dev}: {} Hz, {} ch, {} bits, period {per}, buffer {buf}",
                 t.near.rate,
-                model.capture_channels,
-                model.capture_format.bits()
+                capture.channels,
+                capture.format.bits()
             );
             let per = usize::try_from(per).unwrap_or(usize::MAX);
             Some((pcm, per.min(period)))
@@ -678,7 +680,7 @@ fn open_capture(model: &Model, period: usize) -> Option<(Pcm, usize)> {
             None
         }
         Err(HwFail::Rate(got)) => {
-            error!("capture {dev}: rate {got} Hz, need {}", model.capture_rate);
+            error!("capture {dev}: rate {got} Hz, need {}", capture.rate);
             error!("capture {dev}: rate: unexpected value");
             None
         }
@@ -863,8 +865,12 @@ fn preroll_chunks(rule: Option<PrerollRule>, first_stage_age: Option<usize>) -> 
 
 /// Pre-roll rule for the active detector. The custom Ricardo detector has no stock model
 /// directory, so its id is not `Engine::wake_id` (which still points at the native «Алиса»
-/// model kept for rollback) but the `ricardo` entry of `Model::wake_preroll`.
-fn wake_preroll_rule(model: &Model, shared: &Shared, stock_id: &str) -> Option<PrerollRule> {
+/// model kept for rollback) but the `ricardo` entry of `Preroll`.
+fn wake_preroll_rule(
+    preroll: Option<&'static Preroll>,
+    shared: &Shared,
+    stock_id: &str,
+) -> Option<PrerollRule> {
     if !shared.preroll.load(Relaxed) {
         return None;
     }
@@ -873,11 +879,7 @@ fn wake_preroll_rule(model: &Model, shared: &Shared, stock_id: &str) -> Option<P
     } else {
         stock_id
     };
-    model
-        .wake_preroll
-        .iter()
-        .find(|p| p.id == id)
-        .map(|p| p.rule)
+    preroll?.rules.iter().find(|p| p.id == id).map(|p| p.rule)
 }
 
 /// "-" for None in the "wake timing" log.
@@ -910,7 +912,8 @@ impl WakeState {
 }
 
 fn processing(
-    model: &'static Model,
+    capture: &'static CaptureLayout,
+    preroll: Option<&'static Preroll>,
     mut eng: Engine,
     shared: &Shared,
     pipe: &Pipe,
@@ -918,8 +921,8 @@ fn processing(
     wake_input: Option<WakeInput>,
 ) {
     let period = eng.chunk;
-    let nch = model.capture_channels as usize;
-    let (mic_ch, spk_ch) = (model.mic_channels, model.spk_channels);
+    let nch = capture.channels as usize;
+    let (mic_ch, spk_ch) = (capture.mic_channels, capture.spk_channels);
     let nspk = spk_ch.len();
     let mut input = vec![0i16; period * nch];
     let mut mics = vec![0f32; period * mic_ch.len()];
@@ -930,7 +933,7 @@ fn processing(
     let mut gain_hist = [0f32; LEVEL_CHUNKS];
     let mut gain_pos = 0;
     let mut gain_filled = 0usize;
-    let mut ana = SpectrumAnalyzer::new(model.capture_rate, period);
+    let mut ana = SpectrumAnalyzer::new(capture.rate, period);
     if !ana.ok() {
         warn!("music analysis: unsupported capture layout");
     }
@@ -1108,7 +1111,7 @@ fn processing(
                 let level_db = wake_level_db(&level_hist.values);
                 let speech_end = level_hist.speech_end(frame);
                 let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
-                let rule = wake_preroll_rule(model, shared, "ricardo");
+                let rule = wake_preroll_rule(preroll, shared, "ricardo");
                 let n = preroll_chunks(rule, None).min(ring.chunks());
                 let preroll = ring.last(n);
                 info!(
@@ -1141,7 +1144,7 @@ fn processing(
                 let level_db = wake_level_db(&level_hist.values);
                 let speech_end = level_hist.speech_end(frame);
                 let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
-                let rule = wake_preroll_rule(model, shared, eng.wake_id());
+                let rule = wake_preroll_rule(preroll, shared, eng.wake_id());
                 let n = preroll_chunks(rule, first_stage_age).min(ring.chunks());
                 let preroll = ring.last(n);
                 info!(
@@ -1177,7 +1180,7 @@ fn processing(
 mod tests {
     use super::*;
     use pulsar_alsa::HwResult;
-    use pulsar_core::model::model_from_compatible;
+    use pulsar_model::profile_from_compatible;
 
     #[test]
     fn s32_capture_keeps_the_top_16_of_24_bits() {
@@ -1301,18 +1304,18 @@ mod tests {
 
     #[test]
     fn ricardo_preroll_rule_uses_the_custom_id() {
-        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
+        let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
         // The custom detector is active: the stock model id ("alisa", kept for rollback) must
         // not select the rule, or the Ricardo word loses its pre-roll.
         let custom = Shared::new(true);
         assert_eq!(
-            wake_preroll_rule(midi, &custom, "alisa"),
+            wake_preroll_rule(midi.wake_preroll.as_ref(), &custom, "alisa"),
             Some(PrerollRule::Fixed(8))
         );
         // Switched back to a stock spotter: the custom entry no longer applies.
         let stock = Shared::new(false);
         assert_eq!(
-            wake_preroll_rule(midi, &stock, "alisa"),
+            wake_preroll_rule(midi.wake_preroll.as_ref(), &stock, "alisa"),
             Some(PrerollRule::Fixed(2))
         );
     }
@@ -1321,12 +1324,12 @@ mod tests {
     fn ricardo_preroll_is_the_last_256_ms_of_the_ring() {
         const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
         const RING_CHUNKS: usize = PREROLL_SAMPLES / FRAME;
-        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
+        let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
         let mut ring = PrerollRing::new(RING_CHUNKS, FRAME);
         for k in 0..RING_CHUNKS {
             ring.push(&[k as f32 / 32768.0; FRAME]);
         }
-        let rule = wake_preroll_rule(midi, &Shared::new(true), "ricardo");
+        let rule = wake_preroll_rule(midi.wake_preroll.as_ref(), &Shared::new(true), "ricardo");
         let n = preroll_chunks(rule, None);
         assert_eq!(n, 8);
         let preroll = ring.last(n);
@@ -1339,10 +1342,13 @@ mod tests {
 
     #[test]
     fn preroll_off_is_empty_but_the_wake_hold_is_separate() {
-        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
+        let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
         let shared = Shared::new(true);
         shared.preroll.store(false, Relaxed);
-        let n = preroll_chunks(wake_preroll_rule(midi, &shared, "ricardo"), None);
+        let n = preroll_chunks(
+            wake_preroll_rule(midi.wake_preroll.as_ref(), &shared, "ricardo"),
+            None,
+        );
         assert_eq!(n, 0);
         let mut ring = PrerollRing::new(PREROLL_SAMPLES / 512, 512);
         ring.push(&[0.5; 512]);
@@ -1359,33 +1365,34 @@ mod tests {
 
     #[test]
     fn deinterleave_supported_layouts() {
-        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-        let lite2 = model_from_compatible(b"yandex,plum\0").unwrap();
-        let mini3 = model_from_compatible(b"yandex,bergamot\0").unwrap();
+        let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
+        let lite2 = profile_from_compatible(b"yandex,plum\0").unwrap();
+        let mini3 = profile_from_compatible(b"yandex,bergamot\0").unwrap();
         for m in [midi, lite2, mini3] {
-            let nch = m.capture_channels as usize;
+            let cap = &m.audio.capture;
+            let nch = cap.channels as usize;
             let frames = 4;
             // Sample = frame * 100 + channel.
             let input: Vec<i16> = (0..frames * nch)
                 .map(|s| ((s / nch) * 100 + s % nch) as i16)
                 .collect();
-            let mut mics = vec![0.0; frames * m.mic_channels.len()];
-            let mut spk = vec![0.0; frames * m.spk_channels.len()];
+            let mut mics = vec![0.0; frames * cap.mic_channels.len()];
+            let mut spk = vec![0.0; frames * cap.spk_channels.len()];
             deinterleave(
                 &input,
                 nch,
-                m.mic_channels,
-                m.spk_channels,
+                cap.mic_channels,
+                cap.spk_channels,
                 &mut mics,
                 &mut spk,
             );
             let v = |frame: usize, ch: u32| (frame * 100 + ch as usize) as f32 / 32768.0;
             for i in 0..frames {
-                for (c, &ch) in m.mic_channels.iter().enumerate() {
-                    assert_eq!(mics[i * m.mic_channels.len() + c], v(i, ch));
+                for (c, &ch) in cap.mic_channels.iter().enumerate() {
+                    assert_eq!(mics[i * cap.mic_channels.len() + c], v(i, ch));
                 }
-                for (c, &ch) in m.spk_channels.iter().enumerate() {
-                    assert_eq!(spk[i * m.spk_channels.len() + c], v(i, ch));
+                for (c, &ch) in cap.spk_channels.iter().enumerate() {
+                    assert_eq!(spk[i * cap.spk_channels.len() + c], v(i, ch));
                 }
             }
         }
@@ -1398,8 +1405,8 @@ mod tests {
         deinterleave(
             &input,
             8,
-            lite2.mic_channels,
-            lite2.spk_channels,
+            lite2.audio.capture.mic_channels,
+            lite2.audio.capture.spk_channels,
             &mut mics,
             &mut spk,
         );
@@ -1513,8 +1520,16 @@ mod tests {
     #[test]
     fn without_the_yandex_library_the_handle_is_degraded() {
         // No /system/vendor/quasar/libs on the build host: dlopen fails.
-        let midi = model_from_compatible(b"yandex,cucumber\0").unwrap();
-        let (h, mut rx) = spawn(midi, Path::new("/nonexistent"), None, false, None, None);
+        let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
+        let (h, mut rx) = spawn(
+            &midi.audio.capture,
+            midi.wake_preroll.as_ref(),
+            Path::new("/nonexistent"),
+            None,
+            false,
+            None,
+            None,
+        );
         h.set_streaming(true);
         h.set_model(PathBuf::from("/nonexistent/2"));
         let h2 = h.clone();

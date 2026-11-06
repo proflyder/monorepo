@@ -17,6 +17,7 @@ pulsar-hw = { path = "../pulsar-hw" }
 pulsar-arbiter = { path = "../pulsar-arbiter" }
 pulsar-mdns = { path = "../pulsar-mdns" }
 pulsar-media = { path = "../pulsar-media" }
+pulsar-model = { path = "../pulsar-model" }
 pulsar-sendspin = { path = "../pulsar-sendspin" }
 pulsar-update = { path = "../pulsar-update" }
 pulsar-zigbee = { path = "../pulsar-zigbee" }

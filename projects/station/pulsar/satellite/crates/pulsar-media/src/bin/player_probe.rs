@@ -247,13 +247,13 @@ fn main() -> ExitCode {
     let t0 = pulsar_core::now_ms();
     let ts = || (pulsar_core::now_ms() - t0) as f64 / 1000.0;
 
-    let Some(model) = pulsar_core::model::detect_model() else {
+    let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::FAILURE;
     };
-    pulsar_alsa::init(model);
+    pulsar_alsa::init(&model.audio.playback);
     // Test sounds only with the volume capped: without the control there is no cap.
-    let mut mx = Mixer::open(model);
-    let software = model.software_volume;
+    let mut mx = Mixer::open(&model.audio.playback, &model.volume);
+    let software = model.volume.software_volume;
     let ctl = (!software)
         .then(|| pulsar_alsa::Ctl::open("hw:0").ok())
         .flatten();
@@ -311,8 +311,8 @@ fn main() -> ExitCode {
     } else {
         mx.volume().min(MAX_TEST_VOLUME)
     };
-    let cap = pulsar_core::volume::to_raw(model, MAX_TEST_VOLUME);
-    let want = pulsar_core::volume::to_raw(model, volume);
+    let cap = pulsar_core::volume::to_raw(&model.volume, MAX_TEST_VOLUME);
+    let want = pulsar_core::volume::to_raw(&model.volume, volume);
     mx.set_volume(volume);
     println!(
         "[{:6.2}] set_volume({volume:.3}): expect values={want},{want}",
@@ -353,11 +353,11 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let (player, mut rx) = spawn(model);
+    let (player, mut rx) = spawn(&model.audio.playback);
     // The mixer's master is already in the signal on hardware models; a software master has to
     // go into the channel gains the same way the controller does it.
     let master = if software {
-        pulsar_core::volume::master_gain(model, volume)
+        pulsar_core::volume::master_gain(&model.volume, volume)
     } else {
         1.0
     };

@@ -109,5 +109,5 @@ maind играет звук громкости (sound 45, SimpleVolumeTonePlayer
    обрезано.
 
 Значения и заметки о замерах по моделям записаны в комментариях у `*_PREROLL` в
-[`pulsar-core/src/model.rs`](../satellite/crates/pulsar-core/src/model.rs). Мини 3 —
+[`pulsar-model/src/profile.rs`](../satellite/crates/pulsar-model/src/profile.rs). Мини 3 —
 [mini3.md](mini3.md).

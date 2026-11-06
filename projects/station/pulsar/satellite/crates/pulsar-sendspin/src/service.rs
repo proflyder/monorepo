@@ -242,7 +242,7 @@ pub fn spawn(
     let initial_gain = if muted { 0.0 } else { master_gain };
     let ctx = Arc::new(Ctx {
         events: Mutex::new(Vec::new()),
-        sink: Sink::new(cfg.model),
+        sink: Sink::new(cfg.playback),
         state_dir: cfg.state_dir.clone(),
         tx,
         hooks: AtomicBool::new(true),
@@ -587,7 +587,12 @@ mod tests {
         let (tx, rx) = unbounded_channel();
         let ctx = Ctx {
             events: Mutex::new(Vec::new()),
-            sink: Sink::new(pulsar_core::model::model_from_dt_id(b"axg_s420_v03").unwrap()),
+            sink: Sink::new(
+                pulsar_model::profile_from_dt_id(b"axg_s420_v03")
+                    .unwrap()
+                    .audio
+                    .playback,
+            ),
             state_dir: PathBuf::from("/nonexistent"),
             tx,
             hooks: AtomicBool::new(true),

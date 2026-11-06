@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
 
-use pulsar_core::model::Model;
-use pulsar_esphome::{DeviceIdentity, MediaState, VaEvent};
+use pulsar_esphome::{Capabilities, DeviceIdentity, MediaState, VaEvent};
 use pulsar_hw::Rgb;
 use pulsar_media::PlayState;
+use pulsar_model::{DeviceProfile, Identity};
 
 /// After the wake word a stock command ("Алиса, громче") is handled locally if it is heard
 /// within this window; the HA pipeline is then cancelled.
@@ -99,7 +99,7 @@ pub fn in_dir(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
 /// The ESPHome device: `host_prefix` + the last 6 hex digits of the wlan0 MAC (lowercase), the
 /// MAC itself in uppercase. `mac_line`: the first line of /sys/class/net/wlan0/address.
 pub fn identity(
-    model: &Model,
+    identity: &Identity,
     mac_line: &str,
     version: &str,
     compilation_time: &str,
@@ -116,14 +116,43 @@ pub fn identity(
         &plain[..]
     };
     DeviceIdentity {
-        name: format!("{}{suffix}", model.host_prefix),
-        friendly_name: model.friendly_name.into(),
+        name: format!("{}{suffix}", identity.host_prefix),
+        friendly_name: identity.friendly_name.into(),
         mac,
-        model: model.model_name.into(),
-        board: model.codename.into(),
+        model: identity.model_name.into(),
+        board: identity.codename.into(),
         manufacturer: "Yandex".into(),
         project_version: version.into(),
         compilation_time: compilation_time.into(),
+    }
+}
+
+/// Which ESPHome entities this station gets, from the profile and the services that actually
+/// opened. Called once when the services are built.
+pub fn capabilities(
+    profile: &DeviceProfile,
+    panel_present: bool,
+    lux_present: bool,
+    case_colors: bool,
+    voice_colors: bool,
+    zigbee: bool,
+) -> Capabilities {
+    Capabilities {
+        clock: profile
+            .clock
+            .as_ref()
+            .is_some_and(|panel| !panel.optional || panel_present),
+        lux: profile
+            .lux
+            .as_ref()
+            .is_some_and(|sensor| !sensor.optional || lux_present),
+        auto_brightness: lux_present,
+        wake_preroll: profile.wake_preroll.is_some(),
+        hw_mic_mute: profile.input.hardware_mute(),
+        buttons: profile.input.has_button_events(),
+        case_colors,
+        voice_colors,
+        zigbee,
     }
 }
 

@@ -17,7 +17,8 @@
 | Крейт | Ответственность |
 |---|---|
 | `pulsar` | демон: рантайм и завершение (`main.rs`), контроллер — вся логика сателлита, `state.conf`, отчёт о падении |
-| `pulsar-core` | общие части: слои `tracing` (stderr-контракт и ESPHome-sink), супервизор акторов, таймеры, `Model` (описание железа модели), громкость, мелкие общие типы |
+| `pulsar-core` | общие части: слои `tracing` (stderr-контракт и ESPHome-sink), супервизор акторов, таймеры, громкость, мелкие общие типы |
+| `pulsar-model` | описание железа модели: `DeviceProfile` из capability-структур (`Identity`, `Audio`, `VolumeCurve`, `Leds`, `Option<ClockPanel>`, `Input`, `Option<LightSensor>`, `Option<ZigbeeRadio>`, `Earcons`, `Option<Preroll>`) и детект по devicetree / `quasar.cfg` |
 | `pulsar-alsa` | libasound прошивки, загружаемая через dlopen; обёртки PCM / ctl |
 | `pulsar-esphome` | сервер ESPHome Native API (plaintext / Noise) |
 | `pulsar-mdns` | mDNS-респондер: чистое DNS-ядро и UDP/rtnetlink-адаптер |
@@ -221,10 +222,10 @@ flowchart LR
 
 ### `pulsar-alsa`
 
-- `init(model)` зовётся в `main` до старта рантайма, потоков и библиотек (`pulsar-alsa` нельзя
-  грузить до этого): `Model::apply_env` задаёт `ALSA_CONFIG_PATH` (только Мини —
+- `init(playback)` зовётся в `main` до старта рантайма, потоков и библиотек (`pulsar-alsa` нельзя
+  грузить до этого): `Playback::apply_env` задаёт `ALSA_CONFIG_PATH` (только Мини —
   `/data/pulsar/asound.conf`, и только если файл есть; иначе ошибка в логе), а путь к libasound —
-  из `Model::alsa_lib`; у Мини это абсолютный `/system/vendor/quasar/libs/libasound.so.2`, потому
+  из `Playback::alsa_lib`; у Мини это абсолютный `/system/vendor/quasar/libs/libasound.so.2`, потому
   что каталог прошивки вне путей поиска загрузчика. С таким путём `init` сразу загружает
   библиотеку (RTLD_GLOBAL), до GStreamer: `NEEDED libasound.so.2` у `libquasar_gstreamer.so`
   тогда разрешается в эту копию по SONAME, есть у неё RUNPATH или нет (на Мини не проверено).
@@ -281,7 +282,7 @@ flowchart LR
   фронтенд не падает.
 - `stats()` / `frame()` / `set_raw_tap()` — только для `frontend_probe`: счётчики потоков, размер
   аудиочанка и сырой захват для `--record`. Формат захвата задаёт
-  `pulsar_core::model::CaptureFormat` (`S16`, либо `S32 { shift }` — S32_LE с right-justified 24
+  `pulsar_model::CaptureFormat` (`S16`, либо `S32 { shift }` — S32_LE с right-justified 24
   битами, Мини: `shift=8`); перед VQE сэмпл приводится к i16 со сдвигом и насыщением.
 - Уровень wake word для арбитража и FFT светомузыки считаются блоками по 512 сэмплов (32 мс при
   16 кГц) независимо от чанка VQE: `LevelHistory` и `SpectrumAnalyzer` копят 16-мс чанки Мини 3 и
@@ -295,7 +296,7 @@ flowchart LR
   Миди событие 3 приходит в одном чанке с подтверждением 5 и ничего не отсчитывает; у всех
   `Fixed`. Поток обработки держит кольцо последних 1,024 с `VQE_OMNI_WITH_GAIN` (32 чанка по
   32 мс, на Мини 3 и Мини — 64 по 16 мс) и кладёт в `FrontendEvent::Wake { preroll }` звук от конца
-  слова до подтверждающего чанка включительно. Длина — правило из `Model::wake_preroll` для id
+  слова до подтверждающего чанка включительно. Длина — правило из `Preroll` для id
   модели (имя каталога, `alisa` / `yandex`) или для `ricardo`, когда активен кастомный детектор (его
   нативный каталог остаётся `alisa` как путь отката): чанки после 1-й стадии плюс смещение или
   фиксированное число; id без правила — пустой пре-ролл (у Мини правил нет). Значения берутся с
@@ -339,7 +340,7 @@ flowchart LR
   `pulsar_alsa::quiet_error_handler()`.
 - ANNOUNCE не играет через alsasink: playbin декодирует в `fdsink` на socketpair (S16LE 48 кГц
   стерео), поток-читатель на каждый url складывает PCM в очередь (до 1 с, дальше декодер ждёт),
-  один поток-писатель (`pcm_out.rs`) пишет его в `Model::playback_pcm`. Писатель начинает, когда
+  один поток-писатель (`pcm_out.rs`) пишет его в `Playback::pcm`. Писатель начинает, когда
   набралось 200 мс (или пришёл конец url); сообщения буферизации ANNOUNCE не ставят на паузу.
   Если очередь пуста, а в устройстве меньше двух периодов, писатель подкладывает тишину и снова
   ждёт 200 мс: устройство не опустевает (dmix, перезапущенный после опустения, терял ~60 мс

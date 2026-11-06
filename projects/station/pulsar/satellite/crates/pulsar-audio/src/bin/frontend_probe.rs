@@ -17,7 +17,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use pulsar_audio::{FrontendEvent, FrontendStats};
-use pulsar_core::model::Model;
+use pulsar_model::{Capture, DeviceProfile};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::{Instant, MissedTickBehavior};
 
@@ -111,16 +111,16 @@ struct Recorder {
 }
 
 impl Recorder {
-    fn create(path: PathBuf, m: &Model, seconds: u64) -> std::io::Result<Self> {
+    fn create(path: PathBuf, m: &Capture, seconds: u64) -> std::io::Result<Self> {
         let mut file = BufWriter::new(File::create(&path)?);
-        let channels = m.capture_channels as u16;
-        file.write_all(&wav_header(channels, m.capture_rate, 0))?;
+        let channels = m.channels as u16;
+        file.write_all(&wav_header(channels, m.rate, 0))?;
         Ok(Self {
             file,
             path,
             channels,
-            rate: m.capture_rate,
-            left: seconds * u64::from(m.capture_rate) * u64::from(channels),
+            rate: m.rate,
+            left: seconds * u64::from(m.rate) * u64::from(channels),
             samples: 0,
         })
     }
@@ -161,10 +161,10 @@ impl Recorder {
 fn main() -> ExitCode {
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
-    let Some(m) = pulsar_core::model::detect_model() else {
+    let Some(m) = pulsar_model::detect_profile() else {
         return ExitCode::from(1);
     };
-    pulsar_alsa::init(m);
+    pulsar_alsa::init(&m.audio.playback);
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(a) => a,
         Err(e) => {
@@ -193,11 +193,11 @@ fn main() -> ExitCode {
 }
 
 /// Ok(false): no VQE chunk was processed.
-async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
+async fn run(m: &'static DeviceProfile, a: Args) -> std::io::Result<bool> {
     out!(
         "frontend_probe: {} ({}), {} s, wake {}, stream {}, music {}, commands {}{}",
-        m.model_name,
-        m.codename,
+        m.identity.model_name,
+        m.identity.codename,
         a.seconds,
         a.wake,
         on(a.stream),
@@ -210,13 +210,14 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
         ))
     );
     let mut recorder = match a.record {
-        Some((path, secs)) => Some(Recorder::create(path, m, secs)?),
+        Some((path, secs)) => Some(Recorder::create(path, &m.audio.capture, secs)?),
         None => None,
     };
     let custom = a.wake == "ricardo";
     let native = if custom { "alisa" } else { &a.wake };
     let (h, mut rx) = pulsar_audio::spawn(
-        m,
+        &m.audio.capture,
+        m.wake_preroll.as_ref(),
         &PathBuf::from(format!("{MODELS}{native}")),
         custom.then(|| Path::new(RICARDO_MODEL)),
         custom,
@@ -297,7 +298,7 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
                     music - prev_counts.1,
                     s.captured_frames - prev.captured_frames,
                     s.fifo_frames,
-                    s.fifo_frames as f64 * 1000.0 / f64::from(m.capture_rate),
+                    s.fifo_frames as f64 * 1000.0 / f64::from(m.audio.capture.rate),
                     s.dropped_frames,
                 );
                 prev = s;
@@ -335,7 +336,7 @@ async fn run(m: &'static Model, a: Args) -> std::io::Result<bool> {
                 (audio - audio0) as f64 / dt,
                 (music - music0) as f64 / dt,
                 (s.captured_frames - s0.captured_frames) as f64 / dt,
-                m.capture_rate
+                m.audio.capture.rate
             );
         }
     }

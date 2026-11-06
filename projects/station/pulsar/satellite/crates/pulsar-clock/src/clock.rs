@@ -40,11 +40,11 @@ use std::os::fd::AsRawFd as _;
 use std::path::PathBuf;
 
 use home_linux as sysfs;
-use pulsar_core::model::Model;
 use pulsar_core::{
     AmbientDimmer, ClockShot, MUSIC_STALE_MS, MusicFrame, SENDSPIN_FRESH_MS, Timers, UiState,
     now_ms,
 };
+use pulsar_model::ClockPanel;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -525,23 +525,23 @@ fn write_int(f: &File, v: i32) -> bool {
 }
 
 impl Leds {
-    fn seg_name(model: &Model, digit: usize, seg: usize) -> String {
-        let letter = char::from_u32(model.clock_seg_base as u32 + seg as u32).unwrap_or('?');
-        format!("{letter}{}", model.clock_pos_base + digit as i32)
+    fn seg_name(panel: &ClockPanel, digit: usize, seg: usize) -> String {
+        let letter = char::from_u32(panel.seg_base as u32 + seg as u32).unwrap_or('?');
+        format!("{letter}{}", panel.pos_base + digit as i32)
     }
 
-    fn open_led(model: &Model, name: &str) -> Option<File> {
-        let path = format!("{}{name}/brightness", model.clock_dir);
+    fn open_led(panel: &ClockPanel, name: &str) -> Option<File> {
+        let path = format!("{}{name}/brightness", panel.dir);
         OpenOptions::new().write(true).open(path).ok()
     }
 
-    /// The segments, colon and centre LEDs of `model`; aux LEDs are switched off once. None
+    /// The segments, colon and centre LEDs of `panel`; aux LEDs are switched off once. None
     /// (logged) when no segment exists.
-    fn open(model: &Model) -> Option<Self> {
+    fn open(panel: &ClockPanel) -> Option<Self> {
         let mut found = 0;
         let seg = std::array::from_fn(|d| {
             std::array::from_fn(|s| {
-                let f = Self::open_led(model, &Self::seg_name(model, d, s));
+                let f = Self::open_led(panel, &Self::seg_name(panel, d, s));
                 if f.is_some() {
                     found += 1;
                 }
@@ -551,43 +551,43 @@ impl Leds {
         let total = DIGITS * SEGS;
         if found == 0 {
             // The whole panel is absent: one line, not one per LED.
-            if model.has_clock {
-                error!("clock: no clock segments under {}", model.clock_dir);
+            if panel.optional {
+                info!("clock: no clock segments under {}", panel.dir);
             } else {
-                info!("clock: no clock segments under {}", model.clock_dir);
+                error!("clock: no clock segments under {}", panel.dir);
             }
             return None;
         }
         if found < total {
             warn!("clock: {} of {total} segments missing", total - found);
         }
-        let colon: Vec<File> = model
-            .clock_colon
+        let colon: Vec<File> = panel
+            .colon
             .iter()
-            .filter_map(|name| Self::open_led(model, name))
+            .filter_map(|name| Self::open_led(panel, name))
             .collect();
-        for aux in model.clock_aux {
-            if let Some(f) = Self::open_led(model, aux) {
+        for aux in panel.aux {
+            if let Some(f) = Self::open_led(panel, aux) {
                 write_int(&f, 0);
             }
         }
         let mut center = None;
-        if !model.clock_center.is_empty() {
-            center = Self::open_led(model, model.clock_center);
+        if let Some(name) = panel.center {
+            center = Self::open_led(panel, name);
             if center.is_none() {
-                warn!("clock: missing centre LED {}", model.clock_center);
+                warn!("clock: missing centre LED {name}");
             }
         }
         let mut current = Vec::new();
-        if model.clock_chip_current {
+        if panel.chip_current {
             // Global current of the clock driver chips, found through the LED device links of
             // the leftmost and rightmost digit (one chip each on the Midi).
             let mut opened: Vec<PathBuf> = Vec::new();
             for name in [
-                Self::seg_name(model, 0, 0),
-                Self::seg_name(model, DIGITS - 1, 0),
+                Self::seg_name(panel, 0, 0),
+                Self::seg_name(panel, DIGITS - 1, 0),
             ] {
-                let dev = format!("{}{name}/device/current", model.clock_dir);
+                let dev = format!("{}{name}/device/current", panel.dir);
                 let Ok(real) = std::fs::canonicalize(dev) else {
                     continue;
                 };
@@ -603,7 +603,7 @@ impl Leds {
         info!(
             "clock: {found} segments, {} colon LEDs, {} dimming",
             colon.len(),
-            if model.clock_chip_current {
+            if panel.chip_current {
                 "chip current"
             } else {
                 "segment brightness"
@@ -614,7 +614,7 @@ impl Leds {
             colon,
             center,
             current,
-            chip_current: model.clock_chip_current,
+            chip_current: panel.chip_current,
             seg_last: [[-1; SEGS]; DIGITS],
             colon_last: -1,
             center_last: -1,
@@ -817,19 +817,12 @@ impl Clock {
     }
 }
 
-/// Whether any clock segment of `model` exists in sysfs (decides the clock entities of a model
-/// whose panel may be missing, `Model::has_clock` false).
-pub fn panel_present(model: &Model) -> bool {
-    if model.clock_dir.is_empty() {
-        return false;
-    }
+/// Whether any clock segment of `panel` exists in sysfs (decides the clock entities of a model
+/// whose panel may be missing, `ClockPanel::optional`).
+pub fn panel_present(panel: &ClockPanel) -> bool {
     (0..DIGITS).any(|d| {
         (0..SEGS).any(|s| {
-            let led = format!(
-                "{}{}/brightness",
-                model.clock_dir,
-                Leds::seg_name(model, d, s)
-            );
+            let led = format!("{}{}/brightness", panel.dir, Leds::seg_name(panel, d, s));
             std::path::Path::new(&led).exists()
         })
     })
@@ -842,17 +835,15 @@ pub struct ClockHandle {
     tx: Option<mpsc::UnboundedSender<Cmd>>,
 }
 
-/// Opens the clock LEDs of `model` (sysfs `<clock_dir><segment><position>`) and starts the
-/// clock actor, which stops when every handle is dropped. Without any segment: logged ("clock
-/// unavailable"), the handle is a no-op.
-pub fn spawn(model: &'static Model) -> ClockHandle {
-    // An empty clock_dir means the model has no display at all (the Mini): no sysfs probe with
-    // relative paths and no warning.
-    let Some(leds) = (!model.clock_dir.is_empty())
-        .then(|| Leds::open(model))
-        .flatten()
-    else {
-        if model.has_clock {
+/// Opens the clock LEDs of `panel` (sysfs `<dir><segment><position>`) and starts the clock
+/// actor, which stops when every handle is dropped. Without a panel: no-op handle.
+pub fn spawn(panel: Option<&'static ClockPanel>) -> ClockHandle {
+    // None means the model has no display at all (the Mini): no sysfs probe.
+    let Some(panel) = panel else {
+        return ClockHandle { tx: None };
+    };
+    let Some(leds) = Leds::open(panel) else {
+        if !panel.optional {
             warn!("clock unavailable");
         }
         return ClockHandle { tx: None };

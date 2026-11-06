@@ -38,15 +38,15 @@ fn main() -> ExitCode {
 fn run() -> u8 {
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
-    let Some(m) = pulsar_core::model::detect_model() else {
+    let Some(m) = pulsar_model::detect_profile() else {
         return 1;
     };
-    pulsar_alsa::init(m);
+    pulsar_alsa::init(&m.audio.playback);
     let spk_channels = std::env::var_os("SPK").map_or_else(
-        || m.spk_channels.to_vec(),
+        || m.audio.capture.spk_channels.to_vec(),
         |s| parse_channels(&s.to_string_lossy()),
     );
-    let cap = m.capture_channels as usize;
+    let cap = m.audio.capture.channels as usize;
     if let Some(&c) = spk_channels.iter().find(|&&c| c as usize >= cap) {
         let _ = writeln!(
             std::io::stderr(),
@@ -56,13 +56,13 @@ fn run() -> u8 {
     }
     // The VQE preset fixes the number of speaker reference channels; SPK only picks which
     // capture channels feed them.
-    if spk_channels.len() != m.spk_channels.len() {
+    if spk_channels.len() != m.audio.capture.spk_channels.len() {
         let _ = writeln!(
             std::io::stderr(),
             "SPK: {} channels given, the {} preset takes {}",
             spk_channels.len(),
-            m.vqe_preset,
-            m.spk_channels.len()
+            m.audio.capture.vqe_preset,
+            m.audio.capture.spk_channels.len()
         );
         return 2;
     }
@@ -101,8 +101,14 @@ fn run() -> u8 {
     // As fseek: a stream that cannot seek is read from where it is.
     let _ = f.seek(SeekFrom::Start(WAV_HEADER));
 
-    let (nmic, nspk) = (m.mic_channels.len(), spk_channels.len());
-    let mut vqe = match Vqe::new(&lib, m.vqe_preset, Path::new(VQE_MODELS), nmic, nspk) {
+    let (nmic, nspk) = (m.audio.capture.mic_channels.len(), spk_channels.len());
+    let mut vqe = match Vqe::new(
+        &lib,
+        m.audio.capture.vqe_preset,
+        Path::new(VQE_MODELS),
+        nmic,
+        nspk,
+    ) {
         Ok(v) => v,
         Err((VqeStep::Config, e)) => {
             out!("cfg: {e}");
@@ -157,7 +163,7 @@ fn run() -> u8 {
     }
 
     let nch = layout.types.len();
-    let (mic_ch, spk_ch) = (m.mic_channels, spk_channels.as_slice());
+    let (mic_ch, spk_ch) = (m.audio.capture.mic_channels, spk_channels.as_slice());
     let (nmic, nspk) = (mic_ch.len(), spk_ch.len());
     let mut raw = vec![0u8; frames * cap * 2];
     let mut input = vec![0i16; frames * cap];
@@ -230,7 +236,7 @@ fn run() -> u8 {
                 if hit { "  HIT" } else { "" }
             );
         }
-        t += frames as f64 / f64::from(m.capture_rate);
+        t += frames as f64 / f64::from(m.audio.capture.rate);
         if t >= next_report {
             out!(
                 "t={t:6.2}s rms dBFS: speaker ref {:6.1}, vqe out {:6.1}",

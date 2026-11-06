@@ -26,7 +26,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use pulsar_alsa::{Format, HwRequest, Pcm};
-use pulsar_core::model::Model;
+use pulsar_model::Playback;
 use tracing::{debug, error, info, warn};
 
 /// The format playsink converts to (capsfilter before the fdsink) and the PCM is opened with.
@@ -120,13 +120,13 @@ pub struct Output {
 impl Output {
     /// Starts the writer thread on the model's playback PCM; `notify` runs on that thread.
     pub(crate) fn spawn(
-        model: &'static Model,
+        playback: &'static Playback,
         notify: Box<dyn Fn(OutEvent) + Send>,
     ) -> Option<Self> {
         let (cmds, rx) = mpsc::channel();
         let gain = Arc::new(AtomicU32::new(1.0f32.to_bits()));
         let w = Writer {
-            model,
+            playback,
             notify,
             gain: Arc::clone(&gain),
             scratch: Vec::new(),
@@ -246,7 +246,7 @@ enum Phase {
 }
 
 struct Writer {
-    model: &'static Model,
+    playback: &'static Playback,
     notify: Box<dyn Fn(OutEvent) + Send>,
     gain: Arc<AtomicU32>,
     /// Gain-scaled PCM on its way to the device.
@@ -345,7 +345,7 @@ impl Writer {
                         Err((step, e)) => {
                             error!(
                                 "player: announce output '{}' {step} failed: {}",
-                                self.model.playback_pcm,
+                                self.playback.pcm,
                                 pulsar_alsa::strerror(e)
                             );
                             self.finish(OutEvent::Failed(item));
@@ -518,7 +518,7 @@ impl Writer {
     }
 
     fn open(&mut self) -> Result<Pcm, (&'static str, i32)> {
-        let mut pcm = pulsar_alsa::open_playback(self.model).map_err(|e| ("open", e))?;
+        let mut pcm = pulsar_alsa::open_playback(self.playback).map_err(|e| ("open", e))?;
         let hw = pcm
             .set_hw_params(&HwRequest {
                 format: Format::S16Le,
@@ -540,7 +540,7 @@ impl Writer {
         self.low_frames = (LOW_PERIODS * self.period_frames).min(self.buffer_frames / 2);
         debug!(
             "player: announce output '{}' open (period {period}, buffer {} frames)",
-            self.model.playback_pcm, hw.buffer_frames
+            self.playback.pcm, hw.buffer_frames
         );
         Ok(pcm)
     }

@@ -39,6 +39,7 @@ rust_library(
         "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     ],
 )
 
@@ -58,6 +59,7 @@ rust_test(
         "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     ],
 )
 
@@ -84,6 +86,7 @@ rust_binary(
         "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     ],
 )
 
@@ -103,6 +106,7 @@ rust_binary(
         "@crates//:tokio",
         "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
         "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     ],
 )
 

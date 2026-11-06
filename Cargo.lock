@@ -1288,6 +1288,7 @@ dependencies = [
  "pulsar-hw",
  "pulsar-mdns",
  "pulsar-media",
+ "pulsar-model",
  "pulsar-sendspin",
  "pulsar-update",
  "pulsar-zigbee",
@@ -1303,6 +1304,7 @@ dependencies = [
  "libc",
  "libloading",
  "pulsar-core",
+ "pulsar-model",
  "tracing",
 ]
 
@@ -1331,6 +1333,7 @@ dependencies = [
  "libloading",
  "pulsar-alsa",
  "pulsar-core",
+ "pulsar-model",
  "ring",
  "tokio",
  "tracing",
@@ -1343,6 +1346,7 @@ dependencies = [
  "home-linux",
  "libc",
  "pulsar-core",
+ "pulsar-model",
  "tokio",
  "tracing",
 ]
@@ -1355,6 +1359,7 @@ dependencies = [
  "home-telemetry",
  "libc",
  "log",
+ "pulsar-model",
  "tokio",
  "tracing",
  "tracing-log",
@@ -1387,6 +1392,7 @@ dependencies = [
  "libc",
  "pulsar-clock",
  "pulsar-core",
+ "pulsar-model",
  "tokio",
  "tracing",
 ]
@@ -1413,7 +1419,15 @@ dependencies = [
  "libloading",
  "pulsar-alsa",
  "pulsar-core",
+ "pulsar-model",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "pulsar-model"
+version = "0.0.0"
+dependencies = [
  "tracing",
 ]
 
@@ -1426,6 +1440,7 @@ dependencies = [
  "libc",
  "pulsar-alsa",
  "pulsar-core",
+ "pulsar-model",
  "tokio",
  "tracing",
 ]
@@ -1458,6 +1473,7 @@ dependencies = [
  "home-linux",
  "libc",
  "pulsar-core",
+ "pulsar-model",
  "socket2",
  "tokio",
  "tracing",
@@ -1526,6 +1542,7 @@ version = "0.1.0"
 dependencies = [
  "pulsar-audio",
  "pulsar-core",
+ "pulsar-model",
  "tokio",
 ]
 

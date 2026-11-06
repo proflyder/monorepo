@@ -10,6 +10,7 @@ libc = { workspace = true }
 log = { workspace = true }
 home-runtime = { path = "../../../../../../packages/rust/home-runtime" }
 home-telemetry = { path = "../../../../../../packages/rust/home-telemetry" }
+pulsar-model = { path = "../pulsar-model" }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-log = { workspace = true }

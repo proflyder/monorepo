@@ -54,11 +54,11 @@ fn main() -> ExitCode {
 
     pulsar_core::init_logger();
     crash::install();
-    let Some(model) = pulsar_core::model::detect_model() else {
+    let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::from(1);
     };
     // Before the runtime, threads and any audio library: ALSA_CONFIG_PATH and libasound.
-    pulsar_alsa::init(model);
+    pulsar_alsa::init(&model.audio.playback);
 
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -88,7 +88,7 @@ fn main() -> ExitCode {
         };
         info!(
             "pulsar {VERSION} running on {} ({})",
-            model.model_name, model.codename
+            model.identity.model_name, model.identity.codename
         );
         ctl.run().await;
         // `enabled` is what supervise.sh restarts on: promise MA a reconnect only when this is

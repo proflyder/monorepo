@@ -14,13 +14,13 @@ use std::path::{Path, PathBuf};
 use pulsar_arbiter as arbiter;
 use pulsar_arbiter::{ArbiterEvent, ArbiterHandle, ClaimId};
 use pulsar_audio::{FrontendEvent, Outcome};
-use pulsar_core::model::Model;
 use pulsar_core::{ClockShot, Timers, UiState, now_ms};
-use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, Capabilities, WakeWordInfo};
+use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, WakeWordInfo};
 use pulsar_hw::{InputEvent, InputHandle, LedsHandle, Rgb};
 use pulsar_mdns as mdns;
 use pulsar_mdns::{MdnsHandle, MdnsService};
 use pulsar_media::{Channel, Mixer, PlayId, PlayState, PlayerEvent, PlayerHandle};
+use pulsar_model::DeviceProfile;
 use pulsar_sendspin::{SendspinConfig, SendspinEvent, SendspinHandle};
 use pulsar_update::{Release, RequestId, UpdateEvent, UpdaterHandle};
 use pulsar_zigbee::{ZigbeeConfig, ZigbeeEvent, ZigbeeHandle};
@@ -193,7 +193,7 @@ pub struct Controller {
     term: Signal,
     int: Signal,
 
-    model: &'static Model,
+    model: &'static DeviceProfile,
     state: StateFile,
     st: Settings,
     timers: Timers<Tk>,
@@ -327,7 +327,7 @@ fn light_rgb(l: &pulsar_esphome::LightState) -> Rgb {
 impl Controller {
     /// Loads the settings and starts every service. Err (to be logged by the caller, exit 1):
     /// an invalid `PULSAR_PORT_OFFSET`, or the API server could not bind its port.
-    pub fn start(model: &'static Model, state_path: PathBuf) -> Result<Self, String> {
+    pub fn start(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Self, String> {
         // Before anything starts: a SIGTERM during the start-up still ends the daemon cleanly.
         let term = signal(SignalKind::terminate()).map_err(|e| format!("signals: {e}"))?;
         let int = signal(SignalKind::interrupt()).map_err(|e| format!("signals: {e}"))?;
@@ -350,7 +350,7 @@ impl Controller {
         }
 
         let id = logic::identity(
-            model,
+            &model.identity,
             &read_line("/sys/class/net/wlan0/address"),
             VERSION,
             BUILD_TIME,
@@ -367,7 +367,7 @@ impl Controller {
         // entity.
         let lux_rx = match pulsar_clock::spawn_light_sensor(LUX_PERIOD_MS) {
             Ok(rx) => Some(rx),
-            Err(e) if model.has_lux => {
+            Err(e) if model.lux.as_ref().is_some_and(|l| !l.optional) => {
                 error!("{e}");
                 None
             }
@@ -380,25 +380,25 @@ impl Controller {
             .iter()
             .map(|c| c.label().to_owned())
             .collect();
-        let zigbee_modes: Vec<String> = if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
-            Vec::new()
-        } else {
-            pulsar_zigbee::ROLES
+        let zigbee_modes: Vec<String> = match model.zigbee.as_ref() {
+            Some(_) if ENABLE_ZIGBEE => pulsar_zigbee::ROLES
                 .iter()
                 .map(|r| r.label.to_owned())
-                .collect()
+                .collect(),
+            _ => Vec::new(),
         };
-        let capabilities = Capabilities {
-            clock: model.has_clock || pulsar_clock::panel_present(model),
-            lux: model.has_lux || lux_rx.is_some(),
-            auto_brightness: lux_rx.is_some(),
-            wake_preroll: !model.wake_preroll.is_empty(),
-            hw_mic_mute: !model.mute_input.is_empty() || model.mute_gpio != 0,
-            buttons: model.has_button_events(),
-            case_colors: case_colors.len() > 1,
-            voice_colors: !voice_colors.is_empty(),
-            zigbee: !zigbee_modes.is_empty(),
-        };
+        let panel_present = model
+            .clock
+            .as_ref()
+            .is_some_and(pulsar_clock::panel_present);
+        let capabilities = logic::capabilities(
+            model,
+            panel_present,
+            lux_rx.is_some(),
+            case_colors.len() > 1,
+            !voice_colors.is_empty(),
+            !zigbee_modes.is_empty(),
+        );
         let cfg = ApiConfig {
             port: ports.api,
             capabilities,
@@ -435,13 +435,13 @@ impl Controller {
             .map_err(|_| "ESPHome API server failed to start".to_owned())?;
         // Before any other thread exists: the player's spawn sets SSL_CERT_FILE (set_var), which
         // C code on another thread could be reading.
-        let (player, player_rx) = pulsar_media::spawn(model);
+        let (player, player_rx) = pulsar_media::spawn(&model.audio.playback);
         let (arbiter, arbiter_rx) = arbiter::spawn(id.name.clone(), ports.arbiter);
 
         // Hardware first: UI feedback should work even if HA is not connected.
-        let leds = pulsar_hw::spawn_leds(model);
-        // spawn handles an absent panel (empty clock_dir) with a no-op handle.
-        let clock = pulsar_clock::spawn(model);
+        let leds = pulsar_hw::spawn_leds(&model.leds);
+        // spawn handles a missing panel (None) with a no-op handle.
+        let clock = pulsar_clock::spawn(model.clock.as_ref());
         clock.set_enabled(st.clock_on);
         clock.set_brightness(st.clock_brightness);
         clock.set_auto_brightness(st.clock_auto_brightness);
@@ -460,7 +460,7 @@ impl Controller {
             0,
         );
 
-        let mut mixer = Mixer::open(model);
+        let mut mixer = Mixer::open(&model.audio.playback, &model.volume);
         if !mixer.available() {
             warn!("mixer unavailable");
         }
@@ -470,7 +470,7 @@ impl Controller {
             st.volume_legacy,
             st.legacy_on_stock,
             mixer.volume(),
-            |v| pulsar_core::volume::from_legacy(model, v),
+            |v| pulsar_core::volume::from_legacy(&model.volume, v),
         );
         st.volume = volume;
         // Changes made while starting are written like any other (StateFile, 1 s later).
@@ -513,7 +513,7 @@ impl Controller {
         let (updater, updater_rx) =
             pulsar_update::spawn(pulsar_update::UPDATE_REPO.into(), VERSION);
 
-        let (input, input_rx) = match pulsar_hw::spawn_input(model) {
+        let (input, input_rx) = match pulsar_hw::spawn_input(&model.input) {
             Ok((h, rx)) => (Some(h), Some(rx)),
             Err(e) => {
                 warn!("{e}");
@@ -523,7 +523,8 @@ impl Controller {
         let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
         let custom_wake = st.wake_word == "ricardo";
         let (mic, mic_rx) = pulsar_audio::spawn(
-            model,
+            &model.audio.capture,
+            model.wake_preroll.as_ref(),
             &if custom_wake {
                 // Native spotters stay available for a rollback to «Алиса»/«Яндекс».
                 model_dir("alisa")
@@ -550,10 +551,10 @@ impl Controller {
             software_version: id.project_version.clone(),
             mac: id.mac.to_ascii_lowercase(),
             state_dir: logic::in_dir(&dir, "sendspin"),
-            model,
+            playback: &model.audio.playback,
             port: ports.sendspin,
         };
-        let master = pulsar_core::volume::master_gain(model, st.volume);
+        let master = pulsar_core::volume::master_gain(&model.volume, st.volume);
         let (sendspin, sendspin_rx) =
             match pulsar_sendspin::spawn(ss_cfg, st.volume, st.muted, master) {
                 Ok((h, rx)) => (Some(h), Some(rx)),
@@ -596,41 +597,42 @@ impl Controller {
             None
         };
 
-        let (zigbee, zigbee_rx) = if !ENABLE_ZIGBEE || model.zigbee_tty.is_empty() {
-            (None, None)
-        } else {
-            let zcfg = ZigbeeConfig {
-                lines: pulsar_zigbee::RadioLines {
-                    tty: model.zigbee_tty.into(),
-                    reset: model.zigbee_reset.into(),
-                    boot: model.zigbee_boot.into(),
-                },
-                coordinator_image: logic::in_dir(&dir, "zigbee-coordinator.ybl"),
-                router_image: logic::in_dir(&dir, "zigbee-router.ybl"),
-                deconz_port: ports.deconz,
-                failed_version: st.zigbee_flash_failed,
-            };
-            updater.add_extra_asset("zigbee-coordinator.ybl", zcfg.coordinator_image.clone());
-            updater.add_extra_asset("zigbee-router.ybl", zcfg.router_image.clone());
-            let mode = st.zigbee_role;
-            let (h, rx) = pulsar_zigbee::spawn(zcfg, mode);
-            // ZHA discovers the coordinator (radio_type selects zigpy-deconz, serial_number is
-            // its unique id).
-            if mode == pulsar_zigbee::Mode::Coordinator
-                && let Some(m) = &mdns
-            {
-                m.add_service(MdnsService {
-                    service: "_zigbee-coordinator._tcp".into(),
-                    instance: id.name.clone(),
-                    port: ports.deconz,
-                    txt: vec![
-                        "radio_type=deconz".into(),
-                        format!("serial_number={}", id.name),
-                        format!("name={}", id.friendly_name),
-                    ],
-                });
+        let (zigbee, zigbee_rx) = match model.zigbee.as_ref() {
+            Some(radio) if ENABLE_ZIGBEE => {
+                let zcfg = ZigbeeConfig {
+                    lines: pulsar_zigbee::RadioLines {
+                        tty: radio.tty.into(),
+                        reset: radio.reset.into(),
+                        boot: radio.boot.into(),
+                    },
+                    coordinator_image: logic::in_dir(&dir, "zigbee-coordinator.ybl"),
+                    router_image: logic::in_dir(&dir, "zigbee-router.ybl"),
+                    deconz_port: ports.deconz,
+                    failed_version: st.zigbee_flash_failed,
+                };
+                updater.add_extra_asset("zigbee-coordinator.ybl", zcfg.coordinator_image.clone());
+                updater.add_extra_asset("zigbee-router.ybl", zcfg.router_image.clone());
+                let mode = st.zigbee_role;
+                let (h, rx) = pulsar_zigbee::spawn(zcfg, mode);
+                // ZHA discovers the coordinator (radio_type selects zigpy-deconz, serial_number
+                // is its unique id).
+                if mode == pulsar_zigbee::Mode::Coordinator
+                    && let Some(m) = &mdns
+                {
+                    m.add_service(MdnsService {
+                        service: "_zigbee-coordinator._tcp".into(),
+                        instance: id.name.clone(),
+                        port: ports.deconz,
+                        txt: vec![
+                            "radio_type=deconz".into(),
+                            format!("serial_number={}", id.name),
+                            format!("name={}", id.friendly_name),
+                        ],
+                    });
+                }
+                (Some(h), Some(rx))
             }
-            (Some(h), Some(rx))
+            _ => (None, None),
         };
 
         let mut c = Self {
@@ -901,7 +903,7 @@ impl Controller {
     /// `st` changed: written a moment after the last change (`StateFile`). `volume=` follows
     /// `volume2=` on the curve of earlier builds.
     fn persist(&mut self) {
-        self.st.volume_legacy = pulsar_core::volume::to_legacy(self.model, self.st.volume);
+        self.st.volume_legacy = pulsar_core::volume::to_legacy(&self.model.volume, self.st.volume);
         self.state.changed();
     }
 
@@ -910,7 +912,7 @@ impl Controller {
     /// stays pending (`StateFile`).
     #[must_use = "a write that must be on disk has to check it"]
     fn persist_now(&mut self) -> bool {
-        self.st.volume_legacy = pulsar_core::volume::to_legacy(self.model, self.st.volume);
+        self.st.volume_legacy = pulsar_core::volume::to_legacy(&self.model.volume, self.st.volume);
         self.state.write_now(&self.st)
     }
 

@@ -321,7 +321,7 @@ impl Controller {
         self.followup = logic::Followup::default();
         self.update_duck();
         if earcon {
-            let sound = format!("{SOUNDS}{}", self.model.wake_sound);
+            let sound = format!("{SOUNDS}{}", self.model.earcons.wake);
             self.player.play(Channel::Announce, vec![sound]);
         }
         // HA applies AnnounceFinished by forcing idle: an answer's report must not arrive over
@@ -522,7 +522,7 @@ impl Controller {
                     self.stop_streaming();
                     self.error_shown = true;
                     self.show_ui(UiState::Error);
-                    let sound = format!("{SOUNDS}{}", self.model.error_sound);
+                    let sound = format!("{SOUNDS}{}", self.model.earcons.error);
                     self.play_closing_earcon(sound);
                 }
             }
@@ -674,7 +674,7 @@ impl Controller {
     /// диалога, обрывается вместе с ним.
     fn cancel_dialog(&mut self) {
         self.interrupt_speech();
-        self.play_closing_earcon(format!("{SOUNDS}{}", self.model.cancel_sound));
+        self.play_closing_earcon(format!("{SOUNDS}{}", self.model.earcons.cancel));
         self.mark_wake_cancelled();
         self.finish_interaction();
     }
@@ -822,7 +822,7 @@ impl Controller {
             self.ring_yielded = true;
             return;
         }
-        let sound = format!("{SOUNDS}{}", self.model.timer_sound);
+        let sound = format!("{SOUNDS}{}", self.model.earcons.timer);
         self.play_announce(vec![sound], Pending::Ring);
     }
 

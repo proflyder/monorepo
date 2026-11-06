@@ -1,0 +1,38 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@crates//:tracing",
+]
+
+rust_library(
+    name = "pulsar_model",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_test(
+    name = "pulsar_model_unit_tests",
+    crate = ":pulsar_model",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

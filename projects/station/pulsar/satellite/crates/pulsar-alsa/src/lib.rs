@@ -7,7 +7,7 @@
 mod ffi;
 
 use ffi::{HwParams, MixerValue, RawCtl, RawPcm, SwParams};
-use pulsar_core::model::Model;
+use pulsar_model::Playback;
 
 /// Applies the model's process-wide ALSA settings before any thread or audio library starts:
 /// ALSA_CONFIG_PATH and the absolute libasound path (the Mini's firmware keeps it outside the
@@ -16,10 +16,10 @@ use pulsar_core::model::Model;
 /// SONAME whether or not that library carries a RUNPATH (not checked on a Mini). The other models
 /// keep the lazy SONAME lookup: an early `libasound.so.2` dlopen from the executable (no RUNPATH)
 /// could pick another copy than GStreamer's RUNPATH does. Must be called before the first [`load`].
-pub fn init(model: &Model) {
-    model.apply_env();
-    ffi::set_library_path(model.alsa_lib);
-    if !model.alsa_lib.is_empty() {
+pub fn init(playback: &Playback) {
+    playback.apply_env();
+    ffi::set_library_path(playback.alsa_lib());
+    if playback.alsa.is_some() {
         // A failed dlopen is logged by ffi::lib.
         let _ = ffi::lib();
     }
@@ -273,20 +273,16 @@ pub fn set_mixer_integer(name: &str, values: &[i64]) -> Result<(), i32> {
 /// Switches the model's output on: the sysfs amplifier gates and the ALSA "SPK mute" mixer.
 /// Opening a PCM or dmix dropping its last client may switch the gates off again, so this runs
 /// both before and after a device is opened.
-pub fn enable_output(model: &Model) {
-    for path in model.amp_enable_paths {
+pub fn enable_output(playback: &Playback) {
+    for path in playback.amp_enable_paths {
         if !home_linux::write_file(path, "1\n") {
             tracing::warn!("amp: cannot write '{path}'");
         }
     }
-    if !model.spk_mute_ctl.is_empty()
-        && let Err(e) = set_mixer_integer(model.spk_mute_ctl, &[1])
+    if let Some(ctl) = playback.spk_mute_ctl
+        && let Err(e) = set_mixer_integer(ctl, &[1])
     {
-        tracing::warn!(
-            "spk: cannot unmute '{}': {}",
-            model.spk_mute_ctl,
-            strerror(e)
-        );
+        tracing::warn!("spk: cannot unmute '{ctl}': {}", strerror(e));
     }
 }
 
@@ -296,10 +292,10 @@ pub fn enable_output(model: &Model) {
 /// openers in the daemon use this; the MUSIC pipeline, whose alsasink opens the device inside
 /// GStreamer, instead calls [`enable_output`] before it starts the pipeline and again when the
 /// pipeline reports PLAYING (the device is open by then).
-pub fn open_playback(model: &Model) -> Result<Pcm, i32> {
-    enable_output(model);
-    let pcm = Pcm::open(model.playback_pcm, Stream::Playback, false)?;
-    enable_output(model);
+pub fn open_playback(playback: &Playback) -> Result<Pcm, i32> {
+    enable_output(playback);
+    let pcm = Pcm::open(playback.pcm, Stream::Playback, false)?;
+    enable_output(playback);
     Ok(pcm)
 }
 
