@@ -1,11 +1,15 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use tokio::net::UdpSocket;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio::task::LocalSet;
+use tokio::time::Instant;
 
 use super::*;
+use crate::actor::{Arbiter, Cmd, RX_BUF, accept, launch};
 
-const GOLDEN: &str = include_str!("../../tests/golden/arbiter.txt");
+const GOLDEN: &str = include_str!("../tests/golden/arbiter.txt");
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
@@ -116,7 +120,8 @@ impl Rig {
         let (events_tx, events) = unbounded_channel();
         let (trace_tx, trace) = unbounded_channel();
         let sock = UdpSocket::from_std(sock).unwrap();
-        let a = Arbiter::new(station.to_owned(), sock, dest, events_tx, Some(trace_tx));
+        let mut a = Arbiter::new(station.to_owned(), sock, dest, events_tx);
+        a.trace_claims(trace_tx);
         Self {
             a,
             events,
@@ -129,7 +134,7 @@ impl Rig {
 
     fn claim(&mut self, id: u64, level_db: f32, busy: bool, decide: bool) {
         self.a.on_cmd(Cmd::Claim {
-            id,
+            id: ClaimId(id),
             wake: "alisa".to_owned(),
             level_db,
             busy,
@@ -170,7 +175,7 @@ impl Rig {
                 won,
                 best,
                 peers,
-            } => (claim_id, won, best.station, peers),
+            } => (claim_id.0, won, best.station, peers),
         })
     }
 
@@ -424,10 +429,10 @@ async fn handle_numbers_claims_and_reports_decisions() {
             let (wire, dest) = loopback();
             let (sock, _) = loopback();
             let sock = UdpSocket::from_std(sock).unwrap();
-            let (h, mut events) = launch("st-me".to_owned(), sock, dest, None);
+            let (h, mut events) = launch("st-me".to_owned(), sock, dest);
             assert!(h.ok());
             let start = Instant::now();
-            assert_eq!(h.clone().claim("alisa", -20.0, false, true), 1);
+            assert_eq!(h.clone().claim("alisa", -20.0, false, true), ClaimId(1));
             let ArbiterEvent::Decided {
                 claim_id,
                 won,
@@ -437,12 +442,12 @@ async fn handle_numbers_claims_and_reports_decisions() {
             assert_eq!(Instant::now() - start, Duration::from_millis(250));
             assert_eq!(
                 (claim_id, won, best, peers),
-                (1, true, claim("st-me", "alisa", false, -20.0), 0)
+                (ClaimId(1), true, claim("st-me", "alisa", false, -20.0), 0)
             );
-            assert_eq!(h.claim("alisa", -20.0, true, false), 2);
+            assert_eq!(h.claim("alisa", -20.0, true, false), ClaimId(2));
             let quiet = tokio::time::timeout(Duration::from_secs(1), events.recv()).await;
             assert!(quiet.is_err());
-            assert_eq!(h.claim("yandex", -20.0, false, true), 3);
+            assert_eq!(h.claim("yandex", -20.0, false, true), ClaimId(3));
             h.cancel();
             let quiet = tokio::time::timeout(Duration::from_secs(1), events.recv()).await;
             assert!(quiet.is_err());
@@ -469,17 +474,17 @@ async fn without_a_socket_every_claim_wins_alone() {
             let port = holder.local_addr().unwrap().port();
             let (h, mut events) = spawn("st-me".to_owned(), port);
             assert!(!h.ok());
-            assert_eq!(h.claim("alisa", -20.0, true, true), 1);
+            assert_eq!(h.claim("alisa", -20.0, true, true), ClaimId(1));
             assert_eq!(
                 events.try_recv().unwrap(),
                 ArbiterEvent::Decided {
-                    claim_id: 1,
+                    claim_id: ClaimId(1),
                     won: true,
                     best: claim("st-me", "alisa", true, -20.0),
                     peers: 0,
                 }
             );
-            assert_eq!(h.claim("alisa", -20.0, true, false), 2);
+            assert_eq!(h.claim("alisa", -20.0, true, false), ClaimId(2));
             h.cancel();
             assert!(events.try_recv().is_err());
         })

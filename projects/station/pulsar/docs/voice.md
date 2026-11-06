@@ -56,7 +56,7 @@ maind играет звук громкости (sound 45, SimpleVolumeTonePlayer
 
 Протокол общий для всех станций и версий: окно, правила решения и уровень wake должны совпадать
 везде, иначе станции придут к разным итогам. Реализация:
-[`pulsar-lan/src/arbiter.rs`](../satellite/crates/pulsar-lan/src/arbiter.rs).
+[`pulsar-arbiter/src/`](../satellite/crates/pulsar-arbiter/src/).
 
 - Каждая станция, услышавшая wake word, шлёт claim: одну ASCII-строку
   `pulsar-wake/1 <name> <wake> <busy> <level>` в UDP broadcast на `255.255.255.255:6054`, три копии
@@ -67,8 +67,8 @@ maind играет звук громкости (sound 45, SimpleVolumeTonePlayer
   - `<level>` — [уровень wake](#уровень-wake) в формате `%.1f`.
 
   Ограничения полей и длины повторяют `sscanf` прежнего арбитра на C++, см. шапку
-  [`arbiter/wire.rs`](../satellite/crates/pulsar-lan/src/arbiter/wire.rs) и
-  `satellite/crates/pulsar-lan/tests/golden/arbiter.txt`.
+  [`wire.rs`](../satellite/crates/pulsar-arbiter/src/wire.rs) и
+  `satellite/crates/pulsar-arbiter/tests/golden/arbiter.txt`.
 - Решение принимается через 250 мс после своего claim. Учитываются claims с тем же `<wake>`,
   полученные не раньше чем за 500 мс до нашего: другая станция может подтвердить слово раньше нас.
 - Claim, полученный раньше чем за 250 мс до нашего, побеждает сразу: его станция уже решила и

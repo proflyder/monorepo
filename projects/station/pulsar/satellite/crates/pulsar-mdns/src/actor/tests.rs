@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use tokio::time::Instant;
 
-use super::dns::{A, Kind, bit, put_name, read_name};
 use super::*;
+use crate::dns::{A, Kind, Reply, bit, put_name, read_name};
 
 const GOLDEN: &str = include_str!("../../tests/golden/mdns.txt");
 
@@ -311,14 +311,12 @@ fn responder() -> Responder {
         // No address: nothing is announced from a test.
         records: Records::new("pulsar-test"),
         sock: UdpSocket::from_std(sock).unwrap(),
-        ip: Rc::new(Cell::new(Ipv4Addr::UNSPECIFIED)),
         ifindex: 0,
         ifname: String::new(),
         join_failed: false,
         link_flags: Vec::new(),
         change_forced: false,
         timers: Timers::new(),
-        trace: None,
     }
 }
 
@@ -485,16 +483,4 @@ fn netlink_messages() {
             LinkEvent::Ipv4Addr,
         ]
     );
-}
-
-#[test]
-fn handle_reports_no_address_as_none() {
-    let (cmds, _rx) = unbounded_channel();
-    let h = MdnsHandle {
-        cmds,
-        ip: Rc::new(Cell::new(Ipv4Addr::UNSPECIFIED)),
-    };
-    assert_eq!(h.ipv4(), None);
-    h.ip.set(Ipv4Addr::new(192, 168, 1, 50));
-    assert_eq!(h.ipv4(), Some(Ipv4Addr::new(192, 168, 1, 50)));
 }

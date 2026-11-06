@@ -3,10 +3,10 @@
 
 use std::collections::HashMap;
 
+use pulsar_arbiter::Claim;
 use pulsar_audio::endpoint::{EndpointPrior, EndpointRun, pcm_level_db};
 use pulsar_core::{ClockShot, UiState, now_ms};
 use pulsar_esphome::{AnnounceRequest, TimerEvent, TimerInfo, VaEvent};
-use pulsar_lan::arbiter::Claim;
 use pulsar_media::{Channel, PlayState};
 use pulsar_sendspin::Transport;
 use tracing::{debug, info, warn};

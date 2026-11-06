@@ -1280,12 +1280,13 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "pulsar-alsa",
+ "pulsar-arbiter",
  "pulsar-audio",
  "pulsar-clock",
  "pulsar-core",
  "pulsar-esphome",
  "pulsar-hw",
- "pulsar-lan",
+ "pulsar-mdns",
  "pulsar-media",
  "pulsar-sendspin",
  "pulsar-update",
@@ -1303,6 +1304,21 @@ dependencies = [
  "libloading",
  "pulsar-core",
  "tracing",
+]
+
+[[package]]
+name = "pulsar-arbiter"
+version = "0.0.0"
+dependencies = [
+ "home-actor",
+ "home-linux",
+ "pulsar-core",
+ "pulsar-mdns",
+ "socket2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1376,7 +1392,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulsar-lan"
+name = "pulsar-mdns"
 version = "0.0.0"
 dependencies = [
  "home-actor",
@@ -1384,6 +1400,7 @@ dependencies = [
  "libc",
  "pulsar-core",
  "socket2",
+ "thiserror",
  "tokio",
  "tracing",
 ]

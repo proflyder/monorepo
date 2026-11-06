@@ -2,7 +2,7 @@
 //! Parsing follows the C++ `sscanf("%15s %31s %15s %d %f")` field limits, so both sides accept
 //! and reject the same datagrams (tests/golden/arbiter.txt).
 
-use super::Claim;
+use crate::Claim;
 
 const MAGIC: &[u8] = b"pulsar-wake/1";
 /// The C++ arbiter formatted into char[128] and did not send longer claims.

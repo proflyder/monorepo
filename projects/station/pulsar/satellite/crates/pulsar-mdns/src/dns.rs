@@ -1,9 +1,8 @@
-//! DNS wire format of the responder: record selection, response packets and query parsing.
-//! No I/O; the packets are byte-identical to the C++ responder's (tests/golden/mdns.txt).
+//! DNS wire format of the responder: typed records, the codec and question answering.
+//! No I/O and no runtime; the packets are byte-identical to the C++ responder's
+//! (tests/golden/mdns.txt).
 
 use std::net::Ipv4Addr;
-
-use super::Reply;
 
 pub const MDNS_PORT: u16 = 5353;
 pub const GROUP: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
@@ -38,6 +37,27 @@ pub fn bit(svc: usize, k: Kind) -> u32 {
     1 << (1 + 4 * svc + k as usize)
 }
 
+/// How a query was answered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reply {
+    /// Source port other than 5353: straight to the sender, question and id echoed.
+    Legacy,
+    /// QU bit: to the sender.
+    Unicast,
+    Multicast,
+}
+
+impl Reply {
+    /// Stable name for `tracing` diagnostics of `lan_probe`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Legacy => "legacy",
+            Self::Unicast => "unicast",
+            Self::Multicast => "multicast",
+        }
+    }
+}
+
 pub struct Service {
     /// "_esphomelib._tcp.local"
     pub type_fqdn: String,
@@ -69,6 +89,44 @@ pub struct Response {
     pub packet: Vec<u8>,
     /// (name, qtype) of the questions this packet answers; filled only when asked for.
     pub questions: Vec<(String, u16)>,
+}
+
+/// DNS record types this responder emits.
+#[derive(Clone, Copy)]
+enum RType {
+    A,
+    Ptr,
+    Txt,
+    Srv,
+}
+
+impl RType {
+    const fn code(self) -> u16 {
+        match self {
+            Self::A => 1,
+            Self::Ptr => 12,
+            Self::Txt => 16,
+            Self::Srv => 33,
+        }
+    }
+}
+
+/// Typed RDATA of one record.
+enum RData<'a> {
+    A(Ipv4Addr),
+    Ptr(&'a str),
+    Srv { port: u16, target: &'a str },
+    Txt(&'a [String]),
+}
+
+/// One resource record before encoding.
+struct Record<'a> {
+    name: &'a str,
+    rtype: RType,
+    /// Cache-flush bit on the class field (unique records, not in legacy replies).
+    unique: bool,
+    ttl: u32,
+    data: RData<'a>,
 }
 
 pub struct Records {
@@ -185,89 +243,77 @@ impl Records {
             additional &= !A;
         }
         additional &= !answers;
-        let mut body = Vec::new();
-        let mut rd = Vec::new();
-        let an = self.emit(&mut body, &mut rd, answers, ttl_cap, goodbye);
-        let ar = self.emit(&mut body, &mut rd, additional, ttl_cap, goodbye);
-        let mut pkt = Vec::with_capacity(12 + question.len() + body.len());
+        let (answers, additional) = (
+            self.select_records(answers),
+            self.select_records(additional),
+        );
+        let mut pkt = Vec::with_capacity(12 + question.len() + 512);
         put16(&mut pkt, id);
         put16(&mut pkt, 0x8400); // response, authoritative
         put16(&mut pkt, u16::from(!question.is_empty()));
-        put16(&mut pkt, an as u16);
+        put16(&mut pkt, answers.len() as u16);
         put16(&mut pkt, 0);
-        put16(&mut pkt, ar as u16);
+        put16(&mut pkt, additional.len() as u16);
         pkt.extend_from_slice(question);
-        pkt.extend_from_slice(&body);
+        encode_records(&mut pkt, &answers, ttl_cap, goodbye);
+        encode_records(&mut pkt, &additional, ttl_cap, goodbye);
         pkt
     }
 
-    /// Appends the records of `mask` in a fixed order (A, then per service PTR, SRV, TXT,
-    /// enumeration PTR); returns how many.
-    fn emit(
-        &self,
-        body: &mut Vec<u8>,
-        rd: &mut Vec<u8>,
-        mask: u32,
-        ttl_cap: Option<u32>,
-        goodbye: bool,
-    ) -> usize {
-        let mut count = 0;
-        let mut rr =
-            |body: &mut Vec<u8>, name: &str, rtype: u16, unique: bool, ttl: u32, rd: &[u8]| {
-                put_name(body, name.as_bytes());
-                put16(body, rtype);
-                let flush = if unique && ttl_cap.is_none() {
-                    0x8000
-                } else {
-                    0
-                };
-                put16(body, flush | 1);
-                let ttl = if goodbye {
-                    0
-                } else {
-                    ttl_cap.map_or(ttl, |cap| ttl.min(cap))
-                };
-                body.extend_from_slice(&ttl.to_be_bytes());
-                put16(body, rd.len() as u16);
-                body.extend_from_slice(rd);
-                count += 1;
-            };
+    /// Records of `mask` in the C++ order: A, then per service PTR, SRV, TXT, enumeration PTR.
+    fn select_records(&self, mask: u32) -> Vec<Record<'_>> {
+        let mut out = Vec::new();
         if mask & A != 0 {
-            rr(body, &self.host_fqdn, T_A, true, 120, &self.ip.octets());
+            out.push(Record {
+                name: &self.host_fqdn,
+                rtype: RType::A,
+                unique: true,
+                ttl: 120,
+                data: RData::A(self.ip),
+            });
         }
         for (i, s) in self.services.iter().enumerate() {
             if mask & bit(i, Kind::Ptr) != 0 {
-                rd.clear();
-                put_name(rd, s.instance_fqdn.as_bytes());
-                rr(body, &s.type_fqdn, T_PTR, false, 4500, rd);
+                out.push(Record {
+                    name: &s.type_fqdn,
+                    rtype: RType::Ptr,
+                    unique: false,
+                    ttl: 4500,
+                    data: RData::Ptr(&s.instance_fqdn),
+                });
             }
             if mask & bit(i, Kind::Srv) != 0 {
-                rd.clear();
-                put16(rd, 0); // priority
-                put16(rd, 0); // weight
-                put16(rd, s.port);
-                put_name(rd, self.host_fqdn.as_bytes());
-                rr(body, &s.instance_fqdn, T_SRV, true, 120, rd);
+                out.push(Record {
+                    name: &s.instance_fqdn,
+                    rtype: RType::Srv,
+                    unique: true,
+                    ttl: 120,
+                    data: RData::Srv {
+                        port: s.port,
+                        target: &self.host_fqdn,
+                    },
+                });
             }
             if mask & bit(i, Kind::Txt) != 0 {
-                rd.clear();
-                for t in &s.txt {
-                    let t = &t.as_bytes()[..t.len().min(255)];
-                    rd.push(t.len() as u8);
-                    rd.extend_from_slice(t);
-                }
-                if rd.is_empty() {
-                    rd.push(0);
-                }
-                rr(body, &s.instance_fqdn, T_TXT, true, 4500, rd);
+                out.push(Record {
+                    name: &s.instance_fqdn,
+                    rtype: RType::Txt,
+                    unique: true,
+                    ttl: 4500,
+                    data: RData::Txt(&s.txt),
+                });
             }
             if mask & bit(i, Kind::Enum) != 0 {
-                rd.clear();
-                put_name(rd, s.type_fqdn.as_bytes());
-                rr(body, SERVICES_ENUM, T_PTR, false, 4500, rd);
+                out.push(Record {
+                    name: SERVICES_ENUM,
+                    rtype: RType::Ptr,
+                    unique: false,
+                    ttl: 4500,
+                    data: RData::Ptr(&s.type_fqdn),
+                });
             }
         }
-        count
+        out
     }
 
     /// Responses to a datagram from port `from_port`, in send order. A legacy resolver (source
@@ -379,5 +425,49 @@ impl Records {
             a |= A;
         }
         (a, add)
+    }
+}
+
+/// Appends the records in order: header, then RDATA and the record itself.
+fn encode_records(out: &mut Vec<u8>, records: &[Record<'_>], ttl_cap: Option<u32>, goodbye: bool) {
+    let mut rd = Vec::new();
+    for r in records {
+        rd.clear();
+        match &r.data {
+            RData::A(ip) => rd.extend_from_slice(&ip.octets()),
+            RData::Ptr(name) => put_name(&mut rd, name.as_bytes()),
+            RData::Srv { port, target } => {
+                put16(&mut rd, 0); // priority
+                put16(&mut rd, 0); // weight
+                put16(&mut rd, *port);
+                put_name(&mut rd, target.as_bytes());
+            }
+            RData::Txt(txt) => {
+                for t in *txt {
+                    let t = &t.as_bytes()[..t.len().min(255)];
+                    rd.push(t.len() as u8);
+                    rd.extend_from_slice(t);
+                }
+                if rd.is_empty() {
+                    rd.push(0);
+                }
+            }
+        }
+        put_name(out, r.name.as_bytes());
+        put16(out, r.rtype.code());
+        let flush = if r.unique && ttl_cap.is_none() {
+            0x8000
+        } else {
+            0
+        };
+        put16(out, flush | 1);
+        let ttl = if goodbye {
+            0
+        } else {
+            ttl_cap.map_or(r.ttl, |cap| r.ttl.min(cap))
+        };
+        out.extend_from_slice(&ttl.to_be_bytes());
+        put16(out, rd.len() as u16);
+        out.extend_from_slice(&rd);
     }
 }

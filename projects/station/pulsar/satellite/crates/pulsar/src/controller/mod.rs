@@ -11,13 +11,15 @@ mod voice;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
+use pulsar_arbiter as arbiter;
+use pulsar_arbiter::{ArbiterEvent, ArbiterHandle, ClaimId};
 use pulsar_audio::{FrontendEvent, Outcome};
 use pulsar_core::model::Model;
 use pulsar_core::{ClockShot, Timers, UiState, now_ms};
 use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, Capabilities, WakeWordInfo};
 use pulsar_hw::{InputEvent, InputHandle, LedsHandle, Rgb};
-use pulsar_lan::arbiter::{self, ArbiterEvent, ArbiterHandle};
-use pulsar_lan::mdns::{self, MdnsHandle, MdnsService};
+use pulsar_mdns as mdns;
+use pulsar_mdns::{MdnsHandle, MdnsService};
 use pulsar_media::{Channel, Mixer, PlayId, PlayState, PlayerEvent, PlayerHandle};
 use pulsar_sendspin::{SendspinConfig, SendspinEvent, SendspinHandle};
 use pulsar_update::{Release, RequestId, UpdateEvent, UpdaterHandle};
@@ -215,7 +217,7 @@ pub struct Controller {
     arbitrating: bool,
     /// Our claim being decided; forgotten on cancel (a `Decided` already queued then still
     /// arrives and is ignored).
-    arb_claim: Option<u64>,
+    arb_claim: Option<ClaimId>,
     arb_phrase: String,
     arb_level: f32,
     arb_audio: Vec<i16>,
@@ -564,28 +566,31 @@ impl Controller {
 
         // A test instance (port offset) stays invisible to HA and Music Assistant.
         let mdns = if ports.offset == 0 {
-            if let Ok(m) = mdns::spawn(&id.name) {
-                m.add_service(MdnsService {
-                    service: "_esphomelib._tcp".into(),
-                    instance: id.name.clone(),
-                    port: ports.api,
-                    txt: api.mdns_txt(),
-                });
-                if sendspin.is_some() {
+            match mdns::spawn(&id.name) {
+                Ok(m) => {
                     m.add_service(MdnsService {
-                        service: "_sendspin._tcp".into(),
+                        service: "_esphomelib._tcp".into(),
                         instance: id.name.clone(),
-                        port: ports.sendspin,
-                        txt: vec![
-                            "path=/sendspin".into(),
-                            format!("name={}", id.friendly_name),
-                        ],
+                        port: ports.api,
+                        txt: api.mdns_txt(),
                     });
+                    if sendspin.is_some() {
+                        m.add_service(MdnsService {
+                            service: "_sendspin._tcp".into(),
+                            instance: id.name.clone(),
+                            port: ports.sendspin,
+                            txt: vec![
+                                "path=/sendspin".into(),
+                                format!("name={}", id.friendly_name),
+                            ],
+                        });
+                    }
+                    Some(m)
                 }
-                Some(m)
-            } else {
-                warn!("api: mDNS advertising unavailable");
-                None
+                Err(e) => {
+                    warn!("api: mDNS advertising unavailable: {e}");
+                    None
+                }
             }
         } else {
             None

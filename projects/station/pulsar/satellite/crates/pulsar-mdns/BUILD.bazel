@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,18 +9,16 @@ DEPS = [
     "//packages/rust/home-actor:home_actor",
     "//packages/rust/home-linux:home_linux",
     "@crates//:libc",
-    "@crates//:tracing",
     "@crates//:socket2",
+    "@crates//:thiserror",
     "@crates//:tokio",
+    "@crates//:tracing",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
 
 rust_library(
-    name = "pulsar_lan",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["src/bin/**"],
-    ),
+    name = "pulsar_mdns",
+    srcs = glob(["src/**/*.rs"]),
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -28,18 +26,9 @@ rust_library(
     deps = DEPS,
 )
 
-rust_binary(
-    name = "lan_probe",
-    srcs = ["src/bin/lan_probe.rs"],
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    target_compatible_with = LINUX,
-    deps = DEPS + [":pulsar_lan"],
-)
-
 rust_test(
-    name = "pulsar_lan_unit_tests",
-    crate = ":pulsar_lan",
+    name = "pulsar_mdns_unit_tests",
+    crate = ":pulsar_mdns",
     edition = "2024",
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
