@@ -1,20 +1,25 @@
-//! Messages of the entities and the voice assistant: commands from HA, validated as the C++
-//! server did, become `ApiEvent`s.
+//! Сообщения сущностей и голосового ассистента: команды HA, проверенные так же, как в
+//! C++-сервере, превращаются в `ApiEvent`.
 
 use std::collections::HashMap;
 
+use esphome_proto::entity::{
+    ActionId, CLOCK_TEXT_MAX, LED_SPEED_MAX, LED_SPEED_MIN, NumberId, SelectId, SwitchId, TextId,
+    key,
+};
+use esphome_proto::pb::msg;
+use esphome_proto::pb::*;
 use tracing::{debug, info, warn};
 
-use super::entities::{CLOCK_TEXT_MAX, LED_SPEED_MAX, LED_SPEED_MIN, clamp01, key};
-use super::{Server, msg};
-use crate::proto::{Reader, WireType, zigzag32};
+use super::decode;
+use super::entities::{EntityState, clamp01};
 use crate::types::{
-    ActionId, AnnounceRequest, ApiEvent, ButtonId, LightState, MediaCommand, MediaCommandRequest,
-    NumberId, SelectId, SwitchId, TextId, TimerEvent, TimerInfo, UpdateCommand, VaEvent,
+    AnnounceRequest, ApiEvent, ButtonId, LightState, MediaCommand, MediaCommandRequest, TimerEvent,
+    TimerInfo, UpdateCommand, VaEvent, followup_duration_s,
 };
 
-/// LightCommandRequest without a transition: ESPHome's default_transition_length. Longer ones
-/// are cut to a minute (frames run for the whole fade).
+/// LightCommandRequest без transition: default_transition_length ESPHome. Более длинные
+/// обрезаются до минуты (кадры идут весь fade).
 const DEFAULT_TRANSITION_MS: u32 = 1000;
 const MAX_TRANSITION_MS: u32 = 60_000;
 
@@ -22,14 +27,14 @@ fn lossy(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-/// Text for the clock: at most CLOCK_TEXT_MAX characters of what the controller will get (the
-/// lossy decoding, where each invalid sequence is one U+FFFD). For valid UTF-8 this is the
-/// C++ count; for invalid input C++ counted bytes that are not continuation bytes, which let
-/// e.g. "a" + 64 stray continuation bytes through as one character.
+/// Текст для часов: не более CLOCK_TEXT_MAX символов того, что получит контроллер (lossy-
+/// декодирование, где каждая невалидная последовательность — один U+FFFD). Для валидного
+/// UTF-8 это счёт C++; для невалидного C++ считал байты, не являющиеся continuation, и
+/// пропускал, например, "a" + 64 лишних continuation как один символ.
 fn clock_text(b: &[u8]) -> Option<String> {
     let s = lossy(b);
     let n = s.chars().count();
-    if n > CLOCK_TEXT_MAX {
+    if n > CLOCK_TEXT_MAX as usize {
         warn!("api: clock text too long ({n} chars)");
         return None;
     }
@@ -75,16 +80,24 @@ fn timer_event(v: u32) -> Option<TimerEvent> {
     })
 }
 
-impl Server {
-    /// Messages past the transport's own; false: return at once (the C++ server could be gone
-    /// after the restart hook).
-    pub(super) fn handle_entities(
-        &mut self,
-        id: u64,
-        msg_type: u32,
-        r: &mut Reader<'_>,
-        len: usize,
-    ) -> bool {
+fn switch_id(key: u32) -> Option<SwitchId> {
+    Some(match key {
+        k if k == key::SW_MICROPHONES.get() => SwitchId::Microphones,
+        k if k == key::SW_CLOCK.get() => SwitchId::Clock,
+        k if k == key::SW_CLOCK_AUTO_BRI.get() => SwitchId::ClockAutoBrightness,
+        k if k == key::SW_AUTO_UPDATE.get() => SwitchId::AutoUpdate,
+        k if k == key::SW_NEAREST_ANSWERS.get() => SwitchId::NearestAnswers,
+        k if k == key::SW_VOICE_INDICATION.get() => SwitchId::VoiceIndication,
+        k if k == key::SW_WAKE_PREROLL.get() => SwitchId::WakePreroll,
+        k if k == key::SW_WAKE_EVENT_RECORDING.get() => SwitchId::WakeEventRecording,
+        k if k == key::SW_WAKE_DRY_RUN.get() => SwitchId::WakeDryRun,
+        _ => return None,
+    })
+}
+
+impl super::Server {
+    /// Сообщения после транспорта.
+    pub(super) fn handle_entities(&mut self, id: u64, msg_type: u32, payload: &[u8]) {
         match msg_type {
             msg::DEVICE_INFO_REQ => self.send_device_info(id),
             msg::DEVICE_CAPS_REQ => self.send_device_caps(id),
@@ -96,125 +109,92 @@ impl Server {
                 self.send_all_states(id);
             }
             msg::SUBSCRIBE_HA_SERVICES_REQ | msg::SUBSCRIBE_HA_STATES_REQ | msg::VA_AUDIO => {}
-            msg::MEDIA_PLAYER_CMD => self.on_media_cmd(r),
-            msg::BUTTON_CMD => return self.on_button_cmd(id, r),
-            msg::SWITCH_CMD => self.on_switch_cmd(r),
+            msg::MEDIA_PLAYER_CMD => self.on_media_cmd(payload),
+            msg::BUTTON_CMD => self.on_button_cmd(id, payload),
+            msg::SWITCH_CMD => self.on_switch_cmd(payload),
             msg::UPDATE_CMD => {
-                let (mut key, mut cmd) = (0, 0);
-                while let Some(f) = r.next() {
-                    match f.num {
-                        1 => key = f.u32(),
-                        2 => cmd = f.u32(),
-                        _ => {}
+                let m: UpdateCommandRequest = decode(payload);
+                if m.key == Some(key::UPDATE.get())
+                    && let Some(cmd) = match m.command.unwrap_or(0) {
+                        0 => Some(UpdateCommand::None),
+                        1 => Some(UpdateCommand::Install),
+                        2 => Some(UpdateCommand::Check),
+                        _ => None,
                     }
-                }
-                let cmd = match cmd {
-                    0 => Some(UpdateCommand::None),
-                    1 => Some(UpdateCommand::Install),
-                    2 => Some(UpdateCommand::Check),
-                    _ => None,
-                };
-                if key == key::UPDATE
-                    && let Some(cmd) = cmd
                 {
                     self.emit(ApiEvent::Update(cmd));
                 }
             }
-            msg::NUMBER_CMD => self.on_number_cmd(r),
-            msg::TEXT_CMD => self.on_text_cmd(r),
-            msg::SELECT_CMD => self.on_select_cmd(r),
-            msg::EXECUTE_SERVICE_REQ => self.on_execute_service(r),
-            msg::LIGHT_CMD => self.on_light_cmd(r),
-            msg::VA_EVENT_RESP => self.on_voice_event(id, r),
-            msg::VA_TIMER_EVENT_RESP => self.on_timer_event(r),
+            msg::NUMBER_CMD => self.on_number_cmd(payload),
+            msg::TEXT_CMD => self.on_text_cmd(payload),
+            msg::SELECT_CMD => self.on_select_cmd(payload),
+            msg::EXECUTE_SERVICE_REQ => self.on_execute_service(payload),
+            msg::LIGHT_CMD => self.on_light_cmd(payload),
+            msg::VA_EVENT_RESP => self.on_voice_event(id, payload),
+            msg::VA_TIMER_EVENT_RESP => self.on_timer_event(payload),
             msg::VA_ANNOUNCE_REQ => {
-                let mut a = AnnounceRequest::default();
-                while let Some(f) = r.next() {
-                    match f.num {
-                        1 => a.media_id = f.str(),
-                        2 => a.text = f.str(),
-                        3 => a.preannounce_media_id = f.str(),
-                        4 => a.start_conversation = f.boolean(),
-                        _ => {}
-                    }
-                }
+                let m: VoiceAssistantAnnounceRequest = decode(payload);
+                let a = AnnounceRequest {
+                    media_id: m.media_id.unwrap_or_default(),
+                    text: m.text.unwrap_or_default(),
+                    preannounce_media_id: m.preannounce_media_id.unwrap_or_default(),
+                    start_conversation: m.start_conversation.unwrap_or(false),
+                };
                 info!("api: announce '{}' media={}", a.text, a.media_id);
                 self.emit(ApiEvent::Announce(a));
             }
             msg::VA_CONFIG_REQ => self.send_va_config(id),
-            msg::VA_SET_CONFIG => self.on_va_set_config(r),
-            // HA -> device TTS audio over the API; SPEAKER is not advertised.
-            _ => debug!("api: ignoring message type {msg_type} ({len} bytes)"),
+            msg::VA_SET_CONFIG => self.on_va_set_config(payload),
+            // HA -> устройство TTS-аудио через API; SPEAKER не объявляется.
+            _ => debug!(
+                "api: ignoring message type {msg_type} ({} bytes)",
+                payload.len()
+            ),
         }
-        true
     }
 
-    fn on_button_cmd(&mut self, id: u64, r: &mut Reader<'_>) -> bool {
-        let mut k = 0;
-        while let Some(f) = r.next() {
-            if f.num == 1 {
-                k = f.u32();
-            }
-        }
+    fn on_button_cmd(&mut self, id: u64, payload: &[u8]) {
+        let m: ButtonCommandRequest = decode(payload);
+        let k = m.key.unwrap_or(0);
         let peer = self.client(id).map(|c| c.peer.clone()).unwrap_or_default();
-        if k == key::BUTTON_WAKE_FALSE_ALARM || k == key::BUTTON_WAKE_MISSED {
-            let b = if k == key::BUTTON_WAKE_FALSE_ALARM {
+        if k == key::BUTTON_WAKE_FALSE_ALARM.get() || k == key::BUTTON_WAKE_MISSED.get() {
+            let b = if k == key::BUTTON_WAKE_FALSE_ALARM.get() {
                 ButtonId::WakeFalseAlarm
             } else {
                 ButtonId::WakeMissed
             };
             info!("api: wake-event button {k} pressed by {peer}");
             self.emit(ApiEvent::Button(b));
-            return true;
+            return;
         }
-        if k == key::BUTTON_ZIGBEE_JOIN || k == key::BUTTON_ZIGBEE_LEAVE {
-            if self.cfg.zigbee_modes.is_empty() {
-                return true;
+        if k == key::BUTTON_ZIGBEE_JOIN.get() || k == key::BUTTON_ZIGBEE_LEAVE.get() {
+            if !self.cfg.capabilities.zigbee {
+                return;
             }
             info!("api: Zigbee button {k} pressed by {peer}");
-            let b = if k == key::BUTTON_ZIGBEE_JOIN {
+            let b = if k == key::BUTTON_ZIGBEE_JOIN.get() {
                 ButtonId::ZigbeeJoin
             } else {
                 ButtonId::ZigbeeLeave
             };
             self.emit(ApiEvent::Button(b));
-            return true;
-        }
-        if k != key::BUTTON_RESTART {
-            return true;
-        }
-        warn!("api: restart requested by {peer}");
-        self.emit(ApiEvent::Restart);
-        false
-    }
-
-    fn on_media_cmd(&mut self, r: &mut Reader<'_>) {
-        let mut k = 0;
-        let (mut has_cmd, mut cmd) = (false, 0);
-        let (mut has_vol, mut vol) = (false, 0.0);
-        let (mut has_url, mut url) = (false, String::new());
-        let (mut has_ann, mut ann) = (false, false);
-        while let Some(f) = r.next() {
-            match f.num {
-                1 => k = f.u32(),
-                2 => has_cmd = f.boolean(),
-                3 => cmd = f.u32(),
-                4 => has_vol = f.boolean(),
-                5 => vol = f.flt(),
-                6 => has_url = f.boolean(),
-                7 => url = f.str(),
-                8 => has_ann = f.boolean(),
-                9 => ann = f.boolean(),
-                _ => {}
-            }
-        }
-        if k != key::MEDIA {
             return;
         }
-        let command = if has_cmd {
-            let c = media_command(cmd);
+        if k == key::BUTTON_RESTART.get() {
+            warn!("api: restart requested by {peer}");
+            self.emit(ApiEvent::Restart);
+        }
+    }
+
+    fn on_media_cmd(&mut self, payload: &[u8]) {
+        let m: MediaPlayerCommandRequest = decode(payload);
+        if m.key != Some(key::MEDIA.get()) {
+            return;
+        }
+        let command = if m.has_command.unwrap_or(false) {
+            let c = media_command(m.command.unwrap_or(0));
             if c.is_none() {
-                debug!("api: unknown media command {cmd}");
+                debug!("api: unknown media command {}", m.command.unwrap_or(0));
             }
             c
         } else {
@@ -222,54 +202,46 @@ impl Server {
         };
         self.emit(ApiEvent::MediaCommand(MediaCommandRequest {
             command,
-            volume: has_vol.then(|| clamp01(vol)),
-            media_url: has_url.then_some(url),
-            announcement: has_ann.then_some(ann),
+            volume: m
+                .has_volume
+                .unwrap_or(false)
+                .then(|| clamp01(m.volume.unwrap_or(0.0))),
+            media_url: m
+                .has_media_url
+                .unwrap_or(false)
+                .then(|| m.media_url.unwrap_or_default()),
+            announcement: m
+                .has_announcement
+                .unwrap_or(false)
+                .then(|| m.announcement.unwrap_or(false)),
         }));
     }
 
-    fn on_switch_cmd(&mut self, r: &mut Reader<'_>) {
-        let (mut k, mut state) = (0, false);
-        while let Some(f) = r.next() {
-            match f.num {
-                1 => k = f.u32(),
-                2 => state = f.boolean(),
-                _ => {}
-            }
+    fn on_switch_cmd(&mut self, payload: &[u8]) {
+        let m: SwitchCommandRequest = decode(payload);
+        if let Some(id) = switch_id(m.key.unwrap_or(0)) {
+            self.emit(ApiEvent::Switch(id, m.state.unwrap_or(false)));
         }
-        let id = match k {
-            key::SW_MICROPHONES => SwitchId::Microphones,
-            key::SW_CLOCK => SwitchId::Clock,
-            key::SW_CLOCK_AUTO_BRI => SwitchId::ClockAutoBrightness,
-            key::SW_AUTO_UPDATE => SwitchId::AutoUpdate,
-            key::SW_NEAREST_ANSWERS => SwitchId::NearestAnswers,
-            key::SW_VOICE_INDICATION => SwitchId::VoiceIndication,
-            key::SW_WAKE_PREROLL => SwitchId::WakePreroll,
-            key::SW_WAKE_EVENT_RECORDING => SwitchId::WakeEventRecording,
-            key::SW_WAKE_DRY_RUN => SwitchId::WakeDryRun,
-            _ => return,
-        };
-        self.emit(ApiEvent::Switch(id, state));
     }
 
-    fn on_number_cmd(&mut self, r: &mut Reader<'_>) {
-        let (mut k, mut v) = (0, 0.0f32);
-        while let Some(f) = r.next() {
-            match f.num {
-                1 => k = f.u32(),
-                2 => v = f.flt(),
-                _ => {}
-            }
-        }
+    fn on_number_cmd(&mut self, payload: &[u8]) {
+        let m: NumberCommandRequest = decode(payload);
+        let v = m.state.unwrap_or(0.0);
         if v.is_nan() {
             return;
         }
-        let (id, v) = match k {
-            key::NUMBER_CLOCK_BRI => (NumberId::ClockBrightness, v.clamp(0.0, 100.0)),
-            key::NUMBER_CLOCK_SCROLL => (NumberId::ClockScroll, v.clamp(100.0, 2000.0)),
-            key::NUMBER_LED_SPEED => (NumberId::LedSpeed, v.clamp(LED_SPEED_MIN, LED_SPEED_MAX)),
-            key::NUMBER_FOLLOWUP_DURATION => {
-                let Some(s) = crate::followup_duration_s(v) else {
+        let (id, v) = match m.key.unwrap_or(0) {
+            k if k == key::NUMBER_CLOCK_BRI.get() => {
+                (NumberId::ClockBrightness, v.clamp(0.0, 100.0))
+            }
+            k if k == key::NUMBER_CLOCK_SCROLL.get() => {
+                (NumberId::ClockScroll, v.clamp(100.0, 2000.0))
+            }
+            k if k == key::NUMBER_LED_SPEED.get() => {
+                (NumberId::LedSpeed, v.clamp(LED_SPEED_MIN, LED_SPEED_MAX))
+            }
+            k if k == key::NUMBER_FOLLOWUP_DURATION.get() => {
+                let Some(s) = followup_duration_s(v) else {
                     return;
                 };
                 (NumberId::FollowupDuration, s as f32)
@@ -279,19 +251,12 @@ impl Server {
         self.emit(ApiEvent::Number(id, v));
     }
 
-    fn on_text_cmd(&mut self, r: &mut Reader<'_>) {
-        let (mut k, mut s): (u32, &[u8]) = (0, &[]);
-        while let Some(f) = r.next() {
-            match f.num {
-                1 => k = f.u32(),
-                2 => s = f.data,
-                _ => {}
-            }
-        }
-        if k != key::TEXT_CLOCK {
+    fn on_text_cmd(&mut self, payload: &[u8]) {
+        let m: TextCommandRequest = decode(payload);
+        if m.key != Some(key::TEXT_CLOCK.get()) {
             return;
         }
-        if let Some(s) = clock_text(s) {
+        if let Some(s) = clock_text(m.state.as_deref().unwrap_or_default()) {
             self.emit(ApiEvent::Text(TextId::ClockText, s));
         }
     }
@@ -300,34 +265,32 @@ impl Server {
         self.cfg.clock_faces.iter().any(|o| o == s)
     }
 
-    fn on_select_cmd(&mut self, r: &mut Reader<'_>) {
-        let (mut k, mut s) = (0, String::new());
-        while let Some(f) = r.next() {
-            match f.num {
-                1 => k = f.u32(),
-                2 => s = f.str(),
-                _ => {}
-            }
-        }
-        let (id, options, what) = match k {
-            key::SELECT_ZIGBEE_MODE => {
+    fn on_select_cmd(&mut self, payload: &[u8]) {
+        let m: SelectCommandRequest = decode(payload);
+        let s = m.state.unwrap_or_default();
+        let (id, options, what) = match m.key.unwrap_or(0) {
+            k if k == key::SELECT_ZIGBEE_MODE.get() => {
                 (SelectId::ZigbeeMode, &self.cfg.zigbee_modes, "Zigbee role")
             }
-            key::SELECT_CLOCK_MUSIC => (
+            k if k == key::SELECT_CLOCK_MUSIC.get() => (
                 SelectId::ClockMusic,
                 &self.cfg.clock_music_styles,
                 "clock music",
             ),
-            key::SELECT_MUSIC_VIZ => (
+            k if k == key::SELECT_MUSIC_VIZ.get() => (
                 SelectId::MusicViz,
                 &self.cfg.music_styles,
                 "music visualization",
             ),
-            key::SELECT_CASE_COLOR => (SelectId::CaseColor, &self.cfg.case_colors, "case color"),
-            key::SELECT_VOICE_COLOR => {
+            k if k == key::SELECT_CASE_COLOR.get() => {
+                (SelectId::CaseColor, &self.cfg.case_colors, "case color")
+            }
+            k if k == key::SELECT_VOICE_COLOR.get() => {
                 (SelectId::VoiceColor, &self.cfg.voice_colors, "voice color")
             }
-            key::SELECT_CLOCK_FACE => (SelectId::ClockFace, &self.cfg.clock_faces, "clock face"),
+            k if k == key::SELECT_CLOCK_FACE.get() => {
+                (SelectId::ClockFace, &self.cfg.clock_faces, "clock face")
+            }
             _ => return,
         };
         if !options.contains(&s) {
@@ -337,49 +300,25 @@ impl Server {
         self.emit(ApiEvent::Select(id, s));
     }
 
-    fn on_execute_service(&mut self, r: &mut Reader<'_>) {
-        struct Arg<'a> {
-            s: &'a [u8],
-            i: i32,
-        }
-        let mut k = 0;
-        // Only the first three are kept: no action takes more, and the count decides.
-        let mut args: Vec<Arg<'_>> = Vec::with_capacity(3);
-        let mut n_args = 0usize;
-        while let Some(f) = r.next() {
-            if f.num == 1 {
-                k = f.u32();
-            }
-            // 3/4 call_id / return_response: actions declare no response.
-            if f.num != 2 {
-                continue;
-            }
-            let mut a = Arg { s: &[], i: 0 };
-            let mut ar = Reader::new(f.data);
-            while let Some(af) = ar.next() {
-                match af.num {
-                    4 => a.s = af.data,
-                    5 => a.i = zigzag32(af.v),
-                    2 => a.i = af.v as u32 as i32, // legacy_int
-                    _ => {}
-                }
-            }
-            n_args += 1;
-            if args.len() < 3 {
-                args.push(a);
-            }
-        }
-        let want = if k == key::ACTION_LED_SHOW { 3 } else { 2 };
-        if !matches!(
-            k,
-            key::ACTION_CLOCK_TEXT | key::ACTION_CLOCK_FACE | key::ACTION_LED_SHOW
-        ) || n_args != want
+    fn on_execute_service(&mut self, payload: &[u8]) {
+        let m: ExecuteServiceRequest = decode(payload);
+        let k = m.key.unwrap_or(0);
+        let args = &m.args;
+        let want = if k == key::ACTION_LED_SHOW.get() {
+            3
+        } else {
+            2
+        };
+        if !(k == key::ACTION_CLOCK_TEXT.get()
+            || k == key::ACTION_CLOCK_FACE.get()
+            || k == key::ACTION_LED_SHOW.get())
+            || args.len() != want
         {
-            warn!("api: bad action call key={k} args={n_args}");
+            warn!("api: bad action call key={k} args={}", args.len());
             return;
         }
-        if k == key::ACTION_LED_SHOW {
-            let effect = lossy(args[0].s);
+        if k == key::ACTION_LED_SHOW.get() {
+            let effect = lossy(args[0].string_.as_deref().unwrap_or_default().as_bytes());
             if !effect.is_empty() && effect != "None" && !self.cfg.light_effects.contains(&effect) {
                 warn!("api: unknown LED effect '{effect}'");
                 return;
@@ -391,14 +330,15 @@ impl Server {
             };
             self.emit(ApiEvent::LedShow {
                 effect,
-                color: lossy(args[1].s),
-                seconds: args[2].i,
+                color: lossy(args[1].string_.as_deref().unwrap_or_default().as_bytes()),
+                seconds: args[2].int_.or(args[2].legacy_int).unwrap_or(0),
             });
             return;
         }
-        let (value, seconds) = (args[0].s, args[1].i);
-        if k == key::ACTION_CLOCK_TEXT {
-            let Some(value) = clock_text(value) else {
+        let value = args[0].string_.as_deref().unwrap_or_default();
+        let seconds = args[1].int_.or(args[1].legacy_int).unwrap_or(0);
+        if k == key::ACTION_CLOCK_TEXT.get() {
+            let Some(value) = clock_text(value.as_bytes()) else {
                 return;
             };
             self.emit(ApiEvent::Action {
@@ -407,7 +347,7 @@ impl Server {
                 seconds,
             });
         } else {
-            let face = lossy(value);
+            let face = lossy(value.as_bytes());
             if !face.is_empty() && !self.is_clock_face(&face) {
                 warn!("api: unknown clock face '{face}'");
                 return;
@@ -420,39 +360,20 @@ impl Server {
         }
     }
 
-    fn on_light_cmd(&mut self, r: &mut Reader<'_>) {
-        let mut k = 0;
-        let (mut has_state, mut state) = (false, false);
-        let (mut has_bri, mut bri) = (false, 0.0f32);
-        let (mut has_cbri, mut cbri) = (false, 1.0f32);
-        let (mut has_rgb, mut rgb) = (false, [0.0f32; 3]);
-        let (mut has_effect, mut effect) = (false, String::new());
-        let (mut has_transition, mut transition) = (false, 0u32);
-        while let Some(f) = r.next() {
-            match f.num {
-                1 => k = f.u32(),
-                2 => has_state = f.boolean(),
-                3 => state = f.boolean(),
-                4 => has_bri = f.boolean(),
-                5 => bri = f.flt(),
-                20 => has_cbri = f.boolean(),
-                21 => cbri = f.flt(),
-                6 => has_rgb = f.boolean(),
-                7 => rgb[0] = f.flt(),
-                8 => rgb[1] = f.flt(),
-                9 => rgb[2] = f.flt(),
-                18 => has_effect = f.boolean(),
-                19 => effect = f.str(),
-                14 => has_transition = f.boolean(),
-                15 => transition = f.u32(),
-                _ => {}
-            }
-        }
-        if k != key::LIGHT_RING {
+    fn on_light_cmd(&mut self, payload: &[u8]) {
+        let m: LightCommandRequest = decode(payload);
+        if m.key != Some(key::LIGHT_RING.get()) {
             return;
         }
-        // NaN would reach the LEDs as NaN (the C++ server let it through, clamp01 keeps it):
-        // refused like a NaN number.
+        let bri = m.brightness.unwrap_or(0.0);
+        let cbri = m.color_brightness.unwrap_or(1.0);
+        let rgb = [
+            m.red.unwrap_or(0.0),
+            m.green.unwrap_or(0.0),
+            m.blue.unwrap_or(0.0),
+        ];
+        // NaN дошёл бы до LED как NaN (C++-сервер пропускал, clamp01 его сохраняет):
+        // отвергается так же, как NaN number.
         if [bri, cbri, rgb[0], rgb[1], rgb[2]]
             .iter()
             .any(|v| v.is_nan())
@@ -460,34 +381,42 @@ impl Server {
             warn!("api: light command with NaN ignored");
             return;
         }
-        let mut st: LightState = self.cache.light.clone();
-        if has_state {
-            st.on = state;
+        let mut st = match self.states.get(&key::LIGHT_RING) {
+            Some(EntityState::Light(l)) => l.clone(),
+            _ => LightState::default(),
+        };
+        if m.has_state.unwrap_or(false) {
+            st.on = m.state.unwrap_or(false);
         }
-        if has_bri {
+        if m.has_brightness.unwrap_or(false) {
             st.brightness = clamp01(bri);
         }
-        if has_rgb {
-            let scale = if has_cbri { clamp01(cbri) } else { 1.0 };
+        if m.has_rgb.unwrap_or(false) {
+            let scale = if m.has_color_brightness.unwrap_or(false) {
+                clamp01(cbri)
+            } else {
+                1.0
+            };
             st.r = clamp01(rgb[0]) * scale;
             st.g = clamp01(rgb[1]) * scale;
             st.b = clamp01(rgb[2]) * scale;
-        } else if has_cbri {
-            let m = st.r.max(st.g).max(st.b);
-            let scale = if m > 0.0 { clamp01(cbri) / m } else { 0.0 };
+        } else if m.has_color_brightness.unwrap_or(false) {
+            let max = st.r.max(st.g).max(st.b);
+            let scale = if max > 0.0 { clamp01(cbri) / max } else { 0.0 };
             st.r *= scale;
             st.g *= scale;
             st.b *= scale;
         }
-        if has_effect {
+        if m.has_effect.unwrap_or(false) {
+            let effect = m.effect.unwrap_or_default();
             st.effect = if effect == "None" {
                 String::new()
             } else {
                 effect
             };
         }
-        let transition_ms = if has_transition {
-            transition.min(MAX_TRANSITION_MS)
+        let transition_ms = if m.has_transition_length.unwrap_or(false) {
+            m.transition_length.unwrap_or(0).min(MAX_TRANSITION_MS)
         } else {
             DEFAULT_TRANSITION_MS
         };
@@ -495,36 +424,23 @@ impl Server {
             state: st.clone(),
             transition_ms,
         });
-        self.cache.light = st;
-        if self.clients.iter().any(|c| c.hello && c.states) {
-            self.send_light(None);
+        self.states.insert(key::LIGHT_RING, EntityState::Light(st));
+        if self.states_on() {
+            self.send_state(key::LIGHT_RING, None);
         }
     }
 
-    fn on_voice_event(&mut self, id: u64, r: &mut Reader<'_>) {
-        // Pipeline events only count from the pipeline owner.
-        if !self.client(id).is_some_and(|c| c.voice) {
+    fn on_voice_event(&mut self, id: u64, payload: &[u8]) {
+        // События пайплайна считаются только от владельца.
+        if self.voice.current() != Some(id) {
             return;
         }
-        let mut type_v = 0;
+        let m: VoiceAssistantEventResponse = decode(payload);
         let mut data = HashMap::new();
-        while let Some(f) = r.next() {
-            if f.num == 1 {
-                type_v = f.u32();
-            }
-            if f.num == 2 && f.wt == WireType::Len {
-                let (mut k, mut v) = (String::new(), String::new());
-                let mut sr = Reader::new(f.data);
-                while let Some(sf) = sr.next() {
-                    match sf.num {
-                        1 => k = sf.str(),
-                        2 => v = sf.str(),
-                        _ => {}
-                    }
-                }
-                data.insert(k, v);
-            }
+        for d in m.data {
+            data.insert(d.name.unwrap_or_default(), d.value.unwrap_or_default());
         }
+        let type_v = m.event_type.unwrap_or(0);
         debug!("api: voice event {type_v}");
         self.emit(ApiEvent::VoiceEvent {
             event: va_event(type_v),
@@ -532,36 +448,28 @@ impl Server {
         });
     }
 
-    fn on_timer_event(&mut self, r: &mut Reader<'_>) {
-        let mut t = TimerInfo::default();
-        let mut event = 0;
-        while let Some(f) = r.next() {
-            match f.num {
-                1 => event = f.u32(),
-                2 => t.id = f.str(),
-                3 => t.name = f.str(),
-                4 => t.total_seconds = f.u32(),
-                5 => t.seconds_left = f.u32(),
-                6 => t.is_active = f.boolean(),
-                _ => {}
-            }
-        }
+    fn on_timer_event(&mut self, payload: &[u8]) {
+        let m: VoiceAssistantTimerEventResponse = decode(payload);
+        let event = m.event_type.unwrap_or(0);
         if let Some(e) = timer_event(event) {
-            t.event = e;
-            self.emit(ApiEvent::Timer(t));
+            self.emit(ApiEvent::Timer(TimerInfo {
+                event: e,
+                id: m.timer_id.unwrap_or_default(),
+                name: m.name.unwrap_or_default(),
+                total_seconds: m.total_seconds.unwrap_or(0),
+                seconds_left: m.seconds_left.unwrap_or(0),
+                is_active: m.is_active.unwrap_or(false),
+            }));
         } else {
             debug!("api: unknown timer event {event} dropped");
         }
     }
 
-    fn on_va_set_config(&mut self, r: &mut Reader<'_>) {
+    fn on_va_set_config(&mut self, payload: &[u8]) {
+        let m: VoiceAssistantSetConfiguration = decode(payload);
         let mut ids: Vec<String> = Vec::new();
         let (mut ignored, mut first_ignored) = (0usize, String::new());
-        while let Some(f) = r.next() {
-            if f.num != 1 || f.wt != WireType::Len {
-                continue;
-            }
-            let ww = f.str();
+        for ww in m.active_wake_words {
             let known = self.cfg.wake_words.iter().any(|w| w.id == ww);
             // max_active_wake_words = 1
             if known && ids.is_empty() {
@@ -573,53 +481,16 @@ impl Server {
                 ignored += 1;
             }
         }
-        // One line however many came (the C++ server logged each).
+        // Одна строка, сколько бы ни пришло (C++-сервер логировал каждую).
         if ignored > 0 {
             warn!("api: ignoring {ignored} wake word(s), first '{first_ignored}'");
         }
-        // The spotter always runs one model: an empty / unknown selection leaves the current
-        // word active, and the controller reports a switch back through set_active_wake_words.
+        // Спотер всегда держит одну модель: пустой / неизвестный выбор оставляет текущее слово,
+        // а контроллер сообщает возврат через set_active_wake_words.
         if ids.is_empty() {
             warn!("api: no known wake word in the new configuration, keeping the current one");
             return;
         }
         self.emit(ApiEvent::ActiveWakeWords(ids));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn clock_text_counts_what_the_controller_gets() {
-        assert_eq!(
-            clock_text("я".repeat(64).as_bytes())
-                .unwrap()
-                .chars()
-                .count(),
-            64
-        );
-        assert!(clock_text("я".repeat(65).as_bytes()).is_none());
-        // Each stray continuation byte becomes one U+FFFD: "a" + 63 of them is 64 characters,
-        // + 64 is too long (C++ counted 1 either way).
-        let mut b = b"a".to_vec();
-        b.extend_from_slice(&[0x80; 63]);
-        assert_eq!(clock_text(&b).unwrap().chars().count(), 64);
-        b.push(0x80);
-        assert!(clock_text(&b).is_none());
-    }
-
-    #[test]
-    fn enum_values_from_the_wire() {
-        assert_eq!(va_event(100), VaEvent::IntentProgress);
-        assert_eq!(va_event(13), VaEvent::Unknown(13));
-        for code in [0, 1, 2, 12, 98, 99, 100, 13, 97, 101, 7777] {
-            assert_eq!(VaEvent::from_code(code).code(), code);
-        }
-        assert_eq!(media_command(13), Some(MediaCommand::TurnOff));
-        assert_eq!(media_command(14), None);
-        assert_eq!(timer_event(3), Some(TimerEvent::Finished));
-        assert_eq!(timer_event(4), None);
     }
 }

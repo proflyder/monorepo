@@ -1,218 +1,22 @@
-//! Entities: the golden bytes of the C++ api_selftest configuration, the command parsers at
-//! their limits, publishing.
+//! Сущности: проверки команд на границах (как C++-сервер), подписка и replay состояний,
+//! гейтинг по `Capabilities`, голосовые события.
+
+use esphome_proto::entity::{FOLLOWUP_DURATION_MAX_S, key};
+use esphome_proto::pb::msg;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 use super::*;
-use crate::server::entities::key;
-use crate::types::*;
 
-const RAW: &str = include_str!("../../../tests/golden/selftest_raw.txt");
-
-/// The C++ api_selftest's identity and configuration (satellite/tools/api_selftest.cpp, tag rust-port-base).
-fn selftest(compilation_time: &str) -> (DeviceIdentity, ApiConfig) {
-    let s = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-    let ww = |id: &str, phrase: &str| WakeWordInfo {
-        id: id.into(),
-        phrase: phrase.into(),
-        languages: s(&["ru"]),
-    };
-    let id = DeviceIdentity {
-        name: "pulsar-selftest".into(),
-        friendly_name: "Яндекс Станция Миди (selftest)".into(),
-        mac: "02:00:00:C0:FF:EE".into(),
-        model: "Yandex Station Midi".into(),
-        board: "cucumber".into(),
-        manufacturer: "Yandex".into(),
-        project_version: "0.1.0".into(),
-        compilation_time: compilation_time.into(),
-    };
-    let cfg = ApiConfig {
-        port: 0,
-        wake_words: vec![ww("alisa", "Алиса"), ww("yandex", "Яндекс")],
-        active_wake_words: s(&["alisa"]),
-        light_effects: s(&["Rainbow", "Pulse"]),
-        clock_faces: s(&["None", "Smiley"]),
-        music_styles: s(&["Off", "All styles", "Spectrum"]),
-        case_colors: s(&["None", "blue"]),
-        clock_music_styles: s(&["Off", "Levels"]),
-        voice_colors: s(&["Violet", "Blue"]),
-        zigbee_modes: s(&["Coordinator", "Router"]),
-        has_clock: true,
-        has_lux: true,
-        has_wake_preroll: true,
-        has_hw_mic_mute: true,
-        has_buttons: true,
-        has_auto_brightness: true,
-        key_path: None,
-    };
-    (id, cfg)
-}
-
-fn publish_selftest_states(h: &ApiHandle) {
-    h.publish_media(MediaState::Idle, 0.5, false);
-    h.publish_switch(SwitchId::Microphones, true);
-    h.publish_switch(SwitchId::Clock, true);
-    h.publish_switch(SwitchId::VoiceIndication, true);
-    h.publish_number(NumberId::LedSpeed, 1.0);
-    h.publish_select(SelectId::MusicViz, "All styles");
-    h.publish_select(SelectId::CaseColor, "None");
-    h.publish_select(SelectId::ClockMusic, "Off");
-    h.publish_binary_sensor(BinarySensorId::HwMicMute, false);
-    h.publish_number(NumberId::ClockBrightness, 50.0);
-    h.publish_light(&LightState {
-        on: true,
-        brightness: 0.8,
-        r: 0.0,
-        g: 0.5,
-        b: 1.0,
-        effect: String::new(),
-    });
-    h.publish_number(NumberId::ClockScroll, 400.0);
-    h.publish_text(TextId::ClockText, "");
-    h.publish_select(SelectId::ClockFace, "None");
-    h.publish_select(SelectId::ZigbeeMode, "Coordinator");
-    h.publish_select(SelectId::VoiceColor, "Violet");
-    h.publish_text_sensor(TextSensorId::Zigbee, "coordinator: PAN 0x1234, channel 15");
-}
-
-fn start_with(id: DeviceIdentity, cfg: ApiConfig) -> (ApiHandle, UnboundedReceiver<ApiEvent>, u16) {
-    let s = spawn(id, cfg).unwrap();
-    let h = ApiHandle {
-        cmds: s.cmds,
-        shared: s.shared,
-    };
-    (h, s.events, s.port)
-}
-
-/// Message type and fixed32 key of a state message (field 1), for the masked comparison.
+/// Ключ состояния (field 1, fixed32) и ключ сущности в ListEntities (field 2, fixed32).
 fn state_key(m: &[u8]) -> Option<u32> {
-    field(m, 1)
-        .filter(|f| f.wt == WireType::Fixed32)
-        .map(|f| f.u32())
+    field(m, 1).map(Field::u32)
 }
 
-/// The fork's own entity keys: `key` of a ListEntities message (field 2).
-fn entity_key(m: &[u8]) -> Option<u32> {
-    field(m, 2)
-        .filter(|f| f.wt == WireType::Fixed32)
-        .map(|f| f.u32())
+fn entity_keys(m: &[u8]) -> Option<u32> {
+    field(m, 2).map(Field::u32)
 }
 
-/// Entities and states this fork adds to the C++ reference (wake-event recording, voice color).
-fn fork_only(t: u32, m: &[u8]) -> bool {
-    const KEYS: [u32; 5] = [
-        key::SW_WAKE_EVENT_RECORDING,
-        key::SW_WAKE_DRY_RUN,
-        key::BUTTON_WAKE_FALSE_ALARM,
-        key::BUTTON_WAKE_MISSED,
-        key::SELECT_VOICE_COLOR,
-    ];
-    match t {
-        msg::LIST_SWITCH | msg::LIST_BUTTON | msg::LIST_SELECT => {
-            entity_key(m).is_some_and(|k| KEYS.contains(&k))
-        }
-        msg::SWITCH_STATE | msg::SELECT_STATE => state_key(m).is_some_and(|k| KEYS.contains(&k)),
-        _ => false,
-    }
-}
-
-#[tokio::test]
-async fn selftest_matches_cxx_golden_bytes() {
-    let golden: Vec<(u32, Vec<u8>)> = RAW
-        .lines()
-        .filter(|l| !l.starts_with('#'))
-        .map(|l| {
-            let (t, hex) = l.split_once(' ').unwrap();
-            (t.parse().unwrap(), unhex(hex))
-        })
-        .collect();
-    // compilation_time is the C++ build's __DATE__ / __TIME__.
-    let info = &golden
-        .iter()
-        .find(|(t, _)| *t == msg::DEVICE_INFO_RESP)
-        .unwrap()
-        .1;
-    let built = field(info, 5).unwrap().str();
-    local()
-        .run_until(async {
-            let (id, cfg) = selftest(&built);
-            let (h, _rx, port) = start_with(id, cfg);
-            publish_selftest_states(&h);
-            let mut p = Peer::connect(port).await;
-            let mut got = Vec::new();
-            let mut w = Writer::new();
-            w.str(1, "raw", false);
-            w.u32(2, 1, false);
-            w.u32(3, 10, false);
-            p.send(msg::HELLO_REQ, &w).await;
-            got.push(p.recv().await.unwrap());
-            got.push(p.recv().await.unwrap());
-            for req in [
-                msg::DEVICE_INFO_REQ,
-                msg::DEVICE_CAPS_REQ,
-                msg::VA_CONFIG_REQ,
-            ] {
-                p.send(req, &Writer::new()).await;
-                got.push(p.recv().await.unwrap());
-            }
-            p.send(msg::LIST_ENTITIES_REQ, &Writer::new()).await;
-            loop {
-                let m = p.recv().await.unwrap();
-                let done = m.0 == msg::LIST_DONE;
-                got.push(m);
-                if done {
-                    break;
-                }
-            }
-            p.send(msg::SUBSCRIBE_STATES_REQ, &Writer::new()).await;
-            got.extend(p.sync().await);
-            // This fork adds the wake-event switch and button entities; they are not part of the
-            // C++ reference capture, so they are compared only for being extra.
-            got.retain(|(t, m)| !fork_only(*t, m));
-            assert_eq!(got.len(), golden.len());
-            for (i, (g, r)) in golden.iter().zip(&got).enumerate() {
-                assert_eq!(g.0, r.0, "message {i}");
-                // Diagnostics of the host: Wi-Fi signal, uptime, IP.
-                let k = state_key(&g.1);
-                let host_dependent = matches!(
-                    (g.0, k),
-                    (
-                        msg::SENSOR_STATE,
-                        Some(key::SENSOR_RSSI | key::SENSOR_UPTIME)
-                    ) | (msg::TEXT_SENSOR_STATE, Some(key::TEXT_IP))
-                );
-                if host_dependent {
-                    assert_eq!(k, state_key(&r.1), "message {i}");
-                } else {
-                    assert_eq!(
-                        crate::proto::golden::hex(&g.1),
-                        crate::proto::golden::hex(&r.1),
-                        "message {i} type {}",
-                        g.0
-                    );
-                }
-            }
-        })
-        .await;
-}
-
-struct Cmd<'a> {
-    p: &'a mut Peer,
-}
-
-impl Cmd<'_> {
-    async fn send(&mut self, t: u32, w: Writer) {
-        self.p.send(t, &w).await;
-    }
-}
-
-fn kv(k: u32, f: impl FnOnce(&mut Writer)) -> Writer {
-    let mut w = Writer::new();
-    w.fixed32(1, k, true);
-    f(&mut w);
-    w
-}
-
-/// Every event that came, after a round trip.
+/// Все события, накопившиеся после round trip.
 async fn drain(p: &mut Peer, rx: &mut UnboundedReceiver<ApiEvent>) -> Vec<ApiEvent> {
     p.sync().await;
     let mut v = Vec::new();
@@ -222,32 +26,71 @@ async fn drain(p: &mut Peer, rx: &mut UnboundedReceiver<ApiEvent>) -> Vec<ApiEve
     v
 }
 
+async fn list_keys(p: &mut Peer) -> Vec<u32> {
+    p.send(msg::LIST_ENTITIES_REQ, &[]).await;
+    let mut keys = Vec::new();
+    loop {
+        let (t, m) = p.recv().await.unwrap();
+        if t == msg::LIST_DONE {
+            return keys;
+        }
+        keys.push(entity_keys(&m).unwrap());
+    }
+}
+
+fn action(k: u32, args: &[(Option<&str>, Option<i32>, Option<i32>)]) -> ExecuteServiceRequest {
+    ExecuteServiceRequest {
+        key: Some(k),
+        args: args
+            .iter()
+            .map(|(s, sint, legacy)| ExecuteServiceArgument {
+                bool_: None,
+                legacy_int: *legacy,
+                float_: None,
+                string_: s.map(str::to_owned),
+                int_: *sint,
+            })
+            .collect(),
+    }
+}
+
+/// Строковый аргумент действия.
+fn s(v: &str) -> (Option<&str>, Option<i32>, Option<i32>) {
+    (Some(v), None, None)
+}
+
 #[tokio::test]
 async fn commands_are_validated_like_cxx() {
     local()
         .run_until(async {
-            let (id, cfg) = selftest("now");
-            let (h, mut rx, port) = start_with(id, cfg);
-            let mut p = Peer::connect(port).await;
+            let mut ts = TestServer::start(selftest_config(None));
+            let mut rx = ts.take_events();
+            let mut p = ts.connect();
             p.hello("HA").await;
             event(&mut rx).await;
-            let mut c = Cmd { p: &mut p };
 
-            // Numbers: NaN dropped, values clamped to each entity's range.
+            // Числа: NaN отброшен, значения обрезаны диапазоном сущности.
             for (k, v) in [
-                (key::NUMBER_CLOCK_BRI, f32::NAN),
-                (key::NUMBER_CLOCK_BRI, 150.0),
-                (key::NUMBER_CLOCK_BRI, -5.0),
-                (key::NUMBER_CLOCK_SCROLL, 50.0),
-                (key::NUMBER_CLOCK_SCROLL, 5000.0),
-                (key::NUMBER_LED_SPEED, 0.1),
-                (key::NUMBER_LED_SPEED, 9.0),
+                (key::NUMBER_CLOCK_BRI.get(), f32::NAN),
+                (key::NUMBER_CLOCK_BRI.get(), 150.0),
+                (key::NUMBER_CLOCK_BRI.get(), -5.0),
+                (key::NUMBER_CLOCK_SCROLL.get(), 50.0),
+                (key::NUMBER_CLOCK_SCROLL.get(), 5000.0),
+                (key::NUMBER_LED_SPEED.get(), 0.1),
+                (key::NUMBER_LED_SPEED.get(), 9.0),
                 (999, 1.0),
             ] {
-                c.send(msg::NUMBER_CMD, kv(k, |w| w.flt(2, v, true))).await;
+                p.send_msg(
+                    msg::NUMBER_CMD,
+                    &NumberCommandRequest {
+                        key: Some(k),
+                        state: Some(v),
+                    },
+                )
+                .await;
             }
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [
                     ApiEvent::Number(NumberId::ClockBrightness, 100.0),
                     ApiEvent::Number(NumberId::ClockBrightness, 0.0),
@@ -258,22 +101,23 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Text: at most 64 characters, counted on the bytes as sent (as C++ did).
-            let text = |b: Vec<u8>| kv(key::TEXT_CLOCK, |w| w.bytes(2, &b, true));
-            c.send(msg::TEXT_CMD, text("я".repeat(64).into_bytes()))
+            // Текст: не больше 64 символов, на декодированном тексте (как считал C++).
+            let text = |b: Vec<u8>| TextCommandRequest {
+                key: Some(key::TEXT_CLOCK.get()),
+                state: Some(b),
+            };
+            p.send_msg(msg::TEXT_CMD, &text("я".repeat(64).into_bytes()))
                 .await;
-            c.send(msg::TEXT_CMD, text("я".repeat(65).into_bytes()))
+            p.send_msg(msg::TEXT_CMD, &text("я".repeat(65).into_bytes()))
                 .await;
-            // Counted on the decoded text: "a" + 63 stray continuation bytes is 64 characters
-            // (63 U+FFFD), one more is too long.
             let mut odd = b"a".to_vec();
             odd.extend_from_slice(&[0x80; 63]);
-            c.send(msg::TEXT_CMD, text(odd.clone())).await;
+            p.send_msg(msg::TEXT_CMD, &text(odd.clone())).await;
             let mut too_odd = odd.clone();
             too_odd.push(0x80);
-            c.send(msg::TEXT_CMD, text(too_odd)).await;
+            p.send_msg(msg::TEXT_CMD, &text(too_odd)).await;
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [
                     ApiEvent::Text(TextId::ClockText, "я".repeat(64)),
                     ApiEvent::Text(
@@ -283,48 +127,51 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Selects: only the entity's options; switches: known keys only.
-            let select = |k, s: &str| kv(k, |w| w.str(2, s, true));
-            c.send(msg::SELECT_CMD, select(key::SELECT_CLOCK_FACE, "Smiley"))
-                .await;
-            c.send(msg::SELECT_CMD, select(key::SELECT_CLOCK_FACE, "Frown"))
-                .await;
-            c.send(msg::SELECT_CMD, select(key::SELECT_MUSIC_VIZ, "Spectrum"))
-                .await;
-            c.send(msg::SELECT_CMD, select(key::SELECT_CASE_COLOR, "Spectrum"))
-                .await;
-            c.send(msg::SELECT_CMD, select(key::SELECT_ZIGBEE_MODE, "Router"))
-                .await;
-            c.send(msg::SELECT_CMD, select(key::SELECT_CLOCK_MUSIC, "Levels"))
-                .await;
-            c.send(msg::SELECT_CMD, select(key::SELECT_VOICE_COLOR, "Blue"))
-                .await;
-            c.send(msg::SELECT_CMD, select(key::SELECT_VOICE_COLOR, "Green"))
-                .await;
-            c.send(
+            // Select: только опции сущности; switch: только известные ключи.
+            let select = |k: u32, s: &str| SelectCommandRequest {
+                key: Some(k),
+                state: Some(s.to_owned()),
+            };
+            for (k, s) in [
+                (key::SELECT_CLOCK_FACE.get(), "Smiley"),
+                (key::SELECT_CLOCK_FACE.get(), "Frown"),
+                (key::SELECT_MUSIC_VIZ.get(), "Spectrum"),
+                (key::SELECT_CASE_COLOR.get(), "Spectrum"),
+                (key::SELECT_ZIGBEE_MODE.get(), "Router"),
+                (key::SELECT_CLOCK_MUSIC.get(), "Levels"),
+                (key::SELECT_VOICE_COLOR.get(), "Blue"),
+                (key::SELECT_VOICE_COLOR.get(), "Green"),
+            ] {
+                p.send_msg(msg::SELECT_CMD, &select(k, s)).await;
+            }
+            let switch = |k: u32, v: Option<bool>| SwitchCommandRequest {
+                key: Some(k),
+                state: v,
+            };
+            p.send_msg(
                 msg::SWITCH_CMD,
-                kv(key::SW_NEAREST_ANSWERS, |w| w.boolean(2, true, true)),
+                &switch(key::SW_NEAREST_ANSWERS.get(), Some(true)),
             )
             .await;
-            c.send(msg::SWITCH_CMD, kv(key::SW_VOICE_INDICATION, |_| {}))
+            p.send_msg(
+                msg::SWITCH_CMD,
+                &switch(key::SW_VOICE_INDICATION.get(), None),
+            )
+            .await;
+            p.send_msg(
+                msg::SWITCH_CMD,
+                &switch(key::SW_WAKE_PREROLL.get(), Some(true)),
+            )
+            .await;
+            p.send_msg(
+                msg::SWITCH_CMD,
+                &switch(key::SW_CLOCK_AUTO_BRI.get(), Some(true)),
+            )
+            .await;
+            p.send_msg(msg::SWITCH_CMD, &switch(key::MEDIA.get(), Some(true)))
                 .await;
-            c.send(
-                msg::SWITCH_CMD,
-                kv(key::SW_WAKE_PREROLL, |w| w.boolean(2, true, true)),
-            )
-            .await;
-            c.send(
-                msg::SWITCH_CMD,
-                kv(key::SW_CLOCK_AUTO_BRI, |w| w.boolean(2, true, true)),
-            )
-            .await;
-            c.send(
-                msg::SWITCH_CMD,
-                kv(key::MEDIA, |w| w.boolean(2, true, true)),
-            )
-            .await;
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [
                     ApiEvent::Select(SelectId::ClockFace, "Smiley".into()),
                     ApiEvent::Select(SelectId::MusicViz, "Spectrum".into()),
@@ -338,30 +185,39 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Media: volume clamped, unknown command values dropped, fields only when set.
-            c.send(
+            // Media: громкость обрезана, неизвестная команда отброшена, поля только заданные.
+            p.send_msg(
                 msg::MEDIA_PLAYER_CMD,
-                kv(key::MEDIA, |w| {
-                    w.boolean(4, true, false);
-                    w.flt(5, 1.5, false);
-                    w.boolean(2, true, false);
-                    w.u32(3, 99, false);
-                }),
+                &MediaPlayerCommandRequest {
+                    key: Some(key::MEDIA.get()),
+                    has_command: Some(true),
+                    command: Some(99),
+                    has_volume: Some(true),
+                    volume: Some(1.5),
+                    has_media_url: None,
+                    media_url: None,
+                    has_announcement: None,
+                    announcement: None,
+                },
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::MEDIA_PLAYER_CMD,
-                kv(key::MEDIA, |w| {
-                    w.boolean(6, true, false);
-                    w.str(7, "http://x/a.mp3", false);
-                    w.boolean(8, true, false);
-                    w.boolean(9, true, false);
-                    w.boolean(2, true, false); // command PLAY (0 = absent field)
-                }),
+                &MediaPlayerCommandRequest {
+                    key: Some(key::MEDIA.get()),
+                    has_command: Some(true),
+                    command: Some(0),
+                    has_volume: None,
+                    volume: None,
+                    has_media_url: Some(true),
+                    media_url: Some("http://x/a.mp3".into()),
+                    has_announcement: Some(true),
+                    announcement: Some(true),
+                },
             )
             .await;
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [
                     ApiEvent::MediaCommand(MediaCommandRequest {
                         command: None,
@@ -378,95 +234,98 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Update: the entity's key and commands 0..2 only.
-            for (k, cmd) in [(key::UPDATE, 2), (key::UPDATE, 3), (key::MEDIA, 1)] {
-                c.send(msg::UPDATE_CMD, kv(k, |w| w.u32(2, cmd, false)))
-                    .await;
+            // Update: ключ сущности и команды 0..2.
+            for (k, cmd) in [
+                (key::UPDATE.get(), 2),
+                (key::UPDATE.get(), 3),
+                (key::MEDIA.get(), 1),
+            ] {
+                p.send_msg(
+                    msg::UPDATE_CMD,
+                    &UpdateCommandRequest {
+                        key: Some(k),
+                        command: Some(cmd),
+                    },
+                )
+                .await;
             }
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [ApiEvent::Update(UpdateCommand::Check)]
             );
 
-            // Actions: argument counts, sint32 and legacy int arguments, effect and face checks.
-            let action = |k, args: &[(Option<&str>, Option<i32>, Option<i32>)]| {
-                let mut w = Writer::new();
-                w.fixed32(1, k, true);
-                for (s, sint, legacy) in args {
-                    let mut a = Writer::new();
-                    if let Some(s) = s {
-                        a.str(4, s, true);
-                    }
-                    if let Some(i) = *sint {
-                        a.u32(5, ((i << 1) ^ (i >> 31)) as u32, true);
-                    }
-                    if let Some(i) = *legacy {
-                        a.i32(2, i, true);
-                    }
-                    w.msg(2, &a);
-                }
-                w
-            };
-            let s = |v| (Some(v), None, None);
-            c.send(
+            // Actions: число аргументов, sint32 и legacy int, проверки эффекта и лица.
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(key::ACTION_CLOCK_TEXT, &[s("Hi"), (None, Some(-5), None)]),
+                &action(
+                    key::ACTION_CLOCK_TEXT.get(),
+                    &[s("Hi"), (None, Some(-5), None)],
+                ),
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(key::ACTION_CLOCK_TEXT, &[s("Hi")]),
+                &action(key::ACTION_CLOCK_TEXT.get(), &[s("Hi")]),
             )
             .await;
             let long = "x".repeat(65);
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(key::ACTION_CLOCK_TEXT, &[s(&long), (None, Some(1), None)]),
+                &action(
+                    key::ACTION_CLOCK_TEXT.get(),
+                    &[s(&long), (None, Some(1), None)],
+                ),
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(
-                    key::ACTION_CLOCK_FACE,
+                &action(
+                    key::ACTION_CLOCK_FACE.get(),
                     &[s("Smiley"), (None, None, Some(7))],
                 ),
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(key::ACTION_CLOCK_FACE, &[s("Frown"), (None, None, Some(7))]),
+                &action(
+                    key::ACTION_CLOCK_FACE.get(),
+                    &[s("Frown"), (None, None, Some(7))],
+                ),
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(key::ACTION_CLOCK_FACE, &[s(""), (None, None, Some(0))]),
+                &action(
+                    key::ACTION_CLOCK_FACE.get(),
+                    &[s(""), (None, None, Some(0))],
+                ),
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(
-                    key::ACTION_LED_SHOW,
+                &action(
+                    key::ACTION_LED_SHOW.get(),
                     &[s("None"), s("#ff0000"), (None, Some(3), None)],
                 ),
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(
-                    key::ACTION_LED_SHOW,
+                &action(
+                    key::ACTION_LED_SHOW.get(),
                     &[s("Strobe"), s("#ff0000"), (None, Some(3), None)],
                 ),
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
-                action(
-                    key::ACTION_LED_SHOW,
+                &action(
+                    key::ACTION_LED_SHOW.get(),
                     &[s("Pulse"), s("red"), (None, Some(3), None)],
                 ),
             )
             .await;
-            c.send(msg::EXECUTE_SERVICE_REQ, action(999, &[s("a"), s("b")]))
+            p.send_msg(msg::EXECUTE_SERVICE_REQ, &action(999, &[s("a"), s("b")]))
                 .await;
             let act = |id, v: &str, seconds| ApiEvent::Action {
                 id,
@@ -479,7 +338,7 @@ async fn commands_are_validated_like_cxx() {
                 seconds: 3,
             };
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [
                     act(ActionId::ClockShowText, "Hi", -5),
                     act(ActionId::ClockShowFace, "Smiley", 7),
@@ -489,32 +348,70 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Light: rgb scaled by color_brightness, effect "None" -> "", transition default and
-            // cap; the server echoes the normalised state to state subscribers.
-            c.send(
+            // Свет: rgb масштабируется color_brightness, effect "None" -> "", переход по
+            // умолчанию и с ограничением; сервер отдаёт нормализованное состояние.
+            p.send_msg(
                 msg::LIGHT_CMD,
-                kv(key::LIGHT_RING, |w| {
-                    w.boolean(2, true, false);
-                    w.boolean(3, true, false);
-                    w.boolean(6, true, false);
-                    w.flt(7, 1.0, false);
-                    w.flt(8, 0.5, false);
-                    w.flt(9, 2.0, false);
-                    w.boolean(20, true, false);
-                    w.flt(21, 0.5, false);
-                    w.boolean(18, true, false);
-                    w.str(19, "None", false);
-                }),
+                &LightCommandRequest {
+                    key: Some(key::LIGHT_RING.get()),
+                    has_state: Some(true),
+                    state: Some(true),
+                    has_brightness: None,
+                    brightness: None,
+                    has_color_brightness: Some(true),
+                    color_brightness: Some(0.5),
+                    has_rgb: Some(true),
+                    red: Some(1.0),
+                    green: Some(0.5),
+                    blue: Some(2.0),
+                    has_effect: Some(true),
+                    effect: Some("None".into()),
+                    has_transition_length: None,
+                    transition_length: None,
+                },
             )
             .await;
-            c.send(
+            p.send_msg(
                 msg::LIGHT_CMD,
-                kv(key::LIGHT_RING, |w| {
-                    w.boolean(20, true, false);
-                    w.flt(21, 1.0, false);
-                    w.boolean(14, true, false);
-                    w.u32(15, 600_000, false);
-                }),
+                &LightCommandRequest {
+                    key: Some(key::LIGHT_RING.get()),
+                    has_state: None,
+                    state: None,
+                    has_brightness: None,
+                    brightness: None,
+                    has_color_brightness: Some(true),
+                    color_brightness: Some(1.0),
+                    has_rgb: None,
+                    red: None,
+                    green: None,
+                    blue: None,
+                    has_effect: None,
+                    effect: None,
+                    has_transition_length: Some(true),
+                    transition_length: Some(600_000),
+                },
+            )
+            .await;
+            // NaN до светодиодов не доходит: команда отброшена целиком.
+            p.send_msg(
+                msg::LIGHT_CMD,
+                &LightCommandRequest {
+                    key: Some(key::LIGHT_RING.get()),
+                    has_state: Some(true),
+                    state: Some(true),
+                    has_brightness: Some(true),
+                    brightness: Some(f32::NAN),
+                    has_color_brightness: None,
+                    color_brightness: None,
+                    has_rgb: None,
+                    red: None,
+                    green: None,
+                    blue: None,
+                    has_effect: None,
+                    effect: None,
+                    has_transition_length: None,
+                    transition_length: None,
+                },
             )
             .await;
             let light = |r, g, b, transition_ms| ApiEvent::Light {
@@ -529,50 +426,78 @@ async fn commands_are_validated_like_cxx() {
                 transition_ms,
             };
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [light(0.5, 0.25, 0.5, 1000), light(1.0, 0.5, 1.0, 60_000)]
             );
 
-            // Buttons: Zigbee (entities exist here) and Restart.
-            c.send(msg::BUTTON_CMD, kv(key::BUTTON_ZIGBEE_LEAVE, |_| {}))
-                .await;
-            c.send(msg::BUTTON_CMD, kv(key::BUTTON_RESTART, |_| {}))
-                .await;
-            c.send(msg::BUTTON_CMD, kv(key::MEDIA, |_| {})).await;
+            // Buttons: Zigbee (сущности есть) и Restart.
+            for k in [
+                key::BUTTON_ZIGBEE_LEAVE.get(),
+                key::BUTTON_RESTART.get(),
+                key::MEDIA.get(),
+            ] {
+                p.send_msg(msg::BUTTON_CMD, &ButtonCommandRequest { key: Some(k) })
+                    .await;
+            }
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [ApiEvent::Button(ButtonId::ZigbeeLeave), ApiEvent::Restart]
             );
 
-            // Voice assistant configuration: one known wake word.
-            let mut w = Writer::new();
-            for ww in ["nope", "yandex", "alisa"] {
-                w.str(1, ww, true);
+            // Конфигурация голосового ассистента: одно известное wake word.
+            p.send_msg(
+                msg::VA_SET_CONFIG,
+                &VoiceAssistantSetConfiguration {
+                    active_wake_words: ["nope", "yandex", "alisa"]
+                        .iter()
+                        .map(|s| (*s).to_owned())
+                        .collect(),
+                },
+            )
+            .await;
+            p.send_msg(
+                msg::VA_SET_CONFIG,
+                &VoiceAssistantSetConfiguration {
+                    active_wake_words: vec!["nope".into()],
+                },
+            )
+            .await;
+            // Таймеры: неизвестные значения события отброшены.
+            for ev in [3u32, 9] {
+                p.send_msg(
+                    msg::VA_TIMER_EVENT_RESP,
+                    &VoiceAssistantTimerEventResponse {
+                        event_type: Some(ev),
+                        timer_id: Some("t1".into()),
+                        name: None,
+                        total_seconds: None,
+                        seconds_left: Some(42),
+                        is_active: Some(true),
+                    },
+                )
+                .await;
             }
-            c.send(msg::VA_SET_CONFIG, w).await;
-            let mut w = Writer::new();
-            w.str(1, "nope", true);
-            c.send(msg::VA_SET_CONFIG, w).await;
-            // Timers: unknown event values dropped.
-            for ev in [3, 9] {
-                let mut w = Writer::new();
-                w.u32(1, ev, false);
-                w.str(2, "t1", false);
-                w.u32(5, 42, false);
-                w.boolean(6, true, false);
-                c.send(msg::VA_TIMER_EVENT_RESP, w).await;
-            }
-            // Pipeline events only from the voice owner (nobody here).
-            let mut w = Writer::new();
-            w.u32(1, 1, false);
-            c.send(msg::VA_EVENT_RESP, w).await;
-            let mut w = Writer::new();
-            w.str(1, "http://x/a.mp3", false);
-            w.str(2, "Привет", false);
-            w.boolean(4, true, false);
-            c.send(msg::VA_ANNOUNCE_REQ, w).await;
+            // События пайплайна только от владельца голоса (здесь его нет).
+            p.send_msg(
+                msg::VA_EVENT_RESP,
+                &VoiceAssistantEventResponse {
+                    event_type: Some(1),
+                    data: Vec::new(),
+                },
+            )
+            .await;
+            p.send_msg(
+                msg::VA_ANNOUNCE_REQ,
+                &VoiceAssistantAnnounceRequest {
+                    media_id: Some("http://x/a.mp3".into()),
+                    text: Some("Привет".into()),
+                    preannounce_media_id: None,
+                    start_conversation: Some(true),
+                },
+            )
+            .await;
             assert_eq!(
-                drain(c.p, &mut rx).await,
+                drain(&mut p, &mut rx).await,
                 [
                     ApiEvent::ActiveWakeWords(vec!["yandex".into()]),
                     ApiEvent::Timer(TimerInfo {
@@ -591,7 +516,6 @@ async fn commands_are_validated_like_cxx() {
                     }),
                 ]
             );
-            drop(h);
         })
         .await;
 }
@@ -600,30 +524,30 @@ async fn commands_are_validated_like_cxx() {
 async fn voice_events_come_from_the_owner() {
     local()
         .run_until(async {
-            let (id, cfg) = selftest("now");
-            let (_h, mut rx, port) = start_with(id, cfg);
-            let mut p = Peer::connect(port).await;
+            let mut ts = TestServer::start(selftest_config(None));
+            let mut rx = ts.take_events();
+            let mut p = ts.connect();
             p.hello("HA").await;
+            event(&mut rx).await;
             p.subscribe_voice(true).await;
             assert_eq!(
-                drain(&mut p, &mut rx).await[1..],
+                drain(&mut p, &mut rx).await,
                 [ApiEvent::VoiceSubscribed(true)]
             );
-            let ev = |t: u32, data: &[(&str, &str)]| {
-                let mut w = Writer::new();
-                w.u32(1, t, false);
-                for (k, v) in data {
-                    let mut d = Writer::new();
-                    d.str(1, k, false);
-                    d.str(2, v, false);
-                    w.msg(2, &d);
-                }
-                w
+            let ev = |t: u32, data: &[(&str, &str)]| VoiceAssistantEventResponse {
+                event_type: Some(t),
+                data: data
+                    .iter()
+                    .map(|(k, v)| VoiceAssistantEventData {
+                        name: Some((*k).to_owned()),
+                        value: Some((*v).to_owned()),
+                    })
+                    .collect(),
             };
-            p.send(msg::VA_EVENT_RESP, &ev(4, &[("text", "a"), ("text", "b")]))
+            p.send_msg(msg::VA_EVENT_RESP, &ev(4, &[("text", "a"), ("text", "b")]))
                 .await;
-            p.send(msg::VA_EVENT_RESP, &ev(13, &[])).await;
-            p.send(msg::VA_EVENT_RESP, &ev(100, &[])).await;
+            p.send_msg(msg::VA_EVENT_RESP, &ev(13, &[])).await;
+            p.send_msg(msg::VA_EVENT_RESP, &ev(100, &[])).await;
             assert_eq!(
                 drain(&mut p, &mut rx).await,
                 [
@@ -631,7 +555,7 @@ async fn voice_events_come_from_the_owner() {
                         event: VaEvent::SttEnd,
                         data: [("text".to_owned(), "b".to_owned())].into(),
                     },
-                    // A type newer than this build still reaches the controller (watchdog).
+                    // Тип новее этой сборки всё равно доходит до контроллера (watchdog).
                     ApiEvent::VoiceEvent {
                         event: VaEvent::Unknown(13),
                         data: Default::default(),
@@ -650,43 +574,40 @@ async fn voice_events_come_from_the_owner() {
 async fn states_go_to_subscribers_and_zigbee_entities_need_modes() {
     local()
         .run_until(async {
-            let (id, mut cfg) = selftest("now");
+            let mut cfg = selftest_config(None);
+            cfg.capabilities.zigbee = false;
             cfg.zigbee_modes.clear();
-            let (h, mut rx, port) = start_with(id, cfg);
-            let mut p = Peer::connect(port).await;
+            let mut ts = TestServer::start(cfg);
+            let h = ts.api.clone();
+            let mut rx = ts.take_events();
+            let mut p = ts.connect();
             p.hello("HA").await;
             event(&mut rx).await;
-            // Without a state subscription nothing is pushed, events are dropped.
+            // Без подписки на состояния ничего не пушится, события отброшены.
             h.publish_switch(SwitchId::Microphones, true);
             h.fire_event(EventId::Button, "action");
             assert!(p.sync().await.is_empty());
-            // No Zigbee entities, states or buttons.
-            p.send(msg::LIST_ENTITIES_REQ, &Writer::new()).await;
-            let mut keys = Vec::new();
-            loop {
-                let (t, m) = p.recv().await.unwrap();
-                if t == msg::LIST_DONE {
-                    break;
-                }
-                keys.push(field(&m, 2).unwrap().u32());
-            }
-            assert!(!keys.contains(&key::SELECT_ZIGBEE_MODE));
-            assert!(!keys.contains(&key::TEXT_ZIGBEE));
-            assert!(!keys.contains(&key::BUTTON_ZIGBEE_JOIN));
-            p.send(msg::SUBSCRIBE_STATES_REQ, &Writer::new()).await;
+            // Zigbee-сущностей, состояний и кнопок нет.
+            let keys = list_keys(&mut p).await;
+            assert!(!keys.contains(&key::SELECT_ZIGBEE_MODE.get()));
+            assert!(!keys.contains(&key::TEXT_ZIGBEE.get()));
+            assert!(!keys.contains(&key::BUTTON_ZIGBEE_JOIN.get()));
+            p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
             let states = p.sync().await;
-            // Cached value replayed; no Zigbee states.
+            // Кэшированное значение пришло, Zigbee-состояний нет.
             let mic = states
                 .iter()
-                .find(|(t, m)| *t == msg::SWITCH_STATE && state_key(m) == Some(key::SW_MICROPHONES))
+                .find(|(t, m)| {
+                    *t == msg::SWITCH_STATE && state_key(m) == Some(key::SW_MICROPHONES.get())
+                })
                 .unwrap();
             assert!(field(&mic.1, 2).unwrap().boolean());
             assert!(
                 !states
                     .iter()
-                    .any(|(_, m)| state_key(m) == Some(key::TEXT_ZIGBEE))
+                    .any(|(_, m)| state_key(m) == Some(key::TEXT_ZIGBEE.get()))
             );
-            // Subscribed: publishes and events arrive; the Zigbee text sensor still does not.
+            // После подписки публикации и события доходят; Zigbee text sensor — нет.
             h.publish_text_sensor(TextSensorId::Zigbee, "x");
             h.publish_sensor(SensorId::Illuminance, 12.5);
             h.fire_event(EventId::Button, "action_long");
@@ -704,9 +625,14 @@ async fn states_go_to_subscribers_and_zigbee_entities_need_modes() {
             assert_eq!(field(&got[0].1, 2).unwrap().flt(), 12.5);
             assert_eq!(field(&got[1].1, 2).unwrap().str(), "action_long");
             assert_eq!(field(&got[2].1, 7).unwrap().str(), "v2");
-            // Zigbee buttons are ignored without the entities.
-            p.send(msg::BUTTON_CMD, &kv(key::BUTTON_ZIGBEE_JOIN, |_| {}))
-                .await;
+            // Zigbee-кнопки игнорируются без сущностей.
+            p.send_msg(
+                msg::BUTTON_CMD,
+                &ButtonCommandRequest {
+                    key: Some(key::BUTTON_ZIGBEE_JOIN.get()),
+                },
+            )
+            .await;
             assert!(drain(&mut p, &mut rx).await.is_empty());
         })
         .await;
@@ -716,37 +642,33 @@ async fn states_go_to_subscribers_and_zigbee_entities_need_modes() {
 async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
     local()
         .run_until(async {
-            let (id, mut cfg) = selftest("now");
-            cfg.has_clock = false;
-            cfg.has_lux = false;
-            cfg.has_auto_brightness = false;
-            cfg.has_wake_preroll = false;
-            cfg.has_hw_mic_mute = false;
-            // Only a mute button: no «Button» event entity (Model::has_button_events).
-            cfg.has_buttons = false;
-            // The Mini's ledconfigs directory is empty; with_none() leaves just "None".
-            cfg.case_colors = ["None"].iter().map(|v| (*v).to_owned()).collect();
+            let mut cfg = selftest_config(None);
+            cfg.capabilities = Capabilities {
+                clock: false,
+                lux: false,
+                auto_brightness: false,
+                wake_preroll: false,
+                hw_mic_mute: false,
+                buttons: false,
+                case_colors: false,
+                voice_colors: true,
+                zigbee: false,
+            };
+            cfg.case_colors = vec!["None".into()];
             cfg.zigbee_modes.clear();
-            let (h, mut rx, port) = start_with(id, cfg);
-            let mut p = Peer::connect(port).await;
+            let mut ts = TestServer::start(cfg);
+            let h = ts.api.clone();
+            let mut rx = ts.take_events();
+            let mut p = ts.connect();
             p.hello("HA").await;
             event(&mut rx).await;
-            p.send(msg::LIST_ENTITIES_REQ, &Writer::new()).await;
-            let mut keys = Vec::new();
-            loop {
-                let (t, m) = p.recv().await.unwrap();
-                if t == msg::LIST_DONE {
-                    break;
-                }
-                keys.push(field(&m, 2).unwrap().u32());
-            }
-            // 20 entities plus the led_show service; no clock, Lux, wake pre-roll, hardware
-            // MUTE, case colour or Button entities, but with the follow-up duration. The two
-            // wake-event switches, two buttons and the voice colour select are always listed,
-            // even without the Ricardo detector.
+            let keys = list_keys(&mut p).await;
+            // 20 сущностей плюс сервис led_show; без часов, Lux, wake pre-roll, аппаратного
+            // MUTE, цвета корпуса и кнопок Button, но с follow-up duration. Два switch и две
+            // кнопки wake-event и select голосового цвета есть всегда.
             assert_eq!(keys.len(), 21, "keys: {keys:?}");
-            assert!(keys.contains(&key::NUMBER_FOLLOWUP_DURATION));
-            assert!(keys.contains(&key::ACTION_LED_SHOW));
+            assert!(keys.contains(&key::NUMBER_FOLLOWUP_DURATION.get()));
+            assert!(keys.contains(&key::ACTION_LED_SHOW.get()));
             let absent = [
                 key::SW_CLOCK,
                 key::SW_CLOCK_AUTO_BRI,
@@ -764,22 +686,28 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
                 key::EVENT_BUTTON,
             ];
             for k in absent {
-                assert!(!keys.contains(&k), "unexpected entity key {k}");
+                assert!(!keys.contains(&k.get()), "unexpected entity key {k:?}");
             }
-            // The initial states carry the listed entities only.
+            // Начальные состояния несут только перечисленные сущности.
             publish_selftest_states(&h);
-            p.send(msg::SUBSCRIBE_STATES_REQ, &Writer::new()).await;
+            p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
             let initial: Vec<u32> = p
                 .sync()
                 .await
                 .iter()
                 .filter_map(|(_, m)| state_key(m))
                 .collect();
-            assert!(initial.contains(&key::NUMBER_LED_SPEED), "{initial:?}");
+            assert!(
+                initial.contains(&key::NUMBER_LED_SPEED.get()),
+                "{initial:?}"
+            );
             for k in absent {
-                assert!(!initial.contains(&k), "unexpected state for key {k}");
+                assert!(
+                    !initial.contains(&k.get()),
+                    "unexpected state for key {k:?}"
+                );
             }
-            // The controller may still publish these cache values; the server must drop them.
+            // Контроллер может публиковать эти значения; сервер обязан их отбросить.
             h.publish_switch(SwitchId::Clock, true);
             h.publish_switch(SwitchId::ClockAutoBrightness, true);
             h.publish_switch(SwitchId::WakePreroll, true);
@@ -793,55 +721,49 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
             h.publish_sensor(SensorId::Illuminance, 12.5);
             h.fire_event(EventId::Button, "action");
             assert!(p.sync().await.is_empty());
-            // A listed entity still gets its state.
+            // Перечисленная сущность состояние получает.
             h.publish_number(NumberId::LedSpeed, 2.0);
             let got = p.sync().await;
             assert_eq!(got.len(), 1, "{got:?}");
             assert_eq!(got[0].0, msg::NUMBER_STATE);
-            assert_eq!(state_key(&got[0].1), Some(key::NUMBER_LED_SPEED));
+            assert_eq!(state_key(&got[0].1), Some(key::NUMBER_LED_SPEED.get()));
         })
         .await;
 }
 
 #[tokio::test]
 async fn clock_auto_brightness_needs_the_clock_and_the_light_sensor() {
-    // A clock whose light sensor failed to open; a light sensor without a clock panel (a Mini 2
-    // whose clock chip failed to probe). Illuminance stays listed in both.
+    // Часы, чей датчик света не открылся; датчик света без панели часов (Миди 2, где чип часов
+    // не завёлся). Illuminance перечислен в обоих случаях.
     for (has_clock, has_auto_brightness) in [(true, false), (false, true)] {
         local()
             .run_until(async {
-                let (id, mut cfg) = selftest("now");
-                cfg.has_clock = has_clock;
-                cfg.has_auto_brightness = has_auto_brightness;
-                let (h, mut rx, port) = start_with(id, cfg);
-                let mut p = Peer::connect(port).await;
+                let mut cfg = selftest_config(None);
+                cfg.capabilities.clock = has_clock;
+                cfg.capabilities.auto_brightness = has_auto_brightness;
+                let mut ts = TestServer::start(cfg);
+                let h = ts.api.clone();
+                let mut rx = ts.take_events();
+                let mut p = ts.connect();
                 p.hello("HA").await;
                 event(&mut rx).await;
                 publish_selftest_states(&h);
-                p.send(msg::LIST_ENTITIES_REQ, &Writer::new()).await;
-                let mut keys = Vec::new();
-                loop {
-                    let (t, m) = p.recv().await.unwrap();
-                    if t == msg::LIST_DONE {
-                        break;
-                    }
-                    keys.push(field(&m, 2).unwrap().u32());
-                }
-                assert_eq!(keys.contains(&key::SW_CLOCK), has_clock);
-                assert!(keys.contains(&key::SENSOR_LUX));
-                assert!(!keys.contains(&key::SW_CLOCK_AUTO_BRI));
-                p.send(msg::SUBSCRIBE_STATES_REQ, &Writer::new()).await;
+                let keys = list_keys(&mut p).await;
+                assert_eq!(keys.contains(&key::SW_CLOCK.get()), has_clock);
+                assert!(keys.contains(&key::SENSOR_LUX.get()));
+                assert!(!keys.contains(&key::SW_CLOCK_AUTO_BRI.get()));
+                p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
                 let states = p.sync().await;
                 assert!(
                     !states
                         .iter()
-                        .any(|(_, m)| state_key(m) == Some(key::SW_CLOCK_AUTO_BRI))
+                        .any(|(_, m)| state_key(m) == Some(key::SW_CLOCK_AUTO_BRI.get()))
                 );
                 h.publish_switch(SwitchId::ClockAutoBrightness, false);
                 h.publish_number(NumberId::LedSpeed, 2.0);
                 let got = p.sync().await;
                 assert_eq!(got.len(), 1);
-                assert_eq!(state_key(&got[0].1), Some(key::NUMBER_LED_SPEED));
+                assert_eq!(state_key(&got[0].1), Some(key::NUMBER_LED_SPEED.get()));
             })
             .await;
     }
@@ -851,14 +773,16 @@ async fn clock_auto_brightness_needs_the_clock_and_the_light_sensor() {
 async fn entity_list_flood_yields_to_other_clients() {
     local()
         .run_until(async {
-            let (id, cfg) = selftest("now");
-            let (_h, mut rx, port) = start_with(id, cfg);
-            let mut flood = Peer::connect(port).await;
+            let mut ts = TestServer::start(selftest_config(None));
+            let mut rx = ts.take_events();
+            let mut flood = ts.connect();
             flood.hello("flood").await;
-            let mut other = Peer::connect(port).await;
+            let mut other = ts.connect();
             other.hello("other").await;
-            // 300 ListEntities requests in one write: ~1 MiB of replies, parsed in several
-            // batches; the other client is served meanwhile and nothing is lost.
+            event(&mut rx).await;
+            event(&mut rx).await;
+            // 300 ListEntities в одной записи: ~1 MiB ответов; другой клиент обслуживается,
+            // ничего не теряется.
             let mut req = Vec::new();
             for _ in 0..300 {
                 append_plain(&mut req, msg::LIST_ENTITIES_REQ, &[]);
@@ -879,52 +803,11 @@ async fn entity_list_flood_yields_to_other_clients() {
 }
 
 #[tokio::test]
-async fn pending_batch_does_not_read_more_input() {
-    local()
-        .run_until(async {
-            let (id, cfg) = selftest("now");
-            let (_h, rx, port) = start_with(id, cfg);
-            MAX_RBUF.with(|m| m.set(0));
-            let sock = TcpSocket::new_v4().unwrap();
-            sock.set_recv_buffer_size(4096).unwrap();
-            let s = sock
-                .connect(SocketAddr::from(([127, 0, 0, 1], port)))
-                .await
-                .unwrap();
-            let mut p = Peer::with(s);
-            p.hello("flood").await;
-            let mut req = Vec::new();
-            for _ in 0..1000 {
-                append_plain(&mut req, msg::LIST_ENTITIES_REQ, &[]);
-            }
-            // Never reads; keeps sending until the server closes it or the writes block.
-            for _ in 0..200 {
-                let w = timeout(Duration::from_millis(100), p.s.write_all(&req));
-                match w.await {
-                    Ok(Ok(())) => {}
-                    _ => break,
-                }
-                if !rx.is_empty() {
-                    break;
-                }
-            }
-            let max = MAX_RBUF.with(Cell::get);
-            assert!(max > 0);
-            assert!(
-                max <= READ_PER_WAKEUP + req.len(),
-                "rbuf grew to {max} bytes"
-            );
-        })
-        .await;
-}
-
-#[tokio::test]
 async fn eof_with_pending_batch_still_answers_everything() {
     local()
         .run_until(async {
-            let (id, cfg) = selftest("now");
-            let (_h, _rx, port) = start_with(id, cfg);
-            let mut p = Peer::connect(port).await;
+            let ts = TestServer::start(selftest_config(None));
+            let mut p = ts.connect();
             p.hello("eof").await;
             let mut req = Vec::new();
             for _ in 0..300 {
@@ -948,13 +831,15 @@ async fn followup_duration_is_universal_config_and_replays_its_state() {
     for has_clock in [true, false] {
         local()
             .run_until(async {
-                let (id, mut cfg) = selftest("now");
-                cfg.has_clock = has_clock;
-                let (h, mut rx, port) = start_with(id, cfg);
-                let mut p = Peer::connect(port).await;
+                let mut cfg = selftest_config(None);
+                cfg.capabilities.clock = has_clock;
+                let mut ts = TestServer::start(cfg);
+                let h = ts.api.clone();
+                let mut rx = ts.take_events();
+                let mut p = ts.connect();
                 p.hello("HA").await;
                 event(&mut rx).await;
-                p.send(msg::LIST_ENTITIES_REQ, &Writer::new()).await;
+                p.send(msg::LIST_ENTITIES_REQ, &[]).await;
                 let mut found = false;
                 loop {
                     let (t, m) = p.recv().await.unwrap();
@@ -962,12 +847,12 @@ async fn followup_duration_is_universal_config_and_replays_its_state() {
                         break;
                     }
                     if t == msg::LIST_NUMBER
-                        && field(&m, 2).unwrap().u32() == key::NUMBER_FOLLOWUP_DURATION
+                        && entity_keys(&m) == Some(key::NUMBER_FOLLOWUP_DURATION.get())
                     {
                         found = true;
                         assert_eq!(field(&m, 1).unwrap().str(), "followup_duration");
                         assert_eq!(field(&m, 3).unwrap().str(), "Follow-up duration");
-                        assert_eq!(field(&m, 6).map_or(0.0, |f| f.flt()), 0.0);
+                        assert_eq!(field(&m, 6).map_or(0.0, Field::flt), 0.0);
                         assert_eq!(field(&m, 7).unwrap().flt(), FOLLOWUP_DURATION_MAX_S as f32);
                         assert_eq!(field(&m, 8).unwrap().flt(), 1.0);
                         assert_eq!(field(&m, 10).unwrap().u32(), 1); // категория config
@@ -976,13 +861,13 @@ async fn followup_duration_is_universal_config_and_replays_its_state() {
                 }
                 assert!(found);
                 h.publish_number(NumberId::FollowupDuration, 10.0);
-                p.send(msg::SUBSCRIBE_STATES_REQ, &Writer::new()).await;
+                p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
                 let initial = p.sync().await;
                 let (_, m) = initial
                     .iter()
                     .find(|(t, m)| {
                         *t == msg::NUMBER_STATE
-                            && state_key(m) == Some(key::NUMBER_FOLLOWUP_DURATION)
+                            && state_key(m) == Some(key::NUMBER_FOLLOWUP_DURATION.get())
                     })
                     .unwrap();
                 assert_eq!(field(m, 2).unwrap().flt(), 10.0);
@@ -994,9 +879,12 @@ async fn followup_duration_is_universal_config_and_replays_its_state() {
                     (f32::NAN, None),
                     (f32::INFINITY, None),
                 ] {
-                    p.send(
+                    p.send_msg(
                         msg::NUMBER_CMD,
-                        &kv(key::NUMBER_FOLLOWUP_DURATION, |w| w.flt(2, input, true)),
+                        &NumberCommandRequest {
+                            key: Some(key::NUMBER_FOLLOWUP_DURATION.get()),
+                            state: Some(input),
+                        },
                     )
                     .await;
                     let got = drain(&mut p, &mut rx).await;
@@ -1013,16 +901,16 @@ async fn followup_duration_is_universal_config_and_replays_its_state() {
                     let pushed = p.sync().await;
                     let (_, m) = pushed
                         .iter()
-                        .find(|(_, m)| state_key(m) == Some(key::NUMBER_FOLLOWUP_DURATION))
+                        .find(|(_, m)| state_key(m) == Some(key::NUMBER_FOLLOWUP_DURATION.get()))
                         .unwrap();
-                    assert_eq!(field(m, 2).map_or(0.0, |f| f.flt()), value);
-                    p.send(msg::SUBSCRIBE_STATES_REQ, &Writer::new()).await;
+                    assert_eq!(field(m, 2).map_or(0.0, Field::flt), value);
+                    p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
                     let replayed = p.sync().await;
                     let (_, m) = replayed
                         .iter()
-                        .find(|(_, m)| state_key(m) == Some(key::NUMBER_FOLLOWUP_DURATION))
+                        .find(|(_, m)| state_key(m) == Some(key::NUMBER_FOLLOWUP_DURATION.get()))
                         .unwrap();
-                    assert_eq!(field(m, 2).map_or(0.0, |f| f.flt()), value);
+                    assert_eq!(field(m, 2).map_or(0.0, Field::flt), value);
                 }
             })
             .await;

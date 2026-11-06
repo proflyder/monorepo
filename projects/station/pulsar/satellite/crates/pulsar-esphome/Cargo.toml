@@ -6,17 +6,22 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+esphome-proto = { path = "../esphome-proto" }
+home-actor = { path = "../../../../../../packages/rust/home-actor" }
 home-linux = { path = "../../../../../../packages/rust/home-linux" }
 
+getrandom = { workspace = true }
 libc = { workspace = true }
+prost = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 pulsar-core = { path = "../pulsar-core" }
-snow = { workspace = true }
 socket2 = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+snow = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,5 +1,5 @@
 {
-  "checksum": "a435f70c5962211f10480893af429f5e478bfad7b6a741ba73784683248c144f",
+  "checksum": "6fef3f50dd71762d50d5551d1fa9f2f7fba3e397b6f6cbc902f051574b4f0203",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -1936,6 +1936,39 @@
       ],
       "version": "0.2.7"
     },
+    "either 1.19.0": {
+      "common_attrs": {
+        "crate_features": [
+          "std",
+          "use_std"
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "either",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "either",
+      "package_url": "https://github.com/rayon-rs/either",
+      "repository": {
+        "Http": {
+          "sha256": "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be",
+          "url": "https://static.crates.io/crates/either/1.19.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "either",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.19.0"
+    },
     "endi 1.1.1": {
       "common_attrs": {
         "crate_features": [
@@ -2163,6 +2196,45 @@
         }
       ],
       "version": "0.3.14"
+    },
+    "esphome-proto 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "base64 0.22.1",
+            "target": "base64"
+          },
+          {
+            "id": "prost 0.14.4",
+            "target": "prost"
+          },
+          {
+            "id": "snow 0.10.0",
+            "target": "snow"
+          },
+          {
+            "id": "zeroize 1.9.1",
+            "target": "zeroize"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "esphome_proto",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "esphome-proto",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "esphome_proto",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
     },
     "event-listener 5.4.2": {
       "common_attrs": {
@@ -4439,6 +4511,46 @@
       ],
       "version": "2.12.2"
     },
+    "itertools 0.14.0": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "use_alloc",
+          "use_std"
+        ],
+        "deps": [
+          {
+            "id": "either 1.19.0",
+            "target": "either"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "itertools",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "itertools",
+      "package_url": "https://github.com/rust-itertools/itertools",
+      "repository": {
+        "Http": {
+          "sha256": "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285",
+          "url": "https://static.crates.io/crates/itertools/0.14.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "itertools",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.14.0"
+    },
     "itoa 1.0.18": {
       "common_attrs": {
         "edition": "2021"
@@ -5497,6 +5609,100 @@
       ],
       "version": "1.0.107"
     },
+    "prost 0.14.4": {
+      "common_attrs": {
+        "crate_features": [
+          "derive",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "bytes 1.12.1",
+            "target": "bytes"
+          }
+        ],
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "prost-derive 0.14.4",
+            "target": "prost_derive"
+          }
+        ]
+      },
+      "library_target_name": "prost",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "prost",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "sha256": "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1",
+          "url": "https://static.crates.io/crates/prost/0.14.4/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prost",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.14.4"
+    },
+    "prost-derive 0.14.4": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "itertools 0.14.0",
+            "target": "itertools"
+          },
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 2.0.119",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "prost_derive",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "prost-derive",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "sha256": "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf",
+          "url": "https://static.crates.io/crates/prost-derive/0.14.4/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "prost_derive",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.14.4"
+    },
     "pulsar 0.0.0": {
       "common_attrs": {
         "deps": [
@@ -5711,16 +5917,24 @@
       "common_attrs": {
         "deps": [
           {
+            "id": "getrandom 0.3.4",
+            "target": "getrandom"
+          },
+          {
             "id": "libc 0.2.191",
             "target": "libc"
           },
           {
-            "id": "snow 0.10.0",
-            "target": "snow"
+            "id": "prost 0.14.4",
+            "target": "prost"
           },
           {
             "id": "socket2 0.6.5",
             "target": "socket2"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
           },
           {
             "id": "tokio 1.54.1",
@@ -5729,6 +5943,12 @@
           {
             "id": "tracing 0.1.44",
             "target": "tracing"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "snow 0.10.0",
+            "target": "snow"
           }
         ],
         "edition": "2024"
@@ -11689,6 +11909,7 @@
     "libc 0.2.191",
     "libloading 0.9.0",
     "log 0.4.34",
+    "prost 0.14.4",
     "reqwest 0.12.28",
     "ring 0.17.14",
     "rustix 1.1.6",
@@ -11717,6 +11938,7 @@
   "workspace_members": {
     "ble-gateway 0.2.0": "projects/station/ble-gateway/crates/ble-gateway",
     "cp_selftest 0.1.0": "solutions/windows-logon-provider/crates/cp-selftest",
+    "esphome-proto 0.0.0": "projects/station/pulsar/satellite/crates/esphome-proto",
     "home-actor 0.1.0": "packages/rust/home-actor",
     "home-http 0.1.0": "packages/rust/home-http",
     "home-linux 0.1.0": "packages/rust/home-linux",
