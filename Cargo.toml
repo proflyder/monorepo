@@ -83,7 +83,13 @@ time = { version = "=0.3.55", default-features = false, features = ["std", "form
 # (DECISIONS 41). `rusqlite` is bundled so the static musl image carries its
 # own SQLite.
 rusqlite = { version = "=0.41.1", features = ["bundled"] }
-uuid = { version = "=1.29.0", features = ["v4"] }
+# Scheduler ids (DECISIONS 41): `v5` reproduces Go's UUIDv5/DNS event ids and
+# `v7` the same 36-character time-ordered format as `uuid.NewV7`.
+uuid = { version = "=1.29.0", features = ["v4", "v5", "v7"] }
+# IANA time zones with a bundled tzdb (no system tzdata on the station image):
+# `tzdb-bundle-always` keeps DST/gap/fold behaviour reproducible. Pinned so a
+# tzdb update cannot change scheduler occurrences silently.
+jiff = { version = "=0.2.39", default-features = false, features = ["std", "tzdb-bundle-always"] }
 tower = { version = "=0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "=0.6.11", default-features = false, features = ["limit", "timeout"] }
 http-body-util = "=0.1.5"

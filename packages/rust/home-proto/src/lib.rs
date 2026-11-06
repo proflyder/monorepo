@@ -22,4 +22,4 @@ mod transport;
 
 pub use generated::ricardo::v1;
 pub use scheduler::{SchedulerClient, SchedulerError};
-pub use transport::ReqwestTransport;
+pub use transport::{CaError, ReqwestTransport};

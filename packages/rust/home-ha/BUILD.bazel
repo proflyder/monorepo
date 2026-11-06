@@ -24,10 +24,12 @@ rust_library(
 rust_test(
     name = "unit_tests",
     crate = ":home_ha",
+    compile_data = ["testdata/test-ca.pem"],
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = DEPS + [
         "@crates//:axum",
+        "@crates//:tempfile",
         "@crates//:tokio",
     ],
 )

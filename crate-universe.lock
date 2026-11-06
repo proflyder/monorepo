@@ -1,5 +1,5 @@
 {
-  "checksum": "7b1a061ad063bdf3cfeafc81c1827e145c3b8a6145e83d9d695a952a01ff5120",
+  "checksum": "14de946d61dc6a05ff54779d973acb6ae9e862e8c26b4f5669c34a0724fc186b",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4073,6 +4073,10 @@
           {
             "id": "axum 0.8.9",
             "target": "axum"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
           },
           {
             "id": "tokio 1.54.1",
@@ -8973,6 +8977,34 @@
       ],
       "version": "0.7.1"
     },
+    "sha1_smol 1.0.1": {
+      "common_attrs": {
+        "edition": "2018"
+      },
+      "library_target_name": "sha1_smol",
+      "license": "BSD-3-Clause",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "name": "sha1_smol",
+      "package_url": "https://github.com/mitsuhiko/sha1-smol",
+      "repository": {
+        "Http": {
+          "sha256": "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d",
+          "url": "https://static.crates.io/crates/sha1_smol/1.0.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sha1_smol",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.1"
+    },
     "sha2 0.10.9": {
       "common_attrs": {
         "deps": {
@@ -9765,7 +9797,7 @@
               "target": "fastrand"
             },
             {
-              "id": "getrandom 0.4.3",
+              "id": "getrandom 0.3.4",
               "target": "getrandom"
             },
             {
@@ -11539,8 +11571,11 @@
           "default",
           "rng",
           "serde",
+          "sha1",
           "std",
-          "v4"
+          "v4",
+          "v5",
+          "v7"
         ],
         "deps": [
           {
@@ -11550,6 +11585,10 @@
           {
             "id": "serde_core 1.0.229",
             "target": "serde_core"
+          },
+          {
+            "id": "sha1_smol 1.0.1",
+            "target": "sha1_smol"
           }
         ],
         "edition": "2021"

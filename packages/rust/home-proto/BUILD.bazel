@@ -32,12 +32,14 @@ rust_library(
 rust_test(
     name = "unit_tests",
     crate = ":home_proto",
+    compile_data = ["testdata/test-ca.pem"],
     edition = "2024",
     lint_config = ":workspace_lints",
     tags = ["no_rustfmt"],
     deps = DEPS + [
         "@crates//:axum",
         "@crates//:serde_json",
+        "@crates//:tempfile",
         "@crates//:tokio",
     ],
 )

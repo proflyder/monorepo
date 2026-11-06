@@ -51,7 +51,8 @@ impl Error {
 
 /// Optional hooks. The factory passed to [`run`] is called once per scenario
 /// and is the place to seed state; `before_step` runs before every request
-/// (for example to advance a fake clock).
+/// with the scenario name and the 1-based step number, exactly like Go's
+/// `contracttest.WithBeforeStep` (for example to advance a fake clock).
 type BeforeStep = Box<dyn Fn(&str, usize)>;
 type Normalizer = Box<dyn Fn(&str, &mut Value)>;
 
@@ -122,7 +123,7 @@ where
         for (index, step) in steps.iter().enumerate() {
             let number = index + 1;
             if let Some(hook) = &options.before_step {
-                hook(&name, index);
+                hook(&name, number);
             }
             replay_step(&name, number, step, router.clone(), &mut captures, &options).await?;
         }
@@ -686,6 +687,41 @@ mod tests {
             .await
             .expect("fixtures");
         assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn the_before_step_hook_gets_the_scenario_and_one_based_step() {
+        let dir = temp_dir();
+        std::fs::write(
+            dir.path().join("hooks.json"),
+            br#"{
+                "name": "hooks",
+                "steps": [
+                    {"request": {"method": "GET", "path": "/healthz"}, "response": {"status": 200}},
+                    {"request": {"method": "GET", "path": "/healthz"}, "response": {"status": 200}}
+                ]
+            }"#,
+        )
+        .expect("write");
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorder = seen.clone();
+        let count = run(
+            dir.path(),
+            |_| router(),
+            Options::default().with_before_step(move |scenario, step| {
+                recorder
+                    .lock()
+                    .expect("lock")
+                    .push((scenario.to_owned(), step));
+            }),
+        )
+        .await
+        .expect("fixtures");
+        assert_eq!(count, 1);
+        assert_eq!(
+            *seen.lock().expect("lock"),
+            vec![("hooks".to_owned(), 1), ("hooks".to_owned(), 2)]
+        );
     }
 
     #[tokio::test]

@@ -30,6 +30,8 @@ pub enum SchedulerError {
     InvalidUrl,
     #[error("scheduler: cannot build the HTTP client")]
     Transport,
+    #[error("scheduler: unusable CA")]
+    Certificate,
     #[error("scheduler: {code:?}: {message}")]
     Rpc { code: ErrorCode, message: String },
 }
@@ -39,7 +41,7 @@ impl SchedulerError {
     #[must_use]
     pub fn is_transient(&self) -> bool {
         match self {
-            Self::InvalidUrl | Self::Transport => false,
+            Self::InvalidUrl | Self::Transport | Self::Certificate => false,
             Self::Rpc { code, .. } => matches!(
                 code,
                 ErrorCode::Unavailable
@@ -80,6 +82,42 @@ impl SchedulerClient {
     /// (`http://127.0.0.1:8098`); a trailing `/ricardo.v1.SchedulerService`
     /// is tolerated, like the Go client.
     pub fn new(base_url: &str, token: Token, timeout: Duration) -> Result<Self, SchedulerError> {
+        Self::build(base_url, token, timeout, || {
+            ReqwestTransport::plaintext().map_err(|_| SchedulerError::Transport)
+        })
+    }
+
+    /// Build a client that trusts the given PEM bundle in addition to the
+    /// transport's roots (the workspace reqwest compiles none in).
+    pub fn new_with_ca_pem(
+        base_url: &str,
+        token: Token,
+        timeout: Duration,
+        ca_pem: &[u8],
+    ) -> Result<Self, SchedulerError> {
+        Self::build(base_url, token, timeout, || {
+            ReqwestTransport::with_ca_pem(ca_pem).map_err(|_| SchedulerError::Certificate)
+        })
+    }
+
+    /// Like [`SchedulerClient::new_with_ca_pem`], but reads the bundle from
+    /// `path`. The file content is never logged.
+    pub fn new_with_ca_file(
+        base_url: &str,
+        token: Token,
+        timeout: Duration,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<Self, SchedulerError> {
+        let pem = std::fs::read(path).map_err(|_| SchedulerError::Certificate)?;
+        Self::new_with_ca_pem(base_url, token, timeout, &pem)
+    }
+
+    fn build(
+        base_url: &str,
+        token: Token,
+        timeout: Duration,
+        transport: impl FnOnce() -> Result<ReqwestTransport, SchedulerError>,
+    ) -> Result<Self, SchedulerError> {
         let base = base_url.trim().trim_end_matches('/');
         let base = base
             .strip_suffix("/ricardo.v1.SchedulerService")
@@ -88,7 +126,7 @@ impl SchedulerClient {
         if uri.scheme_str().is_none() || uri.authority().is_none() {
             return Err(SchedulerError::InvalidUrl);
         }
-        let transport = ReqwestTransport::plaintext().map_err(|_| SchedulerError::Transport)?;
+        let transport = transport()?;
         let config = ClientConfig::new(uri)
             .with_protocol(Protocol::Connect)
             .with_codec_format(CodecFormat::Json)
@@ -388,6 +426,55 @@ mod tests {
         assert!(matches!(error, SchedulerError::Rpc { .. }));
         assert!(error.is_permanent());
         assert!(!error.to_string().contains("sched-token"));
+    }
+
+    // Throwaway self-signed test CA (no private key in the tree).
+    const TEST_CA_PEM: &str = include_str!("../testdata/test-ca.pem");
+
+    #[tokio::test]
+    async fn an_extra_ca_bundle_can_be_supplied_from_bytes_or_a_file() {
+        let (base, _calls) = serve().await;
+        let client = SchedulerClient::new_with_ca_pem(
+            &base,
+            Token::new("sched-token"),
+            Duration::from_secs(1),
+            TEST_CA_PEM.as_bytes(),
+        )
+        .expect("client with CA");
+        client.get_status().await.expect("status");
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("ca.pem");
+        std::fs::write(&path, TEST_CA_PEM).expect("write CA");
+        let client = SchedulerClient::new_with_ca_file(
+            &base,
+            Token::new("sched-token"),
+            Duration::from_secs(1),
+            &path,
+        )
+        .expect("client with CA file");
+        client.get_status().await.expect("status");
+    }
+
+    #[test]
+    fn an_unusable_ca_is_a_permanent_error() {
+        let error = SchedulerClient::new_with_ca_pem(
+            "http://127.0.0.1:1",
+            Token::new("sched-token"),
+            Duration::from_secs(1),
+            b"not a certificate",
+        )
+        .expect_err("bad CA");
+        assert!(matches!(error, SchedulerError::Certificate));
+        assert!(error.is_permanent());
+        let error = SchedulerClient::new_with_ca_file(
+            "http://127.0.0.1:1",
+            Token::new("sched-token"),
+            Duration::from_secs(1),
+            "/definitely/not/a/ca.pem",
+        )
+        .expect_err("missing CA");
+        assert!(matches!(error, SchedulerError::Certificate));
     }
 
     #[test]
