@@ -74,8 +74,7 @@
   48 ч (`imageMaximumGCAge`, drop-in `agent/etc/kubelet.conf.d/50-image-gc.conf`
   в data-dir), иначе — при 85% диска. Откат берёт образ по digest из GHCR.
   Образы тянутся параллельно, до 4 одновременно (`serializeImagePulls: false`,
-  drop-in `50-image-pull.conf`). Деплой юнита сначала подтягивает новые образы
-  (`home-deploy prepull`), потом применяет; таймауты выката — 600 с.
+  drop-in `50-image-pull.conf`); таймауты выката — 600 с.
 - Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
   `openbao`, `external-secrets`, `currency-bot`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,

@@ -229,13 +229,6 @@ converge_deployment() {
     --summary-file "${DEPLOY_SUMMARY_FILE:-}"
 }
 
-# Pull the new images onto the node first (parallel kubelet pulls): the rollout
-# timeout below then measures only the start of the new version, not a slow
-# registry (run 42188744175 rolled back while images were still downloading).
-echo "== prepulling images"
-home_deploy prepull --kubectl "$KUBECTL" --namespace "$NS" --timeout 600s \
-  --image "$IMAGE_REF" --image "$CLOUDFLARED_IMAGE"
-
 echo "== applying currency-bot"
 record_before currency-bot
 converge_deployment currency-bot "$RENDER_DIR/currency-bot.yaml"
