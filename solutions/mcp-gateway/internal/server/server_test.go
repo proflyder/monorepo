@@ -258,3 +258,23 @@ func TestUnauthorizedClientCannotInitialize(t *testing.T) {
 		t.Fatalf("body = %v", body)
 	}
 }
+
+func TestRouteOfIncludesEveryVoiceRoute(t *testing.T) {
+	cases := map[string]string{
+		"/mcp":                  "/mcp",
+		"/v1/voice/utterance":   "/v1/voice/utterance",
+		"/v1/voice/result":      "/v1/voice/result",
+		"/v1/voice/updates":     "/v1/voice/updates",
+		"/v1/voice/state":       "/v1/voice/state",
+		"/healthz":              "/healthz",
+		"/readyz":               "/readyz",
+		"/metrics":              "/metrics",
+		"/unknown":              "other",
+		"/v1/voice/unsupported": "other",
+	}
+	for path, want := range cases {
+		if got := routeOf(path); got != want {
+			t.Fatalf("routeOf(%q) = %q, want %q", path, got, want)
+		}
+	}
+}

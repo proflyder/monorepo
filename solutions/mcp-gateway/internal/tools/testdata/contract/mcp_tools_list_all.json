@@ -1,0 +1,400 @@
+{
+  "name": "mcp_tools_list_all",
+  "description": "MCP tools/list with every group enabled: 15 tools, sorted by name. Semantic comparison still pins the exact tool set, descriptions, schemas and annotations.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "method": "tools/list",
+          "params": {}
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "result": {
+            "tools": [
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Drop the pending agent spawn without starting it.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "bb_cancel"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Start the agent prepared by bb_prepare_spawn. Takes no arguments, uses the stored idempotency key, and turns on agent conversation mode for the created thread.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "bb_confirm"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Validate that an agent may be started in one personal project and store exactly one pending spawn for 90 seconds. Project is resolved only among personal targets, by spoken name or alias; provider, model and reasoning level must be allowed by the dispatcher. Nothing is started yet: returns a short Russian confirmation question.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "effort": {
+                      "description": "optional reasoning level allowed by the dispatcher",
+                      "type": "string"
+                    },
+                    "model": {
+                      "description": "optional model id allowed by the dispatcher",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "spoken project name or alias from the personal allowlist",
+                      "type": "string"
+                    },
+                    "task": {
+                      "description": "task text for the agent",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "task"
+                  ],
+                  "type": "object"
+                },
+                "name": "bb_prepare_spawn"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Short summary of running agent threads in the personal profile. Work-profile threads and projects are never listed. Returns a short Russian speech line plus structured thread details.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "bb_status"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Explain one active alert by Alertmanager fingerprint (full or a prefix of at least 6 characters) or by alert name. Returns its labels and annotations plus the matching catalog service detail, so a follow-up question about an alert can be answered.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "ref": {
+                      "description": "Alertmanager fingerprint (full or a prefix of at least 6 characters) or the alert name",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ref"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_alert"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Drop the pending restart without executing it.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "infra_cancel"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Execute the pending restart prepared by infra_prepare_restart. Takes no arguments, so it works even if the client lost conversation history. Self-disrupting services restart after a short delay.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "infra_confirm"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Recent logs for any catalog service: Loki when the service is ingested there, otherwise Kubernetes pods/log. Secret-like values are redacted before returning.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "grep": {
+                      "description": "case-insensitive substring filter",
+                      "type": "string"
+                    },
+                    "limit": {
+                      "description": "maximum number of log lines (default 50)",
+                      "type": "integer"
+                    },
+                    "name": {
+                      "description": "spoken service name from the catalog",
+                      "type": "string"
+                    },
+                    "since": {
+                      "description": "how far back to read, for example 15m or 1h (default 15m)",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_logs"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Topology overview and the service catalog (spoken aliases, workloads, restart policy) for model context.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "infra_overview"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Validate that one catalog service may be restarted now and store exactly one pending action for 90 seconds. Returns a short Russian confirmation question; nothing is restarted yet.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "description": "spoken service name from the catalog",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_prepare_restart"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Run one read-only instant PromQL query. Results are capped; this tool cannot change anything.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "promql": {
+                      "description": "read-only instant PromQL expression",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "promql"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_query"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Full infrastructure report across every catalog service. Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "verbose": {
+                      "description": "append a compact versions section (image, age, versions) to the text report",
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "infra_report"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": false,
+                  "openWorldHint": true,
+                  "readOnlyHint": false
+                },
+                "description": "Send a long HTML-escaped report to the preconfigured Telegram chat. The recipient cannot be chosen by the model. Suitable for detailed reports that are too long to speak.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "text": {
+                      "description": "report body, plain text; HTML is escaped",
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "short report title",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "text"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_send_report"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Detail for one catalog service resolved by spoken name (case and ё-insensitive): workload status, pods, restarts, recent events, Prometheus signals and related alerts.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "description": "spoken service name from the catalog",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "type": "object"
+                },
+                "name": "infra_service"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "One aggregate infra health check: firing alerts, catalog health signals, Kubernetes workload availability and recent pod restarts. Returns a short Russian speech verdict plus structured details.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "infra_status"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

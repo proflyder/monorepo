@@ -161,6 +161,7 @@ func Run(ctx context.Context) error {
 			Metrics:      m,
 			Logger:       logger,
 			Now:          time.Now,
+			UpdatesWait:  voice.UpdatesWaitFor(cfg.BBTimeout),
 		}).Handler()
 	}
 

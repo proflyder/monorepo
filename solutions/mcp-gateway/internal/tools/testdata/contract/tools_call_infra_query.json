@@ -1,0 +1,291 @@
+{
+  "name": "tools_call_infra_query",
+  "description": "infra_query: a successful instant query, an empty result, a backend error, an empty expression and an over-2000-character expression.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "promql": "up"
+            },
+            "name": "infra_query"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запрос не вернул данных.\",\n  \"details\": {\n    \"promql\": \"up\",\n    \"samples\": []\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "promql": "absent"
+            },
+            "name": "infra_query"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запрос не вернул данных.\",\n  \"details\": {\n    \"promql\": \"absent\",\n    \"samples\": []\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "promql": "up"
+            },
+            "name": "infra_query"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запрос не выполнен.\",\n  \"details\": {\n    \"error\": \"unexpected EOF\",\n    \"promql\": \"up\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "promql": "  "
+            },
+            "name": "infra_query"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Пустой запрос PromQL.\"\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "promql": "up{instance=\"n0\"} or up{instance=\"n1\"} or up{instance=\"n2\"} or up{instance=\"n3\"} or up{instance=\"n4\"} or up{instance=\"n5\"} or up{instance=\"n6\"} or up{instance=\"n7\"} or up{instance=\"n8\"} or up{instance=\"n9\"} or up{instance=\"n10\"} or up{instance=\"n11\"} or up{instance=\"n12\"} or up{instance=\"n13\"} or up{instance=\"n14\"} or up{instance=\"n15\"} or up{instance=\"n16\"} or up{instance=\"n17\"} or up{instance=\"n18\"} or up{instance=\"n19\"} or up{instance=\"n20\"} or up{instance=\"n21\"} or up{instance=\"n22\"} or up{instance=\"n23\"} or up{instance=\"n24\"} or up{instance=\"n25\"} or up{instance=\"n26\"} or up{instance=\"n27\"} or up{instance=\"n28\"} or up{instance=\"n29\"} or up{instance=\"n30\"} or up{instance=\"n31\"} or up{instance=\"n32\"} or up{instance=\"n33\"} or up{instance=\"n34\"} or up{instance=\"n35\"} or up{instance=\"n36\"} or up{instance=\"n37\"} or up{instance=\"n38\"} or up{instance=\"n39\"} or up{instance=\"n40\"} or up{instance=\"n41\"} or up{instance=\"n42\"} or up{instance=\"n43\"} or up{instance=\"n44\"} or up{instance=\"n45\"} or up{instance=\"n46\"} or up{instance=\"n47\"} or up{instance=\"n48\"} or up{instance=\"n49\"} or up{instance=\"n50\"} or up{instance=\"n51\"} or up{instance=\"n52\"} or up{instance=\"n53\"} or up{instance=\"n54\"} or up{instance=\"n55\"} or up{instance=\"n56\"} or up{instance=\"n57\"} or up{instance=\"n58\"} or up{instance=\"n59\"} or up{instance=\"n60\"} or up{instance=\"n61\"} or up{instance=\"n62\"} or up{instance=\"n63\"} or up{instance=\"n64\"} or up{instance=\"n65\"} or up{instance=\"n66\"} or up{instance=\"n67\"} or up{instance=\"n68\"} or up{instance=\"n69\"} or up{instance=\"n70\"} or up{instance=\"n71\"} or up{instance=\"n72\"} or up{instance=\"n73\"} or up{instance=\"n74\"} or up{instance=\"n75\"} or up{instance=\"n76\"} or up{instance=\"n77\"} or up{instance=\"n78\"} or up{instance=\"n79\"} or up{instance=\"n80\"} or up{instance=\"n81\"} or up{instance=\"n82\"} or up{instance=\"n83\"} or up{instance=\"n84\"} or up{instance=\"n85\"} or up{instance=\"n86\"} or up{instance=\"n87\"} or up{instance=\"n88\"} or up{instance=\"n89\"} or up{instance=\"n90\"} or up{instance=\"n91\"} or up{instance=\"n92\"} or up{instance=\"n93\"} or up{instance=\"n94\"} or up{instance=\"n95\"} or up{instance=\"n96\"} or up{instance=\"n97\"} or up{instance=\"n98\"} or up{instance=\"n99\"} or up{instance=\"n100\"} or up{instance=\"n101\"} or up{instance=\"n102\"} or up{instance=\"n103\"} or up{instance=\"n104\"} or up{instance=\"n105\"} or up{instance=\"n106\"} or up{instance=\"n107\"} or up{instance=\"n108\"} or up{instance=\"n109\"} or up{instance=\"n110\"} or up{instance=\"n111\"} or up{instance=\"n112\"} or up{instance=\"n113\"} or up{instance=\"n114\"} or up{instance=\"n115\"} or up{instance=\"n116\"} or up{instance=\"n117\"} or up{instance=\"n118\"} or up{instance=\"n119\"} or up{instance=\"n120\"} or up{instance=\"n121\"} or up{instance=\"n122\"} or up{instance=\"n123\"} or up{instance=\"n124\"} or up{instance=\"n125\"} or up{instance=\"n126\"} or up{instance=\"n127\"} or up{instance=\"n128\"} or up{instance=\"n129\"} or up{instance=\"n130\"} or up{instance=\"n131\"} or up{instance=\"n132\"} or up{instance=\"n133\"} or up{instance=\"n134\"} or up{instance=\"n135\"} or up{instance=\"n136\"} or up{instance=\"n137\"} or up{instance=\"n138\"} or up{instance=\"n139\"} or up{instance=\"n140\"} or up{instance=\"n141\"} or up{instance=\"n142\"} or up{instance=\"n143\"} or up{instance=\"n144\"} or up{instance=\"n145\"} or up{instance=\"n146\"} or up{instance=\"n147\"} or up{instance=\"n148\"} or up{instance=\"n149\"}"
+            },
+            "name": "infra_query"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Запрос слишком длинный.\",\n  \"details\": {\n    \"length\": 3336\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

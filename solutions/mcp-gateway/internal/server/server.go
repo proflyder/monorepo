@@ -158,7 +158,8 @@ func routeOf(path string) string {
 	switch {
 	case path == "/mcp":
 		return "/mcp"
-	case path == "/v1/voice/utterance", path == "/v1/voice/result", path == "/v1/voice/state":
+	case path == "/v1/voice/utterance", path == "/v1/voice/result",
+		path == "/v1/voice/updates", path == "/v1/voice/state":
 		return path
 	case path == "/healthz", path == "/readyz", path == "/metrics":
 		return path

@@ -1,6 +1,7 @@
 {
   "name": "mcp_initialize",
   "description": "MCP Streamable HTTP initialize with a valid bearer token. The session id is returned in the Mcp-Session-Id header (captured, not recorded) and the initialized notification is accepted with 202.",
+  "compare": "semantic",
   "steps": [
     {
       "request": {
@@ -27,10 +28,31 @@
       },
       "response": {
         "status": 200,
+        "format": "sse",
         "headers": {
           "Content-Type": "text/event-stream"
         },
-        "body": "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"logging\":{},\"resources\":{\"listChanged\":true},\"tools\":{\"listChanged\":true}},\"protocolVersion\":\"2025-06-18\",\"serverInfo\":{\"name\":\"mcp-gateway\",\"title\":\"Infra gateway\",\"version\":\"contract\"}}}\n\n"
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
       },
       "captureHeaders": {
         "session": "Mcp-Session-Id"

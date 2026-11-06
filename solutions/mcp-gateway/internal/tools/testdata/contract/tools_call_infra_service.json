@@ -1,0 +1,291 @@
+{
+  "name": "tools_call_infra_service",
+  "description": "infra_service: a Kubernetes service with workload, pods and events; an external service; an unknown name; an empty name; and a Kubernetes API error.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "планировщик"
+            },
+            "name": "infra_service"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Планировщик работает: готовы 1 из 1, подов 2.\",\n  \"details\": {\n    \"service\": {\n      \"id\": \"scheduler\",\n      \"kind\": \"k8s\",\n      \"namespace\": \"home\",\n      \"workloadKind\": \"Deployment\",\n      \"workloadName\": \"scheduler\",\n      \"restartAllowed\": true\n    },\n    \"workload\": {\n      \"namespace\": \"home\",\n      \"kind\": \"Deployment\",\n      \"name\": \"scheduler\",\n      \"generation\": 2,\n      \"observedGeneration\": 2,\n      \"desired\": 1,\n      \"updated\": 1,\n      \"ready\": 1,\n      \"available\": 1\n    },\n    \"pods\": [\n      {\n        \"namespace\": \"home\",\n        \"name\": \"scheduler-1\",\n        \"phase\": \"\",\n        \"ready\": true,\n        \"restarts\": 0,\n        \"containers\": [\n          {\n            \"name\": \"scheduler\",\n            \"image\": \"ghcr.io/proflyder/scheduler:1.2.3\",\n            \"ready\": true,\n            \"restartCount\": 0,\n            \"lastTerminatedAt\": \"0001-01-01T00:00:00Z\"\n          }\n        ],\n        \"startTime\": \"2026-10-30T12:00:00Z\"\n      },\n      {\n        \"namespace\": \"home\",\n        \"name\": \"hermes-7d9f8c6b5-x2x4z\",\n        \"phase\": \"\",\n        \"ready\": true,\n        \"restarts\": 0,\n        \"containers\": [\n          {\n            \"name\": \"hermes\",\n            \"image\": \"ghcr.io/proflyder/hermes:2.0.0\",\n            \"ready\": true,\n            \"restartCount\": 0,\n            \"lastTerminatedAt\": \"0001-01-01T00:00:00Z\"\n          },\n          {\n            \"name\": \"voice-proxy\",\n            \"image\": \"ghcr.io/proflyder/voice-proxy:1.1.0\",\n            \"ready\": true,\n            \"restartCount\": 0,\n            \"lastTerminatedAt\": \"0001-01-01T00:00:00Z\"\n          }\n        ],\n        \"startTime\": \"2026-10-31T12:00:00Z\"\n      }\n    ],\n    \"events\": [\n      {\n        \"type\": \"\",\n        \"reason\": \"Pulled\",\n        \"message\": \"Image pulled\",\n        \"count\": 0,\n        \"lastSeen\": \"2026-11-01T11:00:00Z\"\n      }\n    ],\n    \"signals\": [\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      }\n    ],\n    \"alerts\": []\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "дом"
+            },
+            "name": "infra_service"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Home Assistant: сигналы в норме.\",\n  \"details\": {\n    \"service\": {\n      \"id\": \"ha\",\n      \"kind\": \"external\",\n      \"restartAllowed\": false\n    },\n    \"signals\": [\n      {\n        \"service\": \"ha\",\n        \"meaning\": \"home assistant недоступен\",\n        \"promql\": \"ha_up{endpoint=\\\"ha\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      }\n    ],\n    \"alerts\": []\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "неизвестный"
+            },
+            "name": "infra_service"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Не нашёл сервис неизвестный.\",\n  \"details\": {\n    \"error\": \"unknown service \\\"неизвестный\\\"\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": ""
+            },
+            "name": "infra_service"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Не нашёл сервис .\",\n  \"details\": {\n    \"error\": \"empty service name\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "name": "планировщик"
+            },
+            "name": "infra_service"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Планировщик: не удалось получить состояние — unexpected EOF\",\n  \"details\": {\n    \"service\": {\n      \"id\": \"scheduler\",\n      \"kind\": \"k8s\",\n      \"namespace\": \"home\",\n      \"workloadKind\": \"Deployment\",\n      \"workloadName\": \"scheduler\",\n      \"restartAllowed\": true\n    },\n    \"signals\": [\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      }\n    ],\n    \"alerts\": [],\n    \"errors\": [\n      \"unexpected EOF\"\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

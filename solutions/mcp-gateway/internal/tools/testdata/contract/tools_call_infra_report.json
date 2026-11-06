@@ -1,0 +1,243 @@
+{
+  "name": "tools_call_infra_report",
+  "description": "infra_report: a healthy report, two problems, verbose versions, and an unavailable Alertmanager. details.text must stay a ready Telegram message in the configured Asia/Almaty timezone.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_report"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Всё работает: 4 из 4. Прислать подробности в Telegram?\",\n  \"details\": {\n    \"verdict\": \"Всё работает: 4 из 4. Прислать подробности в Telegram?\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"total\": 4,\n    \"ok\": 4,\n    \"problems\": 0,\n    \"unknown\": 0,\n    \"alerts\": [],\n    \"services\": [\n      {\n        \"id\": \"scheduler\",\n        \"name\": \"Планировщик\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      },\n      {\n        \"id\": \"hermes\",\n        \"name\": \"Гермес\",\n        \"group\": \"Голос\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      },\n      {\n        \"id\": \"ha\",\n        \"name\": \"Home Assistant\",\n        \"group\": \"Дом\",\n        \"kind\": \"external\",\n        \"status\": \"ok\",\n        \"restartsLastHour\": 0,\n        \"checks\": [\n          {\n            \"service\": \"ha\",\n            \"type\": \"tcp\",\n            \"label\": \"HA API\",\n            \"ok\": true,\n            \"value\": \"192.0.2.28:8123\"\n          },\n          {\n            \"service\": \"ha\",\n            \"type\": \"ha_template\",\n            \"label\": \"Pulsar\",\n            \"ok\": true,\n            \"value\": \"1.2.3\"\n          }\n        ],\n        \"versions\": [\n          \"Pulsar: 1.2.3\"\n        ]\n      },\n      {\n        \"id\": \"readonly\",\n        \"name\": \"Readonly\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      }\n    ],\n    \"text\": \"Отчёт по инфраструктуре, 01.11 17:00\\n✅ Всё работает: 4 из 4\\n\\nВ норме\\n✅ Голос: Гермес\\n✅ Дом: Home Assistant\\n✅ Мониторинг: Планировщик, Readonly\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_report"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Проверено сервисов: 4, работают 2. Проблемы: Планировщик, Home Assistant. Прислать подробности в Telegram?\",\n  \"details\": {\n    \"verdict\": \"Проверено сервисов: 4, работают 2. Проблемы: Планировщик, Home Assistant. Прислать подробности в Telegram?\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"total\": 4,\n    \"ok\": 2,\n    \"problems\": 2,\n    \"unknown\": 0,\n    \"alerts\": [],\n    \"services\": [\n      {\n        \"id\": \"scheduler\",\n        \"name\": \"Планировщик\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"down\",\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": [],\n        \"issues\": [\n          \"готовы 0 из 1\"\n        ]\n      },\n      {\n        \"id\": \"hermes\",\n        \"name\": \"Гермес\",\n        \"group\": \"Голос\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      },\n      {\n        \"id\": \"ha\",\n        \"name\": \"Home Assistant\",\n        \"group\": \"Дом\",\n        \"kind\": \"external\",\n        \"status\": \"down\",\n        \"restartsLastHour\": 0,\n        \"checks\": [\n          {\n            \"service\": \"ha\",\n            \"type\": \"tcp\",\n            \"label\": \"HA API\",\n            \"ok\": false,\n            \"error\": \"connection refused\"\n          }\n        ],\n        \"issues\": [\n          \"HA API: connection refused\"\n        ]\n      },\n      {\n        \"id\": \"readonly\",\n        \"name\": \"Readonly\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      }\n    ],\n    \"text\": \"Отчёт по инфраструктуре, 01.11 17:00\\n⚠️ Есть проблемы: 2 из 4\\n\\nПроблемы\\n❌ Home Assistant — HA API: connection refused\\n❌ Планировщик — готовы 0 из 1\\n   рестартов 1ч: 0\\n\\nВ норме\\n✅ Голос: Гермес\\n✅ Мониторинг: Readonly\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {
+              "verbose": true
+            },
+            "name": "infra_report"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Всё работает: 4 из 4. Прислать подробности в Telegram?\",\n  \"details\": {\n    \"verdict\": \"Всё работает: 4 из 4. Прислать подробности в Telegram?\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"total\": 4,\n    \"ok\": 4,\n    \"problems\": 0,\n    \"unknown\": 0,\n    \"alerts\": [],\n    \"services\": [\n      {\n        \"id\": \"scheduler\",\n        \"name\": \"Планировщик\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      },\n      {\n        \"id\": \"hermes\",\n        \"name\": \"Гермес\",\n        \"group\": \"Голос\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      },\n      {\n        \"id\": \"ha\",\n        \"name\": \"Home Assistant\",\n        \"group\": \"Дом\",\n        \"kind\": \"external\",\n        \"status\": \"ok\",\n        \"restartsLastHour\": 0,\n        \"checks\": [\n          {\n            \"service\": \"ha\",\n            \"type\": \"tcp\",\n            \"label\": \"HA API\",\n            \"ok\": true,\n            \"value\": \"192.0.2.28:8123\"\n          },\n          {\n            \"service\": \"ha\",\n            \"type\": \"ha_template\",\n            \"label\": \"Pulsar\",\n            \"ok\": true,\n            \"value\": \"1.2.3\"\n          }\n        ],\n        \"versions\": [\n          \"Pulsar: 1.2.3\"\n        ]\n      },\n      {\n        \"id\": \"readonly\",\n        \"name\": \"Readonly\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      }\n    ],\n    \"text\": \"Отчёт по инфраструктуре, 01.11 17:00\\n✅ Всё работает: 4 из 4\\n\\nВ норме\\n✅ Голос: Гермес\\n✅ Дом: Home Assistant\\n✅ Мониторинг: Планировщик, Readonly\\n\\nВерсии\\nПланировщик — scheduler:1.2.3, возраст 2д\\nГермес — scheduler:1.2.3, возраст 2д\\nHome Assistant — Pulsar: 1.2.3\\nReadonly — scheduler:1.2.3, возраст 2д\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_report"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Всё работает: 4 из 4. Прислать подробности в Telegram?\",\n  \"details\": {\n    \"verdict\": \"Всё работает: 4 из 4. Прислать подробности в Telegram?\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"total\": 4,\n    \"ok\": 4,\n    \"problems\": 0,\n    \"unknown\": 0,\n    \"alerts\": [],\n    \"services\": [\n      {\n        \"id\": \"scheduler\",\n        \"name\": \"Планировщик\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      },\n      {\n        \"id\": \"hermes\",\n        \"name\": \"Гермес\",\n        \"group\": \"Голос\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      },\n      {\n        \"id\": \"ha\",\n        \"name\": \"Home Assistant\",\n        \"group\": \"Дом\",\n        \"kind\": \"external\",\n        \"status\": \"ok\",\n        \"restartsLastHour\": 0,\n        \"checks\": [\n          {\n            \"service\": \"ha\",\n            \"type\": \"tcp\",\n            \"label\": \"HA API\",\n            \"ok\": true,\n            \"value\": \"192.0.2.28:8123\"\n          },\n          {\n            \"service\": \"ha\",\n            \"type\": \"ha_template\",\n            \"label\": \"Pulsar\",\n            \"ok\": true,\n            \"value\": \"1.2.3\"\n          }\n        ],\n        \"versions\": [\n          \"Pulsar: 1.2.3\"\n        ]\n      },\n      {\n        \"id\": \"readonly\",\n        \"name\": \"Readonly\",\n        \"group\": \"Мониторинг\",\n        \"kind\": \"k8s\",\n        \"namespace\": \"home\",\n        \"status\": \"ok\",\n        \"ready\": 1,\n        \"desired\": 1,\n        \"restartsLastHour\": 0,\n        \"image\": \"scheduler:1.2.3\",\n        \"age\": \"2д\",\n        \"checks\": []\n      }\n    ],\n    \"text\": \"Отчёт по инфраструктуре, 01.11 17:00\\n✅ Всё работает: 4 из 4\\n⚠️ Проверка неполная: алерты: Alertmanager не настроен\\n\\nВ норме\\n✅ Голос: Гермес\\n✅ Дом: Home Assistant\\n✅ Мониторинг: Планировщик, Readonly\",\n    \"errors\": [\n      \"алерты: Alertmanager не настроен\"\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

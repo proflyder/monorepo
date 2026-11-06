@@ -1,0 +1,30 @@
+{
+  "name": "voice_work_missing",
+  "description": "A work-profile phrase with no configured work dispatcher thread fails closed on the bb route and never falls back to Hermes.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "work",
+          "text": "почини тесты"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "bb",
+          "speech": "Рабочий тред не настроен."
+        }
+      }
+    }
+  ]
+}

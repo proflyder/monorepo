@@ -2,6 +2,7 @@ package contracttest
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -147,6 +148,78 @@ func TestReplaceAndResolve(t *testing.T) {
 	if _, err := resolve("{{missing}}", map[string]string{}); err == nil {
 		t.Fatal("missing capture was accepted")
 	}
+}
+
+func TestCompareSemanticAllowsExtraKeysButNotValues(t *testing.T) {
+	want := fixtureValue(t, `{"result":{"name":"mcp-gateway","tools":[{"name":"infra_status","annotations":{"readOnlyHint":true}}]}}`)
+	got := decode(t, `{"result":{"name":"mcp-gateway","ttlMs":0,"tools":[{"name":"infra_status","annotations":{"readOnlyHint":true,"idempotentHint":false}}]}}`)
+	if err := compareWithMode(want, got, true); err != nil {
+		t.Fatalf("semantic compare: %v", err)
+	}
+	if err := compare(want, got); err == nil {
+		t.Fatal("exact compare accepted extra keys")
+	}
+	// Missing expected keys, changed values and array lengths still fail.
+	for _, bad := range []string{
+		`{"result":{"name":"other","ttlMs":0,"tools":[{"name":"infra_status","annotations":{"readOnlyHint":true}}]}}`,
+		`{"result":{"name":"mcp-gateway","ttlMs":0,"tools":[]}}`,
+		`{"result":{"name":"mcp-gateway","ttlMs":0}}`,
+	} {
+		if err := compareWithMode(want, decode(t, bad), true); err == nil {
+			t.Fatalf("semantic compare accepted %s", bad)
+		}
+	}
+}
+
+func TestSSEPayloadKeepsTheEnvelopeByteExact(t *testing.T) {
+	frame := []byte("event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1}\n\n")
+	payload, err := ssePayload(frame)
+	if err != nil {
+		t.Fatalf("ssePayload: %v", err)
+	}
+	if string(payload) != `{"jsonrpc":"2.0","id":1}` {
+		t.Fatalf("payload = %q", payload)
+	}
+	for _, broken := range []string{
+		"{\"jsonrpc\":\"2.0\"}",
+		"event: message\ndata: {}\n",
+		"event: ping\ndata: {}\n\n",
+	} {
+		if _, err := ssePayload([]byte(broken)); err == nil {
+			t.Fatalf("ssePayload accepted %q", broken)
+		}
+	}
+}
+
+func TestRunReplaysSemanticSSEFixtures(t *testing.T) {
+	dir := t.TempDir()
+	fixture := `{
+  "name": "semantic",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {"method": "POST", "path": "/mcp"},
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {"Content-Type": "text/event-stream"},
+        "body": {"result": {"name": "mcp-gateway", "tools": [{"name": "infra_status"}]}}
+      }
+    }
+  ]
+}`
+	if err := os.WriteFile(filepath.Join(dir, "semantic.json"), []byte(fixture), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	Run(t, dir, func(t *testing.T, scenario string) http.Handler {
+		if scenario != "semantic" {
+			t.Fatalf("scenario = %q", scenario)
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "event: message\ndata: "+`{"result":{"name":"mcp-gateway","ttlMs":0,"tools":[{"name":"infra_status","inputSchema":{"type":"object"}}]}}`+"\n\n")
+		})
+	})
 }
 
 func TestRunReplaysFixtures(t *testing.T) {

@@ -1,0 +1,121 @@
+{
+  "name": "tools_call_infra_overview",
+  "description": "infra_overview against the fixture catalog: speech plus overview and catalog markdown in details.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_overview"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Каталог: 4 сервисов. Топология в деталях.\",\n  \"details\": {\n    \"catalog\": \"# Каталог сервисов\\n\\nОжидаемо всегда активные алерты (не считаются проблемой): Watchdog\\n\\n## scheduler\\n- title: Планировщик\\n- group: Мониторинг\\n- aliases: планировщик, будильники, scheduler\\n- workload: Deployment home/scheduler\\n- restart: allowed; warning: Будильники в ближайшие минуты могут не сработать.\\n- signal (планировщик недоступен): scheduler_up{endpoint=\\\"scheduler\\\"} == 0\\n\\n## hermes\\n- title: Гермес\\n- group: Голос\\n- aliases: гермес, ассистент, hermes\\n- workload: Deployment home/hermes\\n- restart: allowed; warning: Текущий разговор прервётся.\\n- restart is deferred (self-disrupting)\\n- signal (гермес недоступен): hermes_up{endpoint=\\\"hermes\\\"} == 0\\n\\n## ha\\n- title: Home Assistant\\n- group: Дом\\n- aliases: дом, ха, ha\\n- workload: external (read-only signals)\\n- restart: not allowed\\n- signal (home assistant недоступен): ha_up{endpoint=\\\"ha\\\"} == 0\\n- check tcp: HA API\\n- check ha_template: Pulsar\\n\\n## readonly\\n- title: Readonly\\n- group: Мониторинг\\n- aliases: readonly\\n- workload: StatefulSet home/readonly\\n- restart: not allowed\\n\\n\",\n    \"overview\": \"## Фикстурная топология\\nОдин кластер и один внешний узел.\\n\"\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

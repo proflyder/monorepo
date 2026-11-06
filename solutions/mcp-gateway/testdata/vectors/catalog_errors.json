@@ -1,0 +1,51 @@
+{
+  "name": "catalog_errors",
+  "description": "Валидация каталога: каждый невалидный документ должен быть отвергнут с точной ошибкой. Векторы фиксируют все правила, которые иначе исчезнут вместе с Go-тестами.",
+  "cases": [
+    {
+      "name": "no_services",
+      "input": {
+        "yaml": "overview: x\nservices: []\n"
+      },
+      "expected": {
+        "error": "invalid catalog: catalog has no services"
+      }
+    },
+    {
+      "name": "duplicate_id",
+      "input": {
+        "yaml": "\nservices:\n  - id: a\n    aliases: {en: [a]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: a}\n    restart: {allowed: false}\n  - id: a\n    aliases: {en: [b]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: b}\n    restart: {allowed: false}\n"
+      },
+      "expected": {
+        "error": "invalid catalog: service a: duplicate id (first at services[0])"
+      }
+    },
+    {
+      "name": "external_restart",
+      "input": {
+        "yaml": "\nservices:\n  - id: a\n    aliases: {en: [a]}\n    kind: external\n    restart: {allowed: true, warning: w}\n"
+      },
+      "expected": {
+        "error": "invalid catalog: service a: external services cannot allow restart"
+      }
+    },
+    {
+      "name": "restart_without_warning",
+      "input": {
+        "yaml": "\nservices:\n  - id: a\n    aliases: {en: [a]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: a}\n    restart: {allowed: true}\n"
+      },
+      "expected": {
+        "error": "invalid catalog: service a: restart.warning is required when restart is allowed"
+      }
+    },
+    {
+      "name": "loki_without_selector",
+      "input": {
+        "yaml": "\nservices:\n  - id: a\n    aliases: {en: [a]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: a}\n    logs: {source: loki}\n    restart: {allowed: false}\n"
+      },
+      "expected": {
+        "error": "invalid catalog: service a: logs.selector is required for source loki"
+      }
+    }
+  ]
+}

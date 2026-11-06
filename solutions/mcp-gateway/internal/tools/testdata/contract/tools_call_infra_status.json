@@ -1,0 +1,321 @@
+{
+  "name": "tools_call_infra_status",
+  "description": "infra_status across backend states: healthy, firing and ignored alerts, a firing catalog signal, a rollout with pod restarts, missing Prometheus/Alertmanager (one error line) and failed/skipped external checks. CheckedAt is pinned by the fake clock.",
+  "compare": "semantic",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "method": "initialize",
+          "params": {
+            "capabilities": {},
+            "clientInfo": {
+              "name": "contract-client",
+              "version": "1.0.0"
+            },
+            "protocolVersion": "2025-06-18"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "logging": {},
+              "resources": {
+                "listChanged": true
+              },
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "protocolVersion": "2025-06-18",
+            "serverInfo": {
+              "name": "mcp-gateway",
+              "title": "Infra gateway",
+              "version": "contract"
+            }
+          }
+        }
+      },
+      "captureHeaders": {
+        "session": "Mcp-Session-Id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_status"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Всё в порядке: 4 сервисов, алертов нет.\",\n  \"details\": {\n    \"verdict\": \"Всё в порядке: 4 сервисов, алертов нет.\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"serviceCount\": 4,\n    \"degraded\": false,\n    \"partial\": false,\n    \"alerts\": [],\n    \"ignoredAlerts\": [],\n    \"signals\": [\n      {\n        \"service\": \"ha\",\n        \"meaning\": \"home assistant недоступен\",\n        \"promql\": \"ha_up{endpoint=\\\"ha\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      },\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      }\n    ],\n    \"workloads\": [\n      {\n        \"service\": \"hermes\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"hermes\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"readonly\",\n        \"namespace\": \"home\",\n        \"kind\": \"StatefulSet\",\n        \"name\": \"readonly\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"scheduler\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"scheduler\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      }\n    ],\n    \"restarts\": [],\n    \"externalChecks\": [\n      {\n        \"service\": \"ha\",\n        \"type\": \"tcp\",\n        \"label\": \"HA API\",\n        \"ok\": true,\n        \"value\": \"192.0.2.28:8123\"\n      },\n      {\n        \"service\": \"ha\",\n        \"type\": \"ha_template\",\n        \"label\": \"Pulsar\",\n        \"ok\": true,\n        \"value\": \"1.2.3\"\n      }\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_status"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Проблемы: Планировщик недоступен (critical).\",\n  \"details\": {\n    \"verdict\": \"Проблемы: Планировщик недоступен (critical).\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"serviceCount\": 4,\n    \"degraded\": true,\n    \"partial\": false,\n    \"alerts\": [\n      {\n        \"name\": \"SchedulerDown\",\n        \"severity\": \"critical\",\n        \"summary\": \"Планировщик недоступен\",\n        \"startedAt\": \"2026-11-01T11:50:00Z\"\n      }\n    ],\n    \"ignoredAlerts\": [\n      {\n        \"name\": \"Watchdog\",\n        \"severity\": \"none\",\n        \"summary\": \"Watchdog\",\n        \"startedAt\": \"2026-11-01T11:00:00Z\"\n      }\n    ],\n    \"signals\": [\n      {\n        \"service\": \"ha\",\n        \"meaning\": \"home assistant недоступен\",\n        \"promql\": \"ha_up{endpoint=\\\"ha\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      },\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      }\n    ],\n    \"workloads\": [\n      {\n        \"service\": \"hermes\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"hermes\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"readonly\",\n        \"namespace\": \"home\",\n        \"kind\": \"StatefulSet\",\n        \"name\": \"readonly\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"scheduler\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"scheduler\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      }\n    ],\n    \"restarts\": [],\n    \"externalChecks\": [\n      {\n        \"service\": \"ha\",\n        \"type\": \"tcp\",\n        \"label\": \"HA API\",\n        \"ok\": true,\n        \"value\": \"192.0.2.28:8123\"\n      },\n      {\n        \"service\": \"ha\",\n        \"type\": \"ha_template\",\n        \"label\": \"Pulsar\",\n        \"ok\": true,\n        \"value\": \"1.2.3\"\n      }\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_status"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Проблемы: планировщик недоступен.\",\n  \"details\": {\n    \"verdict\": \"Проблемы: планировщик недоступен.\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"serviceCount\": 4,\n    \"degraded\": true,\n    \"partial\": false,\n    \"alerts\": [],\n    \"ignoredAlerts\": [],\n    \"signals\": [\n      {\n        \"service\": \"ha\",\n        \"meaning\": \"home assistant недоступен\",\n        \"promql\": \"ha_up{endpoint=\\\"ha\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      },\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": true,\n        \"value\": 1\n      }\n    ],\n    \"workloads\": [\n      {\n        \"service\": \"hermes\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"hermes\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"readonly\",\n        \"namespace\": \"home\",\n        \"kind\": \"StatefulSet\",\n        \"name\": \"readonly\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"scheduler\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"scheduler\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      }\n    ],\n    \"restarts\": [],\n    \"externalChecks\": [\n      {\n        \"service\": \"ha\",\n        \"type\": \"tcp\",\n        \"label\": \"HA API\",\n        \"ok\": true,\n        \"value\": \"192.0.2.28:8123\"\n      },\n      {\n        \"service\": \"ha\",\n        \"type\": \"ha_template\",\n        \"label\": \"Pulsar\",\n        \"ok\": true,\n        \"value\": \"1.2.3\"\n      }\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_status"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Проблемы: Планировщик: готово 0 из 1; scheduler-2: CrashLoopBackOff.\",\n  \"details\": {\n    \"verdict\": \"Проблемы: Планировщик: готово 0 из 1; scheduler-2: CrashLoopBackOff.\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"serviceCount\": 4,\n    \"degraded\": true,\n    \"partial\": false,\n    \"alerts\": [],\n    \"ignoredAlerts\": [],\n    \"signals\": [\n      {\n        \"service\": \"ha\",\n        \"meaning\": \"home assistant недоступен\",\n        \"promql\": \"ha_up{endpoint=\\\"ha\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      },\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0\n      }\n    ],\n    \"workloads\": [\n      {\n        \"service\": \"hermes\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"hermes\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"readonly\",\n        \"namespace\": \"home\",\n        \"kind\": \"StatefulSet\",\n        \"name\": \"readonly\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"scheduler\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"scheduler\",\n        \"desired\": 1,\n        \"ready\": 0,\n        \"available\": 0,\n        \"healthy\": false\n      }\n    ],\n    \"restarts\": [\n      {\n        \"service\": \"\",\n        \"namespace\": \"home\",\n        \"pod\": \"scheduler-2\",\n        \"container\": \"scheduler\",\n        \"reason\": \"CrashLoopBackOff\",\n        \"restarts\": 2\n      }\n    ],\n    \"externalChecks\": [\n      {\n        \"service\": \"ha\",\n        \"type\": \"tcp\",\n        \"label\": \"HA API\",\n        \"ok\": true,\n        \"value\": \"192.0.2.28:8123\"\n      },\n      {\n        \"service\": \"ha\",\n        \"type\": \"ha_template\",\n        \"label\": \"Pulsar\",\n        \"ok\": true,\n        \"value\": \"1.2.3\"\n      }\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_status"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Проверка неполная: алерты: Alertmanager не настроен.\",\n  \"details\": {\n    \"verdict\": \"Проверка неполная: алерты: Alertmanager не настроен.\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"serviceCount\": 4,\n    \"degraded\": false,\n    \"partial\": true,\n    \"alerts\": [],\n    \"ignoredAlerts\": [],\n    \"signals\": [\n      {\n        \"service\": \"ha\",\n        \"meaning\": \"home assistant недоступен\",\n        \"promql\": \"ha_up{endpoint=\\\"ha\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0,\n        \"error\": \"Prometheus не настроен\"\n      },\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0,\n        \"error\": \"Prometheus не настроен\"\n      }\n    ],\n    \"workloads\": [\n      {\n        \"service\": \"hermes\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"hermes\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"readonly\",\n        \"namespace\": \"home\",\n        \"kind\": \"StatefulSet\",\n        \"name\": \"readonly\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"scheduler\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"scheduler\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      }\n    ],\n    \"restarts\": [],\n    \"externalChecks\": [\n      {\n        \"service\": \"ha\",\n        \"type\": \"tcp\",\n        \"label\": \"HA API\",\n        \"ok\": true,\n        \"value\": \"192.0.2.28:8123\"\n      },\n      {\n        \"service\": \"ha\",\n        \"type\": \"ha_template\",\n        \"label\": \"Pulsar\",\n        \"ok\": true,\n        \"value\": \"1.2.3\"\n      }\n    ],\n    \"errors\": [\n      \"алерты: Alertmanager не настроен\",\n      \"сигналы: Prometheus не настроен\"\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "headers": {
+          "Accept": "application/json, text/event-stream",
+          "Authorization": "Bearer mcp-contract-token",
+          "Content-Type": "application/json",
+          "Mcp-Session-Id": "{{session}}"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "arguments": {},
+            "name": "infra_status"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "format": "sse",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        },
+        "body": {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\n  \"speech\": \"Проблемы: HA API: connection refused.\",\n  \"details\": {\n    \"verdict\": \"Проблемы: HA API: connection refused.\",\n    \"checkedAt\": \"2026-11-01T12:00:00Z\",\n    \"serviceCount\": 4,\n    \"degraded\": true,\n    \"partial\": true,\n    \"alerts\": [],\n    \"ignoredAlerts\": [],\n    \"signals\": [\n      {\n        \"service\": \"ha\",\n        \"meaning\": \"home assistant недоступен\",\n        \"promql\": \"ha_up{endpoint=\\\"ha\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0,\n        \"error\": \"Prometheus не настроен\"\n      },\n      {\n        \"service\": \"scheduler\",\n        \"meaning\": \"планировщик недоступен\",\n        \"promql\": \"scheduler_up{endpoint=\\\"scheduler\\\"} == 0\",\n        \"firing\": false,\n        \"value\": 0,\n        \"error\": \"Prometheus не настроен\"\n      }\n    ],\n    \"workloads\": [\n      {\n        \"service\": \"hermes\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"hermes\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"readonly\",\n        \"namespace\": \"home\",\n        \"kind\": \"StatefulSet\",\n        \"name\": \"readonly\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      },\n      {\n        \"service\": \"scheduler\",\n        \"namespace\": \"home\",\n        \"kind\": \"Deployment\",\n        \"name\": \"scheduler\",\n        \"desired\": 1,\n        \"ready\": 1,\n        \"available\": 1,\n        \"healthy\": true\n      }\n    ],\n    \"restarts\": [],\n    \"externalChecks\": [\n      {\n        \"service\": \"ha\",\n        \"type\": \"tcp\",\n        \"label\": \"HA API\",\n        \"ok\": false,\n        \"error\": \"connection refused\"\n      },\n      {\n        \"service\": \"ha\",\n        \"type\": \"ha_template\",\n        \"label\": \"Pulsar\",\n        \"ok\": true,\n        \"skipped\": true,\n        \"value\": \"Home Assistant не настроен\"\n      }\n    ],\n    \"errors\": [\n      \"алерты: Alertmanager не настроен\",\n      \"сигналы: Prometheus не настроен\"\n    ]\n  }\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

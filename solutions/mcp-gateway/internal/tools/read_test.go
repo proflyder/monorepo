@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -614,5 +615,71 @@ func TestSpeechNormalization(t *testing.T) {
 	got = Speech(long)
 	if len([]rune(got)) > MaxSpeechRunes {
 		t.Fatalf("speech = %d runes", len([]rune(got)))
+	}
+}
+
+func TestInfraLogsTruncationKeepsUTF8Intact(t *testing.T) {
+	d := testDeps(t)
+	// "ж" is two bytes; a byte cap in the middle of it used to produce U+FFFD.
+	d.LogByteCap = 9
+	d.Loki.(*fakeLoki).lines = []loki.Line{{Text: "абвгдеж"}}
+	_, out, err := d.infraLogs(context.Background(), nil, logsInput{Name: "гермес", Limit: 10})
+	if err != nil {
+		t.Fatalf("infraLogs: %v", err)
+	}
+	detail := resultOf(t, out).Details.(logsDetail)
+	if detail.Truncated != true {
+		t.Fatal("truncated flag is false")
+	}
+	if !utf8.ValidString(detail.Text) {
+		t.Fatalf("truncated text is not valid UTF-8: %q", detail.Text)
+	}
+	if strings.ContainsRune(detail.Text, '\uFFFD') {
+		t.Fatalf("truncated text contains U+FFFD: %q", detail.Text)
+	}
+	if len(detail.Text) > d.LogByteCap {
+		t.Fatalf("text has %d bytes, cap is %d", len(detail.Text), d.LogByteCap)
+	}
+}
+
+func TestTruncateUTF8CutsOnRuneBoundary(t *testing.T) {
+	cases := []struct {
+		input string
+		limit int
+		want  string
+	}{
+		{"abcdef", 3, "abc"},
+		{"абв", 3, "а"},
+		{"абв", 4, "аб"},
+		{"abc", 0, ""},
+		{"abc", 10, "abc"},
+	}
+	for _, tc := range cases {
+		if got := truncateUTF8(tc.input, tc.limit); got != tc.want {
+			t.Fatalf("truncateUTF8(%q, %d) = %q, want %q", tc.input, tc.limit, got, tc.want)
+		}
+	}
+}
+
+func TestInfraStatusReportsMissingPrometheusOnce(t *testing.T) {
+	d := testDeps(t)
+	d.Prom = nil
+	d.Alerts = nil
+	_, out, err := d.infraStatus(context.Background(), nil, struct{}{})
+	if err != nil {
+		t.Fatalf("infraStatus: %v", err)
+	}
+	detail := resultOf(t, out).Details.(statusDetail)
+	count := 0
+	for _, message := range detail.Errors {
+		if message == "сигналы: Prometheus не настроен" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("errors = %v, want exactly one Prometheus message", detail.Errors)
+	}
+	if len(detail.Signals) != 2 {
+		t.Fatalf("signals = %d, want both status signals still listed", len(detail.Signals))
 	}
 }

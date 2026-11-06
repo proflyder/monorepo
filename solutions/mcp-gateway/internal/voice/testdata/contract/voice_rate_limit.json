@@ -1,0 +1,53 @@
+{
+  "name": "voice_rate_limit",
+  "description": "The global utterance limiter answers 429 with the rate-limit speech after the burst is spent.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "раз"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "hermes"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/voice/utterance",
+        "headers": {
+          "Authorization": "Bearer voice-contract-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "profile": "personal",
+          "text": "два"
+        }
+      },
+      "response": {
+        "status": 429,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "route": "bb",
+          "speech": "Слишком часто, подожди немного."
+        }
+      }
+    }
+  ]
+}
