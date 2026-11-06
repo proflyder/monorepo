@@ -9,11 +9,7 @@ go_library(
         "smoke.go",
     ],
     importpath = "github.com/proflyder/monorepo/platform/deploy/internal/hermes",
-    deps = [
-        "//platform/deploy/internal/kube",
-        "//platform/deploy/internal/prepull",
-        "@in_yaml_go_yaml_v2//:yaml",
-    ],
+    deps = ["@in_yaml_go_yaml_v2//:yaml"],
 )
 
 go_test(

@@ -35,10 +35,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/proflyder/monorepo/platform/deploy/internal/buildid"
@@ -50,7 +48,6 @@ import (
 	"github.com/proflyder/monorepo/platform/deploy/internal/manifests"
 	"github.com/proflyder/monorepo/platform/deploy/internal/oci"
 	"github.com/proflyder/monorepo/platform/deploy/internal/preflight"
-	"github.com/proflyder/monorepo/platform/deploy/internal/prepull"
 	"github.com/proflyder/monorepo/platform/deploy/internal/render"
 	"github.com/proflyder/monorepo/platform/deploy/internal/runtimevalues"
 	"github.com/proflyder/monorepo/platform/deploy/internal/state"
@@ -87,10 +84,6 @@ Commands:
   preflight --ha-url URL --ha-token-file FILE --scheduler-url URL
             --scheduler-token-file FILE [--expected-endpoint URL]
            read-only cutover checks for deploy.sh --execute
-  prepull --namespace NS --image REF [--image REF…] [--timeout 600s] [--kubectl K]
-           pull a unit's new images onto the node before apply (one short-lived
-           Pod per image, always deleted); rollout timeouts then measure only
-           the start of the new version
   runtime split --render F --private F --storage-out F --values-out F
             [--health-exporter-image DIGEST]
            split a Helm render into kubectl-applied storage and Helm values
@@ -171,8 +164,6 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runState(args[1:], stdout, stderr)
 	case "preflight":
 		return runPreflight(args[1:], stdout, stderr)
-	case "prepull":
-		return runPrepull(args[1:], stdout, stderr)
 	case "runtime":
 		return runRuntime(args[1:], stdout)
 	case "eso":
@@ -565,39 +556,6 @@ func runESO(args []string, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "%d ExternalSecret(s)\n", len(names))
 	return nil
-}
-
-func runPrepull(args []string, stdout, stderr io.Writer) error {
-	flags := flag.NewFlagSet("prepull", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	kubectl := flags.String("kubectl", "kubectl", "kubectl binary")
-	namespace := flags.String("namespace", "", "namespace for the short-lived Pods")
-	timeout := flags.Duration("timeout", 600*time.Second, "how long to wait for every image")
-	images := stringList{}
-	flags.Var(&images, "image", "image reference to pull (repeatable)")
-	if err := flags.Parse(args); err != nil {
-		return err
-	}
-	runner := kube.Exec(*kubectl)
-	opts := prepull.Options{
-		Namespace: *namespace,
-		Images:    images,
-		Timeout:   *timeout,
-		Log:       func(line string) { fmt.Fprintln(stdout, line) },
-	}
-	// A cancelled CI job sends SIGTERM: delete this run's Pods before exiting.
-	runID := fmt.Sprintf("%x", time.Now().UnixNano()&0xffffffff)
-	opts.RunID = runID
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(signals)
-	go func() {
-		if _, ok := <-signals; ok {
-			_ = prepull.Cleanup(runner, *namespace, runID)
-			os.Exit(130)
-		}
-	}()
-	return prepull.Run(runner, opts)
 }
 
 func runSecret(args []string, stdout, stderr io.Writer) error {

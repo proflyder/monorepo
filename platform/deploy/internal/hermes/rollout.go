@@ -39,9 +39,6 @@ import (
 	"time"
 
 	yaml "go.yaml.in/yaml/v2"
-
-	"github.com/proflyder/monorepo/platform/deploy/internal/kube"
-	"github.com/proflyder/monorepo/platform/deploy/internal/prepull"
 )
 
 // Constants mirrored from the Python rollout.
@@ -122,15 +119,6 @@ func Exec() Runner {
 	}
 }
 
-// kubeRunner adapts the rollout Runner to the kubectl-only runner of the
-// shared deploy packages.
-func kubeRunner(run Runner, kubectl string) kube.Runner {
-	return func(args []string) kube.Result {
-		result := run(Command{Name: kubectl, Args: args})
-		return kube.Result{Stdout: result.Stdout, Stderr: result.Stderr, Code: result.Code}
-	}
-}
-
 // RolloutError is one failed step.
 type RolloutError struct{ message string }
 
@@ -163,11 +151,8 @@ type Options struct {
 	RetryDelay         time.Duration
 	// SmokeTimeout bounds the wait for the smoke Job (default 600s).
 	SmokeTimeout time.Duration
-	// PrepullTimeout bounds pulling the new images before the upgrade
-	// (default 600s).
-	PrepullTimeout time.Duration
-	Stdout         io.Writer
-	Stderr         io.Writer
+	Stdout       io.Writer
+	Stderr       io.Writer
 
 	// Test hooks; nil means the real implementation.
 	Sleep         func(time.Duration)
@@ -205,9 +190,6 @@ func (o *Options) defaults() {
 	}
 	if o.SmokeTimeout == 0 {
 		o.SmokeTimeout = 600 * time.Second
-	}
-	if o.PrepullTimeout == 0 {
-		o.PrepullTimeout = 600 * time.Second
 	}
 	if o.Sleep == nil {
 		o.Sleep = time.Sleep
@@ -578,8 +560,8 @@ func jobCondition(run Runner, options Options, name string) string {
 }
 
 func waitForJob(run Runner, options Options, name string) (string, error) {
-	// The smoke image is prepulled before the upgrade, so this only waits for
-	// the Job itself; the margin covers a slow registry on a cold node.
+	// The margin covers pulling the smoke image from a slow registry when many
+	// images roll at once (deploy run 42188744175).
 	deadline := options.Clock().Add(options.SmokeTimeout)
 	for options.Clock().Before(deadline) {
 		condition := jobCondition(run, options, name)
@@ -866,19 +848,6 @@ func Run(run Runner, options Options) (int, error) {
 	if !options.Force && !needRollout {
 		fmt.Fprintln(options.Stdout, "hermes rollout: live images already match the built digests; nothing to do")
 		return 0, nil
-	}
-
-	// Pull the new images onto the node before helm touches the release, so
-	// `helm --wait` and the smoke Job measure only the start of the new version.
-	if err := prepull.Run(kubeRunner(run, options.Kubectl), prepull.Options{
-		Namespace: options.Namespace,
-		Images:    []string{hermes, voiceProxy, exporter, options.SmokeImage},
-		Timeout:   options.PrepullTimeout,
-		Now:       options.Clock,
-		Sleep:     options.Sleep,
-		Log:       func(line string) { fmt.Fprintln(options.Stdout, line) },
-	}); err != nil {
-		return 0, failf("%s", err)
 	}
 
 	previous := LatestRevision(run, options.Helm, options.Namespace, options.Release)

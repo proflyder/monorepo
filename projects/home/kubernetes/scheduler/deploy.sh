@@ -376,14 +376,6 @@ for s in scheduler-auth ha-bridge-ha; do
   fi
 done
 
-# Pull the new images onto the node first (parallel kubelet pulls): the rollout
-# timeout below then measures only the start of the new version, not a slow
-# registry (run 42188744175 rolled back while images were still downloading).
-echo "== prepulling images"
-home_deploy prepull --kubectl "$KUBECTL" --namespace "$NS" --timeout 600s \
-  --image "$(get_image_ref scheduler)" --image "$(get_image_ref ha-bridge)" \
-  --image "$(get_image_ref ha-control)" --image "$PREFLIGHT_IMAGE"
-
 if $WANT_SCHEDULER; then
   echo "== applying scheduler"
   record_before scheduler
