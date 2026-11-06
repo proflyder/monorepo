@@ -194,6 +194,59 @@ func TestSnoozeEventActivatesWindow(t *testing.T) {
 	}
 }
 
+func TestSnoozeAcrossNextOccurrenceFiresOnlyOnce(t *testing.T) {
+	st, _ := newTestStore(t)
+	ctx := context.Background()
+	sch := createAlarm(t, st, 7, 30, testBase)
+	first := time.Unix(sch.GetNextDueUnix(), 0)
+	if _, err := st.Tick(ctx, first.Add(time.Second)); err != nil {
+		t.Fatalf("first fire: %v", err)
+	}
+	snoozed, _, err := st.SnoozeSchedule(ctx, sch.GetId(), 1440, first.Add(2*time.Second))
+	if err != nil {
+		t.Fatalf("snooze: %v", err)
+	}
+	if snoozed.GetSnoozeUntilUnix() != first.Unix()+1440*60+2 {
+		t.Fatalf("snooze_until = %d", snoozed.GetSnoozeUntilUnix())
+	}
+	// The snooze is due at almost the same instant as the regular next
+	// occurrence. One tick must not emit both FIREs or overwrite the window.
+	at := time.Unix(snoozed.GetSnoozeUntilUnix(), 0).Add(time.Second)
+	stats, err := st.Tick(ctx, at)
+	if err != nil {
+		t.Fatalf("activation tick: %v", err)
+	}
+	if stats.Fired != 0 {
+		t.Fatalf("fired = %d, want the regular occurrence coalesced", stats.Fired)
+	}
+	live, err := st.GetSchedule(ctx, sch.GetId())
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if live.GetActiveOccurrenceUnix() != first.Unix() {
+		t.Fatalf("active occurrence = %d, want snoozed %d", live.GetActiveOccurrenceUnix(), first.Unix())
+	}
+	if live.GetNextDueUnix() != first.Unix()+48*60*60 {
+		t.Fatalf("next due = %d, want the occurrence after the coalesced one", live.GetNextDueUnix())
+	}
+	events, err := st.ListDueEvents(ctx, "home-1", 60, 10, QueueHome, at.Add(time.Second))
+	if err != nil {
+		t.Fatalf("lease: %v", err)
+	}
+	fires := 0
+	for _, ev := range events {
+		if ev.GetAction() == ricardov1.EventAction_EVENT_ACTION_FIRE {
+			fires++
+			if ev.GetOccurrenceUnix() != first.Unix() || ev.GetSnoozeSeq() != 1 {
+				t.Fatalf("unexpected FIRE = %+v", ev)
+			}
+		}
+	}
+	if fires != 1 {
+		t.Fatalf("FIRE events = %d, want 1", fires)
+	}
+}
+
 func TestScenarioEventsStayOutOfHomeQueue(t *testing.T) {
 	st, _ := newTestStore(t)
 	ctx := context.Background()

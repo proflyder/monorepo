@@ -4,3 +4,13 @@ alias(
     name = "scheduler",
     actual = "//solutions/scheduler/cmd/scheduler",
 )
+
+filegroup(
+    name = "planner_vectors",
+    srcs = glob(["testdata/planner/*.json"]),
+)
+
+filegroup(
+    name = "ids_vectors",
+    srcs = ["testdata/ids.json"],
+)

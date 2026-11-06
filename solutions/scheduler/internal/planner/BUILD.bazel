@@ -11,7 +11,11 @@ go_library(
 
 go_test(
     name = "planner_test",
-    srcs = ["planner_test.go"],
+    srcs = [
+        "planner_test.go",
+        "vectors_test.go",
+    ],
+    data = ["//solutions/scheduler:planner_vectors"],
     embed = [":planner"],
     deps = [
         "//packages/proto/ricardo/v1:ricardo",

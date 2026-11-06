@@ -1,0 +1,30 @@
+{
+  "name": "timer_limit",
+  "description": "The contract server seeds 64 active timers; the next StartTimer returns RESOURCE_EXHAUSTED (HTTP 429) with the exact limit text and does not create a timer.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/StartTimer",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "durationSeconds": "600",
+          "label": "one too many"
+        }
+      },
+      "response": {
+        "status": 429,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "resource_exhausted",
+          "message": "limit exceeded: at most 64 active timers"
+        }
+      }
+    }
+  ]
+}

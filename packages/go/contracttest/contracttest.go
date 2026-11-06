@@ -49,10 +49,10 @@ func WithClient(client *http.Client) Option {
 	return func(r *runner) { r.client = client }
 }
 
-// WithBeforeStep runs fn before every request, with the 1-based step number.
-// It is the place for a service that needs to advance a fake clock between
-// steps.
-func WithBeforeStep(fn func(t *testing.T, step int)) Option {
+// WithBeforeStep runs fn before every request, with the scenario name and the
+// 1-based step number. It is the place for a service that needs to advance a
+// fake clock between steps and, for example, run one engine tick.
+func WithBeforeStep(fn func(t *testing.T, scenario string, step int)) Option {
 	return func(r *runner) { r.beforeStep = fn }
 }
 
@@ -99,7 +99,7 @@ func Run(t *testing.T, dir string, newServer func(t *testing.T, scenario string)
 type runner struct {
 	headers    []string
 	client     *http.Client
-	beforeStep func(t *testing.T, step int)
+	beforeStep func(t *testing.T, scenario string, step int)
 	normalize  func(scenario string, value any) any
 }
 
@@ -144,7 +144,7 @@ func (r *runner) runFile(t *testing.T, path string, newServer func(t *testing.T,
 	for index := range file.Steps {
 		step := &file.Steps[index]
 		if r.beforeStep != nil {
-			r.beforeStep(t, index+1)
+			r.beforeStep(t, file.Name, index+1)
 		}
 		req, err := buildRequest(server.URL, step.Request, captured)
 		if err != nil {

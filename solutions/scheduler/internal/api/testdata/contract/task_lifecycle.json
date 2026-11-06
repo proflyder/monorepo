@@ -1,0 +1,442 @@
+{
+  "name": "task_lifecycle",
+  "description": "Generic tasks default to queue tasks and payload {}; a repeated idempotency key replays the same event; CancelTask skips a pending task and replays the terminal event; a timer FIRE cannot be cancelled with CancelTask; a leased task cannot be cancelled because an executor may already run it.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/EnqueueTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "idempotencyKey": "task-future",
+          "runAtUnix": "1767272400",
+          "taskType": "notify.push"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "dueUnix": "1767272400",
+            "id": "{{futureTaskId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "notify.push"
+          }
+        }
+      },
+      "capture": {
+        "futureTaskId": "event.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "tasks"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {}
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CancelTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "eventId": "{{futureTaskId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_SKIPPED",
+            "ackedUnix": "1767268800",
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "detail": "cancelled",
+            "dueUnix": "1767272400",
+            "id": "{{futureTaskId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_SKIPPED",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/EnqueueTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "idempotencyKey": "task-k1",
+          "taskType": "notify.push"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268800",
+            "id": "{{taskId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "notify.push"
+          }
+        }
+      },
+      "capture": {
+        "taskId": "event.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/EnqueueTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "idempotencyKey": "task-k1",
+          "taskType": "notify.push"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268800",
+            "id": "{{taskId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CancelTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "eventId": "{{taskId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_SKIPPED",
+            "ackedUnix": "1767268800",
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "detail": "cancelled",
+            "dueUnix": "1767268800",
+            "id": "{{taskId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_SKIPPED",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CancelTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "eventId": "{{taskId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "ackOutcome": "ACK_OUTCOME_SKIPPED",
+            "ackedUnix": "1767268800",
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268800",
+            "detail": "cancelled",
+            "dueUnix": "1767268800",
+            "id": "{{taskId}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_SKIPPED",
+            "taskType": "notify.push"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/StartTimer",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "durationSeconds": "60",
+          "label": "tea"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "timer": {
+            "createdUnix": "1767268800",
+            "dueUnix": "1767268860",
+            "durationSeconds": "60",
+            "id": "{{timerId}}",
+            "label": "tea",
+            "revision": "1",
+            "state": "TIMER_STATE_RUNNING",
+            "updatedUnix": "1767268800"
+          }
+        }
+      },
+      "capture": {
+        "timerId": "timer.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "home"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767268861",
+              "dueUnix": "1767268860",
+              "id": "{{timerEventId}}",
+              "label": "tea",
+              "leaseUntilUnix": "1767268921",
+              "payloadJson": "{}",
+              "queue": "home",
+              "sourceId": "{{timerId}}",
+              "sourceKind": "SOURCE_KIND_TIMER",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "timer.fire"
+            }
+          ]
+        }
+      },
+      "capture": {
+        "timerEventId": "events[0].id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CancelTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "eventId": "{{timerEventId}}"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "failed_precondition",
+          "message": "precondition failed: only task events can be cancelled; use StopSchedule"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/EnqueueTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "idempotencyKey": "task-k2",
+          "taskType": "notify.push"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "action": "EVENT_ACTION_FIRE",
+            "createdUnix": "1767268861",
+            "dueUnix": "1767268861",
+            "id": "{{task2Id}}",
+            "payloadJson": "{}",
+            "queue": "tasks",
+            "sourceId": "<uuid>",
+            "sourceKind": "SOURCE_KIND_TASK",
+            "state": "EVENT_STATE_PENDING",
+            "taskType": "notify.push"
+          }
+        }
+      },
+      "capture": {
+        "task2Id": "event.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/ListDueEvents",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "consumerId": "home-1",
+          "queue": "tasks"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "events": [
+            {
+              "action": "EVENT_ACTION_FIRE",
+              "attempts": 1,
+              "createdUnix": "1767268861",
+              "dueUnix": "1767268861",
+              "id": "{{task2Id}}",
+              "leaseUntilUnix": "1767268921",
+              "payloadJson": "{}",
+              "queue": "tasks",
+              "sourceId": "<uuid>",
+              "sourceKind": "SOURCE_KIND_TASK",
+              "state": "EVENT_STATE_LEASED",
+              "taskType": "notify.push"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/ricardo.v1.SchedulerService/CancelTask",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "eventId": "{{task2Id}}"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "failed_precondition",
+          "message": "precondition failed: task is already leased by an executor"
+        }
+      }
+    }
+  ]
+}
