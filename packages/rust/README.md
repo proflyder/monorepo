@@ -25,8 +25,14 @@
 | `home-sqlite` | `rusqlite` (bundled) за single-writer потоком: `Db::call`/`call_blocking`, прагмы WAL/busy_timeout/foreign_keys и упорядоченные миграции через `schema_meta` (совместимо с Go v2). |
 | `home-contracttest` | Rust-раннер нормативного формата `packages/go/contracttest`: `axum::Router` через `tower::ServiceExt::oneshot`, capture/`{{name}}`, `<uuid>`/`<base64-32>`/`<any>`, структурное и побайтное сравнение. |
 | `wakegrant-protocol` | Переносимый wire-слой wakegrant (v1 и `logon`/`unlock`): HMAC-SHA256 сообщения, purpose, base64, serde-запросы/ответы и проверка MAC; без I/O и tokio, собирается под Windows. |
+| `voice-contract` | Serde-типы голосового API mcp-gateway `/v1/voice/{utterance,result,updates,state}`: точное JSON-соответствие Go-серверу и клиенту, `Route::{Hermes,Bb,Local,Unknown}`; без I/O. |
+| `home-ha` | Типизированный клиент Home Assistant REST (`state`, `call_service`, `call_script`, `render_template`, `ping`) на `reqwest`; bearer из `home-secret`, ошибка `Transient`/`Permanent` как в `packages/go/httpapi`. |
+| `home-proto` | Закоммиченный Rust-код `ricardo.v1` (`connectrpc` + `buffa`, JSON поверх HTTP/1.1) и тонкий клиент scheduler: `enqueue_task`, `list_due_events`, `ack_event`, `get_status`; перегенерация — `generate.sh`. |
+| `home-worker` | Общий цикл lease → handle → ack: трейты `Queue`/`Handler`/`Gate`, `Outcome::{Delivered,Skipped,Retry}`, экспоненциальный backoff и отмена через `CancellationToken`; `SchedulerQueue` поверх `home-proto`. |
 
 Крейты добавляются только под реального потребителя: BLE gateway — первый
 потребитель runtime-слоя, logon provider использует `home-secret` и
 `wakegrant-protocol`, а `solutions/wakegrant` — первый потребитель
-`home-config`, `home-sqlite` и `home-contracttest`.
+`home-config`, `home-sqlite` и `home-contracttest`. `voice-contract`,
+`home-ha`, `home-proto` и `home-worker` — общий серверный слой для
+voice-proxy и следующих сервисов решения 41.

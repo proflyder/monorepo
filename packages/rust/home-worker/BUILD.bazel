@@ -1,0 +1,37 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Shared lease -> handle -> ack loop and its scheduler-backed queue.
+DEPS = [
+    "@crates//:backon",
+    "@crates//:buffa",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "//packages/rust/home-proto:home_proto",
+]
+
+rust_library(
+    name = "home_worker",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":home_worker",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

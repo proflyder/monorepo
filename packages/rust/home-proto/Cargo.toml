@@ -1,0 +1,24 @@
+[package]
+name = "home-proto"
+description = "Generated ricardo.v1 Connect types and a thin scheduler client"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+buffa = { workspace = true }
+connectrpc = { workspace = true }
+home-secret = { path = "../home-secret" }
+http = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

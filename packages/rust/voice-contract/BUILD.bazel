@@ -1,0 +1,32 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Serde types of the mcp-gateway voice API; no I/O, no runtime.
+DEPS = [
+    "@crates//:serde",
+]
+
+rust_library(
+    name = "voice_contract",
+    srcs = ["src/lib.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":voice_contract",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + ["@crates//:serde_json"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
