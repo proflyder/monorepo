@@ -11,6 +11,8 @@ buffa = { workspace = true }
 connectrpc = { workspace = true }
 home-secret = { path = "../home-secret" }
 http = { workspace = true }
+reqwest = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
