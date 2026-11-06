@@ -378,6 +378,33 @@ export const config = {
     },
 
     {
+      id: "mcp-gateway-rust",
+      platform: "bazel",
+      title: "solutions/mcp-gateway/crates + home-clients + home-telegram (Rust platform layer)",
+      paths: [
+        "solutions/mcp-gateway/crates/**",
+        // The shared clients this PR added. They are under packages/rust/**,
+        // which also selects ble-gateway, but only this unit runs their tests.
+        "packages/rust/home-clients/**",
+        "packages/rust/home-telegram/**",
+      ],
+      bazel: {
+        roots: ["//packages/rust", "//solutions/mcp-gateway"],
+        test_targets: [
+          "//packages/rust/home-clients:unit_tests",
+          "//packages/rust/home-telegram:unit_tests",
+          "//packages/rust:clippy",
+          "//packages/rust:rustfmt",
+          "//solutions/mcp-gateway/crates/mcp-gateway:unit_tests",
+        ],
+        build_targets: [
+          "//packages/rust/...",
+          "//solutions/mcp-gateway/...",
+        ],
+      },
+    },
+
+    {
       id: "ha-bridge",
       platform: "bazel",
       title: "solutions/ha-bridge (Rust home executor + Rust ha-control)",

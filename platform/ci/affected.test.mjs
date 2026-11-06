@@ -1476,6 +1476,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "voice-proxy",
     "scheduler",
     "wakegrant",
+    "mcp-gateway-rust",
     "ha-bridge",
     "ble-gateway",
     "pulsar-bazel",

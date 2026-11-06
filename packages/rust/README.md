@@ -27,6 +27,8 @@
 | `wakegrant-protocol` | Переносимый wire-слой wakegrant (v1 и `logon`/`unlock`): HMAC-SHA256 сообщения, purpose, base64, serde-запросы/ответы и проверка MAC; без I/O и tokio, собирается под Windows. |
 | `voice-contract` | Serde-типы голосового API mcp-gateway `/v1/voice/{utterance,result,updates,state}`: точное JSON-соответствие Go-серверу и клиенту, `Route::{Hermes,Bb,Local,Unknown}`; без I/O. |
 | `home-ha` | Типизированный клиент Home Assistant REST (`state`, `call_service`, `call_script`, `render_template`, `ping`) на `reqwest`; bearer из `home-secret`, ошибка `Transient`/`Permanent` как в `packages/go/httpapi`. |
+| `home-clients` | Read-only клиенты наблюдаемости на `reqwest`: Prometheus instant query, Alertmanager v2 active alerts и Loki `query_range` backward; те же `Transient`/`Permanent`, wire-структуры и лимиты ответа, что у Go-реализации mcp-gateway. |
+| `home-telegram` | Telegram Bot API `sendMessage`: HTML-экранирование, разбиение по 4096 рун на границе строки/символа, `Transient`/`Permanent`; получатель и redaction — у вызывающего. |
 | `home-proto` | Закоммиченный Rust-код `home.v1` (`connectrpc` + `buffa`, JSON поверх HTTP/1.1) и тонкий клиент scheduler: `enqueue_task`, `list_due_events`, `ack_event`, `get_status`; перегенерация — `generate.sh`. |
 | `home-worker` | Общий цикл lease → handle → ack: трейты `Queue`/`Handler`/`Gate`, `Outcome::{Delivered,Skipped,Retry}`, экспоненциальный backoff и отмена через `CancellationToken`; `SchedulerQueue` поверх `home-proto`. |
 
