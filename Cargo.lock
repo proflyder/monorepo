@@ -1494,7 +1494,6 @@ dependencies = [
  "libc",
  "libloading",
  "pulsar-core",
- "pulsar-model",
  "tracing",
 ]
 
@@ -1518,13 +1517,14 @@ name = "pulsar-audio"
 version = "0.0.0"
 dependencies = [
  "cc",
- "home-linux",
  "libc",
  "libloading",
  "pulsar-alsa",
  "pulsar-core",
+ "pulsar-dsp",
  "pulsar-model",
- "ring",
+ "pulsar-wake-events",
+ "thiserror",
  "tokio",
  "tracing",
 ]
@@ -1555,6 +1555,13 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "pulsar-dsp"
+version = "0.0.0"
+dependencies = [
+ "pulsar-core",
 ]
 
 [[package]]
@@ -1635,6 +1642,7 @@ dependencies = [
  "pulsar-audio",
  "pulsar-clock",
  "pulsar-core",
+ "pulsar-dsp",
  "pulsar-esphome",
  "pulsar-hw",
  "pulsar-mdns",
@@ -1690,6 +1698,20 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-util",
+]
+
+[[package]]
+name = "pulsar-wake-events"
+version = "0.0.0"
+dependencies = [
+ "hex",
+ "pulsar-dsp",
+ "ring",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "time",
+ "tracing",
 ]
 
 [[package]]

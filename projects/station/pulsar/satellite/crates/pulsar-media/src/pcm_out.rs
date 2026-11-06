@@ -344,9 +344,8 @@ impl Writer {
                         Ok(pcm) => self.pcm = Some(pcm),
                         Err((step, e)) => {
                             error!(
-                                "player: announce output '{}' {step} failed: {}",
-                                self.playback.pcm,
-                                pulsar_alsa::strerror(e)
+                                "player: announce output '{}' {step} failed: {e}",
+                                self.playback.pcm
                             );
                             self.finish(OutEvent::Failed(item));
                             return;
@@ -517,8 +516,9 @@ impl Writer {
         }
     }
 
-    fn open(&mut self) -> Result<Pcm, (&'static str, i32)> {
-        let mut pcm = pulsar_alsa::open_playback(self.playback).map_err(|e| ("open", e))?;
+    fn open(&mut self) -> Result<Pcm, (&'static str, pulsar_alsa::AlsaError)> {
+        let mut pcm = pulsar_alsa::open_playback(&crate::playback_spec(self.playback))
+            .map_err(|e| ("open", e))?;
         let hw = pcm
             .set_hw_params(&HwRequest {
                 format: Format::S16Le,
@@ -546,26 +546,29 @@ impl Writer {
     }
 
     /// Ok when the PCM can be written again (after an underrun or a suspend).
-    fn recover(&mut self, err: i32) -> Result<(), ()> {
+    fn recover(&mut self, err: pulsar_alsa::AlsaError) -> Result<(), ()> {
+        let mut err = err.code;
         if err == -libc::EINTR || err == -libc::EAGAIN {
             return Ok(());
         }
         let Some(pcm) = self.pcm.as_mut() else {
             return Err(());
         };
-        let mut err = err;
         if err == -libc::EPIPE || err == -libc::ESTRPIPE {
             let mut r = if err == -libc::ESTRPIPE {
                 pcm.resume()
             } else {
-                Err(-1)
+                Err(pulsar_alsa::AlsaError::new(
+                    pulsar_alsa::HwStep::Recover,
+                    -1,
+                ))
             };
             if r.is_err() {
                 r = pcm.prepare();
             }
             match r {
                 Ok(()) => return Ok(()),
-                Err(e) => err = e,
+                Err(e) => err = e.code,
             }
         }
         error!(

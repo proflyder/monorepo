@@ -55,7 +55,7 @@ impl VolumeCap {
         let ctl = match Ctl::open("hw:0") {
             Ok(ctl) => ctl,
             Err(e) => {
-                println!("volume: hw:0: {}, not capped", pulsar_alsa::strerror(e));
+                println!("volume: hw:0: {e}, not capped");
                 return Ok(None);
             }
         };
@@ -69,12 +69,12 @@ impl VolumeCap {
         }
         let read = |i| {
             ctl.read_integer(MASTER, i)
-                .map_err(|e| format!("volume: read: {}", pulsar_alsa::strerror(e)))
+                .map_err(|e| format!("volume: read: {e}"))
         };
         let orig = [read(0)?, read(1)?];
         let capped = orig.map(|v| v.min(MAX_RAW));
         ctl.write_integers(MASTER, &capped)
-            .map_err(|e| format!("volume: write: {}", pulsar_alsa::strerror(e)))?;
+            .map_err(|e| format!("volume: write: {e}"))?;
         println!(
             "volume: master raw {}/{} -> {}/{}",
             orig[0], orig[1], capped[0], capped[1]
@@ -90,7 +90,7 @@ impl Drop for VolumeCap {
                 "volume: master raw restored to {}/{}",
                 self.orig[0], self.orig[1]
             ),
-            Err(e) => println!("volume: restore: {}", pulsar_alsa::strerror(e)),
+            Err(e) => println!("volume: restore: {e}"),
         }
     }
 }
@@ -112,7 +112,8 @@ fn main() -> ExitCode {
     let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::FAILURE;
     };
-    pulsar_alsa::init(&model.audio.playback);
+    model.audio.playback.apply_env();
+    pulsar_alsa::init(model.audio.playback.alsa_lib());
     // As in the daemon (the player sets it): alsa-lib's own messages only at debug level.
     pulsar_alsa::quiet_error_handler();
     let cap = match VolumeCap::apply(&model.audio.playback, &model.volume) {

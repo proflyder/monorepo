@@ -9,9 +9,10 @@ mod ffi;
 use std::fmt::Write as _;
 use std::path::Path;
 
+use pulsar_dsp::to_s16;
 use tracing::{error, info, warn};
 
-use crate::ricardo::RicardoWake;
+use crate::ricardo::{DetectorError, RicardoWake};
 
 pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
 
@@ -97,16 +98,30 @@ impl std::fmt::Display for SpotterLayout {
     }
 }
 
-/// VQE sample in [-1, 1] -> s16 as the C++ daemon converts it (clamped, lrint: ties to even).
-pub(crate) fn to_s16(v: f32) -> i16 {
-    let v = v * 32768.0;
-    if v > 32767.0 {
-        32767
-    } else if v < -32768.0 {
-        -32768
-    } else {
-        v.round_ties_even() as i16
-    }
+/// Почему движок не собрался: dlopen, VQE или обязательный спотер.
+#[derive(Debug, thiserror::Error)]
+pub enum EngineError {
+    #[error("dlopen libyandex_evil: {0}")]
+    Load(String),
+    #[error("libyandex_evil: missing {0}")]
+    Missing(&'static str),
+    #[error("VQE {step:?}: {message}")]
+    Vqe { step: VqeStep, message: String },
+    #[error("VQE config: {chunk} input frames, {frame} output samples per chunk")]
+    VqeShape { chunk: i32, frame: i32 },
+    #[error("wake word spotter: {0}")]
+    WakeSpotter(String),
+}
+
+/// Результат подачи чанка детектору Ricardo: три состояния вместо `Option<Result<..>>`.
+#[derive(Debug)]
+pub enum CustomFeed {
+    /// Детектор не загружен (нет модели или `libtflite`).
+    Unavailable,
+    /// Чанк обработан; `score` — взвешенное среднее вероятности окна.
+    Fed { hit: bool, score: f32 },
+    /// Детектор выключил себя; дальше его не кормят.
+    Failed(DetectorError),
 }
 
 /// Where the events of one fed chunk come from (a spotter, or a script in tests).
@@ -288,41 +303,24 @@ impl Engine {
         custom_wake_model: Option<&Path>,
         command_dir: Option<&Path>,
         custom_thresholds: crate::wake_events::Thresholds,
-    ) -> Option<Self> {
+    ) -> Result<Self, EngineError> {
         if let Err(e) = preload_deps() {
             warn!("libtflite: {e}");
         }
-        let lib = match Lib::load() {
-            Ok(lib) => lib,
-            Err(LoadError::Open(e)) => {
-                error!("dlopen libyandex_evil: {e}");
-                return None;
-            }
-            Err(LoadError::Missing(name)) => {
-                error!("libyandex_evil: missing {name}");
-                return None;
-            }
-        };
+        let lib = Lib::load().map_err(|e| match e {
+            LoadError::Open(text) => EngineError::Load(text),
+            LoadError::Missing(name) => EngineError::Missing(name),
+        })?;
         let preset = capture.vqe_preset;
         let (nmic, nspk) = (capture.mic_channels.len(), capture.spk_channels.len());
-        let vqe = match Vqe::new(&lib, preset, Path::new(VQE_MODELS), nmic, nspk) {
-            Ok(vqe) => vqe,
-            Err((step, e)) => {
-                let what = match step {
-                    VqeStep::Config => "VQE config",
-                    VqeStep::Create => "VQE create",
-                };
-                error!("{what}: {e}");
-                return None;
-            }
-        };
+        let vqe = Vqe::new(&lib, preset, Path::new(VQE_MODELS), nmic, nspk)
+            .map_err(|(step, message)| EngineError::Vqe { step, message })?;
         let (chunk, frame) = (vqe.chunk(), vqe.frame());
         // A zero chunk would spin the capture and processing threads.
         let (Ok(chunk_n @ 1..), Ok(frame_n @ 1..)) =
             (usize::try_from(chunk), usize::try_from(frame))
         else {
-            error!("VQE config: {chunk} input frames, {frame} output samples per chunk");
-            return None;
+            return Err(EngineError::VqeShape { chunk, frame });
         };
         info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
         let custom = custom_wake_model.map(|path| match RicardoWake::new(path) {
@@ -363,14 +361,14 @@ impl Engine {
             stages,
         };
         if !eng.wake.init(&lib, wake_dir, VQE_OMNI_WITH_GAIN) {
-            return None;
+            return Err(EngineError::WakeSpotter(wake_dir.display().to_string()));
         }
         if let Some(dir) = command_dir
             && !eng.cmd.init(&lib, dir, VQE_OMNI)
         {
             warn!("command spotter unavailable; voice commands without the wake word are disabled");
         }
-        Some(eng)
+        Ok(eng)
     }
 
     /// Switches the wake word model.
@@ -416,9 +414,14 @@ impl Engine {
     }
 
     /// Feeds one VQE-cleaned chunk to the optional Ricardo detector.
-    /// None: no detector was loaded.
-    pub fn feed_custom(&mut self, pcm: &[i16]) -> Option<Result<(bool, f32), String>> {
-        self.custom.as_mut().map(|detector| detector.feed(pcm))
+    pub fn feed_custom(&mut self, pcm: &[i16]) -> CustomFeed {
+        let Some(detector) = self.custom.as_mut() else {
+            return CustomFeed::Unavailable;
+        };
+        match detector.feed(pcm) {
+            Ok((hit, score)) => CustomFeed::Fed { hit, score },
+            Err(e) => CustomFeed::Failed(e),
+        }
     }
 
     /// Feeds the last chunk to the command spotter; its confirmed phrases.
@@ -505,25 +508,6 @@ mod tests {
             spotter_layout(&[7; 6], VQE_OMNI).types.len(),
             MAX_SPOTTER_CHANNELS
         );
-    }
-
-    #[test]
-    fn float_to_s16_clamps_and_rounds_to_even() {
-        assert_eq!(to_s16(0.0), 0);
-        assert_eq!(to_s16(0.5), 16384);
-        assert_eq!(to_s16(-0.5), -16384);
-        assert_eq!(to_s16(1.0), 32767);
-        assert_eq!(to_s16(-1.0), -32768);
-        assert_eq!(to_s16(2.0), 32767);
-        assert_eq!(to_s16(-2.0), -32768);
-        // lrint: ties to even.
-        assert_eq!(to_s16(1.5 / 32768.0), 2);
-        assert_eq!(to_s16(2.5 / 32768.0), 2);
-        assert_eq!(to_s16(-2.5 / 32768.0), -2);
-        assert_eq!(to_s16(0.4 / 32768.0), 0);
-        assert_eq!(to_s16(0.6 / 32768.0), 1);
-        assert_eq!(to_s16(32766.5 / 32768.0), 32766);
-        assert_eq!(to_s16(f32::NAN), 0);
     }
 
     struct Script {

@@ -20,47 +20,30 @@ cargo_build_script(
     deps = ["@crates//:cc"],
 )
 
+DEPS = [
+    ":pulsar_audio_build_script",
+    "@crates//:libc",
+    "@crates//:libloading",
+    "@crates//:thiserror",
+    "@crates//:tracing",
+    "@crates//:tokio",
+    "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-dsp:pulsar_dsp",
+    "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
+    "//projects/station/pulsar/satellite/crates/pulsar-wake-events:pulsar_wake_events",
+]
+
 rust_library(
     name = "pulsar_audio",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/bin/**"],
     ),
-    compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
-    deps = [
-        ":pulsar_audio_build_script",
-        "@crates//:libc",
-        "@crates//:libloading",
-        "@crates//:tracing",
-        "@crates//:ring",
-        "@crates//:tokio",
-        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
-        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
-        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
-    ],
-)
-
-rust_test(
-    name = "spectrum_golden_test",
-    srcs = ["tests/spectrum_golden.rs"],
-    compile_data = glob(["tests/golden/**"], allow_empty = True),
-    edition = "2024",
-    lint_config = ":workspace_lints",
-    target_compatible_with = LINUX,
-    deps = [
-        ":pulsar_audio",
-        "@crates//:libc",
-        "@crates//:libloading",
-        "@crates//:tracing",
-        "@crates//:ring",
-        "@crates//:tokio",
-        "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
-        "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
-        "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
-    ],
+    deps = DEPS,
 )
 
 rust_test(
@@ -70,8 +53,6 @@ rust_test(
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
 )
-
-
 
 # Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(

@@ -87,9 +87,11 @@ maind играет звук громкости (sound 45, SimpleVolumeTonePlayer
   округлён до 0,1 дБ. −100 — данных нет.
 
 Округление до 0,1 дБ нужно, чтобы станция сравнивала то же число, что соседи получают текстом
-`%.1f`. Claim с уровнем вне −100…0 не принимается. Код: `wake_level_db` в
-[`pulsar-audio/src/frontend.rs`](../satellite/crates/pulsar-audio/src/frontend.rs). Почему выбран
-именно этот выход VQE, объяснено в комментарии там же.
+`%.1f`. Claim с уровнем вне −100…0 не принимается. Код: `level_db` и
+`LevelDb::from_mean_square` в
+[`pulsar-dsp/src/level.rs`](../satellite/crates/pulsar-dsp/src/level.rs) — единственная точка
+округления. Почему выбран именно этот выход VQE, объяснено в комментарии в
+[`pulsar-audio/src/frontend.rs`](../satellite/crates/pulsar-audio/src/frontend.rs).
 
 ## Пре-ролл: методика измерения
 

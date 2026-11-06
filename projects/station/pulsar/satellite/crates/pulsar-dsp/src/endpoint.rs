@@ -12,6 +12,8 @@
 //! phrase looks finished. Home Assistant's own VAD stays authoritative and may end the run
 //! first. A turn without a usable wake level runs without a detector.
 
+use crate::level::LevelDb;
+
 /// One VQE chunk at 16 kHz.
 pub const CHUNK_MS: u32 = 32;
 /// Consecutive chunks above the onset threshold before the detector believes speech started.
@@ -264,33 +266,19 @@ impl EndpointRun {
     }
 }
 
-/// Mean-square dBFS of s16 PCM, clamped like the front-end's levels.
+/// Mean-square dBFS of s16 PCM, rounded and clamped like every front-end level.
 pub fn pcm_level_db(pcm: &[i16]) -> f32 {
-    if pcm.is_empty() {
-        return -100.0;
-    }
-    let mut sq = 0.0f64;
-    for &s in pcm {
-        let v = f64::from(s) * (1.0 / 32768.0);
-        sq = v.mul_add(v, sq);
-    }
-    mean_square_db((sq / pcm.len() as f64) as f32)
+    LevelDb::from_pcm(pcm).as_f32()
 }
 
 /// Mean-square (linear power) -> dBFS, clamped to -100..0.
 pub fn mean_square_db(ms: f32) -> f32 {
-    (10.0 * (ms.max(0.0) + 1e-10).log10()).clamp(-100.0, 0.0)
+    LevelDb::from_mean_square(ms).as_f32()
 }
 
 /// Quiet-part estimate: dB level at quantile `q` (0..=1) of a window of mean squares.
 pub fn percentile_db(window: &[f32], q: f32) -> f32 {
-    if window.is_empty() {
-        return -100.0;
-    }
-    let mut s = window.to_vec();
-    s.sort_unstable_by(f32::total_cmp);
-    let i = ((s.len() - 1) as f32 * q.clamp(0.0, 1.0)).round() as usize;
-    mean_square_db(s[i])
+    crate::level::percentile_db(window, q).as_f32()
 }
 
 #[cfg(test)]

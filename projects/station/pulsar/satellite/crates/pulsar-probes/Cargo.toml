@@ -16,6 +16,7 @@ pulsar-arbiter = { path = "../pulsar-arbiter" }
 pulsar-audio = { path = "../pulsar-audio" }
 pulsar-clock = { path = "../pulsar-clock" }
 pulsar-core = { path = "../pulsar-core" }
+pulsar-dsp = { path = "../pulsar-dsp" }
 pulsar-esphome = { path = "../pulsar-esphome" }
 pulsar-hw = { path = "../pulsar-hw" }
 pulsar-mdns = { path = "../pulsar-mdns" }

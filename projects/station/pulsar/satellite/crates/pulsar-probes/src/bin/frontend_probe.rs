@@ -74,25 +74,6 @@ impl Cli {
     }
 }
 
-/// 44-byte header of a PCM S16LE WAV.
-fn wav_header(channels: u16, rate: u32, data_bytes: u32) -> [u8; 44] {
-    let mut h = [0u8; 44];
-    let block = channels * 2;
-    h[0..4].copy_from_slice(b"RIFF");
-    h[4..8].copy_from_slice(&data_bytes.saturating_add(36).to_le_bytes());
-    h[8..16].copy_from_slice(b"WAVEfmt ");
-    h[16..20].copy_from_slice(&16u32.to_le_bytes());
-    h[20..22].copy_from_slice(&1u16.to_le_bytes());
-    h[22..24].copy_from_slice(&channels.to_le_bytes());
-    h[24..28].copy_from_slice(&rate.to_le_bytes());
-    h[28..32].copy_from_slice(&(rate * u32::from(block)).to_le_bytes());
-    h[32..34].copy_from_slice(&block.to_le_bytes());
-    h[34..36].copy_from_slice(&16u16.to_le_bytes());
-    h[36..40].copy_from_slice(b"data");
-    h[40..44].copy_from_slice(&data_bytes.to_le_bytes());
-    h
-}
-
 /// Raw capture into a WAV; the header is written with the final size.
 struct Recorder {
     file: BufWriter<File>,
@@ -107,7 +88,7 @@ impl Recorder {
     fn create(path: PathBuf, m: &Capture, seconds: u64) -> std::io::Result<Self> {
         let mut file = BufWriter::new(File::create(&path)?);
         let channels = m.channels as u16;
-        file.write_all(&wav_header(channels, m.rate, 0))?;
+        file.write_all(&pulsar_dsp::wav::header(channels, m.rate, 0))?;
         Ok(Self {
             file,
             path,
@@ -137,7 +118,7 @@ impl Recorder {
         let data = u32::try_from(self.samples * 2).unwrap_or(u32::MAX);
         self.file.seek(SeekFrom::Start(0))?;
         self.file
-            .write_all(&wav_header(self.channels, self.rate, data))?;
+            .write_all(&pulsar_dsp::wav::header(self.channels, self.rate, data))?;
         self.file.flush()?;
         let frames = self.samples / u64::from(self.channels);
         out!(
@@ -157,7 +138,8 @@ fn main() -> ExitCode {
     let Some(m) = pulsar_model::detect_profile() else {
         return ExitCode::from(1);
     };
-    pulsar_alsa::init(&m.audio.playback);
+    m.audio.playback.apply_env();
+    pulsar_alsa::init(m.audio.playback.alsa_lib());
     let args = Cli::parse().into_args();
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_time()
@@ -372,7 +354,7 @@ mod tests {
 
     #[test]
     fn wav_header_layout() {
-        let h = wav_header(8, 48000, 768_000);
+        let h = pulsar_dsp::wav::header(8, 48000, 768_000);
         assert_eq!(&h[0..4], b"RIFF");
         assert_eq!(u32::from_le_bytes(h[4..8].try_into().unwrap()), 768_036);
         assert_eq!(&h[8..16], b"WAVEfmt ");

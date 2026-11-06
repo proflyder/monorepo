@@ -9,7 +9,8 @@ use pulsar_alsa::{Format, HwRequest, Pcm, Stream};
 
 fn main() -> ExitCode {
     if let Some(model) = pulsar_model::detect_profile() {
-        pulsar_alsa::init(&model.audio.playback);
+        model.audio.playback.apply_env();
+        pulsar_alsa::init(model.audio.playback.alsa_lib());
     }
     if let Err(e) = pulsar_alsa::load() {
         eprintln!("load libasound: {e}");
@@ -18,7 +19,7 @@ fn main() -> ExitCode {
     let mut pcm = match Pcm::open("null", Stream::Playback, false) {
         Ok(pcm) => pcm,
         Err(err) => {
-            eprintln!("open null PCM: {}", pulsar_alsa::strerror(err));
+            eprintln!("open null PCM: {err}");
             return ExitCode::FAILURE;
         }
     };
@@ -30,8 +31,8 @@ fn main() -> ExitCode {
         period_frames: Some(3072),
         buffer_frames: Some(24576),
     });
-    if let Some((what, err)) = t.failed {
-        eprintln!("{what}: {}", pulsar_alsa::strerror(err));
+    if let Some((op, code)) = t.failed {
+        eprintln!("{}", pulsar_alsa::AlsaError::new(op, code));
     }
     let (near, actual) = (t.near, t.actual);
     let ok = t.failed.is_none()

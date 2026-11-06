@@ -33,7 +33,9 @@ tracing-log = { version = "=0.2.0", default-features = false, features = ["log-t
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["fmt", "json", "registry", "std"] }
 thiserror = "=2.0.21"
 serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
-serde_json = { version = "=1.0.154", default-features = false, features = ["std"] }
+# `raw_value`: контракт v1 wake-событий пишет числа в формате `%.6`/`%.3`, а не
+# кратчайшим представлением `f64`; литерал поля собирается как `RawValue`.
+serde_json = { version = "=1.0.154", default-features = false, features = ["std", "raw_value"] }
 # Unicode speech rules (DECISIONS 41): the voice-proxy sanitizer needs the same
 # Unicode space set, NFKC and full case folding as the Go implementation.
 # `regex` has no lookahead, so the sentence scanner stays a small state machine.
@@ -78,7 +80,8 @@ cc = "=1.10.0"
 zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }
 # std::time cannot format local calendar timestamps without unsafe libc calls;
 # `time` keeps the BLE gateway log format identical to the former Go daemon.
-time = { version = "=0.3.55", default-features = false, features = ["std", "formatting", "local-offset", "macros"] }
+# `parsing`: обратный разбор `utc` сайдкаров контракта v1 (ретеншн и окно метки).
+time = { version = "=0.3.55", default-features = false, features = ["std", "formatting", "parsing", "local-offset", "macros"] }
 # Server-side configuration and SQLite/HTTP primitives for the home services
 # (DECISIONS 41). `rusqlite` is bundled so the static musl image carries its
 # own SQLite.

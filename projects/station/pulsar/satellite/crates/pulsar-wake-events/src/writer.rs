@@ -10,12 +10,13 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tracing::{debug, info, warn};
 
-use super::logic::{self, MAX_BYTES, MAX_EVENTS, Outcome, Sidecar, Stats, Thresholds};
-use super::{Command, Counters, Job, Recording};
+use super::contract::{Sidecar, Stats, Thresholds, parse_stats, sidecar_json, stats_json};
+use super::logic::{self, MAX_BYTES, MAX_EVENTS, Outcome};
+use super::{Command, Counters, Job, Recording, WakeStoreError};
 
 /// The writer wakes up this often to look for commands and the 60 s stats period.
 const WAKE_MS: u64 = 200;
@@ -23,7 +24,14 @@ const WAKE_MS: u64 = 200;
 /// hit, the audio 1 s later): they wait here for its sidecar.
 const MAX_PENDING_OUTCOMES: usize = 32;
 
-pub(super) fn spawn(
+/// Monotonic milliseconds of this process. Интервалы записи не зависят от стенных часов, и
+/// значение важно только разницей — как `pulsar_core::now_ms` (CLOCK_MONOTONIC).
+fn now_ms() -> i64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_millis() as i64
+}
+
+pub fn spawn(
     dir: PathBuf,
     version: String,
     sha256: String,
@@ -42,7 +50,7 @@ pub(super) fn spawn(
         jobs,
         base: Stats::default(),
         index: Vec::new(),
-        last_stats_ms: pulsar_core::now_ms(),
+        last_stats_ms: now_ms(),
         last_written: None,
         pending_outcomes: Vec::new(),
     };
@@ -79,12 +87,16 @@ fn json_path(dir: &Path, id: &str, ext: &str) -> PathBuf {
     dir.join(format!("{id}.{ext}"))
 }
 
+fn tmp_of(path: &Path) -> PathBuf {
+    let mut tmp = OsString::from(path.as_os_str());
+    tmp.push(".tmp");
+    PathBuf::from(tmp)
+}
+
 /// Write to `<path>.tmp`, fsync, rename, fsync the directory (the pattern of `state.conf`; the
 /// Lite 2's ubifs needs it or a power cut leaves an empty file).
 fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let mut tmp = OsString::from(path.as_os_str());
-    tmp.push(".tmp");
-    let tmp = PathBuf::from(tmp);
+    let tmp = tmp_of(path);
     let mut f = File::create(&tmp)?;
     f.write_all(bytes)?;
     f.sync_all()?;
@@ -95,6 +107,14 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         _ => Path::new("."),
     };
     File::open(dir)?.sync_all()
+}
+
+/// Запись файла контракта; путь и шаг остаются в ошибке.
+fn store_atomic(path: &Path, bytes: &[u8]) -> Result<(), WakeStoreError> {
+    write_atomic(path, bytes).map_err(|source| WakeStoreError::Io {
+        path: path.to_owned(),
+        source,
+    })
 }
 
 impl Writer {
@@ -119,10 +139,10 @@ impl Writer {
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
-            let due = pulsar_core::now_ms().saturating_sub(self.last_stats_ms) >= 60_000;
+            let due = now_ms().saturating_sub(self.last_stats_ms) >= 60_000;
             if due {
                 self.write_stats();
-                self.last_stats_ms = pulsar_core::now_ms();
+                self.last_stats_ms = now_ms();
             }
         }
         // Clean shutdown: the totals of this run reach the file even inside the 60 s period.
@@ -137,7 +157,7 @@ impl Writer {
                 ..Stats::default()
             },
             |text| {
-                logic::parse_stats(&text).unwrap_or_else(|| {
+                parse_stats(&text).unwrap_or_else(|| {
                     warn!(
                         "wake events: {} is not valid, counters start over",
                         path.display()
@@ -179,14 +199,21 @@ impl Writer {
             return;
         }
         let path = self.dir.join("stats.json");
-        if let Err(e) = write_atomic(&path, logic::stats_json(&stats, &self.sha256).as_bytes()) {
-            warn!("wake events: cannot write {}: {e}", path.display());
-            return;
+        match store_atomic(&path, stats_json(&stats, &self.sha256).as_bytes()) {
+            Ok(()) => self.last_written = Some(stats),
+            Err(e) => warn!("wake events: cannot write stats: {e}"),
         }
-        self.last_written = Some(stats);
     }
 
     fn save(&mut self, rec: &Recording) {
+        if let Err(e) = self.try_save(rec) {
+            warn!("wake events: {e}");
+        }
+    }
+
+    /// Пишет WAV и сайдкар. При любой ошибке недописанное событие убирается целиком: без пары
+    /// WAV + JSON оно бесполезно, а `.tmp` не должен остаться ни от одного файла.
+    fn try_save(&mut self, rec: &Recording) -> Result<(), WakeStoreError> {
         let side = Sidecar {
             schema: 1,
             id: rec.id.clone(),
@@ -210,15 +237,17 @@ impl Writer {
             labeled_utc: rec.label.map(|_| logic::format_utc(logic::utc_ms())),
         };
         let wav = logic::wav(&rec.samples);
-        let json = logic::sidecar_json(&side);
+        let json = sidecar_json(&side);
         let wav_path = json_path(&self.dir, &rec.id, "wav");
         let json_path = json_path(&self.dir, &rec.id, "json");
-        if let Err(e) =
-            write_atomic(&wav_path, &wav).and_then(|()| write_atomic(&json_path, json.as_bytes()))
-        {
-            warn!("wake events: cannot write {}: {e}", wav_path.display());
-            let _ = fs::remove_file(&wav_path);
-            return;
+        let written =
+            store_atomic(&wav_path, &wav).and_then(|()| store_atomic(&json_path, json.as_bytes()));
+        if let Err(e) = written {
+            for p in [&wav_path, &json_path] {
+                let _ = fs::remove_file(p);
+                let _ = fs::remove_file(tmp_of(p));
+            }
+            return Err(e);
         }
         info!(
             "wake events: {} {} ({:.1} s, peak {:.3})",
@@ -239,6 +268,7 @@ impl Writer {
             let (_, outcome, stt_text) = self.pending_outcomes.remove(i);
             self.apply_outcome(&rec.id, outcome, stt_text.as_deref());
         }
+        Ok(())
     }
 
     fn enforce_retention(&mut self) {
@@ -286,11 +316,9 @@ impl Writer {
                 side.label = Some("false".into());
                 side.label_source = Some("user".into());
                 side.labeled_utc = Some(logic::format_utc(now));
-                if let Err(e) = write_atomic(
-                    &json_path(&self.dir, &id, "json"),
-                    logic::sidecar_json(&side).as_bytes(),
-                ) {
-                    warn!("wake events: cannot label {id}: {e}");
+                let path = json_path(&self.dir, &id, "json");
+                if let Err(e) = store_atomic(&path, sidecar_json(&side).as_bytes()) {
+                    warn!("wake events: cannot label: {e}");
                     return;
                 }
                 self.index[i].labeled = true;
@@ -308,13 +336,10 @@ impl Writer {
         if let Some(t) = stt_text {
             side.stt_text = Some(t.to_owned());
         }
-        if let Err(e) = write_atomic(
-            &json_path(&self.dir, id, "json"),
-            logic::sidecar_json(&side).as_bytes(),
-        ) {
-            warn!("wake events: cannot update {id}: {e}");
-        } else {
-            debug!("wake events: {id} outcome {}", outcome.as_str());
+        let path = json_path(&self.dir, id, "json");
+        match store_atomic(&path, sidecar_json(&side).as_bytes()) {
+            Ok(()) => debug!("wake events: {id} outcome {}", outcome.as_str()),
+            Err(e) => warn!("wake events: cannot update {id}: {e}"),
         }
     }
 
@@ -362,7 +387,7 @@ fn scan(dir: &Path) -> Vec<logic::Meta> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wake_events::Kind;
+    use crate::Kind;
 
     fn temp_dir(name: &str) -> PathBuf {
         let mut p = std::env::temp_dir();
@@ -449,8 +474,7 @@ mod tests {
         assert!(w.index[0].labeled);
         // Stats: 1.5 s of listening, no hit counted by the counters here.
         w.write_stats();
-        let stats =
-            logic::parse_stats(&fs::read_to_string(dir.join("stats.json")).unwrap()).unwrap();
+        let stats = parse_stats(&fs::read_to_string(dir.join("stats.json")).unwrap()).unwrap();
         assert!((stats.listening_seconds - 1.5).abs() < 1e-9);
         let _ = fs::remove_dir_all(&dir);
     }

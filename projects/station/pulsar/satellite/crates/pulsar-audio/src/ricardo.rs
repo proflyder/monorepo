@@ -17,6 +17,19 @@ unsafe extern "C" {
     fn mww_configure(handle: *mut c_void, cutoff: f32, window: i32);
 }
 
+/// Почему детектор не создался или отказал.
+#[derive(Debug, thiserror::Error)]
+pub enum DetectorError {
+    #[error("{path}: NUL in path")]
+    NulPath { path: std::path::PathBuf },
+    #[error("cannot load {path}")]
+    Load { path: std::path::PathBuf },
+    #[error("microWakeWord disabled itself")]
+    Disabled,
+    #[error("microWakeWord reset failed")]
+    ResetFailed,
+}
+
 /// The on-device "Рикардо" detector. Use only from the audio processing thread.
 pub struct RicardoWake {
     raw: NonNull<c_void>,
@@ -24,13 +37,17 @@ pub struct RicardoWake {
 
 impl RicardoWake {
     /// Loads the model and opens the firmware's `libtflite.so`.
-    pub fn new(model: &Path) -> Result<Self, String> {
-        let path = CString::new(model.as_os_str().as_bytes())
-            .map_err(|_| format!("{}: NUL in path", model.display()))?;
+    pub fn new(model: &Path) -> Result<Self, DetectorError> {
+        let path =
+            CString::new(model.as_os_str().as_bytes()).map_err(|_| DetectorError::NulPath {
+                path: model.to_owned(),
+            })?;
         // SAFETY: the C++ function copies/reads the NUL-terminated path and
         // returns an opaque handle owned by this wrapper.
         let raw = unsafe { mww_create(path.as_ptr()) };
-        let raw = NonNull::new(raw).ok_or_else(|| format!("cannot load {}", model.display()))?;
+        let raw = NonNull::new(raw).ok_or_else(|| DetectorError::Load {
+            path: model.to_owned(),
+        })?;
         Ok(Self { raw })
     }
 
@@ -48,7 +65,7 @@ impl RicardoWake {
     /// Feeds one VQE chunk. Ok((true, score)) on a detection, Ok((false, score)) otherwise, where
     /// `score` is the windowed mean probability of this chunk (-1 while the window fills or the
     /// 1 s warm-up runs); Err after the detector disabled itself.
-    pub fn feed(&mut self, pcm: &[i16]) -> Result<(bool, f32), String> {
+    pub fn feed(&mut self, pcm: &[i16]) -> Result<(bool, f32), DetectorError> {
         let mut score = -1.0f32;
         // SAFETY: `raw` is a live handle from mww_create; `pcm` is valid for
         // the call and `score` points to a local.
@@ -56,18 +73,18 @@ impl RicardoWake {
         match rc {
             0 => Ok((false, score)),
             1 => Ok((true, score)),
-            _ => Err("microWakeWord disabled itself".into()),
+            _ => Err(DetectorError::Disabled),
         }
     }
 
     /// Resets the streaming state (normally the detector does this after a hit).
     #[allow(dead_code, reason = "kept for diagnostics and future reconfiguration")]
-    pub fn reset(&mut self) -> Result<(), String> {
+    pub fn reset(&mut self) -> Result<(), DetectorError> {
         // SAFETY: live handle, no aliasing.
         if unsafe { mww_reset(self.raw.as_ptr()) } == 0 {
             Ok(())
         } else {
-            Err("microWakeWord reset failed".into())
+            Err(DetectorError::ResetFailed)
         }
     }
 }
