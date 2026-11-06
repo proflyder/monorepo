@@ -371,7 +371,14 @@ impl Io {
             }
         };
         let mut opened = false;
-        let res = pulsar_alsa::open_playback(self.playback)
+        let spec = pulsar_alsa::PlaybackSpec {
+            pcm: self.playback.pcm,
+            gates: pulsar_alsa::OutputGates {
+                amp_enable_paths: self.playback.amp_enable_paths,
+                spk_mute_ctl: self.playback.spk_mute_ctl,
+            },
+        };
+        let res = pulsar_alsa::open_playback(&spec)
             .map_err(|e| ("open", e))
             .and_then(|mut pcm| {
                 opened = true;
@@ -387,7 +394,7 @@ impl Io {
                 // fails the open (as "hw_params"): pulsar-alsa sets the frame size only after
                 // both reads, so the PCM could not be written anyway. Not seen on the stations.
                 if let Some((step, e)) = t.failed {
-                    return Err((hw_step(step), e));
+                    return Err((step.as_str(), pulsar_alsa::AlsaError::new(step, e)));
                 }
                 let (period, buffer) = (t.actual.period_frames, t.actual.buffer_frames);
                 // Start as soon as one period is queued so snd_pcm_delay() tracks real playback
@@ -403,11 +410,7 @@ impl Io {
                 if !self.open_failed_logged {
                     error!(
                         "sendspin: ALSA '{}' {step} failed for {} Hz/{} ch/{} bit: {}",
-                        self.playback.pcm,
-                        self.want_rate,
-                        self.want_channels,
-                        self.want_bits,
-                        pulsar_alsa::strerror(err)
+                        self.playback.pcm, self.want_rate, self.want_channels, self.want_bits, err
                     );
                 }
                 self.open_failed_logged = true;
@@ -447,11 +450,11 @@ impl Io {
         }
     }
 
-    fn recover(&mut self, err: i32) -> bool {
+    fn recover(&mut self, err: pulsar_alsa::AlsaError) -> bool {
+        let mut err = err.code;
         if err == -libc::EINTR || err == -libc::EAGAIN {
             return true;
         }
-        let mut err = err;
         if (err == -libc::EPIPE || err == -libc::ESTRPIPE)
             && let Some(pcm) = self.pcm.as_mut()
         {
@@ -459,7 +462,10 @@ impl Io {
             let mut r = if err == -libc::ESTRPIPE {
                 pcm.resume()
             } else {
-                Err(-1)
+                Err(pulsar_alsa::AlsaError::new(
+                    pulsar_alsa::HwStep::Recover,
+                    -1,
+                ))
             };
             if r.is_err() {
                 r = pcm.prepare();
@@ -476,7 +482,7 @@ impl Io {
                     );
                     return true;
                 }
-                Err(e) => err = e,
+                Err(e) => err = e.code,
             }
         }
         error!(
@@ -556,14 +562,5 @@ impl Io {
         self.prev_played = played;
         self.delay_min = i64::from(i32::MAX);
         self.delay_max = 0;
-    }
-}
-
-/// The C++ sink's step names for pulsar-alsa's hw_params steps.
-fn hw_step(step: &'static str) -> &'static str {
-    match step {
-        "any" => "hw_params_any",
-        "access" | "format" | "channels" | "rate" => step,
-        _ => "hw_params",
     }
 }

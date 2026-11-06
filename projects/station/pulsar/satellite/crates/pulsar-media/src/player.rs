@@ -829,13 +829,13 @@ impl Backend for GstBackend {
         // the amplifier off when another client closes meanwhile: the gates go on here and again
         // in `music_playing`. ANNOUNCE is not played by GStreamer (pcm_out opens the PCM itself).
         if s == GstState::Playing && ch == Channel::Music {
-            pulsar_alsa::enable_output(self.playback);
+            pulsar_alsa::enable_output(&crate::output_gates(self.playback));
         }
         self.pipes[ch.index()].set_state(s as i32)
     }
 
     fn music_playing(&mut self) {
-        pulsar_alsa::enable_output(self.playback);
+        pulsar_alsa::enable_output(&crate::output_gates(self.playback));
     }
 
     fn set_uri(&mut self, ch: Channel, uri: &str) {

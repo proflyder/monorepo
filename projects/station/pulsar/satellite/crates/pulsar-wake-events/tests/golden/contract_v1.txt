@@ -1,0 +1,14 @@
+== stats zero
+{"schema":1,"since_utc":"","listening_seconds":0,"hits":0,"near":0,"miss":0,"dry_run_listening_seconds":0,"dropped":0,"model_sha256":"deadbeef"}
+== stats plain
+{"schema":1,"since_utc":"2026-11-01T10:00:00.000Z","listening_seconds":12345.6,"hits":10,"near":40,"miss":2,"dry_run_listening_seconds":3600,"dropped":0,"model_sha256":"deadbeef"}
+== stats fractions
+{"schema":1,"since_utc":"1970-01-01T00:00:00.000Z","listening_seconds":1.234568,"hits":1,"near":2,"miss":3,"dry_run_listening_seconds":0.000001,"dropped":4,"model_sha256":"deadbeef"}
+== stats negzero
+{"schema":1,"since_utc":"x","listening_seconds":-0,"hits":0,"near":0,"miss":0,"dry_run_listening_seconds":0,"dropped":0,"model_sha256":"deadbeef"}
+== sidecar nulls
+{"schema":1,"id":"20261101T101500Z-hit-17","kind":"hit","utc":"2026-11-01T10:15:00.123Z","sample_rate":16000,"pre_ms":3000,"post_ms":1000,"score_peak":0.934,"cutoff":0.9,"window":10,"model_sha256":"deadbeef","pulsar_version":"v0.5.1003","dry_run":false,"outcome":null,"stt_text":null,"label":null,"label_source":null,"labeled_utc":null}
+== sidecar full
+{"schema":1,"id":"20261101T101500Z-hit-17","kind":"hit","utc":"2026-11-01T10:15:00.123Z","sample_rate":16000,"pre_ms":3000,"post_ms":1000,"score_peak":0.9,"cutoff":0.87,"window":10,"model_sha256":"deadbeef","pulsar_version":"v0.5.1003","dry_run":false,"outcome":"answered","stt_text":"привет, \"свет\"\\ок\nновая строка\tтаб\u0001\u0008\u000c","label":"false","label_source":"user","labeled_utc":"2026-11-01T10:20:00.000Z"}
+== sidecar numbers
+{"schema":1,"id":"a/b","kind":"near","utc":"2026-11-01T10:15:00.000Z","sample_rate":16000,"pre_ms":3000,"post_ms":1000,"score_peak":0,"cutoff":0.123457,"window":10,"model_sha256":"deadbeef","pulsar_version":"v0.5.1003","dry_run":true,"outcome":"dry_run","stt_text":null,"label":null,"label_source":null,"labeled_utc":null}

@@ -9,9 +9,8 @@ publish.workspace = true
 libc = { workspace = true }
 libloading = { workspace = true }
 tracing = { workspace = true }
-pulsar-core = { path = "../pulsar-core" }
-pulsar-model = { path = "../pulsar-model" }
 home-linux = { path = "../../../../../../packages/rust/home-linux" }
+pulsar-core = { path = "../pulsar-core" }
 
 [lints]
 workspace = true

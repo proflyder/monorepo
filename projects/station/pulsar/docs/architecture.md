@@ -19,11 +19,13 @@
 | `pulsar` | демон: рантайм и завершение (`main.rs`), контроллер — вся логика сателлита, `state.conf`, отчёт о падении |
 | `pulsar-core` | общие части: слои `tracing` (stderr-контракт и ESPHome-sink), супервизор акторов, таймеры, громкость, мелкие общие типы |
 | `pulsar-model` | описание железа модели: `DeviceProfile` из capability-структур (`Identity`, `Audio`, `VolumeCurve`, `Leds`, `Option<ClockPanel>`, `Input`, `Option<LightSensor>`, `Option<ZigbeeRadio>`, `Earcons`, `Option<Preroll>`) и детект по devicetree / `quasar.cfg` |
-| `pulsar-alsa` | libasound прошивки, загружаемая через dlopen; обёртки PCM / ctl |
+| `pulsar-alsa` | libasound прошивки, загружаемая через dlopen; обёртки PCM / ctl и узкие типы вывода (без модели) |
 | `pulsar-esphome` | сервер ESPHome Native API (plaintext / Noise) |
 | `pulsar-mdns` | mDNS-респондер: чистое DNS-ядро и UDP/rtnetlink-адаптер |
 | `pulsar-arbiter` | арбитр wake word между станциями: протокол, стратегия и UDP-актор |
 | `pulsar-audio` | микрофонный фронтенд (захват → VQE Яндекса → спотеры → поток 16 кГц) и музыкальные признаки опорного сигнала динамика |
+| `pulsar-dsp` | чистый DSP без FFI и модели: типизированное кольцо, уровни dBFS, FFT-спектр, endpoint-детектор, WAV |
+| `pulsar-wake-events` | контракт v1 записи wake-событий: сайдкар/`stats.json` на serde, writer-поток и ретеншн |
 | `pulsar-media` | воспроизведение через GStreamer прошивки (каналы Music / Announce) и `Mixer` |
 | `pulsar-sendspin` | Sendspin-плеер на sendspin-cpp через C-шим `shim/` (см. [«Линковка C++ (sendspin-cpp)»](#линковка-c-sendspin-cpp)) |
 | `pulsar-ui` | чистый домен интерфейса: рендер эффектов LED, анимации и шрифт часов, композиция слоёв обоих устройств, доменные типы (`Effect`, `MusicStyle`, `ClockFace`), общий `MusicSource` |
@@ -151,10 +153,11 @@ flowchart LR
   записано как `mul_add` — одно округление вместо двух; результат может отличаться от раздельных
   операций на 1–2 ulp. У такого места — комментарий с причиной. Сливания не добавлять и не
   убирать.
-- Расстановку `mul_add` фиксируют golden-тесты: `pulsar-audio` `tests/spectrum_golden.rs`,
+- Расстановку `mul_add` фиксируют golden-тесты: `pulsar-dsp` `tests/spectrum_golden.rs`,
   `pulsar-ui` `led_fx/tests.rs` и `clock_fx.rs`, `pulsar-media` `tests/mixer_golden.rs`,
-  `pulsar-core` `ambient.rs`. Без теста, но по тому же правилу: уровень wake (`frontend.rs`,
-  `mean_square`), энергии `ww_offline`, матрица цвета корпуса (`pulsar-ui/src/leds.rs`),
+  `pulsar-core` `ambient.rs`. Без теста, но по тому же правилу: уровень wake
+  (`pulsar-dsp/src/level.rs`, `mean_square`), энергии `ww_offline`, матрица цвета корпуса
+  (`pulsar-ui/src/leds.rs`),
   диапазоны музыки часов (`pulsar-ui/src/clock.rs`), число громкости на часах
   (`controller/media.rs`).
 - armhf-сборка даёт аппаратный `vfma` для `mul_add` только с `-C target-cpu=cortex-a53` (его
@@ -225,11 +228,13 @@ flowchart LR
 
 ### `pulsar-alsa`
 
-- `init(playback)` зовётся в `main` до старта рантайма, потоков и библиотек (`pulsar-alsa` нельзя
-  грузить до этого): `Playback::apply_env` задаёт `ALSA_CONFIG_PATH` (только Мини —
-  `/data/pulsar/asound.conf`, и только если файл есть; иначе ошибка в логе), а путь к libasound —
-  из `Playback::alsa_lib`; у Мини это абсолютный `/system/vendor/quasar/libs/libasound.so.2`, потому
-  что каталог прошивки вне путей поиска загрузчика. С таким путём `init` сразу загружает
+- `init(lib_path)` зовётся в `main` до старта рантайма, потоков и библиотек (`pulsar-alsa` нельзя
+  грузить до этого): вызывающий сначала делает `Playback::apply_env` (задаёт `ALSA_CONFIG_PATH`;
+  только Мини — `/data/pulsar/asound.conf`, и только если файл есть; иначе ошибка в логе), затем
+  передаёт `Playback::alsa_lib`; у Мини это абсолютный
+  `/system/vendor/quasar/libs/libasound.so.2`, потому что каталог прошивки вне путей поиска
+  загрузчика. Крейт не знает `pulsar_model`: затворы усилителя и `SPK mute` приходят как
+  `OutputGates`, PCM — как `PlaybackSpec`. С таким путём `init` сразу загружает
   библиотеку (RTLD_GLOBAL), до GStreamer: `NEEDED libasound.so.2` у `libquasar_gstreamer.so`
   тогда разрешается в эту копию по SONAME, есть у неё RUNPATH или нет (на Мини не проверено).
   Остальные модели грузят libasound лениво по SONAME. `supervise.sh` и станционные скрипты
@@ -240,7 +245,8 @@ flowchart LR
   compat-записи ALSA_0.9, которая принимает значения вместо указателей (period/buffer читаются
   как 0, активационная фраза не работает).
 - `load()` идемпотентна; первая неудача один раз пишет error с текстом dlerror, дальше `open`
-  отдаёт `-ENOENT`.
+  отдаёт `AlsaError { op: HwStep::Load, code: -ENOENT }`. Ошибки всех вызовов — `AlsaError` с
+  шагом и errno; `Display` печатает шаг и `strerror`.
 - `quiet_error_handler()` пишет шум alsa-lib в `log::debug` только при уровне stderr Debug.
 
 ### `pulsar-esphome`
@@ -287,6 +293,8 @@ flowchart LR
   аудиочанка и сырой захват для `--record`. Формат захвата задаёт
   `pulsar_model::CaptureFormat` (`S16`, либо `S32 { shift }` — S32_LE с right-justified 24
   битами, Мини: `shift=8`); перед VQE сэмпл приводится к i16 со сдвигом и насыщением.
+  Кольца FIFO и пре-ролла — один `pulsar_dsp::Ring`; уровень и FFT-спектр, endpoint-детектор и
+  WAV-заголовок живут в `pulsar-dsp`, запись событий и контракт v1 — в `pulsar-wake-events`.
 - Уровень wake word для арбитража и FFT светомузыки считаются блоками по 512 сэмплов (32 мс при
   16 кГц) независимо от чанка VQE: `LevelHistory` и `SpectrumAnalyzer` копят 16-мс чанки Мини 3 и
   Мини до полного блока, так что окно уровня (47 × 32 мс) и темп кадров музыки у всех моделей одни.
@@ -316,7 +324,7 @@ flowchart LR
   `set_streaming` его не трогает): чанки между подтверждением и `set_streaming(true)` контроллера
   продолжают пре-ролл без дыры. Контроллер вызывает `wake_handled()` ровно раз на `Wake`, после
   `on_wake`; пре-ролл уходит в `start_pipeline` или в `arb_audio` арбитража.
-- Запись wake-событий (`wake_events/`, контракт v1, раздел RICARDO.md «Запись wake-событий»):
+- Запись wake-событий (`pulsar-wake-events`, контракт v1, раздел RICARDO.md «Запись wake-событий»):
   поток обработки дополнительно держит 31-секундное кольцо того же `VQE_OMNI_WITH_GAIN` (~1 МБ) и копит
   окна подтверждённых срабатываний (`hit`, 3 с до + 1 с после), локальных максимумов
   windowed mean в полосе 0.5..cutoff (`near`) и нажатия «Wake: не услышала» (`miss`, последние

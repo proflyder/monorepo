@@ -1,0 +1,57 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LINUX = ["@platforms//os:linux"]
+
+DEPS = [
+    "@crates//:hex",
+    "@crates//:ring",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+    "@crates//:time",
+    "@crates//:tracing",
+    "//projects/station/pulsar/satellite/crates/pulsar-dsp:pulsar_dsp",
+]
+
+rust_library(
+    name = "pulsar_wake_events",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/**"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_test(
+    name = "pulsar_wake_events_unit_tests",
+    crate = ":pulsar_wake_events",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+)
+
+rust_test(
+    name = "contract_golden_test",
+    srcs = ["tests/contract_golden.rs"],
+    compile_data = glob(["tests/golden/**"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = [
+        ":pulsar_wake_events",
+        "@crates//:serde_json",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

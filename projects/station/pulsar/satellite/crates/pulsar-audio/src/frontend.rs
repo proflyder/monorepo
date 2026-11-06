@@ -9,7 +9,6 @@
 //! 8 ch S16); VQE chunks occasionally take longer than the remaining slack, which overran the
 //! device buffer when reading and processing shared one thread.
 
-use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{
     AtomicBool, AtomicU32, AtomicU64, Ordering::AcqRel, Ordering::Acquire, Ordering::Relaxed,
@@ -19,32 +18,26 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use pulsar_alsa::{Format, HwRequest, HwTrace, Pcm, Stream};
+use pulsar_alsa::{AlsaError, Format, HwRequest, HwStep, HwTrace, Pcm, Stream};
 use pulsar_core::MusicFrame;
+use pulsar_dsp::endpoint::EndpointPrior;
+use pulsar_dsp::level::{
+    LEVEL_CHUNKS, LEVEL_SAMPLES, LevelHistory, level_db, mean_square, percentile_db,
+};
+use pulsar_dsp::{Ring, SpectrumAnalyzer, to_s16_slice};
 use pulsar_model::{Capture as CaptureLayout, CaptureFormat, Preroll, PrerollRule};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::{error, info, warn};
 
-use crate::endpoint::{EndpointPrior, percentile_db};
-use crate::engine::{Engine, Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN, to_s16};
-use crate::spectrum::SpectrumAnalyzer;
+use crate::engine::{CustomFeed, Engine, Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN};
 use crate::wake_events::{
     self, Capture, Counters, Job, Outcome, Recording, WakeEventOptions, WakeEventsRuntime,
     WakeInput, logic,
 };
 
-/// Wake word level window: 1.5 s in 32 ms blocks at 16 kHz, independent of VQE chunk size.
-/// Long enough to cover the phrase when the spotter confirms; the loudest blocks are the phrase.
-const LEVEL_CHUNKS: usize = 47;
-const LEVEL_TOP: usize = 8;
-/// Samples of one level window block: 32 ms at 16 kHz.
-const LEVEL_SAMPLES: usize = 512;
 /// Pre-roll ring: 1.024 s at 16 kHz (32 chunks of 32 ms, 64 of 16 ms on the Mini 3 and Mini),
 /// more than any wake word's confirmation delay.
 const PREROLL_SAMPLES: usize = 16384;
-/// End of speech for the "wake timing" log: the newest block within 20 dB (power) of the
-/// loudest one in the level window.
-const SPEECH_END_RATIO: f32 = 0.01;
 
 /// ALSA buffer in VQE chunks: 256 ms with 32 ms chunks, 128 ms on the Mini 3 and Mini (16 ms);
 /// the device may grant less (Lite 2: 2048 frames).
@@ -147,20 +140,25 @@ pub fn spawn(
         _events: tx.clone(),
     };
     let command_dir = command_model_dir.filter(|d| !d.as_os_str().is_empty());
-    let started = Engine::start(
+    let started = match Engine::start(
         capture,
         wake_model_dir,
         custom_wake_model,
         command_dir.as_deref(),
         thresholds,
-    )
-    .is_some_and(|eng| {
-        inner.frame = eng.frame();
-        inner
-            .start_threads(capture, preroll, eng, tx)
-            .inspect_err(|e| error!("audio threads: {e}"))
-            .is_ok()
-    });
+    ) {
+        Ok(eng) => {
+            inner.frame = eng.frame();
+            inner
+                .start_threads(capture, preroll, eng, tx)
+                .inspect_err(|e| error!("audio threads: {e}"))
+                .is_ok()
+        }
+        Err(e) => {
+            error!("audio engine: {e}");
+            false
+        }
+    };
     if !started {
         inner.stop();
         inner.frame = 0;
@@ -366,7 +364,7 @@ impl Shared {
 
 /// The FIFO between the threads with its wake-up.
 struct Pipe {
-    fifo: Mutex<Fifo>,
+    fifo: Mutex<Ring<i16>>,
     ready: Condvar,
 }
 
@@ -395,7 +393,7 @@ impl Inner {
         let period = eng.chunk;
         let pipe = Arc::new(Pipe {
             // 1 s of audio.
-            fifo: Mutex::new(Fifo::new(nch, period, capture.rate as usize)),
+            fifo: Mutex::new(Ring::new(period * nch, capture.rate as usize * nch)),
             ready: Condvar::new(),
         });
         self.pipe = Some(pipe.clone());
@@ -444,62 +442,6 @@ impl Drop for Inner {
     }
 }
 
-/// Interleaved capture frames, oldest first, at most `max` samples.
-pub struct Fifo {
-    buf: VecDeque<i16>,
-    nch: usize,
-    chunk: usize,
-    max: usize,
-}
-
-impl Fifo {
-    /// `nch` channels per frame, chunks of `chunk_frames`, at most `max_frames` queued.
-    pub(crate) fn new(nch: usize, chunk_frames: usize, max_frames: usize) -> Self {
-        Self {
-            buf: VecDeque::new(),
-            nch,
-            chunk: chunk_frames * nch,
-            max: max_frames * nch,
-        }
-    }
-
-    /// Appends whole frames; past the limit the oldest are dropped: returns how many frames.
-    pub(crate) fn push(&mut self, samples: &[i16]) -> Option<usize> {
-        self.buf.extend(samples);
-        let over = self.buf.len().checked_sub(self.max).filter(|&n| n > 0)?;
-        self.buf.drain(..over);
-        Some(over / self.nch)
-    }
-
-    /// After a capture error: the chunk being assembled has a gap in it. The processing thread
-    /// takes whole chunks from the front, so the partial one is the tail.
-    pub(crate) fn drop_partial(&mut self) {
-        let keep = self.buf.len() - self.buf.len() % self.chunk;
-        self.buf.truncate(keep);
-    }
-
-    pub(crate) fn has_chunk(&self) -> bool {
-        self.buf.len() >= self.chunk
-    }
-
-    /// Moves exactly one chunk into `out` (its length); false if there is not one yet.
-    pub(crate) fn take_chunk(&mut self, out: &mut [i16]) -> bool {
-        if !self.has_chunk() || out.len() != self.chunk {
-            return false;
-        }
-        let (a, b) = self.buf.as_slices();
-        let na = a.len().min(self.chunk);
-        out[..na].copy_from_slice(&a[..na]);
-        out[na..].copy_from_slice(&b[..self.chunk - na]);
-        self.buf.drain(..self.chunk);
-        true
-    }
-
-    pub(crate) fn frames(&self) -> usize {
-        self.buf.len() / self.nch
-    }
-}
-
 /// Capture buffer per sample format.
 enum CaptureBuf {
     S16(Vec<i16>),
@@ -523,7 +465,7 @@ impl CaptureBuf {
         }
     }
 
-    fn read(&mut self, pcm: &mut Pcm, frames: usize) -> Result<usize, i32> {
+    fn read(&mut self, pcm: &mut Pcm, frames: usize) -> Result<usize, AlsaError> {
         match self {
             Self::S16(buf) => pcm.readi(buf, frames),
             Self::S32 { raw, .. } => pcm.readi_s32(raw, frames),
@@ -558,16 +500,19 @@ fn capture_thread(capture: &'static CaptureLayout, period: usize, shared: &Share
     while shared.running() {
         let Some(p) = pcm.as_mut() else {
             match open_capture(capture, period) {
-                Some((p, per)) => {
+                Ok((p, per)) => {
                     pcm = Some(p);
                     hw_period = per;
                 }
-                None => shared.pause(REOPEN_DELAY),
+                Err(e) => {
+                    error!("{e}");
+                    shared.pause(REOPEN_DELAY);
+                }
             }
             continue;
         };
         let mut r = buf.read(p, hw_period);
-        if r == Err(-libc::EAGAIN) {
+        if r == Err(AlsaError::new(HwStep::Read, -libc::EAGAIN)) {
             match p.wait(READ_WAIT_MS) {
                 // Ready, or timeout (re-checks running).
                 Ok(_) => continue,
@@ -577,9 +522,9 @@ fn capture_thread(capture: &'static CaptureLayout, period: usize, shared: &Share
         let n = match r {
             Ok(n) => n,
             Err(e) => {
-                warn!("capture: {}, recovering", pulsar_alsa::strerror(e));
+                warn!("capture: {e}, recovering");
                 lock(&pipe.fifo).drop_partial();
-                if p.recover(e, true).is_err() {
+                if p.recover(e.code, true).is_err() {
                     pcm = None;
                 }
                 continue;
@@ -594,8 +539,8 @@ fn capture_thread(capture: &'static CaptureLayout, period: usize, shared: &Share
         }
         let dropped = {
             let mut f = lock(&pipe.fifo);
-            let dropped = f.push(block);
-            shared.fifo_frames.store(f.frames() as u64, Relaxed);
+            let dropped = f.push(block).map(|items| items / nch);
+            shared.fifo_frames.store((f.len() / nch) as u64, Relaxed);
             dropped
         };
         pipe.ready.notify_one();
@@ -606,11 +551,11 @@ fn capture_thread(capture: &'static CaptureLayout, period: usize, shared: &Share
     }
 }
 
-/// The C++ name of a failed hw_params step and its error, or the rate the device offered
-/// instead of the model's.
+/// The failing capture hw_params step and its error, or the rate the device offered instead of
+/// the model's.
 #[derive(Debug, PartialEq, Eq)]
 pub enum HwFail {
-    Step(&'static str, i32),
+    Step(HwStep, i32),
     Rate(u32),
 }
 
@@ -618,44 +563,49 @@ pub enum HwFail {
 /// after set_rate_near, then period, buffer, apply (the period / buffer read back afterwards were
 /// not checked there). Ok = the period and buffer the device chose.
 pub fn hw_outcome(t: &HwTrace, rate: u32) -> Result<(u64, u64), HwFail> {
-    let cxx = |step| match step {
-        "any" => "hw_params_any",
-        "access" => "set_access",
-        "format" => "set_format",
-        "channels" => "set_channels",
-        "rate" => "set_rate_near",
-        "period" => "set_period_size_near",
-        "buffer" => "set_buffer_size_near",
-        _ => "snd_pcm_hw_params",
-    };
     match t.failed {
-        Some((step @ ("any" | "access" | "format" | "channels" | "rate"), e)) => {
-            Err(HwFail::Step(cxx(step), e))
-        }
+        Some((
+            op @ (HwStep::Any | HwStep::Access | HwStep::Format | HwStep::Channels | HwStep::Rate),
+            e,
+        )) => Err(HwFail::Step(op, e)),
         _ if t.near.rate != rate => Err(HwFail::Rate(t.near.rate)),
-        Some((step @ ("period" | "buffer" | "apply"), e)) => Err(HwFail::Step(cxx(step), e)),
+        Some((op @ (HwStep::Period | HwStep::Buffer | HwStep::Apply), e)) => {
+            Err(HwFail::Step(op, e))
+        }
         _ => Ok((t.near.period_frames, t.near.buffer_frames)),
     }
+}
+
+/// Почему захват не открылся: шаг ALSA или не та частота, на которую согласился драйвер.
+#[derive(Debug, thiserror::Error)]
+pub enum CaptureError {
+    #[error("capture {pcm}: {source}")]
+    Alsa {
+        pcm: &'static str,
+        #[source]
+        source: AlsaError,
+    },
+    #[error("capture {pcm}: rate {got} Hz, need {want}")]
+    Rate {
+        pcm: &'static str,
+        got: u32,
+        want: u32,
+    },
 }
 
 /// Opens the model's capture PCM: its sample width (S16 or S32), channels, exactly its rate (a
 /// silent rate mismatch would feed the VQE and spotters wrongly timed audio), period = one VQE
 /// chunk, buffer = 8. The period may differ (the FIFO decouples ALSA periods from VQE chunks).
 /// Returns the PCM and the frames to read at once.
-fn open_capture(capture: &CaptureLayout, period: usize) -> Option<(Pcm, usize)> {
+fn open_capture(capture: &CaptureLayout, period: usize) -> Result<(Pcm, usize), CaptureError> {
     let dev = capture.pcm;
     let format = match capture.format {
         CaptureFormat::S16 => Format::S16Le,
         CaptureFormat::S32 { .. } => Format::S32Le,
     };
     // Non-blocking: reads never wait inside ALSA, so a stop never hangs in snd_pcm_readi.
-    let mut pcm = match Pcm::open(dev, Stream::Capture, true) {
-        Ok(p) => p,
-        Err(e) => {
-            error!("snd_pcm_open {dev}: {}", pulsar_alsa::strerror(e));
-            return None;
-        }
-    };
+    let mut pcm = Pcm::open(dev, Stream::Capture, true)
+        .map_err(|source| CaptureError::Alsa { pcm: dev, source })?;
     let t = pcm.set_hw_params_traced(&HwRequest {
         format,
         channels: capture.channels,
@@ -673,17 +623,17 @@ fn open_capture(capture: &CaptureLayout, period: usize) -> Option<(Pcm, usize)> 
                 capture.format.bits()
             );
             let per = usize::try_from(per).unwrap_or(usize::MAX);
-            Some((pcm, per.min(period)))
+            Ok((pcm, per.min(period)))
         }
-        Err(HwFail::Step(what, e)) => {
-            error!("capture {dev}: {what}: {}", pulsar_alsa::strerror(e));
-            None
-        }
-        Err(HwFail::Rate(got)) => {
-            error!("capture {dev}: rate {got} Hz, need {}", capture.rate);
-            error!("capture {dev}: rate: unexpected value");
-            None
-        }
+        Err(HwFail::Step(op, code)) => Err(CaptureError::Alsa {
+            pcm: dev,
+            source: AlsaError::new(op, code),
+        }),
+        Err(HwFail::Rate(got)) => Err(CaptureError::Rate {
+            pcm: dev,
+            got,
+            want: capture.rate,
+        }),
     }
 }
 
@@ -711,144 +661,9 @@ pub fn deinterleave(
 /// A partial window would count its zero padding as a -100 dB floor.
 fn endpoint_prior(hist: &[f32; LEVEL_CHUNKS], filled: usize) -> Option<EndpointPrior> {
     (filled == LEVEL_CHUNKS).then(|| EndpointPrior {
-        noise_db: percentile_db(hist, 0.10),
-        speech_db: wake_level_db(hist),
+        noise_db: percentile_db(hist, 0.10).as_f32(),
+        speech_db: level_db(hist).as_f32(),
     })
-}
-
-/// Mean of the 8 loudest of the last 47 frames (mean squares), in dBFS clamped to -100..0 and
-/// rounded to 0.1 dB: stations compare levels received as "%.1f" text, so ours must be the same
-/// number the peers see, or ties could resolve differently on each side.
-pub fn wake_level_db(h: &[f32; LEVEL_CHUNKS]) -> f32 {
-    let mut s = *h;
-    s.sort_unstable_by(|a, b| b.total_cmp(a));
-    let mut sum = 0.0f32;
-    for &v in &s[..LEVEL_TOP] {
-        sum += v;
-    }
-    let db = (10.0 * (sum / LEVEL_TOP as f32 + 1e-10).log10()).clamp(-100.0, 0.0);
-    (db * 10.0).round() / 10.0
-}
-
-fn mean_square(d: &[f32]) -> f32 {
-    let mut sq = 0.0f64;
-    for &v in d {
-        // `sq += (double)d[i] * d[i]`: fused on the stations (clang -ffp-contract=on).
-        sq = f64::from(v).mul_add(f64::from(v), sq);
-    }
-    (sq / d.len() as f64) as f32
-}
-
-/// Mean squares of the last LEVEL_CHUNKS blocks of LEVEL_SAMPLES samples, whatever the VQE
-/// chunk: the Mini 3's and Mini's VQE give 16 ms chunks, the window stays 47 × 32 ms on every
-/// model.
-struct LevelHistory {
-    values: [f32; LEVEL_CHUNKS],
-    pos: usize,
-    pending: [f32; LEVEL_SAMPLES],
-    used: usize,
-}
-
-impl LevelHistory {
-    fn new() -> Self {
-        Self {
-            values: [0.0; LEVEL_CHUNKS],
-            pos: 0,
-            pending: [0.0; LEVEL_SAMPLES],
-            used: 0,
-        }
-    }
-
-    fn push(&mut self, mut samples: &[f32]) {
-        while !samples.is_empty() {
-            let n = samples.len().min(LEVEL_SAMPLES - self.used);
-            self.pending[self.used..self.used + n].copy_from_slice(&samples[..n]);
-            self.used += n;
-            samples = &samples[n..];
-            if self.used == LEVEL_SAMPLES {
-                self.values[self.pos] = mean_square(&self.pending);
-                self.pos = (self.pos + 1) % LEVEL_CHUNKS;
-                self.used = 0;
-            }
-        }
-    }
-
-    /// VQE chunks of `frame` samples from the newest sample back to the end of speech
-    /// (`speech_end_chunks` counts blocks; samples of an unfinished block count too).
-    fn speech_end(&self, frame: usize) -> Option<usize> {
-        let newest = (self.pos + LEVEL_CHUNKS - 1) % LEVEL_CHUNKS;
-        speech_end_chunks(&self.values, newest)
-            .map(|k| (k * LEVEL_SAMPLES + self.used) / frame.max(1))
-    }
-}
-
-/// The last VQE chunks as s16, for the pre-roll after a wake word.
-pub struct PrerollRing {
-    buf: Vec<i16>,
-    frame: usize,
-    /// Slot the next chunk goes to.
-    next: usize,
-    filled: usize,
-}
-
-impl PrerollRing {
-    pub(crate) fn new(chunks: usize, frame: usize) -> Self {
-        Self {
-            buf: vec![0; chunks * frame],
-            frame,
-            next: 0,
-            filled: 0,
-        }
-    }
-
-    fn chunks(&self) -> usize {
-        self.buf.len() / self.frame.max(1)
-    }
-
-    /// Stores one chunk and returns it as s16. A chunk of another length breaks the timeline:
-    /// the ring is cleared and nothing is stored.
-    pub(crate) fn push(&mut self, d: &[f32]) -> Option<&[i16]> {
-        if d.len() != self.frame || self.frame == 0 || self.buf.is_empty() {
-            self.clear();
-            return None;
-        }
-        let at = self.next * self.frame;
-        let slot = &mut self.buf[at..at + self.frame];
-        for (o, &v) in slot.iter_mut().zip(d) {
-            *o = to_s16(v);
-        }
-        self.next = (self.next + 1) % self.chunks();
-        self.filled = (self.filled + 1).min(self.chunks());
-        Some(&self.buf[at..at + self.frame])
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.next = 0;
-        self.filled = 0;
-    }
-
-    /// The last `n` chunks (at most as many as stored), oldest first.
-    pub(crate) fn last(&self, n: usize) -> Vec<i16> {
-        let n = n.min(self.filled);
-        let total = self.chunks();
-        let mut out = Vec::with_capacity(n * self.frame);
-        for k in (1..=n).rev() {
-            let at = (self.next + total - k) % total * self.frame;
-            out.extend_from_slice(&self.buf[at..at + self.frame]);
-        }
-        out
-    }
-}
-
-/// Chunks from the newest entry of the level window back to the last one within
-/// `SPEECH_END_RATIO` of its loudest (0 = the newest itself); None for a silent window.
-fn speech_end_chunks(h: &[f32; LEVEL_CHUNKS], newest: usize) -> Option<usize> {
-    let peak = h.iter().copied().fold(0.0f32, f32::max);
-    if peak <= 0.0 {
-        return None;
-    }
-    let floor = SPEECH_END_RATIO * peak;
-    (0..LEVEL_CHUNKS).find(|&k| h[(newest + LEVEL_CHUNKS - k) % LEVEL_CHUNKS] >= floor)
 }
 
 /// Pre-roll length in chunks for `rule`, given the chunks since the 1st-stage hit.
@@ -940,7 +755,10 @@ fn processing(
     let mut music_was_on = false;
     let mut custom_failed = false;
     let frame = eng.frame();
-    let mut ring = PrerollRing::new(PREROLL_SAMPLES / frame.max(1), frame);
+    // Пре-ролл в s16: кольцо хранит уже сконвертированные выборки, тот же чанк отдаётся
+    // детектору Ricardo и в `Audio`.
+    let mut ring = Ring::new(frame, PREROLL_SAMPLES);
+    let mut pcm_chunk = vec![0i16; frame];
     let mut wake = wake_input.map(|w| WakeState {
         capture: Capture::new(frame, w.thresholds.cutoff),
         jobs: w.jobs,
@@ -969,7 +787,7 @@ fn processing(
             if !f.take_chunk(&mut input) {
                 continue;
             }
-            shared.fifo_frames.store(f.frames() as u64, Relaxed);
+            shared.fifo_frames.store((f.len() / nch) as u64, Relaxed);
         }
         shared.chunks.fetch_add(1, Relaxed);
 
@@ -1016,26 +834,34 @@ fn processing(
             gain_hist[gain_pos] = mean_square(d);
             gain_pos = (gain_pos + 1) % LEVEL_CHUNKS;
             gain_filled = (gain_filled + 1).min(LEVEL_CHUNKS);
-            if let Some(slot) = ring.push(d) {
+            let stored = if d.len() == frame && frame > 0 {
+                to_s16_slice(d, &mut pcm_chunk);
+                ring.push_chunk(&pcm_chunk)
+            } else {
+                ring.clear();
+                false
+            };
+            if stored {
+                let slot = &pcm_chunk[..];
                 // The Ricardo detector hears the same cleaned chunk as the ring and the
                 // stock spotter; its confirmation then takes the pre-roll from the ring.
                 if custom_active && detecting && !custom_failed {
                     custom_feeding = true;
                     match eng.feed_custom(slot) {
-                        Some(Ok((true, score))) => {
+                        CustomFeed::Fed { hit: true, score } => {
                             custom_hit = Some(score);
                             custom_mean = Some(score);
                         }
-                        Some(Ok((false, score))) => {
+                        CustomFeed::Fed { hit: false, score } => {
                             // The windowed mean of every chunk drives the near-miss band;
                             // negative means the detector window is still filling.
                             custom_mean = (score >= 0.0).then_some(score);
                         }
-                        Some(Err(e)) => {
+                        CustomFeed::Failed(e) => {
                             custom_failed = true;
                             error!("Ricardo wake word: {e}");
                         }
-                        None => {
+                        CustomFeed::Unavailable => {
                             custom_failed = true;
                             error!("Ricardo wake word: detector is not loaded");
                         }
@@ -1108,12 +934,12 @@ fn processing(
                     "Ricardo wake word detected (probability {score:.3}): dry run, not answering"
                 );
             } else {
-                let level_db = wake_level_db(&level_hist.values);
+                let level = level_hist.level().as_f32();
                 let speech_end = level_hist.speech_end(frame);
                 let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
                 let rule = wake_preroll_rule(preroll, shared, "ricardo");
                 let n = preroll_chunks(rule, None).min(ring.chunks());
-                let preroll = ring.last(n);
+                let preroll = ring.tail(n);
                 info!(
                     "Ricardo wake word detected (probability {score:.3}); \
                      wake timing: speech_end={} preroll={}",
@@ -1123,7 +949,7 @@ fn processing(
                 shared.wake_pending.fetch_add(1, Relaxed);
                 let _ = tx.send(FrontendEvent::Wake {
                     phrase: "Рикардо".into(),
-                    level_db,
+                    level_db: level,
                     preroll,
                     endpoint_prior,
                     event_id: wake_hit_id,
@@ -1141,12 +967,12 @@ fn processing(
                 Stage::None => {}
             }
             if !spotted.phrases.is_empty() {
-                let level_db = wake_level_db(&level_hist.values);
+                let level = level_hist.level().as_f32();
                 let speech_end = level_hist.speech_end(frame);
                 let endpoint_prior = endpoint_prior(&gain_hist, gain_filled);
                 let rule = wake_preroll_rule(preroll, shared, eng.wake_id());
                 let n = preroll_chunks(rule, first_stage_age).min(ring.chunks());
-                let preroll = ring.last(n);
+                let preroll = ring.tail(n);
                 info!(
                     "wake timing: first_stage={} speech_end={} preroll={}",
                     Chunks(first_stage_age),
@@ -1158,7 +984,7 @@ fn processing(
                     shared.wake_pending.fetch_add(1, Relaxed);
                     let _ = tx.send(FrontendEvent::Wake {
                         phrase,
-                        level_db,
+                        level_db: level,
                         preroll: preroll.clone(),
                         endpoint_prior,
                         event_id: None,
@@ -1201,94 +1027,6 @@ mod tests {
     }
 
     #[test]
-    fn level_is_the_mean_of_the_8_loudest_rounded_to_a_tenth() {
-        assert_eq!(wake_level_db(&[0.0; LEVEL_CHUNKS]), -100.0);
-        // 8 frames at 0.01 (-20 dB) among quiet ones, anywhere in the ring.
-        let mut h = [1e-6f32; LEVEL_CHUNKS];
-        for i in [0, 5, 13, 20, 30, 40, 45, 46] {
-            h[i] = 0.01;
-        }
-        assert_eq!(wake_level_db(&h), -20.0);
-        // Only the top 8 count: a ninth loud frame changes nothing, a louder one does.
-        h[1] = 0.01;
-        assert_eq!(wake_level_db(&h), -20.0);
-        h[2] = 0.09;
-        // (0.09 + 7 * 0.01) / 8 = 0.02 -> -16.99 dB
-        assert_eq!(wake_level_db(&h), -17.0);
-        // Rounded half away from zero to 0.1 dB: -32.46 -> -32.5, -32.44 -> -32.4.
-        let at = |db: f64| [10f64.powf(db / 10.0) as f32; LEVEL_CHUNKS];
-        assert_eq!(wake_level_db(&at(-32.46)), -32.5);
-        assert_eq!(wake_level_db(&at(-32.44)), -32.4);
-        // Clamped to -100..0.
-        assert_eq!(wake_level_db(&at(3.0)), 0.0);
-        assert_eq!(wake_level_db(&at(-120.0)), -100.0);
-    }
-
-    #[test]
-    fn level_window_is_independent_of_vqe_chunk_size() {
-        let mut full = LevelHistory::new();
-        let mut mini3 = LevelHistory::new();
-        let mut old = [0.0; LEVEL_CHUNKS];
-        for block in 0..LEVEL_CHUNKS + 5 {
-            let samples: Vec<f32> = (0..LEVEL_SAMPLES)
-                .map(|i| ((block * 17 + i * 3) % 97) as f32 / 128.0)
-                .collect();
-            let before = mini3.values.map(f32::to_bits);
-            mini3.push(&samples[..256]);
-            assert_eq!(mini3.values.map(f32::to_bits), before);
-            mini3.push(&samples[256..]);
-            full.push(&samples);
-            old[block % LEVEL_CHUNKS] = mean_square(&samples);
-            assert_eq!(full.values.map(f32::to_bits), old.map(f32::to_bits));
-            assert_eq!(mini3.values.map(f32::to_bits), old.map(f32::to_bits));
-            assert_eq!(mini3.pos, full.pos);
-            assert_eq!(wake_level_db(&mini3.values), wake_level_db(&old));
-        }
-    }
-
-    #[test]
-    fn preroll_ring_keeps_the_last_chunks_oldest_first() {
-        // 3 chunks of 2 samples; chunk k holds the samples k, k.
-        let mut r = PrerollRing::new(3, 2);
-        let chunk = |k: i16| [f32::from(k) / 32768.0; 2];
-        assert!(r.last(2).is_empty());
-        assert_eq!(r.push(&chunk(1)), Some(&[1i16, 1][..]));
-        // Asked for more than stored: what there is.
-        assert_eq!(r.last(3), [1, 1]);
-        for k in 2..=5 {
-            r.push(&chunk(k));
-        }
-        // Wrapped twice: chunks 3, 4, 5 remain.
-        assert_eq!(r.last(3), [3, 3, 4, 4, 5, 5]);
-        assert_eq!(r.last(2), [4, 4, 5, 5]);
-        assert_eq!(r.last(9), [3, 3, 4, 4, 5, 5]);
-        assert!(r.last(0).is_empty());
-        // A chunk of another length breaks the timeline: nothing older survives it.
-        assert_eq!(r.push(&[0.0; 3]), None);
-        assert!(r.last(3).is_empty());
-        r.push(&chunk(6));
-        assert_eq!(r.last(3), [6, 6]);
-    }
-
-    #[test]
-    fn speech_end_is_the_newest_chunk_within_20_db_of_the_peak() {
-        let mut h = [0f32; LEVEL_CHUNKS];
-        assert_eq!(speech_end_chunks(&h, 10), None);
-        // Word in chunks 3..=8, newest = 12: 4 quiet chunks after it.
-        for v in &mut h[3..=8] {
-            *v = 1.0;
-        }
-        h[9] = 0.009;
-        assert_eq!(speech_end_chunks(&h, 12), Some(4));
-        // Exactly 20 dB down still counts as speech.
-        h[9] = 0.01;
-        assert_eq!(speech_end_chunks(&h, 12), Some(3));
-        // The window is a ring: newest = 1 reaches back over the end to the word.
-        assert_eq!(speech_end_chunks(&h, 1), Some(LEVEL_CHUNKS - 9 + 1));
-        assert_eq!(speech_end_chunks(&h, 9), Some(0));
-    }
-
-    #[test]
     fn preroll_length_per_rule() {
         let first = |offset, fallback| Some(PrerollRule::FirstStage { offset, fallback });
         assert_eq!(preroll_chunks(None, Some(5)), 0);
@@ -1325,14 +1063,16 @@ mod tests {
         const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
         const RING_CHUNKS: usize = PREROLL_SAMPLES / FRAME;
         let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
-        let mut ring = PrerollRing::new(RING_CHUNKS, FRAME);
+        let mut ring = Ring::new(FRAME, PREROLL_SAMPLES);
+        let mut chunk = vec![0i16; FRAME];
         for k in 0..RING_CHUNKS {
-            ring.push(&[k as f32 / 32768.0; FRAME]);
+            to_s16_slice(&[k as f32 / 32768.0; FRAME], &mut chunk);
+            ring.push_chunk(&chunk);
         }
         let rule = wake_preroll_rule(midi.wake_preroll.as_ref(), &Shared::new(true), "ricardo");
         let n = preroll_chunks(rule, None);
         assert_eq!(n, 8);
-        let preroll = ring.last(n);
+        let preroll = ring.tail(n);
         assert_eq!(preroll.len(), n * FRAME);
         assert_eq!(preroll.len() / 16, 256, "milliseconds at 16 kHz");
         // Oldest first, ending with the chunk that confirmed the word.
@@ -1350,9 +1090,9 @@ mod tests {
             None,
         );
         assert_eq!(n, 0);
-        let mut ring = PrerollRing::new(PREROLL_SAMPLES / 512, 512);
-        ring.push(&[0.5; 512]);
-        assert!(ring.last(n).is_empty());
+        let mut ring = Ring::new(512, PREROLL_SAMPLES);
+        ring.push_chunk(&[16384; 512]);
+        assert!(ring.tail(n).is_empty());
         // `wake_pending` holds the stream open regardless of the pre-roll switch: the owner
         // raises it for every Wake and lowers it once after `set_streaming`.
         shared.wake_pending.fetch_add(1, Relaxed);
@@ -1414,62 +1154,7 @@ mod tests {
         assert_eq!(spk, [32767.0 / 32768.0, 14.0 / 32768.0]);
     }
 
-    #[test]
-    fn fifo_takes_whole_chunks_in_order() {
-        // 2 channels, chunks of 3 frames, at most 10 frames.
-        let mut f = Fifo::new(2, 3, 10);
-        let mut out = [0i16; 6];
-        assert!(!f.take_chunk(&mut out));
-        assert_eq!(f.push(&[1, 1, 2, 2]), None);
-        assert!(!f.has_chunk());
-        assert_eq!(f.push(&[3, 3, 4, 4]), None);
-        assert_eq!(f.frames(), 4);
-        assert!(f.take_chunk(&mut out));
-        assert_eq!(out, [1, 1, 2, 2, 3, 3]);
-        assert_eq!(f.frames(), 1);
-        // Wrong output size: nothing taken.
-        assert_eq!(f.push(&[5, 5, 6, 6]), None);
-        assert!(!f.take_chunk(&mut [0; 4]));
-        assert!(f.take_chunk(&mut out));
-        assert_eq!(out, [4, 4, 5, 5, 6, 6]);
-        assert_eq!(f.frames(), 0);
-    }
-
-    #[test]
-    fn fifo_drops_the_oldest_past_one_second() {
-        let mut f = Fifo::new(2, 3, 10);
-        let block: Vec<i16> = (0..16).collect();
-        assert_eq!(f.push(&block), None);
-        // 8 + 4 frames: 2 over the limit, the 2 oldest go.
-        let block: Vec<i16> = (16..24).collect();
-        assert_eq!(f.push(&block), Some(2));
-        assert_eq!(f.frames(), 10);
-        let mut out = [0i16; 6];
-        assert!(f.take_chunk(&mut out));
-        assert_eq!(out, [4, 5, 6, 7, 8, 9]);
-        // Exactly at the limit: nothing dropped.
-        let mut f = Fifo::new(2, 3, 10);
-        assert_eq!(f.push(&[0; 20]), None);
-    }
-
-    #[test]
-    fn fifo_drops_the_partial_chunk_after_an_error() {
-        let mut f = Fifo::new(1, 4, 100);
-        f.push(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        f.drop_partial();
-        assert_eq!(f.frames(), 8);
-        f.drop_partial();
-        assert_eq!(f.frames(), 8);
-        let mut out = [0i16; 4];
-        assert!(f.take_chunk(&mut out));
-        assert!(f.take_chunk(&mut out));
-        assert_eq!(out, [5, 6, 7, 8]);
-        f.push(&[11, 12]);
-        f.drop_partial();
-        assert_eq!(f.frames(), 0);
-    }
-
-    fn trace(rate: u32, failed: Option<(&'static str, i32)>) -> HwTrace {
+    fn trace(rate: u32, failed: Option<(HwStep, i32)>) -> HwTrace {
         let r = HwResult {
             rate,
             period_frames: 1536,
@@ -1491,28 +1176,28 @@ mod tests {
             Err(HwFail::Rate(44100))
         );
         assert_eq!(
-            hw_outcome(&trace(44100, Some(("apply", -5))), 48000),
+            hw_outcome(&trace(44100, Some((HwStep::Apply, -5))), 48000),
             Err(HwFail::Rate(44100))
         );
         assert_eq!(
-            hw_outcome(&trace(44100, Some(("channels", -22))), 48000),
-            Err(HwFail::Step("set_channels", -22))
+            hw_outcome(&trace(44100, Some((HwStep::Channels, -22))), 48000),
+            Err(HwFail::Step(HwStep::Channels, -22))
         );
         assert_eq!(
-            hw_outcome(&trace(48000, Some(("rate", -22))), 48000),
-            Err(HwFail::Step("set_rate_near", -22))
+            hw_outcome(&trace(48000, Some((HwStep::Rate, -22))), 48000),
+            Err(HwFail::Step(HwStep::Rate, -22))
         );
         assert_eq!(
-            hw_outcome(&trace(48000, Some(("buffer", -22))), 48000),
-            Err(HwFail::Step("set_buffer_size_near", -22))
+            hw_outcome(&trace(48000, Some((HwStep::Buffer, -22))), 48000),
+            Err(HwFail::Step(HwStep::Buffer, -22))
         );
         assert_eq!(
-            hw_outcome(&trace(48000, Some(("apply", -16))), 48000),
-            Err(HwFail::Step("snd_pcm_hw_params", -16))
+            hw_outcome(&trace(48000, Some((HwStep::Apply, -16))), 48000),
+            Err(HwFail::Step(HwStep::Apply, -16))
         );
         // Reading the sizes back was not a C++ step: the near values count.
         assert_eq!(
-            hw_outcome(&trace(48000, Some(("get period", -5))), 48000),
+            hw_outcome(&trace(48000, Some((HwStep::GetPeriod, -5))), 48000),
             Ok((1536, 12288))
         );
     }

@@ -6,15 +6,15 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-home-linux = { path = "../../../../../../packages/rust/home-linux" }
-
 libc = { workspace = true }
 libloading = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 pulsar-alsa = { path = "../pulsar-alsa" }
 pulsar-core = { path = "../pulsar-core" }
+pulsar-dsp = { path = "../pulsar-dsp" }
 pulsar-model = { path = "../pulsar-model" }
-ring = { workspace = true }
+pulsar-wake-events = { path = "../pulsar-wake-events" }
 tokio = { workspace = true }
 
 [build-dependencies]

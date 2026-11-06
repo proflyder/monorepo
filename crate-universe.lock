@@ -1,5 +1,5 @@
 {
-  "checksum": "14de946d61dc6a05ff54779d973acb6ae9e862e8c26b4f5669c34a0724fc186b",
+  "checksum": "57da017adf61c07a2fda0525ec02a8aaee5c18dbe2f537bbdff8f1f9d54f5ba2",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6935,12 +6935,6 @@
             "id": "cc 1.10.0",
             "target": "cc"
           }
-        ],
-        "link_deps": [
-          {
-            "id": "ring 0.17.14",
-            "target": "ring"
-          }
         ]
       },
       "common_attrs": {
@@ -6954,8 +6948,8 @@
             "target": "libloading"
           },
           {
-            "id": "ring 0.17.14",
-            "target": "ring"
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
           },
           {
             "id": "tokio 1.54.1",
@@ -7070,6 +7064,27 @@
         {
           "Library": {
             "crate_name": "pulsar_core",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
+    "pulsar-dsp 0.0.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_dsp",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-dsp",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_dsp",
             "crate_root": "src/lib.rs"
           }
         }
@@ -7462,6 +7477,57 @@
         {
           "Library": {
             "crate_name": "pulsar_update",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
+    "pulsar-wake-events 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "ring 0.17.14",
+            "target": "ring"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "time 0.3.55",
+            "target": "time"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_wake_events",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-wake-events",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_wake_events",
             "crate_root": "src/lib.rs"
           }
         }
@@ -9981,6 +10047,7 @@
           "formatting",
           "local-offset",
           "macros",
+          "parsing",
           "std"
         ],
         "deps": {
@@ -10130,7 +10197,8 @@
     "time-macros 0.2.32": {
       "common_attrs": {
         "crate_features": [
-          "formatting"
+          "formatting",
+          "parsing"
         ],
         "deps": [
           {
@@ -14208,6 +14276,7 @@
     "pulsar-audio 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-audio",
     "pulsar-clock 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-clock",
     "pulsar-core 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-core",
+    "pulsar-dsp 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-dsp",
     "pulsar-esphome 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-esphome",
     "pulsar-hw 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-hw",
     "pulsar-mdns 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-mdns",
@@ -14217,6 +14286,7 @@
     "pulsar-sendspin 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-sendspin",
     "pulsar-ui 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-ui",
     "pulsar-update 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-update",
+    "pulsar-wake-events 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-wake-events",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
     "ricardo-voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",
     "voice-contract 0.1.0": "packages/rust/voice-contract",

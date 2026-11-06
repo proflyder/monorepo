@@ -58,7 +58,8 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     };
     // Before the runtime, threads and any audio library: ALSA_CONFIG_PATH and libasound.
-    pulsar_alsa::init(&model.audio.playback);
+    model.audio.playback.apply_env();
+    pulsar_alsa::init(model.audio.playback.alsa_lib());
 
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()

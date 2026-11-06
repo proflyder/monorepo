@@ -50,7 +50,8 @@ fn run() -> u8 {
     let Some(m) = pulsar_model::detect_profile() else {
         return 1;
     };
-    pulsar_alsa::init(&m.audio.playback);
+    m.audio.playback.apply_env();
+    pulsar_alsa::init(m.audio.playback.alsa_lib());
     let spk_channels = std::env::var_os("SPK").map_or_else(
         || m.audio.capture.spk_channels.to_vec(),
         |s| parse_channels(&s.to_string_lossy()),

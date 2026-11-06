@@ -6,8 +6,8 @@
 
 use std::f64::consts::PI;
 
-use pulsar_audio::SpectrumAnalyzer;
 use pulsar_core::MusicFrame;
+use pulsar_dsp::SpectrumAnalyzer;
 
 const GOLDEN: &str = include_str!("golden/spectrum.txt");
 

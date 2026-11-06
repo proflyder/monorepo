@@ -1,20 +1,24 @@
 //! Wake-event recording for the Ricardo detector (contract v1): the audio windows of confirmed
 //! hits, near-misses and user-reported misses, their WAV + JSON sidecars, retention and stats.
 //!
-//! The audio processing thread (this crate's `frontend`) keeps the ring and the capture state
-//! ([`Capture`]) and hands finished buffers to one writer thread through a bounded channel
-//! (`try_send`: a stalled disk never blocks the microphone; the drop is counted). The writer owns
-//! all file I/O and the in-memory index; the controller reaches it through [`WakeEventsHandle`]
-//! for the dialog outcome and the «false alarm» label, and reaches the processing thread through
-//! `FrontendHandle::wake_missed` for the «miss» button.
+//! The audio processing thread keeps the ring and the capture state ([`Capture`]) and hands
+//! finished buffers to one writer thread through a bounded channel (`try_send`: a stalled disk
+//! never blocks the microphone; the drop is counted). The writer owns all file I/O and the
+//! in-memory index; the controller reaches it through [`WakeEventsHandle`] for the dialog outcome
+//! and the «false alarm» label, and the processing thread through its own handle for the «miss»
+//! button.
+#![deny(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
-mod capture;
-mod json;
+pub mod capture;
+pub mod contract;
 pub mod logic;
 mod writer;
 
-pub(crate) use capture::Capture;
-pub use logic::{Kind, Meta, Outcome, Stats, Thresholds};
+pub use capture::Capture;
+pub use contract::{Sidecar, Stats, Thresholds};
+pub use logic::{Kind, Meta, Outcome};
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,13 +29,23 @@ use std::thread::JoinHandle;
 use tracing::{error, info, warn};
 
 /// Ring of the detector's input stream: the 30 s of a miss plus the 3 s before a hit.
-pub(crate) const RING_MS: u32 = 31_000;
-pub(crate) const HIT_PRE_MS: u32 = 3000;
-pub(crate) const POST_MS: u32 = 1000;
-pub(crate) const MISS_MS: u32 = 30_000;
+pub const RING_MS: u32 = 31_000;
+pub const HIT_PRE_MS: u32 = 3000;
+pub const POST_MS: u32 = 1000;
+pub const MISS_MS: u32 = 30_000;
 
 /// Finished windows waiting for the writer thread.
 const JOB_QUEUE: usize = 8;
+
+/// Ошибка записи файла контракта: путь и причина, без потери контекста шага.
+#[derive(Debug, thiserror::Error)]
+pub enum WakeStoreError {
+    #[error("{path}: {source}")]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+}
 
 /// Where and for which build the events are recorded.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,7 +60,7 @@ pub struct WakeEventOptions {
 
 /// One finished window on its way to the writer thread.
 #[derive(Debug)]
-pub(crate) struct Recording {
+pub struct Recording {
     pub id: String,
     pub kind: Kind,
     pub utc_ms: i64,
@@ -59,11 +73,11 @@ pub(crate) struct Recording {
     pub label_source: Option<&'static str>,
 }
 
-pub(crate) enum Job {
+pub enum Job {
     Save(Box<Recording>),
 }
 
-enum Command {
+pub(crate) enum Command {
     /// The dialog started by this hit ended.
     Outcome {
         id: String,
@@ -76,7 +90,7 @@ enum Command {
 
 /// Counters of this run; the writer adds them to the loaded `stats.json`.
 #[derive(Default)]
-pub(crate) struct Counters {
+pub struct Counters {
     /// Audio actually fed to the detector (not muted, detector active).
     pub listening_ms: AtomicU64,
     /// The subset while the dry-run switch was on.
@@ -114,13 +128,13 @@ impl WakeEventsHandle {
 }
 
 /// What the processing thread needs to create and save windows.
-pub(crate) struct WakeInput {
+pub struct WakeInput {
     pub jobs: SyncSender<Job>,
     pub counters: Arc<Counters>,
     pub thresholds: Thresholds,
 }
 
-pub(crate) struct WakeEventsRuntime {
+pub struct WakeEventsRuntime {
     pub handle: WakeEventsHandle,
     pub thresholds: Thresholds,
     counters: Arc<Counters>,
@@ -130,7 +144,7 @@ pub(crate) struct WakeEventsRuntime {
 
 impl WakeEventsRuntime {
     /// A clone for the processing thread; None once the runtime is shutting down.
-    pub(crate) fn input(&self) -> Option<WakeInput> {
+    pub fn input(&self) -> Option<WakeInput> {
         Some(WakeInput {
             jobs: self.jobs.clone()?,
             counters: self.counters.clone(),
@@ -140,7 +154,7 @@ impl WakeEventsRuntime {
 
     /// Stops the writer after the processing thread has stopped and its sender is gone; the final
     /// `stats.json` is written on the way out.
-    pub(crate) fn shutdown(&mut self) {
+    pub fn shutdown(&mut self) {
         self.jobs = None;
         if let Some(t) = self.writer.take() {
             let _ = t.join();
@@ -149,20 +163,13 @@ impl WakeEventsRuntime {
 }
 
 /// Lower-case hex SHA-256.
-fn sha256_hex(data: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let digest = ring::digest::digest(&ring::digest::SHA256, data);
-    let mut out = String::with_capacity(64);
-    for b in digest.as_ref() {
-        out.push(char::from(HEX[usize::from(b >> 4)]));
-        out.push(char::from(HEX[usize::from(b & 15)]));
-    }
-    out
+pub fn sha256_hex(data: &[u8]) -> String {
+    hex::encode(ring::digest::digest(&ring::digest::SHA256, data).as_ref())
 }
 
 /// Starts the writer thread with the thresholds the detector was loaded with. None: the
 /// directory cannot be created (logged), so a run records nothing.
-pub(crate) fn start(
+pub fn start(
     opts: &WakeEventOptions,
     thresholds: Thresholds,
     from_manifest: bool,
@@ -217,4 +224,18 @@ pub(crate) fn start(
         jobs: Some(job_tx),
         writer: Some(writer),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sha256_is_lower_case_hex() {
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(sha256_hex(b"abc").len(), 64);
+    }
 }

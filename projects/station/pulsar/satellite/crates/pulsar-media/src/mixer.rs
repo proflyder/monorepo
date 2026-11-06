@@ -43,8 +43,8 @@ impl Mixer {
         }
         let ctl = match Ctl::open("hw:0") {
             Ok(ctl) => ctl,
-            Err(rc) => {
-                error!("mixer: snd_ctl_open hw:0: {}", pulsar_alsa::strerror(rc));
+            Err(e) => {
+                error!("mixer: snd_ctl_open hw:0: {e}");
                 return mixer;
             }
         };
@@ -98,8 +98,8 @@ impl Mixer {
         } else {
             to_raw(self.curve, self.volume)
         };
-        if let Err(rc) = ctl.write_integers(MASTER, &[raw, raw]) {
-            error!("mixer: write {raw}: {}", pulsar_alsa::strerror(rc));
+        if let Err(e) = ctl.write_integers(MASTER, &[raw, raw]) {
+            error!("mixer: write {raw}: {e}");
         } else {
             debug!(
                 "mixer: volume {:.2} muted={} -> raw {raw}",

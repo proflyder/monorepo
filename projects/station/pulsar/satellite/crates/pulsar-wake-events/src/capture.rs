@@ -3,6 +3,8 @@
 //! detector and the user-reported miss. Finished buffers leave through a bounded channel; this
 //! module never touches files and only allocates when an event starts or finishes.
 
+use pulsar_dsp::Ring;
+
 use super::logic::{self, Kind};
 use super::logic::{NEAR_AFTER_HIT_MS, NEAR_GAP_MS};
 use super::{HIT_PRE_MS, MISS_MS, POST_MS, RING_MS, Recording};
@@ -37,9 +39,7 @@ struct Pending {
 /// Ring and capture state of one processing thread.
 pub struct Capture {
     frame: usize,
-    ring: Vec<i16>,
-    next: usize,
-    filled: usize,
+    ring: Ring<i16>,
     seq: u64,
     /// Windowed means of the two chunks before the current one.
     prev: Option<f32>,
@@ -51,13 +51,11 @@ pub struct Capture {
 }
 
 impl Capture {
-    pub(crate) fn new(frame: usize, cutoff: f32) -> Self {
+    pub fn new(frame: usize, cutoff: f32) -> Self {
         let chunks = logic::chunks_for(u64::from(RING_MS), frame);
         Self {
             frame,
-            ring: vec![0; chunks * frame],
-            next: 0,
-            filled: 0,
+            ring: Ring::new(frame, chunks * frame),
             seq: 0,
             prev: None,
             prev2: None,
@@ -70,39 +68,17 @@ impl Capture {
 
     /// Recording switched off (or the detector stopped): pending windows are discarded, the ring
     /// must not keep the audio either.
-    pub(crate) fn reset(&mut self) {
-        self.next = 0;
-        self.filled = 0;
+    pub fn reset(&mut self) {
+        self.ring.clear();
         self.prev = None;
         self.prev2 = None;
         self.pending.clear();
     }
 
-    fn ring_chunks(&self) -> usize {
-        self.ring.len() / self.frame.max(1)
-    }
-
     fn push_ring(&mut self, chunk: &[i16]) {
-        if chunk.len() != self.frame || self.frame == 0 || self.ring.is_empty() {
+        if !self.ring.push_chunk(chunk) {
             self.reset();
-            return;
         }
-        let at = self.next * self.frame;
-        self.ring[at..at + self.frame].copy_from_slice(chunk);
-        self.next = (self.next + 1) % self.ring_chunks();
-        self.filled = (self.filled + 1).min(self.ring_chunks());
-    }
-
-    /// The last `n` chunks, oldest first (at most as many as stored).
-    fn ring_last(&self, n: usize) -> Vec<i16> {
-        let n = n.min(self.filled);
-        let total = self.ring_chunks();
-        let mut out = Vec::with_capacity(n * self.frame);
-        for k in (1..=n).rev() {
-            let at = (self.next + total - k) % total * self.frame;
-            out.extend_from_slice(&self.ring[at..at + self.frame]);
-        }
-        out
     }
 
     fn id(&mut self, utc_ms: i64, kind: Kind) -> String {
@@ -113,7 +89,7 @@ impl Capture {
     /// One detector chunk. `mean` is this chunk's windowed probability (None while the detector
     /// window fills or warms up), `hit` the score of a confirmed detection. Call only while
     /// recording is on and the Ricardo detector is fed.
-    pub(crate) fn push(
+    pub fn push(
         &mut self,
         chunk: &[i16],
         mean: Option<f32>,
@@ -151,7 +127,9 @@ impl Capture {
                 post_ms: POST_MS,
                 score_peak: score,
                 dry_run,
-                samples: self.ring_last(logic::chunks_for(u64::from(HIT_PRE_MS), self.frame)),
+                samples: self
+                    .ring
+                    .tail(logic::chunks_for(u64::from(HIT_PRE_MS), self.frame)),
                 label: None,
                 label_source: None,
             };
@@ -187,8 +165,9 @@ impl Capture {
                 let id = self.id(utc_ms, Kind::Near);
                 // The peak is the previous chunk: the window ends there, and the current chunk
                 // is the first one after it.
-                let mut samples =
-                    self.ring_last(logic::chunks_for(u64::from(HIT_PRE_MS), self.frame) + 1);
+                let mut samples = self
+                    .ring
+                    .tail(logic::chunks_for(u64::from(HIT_PRE_MS), self.frame) + 1);
                 samples.truncate(samples.len().saturating_sub(self.frame));
                 // The falling chunk is the first one after the peak.
                 samples.extend_from_slice(chunk);
@@ -229,8 +208,8 @@ impl Capture {
     }
 
     /// «Wake: не услышала»: the last `MISS_MS` of the ring, no post-roll.
-    pub(crate) fn miss(&mut self, utc_ms: i64) -> Option<Recording> {
-        if self.filled == 0 {
+    pub fn miss(&mut self, utc_ms: i64) -> Option<Recording> {
+        if self.ring.filled_chunks() == 0 {
             return None;
         }
         Some(Recording {
@@ -241,7 +220,9 @@ impl Capture {
             post_ms: 0,
             score_peak: 0.0,
             dry_run: false,
-            samples: self.ring_last(logic::chunks_for(u64::from(MISS_MS), self.frame)),
+            samples: self
+                .ring
+                .tail(logic::chunks_for(u64::from(MISS_MS), self.frame)),
             label: Some("missed"),
             label_source: Some("user"),
         })

@@ -40,10 +40,7 @@ fn restore() {
     if let Some((ctl, raw)) = g.take() {
         match ctl.write_integers(MASTER, &raw) {
             Ok(()) => println!("mixer restored raw={raw:?}"),
-            Err(rc) => println!(
-                "mixer restore raw={raw:?} failed: {}",
-                pulsar_alsa::strerror(rc)
-            ),
+            Err(e) => println!("mixer restore raw={raw:?} failed: {e}"),
         }
     }
 }
@@ -253,7 +250,8 @@ fn main() -> ExitCode {
     let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::FAILURE;
     };
-    pulsar_alsa::init(&model.audio.playback);
+    model.audio.playback.apply_env();
+    pulsar_alsa::init(model.audio.playback.alsa_lib());
     // Test sounds only with the volume capped: without the control there is no cap.
     let mut mx = Mixer::open(&model.audio.playback, &model.volume);
     let software = model.volume.software_volume;

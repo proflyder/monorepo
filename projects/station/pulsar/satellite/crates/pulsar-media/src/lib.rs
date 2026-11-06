@@ -13,3 +13,19 @@ mod player;
 
 pub use mixer::Mixer;
 pub use player::{Channel, PlayId, PlayState, PlayerEvent, PlayerHandle, spawn};
+
+/// Узкая часть профиля модели для ALSA-фасада: затворы усилителя и «SPK mute».
+pub(crate) fn output_gates(playback: &pulsar_model::Playback) -> pulsar_alsa::OutputGates {
+    pulsar_alsa::OutputGates {
+        amp_enable_paths: playback.amp_enable_paths,
+        spk_mute_ctl: playback.spk_mute_ctl,
+    }
+}
+
+/// Входы `pulsar_alsa::open_playback` для PCM модели.
+pub(crate) fn playback_spec(playback: &pulsar_model::Playback) -> pulsar_alsa::PlaybackSpec {
+    pulsar_alsa::PlaybackSpec {
+        pcm: playback.pcm,
+        gates: output_gates(playback),
+    }
+}
