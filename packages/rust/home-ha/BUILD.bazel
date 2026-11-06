@@ -1,0 +1,40 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Shared Home Assistant REST client: state/script/service/template/ping.
+DEPS = [
+    "@crates//:reqwest",
+    "@crates//:rustls",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+    "//packages/rust/home-secret:home_secret",
+]
+
+rust_library(
+    name = "home_ha",
+    srcs = ["src/lib.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":home_ha",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        "@crates//:axum",
+        "@crates//:tokio",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

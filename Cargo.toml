@@ -78,6 +78,19 @@ tower = { version = "=0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "=0.6.11", default-features = false, features = ["limit", "timeout"] }
 http-body-util = "=0.1.5"
 tempfile = "=3.27.0"
+# ricardo.v1 over the official Connect runtime: `connectrpc` transports and
+# serves the protocol, `buffa` owns protobuf messages and protojson
+# (DECISIONS 41, spike #134). Only the client and JSON codec are needed by the
+# home services' executor/queue clients.
+connectrpc = { version = "=0.9.1", default-features = false, features = ["client", "json"] }
+buffa = { version = "=0.9.2", default-features = false, features = ["std", "json"] }
+buffa-types = { version = "=0.9.2", default-features = false, features = ["std", "json"] }
+# Used only by packages/rust/home-proto/generate.sh in its throwaway build
+# project; pinned here so the code generator cannot drift silently.
+connectrpc-build = "=0.9.0"
+# Exponential backoff of the shared worker loop; `tokio-sleep` keeps the retry
+# future async without pulling the blocking or wasm sleepers.
+backon = { version = "=1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
 hmac = "=0.13.0"
 sha2 = "=0.11.1"
 subtle = "=2.6.1"

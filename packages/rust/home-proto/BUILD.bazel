@@ -1,0 +1,64 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Generated ricardo.v1 Connect/buffa code plus the scheduler client. The
+# generated sources are checked in; there is deliberately no build.rs.
+DEPS = [
+    "@crates//:buffa",
+    "@crates//:connectrpc",
+    "@crates//:http",
+    "@crates//:serde",
+    "@crates//:thiserror",
+    "//packages/rust/home-secret:home_secret",
+]
+
+rust_library(
+    name = "home_proto",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    # The checked-in connectrpc/buffa output is machine-formatted and two
+    # megabytes long. `cargo fmt --all` covers the handwritten client via the
+    # module-level rustfmt skip; Bazel's per-file aspect would rewrite the
+    # generated files, so this crate opts out of that one check.
+    tags = ["no_rustfmt"],
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":home_proto",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    tags = ["no_rustfmt"],
+    deps = DEPS + [
+        "@crates//:axum",
+        "@crates//:serde_json",
+        "@crates//:tokio",
+    ],
+)
+
+# Starts the real Go scheduler from the source tree. Bazel's sandbox has no Go
+# toolchain, so this target is manual: run it with cargo (see the file header).
+rust_test(
+    name = "go_integration",
+    srcs = ["tests/go_scheduler.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    tags = ["manual"],
+    deps = [
+        ":home_proto",
+        "//packages/rust/home-secret:home_secret",
+        "@crates//:tempfile",
+        "@crates//:tokio",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
