@@ -7,8 +7,10 @@ LIB_DEPS = [
     "@crates//:anyhow",
     "@crates//:axum",
     "@crates//:clap",
+    "@crates//:reqwest",
     "@crates//:getrandom",
     "@crates//:rusqlite",
+    "@crates//:rustls",
     "@crates//:serde",
     "@crates//:serde_json",
     "@crates//:thiserror",
@@ -45,10 +47,7 @@ rust_binary(
     rustc_flags = ["-C", "strip=symbols"],
     edition = "2024",
     lint_config = ":workspace_lints",
-    deps = LIB_DEPS + [
-        "@crates//:reqwest",
-        ":wakegrant_lib",
-    ],
+    deps = LIB_DEPS + [":wakegrant_lib"],
 )
 
 rust_test(
