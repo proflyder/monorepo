@@ -1,5 +1,5 @@
 {
-  "checksum": "5448af3723f3108bd4bf1188268743eb51bb29eb553735d0f16f4ed54319868d",
+  "checksum": "36856656873829799701770aafa2122aad6066be7ce83cb8713016c236799788",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -1500,7 +1500,6 @@
     "connectrpc 0.9.1": {
       "common_attrs": {
         "crate_features": [
-          "client",
           "json"
         ],
         "deps": {
@@ -1532,14 +1531,6 @@
             {
               "id": "http-body-util 0.1.5",
               "target": "http_body_util"
-            },
-            {
-              "id": "hyper 1.12.0",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-util 0.1.21",
-              "target": "hyper_util"
             },
             {
               "id": "percent-encoding 2.3.2",
@@ -2749,39 +2740,6 @@
       ],
       "version": "0.1.15"
     },
-    "fnv 1.0.7": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "edition": "2015"
-      },
-      "library_target_name": "fnv",
-      "license": "Apache-2.0 / MIT",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "fnv",
-      "package_url": "https://github.com/servo/rust-fnv",
-      "repository": {
-        "Http": {
-          "sha256": "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1",
-          "url": "https://static.crates.io/crates/fnv/1.0.7/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fnv",
-            "crate_root": "lib.rs"
-          }
-        }
-      ],
-      "version": "1.0.7"
-    },
     "foldhash 0.1.5": {
       "common_attrs": {
         "crate_features": [
@@ -3677,80 +3635,6 @@
       ],
       "version": "0.4.3"
     },
-    "h2 0.4.20": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "atomic-waker 1.1.2",
-            "target": "atomic_waker"
-          },
-          {
-            "id": "bytes 1.12.1",
-            "target": "bytes"
-          },
-          {
-            "id": "fnv 1.0.7",
-            "target": "fnv"
-          },
-          {
-            "id": "futures-core 0.3.34",
-            "target": "futures_core"
-          },
-          {
-            "id": "futures-sink 0.3.34",
-            "target": "futures_sink"
-          },
-          {
-            "id": "http 1.5.0",
-            "target": "http"
-          },
-          {
-            "id": "indexmap 2.14.2",
-            "target": "indexmap"
-          },
-          {
-            "id": "slab 0.4.12",
-            "target": "slab"
-          },
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          },
-          {
-            "id": "tokio-util 0.7.20",
-            "target": "tokio_util"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          }
-        ],
-        "edition": "2021"
-      },
-      "library_target_name": "h2",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "h2",
-      "package_url": "https://github.com/hyperium/h2",
-      "repository": {
-        "Http": {
-          "sha256": "7d29020232d6aa3fb1daca64c1127cf662cf97f254ae16c18c05b8ab635fc118",
-          "url": "https://static.crates.io/crates/h2/0.4.20/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "h2",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.4.20"
-    },
     "hashbrown 0.15.5": {
       "common_attrs": {
         "crate_features": [
@@ -4235,6 +4119,14 @@
           {
             "id": "http 1.5.0",
             "target": "http"
+          },
+          {
+            "id": "reqwest 0.12.28",
+            "target": "reqwest"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
           },
           {
             "id": "serde 1.0.229",
@@ -4726,7 +4618,6 @@
           "client",
           "default",
           "http1",
-          "http2",
           "server"
         ],
         "deps": [
@@ -4739,16 +4630,8 @@
             "target": "bytes"
           },
           {
-            "id": "futures-channel 0.3.34",
-            "target": "futures_channel"
-          },
-          {
             "id": "futures-core 0.3.34",
             "target": "futures_core"
-          },
-          {
-            "id": "h2 0.4.20",
-            "target": "h2"
           },
           {
             "id": "http 1.5.0",
@@ -4885,7 +4768,6 @@
           "client-proxy",
           "default",
           "http1",
-          "http2",
           "server",
           "service",
           "tokio"
@@ -9038,7 +8920,6 @@
     "slab 0.4.12": {
       "common_attrs": {
         "crate_features": [
-          "default",
           "std"
         ],
         "edition": "2018"
@@ -10244,7 +10125,6 @@
           "codec",
           "default",
           "futures-util",
-          "io",
           "libc",
           "rt"
         ],

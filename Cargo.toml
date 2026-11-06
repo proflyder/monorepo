@@ -82,7 +82,10 @@ tempfile = "=3.27.0"
 # serves the protocol, `buffa` owns protobuf messages and protojson
 # (DECISIONS 41, spike #134). Only the client and JSON codec are needed by the
 # home services' executor/queue clients.
-connectrpc = { version = "=0.9.1", default-features = false, features = ["client", "json"] }
+# No `client` feature: it enables hyper/http2 workspace-wide (h2 in every
+# hyper user, +580 KB in the station firmware). home-proto implements the
+# client transport over the workspace reqwest (HTTP/1.1) instead.
+connectrpc = { version = "=0.9.1", default-features = false, features = ["json"] }
 buffa = { version = "=0.9.2", default-features = false, features = ["std", "json"] }
 buffa-types = { version = "=0.9.2", default-features = false, features = ["std", "json"] }
 # Used only by packages/rust/home-proto/generate.sh in its throwaway build

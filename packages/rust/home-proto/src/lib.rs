@@ -18,6 +18,8 @@
 
 pub mod generated;
 mod scheduler;
+mod transport;
 
 pub use generated::ricardo::v1;
 pub use scheduler::{SchedulerClient, SchedulerError};
+pub use transport::ReqwestTransport;

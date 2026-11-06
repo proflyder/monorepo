@@ -9,6 +9,8 @@ DEPS = [
     "@crates//:buffa",
     "@crates//:connectrpc",
     "@crates//:http",
+    "@crates//:reqwest",
+    "@crates//:rustls",
     "@crates//:serde",
     "@crates//:thiserror",
     "//packages/rust/home-secret:home_secret",

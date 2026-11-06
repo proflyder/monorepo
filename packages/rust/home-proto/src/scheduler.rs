@@ -8,11 +8,12 @@
 
 use std::time::Duration;
 
-use connectrpc::client::{ClientConfig, HttpClient};
+use connectrpc::client::ClientConfig;
 use connectrpc::{CodecFormat, ConnectError, ErrorCode, Protocol};
 use home_secret::Token;
 use http::Uri;
 
+use crate::transport::ReqwestTransport;
 use crate::v1::{
     AckEventRequest, AckOutcome, DueEvent, EnqueueTaskRequest, GetStatusRequest, GetStatusResponse,
     ListDueEventsRequest, SchedulerServiceClient,
@@ -27,6 +28,8 @@ const MAX_ACK_DETAIL: usize = 1024;
 pub enum SchedulerError {
     #[error("scheduler: invalid base URL")]
     InvalidUrl,
+    #[error("scheduler: cannot build the HTTP client")]
+    Transport,
     #[error("scheduler: {code:?}: {message}")]
     Rpc { code: ErrorCode, message: String },
 }
@@ -36,7 +39,7 @@ impl SchedulerError {
     #[must_use]
     pub fn is_transient(&self) -> bool {
         match self {
-            Self::InvalidUrl => false,
+            Self::InvalidUrl | Self::Transport => false,
             Self::Rpc { code, .. } => matches!(
                 code,
                 ErrorCode::Unavailable
@@ -59,7 +62,7 @@ impl SchedulerError {
 /// Thin typed scheduler client with a fixed bearer and timeout.
 #[derive(Clone)]
 pub struct SchedulerClient {
-    inner: SchedulerServiceClient<HttpClient>,
+    inner: SchedulerServiceClient<ReqwestTransport>,
     token: Token,
 }
 
@@ -85,13 +88,14 @@ impl SchedulerClient {
         if uri.scheme_str().is_none() || uri.authority().is_none() {
             return Err(SchedulerError::InvalidUrl);
         }
+        let transport = ReqwestTransport::plaintext().map_err(|_| SchedulerError::Transport)?;
         let config = ClientConfig::new(uri)
             .with_protocol(Protocol::Connect)
             .with_codec_format(CodecFormat::Json)
             .with_default_timeout(timeout)
             .with_default_header("authorization", format!("Bearer {}", token.expose()));
         Ok(Self {
-            inner: SchedulerServiceClient::new(HttpClient::plaintext(), config),
+            inner: SchedulerServiceClient::new(transport, config),
             token,
         })
     }
