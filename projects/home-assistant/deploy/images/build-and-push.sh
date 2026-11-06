@@ -160,7 +160,10 @@ for image in "$@"; do
         --cache-to "type=registry,ref=${REGISTRY}/hermes:buildcache,mode=max" \
         --push --tag "${REGISTRY}/hermes:${IMAGE_TAG}")
       if [[ "$IMAGE_TAG" != develop ]]; then
-        docker buildx imagetools create \
+        # --prefer-index=false: a single-platform manifest is tagged as is;
+        # by default imagetools wraps it in a new index, so :develop would
+        # report another digest than the one just built (run 42200112820).
+        docker buildx imagetools create --prefer-index=false \
           --tag "${REGISTRY}/hermes:develop" "${REGISTRY}/hermes@${digest}"
         moved=$(docker buildx imagetools inspect \
           --format '{{.Manifest.Digest}}' "${REGISTRY}/hermes:develop")
