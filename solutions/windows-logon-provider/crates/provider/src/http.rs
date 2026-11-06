@@ -9,7 +9,7 @@
 //! Only the argument construction is host-portable; the WinHTTP calls are
 //! behind `cfg(windows)`.
 
-use logon_protocol::ServiceEndpoint;
+use crate::config::ServiceEndpoint;
 
 use crate::wide::WideNul;
 
@@ -72,7 +72,7 @@ mod winhttp {
     use crate::bindings::Windows::Win32::System::SystemInformation::GetTickCount64;
     use windows_core::{PCWSTR, w};
 
-    use logon_protocol::ServiceEndpoint;
+    use crate::config::ServiceEndpoint;
 
     use super::{HttpOutcome, request_targets};
     use crate::wide::WideNul;
@@ -307,7 +307,7 @@ mod winhttp {
 #[cfg(test)]
 mod tests {
     use super::request_targets;
-    use logon_protocol::ServiceEndpoint;
+    use crate::config::ServiceEndpoint;
 
     fn endpoint(host: &str) -> ServiceEndpoint {
         ServiceEndpoint {

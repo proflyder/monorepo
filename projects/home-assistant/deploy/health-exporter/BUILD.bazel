@@ -1,4 +1,4 @@
-load("//solutions/voice-proxy:images.bzl", "service_image")
+load("//platform/bazel/oci:service_image.bzl", "service_image")
 
 package(default_visibility = ["//visibility:public"])
 

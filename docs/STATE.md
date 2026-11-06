@@ -435,7 +435,10 @@
   MAC и пользователь — только в HA secrets; настройка Windows —
   `projects/home/windows-pc/README.md`. Принято вживую 2026-11-03:
   выключение голосом с отменой, WoL из полного выключения, ограниченный SSH.
-- **Вход по пропуску (wakegrant).** `solutions/wakegrant` в K3s
+- **Вход по пропуску (wakegrant).** `solutions/wakegrant` — Rust-сервис
+  (решение 41, пилот): общий core-слой `packages/rust`, статический
+  `x86_64-unknown-linux-musl` бинарник на том же distroless-образе, Go-код
+  удалён; контракт и golden-фикстуры прежние. В K3s
   `home-assistant`: один под, SQLite на PVC `wakegrant-data`
   (`local-retain`), LAN NodePort `30130`, /healthz. `switch.komp.turn_on`
   сначала выдаёт одноразовый пропуск (`rest_command.wakegrant_issue`,

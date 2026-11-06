@@ -10,7 +10,8 @@ publish.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-logon_protocol = { path = "../protocol" }
+http = { workspace = true }
+wakegrant-protocol = { path = "../../../../packages/rust/wakegrant-protocol" }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
 

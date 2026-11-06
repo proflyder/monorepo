@@ -46,7 +46,7 @@ mod windows_impl {
         BOOL, GUID, HRESULT, Interface, PCWSTR, PWSTR, Ref, Result as WinResult, implement,
     };
 
-    use logon_protocol::Purpose;
+    use wakegrant_protocol::Purpose;
 
     use crate::config::{load_config, record_failed_logon};
     use crate::credential::{Credential, FIELD_COUNT, credential_field_descriptor_at};

@@ -1,0 +1,40 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Portable wakegrant messages (v1 and purpose-aware logon/unlock). No I/O and
+# no runtime: shared by the service and the Windows logon provider.
+rust_library(
+    name = "wakegrant_protocol",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = [
+        "@crates//:base64",
+        "@crates//:hmac",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:sha2",
+        "@crates//:subtle",
+        "@crates//:thiserror",
+        "@crates//:zeroize",
+        "//packages/rust/home-secret:home_secret",
+    ],
+)
+
+# The golden HMAC vectors from packages/contracts/wakegrant/PROTOCOL.md.
+rust_test(
+    name = "protocol_tests",
+    srcs = ["tests/protocol.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = [":wakegrant_protocol"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

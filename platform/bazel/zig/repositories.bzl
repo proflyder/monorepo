@@ -44,7 +44,7 @@ if [ "$subcommand" = "cc" ]; then
     esac
   done
 fi
-exec "$DIR/zig" "$subcommand" {args} "${argv[@]}"
+{musl_link}exec "$DIR/zig" "$subcommand" {args} "${argv[@]}"
 """
 
 # rules_rust drives the linker directly on windows-gnu targets and therefore
@@ -139,6 +139,13 @@ _WRAPPERS = [
     # Windows Credential Provider (solutions/windows-logon-provider). Zig's
     # x86_64-windows-gnu target uses mingw-w64/UCRT; the resulting PE imports
     # only system DLLs.
+    # Static musl service images (wakegrant). Fully static libc, no glibc.
+    ("x86_64_musl", "cc", "cc", "-target x86_64-linux-musl"),
+    ("x86_64_musl", "cpp", "c++", "-target x86_64-linux-musl -isystem \"$DIR/lib/libcxx/include\" -isystem \"$DIR/lib/libcxxabi/include\""),
+    ("x86_64_musl", "ar", "ar", ""),
+    ("x86_64_musl", "ranlib", "ranlib", ""),
+    ("x86_64_musl", "ld", "ld.lld", "-target x86_64-linux-musl"),
+    ("x86_64_musl", "objcopy", "objcopy", ""),
     ("windows_x86_64", "cc", "cc", "-target x86_64-windows-gnu"),
     ("windows_x86_64", "cpp", "c++", "-target x86_64-windows-gnu -isystem \"$DIR/lib/libcxx/include\" -isystem \"$DIR/lib/libcxxabi/include\""),
     ("windows_x86_64", "ar", "ar", ""),
@@ -150,11 +157,28 @@ _WRAPPERS = [
 def _generate_wrappers(ctx):
     for prefix, name, subcommand, args in _WRAPPERS:
         windows_args = _WINDOWS_ARGS if prefix == "windows_x86_64" else ""
+        # Rust's musl link line already carries the self-contained crt and
+        # libc, but zig's cc driver adds its own crt1.o, which duplicates
+        # `_start`. `-nostdlib` is only valid on a link, not on a compile
+        # (it would also drop zig's libc include paths).
+        musl_link = ""
+        if prefix == "x86_64_musl" and name in ("cc", "cpp"):
+            musl_link = """has_compile=0
+for arg in "${argv[@]}"; do
+  case "$arg" in
+    -c|-E|-S) has_compile=1 ;;
+  esac
+done
+if [ "$has_compile" = 0 ]; then
+  argv+=("-nostdlib")
+fi
+"""
         ctx.file(
             "tool_{}_{}".format(prefix, name),
             _WRAPPER.replace("{subcommand}", subcommand)
             .replace("{args}", args)
-            .replace("{windows_args}", windows_args),
+            .replace("{windows_args}", windows_args)
+            .replace("{musl_link}", musl_link),
             executable = True,
         )
     # `nm`/`gcov` are never on the code path we build (Rust and static C/C++),
@@ -182,6 +206,15 @@ constraint_setting(name = "station_setting")
 constraint_value(
     name = "station",
     constraint_setting = ":station_setting",
+)
+
+# Static musl services: only //platform/bazel/zig:x86_64_musl_linux carries
+# this value, so no host or glibc build can select the musl cc_toolchain.
+constraint_setting(name = "musl_setting")
+
+constraint_value(
+    name = "musl",
+    constraint_setting = ":musl_setting",
 )
 
 # Same idea for the Windows credential provider target: only
@@ -235,6 +268,19 @@ zig_cc_toolchain(
         "@platforms//os:linux",
         "@platforms//cpu:armv7",
         ":station",
+    ],
+)
+
+zig_cc_toolchain(
+    name = "x86_64_musl",
+    cpu = "x86_64_musl",
+    includes_arch = "x86_64",
+    libc = "musl",
+    sdk_root = "{sdk_root}",
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        ":musl",
     ],
 )
 

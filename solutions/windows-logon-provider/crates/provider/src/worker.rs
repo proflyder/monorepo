@@ -113,11 +113,10 @@ mod windows_impl {
     use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
 
-    use logon_protocol::{
-        ClaimOutcome, MachineSecret, Purpose, ServiceEndpoint, challenge_request_json,
-        claim_mac_message_for_purpose, claim_request_json_for_purpose, endpoint_path,
-        hmac_sha256_b64, parse_challenge_response, parse_service_url, redact_service_url,
-        verify_claim_response_for_purpose,
+    use wakegrant_protocol::{
+        ClaimOutcome, MachineSecret, Purpose, challenge_request_json,
+        claim_mac_message_for_purpose, claim_request_json_for_purpose, hmac_sha256_b64,
+        parse_challenge_response, verify_claim_response_for_purpose,
     };
 
     use crate::bindings::Windows::Win32::Foundation::{CloseHandle, FreeLibrary, HMODULE};
@@ -127,7 +126,10 @@ mod windows_impl {
     use crate::bindings::Windows::Win32::System::Threading::{CreateThread, THREAD_CREATION_FLAGS};
     use windows_core::PCWSTR;
 
-    use crate::config::{Config, ConfigError, load_config, load_secret};
+    use crate::config::{
+        Config, ConfigError, ServiceEndpoint, endpoint_path, load_config, load_secret,
+        parse_service_url, redact_service_url,
+    };
     use crate::ffi_guard::guard;
     use crate::gate::Mode;
     use crate::http::{HttpOutcome, post_json, post_json_with_receive_timeout};

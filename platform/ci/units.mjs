@@ -238,8 +238,8 @@ export const config = {
 
     {
       id: "wakegrant",
-      platform: "go",
-      title: "solutions/wakegrant (one-time logon grants) + home deployment",
+      platform: "bazel",
+      title: "solutions/wakegrant (Rust one-time logon grants) + home deployment",
       paths: [
         "solutions/wakegrant/**",
         "projects/home/kubernetes/wakegrant/**",
@@ -260,11 +260,18 @@ export const config = {
         env_file: "wakegrant.env",
         externalsecrets: ["wakegrant"],
       },
-      go: {
-        module: ".",
-        packages: ["./solutions/wakegrant/..."],
-        race: true,
-        build: ["./solutions/wakegrant/cmd/wakegrant"],
+      // Rust service: host fmt/clippy/tests plus the static musl image. The
+      // protocol and shared core crates live in //packages/rust.
+      bazel: {
+        roots: ["//solutions/wakegrant", "//packages/rust"],
+        test_targets: [
+          "//solutions/wakegrant/crates/wakegrant:unit_tests",
+          "//solutions/wakegrant/crates/wakegrant:clippy",
+          "//solutions/wakegrant/crates/wakegrant:rustfmt",
+          "//packages/rust:clippy",
+          "//packages/rust:rustfmt",
+        ],
+        build_targets: ["//solutions/wakegrant/..."],
       },
     },
 
@@ -406,10 +413,14 @@ export const config = {
           "//projects/station/ble-gateway/crates/ble-gateway:ble_gateway_unit_tests",
           "//packages/rust:clippy",
           "//packages/rust:rustfmt",
+          "//packages/rust/home-config:unit_tests",
+          "//packages/rust/home-contracttest:unit_tests",
           "//packages/rust/home-http:unit_tests",
           "//packages/rust/home-runtime:unit_tests",
           "//packages/rust/home-secret:unit_tests",
+          "//packages/rust/home-sqlite:unit_tests",
           "//packages/rust/home-telemetry:unit_tests",
+          "//packages/rust/wakegrant-protocol:protocol_tests"
         ],
         build_targets: [
           "//projects/station/ble-gateway/...",

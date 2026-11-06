@@ -1,13 +1,18 @@
-load(":images.bzl", "service_image")
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 package(default_visibility = ["//visibility:public"])
 
-# One static linux/amd64 binary on the digest-pinned distroless base, built
-# hermetically without a Docker daemon.
-service_image(
+# Static x86_64-unknown-linux-musl binary (zig cc linker, bundled SQLite) on
+# the same digest-pinned distroless static base as the Go services.
+rust_service_image(
     name = "wakegrant",
-    binary = "//solutions/wakegrant/cmd/wakegrant",
+    crate_binary = "//solutions/wakegrant/crates/wakegrant:wakegrant",
     repo = "ghcr.io/proflyder/wakegrant",
+)
+
+filegroup(
+    name = "contract_fixtures",
+    srcs = glob(["testdata/contract/*.json"]),
 )
 
 filegroup(

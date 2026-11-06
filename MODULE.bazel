@@ -15,6 +15,7 @@ single_version_override(
     module_name = "rules_rust",
     patch_strip = 1,
     patches = [
+        "//platform/bazel/zig:rules_rust_musl_triples.patch",
         "//platform/bazel/windows:rules_rust_windows_gnu_triples.patch",
         "//platform/bazel/windows:rules_rust_windows_gnu_rustc.patch",
     ],
@@ -106,6 +107,12 @@ rust.toolchain(
             "-C",
             "embed-bitcode=yes",
         ],
+        # The zig cc driver owns the musl crt/libc; telling rustc not to add
+        # its self-contained copy avoids a duplicate `_start`.
+        "x86_64-unknown-linux-musl": [
+            "-C",
+            "link-self-contained=no",
+        ],
         "armv7-unknown-linux-gnueabihf": [
             "-C",
             "relocation-model=static",
@@ -127,6 +134,8 @@ rust.toolchain(
         # Windows credential provider (solutions/windows-logon-provider); the
         # platform that selects it is //platform/bazel/windows:x86_64_windows.
         "x86_64-pc-windows-gnu",
+        # Static service images (wakegrant and the other home services).
+        "x86_64-unknown-linux-musl",
     ],
     versions = ["1.99.1"],
 )
@@ -223,6 +232,7 @@ register_toolchains(
     "@zig_0_14_1//:aarch64_toolchain",
     "@zig_0_14_1//:armhf_toolchain",
     "@zig_0_14_1//:windows_x86_64_toolchain",
+    "@zig_0_14_1//:x86_64_musl_toolchain",
 )
 
 # External crates of the single first-party Cargo workspace (/Cargo.toml).
@@ -244,6 +254,7 @@ crate.from_cargo(
         "x86_64-apple-darwin",
         "x86_64-pc-windows-gnu",
         "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
     ],
 )
 use_repo(crate, "crates")

@@ -93,10 +93,21 @@ pub enum LogTarget {
     File(PathBuf),
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LogFormat {
+    /// Human-readable line with the local timestamp (station daemons).
+    #[default]
+    Text,
+    /// One JSON object per event, in the spirit of the Go `slog` JSON handler:
+    /// `timestamp`, `level`, `fields` and the message.
+    Json,
+}
+
 pub struct TelemetryBuilder {
     level: LevelFilter,
     target: LogTarget,
     offset: UtcOffset,
+    format: LogFormat,
     default_layer: bool,
     layers: Vec<Box<dyn Layer<Registry> + Send + Sync>>,
 }
@@ -114,6 +125,7 @@ impl TelemetryBuilder {
             level: LevelFilter::INFO,
             target: LogTarget::Stderr,
             offset: local_offset(),
+            format: LogFormat::Text,
             default_layer: true,
             layers: Vec::new(),
         }
@@ -146,6 +158,19 @@ impl TelemetryBuilder {
     pub fn with_local_offset(mut self, offset: UtcOffset) -> Self {
         self.offset = offset;
         self
+    }
+
+    /// Select the line format; JSON matches the home services' log contract.
+    #[must_use]
+    pub fn with_format(mut self, format: LogFormat) -> Self {
+        self.format = format;
+        self
+    }
+
+    /// Shorthand for [`TelemetryBuilder::with_format`] with [`LogFormat::Json`].
+    #[must_use]
+    pub fn with_json(self) -> Self {
+        self.with_format(LogFormat::Json)
     }
 
     /// Drop the built-in `fmt` layer.
@@ -184,17 +209,32 @@ impl TelemetryBuilder {
                 )))
             }
         };
-        let fmt = tracing_subscriber::fmt::layer()
-            .with_timer(LocalTimer {
-                offset: self.offset,
-            })
-            .with_target(false)
-            .with_level(true)
-            .with_ansi(false)
-            .with_writer(sink);
+        let timer = LocalTimer {
+            offset: self.offset,
+        };
         let mut layers: Vec<Box<dyn Layer<Registry> + Send + Sync>> = vec![Box::new(self.level)];
         if self.default_layer {
-            layers.push(Box::new(fmt));
+            match self.format {
+                LogFormat::Text => {
+                    let fmt = tracing_subscriber::fmt::layer()
+                        .with_timer(timer)
+                        .with_target(false)
+                        .with_level(true)
+                        .with_ansi(false)
+                        .with_writer(sink);
+                    layers.push(Box::new(fmt));
+                }
+                LogFormat::Json => {
+                    let fmt = tracing_subscriber::fmt::layer()
+                        .json()
+                        .with_timer(timer)
+                        .with_target(false)
+                        .with_level(true)
+                        .with_ansi(false)
+                        .with_writer(sink);
+                    layers.push(Box::new(fmt));
+                }
+            }
         }
         layers.extend(self.layers);
         Ok(Registry::default().with(LayerSet(layers)))
@@ -364,6 +404,26 @@ mod tests {
         });
         assert_eq!(first.0.load(Ordering::SeqCst), 2);
         assert_eq!(second.0.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn json_format_is_one_object_per_event() {
+        let path = temp_path("json");
+        let subscriber = TelemetryBuilder::new()
+            .with_max_level(LevelFilter::INFO)
+            .with_json()
+            .with_file(&path)
+            .build()
+            .expect("build");
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(machine = "komp", outcome = "issued", "wakegrant");
+        });
+        let contents = std::fs::read_to_string(&path).expect("read log");
+        assert!(contents.contains("\"level\":\"INFO\""), "{contents}");
+        assert!(contents.contains("\"message\":\"wakegrant\""), "{contents}");
+        assert!(contents.contains("\"machine\":\"komp\""), "{contents}");
+        assert!(contents.trim_start().starts_with('{'), "{contents}");
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

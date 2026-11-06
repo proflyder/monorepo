@@ -1,5 +1,11 @@
 package(default_visibility = ["//visibility:public"])
 
+exports_files([
+    "repositories.bzl",
+    "rules_rust_musl_triples.patch",
+    "toolchain.bzl",
+])
+
 # Station cross-build targets. The matching cc_toolchain rules live in the
 # generated @zig_0_14_1 repository (platform/bazel/zig/repositories.bzl); these
 # platforms select them together with rules_rust's extra target triples.
@@ -13,6 +19,15 @@ platform(
 )
 
 platform(
+    name = "x86_64_musl_linux",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@zig_0_14_1//:musl",
+    ],
+)
+
+platform(
     name = "armhf_linux",
     constraint_values = [
         "@platforms//os:linux",
@@ -20,8 +35,3 @@ platform(
         "@zig_0_14_1//:station",
     ],
 )
-
-exports_files([
-    "repositories.bzl",
-    "toolchain.bzl",
-])

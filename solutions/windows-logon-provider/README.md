@@ -84,7 +84,7 @@ Service URL, имя машины и учётная запись задаёт п�
 
 | файл | назначение |
 |---|---|
-| `crates/protocol/` | переносимый слой: `serde`/`serde_json`, `base64`, HMAC-сообщения, проверка MAC, `http::Uri`-конфиг |
+| `packages/rust/wakegrant-protocol/` | переносимый слой (общий с сервисом): `serde`/`serde_json`, `base64`, HMAC-сообщения, проверка MAC; конфиг провайдера — `crates/provider/src/config.rs` |
 | `crates/provider/src/provider.rs` | `ICredentialProvider`, общее состояние `Session`, бюджет |
 | `crates/provider/src/gate.rs` | режим `logon`/`unlock`/`off` по WTS-сессии, аптайму и сценарию |
 | `crates/provider/src/credential.rs` | плитка, `GetSerialization`, `ReportResult`, `GetUserSid` |

@@ -59,6 +59,7 @@ All values come from the environment; secrets are files only.
 | `WAKE_GRANT_LISTEN` | `127.0.0.1:8099` | HTTP listen address |
 | `WAKE_GRANT_DB_PATH` | `wakegrant.db` | SQLite file (PVC in the home deployment) |
 | `WAKE_GRANT_ISSUER_TOKEN_FILE` | — (required) | issuer bearer token |
+| `WAKE_GRANT_ISSUER_TOKEN` | — | direct token value (wins over `_FILE`) |
 | `WAKE_GRANT_MACHINES_FILE` | — (required) | machine → key map |
 | `WAKE_GRANT_MAX_TTL_SECONDS` | `600` | operator cap inside 30..600 |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
@@ -87,20 +88,38 @@ decode to exactly 32 bytes; otherwise the process refuses to start.
 - Structured JSON logs contain only `machine`, `outcome` and `grantId`. Nonces,
   MACs, tokens and keys are never logged.
 
+## Implementation
+
+Rust, decision 41 pilot. Crates live in `crates/wakegrant`:
+
+| module | contents |
+|---|---|
+| `domain` | purposes, TTL/wait rules, nonce store, rate limiter, long-poll waiters; pure logic, time via the `Clock` trait |
+| `store` | SQL over `home-sqlite` (single writer, `UPDATE … RETURNING` consumption) |
+| `api` | axum routes, bearer via `home-http`, long-poll on `tokio::sync::Notify`, 4 KiB body limit, 40 s request timeout |
+| `config` | `clap`/`home-config`; the same environment names as the Go service |
+| `app` | composition root, `Supervisor` and the periodic grant cleanup |
+
+The binary is a static `x86_64-unknown-linux-musl` executable (zig C toolchain)
+on the same distroless static base, user and entrypoint as before. `-healthcheck`
+is preserved for the Deployment probe.
+
+The schema is Go version 2 (`schema_meta`): an existing PVC database opens in
+place and no table is recreated.
+
 ## Tests
 
 ```bash
-go test -race ./solutions/wakegrant/...
-bazel test //solutions/wakegrant/...
+cargo test -p wakegrant
+bazel test //solutions/wakegrant/... //packages/rust/...
 ```
 
-Covered: both PROTOCOL.md test vectors, full issue → challenge → claim flow,
-restart between grant and claim, nonce replay, wrong machine, expired grant,
-expired nonce, concurrent double claim, newest-grant-wins inside a purpose,
-logon/unlock isolation, v1 byte-compatibility without `purpose`, purpose
-migration of an existing database, long-poll wake-up and timeout, the waiter
-limit, bad bearer, bad MAC, rate limit, malformed JSON, TTL bounds and
-machines-file parsing.
+Covered: both PROTOCOL.md test vectors and all four golden HTTP fixtures
+(unchanged from the Go implementation), full issue → challenge → claim flow,
+store newest-grant/purpose isolation, an existing Go v2 database, nonce replay
+and expiry, rate limiting, waiter cap, domain TTL/wait bounds and machines-file
+parsing. The fixtures live in `testdata/contract/` and are replayed by
+`home-contracttest`; there is no `-update` mode on the Rust side.
 
 Deployment lives in
 [`projects/home/kubernetes/wakegrant`](../../projects/home/kubernetes/wakegrant).
