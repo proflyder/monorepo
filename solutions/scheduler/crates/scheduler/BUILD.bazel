@@ -4,10 +4,19 @@ load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rust_library", "rust_tes
 package(default_visibility = ["//visibility:public"])
 
 LIB_DEPS = [
+    "//packages/rust/home-proto:home_proto",
+    "//packages/rust/home-sqlite:home_sqlite",
+    "@crates//:axum",
+    "@crates//:connectrpc",
+    "@crates//:http",
     "@crates//:jiff",
+    "@crates//:rusqlite",
     "@crates//:serde_json",
     "@crates//:sha1_smol",
+    "@crates//:sha2",
+    "@crates//:subtle",
     "@crates//:thiserror",
+    "@crates//:tower",
     "@crates//:uuid",
 ]
 
@@ -38,6 +47,31 @@ rust_test(
     deps = LIB_DEPS,
 )
 
+rust_test(
+    name = "contract_tests",
+    srcs = ["tests/contract.rs"],
+    data = ["//solutions/scheduler/internal/api:contract_fixtures"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        ":scheduler_lib",
+        "//packages/rust/home-contracttest:home_contracttest",
+        "@crates//:tokio",
+    ],
+)
+
+rust_test(
+    name = "go_database_test",
+    srcs = ["tests/go_database.rs"],
+    data = ["//solutions/scheduler:go_database_dump"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        ":scheduler_lib",
+        "@crates//:tempfile",
+    ],
+)
+
 # Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
@@ -47,11 +81,19 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
-    targets = [":scheduler_lib"],
+    targets = [
+        ":scheduler_lib",
+        ":contract_tests",
+        ":go_database_test",
+    ],
 )
 
 # rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
-    targets = [":scheduler_lib"],
+    targets = [
+        ":scheduler_lib",
+        ":contract_tests",
+        ":go_database_test",
+    ],
 )

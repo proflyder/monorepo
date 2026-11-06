@@ -183,6 +183,7 @@ pub struct Event {
     pub label: String,
     pub payload_json: String,
     pub state: EventState,
+    pub lease_until_unix: i64,
     pub attempts: i32,
     pub snooze_seq: i64,
     pub detail: String,

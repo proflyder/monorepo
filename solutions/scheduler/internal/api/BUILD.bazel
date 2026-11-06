@@ -2,6 +2,13 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 package(default_visibility = ["//visibility:public"])
 
+# Golden HTTP fixtures stay owned by the Go tests; the Rust contract runner
+# reads them in place.
+filegroup(
+    name = "contract_fixtures",
+    srcs = glob(["testdata/contract/*.json"]),
+)
+
 go_library(
     name = "api",
     srcs = [
