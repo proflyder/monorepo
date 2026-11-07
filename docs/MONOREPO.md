@@ -81,15 +81,16 @@ Go-реализации `scheduler`, `alarm`, `ha-bridge` и `currency-bot` уд
 | Pulsar (станция) | Rust (`rules_rust`, Zig cross) | first-party форк upstream, сборка Bazel |
 | `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; члены общего корневого Cargo workspace, host-тесты и armhf-кросс через Bazel |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node из `mise.toml` (CI — `jdx/mise-action`), без pip; локально — `mise install` |
-| Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
+| Bazel-инструменты Android (`platform/android/tools`) | Kotlin/JVM (`rules_kotlin`, exec-конфигурация) | герметичные `kt_jvm_binary` в песочнице Bazel, тот же язык, что и Android-приложение; тесты — JUnit `kt_jvm_test` |
 | `platform/deploy` (`home-deploy`) и runtime health exporter | Go | все инструменты деплоя и in-cluster Job/экспортер — один distroless-бинарник, без Python в кластере (решение 35) |
 | задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
 | ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 
 Rust — для долгоживущих сервисов (решение 41), станции и тяжёлых вычислений,
-Go — для инструментов деплоя, CronJob/Job и Bazel-инструментов (решение 35),
-JavaScript — только для edge Worker, которому нужен runtime Cloudflare, а не
-общий backend-стек.
+Go — для инструментов деплоя, CronJob/Job и серверных Bazel-инструментов
+(решение 35), JavaScript — только для edge Worker, которому нужен runtime
+Cloudflare, а не общий backend-стек. Инструменты Android-сборки идут на языке
+Android-стека — Kotlin.
 Mobile не владеет расписанием и не заменяет серверные будильники.
 
 ## Bazel
@@ -109,8 +110,8 @@ go.mod             Go module для новых решений
 go.work            workspace корня и отслеживаемого BLE-модуля
 ```
 
-Инструменты Android-сборки в `platform/android/tools` — Go-программы
-(`go_binary` в exec-конфигурации), а их тесты — `go_test`; genrule'ы
+Инструменты Android-сборки в `platform/android/tools` — Kotlin/JVM-программы
+(`kt_jvm_binary` в exec-конфигурации), а их тесты — JUnit `kt_jvm_test`; genrule'ы
 ViewBinding/google-services и `android_lint` запускают их по `$(execpath)`, не
 требуя `python3` в песочнице. Python в Android-сборке не используется.
 

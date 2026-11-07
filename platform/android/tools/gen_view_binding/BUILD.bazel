@@ -1,21 +1,27 @@
-load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_binary", "kt_jvm_library", "kt_jvm_test")
 
 package(default_visibility = ["//visibility:public"])
 
-go_binary(
-    name = "gen_view_binding",
-    embed = [":gen_view_binding_lib"],
-)
-
-go_library(
+kt_jvm_library(
     name = "gen_view_binding_lib",
-    srcs = ["main.go"],
-    importpath = "github.com/proflyder/monorepo/platform/android/tools/gen_view_binding",
-    visibility = ["//visibility:private"],
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    kotlinc_opts = "//platform/android:jvm17_options",
 )
 
-go_test(
+kt_jvm_binary(
+    name = "gen_view_binding",
+    main_class = "dev.proflyder.home.tools.genviewbinding.MainKt",
+    kotlinc_opts = "//platform/android:jvm17_options",
+    runtime_deps = [":gen_view_binding_lib"],
+)
+
+kt_jvm_test(
     name = "gen_view_binding_test",
-    srcs = ["main_test.go"],
-    embed = [":gen_view_binding_lib"],
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    kotlinc_opts = "//platform/android:jvm17_options",
+    test_class = "dev.proflyder.home.tools.genviewbinding.GenViewBindingTest",
+    deps = [
+        ":gen_view_binding_lib",
+        "@maven//:junit_junit",
+    ],
 )
