@@ -11,7 +11,7 @@ kubeconfig, Terraform, Wi-Fi/BLE станции). Локальный `secrets/` 
 
 | Путь | Что | Почему |
 |---|---|---|
-| `secrets/README.md`, `secrets/catalog.json` | описание и карта «старый файл → путь#поле» | без значений; IP/MAC |
+| `docs/SECRETS.md`, `platform/workstation/catalog.json` | каталог путей OpenBao (в Git) | только имена, без значений |
 | `secrets/NETWORK.md` | реальные LAN IP, порты, VPN/HTTPS | карта сети |
 | `secrets/openbao/` | operator token, адрес, TOTP method id | постоянный KV-доступ агентов; recovery keys и seal key — только у владельца (Bitwarden `Home recovery`, Vaultwarden `openbao:bootstrap`) |
 | `~/.ssh/home-lab/` | ключ PVE/K3s/HAOS, Комп, VPS + known_hosts | рабочий SSH; копии в `secret/infra/ssh/*` |

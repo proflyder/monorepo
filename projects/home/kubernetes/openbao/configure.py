@@ -120,7 +120,7 @@ path "secret/metadata/k8s" {
   capabilities = ["list"]
 }
 # Owner workstation and infrastructure credentials (SSH keys, CAs, backup
-# passwords, admin kubeconfigs); catalogue — secrets/README.md on the Mac.
+# passwords, admin kubeconfigs); catalogue — platform/workstation/catalog.json.
 path "secret/data/infra/*" {
   capabilities = ["create", "read", "update", "patch"]
 }
@@ -156,7 +156,7 @@ path "secret/metadata/k8s" {
   capabilities = ["list"]
 }
 # Owner workstation and infrastructure credentials (SSH keys, CAs, backup
-# passwords, admin kubeconfigs); catalogue — secrets/README.md on the Mac.
+# passwords, admin kubeconfigs); catalogue — platform/workstation/catalog.json.
 path "secret/data/infra/*" {
   capabilities = ["create", "read", "update", "patch"]
 }

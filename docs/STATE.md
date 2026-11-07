@@ -151,6 +151,11 @@
   токена — `secret/k8s/vaultwarden/vaultwarden-admin` через ESO), egress только DNS,
   SQLite на PVC `vaultwarden-data` (`local-retain`), ежедневно в offsite.
   Файлы — `projects/home/kubernetes/vaultwarden/`.
+- Доступ с рабочих мест: у каждой машины свой periodic operator token
+  (`workstation-<host>`, политика `operator-kv`, `mise run secrets:login`);
+  каталог путей — `docs/SECRETS.md` (52 пути, `mise run secrets:check`).
+  Recovery keys и seal key на диске не хранятся — у владельца в Bitwarden и
+  Vaultwarden (`openbao:bootstrap`).
 
 ## CI/CD и образы
 
@@ -158,6 +163,11 @@
   платформенные reusable workflows (`.github/workflows/_*.yml`),
   обязательный итог — `ci-ok`. Прямой push в `develop` запрещён; `develop`
   обновляется только squash-merge PR.
+- Версии инструментов CI и рабочего места — один `mise.toml` (+ `mise.lock`
+  с sha256 linux-x64/macos-arm64): Python 3.13, Node 22, Go 1.27, Bazelisk,
+  gitleaks, actionlint, shellcheck, kubectl, helm, oras, bao, gh, protoc, bw.
+  CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
+  Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
 - `deploy-home` (push в `develop` = merge PR) деплоит только затронутые
   юниты параллельно: входит в VPN группой `ci`, затем OIDC в OpenBao,
   kubectl → K3s API `6443`, HTTPS → Traefik/OpenBao `443`. Режимы
@@ -306,7 +316,7 @@
   `button.iandeks_stantsiia_midi_wake_ne_uslyshala`,
   `switch.iandeks_stantsiia_midi_wake_zapis_sobytii`,
   `switch.iandeks_stantsiia_midi_wake_testovyi_rezhim_bez_otveta`.
-- SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/ricardo_station_ed25519` →
+- SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/home-lab/station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
 - Установленная модель wake word — кандидат v27
@@ -725,9 +735,9 @@
 
 ## Приватное / backups
 
-- `secrets/NETWORK.md` — реальные IP/порты; `secrets/README.md` — доступы.
-- `secrets/kubernetes-research/` — kubeconfig, private values, Grafana
-  password. Полные бэкапы хоста/VM на Mac не хранятся: их покрывают vzdump и
+- `secrets/NETWORK.md` — реальные IP/порты (из OpenBao `secret/infra/docs/network`).
+- Доступы, kubeconfig, private values, Grafana password — OpenBao
+  (`docs/SECRETS.md`), рабочее место — `docs/WORKSTATION.md`. Полные бэкапы хоста/VM на Mac не хранятся: их покрывают vzdump и
   offsite (ниже).
 - HA automatic encrypted backup включён: ежедневно 03:30, 3 копии, ~45 MB,
   агент `hassio.local`.
