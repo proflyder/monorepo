@@ -27,16 +27,16 @@ pub struct CheckResult {
     #[serde(default)]
     pub ok: bool,
     /// The check was not configured; it is never a failure.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub skipped: bool,
     /// Observed value, for example the unavailable entity count.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub value: String,
     /// Failure reason.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub error: String,
     /// Additional details, for example unavailable entity ids.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub details: Vec<String>,
 }
 
@@ -53,7 +53,7 @@ pub struct SignalDetail {
     /// Whether the signal fired.
     pub firing: bool,
     /// First sample value.
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_go_f64")]
     pub value: f64,
     /// Query error.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -134,6 +134,27 @@ pub struct StatusDetail {
     /// Errors that made the check partial.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+/// Serializes an `f64` the way Go's `encoding/json` does: a whole number has
+/// no `.0` suffix (`0`, `1`, `1.5`).
+pub fn serialize_go_f64<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if value.is_finite()
+        && value.fract() == 0.0
+        && *value >= i64::MIN as f64
+        && *value <= i64::MAX as f64
+        && *value >= 0.0
+    {
+        return serializer.serialize_i64(*value as i64);
+    }
+    serializer.serialize_f64(*value)
 }
 
 /// Renders one failed check without repeating its label.

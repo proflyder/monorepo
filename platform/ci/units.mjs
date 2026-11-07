@@ -389,13 +389,17 @@ export const config = {
     {
       id: "mcp-gateway-rust",
       platform: "bazel",
-      title: "solutions/mcp-gateway/crates + home-clients + home-telegram (Rust platform layer)",
+      title: "solutions/mcp-gateway/crates + shared MCP fixtures (Rust MCP layer)",
       paths: [
         "solutions/mcp-gateway/crates/**",
-        // The shared clients this PR added. They are under packages/rust/**,
+        // The frozen MCP fixtures are replayed against the Rust server.
+        "solutions/mcp-gateway/internal/**",
+        "solutions/mcp-gateway/testdata/**",
+        // The shared clients this unit consumes. They are under packages/rust/**,
         // which also selects ble-gateway, but only this unit runs their tests.
         "packages/rust/home-clients/**",
         "packages/rust/home-telegram/**",
+        "packages/rust/home-contracttest/**",
       ],
       bazel: {
         roots: ["//packages/rust", "//solutions/mcp-gateway"],
@@ -405,6 +409,9 @@ export const config = {
           "//packages/rust:clippy",
           "//packages/rust:rustfmt",
           "//solutions/mcp-gateway/crates/mcp-gateway:unit_tests",
+          "//solutions/mcp-gateway/crates/mcp-gateway:contract_tests",
+          "//solutions/mcp-gateway/crates/mcp-gateway:clippy",
+          "//solutions/mcp-gateway/crates/mcp-gateway:rustfmt",
         ],
         build_targets: [
           "//packages/rust/...",

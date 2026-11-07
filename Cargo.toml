@@ -56,6 +56,13 @@ caseless = "=0.2.2"
 # Incremental SSE decoding of the upstream response body.
 bytes = { version = "=1.12.1", default-features = false, features = ["std"] }
 futures-core = { version = "=0.3.34", default-features = false }
+# The MCP gateway tool groups box their async handlers behind `dyn ToolGroup`,
+# so they need the `BoxFuture` alias and `Stream` combinators.
+futures = { version = "=0.3.34", default-features = false, features = ["std", "async-await"] }
+# MCP server SDK (DECISIONS 41). Only the server and the Streamable HTTP
+# transport; no client, no rmcp `reqwest`, and no `hyper/http2` feature.
+rmcp = { version = "=3.9.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
+# Prometheus text exposition for `mcp_gateway_*` without a second HTTP stack.
 anyhow = "=1.0.104"
 clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "env", "help", "usage", "error-context"] }
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "tokio", "query"] }

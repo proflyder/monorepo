@@ -1,18 +1,32 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Pure domain (catalog, speech, redaction, alerts, status/report, state) plus
-# the Kubernetes REST and bb SSH bridge clients. The binary side of the gateway
-# (MCP transport, tool groups) is added in a later PR; this crate is a library
-# so the domain can be tested on its own against the shared golden vectors.
+# Kept in sync with [package].version in Cargo.toml. Bazel does not derive
+# env!("CARGO_PKG_VERSION"); without this the deployed binary reports 0.0.0.
+PACKAGE_VERSION = "0.1.0"
+
 DEPS = [
+    "//packages/rust/home-clients:home_clients",
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-http:home_http",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-telegram:home_telegram",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "@crates//:anyhow",
+    "@crates//:axum",
     "@crates//:base64",
+    "@crates//:futures",
     "@crates//:hmac",
+    "@crates//:http",
+    "@crates//:http-body-util",
     "@crates//:jiff",
+    "@crates//:prometheus-client",
     "@crates//:regex",
     "@crates//:reqwest",
+    "@crates//:rmcp",
     "@crates//:russh",
     "@crates//:rustls",
     "@crates//:serde",
@@ -22,28 +36,60 @@ DEPS = [
     "@crates//:thiserror",
     "@crates//:time",
     "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tower",
+    "@crates//:tracing",
 ]
 
 rust_library(
     name = "mcp_gateway",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "mcp_gateway",
     edition = "2024",
     lint_config = ":workspace_lints",
+    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
     deps = DEPS,
 )
 
+rust_binary(
+    name = "mcp-gateway",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    deps = DEPS + [":mcp_gateway"],
+)
+
+# The domain vectors are the port contract and are read from disk (from the
+# runfiles tree under Bazel, from the repository under cargo test).
 rust_test(
     name = "unit_tests",
     crate = ":mcp_gateway",
     edition = "2024",
     lint_config = ":workspace_lints",
-    # The domain vectors are the port contract and are read from disk (from the
-    # runfiles tree under Bazel, from the repository under cargo test).
-    data = ["//solutions/mcp-gateway/testdata:vectors"],
     deps = DEPS + [
-        "@crates//:axum",
         "@crates//:rand",
         "@crates//:tempfile",
+    ],
+    data = ["//solutions/mcp-gateway/testdata:vectors"],
+)
+
+rust_test(
+    name = "contract_tests",
+    srcs = ["tests/contract.rs"],
+    data = [
+        "//solutions/mcp-gateway/internal/server:contract_fixtures",
+        "//solutions/mcp-gateway/internal/tools:contract_fixtures",
+        "//solutions/mcp-gateway/testdata:vectors",
+    ],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        ":mcp_gateway",
+        "//packages/rust/home-contracttest:home_contracttest",
     ],
 )
 
@@ -51,4 +97,25 @@ extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",
     workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":mcp_gateway",
+        ":mcp-gateway",
+        ":unit_tests",
+        ":contract_tests",
+    ],
+)
+
+# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = [
+        ":mcp_gateway",
+        ":mcp-gateway",
+        ":unit_tests",
+        ":contract_tests",
+    ],
 )

@@ -55,11 +55,13 @@ impl Error {
 /// `contracttest.WithBeforeStep` (for example to advance a fake clock).
 type BeforeStep = Box<dyn Fn(&str, usize)>;
 type Normalizer = Box<dyn Fn(&str, &mut Value)>;
+type Skip = Box<dyn Fn(&str) -> bool>;
 
 #[derive(Default)]
 pub struct Options {
     before_step: Option<BeforeStep>,
     normalizer: Option<Normalizer>,
+    skip: Option<Skip>,
 }
 
 impl Options {
@@ -74,6 +76,14 @@ impl Options {
     #[must_use]
     pub fn with_normalizer(mut self, hook: impl Fn(&str, &mut Value) + 'static) -> Self {
         self.normalizer = Some(Box::new(hook));
+        self
+    }
+
+    /// Skip a scenario by name. Used when one fixture set contains scenarios
+    /// whose dependencies are implemented in a later change.
+    #[must_use]
+    pub fn with_skip(mut self, hook: impl Fn(&str) -> bool + 'static) -> Self {
+        self.skip = Some(Box::new(hook));
         self
     }
 }
@@ -113,6 +123,9 @@ where
             .and_then(Value::as_str)
             .ok_or_else(|| Error::new("<fixture>", 0, "fixture has no name"))?
             .to_owned();
+        if options.skip.as_ref().is_some_and(|skip| skip(&name)) {
+            continue;
+        }
         let steps = fixture
             .get("steps")
             .and_then(Value::as_array)
@@ -321,13 +334,21 @@ async fn replay_step(
         Value::String(text) => {
             let text = substitute_text(text, captures, scenario, number)?;
             if payload != text.as_bytes() {
+                let actual_text = String::from_utf8_lossy(payload);
+                let at = actual_text
+                    .bytes()
+                    .zip(text.bytes())
+                    .position(|(left, right)| left != right)
+                    .unwrap_or_else(|| actual_text.len().min(text.len()));
+                let start = at.saturating_sub(80);
+                let actual_slice: String = actual_text.chars().skip(start).take(200).collect();
+                let expected_slice: String = text.chars().skip(start).take(200).collect();
                 return Err(Error::new(
                     scenario,
                     number,
                     format!(
-                        "body {:?}, want {:?}",
-                        String::from_utf8_lossy(payload),
-                        text
+                        "body differs at byte {at}: actual {:?} want {:?}",
+                        actual_slice, expected_slice
                     ),
                 ));
             }
@@ -466,6 +487,26 @@ fn compare(
         }
         Value::String(text) => match actual {
             Value::String(actual) if actual == text => Ok(()),
+            Value::String(actual) => {
+                let at = actual
+                    .bytes()
+                    .zip(text.bytes())
+                    .position(|(left, right)| left != right)
+                    .unwrap_or_else(|| actual.len().min(text.len()));
+                let start = at.saturating_sub(60);
+                let actual_slice: String = actual.chars().skip(start).take(160).collect();
+                let expected_slice: String = text.chars().skip(start).take(160).collect();
+                Err(Error::new(
+                    scenario,
+                    step,
+                    format!(
+                        "{}: differs at byte {at}: actual {:?} want {:?}",
+                        display_path(path),
+                        actual_slice,
+                        expected_slice
+                    ),
+                ))
+            }
             _ => Err(Error::new(
                 scenario,
                 step,
