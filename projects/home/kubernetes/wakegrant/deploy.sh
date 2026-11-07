@@ -105,7 +105,7 @@ if $BUILD && [[ -z "${WAKE_GRANT_IMAGE:-}" ]]; then
   echo "== building the wakegrant image with Bazel"
   ( cd "$ROOT" && "$(bazel_bin)" build \
       //solutions/wakegrant:wakegrant_image \
-      --platforms=@rules_go//go/toolchain:linux_amd64 )
+      --platforms=//platform/bazel:linux_amd64 )
 fi
 
 IMAGE_REF=${WAKE_GRANT_IMAGE:-}
@@ -121,7 +121,7 @@ if [[ -z "$IMAGE_REF" ]]; then
   repo="${IMAGE_REGISTRY}/wakegrant"
   if [[ "$PUSH_IMAGES" == 1 ]]; then
     out=$( cd "$ROOT" && "$(bazel_bin)" run //solutions/wakegrant:wakegrant_push \
-      --platforms=@rules_go//go/toolchain:linux_amd64 \
+      --platforms=//platform/bazel:linux_amd64 \
       -- --repository "$repo" --tag "$IMAGE_TAG" 2>&1 ) || {
         printf '%s\n' "$out" >&2
         echo "pushing ${repo}:${IMAGE_TAG} failed" >&2

@@ -46,7 +46,7 @@ CONSUMER = "e2e-ha-bridge"
 POLL = 0.05
 # Deployment configuration must never leak into this hermetic test: a local
 # *_TOKEN_FILE, consumer allowlist, DB path or bridge queue would change what
-# is being exercised. Keep the normal process environment (PATH, Go caches,
+# is being exercised. Keep the normal process environment (PATH, cargo caches,
 # proxies, locale) and drop only scheduler/bridge/HA settings.
 CONFIG_PREFIXES = ("SCHEDULER_", "ALARM_", "BRIDGE_", "HA_")
 

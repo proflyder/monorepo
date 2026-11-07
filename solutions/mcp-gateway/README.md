@@ -342,7 +342,7 @@ bazel build //solutions/mcp-gateway:mcp-gateway_image
 
 Образ — статический `x86_64-unknown-linux-musl` бинарник на digest-pinned
 distroless static; `rust_service_image` сам применяет musl-переход, поэтому
-флаг `--platforms=@rules_go//...` не нужен.
+отдельный флаг `--platforms` не нужен.
 
 Тесты герметичны: фейковые HTTP-бэкенды для Prometheus, Alertmanager, Loki,
 Kubernetes REST и Telegram; сеть и кластер не используются. MCP-транспорт

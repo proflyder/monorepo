@@ -1,4 +1,4 @@
-# Currency bot: one static Go binary, one SQLite writer, one persistent volume.
+# Currency bot: one static Rust binary, one SQLite writer, one persistent volume.
 #
 # TEMPLATE. deploy.sh renders it with private values from an ignored env file
 # (or from the CI job's OpenBao-backed env); rendered manifests must never be

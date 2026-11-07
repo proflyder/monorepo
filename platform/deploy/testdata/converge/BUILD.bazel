@@ -1,8 +1,0 @@
-package(default_visibility = ["//visibility:public"])
-
-# Converge parity fixtures: manifests, live objects, the fake kubectl and the
-# traces recorded from converge.py before it was deleted.
-filegroup(
-    name = "converge",
-    srcs = glob(["**"]),
-)

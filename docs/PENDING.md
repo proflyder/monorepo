@@ -14,9 +14,6 @@
       исправить ~17 замечаний `//solutions/windows-logon-provider:clippy_windows`,
       поднять VERSION и проверить вход на компе.
 
-- [ ] **Мелочи Rust-сервисов.** `projects/home-assistant/deploy/README.md`
-      называет voice-proxy Go-сервисом.
-
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых
       на самом сервере bb; треды на Mac работают без него. Следующий шаг:
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким

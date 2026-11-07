@@ -205,7 +205,7 @@ bazel test //packages/rust/... //projects/station/ble-gateway/...
 
 `bazel test` запускает unit-тесты, `clippy` (warnings = errors) и `rustfmt`.
 Кросс-сборка использует тот же hermetic zig toolchain и Rust-тулчейн, что и
-Pulsar (`rules_rust` в корневом `MODULE.bazel`), поэтому отдельный Go- или
+Pulsar (`rules_rust` в корневом `MODULE.bazel`), поэтому отдельный
 rustup-тулчейн не нужен.
 
 Новый бинарник — armhf ELF. На станции: остановить gateway,

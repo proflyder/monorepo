@@ -1,15 +1,12 @@
 # platform/deploy
 
-Общие шаблоны развёртывания, `resolve.sh` и **legacy-реализация** CLI
-`home-deploy` на Go. Сам CLI с cutover собирается из Rust-крейта
-[`platform/deploy-rs`](../deploy-rs/README.md); Go-код оставлен в дереве до
-отдельного cleanup-PR, чтобы откат был обычным revert.
+Общие шаблоны развёртывания и `resolve.sh`. Сам CLI `home-deploy` — Rust-крейт
+[`platform/deploy-rs`](../deploy-rs/README.md); Go-реализация удалена, здесь
+остались только точка входа скриптов и общие Kubernetes-манифесты.
 
 ```text
-cmd/home-deploy/   Go CLI (legacy; исполняемый контракт — platform/deploy-rs)
-internal/*         Go-реализация тех же модулей (legacy)
-testdata/          golden-выходы, OCI-фикстуры и трассы converge (Go tests)
 resolve.sh         находит и запускает Rust-бинарник из deploy-скриптов
+kubernetes/        общие cluster-scoped манифесты (storage classes)
 ```
 
 ## Вызов
@@ -99,10 +96,10 @@ HA-writers отсутствуют или `off`, нет звонящего буд
 `ready=true`, endpoint HA указывает на этот scheduler.
 
 `render` отказывает на неизвестный/пустой placeholder и на оставшийся `${`,
-поэтому полу-отрендеренный манифест не попадает в кластер. Golden-тесты
-(`go test ./platform/deploy/...`) сравнивают вывод побайтно с эталонами
-в `testdata/golden/`; `oci` сравнивает
-байты архивов и digest с `testdata/oci/`.
+поэтому полу-отрендеренный манифест не попадает в кластер. Frozen-паритет
+(`bazel test //platform/deploy-rs:unit_tests //platform/deploy-rs:parity`)
+сравнивает вывод побайтно с эталонами в `platform/deploy-rs/testdata/frozen/`,
+включая байты OCI-архивов и digest.
 
 Образ `home-deploy` (`//projects/home/kubernetes/scheduler:home-deploy_image`,
 repo `ghcr.io/proflyder/home-deploy`) — тот же бинарник на distroless

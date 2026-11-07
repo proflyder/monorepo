@@ -30,7 +30,6 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(HERE, "../..");
 export const KNOWN_PLATFORMS = new Set([
-  "go",
   "android",
   "bazel",
   "python",
@@ -52,7 +51,7 @@ export const ROLLBACK_KINDS = new Set([
 // Suffixes/names that must be routed somewhere: compiled sources, tests, build
 // files and shell entry points.
 export const OWNED_SUFFIXES = [
-  ".go",
+  ".rs",
   ".py",
   ".kt",
   ".kts",
@@ -231,11 +230,7 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
         }
       }
     }
-    if (unit.platform === "go") {
-      if (!unit.goPackages.length) {
-        problems.push(`${prefix}: go unit without packages`);
-      }
-    } else if (unit.platform === "android" || unit.platform === "bazel") {
+    if (unit.platform === "android" || unit.platform === "bazel") {
       if (!unit.bazelRoots.length) {
         problems.push(`${prefix}: ${unit.platform} unit without bazel.roots`);
       }

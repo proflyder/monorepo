@@ -118,9 +118,6 @@ jobs:
   # no secrets and no VPN; it never runs on workflow_dispatch.
   #
   # Cache keys are derived by the actions themselves from their inputs:
-  #   * Go (mise.toml) + actions/cache, same key as `_go.yml`:
-  #     `go-<os>-<hash(go.sum, ble-gateway/go.sum)>` with restore-keys
-  #     `go-<os>-`, so a PR changing go.sum still restores the closest cache.
   #   * setup-bazel (same version/inputs as the PR jobs): keys are
   #     `setup-bazel-<cache-version>-<platform>-<arch>-<name>-<hash>`, with
   #     name `bazelisk` (hash of `.bazelversion`) and `repository` (hash of
@@ -129,8 +126,8 @@ jobs:
   #     PRs restore develop's cache. `bazel fetch` only populates the
   #     repository cache; it does not run tests or builds.
   #
-  # The actions/cache disk caches in `_android.yml` and the deploy-control job
-  # of `_go.yml` stay PR-local: their content is produced by an Android build /
+  # The actions/cache disk caches in `_android.yml` and `_deploy-control.yml`
+  # stay PR-local: their content is produced by an Android build or a
   # deploy-control run, which this job deliberately does not do.
   warm-caches:
     if: github.event_name == 'push'
@@ -141,36 +138,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      # Identical to `_go.yml`: Go from mise.toml and the same cache key, so the
-      # cache saved here on develop is what every Go PR job restores.
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
-        with:
-          version: 2026.11.3
-          install_args: "go"
-          cache: true
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'projects/station/ble-gateway/go.sum') }}
-          restore-keys: go-${{ runner.os }}-
-
-      - name: Download root modules
-        run: go mod download
-
-      - name: Build root module for the Go build cache
-        run: go build ./...
-
-      - name: Download ble-gateway modules
-        working-directory: projects/station/ble-gateway
-        run: go mod download
-
-      - name: Build ble-gateway for its own build cache
-        working-directory: projects/station/ble-gateway
-        run: go build ./...
-
       # The Android targets in `//projects/...` need the same SDK the Android
       # PR jobs install, otherwise fetching them would fail before the Maven
       # repositories are cached. No Android build or test runs here.
@@ -179,9 +146,9 @@ jobs:
       - name: Install Android SDK packages for repository fetching
         run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
 
-      # Identical inputs to `_android.yml`, `_images.yml`, `_go.yml`
-      # (deploy-control) and the `changes` job; explicit cache-save true writes
-      # the develop-side caches that PRs restore.
+      # Identical inputs to `_android.yml`, `_images.yml`, `_deploy-control.yml`
+      # and the `changes` job; explicit cache-save true writes the develop-side
+      # caches that PRs restore.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: "1.30.0"
@@ -192,9 +159,9 @@ jobs:
       - name: Populate the Bazel repository cache
         run: |
           set -euo pipefail
-          # Same target space as the PR jobs: Go tests/builds, container images
-          # from //projects/... and the Android/Kotlin targets that pull the
-          # Maven repositories. `fetch` resolves external repositories only.
+          # Same target space as the PR jobs: Rust tests/builds, container
+          # images from //projects/... and the Android/Kotlin targets that pull
+          # the Maven repositories. `fetch` resolves external repositories only.
           bazel fetch //solutions/... //packages/... //projects/...
 
   # Route the change onto deployable units. Unknown/zero `before`, or any

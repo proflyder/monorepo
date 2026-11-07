@@ -12,7 +12,7 @@ import * as checkUnits from "./check_units.mjs";
 
 test("check_units: tracked source/test files need an owner", () => {
   for (const owned of [
-    "solutions/x/main.go",
+    "solutions/x/main.rs",
     "platform/ci/affected.test.mjs",
     "projects/mobile/android/app/BUILD.bazel",
     "scripts/run.sh",
@@ -36,7 +36,7 @@ test("check_units: Kotlin Android build tools are routed to the android platform
 test("check_units: schema rejects duplicate ids and unknown platforms", () => {
   const config = new affected.Config({
     units: [
-      new affected.Unit({ id: "same", platform: "go", paths: ["a/**"], goPackages: ["./a/..."] }),
+      new affected.Unit({ id: "same", platform: "rust", paths: ["a/**"] }),
       new affected.Unit({ id: "same", platform: "rust", paths: ["b/**"] }),
     ],
     invalidations: [],
@@ -51,17 +51,16 @@ test("check_units: unowned tracked file is reported", () => {
     units: [new affected.Unit({ id: "u", platform: "quality", paths: ["owned/**"] })],
     invalidations: [],
   });
-  const problems = checkUnits.coverageProblems(config, ["owned/x.go", "stray/y.go"]);
+  const problems = checkUnits.coverageProblems(config, ["owned/x.rs", "stray/y.rs"]);
   assert.ok(problems[0].includes("1 tracked file(s)"));
-  assert.ok(problems.some((problem) => problem.includes("stray/y.go")));
+  assert.ok(problems.some((problem) => problem.includes("stray/y.rs")));
 });
 
 test("check_units: a mixed unit needs an explicit Bazel image map", () => {
   const base = {
     id: "mixed",
-    platform: "go",
+    platform: "quality",
     paths: ["solutions/x/**"],
-    goPackages: ["./solutions/x/..."],
     deployImages: ["a", "b"],
     deployWorkloads: ["w"],
     deployBuilder: "mixed",
@@ -161,7 +160,7 @@ test("check_units: jobs without registry writes need no login", () => {
       "jobs:",
       "  test:",
       "    steps:",
-      "      - run: go test ./...",
+      "      - run: cargo test",
       "",
     ].join("\n"),
   });
@@ -175,7 +174,7 @@ test("check_units: committed workflows log in before every registry write", () =
 test("check_units: committed unit map and tree pass", async () => {
   const result = await checkUnits.check([]);
   assert.deepEqual(result.problems, []);
-  assert.ok(checkUnits.formatSuccess(result.config).includes("go="));
+  assert.ok(checkUnits.formatSuccess(result.config).includes("bazel="));
 });
 
 test("check_units: rollback kinds are validated", () => {

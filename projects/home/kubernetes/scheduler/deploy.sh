@@ -12,7 +12,7 @@
 #
 # Images:
 #   * built hermetically with Bazel (`//projects/home/kubernetes/scheduler:*_image`)
-#     from the Go binaries and a digest-pinned distroless base;
+#     from the Rust binaries and a digest-pinned distroless base;
 #   * referenced by digest only (`ghcr.io/proflyder/<name>@sha256:...`), never by
 #     a moving tag, so a rollback is an exact image;
 #   * PUSH_IMAGES=1 pushes them to GHCR with `docker` (CI); otherwise they are
@@ -225,7 +225,7 @@ if $BUILD; then
     echo "== building container images with Bazel"
     ( cd "$ROOT" && "$(bazel_bin)" build \
         //projects/home/kubernetes/scheduler:images \
-        --platforms=@rules_go//go/toolchain:linux_amd64 )
+        --platforms=//platform/bazel:linux_amd64 )
   else
     echo "== all scheduler images are pre-resolved/prebuilt; skipping Bazel build"
   fi
@@ -236,7 +236,7 @@ push_tag() {
   local bin out pushed
   bin=$(bazel_bin)
   out=$( cd "$ROOT" && "$bin" run "//projects/home/kubernetes/scheduler:${name}_push" \
-    --platforms=@rules_go//go/toolchain:linux_amd64 \
+    --platforms=//platform/bazel:linux_amd64 \
     -- --repository "${IMAGE_REGISTRY}/${name}" --tag "$tag" 2>&1 ) || {
       printf '%s\n' "$out" >&2
       echo "pushing ${repo}:${tag} failed" >&2

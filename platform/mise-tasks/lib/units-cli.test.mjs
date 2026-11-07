@@ -45,18 +45,6 @@ const CONFIG = normalizeConfig({
       },
     },
     {
-      id: "platform-deploy",
-      platform: "go",
-      title: "platform/deploy",
-      paths: ["platform/deploy/**"],
-      go: {
-        module: ".",
-        packages: ["./platform/deploy/..."],
-        race: true,
-        build: ["./platform/deploy/cmd/home-deploy"],
-      },
-    },
-    {
       id: "ha-voice",
       platform: "python",
       title: "projects/home-assistant/ha-voice",
@@ -118,7 +106,7 @@ test("isDeployable follows deploy.images", () => {
 test("suggestIds finds typos and substrings", () => {
   const ids = units.map((unit) => unit.id);
   assert.deepEqual(suggestIds(ids, "protoo"), ["proto"]);
-  assert.ok(suggestIds(ids, "deploy").includes("platform-deploy"));
+  assert.ok(suggestIds(ids, "logon").includes("logon-provider"));
   assert.deepEqual(suggestIds(ids, "zzzzzzzz"), []);
 });
 
@@ -148,23 +136,6 @@ test("buildCommands rejects platforms without a build entry point", () => {
   assert.throws(() => buildCommands(byId("repository")), /mise run check/);
 });
 
-test("buildCommands builds Go binaries into GO_BUILD_DIR", () => {
-  process.env.GO_BUILD_DIR = "/tmp/unit-go-build";
-  try {
-    const [command] = buildCommands(byId("platform-deploy"));
-    assert.equal(command.command, "go");
-    assert.deepEqual(command.args, [
-      "build",
-      "-o",
-      `/tmp/unit-go-build${path.sep}`,
-      "./platform/deploy/cmd/home-deploy",
-    ]);
-    assert.equal(command.cwd, path.join(ROOT, "."));
-  } finally {
-    delete process.env.GO_BUILD_DIR;
-  }
-});
-
 test("testCommands mirrors the Bazel workflow, including --test_output=errors", () => {
   assert.deepEqual(testCommands(byId("proto"))[0].args, [
     "test",
@@ -190,18 +161,6 @@ test("testCommands honours BAZEL_TARGETS narrowed by CI", () => {
   } finally {
     delete process.env.BAZEL_TARGETS;
   }
-});
-
-test("testCommands mirrors the Go workflow: download, vet, test", () => {
-  const commands = testCommands(byId("platform-deploy"));
-  assert.equal(commands.length, 3);
-  assert.deepEqual(commands.map((command) => command.args), [
-    ["mod", "download"],
-    ["vet", "./platform/deploy/..."],
-    ["test", "-race", "./platform/deploy/..."],
-  ]);
-  assert.ok(commands.every((command) => command.command === "go"));
-  assert.ok(commands.every((command) => command.cwd === path.join(ROOT, ".")));
 });
 
 test("testCommands compiles and discovers Python suites", () => {
@@ -256,6 +215,6 @@ test("testCommands mirrors the quality workflow gates", () => {
 });
 
 test("unitHint names the platform command", () => {
-  assert.match(unitHint(byId("platform-deploy")), /go unit/);
+  assert.match(unitHint(byId("ha-voice")), /unittest discover/);
   assert.match(unitHint(byId("heartbeat")), /node --test/);
 });

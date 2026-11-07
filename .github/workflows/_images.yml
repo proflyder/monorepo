@@ -157,7 +157,7 @@ jobs:
             targets+=("${target_root}:${image}_image")
           done
           bazel build "${targets[@]}" \
-            --platforms=@rules_go//go/toolchain:linux_amd64
+            --platforms=//platform/bazel:linux_amd64
           for image in "${images[@]}"; do
             layout="bazel-bin/${package}/${image}_image"
             digest=$("$HOME_DEPLOY" oci digest "$layout")
@@ -279,7 +279,7 @@ jobs:
               fi
               package="${target_root#//}"
               bazel build "${target_root}:${image}_image" \
-                --platforms=@rules_go//go/toolchain:linux_amd64
+                --platforms=//platform/bazel:linux_amd64
               layout="bazel-bin/${package}/${image}_image"
               digest=$("$HOME_DEPLOY" oci digest "$layout")
               repo="ghcr.io/proflyder/${image}"
@@ -362,7 +362,7 @@ jobs:
           target_root="//projects/home/kubernetes/scheduler"
           package="${target_root#//}"
           bazel build "${target_root}:home-deploy_image" \
-            --platforms=@rules_go//go/toolchain:linux_amd64
+            --platforms=//platform/bazel:linux_amd64
           layout="bazel-bin/${package}/home-deploy_image"
           digest=$("$HOME_DEPLOY" oci digest "$layout")
           repo="ghcr.io/proflyder/home-deploy"

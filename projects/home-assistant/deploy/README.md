@@ -31,7 +31,7 @@ mcp/web. SQLite 3.53.4 собирается по checksum из Dockerfile тог
 revision; tini reaps дочерние процессы. Изменение источника требует нового image
 и проверки API + реального модельного запроса, а не одного TCP health.
 
-Voice proxy — Go-сервис `solutions/voice-proxy`, а не Dockerfile: образ
+Voice proxy — Rust-сервис `solutions/voice-proxy`, а не Dockerfile: образ
 собирается Bazel `rules_oci` из `//solutions/voice-proxy:voice-proxy_image`
 (distroless, без shell и python) и пушится байт-в-байт целью
 `//solutions/voice-proxy:voice-proxy_push`; `docker push` переписал бы
@@ -99,7 +99,7 @@ workloads:
 NetworkPolicy на него не действует; scheduler тоже не имеет ingress-policy,
 a egress к `mcp-gateway:8080`, `scheduler:8098` и HA `:8123` разрешён. Новых
 сетевых правил для очереди не требуется. Имена переменных и их defaults не
-менялись при переходе на Go, поэтому приватным values нужна только одна
+менялись при переходе на Rust, поэтому приватным values нужна только одна
 правка — readiness/liveness probe контейнера `voice-proxy`:
 
 ```yaml
@@ -142,7 +142,7 @@ backup. Выполнять только при остановленном gatewa
 
 ```bash
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
-go test -race ./platform/deploy/...
+bazel test //platform/deploy-rs/...
 cargo test -p health-exporter
 bazel test //projects/home-assistant/deploy/health-exporter/...
 cargo test -p voice-proxy

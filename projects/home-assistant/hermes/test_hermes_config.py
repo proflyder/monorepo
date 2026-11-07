@@ -169,11 +169,14 @@ class HermesConfigTests(unittest.TestCase):
         assert "agent" not in self.data or "personalities" not in self.data["agent"]
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         assert "Рикардо" in prompt
-        # The Go renderer wires that file into agent.personalities.voice.
-        renderer = (ROOT / "platform" / "deploy" / "internal" / "hermesconfig" /
-                    "hermesconfig.go").read_text()
-        assert "voice_prompt.txt" in renderer
+        # The Rust renderer (home-deploy hermes render-config) wires that file
+        # into agent.personalities.voice: the CLI defaults the path, the
+        # renderer sets the key.
+        src = ROOT / "platform" / "deploy-rs" / "src"
+        assert "voice_prompt.txt" in (src / "cli.rs").read_text()
+        renderer = (src / "hermesconfig.rs").read_text()
         assert "agent.personalities.voice" in renderer
+        assert 'personalities.set("voice"' in renderer
 
     def test_persona_is_ricardo_not_hermes(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()

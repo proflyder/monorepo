@@ -971,8 +971,7 @@ provenance; `deploy-home` проверяет тег и provenance:
 (если юнит не собирает его сам); job достаёт из промоутнутого образа
 бинарник `home-deploy` (`crane export`) и передаёт его скриптам через
 `HOME_DEPLOY`. Бинарник собирает `rust_service_image` из
-`//platform/deploy-rs:home-deploy`; Go-реализация остаётся в
-`platform/deploy/` только для revert до cleanup-PR.
+`//platform/deploy-rs:home-deploy`; Go-реализация удалена.
 
 Ручной `workflow_dispatch` (смена режима ha-bridge, `units=all`) выкатывает
 текущий `develop`, для которого у нетронутых последним PR юнитов нет

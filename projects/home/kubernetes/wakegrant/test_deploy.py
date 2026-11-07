@@ -3,7 +3,7 @@
 
 Hermetic: no cluster, no network, no secrets. deploy.sh is exercised with a
 stub kubectl that records calls and fails, so only the pre-cluster behaviour is
-asserted. The protocol itself is covered by the Go tests in solutions/wakegrant.
+asserted. The protocol itself is covered by the Rust tests in solutions/wakegrant.
 """
 from __future__ import annotations
 

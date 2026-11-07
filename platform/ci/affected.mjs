@@ -5,9 +5,6 @@
  * Routing is declarative for paths (`platform/ci/units.mjs`) and dependency
  * based for code:
  *
- *   go      - `go list -deps` of each unit's packages. A change in a shared
- *             package (for example `packages/proto`) selects every unit that
- *             imports it.
  *   android - reverse dependencies from the Bazel loading graph
  *             (`bazel query --output=xml`). Rule labels are mapped back to unit
  *             names by `bazel.roots`, so a change in `packages/kotlin` selects
@@ -32,7 +29,7 @@
  *
  *     platform/ci/affected.mjs --base origin/develop --head HEAD --format text
  *     platform/ci/affected.mjs --base "$BASE_SHA" --format github
- *     platform/ci/affected.mjs --changed-file solutions/x/y.go --format json
+ *     platform/ci/affected.mjs --changed-file solutions/x/src/lib.rs --format json
  *
  * Exit status is 0 unless the range cannot be resolved at all.
  */
@@ -47,7 +44,7 @@ import unitModule from "./units.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_UNITS = path.join(HERE, "units.mjs");
-export const PLATFORMS = ["go", "android", "bazel", "python", "js", "native", "quality"];
+export const PLATFORMS = ["android", "bazel", "python", "js", "native", "quality"];
 
 // --------------------------------------------------------------------------
 // Configuration
@@ -69,10 +66,6 @@ export class Unit {
         // Extra Android SDK packages a unit's Bazel actions need, beyond the
         // platform/build-tools baseline installed by `_android.yml`.
         bazelSdkPackages: [],
-        goModule: ".",
-        goPackages: [],
-        goBuild: [],
-        goRace: false,
         suites: [],
         compileDirs: [],
         // Python units whose suites exec the Rust deploy binary.
@@ -194,7 +187,6 @@ export function normalizeConfig(data, label = "units") {
   }
   const units = (data.units || []).map((raw) => {
     const bazel = raw.bazel || {};
-    const go = raw.go || {};
     const python = raw.python || {};
     const js = raw.js || {};
     const native = raw.native || {};
@@ -212,10 +204,6 @@ export function normalizeConfig(data, label = "units") {
       artifact: bazel.artifact ?? "",
       artifactName: bazel.artifact_name ?? "",
       bazelSdkPackages: list(bazel.sdk_packages),
-      goModule: go.module ?? ".",
-      goPackages: list(go.packages),
-      goBuild: list(go.build),
-      goRace: Boolean(go.race),
       suites: list(python.suites),
       compileDirs: list(python.compile),
       // The suite drives a deploy script that execs the Rust deploy binary; the
@@ -413,8 +401,8 @@ export const MODULE_BAZEL = "MODULE.bazel";
 export const MODULE_BAZEL_LOCK = "MODULE.bazel.lock";
 // Virtual changed paths for a scoped MODULE.bazel edit. `units.mjs` maps them
 // to the platforms whose build closure changed, so a Maven artifact bump does
-// not invalidate Go/Python/JS/native units and a Rust/zig toolchain bump does
-// not invalidate Android/Go/images.
+// not invalidate Rust/Python/JS/native units and a Rust/zig toolchain bump does
+// not invalidate Android/images.
 //
 //   #maven  - rules_jvm_external Maven extension -> android only.
 //   #native - rules_rust (toolchains, crate_universe), the zig cc toolchains,
@@ -436,7 +424,7 @@ export const BAZELRC = ".bazelrc";
 export const BAZELRC_CACHE = ".bazelrc#cache";
 
 // The station's target-only toolchain inputs. They change how the native
-// station/provider are cross-built, never the host Go/images/Android builds.
+// station/provider are cross-built, never the host Rust/images/Android builds.
 export const BAZEL_CONFIG_NATIVE = "platform/bazel#native";
 const NATIVE_BAZEL_CONFIG_DIRS = ["platform/bazel/zig/", "platform/bazel/windows/"];
 
@@ -755,7 +743,7 @@ export function moduleBazelScope(oldText, newText) {
    *            `single_version_override(module_name = "rules_rust", ...)` and the
    *            station's `_SENDSPIN_BAZEL` http_archive()s.
    *
-   * Everything else (any bazel_dep, go_deps, oci, python, rules_go, another
+   * Everything else (any bazel_dep, oci, python, another
    * extension, an unbalanced or unparseable file, a missing proxy) returns
    * null: the fail-safe direction is "run everything".
    */
@@ -984,23 +972,6 @@ function scopeChanges(changed, root, base, head) {
   return { changed: scoped, warnings };
 }
 
-
-// --------------------------------------------------------------------------
-// Go dependency closure
-// --------------------------------------------------------------------------
-export function goPackageDirs(root, unit) {
-  // Absolute directories of every package the unit compiles or imports.
-  const moduleDir = realpath(path.resolve(root, unit.goModule));
-  const result = run("go", ["list", "-deps", "-f", "{{.Dir}}", ...unit.goPackages], {
-    cwd: moduleDir,
-  });
-  if (result.error || result.status !== 0) {
-    const stderrLines = (result.stderr || result.error?.message || "").trim().split("\n");
-    const tail = stderrLines.slice(-1)[0] || "";
-    throw new Error(`go list failed for unit ${unit.id}: ${tail}`);
-  }
-  return new Set(result.stdout.split("\n").map((line) => line.trim()).filter(Boolean));
-}
 
 // --------------------------------------------------------------------------
 // Bazel loading graph
@@ -1346,46 +1317,6 @@ function routePlatforms(config, changed, root, invalidated, graph, graphLoader, 
   );
   const routes = {};
 
-  // --- go: dependency closure from the Go toolchain ---------------------
-  const goRoute = new PlatformRoute("go", "go-list");
-  const goUnits = config.byPlatform("go");
-  const goPatterns = goUnits.flatMap((unit) => unit.paths);
-  const goDirty =
-    invalidated.has(GLOBAL) ||
-    invalidated.has("go") ||
-    changed.some(
-      (item) =>
-        item.endsWith(".go") ||
-        item.endsWith("go.mod") ||
-        item.endsWith("go.sum") ||
-        item.endsWith("go.work") ||
-        pathMatches(item, goPatterns),
-    );
-  if (!goDirty) {
-    goRoute.mode = "paths";
-  } else if (invalidated.has(GLOBAL) || invalidated.has("go")) {
-    goRoute.mode = "all";
-    goRoute.units = [...goUnits];
-  } else {
-    for (const unit of goUnits) {
-      const matchedPaths = changed.some((item) => pathMatches(item, unit.paths));
-      let deps;
-      try {
-        deps = internals.goPackageDirs(root, unit);
-      } catch (error) {
-        goRoute.mode = "all";
-        goRoute.units = [...config.byPlatform("go")];
-        goRoute.warnings.push(`go list failed (${error.message}); running every go unit`);
-        break;
-      }
-      if (matchedPaths || [...changedDirs].some((directory) => deps.has(directory))) {
-        goRoute.units.push(unit);
-      }
-    }
-  }
-  goRoute.units = expandDependsOn(config, goRoute.units);
-  routes.go = goRoute;
-
   // --- android / bazel: Bazel reverse dependencies ----------------------
   // `android` is the JDK/SDK application platform; `bazel` is a generic
   // Linux Bazel unit (the Pulsar Rust workspace). Both route identically
@@ -1545,9 +1476,13 @@ export function route(
   const docsOnly =
     Boolean(changed.length) &&
     changed.every((item) => item.endsWith(".md") || item.endsWith(".mdx") || item.startsWith("docs/"));
-  const affectedGo = new Set(routes.go.units.map((unit) => unit.id));
+  const affectedIds = new Set(
+    Object.values(routes).flatMap((platformRoute) =>
+      platformRoute.units.map((unit) => unit.id),
+    ),
+  );
   const deployControl =
-    config.deployControlUnits.some((unit) => affectedGo.has(unit)) ||
+    config.deployControlUnits.some((unit) => affectedIds.has(unit)) ||
     changed.some((item) => pathMatches(item, config.deployControlPaths));
 
   for (const platformRoute of Object.values(routes)) {
@@ -1607,13 +1542,6 @@ export function nativePublishSelected(unit, changed) {
 
 export function matrixEntries(route_, config) {
   // Matrix payloads for the reusable platform workflows.
-  const go = route_.routes.go.units.map((unit) => ({
-    id: unit.id,
-    workdir: unit.goModule,
-    packages: space(unit.goPackages),
-    race: unit.goRace,
-    build_packages: space(unit.goBuild),
-  }));
   // Every android/kotlin target so the precise target step can see shared
   // libraries that belong to another unit than the application it builds.
   const androidRoots = [
@@ -1663,17 +1591,17 @@ export function matrixEntries(route_, config) {
     toolchain_sha256: unit.nativeToolchainSha256,
     toolchain_root: unit.nativeToolchainRoot,
   }));
-  return { go, android, bazel, python, js, native };
+  return { android, bazel, python, js, native };
 }
 
 export function deployEntries(route_, config) {
   /**
    * Deployable units selected by the same routing as CI.
    *
-   * A shared Go package change reaches every importer, so it also deploys every
-   * importer that declares a `deploy` block. Units without one (documentation,
-   * infrastructure, observability) never appear here, so `deploy-home` cannot
-   * roll them by accident.
+   * A shared Rust crate change reaches every importer through the Bazel
+   * loading graph, so it also deploys every importer that declares a `deploy`
+   * block. Units without one (documentation, infrastructure, observability)
+   * never appear here, so `deploy-home` cannot roll them by accident.
    */
   const selected = route_.deploySelected;
   const entries = [];
@@ -1869,7 +1797,6 @@ export function githubOutputs(computed) {
   const { result, entries, config } = computed;
   return {
     base_sha: result.base || "",
-    go_units: jsonDumps(entries.go),
     android_units: jsonDumps(entries.android),
     bazel_units: jsonDumps(entries.bazel),
     python_units: jsonDumps(entries.python),
@@ -1947,7 +1874,6 @@ export async function runGithubScript({ core, argv = [] }) {
 // Test seam: mutate these to simulate Git/toolchain failures without touching
 // module bindings (ES modules are immutable from the outside).
 export const internals = {
-  goPackageDirs,
   gitFileText,
   resolveBase,
   changedFiles,

@@ -23,7 +23,7 @@ solutions/               переиспользуемые решения
   bb-profiles/           плагин bb: изолированные профили
 
 packages/                общий код и контракты
-  proto/                 gRPC/protobuf (+ checked-in Go stubs)
+  proto/                 gRPC/protobuf (сгенерированные контракты)
 
 projects/                композиции и deployment
   station/               Pulsar/ADB/BLE/provisioning
@@ -81,33 +81,31 @@ Go-реализации `scheduler`, `alarm`, `ha-bridge` и `currency-bot` уд
 | `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; члены общего корневого Cargo workspace, host-тесты и armhf-кросс через Bazel |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node из `mise.toml` (CI — `jdx/mise-action`), без pip; локально — `mise install` |
 | Bazel-инструменты Android (`platform/android/tools`) | Kotlin/JVM (`rules_kotlin`, exec-конфигурация) | герметичные `kt_jvm_binary` в песочнице Bazel, тот же язык, что и Android-приложение; тесты — JUnit `kt_jvm_test` |
-| `platform/deploy-rs` (`home-deploy`) | Rust (`rules_rust`, static musl) | все инструменты деплоя и in-cluster Job — один distroless-бинарник, без Python в кластере; Go-дерево `platform/deploy` оставлено для revert до cleanup-PR |
+| `platform/deploy-rs` (`home-deploy`) | Rust (`rules_rust`, static musl) | все инструменты деплоя и in-cluster Job — один distroless-бинарник, без Python в кластере; `platform/deploy/resolve.sh` остаётся точкой входа скриптов |
 | runtime health exporter | Rust (`projects/home-assistant/deploy/health-exporter/crates/health-exporter`) | как остальные сервисы |
-| задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
+| задачи на хостах | shell / Python stdlib (короткая обвязка) или Rust-бинарник (большая логика) | Go в репозитории нет |
 | ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 
-Rust — для долгоживущих сервисов (решение 41), станции и тяжёлых вычислений,
-Go — для CronJob/Job и серверных Bazel-инструментов (решение 35); инструменты
-деплоя перенесены на Rust (`platform/deploy-rs`). JavaScript — только для edge
-Worker, которому нужен runtime Cloudflare, а не общий backend-стек. Инструменты Android-сборки идут на языке
-Android-стека — Kotlin.
+Rust — для сервисов, станции, CronJob/Job, инструментов деплоя
+(`platform/deploy-rs`) и серверных Bazel-инструментов. JavaScript — только для
+edge Worker, которому нужен runtime Cloudflare, а не общий backend-стек.
+Инструменты Android-сборки идут на языке Android-стека — Kotlin. В репозитории
+нет Go: языки — Rust, Kotlin, Python, JS/TS.
 Mobile не владеет расписанием и не заменяет серверные будильники.
 
 ## Bazel
 
 ```text
-MODULE.bazel       Bzlmod: rules_go, gazelle, rules_rust, rules_proto, Android
+MODULE.bazel       Bzlmod: rules_rust, rules_proto, rules_oci, Android
 MODULE.bazel.lock  зафиксированные зависимости
 .bazelversion      Bazel 9.3.1
 .bazelrc           cache/вывод
 .bazelignore       тяжёлые/чужие/legacy каталоги
-BUILD.bazel        //:gazelle
+BUILD.bazel        exports_files корня
 Cargo.toml         единый Cargo workspace всего first-party Rust
 Cargo.lock         единственный lockfile workspace (cargo)
 crate-universe.lock  generated Bazel lock для @crates
 rust-toolchain.toml  канал 1.99.1 и targets всех Rust-целей
-go.mod             Go module для новых решений
-go.work            workspace корня и отслеживаемого BLE-модуля
 ```
 
 Инструменты Android-сборки в `platform/android/tools` — Kotlin/JVM-программы
@@ -125,14 +123,15 @@ android (меняется Maven/APK-замыкание). Если меняютс
 "rules_rust")` и сторонние C/C++ станции через `_SENDSPIN_BAZEL`
 `http_archive` — путь становится `MODULE.bazel#native` (платформы `native` и
 `bazel`). Смешанный дифф даёт оба виртуальных пути. Остальные правки —
-`bazel_dep`, `go_deps`, `oci`, python — остаются глобальными. `.bazelrc`
+`bazel_dep`, `oci`, python — остаются глобальными. `.bazelrc`
 сужается до `.bazelrc#cache` (ни одной платформы), только если дифф меняет
 исключительно cache/output-флаги; `platform/bazel/zig/**` и
 `platform/bazel/windows/**` — только `native` (`platform/bazel#native`).
 Подробности и белый список флагов — `docs/TESTING.md`.
 
-Чистый checkout поддерживает `go test ./solutions/... ./packages/...` (Go-часть scheduler и ha-bridge удалена);
-Pulsar installer — Rust-крейт `projects/station/pulsar/installer`, проверяется Bazel-целями
+Чистый checkout проверяется `bazel test //solutions/... //packages/...`; Go в
+репозитории нет. Pulsar installer — Rust-крейт
+`projects/station/pulsar/installer`, проверяется Bazel-целями
 `//projects/station/pulsar/installer/...`.
 `mise run test` пропускает (`SKIP`) тесты, которым нужны игнорируемые локальные
 источники (см. `docs/TESTING.md`).
@@ -144,7 +143,6 @@ bazel build //solutions/scheduler/... //solutions/ha-bridge/... //packages/proto
 bazel test  //solutions/scheduler/... //solutions/ha-bridge/...
 
 bazel test //packages/...
-bazel run //:gazelle
 ```
 
 `projects/station/ble-gateway` — Rust-крейт `zbus`/`tokio` на `rules_rust`:
@@ -223,8 +221,8 @@ JSON/binary и gRPC-Web по HTTP/1.1; отдельного REST API нет. Rus
 - `solutions/ha-bridge`: executor adapter; арендует `queue=home`, вызывает HA
   scripts, подтверждает события. Не владеет расписанием.
 - `packages/go` удалён: общий golden-раннер контрактов живёт в
-  `packages/rust/home-contracttest`. Go-клиенты scheduler удалены вместе с
-  Go-сервером.
+  `packages/rust/home-contracttest`. Go-клиенты и серверы удалены вместе с
+  последним Go-кодом.
 - `solutions/bb-home-dispatcher` и `solutions/bb-profiles`: плагины bb, а не
   сервисы. Диспетчер ничего не знает о проектах, кроме ответов `profiles`;
   профиль и allowlist провайдеров/машин живут только в `profiles`, голосовой

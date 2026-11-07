@@ -119,10 +119,6 @@ export function findUnit(list, id) {
 /** How to exercise a unit that has no Bazel build targets. */
 export function unitHint(unit) {
   switch (unit.platform) {
-    case "go": {
-      const packages = unit.goPackages.length ? unit.goPackages.join(" ") : "./...";
-      return `go unit (${unit.goModule}): cd ${unit.goModule} && go test ${packages}`;
-    }
     case "python": {
       const parts = [
         ...unit.suites.map(
@@ -172,28 +168,11 @@ export function bazelTargets(unit, kind) {
 }
 
 /**
- * Commands that build a unit: Bazel targets, or the Go binaries a Go unit
- * declares (CI budgets them into $RUNNER_TEMP/gobuild).
+ * Commands that build a unit: its Bazel targets.
  */
 export function buildCommands(unit, root = ROOT) {
   if (unit === null) {
     return [{ command: "bazel", args: ["build", "//..."], cwd: root }];
-  }
-  if (unit.platform === "go") {
-    if (!unit.goBuild.length) {
-      throw new Error(
-        `unit '${unit.id}' declares no Go build packages.\n${unitHint(unit)}`,
-      );
-    }
-    const outdir = process.env.GO_BUILD_DIR || path.join(os.tmpdir(), "mise-go-build");
-    fs.mkdirSync(outdir, { recursive: true });
-    return [
-      {
-        command: "go",
-        args: ["build", "-o", `${outdir}${path.sep}`, ...unit.goBuild],
-        cwd: path.resolve(root, unit.goModule),
-      },
-    ];
   }
   if (!["bazel", "android"].includes(unit.platform)) {
     throw new Error(
@@ -223,8 +202,8 @@ function testFiles(root, directories, suffix) {
 
 /**
  * Commands that test a unit, mirroring the reusable platform workflow:
- * `bazel test`, `go mod download` + `go vet` + `go test [-race]`, Python
- * compile + unittest discovery (plus the Go deploy tool for deploy_tool
+ * `bazel test`, Python compile + unittest discovery (plus the Rust deploy
+ * tool for deploy_tool
  * units), `node --test`, or the native repository script.
  */
 export function testCommands(unit, root = ROOT) {
@@ -252,21 +231,6 @@ export function testCommands(unit, root = ROOT) {
           args: ["test", ...targets, "--test_output=errors"],
           cwd: root,
         },
-      ];
-    }
-    case "go": {
-      const packages = unit.goPackages.length ? unit.goPackages : ["./..."];
-      const testArgs = ["test"];
-      if (unit.goRace) {
-        testArgs.push("-race");
-      }
-      testArgs.push(...packages);
-      const cwd = path.resolve(root, unit.goModule);
-      // Same sequence as `_go.yml`: modules, vet, then the test binary.
-      return [
-        { command: "go", args: ["mod", "download"], cwd },
-        { command: "go", args: ["vet", ...packages], cwd },
-        { command: "go", args: testArgs, cwd },
       ];
     }
     case "python": {
@@ -420,7 +384,7 @@ const USAGE = `Usage: units-cli.mjs <command>
 
   units          list units: id, platform, title, deployable
   ids            print unit ids, one per line (completion)
-  build [unit]   bazel build //..., or one unit's Bazel targets / Go binaries
+  build [unit]   bazel build //..., or one unit's Bazel targets
   test [unit]    hermetic suite or one unit's CI test commands
 `;
 

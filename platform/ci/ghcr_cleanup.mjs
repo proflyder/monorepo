@@ -68,11 +68,10 @@ export const PROTECTED_TAGS = [
  * Digests that must never be deleted even though the retention window would
  * otherwise select them. `voice-proxy` → sha256:238e…fca9 is the last Python
  * voice-proxy image: the Hermes health-exporter container still runs from it
- * (pinned in private runtime values) until the exporter moves to Go
- * (docs/PENDING.md, "Решение 35"). Drop this entry when that migration lands.
+ * (pinned in private runtime values) until the exporter rollout lands.
+ * Digests a running workload still needs although no tag protects them, as
+ * { package, digest, reason }. Empty since the health exporter moved to Rust.
  */
-// Digests a running workload still needs although no tag protects them, as
-// { package, digest, reason }. Empty since the health exporter moved to Go.
 export const PROTECTED_DIGESTS = [];
 /**
  * Packages the policy never considers even if a future unit map lists them.
