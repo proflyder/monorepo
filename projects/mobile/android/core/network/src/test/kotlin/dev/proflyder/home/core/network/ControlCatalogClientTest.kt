@@ -7,6 +7,7 @@ import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.PowerState
@@ -133,6 +134,28 @@ class ControlCatalogClientTest {
         assertTrue((client().fetch() as Outcome.Failure).failure is RemoteFailure.ProtocolFailure)
         server.enqueue(MockResponse().setBody("not json"))
         assertTrue((client().fetch() as Outcome.Failure).failure is RemoteFailure.ProtocolFailure)
+    }
+
+    @Test
+    fun parsesOptionalDeviceGroupingWithSafeDefaults() {
+        val catalog = ControlJson.parseCatalog(
+            kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"statesOk":true,"entries":[
+                  {"id":"lamp","kind":"light","title":"Lamp","device_id":"dev.lamp","device":"Ceiling lamp","role":"primary","available":true},
+                  {"id":"lamp.night","kind":"switch","title":"Night light","device_id":"dev.lamp","device":"Ceiling lamp","role":"setting","available":true},
+                  {"id":"legacy","kind":"switch","title":"Legacy","available":true}]}""",
+            ),
+        )
+        val (lamp, night, legacy) = catalog.entries
+        assertEquals("dev.lamp", lamp.deviceId)
+        assertEquals("Ceiling lamp", lamp.device)
+        assertEquals(ControlRole.PRIMARY, lamp.role)
+        assertEquals("dev.lamp", night.deviceId)
+        assertEquals(ControlRole.SETTING, night.role)
+        // An older server omits the fields: every entry stays its own primary device.
+        assertEquals("", legacy.deviceId)
+        assertEquals("", legacy.device)
+        assertEquals(ControlRole.PRIMARY, legacy.role)
     }
 
     @Test

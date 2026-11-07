@@ -26,6 +26,13 @@ enum class ControlAction(val wire: String) {
 enum class PowerState { ON, OFF }
 
 /**
+ * Where an entry sits inside its device: [PRIMARY] entries are the controls
+ * shown on the device card, [SETTING] entries are secondary switches hidden
+ * behind "Settings (N)". Entries without a device are always primary.
+ */
+enum class ControlRole { PRIMARY, SETTING }
+
+/**
  * One scenario or device from the home control catalog. [id] is the catalog id
  * (not a Home Assistant entity id); [icon] is a free hint the UI may map to art.
  */
@@ -68,6 +75,15 @@ data class ControlEntry(
     val available: Boolean,
     /** Set for lights that can be adjusted beyond on/off. */
     val light: LightControls? = null,
+    /**
+     * Device this entry belongs to; empty when the server does not group
+     * entries (an older server), in which case the entry is its own device.
+     */
+    val deviceId: String = "",
+    /** Device name shown as the group title; empty when the entry has no device. */
+    val device: String = "",
+    /** Primary control or a secondary setting of [deviceId]. */
+    val role: ControlRole = ControlRole.PRIMARY,
 ) {
     val isDevice: Boolean get() = kind == ControlKind.LIGHT || kind == ControlKind.SWITCH
 

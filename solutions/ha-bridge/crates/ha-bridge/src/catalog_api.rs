@@ -25,6 +25,18 @@ use crate::discovery::CatalogSource;
 const CACHE_CONTROL: &str = "no-store";
 
 /// One catalog entry on the wire.
+///
+/// `device_id`, `device` and `role` are additive: an older server never sends
+/// them, an older client ignores them, and they are omitted while empty (the
+/// Home Assistant device registry could not be read). `role` is `"primary"` or
+/// `"setting"`; a setting is a `config`/`diagnostic` entity of the device, or a
+/// switch next to the device's light.
+///
+/// A future device-level action (for example "speak this text on the speaker"
+/// or "call the speaker") is expected to appear as an entry with
+/// `kind: "action"`, the same `device_id`/`device` as its device, a
+/// human-readable `title`, and its own allowlisted action name; commands keep
+/// travelling as `{"entry", "action"}` tasks, so this shape stays additive.
 #[derive(Debug, Serialize)]
 struct EntryView {
     id: String,
@@ -34,6 +46,12 @@ struct EntryView {
     room: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     icon: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    device_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    device: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    role: String,
     actions: Vec<&'static str>,
     #[serde(skip_serializing_if = "String::is_empty")]
     state: String,
@@ -155,6 +173,9 @@ impl EntryView {
             title: entry.title.clone(),
             room: entry.room.clone(),
             icon: entry.icon.clone(),
+            device_id: entry.device_id.clone(),
+            device: entry.device.clone(),
+            role: entry.role.clone(),
             actions: entry.actions(),
             state: entry.state.clone(),
             available: entry.available,
@@ -317,5 +338,41 @@ mod tests {
     fn source_is_read_only_and_states_ok_is_carried() {
         let snapshot = source(false);
         let _ = snapshot;
+    }
+
+    #[test]
+    fn device_fields_are_additive_and_omitted_when_empty() {
+        let entries = build(
+            &[
+                Raw {
+                    entity: "light.lamp".to_owned(),
+                    state: "on".to_owned(),
+                    name: "Светильник  Light".to_owned(),
+                    device_id: "dev-1".to_owned(),
+                    device: "Светильник".to_owned(),
+                    role: "primary".to_owned(),
+                    ..Raw::default()
+                },
+                Raw {
+                    entity: "scene.movie".to_owned(),
+                    state: "x".to_owned(),
+                    name: "Movie".to_owned(),
+                    ..Raw::default()
+                },
+            ],
+            &Rules {
+                scenario_label: "scenario".to_owned(),
+                profile_label: "voice_profile".to_owned(),
+                exclude: Vec::new(),
+            },
+        );
+        let body = catalog_body(&Catalog::new(entries), true);
+        assert!(body.contains("\"id\":\"light.lamp\""), "{body}");
+        assert!(body.contains("\"title\":\"Light\""), "{body}");
+        assert!(body.contains("\"device_id\":\"dev-1\""), "{body}");
+        assert!(body.contains("\"device\":\"Светильник\""), "{body}");
+        assert!(body.contains("\"role\":\"primary\""), "{body}");
+        assert_eq!(body.matches("\"device_id\"").count(), 1, "{body}");
+        assert_eq!(body.matches("\"role\"").count(), 1, "{body}");
     }
 }

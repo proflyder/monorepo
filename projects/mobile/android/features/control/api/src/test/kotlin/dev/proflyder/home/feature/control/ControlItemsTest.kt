@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.control
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,15 +26,22 @@ class ControlItemsTest {
         room: String = "",
         power: PowerState? = null,
         available: Boolean = true,
+        title: String = id,
+        deviceId: String = "",
+        device: String = "",
+        role: ControlRole = ControlRole.PRIMARY,
     ) = ControlEntry(
         id = id,
         kind = kind,
-        title = id,
+        title = title,
         room = room,
         icon = "",
         actions = if (kind == ControlKind.SCENARIO) setOf(ControlAction.RUN) else setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
         power = power,
         available = available,
+        deviceId = deviceId,
+        device = device,
+        role = role,
     )
 
     private val sample = listOf(
@@ -50,7 +58,8 @@ class ControlItemsTest {
         filter: ControlFilter = ControlFilter.All,
         pending: Set<String> = emptySet(),
         statesOk: Boolean = true,
-    ) = ControlItems.build(entries, pending, statesOk, filter, texts)
+        expandedDevices: Set<String> = emptySet(),
+    ) = ControlItems.build(entries, pending, statesOk, filter, texts, expandedDevices)
 
     private fun List<ControlItem>.describe(): List<String> = map {
         when (it) {
@@ -58,6 +67,10 @@ class ControlItemsTest {
             is ControlItem.Profile -> "P ${it.entry.id}"
             is ControlItem.Scenario -> "S ${it.entry.id}"
             is ControlItem.Device -> "D ${it.entry.id}"
+            is ControlItem.DeviceGroup ->
+                "G ${it.title} expanded=${it.expanded}" +
+                    " p=[${it.primary.joinToString(",") { row -> row.entry.id }}]" +
+                    " s=[${it.settings.joinToString(",") { row -> row.entry.id }}]"
         }
     }
 
@@ -231,5 +244,166 @@ class ControlItemsTest {
         assertFalse(build(withProfile, statesOk = false).filterIsInstance<ControlItem.Profile>().single().statesKnown)
         // Devices are unaffected by the profile entry.
         assertTrue(build(withProfile).filterIsInstance<ControlItem.Device>().all { it.statesKnown })
+    }
+
+    // --- device grouping ------------------------------------------------------
+
+    private val ceilingLamp = listOf(
+        entry("light.ceiling", room = "Bedroom", power = PowerState.ON, deviceId = "dev.ceiling", device = "Ceiling lamp"),
+        entry("light.ceiling.ambient", room = "Bedroom", power = PowerState.OFF, deviceId = "dev.ceiling", device = "Ceiling lamp"),
+        entry(
+            "switch.ceiling.nightlight",
+            kind = ControlKind.SWITCH,
+            room = "Bedroom",
+            power = PowerState.OFF,
+            deviceId = "dev.ceiling",
+            device = "Ceiling lamp",
+            role = ControlRole.SETTING,
+        ),
+    )
+
+    @Test
+    fun entriesOfOneDeviceBecomeOneGroupWithPrimaryAndSettings() {
+        assertEquals(
+            listOf(
+                "# Bedroom (1 of 2 on)",
+                "G Ceiling lamp expanded=false p=[light.ceiling,light.ceiling.ambient] s=[switch.ceiling.nightlight]",
+            ),
+            build(ceilingLamp).describe(),
+        )
+    }
+
+    @Test
+    fun aSinglePrimaryWithoutSettingsStaysAPlainRow() {
+        val single = listOf(
+            entry("light.desk", room = "Office", deviceId = "dev.desk", device = "Desk lamp"),
+        )
+        assertEquals(listOf("# Office (0 of 1 on)", "D light.desk"), build(single).describe())
+        // A standalone row is titled by its device, never by the short entity
+        // title or the id fallback.
+        listOf("", "Light", "light.desk").forEach { shortTitle ->
+            val row = build(listOf(entry("light.desk", title = shortTitle, deviceId = "dev.desk", device = "Desk lamp")))
+                .filterIsInstance<ControlItem.Device>()
+                .single()
+            assertEquals("Desk lamp", row.entry.title)
+        }
+    }
+
+    @Test
+    fun aSinglePrimaryWithSettingsIsStillAGroup() {
+        val entries = listOf(
+            entry("light.desk", room = "Office", deviceId = "dev.desk", device = "Desk lamp", power = PowerState.OFF),
+            entry(
+                "switch.desk.timer",
+                kind = ControlKind.SWITCH,
+                room = "Office",
+                deviceId = "dev.desk",
+                device = "Desk lamp",
+                role = ControlRole.SETTING,
+            ),
+        )
+        assertEquals(
+            listOf(
+                "# Office (0 of 1 on)",
+                "G Desk lamp expanded=false p=[light.desk] s=[switch.desk.timer]",
+            ),
+            build(entries, filter = ControlFilter.All).describe(),
+        )
+    }
+
+    @Test
+    fun aLampRowTakesTheDeviceName() {
+        // The server's entity title is the short "Light"; a standalone device
+        // row is titled by the device instead.
+        val lamp = listOf(entry("light.lamp", title = "Light", deviceId = "dev.lamp", device = "Лампа"))
+        assertEquals("Лампа", build(lamp).filterIsInstance<ControlItem.Device>().single().entry.title)
+    }
+
+    @Test
+    fun aSinglePrimaryDeviceCardUsesTheDeviceNameForItsMainRow() {
+        val settings = (1..6).map { number ->
+            entry(
+                "switch.strip.$number",
+                kind = ControlKind.SWITCH,
+                title = "Setting $number",
+                deviceId = "dev.strip",
+                device = "Светильник",
+                role = ControlRole.SETTING,
+            )
+        }
+        val entries = listOf(entry("light.strip", title = "Light", deviceId = "dev.strip", device = "Светильник")) + settings
+        val group = build(entries).filterIsInstance<ControlItem.DeviceGroup>().single()
+        assertEquals("Светильник", group.title)
+        assertEquals(1, group.primary.size)
+        // The lone primary is the card's main row, so its title is the device,
+        // not the duplicated short "Light".
+        assertEquals("Светильник", group.primary.single().entry.title)
+        // Settings keep the short names the server sent.
+        assertEquals(settings.map { it.id }, group.settings.map { it.entry.id })
+        assertEquals((1..6).map { "Setting $it" }, group.settings.map { it.entry.title })
+    }
+
+    @Test
+    fun aMultiPrimaryDeviceKeepsTheDeviceHeaderAndShortRowNames() {
+        val entries = listOf(
+            entry("media.mic", kind = ControlKind.SWITCH, title = "Microphones", deviceId = "dev.speaker", device = "Колонка"),
+            entry("media.clock", kind = ControlKind.SWITCH, title = "Clock display", deviceId = "dev.speaker", device = "Колонка"),
+            entry("media.ring", kind = ControlKind.SWITCH, title = "Ring", deviceId = "dev.speaker", device = "Колонка"),
+        )
+        val group = build(entries).filterIsInstance<ControlItem.DeviceGroup>().single()
+        assertEquals("Колонка", group.title)
+        assertEquals(listOf("Microphones", "Clock display", "Ring"), group.primary.map { it.entry.title })
+    }
+
+    @Test
+    fun settingsDoNotAddChipsOrCounts() {
+        // One primary light and one setting switch: no "Switches" chip appears
+        // and the light is counted once.
+        assertEquals(
+            listOf(ControlFilterOption(ControlFilter.All, 2), ControlFilterOption(ControlFilter.Lights, 2)),
+            ControlItems.options(ceilingLamp),
+        )
+        // The settings follow their visible device even when that chip matches
+        // only the primary controls.
+        assertEquals(
+            listOf(
+                "# Bedroom (1 of 2 on)",
+                "G Ceiling lamp expanded=false p=[light.ceiling,light.ceiling.ambient] s=[switch.ceiling.nightlight]",
+            ),
+            build(ceilingLamp, filter = ControlFilter.Lights).describe(),
+        )
+    }
+
+    @Test
+    fun expandedSettingsAreDrivenByTheViewModelState() {
+        val collapsed = build(ceilingLamp).filterIsInstance<ControlItem.DeviceGroup>().single()
+        assertFalse(collapsed.expanded)
+        val expanded = build(ceilingLamp, expandedDevices = setOf("dev.ceiling"))
+            .filterIsInstance<ControlItem.DeviceGroup>()
+            .single()
+        assertTrue(expanded.expanded)
+    }
+
+    @Test
+    fun entriesWithoutADeviceIdAreEachTheirOwnDevice() {
+        // An older server omits device_id, so the flat rows stay exactly as before.
+        assertEquals(
+            listOf("# Bedroom (1 of 2 on)", "D light.a", "D light.b"),
+            build(
+                listOf(
+                    entry("light.a", room = "Bedroom", power = PowerState.ON),
+                    entry("light.b", room = "Bedroom", power = PowerState.OFF),
+                ),
+            ).describe(),
+        )
+    }
+
+    @Test
+    fun aGroupedDeviceKeepsItsBusyFlagsAndKnownState() {
+        val items = build(ceilingLamp, pending = setOf("light.ceiling"), statesOk = false)
+        val group = items.filterIsInstance<ControlItem.DeviceGroup>().single()
+        assertTrue(group.primary.single { it.entry.id == "light.ceiling" }.busy)
+        assertFalse(group.primary.single { it.entry.id == "light.ceiling.ambient" }.busy)
+        assertFalse(group.statesKnown)
     }
 }

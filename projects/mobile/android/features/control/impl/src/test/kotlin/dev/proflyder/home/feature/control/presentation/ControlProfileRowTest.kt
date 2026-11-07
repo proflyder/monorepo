@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.control.presentation
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
@@ -10,6 +11,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.feature.control.ControlItem
@@ -34,6 +36,7 @@ class ControlProfileRowTest {
     private val changes = mutableListOf<Boolean>()
     private val powerChanges = mutableListOf<Boolean>()
     private val rowClicks = mutableListOf<ControlItem>()
+    private val settingsToggles = mutableListOf<String>()
 
     private val callback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
         override fun onItemClick(item: ControlItem) {
@@ -46,6 +49,10 @@ class ControlProfileRowTest {
 
         override fun onProfileChanged(entry: ControlEntry, work: Boolean) {
             changes += work
+        }
+
+        override fun onToggleSettings(deviceId: String) {
+            settingsToggles += deviceId
         }
     }
 
@@ -181,5 +188,109 @@ class ControlProfileRowTest {
         assertEquals("On", state.text.toString())
         // Payload binding is programmatic and must never look like a user toggle.
         assertEquals(emptyList<Boolean>(), powerChanges)
+    }
+
+    private fun setting(power: PowerState?) = ControlEntry(
+        id = "switch.desk.timer",
+        kind = ControlKind.SWITCH,
+        title = "Timer",
+        room = "Office",
+        icon = "",
+        actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+        power = power,
+        available = true,
+        deviceId = "dev.desk",
+        device = "Desk lamp",
+        role = ControlRole.SETTING,
+    )
+
+    private fun bindAny(item: ControlItem): View {
+        val themed = ContextThemeWrapper(
+            RuntimeEnvironment.getApplication(),
+            com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
+        )
+        val parent = FrameLayout(themed)
+        val adapter = ControlAdapter(callback)
+        adapter.submitList(listOf(item))
+        val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(0))
+        adapter.onBindViewHolder(holder, 0)
+        return holder.itemView
+    }
+
+    @Test
+    fun deviceGroupShowsRowsAndTogglesSettings() {
+        val group = ControlItem.DeviceGroup(
+            deviceId = "dev.desk",
+            title = "Desk lamp",
+            primary = listOf(ControlItem.DeviceGroup.Row(device(PowerState.ON), busy = false)),
+            settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = false)),
+            expanded = false,
+            statesKnown = true,
+        )
+        val root = bindAny(group)
+        // A single-primary card has no separate header: its row is the title.
+        assertEquals(
+            View.GONE,
+            root.findViewById<android.widget.TextView>(R.id.control_group_title).visibility,
+        )
+        val primary = root.findViewById<LinearLayout>(R.id.control_group_primary)
+        assertEquals(1, primary.childCount)
+        assertEquals(
+            "Desk lamp",
+            primary.getChildAt(0).findViewById<android.widget.TextView>(R.id.control_row_title).text.toString(),
+        )
+        val settingsButton = root.findViewById<MaterialButton>(R.id.control_group_settings)
+        assertEquals("Settings (1)", settingsButton.text.toString())
+        assertEquals(View.VISIBLE, settingsButton.visibility)
+        assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_settings_list).visibility)
+        settingsButton.performClick()
+        assertEquals(listOf("dev.desk"), settingsToggles)
+
+        val expanded = bindAny(group.copy(expanded = true))
+        assertEquals(
+            View.VISIBLE,
+            expanded.findViewById<LinearLayout>(R.id.control_group_settings_list).visibility,
+        )
+        assertEquals(1, expanded.findViewById<LinearLayout>(R.id.control_group_settings_list).childCount)
+    }
+
+    @Test
+    fun multiPrimaryGroupKeepsTheHeaderAndShortRowNames() {
+        fun primary(id: String, title: String) = ControlItem.DeviceGroup.Row(
+            ControlEntry(
+                id = id,
+                kind = ControlKind.SWITCH,
+                title = title,
+                room = "Living room",
+                icon = "",
+                actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+                power = PowerState.OFF,
+                available = true,
+                deviceId = "dev.speaker",
+                device = "Колонка",
+            ),
+            busy = false,
+        )
+        val group = ControlItem.DeviceGroup(
+            deviceId = "dev.speaker",
+            title = "Колонка",
+            primary = listOf(
+                primary("media.mic", "Microphones"),
+                primary("media.clock", "Clock display"),
+                primary("media.ring", "Ring"),
+            ),
+            settings = emptyList(),
+            expanded = false,
+            statesKnown = true,
+        )
+        val root = bindAny(group)
+        val header = root.findViewById<android.widget.TextView>(R.id.control_group_title)
+        assertEquals(View.VISIBLE, header.visibility)
+        assertEquals("Колонка", header.text.toString())
+        val container = root.findViewById<LinearLayout>(R.id.control_group_primary)
+        val titles = (0 until container.childCount).map {
+            container.getChildAt(it).findViewById<android.widget.TextView>(R.id.control_row_title).text.toString()
+        }
+        assertEquals(listOf("Microphones", "Clock display", "Ring"), titles)
     }
 }

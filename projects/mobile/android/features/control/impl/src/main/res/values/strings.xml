@@ -21,6 +21,7 @@
     <string name="control_state_unknown">State unknown</string>
     <string name="control_state_unavailable">Unavailable</string>
     <string name="control_state_on_brightness">On · %1$d%%</string>
+    <string name="control_device_settings">Settings (%1$d)</string>
     <string name="control_profile_personal">Personal</string>
     <string name="control_profile_work">Work</string>
     <string name="control_profile_states_unknown">State unknown</string>

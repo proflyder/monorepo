@@ -1,9 +1,12 @@
-//! Narrow Home Assistant REST client shared by the home services.
+//! Narrow Home Assistant client shared by the home services.
 //!
 //! It calls scripts and services, reads one entity state or the whole state
-//! list, renders a template and probes `/api/`. The scheduler owns schedule
-//! state; Home Assistant only performs the side effect, so nothing here knows
-//! about schedules, queues or MCP.
+//! list, renders a template and probes `/api/`. The entity registry has no REST
+//! endpoint, so [`Client::entity_registry`] opens one short WebSocket
+//! connection (`/api/websocket`), authenticates and asks for
+//! `config/entity_registry/list`. The scheduler owns schedule state; Home
+//! Assistant only performs the side effect, so nothing here knows about
+//! schedules, queues or MCP.
 //!
 //! A private Home Assistant certificate is supplied as PEM bytes or a file
 //! path ([`Client::new_with_ca_pem`], [`Client::new_with_ca_file`]). The crate
@@ -19,16 +22,24 @@
 //! [`ErrorKind::Permanent`] for every other `4xx` and for a malformed answer.
 
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::{SinkExt as _, StreamExt as _};
 use home_secret::Token;
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::pem::PemObject as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use tokio_tungstenite::Connector;
+use tokio_tungstenite::tungstenite::Message;
 
 const STATES_PATH: &str = "/api/states";
 const SERVICE_PATH: &str = "/api/services";
 const TEMPLATE_PATH: &str = "/api/template";
 const PING_PATH: &str = "/api/";
+const WEBSOCKET_PATH: &str = "/api/websocket";
+const REGISTRY_MESSAGE_ID: i64 = 1;
 const MAX_STATE_BYTES: usize = 1 << 20;
 const MAX_STATES_BYTES: usize = 8 << 20;
 const MAX_MESSAGE: usize = 200;
@@ -66,6 +77,8 @@ pub enum Error {
     Invalid { op: &'static str, detail: String },
     #[error("{op}: unusable CA")]
     Certificate { op: &'static str },
+    #[error("{op}: websocket failed")]
+    WebSocket { op: &'static str },
 }
 
 impl Error {
@@ -73,7 +86,8 @@ impl Error {
     #[must_use]
     pub fn kind(&self) -> ErrorKind {
         match self {
-            Self::Transport { .. } => ErrorKind::Transient,
+            // A dropped WebSocket, a timeout or a closed listener may recover.
+            Self::Transport { .. } | Self::WebSocket { .. } => ErrorKind::Transient,
             Self::Status { status, .. } => match *status {
                 408 | 425 | 429 => ErrorKind::Transient,
                 status if status >= 500 => ErrorKind::Transient,
@@ -98,6 +112,9 @@ pub struct Client {
     http: reqwest::Client,
     base_url: String,
     token: Token,
+    timeout: Duration,
+    /// PEM bundle used for the private-CA WebSocket connector; never logged.
+    ca_pem: Option<Vec<u8>>,
 }
 
 impl fmt::Debug for Client {
@@ -160,12 +177,13 @@ impl Client {
         ca_pem: Option<&[u8]>,
     ) -> Result<Self, Error> {
         let _already_installed = rustls::crypto::ring::default_provider().install_default();
+        let ca_pem = ca_pem.map(<[u8]>::to_vec);
         let mut builder = reqwest::Client::builder()
             .timeout(timeout)
             // An authenticated client must not forward its bearer to a
             // redirect target; a 3xx is surfaced as a status error instead.
             .redirect(reqwest::redirect::Policy::none());
-        if let Some(ca_pem) = ca_pem {
+        if let Some(ca_pem) = ca_pem.as_deref() {
             let certificates = reqwest::Certificate::from_pem_bundle(ca_pem)
                 .map_err(|_| Error::Certificate { op: "decode CA" })?;
             if certificates.is_empty() {
@@ -183,6 +201,8 @@ impl Client {
             http,
             base_url: base_url.into().trim().trim_end_matches('/').to_owned(),
             token,
+            timeout,
+            ca_pem,
         })
     }
 
@@ -240,6 +260,112 @@ impl Client {
             return Err(Error::Decode { op: OP });
         }
         serde_json::from_slice(&body).map_err(|_| Error::Decode { op: OP })
+    }
+
+    /// Read the entity registry: entity id, owning device and entity category.
+    ///
+    /// The registry is WebSocket-only, so this opens one short-lived connection
+    /// to `/api/websocket`, authenticates with the same bearer and sends
+    /// `config/entity_registry/list`. The whole exchange is bounded by the
+    /// client timeout. A failure is [`ErrorKind::Transient`]: the caller may
+    /// keep what it has and retry on the next refresh.
+    pub async fn entity_registry(&self) -> Result<Vec<RegistryEntity>, Error> {
+        const OP: &str = "read entity registry";
+        tokio::time::timeout(self.timeout, self.registry_exchange(OP))
+            .await
+            .unwrap_or(Err(Error::WebSocket { op: OP }))
+    }
+
+    async fn registry_exchange(&self, op: &'static str) -> Result<Vec<RegistryEntity>, Error> {
+        let url = self.websocket_url(op)?;
+        let connector = if url.starts_with("wss://") {
+            self.tls_connector(op)?
+        } else {
+            None
+        };
+        let (mut socket, _response) = match connector {
+            Some(connector) => {
+                tokio_tungstenite::connect_async_tls_with_config(url, None, false, Some(connector))
+                    .await
+            }
+            None => tokio_tungstenite::connect_async(url).await,
+        }
+        .map_err(|_| Error::WebSocket { op })?;
+
+        let hello = read_text(&mut socket, op).await?;
+        let hello: Value = serde_json::from_str(&hello).map_err(|_| Error::Decode { op })?;
+        if hello.get("type").and_then(Value::as_str) != Some("auth_required") {
+            return Err(Error::Decode { op });
+        }
+
+        let auth = serde_json::json!({
+            "type": "auth",
+            "access_token": self.token.expose(),
+        });
+        send_text(&mut socket, &auth.to_string(), op).await?;
+
+        let reply = read_text(&mut socket, op).await?;
+        let reply: Value = serde_json::from_str(&reply).map_err(|_| Error::Decode { op })?;
+        match reply.get("type").and_then(Value::as_str) {
+            Some("auth_ok") => {}
+            Some("auth_invalid") => {
+                return Err(Error::Status {
+                    op,
+                    status: 401,
+                    message: "authentication failed".to_owned(),
+                });
+            }
+            _ => return Err(Error::Decode { op }),
+        }
+
+        let request = serde_json::json!({
+            "id": REGISTRY_MESSAGE_ID,
+            "type": "config/entity_registry/list",
+        });
+        send_text(&mut socket, &request.to_string(), op).await?;
+        loop {
+            let text = read_text(&mut socket, op).await?;
+            if let Some(entities) = registry_reply(&text).map_err(|()| Error::Decode { op })? {
+                return Ok(entities);
+            }
+        }
+    }
+
+    /// `http(s)://host:port` → `ws(s)://host:port/api/websocket`.
+    fn websocket_url(&self, op: &'static str) -> Result<String, Error> {
+        let (scheme, rest) = if let Some(rest) = self.base_url.strip_prefix("https://") {
+            ("wss://", rest)
+        } else if let Some(rest) = self.base_url.strip_prefix("http://") {
+            ("ws://", rest)
+        } else {
+            return Err(Error::Invalid {
+                op,
+                detail: "unsupported Home Assistant URL".to_owned(),
+            });
+        };
+        Ok(format!("{scheme}{rest}{WEBSOCKET_PATH}"))
+    }
+
+    /// rustls connector trusting the configured CA bundle. Without a bundle,
+    /// `connect_async` falls back to the WebPKI roots.
+    fn tls_connector(&self, op: &'static str) -> Result<Option<Connector>, Error> {
+        let Some(ca_pem) = self.ca_pem.as_deref() else {
+            return Ok(None);
+        };
+        let mut roots = rustls::RootCertStore::empty();
+        for certificate in CertificateDer::pem_slice_iter(ca_pem) {
+            let certificate = certificate.map_err(|_| Error::Certificate { op })?;
+            roots
+                .add(certificate)
+                .map_err(|_| Error::Certificate { op })?;
+        }
+        if roots.is_empty() {
+            return Err(Error::Certificate { op });
+        }
+        let config = rustls::ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        Ok(Some(Connector::Rustls(Arc::new(config))))
     }
 
     /// Invoke `<domain>.<service>` with any serializable JSON data. The caller
@@ -428,6 +554,18 @@ impl Entity {
     }
 }
 
+/// One record of `config/entity_registry/list`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct RegistryEntity {
+    pub entity_id: String,
+    #[serde(default)]
+    pub device_id: Option<String>,
+    /// `None` for a normal entity; `config` or `diagnostic` for a device
+    /// setting.
+    #[serde(default)]
+    pub entity_category: Option<String>,
+}
+
 /// The Home Assistant attributes the catalog needs; every other attribute is
 /// preserved verbatim in [`EntityAttributes::other`].
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
@@ -465,6 +603,53 @@ fn validate_service<'a>(
 struct StatePayload {
     #[serde(default)]
     state: Option<String>,
+}
+
+/// Read the next text frame, skipping keepalive and unrelated binary frames.
+async fn read_text<S>(socket: &mut S, op: &'static str) -> Result<String, Error>
+where
+    S: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
+    loop {
+        let Some(message) = socket.next().await else {
+            return Err(Error::WebSocket { op });
+        };
+        let message = message.map_err(|_| Error::WebSocket { op })?;
+        if message.is_close() {
+            return Err(Error::WebSocket { op });
+        }
+        if let Ok(text) = message.to_text() {
+            return Ok(text.to_owned());
+        }
+    }
+}
+
+async fn send_text<S>(socket: &mut S, text: &str, op: &'static str) -> Result<(), Error>
+where
+    S: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
+{
+    socket
+        .send(Message::text(text))
+        .await
+        .map_err(|_| Error::WebSocket { op })
+}
+
+/// Parse one answer of the registry request.
+///
+/// `Ok(None)` means another message kind (an event or an unrelated reply) and
+/// the caller keeps reading; `Err(())` is a failed or malformed reply.
+fn registry_reply(text: &str) -> Result<Option<Vec<RegistryEntity>>, ()> {
+    let value: Value = serde_json::from_str(text).map_err(|_| ())?;
+    if value.get("id").and_then(Value::as_i64) != Some(REGISTRY_MESSAGE_ID) {
+        return Ok(None);
+    }
+    if value.get("success").and_then(Value::as_bool) != Some(true) {
+        return Err(());
+    }
+    let result = value.get("result").ok_or(())?;
+    serde_json::from_value(result.clone())
+        .map(Some)
+        .map_err(|_| ())
 }
 
 fn encode(op: &'static str, value: &Value) -> Result<Vec<u8>, Error> {
@@ -531,7 +716,7 @@ mod tests {
     use home_secret::Token;
     use serde_json::{Value, json};
 
-    use super::{Client, Error, ErrorKind, script_entity};
+    use super::{Client, Error, ErrorKind, registry_reply, script_entity};
 
     async fn serve(app: Router) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -878,6 +1063,91 @@ mod tests {
         assert_eq!(script_entity("announce"), "script.announce");
         assert_eq!(script_entity("script.announce"), "script.announce");
         assert_eq!(script_entity("  "), "script.");
+    }
+
+    #[test]
+    fn entity_registry_reply_parses_categories_and_ignores_events() {
+        let payload = json!({
+            "id": 1,
+            "type": "result",
+            "success": true,
+            "result": [
+                {"entity_id": "light.lamp", "device_id": "dev-1", "entity_category": null},
+                {"entity_id": "switch.delay", "device_id": "dev-1", "entity_category": "config"},
+                {"entity_id": "switch.wake", "device_id": "dev-2", "entity_category": "diagnostic"},
+                {"entity_id": "sensor.bare"}
+            ]
+        })
+        .to_string();
+        let entities = registry_reply(&payload)
+            .expect("valid reply")
+            .expect("registry reply");
+        assert_eq!(entities.len(), 4);
+        assert_eq!(entities[0].entity_category, None);
+        assert_eq!(entities[1].entity_category.as_deref(), Some("config"));
+        assert_eq!(entities[2].entity_category.as_deref(), Some("diagnostic"));
+        assert_eq!(entities[3].device_id, None);
+        assert_eq!(entities[3].entity_category, None);
+
+        let event = json!({"type": "event", "event": {"event_type": "state_changed"}});
+        assert_eq!(registry_reply(&event.to_string()), Ok(None));
+
+        let failure = json!({"id": 1, "success": false, "error": {"code": "unknown_command"}});
+        assert_eq!(registry_reply(&failure.to_string()), Err(()));
+        assert_eq!(registry_reply("not json"), Err(()));
+    }
+
+    #[test]
+    fn websocket_url_mirrors_the_http_scheme() {
+        let http = Client::new(
+            "http://192.0.2.28:8123",
+            Token::new("token"),
+            Duration::from_secs(1),
+        )
+        .expect("client");
+        assert_eq!(
+            http.websocket_url("read entity registry").expect("url"),
+            "ws://192.0.2.28:8123/api/websocket"
+        );
+        let https = Client::new(
+            "https://ha.example.test/",
+            Token::new("token"),
+            Duration::from_secs(1),
+        )
+        .expect("client");
+        assert_eq!(
+            https.websocket_url("read entity registry").expect("url"),
+            "wss://ha.example.test/api/websocket"
+        );
+    }
+
+    #[test]
+    fn the_ca_bundle_builds_a_websocket_connector() {
+        let client = Client::new_with_ca_pem(
+            "https://ha.example.test",
+            Token::new("token"),
+            Duration::from_secs(1),
+            TEST_CA_PEM.as_bytes(),
+        )
+        .expect("client");
+        assert!(
+            client
+                .tls_connector("read entity registry")
+                .expect("connector")
+                .is_some()
+        );
+        let plain = Client::new(
+            "https://ha.example.test",
+            Token::new("token"),
+            Duration::from_secs(1),
+        )
+        .expect("client");
+        assert!(
+            plain
+                .tls_connector("read entity registry")
+                .expect("connector")
+                .is_none()
+        );
     }
 
     #[test]

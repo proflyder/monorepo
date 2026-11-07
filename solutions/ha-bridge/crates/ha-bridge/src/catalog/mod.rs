@@ -15,7 +15,7 @@ mod light;
 
 pub use light::{Light, LightInput, Params};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{Map, Value};
 
@@ -67,6 +67,15 @@ pub struct Raw {
     pub name: String,
     pub icon: String,
     pub room: String,
+    /// Home Assistant device registry id, empty when the entity has no device
+    /// or the registry could not be read.
+    pub device_id: String,
+    /// Display name of the owning device, empty when unknown.
+    pub device: String,
+    /// `"primary"` for a normal entity, `"setting"` for a config/diagnostic
+    /// entity of a device or for a device's switch next to a light, empty when
+    /// the entity registry could not be read.
+    pub role: String,
     pub hidden: bool,
     pub scenario: bool,
     pub profile: bool,
@@ -110,6 +119,15 @@ pub enum RulesError {
 }
 
 /// One controllable thing with its live state at discovery time.
+///
+/// Entries are flat: one Home Assistant entity is one entry. A device groups
+/// its entries in the client through [`Entry::device_id`]. Device-level
+/// actions (for example "speak this text on the speaker" or "call the
+/// speaker"), once implemented, are expected to be further entries with
+/// `kind: "action"` that carry the same `device_id` and `device`, keep a
+/// human-readable `title`, and resolve to their own allowlisted service call.
+/// The executor contract (`{"entry", "action", ...}` in the `control` queue)
+/// does not change, so adding actions stays additive for the clients.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub id: String,
@@ -120,6 +138,12 @@ pub struct Entry {
     pub entity: String,
     pub state: String,
     pub available: bool,
+    /// Home Assistant device registry id; empty when unknown.
+    pub device_id: String,
+    /// Display name of the owning device; empty when unknown.
+    pub device: String,
+    /// `"primary"`, `"setting"` or empty when unknown.
+    pub role: String,
     pub light: Option<Light>,
 }
 
@@ -264,6 +288,10 @@ pub fn domain_of(entity: &str) -> &str {
 #[must_use]
 pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
     let mut entries: Vec<Entry> = Vec::with_capacity(raws.len());
+    // Devices that expose a light control. Home Assistant reports a `null`
+    // category for Yeelight-style setting switches; the light sibling is the
+    // only signal that they are settings rather than independent switches.
+    let light_devices: HashSet<&str> = raws.iter().filter_map(device_with_light).collect();
     for raw in raws {
         if !valid_entity(&raw.entity) {
             continue;
@@ -296,6 +324,12 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
             entity: raw.entity.clone(),
             state: String::new(),
             available,
+            device_id: truncate_chars(raw.device_id.trim(), MAX_TEXT),
+            device: truncate_chars(raw.device.trim(), MAX_TEXT),
+            role: role_of(
+                raw,
+                device_key(raw).is_some_and(|key| light_devices.contains(key)),
+            ),
             light: None,
         };
         if kind == Kind::Light && available {
@@ -344,10 +378,72 @@ fn excluded(patterns: &[String], entity: &str) -> bool {
         .any(|pattern| glob_match(pattern, entity).unwrap_or(false))
 }
 
+/// Whether the entity is a device setting rather than a primary control.
+///
+/// Discovery fills [`Raw::role`] from the Home Assistant entity registry
+/// category (`config`/`diagnostic` → `setting`, a known `null` → `primary`,
+/// an unreadable registry → empty). A `primary` switch whose device also has a
+/// light entity is a setting: on those devices the light is the control and
+/// the switches are its options. Unknown roles stay empty, so a registry
+/// outage never claims a category.
+fn role_of(raw: &Raw, device_has_light: bool) -> String {
+    let role = raw.role.trim();
+    if role.eq_ignore_ascii_case("setting") {
+        return "setting".to_owned();
+    }
+    if role.eq_ignore_ascii_case("primary") {
+        if device_has_light && domain_of(&raw.entity) == "switch" {
+            return "setting".to_owned();
+        }
+        return "primary".to_owned();
+    }
+    String::new()
+}
+
+/// Grouping key of a device: its registry id, or the display name as fallback.
+fn device_key(raw: &Raw) -> Option<&str> {
+    let id = raw.device_id.trim();
+    if !id.is_empty() {
+        return Some(id);
+    }
+    let name = raw.device.trim();
+    (!name.is_empty()).then_some(name)
+}
+
+fn device_with_light(raw: &Raw) -> Option<&str> {
+    if domain_of(&raw.entity) == "light" {
+        device_key(raw)
+    } else {
+        None
+    }
+}
+
+/// Human title of an entity.
+///
+/// Home Assistant builds `friendly_name` as `<device name> <entity name>`, so
+/// the device prefix is removed when it is present. The remainder then loses
+/// leading separators (`*`, `-`, `:` …) and repeated whitespace. When only the
+/// device prefix was there, the device name itself becomes the title.
 fn title_of(raw: &Raw) -> String {
-    let name = truncate_chars(raw.name.trim(), MAX_TEXT);
-    if !name.is_empty() {
-        return name;
+    let name = raw.name.trim();
+    let device = raw.device.trim();
+    let title = if device.is_empty() {
+        clean_spaces(name)
+    } else {
+        strip_device_prefix(name, device).map_or_else(
+            || clean_spaces(name),
+            |rest| {
+                let rest = strip_leading_separators(rest);
+                if rest.is_empty() {
+                    clean_spaces(device)
+                } else {
+                    rest
+                }
+            },
+        )
+    };
+    if !title.is_empty() {
+        return truncate_chars(&title, MAX_TEXT);
     }
     // "light.bedside_lamp" -> "Bedside lamp"
     let object = raw
@@ -361,6 +457,36 @@ fn title_of(raw: &Raw) -> String {
     let mut characters = object.chars();
     let first = characters.next().unwrap_or_default();
     format!("{}{rest}", first.to_uppercase(), rest = characters.as_str())
+}
+
+/// Split a `friendly_name` that starts with the device name.
+///
+/// The comparison is case-insensitive and returns the remainder untouched, or
+/// `None` when the name does not start with the device.
+fn strip_device_prefix<'a>(name: &'a str, device: &str) -> Option<&'a str> {
+    let head = name.get(..device.len())?;
+    if head.to_lowercase() == device.to_lowercase() {
+        Some(&name[device.len()..])
+    } else {
+        None
+    }
+}
+
+/// Drop leading separators left after the device prefix and collapse spaces.
+fn strip_leading_separators(text: &str) -> String {
+    clean_spaces(text.trim_start_matches(is_separator))
+}
+
+fn is_separator(character: char) -> bool {
+    character.is_whitespace()
+        || matches!(
+            character,
+            '*' | '-' | '–' | '—' | ':' | ';' | '·' | '•' | '|' | '/' | '\\' | ','
+        )
+}
+
+fn clean_spaces(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn icon_of(icon: &str) -> String {
@@ -687,6 +813,145 @@ mod tests {
         assert_eq!(entries[0].id, "switch.profile");
         assert_eq!(entries[0].kind, Kind::Profile);
         assert_eq!(entries[1].kind, Kind::Light);
+    }
+
+    #[test]
+    fn titles_drop_the_device_prefix_and_leading_separators() {
+        let cases = [
+            ("Светильник  Light", "Светильник", "Light"),
+            (
+                "Светильник * yl-light delay-off",
+                "Светильник",
+                "yl-light delay-off",
+            ),
+            (
+                "Яндекс Станция Миди Wake: разбуди меня",
+                "Яндекс Станция Миди",
+                "Wake: разбуди меня",
+            ),
+            ("Лампа", "Светильник", "Лампа"),
+            ("Светильник", "Светильник", "Светильник"),
+            ("Светильник - ", "Светильник", "Светильник"),
+            ("  Просто   лампа  ", "", "Просто лампа"),
+            ("Светильник  ", "Светильник", "Светильник"),
+            ("светильник lower", "Светильник", "lower"),
+        ];
+        for (name, device, expected) in cases {
+            let raw = Raw {
+                entity: "light.x".to_owned(),
+                name: name.to_owned(),
+                device: device.to_owned(),
+                ..Raw::default()
+            };
+            assert_eq!(title_of(&raw), expected, "{name:?} / {device:?}");
+        }
+    }
+
+    #[test]
+    fn device_metadata_and_role_reach_the_entry() {
+        let raws = [
+            Raw {
+                entity: "switch.delay".to_owned(),
+                state: "off".to_owned(),
+                name: "Светильник * yl-light delay-off".to_owned(),
+                device_id: "dev-1".to_owned(),
+                device: "Светильник".to_owned(),
+                role: "setting".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "light.lamp".to_owned(),
+                state: "on".to_owned(),
+                name: "Светильник Light".to_owned(),
+                device_id: "dev-1".to_owned(),
+                device: "Светильник".to_owned(),
+                ..Raw::default()
+            },
+        ];
+        let entries = build(&raws, &rules());
+        let setting = entries
+            .iter()
+            .find(|entry| entry.id == "switch.delay")
+            .expect("setting");
+        assert_eq!(setting.title, "yl-light delay-off");
+        assert_eq!(setting.device_id, "dev-1");
+        assert_eq!(setting.device, "Светильник");
+        assert_eq!(setting.role, "setting");
+        // Without metadata the fields stay empty and nothing is lost.
+        let lamp = entries
+            .iter()
+            .find(|entry| entry.id == "light.lamp")
+            .expect("lamp");
+        assert_eq!(lamp.title, "Light");
+        assert_eq!(lamp.role, "");
+    }
+
+    #[test]
+    fn switches_next_to_a_light_are_settings_and_other_switches_stay_primary() {
+        let raws = [
+            // Yeelight: the light is the control, null-category switches are
+            // its settings.
+            Raw {
+                entity: "light.yeelight".to_owned(),
+                state: "on".to_owned(),
+                name: "Светильник Light".to_owned(),
+                device_id: "yeelight-1".to_owned(),
+                device: "Светильник".to_owned(),
+                role: "primary".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "switch.yeelight_delay_off".to_owned(),
+                state: "off".to_owned(),
+                name: "Светильник yl-light delay-off".to_owned(),
+                device_id: "yeelight-1".to_owned(),
+                device: "Светильник".to_owned(),
+                role: "primary".to_owned(),
+                ..Raw::default()
+            },
+            // Station: config entities are settings, null-category controls
+            // stay primary because the device has no light entity.
+            Raw {
+                entity: "switch.station_wake".to_owned(),
+                state: "off".to_owned(),
+                name: "Яндекс Станция Миди Wake".to_owned(),
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                role: "setting".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "switch.station_mute".to_owned(),
+                state: "off".to_owned(),
+                name: "Яндекс Станция Миди Mute microphones".to_owned(),
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                role: "primary".to_owned(),
+                ..Raw::default()
+            },
+            // Registry outage: the role stays unknown even next to a light.
+            Raw {
+                entity: "switch.yeelight_pomodoro".to_owned(),
+                state: "off".to_owned(),
+                device_id: "yeelight-1".to_owned(),
+                device: "Светильник".to_owned(),
+                ..Raw::default()
+            },
+        ];
+        let entries = build(&raws, &rules());
+        let role = |id: &str| {
+            entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+                .role
+                .as_str()
+        };
+        assert_eq!(role("light.yeelight"), "primary");
+        assert_eq!(role("switch.yeelight_delay_off"), "setting");
+        assert_eq!(role("switch.station_wake"), "setting");
+        assert_eq!(role("switch.station_mute"), "primary");
+        assert_eq!(role("switch.yeelight_pomodoro"), "");
     }
 
     #[test]

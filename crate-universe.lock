@@ -1,5 +1,5 @@
 {
-  "checksum": "c3bf0deff6b56529cee4d8d4536bc353124824aa6e75ca4b6935fa1943b704f4",
+  "checksum": "0e1d40d45bcdd8da0f1094f94a765760c3d5aa5d4b695813e589db1d3539e6df",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6866,12 +6866,20 @@
       "common_attrs": {
         "deps": [
           {
+            "id": "futures-util 0.3.34",
+            "target": "futures_util"
+          },
+          {
             "id": "reqwest 0.12.28",
             "target": "reqwest"
           },
           {
             "id": "rustls 0.23.46",
             "target": "rustls"
+          },
+          {
+            "id": "rustls-pki-types 1.15.1",
+            "target": "rustls_pki_types"
           },
           {
             "id": "serde 1.0.229",
@@ -6884,6 +6892,14 @@
           {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-tungstenite 0.30.0",
+            "target": "tokio_tungstenite"
           }
         ],
         "deps_dev": [
@@ -6894,10 +6910,6 @@
           {
             "id": "tempfile 3.27.0",
             "target": "tempfile"
-          },
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
           }
         ],
         "edition": "2024"
@@ -17946,6 +17958,79 @@
       ],
       "version": "0.1.19"
     },
+    "tokio-tungstenite 0.30.0": {
+      "common_attrs": {
+        "crate_features": [
+          "__rustls-tls",
+          "connect",
+          "handshake",
+          "rustls",
+          "rustls-pki-types",
+          "rustls-tls-webpki-roots",
+          "stream",
+          "tokio-rustls",
+          "webpki-roots"
+        ],
+        "deps": [
+          {
+            "id": "futures-util 0.3.34",
+            "target": "futures_util"
+          },
+          {
+            "id": "log 0.4.34",
+            "target": "log"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "rustls-pki-types 1.15.1",
+            "target": "rustls_pki_types"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-rustls 0.26.6",
+            "target": "tokio_rustls"
+          },
+          {
+            "id": "tungstenite 0.30.0",
+            "target": "tungstenite"
+          },
+          {
+            "id": "webpki-roots 0.26.11",
+            "target": "webpki_roots"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "tokio_tungstenite",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "tokio-tungstenite",
+      "package_url": "https://github.com/snapview/tokio-tungstenite",
+      "repository": {
+        "Http": {
+          "sha256": "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71",
+          "url": "https://static.crates.io/crates/tokio-tungstenite/0.30.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_tungstenite",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.30.0"
+    },
     "tokio-util 0.7.20": {
       "common_attrs": {
         "crate_features": [
@@ -18700,6 +18785,87 @@
         }
       ],
       "version": "0.2.5"
+    },
+    "tungstenite 0.30.0": {
+      "common_attrs": {
+        "crate_features": [
+          "__rustls-tls",
+          "data-encoding",
+          "handshake",
+          "http",
+          "httparse",
+          "rustls",
+          "rustls-pki-types",
+          "sha1"
+        ],
+        "deps": [
+          {
+            "id": "bytes 1.12.1",
+            "target": "bytes"
+          },
+          {
+            "id": "data-encoding 2.11.1",
+            "target": "data_encoding"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "httparse 1.10.1",
+            "target": "httparse"
+          },
+          {
+            "id": "log 0.4.34",
+            "target": "log"
+          },
+          {
+            "id": "rand 0.10.3",
+            "target": "rand"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "rustls-pki-types 1.15.1",
+            "target": "rustls_pki_types"
+          },
+          {
+            "id": "sha1 0.11.0",
+            "target": "sha1"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "tungstenite",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "tungstenite",
+      "package_url": "https://github.com/snapview/tungstenite-rs",
+      "repository": {
+        "Http": {
+          "sha256": "e48ac77174b19c110a50ab2128b24215ac9cb40e0e12e093fb602d175c569d22",
+          "url": "https://static.crates.io/crates/tungstenite/0.30.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tungstenite",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.30.0"
     },
     "typed-path 0.13.0": {
       "common_attrs": {
@@ -20114,6 +20280,41 @@
         }
       ],
       "version": "0.3.107"
+    },
+    "webpki-roots 0.26.11": {
+      "common_attrs": {
+        "deps": [
+          {
+            "alias": "parent",
+            "id": "webpki-roots 1.0.11",
+            "target": "webpki_roots"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "webpki_roots",
+      "license": "CDLA-Permissive-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "CDLA-Permissive-2.0"
+      ],
+      "name": "webpki-roots",
+      "package_url": "https://github.com/rustls/webpki-roots",
+      "repository": {
+        "Http": {
+          "sha256": "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9",
+          "url": "https://static.crates.io/crates/webpki-roots/0.26.11/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki_roots",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.26.11"
     },
     "webpki-roots 1.0.11": {
       "common_attrs": {
@@ -22295,6 +22496,7 @@
     "flate2 1.1.11",
     "futures 0.3.34",
     "futures-core 0.3.34",
+    "futures-util 0.3.34",
     "getrandom 0.3.4",
     "hex 0.4.3",
     "hmac 0.13.0",
@@ -22330,6 +22532,7 @@
     "time 0.3.55",
     "tokio 1.54.1",
     "tokio-rustls 0.26.6",
+    "tokio-tungstenite 0.30.0",
     "tokio-util 0.7.20",
     "tower 0.5.3",
     "tower-http 0.6.11",

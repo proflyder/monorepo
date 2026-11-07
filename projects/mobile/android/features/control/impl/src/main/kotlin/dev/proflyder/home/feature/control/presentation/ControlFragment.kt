@@ -47,14 +47,17 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 is ControlItem.Device ->
                     if (item.entry.light != null && item.entry.available) openLightSheet(item.entry)
                     else viewModel.setPower(item.entry, !item.entry.isOn())
+                // A device group itself does nothing: its rows forward their taps.
                 // The profile is a mode: only its segmented buttons act.
-                is ControlItem.Header, is ControlItem.Profile -> Unit
+                is ControlItem.Header, is ControlItem.Profile, is ControlItem.DeviceGroup -> Unit
             }
         }
 
         override fun onPowerChanged(entry: ControlEntry, on: Boolean) = viewModel.setPower(entry, on)
 
         override fun onProfileChanged(entry: ControlEntry, work: Boolean) = viewModel.setProfile(entry, work)
+
+        override fun onToggleSettings(deviceId: String) = viewModel.toggleDeviceSettings(deviceId)
     }
 
     override fun onBindingCreated(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
@@ -65,7 +68,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
                 override fun getSpanSize(position: Int): Int = when (adapter.currentList.getOrNull(position)) {
                     is ControlItem.Scenario -> 1
-                    is ControlItem.Device -> deviceSpan
+                    is ControlItem.Device, is ControlItem.DeviceGroup -> deviceSpan
                     else -> spanCount
                 }
             }
@@ -130,7 +133,14 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 states.showContent()
                 renderFilters(state)
                 adapter.submitList(
-                    ControlItems.build(state.entries, state.pending, state.statesOk, state.filter, texts()),
+                    ControlItems.build(
+                        state.entries,
+                        state.pending,
+                        state.statesOk,
+                        state.filter,
+                        texts(),
+                        state.expandedDevices,
+                    ),
                 )
             }
         }
