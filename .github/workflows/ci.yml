@@ -2,8 +2,8 @@ name: ci
 
 # Smart CI: only the platforms and units a change actually touches.
 #
-# `changes` routes the diff onto units from platform/ci/units.mjs (Go: `go list`
-# dependency closure, Android: Bazel reverse dependencies, Python/JS/native:
+# `changes` routes the diff onto units from platform/ci/units.mjs (Android:
+# Bazel reverse dependencies, Rust: the Bazel loading graph, Python/JS/native:
 # path rules) and each platform then fans out a matrix of reusable workflows.
 # `ci-ok` is the single required check: green when every job succeeded or was
 # legitimately skipped.
@@ -15,9 +15,9 @@ name: ci
 #
 # `develop` changes only through a PR with a green `ci-ok`, so there is no push
 # trigger: re-running the same checks on the squash merge would be redundant.
-# The shared caches that PRs restore (Go modules, setup-bazel and actions/cache
-# scopes) are warmed after merge by `deploy-home`'s `warm-caches` job, which
-# runs on `push` to `develop` without secrets or an Environment.
+# The shared caches that PRs restore (setup-bazel and actions/cache scopes) are
+# warmed after merge by `deploy-home`'s `warm-caches` job, which runs on `push`
+# to `develop` without secrets or an Environment.
 on:
   pull_request:
     branches: [develop]
@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   # Computes the affected units. Cheap: no toolchains, only a Bazel loading
-  # query for the Android graph and `go list` for Go dependencies.
+  # query for the Android and Rust graphs.
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -40,7 +40,6 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      go_units: ${{ steps.route.outputs.go_units }}
       android_units: ${{ steps.route.outputs.android_units }}
       bazel_units: ${{ steps.route.outputs.bazel_units }}
       python_units: ${{ steps.route.outputs.python_units }}
@@ -94,24 +93,6 @@ jobs:
     needs: changes
     if: always()
     uses: ./.github/workflows/_quality.yml
-
-  # One matrix entry per affected Go unit: scheduler, currency-bot, ha-bridge,
-  # alarm, ble-gateway or the shared packages.
-  go:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.go_units != '[]' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.changes.outputs.go_units) }}
-    uses: ./.github/workflows/_go.yml
-    with:
-      unit: ${{ matrix.id }}
-      workdir: ${{ matrix.workdir }}
-      packages: ${{ matrix.packages }}
-      race: ${{ matrix.race }}
-      build_packages: ${{ matrix.build_packages }}
-      deploy_control: false
 
   # One matrix entry per affected application or shared Kotlin library unit,
   # plus the dedicated `android-lint` unit. Android Lint runs as its own job so
@@ -508,17 +489,13 @@ jobs:
   deploy-control:
     needs: changes
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.deploy_control == 'true' }}
-    uses: ./.github/workflows/_go.yml
-    with:
-      unit: deploy-control
-      packages: ""
-      deploy_control: true
+    uses: ./.github/workflows/_deploy-control.yml
 
   # Single required check for the branch ruleset. Green only when every
   # dispatched job succeeded or was legitimately skipped.
   ci-ok:
     if: always()
-    needs: [changes, quality, go, android, bazel, python, js, native, images, deploy-control]
+    needs: [changes, quality, android, bazel, python, js, native, images, deploy-control]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

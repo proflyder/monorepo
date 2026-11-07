@@ -44,7 +44,7 @@ IMAGES_DIR="$ROOT/projects/home-assistant/deploy/images"
 REGISTRY=${REGISTRY:-"ghcr.io/proflyder"}
 IMAGE_TAG=${IMAGE_TAG:-$(cd "$ROOT" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)}
 UPSTREAM=${HERMES_UPSTREAM:-https://github.com/NousResearch/hermes-agent.git}
-PLATFORM="--platforms=@rules_go//go/toolchain:linux_amd64"
+PLATFORM="--platforms=//platform/bazel:linux_amd64"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 

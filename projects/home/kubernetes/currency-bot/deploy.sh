@@ -115,7 +115,7 @@ if $BUILD && [[ -z "${CURRENCY_BOT_IMAGE:-}" ]]; then
   echo "== building the currency-bot image with Bazel"
   ( cd "$ROOT" && "$(bazel_bin)" build \
       //solutions/currency-bot:currency-bot_image \
-      --platforms=@rules_go//go/toolchain:linux_amd64 )
+      --platforms=//platform/bazel:linux_amd64 )
 fi
 
 IMAGE_REF=${CURRENCY_BOT_IMAGE:-}
@@ -131,7 +131,7 @@ if [[ -z "$IMAGE_REF" ]]; then
   repo="${IMAGE_REGISTRY}/currency-bot"
   if [[ "$PUSH_IMAGES" == 1 ]]; then
     out=$( cd "$ROOT" && "$(bazel_bin)" run //solutions/currency-bot:currency-bot_push \
-      --platforms=@rules_go//go/toolchain:linux_amd64 \
+      --platforms=//platform/bazel:linux_amd64 \
       -- --repository "$repo" --tag "$IMAGE_TAG" 2>&1 ) || {
         printf '%s\n' "$out" >&2
         echo "pushing ${repo}:${IMAGE_TAG} failed" >&2

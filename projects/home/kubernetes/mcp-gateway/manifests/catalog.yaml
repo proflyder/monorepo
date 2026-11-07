@@ -17,7 +17,7 @@
 #     (pods/log through the Kubernetes API), `none` for external targets.
 #
 # tests enforce the catalog/RBAC correspondence:
-#   go test ./projects/home/kubernetes/mcp-gateway/
+#   cargo test -p mcp-gateway
 #   python3 projects/home/kubernetes/mcp-gateway/test_deploy.py
 overview: |
   # Домашний стенд

@@ -44,9 +44,9 @@ teardown восстанавливает source/volume.
 | Heartbeat Worker | grace-логика, auth, KV transitions, Telegram-доставка (моки) |
 | HA live | API, entities, text intents, optional mutation/alarm |
 | Gateway live | bearer auth, status shape, method guards |
-| MCP gateway | Go unit (фейки backend'ов), каталог↔RBAC, contract `deploy.sh`, fake SSH |
+| MCP gateway | Rust/Bazel unit (фейки backend'ов), каталог↔RBAC, contract `deploy.sh`, fake SSH |
 | bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
-| Voice routing | Go-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
+| Voice routing | Rust-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
 | Pulsar Rust | `bazel test //projects/station/pulsar/satellite/...` (fmt/clippy/tests, Linux) и `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` для `aarch64`/`armhf` — CI-юниты `pulsar-bazel` (`_bazel.yml`) и `pulsar` (`_native.yml`) |
 | Pulsar installer | Rust-тесты установщика и golden-фикстуры из [`projects/station/pulsar/installer/`](../projects/station/pulsar/installer); `bazel test //projects/station/pulsar/installer/...` |
 
@@ -68,21 +68,19 @@ Hermes `/health` и `/v1/models` не заменяют регистрацию а
 
 ## Scheduler и HA bridge
 
-`make test` включает Go-тесты корневого модуля (`solutions/...` и
-`packages/...`). Отдельные команды:
+`make test` запускает герметичные suites, `bazel test` — проверки юнитов.
+Отдельные команды:
 
 ```bash
-go test ./solutions/...
-go test ./packages/...
-go test -race ./solutions/ha-bridge/...
-go test -race ./platform/deploy/...   # converge, state, preflight, render, oci
-go vet ./solutions/...
+bazel test //solutions/... //packages/...
+bazel test //platform/deploy-rs/...
+cargo test -p scheduler -p ha-bridge
 ```
 
-`platform/deploy/internal/converge` содержит parity-тест: fake kubectl
-записывает argv и payload, а тест сравнивает разобранные JSON-объекты с
-трассами, снятыми с Python `converge.py` до его удаления
-(`platform/deploy/testdata/converge/`). `state` покрывает все случаи
+`platform/deploy-rs` содержит frozen parity-фикстуры: fake kubectl
+записывает argv и payload, а `bazel test //platform/deploy-rs:parity`
+сравнивает их с трассами и файлами, снятыми с Go-реализации до её удаления.
+`state` покрывает все случаи
 `test_rollback.py`, `preflight` — legacy-writer проверки и HTTP-сценарии на
 `httptest`.
 
@@ -134,8 +132,8 @@ create/list. Результаты и scheduler state сверяются чере
 node --test solutions/bb-home-dispatcher/tests/*.test.js
 (cd solutions/bb-profiles && npm test)
 
-# шлюз: Go-тесты, каталог↔RBAC, контракт полей и деплой
-go test ./solutions/mcp-gateway/...
+# шлюз: Rust-тесты, каталог↔RBAC, контракт полей и деплой
+bazel test //solutions/mcp-gateway/...
 python3 -m unittest projects/home/kubernetes/mcp-gateway/test_deploy.py -v
 
 # мост и authorized_keys на локальном HTTP-double плагина
@@ -147,7 +145,7 @@ bazel test //solutions/voice-proxy/crates/voice-proxy:unit_tests
 python3 -m unittest projects/home-assistant/deploy/test_voice_routing_contract.py -v
 
 # деплой-инструменты и Hermes rollout/render-config
-go test -race ./platform/deploy/...
+bazel test //platform/deploy-rs/...
 cargo test -p health-exporter
 bazel test //projects/home-assistant/deploy/health-exporter/...
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
@@ -201,11 +199,10 @@ bazel build //projects/mobile/android:app
 # needs cmdline-tools 23.0.
 bazel test //projects/mobile/android:android_lint
 
-# Bazel-инструменты Android (Go, exec-конфигурация): генераторы
+# Bazel-инструменты Android (Kotlin/JVM, exec-конфигурация): генераторы
 # ViewBinding/google-services, lint runner и APK closure; их тесты входят
 # в android_tests.
 bazel test //platform/android/...
-go vet ./platform/android/...
 ```
 
 Android-гейты и их актуальный состав перечислены в
@@ -279,13 +276,13 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 зелёным `ci-ok`, повторный прогон после squash-merge избыточен.
 `permissions: contents: read`, `concurrency` отменяет устаревший прогон только
 для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
-`develop` (см. ниже); его job `warm-caches` после merge сохраняет общие кэши
-Go (`actions/cache`, ключ по `go.sum`) и `setup-bazel` под теми же ключами,
-которые восстанавливают PR. Версии инструментов CI (Python, Node, Go, gitleaks,
-actionlint, shellcheck, kubectl, helm, oras) — из `mise.toml`/`mise.lock` через
-`jdx/mise-action`, как и на рабочем месте (`docs/WORKSTATION.md`).
-Кэши `actions/cache` для Android и deploy-control остаются PR-локальными:
-их содержимое создаёт только соответствующий build/regression.
+`develop` (см. ниже); его job `warm-caches` после merge сохраняет общий кэш
+`setup-bazel` под теми же ключами, которые восстанавливают PR. Версии
+инструментов CI (Python, Node, gitleaks, actionlint, shellcheck, kubectl,
+helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`, как и на
+рабочем месте (`docs/WORKSTATION.md`). Кэши `actions/cache` для Android и
+deploy-control остаются PR-локальными: их содержимое создаёт только
+соответствующий build/regression.
 
 ### Маршрутизация по юнитам
 
@@ -295,9 +292,8 @@ matrix одного платформенного workflow.
 
 | Платформа | Reusable workflow | Что делает юнит |
 |---|---|---|
-| go | `_go.yml` | `go vet`, `go test` (`-race` где объявлено), `go build` бинарей |
 | android | `_android.yml` | JDK 21 + SDK 36, `bazel build` затем `bazel test`, APK в artifact |
-| bazel | `_bazel.yml` | Linux-runner, `bazel build` затем `bazel test` (Rust-хост Pulsar: тесты, fmt, clippy) |
+| bazel | `_bazel.yml` | Linux-runner, `bazel build` затем `bazel test` (Rust-сервисы, `home-deploy`, хост Pulsar: тесты, fmt, clippy) |
 | python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
 | js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
 | native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact; same-repo PR публикует release-shaped `tree-<hash>` с provenance |
@@ -350,13 +346,13 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
 ### Карта юнитов
 
 `platform/ci/units.mjs` (ES-модуль, без npm) — единственный источник правды: `id`, `platform`,
-`paths`, способ запуска (`go.packages`, `bazel.test_targets`, `python.suites`)
+`paths`, способ запуска (`bazel.test_targets`, `python.suites`, `native.*`)
 и Bazel-корни для сопоставления графа с юнитами. Рядом:
 
 * `invalidations` — пути, которые валят больше юнитов, чем совпало по `paths`
   (`MODULE.bazel`, `MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
-  `BUILD.bazel`, toolchain-файлы → все платформы; `go.mod/go.sum/go.work` →
-  все go-юниты; `platform/android/**` → все android-юниты;
+  `BUILD.bazel`, toolchain-файлы → все платформы; `platform/android/**` →
+  все android-юниты;
   `requirements-test.txt` → python+quality). Флаг `deploy: false` оставляет
   правило только для CI: правка workflow или `platform/ci/**` перезапускает
   проверки, но `deploy-home` не выкатывает юнит, выбранный лишь таким
@@ -377,7 +373,7 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
     `_SENDSPIN_BAZEL`) → `MODULE.bazel#native`, платформы `native` и `bazel`
     (хост-проверки Pulsar компилируют те же крейты, что и кросс-сборка);
   * Maven и native вместе → оба виртуальных пути (объединение платформ).
-  Всё остальное (`bazel_dep` любого модуля, `go_deps`, `oci`, `rules_go`,
+  Всё остальное (`bazel_dep` любого модуля, `oci`,
   python, другая extension, неразбираемый файл, отсутствующая base или
   добавление/удаление `MODULE.bazel`) оставляет глобальную инвалидацию.
   `MODULE.bazel.lock` следует scope только вместе со scoped-изменением
@@ -397,13 +393,13 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
 * `platform/bazel/zig/**` и `platform/bazel/windows/**` — только платформа
   `native` (виртуальный `platform/bazel#native`): это target-constrained
   zig cc-toolchain'ы и rules_rust-патчи для кросс-сборки станции и Windows
-  provider; хост-сборки Go/образов/Android их не выбирают. Остальной
+  provider; хост-сборки Rust/образов/Android их не выбирают. Остальной
   `platform/bazel/**` остаётся глобальным.
-* Любое другое изменение (`bazel_dep`, toolchain, `go_deps`, `oci`,
-  python), неразбираемый файл, отсутствующая base-ревизия или
+* Любое другое изменение (`bazel_dep`, toolchain, `oci`, python),
+  неразбираемый файл, отсутствующая base-ревизия или
   добавление/удаление `MODULE.bazel` оставляют глобальную инвалидацию:
   fail safe — «больше», не «меньше».
-* `deploy_control` — какие go-юниты и пути включают дорогую регрессию
+* `deploy_control` — какие юниты и пути включают дорогую регрессию
   `make test-deploy-control` (scheduler, ha-bridge/ha-control,
   `projects/home/kubernetes/scheduler/**`).
 * `deploy` (у деплоимых юнитов) — `images`, `workloads` и `builder`
@@ -416,7 +412,6 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
 
 | Платформа | Источник зависимостей | Пример |
 |---|---|---|
-| go | `go list -deps` пакетов юнита | правка `packages/proto` выбирает все юниты, которые его импортируют |
 | android | обратные зависимости Bazel (`bazel query --output=xml`, loading phase) | правка `packages/kotlin/core` выбирает `kotlin-shared` и только те приложения, что от него зависят |
 | bazel | те же обратные зависимости Bazel, что у android | правка `projects/station/pulsar/satellite/crates/pulsar-core` выбирает `pulsar-bazel` |
 | python | пути юнита (+ `depends_on`) | правка `projects/home/proxmox/**` выбирает `proxmox` |
@@ -426,10 +421,6 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
 Android-граф берётся из loading-фазы намеренно: он не требует JDK и Android
 SDK, поэтому маршрутизация дешёвая и не может «сломаться из-за toolchain».
 
-Замыкание `go list` работает только внутри go-юнитов. Деплой-юнит `hermes`
-имеет платформу `python` и собственных go-пакетов, поэтому изменения
-`packages/go/**` не доходят до него через зависимость; путь добавлен в
-`hermes.paths` явно (тесты при этом остаются у go-юнита `voice-proxy`).
 Изменённый файл сопоставляется с `rule-input` (source file); для нового,
 удалённого файла или правки `BUILD.bazel`/`.bzl` берётся весь пакет — это
 безопасное over-approximation.
@@ -441,7 +432,7 @@ SDK, поэтому маршрутизация дешёвая и не может
   юниты; исключения — scoped-диффы, описанные выше: `MODULE.bazel#maven` →
   только android, `MODULE.bazel#native` → native + pulsar-bazel,
   `.bazelrc#cache` → ни одной платформы, `platform/bazel#native` → native;
-* `go list` упал → все go-юниты; `bazel query` упал → все android и bazel юниты;
+* `bazel query` упал → все android и bazel юниты;
 * база не определена (новый push, `workflow_dispatch`) → все юниты
   (`affected.mjs --all`);
 * база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
@@ -463,7 +454,7 @@ SDK, поэтому маршрутизация дешёвая и не может
 * `depends_on` ссылается на несуществующий юнит;
 * объявленный python-suite не содержит `test_*.py` (для каталогов без
   герметичных тестов есть `python.compile`: только `compileall`);
-* **любой tracked `*.go`/`*.py`/`*.kt`/`*.js`/`*.mjs`/`*.sh`/`*.bzl`/`BUILD.bazel` не
+* **любой tracked `*.rs`/`*.py`/`*.kt`/`*.js`/`*.mjs`/`*.sh`/`*.bzl`/`BUILD.bazel` не
   принадлежит ни одному юниту** — новый тест не может молча выпасть из CI;
 * job workflow пишет в registry (`crane tag`/`crane push`, `oras push`/`oras
   tag`, `platform/ci/promote.mjs`, `push-to-registry: true`) без логина в
@@ -534,8 +525,8 @@ digest-пины образов, поэтому `make test` и `make test-deploy-
 `projects/home-assistant/deploy/test_build_and_push.py` проверяет то же для
 `build-and-push.sh` (`hermes`, `voice-proxy`, `health-exporter`,
 `home-deploy`) с заглушками docker/bazel/git. Hermes rollout и
-render-config покрыты Go-тестами `platform/deploy/internal/hermes` и
-`.../hermesconfig` (включая golden parity с Python-выходом рендерера);
+render-config покрыты Rust-тестами `platform/deploy-rs` (`hermes` и
+`hermesconfig`, включая frozen parity с выходами Go/Python-рендерера);
 health exporter — Rust `.../deploy/health-exporter` (`cargo test -p
 health-exporter` и Bazel-юнит `health-exporter`).
 

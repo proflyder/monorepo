@@ -93,4 +93,4 @@ python3 -m unittest discover -s projects/home/kubernetes/wakegrant -p 'test_*.py
 
 The deploy tests are hermetic: a stub `kubectl` fails at the first cluster
 call, so only validation, rendering and manifest invariants are asserted. The
-protocol itself is tested in Go.
+protocol itself is tested in Rust (`solutions/wakegrant`).

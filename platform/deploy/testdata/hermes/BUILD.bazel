@@ -1,7 +1,0 @@
-package(default_visibility = ["//visibility:public"])
-
-# Synthetic TEST-NET private values for the Hermes render golden test.
-filegroup(
-    name = "hermes",
-    srcs = glob(["*.yaml"]),
-)

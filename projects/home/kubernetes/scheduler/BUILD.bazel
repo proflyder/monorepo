@@ -1,10 +1,9 @@
-load("//platform/bazel/oci:service_image.bzl", "rust_service_image", "service_image")
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 # Container images for the home scheduler stack.
 #
-# The scheduler, ha-bridge and ha-control are Rust crates rebuilt for static
-# musl; the remaining service is a static linux/amd64 Go binary. Each image is one binary on top of a
-# digest-pinned distroless base (MODULE.bazel `distroless_static`). There are
+# All four services are Rust crates rebuilt for static linux/amd64 musl. Each
+# image is one binary on top of a digest-pinned distroless base (MODULE.bazel `distroless_static`). There are
 # no RUN steps and no package manager, so the images are assembled hermetically
 # on any host (macOS workstation or the GitHub runner) and never need a Docker
 # daemon to build. Runtime manifests reference images by digest, never by tag.
@@ -51,7 +50,7 @@ filegroup(
 )
 
 # Templates rendered by the deploy scripts and the deployment tooling tests
-# (platform/deploy/internal/render golden parity).
+# (//platform/deploy-rs:unit_tests golden parity).
 filegroup(
     name = "deploy_templates",
     srcs = glob([

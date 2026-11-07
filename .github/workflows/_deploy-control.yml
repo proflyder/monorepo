@@ -1,0 +1,34 @@
+name: _deploy-control
+
+# Mocked-kubectl regression for deploy.sh control mode. It needs the Rust
+# home-deploy CLI (the script resolves HOME_DEPLOY) and pre-resolved image
+# digests, so no image build or cluster access is involved.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-control:
+    name: deploy-control
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
+      - name: Build the deploy CLI
+        run: bazel build //platform/deploy-rs:home-deploy
+
+      - name: scheduler deploy control regression
+        env:
+          HOME_DEPLOY: ${{ github.workspace }}/bazel-bin/platform/deploy-rs/home-deploy
+        run: bash projects/home/kubernetes/scheduler/test_deploy_control.sh

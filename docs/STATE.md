@@ -164,7 +164,7 @@
   обязательный итог — `ci-ok`. Прямой push в `develop` запрещён; `develop`
   обновляется только squash-merge PR.
 - Версии инструментов CI и рабочего места — один `mise.toml` (+ `mise.lock`
-  с sha256 linux-x64/macos-arm64): Python 3.13, Node 22, Go 1.27, Bazelisk,
+  с sha256 linux-x64/macos-arm64): Python 3.13, Node 22, Bazelisk,
   gitleaks, actionlint, shellcheck, kubectl, helm, oras, bao, gh, protoc, bw.
   CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
   Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
@@ -558,7 +558,7 @@
   назначена `script.work_mode` и `script.blackout`. Живой каталог: 2 сценария
   + 15 light/switch, служебные скрипты отсутствуют. LAN NodePort `30099`,
   HTTPS `https://control.home.example.com` (LAN/VPN). Доставка
-  at-least-once, не exactly-once. Go-бинарник `cmd/ha-control` остаётся для
+  at-least-once, не exactly-once. Прежний образ `ha-control` остаётся в GHCR для
   отката по digest; Rust-контракт каталога закреплён `testdata/catalog`.
   Title/Room режутся по символам (не по байтам), `Light.Mode` определяется до
   live-значений, HTTP-сервер ограничен таймаутом запроса.

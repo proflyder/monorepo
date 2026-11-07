@@ -102,7 +102,7 @@ test("bazel graph: label path conversion", () => {
 test("android fixture: shared library selects only its dependent application", () => {
   const config = affected.loadConfig(fixtureConfig);
   const graph = loadFixtureGraph();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["libs/shared/src/Shared.kt"], {
       root: REPO,
       base: "base-sha",
@@ -117,7 +117,7 @@ test("android fixture: shared library selects only its dependent application", (
 test("android fixture: application change selects only that application", () => {
   const config = affected.loadConfig(fixtureConfig);
   const graph = loadFixtureGraph();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["apps/two/src/Two.kt"], {
       root: REPO,
       base: "base-sha",
@@ -130,7 +130,7 @@ test("android fixture: application change selects only that application", () => 
 test("android fixture: module change selects every application", () => {
   const config = affected.loadConfig(fixtureConfig);
   const graph = loadFixtureGraph();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["MODULE.bazel"], {
       root: REPO,
       base: "base-sha",
@@ -140,13 +140,12 @@ test("android fixture: module change selects every application", () => {
   const ids = result.routes.android.units.map((unit) => unit.id);
   assert.deepEqual(ids, ["app-one", "app-two", "shared-kotlin"]);
   assert.equal(result.routes.android.mode, "all");
-  assert.equal(result.routes.go.mode, "all");
 });
 
 test("android fixture: maven virtual path only reaches android", () => {
   const config = affected.loadConfig(fixtureConfig);
   const graph = loadFixtureGraph();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, [affected.MODULE_BAZEL_MAVEN], {
       root: REPO,
       base: "base-sha",
@@ -156,13 +155,12 @@ test("android fixture: maven virtual path only reaches android", () => {
   const ids = result.routes.android.units.map((unit) => unit.id);
   assert.deepEqual(ids, ["app-one", "app-two", "shared-kotlin"]);
   assert.equal(result.routes.android.mode, "all");
-  assert.deepEqual(result.routes.go.units, []);
 });
 
 test("android fixture: docs-only change runs nothing but quality", () => {
   const config = affected.loadConfig(fixtureConfig);
   const graph = loadFixtureGraph();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["docs/ARCHITECTURE.md"], {
       root: REPO,
       base: "base-sha",
@@ -170,7 +168,7 @@ test("android fixture: docs-only change runs nothing but quality", () => {
     }),
   );
   assert.equal(result.docsOnly, true);
-  for (const platform of ["go", "android", "bazel", "python", "js", "native"]) {
+  for (const platform of ["android", "bazel", "python", "js", "native"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
   }
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
@@ -178,7 +176,7 @@ test("android fixture: docs-only change runs nothing but quality", () => {
 
 test("android fixture: graph failure degrades to all android units", () => {
   const config = affected.loadConfig(fixtureConfig);
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["libs/shared/src/Shared.kt"], {
       root: REPO,
       base: "base-sha",
@@ -196,7 +194,7 @@ test("android fixture: graph failure degrades to all android units", () => {
 test("android fixture: matrix entries are flat strings", () => {
   const config = affected.loadConfig(fixtureConfig);
   const graph = loadFixtureGraph();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["libs/shared/src/Shared.kt"], {
       root: REPO,
       base: "base-sha",
@@ -213,62 +211,6 @@ test("android fixture: matrix entries are flat strings", () => {
     sdk_packages: "",
     universe: "//apps/one/... + //apps/two/... + //libs/shared/...",
   });
-});
-
-function fakeDeps(_root, unit) {
-  // Directory of a real Go package, as `go list -deps` reports it.
-  const shared = new Set([path.join(REPO, "platform", "deploy", "internal", "buildid")]);
-  const own = new Set([path.join(REPO, unit.id)]);
-  // `sched` imports the shared package, nothing else does.
-  if (unit.id === "sched") {
-    return new Set([...own, ...shared]);
-  }
-  return own;
-}
-
-test("go: only importing unit is selected", () => {
-  const config = affected.loadConfig(fixtureConfig);
-  const result = withDeps({ goPackageDirs: fakeDeps }, () =>
-    affected.route(config, ["platform/deploy/internal/buildid/buildid.go"], {
-      root: REPO,
-      base: "b",
-    }),
-  );
-  assert.deepEqual(result.routes.go.units.map((unit) => unit.id), ["sched"]);
-});
-
-test("go: unit path selects its own unit", () => {
-  const config = affected.loadConfig(fixtureConfig);
-  const result = withDeps({ goPackageDirs: fakeDeps }, () =>
-    affected.route(config, ["go/sched/cmd/sched/main.go"], { root: REPO, base: "b" }),
-  );
-  assert.deepEqual(result.routes.go.units.map((unit) => unit.id), ["sched"]);
-});
-
-test("go: go list failure degrades to all go units", () => {
-  const config = affected.loadConfig(fixtureConfig);
-  const result = withDeps(
-    {
-      goPackageDirs: () => {
-        throw new Error("go list failed");
-      },
-    },
-    () => affected.route(config, ["go/sched/x.go"], { root: REPO, base: "b" }),
-  );
-  assert.equal(result.routes.go.mode, "all");
-  assert.deepEqual(result.routes.go.units.map((unit) => unit.id), ["sched"]);
-});
-
-test("go: deploy control flag follows affected units", () => {
-  const config = affected.loadConfig(fixtureConfig);
-  const outOfScope = withDeps({ goPackageDirs: fakeDeps }, () =>
-    affected.route(config, ["apps/two/src/Two.kt"], { root: REPO, base: "b" }),
-  );
-  const inScope = withDeps({ goPackageDirs: fakeDeps }, () =>
-    affected.route(config, ["go/sched/x.go"], { root: REPO, base: "b" }),
-  );
-  assert.equal(outOfScope.deployControl, false);
-  assert.equal(inScope.deployControl, true);
 });
 
 function pythonUnit(overrides = {}) {
@@ -317,7 +259,7 @@ test("python units: compile-only unit is accepted", () => {
 
 test("python units: matrix entry carries compile dirs", () => {
   const config = affected.loadConfig(fixtureConfig);
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["apps/two/src/Two.kt"], { root: REPO, base: "b" }),
   );
   const entries = affected.matrixEntries(result, config);
@@ -412,14 +354,14 @@ test("real repo: every tracked source and test file is owned", () => {
 
 test("real repo: every known platform has a unit", () => {
   const config = affected.loadConfig();
-  for (const platform of ["go", "android", "python", "js", "native", "quality"]) {
+  for (const platform of ["android", "python", "js", "native", "quality"]) {
     assert.ok(config.byPlatform(platform).length, platform);
   }
 });
 
 test("real repo: native provider change routes to its unit without publishing", () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["solutions/windows-logon-provider/crates/provider/src/worker.rs"], {
       root: REPO,
       base: "b",
@@ -455,7 +397,7 @@ test("real repo: native provider change routes to its unit without publishing", 
 
 test("real repo: native workflow change runs native units", () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, [".github/workflows/_native.yml"], { root: REPO, base: "b" }),
   );
   assert.equal(result.routes.native.mode, "all");
@@ -467,7 +409,7 @@ test("real repo: native workflow change runs native units", () => {
 
 test("real repo: pulsar change routes to the native pulsar unit", () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"], {
       root: REPO,
       base: "b",
@@ -501,7 +443,7 @@ test("real repo: pulsar change routes to the native pulsar unit", () => {
 test("real repo: pulsar and the logon provider publish only when VERSION changed", () => {
   const config = affected.loadConfig();
   const entryFor = (changed, id) => {
-    const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+    const result = withDeps({}, () =>
       affected.route(config, changed, { root: REPO, base: "b" }),
     );
     return affected.matrixEntries(result, config).native.find((item) => item.id === id);
@@ -528,7 +470,7 @@ test("real repo: pulsar and the logon provider publish only when VERSION changed
 
 test("real repo: js worker change routes to its unit", () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["solutions/heartbeat/src/decide.js"], {
       root: REPO,
       base: "b",
@@ -560,7 +502,7 @@ test("real repo: android lint unit is a separate job with the same paths", () =>
 
 test("real repo: android module change selects the app and the lint unit", () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["projects/mobile/android/features/alarms/impl/AlarmsFragment.kt"], {
       root: REPO,
       base: "b",
@@ -575,7 +517,7 @@ test("real repo: android module change selects the app and the lint unit", () =>
 
 test("real repo: shared kotlin change selects the lint unit through the graph", () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["packages/kotlin/core/src/main/A.kt"], {
       root: REPO,
       base: "b",
@@ -614,7 +556,7 @@ test("real repo: lint rule change runs every android unit including lint", () =>
 
 test("real repo: github format is a valid JSON payload", async () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(config, ["docs/TESTING.md"], { root: REPO, base: "b", graph: null }),
   );
   const tmp = tempDir();
@@ -646,7 +588,6 @@ test("real repo: github format is a valid JSON payload", async () => {
         values[line.slice(0, index)] = line.slice(index + 1);
       }
     }
-    assert.deepEqual(JSON.parse(values.go_units), []);
     assert.equal(values.docs_only, "true");
     assert.equal(values.android_distribute, "false");
   } finally {
@@ -657,7 +598,7 @@ test("real repo: github format is a valid JSON payload", async () => {
 function routeReal(changed, deps, graph = null) {
   const config = affected.loadConfig();
   return withDeps(
-    { goPackageDirs: deps ?? (() => new Set()) },
+    {},
     () => affected.route(config, changed, { root: REPO, base: "b", graph }),
   );
 }
@@ -681,7 +622,6 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "mcp-gateway",
     "ha-bridge",
   ]);
-  assert.deepEqual(result.routes.go.units, []);
   // A tooling change reaches every unit that runs a deploy script.
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id).sort(), [
@@ -720,7 +660,6 @@ test("deploy: scheduler Rust crate change deploys scheduler", () => {
         new Set(["//solutions/scheduler/crates/scheduler:scheduler"]),
     },
   );
-  assert.deepEqual(result.routes.go.units, []);
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["scheduler"]);
   assert.equal(result.deployControl, true);
   const entries = affected.deployEntries(result, config);
@@ -840,7 +779,6 @@ test("deploy: voice-proxy solution change runs its bazel unit and deploys hermes
     { root: REPO, base: "b", graph: { affectedRules: () => new Set() } },
   );
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["voice-proxy"]);
-  assert.deepEqual(result.routes.go.units, []);
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
 });
@@ -881,7 +819,7 @@ test("rust cutover: a shared crate change also runs the bazel unit", () => {
 test("deploy: ci workflow change runs checks but deploys nothing", () => {
   const config = affected.loadConfig();
   const result = routeReal([".github/workflows/ci.yml"]);
-  for (const platform of ["go", "android", "python", "js"]) {
+  for (const platform of ["android", "python", "js"]) {
     assert.ok(result.routes[platform].units.length, platform);
   }
   assert.deepEqual(affected.deployEntries(result, config), []);
@@ -975,11 +913,10 @@ test("android distribution: paths cover android units and platform tooling", () 
   }
 });
 
-test("workflow invalidation: go workflow runs every go unit", () => {
-  const result = routeReal([".github/workflows/_go.yml"]);
-  assert.equal(result.routes.go.mode, "all");
-  assert.ok(result.routes.go.units.length);
-  assert.deepEqual(result.routes.android.units, []);
+test("workflow invalidation: deploy-control workflow runs every platform", () => {
+  const result = routeReal([".github/workflows/_deploy-control.yml"]);
+  assert.equal(result.routes.android.mode, "all");
+  assert.ok(result.routes.android.units.length);
 });
 
 test("workflow invalidation: android workflow runs android", () => {
@@ -996,7 +933,7 @@ test("workflow invalidation: native workflow runs native", () => {
 
 test("workflow invalidation: ci entrypoint runs everything", () => {
   const result = routeReal([".github/workflows/ci.yml"]);
-  for (const platform of ["go", "android", "bazel", "python", "js", "native"]) {
+  for (const platform of ["android", "bazel", "python", "js", "native"]) {
     assert.ok(result.routes[platform].units.length, platform);
   }
 });
@@ -1019,9 +956,8 @@ maven.install(
 )
 use_repo(maven, "maven")
 
-go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-go_deps.from_file(go_mod = "//:go.mod")
-use_repo(go_deps, "com_github_example")
+other = use_extension("@example//:extensions.bzl", "other")
+use_repo(other, "com_example")
 
 # A \`#\` and parentheses in a string must not confuse the tokenizer.
 MARKER = "value (with # parens)"
@@ -1047,9 +983,8 @@ maven.install(
 )
 use_repo(maven, "maven")
 
-go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-go_deps.from_file(go_mod = "//:go.mod")
-use_repo(go_deps, "com_github_example")
+other = use_extension("@example//:extensions.bzl", "other")
+use_repo(other, "com_example")
 
 # A \`#\` and parentheses in a string must not confuse the tokenizer.
 MARKER = "value (with # parens)"
@@ -1082,8 +1017,8 @@ test("module bazel: mixed maven and bazel_dep edit is global", () => {
 
 test("module bazel: other extension use_repo edit is global", () => {
   const updated = MODULE_BAZEL_MAVEN_OLD.replace(
-    'use_repo(go_deps, "com_github_example")',
-    'use_repo(go_deps, "com_github_example", "com_github_other")',
+    'use_repo(other, "com_example")',
+    'use_repo(other, "com_example", "com_example_other")',
   );
   assert.equal(affected.moduleBazelIsMavenOnly(MODULE_BAZEL_MAVEN_OLD, updated), false);
 });
@@ -1124,7 +1059,6 @@ function routeModule(oldText, newText) {
   const config = affected.loadConfig();
   return withDeps(
     {
-      goPackageDirs: () => new Set(),
       gitFileText: (_root, revision) =>
         revision === "base-sha" ? oldText : newText,
     },
@@ -1144,7 +1078,7 @@ test("module routing: maven-only edit runs android checks and no other platform"
   assert.deepEqual(result.changed, [affected.MODULE_BAZEL_MAVEN]);
   assert.equal(result.routes.android.mode, "all");
   assert.deepEqual(result.routes.android.units.map((unit) => unit.id), androidIds);
-  for (const platform of ["go", "python", "js", "native"]) {
+  for (const platform of ["python", "js", "native"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
   }
   assert.equal(result.routes.quality.mode, "always");
@@ -1169,7 +1103,6 @@ test("module routing: bazel_dep change keeps the global invalidation", () => {
   const updated = MODULE_BAZEL_MAVEN_OLD.replace('version = "6.6"', 'version = "7.0"');
   const result = routeModule(MODULE_BAZEL_MAVEN_OLD, updated);
   assert.deepEqual(result.changed, ["MODULE.bazel"]);
-  assert.equal(result.routes.go.mode, "all");
   assert.equal(result.routes.python.mode, "all");
   const expected = config.units.filter((unit) => unit.deployImages.length).map((unit) => unit.id);
   assert.deepEqual(
@@ -1181,14 +1114,12 @@ test("module routing: bazel_dep change keeps the global invalidation", () => {
 test("module routing: mixed edit keeps the global invalidation", () => {
   const updated = MODULE_BAZEL_MAVEN_NEW.replace('version = "6.6"', 'version = "7.0"');
   const result = routeModule(MODULE_BAZEL_MAVEN_OLD, updated);
-  assert.equal(result.routes.go.mode, "all");
 });
 
 test("module routing: missing revision keeps the global invalidation", () => {
   const config = affected.loadConfig();
   const result = withDeps(
     {
-      goPackageDirs: () => new Set(),
       gitFileText: (_root, revision) =>
         revision === "base-sha" ? null : MODULE_BAZEL_MAVEN_NEW,
     },
@@ -1200,7 +1131,6 @@ test("module routing: missing revision keeps the global invalidation", () => {
       }),
   );
   assert.deepEqual(result.changed, ["MODULE.bazel"]);
-  assert.equal(result.routes.go.mode, "all");
 });
 
 // --------------------------------------------------------------------------
@@ -1281,7 +1211,6 @@ test("bazelrc routing: cache-only edit runs no platform and deploys nothing", ()
   const config = affected.loadConfig();
   const result = withDeps(
     {
-      goPackageDirs: () => new Set(),
       gitFileText: (_root, revision, filePath) => {
         if (filePath !== affected.BAZELRC) {
           return null;
@@ -1297,7 +1226,7 @@ test("bazelrc routing: cache-only edit runs no platform and deploys nothing", ()
       }),
   );
   assert.deepEqual(result.changed, [affected.BAZELRC_CACHE]);
-  for (const platform of ["go", "android", "bazel", "python", "js", "native"]) {
+  for (const platform of ["android", "bazel", "python", "js", "native"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
   }
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
@@ -1310,7 +1239,6 @@ test("bazelrc routing: a real flag edit keeps the global invalidation", () => {
   const config = affected.loadConfig();
   const result = withDeps(
     {
-      goPackageDirs: () => new Set(),
       gitFileText: (_root, revision, filePath) => {
         if (filePath !== affected.BAZELRC) {
           return null;
@@ -1326,14 +1254,12 @@ test("bazelrc routing: a real flag edit keeps the global invalidation", () => {
       }),
   );
   assert.deepEqual(result.changed, [affected.BAZELRC]);
-  assert.equal(result.routes.go.mode, "all");
 });
 
 test("bazelrc routing: a deleted file keeps the global invalidation", () => {
   const config = affected.loadConfig();
   const result = withDeps(
     {
-      goPackageDirs: () => new Set(),
       gitFileText: (_root, revision) => (revision === "base-sha" ? BAZELRC_BASE : null),
     },
     () =>
@@ -1344,7 +1270,6 @@ test("bazelrc routing: a deleted file keeps the global invalidation", () => {
       }),
   );
   assert.deepEqual(result.changed, [affected.BAZELRC]);
-  assert.equal(result.routes.go.mode, "all");
 });
 
 // --------------------------------------------------------------------------
@@ -1503,7 +1428,6 @@ function routeModuleFiles(changed, oldText, newText) {
   const config = affected.loadConfig();
   return withDeps(
     {
-      goPackageDirs: () => new Set(),
       gitFileText: (_root, revision, filePath) =>
         filePath === affected.MODULE_BAZEL
           ? revision === "base-sha"
@@ -1528,7 +1452,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     MODULE_BAZEL_NATIVE_NEW,
   );
   assert.deepEqual(result.changed, [affected.MODULE_BAZEL_NATIVE]);
-  for (const platform of ["go", "android", "python", "js"]) {
+  for (const platform of ["android", "python", "js"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
   }
   assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
@@ -1572,7 +1496,6 @@ test("module routing: mixed maven+native edit unions android, native and bazel",
   assert.equal(result.routes.android.mode, "all");
   assert.equal(result.routes.native.mode, "all");
   assert.equal(result.routes.bazel.mode, "all");
-  assert.deepEqual(result.routes.go.units, []);
   assert.deepEqual(result.routes.python.units, []);
   assert.deepEqual(result.routes.js.units, []);
   assert.equal(result.androidDistribute, true);
@@ -1585,8 +1508,6 @@ test("module routing: a native edit with the lock follows the same scope", () =>
     MODULE_BAZEL_NATIVE_NEW,
   );
   assert.deepEqual(result.changed, [affected.MODULE_BAZEL_NATIVE]);
-  assert.equal(result.routes.go.mode, "paths");
-  assert.deepEqual(result.routes.go.units, []);
 });
 
 test("module routing: the lock alone keeps the global invalidation", () => {
@@ -1596,7 +1517,6 @@ test("module routing: the lock alone keeps the global invalidation", () => {
     MODULE_BAZEL_NATIVE_NEW,
   );
   assert.deepEqual(result.changed, [affected.MODULE_BAZEL_LOCK]);
-  assert.equal(result.routes.go.mode, "all");
   assert.equal(result.routes.android.mode, "all");
 });
 
@@ -1606,7 +1526,7 @@ test("module routing: the lock alone keeps the global invalidation", () => {
 test("platform bazel routing: zig toolchain change reaches only native", () => {
   const result = routeReal(["platform/bazel/zig/toolchain.bzl"]);
   assert.deepEqual(result.changed, [affected.BAZEL_CONFIG_NATIVE]);
-  for (const platform of ["go", "android", "bazel", "python", "js"]) {
+  for (const platform of ["android", "bazel", "python", "js"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
   }
   assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
@@ -1619,7 +1539,6 @@ test("platform bazel routing: zig toolchain change reaches only native", () => {
 test("platform bazel routing: windows patches reach only native", () => {
   const result = routeReal(["platform/bazel/windows/BUILD.bazel"]);
   assert.deepEqual(result.changed, [affected.BAZEL_CONFIG_NATIVE]);
-  assert.deepEqual(result.routes.go.units, []);
   assert.deepEqual(result.routes.android.units, []);
   assert.deepEqual(result.routes.native.units.map((unit) => unit.id), [
     "logon-provider",
@@ -1630,13 +1549,12 @@ test("platform bazel routing: windows patches reach only native", () => {
 test("platform bazel routing: other files under platform/bazel stay global", () => {
   const result = routeReal(["platform/bazel/README.md"]);
   assert.deepEqual(result.changed, ["platform/bazel/README.md"]);
-  assert.equal(result.routes.go.mode, "all");
   assert.equal(result.routes.android.mode, "all");
 });
 
 test("platform bazel routing: a native toolchain and a scheduler change select both", () => {
   const config = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
+  const result = withDeps({}, () =>
     affected.route(
       config,
       ["platform/bazel/zig/repositories.bzl", "solutions/scheduler/crates/scheduler/src/api/service.rs"],
@@ -1655,7 +1573,6 @@ test("platform bazel routing: a native toolchain and a scheduler change select b
     "logon-provider",
     "pulsar",
   ]);
-  assert.deepEqual(result.routes.go.units, []);
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["scheduler"]);
   assert.deepEqual(result.routes.android.units, []);
 });

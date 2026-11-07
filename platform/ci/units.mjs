@@ -5,8 +5,6 @@
 // 1:1 to a matrix entry of one platform workflow (`.github/workflows/_*.yml`).
 //
 // Routing is computed by `platform/ci/affected.mjs`:
-//   * go       - dependency closure from `go list -deps` of the unit's packages,
-//                so a shared package change selects every importing unit.
 //   * android  - reverse dependencies from the Bazel loading graph
 //                (`bazel query --output=xml`), mapped back to unit names by
 //                `bazel.roots`, so a Kotlin library change selects only the
@@ -32,7 +30,7 @@ export const config = {
   // Paths whose change invalidates more than the units whose `paths` match.
   // `platforms: ["*"]` means every platform. Shared libraries are deliberately
   // absent here: they reach their consumers through the dependency engines
-  // (`go list -deps`, Bazel reverse dependencies), not through path globs.
+  // (Bazel reverse dependencies), not through path globs.
   //
   // `deploy: false` (default true) keeps the invalidation for CI only:
   // `deploy-home` never redeploys a unit selected *solely* by such a path. Workflow
@@ -47,7 +45,7 @@ export const config = {
   //     `MODULE.bazel#native` -> native units (station/provider cross-build)
   //     plus the `pulsar-bazel` host checks (same Rust crates on the host).
   //   * a mix of both -> both virtual paths (union of the platforms).
-  // Anything else in MODULE.bazel - bazel_dep, go_deps, oci, rules_go, python -
+  // Anything else in MODULE.bazel - bazel_dep, oci, python -
   // and an unparseable file, a missing base or an added/deleted file keep the
   // global rule below.
   //
@@ -57,7 +55,7 @@ export const config = {
   // and runs only the always-on quality job. `platform/bazel/zig/**` and
   // `platform/bazel/windows/**` become `platform/bazel#native`: they are
   // target-constrained toolchains/patches for the native station and the
-  // Windows provider, never for the host Go/images/Android builds.
+  // Windows provider, never for the host Rust/images/Android builds.
   invalidations: [
     {
       paths: [
@@ -92,10 +90,6 @@ export const config = {
       paths: ["platform/android/**"],
       platforms: ["android"],
     },
-    {
-      paths: ["go.mod", "go.sum", "go.work", "go.work.sum"],
-      platforms: ["go"],
-    },
     // Root Cargo workspace: one lockfile and one toolchain for every
     // first-party Rust crate. A pin, lock or toolchain change reaches every
     // unit that compiles Rust (host checks and cross-builds).
@@ -114,15 +108,20 @@ export const config = {
       platforms: ["python", "quality"],
     },
     // A reusable workflow change must run the jobs it defines, otherwise a broken
-    // _go.yml/_android.yml passes PR CI unexercised.
+    // workflow passes PR CI unexercised.
     {
       paths: [".github/workflows/ci.yml"],
       platforms: ["*"],
       deploy: false,
     },
     {
-      paths: [".github/workflows/_go.yml", ".github/workflows/_images.yml"],
-      platforms: ["go"],
+      paths: [".github/workflows/_images.yml"],
+      platforms: ["bazel", "native"],
+      deploy: false,
+    },
+    {
+      paths: [".github/workflows/_deploy-control.yml"],
+      platforms: ["*"],
       deploy: false,
     },
     {
@@ -170,8 +169,7 @@ export const config = {
       id: "platform-deploy",
       platform: "bazel",
       title: "platform/deploy-rs (home-deploy CLI: render, env, oci, converge, state, preflight, hermes)",
-      // The Rust crate is the executable contract; the legacy Go implementation
-      // stays in the tree until the cleanup PR. Every deploy script and the
+      // The Rust crate is the executable contract. Every deploy script and the
       // image build call this binary, so a change is both tested here and
       // routed to the units that deploy through it (their `paths` include
       // platform/deploy-rs/**).
@@ -185,21 +183,6 @@ export const config = {
           "//platform/deploy-rs:parity",
         ],
         build_targets: ["//platform/deploy-rs/..."],
-      },
-    },
-    {
-      id: "platform-deploy-go",
-      platform: "go",
-      title: "platform/deploy (legacy Go home-deploy, retained for revert)",
-      // The executable contract moved to platform/deploy-rs; the Go tree stays
-      // until the cleanup PR so a cutover revert is one PR. Keep its Go tests
-      // green while it exists.
-      paths: ["platform/deploy/**"],
-      go: {
-        module: ".",
-        packages: ["./platform/deploy/..."],
-        race: true,
-        build: ["./platform/deploy/cmd/home-deploy"],
       },
     },
     {
@@ -449,7 +432,6 @@ export const config = {
         // Direct dependencies of the Rust executors: a change here rebuilds
         // the unit even though the Bazel graph only sees it through its own
         // targets.
-        "packages/go/**",
         "packages/proto/**",
         "packages/rust/**",
         // The deploy tooling that renders the shared scheduler manifests.
@@ -833,7 +815,7 @@ export const config = {
       paths: ["projects/home/kubernetes/scheduler/**"],
       python: {
         // The remaining Python contract test is the shell regression driver;
-        // converge/state/preflight live in platform/deploy (Go, unit above).
+        // converge/state/preflight live in platform/deploy-rs (unit above).
         compile: ["projects/home/kubernetes/scheduler"],
       },
     },

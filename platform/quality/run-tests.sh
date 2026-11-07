@@ -44,6 +44,7 @@ fi
 if command -v cargo >/dev/null 2>&1; then
   echo "== Deploy tooling: home-deploy (Rust) =="
   cargo build -p home-deploy
+  cargo test -p home-deploy
   HOME_DEPLOY="$ROOT/target/debug/home-deploy"
   export HOME_DEPLOY
 else
@@ -55,11 +56,6 @@ fi
 # The Rust crate's converge/state/preflight are covered by its Bazel unit tests.
 echo "== Scheduler deployment: deploy control =="
 bash projects/home/kubernetes/scheduler/test_deploy_control.sh
-
-# Root Go module: reusable solutions and shared packages. Android/Bazel gates are
-# separate (they need the Android SDK) and are documented in docs/TESTING.md.
-echo "== Go: solutions, packages and deploy tooling =="
-go test ./solutions/... ./packages/... ./platform/deploy/...
 
 if [[ -d projects/station/resources/quasar-connect-bot ]]; then
   echo "== Python: quasar-connect-bot (nested checkout) =="

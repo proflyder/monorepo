@@ -37,7 +37,7 @@ helm template runtime "$ROOT/projects/home-assistant/deploy/chart" \
   -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" > "$TMP/render.yaml"
 
 # Split the render: keep PV/PVC out of the Helm release and write a values file
-# without `storage`, with the health exporter pinned to the Go image.
+# without `storage`, with the health exporter pinned to the Rust image.
 home_deploy runtime split \
   --render "$TMP/render.yaml" \
   --private "$RUNTIME_PRIVATE_VALUES" \
