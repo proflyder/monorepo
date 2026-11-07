@@ -218,6 +218,9 @@ mod windows_impl {
 
     /// Looks up the "negotiate" authentication package id.
     fn retrieve_negotiate_auth_package() -> Result<u32, HRESULT> {
+        // Same as NEGOSSP_NAME_A: "Negotiate" with the terminating NUL, and
+        // MaximumLength one past the length.
+        const NAME: &[u8] = b"Negotiate\0";
         let mut lsa = HANDLE::default();
         // SAFETY: `lsa` is a valid out-parameter.
         let status = unsafe { LsaConnectUntrusted(&raw mut lsa) };
@@ -225,9 +228,6 @@ mod windows_impl {
             return Err(HRESULT::from_nt(status.0));
         }
 
-        // Same as NEGOSSP_NAME_A: "Negotiate" with the terminating NUL, and
-        // MaximumLength one past the length.
-        const NAME: &[u8] = b"Negotiate\0";
         let package_name = LSA_STRING {
             Length: (NAME.len() - 1) as u16,
             MaximumLength: NAME.len() as u16,
@@ -291,9 +291,8 @@ mod windows_impl {
         let Some(kind) = message_type(cpus) else {
             return Err(E_FAIL);
         };
-        let mut packed = match kerb::pack(&domain, &user, &protected[..protected_len], kind) {
-            Some(packed) => packed,
-            None => return Err(E_FAIL),
+        let Some(mut packed) = kerb::pack(&domain, &user, &protected[..protected_len], kind) else {
+            return Err(E_FAIL);
         };
         let package = match retrieve_negotiate_auth_package() {
             Ok(package) => package,
@@ -378,15 +377,12 @@ mod windows_impl {
             let elapsed = unsafe { GetTickCount64() }.saturating_sub(started) as u32;
             log_event("serialization", &format!("elapsed_ms={elapsed}"));
 
-            let (mut packed, package) = match result {
-                Ok(values) => values,
-                Err(_) => {
-                    // Fail closed: no credential, no status text, no dialog.
-                    // Re-enumerate so LogonUI drops the tile instead of
-                    // showing a dead one.
-                    notify_session_changed(&self.session);
-                    return Ok(());
-                }
+            let Ok((mut packed, package)) = result else {
+                // Fail closed: no credential, no status text, no dialog.
+                // Re-enumerate so LogonUI drops the tile instead of
+                // showing a dead one.
+                notify_session_changed(&self.session);
+                return Ok(());
             };
 
             // The buffer LogonUI frees must come from CoTaskMemAlloc.

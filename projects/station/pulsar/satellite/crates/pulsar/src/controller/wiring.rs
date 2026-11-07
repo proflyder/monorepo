@@ -387,7 +387,7 @@ impl Boot {
         };
         // The one master-gain formula: the same value `Policy` applies to both channels.
         let master = self.media.master_gain(self.store.volume);
-        match pulsar_sendspin::spawn(cfg, self.store.volume, self.store.muted, master) {
+        match pulsar_sendspin::spawn(&cfg, self.store.volume, self.store.muted, master) {
             Ok((h, rx)) => Some((h, rx)),
             Err(e) => {
                 debug!("{e}");

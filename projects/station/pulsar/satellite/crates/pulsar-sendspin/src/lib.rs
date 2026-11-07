@@ -161,7 +161,7 @@ mod tests {
             port: 0,
         };
         assert_eq!(
-            spawn(cfg, 0.2, false, 1.0).err(),
+            spawn(&cfg, 0.2, false, 1.0).err(),
             Some(SendspinInitError::Unsupported)
         );
     }

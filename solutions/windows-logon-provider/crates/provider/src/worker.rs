@@ -331,24 +331,22 @@ mod windows_impl {
             Err(outcome) => return outcome,
         };
 
-        let result = match std::str::from_utf8(&claim_body) {
-            Ok(body) => verify_claim_response_for_purpose(
-                body,
-                secret.key(),
-                &config.machine,
-                &response.nonce,
-                purpose,
-            ),
-            Err(_) => {
-                log_error(
-                    dedup,
-                    "grant",
-                    "grant-invalid-utf8",
-                    &format!("result=malformed detail=invalid-utf8 ms={claim_ms} {prefix}"),
-                );
-                return RoundOutcome::retry_error(POLL_INTERVAL_MS);
-            }
+        let Ok(body) = std::str::from_utf8(&claim_body) else {
+            log_error(
+                dedup,
+                "grant",
+                "grant-invalid-utf8",
+                &format!("result=malformed detail=invalid-utf8 ms={claim_ms} {prefix}"),
+            );
+            return RoundOutcome::retry_error(POLL_INTERVAL_MS);
         };
+        let result = verify_claim_response_for_purpose(
+            body,
+            secret.key(),
+            &config.machine,
+            &response.nonce,
+            purpose,
+        );
 
         match result.outcome {
             ClaimOutcome::Granted => {

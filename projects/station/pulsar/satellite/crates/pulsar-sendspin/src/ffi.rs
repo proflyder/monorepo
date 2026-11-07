@@ -193,7 +193,7 @@ unsafe extern "C" {
 }
 
 /// sendspin::LogLevel::INFO for the library's own log lines (stderr).
-pub(crate) fn set_log_level_info() {
+pub fn set_log_level_info() {
     ss_set_log_level(3);
 }
 
@@ -220,13 +220,13 @@ pub unsafe extern "C" fn pulsar_redact_line(
 }
 
 /// The library's clock in µs, any thread: deadlines and notify_audio_played timestamps.
-pub(crate) fn now_us() -> i64 {
+pub fn now_us() -> i64 {
     ss_now_us()
 }
 
-pub(crate) use crate::proto::{Codec, Command, Format, Scale, VisType, Visualizer};
+pub use crate::proto::{Codec, Command, Format, Scale, VisType, Visualizer};
 
-pub(crate) struct Config<'a> {
+pub struct Config<'a> {
     pub name: &'a str,
     pub product_name: &'a str,
     pub manufacturer: &'a str,
@@ -244,7 +244,7 @@ pub(crate) struct Config<'a> {
 }
 
 /// Receiver of every library callback. None of its methods may call into the `Client`.
-pub(crate) trait Listener: Sync {
+pub trait Listener: Sync {
     /// Main loop thread: from inside `Client::run_loop`, `Client::start` and the drop.
     fn event(&self, ev: LibEvent);
     /// Persistence provider, main loop thread. None: not stored.
@@ -544,7 +544,7 @@ unsafe extern "C" fn put_string(dst: *mut c_void, s: *const c_char, len: usize) 
 /// One sendspin-cpp client with all its roles. Not `Send`: every call (and the drop, which stops
 /// the library and joins its threads) happens on the thread that created it, which is the
 /// library's main loop thread. The listener is never called back into from here.
-pub(crate) struct Client<L: Listener> {
+pub struct Client<L: Listener> {
     raw: NonNull<SsClient>,
     // Dropped after `ss_destroy` (see Drop): the library's threads use it until then.
     _listener: Arc<L>,

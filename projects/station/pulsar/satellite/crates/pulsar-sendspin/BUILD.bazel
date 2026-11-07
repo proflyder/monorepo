@@ -69,7 +69,10 @@ rust_library(
     compile_data = glob(["tests/golden/**"], allow_empty = True),
     edition = "2024",
     lint_config = ":workspace_lints",
-    rustc_flags = select({
+    # build.rs (host) and this flag (station) enable `--check-cfg`, which turns
+    # off rustc's implicit "accept every cfg" mode; `cfg(test)` is one of the
+    # names Cargo always declares and must therefore be listed here too.
+    rustc_flags = ["--check-cfg=cfg(test)", "--check-cfg=cfg(sendspin_ffi)"] + select({
         "@zig_0_14_1//:station": [
             "--cfg",
             "sendspin_ffi",

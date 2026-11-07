@@ -19,8 +19,7 @@ use crate::SendspinConfig;
 use crate::actor::{Actor, Cmd, EventHandler, Link, SinkPort, transport_command};
 use crate::event::LibEvent;
 use crate::ffi::{self, Client, Codec, Format, Listener, Scale, VisType};
-use crate::proto::{Command, Visualizer};
-use crate::secrets;
+use crate::proto::Visualizer;
 use crate::sink::Sink;
 use crate::state::Status;
 use crate::store::{FileStore, IdentityStore};
@@ -114,45 +113,45 @@ impl Listener for Ctx {
 
 impl SinkPort for Sink {
     fn configure(&self, rate: u32, channels: u8, bits: u8) {
-        Sink::configure(self, rate, channels, bits);
+        Self::configure(self, rate, channels, bits);
     }
 
     fn release(&self) {
-        Sink::release(self);
+        Self::release(self);
     }
 }
 
 impl Link for SsClient {
     fn run_loop(&self) -> bool {
-        Client::run_loop(self)
+        Self::run_loop(self)
     }
 
     fn is_connected(&self) -> bool {
-        Client::is_connected(self)
+        Self::is_connected(self)
     }
 
     fn server_info(&self) -> Option<(String, String)> {
-        Client::server_info(self)
+        Self::server_info(self)
     }
 
     fn volume(&self) -> u8 {
-        Client::volume(self)
+        Self::volume(self)
     }
 
     fn muted(&self) -> bool {
-        Client::muted(self)
+        Self::muted(self)
     }
 
     fn update_volume(&self, volume: u8) {
-        Client::update_volume(self, volume);
+        Self::update_volume(self, volume);
     }
 
     fn update_muted(&self, muted: bool) {
-        Client::update_muted(self, muted);
+        Self::update_muted(self, muted);
     }
 
     fn confirm_pairing_window(&self) {
-        Client::confirm_pairing_window(self);
+        Self::confirm_pairing_window(self);
     }
 }
 
@@ -229,7 +228,7 @@ impl SendspinHandle {
 /// Starts the client (WebSocket server on `cfg.port`) with the current local volume / mute.
 /// Must run inside the controller's `LocalSet`.
 pub fn spawn(
-    cfg: SendspinConfig,
+    cfg: &SendspinConfig,
     volume: f32,
     muted: bool,
     master_gain: f32,
@@ -283,13 +282,12 @@ pub fn spawn(
         pairing_psk_location: "operator",
         unpaired_access: unpaired,
     };
-    let created = Client::new(&config, ctx.clone());
-    let started = created.filter(|c| match c.start() {
-        Some(ok) => ok,
-        None => {
+    let created = Client::new(&config, ctx);
+    let started = created.filter(|c| {
+        c.start().unwrap_or_else(|| {
             error!("sendspin: client start threw an exception");
             false
-        }
+        })
     });
     let Some(client) = started else {
         error!("sendspin: client start failed");
