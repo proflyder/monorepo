@@ -1980,6 +1980,7 @@ dependencies = [
  "home-secret",
  "home-telegram",
  "home-telemetry",
+ "home-tls",
  "http",
  "http-body-util",
  "jiff",

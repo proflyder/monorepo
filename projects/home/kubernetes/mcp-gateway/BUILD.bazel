@@ -1,8 +1,8 @@
 # Plain-file package: the templates are rendered by the projects/home/kubernetes
 # deploy scripts and by //platform/deploy (golden parity tests).
-# catalog_contract_test.go builds the gateway with `go build` from the source
-# tree, so it runs under `go test` in CI, not as a Bazel target.
-# gazelle:exclude catalog_contract_test.go
+# The catalog and bb allow-list are validated by the real Rust validators in
+# //solutions/mcp-gateway/crates/mcp-gateway:deploy_contract_tests, which consumes
+# these templates as data.
 
 package(default_visibility = ["//visibility:public"])
 

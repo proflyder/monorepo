@@ -4,12 +4,12 @@ Kubernetes deployment of `solutions/mcp-gateway`: the single MCP gateway that
 Hermes uses for infrastructure diagnostics, the two-step rollout restart and
 Telegram reports.
 
-- Solution: `solutions/mcp-gateway` (Go, distroless, one binary).
+- Solution: `solutions/mcp-gateway` (Rust, static musl, distroless, one binary).
 - Project: this directory — manifests, catalog, RBAC, secrets wiring, deploy.
 - Namespace: `home-assistant`; one Deployment, one ClusterIP Service, no
   ingress and no NodePort.
-- CI unit: `mcp-gateway` (Go + image + deploy) and `mcp-gateway-deploy`
-  (catalog/RBAC/deploy contract).
+- CI unit: `mcp-gateway` (Bazel: Rust crate tests/clippy/fmt + musl image +
+  deploy) and `mcp-gateway-deploy` (catalog/RBAC/deploy contract).
 
 ```text
 Hermes (hostNetwork, no kubectl)          voice proxy (in-cluster)
@@ -40,7 +40,6 @@ deploy.sh                         build/push/import image, render, apply, roll o
                                   (`home-deploy render --unit mcp-gateway`)
 mcp-gateway.env.example           LAN/host/bb placeholders
 test_deploy.py                    catalog↔RBAC, manifests, render, deploy contract
-catalog_contract_test.go          loads the tracked catalog with the real loader
 ```
 
 Rendered manifests go to `secrets/local/rendered/mcp-gateway` (git-ignored).
@@ -134,8 +133,10 @@ With problems the failing services come first, for example:
 The catalog and RBAC are checked against each other: `patch` resourceNames in
 `manifests/rbac.yaml` must equal the restartable catalog workloads
 (`test_deploy.py::test_write_resource_names_equal_catalog_restartable_workloads`).
-`catalog_contract_test.go` builds the real binary and proves the tracked
-catalog loads (and that an invalid one refuses to start).
+The tracked catalog and bb allow-list are loaded by the real Rust validators
+in `//solutions/mcp-gateway/crates/mcp-gateway:deploy_contract_tests` (the
+former Go `catalog_contract_test.go` is gone); an invalid duplicate-id catalog
+is rejected in the same test.
 
 ## RBAC
 

@@ -1,6 +1,6 @@
 //! Golden replays of `/v1/voice/*` plus a real `voice-proxy` client.
 //!
-//! The eight files in `internal/voice/testdata/contract` are replayed against
+//! The eight files in `testdata/contract/voice` are replayed against
 //! this crate's voice router through `home-contracttest` with a fake bb
 //! dispatcher and a deterministic clock. The final test drives the real
 //! `voice_proxy::services::Gateway` over TCP and checks the `completedSeq`
@@ -343,7 +343,7 @@ async fn voice_contract_fixtures() {
     let factory_worlds = Arc::clone(&worlds);
     let hook_worlds = Arc::clone(&worlds);
     let scenarios = home_contracttest::run(
-        fixture_dir("internal/voice/testdata/contract"),
+        fixture_dir("testdata/contract/voice"),
         move |scenario| scenario_router(scenario, &factory_worlds),
         home_contracttest::Options::default().with_before_step(move |scenario, step| {
             before_step(scenario, step, &hook_worlds);

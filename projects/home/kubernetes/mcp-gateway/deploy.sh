@@ -114,9 +114,9 @@ fi
 
 if $BUILD && [[ -z "${MCP_GATEWAY_IMAGE:-}" ]]; then
   echo "== building the mcp-gateway image with Bazel"
-  ( cd "$ROOT" && "$(bazel_bin)" build \
-      //solutions/mcp-gateway:mcp-gateway_image \
-      --platforms=@rules_go//go/toolchain:linux_amd64 )
+  # The image target packages the static musl binary through its own Bazel
+  # transition, so no Go platform flag is needed (the Go implementation is gone).
+  ( cd "$ROOT" && "$(bazel_bin)" build //solutions/mcp-gateway:mcp-gateway_image )
 fi
 
 IMAGE_REF=${MCP_GATEWAY_IMAGE:-}
@@ -127,7 +127,6 @@ if [[ -z "$IMAGE_REF" ]]; then
   repo="${IMAGE_REGISTRY}/mcp-gateway"
   if [[ "$PUSH_IMAGES" == 1 ]]; then
     out=$( cd "$ROOT" && "$(bazel_bin)" run //solutions/mcp-gateway:mcp-gateway_push \
-      --platforms=@rules_go//go/toolchain:linux_amd64 \
       -- --repository "$repo" --tag "$IMAGE_TAG" 2>&1 ) || {
         printf '%s\n' "$out" >&2
         echo "pushing ${repo}:${IMAGE_TAG} failed" >&2

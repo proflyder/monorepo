@@ -69,7 +69,7 @@ Go-реализации `scheduler`, `alarm`, `ha-bridge` и `currency-bot` уд
 
 | Слой | Язык | Почему |
 |---|---|---|
-| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `currency-bot` | Rust (цель, решение 41); `scheduler`, `ha-bridge`/`ha-control`, `voice-proxy`, `wakegrant` и `currency-bot` уже Rust, `mcp-gateway` пока Go | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
+| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `currency-bot` | Rust (решение 41); все они уже Rust — Go-код удалён | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
 | `voice-proxy` | Rust (решение 41) | `domain`/`openai`/`relay`/`services` на общем `home-*` слое: `home-config`, `home-ha`, `home-proto`, `home-worker`, `voice-contract`, `home-contracttest`; golden-фикстуры и байты payload очереди перенесены без изменений, статический musl-образ |
 | `wakegrant` | Rust (решение 41, пилот) | первый потребитель общего core-слоя: `wakegrant-protocol`, `home-config`, `home-sqlite`, `home-contracttest`; статический musl-образ, Go-код удалён |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |

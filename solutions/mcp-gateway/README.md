@@ -27,8 +27,8 @@ MCP client (Hermes, IDE, agent)          voice proxy
 
 ## Транспорт и аутентификация
 
-- MCP Streamable HTTP: `POST /mcp` (официальный Go SDK
-  `github.com/modelcontextprotocol/go-sdk`).
+- MCP Streamable HTTP: `POST /mcp` (Rust SDK `rmcp`; только серверный
+  транспорт, без клиентских фич).
 - `Authorization: Bearer <token>`. Токен MCP читается из `MCP_AUTH_TOKEN_FILE`,
   сравнивается в постоянное время. Без токена — `401`.
 - `/v1/voice/*` защищён **отдельным** токеном `MCP_VOICE_TOKEN_FILE`: голосовой
@@ -309,9 +309,16 @@ checks:
   откатываются в Hermes; текст речи никогда не пишется в лог.
 - Логи и отчёты проходят через redaction (bearer/Authorization, `token=`,
   `password=`, JWT, длинные hex/base64).
-- Секреты не логируются; аудит — структурированный slog (`event=action`,
-  `action`, `target`, `outcome`) и метрика
+- Секреты не логируются; аудит — структурированные JSON-логи
+  (`event=action`, `action`, `target`, `outcome`) и метрика
   `mcp_gateway_actions_total{action,target,outcome}`.
+- TLS: workspace `reqwest` собран без встроенных корней, поэтому внешние
+  HTTPS-клиенты (Prometheus/Alertmanager/Loki, Telegram, HA и внешние `http`
+  проверки) берут системный PEM-бандл через `packages/rust/home-tls`
+  (`SSL_CERT_FILE`, иначе `/etc/ssl/certs/ca-certificates.crt`). Клиент
+  Kubernetes API доверяет **только** CA сервис-аккаунта из
+  `/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`
+  (`tls_built_in_root_certs(false)`), а не системным корням.
 - Решения о RBAC, NetworkPolicy и TLS принимает проект, который разворачивает
   шлюз. Шлюз не публикует себя наружу.
 
@@ -322,23 +329,27 @@ checks:
   `mcp_gateway_tool_duration_seconds{tool}` — вызовы инструментов.
 - `mcp_gateway_http_requests_total{route,status}` — HTTP-запросы.
 - `mcp_gateway_voice_utterances_total{route,outcome}` — маршруты голосовых фраз.
-- Стандартные Go/process-метрики.
+- Только `mcp_gateway_*`: Go/process-коллекторов нет, как и мёртвой
+  `mcp_gateway_backend_up`.
 
 ## Сборка и тесты
 
 ```bash
-go test ./solutions/mcp-gateway/...
-go vet ./solutions/mcp-gateway/...
-bazel run //:gazelle
-bazel build //solutions/mcp-gateway/...
-bazel build //solutions/mcp-gateway:mcp-gateway_image \
-  --platforms=@rules_go//go/toolchain:linux_amd64
+cargo test -p mcp-gateway
+bazel test //solutions/mcp-gateway/... //projects/home/kubernetes/mcp-gateway/...
+bazel build //solutions/mcp-gateway:mcp-gateway_image
 ```
 
-Тесты герметичны: `httptest`-фейки для Prometheus, Alertmanager, Loki,
+Образ — статический `x86_64-unknown-linux-musl` бинарник на digest-pinned
+distroless static; `rust_service_image` сам применяет musl-переход, поэтому
+флаг `--platforms=@rules_go//...` не нужен.
+
+Тесты герметичны: фейковые HTTP-бэкенды для Prometheus, Alertmanager, Loki,
 Kubernetes REST и Telegram; сеть и кластер не используются. MCP-транспорт
-проверяется настоящим SDK-клиентом через Streamable HTTP с bearer-токеном.
-bb проверяется на уровне интерфейса `Runner` и встроенного фейкового SSH-сервера
-(реальные key/known_hosts пути), голос — на фейковом dispatcher'е: prepare/
-confirm/cancel/TTL, маршруты utterance, выход из режима, fail-closed для work и
-long-poll результата.
+проверяется через Streamable HTTP с bearer-токеном на замороженных фикстурах
+`testdata/contract/{server,tools}`. bb проверяется на уровне трейта `BbApi` и
+встроенного фейкового SSH-сервера (реальные key/known_hosts пути), голос — на
+фейковом dispatcher'е (`testdata/contract/voice`): prepare/confirm/cancel/TTL,
+маршруты utterance, выход из режима, fail-closed для work и long-poll
+результата. `tests/deploy_contract.rs` проверяет tracked-каталог и
+bb-allowlist настоящими валидаторами.

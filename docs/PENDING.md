@@ -8,25 +8,16 @@
 
 ## P2 — проверки и улучшения инфраструктуры
 
-- [ ] **Решение 41: оставшиеся шаги переноса на Rust.** Уже на Rust:
-      wakegrant, voice-proxy, scheduler, ha-bridge, ha-control, currency-bot.
-      Выполнено: контракт переименован в `home.v1` (Go-алиас не заводился);
-      Android, HA, ingress verify и preflight переведены на `home.v1`;
-      Go-код scheduler, ha-bridge/ha-control, `solutions/alarm`,
-      `packages/go/scheduler` и `solutions/currency-bot/{cmd,internal}`
-      удалён, golden-фикстуры остаются в `solutions/scheduler/testdata`,
-      `solutions/ha-bridge/testdata` и `solutions/currency-bot/testdata` как
-      замороженные данные. Остаётся mcp-gateway.
-
 - [ ] **Bazel clippy не валит сборку на предупреждениях.** `rust_clippy_test`
       оставляет уровни `lint_config` предупреждениями. Следующий шаг:
       `--@rules_rust//rust/settings:clippy_flag=-Dwarnings` в `.bazelrc`,
       исправить ~17 замечаний `//solutions/windows-logon-provider:clippy_windows`,
       поднять VERSION и проверить вход на компе.
 
-- [ ] **Мелочи Rust-сервисов.** Версия wakegrant в логе `0.0.0`;
-      `projects/home-assistant/deploy/README.md` называет voice-proxy
-      Go-сервисом.
+- [ ] **Мелочи Rust-сервисов.** Версия wakegrant и currency-bot в логе
+      `0.0.0`; `serde_yaml` 0.9 объявлен deprecated (нужна замена до
+      следующего мажора); `projects/home-assistant/deploy/README.md` называет
+      voice-proxy Go-сервисом.
 
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых
       на самом сервере bb; треды на Mac работают без него. Следующий шаг:

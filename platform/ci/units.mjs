@@ -342,8 +342,8 @@ export const config = {
 
     {
       id: "mcp-gateway",
-      platform: "go",
-      title: "solutions/mcp-gateway (MCP infra tool groups + home deployment)",
+      platform: "bazel",
+      title: "solutions/mcp-gateway (Rust MCP infra gateway) + home deployment",
       paths: [
         "solutions/mcp-gateway/**",
         // The plugin's strict per-method params schema is the gateway's wire
@@ -352,6 +352,11 @@ export const config = {
         "projects/home/kubernetes/mcp-gateway/**",
         // The deploy tooling that renders this unit's manifests.
         "platform/deploy/**",
+        // The shared clients and TLS roots this crate consumes.
+        "packages/rust/home-clients/**",
+        "packages/rust/home-telegram/**",
+        "packages/rust/home-tls/**",
+        "packages/rust/home-contracttest/**",
       ],
       // One image and one Deployment in home-assistant. The catalog ConfigMap,
       // RBAC, ExternalSecrets and NetworkPolicy are part of the same unit because
@@ -373,34 +378,8 @@ export const config = {
           "mcp-gateway-voice",
         ],
       },
-      go: {
-        module: ".",
-        packages: [
-          "./solutions/mcp-gateway/...",
-          // Project-side deploy contract: loads the tracked catalog with the
-          // gateway's real loader (builds and starts the binary).
-          "./projects/home/kubernetes/mcp-gateway",
-        ],
-        race: true,
-        build: ["./solutions/mcp-gateway/cmd/mcp-gateway"],
-      },
-    },
-
-    {
-      id: "mcp-gateway-rust",
-      platform: "bazel",
-      title: "solutions/mcp-gateway/crates + shared MCP fixtures (Rust MCP layer)",
-      paths: [
-        "solutions/mcp-gateway/crates/**",
-        // The frozen MCP fixtures are replayed against the Rust server.
-        "solutions/mcp-gateway/internal/**",
-        "solutions/mcp-gateway/testdata/**",
-        // The shared clients this unit consumes. They are under packages/rust/**,
-        // which also selects ble-gateway, but only this unit runs their tests.
-        "packages/rust/home-clients/**",
-        "packages/rust/home-telegram/**",
-        "packages/rust/home-contracttest/**",
-      ],
+      // Rust service: host fmt/clippy/tests plus the static musl image. The Go
+      // implementation is deleted; `testdata` stays as frozen contract data.
       bazel: {
         roots: ["//packages/rust", "//solutions/mcp-gateway"],
         test_targets: [
@@ -410,6 +389,8 @@ export const config = {
           "//packages/rust:rustfmt",
           "//solutions/mcp-gateway/crates/mcp-gateway:unit_tests",
           "//solutions/mcp-gateway/crates/mcp-gateway:contract_tests",
+          "//solutions/mcp-gateway/crates/mcp-gateway:voice_tests",
+          "//solutions/mcp-gateway/crates/mcp-gateway:deploy_contract_tests",
           "//solutions/mcp-gateway/crates/mcp-gateway:clippy",
           "//solutions/mcp-gateway/crates/mcp-gateway:rustfmt",
         ],
@@ -832,9 +813,10 @@ export const config = {
       platform: "python",
       title: "projects/home/kubernetes/mcp-gateway (catalog/RBAC/deploy contract)",
       paths: [
-        // The catalog's schema is checked by the go unit (real loader); this unit
-        // owns the catalog↔RBAC correspondence, manifest hardening and the
-        // deploy-script/render contract.
+        // The catalog's schema is checked by the Rust deploy-contract test in
+        // the mcp-gateway unit (real loader); this unit owns the catalog↔RBAC
+        // correspondence, manifest hardening and the deploy-script/render
+        // contract.
         "projects/home/kubernetes/mcp-gateway/**",
       ],
       python: {

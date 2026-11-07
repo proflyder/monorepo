@@ -494,8 +494,9 @@
       остаются замороженными данными и проходят на Rust-реализации.
     * Порядок: core → wakegrant (пилот) → voice-proxy → scheduler +
       исполнители HA → mcp-gateway → currency-bot. Каждый сервис — отдельный
-      PR. Go-код scheduler, ha-bridge/ha-control, alarm и currency-bot
-      удалён; откат сервисов — прежний образ; на Go пока остаётся mcp-gateway.
+      PR. Go-код scheduler, ha-bridge/ha-control, alarm, mcp-gateway и
+      currency-bot удалён; откат сервисов — прежний образ. Долгоживущих
+      Go-сервисов в репозитории не осталось.
     * На Go остаются `platform/deploy`, Bazel-инструменты Android,
       Pulsar installer (upstream) и health-exporter: там Rust ничего не даёт.
 

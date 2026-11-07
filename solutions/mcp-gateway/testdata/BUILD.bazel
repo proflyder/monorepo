@@ -11,3 +11,21 @@ filegroup(
     name = "vectors",
     srcs = glob(["vectors/*.json"]),
 )
+
+# Frozen HTTP contract fixtures captured from the former Go implementation.
+# The Rust contract runner replays them; they are data, not Go tests. The
+# directory split mirrors the former Go test packages.
+filegroup(
+    name = "contract_server",
+    srcs = glob(["contract/server/*.json"]),
+)
+
+filegroup(
+    name = "contract_tools",
+    srcs = glob(["contract/tools/*.json"]),
+)
+
+filegroup(
+    name = "contract_voice",
+    srcs = glob(["contract/voice/*.json"]),
+)

@@ -1,7 +1,7 @@
 //! Typed wire contract of the mcp-gateway voice API.
 //!
-//! The routes are served by `solutions/mcp-gateway/internal/voice` and called
-//! by `solutions/voice-proxy/internal/gateway`:
+//! The routes are served by `solutions/mcp-gateway/crates/mcp-gateway`
+//! (`voice.rs`) and called by `solutions/voice-proxy/crates/voice-proxy`:
 //!
 //! * `POST /v1/voice/utterance` — route one spoken phrase;
 //! * `POST /v1/voice/result` — long-poll the answer of a routed turn;
@@ -262,9 +262,8 @@ mod tests {
         serde_json::to_value(value).expect("serialize")
     }
 
-    // Samples below are taken from the Go tests on both sides:
-    // solutions/mcp-gateway/internal/voice/voice_test.go and
-    // solutions/voice-proxy/internal/gateway/client_test.go.
+    // Samples below are frozen from the pre-Rust tests on both sides and
+    // replayed by the Rust contract suites.
 
     #[test]
     fn utterance_request_round_trips_like_the_go_client() {

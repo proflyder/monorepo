@@ -1514,7 +1514,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "scheduler",
     "wakegrant",
     "currency-bot",
-    "mcp-gateway-rust",
+    "mcp-gateway",
     "ha-bridge",
     "ble-gateway",
     "pulsar-bazel",
@@ -1525,7 +1525,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
   // them; the native-only units are not deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
-    ["scheduler", "wakegrant", "currency-bot", "ha-bridge"],
+    ["scheduler", "wakegrant", "currency-bot", "mcp-gateway", "ha-bridge"],
   );
   assert.equal(result.androidDistribute, false);
 });
