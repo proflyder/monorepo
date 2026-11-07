@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-use pulsar_arbiter::Claim;
 use pulsar_audio::endpoint::{EndpointPrior, EndpointRun, pcm_level_db};
 use pulsar_core::{ClockShot, UiState, now_ms};
 use pulsar_esphome::{AnnounceRequest, VaEvent};
@@ -12,8 +11,9 @@ use pulsar_sendspin::Transport;
 use tracing::{debug, info, warn};
 
 use super::earcons;
-use super::logic::{self, COMMAND_AFTER_WAKE_MS, Phase, VoiceCommand};
-use super::{Controller, LISTEN_TIMEOUT_MS, PROCESS_TIMEOUT_MS, Pending, Tk, WakeRecord};
+use super::logic::{self, Phase, VoiceCommand};
+use super::wake::{ClaimToken, Decision};
+use super::{Controller, Pending, Tk, WakeRecord};
 
 impl Controller {
     fn arbitration_on(&self) -> bool {
@@ -30,26 +30,24 @@ impl Controller {
     pub(super) fn play_done(&mut self, p: Pending, ok: bool) {
         match p {
             Pending::Tts { dialog } => {
-                if dialog == self.dialog && self.phase == Phase::Speaking {
+                if dialog == self.session.current_id() && self.session.is_speaking() {
                     self.tts_finished(ok);
                 }
                 self.resume_ring();
             }
             Pending::Earcon { seq } => {
-                if seq != self.earcon_seq {
+                if !self.session.finish_earcon(seq) {
                     return;
                 }
-                self.closing_earcon = false;
                 self.update_duck();
             }
             Pending::Announce { conv, seq } => {
                 // Exactly once per announcement, also when cut short.
                 self.deps.ha.voice_announce_finished(ok);
-                if seq == self.announce_seq {
-                    self.announcing = false;
+                if self.session.finish_announce(seq) {
                     if ok
                         && conv
-                        && self.phase == Phase::Idle
+                        && self.session.phase() == Phase::Idle
                         && !self.timers_ha.ringing()
                         && !self.mic_muted()
                     {
@@ -60,8 +58,7 @@ impl Controller {
                 self.resume_ring();
             }
             Pending::MediaAnnounce { seq } => {
-                if seq == self.announce_seq {
-                    self.announcing = false;
+                if self.session.finish_announce(seq) {
                     self.end_announce();
                 }
                 self.resume_ring();
@@ -97,10 +94,10 @@ impl Controller {
     /// AnnounceFinished owed for the answer belongs to the lost client: the next one could be
     /// waiting for an announcement, which that message would end.
     pub(super) fn voice_link_lost(&mut self) {
-        self.run.reset();
-        self.followup = logic::Followup::default();
-        self.tts_report_owed = false;
-        if matches!(self.phase, Phase::Listening | Phase::Processing) {
+        self.session.reset_run();
+        self.session.reset_followup();
+        self.session.drop_tts_report();
+        if self.session.in_voice_request() {
             self.mark_wake_cancelled();
             self.finish_interaction();
         }
@@ -132,40 +129,36 @@ impl Controller {
                     .arbiter
                     .claim(&self.st.wake_word, level_db, true, false);
             }
-            self.ring_stopped_in_dialog =
-                matches!(self.phase, Phase::Listening | Phase::Processing);
             return self.stop_timer_ring();
         }
         // As stock Alice: a repeated wake word replaces the call in progress instead of being
         // ignored. The old call is ended only when this station starts the new dialog
         // (answer_wake): a station that loses wake arbitration keeps its answer, and its busy
         // claim still counts SPEAKING. A pending claim is replaced by this wake word.
-        if self.arbitrating {
-            self.cancel_arbitration();
-        }
+        self.cancel_arbitration();
         // Without the HA pipeline this station could win and stay silent: it does not take part.
         if !self.arbitration_on() || !self.deps.ha.voice_subscribed() {
             return self.answer_wake(phrase, &preroll, &[], endpoint_prior, rec);
         }
-        self.arbitrating = true;
-        self.wake_pending = rec;
-        // A station that lost the previous wake word may win this one.
-        self.commands_blocked_until_ms = 0;
-        phrase.clone_into(&mut self.arb_phrase);
-        self.arb_level = level_db;
-        self.arb_audio = preroll;
+        let busy = self.session.is_speaking() || self.session.announcing();
+        // A station that lost the previous wake word may win this one: the new claim replaces
+        // the blocked turn.
+        let claim = self
+            .deps
+            .arbiter
+            .claim(&self.st.wake_word, level_db, busy, true);
         // Everything after this point is live post-wake speech held during the decision; the
         // detector must not treat it as pre-roll evidence.
-        self.arb_boundary = self.arb_audio.len();
-        self.arb_endpoint = endpoint_prior;
+        self.wake.start(
+            claim,
+            phrase.to_owned(),
+            level_db,
+            preroll,
+            endpoint_prior,
+            rec,
+        );
         self.deps.frontend.set_streaming(true);
         self.update_ui();
-        let busy = self.phase == Phase::Speaking || self.announcing;
-        self.arb_claim = Some(
-            self.deps
-                .arbiter
-                .claim(&self.st.wake_word, level_db, busy, true),
-        );
     }
 
     fn answer_wake(
@@ -184,99 +177,95 @@ impl Controller {
         // SPEAKING the answer is only cut, as before (the new start replaces its dialog id).
         // ESPHome pipeline events carry no run id: a run replaced before its RUN_START cannot be
         // told apart from the new one if that RUN_START was still on the wire.
-        if matches!(self.phase, Phase::Listening | Phase::Processing) {
+        if self.session.in_voice_request() {
             info!("wake word: replacing the active dialog");
             self.interrupt_speech();
             self.mark_wake_cancelled();
             self.finish_interaction();
-        } else if self.phase == Phase::Speaking || self.announcing {
+        } else if self.session.is_speaking() || self.session.announcing() {
             // The cut answer's completion never closes its dialog (the id changes below), so its
             // sidecar gets the outcome here.
             self.mark_wake_cancelled();
             self.finish_wake_rec();
             self.interrupt_speech(); // barge-in: cut the answer short
         }
-        self.wake_rec = rec;
+        self.session.set_record(rec);
         self.start_pipeline(phrase, true, preroll, live, endpoint_prior);
         // No dialog started (HA is gone): the hit still gets an outcome instead of being
         // overwritten by the next one.
-        if self.phase != Phase::Listening {
+        if !self.session.is_listening() {
             self.mark_wake_cancelled();
             self.finish_wake_rec();
         }
     }
 
-    pub(super) fn arbitration_done(&mut self, won: bool, best: &Claim, peers: usize) {
-        self.arbitrating = false;
-        self.arb_claim = None;
-        let mut audio = std::mem::take(&mut self.arb_audio);
-        let split = self.arb_boundary.min(audio.len());
-        let live = audio.split_off(split);
-        self.arb_boundary = 0;
-        let prior = self.arb_endpoint.take();
-        if !won {
-            // The recorded hit still gets its outcome: another station answered.
-            if let Some(mut rec) = self.wake_pending.take() {
-                rec.arbiter_lost = true;
-                self.finish_wake(Some(rec));
-            }
-            // A dialog that was already listening keeps streaming: this wake word replaced
-            // nothing unless this station answers it.
-            if self.phase != Phase::Listening {
-                self.deps.frontend.set_streaming(false);
-            }
-            info!(
-                "wake word: {} answers ({}{:.1} dB, ours {:.1} dB)",
-                best.station,
-                if best.busy { "busy, " } else { "" },
-                best.level_db,
-                self.arb_level
-            );
-            // Its command spotter would still act on "Алиса, громче" if it sounds or owns music.
-            self.commands_blocked_until_ms = now_ms() + COMMAND_AFTER_WAKE_MS;
-            self.update_ui();
+    pub(super) fn on_arbiter_decided(
+        &mut self,
+        claim_id: ClaimToken,
+        won: bool,
+        best: &pulsar_arbiter::Claim,
+        peers: usize,
+    ) {
+        let Some(decision) = self.wake.decided(claim_id, won, best, peers) else {
             return;
-        }
-        info!("wake word: this station answers ({peers} other station(s) heard it)");
-        // Capture keeps streaming into the new dialog: switching it off here could drop the
-        // chunk between the preroll and live audio.
-        let phrase = self.arb_phrase.clone();
-        let rec = self.wake_pending.take();
-        self.answer_wake(&phrase, &audio, &live, prior, rec);
-        if self.phase != Phase::Listening {
-            self.deps.frontend.set_streaming(false); // no dialog started (e.g. HA gone)
+        };
+        match decision {
+            Decision::Lost {
+                best,
+                level_db,
+                record,
+            } => {
+                // The recorded hit still gets its outcome: another station answered.
+                self.finish_wake(record);
+                // A dialog that was already listening keeps streaming: this wake word replaced
+                // nothing unless this station answers it.
+                if !self.session.is_listening() {
+                    self.deps.frontend.set_streaming(false);
+                }
+                info!(
+                    "wake word: {} answers ({}{:.1} dB, ours {:.1} dB)",
+                    best.station,
+                    if best.busy { "busy, " } else { "" },
+                    best.level_db,
+                    level_db
+                );
+                // Its command spotter would still act on "Алиса, громче" if it sounds or owns music.
+                self.wake.lost(now_ms());
+                self.update_ui();
+            }
+            Decision::Won {
+                phrase,
+                preroll,
+                live,
+                endpoint,
+                record,
+                peers,
+            } => {
+                info!("wake word: this station answers ({peers} other station(s) heard it)");
+                // Capture keeps streaming into the new dialog: switching it off here could drop
+                // the chunk between the preroll and live audio.
+                self.answer_wake(&phrase, &preroll, &live, endpoint, record);
+                if !self.session.is_listening() {
+                    self.deps.frontend.set_streaming(false); // no dialog started (e.g. HA gone)
+                }
+            }
         }
     }
 
     pub(super) fn cancel_arbitration(&mut self) {
-        if !self.arbitrating {
+        if !self.wake.is_claiming() {
             return;
         }
         // The pending hit started no dialog: its event ended with the cancelled arbitration.
-        if let Some(mut rec) = self.wake_pending.take() {
-            rec.cancelled = true;
-            self.finish_wake(Some(rec));
-        }
+        let record = self.wake.cancel();
+        self.finish_wake(record);
         self.deps.arbiter.cancel();
-        self.arbitrating = false;
-        self.arb_claim = None;
-        self.arb_audio.clear();
-        self.arb_boundary = 0;
-        self.arb_endpoint = None;
-        if self.phase != Phase::Listening {
+        if !self.session.is_listening() {
             self.deps.frontend.set_streaming(false);
         }
     }
 
     // ---------------- pipeline ----------------
-
-    /// Uncalibrated energy heuristic: opt-in only, off unless explicitly enabled.
-    fn local_endpointing_enabled() -> bool {
-        matches!(
-            std::env::var("PULSAR_LOCAL_ENDPOINTING").as_deref(),
-            Ok("1")
-        )
-    }
 
     /// The only way into LISTENING (the watchdog bounds it). `preroll` came with the wake event;
     /// `live` is post-wake audio held during wake arbitration (empty otherwise).
@@ -298,17 +287,13 @@ impl Controller {
             return;
         }
         info!("starting voice pipeline (wake='{phrase}')");
-        self.commands_blocked_until_ms = 0;
-        self.phase = Phase::Listening;
-        self.dialog = self.dialog.next();
-        self.run.start();
-        self.stop_sent = false;
-        self.endpoint = if Self::local_endpointing_enabled() {
+        self.wake.clear();
+        let endpoint = if self.local_endpointing {
             endpoint_prior.and_then(|p| EndpointRun::new(p, preroll, live))
         } else {
             None
         };
-        if let Some(r) = self.endpoint.as_ref() {
+        if let Some(r) = endpoint.as_ref() {
             let p = r.prior();
             let (on, off) = r.thresholds();
             debug!(
@@ -316,12 +301,7 @@ impl Controller {
                 p.noise_db, p.speech_db, on, off
             );
         }
-        self.listen_started_ms = now_ms();
-        self.wake_dialog = !phrase.is_empty();
-        self.ring_stopped_in_dialog = false;
-        self.tts_url.clear();
-        self.tts_played = false;
-        self.followup = logic::Followup::default();
+        self.session.begin(now_ms(), !phrase.is_empty(), endpoint);
         self.update_duck();
         if earcon {
             let sound = earcons::path(self.model.earcons.wake);
@@ -331,7 +311,8 @@ impl Controller {
         // the new dialog's listening state.
         self.send_tts_report(false);
         // A failed send comes back as VoiceStartFailed / VoiceAudioOverflow of this run.
-        self.voice_run = self.deps.ha.voice_request_start(phrase);
+        let run = self.deps.ha.voice_request_start(phrase);
+        self.session.set_voice_run(run);
         // HA drops audio queued before the start and queues what follows it on the same
         // connection.
         for chunk in preroll.chunks(512) {
@@ -349,32 +330,21 @@ impl Controller {
         self.timers.cancel(Tk::FollowupWait);
         // HA finished the phrase first (STT_VAD_END/STT_END), the dialog was cancelled or a
         // repeated wake replaced it: drop the run so no stale end can follow.
-        if let Some(r) = self.endpoint.as_mut() {
-            r.cancel();
-        }
-        self.endpoint = None;
+        self.session.stop_listening();
         // A wake word heard meanwhile keeps its audio.
-        self.deps.frontend.set_streaming(self.arbitrating);
-        if self.phase == Phase::Listening {
-            self.phase = Phase::Processing;
-        }
+        self.deps.frontend.set_streaming(self.wake.is_claiming());
     }
 
     /// One live 32 ms chunk while the dialog listens. Sends it to HA and feeds the optional
     /// local detector; a detected end is deferred while the wake earcon is playing.
     pub(super) fn on_listening_audio(&mut self, pcm: Vec<i16>) {
-        if let Some(r) = self.endpoint.as_mut() {
-            r.push(pcm_level_db(&pcm), true);
-        }
+        self.session.push_listen_level(pcm_level_db(&pcm));
         self.deps.ha.voice_send_audio(pcm);
         let earcon = matches!(
             self.deps.player.state(Channel::Announce),
             PlayState::Playing | PlayState::Loading
         );
-        if !earcon
-            && self.phase == Phase::Listening
-            && self.endpoint.as_mut().is_some_and(EndpointRun::take_end)
-        {
+        if !earcon && self.session.is_listening() && self.session.take_endpoint_end() {
             self.send_endpoint_end();
         }
     }
@@ -382,10 +352,10 @@ impl Controller {
     /// Graceful `VoiceAssistantAudio.end`: finish the phrase on what HA already has, without
     /// aborting the run. Exactly once per dialog; a stale or replaced dialog sends nothing.
     fn send_endpoint_end(&mut self) {
-        if self.stop_sent || self.phase != Phase::Listening {
+        if self.session.stop_sent() || !self.session.is_listening() {
             return;
         }
-        if let Some(r) = self.endpoint.as_ref() {
+        if let Some(r) = self.session.endpoint() {
             let p = r.prior();
             let (on, off) = r.thresholds();
             info!(
@@ -405,9 +375,7 @@ impl Controller {
 
     /// The running dialog was not ended by its own run: re-wake, local cancel, mute, lost link.
     pub(super) fn mark_wake_cancelled(&mut self) {
-        if let Some(rec) = &mut self.wake_rec {
-            rec.cancelled = true;
-        }
+        self.session.mark_wake_cancelled();
     }
 
     /// Writes the outcome of `rec` to its sidecar (no-op without a recorded hit).
@@ -419,120 +387,54 @@ impl Controller {
     }
 
     fn finish_wake_rec(&mut self) {
-        let rec = self.wake_rec.take();
+        let rec = self.session.take_record();
         self.finish_wake(rec);
     }
 
     pub(super) fn on_voice_event(&mut self, ev: VaEvent, data: &HashMap<String, String>) {
-        let get = |k: &str| data.get(k).map_or("", String::as_str);
         let code = ev.code();
         if ev != VaEvent::IntentProgress {
             info!("voice event {code}");
         }
-        if !self.run.accept(ev) {
+        if !self.session.accept(ev) {
             debug!("voice event {code}: from the replaced run, ignored");
             return;
         }
-        if self.phase == Phase::Idle {
+        if self.session.phase() == Phase::Idle {
             // The run of a dialog that already ended; it is being stopped. A TTS_START that got
             // out before the stop still leaves HA waiting for the answer's report.
             if ev == VaEvent::TtsStart {
-                self.tts_report_owed = true;
+                self.session.owe_tts_report();
                 self.send_tts_report(false);
             }
             debug!("voice event {code}: dialog already ended, ignored");
             return;
         }
-        self.followup
-            .on_event(ev, get("continue_conversation") == "1");
+        self.session.followup_on_event(
+            ev,
+            data.get("continue_conversation").is_some_and(|v| v == "1"),
+        );
         match ev {
-            VaEvent::RunStart => {
-                get("url").clone_into(&mut self.tts_url);
-                self.tts_played = false;
-            }
-            VaEvent::SttStart => {
-                if self.phase == Phase::Listening
-                    && let Some(ms) = self.followup.window_ms(self.st.followup_duration_s)
-                {
-                    self.timers.set(Tk::FollowupWait, ms);
-                }
-            }
+            VaEvent::RunStart => self.session.set_tts_url(get(data, "url")),
+            VaEvent::SttStart => self.on_stt_start(),
             VaEvent::SttVadStart => self.timers.cancel(Tk::FollowupWait),
-            VaEvent::SttVadEnd | VaEvent::SttEnd => {
-                if ev == VaEvent::SttEnd {
-                    if let Some(rec) = &mut self.wake_rec {
-                        rec.stt = Some(get("text").to_owned());
-                    }
-                    if matches!(self.phase, Phase::Listening | Phase::Processing) {
-                        match logic::stt_stop_action(get("text"), self.wake_dialog) {
-                            logic::SttStopAction::None => {}
-                            logic::SttStopAction::Cancel => {
-                                info!("voice command: stop word in STT text");
-                                if self.timers_ha.ringing() {
-                                    self.stop_timer_ring();
-                                }
-                                return self.cancel_dialog();
-                            }
-                        }
-                    }
-                }
-                self.stop_streaming();
-                self.update_ui();
-            }
-            VaEvent::IntentStart => {
-                if self.phase == Phase::Listening {
-                    self.stop_streaming();
-                }
-                self.update_ui();
-            }
+            VaEvent::SttVadEnd => self.finish_phrase(),
+            VaEvent::SttEnd => self.on_stt_end(get(data, "text")),
+            VaEvent::IntentStart => self.on_intent_start(),
             VaEvent::IntentProgress => {
-                if get("tts_start_streaming") == "1" {
+                if get(data, "tts_start_streaming") == "1" {
                     self.play_tts();
                 }
             }
-            VaEvent::TtsStart => self.tts_report_owed = true,
+            VaEvent::TtsStart => self.session.owe_tts_report(),
             VaEvent::TtsEnd => {
-                if !get("url").is_empty() {
-                    get("url").clone_into(&mut self.tts_url);
-                }
+                self.session.update_tts_url(get(data, "url"));
                 self.play_tts();
             }
-            VaEvent::Error => {
-                // HA accepts one wake word phrase per 2 s across satellites: another one answers.
-                if get("code") == "duplicate_wake_up_detected" {
-                    info!(
-                        "pipeline: another satellite answers this wake word (HA duplicate wake-up)"
-                    );
-                    if let Some(rec) = &mut self.wake_rec {
-                        rec.arbiter_lost = true;
-                    }
-                    self.stop_streaming();
-                } else if get("code") == "stt-no-text-recognized" {
-                    // Empty STT after a wake word: the user changed their mind or spoke
-                    // too softly. Treat it as a silent cancel, not a station error.
-                    info!("pipeline: no speech recognized, treating as cancel");
-                    if let Some(rec) = &mut self.wake_rec {
-                        rec.stt = Some(String::new());
-                    }
-                    self.stop_streaming();
-                } else if self.followup.silent(get("code")) {
-                    info!("follow-up: nothing said, conversation ends");
-                    self.stop_streaming();
-                } else {
-                    warn!("pipeline error: {} {}", get("code"), get("message"));
-                    if let Some(rec) = &mut self.wake_rec {
-                        rec.error = true;
-                    }
-                    self.stop_streaming();
-                    self.error_shown = true;
-                    self.show_ui(UiState::Error);
-                    let sound = earcons::path(self.model.earcons.error);
-                    self.play_closing_earcon(sound);
-                }
-            }
+            VaEvent::Error => self.on_voice_error(data),
             VaEvent::RunEnd => {
                 self.stop_streaming();
-                if !self.tts_played {
+                if !self.session.tts_played() {
                     self.finish_interaction();
                 }
             }
@@ -542,30 +444,89 @@ impl Controller {
         self.arm_watchdog();
     }
 
-    fn play_tts(&mut self) {
-        if self.tts_played || self.tts_url.is_empty() {
-            return;
+    fn on_stt_start(&mut self) {
+        if self.session.is_listening()
+            && let Some(ms) = self.session.followup_window_ms(self.st.followup_duration_s)
+        {
+            self.timers.set(Tk::FollowupWait, ms);
         }
-        self.tts_played = true;
-        self.phase = Phase::Speaking;
+    }
+
+    /// STT кончился без слова-остановки: фраза уходит в HA.
+    fn finish_phrase(&mut self) {
+        self.stop_streaming();
         self.update_ui();
-        let url = self.tts_url.clone();
-        let dialog = self.dialog;
+    }
+
+    fn on_stt_end(&mut self, text: &str) {
+        self.session.record_stt(text);
+        if self.session.in_voice_request()
+            && logic::stt_stop_action(text, self.session.wake_dialog())
+                == logic::SttStopAction::Cancel
+        {
+            info!("voice command: stop word in STT text");
+            if self.timers_ha.ringing() {
+                self.stop_timer_ring();
+            }
+            return self.cancel_dialog();
+        }
+        self.finish_phrase();
+    }
+
+    fn on_intent_start(&mut self) {
+        if self.session.is_listening() {
+            self.stop_streaming();
+        }
+        self.update_ui();
+    }
+
+    fn on_voice_error(&mut self, data: &HashMap<String, String>) {
+        let code = get(data, "code");
+        // HA accepts one wake word phrase per 2 s across satellites: another one answers.
+        if code == "duplicate_wake_up_detected" {
+            info!("pipeline: another satellite answers this wake word (HA duplicate wake-up)");
+            self.session.record_arbiter_lost();
+            self.stop_streaming();
+        } else if code == "stt-no-text-recognized" {
+            // Empty STT after a wake word: the user changed their mind or spoke too softly.
+            // Treat it as a silent cancel, not a station error.
+            info!("pipeline: no speech recognized, treating as cancel");
+            self.session.record_stt("");
+            self.stop_streaming();
+        } else if self.session.followup_silent(code) {
+            info!("follow-up: nothing said, conversation ends");
+            self.stop_streaming();
+        } else {
+            warn!("pipeline error: {} {}", code, get(data, "message"));
+            self.session.record_error();
+            self.stop_streaming();
+            self.error_shown = true;
+            self.show_ui(UiState::Error);
+            let sound = earcons::path(self.model.earcons.error);
+            self.play_closing_earcon(sound);
+        }
+    }
+
+    fn play_tts(&mut self) {
+        let Some((dialog, url)) = self.session.take_tts() else {
+            return;
+        };
+        self.update_ui();
         self.play_announce(vec![url], Pending::Tts { dialog });
     }
 
     /// A cut-short or failed answer does not reopen the microphone, nor does a ringing timer.
     fn tts_finished(&mut self, ok: bool) {
         self.send_tts_report(ok);
-        let followup = self.followup;
+        let followup = self.session.followup();
         if followup.should_continue(
             ok,
             self.st.followup_duration_s,
             self.timers_ha.ringing() || self.mic_muted(),
         ) {
             self.start_pipeline("", false, &[], &[], None);
-            if self.phase == Phase::Listening {
-                self.followup = followup.next_turn();
+            if self.session.is_listening() {
+                self.session.set_followup(followup.next_turn());
             }
             return;
         }
@@ -577,7 +538,7 @@ impl Controller {
     /// AnnounceFinished ends HA's wait as well, and one more would end the announcement's wait
     /// early. Media player announcements send none.
     fn send_tts_report(&mut self, ok: bool) {
-        if !std::mem::take(&mut self.tts_report_owed)
+        if !self.session.take_tts_report()
             || self
                 .pending
                 .values()
@@ -593,20 +554,15 @@ impl Controller {
         self.timers.cancel(Tk::FollowupWait);
         // The dialog may end before its run does (answer cut short, cancel, timeout): stop the
         // run so HA does not go on generating; whatever it still sends is dropped while idle.
-        if (self.run.run_active || self.run.awaiting_run_start) && !self.stop_sent {
+        if self.session.stop_due() {
             self.deps.ha.voice_request_stop();
-            self.stop_sent = true;
+            self.session.mark_stop_sent();
         }
-        self.run.awaiting_run_start = false;
+        self.session.no_run_follows();
         self.send_tts_report(false);
-        self.endpoint = None;
-        self.deps.frontend.set_streaming(self.arbitrating);
-        self.phase = Phase::Idle;
-        self.dialog = self.dialog.next();
-        self.tts_played = false;
-        self.tts_url.clear();
+        self.session.finish();
+        self.deps.frontend.set_streaming(self.wake.is_claiming());
         self.finish_wake_rec();
-        self.followup = logic::Followup::default();
         self.update_duck();
         self.arm_watchdog();
         if self.error_shown {
@@ -627,18 +583,18 @@ impl Controller {
     }
 
     pub(super) fn on_voice_start_failed(&mut self, run: u64) {
-        if run != self.voice_run || !matches!(self.phase, Phase::Listening | Phase::Processing) {
+        if run != self.session.voice_run() || !self.session.in_voice_request() {
             return;
         }
-        self.run.awaiting_run_start = false; // no run follows
+        self.session.no_run_follows(); // no run follows
         self.abort_dialog("Home Assistant refused to start it");
     }
 
     pub(super) fn on_voice_audio_overflow(&mut self, run: u64) {
-        if run != self.voice_run || !matches!(self.phase, Phase::Listening | Phase::Processing) {
+        if run != self.session.voice_run() || !self.session.in_voice_request() {
             return;
         }
-        self.stop_sent = true; // by the server itself
+        self.session.mark_stop_sent(); // by the server itself
         self.abort_dialog("network too slow for the microphone audio");
     }
 
@@ -646,12 +602,9 @@ impl Controller {
     /// listening, the microphone streaming and the wake word ignored.
     fn arm_watchdog(&mut self) {
         self.timers.cancel(Tk::Watchdog);
-        let ms = match self.phase {
-            Phase::Listening => LISTEN_TIMEOUT_MS,
-            Phase::Processing => PROCESS_TIMEOUT_MS,
-            _ => return,
-        };
-        self.timers.set(Tk::Watchdog, ms);
+        if let Some(ms) = self.session.watchdog_ms() {
+            self.timers.set(Tk::Watchdog, ms);
+        }
     }
 
     /// Cuts the TTS answer or HA announcement short. An interrupted announcement ends here (its
@@ -659,17 +612,14 @@ impl Controller {
     /// replaced by the caller, otherwise by the TTS completion.
     pub(super) fn interrupt_speech(&mut self) {
         self.deps.player.stop(Channel::Announce);
-        if self.announcing {
-            self.announcing = false;
-            self.announce_seq = self.announce_seq.next();
+        if self.session.announcing() {
+            self.session.interrupt_announce();
         }
     }
 
     /// Error and cancel sounds outlive the dialog they close; music stays ducked until they end.
     pub(super) fn play_closing_earcon(&mut self, path: String) {
-        self.closing_earcon = true;
-        self.earcon_seq = self.earcon_seq.next();
-        let seq = self.earcon_seq;
+        let seq = self.session.start_earcon();
         self.play_announce(vec![path], Pending::Earcon { seq });
     }
 
@@ -688,10 +638,10 @@ impl Controller {
         if self.timers_ha.ringing() {
             return self.stop_timer_ring();
         }
-        if matches!(self.phase, Phase::Listening | Phase::Processing) {
+        if self.session.in_voice_request() {
             return self.cancel_dialog();
         }
-        if self.phase == Phase::Speaking || self.announcing {
+        if self.session.is_speaking() || self.session.announcing() {
             self.mark_wake_cancelled();
             self.interrupt_speech();
             return self.finish_interaction();
@@ -709,7 +659,7 @@ impl Controller {
         info!(
             "announce: '{}'{}",
             req.text,
-            if self.phase == Phase::Idle {
+            if self.session.phase() == Phase::Idle {
                 ""
             } else {
                 " (during a dialog)"
@@ -720,9 +670,7 @@ impl Controller {
             urls.push(req.preannounce_media_id);
         }
         urls.push(req.media_id);
-        self.announcing = true;
-        self.announce_seq = self.announce_seq.next();
-        let seq = self.announce_seq;
+        let seq = self.session.start_announce();
         self.update_duck();
         self.update_ui();
         self.publish_media();
@@ -755,23 +703,21 @@ impl Controller {
             self.deps.player.state(Channel::Music),
             PlayState::Playing | PlayState::Loading
         ) || self.sendspin_streaming()
-            || self.announcing
+            || self.session.announcing()
             || self.timers_ha.ringing()
-            || self.phase == Phase::Speaking;
-        let dialog = matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating;
+            || self.session.is_speaking();
+        let dialog = self.session.in_voice_request() || self.wake.is_claiming();
         self.deps
             .frontend
             .set_commands(!self.mic_muted() && playing && !dialog);
     }
 
     fn owns_music(&self) -> bool {
-        logic::owns_music(
+        self.session.owns_music(
             now_ms(),
             self.deps.player.state(Channel::Music),
-            self.music_paused_ms,
             self.sendspin_streaming(),
             self.deps.sendspin.as_ref().is_some_and(|ss| ss.connected()),
-            self.sendspin_ended_ms,
         )
     }
 
@@ -809,7 +755,8 @@ impl Controller {
         let Some(c) = logic::command_of(word) else {
             return;
         };
-        if now_ms() < self.commands_blocked_until_ms {
+        let now = now_ms();
+        if self.wake.blocked(now) {
             info!("voice command '{word}' ignored: another station answers this wake word");
             return;
         }
@@ -817,22 +764,24 @@ impl Controller {
         // stops a ringing alarm and restores the paused music; local handling would
         // only pause the music and cancel the pipeline. This also covers a callback
         // queued just before update_commands() switched the spotter off.
-        if matches!(self.phase, Phase::Listening | Phase::Processing) || self.arbitrating {
-            let after_wake = logic::after_wake(self.phase, now_ms(), self.listen_started_ms);
+        if self.session.in_voice_request() || self.wake.is_claiming() {
+            let after_wake =
+                logic::after_wake(self.session.phase(), now, self.session.listen_started_ms());
             info!(
                 "voice command '{word}' left to Home Assistant during a voice request{}",
                 if after_wake { " (after wake word)" } else { "" }
             );
             return;
         }
-        let sounding = self.phase == Phase::Speaking || self.announcing || self.timers_ha.ringing();
+        let sounding =
+            self.session.is_speaking() || self.session.announcing() || self.timers_ha.ringing();
         if !logic::command_allowed(c, false, false, sounding, self.owns_music()) {
             info!("voice command '{word}' ignored: not for this station");
             return;
         }
         info!("voice command '{word}'");
         match c {
-            VoiceCommand::Stop => self.stop_word(false),
+            VoiceCommand::Stop => self.stop_word(),
             VoiceCommand::Pause => {
                 if self.music_pause() {
                     self.deps.display.clock.play(ClockShot::Pause);
@@ -863,18 +812,15 @@ impl Controller {
         }
     }
 
-    /// «стоп» / «хватит» от спотера или из текста STT.
-    fn stop_word(&mut self, in_dialog: bool) {
+    /// «стоп» / «хватит» от командного спотера.
+    fn stop_word(&mut self) {
         if self.timers_ha.ringing() {
-            self.ring_stopped_in_dialog = in_dialog;
             self.stop_timer_ring();
-        } else if in_dialog {
-            self.cancel_dialog();
-        } else if self.phase == Phase::Speaking {
+        } else if self.session.is_speaking() {
             self.mark_wake_cancelled();
             self.interrupt_speech();
             self.finish_interaction();
-        } else if self.announcing {
+        } else if self.session.announcing() {
             // A dialog listening meanwhile goes on.
             self.mark_wake_cancelled();
             self.interrupt_speech();
@@ -885,4 +831,8 @@ impl Controller {
             self.deps.display.clock.play(ClockShot::Pause);
         }
     }
+}
+
+fn get<'a>(data: &'a HashMap<String, String>, key: &str) -> &'a str {
+    data.get(key).map_or("", String::as_str)
 }

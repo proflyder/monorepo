@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use pulsar_arbiter::{ArbiterHandle, ClaimId};
+use pulsar_arbiter::ArbiterHandle;
 use pulsar_audio::{FrontendHandle, Outcome};
 use pulsar_clock::{ClockFace, ClockHandle, ClockMusicStyle};
 use pulsar_core::{ClockShot, MusicFrame, UiState};
@@ -20,6 +20,8 @@ use pulsar_media::{Channel, Mixer as MixerHandle, PlayId, PlayState, PlayerHandl
 use pulsar_sendspin::{SendspinHandle, Transport};
 use pulsar_update::{Release, RequestId, UpdaterHandle};
 use pulsar_zigbee::{Mode, ZigbeeHandle};
+
+use super::wake::ClaimToken;
 
 /// Воспроизведение: каналы Music / Announce.
 pub trait Player {
@@ -83,7 +85,7 @@ pub trait Frontend {
 /// Арбитраж wake word между станциями.
 pub trait Arbiter {
     fn ok(&self) -> bool;
-    fn claim(&self, wake: &str, level_db: f32, busy: bool, decide: bool) -> ClaimId;
+    fn claim(&self, wake: &str, level_db: f32, busy: bool, decide: bool) -> ClaimToken;
     fn cancel(&self);
 }
 
@@ -356,8 +358,8 @@ impl Arbiter for ArbiterHandle {
         Self::ok(self)
     }
 
-    fn claim(&self, wake: &str, level_db: f32, busy: bool, decide: bool) -> ClaimId {
-        Self::claim(self, wake, level_db, busy, decide)
+    fn claim(&self, wake: &str, level_db: f32, busy: bool, decide: bool) -> ClaimToken {
+        Self::claim(self, wake, level_db, busy, decide).into()
     }
 
     fn cancel(&self) {

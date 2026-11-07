@@ -61,10 +61,10 @@ impl Policy {
 impl Controller {
     pub(super) fn update_duck(&mut self) {
         let want = logic::want_duck(
-            self.phase,
-            self.announcing,
+            self.session.phase(),
+            self.session.announcing(),
             self.timers_ha.ringing(),
-            self.closing_earcon,
+            self.session.closing_earcon(),
         );
         if self.media.set_ducked(want) {
             self.apply_gains();
@@ -130,11 +130,11 @@ impl Controller {
         if !logic::want_volume_click(
             before,
             (self.st.volume, self.st.muted),
-            self.phase,
-            self.arbitrating,
-            self.announcing,
+            self.session.phase(),
+            self.wake.is_claiming(),
+            self.session.announcing(),
             self.timers_ha.ringing(),
-            self.closing_earcon,
+            self.session.closing_earcon(),
         ) {
             return;
         }
@@ -149,7 +149,7 @@ impl Controller {
     /// previous one (as in C++); the change comes as `PlayerEvent::State`, which publishes again.
     pub(super) fn publish_media(&self) {
         let s = logic::media_state(
-            self.announcing,
+            self.session.announcing(),
             self.deps.player.state(Channel::Music),
             self.sendspin_streaming(),
         );
@@ -180,9 +180,7 @@ impl Controller {
         if let Some(url) = cmd.media_url {
             if cmd.announcement == Some(true) {
                 // Media-player announcements report completion through state only.
-                self.announcing = true;
-                self.announce_seq = self.announce_seq.next();
-                let seq = self.announce_seq;
+                let seq = self.session.start_announce();
                 self.update_duck();
                 self.update_ui();
                 let id = self.deps.player.play(Channel::Announce, vec![url]);
@@ -272,7 +270,8 @@ impl Controller {
                     self.deps.player.state(Channel::Music),
                     PlayState::Playing | PlayState::Loading
                 );
-                self.sendspin_ended_ms = (!active && !taken_over).then(now_ms);
+                self.session
+                    .on_sendspin_stream(active, taken_over, now_ms());
                 self.publish_media();
             }
             SendspinEvent::Volume(v) => self.set_volume(v, false),

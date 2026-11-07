@@ -2,16 +2,17 @@
 //! не участвуют — только домены и вызовы портов.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use pulsar_arbiter::ClaimId;
 use pulsar_audio::Outcome;
 use pulsar_clock::{ClockFace, ClockMusicStyle};
 use pulsar_core::{MusicFrame, UiState};
 use pulsar_esphome::{
     AnnounceRequest, ApiEvent, BinarySensorId, ButtonId, EventId, LightState, MediaState, NumberId,
     SelectId, SensorId, SwitchId, TextId, TextSensorId, TimerEvent, TimerInfo, UpdateState,
+    VaEvent,
 };
 use pulsar_hw::{CaseColor, Effect, MusicStyle, Rgb, VoiceColor};
 use pulsar_media::{Channel, PlayId, PlayState};
@@ -22,6 +23,7 @@ use tokio::sync::mpsc::unbounded_channel;
 use super::ports::{
     Arbiter, Clock, Display, Frontend, HaLink, Leds, Mdns, Mixer, Player, Radio, Sendspin, Updater,
 };
+use super::wake::ClaimToken;
 use super::{Controller, Pending, Tk, wiring};
 use crate::settings::Store;
 
@@ -254,18 +256,29 @@ impl Frontend for FakeFrontend {
     }
 }
 
-struct FakeArbiter;
+struct FakeArbiter {
+    rec: Rc<Rec>,
+    ok: Rc<Cell<bool>>,
+    next: Rc<Cell<u64>>,
+}
 
 impl Arbiter for FakeArbiter {
     fn ok(&self) -> bool {
-        false
+        self.ok.get()
     }
 
-    fn claim(&self, _wake: &str, _level_db: f32, _busy: bool, _decide: bool) -> ClaimId {
-        unreachable!("the fake arbiter never arbitrates")
+    fn claim(&self, wake: &str, level_db: f32, busy: bool, decide: bool) -> ClaimToken {
+        let id = self.next.get() + 1;
+        self.next.set(id);
+        self.rec.push(format!(
+            "arbiter.claim '{wake}' {level_db} busy={busy} decide={decide}"
+        ));
+        ClaimToken(id)
     }
 
-    fn cancel(&self) {}
+    fn cancel(&self) {
+        self.rec.push("arbiter.cancel".into());
+    }
 }
 
 struct FakeLeds {
@@ -525,6 +538,8 @@ struct Fixture {
     dir: PathBuf,
     music: Rc<Cell<PlayState>>,
     streaming: Rc<Cell<bool>>,
+    subscribed: Rc<Cell<bool>>,
+    arb_ok: Rc<Cell<bool>>,
 }
 
 impl Drop for Fixture {
@@ -565,6 +580,8 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
     let streaming = Rc::new(Cell::new(false));
     let connected = Rc::new(Cell::new(false));
     let subscribed = Rc::new(Cell::new(false));
+    let arb_ok = Rc::new(Cell::new(false));
+    let arb_next = Rc::new(Cell::new(0));
     let model = pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap();
     let store = Store::load(dir.join("state.conf"));
     let wired = wiring::Wired {
@@ -576,7 +593,11 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
             })),
             radio,
             updater: Box::new(FakeUpdater { rec: rec.clone() }),
-            arbiter: Box::new(FakeArbiter),
+            arbiter: Box::new(FakeArbiter {
+                rec: rec.clone(),
+                ok: arb_ok.clone(),
+                next: arb_next,
+            }),
             _input: None,
             display: Display {
                 clock: Box::new(FakeClock { rec: rec.clone() }),
@@ -592,7 +613,7 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
             mdns: Some(Box::new(FakeMdns)),
             ha: Box::new(FakeHa {
                 rec: rec.clone(),
-                subscribed,
+                subscribed: subscribed.clone(),
                 run: Cell::new(0),
             }),
         },
@@ -623,6 +644,8 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
         dir,
         music,
         streaming,
+        subscribed,
+        arb_ok,
     }
 }
 
@@ -676,6 +699,7 @@ async fn volume_feedback_unmutes_and_shows_the_rounded_level() {
 async fn announce_ducks_music_and_its_end_restores_the_gain() {
     let mut f = controller();
     f.music.set(PlayState::Playing);
+    f.streaming.set(true);
     f.calls();
     f.c.on_api(ApiEvent::Announce(AnnounceRequest {
         media_id: "/a.mp3".into(),
@@ -683,16 +707,20 @@ async fn announce_ducks_music_and_its_end_restores_the_gain() {
         preannounce_media_id: String::new(),
         start_conversation: false,
     }));
-    assert!(f.c.announcing);
+    assert!(f.c.session.announcing());
     let calls = f.calls();
     // Midi: hardware volume, so the master gain is 1 and the duck is exactly DUCK_GAIN.
     assert!(
         calls.contains(&"player.gain Music 0.15".to_owned()),
         "{calls:?}"
     );
-    let seq = f.c.announce_seq;
+    assert!(
+        calls.contains(&"sendspin.gain 0.15".to_owned()),
+        "{calls:?}"
+    );
+    let seq = f.c.session.announce_id().expect("announcement is current");
     f.c.play_done(Pending::Announce { conv: false, seq }, true);
-    assert!(!f.c.announcing);
+    assert!(!f.c.session.announcing());
     let calls = f.calls();
     assert!(
         calls.contains(&"player.gain Music 1".to_owned()),
@@ -863,10 +891,18 @@ async fn ha_timer_shows_rings_and_yields_to_speech() {
         "{calls:?}"
     );
     // Speech takes the channel: the ring yields, then resumes after the answer.
-    f.c.phase = super::logic::Phase::Speaking;
+    f.subscribed.set(true);
+    // HA started the conversation (the wake word and the button would stop the ring).
+    f.c.start_pipeline("", true, &[], &[], None);
+    let mut data = HashMap::new();
+    data.insert("url".to_owned(), "/a.mp3".to_owned());
+    f.c.on_voice_event(VaEvent::RunStart, &data);
+    f.c.on_voice_event(VaEvent::TtsStart, &data);
+    f.c.on_voice_event(VaEvent::TtsEnd, &data);
+    f.calls();
     f.c.ring_timer();
     assert!(!f.calls().iter().any(|c| c.starts_with("player.play")));
-    f.c.phase = super::logic::Phase::Idle;
+    f.c.finish_interaction();
     f.c.resume_ring();
     assert!(
         f.calls()
@@ -904,4 +940,436 @@ async fn owns_music_follows_sendspin_and_the_player() {
         !calls.iter().any(|c| c.starts_with("sendspin.")),
         "{calls:?}"
     );
+}
+
+// ---------------- сценарии голосовой сессии ----------------
+
+fn va(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect()
+}
+
+fn claim(station: &str, busy: bool, level_db: f32) -> pulsar_arbiter::Claim {
+    pulsar_arbiter::Claim {
+        station: station.to_owned(),
+        wake: "alice".to_owned(),
+        busy,
+        level_db,
+    }
+}
+
+/// Включить арбитраж и HA: wake word проходит через claim/decided.
+fn with_arbitration(f: &mut Fixture) {
+    f.subscribed.set(true);
+    f.arb_ok.set(true);
+    f.c.st.nearest_answers = true;
+}
+
+#[tokio::test]
+async fn wake_claim_won_listens_and_answers_over_ha_endpoint() {
+    let mut f = controller();
+    with_arbitration(&mut f);
+    f.calls();
+    f.c.on_wake("alice", -12.0, vec![7; 4], None, Some("hit-1".into()));
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"arbiter.claim 'ricardo' -12 busy=false decide=true".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"frontend.streaming true".to_owned()),
+        "{calls:?}"
+    );
+    let id = f.c.wake.claim_id().unwrap();
+    f.c.on_frontend(pulsar_audio::FrontendEvent::Audio(vec![9; 3]));
+    f.calls();
+    f.c.on_arbiter_decided(id, true, &claim("station-b", false, -12.0), 1);
+    let calls = f.calls();
+    // Пре-ролл (4) и удержанная речь (3) уходят в HA после voice_request_start.
+    assert!(
+        calls.contains(&"ha.voice_start 1 'alice'".to_owned()),
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"ha.audio 4".to_owned()), "{calls:?}");
+    assert!(calls.contains(&"ha.audio 3".to_owned()), "{calls:?}");
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Listening);
+
+    let data = va(&[("url", "/a.mp3")]);
+    f.c.on_voice_event(VaEvent::RunStart, &data);
+    f.c.on_voice_event(VaEvent::SttVadEnd, &HashMap::new());
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Processing);
+    let calls = f.calls();
+    // HA закончил фразу сам: graceful audio.end не отправляется.
+    assert!(!calls.iter().any(|c| c == "ha.audio_end"), "{calls:?}");
+    f.c.on_voice_event(
+        VaEvent::SttEnd,
+        &va(&[("text", "включи свет"), ("continue_conversation", "0")]),
+    );
+    f.c.on_voice_event(VaEvent::TtsStart, &HashMap::new());
+    f.calls();
+    f.c.on_voice_event(VaEvent::TtsEnd, &data);
+    assert!(f.c.session.is_speaking());
+    let dialog = f.c.session.current_id();
+    f.c.play_done(Pending::Tts { dialog }, true);
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"ha.answer_finished true".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"frontend.outcome hit-1 Answered Some(\"включи свет\")".to_owned()),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn claim_shows_listening_and_holds_the_command_spotter_during_music() {
+    let mut f = controller();
+    with_arbitration(&mut f);
+    f.music.set(PlayState::Playing);
+    f.calls();
+    f.c.on_wake("alice", -12.0, vec![0; 2], None, None);
+    let calls = f.calls();
+    // Claim уже активен: кольцо и часы показывают Listening, спотер команд выключен,
+    // хотя музыка играет.
+    assert!(calls.contains(&"leds.ui Listening".to_owned()), "{calls:?}");
+    assert!(
+        calls.contains(&"clock.ui Listening".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"frontend.commands false".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.contains(&"frontend.commands true".to_owned()),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn local_endpoint_end_is_reported_through_the_frontend_path() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.local_endpointing = true;
+    let prior = pulsar_audio::endpoint::EndpointPrior {
+        noise_db: -60.0,
+        speech_db: -20.0,
+    };
+    f.c.start_pipeline("", false, &[], &[], Some(prior));
+    f.calls();
+    // Речь выше onset (-40 dB), затем пауза ниже release (-50 dB) на 31 чанк.
+    for _ in 0..6 {
+        f.c.on_frontend(pulsar_audio::FrontendEvent::Audio(vec![10_000; 512]));
+    }
+    for _ in 0..31 {
+        f.c.on_frontend(pulsar_audio::FrontendEvent::Audio(vec![0; 512]));
+    }
+    let calls = f.calls();
+    assert!(calls.contains(&"ha.audio_end".to_owned()), "{calls:?}");
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Processing);
+}
+
+#[tokio::test]
+async fn run_start_while_speaking_lets_the_next_answer_play() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.start_pipeline("", false, &[], &[], None);
+    let first = va(&[("url", "/a.mp3")]);
+    f.c.on_voice_event(VaEvent::RunStart, &first);
+    f.c.on_voice_event(VaEvent::TtsEnd, &first);
+    assert!(f.c.session.is_speaking());
+    assert!(f.c.session.tts_played());
+    // RUN_START в Speaking сбрасывает «ответ уже играл», как tts_played = false в HEAD.
+    let second = va(&[("url", "/b.mp3")]);
+    f.calls();
+    f.c.on_voice_event(VaEvent::RunStart, &second);
+    f.c.on_voice_event(VaEvent::TtsEnd, &second);
+    let calls = f.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("player.play Announce") && c.contains("/b.mp3")),
+        "{calls:?}"
+    );
+    assert!(f.c.session.tts_played());
+}
+
+#[tokio::test]
+async fn run_end_after_a_reset_run_start_closes_the_dialog() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.start_pipeline("", false, &[], &[], None);
+    let data = va(&[("url", "/a.mp3")]);
+    f.c.on_voice_event(VaEvent::RunStart, &data);
+    f.c.on_voice_event(VaEvent::TtsEnd, &data);
+    assert!(f.c.session.is_speaking());
+    // Новый RUN_START не дошёл до TTS_END: RUN_END закрывает диалог, follow-up не открывается.
+    f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
+    f.c.on_voice_event(VaEvent::RunEnd, &HashMap::new());
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+}
+
+#[tokio::test]
+async fn followup_continues_then_closes_its_window() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.start_pipeline("", false, &[], &[], None);
+    let data = va(&[("url", "/a.mp3")]);
+    f.c.on_voice_event(VaEvent::RunStart, &data);
+    f.c.on_voice_event(VaEvent::SttVadStart, &HashMap::new());
+    f.c.on_voice_event(VaEvent::IntentEnd, &va(&[("continue_conversation", "1")]));
+    f.c.on_voice_event(VaEvent::TtsStart, &HashMap::new());
+    f.c.on_voice_event(VaEvent::TtsEnd, &data);
+    let dialog = f.c.session.current_id();
+    f.calls();
+    f.c.play_done(Pending::Tts { dialog }, true);
+    assert!(
+        f.c.session.is_listening(),
+        "follow-up reopens the microphone"
+    );
+    assert!(f.c.session.followup_awaiting_speech());
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"ha.voice_start 2 ''".to_owned()),
+        "{calls:?}"
+    );
+    // Окно follow-up-реплики: STT_START взводит таймер, его срабатывание закрывает диалог.
+    f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
+    f.c.on_voice_event(VaEvent::SttStart, &HashMap::new());
+    assert!(f.c.timers.is_set(Tk::FollowupWait));
+    f.c.on_timer(Tk::FollowupWait);
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+}
+
+#[tokio::test]
+async fn stt_stop_word_cancels_a_button_dialog_but_not_a_wake_dialog() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.start_pipeline("", false, &[], &[], None);
+    f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
+    f.calls();
+    f.c.on_voice_event(VaEvent::SttEnd, &va(&[("text", "стоп")]));
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+    let calls = f.calls();
+    assert!(calls.contains(&"ha.voice_stop".to_owned()), "{calls:?}");
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("player.play Announce") && c.contains("cancel")),
+        "{calls:?}"
+    );
+    // В диалоге от wake word «стоп» остаётся HA.
+    f.c.start_pipeline("alice", true, &[], &[], None);
+    f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
+    f.calls();
+    f.c.on_voice_event(VaEvent::SttEnd, &va(&[("text", "стоп")]));
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Processing);
+    assert!(!f.calls().iter().any(|c| c == "ha.voice_stop"));
+}
+
+#[tokio::test]
+async fn lost_arbitration_blocks_commands_until_the_window_ends() {
+    let mut f = controller();
+    with_arbitration(&mut f);
+    f.c.on_wake("alice", -20.0, vec![0; 2], None, None);
+    let id = f.c.wake.claim_id().unwrap();
+    f.calls();
+    f.c.on_arbiter_decided(id, false, &claim("station-b", false, -10.0), 1);
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+    assert!(f.c.wake.blocked(pulsar_core::now_ms()));
+    assert!(
+        f.calls().contains(&"frontend.streaming false".to_owned()),
+        "no dialog started"
+    );
+    // Отмена «висящего» claim не снимает проигранный turn.
+    f.c.cancel_arbitration();
+    assert!(f.c.wake.blocked(pulsar_core::now_ms()));
+    f.calls();
+    f.c.on_command("громче");
+    let calls = f.calls();
+    assert!(
+        !calls.iter().any(|c| c.starts_with("mixer.")),
+        "blocked: {calls:?}"
+    );
+    // Новое wake word снимает блокировку и заменяет ожидающий claim.
+    f.c.on_wake("alice", -12.0, vec![0; 2], None, None);
+    assert!(f.c.wake.is_claiming());
+    assert!(!f.c.wake.blocked(pulsar_core::now_ms()));
+}
+
+#[tokio::test]
+async fn repeated_wake_replaces_the_pending_claim() {
+    let mut f = controller();
+    with_arbitration(&mut f);
+    f.c.on_wake("alice", -20.0, vec![0; 2], None, Some("hit-1".into()));
+    let first = f.c.wake.claim_id().unwrap();
+    f.c.on_wake("alice", -10.0, vec![1; 2], None, Some("hit-2".into()));
+    let second = f.c.wake.claim_id().unwrap();
+    assert_ne!(first, second);
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"frontend.outcome hit-1 Cancelled None".to_owned()),
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"arbiter.cancel".to_owned()), "{calls:?}");
+}
+
+#[tokio::test]
+async fn watchdog_bounds_listening_and_processing() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.start_pipeline("", false, &[], &[], None);
+    assert_eq!(f.c.session.watchdog_ms(), Some(30_000));
+    assert!(f.c.timers.is_set(Tk::Watchdog));
+    f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
+    f.c.on_voice_event(VaEvent::SttVadEnd, &HashMap::new());
+    assert_eq!(f.c.session.watchdog_ms(), Some(120_000));
+    f.calls();
+    f.c.on_timer(Tk::Watchdog);
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+    let calls = f.calls();
+    assert!(calls.contains(&"ha.voice_stop".to_owned()), "{calls:?}");
+    assert!(calls.contains(&"leds.ui Error".to_owned()), "{calls:?}");
+}
+
+#[tokio::test]
+async fn announce_ducks_music_and_leaves_a_dialog_listening() {
+    let mut f = controller();
+    f.music.set(PlayState::Playing);
+    f.streaming.set(true);
+    f.subscribed.set(true);
+    f.c.start_pipeline("", false, &[], &[], None);
+    f.calls();
+    f.c.on_announce(AnnounceRequest {
+        media_id: "/a.mp3".into(),
+        text: "hello".into(),
+        preannounce_media_id: String::new(),
+        start_conversation: false,
+    });
+    let calls = f.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("player.play Announce") && c.contains("/a.mp3")),
+        "{calls:?}"
+    );
+    assert_eq!(
+        f.c.session.phase(),
+        super::logic::Phase::Listening,
+        "the dialog is not taken over"
+    );
+    let seq = f.c.session.announce_id().unwrap();
+    f.calls();
+    f.c.play_done(Pending::Announce { conv: false, seq }, true);
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Listening);
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"ha.announce_finished true".to_owned()),
+        "{calls:?}"
+    );
+    // Диалог продолжается и всё ещё держит музыку приглушённой.
+    assert!(!f.c.session.announcing());
+}
+
+#[tokio::test]
+async fn wake_during_the_timer_ring_takes_the_turn_without_a_dialog() {
+    let mut f = controller();
+    with_arbitration(&mut f);
+    f.c.on_api(ApiEvent::Timer(TimerInfo {
+        event: TimerEvent::Finished,
+        id: "a".into(),
+        name: "tea".into(),
+        total_seconds: 10,
+        seconds_left: 0,
+        is_active: false,
+    }));
+    assert!(f.c.timers_ha.ringing());
+    f.calls();
+    f.c.on_wake("alice", -15.0, vec![0; 2], None, None);
+    assert!(!f.c.timers_ha.ringing());
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"arbiter.claim 'ricardo' -15 busy=true decide=false".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.starts_with("ha.voice_start")),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn wake_recording_reports_cancelled_and_answered_hits() {
+    let mut f = controller();
+    // HA ещё не подписан: диалог не начался, срабатывание всё равно получает исход.
+    f.c.on_wake("alice", -12.0, vec![], None, Some("hit-1".into()));
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"frontend.outcome hit-1 Cancelled None".to_owned()),
+        "{calls:?}"
+    );
+    // Полный диалог: исход Answered с текстом STT.
+    f.subscribed.set(true);
+    f.c.on_wake("alice", -12.0, vec![], None, Some("hit-2".into()));
+    f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
+    f.c.on_voice_event(VaEvent::SttEnd, &va(&[("text", "выключи свет")]));
+    f.c.finish_interaction();
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"frontend.outcome hit-2 Answered Some(\"выключи свет\")".to_owned()),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn mute_during_the_dialog_cancels_the_recorded_hit() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.on_wake("alice", -12.0, vec![], None, Some("hit-1".into()));
+    assert!(f.c.session.is_listening());
+    f.calls();
+    f.c.on_api(ApiEvent::Switch(SwitchId::Microphones, false));
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"frontend.outcome hit-1 Cancelled None".to_owned()),
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"ha.voice_stop".to_owned()), "{calls:?}");
+}
+
+#[tokio::test]
+async fn ha_disconnect_mid_dialog_ends_it_and_stops_the_run() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.start_pipeline("", false, &[], &[], None);
+    f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
+    f.calls();
+    f.c.on_voice_subscribed(false);
+    assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
+    let calls = f.calls();
+    // The lost client's run is dropped without a stop: it would reach the next subscriber.
+    assert!(!calls.contains(&"ha.voice_stop".to_owned()), "{calls:?}");
+    assert!(
+        calls.contains(&"frontend.streaming false".to_owned()),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn dry_run_switch_reaches_the_frontend() {
+    let mut f = controller();
+    f.calls();
+    f.c.on_api(ApiEvent::Switch(SwitchId::WakeDryRun, true));
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"frontend.wake_dry_run true".to_owned()),
+        "{calls:?}"
+    );
+    assert!(f.c.st.wake_dry_run);
 }

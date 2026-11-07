@@ -230,7 +230,7 @@ impl Controller {
                     logic::sw_mute_after_switch(state, self.st.mic_muted, self.hw_mic_muted);
                 if !state {
                     self.cancel_arbitration();
-                    if self.phase == logic::Phase::Listening {
+                    if self.session.is_listening() {
                         self.mark_wake_cancelled();
                         self.finish_interaction();
                     }
@@ -335,9 +335,7 @@ impl Controller {
                 self.st.followup_duration_s = s;
                 self.deps.ha.publish_number(id, s as f32);
                 // Ожидание открыто и до STT_START, и без таймера: проверяется по флагу, не по Tk.
-                if s == 0
-                    && self.phase == logic::Phase::Listening
-                    && self.followup.awaiting_speech()
+                if s == 0 && self.session.is_listening() && self.session.followup_awaiting_speech()
                 {
                     info!("follow-up: turned off, conversation ends");
                     self.finish_interaction();
@@ -566,7 +564,7 @@ impl Controller {
                     self.persist();
                 }
                 self.publish_microphones();
-                if m && self.phase == logic::Phase::Listening {
+                if m && self.session.is_listening() {
                     self.mark_wake_cancelled();
                     self.finish_interaction();
                 }
@@ -582,7 +580,7 @@ impl Controller {
                 self.st.mic_muted = muted;
                 if muted {
                     self.cancel_arbitration();
-                    if self.phase == logic::Phase::Listening {
+                    if self.session.is_listening() {
                         self.mark_wake_cancelled();
                         self.finish_interaction();
                     }
@@ -692,8 +690,8 @@ impl Controller {
 
     fn idle_for_update(&self) -> bool {
         logic::idle_for_update(
-            self.phase,
-            self.announcing,
+            self.session.phase(),
+            self.session.announcing(),
             self.timers_ha.ringing(),
             self.deps.player.state(Channel::Music),
             self.sendspin_streaming(),
