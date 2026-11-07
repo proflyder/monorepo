@@ -93,17 +93,10 @@ export const config = {
       paths: ["platform/android/**"],
       platforms: ["android"],
     },
-    // Root Cargo workspace: one lockfile and one toolchain for every
-    // first-party Rust crate. A pin, lock or toolchain change reaches every
-    // unit that compiles Rust (host checks and cross-builds).
+    // The compiler toolchain changes how every first-party Rust crate is
+    // built, so it stays a Rust-wide invalidation.
     {
-      paths: [
-        "Cargo.toml",
-        "Cargo.lock",
-        "crate-universe.lock",
-        "rust-toolchain.toml",
-        "packages/rust/**",
-      ],
+      paths: ["rust-toolchain.toml"],
       platforms: ["native", "bazel"],
     },
     {
@@ -240,9 +233,9 @@ export const config = {
       title: "solutions/scheduler (Rust service) + home deployment",
       paths: [
         "solutions/scheduler/**",
-        // Shared Rust crates and the home.v1 schema the service is generated
-        // from; a change here rebuilds the scheduler.
-        "packages/rust/**",
+        // Shared Rust crates reach this unit through the Bazel reverse
+        // dependencies, not as a path glob: only a crate the scheduler
+        // actually imports selects it.
         "packages/proto/**",
         // The deploy tooling that renders this unit's manifests.
         "platform/deploy/**",
@@ -286,6 +279,10 @@ export const config = {
           "//packages/rust",
           "//projects/home/kubernetes/scheduler",
         ],
+        // The K8s package also builds ha-bridge/ha-control images; a shared
+        // crate that reaches those must not select the scheduler unit. The
+        // scheduler image is selected through its own solution subtree.
+        routing_roots: ["//solutions/scheduler"],
         test_targets: [
           "//solutions/scheduler/crates/scheduler:unit_tests",
           "//solutions/scheduler/crates/scheduler:contract_tests",
@@ -473,8 +470,9 @@ export const config = {
         // the unit even though the Bazel graph only sees it through its own
         // targets.
         "packages/proto/**",
-        "packages/rust/**",
-        // The deploy tooling that renders the shared scheduler manifests.
+        // Shared crates reach this unit through the Bazel graph; only a crate
+        // the bridge/control targets import selects it. The deploy tooling that
+        // renders the shared scheduler manifests is a direct path.
         "platform/deploy/**",
         "platform/deploy-rs/**",
       ],
@@ -511,6 +509,10 @@ export const config = {
           "//packages/rust",
           "//projects/home/kubernetes/scheduler",
         ],
+        // The bridge/control binaries and images live under //solutions; the
+        // K8s package is shared with the scheduler image and must not make a
+        // scheduler-only label select the bridge.
+        routing_roots: ["//solutions/ha-bridge"],
         test_targets: [
           "//solutions/ha-bridge/crates/ha-bridge:unit_tests",
           "//solutions/ha-bridge/crates/ha-bridge:golden_tests",
@@ -530,7 +532,7 @@ export const config = {
       id: "ble-gateway",
       platform: "bazel",
       title: "projects/station/ble-gateway + packages/rust (Rust host build, tests, fmt, clippy)",
-      paths: ["projects/station/ble-gateway/**", "packages/rust/**"],
+      paths: ["projects/station/ble-gateway/**"],
       bazel: {
         roots: ["//projects/station/ble-gateway", "//packages/rust"],
         test_targets: [
@@ -678,11 +680,10 @@ export const config = {
         "projects/home-assistant/deploy/images/hermes/**",
         // The voice-proxy Rust solution and the shared crates it compiles into
         // the deployed binary. The `voice-proxy` Bazel unit runs the tests; this
-        // unit owns the deploy. `packages/rust/**` is explicit because a
-        // python unit has no Bazel reverse-dependency closure of its own, so a
-        // shared-crate change never reaches the deploy unit otherwise.
+        // unit owns the deploy. Shared `packages/rust` crates are routed through
+        // the Bazel graph (the unit declares its image roots below), so only a
+        // crate that voice-proxy or the health exporter imports selects it.
         "solutions/voice-proxy/**",
-        "packages/rust/**",
         // The runtime chart's Rust health exporter is part of this deploy unit.
         "projects/home-assistant/deploy/health-exporter/**",
         "projects/home-assistant/deploy/chart/**",
@@ -690,6 +691,15 @@ export const config = {
         "platform/deploy/**",
         "platform/deploy-rs/**",
       ],
+      // The deploy unit has no Bazel closure of its own, but it owns two Bazel
+      // images. A shared crate that reaches either image must also select it
+      // (the health exporter pulls home-tls, voice-proxy pulls home-ha).
+      bazel: {
+        roots: [
+          "//solutions/voice-proxy",
+          "//projects/home-assistant/deploy/health-exporter",
+        ],
+      },
       // Hermes/voice-proxy/health-exporter: build+push, then promote the digests
       // into the runtime Helm release (`home-deploy hermes rollout`). `hermes`
       // is a Docker build; the other images are Bazel/rules_oci images named in
@@ -1072,6 +1082,12 @@ export const config = {
         "platform/bazel/zig/**",
         "MODULE.bazel",
       ],
+      // The provider is a Bazel cross-build, so a shared crate it imports
+      // (`wakegrant-protocol` today) selects the unit through the same reverse
+      // dependencies as the host units.
+      bazel: {
+        roots: ["//solutions/windows-logon-provider"],
+      },
       native: {
         workdir: "solutions/windows-logon-provider",
         kind: "script",
@@ -1102,6 +1118,12 @@ export const config = {
       platform: "native",
       title: "projects/station/pulsar (Rust station daemon, radio, installer)",
       paths: ["projects/station/pulsar/**"],
+      // The station binaries and installer are Bazel cross-builds. A shared
+      // crate they import (home-runtime, home-telemetry, ...) selects this unit
+      // through the Bazel graph, without matching the radio's Makefile build.
+      bazel: {
+        roots: ["//projects/station/pulsar"],
+      },
       native: {
         kind: "pulsar",
         workdir: "projects/station/pulsar",
@@ -1140,6 +1162,14 @@ export const config = {
         "requirements-test.txt",
         ".gitleaks.toml",
         "**/*.sh",
+        // The root Cargo workspace/lockfiles and the shared Rust crates are
+        // routed precisely through the Bazel graph (see `affected.mjs`). They
+        // still need an owning unit for the coverage invariant, and the
+        // always-on quality job is the natural owner.
+        "Cargo.toml",
+        "Cargo.lock",
+        "crate-universe.lock",
+        "packages/rust/**",
         // Infrastructure bootstrap helpers written in Python; the shell
         // entrypoints that call them are covered by `**/*.sh` above.
         "projects/home/kubernetes/openbao/configure.py",
