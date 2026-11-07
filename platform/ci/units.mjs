@@ -304,8 +304,8 @@ export const config = {
 
     {
       id: "currency-bot",
-      platform: "go",
-      title: "solutions/currency-bot (Telegram currency bot)",
+      platform: "bazel",
+      title: "solutions/currency-bot (Rust Telegram currency bot) + home deployment",
       paths: [
         "solutions/currency-bot/**",
         "projects/home/kubernetes/currency-bot/**",
@@ -325,37 +325,18 @@ export const config = {
         env_file: "currency-bot.env",
         externalsecrets: ["currency-bot", "cloudflared-tunnel"],
       },
-      go: {
-        module: ".",
-        packages: ["./solutions/currency-bot/..."],
-        race: true,
-        build: [
-          "./solutions/currency-bot/cmd/currency-bot",
-          "./solutions/currency-bot/cmd/currency-bot-import",
-        ],
-      },
-    },
-
-    {
-      // Temporary Rust port unit (DECISIONS 41, PR 3). It runs the crate's
-      // fmt/clippy/tests while the Go binary still owns the image and the
-      // deployment. PR 4 removes this unit and moves `currency-bot` itself to
-      // `platform: "bazel"`. No `deploy` block on purpose.
-      id: "currency-bot-rust",
-      platform: "bazel",
-      title: "solutions/currency-bot/crates/currency-bot (Rust port, not deployed)",
-      paths: [
-        "solutions/currency-bot/crates/**",
-        "packages/rust/**",
-      ],
+      // Rust service: host fmt/clippy/tests plus the static musl image. The Go
+      // implementation is deleted; `testdata` stays as frozen contract data.
       bazel: {
-        roots: ["//solutions/currency-bot/crates", "//packages/rust"],
+        roots: ["//solutions/currency-bot", "//packages/rust"],
         test_targets: [
           "//solutions/currency-bot/crates/currency-bot:unit_tests",
           "//solutions/currency-bot/crates/currency-bot:clippy",
           "//solutions/currency-bot/crates/currency-bot:rustfmt",
+          "//packages/rust:clippy",
+          "//packages/rust:rustfmt",
         ],
-        build_targets: ["//solutions/currency-bot/crates/..."],
+        build_targets: ["//solutions/currency-bot/..."],
       },
     },
 

@@ -939,7 +939,7 @@ class CurrencyRateTests(unittest.TestCase):
     currency-bot stores kurs.kz `sell` as the rate when YOU BUY currency and
     `buy` as the rate when YOU SELL. The API keeps those names, so the voice
     text must say «купить — sell», «продать — buy». The JSON shapes here match
-    `GET /api/latest` from solutions/currency-bot/internal/server/history.go.
+    `GET /api/latest` from solutions/currency-bot/crates/currency-bot/src/api/history.rs.
     """
 
     NOW = datetime(2026, 10, 31, 17, 0, 0, tzinfo=ZoneInfo("Asia/Almaty"))  # 12:00Z

@@ -703,7 +703,14 @@ test("deploy: scheduler Rust crate change deploys scheduler", () => {
 
 test("deploy: currency-bot change deploys its namespace", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["solutions/currency-bot/internal/server/webhook.go"]);
+  const result = routeReal(
+    ["solutions/currency-bot/crates/currency-bot/src/api/webhook.rs"],
+    undefined,
+    {
+      affectedRules: () =>
+        new Set(["//solutions/currency-bot/crates/currency-bot:currency_bot_lib"]),
+    },
+  );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["currency-bot"]);
   assert.equal(entries[0].namespace, "currency-bot");
@@ -714,9 +721,14 @@ test("deploy: currency-bot change deploys its namespace", () => {
 
 test("deploy: currency-bot manifest change deploys it", () => {
   const config = affected.loadConfig();
-  const result = routeReal([
-    "projects/home/kubernetes/currency-bot/manifests/currency-bot.yaml",
-  ]);
+  const result = routeReal(
+    ["projects/home/kubernetes/currency-bot/manifests/currency-bot.yaml"],
+    undefined,
+    {
+      affectedRules: () =>
+        new Set(["//projects/home/kubernetes/currency-bot:deploy_templates"]),
+    },
+  );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["currency-bot"]);
 });
@@ -822,21 +834,22 @@ test("deploy: a shared rust crate change reaches the hermes deploy unit", () => 
   assert.ok(entries.includes("hermes"), entries.join(","));
 });
 
-test("rust port: a crate change runs the temporary bazel unit and deploys nothing extra", () => {
+test("rust cutover: a crate change runs the bazel unit and deploys it", () => {
   const config = affected.loadConfig();
   const result = routeReal(["solutions/currency-bot/crates/currency-bot/src/lib.rs"]);
   const bazelIds = result.routes.bazel.units.map((unit) => unit.id);
-  assert.ok(bazelIds.includes("currency-bot-rust"), bazelIds.join(","));
-  const unit = config.units.find((item) => item.id === "currency-bot-rust");
-  assert.ok(unit, "currency-bot-rust unit exists");
-  assert.equal(unit.deployImages.length, 0);
-  assert.equal(unit.deployWorkloads.length, 0);
+  assert.ok(bazelIds.includes("currency-bot"), bazelIds.join(","));
+  assert.ok(!bazelIds.includes("currency-bot-rust"), bazelIds.join(","));
+  const unit = config.units.find((item) => item.id === "currency-bot");
+  assert.ok(unit, "currency-bot unit exists");
+  assert.deepEqual(unit.deployImages, ["currency-bot"]);
+  assert.deepEqual(unit.deployWorkloads, ["currency-bot"]);
 });
 
-test("rust port: a shared crate change also runs the temporary bazel unit", () => {
+test("rust cutover: a shared crate change also runs the bazel unit", () => {
   const result = routeReal(["packages/rust/home-telegram/src/lib.rs"]);
   const bazelIds = result.routes.bazel.units.map((unit) => unit.id);
-  assert.ok(bazelIds.includes("currency-bot-rust"), bazelIds.join(","));
+  assert.ok(bazelIds.includes("currency-bot"), bazelIds.join(","));
 });
 
 test("deploy: ci workflow change runs checks but deploys nothing", () => {
@@ -850,7 +863,14 @@ test("deploy: ci workflow change runs checks but deploys nothing", () => {
 
 test("deploy: workflow and service change deploys only the service", () => {
   const config = affected.loadConfig();
-  const result = routeReal([".github/workflows/ci.yml", "solutions/currency-bot/x.go"]);
+  const result = routeReal(
+    [".github/workflows/ci.yml", "solutions/currency-bot/crates/currency-bot/src/lib.rs"],
+    undefined,
+    {
+      affectedRules: () =>
+        new Set(["//solutions/currency-bot/crates/currency-bot:currency_bot_lib"]),
+    },
+  );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["currency-bot"]);
 });
@@ -1493,19 +1513,19 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "voice-proxy",
     "scheduler",
     "wakegrant",
-    "currency-bot-rust",
+    "currency-bot",
     "mcp-gateway-rust",
     "ha-bridge",
     "ble-gateway",
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  // scheduler, wakegrant and ha-bridge are Rust Bazel deploy units now, so a
-  // Rust toolchain pin change legitimately rebuilds and rolls them; the
-  // native-only units are not deployed.
+  // scheduler, wakegrant, currency-bot and ha-bridge are Rust Bazel deploy
+  // units now, so a Rust toolchain pin change legitimately rebuilds and rolls
+  // them; the native-only units are not deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
-    ["scheduler", "wakegrant", "ha-bridge"],
+    ["scheduler", "wakegrant", "currency-bot", "ha-bridge"],
   );
   assert.equal(result.androidDistribute, false);
 });

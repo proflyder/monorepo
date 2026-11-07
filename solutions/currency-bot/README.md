@@ -1,9 +1,10 @@
 # currency-bot
 
-One static Go binary scrapes
+One static Rust binary scrapes
 [kurs.kz](https://kurs.kz), stores USD/KZT and RUB/KZT snapshots in SQLite,
 alerts a Telegram chat when a threshold is crossed, and serves a small internal
-JSON API.
+JSON API. The crate lives in `crates/currency-bot`; the former Go
+implementation was removed at the cutover.
 
 ## Behaviour
 
@@ -83,7 +84,7 @@ There is no `.env` loader and no secret has a default.
 |---|---|---|---|
 | `GET` | `/` | none | `Hello World!` compatibility probe. |
 | `GET` | `/healthz` | none | Liveness. |
-| `GET` | `/readyz` | none | Readiness; pings SQLite and, when `WEBHOOK_URL` is set, the Telegram webhook registration. |
+| `GET` | `/readyz` | none | Readiness; pings the SQLite store. |
 | `GET` | `/metrics` | none | Prometheus text exposition. |
 | `GET` | `/api/history` | Bearer | Full history or a filtered range. |
 | `GET` | `/api/latest` | Bearer | Newest stored snapshot (`404` when empty). |
@@ -156,8 +157,8 @@ the rates message itself is the response. On failure the sender gets
 
 ## Logs
 
-JSON via `log/slog` to stdout (no files, no Promtail). Every line has `level`
-and `msg`; business and HTTP lines add `event`:
+JSON via `home-telemetry` to stdout (no files, no Promtail). Every line has
+`level` and `msg`; business and HTTP lines add `event`:
 
 - `event=currency_rate_updated` with `currency_from`, `currency_to`,
   `rate_buy`, `rate_sell`, `timestamp` (epoch ms);
@@ -169,7 +170,8 @@ and `msg`; business and HTTP lines add `event`:
 
 ## Storage
 
-SQLite (`modernc.org/sqlite`, WAL) with the H2 tables translated 1:1:
+SQLite (`rusqlite` through the shared `home-sqlite` single-writer actor, WAL)
+with the H2 tables translated 1:1:
 
 - `currency_history(id, timestamp, usd_buy, usd_sell, rub_buy, rub_sell)`,
   index on `timestamp`; `timestamp` is Unix milliseconds UTC.
@@ -178,39 +180,42 @@ SQLite (`modernc.org/sqlite`, WAL) with the H2 tables translated 1:1:
 
 ## H2 import
 
-`cmd/currency-bot-import` imports CSV exports of the former H2 tables
-(`currency_history`, `sent_alerts`) into SQLite; it is idempotent and skips
-existing timestamps. The home deployment and its history live in
-`projects/home/kubernetes/currency-bot/README.md`.
+The one-off `currency-bot-import` binary (CSV exports of the former H2 tables
+into SQLite) was deleted with the Go tree; it is not part of the runtime image.
+If a migration is ever needed again, restore it from the `cutover` commit's
+parent history and run it as a one-off Job. The home deployment and its history
+live in `projects/home/kubernetes/currency-bot/README.md`.
 
 ## Build and test
 
 ```bash
-go vet ./solutions/currency-bot/...
-go test -race ./solutions/currency-bot/...
-bazel build //solutions/currency-bot/...   # includes :currency-bot_image
+cargo test -p currency-bot
 bazel test  //solutions/currency-bot/...
+bazel build //solutions/currency-bot:currency-bot_image
 ```
 
-Tests are hermetic: `httptest` fakes cover Telegram and kurs.kz, SQLite uses a
+Tests are hermetic: fake HTTP servers cover Telegram and kurs.kz, SQLite uses a
 temporary file, and the parser fixture is a captured kurs.kz response with names,
-addresses, phones and coordinates stripped.
+addresses, phones and coordinates stripped. The crate's `unit_tests` target
+replays the frozen data below and runs `rustfmt`/`clippy` as separate targets.
 
-`testdata/` is the language-neutral contract used when the service is ported to
-Rust:
+`testdata/` is the language-neutral contract captured from the former Go
+service. It is frozen data, not regenerable from this tree:
 
-- `testdata/contract/*.json` — HTTP goldens in the `packages/go/contracttest`
-  format (exact paths, statuses, significant headers, bodies);
+- `testdata/contract/*.json` — HTTP goldens (exact paths, statuses, significant
+  headers, bodies) replayed by `src/contract_tests.rs`;
 - `testdata/vectors/*.json` — domain vectors for parsing/IQR/best-five, alert
   thresholds and dedup, exact Telegram HTML (including `.x5` rounding),
   command texts and schedules (UTC, Asia/Almaty and DST);
 - `testdata/store/schema_v1.sql` — schema v1 with sample rows; the store test
   loads it, reads the rows and inserts again.
 
-Regenerate with `go test ./solutions/currency-bot/internal/<pkg> -update`; the
-Rust port must replay the committed bytes unchanged.
+The former generators were Go `-update` tests and were removed with the Go
+code; see `testdata/README.md` for how to regenerate if ever required.
 
-The OCI image follows the scheduler pattern: one static linux/amd64 binary on
-the digest-pinned distroless base, built without a Docker daemon. Targets:
+The OCI image follows the scheduler pattern: one static
+`x86_64-unknown-linux-musl` binary on the digest-pinned distroless base, built
+without a Docker daemon. Targets:
 `//solutions/currency-bot:currency-bot_image`, `:currency-bot_load`,
-`:currency-bot_push` (repository `ghcr.io/proflyder/currency-bot`).
+`:currency-bot_push` (repository `ghcr.io/proflyder/currency-bot`). Entrypoint,
+uid/gid and container ports are unchanged from the Go image.

@@ -68,7 +68,6 @@ use_repo(
     "in_yaml_go_yaml_v2",
     "org_golang_x_crypto",
     "org_golang_x_time",
-    "org_modernc_sqlite",
 )
 
 # Rust: one Cargo workspace for every first-party crate (Pulsar, BLE gateway,

@@ -193,6 +193,25 @@ fn parse_weekday(raw: &str) -> Result<i8, ConfigError> {
     Ok(day)
 }
 
+/// Expands a Go-style `:port` listen address into an explicit wildcard host.
+///
+/// Go's `net.Listen` treats `:8080` as "all interfaces"; tokio's
+/// `TcpListener::bind` does not, so the default `HTTP_ADDR`/`WEBHOOK_ADDR`
+/// values must be normalised before binding.
+pub fn normalize_listen(listen: &str) -> Result<String, String> {
+    let Some((host, port)) = listen.rsplit_once(':') else {
+        return Err(format!("invalid listen address: {listen}"));
+    };
+    if port.parse::<u16>().is_err() {
+        return Err(format!("invalid listen address: {listen}"));
+    }
+    let host = match host.trim() {
+        "" => "0.0.0.0",
+        other => other,
+    };
+    Ok(format!("{host}:{port}"))
+}
+
 /// Turns a listen address into a loopback probe address.
 pub fn healthcheck_address(listen: &str) -> Result<SocketAddr, String> {
     let Some((host, port)) = listen.rsplit_once(':') else {
@@ -304,6 +323,20 @@ mod tests {
                 "{key}={value}"
             );
         }
+    }
+
+    #[test]
+    fn listen_addresses_expand_the_wildcard_host() {
+        for (input, want) in [
+            (":8080", "0.0.0.0:8080"),
+            ("0.0.0.0:8080", "0.0.0.0:8080"),
+            ("[::]:8080", "[::]:8080"),
+            ("127.0.0.1:9090", "127.0.0.1:9090"),
+        ] {
+            assert_eq!(normalize_listen(input).expect(input), want);
+        }
+        assert!(normalize_listen("nope").is_err());
+        assert!(normalize_listen(":not-a-port").is_err());
     }
 
     #[test]
