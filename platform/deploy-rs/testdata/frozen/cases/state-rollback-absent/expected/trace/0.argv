@@ -1,0 +1,6 @@
+-n
+home-assistant
+delete
+deployment
+ha-bridge
+--ignore-not-found

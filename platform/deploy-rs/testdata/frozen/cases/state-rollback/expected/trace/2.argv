@@ -1,0 +1,6 @@
+-n
+home-assistant
+rollout
+status
+deployment/scheduler
+--timeout=180s

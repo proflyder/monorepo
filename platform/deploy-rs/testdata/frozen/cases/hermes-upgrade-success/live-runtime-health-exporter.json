@@ -1,0 +1,1 @@
+{"spec": {"template": {"spec": {"containers": [{"name": "health-exporter", "image": "ghcr.io/proflyder/health-exporter@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]}}}}

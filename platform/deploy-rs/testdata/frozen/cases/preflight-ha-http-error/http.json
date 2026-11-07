@@ -1,0 +1,10 @@
+{
+  "/home.v1.SchedulerService/GetStatus": [
+    200,
+    "{\"ready\":true}"
+  ],
+  "/api/states": [
+    500,
+    ""
+  ]
+}

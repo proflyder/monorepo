@@ -1,0 +1,1670 @@
+{
+  "generator": "generate.py",
+  "cases": [
+    {
+      "name": "cli-no-args",
+      "argv": [],
+      "cwd": "cases/cli-no-args",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "cli-help",
+      "argv": [
+        "--help"
+      ],
+      "cwd": "cases/cli-help",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "cli-unknown-command",
+      "argv": [
+        "bogus"
+      ],
+      "cwd": "cases/cli-unknown-command",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "cli-build-id-missing-fingerprint",
+      "argv": [
+        "build-id"
+      ],
+      "cwd": "cases/cli-build-id-missing-fingerprint",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "cli-build-id-single-dash",
+      "argv": [
+        "build-id",
+        "-fingerprint",
+        "hello"
+      ],
+      "cwd": "cases/cli-build-id-single-dash",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "build-id-fingerprint",
+      "argv": [
+        "build-id",
+        "--fingerprint",
+        "hello"
+      ],
+      "cwd": "cases/build-id-fingerprint",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "build-id-revision",
+      "argv": [
+        "build-id",
+        "--revision",
+        "abc123",
+        "--fingerprint",
+        "hello"
+      ],
+      "cwd": "cases/build-id-revision",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "env-get-value",
+      "argv": [
+        "env",
+        "get",
+        "input/private.env",
+        "KEY"
+      ],
+      "cwd": "cases/env-get-value",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "env-get-quoted",
+      "argv": [
+        "env",
+        "get",
+        "input/private.env",
+        "QUOTED"
+      ],
+      "cwd": "cases/env-get-quoted",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "env-get-exported",
+      "argv": [
+        "env",
+        "get",
+        "input/private.env",
+        "EXPORTED"
+      ],
+      "cwd": "cases/env-get-exported",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "env-get-first-duplicate-wins",
+      "argv": [
+        "env",
+        "get",
+        "input/private.env",
+        "KEY_FIRST"
+      ],
+      "cwd": "cases/env-get-first-duplicate-wins",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "env-get-absent",
+      "argv": [
+        "env",
+        "get",
+        "input/private.env",
+        "ABSENT"
+      ],
+      "cwd": "cases/env-get-absent",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout"
+    },
+    {
+      "name": "env-get-missing-file",
+      "argv": [
+        "env",
+        "get",
+        "input/missing.env",
+        "KEY"
+      ],
+      "cwd": "cases/env-get-missing-file",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "render-scheduler",
+      "argv": [
+        "render",
+        "--unit",
+        "scheduler",
+        "--env",
+        "input/env",
+        "--out",
+        "out",
+        "--rollout-key",
+        "ROLLOUT_ID",
+        "--set",
+        "BUILD_ID=0123456789ab",
+        "--set",
+        "SCHEDULER_IMAGE=ghcr.io/proflyder/scheduler@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "--set",
+        "HA_BRIDGE_IMAGE=ghcr.io/proflyder/ha-bridge@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "--set",
+        "HA_CONTROL_IMAGE=ghcr.io/proflyder/ha-control@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "--set",
+        "PREFLIGHT_IMAGE=ghcr.io/proflyder/home-deploy@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "input/scheduler.yaml",
+        "input/bridge.yaml",
+        "input/control.yaml",
+        "input/control-service.yaml",
+        "input/preflight-job.yaml"
+      ],
+      "cwd": "cases/render-scheduler",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/bridge.yaml",
+          "golden": "expected/out/bridge.yaml"
+        },
+        {
+          "path": "out/control-service.yaml",
+          "golden": "expected/out/control-service.yaml"
+        },
+        {
+          "path": "out/control.yaml",
+          "golden": "expected/out/control.yaml"
+        },
+        {
+          "path": "out/preflight-job.yaml",
+          "golden": "expected/out/preflight-job.yaml"
+        },
+        {
+          "path": "out/scheduler.yaml",
+          "golden": "expected/out/scheduler.yaml"
+        }
+      ]
+    },
+    {
+      "name": "render-currency-bot",
+      "argv": [
+        "render",
+        "--unit",
+        "currency-bot",
+        "--env",
+        "input/env",
+        "--out",
+        "out",
+        "--rollout-key",
+        "ROLLOUT_ID",
+        "--set",
+        "BUILD_ID=0123456789ab",
+        "--set",
+        "CURRENCY_BOT_IMAGE=ghcr.io/proflyder/currency-bot@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "--set",
+        "CLOUDFLARED_IMAGE=cloudflare/cloudflared@sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "--set",
+        "CURRENCY_WEBHOOK_URL=https://bot.example.test/telegram/webhook",
+        "--set",
+        "CURRENCY_BOT_NODE_PORT=30100",
+        "input/currency-bot.yaml",
+        "input/cloudflared.yaml",
+        "input/network-policies.yaml",
+        "input/servicemonitor.yaml"
+      ],
+      "cwd": "cases/render-currency-bot",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/cloudflared.yaml",
+          "golden": "expected/out/cloudflared.yaml"
+        },
+        {
+          "path": "out/currency-bot.yaml",
+          "golden": "expected/out/currency-bot.yaml"
+        },
+        {
+          "path": "out/network-policies.yaml",
+          "golden": "expected/out/network-policies.yaml"
+        },
+        {
+          "path": "out/servicemonitor.yaml",
+          "golden": "expected/out/servicemonitor.yaml"
+        }
+      ]
+    },
+    {
+      "name": "render-mcp-gateway",
+      "argv": [
+        "render",
+        "--unit",
+        "mcp-gateway",
+        "--env",
+        "input/env",
+        "--out",
+        "out",
+        "--rollout-key",
+        "ROLLOUT_ID",
+        "--set",
+        "BUILD_ID=0123456789ab",
+        "--set",
+        "MCP_GATEWAY_IMAGE=ghcr.io/proflyder/mcp-gateway@sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "--set",
+        "BB_CT_IP=192.0.2.30",
+        "--set",
+        "BB_PROJECT_STATION_LAB=proj_0000000000000001",
+        "--set",
+        "BB_PROJECT_ENGLISH_NOTES=proj_0000000000000003",
+        "--set",
+        "BB_DISPATCHER_THREAD_ID=thr_0000000000000002",
+        "input/deployment.yaml",
+        "input/network-policies.yaml",
+        "input/servicemonitor.yaml",
+        "input/catalog.yaml",
+        "input/bb-targets.yaml"
+      ],
+      "cwd": "cases/render-mcp-gateway",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/bb-targets.yaml",
+          "golden": "expected/out/bb-targets.yaml"
+        },
+        {
+          "path": "out/catalog.yaml",
+          "golden": "expected/out/catalog.yaml"
+        },
+        {
+          "path": "out/deployment.yaml",
+          "golden": "expected/out/deployment.yaml"
+        },
+        {
+          "path": "out/network-policies.yaml",
+          "golden": "expected/out/network-policies.yaml"
+        },
+        {
+          "path": "out/servicemonitor.yaml",
+          "golden": "expected/out/servicemonitor.yaml"
+        }
+      ]
+    },
+    {
+      "name": "render-wakegrant",
+      "argv": [
+        "render",
+        "--unit",
+        "wakegrant",
+        "--env",
+        "input/env",
+        "--out",
+        "out",
+        "--rollout-key",
+        "ROLLOUT_ID",
+        "--set",
+        "BUILD_ID=0123456789ab",
+        "--set",
+        "WAKE_GRANT_IMAGE=ghcr.io/proflyder/wakegrant@sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "--set",
+        "WAKE_GRANT_NODE_PORT=30101",
+        "input/wakegrant.yaml"
+      ],
+      "cwd": "cases/render-wakegrant",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/wakegrant.yaml",
+          "golden": "expected/out/wakegrant.yaml"
+        }
+      ]
+    },
+    {
+      "name": "render-nft",
+      "argv": [
+        "render",
+        "--unit",
+        "scheduler",
+        "--env",
+        "input/env",
+        "--out",
+        "out",
+        "--rollout-key",
+        "ROLLOUT_ID",
+        "--set",
+        "BUILD_ID=0123456789ab",
+        "--set",
+        "SCHEDULER_IMAGE=ghcr.io/proflyder/scheduler@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "--set",
+        "HA_BRIDGE_IMAGE=ghcr.io/proflyder/ha-bridge@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "--set",
+        "HA_CONTROL_IMAGE=ghcr.io/proflyder/ha-control@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "--set",
+        "PREFLIGHT_IMAGE=ghcr.io/proflyder/home-deploy@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "input/scheduler-nodeport.nft",
+        "input/currency-bot-nodeport.nft"
+      ],
+      "cwd": "cases/render-nft",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/currency-bot-nodeport.nft",
+          "golden": "expected/out/currency-bot-nodeport.nft"
+        },
+        {
+          "path": "out/scheduler-nodeport.nft",
+          "golden": "expected/out/scheduler-nodeport.nft"
+        }
+      ]
+    },
+    {
+      "name": "render-ingress",
+      "argv": [
+        "render",
+        "--unit",
+        "ingress",
+        "--out",
+        "out",
+        "--set",
+        "HOME_DOMAIN=home.example.test",
+        "--set",
+        "LAN_CIDR=192.0.2.0/24",
+        "--set",
+        "HAOS_ADDRESS=192.0.2.28",
+        "--set",
+        "HA_HOST=ha.home.example.test",
+        "--set",
+        "GRAFANA_HOST=grafana.home.example.test",
+        "--set",
+        "ALARMS_HOST=alarms.home.example.test",
+        "--set",
+        "CONTROL_HOST=control.home.example.test",
+        "--set",
+        "CURRENCY_HOST=currency.home.example.test",
+        "input/issuers.yaml",
+        "input/certificate.yaml",
+        "input/certificate-staging.yaml",
+        "input/middleware.yaml",
+        "input/backends.yaml",
+        "input/routes.yaml"
+      ],
+      "cwd": "cases/render-ingress",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/backends.yaml",
+          "golden": "expected/out/backends.yaml"
+        },
+        {
+          "path": "out/certificate-staging.yaml",
+          "golden": "expected/out/certificate-staging.yaml"
+        },
+        {
+          "path": "out/certificate.yaml",
+          "golden": "expected/out/certificate.yaml"
+        },
+        {
+          "path": "out/issuers.yaml",
+          "golden": "expected/out/issuers.yaml"
+        },
+        {
+          "path": "out/middleware.yaml",
+          "golden": "expected/out/middleware.yaml"
+        },
+        {
+          "path": "out/routes.yaml",
+          "golden": "expected/out/routes.yaml"
+        }
+      ]
+    },
+    {
+      "name": "render-env-and-set",
+      "argv": [
+        "render",
+        "--unit",
+        "scheduler",
+        "--env",
+        "input/private.env",
+        "--out",
+        "out",
+        "--set",
+        "LAN_CIDR=192.0.2.99",
+        "input/template.yaml"
+      ],
+      "cwd": "cases/render-env-and-set",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/template.yaml",
+          "golden": "expected/out/template.yaml"
+        }
+      ]
+    },
+    {
+      "name": "render-missing-value",
+      "argv": [
+        "render",
+        "--unit",
+        "scheduler",
+        "--out",
+        "out",
+        "input/template.yaml"
+      ],
+      "cwd": "cases/render-missing-value",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "render-disallowed-set",
+      "argv": [
+        "render",
+        "--unit",
+        "scheduler",
+        "--out",
+        "out",
+        "--set",
+        "NOPE=x",
+        "input/template.yaml"
+      ],
+      "cwd": "cases/render-disallowed-set",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "render-leftover",
+      "argv": [
+        "render",
+        "--unit",
+        "ingress",
+        "--out",
+        "out",
+        "--set",
+        "HOME_DOMAIN=home.example.test",
+        "input/template.yaml"
+      ],
+      "cwd": "cases/render-leftover",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "render-unknown-unit",
+      "argv": [
+        "render",
+        "--unit",
+        "nope",
+        "--out",
+        "out",
+        "input/template.yaml"
+      ],
+      "cwd": "cases/render-unknown-unit",
+      "status": "implemented",
+      "exit": 1,
+      "stderr": "expected/stderr"
+    },
+    {
+      "name": "render-plain",
+      "argv": [
+        "render",
+        "--unit",
+        "scheduler",
+        "--env",
+        "input/private.env",
+        "--out",
+        "out",
+        "input/template.yaml"
+      ],
+      "cwd": "cases/render-plain",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/template.yaml",
+          "golden": "expected/out/template.yaml"
+        }
+      ]
+    },
+    {
+      "name": "render-single-dash",
+      "argv": [
+        "render",
+        "-unit",
+        "scheduler",
+        "-env",
+        "input/private.env",
+        "-out",
+        "out",
+        "input/template.yaml"
+      ],
+      "cwd": "cases/render-single-dash",
+      "status": "implemented",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "outputs": [
+        {
+          "path": "out/template.yaml",
+          "golden": "expected/out/template.yaml"
+        }
+      ]
+    },
+    {
+      "name": "eso-names",
+      "argv": [
+        "eso",
+        "names",
+        "--out",
+        "names.txt",
+        "input/external-secrets.yaml",
+        "input/external-secrets.yaml",
+        "input/external-secrets.yaml"
+      ],
+      "cwd": "cases/eso-names",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "manifests helpers are not ported yet",
+      "outputs": [
+        {
+          "path": "names.txt",
+          "golden": "expected/names.txt"
+        }
+      ]
+    },
+    {
+      "name": "secret-opaque",
+      "argv": [
+        "secret",
+        "opaque",
+        "--name",
+        "bootstrap",
+        "--namespace",
+        "home-assistant",
+        "--key",
+        "token",
+        "--from-env-file",
+        "input/private.env",
+        "--env",
+        "BOOTSTRAP_TOKEN"
+      ],
+      "cwd": "cases/secret-opaque",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "manifests helpers are not ported yet"
+    },
+    {
+      "name": "secret-opaque-missing",
+      "argv": [
+        "secret",
+        "opaque",
+        "--name",
+        "bootstrap",
+        "--namespace",
+        "home-assistant",
+        "--key",
+        "token",
+        "--from-env-file",
+        "input/private.env",
+        "--env",
+        "MISSING"
+      ],
+      "cwd": "cases/secret-opaque-missing",
+      "status": "skip",
+      "exit": 1,
+      "stderr": "expected/stderr",
+      "reason": "manifests helpers are not ported yet"
+    },
+    {
+      "name": "runtime-split",
+      "argv": [
+        "runtime",
+        "split",
+        "--render",
+        "input/render.yaml",
+        "--private",
+        "input/private.yaml",
+        "--storage-out",
+        "storage.yaml",
+        "--values-out",
+        "values.yaml",
+        "--health-exporter-image",
+        "ghcr.io/proflyder/health-exporter@sha256:new"
+      ],
+      "cwd": "cases/runtime-split",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "runtimevalues is not ported yet",
+      "outputs": [
+        {
+          "path": "storage.yaml",
+          "golden": "expected/storage.yaml"
+        },
+        {
+          "path": "values.yaml",
+          "golden": "expected/values.yaml"
+        }
+      ]
+    },
+    {
+      "name": "oci-digest",
+      "argv": [
+        "oci",
+        "digest",
+        "layout"
+      ],
+      "cwd": "cases/oci-digest",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "oci is not ported yet"
+    },
+    {
+      "name": "oci-pack",
+      "argv": [
+        "oci",
+        "pack",
+        "layout",
+        "--ref",
+        "home.test/example:test",
+        "--out",
+        "pack.tar"
+      ],
+      "cwd": "cases/oci-pack",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "oci is not ported yet",
+      "outputs": [
+        {
+          "path": "pack.tar",
+          "golden": "expected/pack.tar"
+        }
+      ]
+    },
+    {
+      "name": "oci-docker",
+      "argv": [
+        "oci",
+        "docker",
+        "layout",
+        "--ref",
+        "home.test/example:test",
+        "--out",
+        "docker.tar"
+      ],
+      "cwd": "cases/oci-docker",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "oci is not ported yet",
+      "outputs": [
+        {
+          "path": "docker.tar",
+          "golden": "expected/docker.tar"
+        }
+      ]
+    },
+    {
+      "name": "oci-pack-single-dash",
+      "argv": [
+        "oci",
+        "pack",
+        "layout",
+        "-ref",
+        "home.test/example:test",
+        "-out",
+        "pack.tar"
+      ],
+      "cwd": "cases/oci-pack-single-dash",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "oci is not ported yet",
+      "outputs": [
+        {
+          "path": "pack.tar",
+          "golden": "expected/pack.tar"
+        }
+      ]
+    },
+    {
+      "name": "converge-create",
+      "argv": [
+        "converge",
+        "--kubectl",
+        "fakes/kubectl",
+        "--namespace",
+        "home-assistant",
+        "--name",
+        "ha-bridge",
+        "--file",
+        "manifest.yaml",
+        "--summary-file",
+        "summary.txt"
+      ],
+      "cwd": "cases/converge-create",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "converge is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "summary.txt",
+          "golden": "expected/summary.txt"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        },
+        {
+          "path": "trace/1.payload",
+          "golden": "expected/trace/1.payload"
+        }
+      ]
+    },
+    {
+      "name": "converge-manifest-wins",
+      "argv": [
+        "converge",
+        "--kubectl",
+        "fakes/kubectl",
+        "--namespace",
+        "home-assistant",
+        "--name",
+        "ha-bridge",
+        "--file",
+        "manifest.yaml",
+        "--summary-file",
+        "summary.txt"
+      ],
+      "cwd": "cases/converge-manifest-wins",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "converge is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "summary.txt",
+          "golden": "expected/summary.txt"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        },
+        {
+          "path": "trace/1.payload",
+          "golden": "expected/trace/1.payload"
+        },
+        {
+          "path": "trace/2.argv",
+          "golden": "expected/trace/2.argv"
+        }
+      ]
+    },
+    {
+      "name": "converge-drift-preserve",
+      "argv": [
+        "converge",
+        "--kubectl",
+        "fakes/kubectl",
+        "--namespace",
+        "home-assistant",
+        "--name",
+        "ha-bridge",
+        "--file",
+        "manifest.yaml",
+        "--summary-file",
+        "summary.txt",
+        "--preserve-replicas",
+        "--preserve-env"
+      ],
+      "cwd": "cases/converge-drift-preserve",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "converge is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "summary.txt",
+          "golden": "expected/summary.txt"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        },
+        {
+          "path": "trace/1.payload",
+          "golden": "expected/trace/1.payload"
+        },
+        {
+          "path": "trace/2.argv",
+          "golden": "expected/trace/2.argv"
+        }
+      ]
+    },
+    {
+      "name": "converge-support-objects",
+      "argv": [
+        "converge",
+        "--kubectl",
+        "fakes/kubectl",
+        "--namespace",
+        "home-assistant",
+        "--name",
+        "ha-bridge",
+        "--file",
+        "manifest.yaml",
+        "--summary-file",
+        "summary.txt"
+      ],
+      "cwd": "cases/converge-support-objects",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "converge is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "summary.txt",
+          "golden": "expected/summary.txt"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/0.payload",
+          "golden": "expected/trace/0.payload"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        },
+        {
+          "path": "trace/2.argv",
+          "golden": "expected/trace/2.argv"
+        },
+        {
+          "path": "trace/2.payload",
+          "golden": "expected/trace/2.payload"
+        },
+        {
+          "path": "trace/3.argv",
+          "golden": "expected/trace/3.argv"
+        }
+      ]
+    },
+    {
+      "name": "state-record",
+      "argv": [
+        "state",
+        "record",
+        "--state-dir",
+        "state",
+        "--namespace",
+        "home-assistant",
+        "--name",
+        "scheduler",
+        "--kubectl",
+        "fakes/kubectl"
+      ],
+      "cwd": "cases/state-record",
+      "status": "skip",
+      "exit": 0,
+      "reason": "state is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "state/scheduler.before.json",
+          "golden": "expected/state/scheduler.before.json"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        }
+      ]
+    },
+    {
+      "name": "state-record-absent",
+      "argv": [
+        "state",
+        "record",
+        "--state-dir",
+        "state",
+        "--namespace",
+        "home-assistant",
+        "--name",
+        "scheduler",
+        "--kubectl",
+        "fakes/kubectl"
+      ],
+      "cwd": "cases/state-record-absent",
+      "status": "skip",
+      "exit": 0,
+      "reason": "state is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "state/scheduler.absent",
+          "golden": "expected/state/scheduler.absent"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        }
+      ]
+    },
+    {
+      "name": "state-record-get-error",
+      "argv": [
+        "state",
+        "record",
+        "--state-dir",
+        "state",
+        "--namespace",
+        "home-assistant",
+        "--name",
+        "scheduler",
+        "--kubectl",
+        "fakes/kubectl"
+      ],
+      "cwd": "cases/state-record-get-error",
+      "status": "skip",
+      "exit": 1,
+      "stderr": "expected/stderr",
+      "reason": "state.* is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace",
+        "FAKE_GET_FAIL": "1"
+      },
+      "outputs": [
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        }
+      ]
+    },
+    {
+      "name": "state-mark",
+      "argv": [
+        "state",
+        "mark",
+        "--state-dir",
+        "state",
+        "--name",
+        "scheduler"
+      ],
+      "cwd": "cases/state-mark",
+      "status": "skip",
+      "exit": 0,
+      "reason": "state is not ported yet",
+      "outputs": [
+        {
+          "path": "state/scheduler.applied",
+          "golden": "expected/state/scheduler.applied"
+        }
+      ]
+    },
+    {
+      "name": "state-rollback",
+      "argv": [
+        "state",
+        "rollback",
+        "--state-dir",
+        "state",
+        "--namespace",
+        "home-assistant",
+        "--kubectl",
+        "fakes/kubectl"
+      ],
+      "cwd": "cases/state-rollback",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "state.* is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        },
+        {
+          "path": "trace/1.payload",
+          "golden": "expected/trace/1.payload"
+        },
+        {
+          "path": "trace/2.argv",
+          "golden": "expected/trace/2.argv"
+        }
+      ]
+    },
+    {
+      "name": "state-rollback-absent",
+      "argv": [
+        "state",
+        "rollback",
+        "--state-dir",
+        "state",
+        "--namespace",
+        "home-assistant",
+        "--kubectl",
+        "fakes/kubectl"
+      ],
+      "cwd": "cases/state-rollback-absent",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "state.* is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace"
+      },
+      "outputs": [
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        }
+      ]
+    },
+    {
+      "name": "preflight-ok",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58941",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58941",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.27:30098"
+      ],
+      "cwd": "cases/preflight-ok",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "preflight-ringing-alarm",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58944",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58944",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.27:30098"
+      ],
+      "cwd": "cases/preflight-ringing-alarm",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "preflight-legacy-writer",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58948",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58948",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.27:30098"
+      ],
+      "cwd": "cases/preflight-legacy-writer",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "preflight-endpoint-mismatch",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58951",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58951",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.99:30098"
+      ],
+      "cwd": "cases/preflight-endpoint-mismatch",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "preflight-not-ready",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58954",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58954",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.27:30098"
+      ],
+      "cwd": "cases/preflight-not-ready",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "preflight-ha-http-error",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58958",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58958",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.27:30098"
+      ],
+      "cwd": "cases/preflight-ha-http-error",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "preflight-ha-invalid-json",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58960",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58960",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.27:30098"
+      ],
+      "cwd": "cases/preflight-ha-invalid-json",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "preflight-scheduler-http-error",
+      "argv": [
+        "preflight",
+        "--ha-url",
+        "http://127.0.0.1:58968",
+        "--ha-token-file",
+        "input/ha.token",
+        "--scheduler-url",
+        "http://127.0.0.1:58968",
+        "--scheduler-token-file",
+        "input/scheduler.token",
+        "--expected-endpoint",
+        "http://192.0.2.27:30098"
+      ],
+      "cwd": "cases/preflight-scheduler-http-error",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "reason": "preflight HTTP client is not ported yet"
+    },
+    {
+      "name": "hermes-noop",
+      "argv": [
+        "hermes",
+        "rollout",
+        "--values-file",
+        "values.yaml",
+        "--hermes-digest",
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "--voice-proxy-digest",
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--exporter-digest",
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "--smoke-image",
+        "ghcr.io/proflyder/home-deploy@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "--chart",
+        "chart",
+        "--state-dir",
+        "state",
+        "--kubectl",
+        "fakes/kubectl",
+        "--helm",
+        "fakes/helm",
+        "--timeout",
+        "8m"
+      ],
+      "cwd": "cases/hermes-noop",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "hermes rollout is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace",
+        "FAKE_LIVE": "live-hermes.json",
+        "FAKE_METRICS": "metrics.txt",
+        "FAKE_JOB_CONDITION": "job-condition.txt",
+        "FAKE_SMOKE_LOG": "smoke-log.json",
+        "FAKE_VOICE_LOG": "voice-log.txt",
+        "FAKE_GENERATION": "generation.txt",
+        "FAKE_HELM_HISTORY": "helm-history.json",
+        "FAKE_HELM_HISTORY_AFTER": "helm-history-after.json"
+      },
+      "outputs": [
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        }
+      ]
+    },
+    {
+      "name": "hermes-upgrade-success",
+      "argv": [
+        "hermes",
+        "rollout",
+        "--values-file",
+        "values.yaml",
+        "--hermes-digest",
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "--voice-proxy-digest",
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--exporter-digest",
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "--smoke-image",
+        "ghcr.io/proflyder/home-deploy@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "--chart",
+        "chart",
+        "--state-dir",
+        "state",
+        "--kubectl",
+        "fakes/kubectl",
+        "--helm",
+        "fakes/helm",
+        "--timeout",
+        "8m"
+      ],
+      "cwd": "cases/hermes-upgrade-success",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "hermes rollout is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace",
+        "FAKE_LIVE": "live-hermes.json",
+        "FAKE_METRICS": "metrics.txt",
+        "FAKE_JOB_CONDITION": "job-condition.txt",
+        "FAKE_SMOKE_LOG": "smoke-log.json",
+        "FAKE_VOICE_LOG": "voice-log.txt",
+        "FAKE_GENERATION": "generation.txt",
+        "FAKE_HELM_HISTORY": "helm-history.json",
+        "FAKE_HELM_HISTORY_AFTER": "helm-history-after.json"
+      },
+      "outputs": [
+        {
+          "path": "state/previous-revision",
+          "golden": "expected/state/previous-revision"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        },
+        {
+          "path": "trace/10.argv",
+          "golden": "expected/trace/10.argv"
+        },
+        {
+          "path": "trace/11.argv",
+          "golden": "expected/trace/11.argv"
+        },
+        {
+          "path": "trace/12.argv",
+          "golden": "expected/trace/12.argv"
+        },
+        {
+          "path": "trace/13.argv",
+          "golden": "expected/trace/13.argv"
+        },
+        {
+          "path": "trace/2.argv",
+          "golden": "expected/trace/2.argv"
+        },
+        {
+          "path": "trace/3.argv",
+          "golden": "expected/trace/3.argv"
+        },
+        {
+          "path": "trace/3.payload",
+          "golden": "expected/trace/3.payload"
+        },
+        {
+          "path": "trace/4.argv",
+          "golden": "expected/trace/4.argv"
+        },
+        {
+          "path": "trace/5.argv",
+          "golden": "expected/trace/5.argv"
+        },
+        {
+          "path": "trace/6.argv",
+          "golden": "expected/trace/6.argv"
+        },
+        {
+          "path": "trace/7.argv",
+          "golden": "expected/trace/7.argv"
+        },
+        {
+          "path": "trace/7.stdin",
+          "golden": "expected/trace/7.stdin"
+        },
+        {
+          "path": "trace/8.argv",
+          "golden": "expected/trace/8.argv"
+        },
+        {
+          "path": "trace/9.argv",
+          "golden": "expected/trace/9.argv"
+        }
+      ]
+    },
+    {
+      "name": "hermes-smoke-failure",
+      "argv": [
+        "hermes",
+        "rollout",
+        "--values-file",
+        "values.yaml",
+        "--hermes-digest",
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "--voice-proxy-digest",
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--exporter-digest",
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "--smoke-image",
+        "ghcr.io/proflyder/home-deploy@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "--chart",
+        "chart",
+        "--state-dir",
+        "state",
+        "--kubectl",
+        "fakes/kubectl",
+        "--helm",
+        "fakes/helm",
+        "--timeout",
+        "8m",
+        "--simulate-smoke-failure"
+      ],
+      "cwd": "cases/hermes-smoke-failure",
+      "status": "skip",
+      "exit": 1,
+      "stdout": "expected/stdout",
+      "stderr": "expected/stderr",
+      "reason": "hermes rollout is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace",
+        "FAKE_LIVE": "live-hermes.json",
+        "FAKE_METRICS": "metrics.txt",
+        "FAKE_JOB_CONDITION": "job-condition.txt",
+        "FAKE_SMOKE_LOG": "smoke-log.json",
+        "FAKE_VOICE_LOG": "voice-log.txt",
+        "FAKE_GENERATION": "generation.txt",
+        "FAKE_HELM_HISTORY": "helm-history.json",
+        "FAKE_HELM_HISTORY_AFTER": "helm-history-after.json"
+      },
+      "outputs": [
+        {
+          "path": "state/previous-revision",
+          "golden": "expected/state/previous-revision"
+        },
+        {
+          "path": "state/upgrade-applied",
+          "golden": "expected/state/upgrade-applied"
+        },
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        },
+        {
+          "path": "trace/10.argv",
+          "golden": "expected/trace/10.argv"
+        },
+        {
+          "path": "trace/11.argv",
+          "golden": "expected/trace/11.argv"
+        },
+        {
+          "path": "trace/12.argv",
+          "golden": "expected/trace/12.argv"
+        },
+        {
+          "path": "trace/13.argv",
+          "golden": "expected/trace/13.argv"
+        },
+        {
+          "path": "trace/2.argv",
+          "golden": "expected/trace/2.argv"
+        },
+        {
+          "path": "trace/3.argv",
+          "golden": "expected/trace/3.argv"
+        },
+        {
+          "path": "trace/3.payload",
+          "golden": "expected/trace/3.payload"
+        },
+        {
+          "path": "trace/4.argv",
+          "golden": "expected/trace/4.argv"
+        },
+        {
+          "path": "trace/5.argv",
+          "golden": "expected/trace/5.argv"
+        },
+        {
+          "path": "trace/6.argv",
+          "golden": "expected/trace/6.argv"
+        },
+        {
+          "path": "trace/7.argv",
+          "golden": "expected/trace/7.argv"
+        },
+        {
+          "path": "trace/8.argv",
+          "golden": "expected/trace/8.argv"
+        },
+        {
+          "path": "trace/9.argv",
+          "golden": "expected/trace/9.argv"
+        },
+        {
+          "path": "trace/9.stdin",
+          "golden": "expected/trace/9.stdin"
+        }
+      ]
+    },
+    {
+      "name": "hermes-rollback-only",
+      "argv": [
+        "hermes",
+        "rollout",
+        "--rollback-only",
+        "--state-dir",
+        "state",
+        "--kubectl",
+        "fakes/kubectl",
+        "--helm",
+        "fakes/helm",
+        "--timeout",
+        "8m"
+      ],
+      "cwd": "cases/hermes-rollback-only",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "hermes rollout is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace",
+        "FAKE_LIVE": "live-hermes.json",
+        "FAKE_METRICS": "metrics.txt",
+        "FAKE_JOB_CONDITION": "job-condition.txt",
+        "FAKE_SMOKE_LOG": "smoke-log.json",
+        "FAKE_VOICE_LOG": "voice-log.txt",
+        "FAKE_GENERATION": "generation.txt",
+        "FAKE_HELM_HISTORY": "helm-history.json",
+        "FAKE_HELM_HISTORY_AFTER": "helm-history-after.json"
+      },
+      "outputs": [
+        {
+          "path": "trace/0.argv",
+          "golden": "expected/trace/0.argv"
+        },
+        {
+          "path": "trace/1.argv",
+          "golden": "expected/trace/1.argv"
+        }
+      ]
+    },
+    {
+      "name": "hermes-rollback-only-noop",
+      "argv": [
+        "hermes",
+        "rollout",
+        "--rollback-only",
+        "--state-dir",
+        "state",
+        "--kubectl",
+        "fakes/kubectl",
+        "--helm",
+        "fakes/helm"
+      ],
+      "cwd": "cases/hermes-rollback-only-noop",
+      "status": "skip",
+      "exit": 0,
+      "stdout": "expected/stdout",
+      "reason": "hermes rollout is not ported yet",
+      "env": {
+        "TRACE_DIR": "trace",
+        "FAKE_LIVE": "live-hermes.json",
+        "FAKE_METRICS": "metrics.txt",
+        "FAKE_JOB_CONDITION": "job-condition.txt",
+        "FAKE_SMOKE_LOG": "smoke-log.json",
+        "FAKE_VOICE_LOG": "voice-log.txt",
+        "FAKE_GENERATION": "generation.txt",
+        "FAKE_HELM_HISTORY": "helm-history.json",
+        "FAKE_HELM_HISTORY_AFTER": "helm-history-after.json"
+      }
+    }
+  ]
+}

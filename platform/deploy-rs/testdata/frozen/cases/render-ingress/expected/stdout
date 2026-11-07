@@ -1,0 +1,6 @@
+rendered input/issuers.yaml -> out/issuers.yaml
+rendered input/certificate.yaml -> out/certificate.yaml
+rendered input/certificate-staging.yaml -> out/certificate-staging.yaml
+rendered input/middleware.yaml -> out/middleware.yaml
+rendered input/backends.yaml -> out/backends.yaml
+rendered input/routes.yaml -> out/routes.yaml

@@ -1,0 +1,7 @@
+-n
+home-assistant
+get
+job
+hermes-smoke-<id>
+-o
+jsonpath={range .status.conditions[*]}{.type}={.status}{"\n"}{end}

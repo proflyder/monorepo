@@ -1,0 +1,20 @@
+# Public template. Used only by `deploy.sh --staging` to prove DNS-01 and the
+# Cloudflare token before spending a production Let's Encrypt order. It is not
+# referenced by any route.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: home-wildcard-staging
+  namespace: traefik
+spec:
+  secretName: home-wildcard-staging-tls
+  issuerRef:
+    name: letsencrypt-staging
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.${HOME_DOMAIN}"
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  duration: 720h
+  renewBefore: 240h

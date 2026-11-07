@@ -1,0 +1,7 @@
+-n
+home-assistant
+logs
+deployment/hermes
+-c
+voice-proxy
+--since=10m

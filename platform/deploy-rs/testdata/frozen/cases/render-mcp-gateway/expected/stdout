@@ -1,0 +1,6 @@
+rollout id: e868e83cd607
+rendered input/deployment.yaml -> out/deployment.yaml
+rendered input/network-policies.yaml -> out/network-policies.yaml
+rendered input/servicemonitor.yaml -> out/servicemonitor.yaml
+rendered input/catalog.yaml -> out/catalog.yaml
+rendered input/bb-targets.yaml -> out/bb-targets.yaml

@@ -1,0 +1,7 @@
+rollback
+runtime
+1
+-n
+home-assistant
+--wait=legacy
+--timeout=8m

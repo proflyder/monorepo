@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: ha-bridge
+  name: ha-bridge
+  namespace: home-assistant
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ha-bridge
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      containers:
+      - env:
+        - name: BRIDGE_EXECUTE
+          value: "false"
+        image: ghcr.io/proflyder/ha-bridge@sha256:aaa
+        name: ha-bridge
+        volumeMounts:
+        - mountPath: /data
+          name: data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ha-bridge-data

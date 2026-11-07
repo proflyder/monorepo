@@ -1,0 +1,21 @@
+# Public template. `deploy.sh` substitutes ${HOME_DOMAIN}.
+# Wildcard certificate for all names below the private home suffix. It lives in
+# the same namespace as the IngressRoutes and the Cloudflare API token Secret,
+# so one certificate covers every host without duplicating TLS Secrets.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: home-wildcard
+  namespace: traefik
+spec:
+  secretName: home-wildcard-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.${HOME_DOMAIN}"
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  duration: 2160h
+  renewBefore: 720h

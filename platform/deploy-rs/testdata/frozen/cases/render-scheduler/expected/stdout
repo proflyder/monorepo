@@ -1,0 +1,6 @@
+rollout id: d2772480b1b3
+rendered input/scheduler.yaml -> out/scheduler.yaml
+rendered input/bridge.yaml -> out/bridge.yaml
+rendered input/control.yaml -> out/control.yaml
+rendered input/control-service.yaml -> out/control-service.yaml
+rendered input/preflight-job.yaml -> out/preflight-job.yaml

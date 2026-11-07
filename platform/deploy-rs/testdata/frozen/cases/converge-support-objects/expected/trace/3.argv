@@ -1,0 +1,7 @@
+-n
+home-assistant
+get
+deployment
+ha-bridge
+-o
+jsonpath={.metadata.generation}

@@ -1,0 +1,5 @@
+-n
+home-assistant
+apply
+-f
+<payload>

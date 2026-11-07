@@ -1,0 +1,75 @@
+#!/bin/sh
+# Fake kubectl used by the frozen fixtures. Records argv (with `-f FILE`
+# payloads and stdin copied next to it) and answers from the files named by the
+# FAKE_* variables. The real command names and order are the contract.
+set -u
+trace="${TRACE_DIR:-trace}"
+mkdir -p "$trace"
+idx=$(find "$trace" -maxdepth 1 -name '*.argv' | wc -l | tr -d ' ')
+argfile="$trace/$idx.argv"
+prev=
+{
+  for argument in "$@"; do
+    if [ "$prev" = "-f" ]; then
+      case "$argument" in
+        -) cat >"$trace/$idx.stdin"; printf '<stdin>\n' ;;
+        *) cp "$argument" "$trace/$idx.payload"; printf '<payload>\n' ;;
+      esac
+    else
+      printf '%s\n' "$argument"
+    fi
+    prev="$argument"
+  done
+} >"$argfile"
+
+joined=" $* "
+case "$joined" in
+  *" get deployment "*)
+    if [ "${FAKE_GET_FAIL:-0}" = "1" ]; then
+      echo "Error from server (Forbidden): deployments.apps is forbidden" >&2
+      exit 1
+    fi
+    live="${FAKE_LIVE:-live.json}"
+    prev2=
+    for argument in "$@"; do
+      if [ "$prev2" = "deployment" ]; then
+        if [ -f "live-$argument.json" ]; then
+          live="live-$argument.json"
+        fi
+        break
+      fi
+      prev2="$argument"
+    done
+    case "$joined" in
+      *jsonpath=*generation*)
+        cat "${FAKE_GENERATION:-generation.txt}" 2>/dev/null || true
+        exit 0
+        ;;
+      *" -o json"*)
+        if [ -f "$live" ]; then
+          cat "$live"
+          exit 0
+        fi
+        echo "Error from server (NotFound): deployments.apps not found" >&2
+        exit 1
+        ;;
+      *)
+        if [ -f "$live" ]; then
+          exit 0
+        fi
+        echo "Error from server (NotFound): deployments.apps not found" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *" get --raw "*) cat "${FAKE_METRICS:-metrics.txt}" 2>/dev/null; exit 0 ;;
+  *" get job "*) cat "${FAKE_JOB_CONDITION:-job-condition.txt}" 2>/dev/null; exit 0 ;;
+  *" logs job/"*) cat "${FAKE_SMOKE_LOG:-smoke-log.json}" 2>/dev/null; exit 0 ;;
+  *" describe job "*) exit 0 ;;
+  *" logs deployment/"*) cat "${FAKE_VOICE_LOG:-voice-log.txt}" 2>/dev/null; exit 0 ;;
+  *" exec "*) exit "${FAKE_EXEC_CODE:-0}" ;;
+  *" rollout status "*) exit "${FAKE_ROLLOUT_CODE:-0}" ;;
+  *" apply "*) exit "${FAKE_APPLY_CODE:-0}" ;;
+  *" delete "*) exit 0 ;;
+  *) exit 0 ;;
+esac

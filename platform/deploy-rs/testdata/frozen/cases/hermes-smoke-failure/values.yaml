@@ -1,0 +1,13 @@
+storage:
+  hermes:
+    size: 10Gi
+workloads:
+  hermes:
+    replicas: 1
+    containers:
+    - name: gateway
+    - name: voice-proxy
+  runtime-health-exporter:
+    replicas: 1
+    containers:
+    - name: health-exporter

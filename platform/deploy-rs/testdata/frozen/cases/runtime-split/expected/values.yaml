@@ -1,0 +1,15 @@
+nodeName: lab-host
+workloads:
+  hermes:
+    replicas: 1
+    containers:
+    - name: gateway
+      image: hermes@sha256:aaaa
+  runtime-health-exporter:
+    replicas: 1
+    containers:
+    - name: health-exporter
+      image: ghcr.io/proflyder/health-exporter@sha256:new
+      command:
+      - /usr/local/bin/health-exporter
+      volumeMounts: []

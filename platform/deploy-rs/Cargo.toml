@@ -1,0 +1,32 @@
+[package]
+name = "home-deploy"
+description = "Home deployment tooling (Rust port of platform/deploy)"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "home_deploy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "home-deploy"
+path = "src/main.rs"
+
+[[bin]]
+name = "parity_runner"
+path = "src/bin/parity.rs"
+
+[dependencies]
+clap = { workspace = true }
+hex = { workspace = true }
+regex = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

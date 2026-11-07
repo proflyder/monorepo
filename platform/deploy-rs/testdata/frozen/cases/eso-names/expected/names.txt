@@ -1,0 +1,6 @@
+currency-bot/currency-bot
+currency-bot/cloudflared-tunnel
+currency-bot/currency-bot
+currency-bot/cloudflared-tunnel
+currency-bot/currency-bot
+currency-bot/cloudflared-tunnel

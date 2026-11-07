@@ -1,0 +1,10 @@
+{
+  "/home.v1.SchedulerService/GetStatus": [
+    200,
+    "{\"ready\":true}"
+  ],
+  "/api/states": [
+    200,
+    "[{\"entity_id\": \"input_boolean.alarm_ringing\", \"state\": \"on\"}, {\"entity_id\": \"input_text.scheduler_endpoint\", \"state\": \"http://192.0.2.27:30098\"}]"
+  ]
+}
