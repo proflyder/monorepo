@@ -304,7 +304,7 @@ impl Catalog {
     /// [`CatalogError::Invalid`] for a document that breaks a schema rule.
     pub fn parse(data: &str) -> Result<Self, CatalogError> {
         let mut catalog: Self =
-            serde_yaml::from_str(data).map_err(|error| CatalogError::Parse(error.to_string()))?;
+            serde_saphyr::from_str(data).map_err(|error| CatalogError::Parse(error.to_string()))?;
         catalog.validate()?;
         catalog.prepare();
         Ok(catalog)

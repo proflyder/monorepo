@@ -689,7 +689,7 @@ impl BbResolver {
     /// Validates an allow-list document.
     pub fn parse(data: &[u8]) -> Result<Self, String> {
         let file: TargetsFile =
-            serde_yaml::from_slice(data).map_err(|error| format!("bb targets: {error}"))?;
+            serde_saphyr::from_slice(data).map_err(|error| format!("bb targets: {error}"))?;
         if file.targets.is_empty() {
             return Err("bb targets: at least one target is required".to_owned());
         }

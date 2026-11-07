@@ -60,6 +60,7 @@ pub async fn run() -> anyhow::Result<()> {
         .with_context(|| format!("bind {}", config.listen))?;
     let address = listener.local_addr().context("listen address")?;
     info!(
+        version = VERSION,
         addr = %address,
         scenario_label = %config.scenario_label,
         profile_label = %config.profile_label,

@@ -46,7 +46,7 @@ pub async fn run() -> anyhow::Result<()> {
 
 async fn execute(config: Arc<Config>) -> anyhow::Result<()> {
     log_configuration(&config);
-    info!(queue = %config.queue, "executor starting");
+    info!(version = VERSION, queue = %config.queue, "executor starting");
 
     let scheduler =
         scheduler_client(&config, config.scheduler_timeout).context("scheduler client")?;
