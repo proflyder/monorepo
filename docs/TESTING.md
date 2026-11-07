@@ -562,13 +562,18 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
 - Смена режима (`preserve`, `execute`, `shadow`, `control-*`) — только
   `workflow_dispatch`; push всегда conservative preserve.
 - Hermes/voice-proxy (builder `mixed`): `hermes` — Docker, `voice-proxy` —
-  Bazel/rules_oci; build+push → digest в релиз `runtime` →
-  `-healthcheck`/health/Assist-проверка → `helm rollback` при провале.
-- Build once (решение 36): перед сборкой job считает tree деплоимого коммита
-  и пробует продвинуть digest'ы PR-сборки (`tree-<hash>` + проверенный
-  provenance). Если все образы юнита прошли проверку, скрипт получает
-  `PREBUILT_DIGESTS` и не собирает/push'ит их; иначе — обычная сборка.
-  Выбранный путь виден в job summary (`image path: prebuilt|build`).
+  Bazel/rules_oci; PR CI собирает и публикует их; deploy-home берёт
+  промоутнутые digest'ы → релиз `runtime` → `-healthcheck`/health/Assist-
+  проверка → `helm rollback` при провале. С `DEPLOY_NO_BUILD=1` отсутствие
+  digest'а — ошибка, а не сборка.
+- Build once (решение 36): job считает tree деплоимого коммита и продвигает
+  digest'ы PR-сборки (`tree-<hash>` + проверенный provenance), включая
+  `home-deploy`, из образа которого достаётся CLI. На `workflow_dispatch` и
+  для образов-соседей (`deploy.optional_images`) берётся самый свежий
+  верифицированный тег в first-parent истории; коммит-источник — в summary.
+  Deploy-home ничего не собирает: если хоть один образ не прошёл проверку, job
+  падает, а не откатывается на сборку. Выбранный путь виден в job summary
+  (`image path: prebuilt|build`, где `build` = отказ promotion).
 - Native (Pulsar, logon provider): job `native-release` вызывает `_native.yml`
   с `promote: true`. Тот проверяет `tree-<hash>` и provenance, ставит релизные
   теги на тот же digest и пропускает сборку; при missing/unverified собирает и

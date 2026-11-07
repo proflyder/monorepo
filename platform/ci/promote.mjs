@@ -14,9 +14,9 @@
  *      (`crane tag`) and prove the tag resolves to it.
  *
  * If any image of the unit is missing, unverified or cannot be tagged, the whole
- * unit falls back to the normal build path: the workflow passes an empty
- * `PREBUILT_DIGESTS`, and the deploy script builds and pushes exactly as before.
- * A partially promoted unit is never deployed.
+ * unit is reported as not deployable (mode `build`): `deploy-home` reads that as
+ * a hard failure and stops instead of building. A partially promoted unit is
+ * never deployed and never built on the deployment runner.
  *
  * The rule that matters: the tag itself is only a claim. Only a digest whose
  * provenance says "this repository's CI built this commit's tree" may be
@@ -150,50 +150,195 @@ function uniqueImages(images) {
 }
 
 /**
+ * Validate a newest-first first-parent history entry (`{commit, tree}`).
+ * `readHistory` builds the list from git; discovery accepts it as data so
+ * `planPromotion` stays a pure decision function.
+ */
+export function historyEntry(entry) {
+  const commit = String(entry?.commit || "");
+  const tree = String(entry?.tree || "");
+  if (!COMMIT.test(commit) || !TREE.test(tree)) {
+    throw new Error(`invalid history entry '${commit} ${tree}'`);
+  }
+  return { commit, tree };
+}
+
+/**
+ * Read `limit` newest-first first-parent commits of HEAD with their trees.
+ * A squash-merged `develop` is linear, so this is the deployed lineage.
+ */
+export function readHistory(exec, limit = 200) {
+  const count = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 1000) : 200;
+  const output = exec("git", [
+    "log",
+    "--first-parent",
+    `-n${count}`,
+    "--format=%H %T",
+    "HEAD",
+  ]);
+  return String(output)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [commit, tree] = line.split(/\s+/);
+      return historyEntry({ commit, tree });
+    });
+}
+
+/**
  * Decide and perform the promotion. `exec(command, args)` returns stdout and
  * throws on a non-zero exit; it is injected so tests never touch a registry.
+ *
+ * `optionalImages` are rendered by a deploy script but not applied by it (the
+ * sibling workloads of the shared scheduler manifests). They are always
+ * resolved from the newest verified build in `history`, because the unit that
+ * owns them was not part of this change. `allowHistory` extends the same search
+ * to required images; `deploy-home` sets it for `workflow_dispatch`, where the
+ * current tree has no CI build (the tag only exists for units the last merged
+ * PR touched).
+ *
+ * `history` is a newest-first list of `{commit, tree}` from `readHistory`. The
+ * search is correct because CI builds an image whenever its inputs change: if
+ * the inputs changed after the found commit, a later tree would have been built
+ * and would be found first. Provenance is verified for the found commit, and
+ * the summary names it.
  */
-export function planPromotion({ images, tree, commit, repository, exec }) {
+export function planPromotion({
+  images,
+  optionalImages = [],
+  tree,
+  commit,
+  repository,
+  exec,
+  history = [],
+  allowHistory = false,
+}) {
   const tag = treeTag(tree);
   if (!COMMIT.test(String(commit || ""))) {
     throw new Error(`commit must be a git sha, got '${commit}'`);
   }
   signerIdentityPattern(repository); // validate before any registry call
-  const names = uniqueImages(images);
+  const required = uniqueImages(images);
+  const optional = (optionalImages.length ? uniqueImages(optionalImages) : []).filter(
+    (image) => !required.includes(image),
+  );
+  const lineage = history.map(historyEntry);
   const decisions = [];
   const verified = [];
+  /** Memoised tag list per image for the history search. */
+  const tagSets = new Map();
 
-  // Phase 1: resolve and verify every image before tagging anything, so a
-  // missing/unverified image cannot leave a half-promoted unit behind.
-  for (const image of names) {
-    const ref = imageRef(image);
+  const knownTags = (ref) => {
+    if (!tagSets.has(ref)) {
+      try {
+        tagSets.set(
+          ref,
+          new Set(
+            String(exec("crane", ["ls", ref]))
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean),
+          ),
+        );
+      } catch {
+        // Listing can be unavailable on an odd registry; probe candidates
+        // directly instead of failing the whole history search.
+        tagSets.set(ref, null);
+      }
+    }
+    return tagSets.get(ref);
+  };
+
+  /** Resolve one tag to a verified digest, or a decision describing the failure. */
+  const resolveTag = (ref, candidateTag) => {
     let digest;
     try {
-      digest = parseDigest(exec("crane", ["digest", `${ref}:${tag}`]));
+      digest = parseDigest(exec("crane", ["digest", `${ref}:${candidateTag}`]));
     } catch (error) {
-      decisions.push({ image, status: "missing", detail: `${tag} not found: ${message(error)}` });
-      continue;
+      return { error: "missing", detail: `${candidateTag} not found: ${message(error)}` };
     }
     if (!digest) {
-      decisions.push({ image, status: "missing", detail: `${tag} did not resolve to a sha256 digest` });
-      continue;
+      return { error: "missing", detail: `${candidateTag} did not resolve to a sha256 digest` };
     }
     try {
       exec("gh", verifyArgs({ repository, reference: `${ref}@${digest}` }));
     } catch (error) {
+      return {
+        error: "unverified",
+        digest,
+        detail: `provenance check failed for ${candidateTag}: ${message(error)}`,
+      };
+    }
+    return { digest };
+  };
+
+  /** Walk the lineage newest-first for the first built and verified tree. */
+  const resolveFromHistory = (ref) => {
+    const tags = knownTags(ref);
+    for (const entry of lineage) {
+      if (entry.tree === tree) {
+        continue; // already probed as the current tree
+      }
+      const candidateTag = `tree-${entry.tree}`;
+      if (tags && !tags.has(candidateTag)) {
+        continue;
+      }
+      const resolved = resolveTag(ref, candidateTag);
+      if (!resolved.error) {
+        return { digest: resolved.digest, source: entry.commit, sourceTree: entry.tree };
+      }
+    }
+    return null;
+  };
+
+  // Phase 1: resolve and verify every image before tagging anything, so a
+  // missing/unverified image cannot leave a half-promoted unit behind.
+  for (const [image, isOptional] of [
+    ...required.map((image) => [image, false]),
+    ...optional.map((image) => [image, true]),
+  ]) {
+    const ref = imageRef(image);
+    const fallback = isOptional || allowHistory;
+    const current = resolveTag(ref, tag);
+    let resolved = null;
+    let detail = current.detail;
+    if (!current.error) {
+      resolved = { digest: current.digest, source: commit, sourceTree: tree };
+    } else if (fallback) {
+      const previous = resolveFromHistory(ref);
+      if (previous) {
+        resolved = previous;
+      } else {
+        detail = `${tag} is not available and no verified tree-<hash> exists in the last ${lineage.length} first-parent commits`;
+      }
+    }
+    if (!resolved) {
       decisions.push({
         image,
-        status: "unverified",
-        digest,
-        detail: `provenance check failed: ${message(error)}`,
+        optional: isOptional,
+        status: current.error || "missing",
+        digest: current.digest || null,
+        detail,
+        source: null,
       });
       continue;
     }
-    verified.push({ image, ref, digest });
-    decisions.push({ image, status: "verified", digest });
+    verified.push({ image, ref, digest: resolved.digest, source: resolved.source, optional: isOptional });
+    decisions.push({
+      image,
+      optional: isOptional,
+      status: "verified",
+      digest: resolved.digest,
+      source: resolved.source,
+      detail:
+        resolved.source === commit
+          ? "current tree"
+          : `newest verified build in history (tree-${resolved.sourceTree})`,
+    });
   }
 
-  if (verified.length !== names.length) {
+  if (verified.length !== required.length + optional.length) {
     return {
       mode: "build",
       tag,
@@ -203,9 +348,10 @@ export function planPromotion({ images, tree, commit, repository, exec }) {
     };
   }
 
-  // Phase 2: attach the usual tags to the verified digests and prove each tag
-  // still resolves to the same digest (a rewritten manifest would differ).
-  for (const item of verified) {
+  // Phase 2: attach the usual tags to the required images only (the optional
+  // siblings are not this unit's artifact; their digest is just handed to the
+  // renderer) and prove each tag still resolves to the same digest.
+  for (const item of verified.filter((entry) => !entry.optional)) {
     for (const destination of [String(commit), ...PROMOTED_TAGS]) {
       try {
         exec("crane", ["tag", `${item.ref}@${item.digest}`, destination]);
@@ -228,6 +374,9 @@ export function planPromotion({ images, tree, commit, repository, exec }) {
     }
     decisions.find((entry) => entry.image === item.image).status = "promoted";
   }
+  for (const item of verified.filter((entry) => entry.optional)) {
+    decisions.find((entry) => entry.image === item.image).status = "reused";
+  }
 
   return {
     mode: "prebuilt",
@@ -248,12 +397,25 @@ export function formatSummary(result) {
   const lines = [`### image promotion (${result.tag})`, ""];
   for (const decision of result.decisions) {
     const digest = decision.digest ? ` \`${decision.digest}\`` : "";
+    // Name the commit each digest came from: on a manual dispatch a required
+    // image may come from the newest verified build in history, and a reused
+    // sibling always does.
+    const source =
+      decision.status === "verified" || decision.status === "promoted" || decision.status === "reused"
+        ? decision.source
+          ? ` (from ${String(decision.source).slice(0, 12)})`
+          : ""
+        : "";
+    const optional = decision.optional ? " [sibling]" : "";
     const detail = decision.detail ? ` — ${decision.detail}` : "";
-    lines.push(`- \`${decision.image}\`: ${decision.status}${digest}${detail}`);
+    lines.push(`- \`${decision.image}\`${optional}: ${decision.status}${digest}${source}${detail}`);
   }
   lines.push("", `- path: \`${result.mode}\``);
   if (result.mode !== "prebuilt") {
-    lines.push(`- fallback: ${result.reason || "promotion unavailable"}; building images`);
+    lines.push(
+      `- not deployable: ${result.reason || "promotion unavailable"}; ` +
+        "deploy-home does not build (DECISIONS 36)",
+    );
   }
   return `${lines.join("\n")}\n`;
 }
@@ -558,6 +720,9 @@ export function runNativePromotion({ args, exec, env = process.env, log = consol
 function parseArgs(argv) {
   const args = {
     images: [],
+    optionalImages: [],
+    allowHistory: false,
+    historyLimit: 200,
     tree: "",
     commit: "",
     repository: "",
@@ -587,6 +752,17 @@ function parseArgs(argv) {
         break;
       case "--images":
         args.images = String(value || "").split(/[\s,]+/).filter(Boolean);
+        index += 1;
+        break;
+      case "--optional-images":
+        args.optionalImages = String(value || "").split(/[\s,]+/).filter(Boolean);
+        index += 1;
+        break;
+      case "--allow-history":
+        args.allowHistory = true;
+        break;
+      case "--history-limit":
+        args.historyLimit = Number(value);
         index += 1;
         break;
       case "--tree":
@@ -620,15 +796,27 @@ function appendFile(path, text) {
 
 export function runPromotion({ args, exec, env = process.env, log = console.log }) {
   const repository = args.repository || env.GITHUB_REPOSITORY || "";
-  log(`promoting ${args.images.join(", ")} for tree ${args.tree} (${repository})`);
-  // Invalid input throws and fails the step: the fallback below is only for
-  // missing or unverifiable images, never for a malformed tree/commit.
+  const optionalImages = args.optionalImages || [];
+  log(
+    `promoting ${args.images.join(", ")}` +
+      `${optionalImages.length ? ` (+ siblings ${optionalImages.join(", ")})` : ""}` +
+      ` for tree ${args.tree} (${repository})`,
+  );
+  // Invalid input throws and fails the step; the history search only runs when
+  // a manual dispatch or a sibling image needs it.
+  const wantsHistory = Boolean(args.allowHistory || optionalImages.length);
+  const history = wantsHistory
+    ? args.history || readHistory(exec, args.historyLimit)
+    : [];
   const result = planPromotion({
     images: args.images,
+    optionalImages,
     tree: args.tree,
     commit: args.commit,
     repository,
     exec,
+    history,
+    allowHistory: Boolean(args.allowHistory),
   });
   log(formatSummary(result));
   if (env.GITHUB_OUTPUT) {
@@ -664,7 +852,8 @@ export function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   if (args.help) {
     console.log(
-      "usage: promote.mjs --images 'a b' --tree <40-hex> --commit <sha> " +
+      "usage: promote.mjs --images 'a b' [--optional-images 'c d'] " +
+        "[--allow-history] [--history-limit N] --tree <40-hex> --commit <sha> " +
         "[--repository owner/repo]\n" +
         "   or: promote.mjs --native --repository ghcr.io/owner/name --tree <40-hex> " +
         "--commit <sha> --version <vX.Y.Z> --tags '{version} latest'",

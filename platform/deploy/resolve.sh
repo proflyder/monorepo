@@ -8,11 +8,15 @@
 #   home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" ...
 #
 # Resolution order:
-#   1. $HOME_DEPLOY (set by CI after one `bazel build` per job, or by a caller)
+#   1. $HOME_DEPLOY (deploy-home extracts it from the promoted `home-deploy`
+#      OCI image built by PR CI, or a caller sets it)
 #   2. `home-deploy` on PATH (an installed/operator binary)
 #   3. bazel-bin output of an earlier `bazel build` in this checkout
 #   4. bazel run //platform/deploy/cmd/home-deploy --, when Bazel is available
 #      (Bazelisk comes from mise: `mise install`, see mise.toml)
+#
+# In CI (`DEPLOY_NO_BUILD=1`) steps 3 and 4 are skipped: a deployment runner
+# must never compile the tool.
 #
 # Every step is optional, so the manual macOS workstation flow and the CI runner
 # use the same scripts. Compatible with macOS bash 3.2 (no associative arrays).
@@ -61,6 +65,13 @@ home_deploy() {
     return $?
   fi
 
+  if [[ "${DEPLOY_NO_BUILD:-0}" == "1" ]]; then
+    echo "DEPLOY_NO_BUILD=1: refusing to build/run home-deploy from source in this" >&2
+    echo "checkout; deploy-home must pass HOME_DEPLOY extracted from the promoted" >&2
+    echo "ghcr.io/proflyder/home-deploy image (DECISIONS 36)" >&2
+    return 127
+  fi
+
   if bazel=$(home_deploy_bazel); then
     ( cd "$root" && "$bazel" run //platform/deploy/cmd/home-deploy -- "$@" )
     return $?
@@ -71,3 +82,4 @@ home_deploy() {
   echo "or install the tools with \`mise install\` (Bazelisk), or set HOME_DEPLOY" >&2
   return 127
 }
+

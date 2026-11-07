@@ -908,6 +908,25 @@ provenance; `deploy-home` проверяет тег и provenance:
   для logon provider `<version>` и `sha-<12>`. Версия неизменяема: тот же
   digest — no-op, другой — отказ; двигается только `latest`.
 
+`deploy-home` — только доставка: он не запускает `bazel build`/`bazel run`
+и не собирает Docker-образы. Для каждого затронутого деплой-юнита
+`_images.yml` дополнительно публикует `ghcr.io/proflyder/home-deploy`
+(если юнит не собирает его сам); job достаёт из промоутнутого образа
+бинарник `home-deploy` (`crane export`) и передаёт его скриптам через
+`HOME_DEPLOY`.
+
+Ручной `workflow_dispatch` (смена режима ha-bridge, `units=all`) выкатывает
+текущий `develop`, для которого у нетронутых последним PR юнитов нет
+`tree-<hash>`-тега. В этом случае promotion идёт по first-parent истории
+(~200 коммитов) и берёт самый свежий коммит с существующим и проверенным
+`tree-<hash>`; коммит-источник виден в summary. Так же разрешаются
+образы-соседи, которые общий deploy-скрипт рендерит, но не применяет
+(`deploy.optional_images` в `units.mjs`, например ha-bridge/ha-control при
+деплое юнита scheduler). Собственные образы юнита на push обязаны совпадать с
+текущим tree — иначе job падает. Зависимости от живого кластера нет, поэтому
+механизм работает и при первой установке; аварийное восстановление с нуля всё
+равно удобнее делать локальным запуском deploy-скрипта (там сборка разрешена).
+
 Pulsar собирается release-shaped на каждом PR, затрагивающем его код, — с
 версией из `VERSION`, radio и `SHA256SUMS`; тег версии создаётся только при
 merge с изменением `VERSION`.
@@ -916,11 +935,12 @@ merge с изменением `VERSION`.
 
 `hermes` — единственный образ деплоя, собираемый Dockerfile'ом. Его собирает
 общий скрипт `projects/home-assistant/deploy/images/hermes/build.sh`, который
-вызывают и PR CI (`_images.yml`), и fallback `build-and-push.sh`: запиненные по
-digest базовые образы, apt только из snapshot Debian и `SOURCE_DATE_EPOCH` =
-время upstream-коммита, а Buildx переписывает mtime слоёв
-(`rewrite-timestamp=true`). Поэтому две сборки одной ревизии дают один digest и
-неподвижный образ не вызывает rollout.
+вызывает PR CI (`_images.yml`). Сборка запинена по digest базовых образов:
+apt только из snapshot Debian, `SOURCE_DATE_EPOCH` = время upstream-коммита, а
+Buildx переписывает mtime слоёв (`rewrite-timestamp=true`). Поэтому две сборки
+одной ревизии дают один digest и неподвижный образ не вызывает rollout. В
+`deploy-home` `build-and-push.sh` только принимает промоутнутые digest'ы
+(`DEPLOY_NO_BUILD=1`) и ничего не собирает.
 
 ```bash
 # две сборки без кэша в разные каталоги → сравнение digest'ов
@@ -928,7 +948,7 @@ projects/home-assistant/deploy/images/hermes/verify-reproducible.sh
 # ожидается «reproducible: sha256:…»
 ```
 
-PR CI и fallback `deploy-home` дополнительно читают общий кэш слоёв Buildx
+PR CI (`_images.yml`) читает общий кэш слоёв Buildx
 `ghcr.io/proflyder/hermes:buildcache`; пишут его (`mode=max`) только job'ы,
 которые уже залогинены в GHCR с правом записи. Кэш переиспользует слои с теми
 же входами (apt, `uv`), поэтому ускоряет сборку, но не меняет digest. Пакет
@@ -943,13 +963,16 @@ PR CI и fallback `deploy-home` дополнительно читают общи
 Как понять, что использовал деплой:
 
 * вкладка Actions → прогон `deploy-home` → summary job'а
-  `deploy <unit>`: строка `image path: prebuilt` (взят проверенный PR-образ)
-  или `build` (обычная сборка; причина — в блоке `image promotion`);
+  `deploy <unit>`: строка `image path: prebuilt` (взят проверенный PR-образ);
+  `build` означает, что promotion отказал и job упал до выкатки (причина — в
+  блоке `image promotion`);
 * там же видны digest'ы образов и `runtime revision` Helm-релиза.
 
-Если PR-артефакт не найден или provenance не проверяется, юнит автоматически
-собирается и публикуется как раньше — это штатный fallback, а не ошибка
-(в summary он виден как `fallback build`).
+Если для образа нет ни текущего tree, ни верифицированной сборки в истории,
+job падает с понятной ошибкой; автосборки на деплой-раннере нет. Частая
+причина — `develop` ушёл вперёд между PR и squash-merge, поэтому tree не
+совпал: нужно обновить ветку и прогнать PR CI заново. Локально сборка остаётся
+поведением по умолчанию; в CI её запрещает `DEPLOY_NO_BUILD=1`.
 
 Локально путь продвижения можно повторить, передав проверенные digest'ы
 (без них скрипты собирают и пушат как обычно):
