@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resolve and run the `home-deploy` Go CLI from the deploy scripts.
+# Resolve and run the `home-deploy` CLI (the Rust port) from the deploy scripts.
 #
 # Source this file after ROOT is known:
 #
@@ -12,7 +12,7 @@
 #      OCI image built by PR CI, or a caller sets it)
 #   2. `home-deploy` on PATH (an installed/operator binary)
 #   3. bazel-bin output of an earlier `bazel build` in this checkout
-#   4. bazel run //platform/deploy/cmd/home-deploy --, when Bazel is available
+#   4. bazel run //platform/deploy-rs:home-deploy --, when Bazel is available
 #      (Bazelisk comes from mise: `mise install`, see mise.toml)
 #
 # In CI (`DEPLOY_NO_BUILD=1`) steps 3 and 4 are skipped: a deployment runner
@@ -59,7 +59,7 @@ home_deploy() {
   fi
 
   root=$(home_deploy_root)
-  candidate="$root/bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy"
+  candidate="$root/bazel-bin/platform/deploy-rs/home-deploy"
   if [ -x "$candidate" ]; then
     "$candidate" "$@"
     return $?
@@ -73,12 +73,12 @@ home_deploy() {
   fi
 
   if bazel=$(home_deploy_bazel); then
-    ( cd "$root" && "$bazel" run //platform/deploy/cmd/home-deploy -- "$@" )
+    ( cd "$root" && "$bazel" run //platform/deploy-rs:home-deploy -- "$@" )
     return $?
   fi
 
   echo "home-deploy not found: build it with" >&2
-  echo "  bazel build //platform/deploy/cmd/home-deploy --platforms=@rules_go//go/toolchain:linux_amd64" >&2
+  echo "  bazel build //platform/deploy-rs:home-deploy" >&2
   echo "or install the tools with \`mise install\` (Bazelisk), or set HOME_DEPLOY" >&2
   return 127
 }

@@ -1,26 +1,15 @@
 # platform/deploy
 
-Общие шаблоны развёртывания и **`home-deploy`** — единственный CLI инструментов
-деплоя (решение 35: инструменты деплоя пишутся на Go).
+Общие шаблоны развёртывания, `resolve.sh` и **legacy-реализация** CLI
+`home-deploy` на Go. Сам CLI с cutover собирается из Rust-крейта
+[`platform/deploy-rs`](../deploy-rs/README.md); Go-код оставлен в дереве до
+отдельного cleanup-PR, чтобы откат был обычным revert.
 
 ```text
-cmd/home-deploy/   CLI: render, env get, build-id, oci, converge, state,
-                   preflight, runtime split, eso names, secret opaque,
-                   hermes rollout|render-config|assist-smoke
-internal/envfile   разбор приватных KEY=VALUE файлов
-internal/render    подстановка ${KEY} с allowlist по юниту
-internal/buildid   короткий идентификатор сборки
-internal/oci       OCI layout: digest, pack (ctr import), docker archive
-internal/kube      запуск kubectl с подменяемым runner'ом
-internal/converge  полная замена Deployment с prune drift
-internal/state     маркеры .before.json/.absent/.applied и rollback
-internal/preflight read-only проверки HA + scheduler для --execute
-internal/hermes    rollout digest'ов в релиз runtime + Assist smoke клиент
-internal/hermesconfig  merge config.fragment.yaml в живой HERMES_HOME
-internal/runtimevalues split helm template, values и pin exporter'а
-internal/manifests имена ExternalSecret и bootstrap Opaque Secret
-testdata/          golden-выходы, OCI-фикстура и трассы converge для parity
-resolve.sh         находит и запускает бинарник из deploy-скриптов
+cmd/home-deploy/   Go CLI (legacy; исполняемый контракт — platform/deploy-rs)
+internal/*         Go-реализация тех же модулей (legacy)
+testdata/          golden-выходы, OCI-фикстуры и трассы converge (Go tests)
+resolve.sh         находит и запускает Rust-бинарник из deploy-скриптов
 ```
 
 ## Вызов
@@ -36,13 +25,14 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
 ```
 
 Порядок поиска бинарника: `$HOME_DEPLOY` → `home-deploy` в `PATH` →
-`bazel-bin` после `bazel build` → `bazel run //platform/deploy/cmd/home-deploy --`
-(Bazelisk — из `mise install`).
+`bazel-bin/platform/deploy-rs/home-deploy` после `bazel build` →
+`bazel run //platform/deploy-rs:home-deploy --` (Bazelisk — из `mise install`).
 
 `deploy-home` не компилирует инструмент: он достаёт бинарник из промоутнутого
 OCI-образа `ghcr.io/proflyder/home-deploy` (`crane export`, путь
 `/usr/local/bin/home-deploy`) и экспортирует `HOME_DEPLOY`. Контракт — образ,
-а не язык: Go-бинарник сегодня и `platform/deploy-rs` после переезда.
+а не язык: сейчас его собирает `rust_service_image` из
+`//platform/deploy-rs:home-deploy`.
 `DEPLOY_NO_BUILD=1` в CI также запрещает запасные пути `bazel-bin` и `bazel
 run`. На node, где запускается `nft/apply.sh`, нужен уже установленный бинарник
 (например `/usr/local/bin/home-deploy`) или `HOME_DEPLOY`.

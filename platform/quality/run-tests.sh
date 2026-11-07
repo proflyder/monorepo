@@ -26,8 +26,8 @@ else
 fi
 
 # Python checks that outlive the CI-glue migration: the first-party Python
-# product syntax/secret gates. The deploy tooling moved to Go (decision 35) and
-# is covered by the Go step below.
+# product syntax/secret gates. The deploy tooling is the Rust crate below; the
+# legacy Go implementation is still covered by the Go step at the end.
 echo "== Python: platform/quality static gate =="
 python3 -m unittest discover -s platform/quality -p 'test_static.py' -v
 
@@ -39,20 +39,20 @@ else
   skip "Node.js is not installed: solutions/heartbeat tests need node --test"
 fi
 
-# Deploy tooling: build the Go CLI once and let every deploy.sh in this run
+# Deploy tooling: build the Rust CLI once and let every deploy.sh in this run
 # resolve it through platform/deploy/resolve.sh.
-if command -v go >/dev/null 2>&1; then
-  echo "== Deploy tooling: home-deploy =="
-  HOME_DEPLOY="${TMPDIR:-/tmp}/home-deploy-$$"
-  go build -o "$HOME_DEPLOY" ./platform/deploy/cmd/home-deploy
+if command -v cargo >/dev/null 2>&1; then
+  echo "== Deploy tooling: home-deploy (Rust) =="
+  cargo build -p home-deploy
+  HOME_DEPLOY="$ROOT/target/debug/home-deploy"
   export HOME_DEPLOY
 else
-  skip "Go is not installed: deploy scripts fall back to bazel/installed home-deploy"
+  skip "Cargo is not installed: deploy scripts fall back to bazel/installed home-deploy"
 fi
 
 # The control-mode regression drives deploy.sh --skip-build with pre-resolved
 # image digests, so it needs neither Bazel nor release binaries in dist/.
-# converge/state/preflight are Go and covered by platform/deploy's go_test.
+# The Rust crate's converge/state/preflight are covered by its Bazel unit tests.
 echo "== Scheduler deployment: deploy control =="
 bash projects/home/kubernetes/scheduler/test_deploy_control.sh
 

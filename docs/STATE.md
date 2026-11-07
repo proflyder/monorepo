@@ -200,7 +200,7 @@
   провале. Assist smoke Job работает на `home-deploy` (`hermes assist-smoke`).
   Voice-proxy принят вживую на станции: оба профиля, подтверждение с
   открытым микрофоном, отмена, поздние ответы.
-- Деплой — `home-deploy converge` (Go): полная замена Deployment, сохранение env/режима и
+- Деплой — `home-deploy converge` (Rust-крейт `platform/deploy-rs`): полная замена Deployment, сохранение env/режима и
   replicas; откат восстанавливает только применённый объект целиком.
 - PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
   namespace-scoped workloads, поэтому `ci-deploy` не имеет cluster-scoped

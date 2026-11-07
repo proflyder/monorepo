@@ -668,18 +668,30 @@ test("deploy: docs-only change deploys nothing", () => {
   assert.deepEqual(affected.deployEntries(result, config), []);
 });
 
-test("deploy: platform/deploy-rs change runs the Rust unit and deploys nothing", () => {
+test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy units", () => {
   const config = affected.loadConfig();
   const result = routeReal(["platform/deploy-rs/src/render.rs"], undefined, {
     affectedRules: () => new Set(),
   });
-  assert.deepEqual(
-    result.routes.bazel.units.map((unit) => unit.id),
-    ["platform-deploy-rust"],
-  );
-  // platform/deploy-rs is deliberately outside every deploy unit's paths.
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
+    "platform-deploy",
+    "scheduler",
+    "wakegrant",
+    "currency-bot",
+    "mcp-gateway",
+    "ha-bridge",
+  ]);
   assert.deepEqual(result.routes.go.units, []);
-  assert.deepEqual(affected.deployEntries(result, config), []);
+  // A tooling change reaches every unit that runs a deploy script.
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id).sort(), [
+    "currency-bot",
+    "ha-bridge",
+    "hermes",
+    "mcp-gateway",
+    "scheduler",
+    "wakegrant",
+  ]);
 });
 
 test("deploy: scheduler change deploys only scheduler", () => {
@@ -1524,7 +1536,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "pulsar",
   ]);
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
-    "platform-deploy-rust",
+    "platform-deploy",
     "voice-proxy",
     "health-exporter",
     "scheduler",
