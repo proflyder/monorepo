@@ -480,9 +480,11 @@
   переиспользуемое решение `solutions/windows-logon-provider` (Rust, CLSID
   `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`, журнал
   `C:\ProgramData\Ricardo\KompLogon\logon.log`). На ПК установлена сборка
-  `1.3.14` (OCI `sha256:4e1741a6be8075ef07cea31f384318a00e0d7d48ce644ccc68ecc19d112bad6f`,
-  sha256 DLL `dd40e924d71aede4d4921f473375a1ff6fe2a0ed3aa90f27521d061166ad2ada`);
-  PE-таймстемп обнуляется, поэтому релизный тег содержит те же байты.
+  `1.3.15` (sha256 DLL `46d67528fff5eda59d0beb069ace326ed3f83c34907e904db81a94a996b9d5ab`;
+  PE-таймстемп обнуляется, поэтому релизный тег содержит те же байты), принята
+  вживую 2026-11-07: холодный вход по grant, разблокировка по grant,
+  недоступный `wakegrant` (одна строка `send_failed`, затем backoff).
+  Прежняя `1.3.14` лежит рядом как `RicardoKompLogon.old-1.3.14-20261107151433.dll`.
   Прежняя `1.3.0` лежит рядом как `RicardoKompLogon.old-20261107141813.dll`. Сборка `1.2.0` лежит рядом как `RicardoKompLogon.dll.rust-1.2.0`. Предыдущая C++ DLL `1.0.0` лежит рядом как
   `RicardoKompLogon.dll.cpp-1.0.0` для отката. HA-файлы `ha-voice`
   выложены в HAOS вручную (копия прежних — `/mnt/data/ha-voice-backup-*.tar`).
