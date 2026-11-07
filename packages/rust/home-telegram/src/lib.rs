@@ -15,8 +15,8 @@
 
 use std::fmt;
 
-use home_secret::Token;
-use serde::Deserialize;
+use home_secret::{Secret, Token};
+use serde::{Deserialize, Serialize};
 
 /// The Bot API limit for one message, in runes.
 pub const MAX_MESSAGE_RUNES: usize = 4096;
@@ -39,17 +39,25 @@ pub enum ErrorKind {
 pub enum Error {
     #[error("{detail}")]
     Invalid { detail: &'static str },
-    #[error("telegram sendMessage returned HTTP {status}")]
-    Status { status: u16 },
-    #[error("telegram sendMessage failed: {description}")]
-    Api { description: String },
-    #[error("telegram sendMessage: request failed")]
+    #[error("telegram {operation} returned HTTP {status}")]
+    Status {
+        operation: &'static str,
+        status: u16,
+    },
+    #[error("telegram {operation} failed: {description}")]
+    Api {
+        operation: &'static str,
+        description: String,
+    },
+    #[error("telegram {operation}: request failed")]
     Transport {
+        operation: &'static str,
         #[source]
         source: reqwest::Error,
     },
-    #[error("telegram response is not JSON")]
+    #[error("telegram {operation} response is not JSON")]
     Decode {
+        operation: &'static str,
         #[source]
         source: serde_json::Error,
     },
@@ -61,7 +69,7 @@ impl Error {
     pub fn kind(&self) -> ErrorKind {
         match self {
             Self::Transport { .. } => ErrorKind::Transient,
-            Self::Status { status } => match *status {
+            Self::Status { status, .. } => match *status {
                 408 | 425 | 429 => ErrorKind::Transient,
                 status if status >= 500 => ErrorKind::Transient,
                 _ => ErrorKind::Permanent,
@@ -113,7 +121,10 @@ impl Sender {
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .map_err(|source| Error::Transport { source })?;
+            .map_err(|source| Error::Transport {
+                operation: "sendMessage",
+                source,
+            })?;
         Ok(Self {
             http,
             api_url: api_url.into().trim().trim_end_matches('/').to_owned(),
@@ -157,14 +168,20 @@ impl Sender {
             ])
             .send()
             .await
-            .map_err(|source| Error::Transport { source })?;
+            .map_err(|source| Error::Transport {
+                operation: "sendMessage",
+                source,
+            })?;
         let status = response.status().as_u16();
-        let body = response
-            .bytes()
-            .await
-            .map_err(|source| Error::Transport { source })?;
+        let body = response.bytes().await.map_err(|source| Error::Transport {
+            operation: "sendMessage",
+            source,
+        })?;
         if status != 200 {
-            return Err(Error::Status { status });
+            return Err(Error::Status {
+                operation: "sendMessage",
+                status,
+            });
         }
         if body.len() > MAX_RESPONSE_BYTES {
             return Err(Error::Invalid {
@@ -172,14 +189,215 @@ impl Sender {
             });
         }
         let decoded: SendResponse =
-            serde_json::from_slice(&body).map_err(|source| Error::Decode { source })?;
+            serde_json::from_slice(&body).map_err(|source| Error::Decode {
+                operation: "sendMessage",
+                source,
+            })?;
         if !decoded.ok {
             return Err(Error::Api {
+                operation: "sendMessage",
                 description: decoded.description,
             });
         }
         Ok(())
     }
+}
+
+/// A stateless Bot API client for a caller that addresses several chats.
+///
+/// [`Sender`] is bound to one chat and is the right tool for a fixed report
+/// recipient. The currency bot talks to an allowlist of chats and echoes the
+/// chat that sent a command, so it needs the chat id per message. This client
+/// also owns `setWebhook`.
+#[derive(Clone)]
+pub struct Bot {
+    http: reqwest::Client,
+    api_url: String,
+    token: Token,
+}
+
+impl fmt::Debug for Bot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("home_telegram::Bot")
+            .field("api_url", &self.api_url)
+            .field("token", &self.token)
+            .finish()
+    }
+}
+
+impl Bot {
+    /// Build a bot client. `api_url` is the Bot API root; `token` is trimmed.
+    pub fn new(
+        api_url: impl Into<String>,
+        token: Token,
+        timeout: std::time::Duration,
+    ) -> Result<Self, Error> {
+        // The workspace `reqwest` has no default crypto provider; install one
+        // before the first client. A provider installed earlier is kept.
+        let _already_installed = rustls::crypto::ring::default_provider().install_default();
+        let http = reqwest::Client::builder()
+            .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|source| Error::Transport {
+                operation: "sendMessage",
+                source,
+            })?;
+        Ok(Self {
+            http,
+            api_url: api_url.into().trim().trim_end_matches('/').to_owned(),
+            token,
+        })
+    }
+
+    /// Send one already-formatted HTML message to `chat_id`.
+    ///
+    /// The body is JSON (`chat_id` is a string, as in the Kotlin contract) and
+    /// deliberately omits `disable_web_page_preview`, matching the currency
+    /// bot's current wire behaviour.
+    pub async fn send_message(&self, chat_id: &str, text: &str) -> Result<(), Error> {
+        if self.token.expose().is_empty() || chat_id.trim().is_empty() {
+            return Err(Error::Invalid {
+                detail: "telegram token and chat id are required",
+            });
+        }
+        let payload = SendMessageJson {
+            chat_id: chat_id.trim().to_owned(),
+            text: text.to_owned(),
+            parse_mode: "HTML",
+        };
+        let body = serde_json::to_vec(&payload).map_err(|source| Error::Decode {
+            operation: "sendMessage",
+            source,
+        })?;
+        self.post_json("sendMessage", "sendMessage", &body).await
+    }
+
+    /// Register the webhook with its secret token and the allowed update kinds.
+    pub async fn set_webhook(
+        &self,
+        url: &str,
+        secret: &Secret,
+        allowed_updates: &[&str],
+    ) -> Result<(), Error> {
+        if self.token.expose().is_empty() || url.trim().is_empty() {
+            return Err(Error::Invalid {
+                detail: "telegram token and webhook url are required",
+            });
+        }
+        let payload = SetWebhookJson {
+            url: url.trim().to_owned(),
+            secret_token: secret.expose().to_owned(),
+            allowed_updates: allowed_updates
+                .iter()
+                .map(|update| (*update).to_owned())
+                .collect(),
+        };
+        let body = serde_json::to_vec(&payload).map_err(|source| Error::Decode {
+            operation: "setWebhook",
+            source,
+        })?;
+        self.post_json("setWebhook", "setWebhook", &body).await
+    }
+
+    async fn post_json(
+        &self,
+        operation: &'static str,
+        method: &str,
+        body: &[u8],
+    ) -> Result<(), Error> {
+        let endpoint = format!("{}/bot{}/{}", self.api_url, self.token.expose(), method);
+        let response = self
+            .http
+            .post(endpoint)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body.to_vec())
+            .send()
+            .await
+            .map_err(|source| Error::Transport { operation, source })?;
+        let status = response.status().as_u16();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|source| Error::Transport { operation, source })?;
+        if status != 200 {
+            return Err(Error::Status { operation, status });
+        }
+        if body.len() > MAX_RESPONSE_BYTES {
+            return Err(Error::Invalid {
+                detail: "telegram response is too large",
+            });
+        }
+        let decoded: SendResponse =
+            serde_json::from_slice(&body).map_err(|source| Error::Decode { operation, source })?;
+        if !decoded.ok {
+            return Err(Error::Api {
+                operation,
+                description: decoded.description,
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SendMessageJson {
+    chat_id: String,
+    text: String,
+    parse_mode: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct SetWebhookJson {
+    url: String,
+    secret_token: String,
+    allowed_updates: Vec<String>,
+}
+
+/// Incoming Bot API update with the four message variants the bot accepts.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Update {
+    #[serde(default)]
+    pub update_id: i64,
+    #[serde(default)]
+    pub message: Option<Message>,
+    #[serde(default)]
+    pub edited_message: Option<Message>,
+    #[serde(default)]
+    pub channel_post: Option<Message>,
+    #[serde(default)]
+    pub edited_channel_post: Option<Message>,
+}
+
+impl Update {
+    /// The first present message carrier, in the same precedence as the Go
+    /// webhook: `message`, `edited_message`, `channel_post`,
+    /// `edited_channel_post`.
+    #[must_use]
+    pub fn message(&self) -> Option<&Message> {
+        self.message
+            .as_ref()
+            .or(self.edited_message.as_ref())
+            .or(self.channel_post.as_ref())
+            .or(self.edited_channel_post.as_ref())
+    }
+}
+
+/// The fields of a Bot API message that the bot inspects.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Message {
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub chat: Chat,
+}
+
+/// The originating chat.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub struct Chat {
+    #[serde(default)]
+    pub id: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -279,6 +497,8 @@ mod tests {
     use super::*;
 
     type Bodies = Arc<std::sync::Mutex<Vec<(String, HashMap<String, String>)>>>;
+    type JsonBodies = Arc<std::sync::Mutex<Vec<(String, serde_json::Value)>>>;
+    type WebhookBodies = Arc<std::sync::Mutex<Vec<serde_json::Value>>>;
 
     async fn serve(app: Router) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -417,5 +637,130 @@ mod tests {
         .expect("sender");
         let error = sender.send_message("x").await.expect_err("HTTP 429");
         assert_eq!(error.kind(), ErrorKind::Transient);
+    }
+
+    #[test]
+    fn update_selects_the_first_message_carrier() {
+        let update: Update = serde_json::from_str(
+            r#"{
+                "update_id": 7,
+                "message": {"text": "/start", "chat": {"id": 123}},
+                "edited_message": {"text": "/help", "chat": {"id": 124}},
+                "channel_post": {"text": "/trigger", "chat": {"id": -100999}},
+                "edited_channel_post": {"text": "ignored", "chat": {"id": 1}}
+            }"#,
+        )
+        .expect("update");
+        assert_eq!(update.update_id, 7);
+        let message = update.message().expect("message");
+        assert_eq!(message.text.as_deref(), Some("/start"));
+        assert_eq!(message.chat.id, 123);
+
+        // Every non-message update is still a valid update with no carrier.
+        let empty: Update = serde_json::from_str(r#"{"update_id": 8}"#).expect("empty update");
+        assert!(empty.message().is_none());
+        assert_eq!(empty.update_id, 8);
+    }
+
+    #[test]
+    fn update_parses_each_variant_without_the_message_key() {
+        for key in [
+            "message",
+            "edited_message",
+            "channel_post",
+            "edited_channel_post",
+        ] {
+            let json = format!(
+                r#"{{"update_id": 1, "{key}": {{"text": "hello", "chat": {{"id": -42}}}}}}"#
+            );
+            let update: Update = serde_json::from_str(&json).expect(key);
+            let message = update.message().expect(key);
+            assert_eq!(message.text.as_deref(), Some("hello"), "{key}");
+            assert_eq!(message.chat.id, -42, "{key}");
+        }
+    }
+
+    #[tokio::test]
+    async fn bot_sends_json_to_the_addressed_chat() {
+        let bodies = Arc::new(std::sync::Mutex::new(
+            Vec::<(String, serde_json::Value)>::new(),
+        ));
+        let app = Router::new()
+            .route(
+                "/botTOKEN/sendMessage",
+                post(
+                    |axum::extract::State(bodies): axum::extract::State<JsonBodies>,
+                     axum::Json(body): axum::Json<serde_json::Value>| async move {
+                        bodies
+                            .lock()
+                            .expect("lock")
+                            .push(("sendMessage".to_owned(), body));
+                        axum::Json(serde_json::json!({"ok": true, "result": {"message_id": 1}}))
+                    },
+                ),
+            )
+            .with_state(bodies.clone());
+        let base = serve(app).await;
+        let bot =
+            Bot::new(base, Token::new("TOKEN"), std::time::Duration::from_secs(5)).expect("bot");
+        bot.send_message("-100999", "<b>hi</b>")
+            .await
+            .expect("send");
+        let body = {
+            let bodies = bodies.lock().expect("lock");
+            assert_eq!(bodies.len(), 1);
+            bodies[0].1.clone()
+        };
+        assert_eq!(body["chat_id"], "-100999");
+        assert_eq!(body["text"], "<b>hi</b>");
+        assert_eq!(body["parse_mode"], "HTML");
+        assert!(body.get("disable_web_page_preview").is_none());
+    }
+
+    #[tokio::test]
+    async fn bot_registers_the_webhook_with_secret_and_allowed_updates() {
+        let captured = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let app = Router::new()
+            .route(
+                "/botTOKEN/setWebhook",
+                post(
+                    |axum::extract::State(captured): axum::extract::State<WebhookBodies>,
+                     axum::Json(body): axum::Json<serde_json::Value>| async move {
+                        captured.lock().expect("lock").push(body);
+                        axum::Json(serde_json::json!({"ok": true, "result": true}))
+                    },
+                ),
+            )
+            .with_state(captured.clone());
+        let base = serve(app).await;
+        let bot =
+            Bot::new(base, Token::new("TOKEN"), std::time::Duration::from_secs(5)).expect("bot");
+        bot.set_webhook(
+            "https://currency.example/telegram/webhook",
+            &Secret::new("webhook-secret"),
+            &["message"],
+        )
+        .await
+        .expect("setWebhook");
+        let body = {
+            let captured = captured.lock().expect("lock");
+            assert_eq!(captured.len(), 1);
+            captured[0].clone()
+        };
+        assert_eq!(body["url"], "https://currency.example/telegram/webhook");
+        assert_eq!(body["secret_token"], "webhook-secret");
+        assert_eq!(body["allowed_updates"], serde_json::json!(["message"]));
+    }
+
+    #[tokio::test]
+    async fn bot_errors_are_classified() {
+        let bot = Bot::new(
+            "http://example",
+            Token::new(""),
+            std::time::Duration::from_secs(1),
+        )
+        .expect("bot");
+        let error = bot.send_message("1", "x").await.expect_err("empty token");
+        assert_eq!(error.kind(), ErrorKind::Permanent);
     }
 }

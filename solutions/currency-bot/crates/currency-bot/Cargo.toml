@@ -1,0 +1,49 @@
+[package]
+name = "currency-bot"
+description = "kurs.kz USD/RUB rate snapshots, threshold alerts and a Telegram bot API"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "currency_bot"
+path = "src/lib.rs"
+
+[[bin]]
+name = "currency-bot"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+home-config = { path = "../../../../packages/rust/home-config" }
+home-http = { path = "../../../../packages/rust/home-http" }
+home-runtime = { path = "../../../../packages/rust/home-runtime" }
+home-secret = { path = "../../../../packages/rust/home-secret" }
+home-sqlite = { path = "../../../../packages/rust/home-sqlite" }
+home-telegram = { path = "../../../../packages/rust/home-telegram" }
+home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
+http = { workspace = true }
+jiff = { workspace = true }
+prometheus-client = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+rusqlite = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+home-contracttest = { path = "../../../../packages/rust/home-contracttest" }
+http-body-util = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tower = { workspace = true }
+
+[lints]
+workspace = true

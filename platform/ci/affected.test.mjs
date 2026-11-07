@@ -822,6 +822,23 @@ test("deploy: a shared rust crate change reaches the hermes deploy unit", () => 
   assert.ok(entries.includes("hermes"), entries.join(","));
 });
 
+test("rust port: a crate change runs the temporary bazel unit and deploys nothing extra", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["solutions/currency-bot/crates/currency-bot/src/lib.rs"]);
+  const bazelIds = result.routes.bazel.units.map((unit) => unit.id);
+  assert.ok(bazelIds.includes("currency-bot-rust"), bazelIds.join(","));
+  const unit = config.units.find((item) => item.id === "currency-bot-rust");
+  assert.ok(unit, "currency-bot-rust unit exists");
+  assert.equal(unit.deployImages.length, 0);
+  assert.equal(unit.deployWorkloads.length, 0);
+});
+
+test("rust port: a shared crate change also runs the temporary bazel unit", () => {
+  const result = routeReal(["packages/rust/home-telegram/src/lib.rs"]);
+  const bazelIds = result.routes.bazel.units.map((unit) => unit.id);
+  assert.ok(bazelIds.includes("currency-bot-rust"), bazelIds.join(","));
+});
+
 test("deploy: ci workflow change runs checks but deploys nothing", () => {
   const config = affected.loadConfig();
   const result = routeReal([".github/workflows/ci.yml"]);
@@ -1476,6 +1493,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "voice-proxy",
     "scheduler",
     "wakegrant",
+    "currency-bot-rust",
     "mcp-gateway-rust",
     "ha-bridge",
     "ble-gateway",
