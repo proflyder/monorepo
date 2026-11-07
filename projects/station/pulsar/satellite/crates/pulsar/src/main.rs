@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use tracing::{error, info};
 
-use controller::Controller;
+use controller::{Controller, prepare_process};
 use version::VERSION;
 
 const DEFAULT_STATE: &str = "/data/pulsar/state.conf";
@@ -58,8 +58,7 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     };
     // Before the runtime, threads and any audio library: ALSA_CONFIG_PATH and libasound.
-    model.audio.playback.apply_env();
-    pulsar_alsa::init(model.audio.playback.alsa_lib());
+    prepare_process(model);
 
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()

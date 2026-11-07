@@ -205,7 +205,7 @@ pub fn parse_led_color(color: &str) -> Option<Rgb> {
 }
 
 /// An HA voice timer as the controller keeps it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HaTimer {
     pub active: bool,
     /// While active.

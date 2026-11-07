@@ -5,23 +5,62 @@
 //!
 //! Writes are atomic and durable (tmp, fsync, rename, fsync of the directory): /data on the
 //! Lite 2 is ubifs, where a rename reaches the flash long before unsynced data, so a power cut
-//! could leave an empty file and reset every setting. `StateFile` writes a change
-//! `SAVE_DELAY_MS` after the last one (a slider or a held volume key is one write, not dozens of
-//! flash writes); keys that matter across a restart or a binary swap are written at once.
+//! could leave an empty file and reset every setting. `Store` writes a change `SAVE_DELAY_MS`
+//! after the last one (a slider or a held volume key is one write, not dozens of flash writes);
+//! keys that matter across a restart or a binary swap are written at once.
+//!
+//! The codec keeps only its own types and strings: a value whose vocabulary belongs to another
+//! crate (HA select options, Zigbee role names) is stored as the string that goes to the file,
+//! and the controller maps it to its domain type at the boundary.
 
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write as _;
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 
 use pulsar_core::Timers;
 use pulsar_core::fmt::{g6, parse_f32_prefix};
-use pulsar_esphome::LightState;
-use pulsar_zigbee::Mode;
 use tracing::warn;
 
 /// A change is written this long after the last one.
 pub const SAVE_DELAY_MS: u64 = 1000;
+
+/// Option texts persisted in `state.conf`; the controller maps them to the HA/domain option
+/// types. An unknown value falls back to the default listed first in each table, as the C++
+/// codec did.
+const MUSIC_STYLES: [&str; 6] = ["Off", "All styles", "Spectrum", "Pulse", "Disco", "Polar"];
+const MUSIC_STYLE_DEFAULT: &str = "All styles";
+const CLOCK_MUSIC_STYLES: [&str; 2] = ["Off", "Levels"];
+const VOICE_COLORS: [&str; 2] = ["Violet", "Blue"];
+const ZIGBEE_ROLES: [&str; 3] = ["off", "pulsar-coordinator", "router"];
+
+/// User ring light (`light_*=` keys).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Light {
+    pub on: bool,
+    /// 0..1.
+    pub brightness: f32,
+    /// 0..1 each.
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    /// "" or "None" — no effect.
+    pub effect: String,
+}
+
+impl Default for Light {
+    fn default() -> Self {
+        Self {
+            on: false,
+            brightness: 1.0,
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            effect: String::new(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
@@ -46,7 +85,7 @@ pub struct Settings {
     /// Clock text scroll step.
     pub clock_scroll_ms: i32,
     /// User ring light.
-    pub light: LightState,
+    pub light: Light,
     pub wake_word: String,
     /// POSIX TZ (the default matches what the Yandex firmware showed); updated from HA.
     pub tz: String,
@@ -54,10 +93,10 @@ pub struct Settings {
     pub auto_update: bool,
     /// Wake arbitration with other pulsar stations.
     pub nearest_answers: bool,
-    /// Стиль визуализации музыки кольца.
-    pub music_viz: pulsar_hw::MusicStyle,
-    /// Стиль музыки часов.
-    pub clock_music: pulsar_clock::ClockMusicStyle,
+    /// Music visualisation style of the ring (HA select option text).
+    pub music_viz: String,
+    /// Clock music style (HA select option text).
+    pub clock_music: String,
     /// 0.25..4
     pub led_speed: f32,
     /// Listening / thinking / speaking shown on the ring and the clock.
@@ -73,11 +112,12 @@ pub struct Settings {
     /// Stem of `pulsar_hw::case_colors()`, "" = none.
     pub led_case_color: String,
     /// Hue of the ring's listening / thinking / speaking animation (`voice_color=`).
-    pub voice_color: pulsar_hw::VoiceColor,
+    pub voice_color: String,
     /// Release being installed. Still set after a restart into another version: that release
     /// was rolled back by supervise.sh (crash loop), automatic updates skip it.
     pub update_attempt: String,
-    pub zigbee_role: Mode,
+    /// `state.conf` `zigbee_role=`: "off", "pulsar-coordinator" or "router".
+    pub zigbee_role: String,
     /// Radio image version given up on (the radio did not take it); not written again until the
     /// role changes or another image version is installed.
     pub zigbee_flash_failed: u32,
@@ -96,14 +136,14 @@ impl Default for Settings {
             clock_brightness: 1.0,
             clock_auto_brightness: true,
             clock_scroll_ms: 400,
-            light: LightState::default(),
+            light: Light::default(),
             wake_word: "ricardo".into(),
             tz: "MSK-3".into(),
             auto_update: false,
             // One station in this installation: the 250 ms arbitration window only adds latency.
             nearest_answers: false,
-            music_viz: pulsar_hw::MusicStyle::All,
-            clock_music: pulsar_clock::ClockMusicStyle::Off,
+            music_viz: MUSIC_STYLE_DEFAULT.into(),
+            clock_music: "Off".into(),
             led_speed: 1.0,
             voice_indication: true,
             wake_preroll: true,
@@ -111,11 +151,21 @@ impl Default for Settings {
             wake_recording: true,
             wake_dry_run: false,
             led_case_color: String::new(),
-            voice_color: pulsar_hw::VoiceColor::Violet,
+            voice_color: "Violet".into(),
             update_attempt: String::new(),
-            zigbee_role: Mode::Off,
+            zigbee_role: "off".into(),
             zigbee_flash_failed: 0,
         }
+    }
+}
+
+/// A persisted option text: a known one stays, anything else is the default (as the C++ codec
+/// normalized its enums).
+fn canonical(options: &[&str], value: &str, default: &str) -> String {
+    if options.contains(&value) {
+        value.to_owned()
+    } else {
+        default.to_owned()
     }
 }
 
@@ -168,14 +218,12 @@ impl Settings {
                 b"auto_update" => self.auto_update = on,
                 b"nearest_answers" => self.nearest_answers = on,
                 b"update_attempt" => self.update_attempt = v,
-                b"zigbee_role" => self.zigbee_role = pulsar_zigbee::parse_mode(&v),
+                b"zigbee_role" => self.zigbee_role = canonical(&ZIGBEE_ROLES, &v, "off"),
                 b"zigbee_flash_failed" => self.zigbee_flash_failed = strtoul_hex(&v) as u32,
                 b"music_viz" => {
-                    self.music_viz = v.parse().unwrap_or(pulsar_hw::MusicStyle::All);
+                    self.music_viz = canonical(&MUSIC_STYLES, &v, MUSIC_STYLE_DEFAULT);
                 }
-                b"clock_music" => {
-                    self.clock_music = v.parse().unwrap_or(pulsar_clock::ClockMusicStyle::Off);
-                }
+                b"clock_music" => self.clock_music = canonical(&CLOCK_MUSIC_STYLES, &v, "Off"),
                 b"led_speed" => {
                     self.led_speed = if fv.is_finite() {
                         fv.clamp(0.25, 4.0)
@@ -186,6 +234,7 @@ impl Settings {
                 b"voice_indication" => self.voice_indication = on,
                 b"wake_preroll" => self.wake_preroll = on,
                 b"followup_duration_s" => {
+                    // The HA entity's own clamp (no esphome type leaks into `Settings`).
                     if let Some(s) = pulsar_esphome::followup_duration_s(fv) {
                         self.followup_duration_s = s;
                     }
@@ -193,7 +242,7 @@ impl Settings {
                 b"wake_event_recording" => self.wake_recording = on,
                 b"wake_dry_run" => self.wake_dry_run = on,
                 b"led_case_color" => self.led_case_color = v,
-                b"voice_color" => self.voice_color = v.parse().unwrap_or_default(),
+                b"voice_color" => self.voice_color = canonical(&VOICE_COLORS, &v, "Violet"),
                 _ => {}
             }
         }
@@ -229,15 +278,15 @@ impl Settings {
             self.tz,
             b(self.auto_update),
             self.update_attempt,
-            pulsar_zigbee::role(self.zigbee_role).name,
+            self.zigbee_role,
             self.zigbee_flash_failed,
             b(self.nearest_answers),
-            self.music_viz.as_str(),
+            self.music_viz,
             f(self.led_speed),
             b(self.voice_indication),
             self.led_case_color,
-            self.voice_color.as_str(),
-            self.clock_music.as_str(),
+            self.voice_color,
+            self.clock_music,
             b(self.wake_preroll),
             b(self.clock_auto_brightness),
             self.followup_duration_s,
@@ -283,20 +332,36 @@ impl Settings {
     }
 }
 
-/// The `state.conf` writer: `changed` writes `SAVE_DELAY_MS` after the last change (when `due`
-/// completes, the owner calls `flush`), `write_now` at once. Every write is the whole file, so
-/// one write covers every change pending until then. A failed write stays pending: the next
-/// change or `flush` tries again.
-pub struct StateFile {
+/// The settings and their `state.conf` writer: `changed` writes `SAVE_DELAY_MS` after the last
+/// change (when `due` completes, the owner calls `flush`), `write_now` at once. Every write is
+/// the whole file, so one write covers every change pending until then. A failed write stays
+/// pending: the next change or `flush` tries again.
+pub struct Store {
     path: PathBuf,
+    values: Settings,
     dirty: bool,
     timer: Timers<()>,
 }
 
-impl StateFile {
-    pub fn new(path: PathBuf) -> Self {
+impl Store {
+    /// Reads `path` over the defaults (a missing file leaves all defaults).
+    pub fn load(path: PathBuf) -> Self {
+        let mut values = Settings::default();
+        values.load(&path);
         Self {
             path,
+            values,
+            dirty: false,
+            timer: Timers::new(),
+        }
+    }
+
+    /// A store over `values` that never read `path` (tests).
+    #[cfg(test)]
+    pub fn with_values(path: PathBuf, values: Settings) -> Self {
+        Self {
+            path,
+            values,
             dirty: false,
             timer: Timers::new(),
         }
@@ -308,26 +373,40 @@ impl StateFile {
         self.timer.set((), SAVE_DELAY_MS);
     }
 
-    /// Writes `st` now; a pending delayed write is no longer needed. True = on disk; false = the
+    /// Writes now; a pending delayed write is no longer needed. True = on disk; false = the
     /// change stays pending (the next change or `flush` tries again).
     #[must_use = "a write that must be on disk has to check it"]
-    pub fn write_now(&mut self, st: &Settings) -> bool {
+    pub fn write_now(&mut self) -> bool {
         self.timer.cancel(());
-        self.dirty = !st.save(&self.path);
+        self.dirty = !self.values.save(&self.path);
         !self.dirty
     }
 
-    /// Writes `st` if a change is pending.
-    pub fn flush(&mut self, st: &Settings) {
+    /// Writes if a change is pending.
+    pub fn flush(&mut self) {
         if self.dirty {
             // A failure is logged by save and stays pending for the next change or flush.
-            let _ = self.write_now(st);
+            let _ = self.write_now();
         }
     }
 
     /// Completes when the delayed write is due; pending while none is. Cancel-safe.
     pub async fn due(&mut self) {
         self.timer.next().await;
+    }
+}
+
+impl Deref for Store {
+    type Target = Settings;
+
+    fn deref(&self) -> &Settings {
+        &self.values
+    }
+}
+
+impl DerefMut for Store {
+    fn deref_mut(&mut self) -> &mut Settings {
+        &mut self.values
     }
 }
 

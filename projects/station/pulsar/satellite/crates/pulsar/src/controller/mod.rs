@@ -2,53 +2,47 @@
 //! UI (C++ controller.cpp). Voice-satellite behaviour follows OHF linux-voice-assistant
 //! (satellite.py). The controller owns its state and every service handle; the services report
 //! through channels, which `run` serves one event at a time (no re-entrant hooks as in C++).
+//!
+//! Everything the controller calls into is a port (`ports`); `wiring` starts the services and
+//! builds `Deps`. The controller itself knows nothing about paths, FFI or the start-up order.
 
+mod earcons;
 mod entities;
 mod logic;
 mod media;
+mod ports;
+mod timers;
 mod voice;
+mod wiring;
 
-use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 
-use pulsar_arbiter as arbiter;
-use pulsar_arbiter::{ArbiterEvent, ArbiterHandle, ClaimId};
+use pulsar_arbiter::ArbiterEvent;
 use pulsar_audio::{FrontendEvent, Outcome};
+use pulsar_clock::ClockMusicStyle;
 use pulsar_core::{ClockShot, Timers, UiState, now_ms};
-use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, WakeWordInfo};
-use pulsar_hw::{CaseColor, Effect, InputEvent, InputHandle, LedsHandle, Rgb};
-use pulsar_mdns as mdns;
-use pulsar_mdns::{MdnsHandle, MdnsService};
-use pulsar_media::{Channel, Mixer, PlayId, PlayState, PlayerEvent, PlayerHandle};
+use pulsar_esphome::{ApiEvent, LightState};
+use pulsar_hw::{Effect, InputEvent, MusicStyle, Rgb, VoiceColor};
+use pulsar_media::{Channel, PlayId, PlayerEvent};
 use pulsar_model::DeviceProfile;
-use pulsar_sendspin::{SendspinConfig, SendspinEvent, SendspinHandle};
-use pulsar_update::{Release, RequestId, UpdateEvent, UpdaterHandle};
-use pulsar_zigbee::{ZigbeeConfig, ZigbeeEvent, ZigbeeHandle};
-use tokio::signal::unix::{Signal, SignalKind, signal};
+use pulsar_sendspin::SendspinEvent;
+use pulsar_update::UpdateEvent;
+use pulsar_zigbee::ZigbeeEvent;
+use tokio::signal::unix::Signal;
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
-use crate::settings::{Settings, StateFile};
-use crate::version::{BUILD_TIME, VERSION};
-use logic::{HaTimer, Phase, RunBinding};
+use crate::settings::{self, Store};
+use logic::{Phase, RunBinding};
+
+pub use wiring::prepare_process;
 
 const MODELS: &str = "/system/vendor/quasar/spotter_models/activation/";
 const COMMAND_MODEL: &str = "/system/vendor/quasar/spotter_models/command";
 const RICARDO_MODEL: &str = "/data/pulsar/wakewords/ru_ricardo_mww.tflite";
 /// Recorded wake events, beside `state.conf`.
 const WAKE_EVENTS_DIR: &str = "wake-events";
-const SOUNDS: &str = "/system/vendor/quasar/sounds/";
 
-/// The Ricardo installation uses the station only as an ESPHome/Sendspin endpoint;
-/// the Yandex Zigbee radio stays untouched (the HA Zigbee coordinator is elsewhere).
-const ENABLE_ZIGBEE: bool = false;
-
-const DUCK_GAIN: f32 = 0.15;
-const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
-// Longest wait for the next pipeline event before the dialog is given up locally. HA's voice
-// command segmenter ends speech capture after at most 15 s of audio. Between INTENT_START and
-// INTENT_END nothing arrives (ESPHome forwards INTENT_PROGRESS only once, when TTS streaming
-// starts), and conversation agents (LLMs with tool calls) may think for a minute or more.
 const LISTEN_TIMEOUT_MS: u64 = 30_000;
 const PROCESS_TIMEOUT_MS: u64 = 120_000;
 // Updates: releases of this fork on GitHub, never upstream. The first check waits for the
@@ -135,17 +129,47 @@ impl WakeRecord {
     }
 }
 
+/// Id of one dialog: a completion or a sidecar outcome belongs to the dialog it started in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DialogId(u64);
+
+impl DialogId {
+    fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
+/// Id of one HA announcement (assist or media player).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct AnnounceId(u64);
+
+impl AnnounceId {
+    fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
+/// Id of one closing earcon.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct EarconSeq(u64);
+
+impl EarconSeq {
+    fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
 /// What a `play()` was for: the C++ completion callback and the values it captured.
 #[derive(Clone, Copy, Debug)]
 enum Pending {
     /// Pipeline TTS of dialog `dialog`.
-    Tts { dialog: u64 },
+    Tts { dialog: DialogId },
     /// Error / cancel earcon number `seq`.
-    Earcon { seq: u64 },
+    Earcon { seq: EarconSeq },
     /// HA (assist satellite) announcement number `seq`.
-    Announce { conv: bool, seq: u64 },
+    Announce { conv: bool, seq: AnnounceId },
     /// Media player announcement number `seq`.
-    MediaAnnounce { seq: u64 },
+    MediaAnnounce { seq: AnnounceId },
     /// A round of the timer ring.
     Ring,
 }
@@ -171,31 +195,37 @@ async fn recv<T>(rx: &mut Option<UnboundedReceiver<T>>) -> Option<T> {
     }
 }
 
+/// Один готовый источник `select!`; разбор — в `run`.
+enum Trigger {
+    Timer(Tk),
+    StateDue,
+    Term(i32),
+    Api(Option<ApiEvent>),
+    Player(Option<PlayerEvent>),
+    Frontend(Option<FrontendEvent>),
+    Arbiter(Option<ArbiterEvent>),
+    Input(Option<InputEvent>),
+    Sendspin(Option<SendspinEvent>),
+    Zigbee(Option<ZigbeeEvent>),
+    Updater(Option<UpdateEvent>),
+    Lux(Option<f32>),
+}
+
 pub struct Controller {
-    // Service handles first: fields drop in declaration order, and the C++ members went in
+    // Service handles first: fields drop in declaration order, which is the C++ members'
     // reverse declaration order (Sendspin first, the API server last). Dropping the last handle
     // of a service stops it; the front-end joins its threads (up to ~200 ms of snd_pcm_wait plus
     // the chunk in progress), inside the teardown watchdog that main arms before the drop.
-    sendspin: Option<SendspinHandle>,
-    zigbee: Option<ZigbeeHandle>,
-    updater: UpdaterHandle,
-    arbiter: ArbiterHandle,
-    /// Held only: the input actor runs while its handle exists.
-    _input: Option<InputHandle>,
-    clock: pulsar_clock::ClockHandle,
-    leds: LedsHandle,
-    mixer: Mixer,
-    player: PlayerHandle,
-    mic: pulsar_audio::FrontendHandle,
-    mdns: Option<MdnsHandle>,
-    api: ApiHandle,
+    deps: ports::Deps,
     rx: Rx,
     term: Signal,
     int: Signal,
 
     model: &'static DeviceProfile,
-    state: StateFile,
-    st: Settings,
+    st: Store,
+    media: media::Policy,
+    entity: entities::Publisher,
+    timers_ha: timers::HaTimers,
     timers: Timers<Tk>,
     /// Completion of each `play()` whose end matters.
     pending: HashMap<PlayId, Pending>,
@@ -217,7 +247,7 @@ pub struct Controller {
     arbitrating: bool,
     /// Our claim being decided; forgotten on cancel (a `Decided` already queued then still
     /// arrives and is ignored).
-    arb_claim: Option<ClaimId>,
+    arb_claim: Option<pulsar_arbiter::ClaimId>,
     arb_phrase: String,
     arb_level: f32,
     arb_audio: Vec<i16>,
@@ -243,60 +273,28 @@ pub struct Controller {
     followup: logic::Followup,
     /// An HA announcement (assist or media player) plays on ANNOUNCE.
     announcing: bool,
-    ducked: bool,
     closing_earcon: bool,
-    earcon_seq: u64,
+    earcon_seq: EarconSeq,
     // Completions act only for what is still current: `dialog` changes whenever a dialog starts
     // or ends, `announce_seq` whenever an HA announcement starts or is interrupted.
-    dialog: u64,
-    announce_seq: u64,
-    timer_ringing: bool,
-    /// The ring gave the ANNOUNCE channel to speech; resume_ring() continues it.
-    ring_yielded: bool,
-    timer_ring_started_ms: i64,
+    dialog: DialogId,
+    announce_seq: AnnounceId,
     /// When the HA media channel last paused (logic::owns_music).
     music_paused_ms: Option<i64>,
     /// When the Sendspin stream last ended: pause or stop in Music Assistant (logic::owns_music).
     sendspin_ended_ms: Option<i64>,
-    /// HA timers by TimerInfo::id.
-    ha_timers: BTreeMap<String, HaTimer>,
-    /// Id on the clock, "" = none.
-    shown_timer: String,
-    /// Its data when it was put there.
-    shown: HaTimer,
-    last_lux_published: f32,
-    last_lux_ms: i64,
-    // Clock text / face entity states; not persisted (the clock shows the time after a
-    // restart).
-    clock_text: String,
-    clock_face: String,
-    /// Latest release found.
-    release: Option<Release>,
-    update_installing: bool,
-    update_progress: f32,
     /// A check whose `Checked` has not been handled yet (C++ `Updater::busy()` until its
     /// callback ran).
-    pending_check: Option<RequestId>,
+    pending_check: Option<pulsar_update::RequestId>,
     /// An install whose `Installed` has not been handled yet.
-    install_id: Option<RequestId>,
+    install_id: Option<pulsar_update::RequestId>,
     /// Version being installed (for the messages of its outcome).
     install_version: String,
-    /// Last Zigbee status line published.
-    zigbee_status: String,
     sendspin_pairing_prompt: bool,
     /// The hit whose dialog is open.
     wake_rec: Option<WakeRecord>,
     /// The hit heard while this station arbitrates with its neighbours.
     wake_pending: Option<WakeRecord>,
-}
-
-fn read_line(path: &str) -> String {
-    std::fs::read(path)
-        .map(|b| {
-            let line = b.split(|&c| c == b'\n').next().unwrap_or_default();
-            String::from_utf8_lossy(line).into_owned()
-        })
-        .unwrap_or_default()
 }
 
 /// Face from the option text; "None" / "" / unknown clear it (the stock "no face").
@@ -309,371 +307,76 @@ fn light_effect(name: &str) -> Effect {
     name.parse().unwrap_or_default()
 }
 
-fn model_dir(id: &str) -> PathBuf {
+fn model_dir(id: &str) -> std::path::PathBuf {
     if id == "ricardo" {
-        PathBuf::from(RICARDO_MODEL)
+        std::path::PathBuf::from(RICARDO_MODEL)
     } else {
-        PathBuf::from(format!("{MODELS}{id}"))
+        std::path::PathBuf::from(format!("{MODELS}{id}"))
     }
 }
 
 /// C++ `uint8_t(x * 255)`.
-fn light_rgb(l: &pulsar_esphome::LightState) -> Rgb {
+fn light_rgb(r: f32, g: f32, b: f32) -> Rgb {
     Rgb {
-        r: (l.r * 255.0) as u8,
-        g: (l.g * 255.0) as u8,
-        b: (l.b * 255.0) as u8,
+        r: (r * 255.0) as u8,
+        g: (g * 255.0) as u8,
+        b: (b * 255.0) as u8,
     }
+}
+
+/// `state.conf` option text → domain type, unknown text → the shipped default. One copy for the
+/// controller and `wiring`.
+fn music_viz(st: &settings::Settings) -> MusicStyle {
+    st.music_viz.parse().unwrap_or(MusicStyle::All)
+}
+
+fn clock_music(st: &settings::Settings) -> ClockMusicStyle {
+    st.clock_music.parse().unwrap_or_default()
+}
+
+fn voice_color(st: &settings::Settings) -> VoiceColor {
+    st.voice_color.parse().unwrap_or_default()
+}
+
+fn zigbee_role(st: &settings::Settings) -> pulsar_zigbee::Mode {
+    pulsar_zigbee::parse_mode(&st.zigbee_role)
 }
 
 impl Controller {
     /// Loads the settings and starts every service. Err (to be logged by the caller, exit 1):
     /// an invalid `PULSAR_PORT_OFFSET`, or the API server could not bind its port.
-    pub fn start(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Self, String> {
-        // Before anything starts: a SIGTERM during the start-up still ends the daemon cleanly.
-        let term = signal(SignalKind::terminate()).map_err(|e| format!("signals: {e}"))?;
-        let int = signal(SignalKind::interrupt()).map_err(|e| format!("signals: {e}"))?;
-        let ports = logic::ports(std::env::var_os("PULSAR_PORT_OFFSET").as_deref())
-            .ok_or_else(|| "invalid PULSAR_PORT_OFFSET".to_owned())?;
-        let mut st = Settings::default();
-        st.load(&state_path);
-        let mut applied_tz = String::new();
-        if !st.tz.is_empty() {
-            // The clock shows local time before HA connects.
-            pulsar_core::tz::set_tz(&st.tz);
-            applied_tz.clone_from(&st.tz);
-        }
-        // After the TZ: the log's timestamps are local time.
-        if ports.offset != 0 {
-            info!(
-                "PULSAR_PORT_OFFSET={}: API {}, Sendspin {}, deCONZ {}, arbiter {}, no mDNS",
-                ports.offset, ports.api, ports.sendspin, ports.deconz, ports.arbiter
-            );
-        }
+    pub fn start(
+        model: &'static DeviceProfile,
+        state_path: std::path::PathBuf,
+    ) -> Result<Self, wiring::StartError> {
+        let wired = wiring::wire(model, state_path)?;
+        Ok(Self::new(wired))
+    }
 
-        let id = logic::identity(
-            &model.identity,
-            &read_line("/sys/class/net/wlan0/address"),
-            VERSION,
-            BUILD_TIME,
-        );
-        if st.wake_word != "alisa" && st.wake_word != "yandex" && st.wake_word != "ricardo" {
-            st.wake_word = "ricardo".into();
-        }
-        let case_colors = pulsar_hw::case_colors();
-        let dir = logic::state_dir(state_path.as_os_str());
-        let strings = |l: &[&str]| l.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-        let with_none = |l: Vec<String>| std::iter::once("None".to_owned()).chain(l).collect();
-        // Opened before the entity list: the Clock auto brightness switch exists only when the
-        // sensor opened, and where the model makes the sensor optional, so does the Illuminance
-        // entity.
-        let lux_rx = match pulsar_clock::spawn_light_sensor(LUX_PERIOD_MS) {
-            Ok(rx) => Some(rx),
-            Err(e) if model.lux.as_ref().is_some_and(|l| !l.optional) => {
-                error!("{e}");
-                None
-            }
-            Err(e) => {
-                info!("{e}");
-                None
-            }
-        };
-        let voice_colors: Vec<String> = pulsar_hw::VoiceColor::ALL
-            .iter()
-            .map(|c| c.as_str().to_owned())
-            .collect();
-        let zigbee_modes: Vec<String> = match model.zigbee.as_ref() {
-            Some(_) if ENABLE_ZIGBEE => pulsar_zigbee::ROLES
-                .iter()
-                .map(|r| r.label.to_owned())
-                .collect(),
-            _ => Vec::new(),
-        };
-        let panel_present = model
-            .clock
-            .as_ref()
-            .is_some_and(pulsar_clock::panel_present);
-        let capabilities = logic::capabilities(
-            model,
-            panel_present,
-            lux_rx.is_some(),
-            case_colors.len() > 1,
-            !voice_colors.is_empty(),
-            !zigbee_modes.is_empty(),
-        );
-        let cfg = ApiConfig {
-            port: ports.api,
-            capabilities,
-            wake_words: vec![
-                WakeWordInfo {
-                    id: "alisa".into(),
-                    phrase: "Алиса".into(),
-                    languages: vec!["ru".into()],
-                },
-                WakeWordInfo {
-                    id: "yandex".into(),
-                    phrase: "Яндекс".into(),
-                    languages: vec!["ru".into()],
-                },
-                WakeWordInfo {
-                    id: "ricardo".into(),
-                    phrase: "Рикардо".into(),
-                    languages: vec!["ru".into()],
-                },
-            ],
-            active_wake_words: vec![st.wake_word.clone()],
-            light_effects: strings(&pulsar_hw::effect_names()),
-            clock_faces: with_none(strings(&pulsar_clock::face_names())),
-            music_styles: strings(&pulsar_hw::music_styles()),
-            case_colors: with_none(case_colors.clone()),
-            clock_music_styles: strings(&pulsar_clock::music_styles()),
-            voice_colors,
-            zigbee_modes,
-            key_path: Some(logic::in_dir(&dir, "api_key")),
-        };
-        // The C++ server bound its port last (ApiServer::start); here the bind comes first, so
-        // a failure exits before the hardware starts. Nothing reaches the server before `run`.
-        let (api, api_rx) = pulsar_esphome::spawn(id.clone(), cfg)
-            .map_err(|_| "ESPHome API server failed to start".to_owned())?;
-        // Before any other thread exists: the player's spawn sets SSL_CERT_FILE (set_var), which
-        // C code on another thread could be reading.
-        let (player, player_rx) = pulsar_media::spawn(&model.audio.playback);
-        let (arbiter, arbiter_rx) = arbiter::spawn(id.name.clone(), ports.arbiter);
-
-        // Hardware first: UI feedback should work even if HA is not connected.
-        let leds = pulsar_hw::spawn_leds(&model.leds);
-        // spawn handles a missing panel (None) with a no-op handle.
-        let clock = pulsar_clock::spawn(model.clock.as_ref());
-        clock.set_enabled(st.clock_on);
-        clock.set_brightness(st.clock_brightness);
-        clock.set_auto_brightness(st.clock_auto_brightness);
-        clock.set_scroll_ms(st.clock_scroll_ms);
-        clock.set_voice_indication(st.voice_indication);
-        clock.set_music_style(st.clock_music);
-        leds.set_speed(st.led_speed);
-        leds.set_voice_indication(st.voice_indication);
-        leds.set_voice_color(st.voice_color);
-        leds.set_music_style(st.music_viz);
-        leds.set_user_light(
-            st.light.on,
-            light_rgb(&st.light),
-            st.light.brightness,
-            light_effect(&st.light.effect),
-            0,
-        );
-
-        let mut mixer = match Mixer::open(&model.audio.playback, &model.volume) {
-            Ok(mixer) => mixer,
-            Err(e) => {
-                error!("mixer: {e}");
-                Mixer::fallback(&model.volume)
-            }
-        };
-        if !mixer.available() {
-            warn!("mixer unavailable");
-        }
-        let (volume, migrated) = logic::initial_volume(
-            st.has_volume,
-            st.volume,
-            st.volume_legacy,
-            st.legacy_on_stock,
-            mixer.volume(),
-            |v| pulsar_core::volume::from_legacy(&model.volume, v),
-        );
-        st.volume = volume;
-        // Changes made while starting are written like any other (StateFile, 1 s later).
-        let mut changed = migrated;
-        if migrated {
-            info!(
-                "volume {:.3} from an earlier build -> {:.3}",
-                st.volume_legacy, st.volume
-            );
-        }
-        mixer.set_volume(st.volume);
-        mixer.set_muted(st.muted);
-        if !st.led_case_color.is_empty() {
-            // After the volume: the write covers it too.
-            let listed = case_colors.contains(&st.led_case_color);
-            if !listed {
-                warn!(
-                    "case colour {} not in this firmware, none used",
-                    st.led_case_color
-                );
-            }
-            if listed {
-                // The actor reads the file; an unreadable one leaves the correction off.
-                leds.set_case_color(CaseColor::new(&st.led_case_color));
-            } else {
-                st.led_case_color.clear();
-                changed = true;
-            }
-        }
-        if !st.update_attempt.is_empty() {
-            if st.update_attempt == VERSION {
-                info!("updated to {VERSION}");
-                st.update_attempt.clear();
-                changed = true;
-            } else {
-                warn!(
-                    "update to {} did not stay installed (rolled back?); automatic updates skip it",
-                    st.update_attempt
-                );
-            }
-        }
-        let (updater, updater_rx) =
-            pulsar_update::spawn(pulsar_update::UPDATE_REPO.into(), VERSION);
-
-        let (input, input_rx) = match pulsar_hw::spawn_input(&model.input) {
-            Ok((h, rx)) => (Some(h), Some(rx)),
-            Err(e) => {
-                warn!("{e}");
-                (None, None)
-            }
-        };
-        let hw_mic_muted = input.as_ref().is_some_and(InputHandle::hw_muted);
-        let custom_wake = st.wake_word == "ricardo";
-        let (mic, mic_rx) = pulsar_audio::spawn(
-            &model.audio.capture,
-            model.wake_preroll.as_ref(),
-            &if custom_wake {
-                // Native spotters stay available for a rollback to «Алиса»/«Яндекс».
-                model_dir("alisa")
-            } else {
-                model_dir(&st.wake_word)
-            },
-            Some(Path::new(RICARDO_MODEL)),
-            custom_wake,
-            Some(PathBuf::from(COMMAND_MODEL)),
-            Some(&pulsar_audio::WakeEventOptions {
-                dir: logic::in_dir(&dir, WAKE_EVENTS_DIR),
-                version: VERSION.into(),
-                model: PathBuf::from(RICARDO_MODEL),
-            }),
-        );
-        mic.set_preroll(st.wake_preroll);
-        mic.set_wake_recording(st.wake_recording);
-        mic.set_wake_dry_run(st.wake_dry_run);
-
-        let ss_cfg = SendspinConfig {
-            name: id.friendly_name.clone(),
-            product_name: id.model.clone(),
-            manufacturer: id.manufacturer.clone(),
-            software_version: id.project_version.clone(),
-            mac: id.mac.to_ascii_lowercase(),
-            state_dir: logic::in_dir(&dir, "sendspin"),
-            playback: &model.audio.playback,
-            port: ports.sendspin,
-        };
-        let master = pulsar_core::volume::master_gain(&model.volume, st.volume);
-        let (sendspin, sendspin_rx) =
-            match pulsar_sendspin::spawn(ss_cfg, st.volume, st.muted, master) {
-                Ok((h, rx)) => (Some(h), Some(rx)),
-                Err(e) => {
-                    debug!("{e}");
-                    error!("Sendspin player unavailable");
-                    (None, None)
-                }
-            };
-
-        // A test instance (port offset) stays invisible to HA and Music Assistant.
-        let mdns = if ports.offset == 0 {
-            match mdns::spawn(&id.name) {
-                Ok(m) => {
-                    m.add_service(MdnsService {
-                        service: "_esphomelib._tcp".into(),
-                        instance: id.name.clone(),
-                        port: ports.api,
-                        txt: api.mdns_txt(),
-                    });
-                    if sendspin.is_some() {
-                        m.add_service(MdnsService {
-                            service: "_sendspin._tcp".into(),
-                            instance: id.name.clone(),
-                            port: ports.sendspin,
-                            txt: vec![
-                                "path=/sendspin".into(),
-                                format!("name={}", id.friendly_name),
-                            ],
-                        });
-                    }
-                    Some(m)
-                }
-                Err(e) => {
-                    warn!("api: mDNS advertising unavailable: {e}");
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        let (zigbee, zigbee_rx) = match model.zigbee.as_ref() {
-            Some(radio) if ENABLE_ZIGBEE => {
-                let zcfg = ZigbeeConfig {
-                    lines: pulsar_zigbee::RadioPaths {
-                        tty: radio.tty.into(),
-                        reset: radio.reset.into(),
-                        boot: radio.boot.into(),
-                    },
-                    coordinator_image: logic::in_dir(&dir, "zigbee-coordinator.ybl"),
-                    router_image: logic::in_dir(&dir, "zigbee-router.ybl"),
-                    deconz_port: ports.deconz,
-                    failed_version: st.zigbee_flash_failed,
-                };
-                updater.add_extra_asset("zigbee-coordinator.ybl", zcfg.coordinator_image.clone());
-                updater.add_extra_asset("zigbee-router.ybl", zcfg.router_image.clone());
-                let mode = st.zigbee_role;
-                let (h, rx) = pulsar_zigbee::spawn(zcfg, mode);
-                // ZHA discovers the coordinator (radio_type selects zigpy-deconz, serial_number
-                // is its unique id).
-                if mode == pulsar_zigbee::Mode::Coordinator
-                    && let Some(m) = &mdns
-                {
-                    m.add_service(MdnsService {
-                        service: "_zigbee-coordinator._tcp".into(),
-                        instance: id.name.clone(),
-                        port: ports.deconz,
-                        txt: vec![
-                            "radio_type=deconz".into(),
-                            format!("serial_number={}", id.name),
-                            format!("name={}", id.friendly_name),
-                        ],
-                    });
-                }
-                (Some(h), Some(rx))
-            }
-            _ => (None, None),
-        };
-
-        let mut c = Self {
-            sendspin,
-            zigbee,
-            updater,
-            arbiter,
-            _input: input,
-            clock,
-            leds,
-            mixer,
-            player,
-            mic,
-            mdns,
-            api,
-            rx: Rx {
-                api: Some(api_rx),
-                frontend: Some(mic_rx),
-                player: Some(player_rx),
-                arbiter: Some(arbiter_rx),
-                input: input_rx,
-                lux: lux_rx,
-                sendspin: sendspin_rx,
-                zigbee: zigbee_rx,
-                updater: Some(updater_rx),
-            },
+    /// Builds the controller from the wired services: no paths, no FFI, no start-up order.
+    fn new(wired: wiring::Wired) -> Self {
+        let wiring::Wired {
+            deps,
+            rx,
             term,
             int,
             model,
-            state: StateFile::new(state_path),
-            st,
+            store,
+            media,
+            applied_tz,
+            hw_mic_muted,
+            persist_on_start,
+        } = wired;
+        let mut c = Self {
+            deps,
+            rx,
+            term,
+            int,
+            model,
+            st: store,
+            media,
+            entity: entities::Publisher::new(),
+            timers_ha: timers::HaTimers::new(),
             timers: Timers::new(),
             pending: HashMap::new(),
             exit: None,
@@ -701,54 +404,40 @@ impl Controller {
             tts_report_owed: false,
             followup: logic::Followup::default(),
             announcing: false,
-            ducked: false,
             closing_earcon: false,
-            earcon_seq: 0,
-            dialog: 0,
-            announce_seq: 0,
-            timer_ringing: false,
-            ring_yielded: false,
-            timer_ring_started_ms: 0,
+            earcon_seq: EarconSeq(0),
+            dialog: DialogId(0),
+            announce_seq: AnnounceId(0),
             music_paused_ms: None,
             sendspin_ended_ms: None,
-            ha_timers: BTreeMap::new(),
-            shown_timer: String::new(),
-            shown: HaTimer {
-                active: false,
-                end_ms: 0,
-                seconds_left: 0,
-            },
-            last_lux_published: -1.0,
-            last_lux_ms: 0,
-            clock_text: String::new(),
-            clock_face: "None".into(),
-            release: None,
-            update_installing: false,
-            update_progress: 0.0,
             pending_check: None,
             install_id: None,
             install_version: String::new(),
-            zigbee_status: String::new(),
             sendspin_pairing_prompt: false,
             wake_rec: None,
             wake_pending: None,
         };
         // The rest of the C++ start(), in its order: every call below only queues commands to
         // the services, which run once `run` is awaited.
-        c.publish_update();
-        c.timers.set_repeating(
+        c.on_start(persist_on_start);
+        c
+    }
+
+    /// The C++ tail of `start()`: published state, update schedule, gains, ring, boot shot.
+    fn on_start(&mut self, persist_on_start: bool) {
+        self.publish_update();
+        self.timers.set_repeating(
             Tk::UpdateCheck,
             UPDATE_FIRST_CHECK_MS,
             UPDATE_CHECK_PERIOD_MS,
         );
-        c.update_detection();
-        c.apply_gains(); // a saved mute
-        c.update_ui();
-        c.clock.play(ClockShot::Boot);
-        if changed {
-            c.persist();
+        self.update_detection();
+        self.apply_gains(); // a saved mute
+        self.update_ui();
+        self.deps.display.clock.play(ClockShot::Boot);
+        if persist_on_start {
+            self.persist();
         }
-        Ok(c)
     }
 
     /// Serves the services' events until the daemon should exit. Leaving while an update
@@ -762,83 +451,145 @@ impl Controller {
             if let Some(r) = self.exit.take() {
                 break r;
             }
-            // Timers first (biased): keys due at one wake-up fire back to back (pulsar_core
-            // Timers contract).
-            tokio::select! {
-                biased;
-                k = self.timers.next() => self.on_timer(k),
-                () = self.state.due() => self.state.flush(&self.st),
-                _ = self.term.recv() => {
-                    info!("signal {}, exiting", libc::SIGTERM);
+            match self.next_event().await {
+                Trigger::Timer(k) => self.on_timer(k),
+                Trigger::StateDue => self.st.flush(),
+                Trigger::Term(sig) => {
+                    info!("signal {sig}, exiting");
                     break ExitReason::Signal;
                 }
-                _ = self.int.recv() => {
-                    info!("signal {}, exiting", libc::SIGINT);
-                    break ExitReason::Signal;
-                }
-                ev = recv(&mut self.rx.api) => match ev {
-                    Some(ev) => self.on_api(ev),
-                    None => self.rx.api = None,
-                },
-                ev = recv(&mut self.rx.player) => match ev {
-                    Some(ev) => self.on_player(ev),
-                    None => self.rx.player = None,
-                },
-                ev = recv(&mut self.rx.frontend) => match ev {
-                    Some(ev) => self.on_frontend(ev),
-                    None => self.rx.frontend = None,
-                },
-                ev = recv(&mut self.rx.arbiter) => match ev {
-                    Some(ArbiterEvent::Decided { claim_id, won, best, peers }) => {
-                        if self.arbitrating && self.arb_claim == Some(claim_id) {
-                            self.arbitration_done(won, &best, peers);
-                        }
-                    }
-                    None => self.rx.arbiter = None,
-                },
-                ev = recv(&mut self.rx.input) => match ev {
-                    Some(ev) => self.on_input(ev),
-                    None => self.rx.input = None,
-                },
-                ev = recv(&mut self.rx.sendspin) => match ev {
-                    Some(ev) => self.on_sendspin(ev),
-                    None => self.rx.sendspin = None,
-                },
-                ev = recv(&mut self.rx.zigbee) => match ev {
-                    Some(ev) => self.on_zigbee(ev),
-                    None => self.rx.zigbee = None,
-                },
-                ev = recv(&mut self.rx.updater) => match ev {
-                    Some(ev) => self.on_updater(ev),
-                    None => self.rx.updater = None,
-                },
-                lux = recv(&mut self.rx.lux) => match lux {
-                    Some(lux) => self.on_lux(lux),
-                    None => self.rx.lux = None,
-                },
+                Trigger::Api(ev) => self.on_api_event(ev),
+                Trigger::Player(ev) => self.on_player_event(ev),
+                Trigger::Frontend(ev) => self.on_frontend_event(ev),
+                Trigger::Arbiter(ev) => self.on_arbiter_event(ev),
+                Trigger::Input(ev) => self.on_input_event(ev),
+                Trigger::Sendspin(ev) => self.on_sendspin_event(ev),
+                Trigger::Zigbee(ev) => self.on_zigbee_event(ev),
+                Trigger::Updater(ev) => self.on_updater_event(ev),
+                Trigger::Lux(ev) => self.on_lux_event(ev),
             }
         };
-        if let Some(id) = self.install_id {
-            let mut installed = false;
-            if let Some(rx) = &mut self.rx.updater {
-                while let Ok(ev) = rx.try_recv() {
-                    if let UpdateEvent::Installed { id: i, result } = ev
-                        && i == id
-                    {
-                        installed = result.is_ok();
-                    }
+        self.settle_interrupted_update();
+        reason
+    }
+
+    /// Timers first (biased): keys due at one wake-up fire back to back (pulsar_core Timers
+    /// contract), then the pending settings write, signals, and the services' events.
+    async fn next_event(&mut self) -> Trigger {
+        tokio::select! {
+            biased;
+            k = self.timers.next() => Trigger::Timer(k),
+            () = self.st.due() => Trigger::StateDue,
+            _ = self.term.recv() => Trigger::Term(libc::SIGTERM),
+            _ = self.int.recv() => Trigger::Term(libc::SIGINT),
+            ev = recv(&mut self.rx.api) => Trigger::Api(ev),
+            ev = recv(&mut self.rx.player) => Trigger::Player(ev),
+            ev = recv(&mut self.rx.frontend) => Trigger::Frontend(ev),
+            ev = recv(&mut self.rx.arbiter) => Trigger::Arbiter(ev),
+            ev = recv(&mut self.rx.input) => Trigger::Input(ev),
+            ev = recv(&mut self.rx.sendspin) => Trigger::Sendspin(ev),
+            ev = recv(&mut self.rx.zigbee) => Trigger::Zigbee(ev),
+            ev = recv(&mut self.rx.updater) => Trigger::Updater(ev),
+            lux = recv(&mut self.rx.lux) => Trigger::Lux(lux),
+        }
+    }
+
+    fn on_api_event(&mut self, ev: Option<ApiEvent>) {
+        match ev {
+            Some(ev) => self.on_api(ev),
+            None => self.rx.api = None,
+        }
+    }
+
+    fn on_player_event(&mut self, ev: Option<PlayerEvent>) {
+        match ev {
+            Some(ev) => self.on_player(ev),
+            None => self.rx.player = None,
+        }
+    }
+
+    fn on_frontend_event(&mut self, ev: Option<FrontendEvent>) {
+        match ev {
+            Some(ev) => self.on_frontend(ev),
+            None => self.rx.frontend = None,
+        }
+    }
+
+    fn on_arbiter_event(&mut self, ev: Option<ArbiterEvent>) {
+        match ev {
+            Some(ArbiterEvent::Decided {
+                claim_id,
+                won,
+                best,
+                peers,
+            }) => {
+                if self.arbitrating && self.arb_claim == Some(claim_id) {
+                    self.arbitration_done(won, &best, peers);
                 }
             }
-            if !installed {
-                info!(
-                    "update to {}: cut short by the exit, not installed",
-                    self.install_version
-                );
-                self.st.update_attempt.clear();
-                self.persist();
+            None => self.rx.arbiter = None,
+        }
+    }
+
+    fn on_input_event(&mut self, ev: Option<InputEvent>) {
+        match ev {
+            Some(ev) => self.on_input(ev),
+            None => self.rx.input = None,
+        }
+    }
+
+    fn on_sendspin_event(&mut self, ev: Option<SendspinEvent>) {
+        match ev {
+            Some(ev) => self.on_sendspin(ev),
+            None => self.rx.sendspin = None,
+        }
+    }
+
+    fn on_zigbee_event(&mut self, ev: Option<ZigbeeEvent>) {
+        match ev {
+            Some(ev) => self.on_zigbee(ev),
+            None => self.rx.zigbee = None,
+        }
+    }
+
+    fn on_updater_event(&mut self, ev: Option<UpdateEvent>) {
+        match ev {
+            Some(ev) => self.on_updater(ev),
+            None => self.rx.updater = None,
+        }
+    }
+
+    fn on_lux_event(&mut self, ev: Option<f32>) {
+        match ev {
+            Some(lux) => self.on_lux(lux),
+            None => self.rx.lux = None,
+        }
+    }
+
+    /// An install cut short by the exit: the binary stays as it was, clear the marker so
+    /// automatic updates try that release again.
+    fn settle_interrupted_update(&mut self) {
+        let Some(id) = self.install_id else {
+            return;
+        };
+        let mut installed = false;
+        if let Some(rx) = &mut self.rx.updater {
+            while let Ok(ev) = rx.try_recv() {
+                if let UpdateEvent::Installed { id: i, result } = ev
+                    && i == id
+                {
+                    installed = result.is_ok();
+                }
             }
         }
-        reason
+        if !installed {
+            info!(
+                "update to {}: cut short by the exit, not installed",
+                self.install_version
+            );
+            self.st.update_attempt.clear();
+            self.persist();
+        }
     }
 
     fn on_timer(&mut self, k: Tk) {
@@ -864,10 +615,12 @@ impl Controller {
             PlayerEvent::State(ch, s) => {
                 if ch == Channel::Music {
                     match s {
-                        PlayState::Paused => self.music_paused_ms = Some(now_ms()),
+                        pulsar_media::PlayState::Paused => self.music_paused_ms = Some(now_ms()),
                         // HA media took the speaker: an ended Sendspin stream is not this
                         // station's music any more, whichever of the two events came first.
-                        PlayState::Loading | PlayState::Playing => self.sendspin_ended_ms = None,
+                        pulsar_media::PlayState::Loading | pulsar_media::PlayState::Playing => {
+                            self.sendspin_ended_ms = None;
+                        }
                         _ => {}
                     }
                 }
@@ -892,7 +645,7 @@ impl Controller {
             } => {
                 self.on_wake(&phrase, level_db, preroll, endpoint_prior, event_id);
                 // After on_wake has switched streaming on where the wake word starts a request.
-                self.mic.wake_handled();
+                self.deps.frontend.wake_handled();
             }
             FrontendEvent::Command { word } => self.on_command(&word),
             FrontendEvent::Audio(pcm) => {
@@ -904,39 +657,39 @@ impl Controller {
                 }
             }
             FrontendEvent::Music(f) => {
-                self.leds.music_frame(f, false);
-                self.clock.music_frame(f, false);
+                self.deps.display.leds.music_frame(f, false);
+                self.deps.display.clock.music_frame(f, false);
             }
         }
     }
 
-    /// `st` changed: written a moment after the last change (`StateFile`). `volume=` follows
+    /// `st` changed: written a moment after the last change (`Store`). `volume=` follows
     /// `volume2=` on the curve of earlier builds.
     fn persist(&mut self) {
         self.st.volume_legacy = pulsar_core::volume::to_legacy(&self.model.volume, self.st.volume);
-        self.state.changed();
+        self.st.changed();
     }
 
     /// `st` changed in a way that must survive a power cut or a crash right away: before a
     /// restart or a binary swap, or the microphone mute. True = on disk; on false the change
-    /// stays pending (`StateFile`).
+    /// stays pending (`Store`).
     #[must_use = "a write that must be on disk has to check it"]
     fn persist_now(&mut self) -> bool {
         self.st.volume_legacy = pulsar_core::volume::to_legacy(&self.model.volume, self.st.volume);
-        self.state.write_now(&self.st)
+        self.st.write_now()
     }
 
     /// Writes a pending change now: main calls it once after `run`, when nothing changes any
     /// more.
     pub fn flush_settings(&mut self) {
-        self.state.flush(&self.st);
+        self.st.flush();
     }
 
     /// The supervisor will start this daemon again (the `enabled` file exists): promise the
     /// Sendspin server a reconnect before the client stops, otherwise its stop() sends
     /// `shutdown` and Music Assistant deliberately stops redialing this player.
     pub fn promise_sendspin_restart(&self) {
-        if let Some(ss) = &self.sendspin {
+        if let Some(ss) = &self.deps.sendspin {
             ss.goodbye_restart();
         }
     }
@@ -946,19 +699,42 @@ impl Controller {
     }
 
     fn sendspin_streaming(&self) -> bool {
-        self.sendspin
-            .as_ref()
-            .is_some_and(SendspinHandle::streaming)
+        self.deps.sendspin.as_ref().is_some_and(|ss| ss.streaming())
     }
 
     fn zigbee_flashing(&self) -> bool {
-        self.zigbee.as_ref().is_some_and(ZigbeeHandle::flashing)
+        self.deps.radio.as_ref().is_some_and(|z| z.flashing())
+    }
+
+    /// The stored light as the ESPHome entity shows it.
+    fn light_state(&self) -> LightState {
+        let l = &self.st.light;
+        LightState {
+            on: l.on,
+            brightness: l.brightness,
+            r: l.r,
+            g: l.g,
+            b: l.b,
+            effect: l.effect.clone(),
+        }
+    }
+
+    /// HA command → the stored light (`settings::Light` has no foreign domain types).
+    fn store_light(&mut self, l: LightState) {
+        self.st.light = settings::Light {
+            on: l.on,
+            brightness: l.brightness,
+            r: l.r,
+            g: l.g,
+            b: l.b,
+            effect: l.effect,
+        };
     }
 
     fn update_ui(&mut self) {
-        self.leds.set_muted(self.mic_muted());
+        self.deps.display.leds.set_muted(self.mic_muted());
         self.update_commands();
-        let s = if self.timer_ringing {
+        let s = if self.timers_ha.ringing() {
             UiState::TimerRing
         } else {
             match self.phase {
@@ -975,11 +751,14 @@ impl Controller {
 
     /// Ring and clock.
     fn show_ui(&self, s: UiState) {
-        self.leds.set_ui_state(s);
-        self.clock.set_ui_state(s);
+        self.deps.display.leds.set_ui_state(s);
+        self.deps.display.clock.set_ui_state(s);
     }
 
     fn update_detection(&self) {
-        self.mic.set_detection(!self.mic_muted());
+        self.deps.frontend.set_detection(!self.mic_muted());
     }
 }
+
+#[cfg(test)]
+mod tests;

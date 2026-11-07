@@ -2485,6 +2485,7 @@ dependencies = [
  "pulsar-sendspin",
  "pulsar-update",
  "pulsar-zigbee",
+ "thiserror",
  "tokio",
  "tracing",
 ]
