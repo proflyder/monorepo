@@ -292,6 +292,17 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
     // category for Yeelight-style setting switches; the light sibling is the
     // only signal that they are settings rather than independent switches.
     let light_devices: HashSet<&str> = raws.iter().filter_map(device_with_light).collect();
+    // Devices on which the integration itself marks categories. A device that
+    // already has a config/diagnostic entity is fully annotated in the
+    // registry, so its null-category switches are ordinary controls (the
+    // station has a "Ring" light but its Microphones/Clock display switches
+    // are still controls). Yeelight marks nothing, so the light heuristic
+    // applies there.
+    let categorized_devices: HashSet<&str> = raws
+        .iter()
+        .filter(|raw| raw.role.trim().eq_ignore_ascii_case("setting"))
+        .filter_map(device_key)
+        .collect();
     for raw in raws {
         if !valid_entity(&raw.entity) {
             continue;
@@ -329,6 +340,7 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
             role: role_of(
                 raw,
                 device_key(raw).is_some_and(|key| light_devices.contains(key)),
+                device_key(raw).is_some_and(|key| categorized_devices.contains(key)),
             ),
             light: None,
         };
@@ -382,17 +394,22 @@ fn excluded(patterns: &[String], entity: &str) -> bool {
 ///
 /// Discovery fills [`Raw::role`] from the Home Assistant entity registry
 /// category (`config`/`diagnostic` → `setting`, a known `null` → `primary`,
-/// an unreadable registry → empty). A `primary` switch whose device also has a
-/// light entity is a setting: on those devices the light is the control and
-/// the switches are its options. Unknown roles stay empty, so a registry
-/// outage never claims a category.
-fn role_of(raw: &Raw, device_has_light: bool) -> String {
+/// an unreadable registry → empty).
+///
+/// A `primary` switch whose device also has a light entity is a setting only
+/// when the integration marks no categories on that device at all: the light
+/// is then the control and the switches are its options (Yeelight). If the
+/// device already has a `config`/`diagnostic` entity, the registry is
+/// authoritative and its `null` switches stay primary (the station's
+/// Microphones and Clock display despite the "Ring" light). Unknown roles stay
+/// empty, so a registry outage never claims a category.
+fn role_of(raw: &Raw, device_has_light: bool, device_has_categories: bool) -> String {
     let role = raw.role.trim();
     if role.eq_ignore_ascii_case("setting") {
         return "setting".to_owned();
     }
     if role.eq_ignore_ascii_case("primary") {
-        if device_has_light && domain_of(&raw.entity) == "switch" {
+        if device_has_light && !device_has_categories && domain_of(&raw.entity) == "switch" {
             return "setting".to_owned();
         }
         return "primary".to_owned();
@@ -952,6 +969,63 @@ mod tests {
         assert_eq!(role("switch.station_wake"), "setting");
         assert_eq!(role("switch.station_mute"), "primary");
         assert_eq!(role("switch.yeelight_pomodoro"), "");
+    }
+
+    #[test]
+    fn a_categorized_device_trusts_the_registry_even_with_a_light() {
+        // Live station: it has a "Ring" light and a few config entities, but
+        // the remaining null-category switches are ordinary controls.
+        let raws = [
+            Raw {
+                entity: "light.station_ring".to_owned(),
+                state: "on".to_owned(),
+                name: "Яндекс Станция Миди Ring".to_owned(),
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                role: "primary".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "switch.station_wake".to_owned(),
+                state: "off".to_owned(),
+                name: "Яндекс Станция Миди Wake".to_owned(),
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                role: "setting".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "switch.station_mute".to_owned(),
+                state: "off".to_owned(),
+                name: "Яндекс Станция Миди Microphones".to_owned(),
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                role: "primary".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "switch.station_clock_display".to_owned(),
+                state: "on".to_owned(),
+                name: "Яндекс Станция Миди Clock display".to_owned(),
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                role: "primary".to_owned(),
+                ..Raw::default()
+            },
+        ];
+        let entries = build(&raws, &rules());
+        let role = |id: &str| {
+            entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+                .role
+                .as_str()
+        };
+        assert_eq!(role("light.station_ring"), "primary");
+        assert_eq!(role("switch.station_wake"), "setting");
+        assert_eq!(role("switch.station_mute"), "primary");
+        assert_eq!(role("switch.station_clock_display"), "primary");
     }
 
     #[test]

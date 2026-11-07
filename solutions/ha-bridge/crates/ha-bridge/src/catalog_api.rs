@@ -30,7 +30,7 @@ const CACHE_CONTROL: &str = "no-store";
 /// them, an older client ignores them, and they are omitted while empty (the
 /// Home Assistant device registry could not be read). `role` is `"primary"` or
 /// `"setting"`; a setting is a `config`/`diagnostic` entity of the device, or a
-/// switch next to the device's light.
+/// switch next to the device's light on a device that marks no categories.
 ///
 /// A future device-level action (for example "speak this text on the speaker"
 /// or "call the speaker") is expected to appear as an entry with
