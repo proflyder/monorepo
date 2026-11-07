@@ -961,8 +961,6 @@ def generate_preflight() -> None:
                     "--expected-endpoint",
                     endpoint,
                 ],
-                status="skip",
-                reason="preflight HTTP client is not ported yet",
             )
         finally:
             server.shutdown()
@@ -1083,12 +1081,10 @@ def generate_hermes() -> None:
             *(extra or []),
         ]
 
-    reason = "hermes rollout is not ported yet"
-
     # No-op: the live images already match and nothing is upgraded.
     directory = fresh("hermes-noop")
     setup(directory, live_hermes=hermes_image, live_voice=voice_image, live_exporter=exporter_image, history=[{"revision": 3}])
-    record(directory, "hermes-noop", rollout_args(), env=env, manifest_env=env, status="skip", reason=reason)
+    record(directory, "hermes-noop", rollout_args(), env=env, manifest_env=env)
     outputs: list[dict] = []
     write_trace_outputs(directory, "hermes-noop", outputs)
     add_outputs("hermes-noop", outputs)
@@ -1103,7 +1099,8 @@ def generate_hermes() -> None:
         history=[{"revision": 1}],
         history_after=[{"revision": 1}, {"revision": 2}],
     )
-    record(directory, "hermes-upgrade-success", rollout_args(), env=env, manifest_env=env, status="skip", reason=reason)
+    record(directory, "hermes-upgrade-success", rollout_args(), env=env, manifest_env=env)
+    write_input(directory, "helm-history.json", json.dumps([{"revision": 1}]))
     outputs = []
     freeze_file(directory, "state/previous-revision", outputs)
     write_trace_outputs(directory, "hermes-upgrade-success", outputs)
@@ -1125,9 +1122,8 @@ def generate_hermes() -> None:
         rollout_args(["--simulate-smoke-failure"]),
         env=env,
         manifest_env=env,
-        status="skip",
-        reason=reason,
     )
+    write_input(directory, "helm-history.json", json.dumps([{"revision": 1}]))
     outputs = []
     for relative in ["state/previous-revision", "state/upgrade-applied"]:
         freeze_file(directory, relative, outputs)
@@ -1157,8 +1153,6 @@ def generate_hermes() -> None:
         ],
         env=env,
         manifest_env=env,
-        status="skip",
-        reason=reason,
     )
     outputs = []
     write_trace_outputs(directory, "hermes-rollback-only", outputs)
@@ -1173,8 +1167,6 @@ def generate_hermes() -> None:
         ["hermes", "rollout", "--rollback-only", "--state-dir", "state", "--kubectl", "fakes/kubectl", "--helm", "fakes/helm"],
         env=env,
         manifest_env=env,
-        status="skip",
-        reason=reason,
     )
 
 

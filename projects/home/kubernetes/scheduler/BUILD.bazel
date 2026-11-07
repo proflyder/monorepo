@@ -37,6 +37,24 @@ service_image(
     repo = "ghcr.io/proflyder/home-deploy",
 )
 
+# Prepared cutover target: the same image built from the Rust port. It is not
+# part of `:images` yet. To switch, replace the Go `service_image` block above
+# with:
+#
+#   rust_service_image(
+#       name = "home-deploy",
+#       crate_binary = "//platform/deploy-rs:home-deploy",
+#       repo = "ghcr.io/proflyder/home-deploy",
+#   )
+#
+# and delete this `home-deploy-rust` block. Both macros put the binary at
+# /usr/local/bin/home-deploy, so manifests and the smoke Job do not change.
+rust_service_image(
+    name = "home-deploy-rust",
+    crate_binary = "//platform/deploy-rs:home-deploy",
+    repo = "ghcr.io/proflyder/home-deploy",
+)
+
 # Convenience alias for CI: one `bazel build` produces all images.
 filegroup(
     name = "images",

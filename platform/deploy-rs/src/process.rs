@@ -5,7 +5,8 @@
 //! injectable so unit tests never need a cluster. A failed start is reported as
 //! exit status 1 with the start error on stderr, like the shell would.
 
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command as Process, Stdio};
 
 /// What one kubectl invocation produced.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -41,7 +42,65 @@ impl SystemRunner {
 
 impl Runner for SystemRunner {
     fn run(&self, args: &[String]) -> Output {
-        match Command::new(&self.program).args(args).output() {
+        match Process::new(&self.program).args(args).output() {
+            Ok(output) => Output {
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                code: output.status.code().unwrap_or(1),
+            },
+            Err(error) => Output {
+                stdout: String::new(),
+                stderr: error.to_string(),
+                code: 1,
+            },
+        }
+    }
+}
+
+/// One subprocess invocation for the Hermes rollout (kubectl or helm).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Invocation {
+    /// Binary name.
+    pub program: String,
+    /// Arguments.
+    pub args: Vec<String>,
+    /// Optional stdin.
+    pub stdin: Option<String>,
+}
+
+/// Executes a full [`Invocation`].
+pub trait CommandRunner {
+    /// Runs one command.
+    fn run(&self, command: &Invocation) -> Output;
+}
+
+/// Runs the real binary named by the command.
+pub struct SystemCommandRunner;
+
+impl CommandRunner for SystemCommandRunner {
+    fn run(&self, command: &Invocation) -> Output {
+        let mut process = Process::new(&command.program);
+        process.args(&command.args);
+        if command.stdin.is_some() {
+            process.stdin(Stdio::piped());
+        }
+        process.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = match process.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                return Output {
+                    stdout: String::new(),
+                    stderr: error.to_string(),
+                    code: 1,
+                };
+            }
+        };
+        if let Some(stdin) = &command.stdin
+            && let Some(mut handle) = child.stdin.take()
+        {
+            let _ = handle.write_all(stdin.as_bytes());
+        }
+        match child.wait_with_output() {
             Ok(output) => Output {
                 stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -102,6 +161,40 @@ pub mod testing {
         fn run(&self, args: &[String]) -> Output {
             self.calls.borrow_mut().push(args.to_vec());
             (self.handler)(args)
+        }
+    }
+
+    /// Records every [`super::Invocation`] and answers from an injected handler.
+    pub struct FakeCommandRunner<F> {
+        handler: F,
+        calls: RefCell<Vec<super::Invocation>>,
+    }
+
+    impl<F> FakeCommandRunner<F>
+    where
+        F: Fn(&super::Invocation) -> Output,
+    {
+        /// Creates a fake command runner.
+        pub fn new(handler: F) -> Self {
+            Self {
+                handler,
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+
+        /// Returns the recorded invocations.
+        pub fn calls(&self) -> Vec<super::Invocation> {
+            self.calls.borrow().clone()
+        }
+    }
+
+    impl<F> super::CommandRunner for FakeCommandRunner<F>
+    where
+        F: Fn(&super::Invocation) -> Output,
+    {
+        fn run(&self, command: &super::Invocation) -> Output {
+            self.calls.borrow_mut().push(command.clone());
+            (self.handler)(command)
         }
     }
 }

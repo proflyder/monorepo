@@ -1139,10 +1139,9 @@
         "http://192.0.2.27:30098"
       ],
       "cwd": "cases/preflight-ok",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "preflight-ringing-alarm",
@@ -1160,10 +1159,9 @@
         "http://192.0.2.27:30098"
       ],
       "cwd": "cases/preflight-ringing-alarm",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "preflight-legacy-writer",
@@ -1181,10 +1179,9 @@
         "http://192.0.2.27:30098"
       ],
       "cwd": "cases/preflight-legacy-writer",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "preflight-endpoint-mismatch",
@@ -1202,10 +1199,9 @@
         "http://192.0.2.99:30098"
       ],
       "cwd": "cases/preflight-endpoint-mismatch",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "preflight-not-ready",
@@ -1223,10 +1219,9 @@
         "http://192.0.2.27:30098"
       ],
       "cwd": "cases/preflight-not-ready",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "preflight-ha-http-error",
@@ -1244,10 +1239,9 @@
         "http://192.0.2.27:30098"
       ],
       "cwd": "cases/preflight-ha-http-error",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "preflight-ha-invalid-json",
@@ -1265,10 +1259,9 @@
         "http://192.0.2.27:30098"
       ],
       "cwd": "cases/preflight-ha-invalid-json",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "preflight-scheduler-http-error",
@@ -1286,10 +1279,9 @@
         "http://192.0.2.27:30098"
       ],
       "cwd": "cases/preflight-scheduler-http-error",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stdout": "expected/stdout",
-      "reason": "preflight HTTP client is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "hermes-noop",
@@ -1318,10 +1310,9 @@
         "8m"
       ],
       "cwd": "cases/hermes-noop",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "hermes rollout is not ported yet",
       "env": {
         "TRACE_DIR": "trace",
         "FAKE_LIVE": "live-hermes.json",
@@ -1371,10 +1362,9 @@
         "8m"
       ],
       "cwd": "cases/hermes-upgrade-success",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "hermes rollout is not ported yet",
       "env": {
         "TRACE_DIR": "trace",
         "FAKE_LIVE": "live-hermes.json",
@@ -1485,11 +1475,10 @@
         "--simulate-smoke-failure"
       ],
       "cwd": "cases/hermes-smoke-failure",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
       "stdout": "expected/stdout",
       "stderr": "expected/stderr",
-      "reason": "hermes rollout is not ported yet",
       "env": {
         "TRACE_DIR": "trace",
         "FAKE_LIVE": "live-hermes.json",
@@ -1592,10 +1581,9 @@
         "8m"
       ],
       "cwd": "cases/hermes-rollback-only",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "hermes rollout is not ported yet",
       "env": {
         "TRACE_DIR": "trace",
         "FAKE_LIVE": "live-hermes.json",
@@ -1632,10 +1620,9 @@
         "fakes/helm"
       ],
       "cwd": "cases/hermes-rollback-only-noop",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "hermes rollout is not ported yet",
       "env": {
         "TRACE_DIR": "trace",
         "FAKE_LIVE": "live-hermes.json",

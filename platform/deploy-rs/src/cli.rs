@@ -10,12 +10,17 @@ use std::io::Write;
 
 use clap::{Arg, ArgAction, Command, error::ErrorKind};
 
-use crate::process::SystemRunner;
+use std::path::{Path, PathBuf};
+
+use crate::process::{SystemCommandRunner, SystemRunner};
 use crate::render::{self, Options};
-use crate::{USAGE, buildid, converge, envfile, manifests, oci, runtimevalues, state};
+use crate::{
+    USAGE, buildid, converge, envfile, hermes, hermesconfig, manifests, oci, preflight,
+    runtimevalues, state,
+};
 
 /// Commands that are declared but not ported yet.
-const NOT_IMPLEMENTED: &[&str] = &["preflight", "hermes"];
+const NOT_IMPLEMENTED: &[&str] = &[];
 
 /// Every top-level command, used to keep the Go binary's "unknown command"
 /// response (full usage plus one line) instead of clap's shorter message.
@@ -136,6 +141,8 @@ fn dispatch(
         Some(("oci", sub)) => run_oci(sub, stdout),
         Some(("converge", sub)) => run_converge(sub, stdout),
         Some(("state", sub)) => run_state(sub, stdout),
+        Some(("preflight", sub)) => run_preflight(sub, stdout),
+        Some(("hermes", sub)) => run_hermes(sub, stdout, stderr),
         Some(("runtime", sub)) => run_runtime(sub, stdout),
         Some(("eso", sub)) => run_eso(sub, stdout),
         Some(("secret", sub)) => run_secret(sub, stdout),
@@ -194,7 +201,7 @@ fn run_env(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Fai
     let key = sub
         .get_one::<String>("key")
         .ok_or_else(|| Failure::new("usage: home-deploy env get FILE KEY"))?;
-    let value = envfile::lookup(std::path::Path::new(file), key).map_err(Failure::new)?;
+    let value = envfile::lookup(Path::new(file), key).map_err(Failure::new)?;
     let _ = writeln!(stdout, "{value}");
     Ok(())
 }
@@ -216,6 +223,330 @@ fn run_build_id(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<()
     };
     let _ = writeln!(stdout, "{value}");
     Ok(())
+}
+
+fn run_preflight(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let ha_url = matches
+        .get_one::<String>("ha-url")
+        .map_or("", String::as_str);
+    let ha_token_file = matches
+        .get_one::<String>("ha-token-file")
+        .map_or("", String::as_str);
+    let scheduler_url = matches
+        .get_one::<String>("scheduler-url")
+        .map_or("", String::as_str);
+    let scheduler_token_file = matches
+        .get_one::<String>("scheduler-token-file")
+        .map_or("", String::as_str);
+    let expected_endpoint = matches
+        .get_one::<String>("expected-endpoint")
+        .map_or("", String::as_str);
+    if ha_url.is_empty()
+        || ha_token_file.is_empty()
+        || scheduler_url.is_empty()
+        || scheduler_token_file.is_empty()
+    {
+        return Err(Failure::new(
+            "preflight: --ha-url, --ha-token-file, --scheduler-url and --scheduler-token-file are required",
+        ));
+    }
+    if !Path::new(ha_token_file).exists() {
+        return Err(Failure::new(format!(
+            "preflight: read HA token: open {ha_token_file}: no such file or directory"
+        )));
+    }
+    if !Path::new(scheduler_token_file).exists() {
+        return Err(Failure::new(format!(
+            "preflight: read scheduler token: open {scheduler_token_file}: no such file or directory"
+        )));
+    }
+    let status = preflight::run(
+        &preflight::Options {
+            ha_url,
+            ha_token_file,
+            scheduler_url,
+            scheduler_token_file,
+            expected_endpoint,
+        },
+        stdout,
+    );
+    if status != 0 {
+        return Err(Failure::code(status));
+    }
+    Ok(())
+}
+
+fn run_hermes(
+    matches: &clap::ArgMatches,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<(), Failure> {
+    let Some((command, sub)) = matches.subcommand() else {
+        return Err(Failure::new(
+            "usage: home-deploy hermes rollout|render-config|assist-smoke ...",
+        ));
+    };
+    match command {
+        "rollout" => run_hermes_rollout(sub, stdout, stderr),
+        "render-config" => run_hermes_render_config(sub, stdout),
+        "assist-smoke" => run_hermes_assist_smoke(sub, stdout),
+        other => Err(Failure::new(format!(
+            "unknown hermes command {other:?} (expected rollout, render-config or assist-smoke)"
+        ))),
+    }
+}
+
+fn run_hermes_rollout(
+    sub: &clap::ArgMatches,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<(), Failure> {
+    let default = hermes::Options::default();
+    let chart = sub.get_one::<String>("chart").map_or("", String::as_str);
+    let chart = if chart.is_empty() {
+        repo_root()
+            .map(|root| {
+                root.join("projects/home-assistant/deploy/chart")
+                    .display()
+                    .to_string()
+            })
+            .unwrap_or_default()
+    } else {
+        chart.to_string()
+    };
+    let state_dir = sub
+        .get_one::<String>("state-dir")
+        .map_or("", String::as_str);
+    let state_dir = if state_dir.is_empty() {
+        temporary_state_dir()?
+    } else {
+        state_dir.to_string()
+    };
+    let options = hermes::Options {
+        values_file: sub
+            .get_one::<String>("values-file")
+            .map_or("", String::as_str)
+            .to_string(),
+        hermes_digest: sub
+            .get_one::<String>("hermes-digest")
+            .map_or("", String::as_str)
+            .to_string(),
+        voice_proxy_digest: sub
+            .get_one::<String>("voice-proxy-digest")
+            .map_or("", String::as_str)
+            .to_string(),
+        exporter_digest: sub
+            .get_one::<String>("exporter-digest")
+            .map_or("", String::as_str)
+            .to_string(),
+        smoke_image: sub
+            .get_one::<String>("smoke-image")
+            .map_or("", String::as_str)
+            .to_string(),
+        release: sub
+            .get_one::<String>("release")
+            .map_or(default.release.as_str(), String::as_str)
+            .to_string(),
+        deployment: sub
+            .get_one::<String>("deployment")
+            .map_or(default.deployment.as_str(), String::as_str)
+            .to_string(),
+        exporter_deployment: sub
+            .get_one::<String>("exporter-deployment")
+            .map_or(default.exporter_deployment.as_str(), String::as_str)
+            .to_string(),
+        namespace: sub
+            .get_one::<String>("namespace")
+            .map_or(default.namespace.as_str(), String::as_str)
+            .to_string(),
+        chart,
+        state_dir,
+        timeout: sub
+            .get_one::<String>("timeout")
+            .map_or(default.timeout.as_str(), String::as_str)
+            .to_string(),
+        force: sub.get_flag("force"),
+        simulate_failure: sub.get_flag("simulate-smoke-failure"),
+        rollback_only: sub.get_flag("rollback-only"),
+        kubectl: sub
+            .get_one::<String>("kubectl")
+            .map_or("kubectl", String::as_str)
+            .to_string(),
+        helm: sub
+            .get_one::<String>("helm")
+            .map_or("helm", String::as_str)
+            .to_string(),
+        retry_window_secs: default.retry_window_secs,
+        retry_delay_secs: default.retry_delay_secs,
+    };
+    let code = hermes::run(&SystemCommandRunner, &options, stdout, stderr).map_err(Failure::new)?;
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(Failure::code(code))
+    }
+}
+
+fn run_hermes_render_config(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let home = sub.get_one::<String>("home").map_or("", String::as_str);
+    if home.is_empty() {
+        return Err(Failure::new("hermes render-config: --home is required"));
+    }
+    let dry_run = sub.get_flag("dry-run");
+    let check = sub.get_flag("check");
+    if dry_run && check {
+        return Err(Failure::new(
+            "hermes render-config: --dry-run and --check are mutually exclusive",
+        ));
+    }
+    let source_dir = repo_root().map(|root| root.join("projects/home-assistant/hermes"));
+    let default_path = |value: &str, name: &str| {
+        if value.is_empty() {
+            source_dir
+                .as_ref()
+                .map(|dir| dir.join(name).display().to_string())
+                .unwrap_or_default()
+        } else {
+            value.to_string()
+        }
+    };
+    let options = hermesconfig::Options {
+        home: home.to_string(),
+        fragment: default_path(
+            sub.get_one::<String>("fragment").map_or("", String::as_str),
+            "config.fragment.yaml",
+        ),
+        context: default_path(
+            sub.get_one::<String>("context").map_or("", String::as_str),
+            "HERMES.md",
+        ),
+        soul: default_path(
+            sub.get_one::<String>("soul").map_or("", String::as_str),
+            "SOUL.md",
+        ),
+        voice_prompt: default_path(
+            sub.get_one::<String>("voice-prompt")
+                .map_or("", String::as_str),
+            "voice_prompt.txt",
+        ),
+        telegram_prompt: default_path(
+            sub.get_one::<String>("telegram-prompt")
+                .map_or("", String::as_str),
+            "telegram_prompt.txt",
+        ),
+        skills: default_path(
+            sub.get_one::<String>("skills").map_or("", String::as_str),
+            "skills",
+        ),
+        private_values: sub
+            .get_one::<String>("private-values")
+            .map_or("", String::as_str)
+            .to_string(),
+        allow_placeholders: sub.get_flag("allow-placeholders"),
+    };
+    let mut buffer = Vec::new();
+    let code = hermesconfig::run(&options, dry_run, check, &mut buffer).map_err(Failure::new)?;
+    stdout
+        .write_all(&buffer)
+        .map_err(|error| Failure::new(error.to_string()))?;
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(Failure::code(code))
+    }
+}
+
+fn run_hermes_assist_smoke(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let ha_url = sub
+        .get_one::<String>("ha-url")
+        .map_or(hermes::HA_URL, String::as_str);
+    let agent = sub
+        .get_one::<String>("agent")
+        .map_or(hermes::HA_AGENT, String::as_str);
+    let text = sub
+        .get_one::<String>("text")
+        .map_or(hermes::SMOKE_TEXT, String::as_str);
+    let token_file = sub
+        .get_one::<String>("token-file")
+        .map_or("/run/secrets/ha/token", String::as_str);
+    let timeout = sub
+        .get_one::<String>("timeout")
+        .map_or(Ok(std::time::Duration::from_secs(150)), |value| {
+            parse_go_duration(value)
+        })
+        .map_err(|error| Failure::new(format!("hermes assist-smoke: {error}")))?;
+    let code = hermes::assist_smoke_client(ha_url, agent, text, token_file, timeout, stdout);
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(Failure::code(code))
+    }
+}
+
+/// Parses a Go duration (`150s`, `1m30s`, `500ms`).
+fn parse_go_duration(value: &str) -> Result<std::time::Duration, String> {
+    let mut total = 0.0f64;
+    let mut rest = value.trim();
+    if rest.is_empty() {
+        return Err("time: invalid duration".to_string());
+    }
+    if let Some(stripped) = rest.strip_prefix('-') {
+        rest = stripped;
+    }
+    while !rest.is_empty() {
+        let number_end = rest
+            .find(|character: char| !character.is_ascii_digit() && character != '.')
+            .unwrap_or(rest.len());
+        if number_end == 0 {
+            return Err(format!("time: invalid duration {value:?}"));
+        }
+        let number = rest[..number_end]
+            .parse::<f64>()
+            .map_err(|_| format!("time: invalid duration {value:?}"))?;
+        rest = &rest[number_end..];
+        let (unit, scale) = if let Some(rest) = rest.strip_prefix("ms") {
+            (rest, 1e-3)
+        } else if let Some(rest) = rest.strip_prefix("ns") {
+            (rest, 1e-9)
+        } else if let Some(rest) = rest.strip_prefix("us") {
+            (rest, 1e-6)
+        } else if let Some(rest) = rest.strip_prefix("µs") {
+            (rest, 1e-6)
+        } else if let Some(rest) = rest.strip_prefix('s') {
+            (rest, 1.0)
+        } else if let Some(rest) = rest.strip_prefix('m') {
+            (rest, 60.0)
+        } else if let Some(rest) = rest.strip_prefix('h') {
+            (rest, 3600.0)
+        } else {
+            return Err(format!("time: invalid duration {value:?}"));
+        };
+        total += number * scale;
+        rest = unit;
+    }
+    Ok(std::time::Duration::from_secs_f64(total))
+}
+
+/// Walks up from the working directory to the repository root.
+fn repo_root() -> Option<PathBuf> {
+    let mut directory = std::env::current_dir().ok()?;
+    loop {
+        if directory.join("MODULE.bazel").is_file() {
+            return Some(directory);
+        }
+        if !directory.pop() {
+            return None;
+        }
+    }
+}
+
+fn temporary_state_dir() -> Result<String, Failure> {
+    let index = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let path = std::env::temp_dir().join(format!("hermes-rollout-{}-{index}", std::process::id()));
+    std::fs::create_dir_all(&path).map_err(|error| Failure::new(error.to_string()))?;
+    Ok(path.display().to_string())
 }
 
 fn run_oci(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
@@ -663,15 +994,6 @@ mod tests {
         assert_eq!(code, 1);
         assert!(stderr.contains("home-deploy <command>"));
         assert!(stderr.contains("unknown command \"bogus\""));
-    }
-
-    #[test]
-    fn unimplemented_commands_exit_2() {
-        for name in NOT_IMPLEMENTED {
-            let (code, _, stderr) = execute(&[name]);
-            assert_eq!(code, 2, "{name}: {stderr}");
-            assert!(stderr.contains("not implemented"));
-        }
     }
 
     #[test]
