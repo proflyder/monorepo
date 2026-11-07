@@ -24,7 +24,6 @@ solutions/               переиспользуемые решения
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (+ checked-in Go stubs)
-  go/                    shared Go: httpapi, ha (HA REST), scheduler (Connect-JSON)
 
 projects/                композиции и deployment
   station/               Pulsar/ADB/BLE/provisioning
@@ -82,7 +81,7 @@ Go-реализации `scheduler`, `alarm`, `ha-bridge` и `currency-bot` уд
 | `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; члены общего корневого Cargo workspace, host-тесты и armhf-кросс через Bazel |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node из `mise.toml` (CI — `jdx/mise-action`), без pip; локально — `mise install` |
 | Bazel-инструменты Android (`platform/android/tools`) | Go (`rules_go`, exec-конфигурация) | герметичный статический бинарник в песочнице Bazel, без `python3` на PATH; общий `go.mod`, `go vet`/`go test` |
-| `platform/deploy` (`home-deploy`) и runtime health exporter | Go | все инструменты деплоя и in-cluster Job/экспортер — один distroless-бинарник, без Python в кластере (решение 35) |
+| `platform/deploy` (`home-deploy`) | Go | все инструменты деплоя и in-cluster Job — один distroless-бинарник, без Python в кластере (решение 35); runtime health exporter — Rust `projects/home-assistant/deploy/health-exporter/crates/health-exporter` |
 | задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
 | ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 
@@ -220,8 +219,9 @@ JSON/binary и gRPC-Web по HTTP/1.1; отдельного REST API нет. Rus
   leases/ack, server clock.
 - `solutions/ha-bridge`: executor adapter; арендует `queue=home`, вызывает HA
   scripts, подтверждает события. Не владеет расписанием.
-- `packages/go`: оставшиеся общие Go-пакеты (например, `contracttest`) без
-  проектной привязки. Go-клиенты scheduler удалены вместе с Go-сервером.
+- `packages/go` удалён: общий golden-раннер контрактов живёт в
+  `packages/rust/home-contracttest`. Go-клиенты scheduler удалены вместе с
+  Go-сервером.
 - `solutions/bb-home-dispatcher` и `solutions/bb-profiles`: плагины bb, а не
   сервисы. Диспетчер ничего не знает о проектах, кроме ответов `profiles`;
   профиль и allowlist провайдеров/машин живут только в `profiles`, голосовой

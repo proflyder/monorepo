@@ -45,9 +45,9 @@ class ChartContracts(unittest.TestCase):
         self.assertEqual(volume["spec"]["persistentVolumeReclaimPolicy"], "Retain")
         self.assertEqual(volume["spec"]["local"]["path"], "/srv/example/data")
 
-    def test_runtime_health_exporter_is_a_pinned_go_image(self):
+    def test_runtime_health_exporter_is_a_pinned_distroless_image(self):
         # The Python script and its ConfigMap are gone: the exporter is a
-        # distroless Go image pinned by `hermes rollout`/apply-runtime.sh. The
+        # distroless image pinned by `hermes rollout`/apply-runtime.sh. The
         # chart only owns the Service; the workload comes from private values.
         values = {"nodeName": "example-node", "storage": {}, "workloads": {
             "runtime-health-exporter": {"replicas": 1, "containers": [{

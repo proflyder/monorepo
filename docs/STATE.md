@@ -190,8 +190,10 @@
   запросы к snapshot и установку пакетов — кэш и повторы не влияют на digest.
   `voice-proxy` — Rust-сервис `solutions/voice-proxy/crates/voice-proxy`,
   собираемый Bazel `rules_rust` + `rules_oci` (static musl, distroless) и
-  пушимый байт-в-байт через `oci_push`. Health exporter — отдельный
-  Go-образ `ghcr.io/proflyder/health-exporter`. `deploy-home` (builder `mixed`, карта
+  пушимый байт-в-байт через `oci_push`. Health exporter — Rust-сервис
+  `projects/home-assistant/deploy/health-exporter/crates/health-exporter`,
+  собранный тем же `rust_service_image` (static musl, distroless) в отдельный
+  `ghcr.io/proflyder/health-exporter`. `deploy-home` (builder `mixed`, карта
   `deploy.bazel_images`) собирает и пушит gateway, proxy, exporter и
   `home-deploy`, затем `home-deploy hermes rollout` подставляет digest'ы,
   проверяет `-healthcheck`/health/Assist/логи и делает `helm rollback` при

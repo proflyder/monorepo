@@ -340,7 +340,7 @@ func SetArgs(hermes, voiceProxy string) []string {
 	}
 }
 
-// ExporterSetArgs pins the Go health exporter and drops the old ConfigMap
+// ExporterSetArgs pins the health exporter and drops the old ConfigMap
 // script mount, so the private values do not need to change.
 func ExporterSetArgs(exporterDeployment, image string) []string {
 	container := fmt.Sprintf("workloads.%s.containers[0]", exporterDeployment)

@@ -1,13 +1,13 @@
-load("//platform/bazel/oci:service_image.bzl", "service_image")
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 package(default_visibility = ["//visibility:public"])
 
-# The runtime chart's exporter is a distroless Go binary now, built and pushed
-# byte-for-byte like the other service images. It belongs to the `hermes`
-# deploy unit (deploy.bazel_images), so a change here rolls the runtime release.
-service_image(
+# The runtime chart's exporter is a distroless Rust binary now, built and pushed
+# byte-for-byte like the other service images. It belongs to the `hermes` deploy
+# unit (deploy.bazel_images), so a change here rolls the runtime release.
+rust_service_image(
     name = "health-exporter",
-    binary = "//projects/home-assistant/deploy/health-exporter/cmd/health-exporter",
+    crate_binary = "//projects/home-assistant/deploy/health-exporter/crates/health-exporter:health-exporter",
     repo = "ghcr.io/proflyder/health-exporter",
 )
 
