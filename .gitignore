@@ -38,6 +38,8 @@
 *.gz
 *.xz
 *.bin
+# Byte-exact OCI archive goldens for the Rust parity fixtures (10-20 KiB).
+!platform/deploy-rs/testdata/frozen/**/*.tar
 *.debug
 *.bak
 *.bak-*

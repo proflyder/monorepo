@@ -8,9 +8,14 @@ package(default_visibility = ["//visibility:public"])
 PACKAGE_VERSION = "0.1.0"
 
 LIB_DEPS = [
+    "@crates//:base64",
     "@crates//:clap",
+    "@crates//:flate2",
     "@crates//:hex",
     "@crates//:regex",
+    "@crates//:serde",
+    "@crates//:serde-saphyr",
+    "@crates//:serde_json",
     "@crates//:sha2",
 ]
 
@@ -89,6 +94,7 @@ sh_test(
 rust_test(
     name = "unit_tests",
     crate = ":home_deploy_lib",
+    data = [":frozen"],
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = LIB_DEPS + [

@@ -19,9 +19,13 @@ name = "parity_runner"
 path = "src/bin/parity.rs"
 
 [dependencies]
+base64 = { workspace = true }
 clap = { workspace = true }
+flate2 = { workspace = true }
 hex = { workspace = true }
 regex = { workspace = true }
+serde = { workspace = true }
+serde-saphyr = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 

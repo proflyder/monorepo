@@ -1,5 +1,5 @@
 {
-  "checksum": "5968756b31401cb3152998137ac3bcf2251fb5e3e37e04e4558d02f8895df36e",
+  "checksum": "f21ee7d7468072a1bafb2e6a6e270831a26bef3f83ddf68d45e9403c29190275",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6793,8 +6793,16 @@
       "common_attrs": {
         "deps": [
           {
+            "id": "base64 0.22.1",
+            "target": "base64"
+          },
+          {
             "id": "clap 4.6.7",
             "target": "clap"
+          },
+          {
+            "id": "flate2 1.1.11",
+            "target": "flate2"
           },
           {
             "id": "hex 0.4.3",
@@ -6803,6 +6811,14 @@
           {
             "id": "regex 1.13.1",
             "target": "regex"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde-saphyr 2.1.1",
+            "target": "serde_saphyr"
           },
           {
             "id": "serde_json 1.0.154",
@@ -22268,6 +22284,7 @@
     "cc 1.10.0",
     "clap 4.6.7",
     "connectrpc 0.9.1",
+    "flate2 1.1.11",
     "futures 0.3.34",
     "futures-core 0.3.34",
     "getrandom 0.3.4",

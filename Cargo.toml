@@ -81,6 +81,10 @@ hex = "=0.4.3"
 # `deflate-flate2-zlib-rs` — чистый Rust zlib-rs, без C и на Windows-кросс-сборке;
 # остальные кодеки (bzip2/lzma/zstd/AES) архиву не нужны.
 zip = { version = "=9.4.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# Gzip layer decoding for `home-deploy oci docker` (docker-archive stores the
+# uncompressed layer tar). The backend is the same pure-Rust zlib-rs `zip`
+# already pulls in, so no C and no second codec.
+flate2 = { version = "=1.1.11", default-features = false, features = ["zlib-rs"] }
 # Блокирующий HTTP-клиент установщика для того же архива. rustls с кольцевым
 # провайдером (ring в сборке уже есть у pulsar-update) и корнями WebPKI:
 # установщик работает на чужом компьютере, где CA-бандла прошивки нет.

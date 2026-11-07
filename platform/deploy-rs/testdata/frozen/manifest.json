@@ -597,10 +597,9 @@
         "input/external-secrets.yaml"
       ],
       "cwd": "cases/eso-names",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "manifests helpers are not ported yet",
       "outputs": [
         {
           "path": "names.txt",
@@ -625,10 +624,9 @@
         "BOOTSTRAP_TOKEN"
       ],
       "cwd": "cases/secret-opaque",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
-      "stdout": "expected/stdout",
-      "reason": "manifests helpers are not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "secret-opaque-missing",
@@ -647,10 +645,9 @@
         "MISSING"
       ],
       "cwd": "cases/secret-opaque-missing",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
-      "stderr": "expected/stderr",
-      "reason": "manifests helpers are not ported yet"
+      "stderr": "expected/stderr"
     },
     {
       "name": "runtime-split",
@@ -669,10 +666,9 @@
         "ghcr.io/proflyder/health-exporter@sha256:new"
       ],
       "cwd": "cases/runtime-split",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "runtimevalues is not ported yet",
       "outputs": [
         {
           "path": "storage.yaml",
@@ -692,10 +688,9 @@
         "layout"
       ],
       "cwd": "cases/oci-digest",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
-      "stdout": "expected/stdout",
-      "reason": "oci is not ported yet"
+      "stdout": "expected/stdout"
     },
     {
       "name": "oci-pack",
@@ -709,10 +704,9 @@
         "pack.tar"
       ],
       "cwd": "cases/oci-pack",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "oci is not ported yet",
       "outputs": [
         {
           "path": "pack.tar",
@@ -732,10 +726,9 @@
         "docker.tar"
       ],
       "cwd": "cases/oci-docker",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "oci is not ported yet",
       "outputs": [
         {
           "path": "docker.tar",
@@ -755,10 +748,9 @@
         "pack.tar"
       ],
       "cwd": "cases/oci-pack-single-dash",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "oci is not ported yet",
       "outputs": [
         {
           "path": "pack.tar",

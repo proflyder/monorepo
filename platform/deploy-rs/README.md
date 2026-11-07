@@ -17,14 +17,21 @@ src/cli.rs            clap definitions + Go-`flag` single-dash normalisation
 src/envfile.rs        strict `KEY=VALUE` parser and permissive `env get` lookup
 src/buildid.rs        `<revision>-<12 hex of sha256>`
 src/render.rs         literal `${KEY}` substitution, allowlists, rollout fingerprint
+src/yaml.rs           ordered YAML tree + yaml.v2-compatible emitter
+src/manifests.rs      `eso names` and the bootstrap `secret opaque` JSON
+src/runtimevalues.rs  storage/workload split and health-exporter pin
+src/oci.rs            layout index/manifest, OCI and docker archives
+src/oci/json.rs       ordered JSON with Python `json.dumps` formatting
+src/oci/archive.rs    Python-compatible USTAR writer
 src/bin/parity.rs     frozen-fixture runner
 tests/parity.sh       Bazel sh_test wrapper for the runner
 testdata/frozen/      contract fixtures captured from the Go binary
 ```
 
-Only `env get`, `build-id` and `render` are ported now. Every other subcommand
-is declared in the CLI, prints `not implemented yet` and exits with status 2
-(via `rejection` in `src/cli.rs`) until its module lands.
+`env get`, `build-id`, `render`, `eso names`, `secret opaque`, `runtime split`,
+`oci digest` and `oci pack`/`oci docker` are ported. The remaining subcommands
+(`converge`, `state`, `preflight`, `hermes`) are declared in the CLI, print
+`not implemented yet` and exit with status 2 until their modules land.
 
 ## Frozen contract fixtures
 
@@ -47,6 +54,10 @@ Captured from the Go binary (57 cases):
 | state | 7 | record (live/absent/fail-closed), mark, rollback and first-install delete |
 | preflight | 8 | fake HTTP: ok, alarm, legacy writer, endpoint mismatch, not ready, HTTP/JSON errors |
 | hermes rollout | 5 | no-op, upgrade + smoke, smoke failure + rollback, `--rollback-only` |
+
+34 cases pass byte for byte: CLI/env/build-id/render (26), `eso names`,
+`secret opaque` (2), `runtime split`, and all four OCI cases (digest plus the
+OCI and docker archives). The other 23 are skipped with a reason.
 
 Fake `kubectl`/`helm` scripts record every argv (with `-f` payloads and stdin)
 under the case's `trace/`; the smoke Job name is normalised because it is
