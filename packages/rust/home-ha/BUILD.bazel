@@ -3,13 +3,18 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Shared Home Assistant REST client: state/script/service/template/ping.
+# Shared Home Assistant client: state/script/service/template/ping and the
+# WebSocket entity registry.
 DEPS = [
+    "@crates//:futures-util",
     "@crates//:reqwest",
     "@crates//:rustls",
+    "@crates//:rustls-pki-types",
     "@crates//:serde",
     "@crates//:serde_json",
     "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tokio-tungstenite",
     "//packages/rust/home-secret:home_secret",
 ]
 
@@ -30,7 +35,6 @@ rust_test(
     deps = DEPS + [
         "@crates//:axum",
         "@crates//:tempfile",
-        "@crates//:tokio",
     ],
 )
 

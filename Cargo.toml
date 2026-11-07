@@ -74,6 +74,13 @@ axum = { version = "=0.8.9", default-features = false, features = ["http1", "jso
 # собственными корнями из CA-бандла прошивки. aws-lc-rs не собирается
 # zig-тулчейном; http2, cookies, gzip, charset и system-proxy не нужны.
 reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls-manual-roots-no-provider"] }
+# Home Assistant entity registry is WebSocket-only. `home-ha` opens one short
+# connection per catalog refresh; rustls with WebPKI roots covers public HTTPS,
+# a supplied HA_CA_FILE builds the private-CA connector instead.
+tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# WebSocket streams and sinks for the same small client (already in the lock
+# through `futures`).
+futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
 getrandom = "=0.3.4"
 hex = "=0.4.3"
 # Android SDK Platform-Tools для установщика Pulsar: их архив — zip, а

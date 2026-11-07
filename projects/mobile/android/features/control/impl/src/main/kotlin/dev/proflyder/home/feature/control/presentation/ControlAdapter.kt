@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.control.presentation
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.ControlEntry
@@ -16,6 +17,8 @@ import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceGroupBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceRowBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHeaderBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlProfileBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlScenarioBinding
@@ -26,6 +29,9 @@ internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
 
     /** The profile selector reports the chosen side: `work = true` is the named profile. */
     fun onProfileChanged(entry: ControlEntry, work: Boolean)
+
+    /** Opens or closes the settings rows of a device card. */
+    fun onToggleSettings(deviceId: String)
 }
 
 /**
@@ -54,6 +60,9 @@ internal enum class ControlChange {
 
     /** A section header's right-aligned summary. */
     SUMMARY,
+
+    /** Any visible change inside a device group; the holder rebuilds its dynamic rows. */
+    GROUP,
 }
 
 /** Identity of the artwork an entry resolves to; see [ControlIcons]. */
@@ -79,6 +88,8 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
             oldItem is ControlItem.Profile && newItem is ControlItem.Profile -> profileChanges(oldItem, newItem)
             oldItem is ControlItem.Scenario && newItem is ControlItem.Scenario -> scenarioChanges(oldItem, newItem)
             oldItem is ControlItem.Device && newItem is ControlItem.Device -> deviceChanges(oldItem, newItem)
+            oldItem is ControlItem.DeviceGroup && newItem is ControlItem.DeviceGroup ->
+                if (oldItem == newItem) emptySet() else setOf(ControlChange.GROUP)
             else -> emptySet()
         }
         return if (changed.isEmpty()) null else PayloadSet.of(changed)
@@ -144,6 +155,7 @@ internal class ControlAdapter(
         is ControlItem.Profile -> TYPE_PROFILE
         is ControlItem.Scenario -> TYPE_SCENARIO
         is ControlItem.Device -> TYPE_DEVICE
+        is ControlItem.DeviceGroup -> TYPE_GROUP
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): ControlHolder =
@@ -151,6 +163,7 @@ internal class ControlAdapter(
             TYPE_HEADER -> HeaderHolder(ItemControlHeaderBinding.inflate(inflater, parent, false), callback)
             TYPE_PROFILE -> ProfileHolder(ItemControlProfileBinding.inflate(inflater, parent, false), callback)
             TYPE_SCENARIO -> ScenarioHolder(ItemControlScenarioBinding.inflate(inflater, parent, false), callback)
+            TYPE_GROUP -> DeviceGroupHolder(ItemControlDeviceGroupBinding.inflate(inflater, parent, false), callback)
             else -> DeviceHolder(ItemControlDeviceBinding.inflate(inflater, parent, false), callback)
         }
 
@@ -438,11 +451,100 @@ internal class ControlAdapter(
         }
     }
 
+    /**
+     * A device with several entries: one card whose rows are inflated from
+     * [ItemControlDeviceRowBinding]. The rows are dynamic, so any payload simply
+     * rebinds the card in place (the payload still keeps the holder, so no
+     * crossfade) and the settings list is toggled by the view model's state.
+     */
+    private class DeviceGroupHolder(
+        private val views: ItemControlDeviceGroupBinding,
+        callback: ControlAdapterCallback,
+    ) : ControlHolder(views, callback) {
+        override fun bind(item: ControlItem) {
+            val group = item as ControlItem.DeviceGroup
+            // A card with one primary has no header: that row itself is the
+            // device title (see ControlItems.DeviceGroup).
+            views.controlGroupTitle.text = group.title
+            views.controlGroupTitle.setVisible(group.primary.size != 1)
+            views.controlGroupPrimary.removeAllViews()
+            group.primary.forEach { addRow(views.controlGroupPrimary, it, group.statesKnown) }
+            views.controlGroupActions.removeAllViews()
+            group.actions.forEach { addRow(views.controlGroupActions, it, group.statesKnown) }
+            views.controlGroupActions.setVisible(group.actions.isNotEmpty())
+            views.controlGroupSettings.text =
+                views.root.context.getString(R.string.control_device_settings, group.settings.size)
+            views.controlGroupSettings.setVisible(group.settings.isNotEmpty())
+            val showSettings = group.expanded && group.settings.isNotEmpty()
+            views.controlGroupSettingsList.removeAllViews()
+            if (showSettings) {
+                group.settings.forEach { addRow(views.controlGroupSettingsList, it, group.statesKnown) }
+            }
+            views.controlGroupSettingsList.setVisible(showSettings)
+            views.controlGroupSettings.setOnClickListener { callback.onToggleSettings(group.deviceId) }
+        }
+
+        override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
+
+        private fun addRow(
+            container: LinearLayout,
+            row: ControlItem.DeviceGroup.Row,
+            statesKnown: Boolean,
+        ) {
+            val rowViews = ItemControlDeviceRowBinding.inflate(
+                LayoutInflater.from(container.context),
+                container,
+                false,
+            )
+            val entry = row.entry
+            rowViews.controlRowTitle.text =
+                entry.title.takeUnless { it.isBlank() || it == entry.id } ?: entry.device.ifBlank { entry.title }
+            rowViews.controlRowIcon.setImageResource(ControlIcons.resolve(entry))
+            val on = entry.power == PowerState.ON
+            val tint = MaterialColors.getColor(
+                rowViews.root,
+                if (on) com.google.android.material.R.attr.colorOnPrimaryContainer
+                else com.google.android.material.R.attr.colorOnSurfaceVariant,
+            )
+            rowViews.controlRowIcon.setColorFilter(tint)
+            rowViews.controlRowIcon.isActivated = on
+            // Set the programmatic state before installing the listener, so
+            // binding a row can never look like a user toggle.
+            rowViews.controlRowSwitch.isChecked = on
+            rowViews.controlRowSwitch.setOnCheckedChangeListener { _, checked ->
+                callback.onPowerChanged(entry, checked)
+            }
+            rowViews.controlRowState.setText(
+                when {
+                    !entry.available -> R.string.control_state_unavailable
+                    entry.power == PowerState.ON -> R.string.control_state_on
+                    entry.power == PowerState.OFF -> R.string.control_state_off
+                    else -> R.string.control_state_unknown
+                },
+            )
+            val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
+            if (brightness != null) {
+                rowViews.controlRowState.text =
+                    rowViews.root.context.getString(R.string.control_state_on_brightness, brightness)
+            }
+            rowViews.controlRowProgress.setVisible(row.busy)
+            rowViews.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
+            val enabled = entry.available && !row.busy
+            rowViews.controlRowSwitch.isEnabled = enabled
+            rowViews.root.isEnabled = enabled
+            rowViews.root.setOnClickListener {
+                callback.onItemClick(ControlItem.Device(entry, row.busy, statesKnown))
+            }
+            container.addView(rowViews.root)
+        }
+    }
+
     private companion object {
         const val TYPE_HEADER = 0
         const val TYPE_SCENARIO = 1
         const val TYPE_DEVICE = 2
         const val TYPE_PROFILE = 3
+        const val TYPE_GROUP = 4
         const val DISABLED_ALPHA = 0.5f
     }
 }

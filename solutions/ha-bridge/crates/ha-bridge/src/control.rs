@@ -245,6 +245,7 @@ fn ha_error_detail(error: &home_ha::Error) -> String {
         home_ha::Error::Decode { op } => format!("{op}: invalid response"),
         home_ha::Error::Invalid { op, detail } => format!("{op}: {detail}"),
         home_ha::Error::Certificate { op } => format!("{op}: unusable CA"),
+        home_ha::Error::WebSocket { op } => format!("{op}: websocket failed"),
     }
 }
 

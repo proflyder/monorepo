@@ -161,6 +161,25 @@ class ControlDiffPayloadTest {
         assertEquals(setOf(ControlChange.SUMMARY), changes(base, ControlItem.Header("room:Office", "Office", null)))
     }
 
+    private fun group(
+        expanded: Boolean = false,
+        power: PowerState = PowerState.OFF,
+    ) = ControlItem.DeviceGroup(
+        deviceId = "dev.lamp",
+        title = "Ceiling lamp",
+        primary = listOf(ControlItem.DeviceGroup.Row(entry(power = power), busy = false)),
+        settings = emptyList(),
+        expanded = expanded,
+        statesKnown = true,
+    )
+
+    @Test
+    fun deviceGroupChangesUseTheGroupPayload() {
+        assertNull(changes(group(), group()))
+        assertEquals(setOf(ControlChange.GROUP), changes(group(), group(power = PowerState.ON)))
+        assertEquals(setOf(ControlChange.GROUP), changes(group(), group(expanded = true)))
+    }
+
     @Test
     fun severalPayloadsMergeIntoOneAspectSet() {
         val merged = PayloadSet.merge(

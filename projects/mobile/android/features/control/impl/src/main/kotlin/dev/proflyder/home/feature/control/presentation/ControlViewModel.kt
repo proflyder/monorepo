@@ -41,6 +41,8 @@ data class ControlUiState(
     val actionError: RemoteFailure? = null,
     val notice: ControlNotice? = null,
     val filter: ControlFilter = ControlFilter.All,
+    /** Device ids whose "Settings (N)" row is open; UI state only, not persisted. */
+    val expandedDevices: Set<String> = emptySet(),
 )
 
 class ControlViewModel(
@@ -199,6 +201,11 @@ class ControlViewModel(
         filterChosenByUser = true
         updateState { copy(filter = filter) }
         launch { preferences.saveFilter(filter) }
+    }
+
+    /** Opens or closes the settings rows of one device card. */
+    fun toggleDeviceSettings(deviceId: String) = updateState {
+        copy(expandedDevices = if (deviceId in expandedDevices) expandedDevices - deviceId else expandedDevices + deviceId)
     }
 
     fun consumeNotice() = updateState { copy(notice = null) }

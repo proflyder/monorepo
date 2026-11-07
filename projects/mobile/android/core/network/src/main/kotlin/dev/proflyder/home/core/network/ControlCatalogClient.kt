@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.Outcome
@@ -111,6 +112,11 @@ object ControlJson {
             power = power,
             available = o["available"]?.jsonPrimitive?.booleanOrNull ?: false,
             light = light,
+            // Grouping fields are optional: an older server omits them and
+            // every entry stays its own primary device.
+            deviceId = text("device_id").ifEmpty { text("deviceId") },
+            device = text("device"),
+            role = if (text("role") == "setting") ControlRole.SETTING else ControlRole.PRIMARY,
         )
     }
 }

@@ -9,4 +9,5 @@
     <string name="control_profile_personal">Личный</string>
     <string name="control_profile_work">Рабочий</string>
     <string name="control_profile_states_unknown">Состояние неизвестно</string>
+    <string name="control_device_settings">Настройки (%1$d)</string>
 </resources>
