@@ -35,6 +35,27 @@ mise run rollback scheduler --yes       # выполняет документи�
 завершается ненулевым кодом, а `pulsar` лишь печатает команду для станции —
 устройство автоматически не трогается. Подробности отката — в разделах ниже.
 
+Бэкапы тоже собраны в одну точку: цель — запись реестра
+`platform/ops/backups.mjs` (расписание, где, read-only проверка, команда
+ручного запуска, проверка и ссылка на процедуру restore). Команды — из docs, а
+хосты — через алиасы `ssh -F ~/.ssh/home-lab/config pve|k3s|haos`:
+
+```bash
+mise run backup:list                      # таблица целей, без сети
+mise run backup:status --dry-run          # печатает read-only команды проверки
+mise run backup:status                    # сводка ok/fail/manual по всем целям
+mise run backup:status offsite-restic
+mise run backup:now offsite-restic --dry-run   # план: команда, note, restore doc
+mise run backup:now offsite-restic --yes       # без --yes спрашивает подтверждение
+mise run backup:verify --dry-run          # restic check / integrity_check и т.п.
+mise run backup:verify offsite-restic --yes
+```
+
+`backup:now` выполняет только документированную команду выбранной цели; цель,
+доступная только через UI (HA backup), печатает `manual` и ничего не запускает.
+Restore намеренно не автоматизирован: вывод всегда содержит `restore_doc`.
+Подробности и цели — раздел «Backup» ниже.
+
 
 ## Доступ
 
@@ -1286,7 +1307,10 @@ Pulsar. Аварийный доступ к PVE — LAN/Wi-Fi.
 
 ## Backup
 
-Proxmox: ночной vzdump `nightly` (04:00) на SATA SSD, storage `backup`.
+Все цели, их расписание, read-only проверки и команды ручного запуска —
+`mise run backup:list` (реестр `platform/ops/backups.mjs`, `status`/`verify` —
+из этого раздела). Proxmox: ночной vzdump `nightly` (04:00) на SATA SSD,
+storage `backup`.
 
 ```bash
 ssh pve 'pvesh get /cluster/backup; pvesm list backup | tail'
