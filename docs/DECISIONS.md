@@ -341,7 +341,7 @@
       удаляются. Referrer-версии (`sha256-<hex>` теги, cosign-style) удаляются
       вместе с digest'ом, на который указывают, либо если он уже отсутствует в
       пакете; в окно пяти deploy-версий они не входят. `PROTECTED_DIGESTS`
-      сейчас пуст (exporter Hermes переведён на Go-образ `health-exporter`).
+      сейчас пуст (exporter Hermes переведён на дистролесс-образ `health-exporter`).
       Пакеты — образы деплой-юнитов и `native.publish_repository` из
       `units.mjs`; прочие пакеты аккаунта не рассматриваются. Для
       `pulsar-firmware` и `windows-logon-provider` это означает: релизные теги
@@ -499,9 +499,10 @@
       PR. Go-код scheduler, ha-bridge/ha-control, alarm, mcp-gateway и
       currency-bot удалён; откат сервисов — прежний образ. Долгоживущих
       Go-сервисов в репозитории не осталось.
-    * Установщик Pulsar переписан на Rust (`pulsar-installer`, поведение 1:1)
-      вместе с остальной миграцией; на Go остаются `platform/deploy`,
-      Bazel-инструменты Android и health-exporter.
+    * Установщик Pulsar (`pulsar-installer`) и health-exporter переписаны на
+      Rust (поведение 1:1); на Go остаются только `platform/deploy` и
+      Bazel-инструменты Android — их перенос идёт отдельно (цель: Go в
+      репозитории не остаётся).
 
 42. **Менеджер паролей — self-hosted Vaultwarden.** Для доступа человека к
     паролям и копии секретов на устройствах используется Vaultwarden в K3s
@@ -534,8 +535,7 @@
     `idempotentHint:false` не входят в ожидаемое подмножество, потому что
     `rmcp` их не эмитит. Байтовыми остаются auth, `/healthz`, `/readyz`,
     серии `mcp_gateway_*` в `/metrics` и `/v1/voice/*`. Режим реализован
-    одинаково в `packages/go/contracttest` и
-    `packages/rust/home-contracttest` (`compare: semantic`,
+    в `packages/rust/home-contracttest` (`compare: semantic`,
     `response.format: sse`). Справочный байтовый снимок Go-эпохи —
     `solutions/mcp-gateway/testdata/reference/mcp_tools_list_go_snapshot.json`.
 

@@ -1,5 +1,5 @@
 {
-  "checksum": "0bcf3415c30bcc6c3fb32dabcbed05fec6609f2171319cf48d7ac7d9aa1ff0e4",
+  "checksum": "5968756b31401cb3152998137ac3bcf2251fb5e3e37e04e4558d02f8895df36e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6393,6 +6393,63 @@
         }
       ],
       "version": "0.12.2"
+    },
+    "health-exporter 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "reqwest 0.12.28",
+            "target": "reqwest"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "http-body-util 0.1.5",
+            "target": "http_body_util"
+          },
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "health_exporter",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "health-exporter",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "health_exporter",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "heck 0.5.0": {
       "common_attrs": {
@@ -22272,6 +22329,7 @@
     "currency-bot 0.1.0": "solutions/currency-bot/crates/currency-bot",
     "esphome-proto 0.0.0": "projects/station/pulsar/satellite/crates/esphome-proto",
     "ha-bridge 0.1.0": "solutions/ha-bridge/crates/ha-bridge",
+    "health-exporter 0.1.0": "projects/home-assistant/deploy/health-exporter/crates/health-exporter",
     "home-actor 0.1.0": "packages/rust/home-actor",
     "home-clients 0.1.0": "packages/rust/home-clients",
     "home-config 0.1.0": "packages/rust/home-config",

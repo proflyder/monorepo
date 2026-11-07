@@ -23,7 +23,7 @@
 | `home-http` | axum bearer-авторизация на `home-secret::Token` (`with_bearer`, JSON-ошибка 401), `healthz`, лимит тела и request timeout поверх `tower-http`; `serve`/`serve_with_connect_info` с graceful shutdown. |
 | `home-config` | `clap` derive с `env`: секрет из `NAME`/`NAME_FILE` (без значения в ошибке), listen-адрес, длительности и целые с границами, `LOG_LEVEL`. |
 | `home-sqlite` | `rusqlite` (bundled) за single-writer потоком: `Db::call`/`call_blocking`, прагмы WAL/busy_timeout/foreign_keys и упорядоченные миграции через `schema_meta` (совместимо с Go v2). |
-| `home-contracttest` | Rust-раннер нормативного формата `packages/go/contracttest`: `axum::Router` через `tower::ServiceExt::oneshot`, capture/`{{name}}`, `<uuid>`/`<base64-32>`/`<any>`, структурное и побайтное сравнение. |
+| `home-contracttest` | Единственный раннер нормативного формата golden-фикстур (`packages/rust/home-contracttest/README.md`): `axum::Router` через `tower::ServiceExt::oneshot`, capture/`{{name}}`, `<uuid>`/`<base64-32>`/`<any>`, структурное и побайтное сравнение. |
 | `wakegrant-protocol` | Переносимый wire-слой wakegrant (v1 и `logon`/`unlock`): HMAC-SHA256 сообщения, purpose, base64, serde-запросы/ответы и проверка MAC; без I/O и tokio, собирается под Windows. |
 | `voice-contract` | Serde-типы голосового API mcp-gateway `/v1/voice/{utterance,result,updates,state}`: точное JSON-соответствие Go-серверу и клиенту, `Route::{Hermes,Bb,Local,Unknown}`; без I/O. |
 | `home-ha` | Типизированный клиент Home Assistant REST (`state`, `call_service`, `call_script`, `render_template`, `ping`) на `reqwest`; bearer из `home-secret`, ошибка `Transient`/`Permanent` как в `packages/go/httpapi`. |

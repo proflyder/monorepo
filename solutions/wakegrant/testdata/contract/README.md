@@ -1,7 +1,7 @@
 # wakegrant contract fixtures
 
 Golden HTTP transcripts for `packages/contracts/wakegrant/PROTOCOL.md`, in the
-normative format from `packages/go/contracttest/README.md`.
+normative format from `packages/rust/home-contracttest/README.md`.
 
 They are replayed unchanged by the Rust `home-contracttest` runner in
 `solutions/wakegrant/crates/wakegrant/src/contract_tests.rs`. The fixed clock

@@ -220,16 +220,24 @@ export const config = {
     },
     {
       id: "health-exporter",
-      platform: "go",
+      platform: "bazel",
       title: "projects/home-assistant/deploy/health-exporter (runtime chart)",
       paths: ["projects/home-assistant/deploy/health-exporter/**"],
-      // Tests and the Bazel image target only. The image is deployed by the
-      // `hermes` unit (one Helm release, one smoke, one rollback).
-      go: {
-        module: ".",
-        packages: ["./projects/home-assistant/deploy/health-exporter/..."],
-        race: true,
-        build: ["./projects/home-assistant/deploy/health-exporter/cmd/health-exporter"],
+      // Rust service: host fmt/clippy/tests plus the static musl image. The
+      // image is deployed by the `hermes` unit (one Helm release, one smoke,
+      // one rollback).
+      bazel: {
+        roots: [
+          "//projects/home-assistant/deploy/health-exporter",
+          "//packages/rust",
+        ],
+        test_targets: [
+          "//projects/home-assistant/deploy/health-exporter/crates/health-exporter:unit_tests",
+          "//projects/home-assistant/deploy/health-exporter/crates/health-exporter:binary_tests",
+          "//projects/home-assistant/deploy/health-exporter/crates/health-exporter:clippy",
+          "//projects/home-assistant/deploy/health-exporter/crates/health-exporter:rustfmt",
+        ],
+        build_targets: ["//projects/home-assistant/deploy/health-exporter/..."],
       },
     },
     {
@@ -501,14 +509,14 @@ export const config = {
     },
 
     {
-      id: "shared-go-packages",
-      platform: "go",
-      title: "packages/go + packages/proto (shared libraries, no own consumers)",
-      paths: ["packages/go/**", "packages/proto/**"],
-      go: {
-        module: ".",
-        packages: ["./packages/..."],
-        race: false,
+      id: "proto",
+      platform: "bazel",
+      title: "packages/proto (home.v1 schema; Rust code is generated into home-proto)",
+      paths: ["packages/proto/**"],
+      bazel: {
+        roots: ["//packages/proto", "//packages/rust/home-proto"],
+        test_targets: ["//packages/rust/home-proto:unit_tests"],
+        build_targets: ["//packages/proto/..."],
       },
     },
 
@@ -628,7 +636,7 @@ export const config = {
         // shared-crate change never reaches the deploy unit otherwise.
         "solutions/voice-proxy/**",
         "packages/rust/**",
-        // The runtime chart's Go health exporter is part of this deploy unit.
+        // The runtime chart's Rust health exporter is part of this deploy unit.
         "projects/home-assistant/deploy/health-exporter/**",
         "projects/home-assistant/deploy/chart/**",
         // build-and-push.sh reads image digests with `home-deploy oci digest`.
