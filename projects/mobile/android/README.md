@@ -287,7 +287,7 @@ ln -s "$PWD/secrets/android/google-services.json" \
   platform/android/keys/google-services.json
 ```
 
-`platform/android/tools/google_services` (Go) converts the JSON client for
+`platform/android/tools/google_services` (Kotlin) converts the JSON client for
 `dev.proflyder.home` into `res/values/google_services.xml` (`google_app_id`,
 `gcm_defaultSenderId`, `google_api_key`, `google_crash_reporting_api_key`,
 `google_storage_bucket`, `project_id`) and the Crashlytics build id
