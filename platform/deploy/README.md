@@ -119,7 +119,7 @@ repo `ghcr.io/proflyder/home-deploy`) — тот же бинарник на dist
 
 Образ `health-exporter`
 (`//projects/home-assistant/deploy/health-exporter:health-exporter_image`, repo
-`ghcr.io/proflyder/health-exporter`, исходники в `projects/home-assistant/deploy/health-exporter/cmd/health-exporter`).
+`ghcr.io/proflyder/health-exporter`, исходники в `projects/home-assistant/deploy/health-exporter/crates/health-exporter`).
 `hermes rollout` подставляет его digest, command и пустые volume-монтирования
 в релиз `runtime`.
 

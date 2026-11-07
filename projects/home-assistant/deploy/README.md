@@ -47,8 +47,8 @@ digest'ы в релиз `runtime`, проверяет rollout, health exporter,
 откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
 перезапускает контур.
 
-Health exporter — Go-бинарник `health-exporter/cmd/health-exporter`
-(distroless-образ
+Health exporter — Rust-бинарник
+`health-exporter/crates/health-exporter` (distroless-образ
 `//projects/home-assistant/deploy/health-exporter:health-exporter_image`,
 `ghcr.io/proflyder/health-exporter`): метрики `up` по endpoint'ам, порт 9116,
 цели из переменных `ENDPOINT_HOST_*`. Карта больше не владеет exporter'ом:
@@ -142,7 +142,9 @@ backup. Выполнять только при остановленном gatewa
 
 ```bash
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
-go test -race ./platform/deploy/... ./projects/home-assistant/deploy/health-exporter/...
+go test -race ./platform/deploy/...
+cargo test -p health-exporter
+bazel test //projects/home-assistant/deploy/health-exporter/...
 cargo test -p voice-proxy
 helm lint projects/home-assistant/deploy/chart
 helm lint projects/home-assistant/observability/chart

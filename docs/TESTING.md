@@ -146,8 +146,10 @@ cargo test -p voice-proxy
 bazel test //solutions/voice-proxy/crates/voice-proxy:unit_tests
 python3 -m unittest projects/home-assistant/deploy/test_voice_routing_contract.py -v
 
-# деплой-инструменты, Hermes rollout/render-config и health exporter
-go test -race ./platform/deploy/... ./projects/home-assistant/deploy/health-exporter/...
+# деплой-инструменты и Hermes rollout/render-config
+go test -race ./platform/deploy/...
+cargo test -p health-exporter
+bazel test //projects/home-assistant/deploy/health-exporter/...
 python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
 python3 -m unittest discover -s projects/home-assistant/hermes -p 'test_*.py' -v
 ```
@@ -534,7 +536,8 @@ digest-пины образов, поэтому `make test` и `make test-deploy-
 `home-deploy`) с заглушками docker/bazel/git. Hermes rollout и
 render-config покрыты Go-тестами `platform/deploy/internal/hermes` и
 `.../hermesconfig` (включая golden parity с Python-выходом рендерера);
-health exporter — `.../deploy/health-exporter`.
+health exporter — Rust `.../deploy/health-exporter` (`cargo test -p
+health-exporter` и Bazel-юнит `health-exporter`).
 
 ### Required check
 

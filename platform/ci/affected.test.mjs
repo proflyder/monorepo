@@ -217,7 +217,7 @@ test("android fixture: matrix entries are flat strings", () => {
 
 function fakeDeps(_root, unit) {
   // Directory of a real Go package, as `go list -deps` reports it.
-  const shared = new Set([path.join(REPO, "packages", "go", "contracttest")]);
+  const shared = new Set([path.join(REPO, "platform", "deploy", "internal", "buildid")]);
   const own = new Set([path.join(REPO, unit.id)]);
   // `sched` imports the shared package, nothing else does.
   if (unit.id === "sched") {
@@ -229,7 +229,7 @@ function fakeDeps(_root, unit) {
 test("go: only importing unit is selected", () => {
   const config = affected.loadConfig(fixtureConfig);
   const result = withDeps({ goPackageDirs: fakeDeps }, () =>
-    affected.route(config, ["packages/go/contracttest/contracttest.go"], {
+    affected.route(config, ["platform/deploy/internal/buildid/buildid.go"], {
       root: REPO,
       base: "b",
     }),
@@ -1526,12 +1526,14 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
     "platform-deploy-rust",
     "voice-proxy",
+    "health-exporter",
     "scheduler",
     "wakegrant",
     "currency-bot",
     "mcp-gateway",
     "ha-bridge",
     "ble-gateway",
+    "proto",
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
