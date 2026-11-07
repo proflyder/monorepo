@@ -27,8 +27,10 @@
  * release-shaped OCI artifact under `tree-<hash>`, and `planNativePromotion`
  * verifies it and attaches the unit's release tags (`{version}`, `latest`,
  * `sha-{commit12}`) to the same digest. The deploy path never builds: a missing
- * or unverified tag fails (no history search either — the artifact *is* the
- * release, so an older tree must never be tagged as the current VERSION).
+ * or unverified tag fails (no history search — the artifact *is* the release,
+ * so an older tree must never be tagged as the current VERSION). The PR-head
+ * delta fallback applies here too, because a squash merge may land on a newer
+ * `develop` tree.
  *
  * Immutable tags (`{version}`, `sha-{commit12}`) are immutable by CONTENT, not
  * by manifest digest: two pushes of identical layers differ only in manifest
@@ -38,6 +40,15 @@
  * is (no retag) and the promotion succeeds. Different content is a hard
  * failure, never an overwrite. `latest` moves to the version tag's digest, so
  * `latest` and `<version>` always agree even when the version tag was kept.
+ *
+ * A squash merge keeps the PR's tree only while `develop` does not move. When
+ * another PR lands first the merge commit has a different tree and no
+ * `tree-<hash>` tag exists for it. On push the fallback is the PR head H: fetch
+ * `refs/pull/N/head` (from `gh api …/commits/<sha>/pulls` or the `(#N)` in the
+ * squash subject), route the delta between H and the deploy commit through
+ * `affected.compute`, and use `tree-<tree(H)>` only when that delta does not
+ * select this unit. A delta that touches the unit is a refusal: the bytes CI
+ * validated are not the bytes that would be deployed.
  *
  * Pure decision logic (`planPromotion`/`planNativePromotion`) takes an injected
  * `exec`, so it is tested without a registry. The CLI writes the action outputs:
@@ -51,6 +62,8 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+
+import { compute as computeAffected } from "./affected.mjs";
 
 /** Public GHCR namespace of the monorepo service images. */
 export const REGISTRY = "ghcr.io/proflyder";
@@ -189,6 +202,186 @@ export function readHistory(exec, limit = 200) {
 }
 
 /**
+ * Pull request number from a squash-merge subject line: `feat(x): … (#204)`.
+ * The API is authoritative; this is the offline/limited-token fallback.
+ */
+export function pullRequestNumber(text) {
+  const subject = String(text || "").split("\n")[0].trim();
+  const match = /\(#([0-9]+)\)\s*$/.exec(subject);
+  if (!match) {
+    return null;
+  }
+  const number = Number(match[1]);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+const FULL_SHA = /^[0-9a-f]{40}$/;
+
+function pullEntry(pull, repository) {
+  const number = Number(pull?.number);
+  const head = String(pull?.head?.sha || "");
+  if (!Number.isInteger(number) || number <= 0 || !FULL_SHA.test(head)) {
+    return null;
+  }
+  const headRepository = String(pull?.head?.repo?.full_name || "");
+  return {
+    number,
+    head,
+    // Fork PRs never publish tree tags: their token is read-only in CI.
+    fork: Boolean(headRepository && headRepository !== repository),
+  };
+}
+
+/**
+ * The pull request a commit came from. `gh api …/commits/<sha>/pulls` is
+ * authoritative; when it returns nothing (a token without pull-requests read,
+ * a rate limit) the `(#N)` of the squash subject is resolved through the PR
+ * endpoint. Returns null when neither identifies a PR of this repository.
+ */
+export function pullRequestForCommit(exec, { repository, commit, message = "" }) {
+  try {
+    const pulls = JSON.parse(exec("gh", ["api", `repos/${repository}/commits/${commit}/pulls`]));
+    for (const pull of Array.isArray(pulls) ? pulls : []) {
+      const entry = pullEntry(pull, repository);
+      if (entry) {
+        return entry;
+      }
+    }
+  } catch {
+    // Fall through to the squash subject.
+  }
+  const number = pullRequestNumber(message);
+  if (!number) {
+    return null;
+  }
+  try {
+    return pullEntry(JSON.parse(exec("gh", ["api", `repos/${repository}/pulls/${number}`])), repository);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the PR head of the deploy commit and decide whether the delta between
+ * that head and the merge commit touches `unit`.
+ *
+ * The delta is the TREE difference `git diff <head> <commit>`, not a range from
+ * a merge base: the head already contains everything CI validated, so only the
+ * files another merge added are new. Those names are fed to `affected.compute`
+ * (with `--base <head> --head <commit>` so MODULE.bazel/.bazelrc scoping reads
+ * the right revisions); the unit is affected when `affected` selects it.
+ *
+ * Returns `{error}` when the PR cannot be identified, the head cannot be
+ * fetched/verified, or routing fails — every failure is a refusal, never a
+ * permission to promote. `affectsUnit` is fail-closed: a routing failure is
+ * reported as an error and the caller refuses.
+ */
+export async function resolvePrHeadDelta({
+  exec,
+  compute,
+  repository,
+  commit,
+  unit,
+  commitMessage = "",
+}) {
+  const pull = pullRequestForCommit(exec, { repository, commit, message: commitMessage });
+  if (!pull) {
+    return { error: `no pull request found for ${String(commit).slice(0, 12)}` };
+  }
+  if (pull.fork) {
+    return { error: `#${pull.number} comes from a fork; fork CI never publishes tree tags` };
+  }
+  try {
+    exec("git", ["fetch", "--no-tags", "origin", `refs/pull/${pull.number}/head`]);
+  } catch (error) {
+    return { error: `cannot fetch refs/pull/${pull.number}/head: ${message(error)}` };
+  }
+  let head;
+  try {
+    head = String(exec("git", ["rev-parse", "FETCH_HEAD^{commit}"])).trim();
+  } catch (error) {
+    return { error: `cannot resolve refs/pull/${pull.number}/head: ${message(error)}` };
+  }
+  if (head !== pull.head) {
+    return {
+      error:
+        `refs/pull/${pull.number}/head is ${String(head).slice(0, 12)}, ` +
+        `but the API reports ${pull.head.slice(0, 12)}`,
+    };
+  }
+  let headTree;
+  try {
+    headTree = String(exec("git", ["rev-parse", `${head}^{tree}`])).trim();
+  } catch (error) {
+    return { error: `cannot resolve the tree of ${head.slice(0, 12)}: ${message(error)}` };
+  }
+  if (!TREE.test(headTree)) {
+    return { error: `cannot resolve the tree of ${head.slice(0, 12)}` };
+  }
+  let changed;
+  try {
+    changed = String(exec("git", ["diff", "--name-only", "--no-renames", head, commit]))
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .sort();
+  } catch (error) {
+    return {
+      error: `cannot diff ${head.slice(0, 12)}..${commit.slice(0, 12)}: ${message(error)}`,
+    };
+  }
+  const result = { number: pull.number, head, tree: headTree, changed, affectsUnit: false };
+  if (!changed.length) {
+    return result;
+  }
+  let computed;
+  try {
+    computed = await compute([
+      "--base",
+      head,
+      "--head",
+      commit,
+      "--format",
+      "json",
+      ...changed.flatMap((file) => ["--changed-file", file]),
+    ]);
+  } catch (error) {
+    return {
+      error:
+        `cannot route the delta ${head.slice(0, 12)}..${commit.slice(0, 12)}: ` +
+        `${message(error)}`,
+    };
+  }
+  const selected = computed?.result?.deploySelected;
+  const natives = computed?.entries?.native ?? [];
+  result.affectsUnit =
+    Boolean(selected && typeof selected.has === "function" && selected.has(unit)) ||
+    natives.some((entry) => entry.id === unit);
+  result.changed = computed?.result?.changed ?? changed;
+  return result;
+}
+
+/**
+ * Resolve the PR-head fallback for a CLI run. Never throws: a failure becomes
+ * `{error}`, which only matters when the current tree has no verified build.
+ */
+export async function preparePrHead({ args, exec, compute = computeAffected, unit = "" }) {
+  try {
+    const commitMessage = exec("git", ["log", "-1", "--format=%B", args.commit]);
+    return await resolvePrHeadDelta({
+      exec,
+      compute,
+      repository: args.repository,
+      commit: args.commit,
+      unit: args.unit || unit,
+      commitMessage,
+    });
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+/**
  * Decide and perform the promotion. `exec(command, args)` returns stdout and
  * throws on a non-zero exit; it is injected so tests never touch a registry.
  *
@@ -205,6 +398,11 @@ export function readHistory(exec, limit = 200) {
  * the inputs changed after the found commit, a later tree would have been built
  * and would be found first. Provenance is verified for the found commit, and
  * the summary names it.
+ *
+ * `prHead` is the resolved PR-head fallback (see `resolvePrHeadDelta`), used
+ * only when `allowPrHead` is set and the current tree has no verified tag. It
+ * is tried before history for this unit's own images and after history for
+ * siblings. `prHead.affectsUnit` refuses instead of promoting.
  */
 export function planPromotion({
   images,
@@ -215,6 +413,9 @@ export function planPromotion({
   exec,
   history = [],
   allowHistory = false,
+  allowPrHead = false,
+  prHead = null,
+  unit = "",
 }) {
   const tag = treeTag(tree);
   if (!COMMIT.test(String(commit || ""))) {
@@ -294,6 +495,37 @@ export function planPromotion({
     return null;
   };
 
+  /** The deploy commit's PR head, when the delta to the merge does not touch this unit. */
+  const usablePrHead = () =>
+    prHead && !prHead.error && !prHead.affectsUnit ? prHead : null;
+
+  const deltaDetail = (head) =>
+    `from PR head ${String(head).slice(0, 12)}, delta to ${String(commit).slice(0, 12)} ` +
+    `does not affect ${unit || "the unit"}`;
+
+  /** Probe `tree-<tree(PR head)>`: the bytes CI verified, before another merge. */
+  const resolveFromPrHead = (ref) => {
+    const state = usablePrHead();
+    if (!state) {
+      return null;
+    }
+    const candidateTag = `tree-${state.tree}`;
+    const resolved = resolveTag(ref, candidateTag);
+    if (resolved.error) {
+      return {
+        error:
+          `${candidateTag} (PR #${state.number} head ${state.head.slice(0, 12)}): ` +
+          resolved.detail,
+      };
+    }
+    return {
+      digest: resolved.digest,
+      source: state.head,
+      sourceTree: state.tree,
+      detail: deltaDetail(state.head),
+    };
+  };
+
   // Phase 1: resolve and verify every image before tagging anything, so a
   // missing/unverified image cannot leave a half-promoted unit behind.
   for (const [image, isOptional] of [
@@ -307,12 +539,39 @@ export function planPromotion({
     let detail = current.detail;
     if (!current.error) {
       resolved = { digest: current.digest, source: commit, sourceTree: tree };
-    } else if (fallback) {
-      const previous = resolveFromHistory(ref);
-      if (previous) {
-        resolved = previous;
-      } else {
-        detail = `${tag} is not available and no verified tree-<hash> exists in the last ${lineage.length} first-parent commits`;
+    } else {
+      // Own images prefer the PR head CI built; siblings were not part of this
+      // change, so the newest verified history build is tried first.
+      const steps = isOptional ? ["history", "pr-head"] : ["pr-head", "history"];
+      for (const step of steps) {
+        if (step === "pr-head" && allowPrHead) {
+          const fromPrHead = resolveFromPrHead(ref);
+          if (fromPrHead && fromPrHead.digest) {
+            resolved = fromPrHead;
+            break;
+          }
+          if (fromPrHead && fromPrHead.error) {
+            detail = fromPrHead.error;
+          }
+        }
+        if (step === "history" && fallback) {
+          const previous = resolveFromHistory(ref);
+          if (previous) {
+            resolved = previous;
+            break;
+          }
+          detail = `${tag} is not available and no verified tree-<hash> exists in the last ${lineage.length} first-parent commits`;
+        }
+      }
+      if (!resolved && allowPrHead && prHead) {
+        if (prHead.error) {
+          detail = `${tag} is not available; the PR head fallback failed: ${prHead.error}`;
+        } else if (prHead.affectsUnit) {
+          detail =
+            `${tag} is not available; the delta from PR head ${prHead.head.slice(0, 12)} to ` +
+            `${String(commit).slice(0, 12)} changes ${unit || "this unit"} — bring develop ` +
+            "into the PR, wait for CI and merge again, or workflow_dispatch after the next merge";
+        }
       }
     }
     if (!resolved) {
@@ -334,19 +593,29 @@ export function planPromotion({
       digest: resolved.digest,
       source: resolved.source,
       detail:
-        resolved.source === commit
+        resolved.detail ??
+        (resolved.source === commit
           ? "current tree"
-          : `newest verified build in history (tree-${resolved.sourceTree})`,
+          : `newest verified build in history (tree-${resolved.sourceTree})`),
     });
   }
 
   if (verified.length !== required.length + optional.length) {
+    let reason = "not every image is available and verified";
+    if (allowPrHead && prHead && !prHead.error && prHead.affectsUnit) {
+      reason =
+        `the delta from PR #${prHead.number} head ${prHead.head.slice(0, 12)} to ` +
+        `${String(commit).slice(0, 12)} changes ${unit || "this unit"} — bring develop into ` +
+        "the PR, wait for CI and merge again (or workflow_dispatch after the next merge)";
+    } else if (allowPrHead && prHead?.error) {
+      reason = `this tree has no verified build and the PR head fallback failed: ${prHead.error}`;
+    }
     return {
       mode: "build",
       tag,
       digests: {},
       decisions,
-      reason: "not every image is available and verified",
+      reason,
     };
   }
 
@@ -531,6 +800,9 @@ export function planNativePromotion({
   tags,
   githubRepository = process.env.GITHUB_REPOSITORY,
   exec,
+  allowPrHead = false,
+  prHead = null,
+  unit = "",
 }) {
   const tag = treeTag(tree);
   const ref = nativeRepository(repository);
@@ -538,31 +810,57 @@ export function planNativePromotion({
   const signer = nativeSignerIdentityPattern(githubRepository);
   const decisions = [];
 
-  let digest;
+  // The merged tree normally has the artifact CI built for the PR. When
+  // `develop` moved before the squash merge, the PR head H is the fallback —
+  // but only if the delta H..commit does not touch this native unit (see
+  // `resolvePrHeadDelta`). The artifact *is* the release, so an affected delta
+  // is a refusal, never a retag.
+  let digest = null;
+  let artifactTag = tag;
+  let source = commit;
+  let deltaNote = "";
+  let failure = null;
   try {
     digest = parseDigest(exec("crane", ["digest", `${ref}:${tag}`]));
+    if (!digest) {
+      failure = `${tag} did not resolve to a sha256 digest`;
+    }
   } catch (error) {
-    return {
-      mode: "build",
-      tag,
-      repository: ref,
-      digest: null,
-      tags: destinations,
-      decisions: [
-        { tag, status: "missing", detail: `${tag} not found: ${message(error)}` },
-      ],
-      reason: `${tag} is missing`,
-    };
+    failure = `${tag} not found: ${message(error)}`;
   }
-  if (!digest) {
+  if (failure && allowPrHead && prHead) {
+    if (prHead.error) {
+      failure = `${tag} is missing and the PR head fallback failed: ${prHead.error}`;
+    } else if (prHead.affectsUnit) {
+      failure =
+        `${tag} is missing and the delta from PR head ${prHead.head.slice(0, 12)} to ` +
+        `${String(commit).slice(0, 12)} changes ${unit || "this unit"}; bring develop into ` +
+        "the PR, wait for CI and merge again (or workflow_dispatch after the next merge)";
+    } else {
+      artifactTag = treeTag(prHead.tree);
+      source = prHead.head;
+      deltaNote =
+        `from PR head ${prHead.head.slice(0, 12)}, delta to ${String(commit).slice(0, 12)} ` +
+        `does not affect ${unit || "the unit"}`;
+      try {
+        digest = parseDigest(exec("crane", ["digest", `${ref}:${artifactTag}`]));
+        failure = digest
+          ? null
+          : `${artifactTag} did not resolve to a sha256 digest`;
+      } catch (error) {
+        failure = `${artifactTag} (PR #${prHead.number} head ${prHead.head.slice(0, 12)}) not found: ${message(error)}`;
+      }
+    }
+  }
+  if (failure || !digest) {
     return {
       mode: "build",
       tag,
       repository: ref,
       digest: null,
       tags: destinations,
-      decisions: [{ tag, status: "missing", detail: `${tag} did not resolve to a sha256 digest` }],
-      reason: `${tag} did not resolve`,
+      decisions: [{ tag, status: "missing", detail: failure || `${tag} is missing` }],
+      reason: failure || `${tag} is missing`,
     };
   }
 
@@ -579,12 +877,19 @@ export function planNativePromotion({
       digest,
       tags: destinations,
       decisions: [
-        { tag, status: "unverified", digest, detail: `provenance check failed: ${message(error)}` },
+        {
+          tag: artifactTag,
+          status: "unverified",
+          digest,
+          detail:
+            `provenance check failed: ${message(error)}` +
+            (deltaNote ? ` (${deltaNote})` : ""),
+        },
       ],
       reason: "provenance did not verify",
     };
   }
-  decisions.push({ tag, status: "verified", digest });
+  decisions.push({ tag: artifactTag, status: "verified", digest, ...(deltaNote ? { detail: deltaNote } : {}) });
 
   // Content identity of the candidate, read once. Immutable tags are compared
   // against this instead of their manifest digest: a rebuild of the same files
@@ -674,6 +979,7 @@ export function planNativePromotion({
     repository: ref,
     digest: releaseDigest || digest,
     tags: destinations,
+    source,
     decisions,
   };
 }
@@ -696,7 +1002,13 @@ export function formatNativeSummary(result) {
   return `${lines.join("\n")}\n`;
 }
 
-export function runNativePromotion({ args, exec, env = process.env, log = console.log }) {
+export function runNativePromotion({
+  args,
+  exec,
+  env = process.env,
+  log = console.log,
+  prHead = null,
+}) {
   const repository = nativeRepository(args.repository);
   log(`promoting native ${repository} for tree ${args.tree}`);
   const result = planNativePromotion({
@@ -707,6 +1019,9 @@ export function runNativePromotion({ args, exec, env = process.env, log = consol
     tags: args.tags,
     githubRepository: args.githubRepository || env.GITHUB_REPOSITORY,
     exec,
+    allowPrHead: Boolean(args.allowPrHead),
+    prHead,
+    unit: args.unit || "",
   });
   log(formatNativeSummary(result));
   if (env.GITHUB_OUTPUT) {
@@ -726,7 +1041,8 @@ export function runNativePromotion({ args, exec, env = process.env, log = consol
     throw new Error(
       `native artifact for tree-${args.tree} is not published and verified (${result.reason}); ` +
         "the pull request must publish tree-<hash> — re-run PR CI for the merged commit " +
-        "and re-merge (DECISIONS 36)",
+        "and re-merge (DECISIONS 36). If develop moved after the PR CI run, the PR head " +
+        "delta was refused: bring develop into the PR, wait for CI and merge again",
     );
   }
   return result;
@@ -737,7 +1053,9 @@ function parseArgs(argv) {
     images: [],
     optionalImages: [],
     allowHistory: false,
+    allowPrHead: false,
     historyLimit: 200,
+    unit: "",
     tree: "",
     commit: "",
     repository: "",
@@ -776,6 +1094,13 @@ function parseArgs(argv) {
       case "--allow-history":
         args.allowHistory = true;
         break;
+      case "--allow-pr-head":
+        args.allowPrHead = true;
+        break;
+      case "--unit":
+        args.unit = String(value || "");
+        index += 1;
+        break;
       case "--history-limit":
         args.historyLimit = Number(value);
         index += 1;
@@ -809,7 +1134,13 @@ function appendFile(path, text) {
   fs.appendFileSync(path, text, "utf8");
 }
 
-export function runPromotion({ args, exec, env = process.env, log = console.log }) {
+export function runPromotion({
+  args,
+  exec,
+  env = process.env,
+  log = console.log,
+  prHead = null,
+}) {
   const repository = args.repository || env.GITHUB_REPOSITORY || "";
   const optionalImages = args.optionalImages || [];
   log(
@@ -832,6 +1163,9 @@ export function runPromotion({ args, exec, env = process.env, log = console.log 
     exec,
     history,
     allowHistory: Boolean(args.allowHistory),
+    allowPrHead: Boolean(args.allowPrHead),
+    prHead,
+    unit: args.unit || "",
   });
   log(formatSummary(result));
   if (env.GITHUB_OUTPUT) {
@@ -863,29 +1197,36 @@ export function spawnExec(command, args, options = {}) {
   return String(result.stdout || "");
 }
 
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   if (args.help) {
     console.log(
       "usage: promote.mjs --images 'a b' [--optional-images 'c d'] " +
-        "[--allow-history] [--history-limit N] --tree <40-hex> --commit <sha> " +
-        "[--repository owner/repo]\n" +
+        "[--allow-history] [--allow-pr-head --unit <id>] [--history-limit N] " +
+        "--tree <40-hex> --commit <sha> [--repository owner/repo]\n" +
         "   or: promote.mjs --native --repository ghcr.io/owner/name --tree <40-hex> " +
-        "--commit <sha> --version <vX.Y.Z> --tags '{version} latest'",
+        "--commit <sha> --version <vX.Y.Z> --tags '{version} latest' " +
+        "[--allow-pr-head --unit <id>]",
     );
     return 0;
   }
+  // The PR-head fallback is resolved up front (it is async because routing
+  // goes through `affected.compute`); a failure is reported to the decision
+  // logic and only matters when the current tree has no verified tag.
+  const prHead = args.allowPrHead
+    ? await preparePrHead({ args, exec: spawnExec, unit: args.unit })
+    : null;
   if (args.native) {
-    runNativePromotion({ args, exec: spawnExec });
+    runNativePromotion({ args, exec: spawnExec, prHead });
     return 0;
   }
-  runPromotion({ args, exec: spawnExec });
+  runPromotion({ args, exec: spawnExec, prHead });
   return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    process.exitCode = main();
+    process.exitCode = await main();
   } catch (error) {
     console.error(error?.stack || String(error));
     process.exitCode = 1;

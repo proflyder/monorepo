@@ -373,6 +373,9 @@ jobs:
       # Read the build provenance of a PR-built image before promoting its
       # digest (DECISIONS 36). Reading never grants the right to sign.
       attestations: read
+      # Find the PR a squash-merged commit came from when `develop` moved
+      # while the PR's CI ran (the PR-head delta fallback).
+      pull-requests: read
     env:
       OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
       OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE || 'deploy-home' }}
@@ -612,6 +615,12 @@ jobs:
       # `home-deploy` is always part of the set: it is the deploy CLI image the
       # next step extracts the binary from.
       #
+      # A squash merge keeps the PR's tree only while `develop` does not move.
+      # When it does, the merge commit has a different tree and no tree tag: on
+      # push the PR head is the fallback, used only after `affected.compute`
+      # proves the delta between that head and the merge does not touch this
+      # unit. A delta that does touch it fails the job (DECISIONS 36).
+      #
       # This is the correctness gate: a wrong-tree image can never be deployed,
       # because the tree tag, the verified provenance and the digest read-back
       # all have to agree before a digest is passed to the deploy script.
@@ -625,8 +634,11 @@ jobs:
           OPTIONAL_IMAGES: ${{ matrix.optional_images }}
           # A dispatch deploys the current `develop`, whose tree has no CI build
           # for units the last merged PR did not touch. On push the required
-          # images must match this tree exactly.
+          # images come from this tree or from the PR head when the delta is
+          # provably unrelated to the unit.
           ALLOW_HISTORY: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          ALLOW_PR_HEAD: ${{ github.event_name == 'push' && '1' || '0' }}
+          UNIT: ${{ matrix.id }}
           DEPLOY_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -641,10 +653,15 @@ jobs:
           if [[ "$ALLOW_HISTORY" == "1" ]]; then
             history_args+=(--allow-history)
           fi
+          pr_head_args=()
+          if [[ "$ALLOW_PR_HEAD" == "1" ]]; then
+            pr_head_args=(--allow-pr-head --unit "$UNIT")
+          fi
           if ! node platform/ci/promote.mjs \
             --images "$IMAGES" \
             --optional-images "$OPTIONAL_IMAGES" \
             "${history_args[@]}" \
+            "${pr_head_args[@]}" \
             --tree "$tree" \
             --commit "$DEPLOY_COMMIT" \
             --repository "${GITHUB_REPOSITORY}"; then
@@ -653,8 +670,9 @@ jobs:
           fi
           if ! grep -qx 'mode=prebuilt' "$GITHUB_OUTPUT"; then
             echo "::error::no verified image set for this unit (commit ${DEPLOY_COMMIT}, tree ${tree})" >&2
-            echo "deploy-home never builds: on a push, re-run PR CI on an up-to-date branch" >&2
-            echo "and re-merge; on a dispatch, check the 'image promotion' block in the" >&2
+            echo "deploy-home never builds: on a push, bring develop into the PR, wait for" >&2
+            echo "CI and merge again (or dispatch after the next merged PR); on a dispatch," >&2
+            echo "check the 'image promotion' block in the" >&2
             echo "job summary and the history limit (--history-limit, default 200)" >&2
             exit 1
           fi

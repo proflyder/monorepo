@@ -326,10 +326,37 @@
       На push это правило действует только для образов-соседей, которые
       скрипт рендерит, но не применяет (`deploy.optional_images` в
       `units.mjs`: ha-bridge/ha-control при деплое scheduler и наоборот);
-      собственные образы юнита на push обязаны совпадать с текущим tree,
-      иначе job падает. Соседние образы не перетегируются — их digest только
+      собственные образы юнита на push обязаны совпадать с текущим tree
+      либо приходить из PR head (см. следующий пункт), иначе job падает.
+      Соседние образы не перетегируются — их digest только
       передаётся рендеру. Зависимости от состояния кластера и от `develop`-тега
       нет, поэтому механизм работает и при первой установке.
+    * Squash-merge сохраняет tree PR только пока `develop` не ушёл вперёд.
+      Если между PR CI и merge влился другой PR, merge-коммит имеет другой
+      tree и `tree-<hash>` для него не существует. Тогда на push
+      (`promote.mjs --allow-pr-head --unit <id>`) promotion находит PR
+      коммита (`gh api repos/{repo}/commits/{sha}/pulls`, затем номер `(#N)`
+      из squash-заголовка), берёт его head `H`, делает
+      `git fetch origin refs/pull/N/head`, сверяет `H` с ответом API и
+      считает `affected.compute` по ДЕЛЬТЕ `git diff H <merge-commit>`
+      (имена файлов передаются через `--changed-file`; `--base H
+      --head <merge>` нужен, чтобы scoping `MODULE.bazel`/`.bazelrc` читал
+      правильные ревизии). Диапазон `H...merge` здесь неверен: он вернул бы
+      и собственные изменения PR, уже содержащиеся в `H`. Если юнит в дельту
+      не попал, его входы в merge-коммите идентичны проверенным на `H`:
+      продвигается `tree-<tree(H)>` после обычной проверки provenance, в
+      summary — `from PR head <H12>, delta to <merge12> does not affect
+      <unit>`. Если дельта затрагивает юнит, источники и provenance не
+      совпадают — job падает: подтянуть `develop` в PR, дождаться CI и
+      смержить заново, либо `workflow_dispatch` после следующего PR. Для
+      `home-deploy` и образов-соседей та же логика вместе с поиском по
+      истории (соседи: сначала история, потом PR head). Native-юниты
+      (Pulsar, logon provider) используют тот же fallback в
+      `_native.yml`/`runNativePromotion`: release-shaped артефакт, собранный
+      на head PR, продвигается, только если дельта не затрагивает
+      native-юнит; иначе `native-release` падает. Любая ошибка поиска PR,
+      fetch, сверки head или routing'а дельты — отказ (fail closed), а не
+      разрешение.
     * Native-юнит `deploy-home` продвигает через `platform/ci/promote.mjs
       --native`: требует существующий `tree-<hash>`, проверяет provenance с
       signer `ci.yml`/`_native.yml` и ставит релизные теги из
@@ -347,7 +374,9 @@
       перезапустить PR CI: `deploy-home` не собирает и не публикует
       native-артефакт. История для native не применяется (в отличие от
       образов): релизный артефакт — это и есть релиз, и старый tree нельзя
-      перетегировать как текущий `VERSION`. `deploy-station` только ставит
+      перетегировать как текущий `VERSION`. PR-head fallback применяется:
+      head PR — тот же релиз, если дельта до merge не затрагивает
+      native-юнит; затронула — отказ. `deploy-station` только ставит
       версию через HA и проверяет digest'ы слоёв; сборки в нём нет.
     * Любой job, который пишет в GHCR (`crane tag`/`crane push`, `oras
       push`/`oras tag`, `promote.mjs`, `push-to-registry`), логинится в
