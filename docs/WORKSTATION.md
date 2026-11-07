@@ -17,7 +17,7 @@ mise trust && mise run setup
 1. `mise install` — все инструменты из `mise.toml` с контрольными суммами из
    `mise.lock`: Bazelisk (`bazel` — shim в `platform/workstation/bin`),
    gitleaks, kubectl, helm, oras, OpenBao CLI `bao`, gh, shellcheck, restic,
-   Bitwarden CLI `bw`, Python/Node/Go тех же версий, что в CI.
+   Bitwarden CLI `bw`, Python/Node тех же версий, что в CI.
 2. `mise run secrets:login` — адрес OpenBao, логин, пароль и TOTP человека.
    Скрипт выпускает для этой машины orphan periodic token (политика
    `operator-kv`, period 30 дней, имя `workstation-<host>`), отзывает

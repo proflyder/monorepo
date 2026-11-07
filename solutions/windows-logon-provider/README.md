@@ -189,10 +189,11 @@ solutions/windows-logon-provider/regen-bindings.sh
 общих `Cargo.lock`/`Cargo.toml`/`crate-universe.lock`, используемых крейтов
 `packages/rust/*` или тулчейнов Windows/zig попадает в PR CI: юнит
 `logon-provider` собирает DLL и `cp-selftest`, гоняет `run-tests.sh`,
-проверки `pe_artifacts.py` и `SHA256SUMS`. Публикация — отдельное, осознанное
-действие: на push в `develop` `deploy-home` собирает юнит тем же `_native.yml`
-только когда изменён `solutions/windows-logon-provider/VERSION`, и тогда
-`publish-oci.sh` публикует публичный OCI-артефакт:
+проверки `pe_artifacts.py` и `SHA256SUMS`, и из этого репозитория публикует их
+под `tree-<hash>` с provenance (build once). На push в `develop`
+`native-release` продвигает этот digest на теги `VERSION`/`sha-<12>`;
+`publish_when` по `solutions/windows-logon-provider/VERSION` ограничивает
+релиз. Публичный OCI-артефакт:
 
 ```text
 ghcr.io/proflyder/windows-logon-provider:<VERSION>
@@ -209,7 +210,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 
 ```bash
 # нужны oras и авторизованный gh (оба — из `mise install`)
-solutions/windows-logon-provider/fetch.sh 1.1.0
+solutions/windows-logon-provider/fetch.sh <VERSION>
 solutions/windows-logon-provider/fetch.sh sha256:<digest>   # рекомендуемый pin
 ```
 

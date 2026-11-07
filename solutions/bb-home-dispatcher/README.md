@@ -288,9 +288,9 @@ id треда от вызывающего не принимается. Возв�
 
 - `lib/schema.js` держит ту же таблицу в `METHOD_PARAMS` и валидирует по ней;
   `tests/contract.test.js` падает, если таблица и фикстура разошлись.
-- Шлюз `solutions/mcp-gateway` сериализует только поля из фикстуры;
-  `internal/bb/contract_test.go` читает тот же файл (через Bazel `data`) и
-  падает на лишнем/недостающем поле. Например, `validate_spawn` принимает
+- Шлюз `solutions/mcp-gateway` сериализует только поля из фикстуры:
+  Rust-типы `SpawnRequest`/`SendRequest` и golden-фикстуры
+  `crates/mcp-gateway/tests/contract.rs` фиксируют набор полей. Например, `validate_spawn` принимает
   только target-поля: `title`, `prompt` и `idempotencyKey` есть лишь у
   `spawn`.
 

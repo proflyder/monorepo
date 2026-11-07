@@ -82,12 +82,12 @@ cargo test -p scheduler -p ha-bridge
 `platform/deploy-rs` содержит frozen parity-фикстуры: fake kubectl
 записывает argv и payload, а `bazel test //platform/deploy-rs:parity`
 сравнивает их с трассами и файлами, снятыми с Go-реализации до её удаления.
-`state` покрывает все случаи
-`test_rollback.py`, `preflight` — legacy-writer проверки и HTTP-сценарии на
-`httptest`.
+`state` покрывает record (live/absent/fail-closed), mark, rollback и
+first-install delete; `preflight` — legacy-writer проверки и HTTP-сценарии на
+локальных фейковых HTTP-серверах.
 
 Тесты scheduler/bridge герметичны: SQLite — во временном каталоге, scheduler,
-HA и Connect-клиенты — через `httptest`/фейки; живые HA, ADB и
+HA и Connect-клиенты — через локальные фейковые HTTP-серверы; живые HA, ADB и
 устройство не используются. Scheduler API отдаёт Connect JSON на
 `/home.v1.SchedulerService/<Method>`; bridge проверяется как настоящий
 клиент этого контракта.
@@ -336,10 +336,10 @@ lint также пропускает публикацию APK. `_android.yml` с
 полем `bazel.sdk_packages` (у lint — `cmdline-tools;23.0`), и workflow
 устанавливает их только для этого job.
 
-`changes` выдаёт outputs `go_units`, `android_units`, `python_units`,
-`js_units`, `native_units`, `deploy_control`, `android_distribute`, `base_sha`,
-`docs_only`; каждый output — JSON-массив записей matrix (`android_distribute` —
-`true`/`false`).
+`changes` выдаёт outputs `android_units`, `bazel_units`, `python_units`,
+`js_units`, `native_units`, `deploy_units`, `deploy_control`,
+`android_distribute`, `base_sha`, `docs_only`; каждый output — JSON-массив
+записей matrix (`android_distribute` — `true`/`false`).
 Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
 
 Образы (`images` → `_images.yml`) собираются на PR и, если PR не из форка,
@@ -550,10 +550,10 @@ digest-пины образов, поэтому `mise run test` и `mise run test
 `projects/home-assistant/deploy/test_build_and_push.py` проверяет то же для
 `build-and-push.sh` (`hermes`, `voice-proxy`, `health-exporter`,
 `home-deploy`) с заглушками docker/bazel/git. Hermes rollout и
-render-config покрыты Rust-тестами `platform/deploy-rs` (`hermes` и
-`hermesconfig`, включая frozen parity с выходами Go/Python-рендерера);
-health exporter — Rust `.../deploy/health-exporter` (`cargo test -p
-health-exporter` и Bazel-юнит `health-exporter`).
+render-config покрыты Rust-тестами `platform/deploy-rs`: Hermes rollout —
+frozen parity (`hermes`), `hermesconfig` — unit-тестами слияния, отказа на
+TEST-NET и `.prev`; health exporter — Rust `.../deploy/health-exporter`
+(`cargo test -p health-exporter` и Bazel-юнит `health-exporter`).
 
 ### Required check
 

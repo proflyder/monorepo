@@ -1,7 +1,7 @@
 name: _bazel
 
-# Reusable Bazel platform workflow for Linux Bazel units that are not Android
-# (today: the Pulsar Rust workspace). One matrix entry per affected unit.
+# Reusable Bazel platform workflow for Linux Bazel units that are not Android.
+# One matrix entry per affected unit.
 #
 # The Pulsar targets are Linux-only: `target_compatible_with` makes a macOS
 # `bazel build //...` skip them, while this Linux runner actually builds and

@@ -269,7 +269,7 @@ printf '%s' '{"method":"targets","params":{}}' |
 ## Проверка
 
 ```bash
-cd ~/Desktop/yandex-station-lab
+cd <repo>
 mise run test                # hermetic; не трогает стенд
 mise run test:e2e            # live HA/BLE read-only; нужны токены
 STATION_E2E_MUTATE=1 mise run test:e2e
@@ -609,10 +609,11 @@ PVC), но сбрасывает выданные nonce — ПК просто з�
 ПК — параметры ниже).
 
 Распространение — публичный OCI-артефакт GHCR, а не artifact Actions. Любое
-изменение путей провайдера (и общих Rust/Cargo-входов) собирается и
-проверяется PR CI. На push в `develop` `deploy-home` собирает юнит тем же
-`_native.yml` и публикует через ORAS только когда изменён
-`solutions/windows-logon-provider/VERSION`:
+изменение путей провайдера (и общих Rust/Cargo-входов) собирается, проверяется
+и публикуется PR CI как `tree-<hash>` с provenance (build once). На push в
+`develop` `native-release` продвигает проверенный `tree-<hash>` на релизные
+теги; `publish_when` по `solutions/windows-logon-provider/VERSION`
+ограничивает только релиз:
 
 ```text
 ghcr.io/proflyder/windows-logon-provider:<VERSION>
@@ -623,8 +624,9 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 Тег `<VERSION>` неизменяем: повторная публикация с тем же содержимым — no-op,
 с другим — ошибка, поэтому релиз
 делается сменой `VERSION`. Provenance attestation создаётся для digest
-артефакта и для DLL. PR ничего не публикует; сборка PR остаётся artifact'ом
-для проверки.
+артефакта и для DLL. PR из этого репозитория публикует тот же артефакт под
+`tree-<hash>` с provenance (build once); форки и `workflow_dispatch` только
+собирают.
 
 Пакет публичный (унаследовал видимость публичного репозитория при первом
 publish), анонимный `oras pull` работает без токена. Если новый пакет другого
@@ -1044,9 +1046,8 @@ PREBUILT_DIGESTS="scheduler=sha256:…,ha-bridge=sha256:…,ha-control=sha256:�
 Пакеты — образы деплой-юнитов и `native.publish_repository` из
 `units.mjs`, включая `pulsar-firmware` и `windows-logon-provider`. Политика по
 каждому пакету: не удаляются новейшая версия, теги `develop`, `latest`, semver
-и native `sha-<12>`, digest'ы из `PROTECTED_DIGESTS` (сейчас пусто: health
-exporter Hermes работает на Go-образе с 2026-11-04) и версии моложе
-7 дней. Deploy-версии (40-hex commit-sha тег) сохраняют пять новейших, более
+и native `sha-<12>`, digest'ы из `PROTECTED_DIGESTS` (сейчас пусто) и версии
+моложе 7 дней. Deploy-версии (40-hex commit-sha тег) сохраняют пять новейших, более
 старые старше 7 дней удаляются. Устаревшие версии только с `tree-*` или без
 тегов удаляются. Referrer-версии с тегами `sha256-<hex>` удаляются вместе со
 своим digest'ом или если его уже нет в пакете; в окно пяти deploy-версий они

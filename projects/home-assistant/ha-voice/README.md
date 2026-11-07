@@ -433,7 +433,7 @@ wakegrant_bearer: "Bearer <issuer_token>"
 `switch.komp` — обычная `switch`-сущность без ролевых меток. Каталог
 ha-control берёт все не скрытые switch'и (`solutions/ha-bridge/crates/ha-bridge/src/catalog/`),
 поэтому «Комп» появляется в каталоге ha-control и на вкладке «Дом» в Android
-как штатный on/off без изменений Go-кода. `on` = сенсор ping'а `on`. В
+как штатный on/off без изменений кода каталога. `on` = сенсор ping'а `on`. В
 шаблонной сущности задан `default_entity_id: switch.komp`: кириллическое имя
 не даёт стабильный slug.
 

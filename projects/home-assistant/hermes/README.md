@@ -41,7 +41,7 @@ Do not copy secrets into this directory.
 `config.yaml`, `.hermes.md` and `SOUL.md` live on the PVC
 (`/srv/k3s/volumes/runtime-hermes` on lab-host, `/opt/data` in the Pod) and are not
 watched by CI.  `home-deploy hermes render-config`
-(`//platform/deploy`, Go) is the
+(`//platform/deploy-rs:home-deploy`) is the
 only reviewed path from this directory to that volume:
 
 ```bash
@@ -209,12 +209,12 @@ After rendering, restart the gateway; `/report` appears in the bot menu on the
 next Telegram connect.  Verify with a `/report` message from the owner account
 and check the reply length (it must exceed 180 characters for a real report).
 
-## Voice proxy (Go)
+## Voice proxy (Rust)
 
 The TTS sanitizer, cancel guard, profile routing, late answers, dispatcher
 updates and durable announcement queue are now the reusable
 [`solutions/voice-proxy`](../../../solutions/voice-proxy/README.md) service
-(Go, `rules_oci`/distroless image). That README is the single contract for every
+(Rust, `rules_oci`/distroless image). That README is the single contract for every
 `HERMES_*` variable and for `-healthcheck` / `-status`.
 
 Hermes-specific notes:

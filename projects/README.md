@@ -6,11 +6,11 @@ systemd и deployment, но **не** бизнес-логика.
 ```text
 projects/station/          Pulsar/ADB/BLE/provisioning
 projects/home-assistant/   HA/MA/STT/TTS/Hermes
-projects/home/             композиция station + home-assistant + alarm
+projects/home/             композиция station + home-assistant
 projects/mobile/           Android-клиент
 ```
 
-Один и тот же `solutions/scheduler`/`alarm` запускается с разными БД,
+Один и тот же `solutions/scheduler`/`ha-bridge` запускается с разными БД,
 портами и endpoint; project задаёт только композицию.
 
 ## Правила

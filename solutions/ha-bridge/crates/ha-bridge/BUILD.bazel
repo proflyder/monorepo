@@ -65,8 +65,7 @@ rust_binary(
     deps = LIB_DEPS + [":ha_bridge_lib"],
 )
 
-# The Go bridge stays in the tree as the digest rollback and the golden
-# fixture owner, so the vectors live under //solutions/ha-bridge.
+# The frozen golden vectors live under //solutions/ha-bridge.
 rust_test(
     name = "unit_tests",
     crate = ":ha_bridge_lib",

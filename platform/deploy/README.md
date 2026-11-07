@@ -61,7 +61,8 @@ run`. На node, где запускается `nft/apply.sh`, нужен уже
 заменяется через `replace` с повторным использованием `resourceVersion`.
 `--preserve-replicas` и `--preserve-env` переносят ручной режим/масштаб;
 остальные поля и drift удаляются. Тест сравнивает argv и разобранные
-JSON-payload'ы с эталонными трассами (`testdata/converge/`).
+JSON-payload'ы с эталонными трассами
+(`platform/deploy-rs/testdata/frozen/cases/converge-*/trace/`).
 
 `--summary-file` пишет по строке `<name>\t<status>` на каждый Deployment:
 `created`, `unchanged` или `rolled-out`. Статус определяется сравнением
@@ -114,15 +115,12 @@ repo `ghcr.io/proflyder/home-deploy`) — тот же бинарник на dist
 в релиз `runtime`.
 
 `hermes render-config` сохраняет правила Python-рендерера (deep merge,
-отказ на TEST-NET placeholder, `.prev`, `--dry-run`/`--check`). Документ
-держится как упорядоченное дерево (`yaml.MapSlice`), поэтому порядок ключей
-совпадает; golden-тест сравнивает разобранные документы с Python-выходом
-(`testdata/golden/hermes-config/`), потому что emitter по-разному оформляет
-длинные строки и кавычки.
+отказ на TEST-NET placeholder, `.prev`, `--dry-run`/`--check`). Поведение
+закреплено unit-тестами `hermesconfig`.
 
 Правила развёртывания:
 
 - сервисы слушают loopback или LAN, не публикуются в интернет;
 - внешний вход — только собственный VPN (ocserv);
 - секреты — через env/secret files;
-- `ha-bridge` общается с HA, `alarm` не управляет Pulsar напрямую.
+- `ha-bridge` общается с HA, `ha-bridge` не управляет Pulsar напрямую.

@@ -5,7 +5,7 @@
 ```text
 packages/proto/      protobuf/gRPC contracts
 packages/contracts/  межъязыковые протоколы (wakegrant)
-packages/go/         shared Go packages
+packages/rust/       shared Rust packages
 packages/kotlin/     shared Kotlin packages (Android)
 ```
 

@@ -31,7 +31,7 @@ projects/home/kubernetes/scheduler/BUILD.bazel
   `//solutions/ha-bridge/crates/ha-bridge`, also rebuilt for static musl. The
   former Go implementations are deleted. No Docker daemon and no `RUN` steps
   are involved, so the same targets build on macOS and on the GitHub runner.
-- `home-deploy oci` (`platform/deploy`, decision 35) reads the resulting OCI
+- `home-deploy oci` (`platform/deploy-rs`, decision 35) reads the resulting OCI
   layout: its `digest` prints the manifest digest, `pack` writes an OCI archive
   for `ctr images import` and `docker` a docker archive for local smoke tests. The image is
   referenced as `ghcr.io/proflyder/<name>@sha256:...`, never by a moving tag.
@@ -55,7 +55,7 @@ scheduler.env.example           placeholders; copy to secrets/home/scheduler.env
 deploy.sh                       build/push/import images, apply, mode transitions
                                 (templates rendered by `home-deploy render`)
 backup.sh                       quiesced SQLite + ledger backup with checksums
-                                (preflight/state/converge: `home-deploy`, platform/deploy)
+                                (preflight/state/converge: `home-deploy`, platform/deploy-rs)
 ci/rbac.yaml                    ServiceAccount/Role for CI kubectl
 ```
 

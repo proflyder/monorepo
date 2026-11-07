@@ -91,7 +91,7 @@
     `ctl.sh reload`). Egress станции при этом разрешает HTTPS только к
     публичным IPv4-диапазонам GitHub, весь остальной WAN и Яндекс — DROP.
 
-21. **Currency bot — Go-переписывание, Cloudflare Tunnel, OpenBao вместо
+21. **Currency bot — Rust-сервис, Cloudflare Tunnel, OpenBao вместо
     Unkey.** Заменяет Kotlin `tg-bot-currency` и VPS-стек. Поведение
     прежнего бота сохранено
     (kurs.kz, часовой job, алерты HOUR/DAY/WEEK/MONTH с dedup, retention
@@ -216,15 +216,7 @@
     владеет пропусками входа. Контракт —
     `packages/contracts/wakegrant/PROTOCOL.md`.
 
-33. **Windows-компонент собирается без Visual Studio.**
-    Отменено решением 39: провайдер и self-test — Rust, сборка
-    Bazel/rules_rust + герметичный zig под `x86_64-pc-windows-gnu`. Код
-    основан на MIT-примерах Microsoft (`Windows-classic-samples`),
-    GPL/unlicensed-код не используется; уведомления —
-    `THIRD-PARTY-NOTICES.md`, упаковка KERB портирована в
-    `crates/provider/src/kerb.rs`. CI собирает DLL, `cp-selftest.exe` и
-    `SHA256SUMS` и не трогает ПК (он недоступен из CI); распространение —
-    решение 34.
+33. **Windows-компонент (C++/mingw) — отменено решением 39.**
 
 34. **Windows-бинарники — публичные OCI-артефакты в GHCR через ORAS.**
     Провайдер входа — отдельный пакет
@@ -265,7 +257,7 @@
     * Python остаётся для ML/обучения wake-word, dev-утилит станции,
       проверок YAML-конфигов (включая отчёт `mise run coverage`) и live-e2e, где
       он не исполняется в проде.
-    * Итог (PR7): Go в репозитории нет. Деплой-инструменты — Rust
+    * Итог: Go в репозитории нет. Деплой-инструменты — Rust
       (`platform/deploy-rs`), серверные Bazel-инструменты — Rust, Android —
       Kotlin. Языки репозитория: Rust, Kotlin, Python, JS/TS.
     Существующие
@@ -421,9 +413,9 @@
     * Изменение образа, отрендеренного конфига или смонтированного
       ConfigMap по-прежнему перезапускает pods. ESO-managed Secret'ы не
       входят в хеш: они не рендерятся юнитом.
-    * Golden-фикстуры и `rollout_test.go` фиксируют: другая git-ревизия при
-      тех же образах/конфиге → идентичный pod template; другой digest или
-      конфиг → другой.
+    * Golden-фикстуры `render` (`--rollout-key`/`--fingerprint`) фиксируют:
+      другая git-ревизия при тех же образах/конфиге → идентичный pod template;
+      другой digest или конфиг → другой.
 
 
 39. **Windows-провайдер — Rust на Bazel, без Visual Studio и отдельного mingw.**
@@ -442,7 +434,6 @@
     импорты/экспорты проверяет `pe_artifacts.py` без Windows-тулчейна. CI
     ставит pinned Bazelisk вместо архива кросс-компилятора. MIT-фрагмент
     упаковки KERB — в `crates/provider/src/kerb.rs`.
-    `VERSION` поднят до `1.1.0`: поведение и формат OCI-артефакта те же.
     Сети провайдер достигает через WinHTTP (сетевой стек ОС внутри LogonUI),
     а не `reqwest`/`tokio`: это техническое исключение из общего стека
     крейтов (решение 40), а не отказ от него. Провайдер — член единого
@@ -522,15 +513,8 @@
       preflight переведены одновременно с сервером.
       Эталон — golden-фикстуры `testdata/contract/`; после удаления Go они
       остаются замороженными данными и проходят на Rust-реализации.
-    * Порядок: core → wakegrant (пилот) → voice-proxy → scheduler +
-      исполнители HA → mcp-gateway → currency-bot. Каждый сервис — отдельный
-      PR. Go-код scheduler, ha-bridge/ha-control, alarm, mcp-gateway и
-      currency-bot удалён; откат сервисов — прежний образ. Долгоживущих
-      Go-сервисов в репозитории не осталось.
-    * Установщик Pulsar (`pulsar-installer`) и health-exporter переписаны на
-      Rust (поведение 1:1). CLI `platform/deploy-rs` и Bazel-инструменты
-      Android также переведены (деплой — Rust, Android tools — Kotlin).
-      Итог: Go в репозитории нет; языки — Rust, Kotlin, Python, JS/TS.
+    * Итог: все сервисы — Rust на общем core-слое; Go в репозитории нет;
+      языки — Rust, Kotlin, Python, JS/TS.
 
 42. **Менеджер паролей — self-hosted Vaultwarden.** Для доступа человека к
     паролям и копии секретов на устройствах используется Vaultwarden в K3s
@@ -540,19 +524,6 @@
     OpenBao остаётся источником правды для машинных секретов; Vaultwarden
     получает их копию отдельной синхронизацией. Регистрация закрыта, egress
     только DNS, `/admin` включён с Argon2id-хэшем токена из OpenBao.
-
-44. **Рабочее место и CI — из `mise.toml`, секреты — из OpenBao.** Версии
-    инструментов (Python, Node, Bazelisk, gitleaks, actionlint, kubectl,
-    helm, oras, bao, gh, bw, protoc и др.) задаёт один `mise.toml`, контрольные
-    суммы — `mise.lock` (linux-x64, macos-arm64). CI ставит нужное подмножество
-    через `jdx/mise-action`; Bazel остаётся герметичным (`MODULE.bazel`), его
-    ставит `setup-bazel`. Новая машина: `mise run setup` — человек входит в
-    OpenBao (пароль + TOTP), машина получает свой periodic operator token,
-    SSH-ключи и приватные заметки приходят из `secret/infra/*`. Каталог путей
-    (только имена) живёт в Git (`platform/workstation/catalog.json`,
-    `docs/SECRETS.md`) и сверяется с OpenBao (`mise run secrets:check`).
-
-Меняется решение — обновить этот файл и `STATE.md`.
 
 43. **MCP-контракт mcp-gateway сверяется семантически.** `initialize`,
     `tools/list` и `tools/call` сравниваются по смыслу: объекты как
@@ -567,6 +538,17 @@
     `response.format: sse`). Справочный байтовый снимок Go-эпохи —
     `solutions/mcp-gateway/testdata/reference/mcp_tools_list_go_snapshot.json`.
 
+44. **Рабочее место и CI — из `mise.toml`, секреты — из OpenBao.** Версии
+    инструментов (Python, Node, Bazelisk, gitleaks, actionlint, kubectl,
+    helm, oras, bao, gh, bw, protoc и др.) задаёт один `mise.toml`, контрольные
+    суммы — `mise.lock` (linux-x64, macos-arm64). CI ставит нужное подмножество
+    через `jdx/mise-action`; Bazel остаётся герметичным (`MODULE.bazel`), его
+    ставит `setup-bazel`. Новая машина: `mise run setup` — человек входит в
+    OpenBao (пароль + TOTP), машина получает свой periodic operator token,
+    SSH-ключи и приватные заметки приходят из `secret/infra/*`. Каталог путей
+    (только имена) живёт в Git (`platform/workstation/catalog.json`,
+    `docs/SECRETS.md`) и сверяется с OpenBao (`mise run secrets:check`).
+
 45. **Публичный TLS — системный CA-бандл, не фичи `reqwest`.** Корневой
     `reqwest` собирается с `rustls-tls-manual-roots-no-provider`: прошивка
     станции (`pulsar-update`) сама задаёт корни, а Cargo унифицирует фичи
@@ -578,3 +560,5 @@
     бандл — ошибка на старте. Клиенты, ходящие в публичный HTTPS
     (currency-bot → kurs.kz/Telegram, `home-telegram`, `home-clients`),
     строятся только через `home_tls::public_https_client()`.
+
+Меняется решение — обновить этот файл и `STATE.md`.

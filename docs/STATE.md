@@ -193,9 +193,10 @@
   пушимый байт-в-байт через `oci_push`. Health exporter — Rust-сервис
   `projects/home-assistant/deploy/health-exporter/crates/health-exporter`,
   собранный тем же `rust_service_image` (static musl, distroless) в отдельный
-  `ghcr.io/proflyder/health-exporter`. `deploy-home` (builder `mixed`, карта
-  `deploy.bazel_images`) собирает и пушит gateway, proxy, exporter и
-  `home-deploy`, затем `home-deploy hermes rollout` подставляет digest'ы,
+  `ghcr.io/proflyder/health-exporter`. PR CI (`_images.yml`, builder `mixed`,
+  карта `deploy.bazel_images`) собирает и публикует gateway, proxy, exporter и
+  `home-deploy` под `tree-<hash>`; `deploy-home` продвигает digest'ы, затем
+  `home-deploy hermes rollout` подставляет digest'ы,
   проверяет `-healthcheck`/health/Assist/логи и делает `helm rollback` при
   провале. Assist smoke Job работает на `home-deploy` (`hermes assist-smoke`).
   Voice-proxy принят вживую на станции: оба профиля, подтверждение с
@@ -223,10 +224,11 @@
   переписан на них: нативный control-сокет `wpa_supplicant`, `zbus` proxies,
   `watch`-статус и сериализованные Commit'ы. Pulsar — publishable
   native-юнит общего `deploy-home` с
-  `publish_when` по `projects/station/pulsar/VERSION`: только изменение этого
-  файла на `develop` запускает `native-build` → `publish-native` →
-  OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`).
-  Прочие изменения Pulsar — только PR CI. Затем job `deploy-station` после
+  `publish_when` по `projects/station/pulsar/VERSION`: любое изменение Pulsar
+  собирается и публикуется PR CI из этого репозитория как `tree-<hash>` с
+  provenance, а на `develop` `native-release` продвигает проверенный digest на
+  релизные теги; `publish_when` ограничивает только релиз. Затем job
+  `deploy-station` после
   approve в Environment `Station` входит в VPN группой `ci` (отдельный
   сертификат `ci-pulsar`) и по OIDC в OpenBao роль `deploy-station` (политика
   `ci-station`, `secret/ci/deploy-station`: `ha_url`, `ha_token`, `entity_id`)
@@ -288,14 +290,9 @@
   до HA. Для диалогов по кнопке, follow-up и `start_conversation` отдельное
   «стоп»/«хватит» отменяет диалог локально и останавливает звонящий таймер.
 - Версия Pulsar — `v<upstream major.minor>.<1000+N>`: updater демона ставит только строго большую
-  `MAJOR.MINOR.PATCH`, а upstream уже имеет `v0.5.4`. Релиз — изменение
-  `projects/station/pulsar/VERSION` в PR в `develop`; merge маршрутизирует
-  Pulsar через общий deploy-home, `publish-native` публикует OCI-артефакт в
-  `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`), после approve
-  в Environment `Station` `deploy-station` катит на станцию через HA updater.
-  GitHub Releases и теги в монорепо не используются. Процедура — RICARDO.md
-  «Релизы и деплой». Репозиторий обновлений — константа
-  `pulsar_update::UPDATE_REPO`.
+  `MAJOR.MINOR.PATCH`, а upstream уже имеет `v0.5.4`. Релиз, публикация и
+  деплой — `projects/station/pulsar/RICARDO.md` «Релизы и деплой»; репозиторий
+  обновлений — константа `pulsar_update::UPDATE_REPO`.
 - Upstream `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` →
   `git apply -3 --directory=projects/station/pulsar`), затем обычный PR.
   Прежние GitHub `proflyder/pulsar` и `pulsar-fork-old` удалены. Откат на станции —
@@ -460,8 +457,8 @@
   выключение голосом с отменой, WoL из полного выключения, ограниченный SSH.
 - **Вход по пропуску (wakegrant).** `solutions/wakegrant` — Rust-сервис
   (решение 41, пилот): общий core-слой `packages/rust`, статический
-  `x86_64-unknown-linux-musl` бинарник на том же distroless-образе, Go-код
-  удалён; контракт и golden-фикстуры прежние. В K3s
+  `x86_64-unknown-linux-musl` бинарник на том же distroless-образе; контракт и
+  golden-фикстуры — замороженные данные. В K3s
   `home-assistant`: один под, SQLite на PVC `wakegrant-data`
   (`local-retain`), LAN NodePort `30130`, /healthz. `switch.komp.turn_on`
   сначала выдаёт одноразовый пропуск (`rest_command.wakegrant_issue`,
@@ -486,24 +483,9 @@
   PE-таймстемп обнуляется, поэтому релизный тег содержит те же байты), принята
   вживую 2026-11-07: холодный вход по grant, разблокировка по grant,
   недоступный `wakegrant` (одна строка `send_failed`, затем backoff).
-  Прежняя `1.3.14` лежит рядом как `RicardoKompLogon.old-1.3.14-20261107151433.dll`.
-  Прежняя `1.3.0` лежит рядом как `RicardoKompLogon.old-20261107141813.dll`. Сборка `1.2.0` лежит рядом как `RicardoKompLogon.dll.rust-1.2.0`. Предыдущая C++ DLL `1.0.0` лежит рядом как
-  `RicardoKompLogon.dll.cpp-1.0.0` для отката. HA-файлы `ha-voice`
-  выложены в HAOS вручную (копия прежних — `/mnt/data/ha-voice-backup-*.tar`).
-  Принято вживую 2026-11-05 (команды через HA conversation API): «включи
-  комп» на выключенном → загрузка и вход без PIN (~1 с, `mode=logon`);
-  блокировка → «разблокируй комп» → разблокирован через ~2 с
-  (`mode=unlock`); «включи комп» на включённом → «Комп уже включён», пропуск
-  не выдаётся; блокировка без команды → остаётся заблокированным; загрузка
-  без пропуска → обычный экран входа. Сценарий «wakegrant недоступен» вживую
-  не проверялся (по коду — обычный вход). Сборка `1.3.0` повторно принята
-  вживую 2026-11-05: загрузка без пропуска → экран входа, «включи комп» →
-  вход без PIN (`mode=logon`), блокировка → «разблокируй комп» →
-  разблокирован (`mode=unlock`, long-poll); формат журнала прежний.
-  Сборка `1.3.14` (clippy-гейт, механические правки) принята вживую
-  2026-11-07: пропуск `logon` + перезагрузка → вход без PIN (`granted` за
-  31 мс, `status=0x0`); блокировка без пропуска → остаётся заблокированным;
-  пропуск `unlock` → разблокирован (`status=0x0`).
+  Прежние сборки лежат рядом для отката: `1.3.14`, `1.3.0`, `1.2.0` (Rust)
+  и C++ `1.0.0`. HA-файлы `ha-voice` выложены в HAOS вручную (копия прежних —
+  `/mnt/data/ha-voice-backup-*.tar`).
 
 ## Планировщик, HA bridge, Android
 
@@ -522,7 +504,7 @@
   allowlisted HA scripts; второй исполнитель не запущен. Dry-run Job
   (`ha-bridge-dryrun`) остаётся одноразовой проверкой. Исполнитель — Rust-крейт
   `solutions/ha-bridge/crates/ha-bridge` (static musl, `rules_rust`, uid 65534,
-  тот же `/data/ledger.json`); Go-код удалён, golden-векторы
+  тот же `/data/ledger.json`); golden-векторы
   `testdata/events`, `testdata/ledger` и `testdata/catalog` — замороженные
   данные для Rust-тестов.
 - Действующий владелец будильников, таймеров и напоминаний — scheduler.
@@ -579,7 +561,7 @@
   Kotlin `tg-bot-currency` с тем же поведением: парсер kurs.kz, часовой job в
   :00 UTC, алерты только при порогах HOUR/DAY/WEEK/MONTH с dedup в
   `sent_alerts`, retention 35 дней, команды `/start` `/help` `/trigger`.
-  Go-код удалён при cutover; `testdata/` — замороженные контрактные данные,
+  `testdata/` — замороженные контрактные данные,
   которые Rust воспроизводит. Схема БД v1 и файл `/data/currency-bot.db`
   совместимы с прежним образом, откат — предыдущий digest.
 - Публичный HTTPS (kurs.kz, `api.telegram.org`) идёт через общий крейт

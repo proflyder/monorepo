@@ -20,8 +20,8 @@ projects/station/       Pulsar, ADB, BLE, provisioning
 projects/home/          Proxmox, K3s, Terraform, VPN
 projects/home-assistant/HA, voice, Hermes, MA, TTS, dashboards
 projects/mobile/        Android-клиент
-solutions/              переиспользуемые scheduler/alarm/bridge/currency-bot
-packages/               proto, общий Go/Kotlin-код
+solutions/              переиспользуемые scheduler/bridge/currency-bot/wakegrant
+packages/               proto, общий Rust/Kotlin-код
 docs/                   эксплуатация и политики
 secrets/                реальные адреса, доступы, recovery (вне Git)
 ```

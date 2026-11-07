@@ -60,7 +60,7 @@ Captured from the Go binary (57 cases):
 | eso / secret / runtime split | 4 | name lists, opaque Secret JSON, storage/workload split |
 | OCI | 4 | digest, OCI archive, docker archive, single-dash flags |
 | converge | 4 | create, manifest-wins, drift-preserve, support objects with fake kubectl traces |
-| state | 7 | record (live/absent/fail-closed), mark, rollback and first-install delete |
+| state | 6 | record (live/absent/fail-closed), mark, rollback and first-install delete |
 | preflight | 8 | fake HTTP: ok, alarm, legacy writer, endpoint mismatch, not ready, HTTP/JSON errors |
 | hermes rollout | 5 | no-op, upgrade + smoke, smoke failure + rollback, `--rollback-only` |
 

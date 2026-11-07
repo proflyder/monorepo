@@ -187,7 +187,7 @@ runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/currency-bot.env`.
 6. converges the `cloudflared` Deployment and waits for rollout.
 
 It reuses the generic `home-deploy converge`/`home-deploy state rollback` and the strict
-`home-deploy render --unit currency-bot` renderer (`platform/deploy`, decision
+`home-deploy render --unit currency-bot` renderer (`platform/deploy-rs`, decision
 35); support objects (PVC, Services, policies, ServiceMonitor, ExternalSecrets)
 are applied, Deployments are replaced so removed fields do not linger.
 
