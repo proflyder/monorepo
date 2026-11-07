@@ -1,5 +1,6 @@
 //! HA connection and entities, buttons, the light sensor, Zigbee and updates (controller.cpp
-//! "HA connection", "entities", "updates").
+//! "HA connection", "entities", "updates"). `Publisher` keeps the entity-facing state and
+//! publishes it; HA option texts are parsed here only.
 
 use pulsar_clock::ClockMusicStyle;
 use pulsar_core::now_ms;
@@ -9,16 +10,113 @@ use pulsar_esphome::{
 };
 use pulsar_hw::{Button, CaseColor, InputEvent, MusicStyle, Press, VoiceColor};
 use pulsar_media::Channel;
-use pulsar_update::UpdateEvent;
+use pulsar_update::{Release, UpdateEvent};
 use pulsar_zigbee::{Mode, ZigbeeEvent};
 use tracing::{error, info, warn};
 
 use super::logic::{self, AutoUpdate, cxx_clamp, cxx_max, cxx_min};
+use super::ports::HaLink;
 use super::{
     Controller, ExitReason, Tk, UPDATE_IDLE_RETRY_MS, clock_face, light_effect, light_rgb,
     model_dir,
 };
+use crate::settings::Settings;
 use crate::version::VERSION;
+
+/// Entity-facing state that survives HA reconnects: the clock's last text/face, the last
+/// published illuminance, the release and update progress, the Zigbee status line.
+pub struct Publisher {
+    pub(super) clock_text: String,
+    pub(super) clock_face: String,
+    pub(super) last_lux_published: f32,
+    pub(super) last_lux_ms: i64,
+    pub(super) release: Option<Release>,
+    pub(super) update_installing: bool,
+    pub(super) update_progress: f32,
+    pub(super) zigbee_status: String,
+}
+
+impl Publisher {
+    pub fn new() -> Self {
+        Self {
+            clock_text: String::new(),
+            clock_face: "None".into(),
+            last_lux_published: -1.0,
+            last_lux_ms: 0,
+            release: None,
+            update_installing: false,
+            update_progress: 0.0,
+            zigbee_status: String::new(),
+        }
+    }
+
+    /// "Microphones" is on while the speaker listens: neither the mute from HA nor the mute
+    /// button's.
+    pub fn publish_microphones(&self, ha: &dyn HaLink, muted: bool) {
+        ha.publish_switch(SwitchId::Microphones, !muted);
+    }
+
+    pub fn publish_update(&self, ha: &dyn HaLink) {
+        let release = self.release.as_ref();
+        let version = release.map_or("", |r| r.version().as_str());
+        // latest == current hides the offer: nothing newer, or not checked yet.
+        let offer = !version.is_empty() && pulsar_update::release_newer(version, VERSION).0;
+        ha.publish_update(&UpdateState {
+            in_progress: self.update_installing,
+            has_progress: self.update_installing,
+            progress: self.update_progress,
+            current_version: VERSION.into(),
+            latest_version: if offer { version } else { VERSION }.into(),
+            title: "pulsar".into(),
+            release_url: release.map_or_else(String::new, |r| r.page_url().to_owned()),
+        });
+    }
+
+    /// The C++ `on_client_connected` order: HA keeps the entity list per device, so every
+    /// publish and its order is an external contract.
+    pub fn on_client_connected(&self, ha: &dyn HaLink, s: &ClientSnapshot) {
+        ha.publish_switch(SwitchId::Clock, s.st.clock_on);
+        ha.publish_switch(SwitchId::ClockAutoBrightness, s.st.clock_auto_brightness);
+        ha.publish_switch(SwitchId::AutoUpdate, s.st.auto_update);
+        ha.publish_switch(SwitchId::NearestAnswers, s.st.nearest_answers);
+        ha.publish_switch(SwitchId::VoiceIndication, s.st.voice_indication);
+        ha.publish_switch(SwitchId::WakePreroll, s.st.wake_preroll);
+        ha.publish_switch(SwitchId::WakeEventRecording, s.st.wake_recording);
+        ha.publish_switch(SwitchId::WakeDryRun, s.st.wake_dry_run);
+        self.publish_update(ha);
+        ha.publish_binary_sensor(BinarySensorId::HwMicMute, s.hw_mic_muted);
+        ha.publish_number(NumberId::ClockBrightness, s.st.clock_brightness * 100.0);
+        ha.publish_number(NumberId::ClockScroll, s.st.clock_scroll_ms as f32);
+        ha.publish_text(TextId::ClockText, &self.clock_text);
+        ha.publish_select(SelectId::ClockFace, &self.clock_face);
+        ha.publish_number(NumberId::LedSpeed, s.st.led_speed);
+        ha.publish_number(NumberId::FollowupDuration, s.st.followup_duration_s as f32);
+        ha.publish_select(SelectId::MusicViz, &s.st.music_viz);
+        ha.publish_select(SelectId::ClockMusic, &s.st.clock_music);
+        ha.publish_select(SelectId::CaseColor, s.case_color);
+        ha.publish_select(SelectId::VoiceColor, &s.st.voice_color);
+        if let Some((role, status)) = s.zigbee {
+            ha.publish_select(SelectId::ZigbeeMode, role);
+            // The live status, not the "zigbee: …" dedup cache of Changed: its cache stays as
+            // it is (HEAD published `z.status().to_string()` here).
+            ha.publish_text_sensor(TextSensorId::Zigbee, status);
+        }
+        ha.publish_light(s.light);
+        if self.last_lux_published >= 0.0 {
+            ha.publish_sensor(SensorId::Illuminance, self.last_lux_published);
+        }
+    }
+}
+
+/// Everything the entity list needs from the controller at `ClientConnected`.
+pub struct ClientSnapshot<'a> {
+    pub st: &'a Settings,
+    pub light: &'a LightState,
+    pub case_color: &'a str,
+    pub hw_mic_muted: bool,
+    /// Present when the Zigbee service runs: its select option label and live status line.
+    pub zigbee: Option<(&'a str, &'a str)>,
+}
 
 impl Controller {
     pub(super) fn on_api(&mut self, ev: ApiEvent) {
@@ -55,7 +153,7 @@ impl Controller {
             ApiEvent::VoiceAudioOverflow { run } => self.on_voice_audio_overflow(run),
             ApiEvent::Update(cmd) => self.on_update(cmd),
             ApiEvent::MdnsTxtChanged(txt) => {
-                if let Some(m) = &self.mdns {
+                if let Some(m) = &self.deps.mdns {
                     m.set_txt("_esphomelib._tcp", txt);
                 }
             }
@@ -67,43 +165,26 @@ impl Controller {
         self.error_shown = false;
         self.publish_media();
         self.publish_microphones();
-        let api = &self.api;
-        api.publish_switch(SwitchId::Clock, self.st.clock_on);
-        api.publish_switch(SwitchId::ClockAutoBrightness, self.st.clock_auto_brightness);
-        api.publish_switch(SwitchId::AutoUpdate, self.st.auto_update);
-        api.publish_switch(SwitchId::NearestAnswers, self.st.nearest_answers);
-        api.publish_switch(SwitchId::VoiceIndication, self.st.voice_indication);
-        api.publish_switch(SwitchId::WakePreroll, self.st.wake_preroll);
-        api.publish_switch(SwitchId::WakeEventRecording, self.st.wake_recording);
-        api.publish_switch(SwitchId::WakeDryRun, self.st.wake_dry_run);
-        self.publish_update();
-        let api = &self.api;
-        api.publish_binary_sensor(BinarySensorId::HwMicMute, self.hw_mic_muted);
-        api.publish_number(NumberId::ClockBrightness, self.st.clock_brightness * 100.0);
-        api.publish_number(NumberId::ClockScroll, self.st.clock_scroll_ms as f32);
-        api.publish_text(TextId::ClockText, &self.clock_text);
-        api.publish_select(SelectId::ClockFace, &self.clock_face);
-        api.publish_number(NumberId::LedSpeed, self.st.led_speed);
-        api.publish_number(
-            NumberId::FollowupDuration,
-            self.st.followup_duration_s as f32,
+        let light = self.light_state();
+        let zigbee = self.deps.radio.as_ref().map(|z| {
+            (
+                pulsar_zigbee::role(super::zigbee_role(&self.st)).label,
+                z.status(),
+            )
+        });
+        let zigbee = zigbee
+            .as_ref()
+            .map(|(role, status)| (*role, status.as_str()));
+        self.entity.on_client_connected(
+            &*self.deps.ha,
+            &ClientSnapshot {
+                st: &self.st,
+                light: &light,
+                case_color: self.case_color_option(),
+                hw_mic_muted: self.hw_mic_muted,
+                zigbee,
+            },
         );
-        api.publish_select(SelectId::MusicViz, self.st.music_viz.as_str());
-        api.publish_select(SelectId::ClockMusic, self.st.clock_music.as_str());
-        api.publish_select(SelectId::CaseColor, self.case_color_option());
-        api.publish_select(SelectId::VoiceColor, self.st.voice_color.as_str());
-        if let Some(z) = &self.zigbee {
-            api.publish_select(
-                SelectId::ZigbeeMode,
-                pulsar_zigbee::role(self.st.zigbee_role).label,
-            );
-            // Not through the "zigbee: …" dedup of Changed: its cache stays as it is.
-            api.publish_text_sensor(TextSensorId::Zigbee, &z.status().to_string());
-        }
-        api.publish_light(&self.st.light);
-        if self.last_lux_published >= 0.0 {
-            api.publish_sensor(SensorId::Illuminance, self.last_lux_published);
-        }
     }
 
     fn case_color_option(&self) -> &str {
@@ -165,39 +246,39 @@ impl Controller {
             }
             SwitchId::Clock => {
                 self.st.clock_on = state;
-                self.clock.set_enabled(state);
+                self.deps.display.clock.set_enabled(state);
                 self.update_music();
             }
             SwitchId::ClockAutoBrightness => {
                 self.st.clock_auto_brightness = state;
-                self.clock.set_auto_brightness(state);
+                self.deps.display.clock.set_auto_brightness(state);
             }
             SwitchId::AutoUpdate => self.st.auto_update = state,
             SwitchId::NearestAnswers => self.st.nearest_answers = state,
             SwitchId::VoiceIndication => {
                 self.st.voice_indication = state;
-                self.leds.set_voice_indication(state);
-                self.clock.set_voice_indication(state);
+                self.deps.display.leds.set_voice_indication(state);
+                self.deps.display.clock.set_voice_indication(state);
             }
             SwitchId::WakePreroll => {
                 self.st.wake_preroll = state;
-                self.mic.set_preroll(state);
+                self.deps.frontend.set_preroll(state);
             }
             SwitchId::WakeEventRecording => {
                 self.st.wake_recording = state;
-                self.mic.set_wake_recording(state);
+                self.deps.frontend.set_wake_recording(state);
                 info!(
                     "wake events: recording {}",
                     if state { "on" } else { "off" }
                 );
                 // Privacy: the choice must survive a power cut right after it.
                 let _ = self.persist_now();
-                self.api.publish_switch(id, state);
+                self.deps.ha.publish_switch(id, state);
                 return;
             }
             SwitchId::WakeDryRun => {
                 self.st.wake_dry_run = state;
-                self.mic.set_wake_dry_run(state);
+                self.deps.frontend.set_wake_dry_run(state);
                 info!(
                     "wake events: dry run {}",
                     if state {
@@ -207,45 +288,52 @@ impl Controller {
                     }
                 );
                 let _ = self.persist_now();
-                self.api.publish_switch(id, state);
+                self.deps.ha.publish_switch(id, state);
                 return;
             }
         }
-        self.api.publish_switch(id, state);
+        self.deps.ha.publish_switch(id, state);
         self.persist();
         if id == SwitchId::AutoUpdate {
             self.maybe_auto_update();
         }
     }
 
-    /// "Microphones" is on while the speaker listens: neither the mute from HA nor the mute
-    /// button's.
     fn publish_microphones(&self) {
-        self.api
-            .publish_switch(SwitchId::Microphones, !self.mic_muted());
+        self.entity
+            .publish_microphones(&*self.deps.ha, self.mic_muted());
     }
 
     fn on_number(&mut self, id: NumberId, value: f32) {
         match id {
             NumberId::ClockBrightness => {
                 self.st.clock_brightness = cxx_min(100.0, cxx_max(0.0, value)) / 100.0;
-                self.clock.set_brightness(self.st.clock_brightness);
-                self.api
+                self.deps
+                    .display
+                    .clock
+                    .set_brightness(self.st.clock_brightness);
+                self.deps
+                    .ha
                     .publish_number(id, self.st.clock_brightness * 100.0);
             }
             NumberId::ClockScroll => {
                 // C++ int(lround(value / 50)) * 50 (Rust saturates where C++ is undefined).
                 let steps = (value / 50.0).round() as i64 as i32;
                 self.st.clock_scroll_ms = steps.wrapping_mul(50).clamp(100, 2000);
-                self.clock.set_scroll_ms(self.st.clock_scroll_ms);
-                self.api.publish_number(id, self.st.clock_scroll_ms as f32);
+                self.deps
+                    .display
+                    .clock
+                    .set_scroll_ms(self.st.clock_scroll_ms);
+                self.deps
+                    .ha
+                    .publish_number(id, self.st.clock_scroll_ms as f32);
             }
             NumberId::FollowupDuration => {
                 let Some(s) = pulsar_esphome::followup_duration_s(value) else {
                     return;
                 };
                 self.st.followup_duration_s = s;
-                self.api.publish_number(id, s as f32);
+                self.deps.ha.publish_number(id, s as f32);
                 // Ожидание открыто и до STT_START, и без таймера: проверяется по флагу, не по Tk.
                 if s == 0
                     && self.phase == logic::Phase::Listening
@@ -257,38 +345,42 @@ impl Controller {
             }
             NumberId::LedSpeed => {
                 self.st.led_speed = cxx_clamp(value, 0.25, 4.0);
-                self.leds.set_speed(self.st.led_speed);
-                self.api.publish_number(id, self.st.led_speed);
+                self.deps.display.leds.set_speed(self.st.led_speed);
+                self.deps.ha.publish_number(id, self.st.led_speed);
             }
         }
         self.persist();
     }
 
     fn on_text(&mut self, id: TextId, value: String) {
-        self.clock.set_text(value.clone());
-        self.api.publish_text(id, &value);
+        self.deps.display.clock.set_text(value.clone());
+        self.deps.ha.publish_text(id, &value);
         // Text and face replace each other on the display; the clock already dropped the face.
-        let clears_face = !value.is_empty() && self.clock_face != "None";
-        self.clock_text = value;
+        let clears_face = !value.is_empty() && self.entity.clock_face != "None";
+        self.entity.clock_text = value;
         if clears_face {
-            self.clock_face = "None".into();
-            self.api
-                .publish_select(SelectId::ClockFace, &self.clock_face);
+            self.entity.clock_face = "None".into();
+            self.deps
+                .ha
+                .publish_select(SelectId::ClockFace, &self.entity.clock_face);
         }
     }
 
     fn on_select(&mut self, id: SelectId, option: String) {
         match id {
             SelectId::ZigbeeMode => {
-                if self.zigbee.is_none() {
+                if self.deps.radio.is_none() {
                     return;
                 }
                 let role = pulsar_zigbee::ROLES
                     .iter()
                     .find(|r| r.label == option)
-                    .map_or(self.st.zigbee_role, |r| r.mode);
-                if role == self.st.zigbee_role {
-                    return self.api.publish_select(id, pulsar_zigbee::role(role).label);
+                    .map_or(super::zigbee_role(&self.st), |r| r.mode);
+                if role == super::zigbee_role(&self.st) {
+                    return self
+                        .deps
+                        .ha
+                        .publish_select(id, pulsar_zigbee::role(role).label);
                 }
                 // The role starts with the daemon, which writes the radio firmware it needs; the
                 // coordinator's mDNS advertisement is only made in that role.
@@ -296,52 +388,62 @@ impl Controller {
                     "zigbee: role {} chosen, restarting",
                     pulsar_zigbee::role(role).name
                 );
-                self.st.zigbee_role = role;
+                pulsar_zigbee::role(role)
+                    .name
+                    .clone_into(&mut self.st.zigbee_role);
                 self.st.zigbee_flash_failed = 0;
                 // Before the restart: the next start acts on the role. A failed write stays
                 // pending for the exit flush after run().
                 let _ = self.persist_now();
-                self.api.publish_select(id, pulsar_zigbee::role(role).label);
+                self.deps
+                    .ha
+                    .publish_select(id, pulsar_zigbee::role(role).label);
                 self.exit = Some(ExitReason::ZigbeeRoleChanged);
             }
             SelectId::MusicViz => {
-                let style: MusicStyle = option.parse().unwrap_or(self.st.music_viz);
-                self.leds.set_music_style(style);
-                self.api.publish_select(id, option.as_str());
-                self.st.music_viz = style;
+                let current = super::music_viz(&self.st);
+                let style: MusicStyle = option.parse().unwrap_or(current);
+                self.deps.display.leds.set_music_style(style);
+                self.deps.ha.publish_select(id, &option);
+                style.as_str().clone_into(&mut self.st.music_viz);
                 self.persist();
                 self.update_music();
             }
             SelectId::ClockMusic => {
-                let style: ClockMusicStyle = option.parse().unwrap_or(self.st.clock_music);
-                self.clock.set_music_style(style);
-                self.api.publish_select(id, option.as_str());
-                self.st.clock_music = style;
+                let current = super::clock_music(&self.st);
+                let style: ClockMusicStyle = option.parse().unwrap_or(current);
+                self.deps.display.clock.set_music_style(style);
+                self.deps.ha.publish_select(id, &option);
+                style.as_str().clone_into(&mut self.st.clock_music);
                 self.persist();
                 self.update_music();
             }
             SelectId::CaseColor => {
                 let stem = if option == "None" { "" } else { &option };
-                self.leds.set_case_color(CaseColor::new(stem));
-                self.st.led_case_color = stem.to_owned();
-                self.api.publish_select(id, self.case_color_option());
+                self.deps.display.leds.set_case_color(CaseColor::new(stem));
+                stem.clone_into(&mut self.st.led_case_color);
+                let shown = self.case_color_option().to_owned();
+                self.deps.ha.publish_select(id, &shown);
                 self.persist();
             }
             SelectId::ClockFace => {
-                self.clock.set_face(clock_face(&option));
-                self.api.publish_select(id, &option);
-                let clears_text = option != "None" && !self.clock_text.is_empty();
-                self.clock_face = option;
+                self.deps.display.clock.set_face(clock_face(&option));
+                self.deps.ha.publish_select(id, &option);
+                let clears_text = option != "None" && !self.entity.clock_text.is_empty();
+                self.entity.clock_face = option;
                 if clears_text {
-                    self.clock_text.clear();
-                    self.api.publish_text(TextId::ClockText, &self.clock_text);
+                    self.entity.clock_text.clear();
+                    self.deps
+                        .ha
+                        .publish_text(TextId::ClockText, &self.entity.clock_text);
                 }
             }
             SelectId::VoiceColor => {
-                let color: VoiceColor = option.parse().unwrap_or(self.st.voice_color);
-                self.leds.set_voice_color(color);
-                self.api.publish_select(id, color.as_str());
-                self.st.voice_color = color;
+                let current = super::voice_color(&self.st);
+                let color: VoiceColor = option.parse().unwrap_or(current);
+                self.deps.display.leds.set_voice_color(color);
+                self.deps.ha.publish_select(id, color.as_str());
+                color.as_str().clone_into(&mut self.st.voice_color);
                 self.persist();
             }
         }
@@ -351,15 +453,15 @@ impl Controller {
         match id {
             ButtonId::WakeFalseAlarm => {
                 info!("wake events: «ложное срабатывание» pressed");
-                return self.mic.wake_event_false_alarm();
+                return self.deps.frontend.wake_event_false_alarm();
             }
             ButtonId::WakeMissed => {
                 info!("wake events: «не услышала» pressed");
-                return self.mic.wake_missed();
+                return self.deps.frontend.wake_missed();
             }
             ButtonId::ZigbeeJoin | ButtonId::ZigbeeLeave => {}
         }
-        let Some(z) = &self.zigbee else {
+        let Some(z) = &self.deps.radio else {
             return;
         };
         if z.mode() != Mode::Router {
@@ -380,15 +482,18 @@ impl Controller {
             if text { "text" } else { "face" }
         );
         if text {
-            self.clock.show_temporary_text(value, seconds);
+            self.deps.display.clock.show_temporary_text(value, seconds);
         } else {
-            self.clock.show_temporary_face(clock_face(&value), seconds);
+            self.deps
+                .display
+                .clock
+                .show_temporary_face(clock_face(&value), seconds);
         }
     }
 
     fn on_led_show(&mut self, effect: &str, color: &str, seconds: i32) {
         if effect.is_empty() && color.is_empty() {
-            return self.leds.clear_temporary();
+            return self.deps.display.leds.clear_temporary();
         }
         let Some(rgb) = logic::parse_led_color(color) else {
             warn!("led_show: bad colour '{color}'");
@@ -398,18 +503,21 @@ impl Controller {
             "leds: show '{effect}' #{:02x}{:02x}{:02x}, {seconds} s requested",
             rgb.r, rgb.g, rgb.b
         );
-        self.leds.show_temporary(light_effect(effect), rgb, seconds);
+        self.deps
+            .display
+            .leds
+            .show_temporary(light_effect(effect), rgb, seconds);
     }
 
     fn on_light(&mut self, l: LightState, transition_ms: u32) {
-        self.leds.set_user_light(
+        self.deps.display.leds.set_user_light(
             l.on,
-            light_rgb(&l),
+            light_rgb(l.r, l.g, l.b),
             l.brightness,
             light_effect(&l.effect),
             transition_ms,
         );
-        self.st.light = l;
+        self.store_light(l);
         self.persist();
         self.update_music();
     }
@@ -427,11 +535,12 @@ impl Controller {
         self.st.wake_word = first;
         info!("wake word -> {}", self.st.wake_word);
         let custom = self.st.wake_word == "ricardo";
-        self.mic.set_custom_wake(custom);
+        self.deps.frontend.set_custom_wake(custom);
         if !custom {
-            self.mic.set_model(model_dir(&self.st.wake_word));
+            self.deps.frontend.set_model(model_dir(&self.st.wake_word));
         }
-        self.api
+        self.deps
+            .ha
             .set_active_wake_words(vec![self.st.wake_word.clone()]);
         self.persist();
     }
@@ -446,7 +555,9 @@ impl Controller {
                 }
                 self.hw_mic_muted = m;
                 info!("hardware mic mute: {}", u8::from(m));
-                self.api.publish_binary_sensor(BinarySensorId::HwMicMute, m);
+                self.deps
+                    .ha
+                    .publish_binary_sensor(BinarySensorId::HwMicMute, m);
                 let sw_muted = logic::sw_mute_after_button(self.st.mic_muted, m);
                 if sw_muted != self.st.mic_muted {
                     info!("mute button lifted the mute from Home Assistant");
@@ -483,7 +594,7 @@ impl Controller {
                 let _ = self.persist_now();
             }
             InputEvent::Button(Button::Action, p) => {
-                self.api.fire_event(
+                self.deps.ha.fire_event(
                     EventId::Button,
                     if p == Press::Long {
                         "action_long"
@@ -495,7 +606,7 @@ impl Controller {
                     return; // exposed to HA automations only
                 }
                 if self.sendspin_pairing_prompt
-                    && let Some(ss) = &self.sendspin
+                    && let Some(ss) = &self.deps.sendspin
                 {
                     return ss.confirm_pairing_window();
                 }
@@ -503,7 +614,7 @@ impl Controller {
             }
             InputEvent::Button(b, _) => {
                 let up = b == Button::VolumeUp;
-                self.api.fire_event(
+                self.deps.ha.fire_event(
                     EventId::Button,
                     if up { "volume_up" } else { "volume_down" },
                 );
@@ -516,13 +627,18 @@ impl Controller {
     }
 
     pub(super) fn on_lux(&mut self, lux: f32) {
-        self.clock.set_ambient_lux(lux);
-        self.leds.set_ambient_lux(lux);
+        self.deps.display.clock.set_ambient_lux(lux);
+        self.deps.display.leds.set_ambient_lux(lux);
         let now = now_ms();
-        if logic::publish_lux(lux, self.last_lux_published, self.last_lux_ms, now) {
-            self.api.publish_sensor(SensorId::Illuminance, lux);
-            self.last_lux_published = lux;
-            self.last_lux_ms = now;
+        if logic::publish_lux(
+            lux,
+            self.entity.last_lux_published,
+            self.entity.last_lux_ms,
+            now,
+        ) {
+            self.deps.ha.publish_sensor(SensorId::Illuminance, lux);
+            self.entity.last_lux_published = lux;
+            self.entity.last_lux_ms = now;
         }
     }
 
@@ -531,16 +647,16 @@ impl Controller {
     pub(super) fn on_zigbee(&mut self, ev: ZigbeeEvent) {
         match ev {
             ZigbeeEvent::Changed => {
-                let Some(z) = &self.zigbee else {
+                let Some(z) = &self.deps.radio else {
                     return;
                 };
-                let s = z.status().to_string();
-                if s == self.zigbee_status {
+                let s = z.status();
+                if s == self.entity.zigbee_status {
                     return;
                 }
                 info!("zigbee: {s}");
-                self.api.publish_text_sensor(TextSensorId::Zigbee, &s);
-                self.zigbee_status = s;
+                self.deps.ha.publish_text_sensor(TextSensorId::Zigbee, &s);
+                self.entity.zigbee_status = s;
             }
             ZigbeeEvent::FlashOutcome { failed_version } => {
                 if failed_version == self.st.zigbee_flash_failed {
@@ -557,38 +673,29 @@ impl Controller {
     // ---------------- updates ----------------
 
     pub(super) fn publish_update(&self) {
-        let release = self.release.as_ref();
-        let version = release.map_or("", |r| r.version().as_str());
-        // latest == current hides the offer: nothing newer, or not checked yet.
-        let offer = !version.is_empty() && pulsar_update::release_newer(version, VERSION).0;
-        self.api.publish_update(&UpdateState {
-            in_progress: self.update_installing,
-            has_progress: self.update_installing,
-            progress: self.update_progress,
-            current_version: VERSION.into(),
-            latest_version: if offer { version } else { VERSION }.into(),
-            title: "pulsar".into(),
-            release_url: release.map_or_else(String::new, |r| r.page_url().to_owned()),
-        });
+        self.entity.publish_update(&*self.deps.ha);
     }
 
     pub(super) fn check_update(&mut self) {
         // None: a request is in flight (C++ Updater::check returned silently).
-        if let Some(id) = self.updater.check() {
+        if let Some(id) = self.deps.updater.check() {
             self.pending_check = Some(id);
         }
     }
 
     fn release_version(&self) -> &str {
-        self.release.as_ref().map_or("", |r| r.version().as_str())
+        self.entity
+            .release
+            .as_ref()
+            .map_or("", |r| r.version().as_str())
     }
 
     fn idle_for_update(&self) -> bool {
         logic::idle_for_update(
             self.phase,
             self.announcing,
-            self.timer_ringing,
-            self.player.state(Channel::Music),
+            self.timers_ha.ringing(),
+            self.deps.player.state(Channel::Music),
             self.sendspin_streaming(),
             self.zigbee_flashing(),
         )
@@ -599,7 +706,7 @@ impl Controller {
         match logic::auto_update(
             self.st.auto_update,
             self.release_version(),
-            self.update_installing,
+            self.entity.update_installing,
             VERSION,
             &self.st.update_attempt,
             self.idle_for_update(),
@@ -612,7 +719,8 @@ impl Controller {
 
     fn install_update(&mut self, why: &str) {
         // A check not handled yet would still replace the release (C++ busy() until then).
-        if self.updater.busy() || self.update_installing || self.pending_check.is_some() {
+        if self.deps.updater.busy() || self.entity.update_installing || self.pending_check.is_some()
+        {
             return;
         }
         if self.zigbee_flashing() {
@@ -625,7 +733,7 @@ impl Controller {
             return;
         };
         let binary = std::path::PathBuf::from(logic::strip_deleted(exe.as_os_str()));
-        let Some(r) = self.release.clone() else {
+        let Some(r) = self.entity.release.clone() else {
             return;
         };
         warn!("installing release {} ({why})", r.version());
@@ -643,12 +751,12 @@ impl Controller {
             self.install_failed();
             return;
         }
-        self.update_installing = true;
-        self.clock.set_updating(true);
-        self.update_progress = 0.0;
+        self.entity.update_installing = true;
+        self.deps.display.clock.set_updating(true);
+        self.entity.update_progress = 0.0;
         self.publish_update();
         r.version().as_str().clone_into(&mut self.install_version);
-        if let Some(id) = self.updater.install(r, binary) {
+        if let Some(id) = self.deps.updater.install(r, binary) {
             self.install_id = Some(id);
         }
     }
@@ -682,14 +790,14 @@ impl Controller {
                         if r.version().as_str() != self.release_version() {
                             info!("latest release {} (running {VERSION})", r.version());
                         }
-                        self.release = Some(r);
+                        self.entity.release = Some(r);
                         self.publish_update();
                         self.maybe_auto_update();
                     }
                 }
             }
             UpdateEvent::Progress { value, .. } => {
-                self.update_progress = value;
+                self.entity.update_progress = value;
                 self.publish_update();
             }
             UpdateEvent::Installed { id, result } => {
@@ -700,7 +808,7 @@ impl Controller {
                 match result {
                     Ok(()) => {
                         warn!("installed {version}, restarting");
-                        self.update_progress = 100.0;
+                        self.entity.update_progress = 100.0;
                         self.publish_update();
                         self.timers.set(Tk::UpdateExit, 500);
                     }
@@ -723,8 +831,8 @@ impl Controller {
     /// An install that ended without a new binary, or never started: HA sees the update entity
     /// idle again, the clock shows the time.
     fn install_failed(&mut self) {
-        self.update_installing = false;
-        self.clock.set_updating(false);
+        self.entity.update_installing = false;
+        self.deps.display.clock.set_updating(false);
         self.publish_update();
     }
 }

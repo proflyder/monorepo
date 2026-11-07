@@ -3,50 +3,94 @@
 use pulsar_core::{ClockShot, now_ms};
 use pulsar_esphome::{MediaCommand, MediaCommandRequest};
 use pulsar_media::{Channel, PlayState};
+use pulsar_model::VolumeCurve;
 use pulsar_sendspin::SendspinEvent;
 use tracing::debug;
 
+use super::earcons;
 use super::logic::{self, cxx_max, cxx_min};
-use super::{Controller, DUCK_GAIN, Pending, SOUNDS};
+use super::{Controller, Pending};
+
+/// Gain of the music while a dialog, announcement, timer ring or closing earcon is on.
+const DUCK_GAIN: f32 = 0.15;
+
+/// Volume, mute and ducking of both playback channels and Sendspin. The gain formulas live
+/// here only: `apply_gains` and the Sendspin start-up used to compute `master_gain` separately.
+pub struct Policy {
+    curve: &'static VolumeCurve,
+    ducked: bool,
+}
+
+impl Policy {
+    pub fn new(curve: &'static VolumeCurve) -> Self {
+        Self {
+            curve,
+            ducked: false,
+        }
+    }
+
+    /// Sets the duck state; true when it changed (the gains then have to be re-applied).
+    pub fn set_ducked(&mut self, want: bool) -> bool {
+        if want == self.ducked {
+            return false;
+        }
+        self.ducked = want;
+        true
+    }
+
+    /// Master output gain on the model's curve (software volume models, e.g. the Mini).
+    pub fn master_gain(&self, volume: f32) -> f32 {
+        pulsar_core::volume::master_gain(self.curve, volume)
+    }
+
+    /// Music channel and Sendspin software gain: mute zeroes it, duck scales it.
+    pub fn music_gain(&self, volume: f32, muted: bool) -> f32 {
+        if muted {
+            0.0
+        } else {
+            self.master_gain(volume) * if self.ducked { DUCK_GAIN } else { 1.0 }
+        }
+    }
+
+    /// Announce channel gain: mute zeroes it, speech is never ducked.
+    pub fn announce_gain(&self, volume: f32, muted: bool) -> f32 {
+        if muted { 0.0 } else { self.master_gain(volume) }
+    }
+}
 
 impl Controller {
     pub(super) fn update_duck(&mut self) {
         let want = logic::want_duck(
             self.phase,
             self.announcing,
-            self.timer_ringing,
+            self.timers_ha.ringing(),
             self.closing_earcon,
         );
-        if want == self.ducked {
-            return;
+        if self.media.set_ducked(want) {
+            self.apply_gains();
         }
-        self.ducked = want;
-        self.apply_gains();
     }
 
     /// Mute: softvol raw 0 is the bottom of its dB range (-60 dB on the Midi), still audible, so
     /// mute also zeroes the software gains of both playback channels and Sendspin. On models
     /// without a usable ALSA master (the Mini) this is also where the master volume is applied.
     pub(super) fn apply_gains(&self) {
-        let master = pulsar_core::volume::master_gain(&self.model.volume, self.st.volume);
-        let music = if self.st.muted {
-            0.0
-        } else {
-            master * if self.ducked { DUCK_GAIN } else { 1.0 }
-        };
-        self.player.set_channel_gain(Channel::Music, music);
-        self.player
-            .set_channel_gain(Channel::Announce, if self.st.muted { 0.0 } else { master });
-        if let Some(ss) = &self.sendspin {
+        let music = self.media.music_gain(self.st.volume, self.st.muted);
+        self.deps.player.set_channel_gain(Channel::Music, music);
+        self.deps.player.set_channel_gain(
+            Channel::Announce,
+            self.media.announce_gain(self.st.volume, self.st.muted),
+        );
+        if let Some(ss) = &self.deps.sendspin {
             ss.set_duck_gain(music);
         }
     }
 
     pub(super) fn set_muted(&mut self, m: bool) {
         self.st.muted = m;
-        self.mixer.set_muted(m);
+        self.deps.mixer.set_muted(m);
         self.apply_gains();
-        if let Some(ss) = &self.sendspin {
+        if let Some(ss) = &self.deps.sendspin {
             ss.report_volume(self.st.volume, self.st.muted);
         }
         self.publish_media();
@@ -58,21 +102,23 @@ impl Controller {
     pub(super) fn set_volume(&mut self, v: f32, feedback: bool) {
         let before = (self.st.volume, self.st.muted);
         self.st.volume = cxx_min(1.0, cxx_max(0.0, v));
-        self.mixer.set_volume(self.st.volume);
+        self.deps.mixer.set_volume(self.st.volume);
         if self.st.muted && feedback {
             self.st.muted = false;
-            self.mixer.set_muted(false);
+            self.deps.mixer.set_muted(false);
         }
         self.apply_gains();
         if feedback {
-            self.leds.show_volume(self.st.volume);
+            self.deps.display.leds.show_volume(self.st.volume);
             // mul_add: the station C++ fuses `volume * 100 + 0.5` (fmadd on aarch64, vfma.f32 on
             // armhf, checked in the -O2 asm of Controller::set_volume); the rounding follows it.
-            self.clock
+            self.deps
+                .display
+                .clock
                 .flash_number(self.st.volume.mul_add(100.0, 0.5) as i32);
             self.volume_click(before);
         }
-        if let Some(ss) = &self.sendspin {
+        if let Some(ss) = &self.deps.sendspin {
             ss.report_volume(self.st.volume, self.st.muted);
         }
         self.publish_media();
@@ -87,14 +133,16 @@ impl Controller {
             self.phase,
             self.arbitrating,
             self.announcing,
-            self.timer_ringing,
+            self.timers_ha.ringing(),
             self.closing_earcon,
         ) {
             return;
         }
         // Music is not ducked under it; its Done has no Pending entry and is ignored.
-        let sound = format!("{SOUNDS}{}", self.model.earcons.volume);
-        self.player.play(Channel::Announce, vec![sound]);
+        self.deps.player.play(
+            Channel::Announce,
+            vec![earcons::path(self.model.earcons.volume)],
+        );
     }
 
     /// Reads the player state as it is now: right after a command to the player it is still the
@@ -102,10 +150,10 @@ impl Controller {
     pub(super) fn publish_media(&self) {
         let s = logic::media_state(
             self.announcing,
-            self.player.state(Channel::Music),
+            self.deps.player.state(Channel::Music),
             self.sendspin_streaming(),
         );
-        self.api.publish_media(s, self.st.volume, self.st.muted);
+        self.deps.ha.publish_media(s, self.st.volume, self.st.muted);
         self.update_music();
         // The local command spotter follows playback: on while music/announcement/
         // timer speech plays, off in silence and during a dialog.
@@ -113,16 +161,17 @@ impl Controller {
     }
 
     pub(super) fn update_music(&self) {
-        let ps = self.player.state(Channel::Music);
+        let ps = self.deps.player.state(Channel::Music);
         let media =
             matches!(ps, PlayState::Playing | PlayState::Loading) || self.sendspin_streaming();
-        self.leds.set_media_playing(media);
-        self.clock.set_media_playing(media);
+        self.deps.display.leds.set_media_playing(media);
+        self.deps.display.clock.set_media_playing(media);
         // The speaker-reference analysis only runs while its result can be shown.
-        self.mic.set_music_analysis(
+        self.deps.frontend.set_music_analysis(
             media
-                && ((self.st.music_viz != pulsar_hw::MusicStyle::Off && !self.st.light.on)
-                    || (self.st.clock_music != pulsar_clock::ClockMusicStyle::Off
+                && ((super::music_viz(&self.st) != pulsar_hw::MusicStyle::Off
+                    && !self.st.light.on)
+                    || (super::clock_music(&self.st) != pulsar_clock::ClockMusicStyle::Off
                         && self.st.clock_on)),
         );
     }
@@ -132,17 +181,17 @@ impl Controller {
             if cmd.announcement == Some(true) {
                 // Media-player announcements report completion through state only.
                 self.announcing = true;
-                self.announce_seq += 1;
+                self.announce_seq = self.announce_seq.next();
                 let seq = self.announce_seq;
                 self.update_duck();
                 self.update_ui();
-                let id = self.player.play(Channel::Announce, vec![url]);
+                let id = self.deps.player.play(Channel::Announce, vec![url]);
                 self.pending.insert(id, Pending::MediaAnnounce { seq });
             } else {
-                if let Some(ss) = &self.sendspin {
+                if let Some(ss) = &self.deps.sendspin {
                     ss.yield_to_local(); // HA media takes the speaker from Sendspin
                 }
-                self.player.play(Channel::Music, vec![url]);
+                self.deps.player.play(Channel::Music, vec![url]);
             }
         }
         if let Some(v) = cmd.volume {
@@ -150,47 +199,47 @@ impl Controller {
         }
         if let Some(c) = cmd.command {
             let ss_on = self.sendspin_streaming();
-            let music = || self.player.state(Channel::Music);
+            let music = || self.deps.player.state(Channel::Music);
             match c {
                 MediaCommand::Play => {
                     if ss_on
                         && music() == PlayState::Paused
-                        && let Some(ss) = &self.sendspin
+                        && let Some(ss) = &self.deps.sendspin
                     {
                         ss.yield_to_local();
                     }
-                    self.player.resume(Channel::Music);
+                    self.deps.player.resume(Channel::Music);
                 }
                 MediaCommand::Pause => {
                     if ss_on || matches!(music(), PlayState::Playing | PlayState::Loading) {
-                        self.clock.play(ClockShot::Pause);
+                        self.deps.display.clock.play(ClockShot::Pause);
                     }
                     // While Sendspin plays, HA's pause/stop leave the Sendspin group (the
                     // speaker stops).
                     if ss_on
                         && music() != PlayState::Playing
-                        && let Some(ss) = &self.sendspin
+                        && let Some(ss) = &self.deps.sendspin
                     {
                         ss.yield_to_local();
                     }
-                    self.player.pause(Channel::Music);
+                    self.deps.player.pause(Channel::Music);
                 }
                 MediaCommand::Toggle => {
                     if music() == PlayState::Playing {
-                        self.clock.play(ClockShot::Pause);
-                        self.player.pause(Channel::Music);
+                        self.deps.display.clock.play(ClockShot::Pause);
+                        self.deps.player.pause(Channel::Music);
                     } else if ss_on {
-                        self.clock.play(ClockShot::Pause);
-                        if let Some(ss) = &self.sendspin {
+                        self.deps.display.clock.play(ClockShot::Pause);
+                        if let Some(ss) = &self.deps.sendspin {
                             ss.yield_to_local();
                         }
                     } else {
-                        self.player.resume(Channel::Music);
+                        self.deps.player.resume(Channel::Music);
                     }
                 }
                 MediaCommand::Stop => {
-                    self.player.stop(Channel::Music);
-                    if ss_on && let Some(ss) = &self.sendspin {
+                    self.deps.player.stop(Channel::Music);
+                    if ss_on && let Some(ss) = &self.deps.sendspin {
                         ss.yield_to_local();
                     }
                 }
@@ -214,13 +263,13 @@ impl Controller {
         match ev {
             SendspinEvent::Stream(active) => {
                 // Music Assistant took over the speaker: the HA media channel yields to it.
-                if active && self.player.state(Channel::Music) != PlayState::Idle {
-                    self.player.stop(Channel::Music);
+                if active && self.deps.player.state(Channel::Music) != PlayState::Idle {
+                    self.deps.player.stop(Channel::Music);
                 }
                 // The HA media channel playing here took the speaker over (yield_to_local): not a
                 // pause in Music Assistant. on_player clears the stamp if its state comes later.
                 let taken_over = matches!(
-                    self.player.state(Channel::Music),
+                    self.deps.player.state(Channel::Music),
                     PlayState::Playing | PlayState::Loading
                 );
                 self.sendspin_ended_ms = (!active && !taken_over).then(now_ms);
@@ -230,22 +279,22 @@ impl Controller {
             SendspinEvent::Mute(m) => self.set_muted(m),
             SendspinEvent::PairingCode(code) => {
                 if code.is_empty() {
-                    self.clock.clear_code();
+                    self.deps.display.clock.clear_code();
                 } else {
-                    self.clock.show_code(code);
+                    self.deps.display.clock.show_code(code);
                 }
             }
             SendspinEvent::PairingWindow(open) => {
                 self.sendspin_pairing_prompt = open;
                 if open {
-                    self.clock.show_code("----".into());
+                    self.deps.display.clock.show_code("----".into());
                 } else {
-                    self.clock.clear_code();
+                    self.deps.display.clock.clear_code();
                 }
             }
             SendspinEvent::Music(f) => {
-                self.leds.music_frame(f, true);
-                self.clock.music_frame(f, true);
+                self.deps.display.leds.music_frame(f, true);
+                self.deps.display.clock.music_frame(f, true);
             }
         }
     }
