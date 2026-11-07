@@ -8,9 +8,16 @@
 //!
 //! Usage: `parity_runner <home-deploy binary> <frozen directory>`
 
+use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::{Command, ExitCode};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -100,6 +107,11 @@ fn run_case(binary: &Path, root: &Path, case: &Value) -> Result<(), String> {
         .map(|value| value.as_str().unwrap_or_default().to_string())
         .collect();
 
+    let _server = match local_port(&argv) {
+        Some(port) if cwd.join("http.json").is_file() => Some(start_server(&cwd, port)?),
+        _ => None,
+    };
+
     let mut command = Command::new(binary);
     command.args(&argv).current_dir(&cwd);
     if let Some(env) = case.get("env").and_then(Value::as_object) {
@@ -131,8 +143,8 @@ fn run_case(binary: &Path, root: &Path, case: &Value) -> Result<(), String> {
             String::from_utf8_lossy(&output.stderr)
         ));
     }
-    compare_bytes(&cwd, case, "stdout", &output.stdout)?;
-    compare_bytes(&cwd, case, "stderr", &output.stderr)?;
+    compare_bytes(&cwd, case, "stdout", &normalize_smoke(&output.stdout))?;
+    compare_bytes(&cwd, case, "stderr", &normalize_smoke(&output.stderr))?;
 
     if let Some(outputs) = case.get("outputs").and_then(Value::as_array) {
         for item in outputs {
@@ -142,13 +154,146 @@ fn run_case(binary: &Path, root: &Path, case: &Value) -> Result<(), String> {
                 fs::read(cwd.join(&path)).map_err(|error| format!("read {path}: {error}"))?;
             let expected = fs::read(cwd.join(&golden))
                 .map_err(|error| format!("read golden {golden}: {error}"))?;
-            if actual != expected {
+            if normalize_smoke(&actual) != expected {
                 return Err(format!("{path} differs from {golden}"));
             }
         }
     }
     let _ = fs::remove_dir_all(&cwd);
     Ok(())
+}
+
+/// Replaces the clock-derived smoke Job name with the fixture placeholder.
+fn normalize_smoke(bytes: &[u8]) -> Vec<u8> {
+    const MARKER: &[u8] = b"hermes-smoke-";
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index..].starts_with(MARKER) {
+            output.extend_from_slice(MARKER);
+            index += MARKER.len();
+            let start = index;
+            while index < bytes.len() && bytes[index].is_ascii_digit() {
+                index += 1;
+            }
+            if index > start {
+                output.extend_from_slice(b"<id>");
+                continue;
+            }
+            continue;
+        }
+        output.push(bytes[index]);
+        index += 1;
+    }
+    output
+}
+
+/// Returns the local port of a preflight URL in argv.
+fn local_port(argv: &[String]) -> Option<u16> {
+    const PREFIX: &str = "http://127.0.0.1:";
+    for argument in argv {
+        let Some(position) = argument.find(PREFIX) else {
+            continue;
+        };
+        let rest = &argument[position + PREFIX.len()..];
+        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+        if let Ok(port) = digits.parse() {
+            return Some(port);
+        }
+    }
+    None
+}
+
+/// Serves the case's `http.json` map while the command runs.
+struct Server {
+    stop: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+fn start_server(cwd: &Path, port: u16) -> Result<Server, String> {
+    let text = fs::read_to_string(cwd.join("http.json"))
+        .map_err(|error| format!("read http.json: {error}"))?;
+    let parsed: Value =
+        serde_json::from_str(&text).map_err(|error| format!("parse http.json: {error}"))?;
+    let mut routes: HashMap<String, (u16, String)> = HashMap::new();
+    if let Some(entries) = parsed.as_object() {
+        for (path, value) in entries {
+            let Some(pair) = value.as_array() else {
+                continue;
+            };
+            let status = pair.first().and_then(Value::as_u64).unwrap_or(500) as u16;
+            let body = pair
+                .get(1)
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            routes.insert(path.clone(), (status, body));
+        }
+    }
+    let listener = TcpListener::bind(("127.0.0.1", port))
+        .map_err(|error| format!("bind preflight server: {error}"))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| format!("preflight server: {error}"))?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let thread_stop = Arc::clone(&stop);
+    let handle = std::thread::spawn(move || {
+        while !thread_stop.load(Ordering::Relaxed) {
+            match listener.accept() {
+                Ok((stream, _)) => serve_connection(stream, &routes),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    Ok(Server {
+        stop,
+        handle: Some(handle),
+    })
+}
+
+fn serve_connection(mut stream: TcpStream, routes: &HashMap<String, (u16, String)>) {
+    // Accepted sockets can inherit non-blocking mode from the listener on
+    // macOS; reads must block until the request headers arrive.
+    let _ = stream.set_nonblocking(false);
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let mut request = Vec::new();
+    let mut buffer = [0u8; 1024];
+    while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => request.extend_from_slice(&buffer[..count]),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+        if request.len() > 16 * 1024 {
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&request);
+    let path = text
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .unwrap_or("/");
+    let path = path.split('?').next().unwrap_or(path);
+    let (status, body) = routes.get(path).cloned().unwrap_or((404, String::new()));
+    let response = format!(
+        "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let _ = stream.write_all(response.as_bytes());
 }
 
 /// Recursively copies a fixture case so a test run never writes into the

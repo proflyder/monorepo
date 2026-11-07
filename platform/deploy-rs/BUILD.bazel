@@ -17,6 +17,8 @@ LIB_DEPS = [
     "@crates//:serde-saphyr",
     "@crates//:serde_json",
     "@crates//:sha2",
+    "@crates//:time",
+    "@crates//:ureq",
 ]
 
 rust_library(

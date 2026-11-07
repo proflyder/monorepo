@@ -1,5 +1,5 @@
 {
-  "checksum": "f21ee7d7468072a1bafb2e6a6e270831a26bef3f83ddf68d45e9403c29190275",
+  "checksum": "c3bf0deff6b56529cee4d8d4536bc353124824aa6e75ca4b6935fa1943b704f4",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6827,6 +6827,14 @@
           {
             "id": "sha2 0.11.1",
             "target": "sha2"
+          },
+          {
+            "id": "time 0.3.55",
+            "target": "time"
+          },
+          {
+            "id": "ureq 3.5.1",
+            "target": "ureq"
           }
         ],
         "deps_dev": [
