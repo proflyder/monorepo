@@ -350,9 +350,13 @@ profile** с id `voice_profile` и назначить её переключат�
 - `setting` — HA `entity_category` `config` или `diagnostic` (например
   переключатели колонки `Clock`/`Wake`/`Microphone`);
 - `setting` — также `switch`-сущность без категории (`entity_category: null`),
-  если у того же устройства есть сущность домена `light`: у Yeelight лампа —
-  это управление, а `delay-off`/`pomodoro`/`save-state`/`*_enable` — её настройки,
-  хотя HA отдаёт для них `null`;
+  если у того же устройства есть сущность домена `light` **и** интеграция не
+  размечает на этом устройстве ни одной категории `config`/`diagnostic`:
+  у Yeelight лампа — это управление, а `delay-off`/`pomodoro`/`save-state`/
+  `*_enable` — её настройки, хотя HA отдаёт для них `null`. Если интеграция
+  категории размечает (как колонка), реестр авторитетен: у «Яндекс Станция
+  Миди» есть light `Ring`, но `Microphones` и `Clock display` с `null`
+  остаются основными;
 - `primary` — всё остальное (у колонки `mute_microphones`, `clock_display` и
   подобные остаются основными);
 - пусто — реестр не прочитался: роль неизвестна, сущности не теряются.
