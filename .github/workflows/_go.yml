@@ -36,10 +36,6 @@ on:
         required: false
         default: false
         type: boolean
-      go_version:
-        required: false
-        default: "1.27.x"
-        type: string
 
 permissions:
   contents: read
@@ -52,13 +48,23 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      # Tool versions and checksums: mise.toml + mise.lock (one source with the
+      # workstation). Only the tools this job needs are installed.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          # go.work requires a newer toolchain than the root go.mod minimum.
-          go-version: ${{ inputs.go_version }}
-          cache-dependency-path: |
-            go.sum
-            projects/station/ble-gateway/go.sum
+          version: 2026.11.3
+          install_args: "go"
+          cache: true
+
+      # Go module/build cache (setup-go used to provide it). Same key in every
+      # Go job and in deploy-home's warm-up, so a develop run seeds PR jobs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'projects/station/ble-gateway/go.sum') }}
+          restore-keys: go-${{ runner.os }}-
 
       - name: Download modules
         if: inputs.packages != ''

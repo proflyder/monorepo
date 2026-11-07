@@ -41,7 +41,6 @@ projects/home/kubernetes/openbao/
   bootstrap.sh       operator init (один раз), configure.py, отзыв root-токена
   configure.py       KV v2, auth-методы, политики, роли, тестовые записи, TOTP
   test_configure.py  контракты ролей/политик (в т.ч. deploy-station)
-  materialize.py     временно восстановить файл secrets/<…> из OpenBao по catalog.json
   verify.sh          HTTPS/UI/логин/политики (+ --kubernetes: под-проба)
   restore_drill.py   restore snapshot на локальном стенде и сверка с live
                      (docs/REBUILD.md §6); test_restore_drill.py — его тесты
@@ -196,8 +195,8 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 create/read/update/patch `secret/data/{ci,k8s,infra}/*`, list/read metadata;
 delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секреты доступа
 владельца (SSH-ключи, CA, VPN, бэкапы, admin kubeconfig); карта путей —
-`secrets/README.md` и `secrets/catalog.json`, временное восстановление файла —
-`materialize.py`.
+`docs/SECRETS.md`, токен машины и восстановление файлов — `docs/WORKSTATION.md`
+(`mise run secrets:login`, `secrets:file`).
 
 `ci-station`: read ровно `secret/data/ci/deploy-station` и
 `secret/metadata/ci/deploy-station`; ни `secret/ci/deploy-home`, ни

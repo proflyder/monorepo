@@ -508,6 +508,17 @@
     получает их копию отдельной синхронизацией. Регистрация закрыта, egress
     только DNS, `/admin` включён с Argon2id-хэшем токена из OpenBao.
 
+44. **Рабочее место и CI — из `mise.toml`, секреты — из OpenBao.** Версии
+    инструментов (Python, Node, Go, Bazelisk, gitleaks, actionlint, kubectl,
+    helm, oras, bao, gh, bw, protoc и др.) задаёт один `mise.toml`, контрольные
+    суммы — `mise.lock` (linux-x64, macos-arm64). CI ставит нужное подмножество
+    через `jdx/mise-action`; Bazel остаётся герметичным (`MODULE.bazel`), его
+    ставит `setup-bazel`. Новая машина: `mise run setup` — человек входит в
+    OpenBao (пароль + TOTP), машина получает свой periodic operator token,
+    SSH-ключи и приватные заметки приходят из `secret/infra/*`. Каталог путей
+    (только имена) живёт в Git (`platform/workstation/catalog.json`,
+    `docs/SECRETS.md`) и сверяется с OpenBao (`mise run secrets:check`).
+
 Меняется решение — обновить этот файл и `STATE.md`.
 
 43. **MCP-контракт mcp-gateway сверяется семантически.** `initialize`,

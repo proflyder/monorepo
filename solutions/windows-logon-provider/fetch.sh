@@ -36,7 +36,7 @@ case "$ref" in
   *) target="$REPOSITORY:$ref" ;;
 esac
 
-command -v oras >/dev/null 2>&1 || die "oras CLI is required (put it on PATH or under local-data/local-tools)"
+command -v oras >/dev/null 2>&1 || die "oras CLI is required (`mise install` provides it)"
 command -v gh >/dev/null 2>&1 || die "GitHub CLI (gh) is required"
 
 mkdir -p "$destination"

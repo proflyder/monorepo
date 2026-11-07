@@ -157,7 +157,7 @@ env_value() {
 bazel_bin() {
   if [[ -n "${BAZELISK:-}" ]]; then echo "$BAZELISK"; return; fi
   if type -P bazel >/dev/null 2>&1; then type -P bazel; return; fi
-  if [[ -x "$ROOT/local-data/local-tools/bazelisk" ]]; then echo "$ROOT/local-data/local-tools/bazelisk"; return; fi
+  if type -P bazelisk >/dev/null 2>&1; then type -P bazelisk; return; fi
   echo "bazel/bazelisk not found; set BAZELISK" >&2
   exit 1
 }

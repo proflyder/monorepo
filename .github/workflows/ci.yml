@@ -15,7 +15,7 @@ name: ci
 #
 # `develop` changes only through a PR with a green `ci-ok`, so there is no push
 # trigger: re-running the same checks on the squash merge would be redundant.
-# The shared caches that PRs restore (setup-go, setup-bazel and actions/cache
+# The shared caches that PRs restore (Go modules, setup-bazel and actions/cache
 # scopes) are warmed after merge by `deploy-home`'s `warm-caches` job, which
 # runs on `push` to `develop` without secrets or an Environment.
 on:

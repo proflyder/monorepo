@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Copy every OpenBao KV secret into Vaultwarden (one-way, idempotent).
 
-    BW_SESSION=... sync_openbao.py [--dry-run]   # BAO_ADDR defaults to secrets/openbao/addr
+    BW_SESSION=... mise run vault:sync [-- --dry-run]
 
 Layout in the vault (folder ``OpenBao``):
   * one Secure Note per KV path, named ``openbao:<path>`` (e.g.
@@ -126,7 +126,9 @@ def ssh_keys(path: str, values: dict[str, str]) -> list[dict]:
 
 def bootstrap(secrets_dir: pathlib.Path, bao_addr: str) -> dict | None:
     base = secrets_dir / "openbao"
-    if not base.is_dir():
+    # Recovery keys and the seal key now live only with the owner. Without them
+    # on disk the item is left alone, never rewritten without the keys.
+    if not ((base / "init.json").is_file() or (base / "seal.key").is_file()):
         return None
     values: dict[str, str] = {"bao_addr": bao_addr}
     for name in ("operator.token", "username", "totp-method-id"):
@@ -287,14 +289,14 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if not os.environ.get("BW_SESSION"):
         ap.error("BW_SESSION is not set: run `bw unlock` first")
-    addr_file = args.secrets_dir / "openbao" / "addr"
-    addr = os.environ.get("BAO_ADDR") or (
-        addr_file.read_text().strip() if addr_file.is_file() else None) or ap.error(
-        "set BAO_ADDR or write secrets/openbao/addr")
-    token = os.environ.get("BAO_TOKEN") or (
-        args.secrets_dir / "openbao" / "operator.token").read_text().strip()
+    sys.path.insert(0, str(ROOT / "platform" / "workstation"))
+    import workstation  # same address/token resolution as `mise run secrets:*`
+    addr = workstation.address(args.secrets_dir) or ap.error(
+        "no OpenBao address: run `mise run secrets:login`")
+    token = workstation.token(args.secrets_dir)
+    state = workstation.state_dir(args.secrets_dir)
     snapshot = Bao(addr, token).snapshot()
-    boot = None if args.no_bootstrap else bootstrap(args.secrets_dir, args.bao_public_addr or addr)
+    boot = None if args.no_bootstrap else bootstrap(state, args.bao_public_addr or addr)
     stats = sync(Bw(), desired(snapshot, boot), args.dry_run)
     print(("dry run: " if args.dry_run else "") + ", ".join(f"{k} {v}" for k, v in stats.items()))
     return 0

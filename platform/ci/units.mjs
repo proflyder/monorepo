@@ -68,6 +68,11 @@ export const config = {
         ".bazelignore",
         "BUILD.bazel",
         "platform/bazel/**",
+        // Tool versions/checksums of every CI job (jdx/mise-action) and the
+        // `bazel` shim on the mise PATH.
+        "mise.toml",
+        "mise.lock",
+        "platform/workstation/bin/**",
       ],
       platforms: ["*"],
     },
@@ -845,6 +850,16 @@ export const config = {
       paths: ["projects/home/kubernetes/openbao/**"],
       python: {
         suites: ["projects/home/kubernetes/openbao"],
+      },
+    },
+
+    {
+      id: "workstation",
+      platform: "python",
+      title: "platform/workstation (mise tasks, OpenBao secrets CLI, catalog)",
+      paths: ["platform/workstation/**", "docs/SECRETS.md"],
+      python: {
+        suites: ["platform/workstation"],
       },
     },
 

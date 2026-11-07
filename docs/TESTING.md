@@ -158,7 +158,7 @@ python3 -m unittest discover -s projects/home-assistant/hermes -p 'test_*.py' -v
 Bazel-гейты отдельные:
 
 ```bash
-# backend-таргеты (нужен Bazelisk; локально — local-data/local-tools/bazelisk)
+# backend-таргеты (Bazelisk — `mise install`; `bazel` — shim на него)
 bazel test //solutions/... //packages/...
 
 # Rust-хост Pulsar (Linux; на macOS цели пропускаются через
@@ -186,23 +186,23 @@ Android-сборка/тесты требуют Android SDK и выполняют
 
 ```bash
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-./local-data/local-tools/bazelisk test \
+bazel test \
   //projects/mobile/android:android_tests \
   //projects/mobile/android/app:main_activity_smoke_test \
   //projects/mobile/android:app \
   //solutions/scheduler/... //solutions/ha-bridge/... //packages/proto/... \
   --nocache_test_results --test_output=errors
-./local-data/local-tools/bazelisk build //projects/mobile/android:app
+bazel build //projects/mobile/android:app
 # debug APK: bazel-bin/projects/mobile/android/app/app.apk
 
 # Android Lint (separate CI unit `android / android-lint`, not in android_tests)
 # needs cmdline-tools 23.0.
-./local-data/local-tools/bazelisk test //projects/mobile/android:android_lint
+bazel test //projects/mobile/android:android_lint
 
 # Bazel-инструменты Android (Go, exec-конфигурация): генераторы
 # ViewBinding/google-services, lint runner и APK closure; их тесты входят
 # в android_tests.
-./local-data/local-tools/bazelisk test //platform/android/...
+bazel test //platform/android/...
 go vet ./platform/android/...
 ```
 
@@ -235,8 +235,7 @@ python3 -m unittest discover -s . -p 'test_*.py' -v   # статический �
 ```
 
 Bazel и Rust/zig-тулчейн приходят из `MODULE.bazel`; на macOS/Linux Bazelisk
-ищется в `PATH`, затем в `local-data/local-tools/bazelisk` (в linked worktree —
-в главном checkout'е), либо задаётся `BAZELISK`. Отдельного mingw-архива и
+берётся из `PATH` (`mise install`, см. `mise.toml`), либо задаётся `BAZELISK`. Отдельного mingw-архива и
 host clang++ нет: `build.sh` собирает
 `//solutions/windows-logon-provider/crates/provider:provider` под
 `//platform/bazel/windows:x86_64_windows`, обнуляет PE-таймстемп для
@@ -279,7 +278,10 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 `permissions: contents: read`, `concurrency` отменяет устаревший прогон только
 для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
 `develop` (см. ниже); его job `warm-caches` после merge сохраняет общие кэши
-`setup-go`/`setup-bazel` под теми же ключами, которые восстанавливают PR.
+Go (`actions/cache`, ключ по `go.sum`) и `setup-bazel` под теми же ключами,
+которые восстанавливают PR. Версии инструментов CI (Python, Node, Go, gitleaks,
+actionlint, shellcheck, kubectl, helm, oras) — из `mise.toml`/`mise.lock` через
+`jdx/mise-action`, как и на рабочем месте (`docs/WORKSTATION.md`).
 Кэши `actions/cache` для Android и deploy-control остаются PR-локальными:
 их содержимое создаёт только соответствующий build/regression.
 

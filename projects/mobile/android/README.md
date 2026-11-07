@@ -134,9 +134,9 @@ build-tools 36.0.0 (`ANDROID_HOME`), Bazelisk. The root contract is
 ```sh
 cd /path/to/yandex-station-lab
 export ANDROID_HOME="$HOME/Library/Android/sdk"
-export PATH="$PWD/local-data/local-tools:$PATH"
+mise install   # Bazelisk and the rest of mise.toml
 
-bazelisk build //projects/mobile/android:app
+mise exec -- bazelisk build //projects/mobile/android:app
 # bazel-bin/projects/mobile/android/app/app.apk
 
 bazelisk test //projects/mobile/android:android_tests

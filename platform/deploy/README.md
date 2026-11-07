@@ -36,8 +36,8 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
 ```
 
 Порядок поиска бинарника: `$HOME_DEPLOY` → `home-deploy` в `PATH` →
-`local-data/local-tools/home-deploy` → тот же путь в основном checkout (для linked
-worktree) → `bazel run //platform/deploy/cmd/home-deploy --`.
+`bazel-bin` после `bazel build` → `bazel run //platform/deploy/cmd/home-deploy --`
+(Bazelisk — из `mise install`).
 
 CI собирает бинарник один раз на job (`bazel build
 //platform/deploy/cmd/home-deploy`) и экспортирует `HOME_DEPLOY`. На node, где

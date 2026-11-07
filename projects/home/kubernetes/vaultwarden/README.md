@@ -50,9 +50,9 @@ projects/home/kubernetes/vaultwarden/
 ## Деплой
 
 ```bash
-projects/home/kubernetes/openbao/materialize.py home/ingress.env home/vpn/cloudflare.env
+mise run secrets:file home/ingress.env home/vpn/cloudflare.env
 KUBECONFIG=<admin kubeconfig> projects/home/kubernetes/vaultwarden/deploy.sh
-projects/home/kubernetes/openbao/materialize.py --clean home/ingress.env home/vpn/cloudflare.env
+mise run secrets:clean home/ingress.env home/vpn/cloudflare.env
 ```
 
 Повторный запуск идемпотентен. Обновление — новый digest в `versions.sh`,
@@ -79,8 +79,8 @@ Bitwarden и `openbao:bootstrap` (operator token, recovery keys, seal key из
 ```bash
 bw config server https://passwords.<home-domain> && bw login   # один раз
 export BW_SESSION=$(bw unlock --raw)
-BAO_ADDR=https://vault.<home-domain> projects/home/kubernetes/vaultwarden/sync_openbao.py --dry-run
-BAO_ADDR=https://vault.<home-domain> projects/home/kubernetes/vaultwarden/sync_openbao.py
+mise run vault:sync -- --dry-run
+mise run vault:sync
 bw lock
 ```
 

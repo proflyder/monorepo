@@ -25,10 +25,6 @@ on:
         required: false
         default: false
         type: boolean
-      python_version:
-        required: false
-        default: "3.13"
-        type: string
 
 permissions:
   contents: read
@@ -41,19 +37,28 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      # Tool versions and checksums: mise.toml + mise.lock (one source with the
+      # workstation). Only the tools this job needs are installed.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          python-version: ${{ inputs.python_version }}
+          version: 2026.11.3
+          install_args: ${{ inputs.deploy_tool && 'python go' || 'python' }}
+          cache: true
+
+      # Go module/build cache (setup-go used to provide it). Same key in every
+      # Go job and in deploy-home's warm-up, so a develop run seeds PR jobs.
+      - if: inputs.deploy_tool
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'projects/station/ble-gateway/go.sum') }}
+          restore-keys: go-${{ runner.os }}-
 
       # Units whose suites drive a deploy script need the Go deploy binary the
       # script execs (deploy.sh sources platform/deploy/resolve.sh). Built once
       # per job; `go build` is enough here and keeps the job small.
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        if: inputs.deploy_tool
-        with:
-          go-version: "1.27.x"
-          cache-dependency-path: go.sum
-
       - name: Build deploy tooling
         if: inputs.deploy_tool
         run: |

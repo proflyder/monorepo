@@ -1,0 +1,1009 @@
+{
+ "comment": "Public map of OpenBao KV v2 (mount `secret`): names only, never values. paths: every path with purpose and consumer (checked by `mise run secrets:check`). pull: files `mise run secrets:pull` writes on a workstation (~ = home, else repo-relative). files: legacy secrets/<file> restored on demand by `mise run secrets:file`.",
+ "paths": {
+  "ci/android-distribute": {
+   "purpose": "Android: APK signing keystore, Firebase App Distribution",
+   "consumer": "CI android-distribute (OIDC)"
+  },
+  "ci/deploy-home": {
+   "purpose": "deploy-home: ci-deploy kubeconfig, service env files, runtime values",
+   "consumer": "CI deploy-home (OIDC)"
+  },
+  "ci/deploy-station": {
+   "purpose": "Pulsar rollout through HA (url, token, firmware entity)",
+   "consumer": "CI deploy-station (OIDC)"
+  },
+  "ci/test": {
+   "purpose": "smoke probe, not secret",
+   "consumer": "CI auth smoke"
+  },
+  "infra/backup/ha": {
+   "purpose": "HA backup encryption key",
+   "consumer": "owner (restore)"
+  },
+  "infra/backup/offsite": {
+   "purpose": "restic offsite: env, password, rclone/GDrive OAuth, HA token",
+   "consumer": "owner (offsite install/restore)"
+  },
+  "infra/certs/station-tls": {
+   "purpose": "station TLS: eMudhra CA, quasar leaf and legacy MITM keys",
+   "consumer": "owner"
+  },
+  "infra/ci/github-environment": {
+   "purpose": "values of GitHub Environments Home/Station (VPN p12, server, runtime values)",
+   "consumer": "owner (GitHub settings)"
+  },
+  "infra/cloudflare/currency-bot-tunnel": {
+   "purpose": "Cloudflare tunnel API token and tunnel metadata",
+   "consumer": "owner"
+  },
+  "infra/cloudflare/vpn-dns": {
+   "purpose": "Cloudflare DNS token (home records, OpenBao/Vaultwarden deploy)",
+   "consumer": "owner deploy scripts"
+  },
+  "infra/cloudflare/workers": {
+   "purpose": "Cloudflare Workers/KV token and heartbeat Worker env",
+   "consumer": "owner deploy scripts"
+  },
+  "infra/currency-bot/vps": {
+   "purpose": "legacy VPS env of the currency bot",
+   "consumer": "owner (legacy)"
+  },
+  "infra/docs/network": {
+   "purpose": "private network map and station identifiers (secrets/NETWORK.md)",
+   "consumer": "secrets:pull"
+  },
+  "infra/komp/wakegrant": {
+   "purpose": "wakegrant env for the Windows PC",
+   "consumer": "owner deploy scripts"
+  },
+  "infra/kubernetes/admin": {
+   "purpose": "admin kubeconfigs of K3s (current and stale)",
+   "consumer": "owner deploy scripts"
+  },
+  "infra/kubernetes/secret-dumps": {
+   "purpose": "historical Kubernetes Secret dumps (2026-10-31, no helm releases)",
+   "consumer": "owner (recovery)"
+  },
+  "infra/kubernetes/values-private": {
+   "purpose": "private Helm values and ingress env",
+   "consumer": "owner deploy scripts"
+  },
+  "infra/legacy/llm": {
+   "purpose": "legacy v3rt3p LLM env",
+   "consumer": "owner (legacy)"
+  },
+  "infra/proxmox/terraform": {
+   "purpose": "Proxmox API token, Terraform state/vars, install settings",
+   "consumer": "owner (Terraform)"
+  },
+  "infra/ssh/ci-deploy": {
+   "purpose": "CI deploy SSH key and known_hosts",
+   "consumer": "owner"
+  },
+  "infra/ssh/currency-bot-vps": {
+   "purpose": "SSH to the currency bot VPS",
+   "consumer": "secrets:pull"
+  },
+  "infra/ssh/ha-addon": {
+   "purpose": "SSH key of the HA SSH add-on",
+   "consumer": "secrets:pull"
+  },
+  "infra/ssh/komp": {
+   "purpose": "SSH to the Windows PC (dev key) and its host key",
+   "consumer": "secrets:pull"
+  },
+  "infra/ssh/mcp-gateway-bb-dispatch": {
+   "purpose": "public key of the MCP gateway bb dispatch key",
+   "consumer": "owner"
+  },
+  "infra/ssh/offsite-bb": {
+   "purpose": "offsite pull key for the bb server export",
+   "consumer": "owner (offsite install)"
+  },
+  "infra/ssh/proxmox-admin": {
+   "purpose": "SSH to PVE, K3s, HAOS: key, known_hosts, ~/.ssh/home-lab/config",
+   "consumer": "secrets:pull"
+  },
+  "infra/ssh/station": {
+   "purpose": "SSH key for the station (root)",
+   "consumer": "secrets:pull"
+  },
+  "infra/ssh/wsl": {
+   "purpose": "SSH key for WSL on the Windows PC",
+   "consumer": "secrets:pull"
+  },
+  "infra/station/access": {
+   "purpose": "station emergency root password, BLE recovery token, Wi-Fi profiles",
+   "consumer": "owner"
+  },
+  "infra/station/pulsar-backup-keys": {
+   "purpose": "API/sendspin keys from old station backups",
+   "consumer": "owner (recovery)"
+  },
+  "infra/station/retired-dpp": {
+   "purpose": "archive of the removed DPP/QR provisioning",
+   "consumer": "owner (recovery)"
+  },
+  "infra/test": {
+   "purpose": "smoke probe, not secret",
+   "consumer": "operator token check"
+  },
+  "infra/vaultwarden/admin": {
+   "purpose": "Vaultwarden /admin password",
+   "consumer": "owner"
+  },
+  "infra/vpn/client-ca": {
+   "purpose": "ocserv client CA (key, cert, CRL, OpenSSL dir)",
+   "consumer": "owner (vpncerts.py)"
+  },
+  "infra/vpn/clients/ci-github": {
+   "purpose": "VPN client certificate for CI deploy-home",
+   "consumer": "owner"
+  },
+  "infra/vpn/clients/ci-pulsar": {
+   "purpose": "VPN client certificate for CI deploy-station",
+   "consumer": "owner"
+  },
+  "infra/vpn/clients/owner-phone": {
+   "purpose": "VPN client certificate of the owner's phone",
+   "consumer": "owner"
+  },
+  "infra/vpn/owner": {
+   "purpose": "owner VPN login: password, TOTP seed and QR",
+   "consumer": "owner"
+  },
+  "k8s/cert-manager/cloudflare-api-token": {
+   "purpose": "Cloudflare DNS-01 token for the wildcard certificate",
+   "consumer": "ESO → cert-manager"
+  },
+  "k8s/currency-bot/cloudflared-tunnel": {
+   "purpose": "Cloudflare Tunnel token for the Telegram webhook",
+   "consumer": "ESO → currency-bot"
+  },
+  "k8s/currency-bot/currency-bot": {
+   "purpose": "currency bot Telegram/API credentials",
+   "consumer": "ESO → currency-bot"
+  },
+  "k8s/home-assistant/ha-bridge-ha": {
+   "purpose": "HA long-lived token for ha-bridge",
+   "consumer": "ESO → home-assistant"
+  },
+  "k8s/home-assistant/hermes-environment": {
+   "purpose": "Hermes agent environment (HA/MA/Telegram/API keys)",
+   "consumer": "ESO → home-assistant"
+  },
+  "k8s/home-assistant/mcp-gateway-auth": {
+   "purpose": "MCP gateway bearer",
+   "consumer": "ESO → home-assistant"
+  },
+  "k8s/home-assistant/mcp-gateway-bb-ssh": {
+   "purpose": "SSH key + known_hosts for bb dispatch from the MCP gateway",
+   "consumer": "ESO → home-assistant"
+  },
+  "k8s/home-assistant/mcp-gateway-voice": {
+   "purpose": "voice tool bearer of the MCP gateway",
+   "consumer": "ESO → home-assistant"
+  },
+  "k8s/home-assistant/scheduler-auth": {
+   "purpose": "scheduler API bearer",
+   "consumer": "ESO → home-assistant"
+  },
+  "k8s/home-assistant/wakegrant": {
+   "purpose": "wakegrant issuer token and per-machine keys",
+   "consumer": "ESO → home-assistant"
+  },
+  "k8s/monitoring/grafana-admin": {
+   "purpose": "Grafana admin login",
+   "consumer": "ESO → monitoring"
+  },
+  "k8s/monitoring/heartbeat": {
+   "purpose": "dead-man switch Worker URL and token",
+   "consumer": "ESO → monitoring"
+  },
+  "k8s/test": {
+   "purpose": "smoke probe, not secret",
+   "consumer": "Kubernetes auth smoke"
+  },
+  "k8s/vaultwarden/vaultwarden-admin": {
+   "purpose": "Argon2id hash of the Vaultwarden /admin token",
+   "consumer": "ESO → vaultwarden"
+  }
+ },
+ "pull": [
+  {
+   "path": "infra/ssh/proxmox-admin",
+   "field": "proxmox_admin",
+   "dest": "~/.ssh/home-lab/proxmox_admin"
+  },
+  {
+   "path": "infra/ssh/proxmox-admin",
+   "field": "proxmox_admin_pub",
+   "dest": "~/.ssh/home-lab/proxmox_admin.pub"
+  },
+  {
+   "path": "infra/ssh/proxmox-admin",
+   "field": "known_hosts",
+   "dest": "~/.ssh/home-lab/known_hosts_pve"
+  },
+  {
+   "path": "infra/ssh/proxmox-admin",
+   "field": "guest_known_hosts",
+   "dest": "~/.ssh/home-lab/known_hosts_k3s"
+  },
+  {
+   "path": "infra/ssh/proxmox-admin",
+   "field": "haos_known_hosts",
+   "dest": "~/.ssh/home-lab/known_hosts_haos"
+  },
+  {
+   "path": "infra/ssh/proxmox-admin",
+   "field": "home_lab_ssh_config",
+   "dest": "~/.ssh/home-lab/config"
+  },
+  {
+   "path": "infra/ssh/komp",
+   "field": "dev_ed25519",
+   "dest": "~/.ssh/home-lab/dev_ed25519"
+  },
+  {
+   "path": "infra/ssh/komp",
+   "field": "dev_ed25519_pub",
+   "dest": "~/.ssh/home-lab/dev_ed25519.pub"
+  },
+  {
+   "path": "infra/ssh/komp",
+   "field": "known_hosts",
+   "dest": "~/.ssh/home-lab/known_hosts_komp"
+  },
+  {
+   "path": "infra/ssh/currency-bot-vps",
+   "field": "vps_ed25519",
+   "dest": "~/.ssh/home-lab/vps_ed25519"
+  },
+  {
+   "path": "infra/ssh/currency-bot-vps",
+   "field": "vps_ed25519_pub",
+   "dest": "~/.ssh/home-lab/vps_ed25519.pub"
+  },
+  {
+   "path": "infra/ssh/station",
+   "field": "private_key",
+   "dest": "~/.ssh/home-lab/station_ed25519"
+  },
+  {
+   "path": "infra/ssh/station",
+   "field": "public_key",
+   "dest": "~/.ssh/home-lab/station_ed25519.pub"
+  },
+  {
+   "path": "infra/ssh/wsl",
+   "field": "private_key",
+   "dest": "~/.ssh/home-lab/wsl_ed25519"
+  },
+  {
+   "path": "infra/ssh/wsl",
+   "field": "public_key",
+   "dest": "~/.ssh/home-lab/wsl_ed25519.pub"
+  },
+  {
+   "path": "infra/ssh/ha-addon",
+   "field": "private_key",
+   "dest": "~/.ssh/home-lab/ha_addon_ed25519"
+  },
+  {
+   "path": "infra/ssh/ha-addon",
+   "field": "public_key",
+   "dest": "~/.ssh/home-lab/ha_addon_ed25519.pub"
+  },
+  {
+   "path": "infra/docs/network",
+   "field": "network_md",
+   "dest": "secrets/NETWORK.md"
+  }
+ ],
+ "files": [
+  {
+   "file": "android/firebase-distribute-sa.json",
+   "path": "ci/android-distribute",
+   "field": "firebase_service_account_json",
+   "encoding": "text"
+  },
+  {
+   "file": "android/google-services.json",
+   "path": "ci/android-distribute",
+   "field": "google_services_json",
+   "encoding": "text"
+  },
+  {
+   "file": "android/home-debug.keystore",
+   "path": "ci/android-distribute",
+   "field": "keystore_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "android/home-debug.keystore.backup-20261101",
+   "path": "ci/android-distribute",
+   "field": "keystore_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "certs/emudhra-ca.crt",
+   "path": "infra/certs/station-tls",
+   "field": "emudhra_ca_crt",
+   "encoding": "text"
+  },
+  {
+   "file": "certs/emudhra-ca.key",
+   "path": "infra/certs/station-tls",
+   "field": "emudhra_ca_key",
+   "encoding": "text"
+  },
+  {
+   "file": "certs/quasar-uniproxy.key",
+   "path": "infra/certs/station-tls",
+   "field": "legacy_alice_quasar_uniproxy_key",
+   "encoding": "text"
+  },
+  {
+   "file": "certs/quasar.yandex.net.key",
+   "path": "infra/certs/station-tls",
+   "field": "legacy_alice_quasar_yandex_net_key",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/github/K3S_NODE",
+   "path": "infra/ci/github-environment",
+   "field": "home_K3S_NODE",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/github/KUBECONFIG_B64",
+   "path": "ci/deploy-home",
+   "field": "kubeconfig",
+   "encoding": "to_b64"
+  },
+  {
+   "file": "ci/github/README.txt",
+   "path": "infra/ci/github-environment",
+   "field": "home_README.txt",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/github/RUNTIME_VALUES_B64",
+   "path": "infra/ci/github-environment",
+   "field": "home_RUNTIME_VALUES_B64",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/github/SCHEDULER_ENV_B64",
+   "path": "ci/deploy-home",
+   "field": "scheduler_env",
+   "encoding": "to_b64"
+  },
+  {
+   "file": "ci/github/VPN_CERT_P12_B64",
+   "path": "infra/ci/github-environment",
+   "field": "home_VPN_CERT_P12_B64",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/github/VPN_CERT_PASSWORD",
+   "path": "infra/ci/github-environment",
+   "field": "home_VPN_CERT_PASSWORD",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/github/VPN_SERVER",
+   "path": "infra/ci/github-environment",
+   "field": "home_VPN_SERVER",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/github/kubeconfig.yaml",
+   "path": "ci/deploy-home",
+   "field": "kubeconfig",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/kubeconfig",
+   "path": "infra/kubernetes/admin",
+   "field": "ci_kubeconfig",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/pulsar/VPN_CERT_P12_B64",
+   "path": "infra/ci/github-environment",
+   "field": "station_VPN_CERT_P12_B64",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/pulsar/VPN_CERT_PASSWORD",
+   "path": "infra/ci/github-environment",
+   "field": "station_VPN_CERT_PASSWORD",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/pulsar/VPN_SERVER",
+   "path": "infra/ci/github-environment",
+   "field": "home_VPN_SERVER",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/pulsar/entity_id",
+   "path": "ci/deploy-station",
+   "field": "entity_id",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/pulsar/ha_token",
+   "path": "ci/deploy-station",
+   "field": "ha_token",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/pulsar/ha_url",
+   "path": "ci/deploy-station",
+   "field": "ha_url",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/ssh/ci-deploy_ed25519",
+   "path": "infra/ssh/ci-deploy",
+   "field": "ci_deploy_ed25519",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/ssh/ci-deploy_ed25519.pub",
+   "path": "infra/ssh/ci-deploy",
+   "field": "ci_deploy_ed25519_pub",
+   "encoding": "text"
+  },
+  {
+   "file": "ci/ssh/known_hosts_k3s",
+   "path": "infra/ssh/ci-deploy",
+   "field": "known_hosts_k3s",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/cloudflare-tunnel.env",
+   "path": "infra/cloudflare/currency-bot-tunnel",
+   "field": "cloudflare_tunnel_env",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/k8s.env",
+   "path": "infra/currency-bot/vps",
+   "field": "k8s_env",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/ssh_config",
+   "path": "infra/ssh/currency-bot-vps",
+   "field": "ssh_config",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/tunnel-token",
+   "path": "k8s/currency-bot/cloudflared-tunnel",
+   "field": "TUNNEL_TOKEN",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/tunnel.json",
+   "path": "infra/cloudflare/currency-bot-tunnel",
+   "field": "tunnel_json",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/vps-bot.env",
+   "path": "infra/currency-bot/vps",
+   "field": "vps_bot_env",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/vps.user",
+   "path": "infra/ssh/currency-bot-vps",
+   "field": "vps_user",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/vps_ed25519",
+   "path": "infra/ssh/currency-bot-vps",
+   "field": "vps_ed25519",
+   "encoding": "text"
+  },
+  {
+   "file": "currency-bot/vps_ed25519.pub",
+   "path": "infra/ssh/currency-bot-vps",
+   "field": "vps_ed25519_pub",
+   "encoding": "text"
+  },
+  {
+   "file": "home/cloudflare-workers.env",
+   "path": "infra/cloudflare/workers",
+   "field": "cloudflare_workers_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/currency-bot.env",
+   "path": "ci/deploy-home",
+   "field": "currency_bot_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/ha-backup.env",
+   "path": "infra/backup/ha",
+   "field": "ha_backup_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/ha.token",
+   "path": "k8s/home-assistant/ha-bridge-ha",
+   "field": "token",
+   "encoding": "text+nl"
+  },
+  {
+   "file": "home/heartbeat.env",
+   "path": "infra/cloudflare/workers",
+   "field": "heartbeat_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/hermes-private.yaml",
+   "path": "infra/kubernetes/values-private",
+   "field": "hermes_private_yaml",
+   "encoding": "text"
+  },
+  {
+   "file": "home/ingress.env",
+   "path": "infra/kubernetes/values-private",
+   "field": "ingress_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/komp/dev_ed25519",
+   "path": "infra/ssh/komp",
+   "field": "dev_ed25519",
+   "encoding": "text"
+  },
+  {
+   "file": "home/komp/dev_ed25519.pub",
+   "path": "infra/ssh/komp",
+   "field": "dev_ed25519_pub",
+   "encoding": "text"
+  },
+  {
+   "file": "home/komp/known_hosts",
+   "path": "infra/ssh/komp",
+   "field": "known_hosts",
+   "encoding": "text"
+  },
+  {
+   "file": "home/komp/komp_ed25519",
+   "path": "infra/ssh/komp",
+   "field": "komp_ed25519",
+   "encoding": "text"
+  },
+  {
+   "file": "home/komp/komp_ed25519.pub",
+   "path": "infra/ssh/komp",
+   "field": "komp_ed25519_pub",
+   "encoding": "text"
+  },
+  {
+   "file": "home/komp/wakegrant.env",
+   "path": "infra/komp/wakegrant",
+   "field": "wakegrant_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/mcp-gateway-bb-dispatch.key",
+   "path": "k8s/home-assistant/mcp-gateway-bb-ssh",
+   "field": "id_ed25519",
+   "encoding": "text"
+  },
+  {
+   "file": "home/mcp-gateway-bb-dispatch.key.pub",
+   "path": "infra/ssh/mcp-gateway-bb-dispatch",
+   "field": "mcp_gateway_bb_dispatch_key_pub",
+   "encoding": "text"
+  },
+  {
+   "file": "home/mcp-gateway-voice.token",
+   "path": "k8s/home-assistant/mcp-gateway-voice",
+   "field": "token",
+   "encoding": "text+nl"
+  },
+  {
+   "file": "home/mcp-gateway.env",
+   "path": "ci/deploy-home",
+   "field": "mcp_gateway_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/observability-values.yaml",
+   "path": "infra/kubernetes/values-private",
+   "field": "observability_values_yaml",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-backup.env",
+   "path": "infra/backup/offsite",
+   "field": "offsite_backup_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-bb.key",
+   "path": "infra/ssh/offsite-bb",
+   "field": "offsite_bb_key",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-bb.key.pub",
+   "path": "infra/ssh/offsite-bb",
+   "field": "offsite_bb_key_pub",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-bb.known_hosts",
+   "path": "infra/ssh/offsite-bb",
+   "field": "offsite_bb_known_hosts",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-gdrive-client.env",
+   "path": "infra/backup/offsite",
+   "field": "offsite_gdrive_client_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-ha.token",
+   "path": "infra/backup/offsite",
+   "field": "offsite_ha_token",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-rclone.conf",
+   "path": "infra/backup/offsite",
+   "field": "offsite_rclone_conf",
+   "encoding": "text"
+  },
+  {
+   "file": "home/offsite-restic.password",
+   "path": "infra/backup/offsite",
+   "field": "offsite_restic_password",
+   "encoding": "text"
+  },
+  {
+   "file": "home/scheduler.env",
+   "path": "ci/deploy-home",
+   "field": "scheduler_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/scheduler.token",
+   "path": "k8s/home-assistant/scheduler-auth",
+   "field": "token",
+   "encoding": "text+nl"
+  },
+  {
+   "file": "home/vpn/client-ca",
+   "path": "infra/vpn/client-ca",
+   "field": "client_ca_dir_tar_gz_b64",
+   "encoding": "tar_b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-github.legacy.p12",
+   "path": "infra/vpn/clients/ci-github",
+   "field": "legacy_p12_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-github.p12",
+   "path": "infra/ci/github-environment",
+   "field": "home_VPN_CERT_P12_B64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-github.password",
+   "path": "infra/ci/github-environment",
+   "field": "home_VPN_CERT_PASSWORD",
+   "encoding": "text+nl"
+  },
+  {
+   "file": "home/vpn/clients/ci-pulsar.legacy.p12",
+   "path": "infra/vpn/clients/ci-pulsar",
+   "field": "legacy_p12_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-pulsar.p12",
+   "path": "infra/ci/github-environment",
+   "field": "station_VPN_CERT_P12_B64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-pulsar.password",
+   "path": "infra/ci/github-environment",
+   "field": "station_VPN_CERT_PASSWORD",
+   "encoding": "text+nl"
+  },
+  {
+   "file": "home/vpn/clients/owner-phone.legacy.p12",
+   "path": "infra/vpn/clients/owner-phone",
+   "field": "legacy_p12_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/owner-phone.p12",
+   "path": "infra/vpn/clients/owner-phone",
+   "field": "p12_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/owner-phone.password",
+   "path": "infra/vpn/clients/owner-phone",
+   "field": "password",
+   "encoding": "text"
+  },
+  {
+   "file": "home/vpn/cloudflare.env",
+   "path": "infra/cloudflare/vpn-dns",
+   "field": "cloudflare_env",
+   "encoding": "text"
+  },
+  {
+   "file": "home/vpn/owner-totp-qr.png",
+   "path": "infra/vpn/owner",
+   "field": "totp_qr_png_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/owner.credentials",
+   "path": "infra/vpn/owner",
+   "field": "credentials",
+   "encoding": "text"
+  },
+  {
+   "file": "kubernetes-research/grafana-password",
+   "path": "k8s/monitoring/grafana-admin",
+   "field": "admin-password",
+   "encoding": "text"
+  },
+  {
+   "file": "kubernetes-research/kubeconfig",
+   "path": "infra/kubernetes/admin",
+   "field": "admin_kubeconfig",
+   "encoding": "text"
+  },
+  {
+   "file": "kubernetes-research/kubeconfig.stale-20261031",
+   "path": "infra/kubernetes/admin",
+   "field": "kubeconfig_stale_20261031",
+   "encoding": "text"
+  },
+  {
+   "file": "kubernetes-research/prom-private.yaml",
+   "path": "infra/kubernetes/values-private",
+   "field": "prom_private_yaml",
+   "encoding": "text"
+  },
+  {
+   "file": "legacy-v3rt3p/.env",
+   "path": "infra/legacy/llm",
+   "field": "env",
+   "encoding": "text"
+  },
+  {
+   "file": "local/archive/legacy/alice-mitm-bootstrap/certs/quasar-uniproxy.key",
+   "path": "infra/certs/station-tls",
+   "field": "legacy_alice_quasar_uniproxy_key",
+   "encoding": "text"
+  },
+  {
+   "file": "local/archive/legacy/alice-mitm-bootstrap/certs/quasar.yandex.net.key",
+   "path": "infra/certs/station-tls",
+   "field": "legacy_alice_quasar_yandex_net_key",
+   "encoding": "text"
+  },
+  {
+   "file": "local/archive/legacy/v3rt3p-stack/repos/https-proxy/certs/ca.key",
+   "path": "infra/certs/station-tls",
+   "field": "emudhra_ca_key",
+   "encoding": "text"
+  },
+  {
+   "file": "local/archive/legacy/v3rt3p-stack/repos/processor/.env",
+   "path": "infra/legacy/llm",
+   "field": "v3rt3p_processor_env",
+   "encoding": "text"
+  },
+  {
+   "file": "local/archive/legacy/v3rt3p-stack/repos/quasar-server/.env",
+   "path": "infra/legacy/llm",
+   "field": "v3rt3p_quasar_server_env",
+   "encoding": "text"
+  },
+  {
+   "file": "local/backups/pulsar-pre-reconnectfix-20261029-171637/api_key",
+   "path": "infra/station/pulsar-backup-keys",
+   "field": "pre_reconnectfix_api_key",
+   "encoding": "text"
+  },
+  {
+   "file": "local/backups/pulsar-pre-v052-20261029-152631/api_key",
+   "path": "infra/station/pulsar-backup-keys",
+   "field": "pre_reconnectfix_api_key",
+   "encoding": "text"
+  },
+  {
+   "file": "local/backups/pulsar-pre-v052-20261029-152631/sendspin/keypair",
+   "path": "infra/station/pulsar-backup-keys",
+   "field": "pre_v052_sendspin_keypair_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "local/backups/pulsar-pre-v052-20261029-152631/sendspin/pairing_psk",
+   "path": "infra/station/pulsar-backup-keys",
+   "field": "pre_v052_sendspin_pairing_psk_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "local/projects/station/tools/quasar-root-kit/leaf.key",
+   "path": "infra/certs/station-tls",
+   "field": "leaf_key",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/audit-kubeconfig",
+   "path": "infra/kubernetes/admin",
+   "field": "admin_kubeconfig",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/guest-known_hosts",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "guest_known_hosts",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/guest-ssh.json",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "guest_ssh_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/haos-key-qga.txt",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "haos_key_qga_txt",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/haos-key-scan.txt",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "haos_key_scan_txt",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/haos-known_hosts",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "haos_known_hosts",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/haos-ssh.json",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "haos_ssh_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/known_hosts",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "known_hosts",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/kubeconfig",
+   "path": "infra/kubernetes/admin",
+   "field": "proxmox_install_kubeconfig",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/original-wifi-profiles.json",
+   "path": "infra/station/access",
+   "field": "original_wifi_profiles_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/proxmox_admin",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "proxmox_admin",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/proxmox_admin.pub",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "proxmox_admin_pub",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/retired-dpp-20261028T183152Z",
+   "path": "infra/station/retired-dpp",
+   "field": "retired_dpp_tar_gz_b64",
+   "encoding": "tar_b64"
+  },
+  {
+   "file": "proxmox-install/runtime-secrets.json",
+   "path": "infra/kubernetes/secret-dumps",
+   "field": "runtime_secrets_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/settings.json",
+   "path": "infra/proxmox/terraform",
+   "field": "settings_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/ssh.json",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "ssh_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/ssh_config",
+   "path": "infra/ssh/proxmox-admin",
+   "field": "ssh_config",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/station-ble-recovery-token",
+   "path": "infra/station/access",
+   "field": "ssh_root_password",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/station-wifi-recovery-profile.json",
+   "path": "infra/station/access",
+   "field": "station_wifi_recovery_profile_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/station-wpa-current-private.conf",
+   "path": "infra/station/access",
+   "field": "station_wpa_current_private_conf",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/terraform-state-pve/terraform.tfstate",
+   "path": "infra/proxmox/terraform",
+   "field": "pve_terraform_tfstate",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/terraform-state/terraform.tfstate",
+   "path": "infra/proxmox/terraform",
+   "field": "terraform_tfstate",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/terraform-state/terraform.tfvars.json",
+   "path": "infra/proxmox/terraform",
+   "field": "terraform_tfvars_json",
+   "encoding": "text"
+  },
+  {
+   "file": "proxmox-install/terraform-token.json",
+   "path": "infra/proxmox/terraform",
+   "field": "terraform_token_json",
+   "encoding": "text"
+  },
+  {
+   "file": "station-host.txt",
+   "path": "infra/station/access",
+   "field": "station_host_txt",
+   "encoding": "text"
+  }
+ ]
+}

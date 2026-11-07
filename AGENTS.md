@@ -136,19 +136,24 @@ duck/resume и передачу wake-команд в HA. Текущая верс
   `secret/ci/*` для CI, `secret/infra/*` для доступа владельца). Локально
   лежат только `secrets/openbao/operator.token` (политика `operator-kv`:
   чтение/запись `secret/{ci,k8s,infra}/*`, без delete), `secrets/openbao/addr`
-  и SSH-ключи `~/.ssh/home-lab/`. Карта путей — `secrets/README.md` и
-  `secrets/catalog.json`.
-- Агент сам берёт нужный секрет: скрипту, читающему файл `secrets/<…>`,
-  файл временно восстанавливает
-  `projects/home/kubernetes/openbao/materialize.py <file>` (в основной копии),
-  после работы — `materialize.py --clean <file>`. Значения не печатать и не
-  копировать в другие файлы, логи, чат, worktree.
-- Запись: GET → merge → POST с `options.cas`. Новый секрет — сразу в OpenBao
-  плюс строка в `secrets/README.md`; локальные копии не создавать.
+  и SSH-ключи `~/.ssh/home-lab/` (алиасы `ssh -F ~/.ssh/home-lab/config
+  pve|k3s|haos`). Карта путей — `docs/SECRETS.md` и
+  `platform/workstation/catalog.json`; рабочее место — `docs/WORKSTATION.md`.
+- Инструменты — только из `mise.toml` (`mise install`); не скачивать бинарники
+  вручную и не класть их в `local-data/`.
+- Агент сам берёт нужный секрет: скрипту, читающему файл `secrets/<…>`, файл
+  временно восстанавливает `mise run secrets:file <file>` (в worktree токен
+  берётся из основной копии), после работы — `mise run secrets:clean <file>`.
+  Значения не печатать и не копировать в другие файлы, логи, чат.
+  `mise run doctor` показывает, чего не хватает; `secrets:login` (пароль +
+  TOTP) выполняет только человек.
+- Запись: GET → merge → POST с `options.cas`. Новый путь — сразу в OpenBao
+  плюс запись в `platform/workstation/catalog.json` и `docs/SECRETS.md`
+  (`mise run secrets:check` должен быть чистым); локальные копии не создавать.
 - Admin OpenBao (политики, auth) — только по запросу человека; recovery keys и
   seal key на диске больше не хранятся (копии у владельца в Bitwarden).
 - После изменений в OpenBao владелец обновляет копию в Vaultwarden:
-  `projects/home/kubernetes/vaultwarden/sync_openbao.py` (нужен `BW_SESSION`).
+  `mise run vault:sync` (нужен `BW_SESSION`).
 
 ## Документация и приватные данные
 
