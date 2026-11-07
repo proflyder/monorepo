@@ -44,7 +44,7 @@ def service_image(name, binary, repo, user = "65534:65534"):
 
 def rust_service_image(name, crate_binary, repo, user = "65534:65534"):
     """A Rust service image: the crate binary rebuilt for static musl, then
-    packaged exactly like the Go images."""
+    packaged as one distroless layer."""
     binary = name + "_binary"
     musl_binary(
         name = binary,

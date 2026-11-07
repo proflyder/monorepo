@@ -1,10 +1,10 @@
 # home-deploy (Rust port)
 
-Rust implementation of the `home-deploy` deploy CLI. Since the cutover this
-crate is the executable contract: `platform/deploy/resolve.sh`, the CI image
-and the in-cluster Jobs all use `//platform/deploy-rs:home-deploy`. The legacy
-Go implementation stays in `platform/deploy/` until a separate cleanup PR so a
-cutover problem can be reverted with one PR.
+Rust implementation of the `home-deploy` deploy CLI. It is the executable
+contract: `platform/deploy/resolve.sh`, the CI image and the in-cluster Jobs all
+use `//platform/deploy-rs:home-deploy`. The former Go implementation has been
+removed; `testdata/frozen` keeps the captured Go/Python outputs as the parity
+fixtures (they are frozen data, not generated at test time).
 
 ## Layout
 
@@ -75,20 +75,12 @@ under the case's `trace/`; the smoke Job name is normalised because it is
 derived from the clock. Preflight cases ship the HTTP response map in
 `http.json`.
 
-## Regenerating
+## Frozen fixtures
 
-The generator drives the Go binary, so it only works while the Go code exists:
-
-```bash
-platform/deploy-rs/testdata/frozen/generate.py
-# or with an already built binary:
-platform/deploy-rs/testdata/frozen/generate.py --go-bin /path/to/home-deploy
-```
-
-It rebuilds `./platform/deploy/cmd/home-deploy` when `--go-bin` is omitted and
-rewrites `cases/` and `manifest.json`. Review the diff like any other contract
-change: a changed expected file is a behaviour change that the Rust port must
-copy deliberately.
+`testdata/frozen` was captured from the Go implementation and the Python
+renderer before the Go code was removed. The fixtures are frozen data: there is
+no generator in the tree any more. Treat a changed expected file as a deliberate
+contract change and review it like code; the parity test must stay green.
 
 ## Checks
 

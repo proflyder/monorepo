@@ -140,7 +140,7 @@ mise exec -- bazelisk build //projects/mobile/android:app
 # bazel-bin/projects/mobile/android/app/app.apk
 
 bazelisk test //projects/mobile/android:android_tests
-# Bazel build tools are Go: unit tests for the generators and lint runner.
+# Bazel build tools are Kotlin/JVM: unit tests for the generators and lint runner.
 bazelisk test //platform/android/...
 
 # Android Lint over the whole app graph (separate CI job `android / android-lint`).
@@ -172,8 +172,7 @@ for a documented false positive, scoped to the narrowest element or module.
 `warning:`/`WARNING:` from this repository's code, resources, manifests or
 Bazel rules. Fix the root cause; do not silence the log. Warnings that come
 from a pinned third-party toolchain (for example javac deprecations inside
-protobuf/rules_android sources, or the macOS Go linker's duplicate `-lm`
-message) are tracked in the change that introduces them and reported rather
+protobuf/rules_android sources) are tracked in the change that introduces them and reported rather
 than hidden.
 
 `android_tests` covers endpoint/security rules, time/duration parsing, Connect

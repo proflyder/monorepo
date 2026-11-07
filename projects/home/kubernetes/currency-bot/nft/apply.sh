@@ -8,7 +8,7 @@
 #   PRIVATE_ENV=secrets/home/currency-bot.env ./apply.sh
 #   ./apply.sh --env /path/to/currency-bot.env
 #
-# Rendering needs the Go `home-deploy` binary on this node (an installed
+# Rendering needs the Rust `home-deploy` binary on this node (an installed
 # /usr/local/bin/home-deploy, or set HOME_DEPLOY); see platform/deploy.
 #
 # The rendered ruleset replaces only `table inet ricardo_currency_bot`; the

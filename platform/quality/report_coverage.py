@@ -76,7 +76,7 @@ def classify(root: Path, patterns: list[str], exclude_tests: bool = True) -> lis
     for pattern in patterns:
         files.extend(root.glob(pattern))
     if exclude_tests:
-        files = [p for p in files if not p.name.endswith("_test.go") and not p.name.startswith("test_") and "/tests/" not in str(p)]
+        files = [p for p in files if not p.name.startswith("test_") and "/tests/" not in str(p)]
     return sorted(set(files))
 
 

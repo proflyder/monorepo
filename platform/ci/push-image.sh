@@ -77,7 +77,7 @@ case "$mode" in
     fi
     [[ -n "$bin" ]] || { echo "bazel/bazelisk not found; set BAZELISK" >&2; exit 1; }
     out=$("$bin" run "$target" \
-      --platforms=@rules_go//go/toolchain:linux_amd64 \
+      --platforms=//platform/bazel:linux_amd64 \
       -- --repository "$repository" --tag "$tag" 2>&1) || {
       printf '%s\n' "$out" >&2
       push_failed

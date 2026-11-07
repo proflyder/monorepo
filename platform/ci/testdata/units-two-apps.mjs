@@ -59,19 +59,6 @@ export const config = {
     },
 
     {
-      id: "sched",
-      platform: "go",
-      title: "go/sched",
-      paths: ["go/sched/**"],
-      go: {
-        module: ".",
-        packages: ["./go/sched/..."],
-        race: true,
-        build: ["./go/sched/cmd/sched"],
-      },
-    },
-
-    {
       id: "repository",
       platform: "quality",
       title: "repository gates",

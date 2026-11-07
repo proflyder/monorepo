@@ -109,14 +109,14 @@ Pulsar — `projects/station/pulsar/AGENTS.md`.
   `resources/` — только внешние checkout'ы.
 - Корневой build contract — `MODULE.bazel` + Bazelisk. Не добавлять
   `WORKSPACE` и не дублировать toolchain-настройки по приложениям.
-- Go-сервисы собираются `rules_go`, Rust-крейты — `rules_rust`. Весь
-  first-party Rust — один корневой Cargo workspace (`/Cargo.toml`,
-  `/Cargo.lock`, `/rust-toolchain.toml`, `@crates//`), включая
-  `projects/station/ble-gateway` (`zbus`/`tokio`, armhf через
-  `//platform/bazel/zig:armhf_linux`) и Windows logon provider; общий код с
-  несколькими потребителями — `packages/rust/`.
-- После добавления Go-зависимости обновлять `go.mod` и `go_deps`/Gazelle,
-  затем проверять `bazel build` и `go test`.
+- First-party Rust собирается `rules_rust`. Весь Rust — один корневой Cargo
+  workspace (`/Cargo.toml`, `/Cargo.lock`, `/rust-toolchain.toml`,
+  `@crates//`), включая `projects/station/ble-gateway` (`zbus`/`tokio`, armhf
+  через `//platform/bazel/zig:armhf_linux`) и Windows logon provider; общий
+  код с несколькими потребителями — `packages/rust/`. Go в репозитории нет.
+- После добавления Rust-зависимости обновлять `Cargo.toml`/`Cargo.lock` и
+  `crate-universe.lock` (`CARGO_BAZEL_REPIN=1 bazel build ...`), затем
+  проверять `bazel build` и `bazel test`.
 - Не коммитить Bazel output base, `bazel-*` symlinks и тяжёлые кэши;
   `MODULE.bazel.lock` — коммитить для воспроизводимости.
 - Solution не должен импортировать project или содержать project-specific

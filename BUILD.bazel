@@ -1,10 +1,4 @@
-load("@gazelle//:def.bzl", "gazelle")
-
 package(default_visibility = ["//visibility:public"])
-
-gazelle(
-    name = "gazelle",
-)
 
 exports_files([
     "Cargo.lock",
@@ -12,6 +6,5 @@ exports_files([
     "MODULE.bazel",
     "README.md",
     "crate-universe.lock",
-    "go.mod",
     "rust-toolchain.toml",
 ])

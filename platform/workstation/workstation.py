@@ -340,7 +340,7 @@ def cmd_doctor(args, out=print, run=subprocess.run) -> int:
         failures += 0 if ok else 1
         out(("ok    " if ok else "FAIL  ") + what + ("" if ok or not hint else f" — {hint}"))
 
-    for tool in ("bazelisk", "gitleaks", "kubectl", "helm", "gh", "bao", "bw", "python3", "node", "go"):
+    for tool in ("bazelisk", "gitleaks", "kubectl", "helm", "gh", "bao", "bw", "python3", "node"):
         report(shutil.which(tool) is not None, f"tool {tool}", "run `mise install`")
     try:
         bao = operator(args.secrets_dir, renew=False)

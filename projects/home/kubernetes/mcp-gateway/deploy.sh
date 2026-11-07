@@ -121,7 +121,7 @@ fi
 if $BUILD && [[ -z "${MCP_GATEWAY_IMAGE:-}" ]]; then
   echo "== building the mcp-gateway image with Bazel"
   # The image target packages the static musl binary through its own Bazel
-  # transition, so no Go platform flag is needed (the Go implementation is gone).
+  # transition, so no extra platform flag is needed.
   ( cd "$ROOT" && "$(bazel_bin)" build //solutions/mcp-gateway:mcp-gateway_image )
 fi
 

@@ -2,7 +2,6 @@ load("@protobuf//bazel:proto_library.bzl", "proto_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# gazelle:proto disable
 
 # The canonical home.v1 schema. Language bindings are generated outside Bazel:
 # the Rust stubs are committed in packages/rust/home-proto/src/generated, and

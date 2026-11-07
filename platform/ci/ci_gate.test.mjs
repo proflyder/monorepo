@@ -11,7 +11,7 @@ import * as ciGate from "./ci_gate.mjs";
 test("gate: all success and skipped is green", () => {
   const { ok, failing } = ciGate.evaluate({
     changes: { result: "success" },
-    go: { result: "success" },
+    bazel: { result: "success" },
     android: { result: "skipped" },
     python: { result: "skipped" },
   });
@@ -22,10 +22,10 @@ test("gate: all success and skipped is green", () => {
 test("gate: failure is red", () => {
   const { ok, failing } = ciGate.evaluate({
     changes: { result: "success" },
-    go: { result: "failure" },
+    bazel: { result: "failure" },
   });
   assert.equal(ok, false);
-  assert.deepEqual(failing, { go: "failure" });
+  assert.deepEqual(failing, { bazel: "failure" });
 });
 
 test("gate: cancelled is red", () => {
@@ -94,7 +94,7 @@ test("gate: invalid json fails", () => {
 test("gate: skipped units pass", () => {
   const result = runWithNeeds({
     changes: { result: "success" },
-    go: { result: "skipped" },
+    bazel: { result: "skipped" },
   });
   assert.equal(result.code, 0);
   assert.ok(result.out.includes("legitimately skipped"));
@@ -103,9 +103,9 @@ test("gate: skipped units pass", () => {
 test("gate: failed unit reports the name", () => {
   const result = runWithNeeds({
     changes: { result: "success" },
-    go: { result: "failure" },
+    bazel: { result: "failure" },
   });
   assert.equal(result.code, 1);
-  assert.ok(result.err.includes("go"));
+  assert.ok(result.err.includes("bazel"));
   assert.ok(result.err.includes("failure"));
 });

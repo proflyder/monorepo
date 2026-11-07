@@ -1,8 +1,8 @@
 package(default_visibility = ["//visibility:public"])
 
-# Reviewed renderer inputs. The renderer itself is Go
-# (//platform/deploy/internal/hermesconfig); these are the files it installs and
-# merges into HERMES_HOME.
+# Reviewed renderer inputs. The renderer is the Rust crate
+# (//platform/deploy-rs:home-deploy, `hermes render-config`); these are the files
+# it installs and merges into HERMES_HOME.
 filegroup(
     name = "render_sources",
     srcs = glob(
