@@ -91,6 +91,8 @@ export const APPROVED_PUBLIC = [
 // pattern are skipped for exactly this file.
 export const PUBLIC_TEST_KEY_FIXTURES = new Set([
   "projects/station/pulsar/satellite/crates/pulsar-update/tests/data/server.key",
+  // home-tls loopback HTTPS test server key (synthetic, generated for the test).
+  "packages/rust/home-tls/testdata/server-key.pem",
 ]);
 
 export const CREDENTIAL_PATTERN =

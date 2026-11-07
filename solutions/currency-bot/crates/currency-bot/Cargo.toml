@@ -23,6 +23,7 @@ home-runtime = { path = "../../../../packages/rust/home-runtime" }
 home-secret = { path = "../../../../packages/rust/home-secret" }
 home-sqlite = { path = "../../../../packages/rust/home-sqlite" }
 home-telegram = { path = "../../../../packages/rust/home-telegram" }
+home-tls = { path = "../../../../packages/rust/home-tls" }
 home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
 http = { workspace = true }
 jiff = { workspace = true }
@@ -30,7 +31,6 @@ prometheus-client = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
-rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

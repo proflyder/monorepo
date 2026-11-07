@@ -29,6 +29,8 @@ _ALL_TARGETS = [
     "//packages/rust/home-sqlite:unit_tests",
     "//packages/rust/home-telegram:home_telegram",
     "//packages/rust/home-telegram:unit_tests",
+    "//packages/rust/home-tls:home_tls",
+    "//packages/rust/home-tls:unit_tests",
     "//packages/rust/home-telemetry:home_telemetry",
     "//packages/rust/home-telemetry:unit_tests",
     "//packages/rust/home-worker:home_worker",

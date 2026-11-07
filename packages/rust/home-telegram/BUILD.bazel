@@ -6,8 +6,8 @@ package(default_visibility = ["//visibility:public"])
 # Telegram Bot API sendMessage with HTML chunks.
 DEPS = [
     "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-tls:home_tls",
     "@crates//:reqwest",
-    "@crates//:rustls",
     "@crates//:serde",
     "@crates//:serde_json",
     "@crates//:thiserror",

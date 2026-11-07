@@ -8,8 +8,8 @@ publish.workspace = true
 
 [dependencies]
 home-secret = { path = "../home-secret" }
+home-tls = { path = "../home-tls" }
 reqwest = { workspace = true }
-rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

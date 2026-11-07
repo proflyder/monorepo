@@ -1,0 +1,42 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Public HTTPS roots for the shared workspace reqwest client.
+DEPS = [
+    "@crates//:reqwest",
+    "@crates//:rustls",
+    "@crates//:thiserror",
+]
+
+rust_library(
+    name = "home_tls",
+    srcs = ["src/lib.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    # The test CA and server certificate are embedded with `include_str!`, so
+    # the PEM files are compile data rather than runtime runfiles.
+    compile_data = glob(["testdata/*.pem"]),
+    crate = ":home_tls",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        "@crates//:rustls-pki-types",
+        "@crates//:tempfile",
+        "@crates//:tokio",
+        "@crates//:tokio-rustls",
+    ],
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
