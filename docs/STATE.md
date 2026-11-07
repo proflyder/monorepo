@@ -254,9 +254,12 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.1009` — armhf-сборка из `projects/station/pulsar/`
-  (Bazel), раскатана `deploy-station` 2026-11-04; линия Ricardo, база
-  upstream `v0.5.4` = `f1f5b17`.
+- Pulsar Rust `v0.5.1010` — armhf-сборка из `projects/station/pulsar/`
+  (Bazel), раскатана `deploy-station` 2026-11-07 (`.prev` = `v0.5.1009`);
+  линия Ricardo, база upstream `v0.5.4` = `f1f5b17`. Внутри — завершённый
+  Rust-рефакторинг (решение 40): крейты за портами, явные состояния
+  фронтенда, голоса и арбитража, `pulsar-playback`, Zigbee разделён и
+  выключен; pairing PSK и токен Sendspin в журнал не пишутся.
   Включает повторный wake, заменяющий активный диалог, экспериментальный
   локальный endpointing, Ricardo pre-roll 256 ms и запись wake-событий
   (`/data/pulsar/wake-events/`, cutoff/window из manifest модели); из
