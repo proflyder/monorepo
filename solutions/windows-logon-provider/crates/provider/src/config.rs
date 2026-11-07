@@ -270,7 +270,7 @@ mod imp {
     pub fn load_secret() -> Result<MachineSecret, &'static str> {
         let secret_path = WideNul::new(SECRET_PATH);
         // SAFETY: `secret_path` is NUL-terminated; no security attributes.
-        let file = match unsafe {
+        let Ok(file) = (unsafe {
             CreateFileW(
                 secret_path.as_pcwstr(),
                 GENERIC_READ.0,
@@ -280,9 +280,8 @@ mod imp {
                 FILE_ATTRIBUTE_NORMAL,
                 None,
             )
-        } {
-            Ok(handle) => handle,
-            Err(_) => return Err("secret_file_missing"),
+        }) else {
+            return Err("secret_file_missing");
         };
 
         let mut size: i64 = 0;
@@ -333,10 +332,10 @@ mod imp {
             // SAFETY: DPAPI returned `output.cbData` bytes at `output.pbData`.
             let plaintext =
                 unsafe { core::slice::from_raw_parts(output.pbData, output.cbData as usize) };
-            match core::str::from_utf8(plaintext) {
-                Ok(text) => parse_secret_json(text).map_err(|error| error.detail()),
-                Err(_) => Err("secret_json_invalid_utf8"),
-            }
+            core::str::from_utf8(plaintext).map_or_else(
+                |_| Err("secret_json_invalid_utf8"),
+                |text| parse_secret_json(text).map_err(wakegrant_protocol::Error::detail),
+            )
         };
 
         // SAFETY: `output` is the DPAPI allocation, wiped before it is freed.

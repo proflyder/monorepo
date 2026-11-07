@@ -297,6 +297,9 @@ mod windows_impl {
 
     /// UTF-8 SID of the configured account, empty when it cannot be resolved.
     pub fn configured_user_sid() -> String {
+        #[repr(align(8))]
+        struct AlignedSid([u8; SECURITY_MAX_SID_SIZE as usize]);
+
         let Ok(config) = load_config() else {
             return String::new();
         };
@@ -320,10 +323,10 @@ mod windows_impl {
                     value.extend_from_slice(&account);
                     value
                 }
-                Err(_) => account.clone(),
+                Err(_) => account,
             }
         } else {
-            let mut value = domain.clone();
+            let mut value = domain;
             value.push(u16::from(b'\\'));
             value.extend_from_slice(&account);
             value
@@ -331,9 +334,6 @@ mod windows_impl {
         // The only place a `PCWSTR` is built from the account name: `WideNul`
         // guarantees the terminator `LookupAccountNameW` reads.
         let qualified = WideNul::from_wide(&qualified);
-
-        #[repr(align(8))]
-        struct AlignedSid([u8; SECURITY_MAX_SID_SIZE as usize]);
 
         let mut sid = AlignedSid([0u8; SECURITY_MAX_SID_SIZE as usize]);
         let mut sid_size = SECURITY_MAX_SID_SIZE;
@@ -418,7 +418,7 @@ mod windows_impl {
             unsafe { *ppv = std::ptr::null_mut() };
 
             let dll_ref = DllRef::acquire();
-            let provider = Provider::new(dll_ref);
+            let provider = Self::new(dll_ref);
             let object: ICredentialProvider = provider.into();
             // SAFETY: the out pointer was validated above.
             unsafe { object.query(riid, ppv) }
@@ -499,6 +499,10 @@ mod windows_impl {
             Ok(())
         }
 
+        // `Ref` is the COM ABI's borrowed-interface wrapper and is `Copy`;
+        // taking it by reference would deviate from the vtable signature this
+        // helper mirrors and from the `windows-core` conventions.
+        #[allow(clippy::needless_pass_by_value)]
         fn advise(
             &self,
             pcpe: Ref<'_, ICredentialProviderEvents>,
@@ -569,10 +573,10 @@ mod windows_impl {
                     Credential::new(Arc::clone(&self.session)).into();
                 *slot = Some(credential.cast()?);
             }
-            match slot.as_ref() {
-                Some(credential) => Ok(credential.clone()),
-                None => Err(E_OUTOFMEMORY.into()),
-            }
+            slot.as_ref().map_or_else(
+                || Err(E_OUTOFMEMORY.into()),
+                |credential| Ok(credential.clone()),
+            )
         }
     }
 
@@ -672,6 +676,7 @@ mod windows_impl {
                     };
                     let mut slot = lock(&self.user_array);
                     *slot = Some(users);
+                    drop(slot);
                     Ok(())
                 },
                 || Err(E_FAIL.into()),

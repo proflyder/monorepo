@@ -1,5 +1,13 @@
 common --enable_bzlmod
 
+# `rust_clippy_test` only exits non-zero on rustc errors: the levels from the
+# root Cargo.toml `[workspace.lints]` (forwarded through `extract_cargo_lints`)
+# are `warn`, so without this flag a new clippy warning passes both the local
+# build and PR CI. Deny warnings for every Rust unit, matching the cargo
+# invocation in the Pulsar/provider scripts.
+build --@rules_rust//rust/settings:clippy_flag=-Dwarnings
+test --@rules_rust//rust/settings:clippy_flag=-Dwarnings
+
 build --announce_rc
 build --color=yes
 test --test_output=errors

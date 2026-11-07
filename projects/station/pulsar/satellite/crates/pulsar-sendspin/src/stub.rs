@@ -55,7 +55,7 @@ impl SendspinHandle {
 }
 
 pub fn spawn(
-    _cfg: SendspinConfig,
+    _cfg: &SendspinConfig,
     _volume: f32,
     _muted: bool,
     _master_gain: f32,

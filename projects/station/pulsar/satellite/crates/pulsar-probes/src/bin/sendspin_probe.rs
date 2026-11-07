@@ -184,7 +184,7 @@ async fn run(args: &Args, model: &'static DeviceProfile) -> Result<Counts, Strin
     let volume = 0.2;
     let master = pulsar_core::volume::master_gain(&model.volume, volume);
     let (handle, mut events) =
-        pulsar_sendspin::spawn(cfg, volume, false, master).map_err(|e| e.to_string())?;
+        pulsar_sendspin::spawn(&cfg, volume, false, master).map_err(|e| e.to_string())?;
     let mut term = signal(SignalKind::terminate()).map_err(|e| format!("signal: {e}"))?;
     let mut int = signal(SignalKind::interrupt()).map_err(|e| format!("signal: {e}"))?;
     println!(

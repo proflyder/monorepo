@@ -162,7 +162,8 @@ mod imp {
         // SAFETY: OPEN_ALWAYS creates the file if needed; no security
         // attributes and no template file are passed, and `log_path` is
         // NUL-terminated. The handle is closed on every path.
-        match unsafe {
+        // Logging must never break logon: a failed open is ignored.
+        if let Ok(handle) = unsafe {
             CreateFileW(
                 log_path.as_pcwstr(),
                 FILE_APPEND_DATA.0,
@@ -173,17 +174,12 @@ mod imp {
                 None,
             )
         } {
-            Ok(handle) => {
-                let mut written = 0u32;
-                // SAFETY: `handle` is an open append handle and the slice stays
-                // alive for the duration of the call.
-                unsafe {
-                    let _ = WriteFile(handle, Some(line.as_bytes()), Some(&raw mut written), None);
-                    let _ = CloseHandle(handle);
-                }
-            }
-            Err(_) => {
-                // Logging must never break logon.
+            let mut written = 0u32;
+            // SAFETY: `handle` is an open append handle and the slice stays
+            // alive for the duration of the call.
+            unsafe {
+                let _ = WriteFile(handle, Some(line.as_bytes()), Some(&raw mut written), None);
+                let _ = CloseHandle(handle);
             }
         }
     }

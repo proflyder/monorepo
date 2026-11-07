@@ -29,7 +29,7 @@ enum Req {
     Release,
 }
 
-pub(crate) struct Sink {
+pub struct Sink {
     io: Mutex<Io>,
     req: Mutex<Req>,
     req_gen: AtomicU32,
@@ -121,6 +121,10 @@ impl Sink {
     }
 
     /// A write now would take the audio: a stream is configured and no request is pending.
+    ///
+    /// Readiness is currently observed through `Status`; kept as the sink-side
+    /// probe for callers that gate on the device instead.
+    #[allow(dead_code)]
     pub fn accepts_audio(&self) -> bool {
         !self.pending() && lock(&self.io).active
     }
@@ -254,6 +258,7 @@ impl Sink {
             let mut req = lock(&self.req);
             *req = r;
             self.req_gen.fetch_add(1, SeqCst);
+            drop(req);
         }
         let io = match self.io.try_lock() {
             Ok(io) => Some(io),
