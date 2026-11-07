@@ -11,19 +11,10 @@ use std::io::Write;
 use clap::{Arg, ArgAction, Command, error::ErrorKind};
 
 use crate::render::{self, Options};
-use crate::{USAGE, buildid, envfile};
+use crate::{USAGE, buildid, envfile, manifests, oci, runtimevalues};
 
 /// Commands that are declared but not ported yet.
-const NOT_IMPLEMENTED: &[&str] = &[
-    "oci",
-    "converge",
-    "state",
-    "preflight",
-    "runtime",
-    "eso",
-    "secret",
-    "hermes",
-];
+const NOT_IMPLEMENTED: &[&str] = &["converge", "state", "preflight", "hermes"];
 
 /// Every top-level command, used to keep the Go binary's "unknown command"
 /// response (full usage plus one line) instead of clap's shorter message.
@@ -141,6 +132,10 @@ fn dispatch(
         Some(("render", sub)) => run_render(sub, stdout),
         Some(("env", sub)) => run_env(sub, stdout),
         Some(("build-id", sub)) => run_build_id(sub, stdout),
+        Some(("oci", sub)) => run_oci(sub, stdout),
+        Some(("runtime", sub)) => run_runtime(sub, stdout),
+        Some(("eso", sub)) => run_eso(sub, stdout),
+        Some(("secret", sub)) => run_secret(sub, stdout),
         Some((name, _)) => {
             let _ = writeln!(stderr, "home-deploy {name}: not implemented yet");
             Err(Failure::code(2))
@@ -217,6 +212,140 @@ fn run_build_id(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<()
         buildid::build_id(revision, fingerprint)
     };
     let _ = writeln!(stdout, "{value}");
+    Ok(())
+}
+
+fn run_oci(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let Some((name, sub)) = matches.subcommand() else {
+        return Err(Failure::new(
+            "usage: home-deploy oci digest|pack|docker LAYOUT --ref REF --out FILE",
+        ));
+    };
+    if name == "digest" {
+        let layout = sub.get_one::<String>("layout").map_or("", String::as_str);
+        if layout.is_empty() {
+            return Err(Failure::new("usage: home-deploy oci digest LAYOUT"));
+        }
+        let digest = oci::digest(layout).map_err(Failure::new)?;
+        let _ = writeln!(stdout, "{digest}");
+        return Ok(());
+    }
+    let layout = sub.get_one::<String>("layout").map_or("", String::as_str);
+    let reference = sub.get_one::<String>("ref").map_or("", String::as_str);
+    let output = sub.get_one::<String>("out").map_or("", String::as_str);
+    if layout.is_empty() {
+        return Err(Failure::new(format!(
+            "oci {name}: layout argument is required"
+        )));
+    }
+    if reference.is_empty() {
+        return Err(Failure::new(format!("oci {name}: --ref is required")));
+    }
+    if output.is_empty() {
+        return Err(Failure::new(format!("oci {name}: --out is required")));
+    }
+    let build = if name == "docker" {
+        oci::docker_archive
+    } else {
+        oci::pack
+    };
+    let digest = build(layout, reference, output).map_err(Failure::new)?;
+    let _ = writeln!(stdout, "{digest}");
+    Ok(())
+}
+
+fn run_runtime(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let Some(("split", sub)) = matches.subcommand() else {
+        return Err(Failure::new(
+            "usage: home-deploy runtime split --render F --private F --storage-out F --values-out F",
+        ));
+    };
+    let render_path = sub.get_one::<String>("render").map_or("", String::as_str);
+    let private_path = sub.get_one::<String>("private").map_or("", String::as_str);
+    let storage_out = sub
+        .get_one::<String>("storage-out")
+        .map_or("", String::as_str);
+    let values_out = sub
+        .get_one::<String>("values-out")
+        .map_or("", String::as_str);
+    let exporter_image = sub
+        .get_one::<String>("health-exporter-image")
+        .map_or("", String::as_str);
+    let exporter_workload = sub
+        .get_one::<String>("health-exporter-workload")
+        .map_or("runtime-health-exporter", String::as_str);
+    if render_path.is_empty()
+        || private_path.is_empty()
+        || storage_out.is_empty()
+        || values_out.is_empty()
+    {
+        return Err(Failure::new(
+            "runtime split: --render, --private, --storage-out and --values-out are required",
+        ));
+    }
+    let storage = runtimevalues::split_render(render_path).map_err(Failure::new)?;
+    runtimevalues::write(storage_out, &storage).map_err(Failure::new)?;
+    let values = runtimevalues::workload_values(private_path).map_err(Failure::new)?;
+    let values = runtimevalues::pin_health_exporter(values, exporter_image, exporter_workload)
+        .map_err(Failure::new)?;
+    runtimevalues::write(values_out, &runtimevalues::marshal(&values)).map_err(Failure::new)?;
+    let _ = writeln!(stdout, "wrote {storage_out} and {values_out}");
+    Ok(())
+}
+
+fn run_eso(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let Some(("names", sub)) = matches.subcommand() else {
+        return Err(Failure::new(
+            "usage: home-deploy eso names --out F MANIFEST...",
+        ));
+    };
+    let out = sub.get_one::<String>("out").map_or("", String::as_str);
+    let files: Vec<String> = sub
+        .get_many::<String>("files")
+        .map(|values| values.cloned().collect())
+        .unwrap_or_default();
+    if out.is_empty() {
+        return Err(Failure::new("eso names: --out is required"));
+    }
+    if files.is_empty() {
+        return Err(Failure::new("eso names: at least one manifest is required"));
+    }
+    let names = manifests::external_secret_names(&files).map_err(Failure::new)?;
+    manifests::write_names(out, &names).map_err(Failure::new)?;
+    let _ = writeln!(stdout, "{} ExternalSecret(s)", names.len());
+    Ok(())
+}
+
+fn run_secret(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let Some(("opaque", sub)) = matches.subcommand() else {
+        return Err(Failure::new(
+            "usage: home-deploy secret opaque --name N --namespace NS --key K --from-env-file F --env KEY",
+        ));
+    };
+    let name = sub.get_one::<String>("name").map_or("", String::as_str);
+    let namespace = sub
+        .get_one::<String>("namespace")
+        .map_or("", String::as_str);
+    let key = sub.get_one::<String>("key").map_or("", String::as_str);
+    let from_env_file = sub
+        .get_one::<String>("from-env-file")
+        .map_or("", String::as_str);
+    let env_key = sub.get_one::<String>("env").map_or("", String::as_str);
+    if name.is_empty()
+        || namespace.is_empty()
+        || key.is_empty()
+        || from_env_file.is_empty()
+        || env_key.is_empty()
+    {
+        return Err(Failure::new(
+            "secret opaque: --name, --namespace, --key, --from-env-file and --env are required",
+        ));
+    }
+    let document = manifests::opaque_secret(name, namespace, key, from_env_file, env_key)
+        .map_err(Failure::new)?;
+    let text = String::from_utf8(document)
+        .map_err(|_| Failure::new("secret opaque: generated document is not UTF-8"))?;
+    let _ = writeln!(stdout, "{text}");
     Ok(())
 }
 
@@ -297,7 +426,9 @@ fn command() -> Command {
                     .arg(string("storage-out"))
                     .arg(string("values-out"))
                     .arg(string("health-exporter-image"))
-                    .arg(string("health-exporter-workload")),
+                    .arg(
+                        string("health-exporter-workload").default_value("runtime-health-exporter"),
+                    ),
             ),
         )
         .subcommand(

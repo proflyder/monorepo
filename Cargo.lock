@@ -1472,9 +1472,13 @@ dependencies = [
 name = "home-deploy"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "clap",
+ "flate2",
  "hex",
  "regex",
+ "serde",
+ "serde-saphyr",
  "serde_json",
  "sha2 0.11.1",
  "tempfile",

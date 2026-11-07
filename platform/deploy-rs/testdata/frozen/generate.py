@@ -53,14 +53,6 @@ GO: Path
 TRACE_INDEX = 0
 
 SKIP_REASONS = {
-    "eso-names": "manifests helpers are not ported yet",
-    "secret-opaque": "manifests helpers are not ported yet",
-    "secret-opaque-missing": "manifests helpers are not ported yet",
-    "runtime-split": "runtimevalues is not ported yet",
-    "oci-digest": "oci is not ported yet",
-    "oci-pack": "oci is not ported yet",
-    "oci-docker": "oci is not ported yet",
-    "oci-pack-single-dash": "oci is not ported yet",
     "converge-create": "converge is not ported yet",
     "converge-manifest-wins": "converge is not ported yet",
     "converge-drift-preserve": "converge is not ported yet",

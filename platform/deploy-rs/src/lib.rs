@@ -5,14 +5,19 @@
 //! cutover) so a parity harness can compare both binaries against the frozen
 //! contract fixtures in `testdata/frozen`.
 //!
-//! Only the pure modules are ported so far: `envfile`, `buildid` and `render`.
-//! Every other subcommand parses its arguments and exits with status 2 (not
-//! implemented) until its own port lands.
+//! Only the pure modules are ported so far: `envfile`, `buildid`, `render`,
+//! `yaml`, `manifests`, `runtimevalues` and `oci`. Every other subcommand
+//! parses its arguments and exits with status 2 (not implemented) until its
+//! own port lands.
 
 pub mod buildid;
 pub mod cli;
 pub mod envfile;
+pub mod manifests;
+pub mod oci;
 pub mod render;
+pub mod runtimevalues;
+pub mod yaml;
 
 /// Usage text shared with the Go binary. The commands, flag names and wording
 /// are part of the CLI contract; keep them byte-identical while both
