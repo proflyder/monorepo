@@ -791,7 +791,15 @@ test("deploy: a shared rust crate change reaches the hermes deploy unit", () => 
     {
       root: REPO,
       base: "b",
-      graph: { affectedRules: () => new Set(["//packages/rust/home-ha:home_ha"]) },
+      // A real reverse-dependency closure reaches voice-proxy, which is one of
+      // hermes' Bazel images; home_ha alone is not enough to select a deploy.
+      graph: {
+        affectedRules: () =>
+          new Set([
+            "//packages/rust/home-ha:home_ha",
+            "//solutions/voice-proxy/crates/voice-proxy:voice_proxy",
+          ]),
+      },
     },
   );
   const entries = affected.deployEntries(result, config).map((entry) => entry.id);
@@ -815,6 +823,455 @@ test("rust cutover: a shared crate change also runs the bazel unit", () => {
   const bazelIds = result.routes.bazel.units.map((unit) => unit.id);
   assert.ok(bazelIds.includes("currency-bot"), bazelIds.join(","));
 });
+
+// --------------------------------------------------------------------------
+// Precise Rust routing (shared crates, Cargo.lock, crate_universe)
+// --------------------------------------------------------------------------
+function routeRust(changed, graph, deps = {}) {
+  const config = affected.loadConfig();
+  return withDeps(deps, () =>
+    affected.route(config, changed, { root: REPO, base: "b", graph }),
+  );
+}
+
+test("rust routing: home-ha change selects its consumers, not pulsar/provider", () => {
+  const result = routeRust(["packages/rust/home-ha/src/lib.rs"], {
+    affectedRules: () =>
+      new Set([
+        "//packages/rust/home-ha:home_ha",
+        "//solutions/ha-bridge/crates/ha-bridge:ha_bridge_lib",
+        "//solutions/voice-proxy/crates/voice-proxy:voice_proxy",
+      ]),
+  });
+  const bazelIds = result.routes.bazel.units.map((unit) => unit.id);
+  assert.deepEqual(bazelIds, ["voice-proxy", "ha-bridge"]);
+  assert.ok(!bazelIds.includes("scheduler"), bazelIds.join(","));
+  const nativeIds = result.routes.native.units.map((unit) => unit.id);
+  assert.deepEqual(nativeIds, []);
+  assert.ok(!nativeIds.includes("pulsar"));
+  assert.ok(!nativeIds.includes("logon-provider"));
+  // The voice-proxy image is deployed through `hermes`.
+  assert.deepEqual(result.routes.python.units.map((unit) => unit.id), ["hermes"]);
+});
+
+test("rust routing: a shared TLS crate selects only its consumers", () => {
+  const result = routeRust(["packages/rust/home-tls/src/lib.rs"], {
+    affectedRules: () =>
+      new Set([
+        "//packages/rust/home-tls:home_tls",
+        "//projects/home-assistant/deploy/health-exporter/crates/health-exporter:health_exporter",
+        "//solutions/currency-bot/crates/currency-bot:currency_bot_lib",
+        "//solutions/mcp-gateway/crates/mcp-gateway:mcp_gateway_lib",
+      ]),
+  });
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
+    "health-exporter",
+    "currency-bot",
+    "mcp-gateway",
+  ]);
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), []);
+  assert.deepEqual(result.routes.python.units.map((unit) => unit.id), ["hermes"]);
+});
+
+test("rust routing: wakegrant-protocol reaches the native logon provider", () => {
+  const result = routeRust(["packages/rust/wakegrant-protocol/src/lib.rs"], {
+    affectedRules: () =>
+      new Set([
+        "//packages/rust/wakegrant-protocol:wakegrant_protocol",
+        "//solutions/windows-logon-provider/crates/provider:provider",
+      ]),
+  });
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), ["logon-provider"]);
+  assert.ok(!result.routes.native.units.some((unit) => unit.id === "pulsar"));
+});
+
+const CARGO_LOCK_BASE = `version = 4
+
+[[package]]
+name = "ha-bridge"
+version = "0.1.0"
+dependencies = [
+ "home-ha",
+]
+
+[[package]]
+name = "home-ha"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaa"
+`;
+
+const CARGO_LOCK_HEAD = `version = 4
+
+[[package]]
+name = "ha-bridge"
+version = "0.1.0"
+dependencies = [
+ "home-ha",
+]
+
+[[package]]
+name = "home-ha"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio-tungstenite",
+]
+
+[[package]]
+name = "serde"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaa"
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb"
+`;
+
+function universeLock(withNewCrate) {
+  const crates = {
+    "ha-bridge 0.1.0": {
+      name: "ha-bridge",
+      version: "0.1.0",
+      common_attrs: { deps: [{ id: "home-ha 0.1.0" }] },
+    },
+    "home-ha 0.1.0": {
+      name: "home-ha",
+      version: "0.1.0",
+      common_attrs: {
+        deps: withNewCrate
+          ? [{ id: "serde 1.0.0" }, { id: "tokio-tungstenite 0.28.0" }]
+          : [{ id: "serde 1.0.0" }],
+      },
+    },
+    "serde 1.0.0": {
+      name: "serde",
+      version: "1.0.0",
+      common_attrs: { deps: [] },
+    },
+  };
+  if (withNewCrate) {
+    crates["tokio-tungstenite 0.28.0"] = {
+      name: "tokio-tungstenite",
+      version: "0.28.0",
+      common_attrs: { deps: [{ id: "serde 1.0.0" }] },
+    };
+  }
+  return JSON.stringify(
+    {
+      crates,
+      direct_deps: withNewCrate
+        ? ["serde 1.0.0", "tokio-tungstenite 0.28.0"]
+        : ["serde 1.0.0"],
+      workspace_members: {
+        "ha-bridge 0.1.0": "solutions/ha-bridge/crates/ha-bridge",
+        "home-ha 0.1.0": "packages/rust/home-ha",
+      },
+    },
+    null,
+    1,
+  );
+}
+
+const CARGO_TOML_BASE = `[workspace]
+members = ["packages/rust/*"]
+
+[workspace.dependencies]
+serde = "=1.0.0"
+`;
+
+const CARGO_TOML_HEAD = `[workspace]
+members = ["packages/rust/*"]
+
+[workspace.dependencies]
+serde = "=1.0.0"
+tokio-tungstenite = "=0.28.0"
+`;
+
+function lockFixtureDeps() {
+  return {
+    gitFileText: (_root, revision, filePath) => {
+      const base = revision === "base-sha";
+      if (filePath === "Cargo.toml") {
+        return base ? CARGO_TOML_BASE : CARGO_TOML_HEAD;
+      }
+      if (filePath === "Cargo.lock") {
+        return base ? CARGO_LOCK_BASE : CARGO_LOCK_HEAD;
+      }
+      if (filePath === "crate-universe.lock") {
+        return universeLock(!base);
+      }
+      return null;
+    },
+  };
+}
+
+test("rust routing: lock dependency spelling is resolved before diffing", () => {
+  const base = `version = 4
+
+[[package]]
+name = "ureq"
+version = "3.5.1"
+dependencies = [
+ "webpki-roots",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.11"
+checksum = "one"
+`;
+  const head = `version = 4
+
+[[package]]
+name = "ureq"
+version = "3.5.1"
+dependencies = [
+ "webpki-roots 1.0.11",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.11"
+checksum = "old"
+dependencies = [
+ "webpki-roots 1.0.11",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.11"
+checksum = "one"
+`;
+  const changes = affected.cargoLockChanges(base, head);
+  // ureq resolves to the same webpki-roots 1.0.11 in both locks.
+  assert.ok(!changes.has("ureq 3.5.1"), [...changes].join(","));
+  assert.ok(changes.has("webpki-roots 0.26.11"));
+});
+
+test("rust routing: a lock diff routes only the new crate's consumers", () => {
+  const config = affected.loadConfig();
+  let seenLabels = null;
+  const result = withDeps(lockFixtureDeps(), () =>
+    affected.route(
+      config,
+      ["Cargo.toml", "Cargo.lock", "crate-universe.lock"],
+      {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+        graph: {
+          affectedRules: (changed, labels) => {
+            seenLabels = [...labels];
+            const out = new Set();
+            if (labels.includes("@crates//:tokio-tungstenite")) {
+              out.add("//solutions/ha-bridge/crates/ha-bridge:ha_bridge_lib");
+              out.add("//solutions/voice-proxy/crates/voice-proxy:voice_proxy");
+            }
+            if (changed.some((item) => item.startsWith("packages/rust/home-ha"))) {
+              out.add("//solutions/ha-bridge/crates/ha-bridge:ha_bridge_lib");
+            }
+            return out;
+          },
+        },
+      },
+    ),
+  );
+  assert.deepEqual(seenLabels, ["@crates//:tokio-tungstenite"]);
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
+    "voice-proxy",
+    "ha-bridge",
+  ]);
+  assert.deepEqual(result.routes.native.units.map((unit) => unit.id), []);
+  assert.ok(result.warnings.some((warning) => warning.includes("lockfile diff")));
+});
+
+test("rust routing: test-only consumers run CI but do not deploy", () => {
+  const config = affected.loadConfig();
+  const graph = new affected.BazelGraph({
+    rules: {
+      "//solutions/ha-bridge/crates/ha-bridge:ha_bridge_lib": "rust_library",
+      "//solutions/mcp-gateway/crates/mcp-gateway:voice_tests": "rust_test",
+    },
+    inputs: {
+      "//solutions/ha-bridge/crates/ha-bridge:ha_bridge_lib": new Set([
+        "@crates//:tokio-tungstenite",
+      ]),
+      "//solutions/mcp-gateway/crates/mcp-gateway:voice_tests": new Set([
+        "@crates//:tokio-tungstenite",
+      ]),
+    },
+  });
+  const result = withDeps(lockFixtureDeps(), () =>
+    affected.route(config, ["Cargo.lock", "crate-universe.lock"], {
+      root: REPO,
+      base: "base-sha",
+      head: "head-sha",
+      graph,
+    }),
+  );
+  assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), [
+    "mcp-gateway",
+    "ha-bridge",
+  ]);
+  assert.deepEqual(
+    affected.deployEntries(result, config).map((entry) => entry.id),
+    ["ha-bridge"],
+  );
+});
+
+test("rust routing: a changed package with no alias or workspace path is conservative", () => {
+  const config = affected.loadConfig();
+  const orphanLock = `${CARGO_LOCK_BASE}
+[[package]]
+name = "orphan"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccc"
+`;
+  const result = withDeps(
+    {
+      gitFileText: (_root, revision, filePath) => {
+        const base = revision === "base-sha";
+        if (filePath === "Cargo.lock") {
+          return base ? CARGO_LOCK_BASE : orphanLock;
+        }
+        if (filePath === "crate-universe.lock") {
+          return universeLock(false);
+        }
+        return null;
+      },
+    },
+    () =>
+      affected.route(config, ["Cargo.lock", "crate-universe.lock"], {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+  assert.equal(result.routes.bazel.mode, "all");
+  assert.equal(result.routes.native.mode, "all");
+  assert.ok(
+    result.warnings.some(
+      (warning) => warning.includes("orphan") && warning.includes("did not map"),
+    ),
+    result.warnings.join("\n"),
+  );
+});
+
+test("rust routing: workspace-dependency edit without a lock diff is conservative", () => {
+  const config = affected.loadConfig();
+  const result = withDeps(
+    {
+      gitFileText: (_root, revision, filePath) =>
+        filePath === "Cargo.toml"
+          ? revision === "base-sha"
+            ? CARGO_TOML_BASE
+            : CARGO_TOML_HEAD
+          : null,
+    },
+    () =>
+      affected.route(config, ["Cargo.toml"], {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+  assert.equal(result.routes.bazel.mode, "all");
+  assert.equal(result.routes.native.mode, "all");
+  assert.ok(
+    result.warnings.some((warning) => warning.includes("no lockfile changed")),
+    result.warnings.join("\n"),
+  );
+});
+
+test("rust routing: changing [profile] in Cargo.toml runs every Rust unit", () => {
+  const config = affected.loadConfig();
+  const changedManifest = CARGO_TOML_BASE.replace(
+    "[workspace.dependencies]",
+    "[profile.release]\nlto = true\n\n[workspace.dependencies]",
+  );
+  const result = withDeps(
+    {
+      gitFileText: (_root, revision, filePath) =>
+        filePath === "Cargo.toml"
+          ? revision === "base-sha"
+            ? CARGO_TOML_BASE
+            : changedManifest
+          : null,
+    },
+    () =>
+      affected.route(config, ["Cargo.toml"], {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+  assert.equal(result.routes.bazel.mode, "all");
+  assert.equal(result.routes.native.mode, "all");
+});
+
+test("rust routing: an unreadable Cargo.lock falls back to every Rust unit", () => {
+  const config = affected.loadConfig();
+  const result = withDeps(
+    {
+      gitFileText: (_root, revision, filePath) => {
+        if (filePath === "Cargo.lock") {
+          return revision === "base-sha" ? CARGO_LOCK_BASE : "not a lockfile";
+        }
+        if (filePath === "crate-universe.lock") {
+          return universeLock(revision !== "base-sha");
+        }
+        return null;
+      },
+    },
+    () =>
+      affected.route(config, ["Cargo.lock"], {
+        root: REPO,
+        base: "base-sha",
+        head: "head-sha",
+      }),
+  );
+  assert.equal(result.routes.bazel.mode, "all");
+  assert.equal(result.routes.native.mode, "all");
+  assert.ok(result.warnings.some((warning) => warning.includes("fell back")));
+});
+
+test("rust routing: rust-toolchain.toml still runs every Rust unit", () => {
+  const result = routeReal(["rust-toolchain.toml"]);
+  assert.equal(result.routes.bazel.mode, "all");
+  assert.equal(result.routes.native.mode, "all");
+});
+
+test("rust routing: a bazel query failure falls back to every Rust unit", () => {
+  const config = affected.loadConfig();
+  const result = withDeps({}, () =>
+    affected.route(config, ["packages/rust/home-ha/src/lib.rs"], {
+      root: REPO,
+      base: "b",
+      graph: null,
+      graphLoader: () => {
+        throw new Error("query boom");
+      },
+    }),
+  );
+  assert.equal(result.routes.bazel.mode, "all");
+  assert.equal(result.routes.native.mode, "all");
+  assert.ok(
+    result.warnings.some((warning) => warning.includes("bazel graph failed")),
+  );
+});
+
 
 test("deploy: ci workflow change runs checks but deploys nothing", () => {
   const config = affected.loadConfig();
