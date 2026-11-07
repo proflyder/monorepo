@@ -561,6 +561,10 @@
   Go-код удалён при cutover; `testdata/` — замороженные контрактные данные,
   которые Rust воспроизводит. Схема БД v1 и файл `/data/currency-bot.db`
   совместимы с прежним образом, откат — предыдущий digest.
+- Публичный HTTPS (kurs.kz, `api.telegram.org`) идёт через общий крейт
+  `packages/rust/home-tls` (решение 45): системный CA-бандл distroless
+  `/etc/ssl/certs/ca-certificates.crt` или override `SSL_CERT_FILE`; без
+  бандла процесс падает на старте, а не молча не ходит по TLS.
 - K3s namespace `currency-bot`: Deployment `currency-bot` (SQLite на PVC
   `currency-bot-data` 1 GiB `local-retain`, образ
   `ghcr.io/<owner>/currency-bot@sha256:…`) и Deployment `cloudflared`

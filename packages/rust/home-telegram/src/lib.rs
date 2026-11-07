@@ -61,6 +61,12 @@ pub enum Error {
         #[source]
         source: serde_json::Error,
     },
+    #[error("telegram {operation}: public TLS roots: {source}")]
+    Tls {
+        operation: &'static str,
+        #[source]
+        source: home_tls::Error,
+    },
 }
 
 impl Error {
@@ -74,7 +80,9 @@ impl Error {
                 status if status >= 500 => ErrorKind::Transient,
                 _ => ErrorKind::Permanent,
             },
-            Self::Invalid { .. } | Self::Api { .. } | Self::Decode { .. } => ErrorKind::Permanent,
+            Self::Invalid { .. } | Self::Api { .. } | Self::Decode { .. } | Self::Tls { .. } => {
+                ErrorKind::Permanent
+            }
         }
     }
 
@@ -114,10 +122,13 @@ impl Sender {
         chat_id: impl Into<String>,
         timeout: std::time::Duration,
     ) -> Result<Self, Error> {
-        // The workspace `reqwest` has no default crypto provider; install one
-        // before the first client. A provider installed earlier is kept.
-        let _already_installed = rustls::crypto::ring::default_provider().install_default();
-        let http = reqwest::Client::builder()
+        // The Bot API is public HTTPS: the shared builder installs the ring
+        // provider and trusts the operating system's root bundle.
+        let http = home_tls::public_https_client()
+            .map_err(|source| Error::Tls {
+                operation: "sendMessage",
+                source,
+            })?
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -233,10 +244,13 @@ impl Bot {
         token: Token,
         timeout: std::time::Duration,
     ) -> Result<Self, Error> {
-        // The workspace `reqwest` has no default crypto provider; install one
-        // before the first client. A provider installed earlier is kept.
-        let _already_installed = rustls::crypto::ring::default_provider().install_default();
-        let http = reqwest::Client::builder()
+        // The Bot API is public HTTPS: the shared builder installs the ring
+        // provider and trusts the operating system's root bundle.
+        let http = home_tls::public_https_client()
+            .map_err(|source| Error::Tls {
+                operation: "sendMessage",
+                source,
+            })?
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
             .build()

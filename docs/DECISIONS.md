@@ -534,3 +534,15 @@
     `packages/rust/home-contracttest` (`compare: semantic`,
     `response.format: sse`). Справочный байтовый снимок Go-эпохи —
     `solutions/mcp-gateway/testdata/reference/mcp_tools_list_go_snapshot.json`.
+
+45. **Публичный TLS — системный CA-бандл, не фичи `reqwest`.** Корневой
+    `reqwest` собирается с `rustls-tls-manual-roots-no-provider`: прошивка
+    станции (`pulsar-update`) сама задаёт корни, а Cargo унифицирует фичи
+    всего workspace, поэтому `rustls-tls-webpki-roots`/`native-roots`
+    включать нельзя. Общий крейт `packages/rust/home-tls` читает PEM-бандл
+    (`SSL_CERT_FILE`, иначе `/etc/ssl/certs/ca-certificates.crt`, fallback
+    macOS `/etc/ssl/cert.pem`), добавляет сертификаты через
+    `add_root_certificate` и ставит ring provider; пустой/отсутствующий
+    бандл — ошибка на старте. Клиенты, ходящие в публичный HTTPS
+    (currency-bot → kurs.kz/Telegram, `home-telegram`, `home-clients`),
+    строятся только через `home_tls::public_https_client()`.

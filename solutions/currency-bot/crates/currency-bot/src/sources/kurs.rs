@@ -28,10 +28,11 @@ impl Kurs {
 
     /// Build a fetcher with an explicit timeout (tests).
     pub fn with_timeout(url: impl Into<String>, timeout: Duration) -> Result<Self, String> {
-        // The workspace `reqwest` has no default crypto provider; install ring
-        // before the first client or `build()` panics.
-        let _already_installed = rustls::crypto::ring::default_provider().install_default();
-        let client = reqwest::Client::builder()
+        // kurs.kz is public HTTPS: the shared builder installs the ring
+        // provider and adds the operating system's root bundle, which the
+        // workspace `reqwest` does not do by itself.
+        let client = home_tls::public_https_client()
+            .map_err(|error| format!("http client: {error}"))?
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
             .build()

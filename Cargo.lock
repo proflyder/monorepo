@@ -659,6 +659,7 @@ dependencies = [
  "home-sqlite",
  "home-telegram",
  "home-telemetry",
+ "home-tls",
  "http",
  "http-body-util",
  "jiff",
@@ -666,7 +667,6 @@ dependencies = [
  "regex",
  "reqwest",
  "rusqlite",
- "rustls",
  "serde",
  "serde_json",
  "tempfile",
@@ -1336,8 +1336,8 @@ name = "home-clients"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "home-tls",
  "reqwest",
- "rustls",
  "serde",
  "serde_json",
  "thiserror",
@@ -1461,8 +1461,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "home-secret",
+ "home-tls",
  "reqwest",
- "rustls",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1478,6 +1478,19 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "home-tls"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "rustls",
+ "rustls-pki-types",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
 ]
 
 [[package]]

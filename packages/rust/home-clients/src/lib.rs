@@ -13,10 +13,11 @@
 //! answer, a rejected query and an invalid argument. The classification is the
 //! same as `packages/rust/home-ha` and `packages/go/httpapi`.
 //!
-//! Every client builds its own `reqwest` client with the workspace rustls
-//! configuration and installs the ring crypto provider before building it: the
-//! workspace `reqwest` is compiled without a default provider. Redirects are
-//! not followed, matching the Go clients (a `3xx` is a status error).
+//! Every client builds its own `reqwest` client through `home_tls`: the
+//! workspace `reqwest` is compiled with `rustls-tls-manual-roots-no-provider`,
+//! so the shared builder installs the ring provider and adds the operating
+//! system's public roots. Redirects are not followed, matching the Go clients
+//! (a `3xx` is a status error).
 
 use std::time::Duration;
 
@@ -68,6 +69,12 @@ pub enum Error {
         #[source]
         source: serde_json::Error,
     },
+    #[error("{operation}: public TLS roots: {source}")]
+    Tls {
+        operation: &'static str,
+        #[source]
+        source: home_tls::Error,
+    },
 }
 
 impl Error {
@@ -81,7 +88,9 @@ impl Error {
                 status if status >= 500 => ErrorKind::Transient,
                 _ => ErrorKind::Permanent,
             },
-            Self::Invalid { .. } | Self::Api { .. } | Self::Decode { .. } => ErrorKind::Permanent,
+            Self::Invalid { .. } | Self::Api { .. } | Self::Decode { .. } | Self::Tls { .. } => {
+                ErrorKind::Permanent
+            }
         }
     }
 
@@ -92,26 +101,19 @@ impl Error {
     }
 }
 
-/// Install the process-wide ring provider before the first `reqwest` client.
-///
-/// The workspace builds `reqwest` with `rustls-tls-manual-roots-no-provider`,
-/// so a client panics ("No provider set") unless one is installed. A provider
-/// installed earlier is kept; the error is ignored so this is safe to call for
-/// every client.
-fn install_crypto_provider() {
-    let _already_installed = rustls::crypto::ring::default_provider().install_default();
-}
-
 /// Build the shared `reqwest` client.
 ///
-/// Redirects are disabled: a query must not silently change its destination,
-/// and a `3xx` surfaces as [`Error::Status`].
+/// The workspace builds `reqwest` with `rustls-tls-manual-roots-no-provider`;
+/// `home_tls` installs the ring provider and adds the operating system's root
+/// bundle, so an `https://` backend (Prometheus behind a private TLS name)
+/// verifies. Redirects are disabled: a query must not silently change its
+/// destination, and a `3xx` surfaces as [`Error::Status`].
 pub(crate) fn build_http(
     operation: &'static str,
     timeout: Duration,
 ) -> Result<reqwest::Client, Error> {
-    install_crypto_provider();
-    reqwest::Client::builder()
+    home_tls::public_https_client()
+        .map_err(|source| Error::Tls { operation, source })?
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()

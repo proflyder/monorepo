@@ -36,7 +36,8 @@ pub async fn run_healthcheck() -> ExitCode {
 
 /// GET `/readyz` and require 200.
 pub async fn check_ready(url: &str) -> Result<(), String> {
-    let _already_installed = rustls::crypto::ring::default_provider().install_default();
+    // Loopback HTTP, but the workspace `reqwest` still needs a provider.
+    home_tls::install_crypto_provider();
     let client = reqwest::Client::builder()
         .timeout(TIMEOUT)
         .build()
