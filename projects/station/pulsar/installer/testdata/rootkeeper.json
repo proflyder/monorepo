@@ -1,0 +1,47 @@
+[
+  {
+    "in": "#!/bin/sh\necho start\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n\nwhile true; do\n  sleep 60\ndone\n",
+    "out": "#!/bin/sh\necho start\nwhile true; do\n  sleep 60\ndone\n",
+    "removed": 1
+  },
+  {
+    "in": "#!/bin/sh\necho start\n\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n",
+    "out": "#!/bin/sh\necho start\n",
+    "removed": 1
+  },
+  {
+    "in": "#!/bin/sh\n\n[ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n",
+    "out": "#!/bin/sh\n",
+    "removed": 2
+  },
+  {
+    "in": "#!/bin/sh\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n\n[ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n\nwhile true; do\n  sleep 60\ndone\n",
+    "out": "#!/bin/sh\nwhile true; do\n  sleep 60\ndone\n",
+    "removed": 2
+  },
+  {
+    "in": "#!/bin/sh\necho\n\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n\nwhile true; do\n  sleep 60\ndone\n",
+    "out": "#!/bin/sh\necho\n\nwhile true; do\n  sleep 60\ndone\n",
+    "removed": 1
+  },
+  {
+    "in": "#!/bin/sh\necho\n\n\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n",
+    "out": "#!/bin/sh\necho\n\n",
+    "removed": 1
+  },
+  {
+    "in": "#!/bin/sh\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n\nwhile true; do\n  [ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n  sleep 60\ndone\n[ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n",
+    "out": "#!/bin/sh\nwhile true; do\n  [ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n  sleep 60\ndone\n[ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh\n",
+    "removed": 2
+  },
+  {
+    "in": "#!/bin/sh\nM=x\n[ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh\nwhile true; do\n  sleep 60\ndone\n",
+    "out": "#!/bin/sh\nM=x\n[ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh\nwhile true; do\n  sleep 60\ndone\n",
+    "removed": 0
+  },
+  {
+    "in": "#!/bin/sh\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\necho x",
+    "out": "#!/bin/sh\necho x",
+    "removed": 1
+  }
+]

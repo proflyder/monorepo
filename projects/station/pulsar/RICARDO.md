@@ -158,7 +158,10 @@ cp /path/to/ru_ricardo_mww.tflite satellite/wakewords/
 cp /path/to/ru_ricardo_mww.json satellite/wakewords/
 ```
 
-`pulsar-install` copies it to `/data/pulsar/wakewords/` with a SHA-256 check.
+`pulsar-install` copies it to `/data/pulsar/wakewords/` with a SHA-256 check. The installer is
+the Rust crate `projects/station/pulsar/installer`; upstream changes to it are ported to Rust by
+hand (the Go implementation is gone). Run it from the pulsar directory:
+`cd projects/station/pulsar && cargo run -p pulsar-installer -- --list`.
 Without the model the daemon starts but logs that the Ricardo detector is
 missing; it does not silently fall back to «Алиса».
 

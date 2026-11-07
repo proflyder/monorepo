@@ -17,7 +17,7 @@ cc-toolchain для `aarch64-linux-gnu` (glibc 2.36) и
 зависимости — `http_archive` с теми же ревизиями, что раньше качал
 `third_party/fetch.sh` (BUILD-overlay'и — `satellite/third_party/bazel/`).
 Rust, zig и C/C++ скачиваются Bazel'ом; rustup, cargo-zigbuild, cmake и ninja
-не нужны. Для installer — Go 1.27+; для установки — adb из platform-tools.
+не нужны. Установщик — тот же Rust workspace; для установки — adb из platform-tools.
 
 Крейты Pulsar — члены общего корневого Cargo workspace: пины зависимостей
 лежат в `/Cargo.toml` (`[workspace.dependencies]`), один `Cargo.lock` и один
@@ -32,7 +32,7 @@ Rust, zig и C/C++ скачиваются Bazel'ом; rustup, cargo-zigbuild, cm
 golden-файлы) — те же, что в CI-юните `pulsar-bazel`:
 
 ```sh
-bazel test //projects/station/pulsar/satellite/...
+bazel test //projects/station/pulsar/satellite/... //projects/station/pulsar/installer/...
 ```
 
 Кросс-сборка на одну архитектуру; release передаёт версию и дату коммита:
@@ -69,6 +69,13 @@ CI копирует их в `satellite/build/<arch>/`; локально можн
 `ssh/build.sh` собирает dropbear и sftp-server для `pulsar-install --ssh` и
 архивов релиза.
 
+Установщик при запуске из чекаута собирает демон сам: ищет `bazel`, затем
+`bazelisk` (mise ставит только его), запускает найденное из корня Git с
+`--disk_cache=` и берёт каталог вывода из `bazel info -c opt
+--platforms=//platform/bazel/zig:<arch>_linux bazel-bin`. Это осознанное отличие
+от прежнего Go-кода, который звал `bazel` из каталога `projects/station/pulsar`
+и читал локальный `bazel-bin`; в монорепозитории симлинк лежит в корне.
+
 Версия бинарника — содержимое `VERSION`, переданное в
 `--define=pulsar_version`; апдейтер разбирает её как `vX.Y.Z[-N-g<hash>]` и
 сверяет `--version` нового бинарника с версией OCI-тега. Время сборки —
@@ -79,8 +86,8 @@ CI копирует их в `satellite/build/<arch>/`; локально можн
 
 CI Pulsar разделён на два юнита. `pulsar-bazel` (`.github/workflows/_bazel.yml`) — хост-сборка,
 `rustfmt`, `clippy` и тесты: `bazel build //projects/station/pulsar/...` + `bazel test
-//projects/station/pulsar/satellite/...`. `pulsar` (`.github/workflows/_native.yml`) — Bazel-кросс-сборка
-обеих архитектур, installer `go test` (`GOWORK=off`), `radio/build.sh` и `ssh/build.sh`.
+//projects/station/pulsar/satellite/... //projects/station/pulsar/installer/...`. `pulsar` (`.github/workflows/_native.yml`) — Bazel-кросс-сборка
+обеих архитектур и установщика (`pulsar-install`), `radio/build.sh` и `ssh/build.sh`.
 Версии инструментов — как в «Сборке» выше; `make check` больше не дублируется.
 
 Релиз — изменение `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`) в PR в
@@ -103,22 +110,26 @@ Pulsar — только PR CI. Имена слоёв — постоянный к
 `pulsar --version`; апдейтер предлагает только строго большие `MAJOR.MINOR.PATCH`.
 `pulsar-windows-amd64.zip`, `pulsar-macos-*.tar.gz`, `pulsar-linux-*.tar.gz` и
 `pulsar-install` больше не публикуются из монорепозитория; установщик собирается в CI как
-проверка (`installer/dist/`).
+проверка (`installer/dist/`); macOS-бинарь собирается нативно на Mac.
 
 ## Установка и станция
 
 ```sh
-go -C installer run . --list         # найти станции и определить модель, ничего не ставить
-go -C installer run . <ip>[:port]    # установить или обновить
+cd projects/station/pulsar
+cargo run -p pulsar-installer -- --list         # найти станции и определить модель, ничего не ставить
+cargo run -p pulsar-installer -- <ip>[:port]    # установить или обновить
 ```
 
-В чекауте установщик сначала сам вызывает `make` (с `--ssh` — и `ssh/build.sh`). Флаги — usage в
-[`../installer/main.go`](../installer/main.go).
+`cwd` должен быть `projects/station/pulsar` (или его потомок): установщик ищет payload
+`satellite/deploy/boot.sh` рядом с собой и в родителях рабочего каталога. В чекауте он сначала сам
+вызывает `bazel build` (с `--ssh` — и `ssh/build.sh`). Флаги — usage в
+[`../installer/testdata/usage.txt`](../installer/testdata/usage.txt) (снят с Go и вкомпилирован
+в [`../installer/src/cli.rs`](../installer/src/cli.rs)).
 
 **Детект модели — три места, которые должны совпадать:** демон (`detect_profile()` в
 [`../satellite/crates/pulsar-model/src/detect.rs`](../satellite/crates/pulsar-model/src/detect.rs)),
 установщик (`modelName()` / `abis()` / `stationCode()` и особый маркер Мини в `probe()` в
-[`../installer/probe.go`](../installer/probe.go)) и
+[`../installer/src/probe.rs`](../installer/src/probe.rs)) и
 [`../satellite/deploy/boot.sh`](../satellite/deploy/boot.sh) (список кодовых имён `yandex,<codename>`
 из `/proc/device-tree/compatible`). У Мини записи `yandex,*` нет, и все три места требуют ОБА
 признака: `/proc/device-tree/amlogic-dt-id` = `axg_s420_v03` и `deviceType=yandexmini` в
@@ -127,7 +138,7 @@ go -C installer run . <ip>[:port]    # установить или обнови�
 Новая модель добавляется во все три места.
 
 **Выбор сборки** (aarch64 или armhf) — комментарий у `abis()` в
-[`../installer/probe.go`](../installer/probe.go). Правило: вторая ABI в `abis()` — только для
+[`../installer/src/probe.rs`](../installer/src/probe.rs). Правило: вторая ABI в `abis()` — только для
 userspace, действительно встреченного на этой модели.
 
 **Раскладка `/data/pulsar`:** `pulsar`, `pulsar.prev`, `pulsar.bad`, `boot.sh`, `supervise.sh`,
@@ -176,7 +187,7 @@ ssh root@<ip> 'cd /data/pulsar && cp pulsar pulsar.prev &&
 [hardware.md, «Зависший dmix lock»](hardware.md#зависший-dmix-lock).
 
 Контракт строк лога (`supervise.sh`, crash-отчёт демона, маркер установщика) с health check
-установщика (`healthCheck()` в [`../installer/deploy.go`](../installer/deploy.go)): после маркера
+установщика (`health_check()` в [`../installer/src/deploy.rs`](../installer/src/deploy.rs)): после маркера
 установки в логе есть `=== start`, и начиная с первого из них — ровно одна такая строка (новый
 демон), процесс `pulsar` жив, а сбоем считаются `=== CRASH` (пишет демон), `=== exit` и
 `=== supervise`. Строка `=== alsa: removed stale dmix lock (…)`, которую `supervise.sh` пишет перед
@@ -202,15 +213,19 @@ ssh root@<ip> 'cd /data/pulsar && cp pulsar pulsar.prev &&
 
 ## Правила installer/
 
-- `installer/` (Go) — единственный установщик на стороне хоста.
-- Только стандартная библиотека Go и `golang.org/x/net`; из инструментов хоста — только adb (плюс
-  `make` и `ssh/build.sh` в чекауте).
-- Команды на станции — строки busybox sh через `sh()` в [`../installer/adb.go`](../installer/adb.go)
-  (adb shell + маркер `__rc=`); одна команда — не больше 4 КБ на этих прошивках.
+- `installer/` — крейт `pulsar-installer` в корневом Cargo workspace, бинарь `pulsar-install`.
+  Это единственный установщик на стороне хоста.
+- Зависимости — только `[workspace.dependencies]` (плюс `zip`/`ureq` для архива platform-tools);
+  из инструментов хоста — только adb (плюс `bazel` и `ssh/build.sh` в чекауте).
+- Команды на станции — строки busybox sh через `Adb::sh` в
+  [`../installer/src/adb.rs`](../installer/src/adb.rs) (adb shell + маркер `__rc=`); одна
+  команда — не больше 4 КБ на этих прошивках, лимит проверяет `ProcessAdb`.
 - `adb shell` на прошивках станций — pty: в выводе `\r`, канал не binary-safe (бинарные данные —
   только `adb push` / `adb pull`), код выхода всегда 0 (настоящий передаётся маркером `__rc=`).
 - Чистые части (текст init-скрипта, проверка защищённости корневой ФС, чистка `rootkeeper.sh`)
-  покрыты `autostart_test.go` и `rootkeeper_test.go`; они должны оставаться чистыми.
+  покрыты тестами [`../installer/src/scripts.rs`](../installer/src/scripts.rs); фикстуры
+  `installer/testdata/` сняты с Go-версии до её удаления, последовательность adb-команд деплоя
+  сверяется с ними же.
 
 ## Диагностика
 

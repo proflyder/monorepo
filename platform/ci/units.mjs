@@ -579,14 +579,20 @@ export const config = {
     {
       id: "pulsar-bazel",
       platform: "bazel",
-      title: "projects/station/pulsar/satellite (Rust host build, tests, fmt, clippy)",
-      paths: ["projects/station/pulsar/satellite/**"],
+      title: "projects/station/pulsar (Rust host build, tests, fmt, clippy)",
+      paths: [
+        "projects/station/pulsar/satellite/**",
+        "projects/station/pulsar/installer/**",
+      ],
       bazel: {
         roots: ["//projects/station/pulsar"],
         test_targets: [
           "//projects/station/pulsar/satellite:clippy",
           "//projects/station/pulsar/satellite:rustfmt",
           "//projects/station/pulsar/satellite/crates/...",
+          "//projects/station/pulsar/installer:unit_tests",
+          "//projects/station/pulsar/installer:clippy",
+          "//projects/station/pulsar/installer:rustfmt",
         ],
         build_targets: ["//projects/station/pulsar/..."],
       },
@@ -952,7 +958,7 @@ export const config = {
     // ----------------------------------------------------------- Native --------
     // Native units: the Windows logon provider is a repository-script Bazel
     // cross-build (rules_rust + hermetic zig cc_toolchain); Pulsar's station
-    // daemon is cross-built with Bazel and its installer/radio/ssh use their
+    // daemon and installer are cross-built with Bazel, radio/ssh use their
     // own scripts. A same-repo PR publishes the
     // release-shaped OCI artifact under `tree-<hash>` with provenance; a push
     // to `develop` promotes that digest to the release tags (deploy-home) or
@@ -1004,7 +1010,7 @@ export const config = {
     },
 
     // The Rust station daemon and its surrounding builds (radio firmware,
-    // Go installer, dropbear). Both station ABIs are built with Bazel; host
+    // Rust installer, dropbear). Both station ABIs are built with Bazel; host
     // fmt/clippy/tests are the `pulsar-bazel` unit. Any Pulsar change is PR CI;
     // only a VERSION change publishes the release OCI artifact, and
     // deploy-home's `deploy-station` job then rolls it out through HA.

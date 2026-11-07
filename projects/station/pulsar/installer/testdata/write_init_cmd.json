@@ -1,0 +1,14 @@
+[
+  {
+    "cmd": "( trap '' HUP INT\nT=/etc/init.d/.S99zpulsar.tmp\ncp /data/pulsar/S99zpulsar.new $T \u0026\u0026 chmod 755 $T \u0026\u0026 set -- $(sha256sum $T) \u0026\u0026 [ \"$1\" = abc123 ] \u0026\u0026 mv $T /etc/init.d/S99zpulsar \u0026\u0026 sync\nrc=$?\nrm -f $T\nexit $rc )",
+    "remount": "false",
+    "src": "/data/pulsar/S99zpulsar.new",
+    "sum": "abc123"
+  },
+  {
+    "cmd": "( trap '' HUP INT\nmount -o remount,rw / || { echo remount-rw-failed; exit 1; }\nT=/etc/init.d/.S99zpulsar.tmp\ncp /data/pulsar/S99zpulsar.new $T \u0026\u0026 chmod 755 $T \u0026\u0026 set -- $(sha256sum $T) \u0026\u0026 [ \"$1\" = abc123 ] \u0026\u0026 mv $T /etc/init.d/S99zpulsar \u0026\u0026 sync\nrc=$?\nrm -f $T\nmount -o remount,ro / || rc=1\nexit $rc )",
+    "remount": "true",
+    "src": "/data/pulsar/S99zpulsar.new",
+    "sum": "abc123"
+  }
+]

@@ -61,9 +61,6 @@ bash projects/home/kubernetes/scheduler/test_deploy_control.sh
 echo "== Go: solutions, packages and deploy tooling =="
 go test ./solutions/... ./packages/... ./platform/deploy/...
 
-echo "== Go: Pulsar installer (nested module, GOWORK=off) =="
-(cd projects/station/pulsar/installer && GOWORK=off go test ./...)
-
 if [[ -d projects/station/resources/quasar-connect-bot ]]; then
   echo "== Python: quasar-connect-bot (nested checkout) =="
   (cd projects/station/resources/quasar-connect-bot && python3 -m unittest discover -s tests -p 'test_*.py' -v)

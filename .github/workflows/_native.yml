@@ -11,7 +11,7 @@ name: _native
 #
 #   * `pulsar` — the Rust station daemon in `projects/station/pulsar`. Its host
 #     fmt/clippy/tests are the `pulsar-bazel` unit (`_bazel.yml`); this workflow
-#     cross-builds both station ABIs with Bazel and builds the Go installer, the
+#     cross-builds both station ABIs and the Rust installer with Bazel, then the
 #     Zigbee radio and dropbear. Zig 0.14.1, Rust 1.99.1 and the sendspin C/C++
 #     are pinned by MODULE.bazel. Every run builds the release-shaped binaries:
 #     VERSION from `projects/station/pulsar/VERSION` (or `release_version`),
@@ -408,8 +408,13 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
 
-  # The Go installer is a nested module with its own go.mod. The root go.work
-  # does not list it, so every command runs with GOWORK=off.
+  # The installer is Rust in the root Cargo workspace. linux-amd64 is built statically
+  # with the existing zig musl repository set; there is no aarch64 musl platform in
+  # platform/bazel/zig, so linux-arm64 stays on the station glibc platform, and
+  # windows-amd64 uses the Windows provider platform. A darwin target
+  # cannot be built in CI: the hermetic toolchain has no macOS SDK/triple, so the
+  # macOS binary is built natively on a Mac (`bazel build -c opt
+  # //projects/station/pulsar/installer:pulsar-install`). `dist/` is only a check artifact.
   pulsar-installer:
     name: native / pulsar-installer
     needs: promote
@@ -419,39 +424,47 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      # Go from mise.toml (version and checksum shared with the workstation).
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
-          version: 2026.11.3
-          install_args: "go"
-          cache: true
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-installer-${{ runner.os }}-${{ hashFiles(format('{0}/installer/go.sum', inputs.workdir)) }}
-          restore-keys: go-installer-${{ runner.os }}-
+          path: ~/.cache/bazel-disk
+          key: bazel-installer-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
+          restore-keys: |
+            bazel-installer-${{ runner.os }}-
+            bazel-${{ runner.os }}-
 
-      - name: vet + test
-        working-directory: ${{ inputs.workdir }}/installer
-        env:
-          GOWORK: "off"
+      - name: Test installer
+        working-directory: ${{ inputs.workdir }}
         run: |
-          go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...
-          go test ./...
+          set -euo pipefail
+          bazel test \
+            //projects/station/pulsar/installer:unit_tests \
+            //projects/station/pulsar/installer:clippy \
+            //projects/station/pulsar/installer:rustfmt
 
-      - name: cross-build
-        working-directory: ${{ inputs.workdir }}/installer
-        env:
-          GOWORK: "off"
+      - name: Cross-build installer
+        working-directory: ${{ inputs.workdir }}
         run: |
-          for t in windows/amd64 darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
-            os=${t%/*} arch=${t#*/} ext=
-            [ "$os" = windows ] && ext=.exe
-            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags='-s -w' -o "dist/$os-$arch/pulsar-install$ext" .
-          done
+          set -euo pipefail
+          target=//projects/station/pulsar/installer:pulsar-install
+          build() {
+            local name=$1 ext=$2
+            shift 2
+            bazel build -c opt "$@" "$target"
+            mkdir -p "installer/dist/$name"
+            cp "$GITHUB_WORKSPACE/bazel-bin/projects/station/pulsar/installer/pulsar-install$ext" \
+              "installer/dist/$name/pulsar-install$ext"
+            ls -l "installer/dist/$name/pulsar-install$ext"
+          }
+          build linux-amd64 "" --platforms=//platform/bazel/zig:x86_64_musl_linux
+          build linux-arm64 "" --platforms=//platform/bazel/zig:aarch64_linux
+          build windows-amd64 .exe --platforms=//platform/bazel/windows:x86_64_windows
 
   # Zigbee firmware for the Midi radio (Telink B91).
   pulsar-radio:

@@ -497,8 +497,9 @@
       PR. Go-код scheduler, ha-bridge/ha-control, alarm, mcp-gateway и
       currency-bot удалён; откат сервисов — прежний образ. Долгоживущих
       Go-сервисов в репозитории не осталось.
-    * На Go остаются `platform/deploy`, Bazel-инструменты Android,
-      Pulsar installer (upstream) и health-exporter: там Rust ничего не даёт.
+    * Установщик Pulsar переписан на Rust (`pulsar-installer`, поведение 1:1)
+      вместе с остальной миграцией; на Go остаются `platform/deploy`,
+      Bazel-инструменты Android и health-exporter.
 
 42. **Менеджер паролей — self-hosted Vaultwarden.** Для доступа человека к
     паролям и копии секретов на устройствах используется Vaultwarden в K3s

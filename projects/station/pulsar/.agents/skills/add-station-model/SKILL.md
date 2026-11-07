@@ -13,7 +13,7 @@ description: >-
 ## 0. Новая модель неизвестна инструментам
 
 `tools/station.sh` принимает только `midi|lite2|mini`, а установщик на неизвестной модели ничего не
-ставит (`abis()` в `installer/probe.go` возвращает пустой список). Поэтому:
+ставит (`abis()` в `installer/src/probe.rs` возвращает пустой список). Поэтому:
 
 - Сбор и замеры — вручную: `adb -s <serial>` (всегда с серийником) или ssh на станцию.
 - Только чтение; файлы — только в `/tmp/pulsar-test/`, после работы удалить.
@@ -58,18 +58,18 @@ description: >-
   `profile_from_compatible`; `detect_profile` (`detect.rs`) читает devicetree.
 - Тест профиля в `detect.rs` по образцу `bergamot_is_mini3`; ориентиры кривой громкости — в
   `satellite/crates/pulsar-media/tests/mixer_golden.rs` (по образцу `mini3_curve_landmarks`).
-- `installer/probe.go`: `modelName()`, `abis()`, `archOf()`, `stationCode()`; тесты — в
-  `installer/probe_test.go`. Когда допустима вторая ABI в `abis()` — `docs/development.md`,
+- `installer/src/probe.rs`: `model_name()`, `abis()`, `arch_of()`, `station_code()`; тесты — в
+  `src/probe.rs` и фикстуры `installer/testdata/probe.json`. Когда допустима вторая ABI в `abis()` — `docs/development.md`,
   «Установка и станция».
-- Особые файлы установщика (как `asound.conf` для `yandexmini` в `installer/deploy.go`) — если
+- Особые файлы установщика (как `asound.conf` для `yandexmini` в `installer/src/deploy.rs`) — если
   модели нужен свой.
 - `satellite/deploy/boot.sh`: список `yandex,(...)` в проверке `compatible`.
 - Без `yandex,*` в `compatible` нужен маркер по образцу `mini_from_board_and_cfg` (`detect.rs`) и
-  проверки в `probe()` (`installer/probe.go`) и `boot.sh`.
-- Правило «три места» (`detect.rs` (`pulsar-model`), `installer/probe.go`, `boot.sh`) — `docs/development.md`,
+  проверки в `probe()` (`installer/src/deploy.rs`) и `boot.sh`.
+- Правило «три места» (`detect.rs` (`pulsar-model`), `installer/src/probe.rs`, `boot.sh`) — `docs/development.md`,
   «Установка и станция».
 - Стоковый init-скрипт (`ls /etc/init.d`): `/etc/init.d/S99zpulsar` должен сортироваться после него
-  (`installer/autostart.go`); запись о нём — в цепочке загрузки, `docs/development.md`, «Установка и
+  (`installer/src/scripts.rs`); запись о нём — в цепочке загрузки, `docs/development.md`, «Установка и
   станция».
 - Ключ dmix: если `ipc_key` dmix воспроизведения модели (в `/etc/asound.conf` станции или в своём
   asound.conf установщика) не 1024 и не 2277 — добавить его в `clear_dmix`
@@ -143,7 +143,7 @@ description: >-
 
 ## 5. Проверка
 
-`bazel test //projects/station/pulsar/satellite/...` и `go -C installer test ./...`. Затем найти остальные места по всему
+`bazel test //projects/station/pulsar/satellite/... //projects/station/pulsar/installer/...`. Затем найти остальные места по всему
 репозиторию и проверить каждое (перечни моделей, цели, ключи):
 
 ```sh

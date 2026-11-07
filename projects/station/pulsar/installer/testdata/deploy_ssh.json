@@ -1,0 +1,306 @@
+{
+  "calls": [
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "mkdir -p /data/pulsar\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -f /data/pulsar/pulsar ] \u0026\u0026 sha256sum /data/pulsar/pulsar\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/satellite/build/aarch64/pulsar",
+      "/data/pulsar/pulsar.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sha256sum /data/pulsar/pulsar.new\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -f /data/pulsar/supervise.sh ] \u0026\u0026 sha256sum /data/pulsar/supervise.sh\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/satellite/deploy/boot.sh",
+      "/data/pulsar/boot.sh.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/satellite/deploy/supervise.sh",
+      "/data/pulsar/supervise.sh.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/satellite/deploy/ctl.sh",
+      "/data/pulsar/ctl.sh.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cd /data/pulsar \u0026\u0026 chmod 755 boot.sh.new supervise.sh.new ctl.sh.new \u0026\u0026\n     mv boot.sh.new boot.sh \u0026\u0026 mv supervise.sh.new supervise.sh \u0026\u0026 mv ctl.sh.new ctl.sh\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cd /data/pulsar \u0026\u0026 chmod 755 pulsar.new \u0026\u0026\n       { [ ! -f pulsar ] || cp -p pulsar pulsar.prev; } \u0026\u0026\n       mv pulsar.new pulsar \u0026\u0026 sync\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -f /data/pulsar/wakewords/ru_ricardo_mww.tflite ] \u0026\u0026 sha256sum /data/pulsar/wakewords/ru_ricardo_mww.tflite\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "mkdir -p /data/pulsar/wakewords\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/satellite/wakewords/ru_ricardo_mww.tflite",
+      "/data/pulsar/wakewords/ru_ricardo_mww.tflite.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sha256sum /data/pulsar/wakewords/ru_ricardo_mww.tflite.new\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "chmod 644 /data/pulsar/wakewords/ru_ricardo_mww.tflite.new \u0026\u0026 mv /data/pulsar/wakewords/ru_ricardo_mww.tflite.new /data/pulsar/wakewords/ru_ricardo_mww.tflite \u0026\u0026 sync\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -f /data/pulsar/zigbee-coordinator.ybl ] \u0026\u0026 sha256sum /data/pulsar/zigbee-coordinator.ybl\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/radio/out/zigbee-coordinator.ybl",
+      "/data/pulsar/zigbee-coordinator.ybl.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sha256sum /data/pulsar/zigbee-coordinator.ybl.new\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cd /data/pulsar \u0026\u0026 mv zigbee-coordinator.ybl.new zigbee-coordinator.ybl \u0026\u0026 sync\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -f /data/pulsar/zigbee-router.ybl ] \u0026\u0026 sha256sum /data/pulsar/zigbee-router.ybl\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/radio/out/zigbee-router.ybl",
+      "/data/pulsar/zigbee-router.ybl.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sha256sum /data/pulsar/zigbee-router.ybl.new\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cd /data/pulsar \u0026\u0026 mv zigbee-router.ybl.new zigbee-router.ybl \u0026\u0026 sync\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "mkdir -p /data/dropbear\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/ssh/out/aarch64/dropbearmulti",
+      "/data/dropbear/dropbearmulti.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/ssh/out/aarch64/sftp-server",
+      "/data/dropbear/sftp-server.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cROOT\u003e/ssh/start.sh",
+      "/data/dropbear/start.sh"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cd /data/dropbear \u0026\u0026 chmod 755 dropbearmulti.new sftp-server.new start.sh \u0026\u0026\n       mv dropbearmulti.new dropbearmulti \u0026\u0026 mv sftp-server.new sftp-server \u0026\u0026 sync\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "pidof dropbear \u003e/dev/null || /data/dropbear/start.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -x /data/dropbear/start.sh ]\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -f /etc/init.d/S99zpulsar ] \u0026\u0026 sha256sum /etc/init.d/S99zpulsar\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cat /proc/mounts\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cat /proc/cmdline\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "ls /dev/mapper 2\u003e/dev/null | cat\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "df /etc /system/vendor/quasar\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cTMP\u003e/pulsar-install/S99zpulsar",
+      "/data/pulsar/S99zpulsar.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sh -n /data/pulsar/S99zpulsar.new\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "( trap '' HUP INT\nT=/etc/init.d/.S99zpulsar.tmp\ncp /data/pulsar/S99zpulsar.new $T \u0026\u0026 chmod 755 $T \u0026\u0026 set -- $(sha256sum $T) \u0026\u0026 [ \"$1\" = 19125d6980704960a69381084ae2e4ae273f22f7babb21fdc52597fe79caad52 ] \u0026\u0026 mv $T /etc/init.d/S99zpulsar \u0026\u0026 sync\nrc=$?\nrm -f $T\nexit $rc )\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sha256sum /etc/init.d/S99zpulsar\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "rm -f /data/pulsar/S99zpulsar.new\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "[ -f /data/quasar/rootkeeper.sh ]\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "pull",
+      "/data/quasar/rootkeeper.sh",
+      "\u003cTMP\u003e/pulsar-install/rk"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "push",
+      "\u003cTMP\u003e/pulsar-install/rk.new",
+      "/data/quasar/rootkeeper.sh.new"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sh -n /data/quasar/rootkeeper.sh.new\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "cp -p /data/quasar/rootkeeper.sh /data/quasar/rootkeeper.sh.bak-20240101120000 \u0026\u0026 chmod 755 /data/quasar/rootkeeper.sh.new \u0026\u0026 mv /data/quasar/rootkeeper.sh.new /data/quasar/rootkeeper.sh \u0026\u0026 sync\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "sha256sum /data/quasar/rootkeeper.sh\necho __rc=$?"
+    ],
+    [
+      "-s",
+      "adb-1",
+      "shell",
+      "diff /data/quasar/rootkeeper.sh.bak-20240101120000 /data/quasar/rootkeeper.sh\necho __rc=$?"
+    ]
+  ],
+  "changed": true,
+  "lost": false,
+  "note": "",
+  "ok": true,
+  "stderr": "",
+  "stdout": "== adb-1: daemon (aarch64)\nwake model ru_ricardo_mww.tflite copied\n== adb-1: dropbear\nrootfs: no dm-verity or device-mapper, /etc and /system/vendor/quasar on the root filesystem\nwrote /etc/init.d/S99zpulsar:\n  #!/bin/sh\n  # pulsar autostart, written by pulsar-install; remove to disable autostart.\n  [ \"$1\" = start ] || exit 0\n  [ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n  [ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\nremoved the old pulsar lines from /data/quasar/rootkeeper.sh, diff against /data/quasar/rootkeeper.sh.bak-20240101120000 on the device:\n  --- bak\n  +++ new\n  -[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n  \n",
+  "sup_changed": true
+}
