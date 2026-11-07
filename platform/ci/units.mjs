@@ -168,29 +168,16 @@ export const config = {
   },
 
   units: [
-    // ---------------------------------------------------------------- Go --------
+    // ------------------------------------------------------- Deploy tooling -----
     {
       id: "platform-deploy",
-      platform: "go",
-      title: "platform/deploy (home-deploy CLI: render, env, build-id, oci)",
-      // Every deploy script and the image build in CI call this binary, so a
-      // change is both tested here and routed to the units that deploy through
-      // it (their `paths` include platform/deploy/**).
-      paths: ["platform/deploy/**"],
-      go: {
-        module: ".",
-        packages: ["./platform/deploy/..."],
-        race: true,
-        build: ["./platform/deploy/cmd/home-deploy"],
-      },
-    },
-    {
-      id: "platform-deploy-rust",
       platform: "bazel",
-      title: "platform/deploy-rs (Rust home-deploy port + Go parity fixtures)",
-      // Kept out of platform/deploy/** on purpose: while both implementations
-      // exist, a tooling-only change must not route to every deploy unit.
-      // `platform/deploy` stays the executable contract until the cutover.
+      title: "platform/deploy-rs (home-deploy CLI: render, env, oci, converge, state, preflight, hermes)",
+      // The Rust crate is the executable contract; the legacy Go implementation
+      // stays in the tree until the cleanup PR. Every deploy script and the
+      // image build call this binary, so a change is both tested here and
+      // routed to the units that deploy through it (their `paths` include
+      // platform/deploy-rs/**).
       paths: ["platform/deploy-rs/**"],
       bazel: {
         roots: ["//platform/deploy-rs"],
@@ -201,6 +188,21 @@ export const config = {
           "//platform/deploy-rs:parity",
         ],
         build_targets: ["//platform/deploy-rs/..."],
+      },
+    },
+    {
+      id: "platform-deploy-go",
+      platform: "go",
+      title: "platform/deploy (legacy Go home-deploy, retained for revert)",
+      // The executable contract moved to platform/deploy-rs; the Go tree stays
+      // until the cleanup PR so a cutover revert is one PR. Keep its Go tests
+      // green while it exists.
+      paths: ["platform/deploy/**"],
+      go: {
+        module: ".",
+        packages: ["./platform/deploy/..."],
+        race: true,
+        build: ["./platform/deploy/cmd/home-deploy"],
       },
     },
     {
@@ -255,6 +257,7 @@ export const config = {
         "packages/proto/**",
         // The deploy tooling that renders this unit's manifests.
         "platform/deploy/**",
+        "platform/deploy-rs/**",
       ],
       // deploy-home rolls exactly these container images and Deployments when the
       // unit is affected. Infrastructure (ingress, observability, runtime chart)
@@ -317,6 +320,7 @@ export const config = {
         "projects/home/kubernetes/wakegrant/**",
         // The deploy tooling that renders this unit's manifests.
         "platform/deploy/**",
+        "platform/deploy-rs/**",
       ],
       // One image and one Deployment with a durable SQLite grant on a PVC; the
       // ESO Secret (issuer token + per-machine keys) is part of the same unit
@@ -366,6 +370,7 @@ export const config = {
         "projects/home/kubernetes/currency-bot/**",
         // The deploy tooling that renders this unit's manifests.
         "platform/deploy/**",
+        "platform/deploy-rs/**",
       ],
       // One image and one Deployment; the Cloudflare Tunnel sidecar is part of the
       // same unit because the webhook is unusable without it.
@@ -413,6 +418,7 @@ export const config = {
         "projects/home/kubernetes/mcp-gateway/**",
         // The deploy tooling that renders this unit's manifests.
         "platform/deploy/**",
+        "platform/deploy-rs/**",
         // The shared clients and TLS roots this crate consumes.
         "packages/rust/home-clients/**",
         "packages/rust/home-telegram/**",
@@ -482,6 +488,7 @@ export const config = {
         "packages/rust/**",
         // The deploy tooling that renders the shared scheduler manifests.
         "platform/deploy/**",
+        "platform/deploy-rs/**",
       ],
       // The bridge unit owns ha-control too: they share the executor code.
       deploy: {
@@ -693,6 +700,7 @@ export const config = {
         "projects/home-assistant/deploy/chart/**",
         // build-and-push.sh reads image digests with `home-deploy oci digest`.
         "platform/deploy/**",
+        "platform/deploy-rs/**",
       ],
       // Hermes/voice-proxy/health-exporter: build+push, then promote the digests
       // into the runtime Helm release (`home-deploy hermes rollout`). `hermes`

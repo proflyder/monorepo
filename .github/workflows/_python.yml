@@ -21,7 +21,7 @@ on:
         default: ""
         type: string
       deploy_tool:
-        description: Build platform/deploy/cmd/home-deploy and export HOME_DEPLOY
+        description: Build platform/deploy-rs:home-deploy and export HOME_DEPLOY
         required: false
         default: false
         type: boolean
@@ -46,26 +46,15 @@ jobs:
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.11.3
-          install_args: ${{ inputs.deploy_tool && 'python go node' || 'python node' }}
+          install_args: ${{ inputs.deploy_tool && 'python bazelisk node' || 'python node' }}
           cache: true
-
-      # Go module/build cache (setup-go used to provide it). Same key in every
-      # Go job and in deploy-home's warm-up, so a develop run seeds PR jobs.
-      - if: inputs.deploy_tool
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'projects/station/ble-gateway/go.sum') }}
-          restore-keys: go-${{ runner.os }}-
 
       - name: Install test dependencies
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements-test.txt
 
-      # Units whose suites drive a deploy script get the Go deploy binary from
+      # Units whose suites drive a deploy script get the Rust deploy binary (Bazel) from
       # the task itself (HOME_DEPLOY), exactly like a local `mise run test`.
       - name: Test ${{ inputs.unit }}
         run: mise run test ${{ inputs.unit }}

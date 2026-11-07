@@ -273,12 +273,12 @@ export function testCommands(unit, root = ROOT) {
       const commands = [];
       let env;
       if (unit.pythonDeployTool) {
-        // `_python.yml` builds the Go deploy CLI once because the suites drive
-        // a deploy script that execs it through HOME_DEPLOY.
-        const binary = path.join(os.tmpdir(), "mise-home-deploy");
+        // The suites drive a deploy script that execs the Rust deploy CLI
+        // through HOME_DEPLOY; same Bazel target as the home-deploy image.
+        const binary = path.join(root, "bazel-bin/platform/deploy-rs/home-deploy");
         commands.push({
-          command: "go",
-          args: ["build", "-o", binary, "./platform/deploy/cmd/home-deploy"],
+          command: "bazel",
+          args: ["build", "//platform/deploy-rs:home-deploy"],
           cwd: root,
         });
         env = { HOME_DEPLOY: binary };

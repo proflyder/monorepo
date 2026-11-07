@@ -1,10 +1,10 @@
 # home-deploy (Rust port)
 
-Rust replacement for the Go `platform/deploy` command. It lives in
-`platform/deploy-rs/` until the cutover so a tooling-only change does not match
-every deploy unit's `platform/deploy/**` path; the Go binary remains the
-executable contract in the meantime. The cutover moves the crate to
-`platform/deploy` and the Go code is then deleted.
+Rust implementation of the `home-deploy` deploy CLI. Since the cutover this
+crate is the executable contract: `platform/deploy/resolve.sh`, the CI image
+and the in-cluster Jobs all use `//platform/deploy-rs:home-deploy`. The legacy
+Go implementation stays in `platform/deploy/` until a separate cleanup PR so a
+cutover problem can be reverted with one PR.
 
 ## Layout
 
@@ -24,6 +24,11 @@ src/process.rs        kubectl runner (system + fake for tests)
 src/converge.rs       Deployment converge with preserve rules
 src/state.rs          rollback markers (fail-closed record)
 src/gojson.rs         `encoding/json.Marshal`-compatible payloads
+src/http.rs           JSON HTTP client for preflight / assist-smoke
+src/preflight.rs      read-only cutover checks
+src/hermes.rs         Hermes rollout, smoke Job and Assist client
+src/hermesconfig.rs   Hermes config merge, plan, diff and apply
+src/diff.rs           unified diff for `render-config --dry-run`
 src/oci.rs            layout index/manifest, OCI and docker archives
 src/oci/json.rs       ordered JSON with Python `json.dumps` formatting
 src/oci/archive.rs    Python-compatible USTAR writer
@@ -32,10 +37,10 @@ tests/parity.sh       Bazel sh_test wrapper for the runner
 testdata/frozen/      contract fixtures captured from the Go binary
 ```
 
-`env get`, `build-id`, `render`, `eso names`, `secret opaque`, `runtime split`,
-`oci digest`, `oci pack`/`oci docker`, `converge` and `state` are ported.
-`preflight` and `hermes` are declared in the CLI, print `not implemented yet`
-and exit with status 2 until their modules land.
+Every subcommand is ported: `env get`, `build-id`, `render`, `eso names`,
+`secret opaque`, `runtime split`, `oci digest`, `oci pack`/`oci docker`,
+`converge`, `state`, `preflight`, `hermes rollout`, `hermes render-config` and
+`hermes assist-smoke`.
 
 ## Frozen contract fixtures
 
@@ -59,10 +64,11 @@ Captured from the Go binary (57 cases):
 | preflight | 8 | fake HTTP: ok, alarm, legacy writer, endpoint mismatch, not ready, HTTP/JSON errors |
 | hermes rollout | 5 | no-op, upgrade + smoke, smoke failure + rollback, `--rollback-only` |
 
-44 cases pass byte for byte: CLI/env/build-id/render (26), `eso names`,
-`secret opaque` (2), `runtime split`, all four OCI cases (digest plus the OCI
-and docker archives), four converge cases and six state cases. The other 13
-(preflight and hermes) are skipped with a reason.
+All 57 cases pass byte for byte: CLI/env/build-id/render (26), `eso names`,
+`secret opaque` (2), `runtime split`, four OCI cases, four converge cases, six
+state cases, eight preflight cases and five Hermes rollout cases. There are no
+skipped cases. The parity runner starts a local HTTP server for the preflight
+cases and normalises the clock-derived smoke Job name.
 
 Fake `kubectl`/`helm` scripts record every argv (with `-f` payloads and stdin)
 under the case's `trace/`; the smoke Job name is normalised because it is

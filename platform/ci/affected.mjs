@@ -75,7 +75,7 @@ export class Unit {
         goRace: false,
         suites: [],
         compileDirs: [],
-        // Python units whose suites exec the Go deploy binary.
+        // Python units whose suites exec the Rust deploy binary.
         pythonDeployTool: false,
         jsTests: [],
         // Native (non-Bazel) build units: a repository script that produces
@@ -218,7 +218,7 @@ export function normalizeConfig(data, label = "units") {
       goRace: Boolean(go.race),
       suites: list(python.suites),
       compileDirs: list(python.compile),
-      // The suite drives a deploy script that execs the Go deploy binary; the
+      // The suite drives a deploy script that execs the Rust deploy binary; the
       // workflow builds it once and exports HOME_DEPLOY.
       pythonDeployTool: Boolean(python.deploy_tool),
       jsTests: list(js.tests),

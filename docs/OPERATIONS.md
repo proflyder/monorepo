@@ -970,7 +970,9 @@ provenance; `deploy-home` проверяет тег и provenance:
 `_images.yml` дополнительно публикует `ghcr.io/proflyder/home-deploy`
 (если юнит не собирает его сам); job достаёт из промоутнутого образа
 бинарник `home-deploy` (`crane export`) и передаёт его скриптам через
-`HOME_DEPLOY`.
+`HOME_DEPLOY`. Бинарник собирает `rust_service_image` из
+`//platform/deploy-rs:home-deploy`; Go-реализация остаётся в
+`platform/deploy/` только для revert до cleanup-PR.
 
 Ручной `workflow_dispatch` (смена режима ha-bridge, `units=all`) выкатывает
 текущий `develop`, для которого у нетронутых последним PR юнитов нет

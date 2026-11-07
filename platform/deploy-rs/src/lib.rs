@@ -5,18 +5,23 @@
 //! cutover) so a parity harness can compare both binaries against the frozen
 //! contract fixtures in `testdata/frozen`.
 //!
-//! The ported modules cover `envfile`, `buildid`, `render`, `yaml`,
-//! `manifests`, `runtimevalues`, `oci`, `converge` and `state`. `preflight` and
-//! `hermes` still parse their arguments and exit with status 2 until their own
-//! port lands.
+//! Every subcommand is ported: `env get`, `build-id`, `render`, `oci`,
+//! `converge`, `state`, `preflight`, `runtime split`, `eso names`,
+//! `secret opaque`, `hermes rollout`, `hermes render-config` and
+//! `hermes assist-smoke`.
 
 pub mod buildid;
 pub mod cli;
 pub mod converge;
+pub mod diff;
 pub mod envfile;
 pub mod gojson;
+pub mod hermes;
+pub mod hermesconfig;
+pub mod http;
 pub mod manifests;
 pub mod oci;
+pub mod preflight;
 pub mod process;
 pub mod render;
 pub mod runtimevalues;

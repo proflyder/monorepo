@@ -211,17 +211,13 @@ test("testCommands compiles and discovers Python suites", () => {
   assert.deepEqual(commands[1].args.slice(0, 4), ["-m", "unittest", "discover", "-s"]);
 });
 
-test("testCommands builds the Go deploy tool for deploy_tool units", () => {
+test("testCommands builds the Rust deploy tool for deploy_tool units", () => {
   const commands = testCommands(byId("currency"));
   const [build, compile, unittest] = commands;
-  assert.equal(build.command, "go");
-  assert.deepEqual(build.args.slice(0, 3), [
-    "build",
-    "-o",
-    path.join(os.tmpdir(), "mise-home-deploy"),
-  ]);
-  assert.equal(compile.env.HOME_DEPLOY, build.args[2]);
-  assert.equal(unittest.env.HOME_DEPLOY, build.args[2]);
+  assert.equal(build.command, "bazel");
+  assert.deepEqual(build.args, ["build", "//platform/deploy-rs:home-deploy"]);
+  assert.match(compile.env.HOME_DEPLOY, /bazel-bin\/platform\/deploy-rs\/home-deploy$/);
+  assert.equal(unittest.env.HOME_DEPLOY, compile.env.HOME_DEPLOY);
 });
 
 test("testCommands collects *.test.js for JS units", () => {
