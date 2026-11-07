@@ -8,12 +8,13 @@ name: deploy-home
 # A push also promotes affected `native` units as public OCI artifacts: the
 # Windows logon provider on any affected change, and Pulsar only when
 # `projects/station/pulsar/VERSION` changed (its `publish_when` trigger).
-# `native-release` reuses `_native.yml`, which promotes the `tree-<hash>`
-# artifact the merged PR built and attested (attaching the release tags) or, on
-# a missing/unverified tree tag, builds and publishes exactly as before. Pull
-# requests never reach this workflow, so they never publish release tags. A
-# Pulsar release then rolls out through `deploy-station` (Environment
-# `Station`); that job is independent of the home `deploy` job.
+# `native-release` reuses `_native.yml`, which only promotes the `tree-<hash>`
+# artifact the merged PR built and attested (attaching the release tags). A
+# missing or unverified tree tag fails the job: this workflow never builds or
+# publishes a native artifact. Pull requests never reach this workflow, so they
+# never publish release tags. A Pulsar release then rolls out through
+# `deploy-station` (Environment `Station`); that job is independent of the home
+# `deploy` job and installs the published image through HA.
 #
 # A push to `develop` is a squash-merge of a PR, so it runs in the base
 # repository context with Environment secrets. The `plan` job routes the change
@@ -25,7 +26,7 @@ name: deploy-home
 # Their provenance must verify against this repository's CI workflows; only then
 # are the usual tags attached and the digest handed to the deploy script. A
 # missing or unverified image fails the job with the promotion decisions in the
-# summary — there is no "build as before" fallback (it would deploy bytes CI
+# summary — there is no "build as before" path (it would deploy bytes CI
 # never tested and made every deploy slow).
 #
 # The deploy CLI itself is not compiled here either: `HOME_DEPLOY` is extracted
@@ -303,17 +304,19 @@ jobs:
             --jq '.[0].html_url' 2>/dev/null || true)
           echo "url=${url}" >> "$GITHUB_OUTPUT"
 
-  # Native units build once too (DECISIONS 36). `_native.yml` first promotes
-  # the digest the merged PR built and attested under `tree-<hash>`: it checks
-  # the tag exists, verifies provenance against this repository's CI workflows,
-  # then attaches the unit's release tags (`{version}`, `latest`,
-  # `sha-<commit12>`) to the same digest. A missing or unverified tree tag falls
-  # back to the normal build and release-tag publication inside the same call,
-  # and the chosen path is recorded in the job summary.
+  # Native units build once too (DECISIONS 36). `_native.yml` promotes the
+  # digest the merged PR built and attested under `tree-<hash>`: it checks the
+  # tag exists, verifies provenance against this repository's CI workflows, then
+  # attaches the unit's release tags (`{version}`, `latest`, `sha-<commit12>`) to
+  # the same digest. A missing or unverified tree tag fails the job — this
+  # workflow never builds or publishes a native artifact, and there is no
+  # history search: an older tree must never be re-tagged as the current VERSION.
   #
-  # Push-only: a dispatch never builds or publishes (Pulsar's dispatch path
-  # re-deploys an already published VERSION). Registry/OIDC/attestation
-  # permissions are needed only by the promote/publish jobs inside `_native.yml`.
+  # Only the units whose `publish_when` (VERSION) changed reach this matrix, so
+  # the merged PR necessarily built the tree artifact. Push-only: a dispatch
+  # never builds or publishes (Pulsar's dispatch path re-deploys an already
+  # published VERSION). Registry/OIDC/attestation permissions are needed only by
+  # the promote job inside `_native.yml`.
   native-release:
     name: native / ${{ matrix.id }}
     needs: plan
@@ -348,7 +351,6 @@ jobs:
       # their own VERSION file.
       release_version: ${{ matrix.id == 'pulsar' && needs.plan.outputs.pulsar_version || '' }}
       promote: true
-      publish_versions: true
       push_tree_tag: false
 
   # One matrix entry per affected deployable unit. Jobs run one at a time and a
@@ -920,10 +922,10 @@ jobs:
   # job is independent from `deploy`, so home units neither wait for it nor
   # fail with it. On dispatch it installs the already published VERSION and
   # does not rebuild or push (Pulsar tags are immutable).
-  # The version tag points at the promoted PR digest when `native-release`
-  # succeeded through promotion; after a fallback build it points at the freshly
-  # published digest. Either way `deploy-station` installs the VERSION tag and
-  # the station updater verifies the layer digests, SHA256SUMS and --version.
+  # The version tag points at the promoted PR digest: `native-release` only
+  # succeeds through promotion and never publishes a fresh build. This job only
+  # installs that tag through Home Assistant; it builds nothing. The station
+  # updater verifies the layer digests, SHA256SUMS and --version.
   # Promotion keeps an existing version tag when its content is identical
   # (manifest annotations only), so `latest` is moved to that tag's digest and
   # the version installed here always matches the digest that was kept/created.

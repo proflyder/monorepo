@@ -245,9 +245,10 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 и запускает оба скрипта, затем публикует DLL, `cp-selftest.exe` и
 `SHA256SUMS` артефактом; ПК из CI недоступен. PR из этого репозитория
 публикует тот же артефакт через ORAS под `tree-<hash>` с provenance
-(build once); merge продвигает проверенный digest на теги `VERSION` и
-`sha-<12>` либо, при missing/unverified, собирает и публикует заново
-(`publish-oci.sh`). Тег версии неизменяем по содержимому. Форки не публикуют;
+(build once); merge только продвигает проверенный digest на теги `VERSION` и
+`sha-<12>`; при missing/unverified job падает и ничего не собирает
+(`publish-oci.sh` в деплое не вызывается). Тег версии неизменяем по
+содержимому. Форки не публикуют;
 проверка получения и проверки digest — `fetch.sh`.
 
 На самом ПК — self-test (когда грант не ожидается) и живая приёмка:
@@ -508,7 +509,7 @@ platform/ci/affected.sh --all
 
 mise run ci:units                               # инварианты карты юнитов
 node --test platform/ci/*.test.mjs platform/quality/*.test.mjs        # маршрутизатор, gate и аудит
-# продвижение по tree hash: теги, digest, fallback — без registry
+# продвижение по tree hash: теги, digest, история и отказ — без registry
 node --test platform/ci/promote.test.mjs
 # политика чистки GHCR: pure-функция + локальный dry-run по фикстуре
 node --test platform/ci/ghcr_cleanup.test.mjs
@@ -592,16 +593,18 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
   (`image path: prebuilt|build`, где `build` = отказ promotion).
 - Native (Pulsar, logon provider): job `native-release` вызывает `_native.yml`
   с `promote: true`. Тот проверяет `tree-<hash>` и provenance, ставит релизные
-  теги на тот же digest и пропускает сборку; при missing/unverified собирает и
-  публикует как раньше. Summary пишет `path: promoted|build` и
-  `fallback build`. `deploy-station` ждёт `native-release` и ставит версию.
+  теги на тот же digest; при missing/unverified job падает — деплой ничего не
+  собирает и не публикует, история для native не применяется. PR CI
+  (`promote: false`) по-прежнему собирает и публикует `tree-<hash>`.
+  `deploy-station` ждёт `native-release` и только ставит опубликованную версию.
 - Откат — только применённого объекта; изменение целиком откатывается новым
   PR с `git revert`.
 
 Pulsar: хост-сборка и тесты — Bazel-юнит `pulsar-bazel`; станционные
 бинарники (Bazel), radio, ssh, installer и релиз — native-юнит `pulsar`
 (`_native.yml`). Каждый PR собирает release-shaped артефакт и публикует
-`tree-<hash>`; merge продвигает его либо пересобирает fallback-путём.
+`tree-<hash>`; merge только продвигает его на релизные теги, а при
+отсутствии/непроверенном теге job падает.
 
 ## Публикация
 

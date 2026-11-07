@@ -21,9 +21,10 @@ name: _native
 # publishes the release-shaped artifact as
 # `ghcr.io/proflyder/<repository>:tree-<git tree hash>` with build provenance.
 # On push to `develop`, deploy-home asks this workflow to `promote` that digest
-# instead of rebuilding; only a missing or unverified tree tag falls back to the
-# normal build plus release-tag publication. Fork PRs and manual dispatch runs
-# never reach the registry: their token is read-only.
+# instead of rebuilding; a missing or unverified tree tag fails the run — the
+# deploy path never builds or publishes. PR CI (`promote: false`) still builds
+# and, for a same-repo PR, publishes the tree tag. Fork PRs and manual dispatch
+# runs never reach the registry: their token is read-only.
 
 on:
   workflow_call:
@@ -97,17 +98,13 @@ on:
       promote:
         description: >-
           Deploy-home path: promote the verified `tree-<hash>` digest to the
-          release tags instead of building, when it exists.
+          release tags. The artifact must already exist; the run fails instead
+          of building.
         required: false
         default: false
         type: boolean
       push_tree_tag:
         description: Publish the built artifact under tree-<hash> (same-repo PR)
-        required: false
-        default: false
-        type: boolean
-      publish_versions:
-        description: Publish the release tags after a fallback build (deploy-home)
         required: false
         default: false
         type: boolean
@@ -124,9 +121,10 @@ env:
 jobs:
   # Build once, deploy the same bytes: on the deploy-home path, promote the
   # artifact the merged PR already built and attested under `tree-<hash>` to the
-  # unit's release tags. A missing or unverified tree tag selects `build`;
-  # release tags are immutable by content: identical layers under an existing
-  # tag (different manifest annotations) is a no-op, different content fails.
+  # unit's release tags. A missing or unverified tree tag fails this job, which
+  # also stops every build job below; the deploy path never builds. Release tags
+  # are immutable by content: identical layers under an existing tag (different
+  # manifest annotations) is a no-op, different content fails.
   #
   # The job always runs so the build jobs can depend on `mode`; when `promote`
   # is false (PR CI) it only publishes `mode=build`.
@@ -201,6 +199,10 @@ jobs:
           mode="build"
           if [[ "${{ steps.promote.outputs.mode }}" == "promoted" ]]; then
             mode="promoted"
+          fi
+          if [[ "${{ inputs.promote }}" == "true" && "$mode" != "promoted" ]]; then
+            echo "::error::tree-<hash> was not published and verified; deploy-home does not build (DECISIONS 36)" >&2
+            exit 1
           fi
           echo "mode=${mode}" >> "$GITHUB_OUTPUT"
 
@@ -506,8 +508,7 @@ jobs:
           retention-days: ${{ inputs.retention_days }}
 
   # The single release-shaped artifact `publish` uploads with
-  # `projects/station/pulsar/publish-oci.sh` (PR `tree-<hash>` or deploy-home
-  # fallback release tags).
+  # `projects/station/pulsar/publish-oci.sh` under the PR `tree-<hash>` tag.
   pulsar-release:
     name: native / pulsar-release (${{ inputs.release_version || 'VERSION' }})
     if: inputs.kind == 'pulsar' && needs.promote.outputs.mode != 'promoted'
@@ -579,12 +580,11 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
 
-  # Publish the artifact of the build that just ran:
-  #   * same-repo PR  -> `<repository>:tree-<git tree hash>` (build once);
-  #   * deploy-home fallback -> the unit's usual release tags, exactly as before.
-  # A promoted deploy path publishes nothing: the digest already exists.
-  # Only this job needs registry/OIDC/attestation permissions; the caller grants
-  # them for this job alone.
+  # Publish the artifact of the same-repo PR build:
+  #   `ghcr.io/proflyder/<repository>:tree-<git tree hash>` (build once).
+  # deploy-home only promotes that digest; it never builds, so this job does not
+  # run on the deploy path. Only this job needs registry/OIDC/attestation
+  # permissions; the caller grants them for this job alone.
   publish:
     name: publish / ${{ inputs.unit }}
     needs: [promote, native, pulsar-release]
@@ -593,7 +593,7 @@ jobs:
       needs.promote.result == 'success' &&
       needs.promote.outputs.mode != 'promoted' &&
       (needs.native.result == 'success' || needs.pulsar-release.result == 'success') &&
-      (inputs.push_tree_tag || inputs.publish_versions) &&
+      inputs.push_tree_tag &&
       inputs.publish_repository != '' &&
       inputs.publish_script != ''
     runs-on: ubuntu-24.04
@@ -683,10 +683,6 @@ jobs:
             echo "### _native publish / ${{ inputs.unit }}"
             echo
             echo "- repository: \`${{ inputs.publish_repository }}\`"
-            if [[ "${{ inputs.push_tree_tag }}" == "true" ]]; then
-              echo "- tag: \`${{ steps.tree.outputs.tag }}\` (PR build once)"
-            else
-              echo "- version: \`${{ steps.publish.outputs.version }}\` (fallback release build)"
-            fi
+            echo "- tag: \`${{ steps.tree.outputs.tag }}\` (PR build once)"
             echo "- digest: \`${{ steps.publish.outputs.digest }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

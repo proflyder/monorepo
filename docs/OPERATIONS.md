@@ -612,8 +612,9 @@ PVC), но сбрасывает выданные nonce — ПК просто з�
 изменение путей провайдера (и общих Rust/Cargo-входов) собирается, проверяется
 и публикуется PR CI как `tree-<hash>` с provenance (build once). На push в
 `develop` `native-release` продвигает проверенный `tree-<hash>` на релизные
-теги; `publish_when` по `solutions/windows-logon-provider/VERSION`
-ограничивает только релиз:
+теги, ничего не собирая (нет артефакта или provenance — job падает);
+`publish_when` по `solutions/windows-logon-provider/VERSION` ограничивает
+только релиз:
 
 ```text
 ghcr.io/proflyder/windows-logon-provider:<VERSION>
@@ -841,8 +842,9 @@ $EDITOR projects/station/pulsar/VERSION
 #    merge проводит pulsar через deploy-home (publish_when по VERSION):
 #    native-release проверяет tree-тег и provenance и ставит на тот же
 #    digest ghcr.io/proflyder/pulsar-firmware:<version> и :latest.
-#    Если tree-тега нет или provenance не сходится — обычная сборка
-#    (projects/station/pulsar/publish-oci.sh) с пометкой fallback в summary.
+#    Если tree-тега нет или provenance не сходится — job падает:
+#    deploy-home ничего не собирает и не публикует. Нужно перезапустить
+#    PR CI (он публикует tree-<hash>) и заново смержить.
 # 3. approve в GitHub Environment `Station` (job deploy-station)
 #    → VPN группа ci → OIDC в OpenBao (deploy-station)
 #    → HA update_entity + update.install
@@ -968,7 +970,13 @@ provenance; `deploy-home` проверяет тег и provenance:
   digest — no-op, другой — отказ; двигается только `latest`.
 
 `deploy-home` — только доставка: он не запускает `bazel build`/`bazel run`
-и не собирает Docker-образы. Для каждого затронутого деплой-юнита
+и не собирает Docker-образы. Native-юниты (Pulsar, logon provider) тоже
+только продвигаются: если `tree-<hash>` не опубликован или provenance не
+сходится, job `native-release` падает с подсказкой перезапустить PR CI; история
+для них не используется, потому что релизный артефакт должен соответствовать
+текущему tree и `VERSION`. `deploy-station` только устанавливает уже
+опубликованный `<version>` через HA и ничего не собирает. Для каждого
+затронутого деплой-юнита
 `_images.yml` дополнительно публикует `ghcr.io/proflyder/home-deploy`
 (если юнит не собирает его сам); job достаёт из промоутнутого образа
 бинарник `home-deploy` (`crane export`) и передаёт его скриптам через

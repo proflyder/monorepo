@@ -183,8 +183,10 @@ upstream-патча, поэтому сравнение версий (`vMAJOR.MIN
    `native.publish_when` пускает его в план только при изменении VERSION. `native-release`
    сначала считает tree деплоимого коммита, проверяет `tree-<hash>` и provenance и ставит на
    тот же digest `ghcr.io/proflyder/pulsar-firmware:<version>` и `:latest` — байты, прошедшие
-   PR, не пересобираются. Если tree-тега нет или provenance не сходится, workflow собирает и
-   публикует `publish-oci.sh` как раньше, с пометкой fallback в summary. Тег версии неизменяем:
+   PR, не пересобираются. Если tree-тега нет или provenance не сходится, job падает:
+   `deploy-home` ничего не собирает и не публикует; нужно перезапустить PR CI и заново
+   смержить. История для native не используется — старый tree нельзя выдать за текущий
+   `VERSION`. Тег версии неизменяем:
    другой digest — отказ, тот же — no-op; двигается только `latest`. Прочие изменения Pulsar
    идут только через PR CI и релизные теги не двигают.
 4. Job `deploy-station` ждёт одобрения в Environment `Station` (required reviewer).
