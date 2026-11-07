@@ -20,15 +20,36 @@ name: deploy-home
 # range (`before..sha`) through the same unit map as CI and deploys exactly the
 # affected deployable units; documentation-only pushes deploy nothing.
 #
-# Build once (DECISIONS 36): each deploy job first tries to promote the digests
-# the merged PR built and attested under `tree-<hash>`. Their provenance must
-# verify against this repository's CI workflows; only then are the usual tags
-# attached and the digest handed to the deploy script. Any missing or
-# unverified image falls back to building exactly as before, and the chosen
-# path is recorded in the job summary.
+# Build once (DECISIONS 36): this workflow never builds. Each deploy job
+# promotes the digests the merged PR built and attested under `tree-<hash>`.
+# Their provenance must verify against this repository's CI workflows; only then
+# are the usual tags attached and the digest handed to the deploy script. A
+# missing or unverified image fails the job with the promotion decisions in the
+# summary — there is no "build as before" fallback (it would deploy bytes CI
+# never tested and made every deploy slow).
+#
+# The deploy CLI itself is not compiled here either: `HOME_DEPLOY` is extracted
+# from the promoted `ghcr.io/proflyder/home-deploy` image, which `_images.yml`
+# publishes for every affected deployable unit. That keeps the mechanism
+# independent of the language `home-deploy` is written in (Go today, Rust next).
+#
+# A manual dispatch deploys the current `develop`, whose tree has no CI build
+# for units the last merged PR did not touch (the tree changes on every merge).
+# Promotion therefore walks the first-parent lineage (~200 commits) of the
+# deploy commit and picks the newest image whose `tree-<hash>` tag exists AND
+# whose provenance verifies; the summary names that commit. That is correct
+# because CI builds an image whenever its inputs change, so a change after the
+# found commit would have produced a later, found-first tree.
+#
+# On a push the unit's own images must match this tree exactly; history is only
+# used for sibling images the shared scheduler script renders but never applies
+# (units.mjs `deploy.optional_images`, ha-bridge/ha-control while rolling the
+# scheduler and the reverse). A required image with no verified tree still
+# fails the job instead of building.
 #
 # The push also runs `warm-caches`, which saves the shared Go/setup-bazel
 # caches under the keys PR jobs restore (CI itself no longer runs on develop).
+# It only populates caches; it is not part of the deploy and never publishes.
 #
 # Push runs only the conservative preserve mode. Mode changes (execute, shadow,
 # control-execute, control-catalog) are manual workflow_dispatch runs for the
@@ -395,7 +416,12 @@ jobs:
       group: deploy-home-${{ matrix.id }}
       cancel-in-progress: false
     steps:
+      # Full history: promotion walks the first-parent lineage of `develop` to
+      # find the newest verified build of an image this change did not touch
+      # (manual dispatch, sibling images of the shared scheduler manifests).
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
 
       - name: Mode guard
         run: |
@@ -424,23 +450,6 @@ jobs:
           install_args: "kubectl helm"
           cache: true
 
-      # Pinned Bazelisk on PATH (`bazel`) plus its Bzlmod/repository caches.
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
-        with:
-          bazelisk-version: ${{ env.BAZELISK_VERSION }}
-          bazelisk-cache: true
-          repository-cache: true
-
-      # Build the deploy CLI once per job; every deploy.sh and build-and-push.sh
-      # in this job runs it through platform/deploy/resolve.sh.
-      - name: Build deploy tooling
-        run: |
-          set -euo pipefail
-          bazel build //platform/deploy/cmd/home-deploy
-          binary="bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy"
-          test -x "$binary" || { echo "missing $binary" >&2; exit 1; }
-          echo "HOME_DEPLOY=$PWD/$binary" >> "$GITHUB_ENV"
-
       # Same Buildx as PR CI: the digest of the Docker-built `hermes` image must
       # not depend on which job built it. `rewrite-timestamp` needs BuildKit
       # >= 0.13, which the action's containerised builder guarantees.
@@ -453,15 +462,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Action-output disk cache (.bazelrc); Bazelisk/repository caches come
-          # from setup-bazel above.
-          path: ~/.cache/bazel-disk
-          key: deploy-home-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'go.sum') }}
-          restore-keys: |
-            deploy-home-${{ runner.os }}-
 
       - name: Materialise VPN credentials
         env:
@@ -635,10 +635,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build once, deploy the same bytes: promote the digests the merged PR
-      # already built and attested under `tree-<hash>`. Each image must exist AND
-      # its provenance must verify against this repository's CI workflows;
-      # otherwise the whole unit falls back to the normal build below.
+      # Build once, deploy the same bytes: promote the digests CI already built
+      # and attested under `tree-<hash>`. Each image must exist AND its
+      # provenance must verify against this repository's CI workflows; otherwise
+      # the job fails. On dispatch (and for sibling images) the newest verified
+      # build in first-parent history is used and named in the summary.
+      # `home-deploy` is always part of the set: it is the deploy CLI image the
+      # next step extracts the binary from.
       #
       # This is the correctness gate: a wrong-tree image can never be deployed,
       # because the tree tag, the verified provenance and the digest read-back
@@ -647,32 +650,76 @@ jobs:
         id: promote
         env:
           GH_TOKEN: ${{ github.token }}
-          IMAGES: ${{ matrix.images }}
+          IMAGES: ${{ matrix.images }} home-deploy
+          # Sibling images the shared deploy script renders but this unit does
+          # not apply (units.mjs `deploy.optional_images`).
+          OPTIONAL_IMAGES: ${{ matrix.optional_images }}
+          # A dispatch deploys the current `develop`, whose tree has no CI build
+          # for units the last merged PR did not touch. On push the required
+          # images must match this tree exactly.
+          ALLOW_HISTORY: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
           DEPLOY_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if ! tree=$(git rev-parse "${DEPLOY_COMMIT}^{tree}" 2>/dev/null); then
-            echo "::warning::cannot resolve the tree of ${DEPLOY_COMMIT}; building images"
-            echo "prebuilt_digests=" >> "$GITHUB_OUTPUT"
-            echo "IMAGE_PROMOTION=build" >> "$GITHUB_ENV"
-            exit 0
+          tree=$(git rev-parse "${DEPLOY_COMMIT}^{tree}") || {
+            echo "::error::cannot resolve the tree of ${DEPLOY_COMMIT}" >&2
+            exit 1
+          }
+          history_args=()
+          if [[ "$ALLOW_HISTORY" == "1" || -n "$OPTIONAL_IMAGES" ]]; then
+            history_args=(--history-limit 200)
+          fi
+          if [[ "$ALLOW_HISTORY" == "1" ]]; then
+            history_args+=(--allow-history)
           fi
           if ! node platform/ci/promote.mjs \
             --images "$IMAGES" \
+            --optional-images "$OPTIONAL_IMAGES" \
+            "${history_args[@]}" \
             --tree "$tree" \
             --commit "$DEPLOY_COMMIT" \
             --repository "${GITHUB_REPOSITORY}"; then
-            # A promotion bug must not block a deploy: fall back to building.
-            echo "image promotion failed; building images as before" >&2
-            echo "prebuilt_digests=" >> "$GITHUB_OUTPUT"
-            echo "IMAGE_PROMOTION=build" >> "$GITHUB_ENV"
+            echo "::error::image promotion failed; see the job summary" >&2
+            exit 1
+          fi
+          if ! grep -qx 'mode=prebuilt' "$GITHUB_OUTPUT"; then
+            echo "::error::no verified image set for this unit (commit ${DEPLOY_COMMIT}, tree ${tree})" >&2
+            echo "deploy-home never builds: on a push, re-run PR CI on an up-to-date branch" >&2
+            echo "and re-merge; on a dispatch, check the 'image promotion' block in the" >&2
+            echo "job summary and the history limit (--history-limit, default 200)" >&2
+            exit 1
           fi
 
-      - name: Build, push and deploy ${{ matrix.id }}
+      # The deploy CLI comes from the promoted image, not from a Bazel build on
+      # the runner (DECISIONS 36). The contract is the image layout: the binary
+      # is /usr/local/bin/home-deploy whatever language builds it (Go today,
+      # platform/deploy-rs later).
+      - name: Extract the deploy CLI from the promoted image
+        run: |
+          set -euo pipefail
+          digest=$(tr ',' '\n' <<< "${{ steps.promote.outputs.prebuilt_digests }}" \
+            | sed -n 's/^home-deploy=//p')
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "no promoted home-deploy digest for this unit" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/home-deploy"
+          crane export "ghcr.io/proflyder/home-deploy@${digest}" - \
+            | tar -x -C "$RUNNER_TEMP/home-deploy" usr/local/bin/home-deploy
+          binary="$RUNNER_TEMP/home-deploy/usr/local/bin/home-deploy"
+          test -x "$binary" || { echo "missing $binary in the promoted image" >&2; exit 1; }
+          "$binary" --help >/dev/null
+          echo "HOME_DEPLOY=$binary" >> "$GITHUB_ENV"
+
+      - name: Deploy ${{ matrix.id }}
         env:
-          # Empty means "build exactly as before"; the deploy entrypoints read
-          # this shared value (platform/ci/prebuilt-digests.sh).
+          # The deploy entrypoints read this shared value
+          # (platform/ci/prebuilt-digests.sh).
           PREBUILT_DIGESTS: ${{ steps.promote.outputs.prebuilt_digests }}
+          # Forbid every build/push on the deployment runner. An image that is
+          # missing here (a sibling workload of the shared manifests) is taken
+          # from the live Deployment instead.
+          DEPLOY_NO_BUILD: "1"
           # converge/kubectl record `workload<TAB>created|unchanged|rolled-out`
           # here; the Summary step renders it per workload.
           DEPLOY_SUMMARY_FILE: ${{ runner.temp }}/ci/rollout-summary
@@ -680,13 +727,13 @@ jobs:
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
           if [[ "${{ matrix.builder }}" == "docker" || "${{ matrix.builder }}" == "mixed" ]]; then
-            # Hermes/voice-proxy/health-exporter (builder `mixed`): build+push
-            # the Docker-built gateway plus the Bazel-built images, then promote
-            # every digest into the runtime release. `home-deploy hermes
-            # rollout` skips the upgrade when the digests did not change, runs
-            # the voice smoke checks and rolls back to the previous revision on
-            # failure. The smoke Job runs the same `home-deploy` image, so the
-            # cluster never needs a Python image.
+            # Hermes/voice-proxy/health-exporter (builder `mixed`): collect the
+            # promoted PR digests (build-and-push.sh refuses to build with
+            # DEPLOY_NO_BUILD=1) and roll them into the runtime release.
+            # `home-deploy hermes rollout` skips the upgrade when the digests
+            # did not change, runs the voice smoke checks and rolls back to the
+            # previous revision on failure. The smoke Job runs the same
+            # `home-deploy` image, so the cluster never needs a Python image.
             DIGEST_FILE="$CI_DIR/digests" \
             IMAGE_TAG="$GITHUB_SHA" \
               projects/home-assistant/deploy/images/build-and-push.sh ${{ matrix.images }}
@@ -723,7 +770,6 @@ jobs:
           KUBECONFIG="$CI_DIR/kubeconfig" \
           PRIVATE_ENV="$CI_DIR/${{ matrix.env_file }}" \
           DEPLOY_STATE_DIR="$CI_DIR/deploy-state" \
-          PUSH_IMAGES=1 \
           IMAGE_TAG="$GITHUB_SHA" \
           ONLY="${ONLY// /,}" \
           PREFLIGHT_IN_CLUSTER=1 \
@@ -819,10 +865,14 @@ jobs:
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
           # Restore only what this job actually applied, to the exact recorded
-          # spec. A failure during build/push/render leaves no `.applied`
-          # marker and must not touch the running Deployments.
-          HOME_DEPLOY_BIN="${HOME_DEPLOY:-$PWD/bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy}"
-          "$HOME_DEPLOY_BIN" state rollback \
+          # spec. A failure during render leaves no `.applied` marker and must
+          # not touch the running Deployments. If the job failed before the
+          # deploy CLI was extracted, nothing was applied: skip.
+          if [[ -z "${HOME_DEPLOY:-}" || ! -x "$HOME_DEPLOY" ]]; then
+            echo "deploy CLI unavailable; nothing was applied by this job"
+            exit 0
+          fi
+          "$HOME_DEPLOY" state rollback \
             --state-dir "$CI_DIR/deploy-state" \
             --namespace "${{ matrix.namespace }}" \
             --kubectl kubectl | tee "$RUNNER_TEMP/rollback.log"
@@ -834,8 +884,13 @@ jobs:
           CI_DIR="$RUNNER_TEMP/ci"
           export KUBECONFIG="$CI_DIR/kubeconfig"
           # Safety net if the runner dies before the rollout can roll back. The
-          # rollout removes the marker after a successful smoke, so a
-          # build/push failure never touches the running release.
+          # rollout removes the marker after a successful smoke, so a failure
+          # before the rollout never touches the running release. Without the
+          # promoted CLI nothing was applied: skip.
+          if [[ -z "${HOME_DEPLOY:-}" || ! -x "$HOME_DEPLOY" ]]; then
+            echo "deploy CLI unavailable; nothing was applied by this job"
+            exit 0
+          fi
           "${{ matrix.script }}" \
             --rollback-only \
             --state-dir "$CI_DIR/hermes-state" \
@@ -854,7 +909,8 @@ jobs:
             echo "- event: \`$GITHUB_EVENT_NAME\`"
             echo "- workloads: \`${{ matrix.workloads }}\`"
             echo "- images: \`${{ matrix.images }}\`"
-            # Which path the unit took: promoted PR build or a fresh build.
+            # Always `prebuilt` on a successful deploy: deploy-home never
+            # builds (DECISIONS 36). `build` means promotion refused the unit.
             echo "- image path: \`${IMAGE_PROMOTION:-unknown}\`"
             echo "- pull request: ${{ needs.plan.outputs.pr_url }}"
             if [[ -s "$CI_DIR/rollout-summary" ]]; then

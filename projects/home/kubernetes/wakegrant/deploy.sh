@@ -42,6 +42,12 @@ DEPLOY_STATE_DIR=${DEPLOY_STATE_DIR:-"$RENDER_DIR/state"}
 PUSH_IMAGES=${PUSH_IMAGES:-0}
 IMAGE_REGISTRY=${IMAGE_REGISTRY:-"ghcr.io/proflyder"}
 BUILD=true
+# CI sets DEPLOY_NO_BUILD=1: the image comes from PR CI (promoted digest), never
+# from a build on the deployment runner (DECISIONS 36).
+DEPLOY_NO_BUILD=${DEPLOY_NO_BUILD:-0}
+if [[ "$DEPLOY_NO_BUILD" == "1" ]]; then
+  BUILD=false
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -103,6 +109,11 @@ if $BUILD && [[ -z "${WAKE_GRANT_IMAGE:-}" ]]; then
 fi
 
 IMAGE_REF=${WAKE_GRANT_IMAGE:-}
+if [[ -z "$IMAGE_REF" && "$DEPLOY_NO_BUILD" == "1" ]]; then
+  echo "no promoted digest for wakegrant: PR CI did not publish it for this tree and" >&2
+  echo "DEPLOY_NO_BUILD=1 forbids building it on the deployment runner (DECISIONS 36)." >&2
+  exit 1
+fi
 if [[ -z "$IMAGE_REF" ]]; then
   layout="$ROOT/bazel-bin/solutions/wakegrant/wakegrant_image"
   [[ -d "$layout" ]] || { echo "missing image layout $layout; build it first" >&2; exit 1; }

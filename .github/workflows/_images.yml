@@ -16,6 +16,11 @@ name: _images
 # with build provenance. The squash merge of that PR keeps the tree, so
 # `deploy-home` deploys exactly these images instead of rebuilding them.
 #
+# Every deploy job also publishes (or reuses) the deploy CLI image
+# `ghcr.io/proflyder/home-deploy` under the same tree tag. `deploy-home` extracts
+# the binary from that image, so the deployment runner never compiles
+# `home-deploy` itself.
+#
 # Fork pull requests and manual `workflow_dispatch` runs build only: their token
 # is read-only, so they never receive registry credentials and never push.
 #
@@ -330,6 +335,45 @@ jobs:
                 ;;
             esac
           done
+
+      # The deploy CLI image is a language-independent artifact: `deploy-home`
+      # extracts its binary from this image and never compiles the tool on a
+      # deployment runner. It is published for every affected deployable unit
+      # under the same tree tag, so every deploy has a verified, attested
+      # `home-deploy` digest regardless of which unit triggered it (DECISIONS
+      # 36). A unit whose own image list already contains `home-deploy`
+      # (scheduler, hermes) built and pushed it in the loop above.
+      - name: Publish the deploy CLI image
+        if: >-
+          inputs.push_tree_tag &&
+          (inputs.builder == 'bazel' || inputs.builder == 'mixed')
+        env:
+          TREE_TAG: ${{ steps.tree.outputs.tag }}
+          UNIT_IMAGES: ${{ inputs.images }}
+        run: |
+          set -euo pipefail
+          read -r -a images <<< "$UNIT_IMAGES"
+          for image in "${images[@]}"; do
+            if [[ "$image" == "home-deploy" ]]; then
+              echo "- \`home-deploy\`: already built with the unit"
+              exit 0
+            fi
+          done
+          target_root="//projects/home/kubernetes/scheduler"
+          package="${target_root#//}"
+          bazel build "${target_root}:home-deploy_image" \
+            --platforms=@rules_go//go/toolchain:linux_amd64
+          layout="bazel-bin/${package}/home-deploy_image"
+          digest=$("$HOME_DEPLOY" oci digest "$layout")
+          repo="ghcr.io/proflyder/home-deploy"
+          platform/ci/push-image.sh bazel \
+            --repository "$repo" \
+            --target "${target_root}:home-deploy_push" \
+            --digest "$digest" \
+            --tag "$TREE_TAG"
+          printf '%s=%s\n' home-deploy "$digest" >> "$RUNNER_TEMP/pushed.txt"
+          echo "- \`home-deploy\`: \`${repo}@${digest}\` (\`${TREE_TAG}\`)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
       # JSON list for the attestation matrix: [{"image":…, "digest":…}].
       - name: Collect pushed image digests

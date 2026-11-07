@@ -20,6 +20,7 @@ import {
   parseDigest,
   planNativePromotion,
   planPromotion,
+  readHistory,
   runPromotion,
   sameManifestContent,
   signerIdentityPattern,
@@ -56,6 +57,7 @@ function isDigestOf(ref, digest) {
 }
 
 const isCraneDigest = (command, args) => command === "crane" && args[0] === "digest";
+const isCraneLs = (command, args) => command === "crane" && args[0] === "ls";
 const isCraneTag = (command, args) => command === "crane" && args[0] === "tag";
 const isGhVerify = (command) => command === "gh";
 
@@ -165,6 +167,114 @@ test("a missing tree tag falls back to the build path", () => {
   assert.equal(result.decisions[0].status, "missing");
   assert.match(result.decisions[0].detail, /MANIFEST_UNKNOWN/);
   assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("readHistory parses first-parent commit/tree pairs newest-first", () => {
+  const older = "c".repeat(40);
+  const olderTree = "d".repeat(40);
+  const seen = [];
+  const exec = (command, args) => {
+    seen.push([command, ...args]);
+    return `${COMMIT} ${TREE}\n${older} ${olderTree}\n`;
+  };
+  assert.deepEqual(readHistory(exec, 25), [
+    { commit: COMMIT, tree: TREE },
+    { commit: older, tree: olderTree },
+  ]);
+  assert.deepEqual(seen[0], [
+    "git",
+    "log",
+    "--first-parent",
+    "-n25",
+    "--format=%H %T",
+    "HEAD",
+  ]);
+  assert.throws(() => readHistory(() => "not a pair\n"), /invalid history entry/);
+});
+
+test("history search finds the newest verified tree when the current tree has none", () => {
+  const olderCommit = "c".repeat(40);
+  const olderTree = "d".repeat(40);
+  const olderTag = `tree-${olderTree}`;
+  const ref = "ghcr.io/proflyder/scheduler";
+  const { calls, exec } = recorder([
+    // The registry has builds for the older tree only; the current tree and
+    // the even older tree have no tag.
+    [isCraneLs, `develop\nlatest\nsha-${olderCommit.slice(0, 12)}\n${olderTag}\n`],
+    [isDigestOf(`${ref}:tree-${TREE}`), new Error("MANIFEST_UNKNOWN: manifest unknown")],
+    [isDigestOf(`${ref}:${olderTag}`), DIGEST_A],
+    [isGhVerify, ""],
+    [isCraneTag, ""],
+    [isCraneDigest, DIGEST_A],
+  ]);
+
+  const result = planPromotion({
+    images: ["scheduler"],
+    tree: TREE,
+    commit: COMMIT,
+    repository: REPO,
+    exec,
+    // Newest first, as `readHistory` returns it: the current commit, then a
+    // commit whose tree was never built, then the built one.
+    history: [
+      { commit: COMMIT, tree: TREE },
+      { commit: "e".repeat(40), tree: "f".repeat(40) },
+      { commit: olderCommit, tree: olderTree },
+    ],
+    allowHistory: true,
+  });
+
+  assert.equal(result.mode, "prebuilt");
+  assert.deepEqual(result.digests, { scheduler: DIGEST_A });
+  assert.equal(result.decisions[0].status, "promoted");
+  assert.equal(result.decisions[0].source, olderCommit);
+  // The dispatch still tags the deployed commit and develop with that digest.
+  assert.deepEqual(tagsWritten(calls), [
+    ["crane", "tag", `${ref}@${DIGEST_A}`, COMMIT],
+    ["crane", "tag", `${ref}@${DIGEST_A}`, "develop"],
+  ]);
+  assert.match(formatSummary(result), new RegExp(`from ${olderCommit.slice(0, 12)}`));
+});
+
+test("sibling images resolve from history and are never tagged", () => {
+  const olderCommit = "c".repeat(40);
+  const olderTree = "d".repeat(40);
+  const olderTag = `tree-${olderTree}`;
+  const scheduler = "ghcr.io/proflyder/scheduler";
+  const bridge = "ghcr.io/proflyder/ha-bridge";
+  const { calls, exec } = recorder([
+    [isCraneLs, `${olderTag}\n`],
+    // The unit's own image is built for this tree.
+    [isDigestOf(`${scheduler}:tree-${TREE}`), DIGEST_A],
+    // The sibling is not; its newest verified build is the older tree.
+    [isDigestOf(`${bridge}:tree-${TREE}`), new Error("MANIFEST_UNKNOWN: manifest unknown")],
+    [isDigestOf(`${bridge}:${olderTag}`), DIGEST_B],
+    [isGhVerify, ""],
+    [isCraneTag, ""],
+    [isCraneDigest, DIGEST_A],
+  ]);
+
+  const result = planPromotion({
+    images: ["scheduler"],
+    optionalImages: ["ha-bridge"],
+    tree: TREE,
+    commit: COMMIT,
+    repository: REPO,
+    exec,
+    history: [{ commit: olderCommit, tree: olderTree }],
+  });
+
+  assert.equal(result.mode, "prebuilt");
+  assert.deepEqual(result.digests, { scheduler: DIGEST_A, "ha-bridge": DIGEST_B });
+  const sibling = result.decisions.find((decision) => decision.image === "ha-bridge");
+  assert.equal(sibling.status, "reused");
+  assert.equal(sibling.optional, true);
+  assert.equal(sibling.source, olderCommit);
+  // Only the unit's own image is retagged.
+  assert.deepEqual(
+    tagsWritten(calls).map((call) => call[2]),
+    [`${scheduler}@${DIGEST_A}`, `${scheduler}@${DIGEST_A}`],
+  );
 });
 
 test("failed provenance verification falls back and tags nothing", () => {
@@ -298,7 +408,7 @@ test("the workflow contract: promoted digests land in GITHUB_OUTPUT/ENV", () => 
   }
 });
 
-test("the fallback emits an empty digest list so the deploy builds", () => {
+test("an unavailable tree emits an empty digest list and mode=build (deploy refuses)", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "promote-"));
   const output = path.join(dir, "output");
   const envFile = path.join(dir, "env");
@@ -799,5 +909,5 @@ test("output formats carry the digest list and the chosen path", () => {
   assert.match(summary, /image promotion \(tree-/);
   assert.match(summary, /`scheduler`: missing — not found/);
   assert.match(summary, /path: `build`/);
-  assert.match(summary, /fallback: not every image/);
+  assert.match(summary, /not deployable: not every image/);
 });

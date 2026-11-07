@@ -106,6 +106,9 @@ export class Unit {
         // Deployable units own container images and Kubernetes workloads. An
         // empty `deployImages` means "this unit is not deployed by deploy-home".
         deployImages: [],
+        // Images the unit's deploy script renders but does not own/apply; they
+        // are resolved from the newest verified build, not from this change.
+        deployOptionalImages: [],
         deployWorkloads: [],
         deployBuilder: "bazel",
         // Bazel package that owns the `<image>_image`/`<image>_push` targets
@@ -230,6 +233,7 @@ export function normalizeConfig(data, label = "units") {
       nativeToolchainRoot: String(nativeToolchain.root ?? ""),
       dependsOn: list(raw.depends_on),
       deployImages: list(deploy.images),
+      deployOptionalImages: list(deploy.optional_images),
       deployWorkloads: list(deploy.workloads),
       deployBuilder: String(deploy.builder ?? "bazel"),
       deployTargetRoot: String(deploy.target_root ?? ""),
@@ -1663,6 +1667,7 @@ export function deployEntries(route_, config) {
     entries.push({
       id: unit.id,
       images: space(unit.deployImages),
+      optional_images: space(unit.deployOptionalImages),
       workloads: space(unit.deployWorkloads),
       builder: unit.deployBuilder,
       target_root: unit.deployTargetRoot,

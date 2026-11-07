@@ -260,6 +260,12 @@ export const config = {
         builder: "bazel",
         target_root: "//projects/home/kubernetes/scheduler",
         images: ["scheduler", "home-deploy"],
+        // The shared scheduler deploy script also renders ha-bridge and
+        // ha-control (it never applies them for this unit). They are not this
+        // unit's artifact, so deploy-home resolves them from the newest
+        // verified build instead of requiring a tree tag for this change or
+        // reading the live cluster.
+        optional_images: ["ha-bridge", "ha-control"],
         workloads: ["scheduler"],
         namespace: "home-assistant",
         script: "projects/home/kubernetes/scheduler/deploy.sh",
@@ -448,6 +454,10 @@ export const config = {
         builder: "bazel",
         target_root: "//projects/home/kubernetes/scheduler",
         images: ["ha-bridge", "ha-control"],
+        // The shared script renders the scheduler too; this unit never applies
+        // it, so its image comes from the newest verified build (see the
+        // scheduler unit's comment).
+        optional_images: ["scheduler"],
         workloads: ["ha-bridge", "ha-control"],
         namespace: "home-assistant",
         script: "projects/home/kubernetes/scheduler/deploy.sh",

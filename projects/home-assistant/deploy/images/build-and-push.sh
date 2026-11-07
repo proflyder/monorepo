@@ -30,7 +30,9 @@
 # `PREBUILT_DIGESTS` / `PREBUILT_DIGESTS_FILE` carry the digests `deploy-home`
 # verified and promoted from the pull-request build (DECISIONS 36). Those images
 # are neither rebuilt nor pushed here; the digest is only recorded for the
-# rollout. Local/manual runs set nothing and behave exactly as before.
+# rollout. `DEPLOY_NO_BUILD=1` (set by deploy-home) makes a missing promoted
+# digest a hard error: the deployment runner never builds. Local/manual runs set
+# neither variable and behave exactly as before.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -124,6 +126,11 @@ for image in "$@"; do
     record_digest "$image" "$prebuilt"
     echo "using prebuilt ${REGISTRY}/${image}@${prebuilt} (tags already promoted)"
     continue
+  fi
+  if [[ "${DEPLOY_NO_BUILD:-0}" == "1" ]]; then
+    echo "no promoted digest for ${image}: PR CI did not publish it for this tree and" >&2
+    echo "DEPLOY_NO_BUILD=1 forbids building it on the deployment runner (DECISIONS 36)." >&2
+    exit 1
   fi
   case "$image" in
     voice-proxy)

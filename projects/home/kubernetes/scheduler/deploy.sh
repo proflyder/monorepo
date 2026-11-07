@@ -40,6 +40,10 @@
 #                   `home-deploy` image that runs the in-cluster preflight Job.
 #   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
 #                   pull-request build (DECISIONS 36); an explicit *_IMAGE wins
+#   DEPLOY_NO_BUILD=1  CI mode: never build or push. Every image comes from
+#                   deploy-home's promotion: this unit's images from the current
+#                   tree, the sibling workloads from the newest verified build
+#                   in history; a missing digest fails the deploy.
 #   SKIP_FIREWALL=1 no longer needed: the NodePort filter is host configuration
 set -euo pipefail
 
@@ -56,6 +60,12 @@ RENDER_DIR="$ROOT/secrets/local/rendered/scheduler"
 MODE=preserve
 CONTROL_MODE=preserve
 BUILD=true
+# CI sets DEPLOY_NO_BUILD=1: the artifacts come from PR CI (promoted digests or
+# the live Deployment), never from a build on the deployment runner.
+DEPLOY_NO_BUILD=${DEPLOY_NO_BUILD:-0}
+if [[ "$DEPLOY_NO_BUILD" == "1" ]]; then
+  BUILD=false
+fi
 ONLY=${ONLY:-all}
 PUSH_IMAGES=${PUSH_IMAGES:-0}
 # Registry namespace for PUSH_IMAGES. Overridable so the push path can be
@@ -199,7 +209,8 @@ image_var() {
 
 # Build only the images that are not already resolved. CI promotes the digests a
 # green pull request already built (PREBUILT_DIGESTS) and the regression test
-# pins them via the *_IMAGE variables, so neither path runs Bazel here.
+# pins them via the *_IMAGE variables, so neither path runs Bazel here. With
+# DEPLOY_NO_BUILD=1 the build is disabled entirely.
 if $BUILD; then
   build_needed=false
   for image in scheduler ha-bridge ha-control home-deploy; do
@@ -263,6 +274,16 @@ resolve_image() {
     set_image_ref "$name" "${IMAGE_REGISTRY}/${name}@${prebuilt}"
     echo "== image ${name}: prebuilt ${IMAGE_REGISTRY}/${name}@${prebuilt}"
     return
+  fi
+  if [[ "$DEPLOY_NO_BUILD" == "1" ]]; then
+    # Every image this script needs is resolved by deploy-home's promotion:
+    # its own images from the current tree and the sibling workloads from the
+    # newest verified build in history. A gap is a CI/promotion problem, never
+    # a reason to compile here.
+    echo "no promoted digest for '$name': PR CI did not publish it and the history" >&2
+    echo "search did not find a verified build. DEPLOY_NO_BUILD=1 forbids building it" >&2
+    echo "on the deployment runner (DECISIONS 36)." >&2
+    exit 1
   fi
   [[ -d "$layout" ]] || {
     echo "missing image layout $layout; build it or set $var" >&2

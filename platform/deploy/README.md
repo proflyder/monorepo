@@ -39,10 +39,13 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
 `bazel-bin` после `bazel build` → `bazel run //platform/deploy/cmd/home-deploy --`
 (Bazelisk — из `mise install`).
 
-CI собирает бинарник один раз на job (`bazel build
-//platform/deploy/cmd/home-deploy`) и экспортирует `HOME_DEPLOY`. На node, где
-запускается `nft/apply.sh`, нужен уже установленный бинарник (например
-`/usr/local/bin/home-deploy`) или `HOME_DEPLOY`.
+`deploy-home` не компилирует инструмент: он достаёт бинарник из промоутнутого
+OCI-образа `ghcr.io/proflyder/home-deploy` (`crane export`, путь
+`/usr/local/bin/home-deploy`) и экспортирует `HOME_DEPLOY`. Контракт — образ,
+а не язык: Go-бинарник сегодня и `platform/deploy-rs` после переезда.
+`DEPLOY_NO_BUILD=1` в CI также запрещает запасные пути `bazel-bin` и `bazel
+run`. На node, где запускается `nft/apply.sh`, нужен уже установленный бинарник
+(например `/usr/local/bin/home-deploy`) или `HOME_DEPLOY`.
 
 ## Команды
 

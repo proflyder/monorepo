@@ -53,7 +53,14 @@ case "$args" in
   *"get deployment scheduler -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"scheduler","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-control -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-control","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-bridge -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-bridge","image":"old"}]}}}}'; exit 0 ;;
-  *"get deployment ha-control"*) exit "${MOCK_CONTROL_EXISTS:-0}" ;;
+  *"get deployment ha-control"*)
+    # A missing Deployment answers like the real API server: state record only
+    # treats an explicit NotFound as "absent" and fails closed on anything else.
+    if [[ "${MOCK_CONTROL_EXISTS:-0}" != "0" ]]; then
+      echo 'Error from server (NotFound): deployments.apps "ha-control" not found' >&2
+      exit 1
+    fi
+    exit 0 ;;
   *"get deployment ha-bridge"*) exit 0 ;;
   *"get externalsecret"*) printf '%s' 'True'; exit 0 ;;
   *"get secret"*) exit 0 ;;
@@ -166,7 +173,34 @@ grep -q "image home-deploy: prebuilt ghcr.io/proflyder/home-deploy@sha256:1111" 
 grep -q "push" "$BAZEL_LOG" && fail "prebuilt images were pushed again"
 unset PREBUILT_DIGESTS
 
-# 7. A malformed or duplicated value must fail closed, before any cluster call.
+# 7. DEPLOY_NO_BUILD=1 (deploy-home) never builds: every image, including the
+#    sibling workloads, arrives as a promoted digest.
+export DEPLOY_NO_BUILD=1
+export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})"
+: > "$BAZEL_LOG"
+: > "$CALL_LOG"
+PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
+  cat "$TMP/out"
+  fail "deploy.sh failed in DEPLOY_NO_BUILD mode"
+}
+[[ ! -s "$BAZEL_LOG" ]] || fail "DEPLOY_NO_BUILD=1 still built or ran Bazel"
+grep -q "image ha-bridge: prebuilt ghcr.io/proflyder/ha-bridge@sha256:eeee" "$TMP/out" \
+  || fail "ha-bridge did not use its promoted digest"
+
+# 8. A missing promoted digest fails closed instead of building.
+: > "$CALL_LOG"
+set +e
+PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})" \
+  PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1
+rc=$?
+set -e
+[[ $rc -ne 0 ]] || fail "DEPLOY_NO_BUILD=1 with a missing image was accepted"
+grep -q "no promoted digest for 'ha-bridge'" "$TMP/out" \
+  || fail "missing promoted digest did not produce an actionable error"
+grep -q "replace -f" "$CALL_LOG" && fail "a failed resolution still touched the cluster"
+unset DEPLOY_NO_BUILD PREBUILT_DIGESTS
+
+# 9. A malformed or duplicated value must fail closed, before any cluster call.
 for bad in \
   "scheduler=sha256:short" \
   "scheduler=$(printf 'a%.0s' {1..64})" \
