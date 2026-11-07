@@ -53,13 +53,6 @@ GO: Path
 TRACE_INDEX = 0
 
 SKIP_REASONS = {
-    "converge-create": "converge is not ported yet",
-    "converge-manifest-wins": "converge is not ported yet",
-    "converge-drift-preserve": "converge is not ported yet",
-    "converge-support-objects": "converge is not ported yet",
-    "state-record": "state is not ported yet",
-    "state-record-absent": "state is not ported yet",
-    "state-mark": "state is not ported yet",
 }
 
 
@@ -772,6 +765,8 @@ def generate_state() -> None:
     install_fakes(directory)
     write_input(directory, "live.json", '{"metadata":{"name":"scheduler","generation":3},"spec":{}}')
     (directory / "state").mkdir()
+    # Git does not track empty directories; keep the state dir in the fixture.
+    (directory / "state/.keep").write_text("")
     record(
         directory,
         "state-record",
@@ -788,6 +783,8 @@ def generate_state() -> None:
     directory = fresh("state-record-absent")
     install_fakes(directory)
     (directory / "state").mkdir()
+    # Git does not track empty directories; keep the state dir in the fixture.
+    (directory / "state/.keep").write_text("")
     record(
         directory,
         "state-record-absent",
@@ -804,14 +801,14 @@ def generate_state() -> None:
     directory = fresh("state-record-get-error")
     install_fakes(directory)
     (directory / "state").mkdir()
+    # Git does not track empty directories; keep the state dir in the fixture.
+    (directory / "state/.keep").write_text("")
     record(
         directory,
         "state-record-get-error",
         ["state", "record", "--state-dir", "state", "--namespace", "home-assistant", "--name", "scheduler", "--kubectl", "fakes/kubectl"],
         env={"TRACE_DIR": "trace", "FAKE_GET_FAIL": "1"},
         manifest_env={"TRACE_DIR": "trace", "FAKE_GET_FAIL": "1"},
-        status="skip",
-        reason="state.* is not ported yet",
     )
     outputs = []
     write_trace_outputs(directory, "state-record-get-error", outputs)
@@ -819,6 +816,8 @@ def generate_state() -> None:
 
     directory = fresh("state-mark")
     (directory / "state").mkdir()
+    # Git does not track empty directories; keep the state dir in the fixture.
+    (directory / "state/.keep").write_text("")
     record(directory, "state-mark", ["state", "mark", "--state-dir", "state", "--name", "scheduler"])
     outputs = []
     freeze_file(directory, "state/scheduler.applied", outputs)
@@ -828,6 +827,8 @@ def generate_state() -> None:
     directory = fresh("state-rollback")
     install_fakes(directory)
     (directory / "state").mkdir()
+    # Git does not track empty directories; keep the state dir in the fixture.
+    (directory / "state/.keep").write_text("")
     write_input(
         directory,
         "state/scheduler.before.json",
@@ -849,8 +850,6 @@ def generate_state() -> None:
         ["state", "rollback", "--state-dir", "state", "--namespace", "home-assistant", "--kubectl", "fakes/kubectl"],
         env={"TRACE_DIR": "trace"},
         manifest_env={"TRACE_DIR": "trace"},
-        status="skip",
-        reason="state.* is not ported yet",
     )
     outputs = []
     write_trace_outputs(directory, "state-rollback", outputs)
@@ -860,6 +859,8 @@ def generate_state() -> None:
     directory = fresh("state-rollback-absent")
     install_fakes(directory)
     (directory / "state").mkdir()
+    # Git does not track empty directories; keep the state dir in the fixture.
+    (directory / "state/.keep").write_text("")
     (directory / "state/ha-bridge.absent").write_text("")
     (directory / "state/ha-bridge.applied").write_text("")
     record(
@@ -868,8 +869,6 @@ def generate_state() -> None:
         ["state", "rollback", "--state-dir", "state", "--namespace", "home-assistant", "--kubectl", "fakes/kubectl"],
         env={"TRACE_DIR": "trace"},
         manifest_env={"TRACE_DIR": "trace"},
-        status="skip",
-        reason="state.* is not ported yet",
     )
     outputs = []
     write_trace_outputs(directory, "state-rollback-absent", outputs)
@@ -1042,6 +1041,8 @@ def generate_hermes() -> None:
         write_input(directory, "smoke-log.json", '{"ok":true,"speech":"Готово.","status":200}\n')
         write_input(directory, "voice-log.txt", "")
         (directory / "state").mkdir()
+    # Git does not track empty directories; keep the state dir in the fixture.
+    (directory / "state/.keep").write_text("")
 
     env = {
         "TRACE_DIR": "trace",

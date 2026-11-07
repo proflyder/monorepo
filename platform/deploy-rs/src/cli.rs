@@ -10,11 +10,12 @@ use std::io::Write;
 
 use clap::{Arg, ArgAction, Command, error::ErrorKind};
 
+use crate::process::SystemRunner;
 use crate::render::{self, Options};
-use crate::{USAGE, buildid, envfile, manifests, oci, runtimevalues};
+use crate::{USAGE, buildid, converge, envfile, manifests, oci, runtimevalues, state};
 
 /// Commands that are declared but not ported yet.
-const NOT_IMPLEMENTED: &[&str] = &["converge", "state", "preflight", "hermes"];
+const NOT_IMPLEMENTED: &[&str] = &["preflight", "hermes"];
 
 /// Every top-level command, used to keep the Go binary's "unknown command"
 /// response (full usage plus one line) instead of clap's shorter message.
@@ -133,6 +134,8 @@ fn dispatch(
         Some(("env", sub)) => run_env(sub, stdout),
         Some(("build-id", sub)) => run_build_id(sub, stdout),
         Some(("oci", sub)) => run_oci(sub, stdout),
+        Some(("converge", sub)) => run_converge(sub, stdout),
+        Some(("state", sub)) => run_state(sub, stdout),
         Some(("runtime", sub)) => run_runtime(sub, stdout),
         Some(("eso", sub)) => run_eso(sub, stdout),
         Some(("secret", sub)) => run_secret(sub, stdout),
@@ -252,6 +255,99 @@ fn run_oci(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Fai
     let digest = build(layout, reference, output).map_err(Failure::new)?;
     let _ = writeln!(stdout, "{digest}");
     Ok(())
+}
+
+fn run_converge(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let kubectl = matches
+        .get_one::<String>("kubectl")
+        .map_or("kubectl", String::as_str);
+    let namespace = matches
+        .get_one::<String>("namespace")
+        .map_or("home-assistant", String::as_str);
+    let name = matches.get_one::<String>("name").map_or("", String::as_str);
+    let file = matches.get_one::<String>("file").map_or("", String::as_str);
+    let summary_file = matches
+        .get_one::<String>("summary-file")
+        .map_or("", String::as_str);
+    if name.is_empty() {
+        return Err(Failure::new("converge: --name is required"));
+    }
+    if file.is_empty() {
+        return Err(Failure::new("converge: --file is required"));
+    }
+    let runner = SystemRunner::new(kubectl);
+    let message = converge::converge(
+        &converge::Options {
+            namespace,
+            name,
+            file,
+            preserve_replicas: matches.get_flag("preserve-replicas"),
+            preserve_env: matches.get_flag("preserve-env"),
+            summary_file,
+        },
+        &runner,
+    )
+    .map_err(Failure::new)?;
+    let _ = writeln!(stdout, "{message}");
+    Ok(())
+}
+
+fn run_state(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let Some((command, sub)) = matches.subcommand() else {
+        return Err(Failure::new(
+            "usage: home-deploy state record|mark|rollback ...",
+        ));
+    };
+    let state_dir = sub
+        .get_one::<String>("state-dir")
+        .map_or("", String::as_str);
+    match command {
+        "record" => {
+            let name = sub.get_one::<String>("name").map_or("", String::as_str);
+            if state_dir.is_empty() || name.is_empty() {
+                return Err(Failure::new(
+                    "state record: --state-dir and --name are required",
+                ));
+            }
+            let namespace = sub
+                .get_one::<String>("namespace")
+                .map_or("home-assistant", String::as_str);
+            let kubectl = sub
+                .get_one::<String>("kubectl")
+                .map_or("kubectl", String::as_str);
+            state::record(state_dir, namespace, name, &SystemRunner::new(kubectl))
+                .map_err(Failure::new)?;
+            Ok(())
+        }
+        "mark" => {
+            let name = sub.get_one::<String>("name").map_or("", String::as_str);
+            if state_dir.is_empty() || name.is_empty() {
+                return Err(Failure::new(
+                    "state mark: --state-dir and --name are required",
+                ));
+            }
+            state::mark(state_dir, name).map_err(Failure::new)?;
+            Ok(())
+        }
+        "rollback" => {
+            if state_dir.is_empty() {
+                return Err(Failure::new("state rollback: --state-dir is required"));
+            }
+            let namespace = sub
+                .get_one::<String>("namespace")
+                .map_or("home-assistant", String::as_str);
+            let kubectl = sub
+                .get_one::<String>("kubectl")
+                .map_or("kubectl", String::as_str);
+            for message in state::rollback(state_dir, namespace, &SystemRunner::new(kubectl)) {
+                let _ = writeln!(stdout, "{message}");
+            }
+            Ok(())
+        }
+        other => Err(Failure::new(format!(
+            "unknown state command {other:?} (expected record, mark or rollback)"
+        ))),
+    }
 }
 
 fn run_runtime(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {

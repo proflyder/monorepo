@@ -91,6 +91,56 @@ impl Value {
     pub fn is_sequence(&self) -> bool {
         matches!(self, Self::Seq(_))
     }
+
+    /// Converts to `serde_json::Value` (the converge/state object model).
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        match self {
+            Self::Null => serde_json::Value::Null,
+            Self::Bool(value) => serde_json::Value::Bool(*value),
+            Self::Int(value) => serde_json::Value::Number((*value).into()),
+            Self::Float(value) => serde_json::Number::from_f64(*value)
+                .map_or(serde_json::Value::Null, serde_json::Value::Number),
+            Self::Str(value) => serde_json::Value::String(value.clone()),
+            Self::Seq(items) => serde_json::Value::Array(items.iter().map(Self::to_json).collect()),
+            Self::Map(entries) => serde_json::Value::Object(
+                entries
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.to_json()))
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Converts from `serde_json::Value`. Object keys come out sorted, which is
+    /// what `yaml.Marshal` does for Go maps.
+    #[must_use]
+    pub fn from_json(value: &serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Null => Self::Null,
+            serde_json::Value::Bool(value) => Self::Bool(*value),
+            serde_json::Value::Number(number) => {
+                if let Some(value) = number.as_i64() {
+                    return Self::Int(value);
+                }
+                if let Some(value) = number.as_u64() {
+                    return i64::try_from(value)
+                        .map_or_else(|_| Self::Float(value as f64), Self::Int);
+                }
+                Self::Float(number.as_f64().unwrap_or(0.0))
+            }
+            serde_json::Value::String(value) => Self::Str(value.clone()),
+            serde_json::Value::Array(items) => {
+                Self::Seq(items.iter().map(Self::from_json).collect())
+            }
+            serde_json::Value::Object(entries) => Self::Map(
+                entries
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Self::from_json(value)))
+                    .collect(),
+            ),
+        }
+    }
 }
 
 /// Parses every YAML document in `raw`, matching `yaml.NewDecoder` + loop.
