@@ -515,6 +515,9 @@ export const config = {
     // ----------------------------------------------------------- Android --------
     // One unit per application; shared Kotlin libraries are their own units and
     // reach applications through the Bazel graph, not through path globs.
+    // Android build tools (platform/android/tools) are Kotlin `kt_jvm_test`
+    // targets; they are part of `android_tests`, so the Android app unit
+    // exercises the toolchain it runs.
     // `android-app` also has the Android build inputs of PR App Distribution in
     // `ci.yml` (job `android-distribute`). That job follows `android_distribute`
     // from `affected.mjs`: real `projects/mobile/android/**`, `packages/kotlin/**`

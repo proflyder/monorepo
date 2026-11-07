@@ -24,6 +24,15 @@ test("check_units: tracked source/test files need an owner", () => {
   }
 });
 
+test("check_units: Kotlin Android build tools are routed to the android platform", () => {
+  const config = affected.loadConfig();
+  const tool =
+    "platform/android/tools/gen_view_binding/src/main/kotlin/dev/proflyder/home/tools/genviewbinding/Main.kt";
+  assert.equal(checkUnits.needsOwner(tool), true);
+  assert.deepEqual(checkUnits.coverageProblems(config, [tool]), []);
+  assert.ok(config.byPlatform("android").some((unit) => unit.id === "android-app"));
+});
+
 test("check_units: schema rejects duplicate ids and unknown platforms", () => {
   const config = new affected.Config({
     units: [
