@@ -44,6 +44,61 @@ impl ConfigError {
     }
 }
 
+/// Registry values before validation. `None` means absent or unreadable; the
+/// validation ladder names the first required field that is missing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(not(any(windows, test)), allow(dead_code))] // constructed by the registry loader
+pub(crate) struct RawConfig {
+    service_url: Option<String>,
+    machine: Option<String>,
+    user: Option<String>,
+    domain: Option<String>,
+    /// `Disabled=1` means "do nothing at all"; absent means enabled.
+    disabled: Option<u32>,
+}
+
+/// Reason for log lines: `registry_value_invalid:<field>` keeps the name of
+/// the first failing field, as the installer contract documents.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))] // used by the registry loader
+fn value_invalid(field: &str) -> ConfigError {
+    ConfigError::Invalid(format!("registry_value_invalid:{field}"))
+}
+
+/// Validates raw registry values. `Disabled` is checked before the URL and the
+/// other required values, so a disabled provider logs `disabled` even when the
+/// rest of the key is broken. `FailCount` (and `Disabled` itself) may be absent:
+/// both are counters/switch values that default to 0.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))] // called by the registry loader
+pub(crate) fn resolve_config(raw: &RawConfig) -> Result<Config, ConfigError> {
+    if raw.disabled.unwrap_or(0) != 0 {
+        return Err(ConfigError::Disabled);
+    }
+    let service_url = raw
+        .service_url
+        .as_deref()
+        .ok_or_else(|| value_invalid("ServiceUrl"))?;
+    let machine = raw
+        .machine
+        .as_deref()
+        .ok_or_else(|| value_invalid("Machine"))?;
+    let user = raw
+        .user
+        .as_deref()
+        .ok_or_else(|| value_invalid("UserName"))?;
+    let domain = raw
+        .domain
+        .as_deref()
+        .ok_or_else(|| value_invalid("Domain"))?;
+    let service_url = validate_config(service_url, machine, user, domain)
+        .map_err(|detail| ConfigError::Invalid(detail.detail().to_owned()))?;
+    Ok(Config {
+        service_url,
+        machine: machine.to_owned(),
+        user: user.to_owned(),
+        domain: domain.to_owned(),
+    })
+}
+
 /// Next stored `FailCount`; saturates at 1000 like `RecordFailedLogon`.
 pub fn next_fail_count(count: u32) -> u32 {
     if count < 1000 { count + 1 } else { count }
@@ -103,8 +158,6 @@ mod imp {
     use crate::wide::WideNul;
 
     use wakegrant_protocol::{MachineSecret, parse_secret_json};
-
-    use super::validate_config;
 
     use zeroize::Zeroize;
 
@@ -172,7 +225,9 @@ mod imp {
         Ok(Some(utf8_from_wide(&buffer[..units])))
     }
 
-    fn read_dword(key: HKEY, name: PCWSTR) -> Result<u32, ()> {
+    /// `Ok(Some(value))` when present, `Ok(None)` when absent, `Err(())` when
+    /// the value exists but is unreadable or has the wrong type.
+    fn read_dword_value(key: HKEY, name: PCWSTR) -> Result<Option<u32>, ()> {
         let mut value = 0u32;
         let mut bytes = size_of::<u32>() as u32;
         // SAFETY: `value` is a valid DWORD-sized out-parameter for
@@ -189,12 +244,12 @@ mod imp {
             )
         };
         if status == ERROR_FILE_NOT_FOUND {
-            return Ok(0);
+            return Ok(None);
         }
         if status != ERROR_SUCCESS {
             return Err(());
         }
-        Ok(value)
+        Ok(Some(value))
     }
 
     fn close_key(key: HKEY) {
@@ -204,22 +259,10 @@ mod imp {
         }
     }
 
-    /// Reads one required `REG_SZ` value, recording
-    /// `registry_value_invalid:<field>` on a missing or malformed value (the
-    /// validation ladder keeps the name of the first failing field).
-    fn value_invalid(field: &str) -> ConfigError {
-        ConfigError::Invalid(format!("registry_value_invalid:{field}"))
-    }
-
-    fn required_string(key: HKEY, name: PCWSTR, field: &str) -> Result<String, ConfigError> {
-        read_string(key, name)
-            .ok()
-            .flatten()
-            .ok_or_else(|| value_invalid(field))
-    }
-
-    fn required_dword(key: HKEY, name: PCWSTR, field: &str) -> Result<u32, ConfigError> {
-        read_dword(key, name).map_err(|()| value_invalid(field))
+    /// Reads an optional `REG_SZ` value; a missing or malformed value is
+    /// `None`, which the validation ladder reports by field name.
+    fn optional_string(key: HKEY, name: PCWSTR) -> Option<String> {
+        read_string(key, name).ok().flatten()
     }
 
     /// Reads and validates the registry configuration.
@@ -240,29 +283,30 @@ mod imp {
             return Err(ConfigError::Invalid("registry_key_missing".to_owned()));
         }
 
-        let values = (|| {
-            let service_url = required_string(key, w!("ServiceUrl"), "ServiceUrl")?;
-            let machine = required_string(key, w!("Machine"), "Machine")?;
-            let user = required_string(key, w!("UserName"), "UserName")?;
-            let domain = required_string(key, w!("Domain"), "Domain")?;
-            let disabled = required_dword(key, w!("Disabled"), "Disabled")?;
-            let _fail_count = required_dword(key, w!("FailCount"), "FailCount")?;
-            Ok::<_, ConfigError>((service_url, machine, user, domain, disabled))
-        })();
+        // Absent `Disabled` means 0. A present but unreadable value is still an
+        // error: it must not silently change the operator's switch.
+        let Ok(disabled) = read_dword_value(key, w!("Disabled")) else {
+            close_key(key);
+            return Err(super::value_invalid("Disabled"));
+        };
+        let raw = super::RawConfig {
+            service_url: optional_string(key, w!("ServiceUrl")),
+            machine: optional_string(key, w!("Machine")),
+            user: optional_string(key, w!("UserName")),
+            domain: optional_string(key, w!("Domain")),
+            disabled,
+        };
+        // `Disabled` and the required fields decide first; only a configuration
+        // the provider would actually use is checked for a bad `FailCount`
+        // (absent is 0, a present value of the wrong type is invalid).
+        let resolved = super::resolve_config(&raw);
+        let fail_count_invalid =
+            resolved.is_ok() && read_dword_value(key, w!("FailCount")).is_err();
         close_key(key);
-
-        let (service_url, machine, user, domain, disabled) = values?;
-        let service_url = validate_config(&service_url, &machine, &user, &domain)
-            .map_err(|detail| ConfigError::Invalid(detail.detail().to_owned()))?;
-        if disabled != 0 {
-            return Err(ConfigError::Disabled);
+        if fail_count_invalid {
+            return Err(super::value_invalid("FailCount"));
         }
-        Ok(Config {
-            service_url,
-            machine,
-            user,
-            domain,
-        })
+        resolved
     }
 
     /// Reads, DPAPI-decrypts and parses the secret file. `Err` carries a short
@@ -367,12 +411,21 @@ mod imp {
             return (0, false);
         }
 
-        let (Ok(fail_count), Ok(disabled)) = (
-            read_dword(key, w!("FailCount")),
-            read_dword(key, w!("Disabled")),
-        ) else {
-            close_key(key);
-            return (0, false);
+        let fail_count = match read_dword_value(key, w!("FailCount")) {
+            Ok(Some(value)) => value,
+            Ok(None) => 0,
+            Err(()) => {
+                close_key(key);
+                return (0, false);
+            }
+        };
+        let disabled = match read_dword_value(key, w!("Disabled")) {
+            Ok(Some(value)) => value,
+            Ok(None) => 0,
+            Err(()) => {
+                close_key(key);
+                return (0, false);
+            }
         };
         let (count, disabled) = super::updated_fail_state(fail_count, disabled);
 
@@ -419,6 +472,46 @@ mod tests {
         assert_eq!(updated_fail_state(2, 0), (3, 1));
         assert_eq!(updated_fail_state(3, 0), (4, 1));
         assert_eq!(updated_fail_state(10, 1), (11, 1));
+    }
+
+    #[test]
+    fn missing_optional_values_keep_the_configuration_valid() {
+        let raw = RawConfig {
+            service_url: Some("http://192.0.2.27:30130".to_owned()),
+            machine: Some("komp".to_owned()),
+            user: Some("pl".to_owned()),
+            domain: Some(".".to_owned()),
+            disabled: None,
+        };
+        let config = resolve_config(&raw).expect("counters are optional");
+        assert_eq!(config.machine, "komp");
+        assert_eq!(config.service_url, "http://192.0.2.27:30130");
+    }
+
+    #[test]
+    fn disabled_is_checked_before_the_url() {
+        let raw = RawConfig {
+            service_url: Some("not a url".to_owned()),
+            disabled: Some(1),
+            ..RawConfig::default()
+        };
+        assert_eq!(resolve_config(&raw), Err(ConfigError::Disabled));
+    }
+
+    #[test]
+    fn a_missing_required_value_names_its_field() {
+        let raw = RawConfig {
+            machine: Some("komp".to_owned()),
+            user: Some("pl".to_owned()),
+            domain: Some(".".to_owned()),
+            ..RawConfig::default()
+        };
+        assert_eq!(
+            resolve_config(&raw),
+            Err(ConfigError::Invalid(
+                "registry_value_invalid:ServiceUrl".to_owned()
+            ))
+        );
     }
 
     #[test]

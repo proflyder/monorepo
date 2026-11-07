@@ -13,6 +13,9 @@ use crate::config::ServiceEndpoint;
 
 use crate::wide::WideNul;
 
+/// Default receive timeout for challenge and logon claim requests.
+pub const DEFAULT_RECEIVE_TIMEOUT_MS: i32 = 4000;
+
 /// One HTTP exchange. `Response` means the transport succeeded; any HTTP
 /// status is still a response, while `Transport` carries a log-safe reason.
 #[derive(Debug)]
@@ -54,7 +57,7 @@ pub(crate) fn request_targets(
 }
 
 #[cfg(windows)]
-pub use winhttp::{post_json, post_json_with_receive_timeout};
+pub use winhttp::post_json_with_receive_timeout;
 
 #[cfg(windows)]
 mod winhttp {
@@ -62,8 +65,10 @@ mod winhttp {
 
     use crate::bindings::Windows::Win32::Networking::WinHttp::{
         WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_DISABLE_COOKIES, WINHTTP_DISABLE_REDIRECTS,
-        WINHTTP_FLAG_SECURE, WINHTTP_OPEN_REQUEST_FLAGS, WINHTTP_OPTION_DISABLE_FEATURE,
-        WINHTTP_OPTION_REDIRECT_POLICY, WINHTTP_OPTION_REDIRECT_POLICY_NEVER,
+        WINHTTP_FLAG_SECURE, WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2,
+        WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3, WINHTTP_OPEN_REQUEST_FLAGS,
+        WINHTTP_OPTION_DISABLE_FEATURE, WINHTTP_OPTION_REDIRECT_POLICY,
+        WINHTTP_OPTION_REDIRECT_POLICY_NEVER, WINHTTP_OPTION_SECURE_PROTOCOLS,
         WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect,
         WinHttpOpen, WinHttpOpenRequest, WinHttpQueryDataAvailable, WinHttpQueryHeaders,
         WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetOption,
@@ -80,7 +85,6 @@ mod winhttp {
     const RESOLVE_TIMEOUT_MS: i32 = 2000;
     const CONNECT_TIMEOUT_MS: i32 = 2000;
     const SEND_TIMEOUT_MS: i32 = 4000;
-    const RECEIVE_TIMEOUT_MS: i32 = 4000;
     const MAX_RESPONSE_BYTES: usize = 16 * 1024;
     const USER_AGENT: &str = "RicardoKompLogon/1.0 (Windows LogonUI)";
     // The headers are passed with an explicit character count, so (unlike the
@@ -99,6 +103,30 @@ mod winhttp {
                 }
             }
         }
+    }
+
+    /// Restricts an https session to TLS 1.2 and 1.3, falling back to TLS 1.2
+    /// alone. Older Windows 10 builds reject the TLS 1.3 flag with
+    /// `ERROR_INVALID_PARAMETER`; if even TLS 1.2 cannot be set, the request
+    /// fails closed with a log-safe reason.
+    fn set_secure_protocols(session: *mut c_void) -> Result<(), &'static str> {
+        let both = (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3)
+            .to_le_bytes();
+        // SAFETY: `session` is an open WinHTTP session handle and the option
+        // buffer is a live DWORD.
+        if unsafe { WinHttpSetOption(Some(session), WINHTTP_OPTION_SECURE_PROTOCOLS, Some(&both)) }
+            .is_ok()
+        {
+            return Ok(());
+        }
+        let tls12 = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2.to_le_bytes();
+        // SAFETY: same session handle and a live DWORD buffer.
+        if unsafe { WinHttpSetOption(Some(session), WINHTTP_OPTION_SECURE_PROTOCOLS, Some(&tls12)) }
+            .is_ok()
+        {
+            return Ok(());
+        }
+        Err("tls_option_failed")
     }
 
     fn post_json_inner(
@@ -143,6 +171,14 @@ mod winhttp {
                 WINHTTP_OPTION_DISABLE_FEATURE,
                 Some(&disable),
             );
+        }
+
+        // TLS 1.2+ for https, as decided by the owner; plain `http://` is still
+        // accepted for the LAN and pinning is deliberately not done. WinHTTP
+        // keeps its normal certificate validation. The option only applies to
+        // the session handle, not to the request handle.
+        if endpoint.tls {
+            set_secure_protocols(session.0)?;
         }
 
         // SAFETY: `targets.host` is NUL-terminated by construction; `session` is
@@ -273,14 +309,10 @@ mod winhttp {
         Ok((status as i32, response))
     }
 
-    /// `POST path` with a JSON body and the documented 4 s receive timeout.
-    /// Never panics; every failure is a log-safe `Transport` value.
-    pub fn post_json(endpoint: &ServiceEndpoint, path: &str, body: &[u8]) -> HttpOutcome {
-        post_json_with_receive_timeout(endpoint, path, body, RECEIVE_TIMEOUT_MS)
-    }
-
-    /// Same as [`post_json`], with an explicit receive timeout for the unlock
-    /// long-poll claim. The send timeout stays at 4 s: the claim body is tiny.
+    /// `POST path` with a JSON body and an explicit receive timeout (4 s by
+    /// default, 35 s for the unlock long-poll claim). The send timeout stays at
+    /// 4 s: the claim body is tiny. Never panics; every failure is a log-safe
+    /// `Transport` value.
     pub fn post_json_with_receive_timeout(
         endpoint: &ServiceEndpoint,
         path: &str,

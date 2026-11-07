@@ -4,7 +4,9 @@
 //! exports are the contract in `README.md`, `PROTOCOL.md` and the install
 //! scripts. Portable modules run in host tests; Windows-only code is behind
 //! `#[cfg(windows)]` and uses the generated [`bindings`]. Every
-//! `extern "system"` boundary goes through [`ffi_guard::guard`].
+//! `extern "system"` boundary goes through [`ffi_guard::guard`], and every
+//! thread procedure through [`ffi_guard::guard_thread`], which also contains
+//! its cleanup.
 
 // The Bazel target renames the crate to `RicardoKompLogon.dll`.
 #![allow(non_snake_case)]
@@ -24,6 +26,7 @@ pub mod log;
 pub mod provider;
 pub mod sync;
 pub mod worker;
+pub mod worker_core;
 
 #[cfg(windows)]
 pub mod dll;

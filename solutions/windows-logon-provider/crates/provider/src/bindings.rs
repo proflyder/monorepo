@@ -617,6 +617,8 @@ pub mod Windows {
                 pub const WINHTTP_DISABLE_REDIRECTS: u32 = 2u32;
                 pub const WINHTTP_FLAG_SECURE: WINHTTP_OPEN_REQUEST_FLAGS =
                     WINHTTP_OPEN_REQUEST_FLAGS(8388608u32);
+                pub const WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2: u32 = 2048u32;
+                pub const WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3: u32 = 8192u32;
                 #[repr(transparent)]
                 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
                 pub struct WINHTTP_OPEN_REQUEST_FLAGS(pub u32);
@@ -656,6 +658,7 @@ pub mod Windows {
                 pub const WINHTTP_OPTION_DISABLE_FEATURE: u32 = 63u32;
                 pub const WINHTTP_OPTION_REDIRECT_POLICY: u32 = 88u32;
                 pub const WINHTTP_OPTION_REDIRECT_POLICY_NEVER: u32 = 0u32;
+                pub const WINHTTP_OPTION_SECURE_PROTOCOLS: u32 = 84u32;
                 pub const WINHTTP_QUERY_FLAG_NUMBER: u32 = 536870912u32;
                 pub const WINHTTP_QUERY_STATUS_CODE: u32 = 19u32;
             }

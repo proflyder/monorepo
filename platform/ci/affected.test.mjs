@@ -417,7 +417,7 @@ test("real repo: every known platform has a unit", () => {
   }
 });
 
-test("real repo: native provider change routes to its unit", () => {
+test("real repo: native provider change routes to its unit without publishing", () => {
   const config = affected.loadConfig();
   const result = withDeps({ goPackageDirs: () => new Set() }, () =>
     affected.route(config, ["solutions/windows-logon-provider/crates/provider/src/worker.rs"], {
@@ -434,7 +434,7 @@ test("real repo: native provider change routes to its unit", () => {
     {
       id: "logon-provider",
       kind: "script",
-      publish: true,
+      publish: false,
       publish_script: "solutions/windows-logon-provider/publish-oci.sh",
       publish_attest_glob: "RicardoKompLogon.dll",
       publish_repository: "ghcr.io/proflyder/windows-logon-provider",
@@ -498,32 +498,32 @@ test("real repo: pulsar change routes to the native pulsar unit", () => {
   ]);
 });
 
-test("real repo: pulsar publishes only when VERSION changed", () => {
+test("real repo: pulsar and the logon provider publish only when VERSION changed", () => {
   const config = affected.loadConfig();
-  const entryFor = (changed) => {
+  const entryFor = (changed, id) => {
     const result = withDeps({ goPackageDirs: () => new Set() }, () =>
       affected.route(config, changed, { root: REPO, base: "b" }),
     );
-    return affected.matrixEntries(result, config).native.find((item) => item.id === "pulsar");
+    return affected.matrixEntries(result, config).native.find((item) => item.id === id);
   };
   // A source change is PR CI only: the unit is built, but not published.
-  assert.equal(entryFor(["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"]).publish, false);
-  assert.equal(entryFor(["projects/station/pulsar/VERSION"]).publish, true);
+  assert.equal(entryFor(["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"], "pulsar").publish, false);
+  assert.equal(entryFor(["projects/station/pulsar/VERSION"], "pulsar").publish, true);
   // A global invalidation does not turn an unchanged VERSION into a release.
-  assert.equal(entryFor(["MODULE.bazel"]).publish, false);
-  // The logon provider has no publish_when: any affected change publishes it.
-  const logon = affected.loadConfig();
-  const result = withDeps({ goPackageDirs: () => new Set() }, () =>
-    affected.route(logon, ["solutions/windows-logon-provider/crates/provider/src/worker.rs"], {
-      root: REPO,
-      base: "b",
-    }),
+  assert.equal(entryFor(["MODULE.bazel"], "pulsar").publish, false);
+
+  // The logon provider follows the same release rule: source changes are
+  // verified in the PR, only a VERSION bump publishes.
+  assert.equal(
+    entryFor(["solutions/windows-logon-provider/crates/provider/src/worker.rs"], "logon-provider")
+      .publish,
+    false,
   );
   assert.equal(
-    affected.matrixEntries(result, logon).native.find((item) => item.id === "logon-provider")
-      .publish,
+    entryFor(["solutions/windows-logon-provider/VERSION"], "logon-provider").publish,
     true,
   );
+  assert.equal(entryFor(["MODULE.bazel"], "logon-provider").publish, false);
 });
 
 test("real repo: js worker change routes to its unit", () => {
