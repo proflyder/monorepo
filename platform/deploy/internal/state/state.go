@@ -37,8 +37,17 @@ import (
 
 // Record remembers the live Deployment name (or its absence) and clears the
 // applied marker. stateDir must already exist (deploy.sh recreates it).
+//
+// The probe is fail-closed: only a NotFound answer from the API server means
+// "the Deployment does not exist". A transient, authorization or transport
+// error aborts the record without writing a marker, because an `.absent`
+// marker written there would make a later rollback delete a live Deployment.
 func Record(stateDir, namespace, name string, run kube.Runner) error {
-	if result := run([]string{"-n", namespace, "get", "deployment", name}); result.Code != 0 {
+	result := run([]string{"-n", namespace, "get", "deployment", name})
+	if result.Code != 0 {
+		if !notFound(result.Stderr) {
+			return fmt.Errorf("%s: cannot record deployment: %s", name, strip(result.Stderr))
+		}
 		if err := os.WriteFile(marker(stateDir, name, ".absent"), nil, 0o644); err != nil {
 			return err
 		}
@@ -52,6 +61,15 @@ func Record(stateDir, namespace, name string, run kube.Runner) error {
 		}
 	}
 	return removeIfExists(marker(stateDir, name, ".applied"))
+}
+
+// notFound reports whether a failed `kubectl get` means the object is genuinely
+// absent. The API server and kubectl phrase it as `(NotFound)` and
+// `not found`; anything else (Forbidden, timeouts, connection errors) must not
+// be treated as an absent Deployment.
+func notFound(stderr string) bool {
+	lower := strings.ToLower(stderr)
+	return strings.Contains(lower, "notfound") || strings.Contains(lower, "not found")
 }
 
 // Mark records that the Deployment change was applied by this job.

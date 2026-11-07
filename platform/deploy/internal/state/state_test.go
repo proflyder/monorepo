@@ -244,7 +244,7 @@ func TestRecordAndMarkKeepTheMarkerContract(t *testing.T) {
 func TestRecordAbsentWritesTheAbsentMarker(t *testing.T) {
 	directory := t.TempDir()
 	run := func(args []string) kube.Result {
-		return kube.Result{Code: 1, Stderr: "not found"}
+		return kube.Result{Code: 1, Stderr: "Error from server (NotFound): deployments.apps \"scheduler\" not found"}
 	}
 	if err := Record(directory, "home-assistant", "scheduler", run); err != nil {
 		t.Fatalf("record: %v", err)
@@ -254,5 +254,32 @@ func TestRecordAbsentWritesTheAbsentMarker(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(directory, "scheduler.before.json")); !os.IsNotExist(err) {
 		t.Fatalf("no before marker expected for an absent Deployment: %v", err)
+	}
+}
+
+// TestRecordTransientGetErrorIsFailClosed covers a Forbidden/timeout/transport
+// error on the probe: it must not be mistaken for an absent Deployment, because
+// the `.absent` marker would make rollback delete the live object.
+func TestRecordTransientGetErrorIsFailClosed(t *testing.T) {
+	directory := t.TempDir()
+	calls := 0
+	run := func(args []string) kube.Result {
+		calls++
+		return kube.Result{Code: 1, Stderr: "Error from server (Forbidden): deployments.apps \"scheduler\" is forbidden"}
+	}
+	err := Record(directory, "home-assistant", "scheduler", run)
+	if err == nil {
+		t.Fatal("record must fail on a non-NotFound get error")
+	}
+	if !strings.Contains(err.Error(), "cannot record deployment") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("unexpected kubectl calls: %d", calls)
+	}
+	for _, suffix := range []string{".absent", ".before.json", ".applied"} {
+		if _, statErr := os.Stat(filepath.Join(directory, "scheduler"+suffix)); !os.IsNotExist(statErr) {
+			t.Fatalf("%s must not be written on a fail-closed error: %v", suffix, statErr)
+		}
 	}
 }
