@@ -62,7 +62,7 @@ kubectl -n home-assistant rollout status deployment/hermes --timeout=180s
 ```
 
 If the binary is not installed on the host, run it from a checkout:
-`bazel run //platform/deploy/cmd/home-deploy -- hermes render-config …`.
+`bazel run //platform/deploy-rs:home-deploy -- hermes render-config …`.
 
 `--private-values` is required on a live home.  The tracked fragment carries
 TEST-NET placeholders for the Home Assistant and Music Assistant endpoints;

@@ -31,7 +31,7 @@ name: deploy-home
 # The deploy CLI itself is not compiled here either: `HOME_DEPLOY` is extracted
 # from the promoted `ghcr.io/proflyder/home-deploy` image, which `_images.yml`
 # publishes for every affected deployable unit. That keeps the mechanism
-# independent of the language `home-deploy` is written in (Go today, Rust next).
+# independent of the language `home-deploy` is written in (the Rust crate today).
 #
 # A manual dispatch deploys the current `develop`, whose tree has no CI build
 # for units the last merged PR did not touch (the tree changes on every merge).
@@ -692,8 +692,7 @@ jobs:
 
       # The deploy CLI comes from the promoted image, not from a Bazel build on
       # the runner (DECISIONS 36). The contract is the image layout: the binary
-      # is /usr/local/bin/home-deploy whatever language builds it (Go today,
-      # platform/deploy-rs later).
+      # is /usr/local/bin/home-deploy, built from platform/deploy-rs today.
       - name: Extract the deploy CLI from the promoted image
         run: |
           set -euo pipefail

@@ -1,10 +1,10 @@
 # home-deploy (Rust port)
 
-Rust replacement for the Go `platform/deploy` command. It lives in
-`platform/deploy-rs/` until the cutover so a tooling-only change does not match
-every deploy unit's `platform/deploy/**` path; the Go binary remains the
-executable contract in the meantime. The cutover moves the crate to
-`platform/deploy` and the Go code is then deleted.
+Rust implementation of the `home-deploy` deploy CLI. Since the cutover this
+crate is the executable contract: `platform/deploy/resolve.sh`, the CI image
+and the in-cluster Jobs all use `//platform/deploy-rs:home-deploy`. The legacy
+Go implementation stays in `platform/deploy/` until a separate cleanup PR so a
+cutover problem can be reverted with one PR.
 
 ## Layout
 

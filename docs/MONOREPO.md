@@ -81,15 +81,15 @@ Go-реализации `scheduler`, `alarm`, `ha-bridge` и `currency-bot` уд
 | `projects/station/ble-gateway` | Rust (`zbus`, `tokio`, `rules_rust`) | прямой D-Bus без libdbus; члены общего корневого Cargo workspace, host-тесты и armhf-кросс через Bazel |
 | CI-обвязка (`platform/ci`, `platform/quality`) | JavaScript (`actions/github-script`, `node --test`) | Node из `mise.toml` (CI — `jdx/mise-action`), без pip; локально — `mise install` |
 | Bazel-инструменты Android (`platform/android/tools`) | Kotlin/JVM (`rules_kotlin`, exec-конфигурация) | герметичные `kt_jvm_binary` в песочнице Bazel, тот же язык, что и Android-приложение; тесты — JUnit `kt_jvm_test` |
-| `platform/deploy` (`home-deploy`) | Go (перенос на Rust идёт в `platform/deploy-rs`) | все инструменты деплоя и in-cluster Job — один distroless-бинарник, без Python в кластере (решение 35) |
+| `platform/deploy-rs` (`home-deploy`) | Rust (`rules_rust`, static musl) | все инструменты деплоя и in-cluster Job — один distroless-бинарник, без Python в кластере; Go-дерево `platform/deploy` оставлено для revert до cleanup-PR |
 | runtime health exporter | Rust (`projects/home-assistant/deploy/health-exporter/crates/health-exporter`) | как остальные сервисы |
 | задачи на хостах | shell / Python stdlib (короткая обвязка) или Go-бинарник (большая логика) | решение 35 |
 | ML wake-word, dev-утилиты станции, проверки YAML, live-e2e | Python | экосистема ML; в проде не исполняется |
 
 Rust — для долгоживущих сервисов (решение 41), станции и тяжёлых вычислений,
-Go — для инструментов деплоя, CronJob/Job и серверных Bazel-инструментов
-(решение 35), JavaScript — только для edge Worker, которому нужен runtime
-Cloudflare, а не общий backend-стек. Инструменты Android-сборки идут на языке
+Go — для CronJob/Job и серверных Bazel-инструментов (решение 35); инструменты
+деплоя перенесены на Rust (`platform/deploy-rs`). JavaScript — только для edge
+Worker, которому нужен runtime Cloudflare, а не общий backend-стек. Инструменты Android-сборки идут на языке
 Android-стека — Kotlin.
 Mobile не владеет расписанием и не заменяет серверные будильники.
 

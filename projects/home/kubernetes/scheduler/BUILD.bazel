@@ -28,29 +28,12 @@ rust_service_image(
 )
 
 # The cutover preflight Job runs the same `home-deploy` binary as the deploy
-# scripts, so the cluster never needs a Python image. It is built with the
-# scheduler unit (the Job belongs to that deploy) and promoted by the same
-# DECISIONS 36 digest path as the three service images above.
-service_image(
-    name = "home-deploy",
-    binary = "//platform/deploy/cmd/home-deploy",
-    repo = "ghcr.io/proflyder/home-deploy",
-)
-
-# Prepared cutover target: the same image built from the Rust port. It is not
-# part of `:images` yet. To switch, replace the Go `service_image` block above
-# with:
-#
-#   rust_service_image(
-#       name = "home-deploy",
-#       crate_binary = "//platform/deploy-rs:home-deploy",
-#       repo = "ghcr.io/proflyder/home-deploy",
-#   )
-#
-# and delete this `home-deploy-rust` block. Both macros put the binary at
-# /usr/local/bin/home-deploy, so manifests and the smoke Job do not change.
+# scripts, so the cluster never needs a Python image. It is built from the Rust
+# crate and promoted by the same DECISIONS 36 digest path as the three service
+# images above. The binary is /usr/local/bin/home-deploy, exactly where the
+# manifests and the Hermes smoke Job expect it.
 rust_service_image(
-    name = "home-deploy-rust",
+    name = "home-deploy",
     crate_binary = "//platform/deploy-rs:home-deploy",
     repo = "ghcr.io/proflyder/home-deploy",
 )

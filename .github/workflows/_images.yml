@@ -119,14 +119,14 @@ jobs:
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       # Build the deploy CLI once per job: the digest step below calls it instead
-      # of spawning Python. The binary path is rules_go's conventional
-      # `<target>_/<target>` output directory.
+      # of spawning Python. It is the Rust crate (rules_rust writes the binary at
+      # the target path).
       - name: Build deploy tooling
         if: inputs.builder == 'bazel' || inputs.builder == 'mixed'
         run: |
           set -euo pipefail
-          bazel build //platform/deploy/cmd/home-deploy
-          binary="bazel-bin/platform/deploy/cmd/home-deploy/home-deploy_/home-deploy"
+          bazel build //platform/deploy-rs:home-deploy
+          binary="bazel-bin/platform/deploy-rs/home-deploy"
           test -x "$binary" || { echo "missing $binary" >&2; exit 1; }
           echo "HOME_DEPLOY=$PWD/$binary" >> "$GITHUB_ENV"
 

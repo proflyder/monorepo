@@ -798,7 +798,7 @@ export function runPromotion({ args, exec, env = process.env, log = console.log 
   const repository = args.repository || env.GITHUB_REPOSITORY || "";
   const optionalImages = args.optionalImages || [];
   log(
-    `promoting ${args.images.join(", ")}` +
+    `promoting ${uniqueImages(args.images).join(", ")}` +
       `${optionalImages.length ? ` (+ siblings ${optionalImages.join(", ")})` : ""}` +
       ` for tree ${args.tree} (${repository})`,
   );
