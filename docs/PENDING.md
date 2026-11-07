@@ -9,13 +9,14 @@
 ## P2 — проверки и улучшения инфраструктуры
 
 - [ ] **Решение 41: оставшиеся шаги переноса на Rust.** Уже на Rust:
-      wakegrant, voice-proxy, scheduler, ha-bridge, ha-control. Выполнено:
-      контракт переименован в `home.v1` (Go-алиас не заводился); Android, HA,
-      ingress verify и preflight переведены на `home.v1`; Go-код scheduler,
-      ha-bridge/ha-control, `solutions/alarm` и `packages/go/scheduler`
-      удалён, golden-фикстуры перенесены в `solutions/scheduler/testdata` и
-      `solutions/ha-bridge/testdata` как замороженные данные. Остаются:
-      mcp-gateway, затем currency-bot.
+      wakegrant, voice-proxy, scheduler, ha-bridge, ha-control, currency-bot.
+      Выполнено: контракт переименован в `home.v1` (Go-алиас не заводился);
+      Android, HA, ingress verify и preflight переведены на `home.v1`;
+      Go-код scheduler, ha-bridge/ha-control, `solutions/alarm`,
+      `packages/go/scheduler` и `solutions/currency-bot/{cmd,internal}`
+      удалён, golden-фикстуры остаются в `solutions/scheduler/testdata`,
+      `solutions/ha-bridge/testdata` и `solutions/currency-bot/testdata` как
+      замороженные данные. Остаётся mcp-gateway.
 
 - [ ] **Bazel clippy не валит сборку на предупреждениях.** `rust_clippy_test`
       оставляет уровни `lint_config` предупреждениями. Следующий шаг:

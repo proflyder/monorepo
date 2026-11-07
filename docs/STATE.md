@@ -554,10 +554,13 @@
 
 ## Currency bot
 
-- `solutions/currency-bot` (Go) заменил Kotlin `tg-bot-currency` с тем же
-  поведением: парсер kurs.kz, часовой job в :00 UTC, алерты только при
-  порогах HOUR/DAY/WEEK/MONTH с dedup в `sent_alerts`, retention 35 дней,
-  команды `/start` `/help` `/trigger`.
+- `solutions/currency-bot` (Rust, крейт `crates/currency-bot`) заменил
+  Kotlin `tg-bot-currency` с тем же поведением: парсер kurs.kz, часовой job в
+  :00 UTC, алерты только при порогах HOUR/DAY/WEEK/MONTH с dedup в
+  `sent_alerts`, retention 35 дней, команды `/start` `/help` `/trigger`.
+  Go-код удалён при cutover; `testdata/` — замороженные контрактные данные,
+  которые Rust воспроизводит. Схема БД v1 и файл `/data/currency-bot.db`
+  совместимы с прежним образом, откат — предыдущий digest.
 - K3s namespace `currency-bot`: Deployment `currency-bot` (SQLite на PVC
   `currency-bot-data` 1 GiB `local-retain`, образ
   `ghcr.io/<owner>/currency-bot@sha256:…`) и Deployment `cloudflared`
@@ -578,8 +581,9 @@
   NetworkPolicies: 8081 только от cloudflared; egress cloudflared к Cloudflare
   `7844/udp` + `443/tcp` и DNS.
 - `/trigger` и `POST /api/trigger` всегда отправляют.
-- CI: юниты `currency-bot` (go + образ + deploy) и `currency-bot-deploy`
-  (contract-тест `deploy.sh`); deploy-env — `secret/ci/deploy-home`,
+- CI: юниты `currency-bot` (bazel: Rust crate, musl-образ, deploy) и
+  `currency-bot-deploy` (contract-тест `deploy.sh`); deploy-env —
+  `secret/ci/deploy-home`,
   ключ `currency_bot_env` (в нём должен появиться `CURRENCY_BOT_NODE_PORT`
   рядом с `WEBHOOK_URL`, `LAN_CIDR`, `NODE_LAN_IP`).
   Деплой `currency-bot` зелёный.

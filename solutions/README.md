@@ -9,7 +9,7 @@
 | `scheduler/` | Go | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect/gRPC | развёрнут |
 | `alarm/` | Go | совместимый entrypoint с именем `alarm` над тем же engine (`AlarmService` отдаёт и `scheduler`) | не развёрнут |
 | `ha-bridge/` | Go | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `cmd/ha-control` — каталог Home и очередь `control` | развёрнут |
-| `currency-bot/` | Go | курсы kurs.kz → SQLite, алерты и API; Telegram webhook | развёрнут |
+| `currency-bot/` | Rust | курсы kurs.kz → SQLite, алерты и API; Telegram webhook | развёрнут |
 | `mcp-gateway/` | Go | MCP Streamable HTTP шлюз: группы `infra.read`, `infra.fix`, `infra.report`; каталог сервисов из env | развёрнут |
 | `voice-proxy/` | Go | OpenAI-совместимый прокси перед LLM: делает ответы пригодными для Piper TTS | развёрнут |
 | `wakegrant/` | Go | одноразовые гранты входа для ПК, разбуженного HA (`packages/contracts/wakegrant`) | развёрнут |

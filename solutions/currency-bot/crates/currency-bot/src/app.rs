@@ -85,12 +85,18 @@ pub async fn run() -> anyhow::Result<()> {
         dispatch_inline: false,
     });
 
-    let api_listener = TcpListener::bind(&config.http_addr)
+    let http_addr = crate::config::normalize_listen(&config.http_addr)
+        .map_err(anyhow::Error::msg)
+        .context("HTTP_ADDR")?;
+    let webhook_addr = crate::config::normalize_listen(&config.webhook_addr)
+        .map_err(anyhow::Error::msg)
+        .context("WEBHOOK_ADDR")?;
+    let api_listener = TcpListener::bind(&http_addr)
         .await
-        .with_context(|| format!("bind {}", config.http_addr))?;
-    let webhook_listener = TcpListener::bind(&config.webhook_addr)
+        .with_context(|| format!("bind {http_addr}"))?;
+    let webhook_listener = TcpListener::bind(&webhook_addr)
         .await
-        .with_context(|| format!("bind {}", config.webhook_addr))?;
+        .with_context(|| format!("bind {webhook_addr}"))?;
     tracing::info!(
         service = "currency-bot",
         version = VERSION,

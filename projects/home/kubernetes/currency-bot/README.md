@@ -1,6 +1,6 @@
 # currency-bot deployment (home K3s)
 
-Telegram currency bot (`solutions/currency-bot`, Go) on the single-node
+Telegram currency bot (`solutions/currency-bot`, Rust) on the single-node
 `lab-k3s` cluster, with its SQLite history on a `local-retain` PVC and the
 Telegram webhook delivered through a Cloudflare Tunnel.
 
@@ -20,9 +20,9 @@ Telegram webhook delivered through a Cloudflare Tunnel.
   points at the tunnel with `allowed_updates=["message"]`.
 - LAN/VPN API `https://currency.home.<domain>/api/*` (Bearer, `home-allowlist`);
   `ServiceMonitor` scrapes `/metrics` (verified `up=1`).
-- CI units `currency-bot` (Go, image, deploy) and `currency-bot-deploy`
-  (deploy-script contract test) are green; the deploy env lives in OpenBao
-  `secret/ci/deploy-home` key `currency_bot_env`.
+- CI units `currency-bot` (Rust crate, musl image, deploy) and
+  `currency-bot-deploy` (deploy-script contract test) are green; the deploy env
+  lives in OpenBao `secret/ci/deploy-home` key `currency_bot_env`.
 - Observability: Alloy ships the namespace's logs with secret redaction and the
   Grafana dashboard `currency-bot` (uid `currency-bot`) is live.
 
