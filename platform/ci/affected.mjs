@@ -10,6 +10,11 @@
  *             names by `bazel.roots`, so a change in `packages/kotlin` selects
  *             only the applications that actually depend on it. This needs no
  *             JDK and no Android SDK because it never analyses targets.
+ *   bazel   - the same loading graph, plus `packages/rust/**` and the Cargo
+ *             lockfiles. Lock diffs are resolved to crate_universe aliases and
+ *             only their reverse dependencies run; `native` units and the
+ *             `hermes` deploy unit opt into the same closure through their
+ *             Bazel roots.
  *   MODULE.bazel - global, unless the diff only touches the Maven extension
  *             (`MODULE.bazel#maven` -> android), the Rust/zig/native station
  *             inputs (`MODULE.bazel#native` -> native + bazel) or both.
@@ -17,9 +22,13 @@
  *             (`.bazelrc#cache` -> no platform).
  *   platform/bazel/zig, platform/bazel/windows - the station/provider
  *             toolchains (`platform/bazel#native` -> native only).
+ *   Cargo.toml - precise only for `[workspace.dependencies]` backed by a
+ *             parseable lock diff; workspace members/profile/lints are global.
+ *   rust-toolchain.toml - all Rust units.
  *   python  - path rules plus optional declarative `depends_on`.
  *   js      - path rules for dependency-free edge Workers (runs `node --test`).
- *   native  - path rules for non-Bazel C/C++ repository-script builds.
+ *   native  - path rules for non-Bazel C/C++ repository-script builds, plus
+ *             the Bazel reverse dependencies of units that declare roots.
  *   quality - always runs.
  *
  * Any failure to compute a dependency closure degrades to "every unit of that
@@ -59,6 +68,11 @@ export class Unit {
         title: "",
         paths: [],
         bazelRoots: [],
+        // Roots used to map affected Bazel labels back to this unit. `bazelRoots`
+        // also lists `//packages/rust` for units that run the shared
+        // clippy/rustfmt targets; that root is deliberately excluded here so a
+        // home-ha edit does not select every unit that lints the shared layer.
+        routingRoots: [],
         testTargets: [],
         buildTargets: [],
         artifact: "",
@@ -193,13 +207,31 @@ export function normalizeConfig(data, label = "units") {
     const nativeToolchain = native.toolchain || {};
     const deploy = raw.deploy || {};
     const rollback = raw.rollback || {};
+    const bazelRoots = list(bazel.roots);
+    const testTargets = list(bazel.test_targets);
+    const routingRoots = list(bazel.routing_roots);
+    if (!routingRoots.length) {
+      const derived = bazelRoots.filter((root) => root !== "//packages/rust");
+      // A unit that explicitly tests a shared crate is its consumer even when
+      // its own source tree does not import it (e.g. ble-gateway tests the
+      // shared SQLite/HTTP crates). The broad `//packages/rust` clippy target is
+      // not a routing root; only the crate packages named in `test_targets` are.
+      for (const target of testTargets) {
+        const match = /^\/\/(packages\/rust\/[^/:]+):([^/]+)$/.exec(target);
+        if (match && !["clippy", "rustfmt"].includes(match[2])) {
+          derived.push(`//${match[1]}`);
+        }
+      }
+      routingRoots.push(...derived);
+    }
     return new Unit({
       id: raw.id,
       platform: raw.platform,
       title: raw.title ?? raw.id,
       paths: list(raw.paths),
-      bazelRoots: list(bazel.roots),
-      testTargets: list(bazel.test_targets),
+      bazelRoots,
+      routingRoots: [...new Set(routingRoots)],
+      testTargets,
       buildTargets: list(bazel.build_targets),
       artifact: bazel.artifact ?? "",
       artifactName: bazel.artifact_name ?? "",
@@ -974,6 +1006,597 @@ function scopeChanges(changed, root, base, head) {
 
 
 // --------------------------------------------------------------------------
+// Cargo workspace / crate_universe routing
+// --------------------------------------------------------------------------
+export const CARGO_MANIFEST = "Cargo.toml";
+export const CARGO_LOCK = "Cargo.lock";
+export const CRATE_UNIVERSE_LOCK = "crate-universe.lock";
+
+// Paths that make the Bazel graph decide Rust units instead of a path glob.
+// `packages/rust/**` seeds the graph by source file; the lockfiles seed it by
+// the crates whose resolved package entries changed.
+export function isRustGraphPath(filePath) {
+  return (
+    filePath === CARGO_MANIFEST ||
+    filePath === CARGO_LOCK ||
+    filePath === CRATE_UNIVERSE_LOCK ||
+    pathMatches(filePath, ["packages/rust/**"])
+  );
+}
+
+function isCargoInputPath(filePath) {
+  return (
+    filePath === CARGO_MANIFEST ||
+    filePath === CARGO_LOCK ||
+    filePath === CRATE_UNIVERSE_LOCK
+  );
+}
+
+function unquoteToml(value) {
+  const text = String(value).trim();
+  const double = /^"((?:[^"\\]|\\.)*)"$/.exec(text);
+  if (double) {
+    return double[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  const single = /^'([^']*)'$/.exec(text);
+  if (single) {
+    return single[1];
+  }
+  throw new Error(`unexpected TOML string: ${text.slice(0, 40)}`);
+}
+
+/**
+ * Parse the package records of a `Cargo.lock`.
+ *
+ * The router only needs `name`, `version`, `source`, `checksum` and
+ * `dependencies`. Anything unexpected throws, so the caller can fall back to
+ * "every Rust unit" rather than guess. That is the required fail-safe for a lock
+ * format change.
+ */
+export function parseCargoLock(text) {
+  if (typeof text !== "string" || !text.includes("[[package]]")) {
+    throw new Error("Cargo.lock: no [[package]] records");
+  }
+  const packages = new Map();
+  let current = null;
+  let inPackage = false;
+  let collecting = null;
+  const finish = () => {
+    if (!current) {
+      return;
+    }
+    if (!current.name || !current.version) {
+      throw new Error("Cargo.lock: a [[package]] record lacks name/version");
+    }
+    const key = `${current.name} ${current.version}`;
+    packages.set(key, {
+      name: current.name,
+      version: current.version,
+      source: current.source ?? null,
+      checksum: current.checksum ?? null,
+      dependencies: current.dependencies ?? [],
+    });
+    current = null;
+  };
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    if (line === "[[package]]") {
+      finish();
+      current = { dependencies: [] };
+      inPackage = true;
+      collecting = null;
+      continue;
+    }
+    if (/^\[[^\]]+\]$/.test(line)) {
+      // A non-package table (`[metadata]`) ends the current package.
+      finish();
+      inPackage = false;
+      collecting = null;
+      continue;
+    }
+    if (!inPackage || !current) {
+      continue;
+    }
+    if (collecting) {
+      collecting.push(line);
+      if (line.includes("]")) {
+        const value = collecting.join(" ");
+        current.dependencies = [...value.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((match) =>
+          match[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"),
+        );
+        collecting = null;
+      }
+      continue;
+    }
+    const eq = line.indexOf("=");
+    if (eq === -1) {
+      throw new Error(`Cargo.lock: unparseable line: ${line.slice(0, 60)}`);
+    }
+    const key = line.slice(0, eq).trim();
+    const value = line.slice(eq + 1).trim();
+    if (key === "dependencies") {
+      if (value.startsWith("[")) {
+        if (value.includes("]")) {
+          current.dependencies = [...value.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((match) =>
+            match[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"),
+          );
+        } else {
+          collecting = [value];
+        }
+      }
+      continue;
+    }
+    if (["name", "version", "source", "checksum"].includes(key)) {
+      current[key] = unquoteToml(value);
+    }
+  }
+  finish();
+  if (!packages.size) {
+    throw new Error("Cargo.lock: no packages parsed");
+  }
+  return packages;
+}
+
+function collectCrateUniverseDeps(value, out) {
+  if (!value) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (item && typeof item === "object" && item.id) {
+        out.add(String(item.id));
+      }
+    }
+    return;
+  }
+  if (typeof value === "object") {
+    for (const child of Object.values(value)) {
+      collectCrateUniverseDeps(child, out);
+    }
+  }
+}
+
+export function parseCrateUniverse(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`crate-universe.lock: ${error.message}`);
+  }
+  if (!data || typeof data !== "object" || !data.crates || typeof data.crates !== "object") {
+    throw new Error("crate-universe.lock: missing crates map");
+  }
+  const entries = new Map();
+  for (const [key, value] of Object.entries(data.crates)) {
+    if (!value || typeof value !== "object") {
+      throw new Error(`crate-universe.lock: invalid crate record ${key}`);
+    }
+    const deps = new Set();
+    collectCrateUniverseDeps(value.common_attrs?.deps, deps);
+    collectCrateUniverseDeps(value.common_attrs?.proc_macro_deps, deps);
+    collectCrateUniverseDeps(value.common_attrs?.build_deps, deps);
+    entries.set(key, {
+      name: String(value.name ?? key.split(" ")[0]),
+      version: String(value.version ?? key.split(" ")[1] ?? ""),
+      checksum: JSON.stringify(value.repository ?? null),
+      dependencies: [...deps],
+    });
+  }
+  const direct = new Set(
+    list(data.direct_deps).map((id) => String(id).split(/\s+/)[0]).filter(Boolean),
+  );
+  const workspaceMembers = new Map();
+  for (const [key, value] of Object.entries(data.workspace_members ?? {})) {
+    workspaceMembers.set(key, String(value));
+  }
+  return { entries, direct, workspaceMembers };
+}
+
+function sameSet(left, right) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const a = [...left].sort();
+  const b = [...right].sort();
+  return a.every((item, index) => item === b[index]);
+}
+
+function lockEntryChanged(left, right) {
+  return (
+    left.source !== right.source ||
+    left.checksum !== right.checksum ||
+    !sameSet(left.dependencies, right.dependencies)
+  );
+}
+
+function cargoLockEntryChanged(left, right, leftEntries, rightEntries) {
+  // Compare resolved package identities, not raw dependency strings: adding a
+  // second version of a crate makes Cargo spell an existing edge as
+  // `name version` even though the edge itself did not move (for example
+  // `ureq -> webpki-roots` vs `ureq -> webpki-roots 1.0.11`). Comparing the raw
+  // text would select every `ureq` consumer for an unrelated websocket bump.
+  const leftDeps = new Set();
+  const rightDeps = new Set();
+  for (const dependency of left.dependencies) {
+    for (const target of dependencyTargets(dependency, leftEntries)) {
+      leftDeps.add(target);
+    }
+  }
+  for (const dependency of right.dependencies) {
+    for (const target of dependencyTargets(dependency, rightEntries)) {
+      rightDeps.add(target);
+    }
+  }
+  return (
+    left.source !== right.source ||
+    left.checksum !== right.checksum ||
+    !sameSet([...leftDeps], [...rightDeps])
+  );
+}
+
+export function cargoLockChanges(baseText, headText) {
+  const base = parseCargoLock(baseText);
+  const head = parseCargoLock(headText);
+  const changed = new Set();
+  for (const key of new Set([...base.keys(), ...head.keys()])) {
+    const before = base.get(key);
+    const after = head.get(key);
+    if (!before || !after || cargoLockEntryChanged(before, after, base, head)) {
+      changed.add(key);
+    }
+  }
+  return changed;
+}
+
+export function crateUniverseChanges(base, head) {
+  // `base` and `head` are parsed crate-universe maps.
+  const changed = new Set();
+  for (const key of new Set([...base.entries.keys(), ...head.entries.keys()])) {
+    const before = base.entries.get(key);
+    const after = head.entries.get(key);
+    if (!before || !after || lockEntryChanged(before, after)) {
+      changed.add(key);
+    }
+  }
+  return changed;
+}
+
+function dependencyTargets(dependency, entries) {
+  if (entries.has(dependency)) {
+    return [dependency];
+  }
+  const name = dependency.split(/\s+/)[0];
+  return [...entries.keys()].filter((key) => entries.get(key).name === name);
+}
+
+function lockAncestors(keys, entries) {
+  const reverse = new Map();
+  for (const [key, entry] of entries) {
+    for (const dependency of entry.dependencies) {
+      for (const target of dependencyTargets(dependency, entries)) {
+        if (!reverse.has(target)) {
+          reverse.set(target, new Set());
+        }
+        reverse.get(target).add(key);
+      }
+    }
+  }
+  const seen = new Set();
+  const stack = [...keys];
+  while (stack.length) {
+    const key = stack.pop();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    for (const parent of reverse.get(key) ?? []) {
+      stack.push(parent);
+    }
+  }
+  return seen;
+}
+
+function resolveLockSeeds(changedKeys, baseEntries, headEntries, baseUniverse, headUniverse) {
+  // A changed crate is routed to the `@crates//:<name>` aliases it reaches.
+  // Transitive-only crates have no alias in the generated repo, so the reverse
+  // closure finds the direct dependency that imports them; the Bazel rdeps then
+  // walk from that alias to every real consumer.
+  //
+  // Every changed package must resolve to at least one alias or workspace path.
+  // Otherwise it would silently disappear from the selection; report it so the
+  // caller can fall back to every Rust unit.
+  const entryFor = (key) =>
+    headEntries?.get(key) ??
+    baseEntries?.get(key) ??
+    headUniverse?.entries.get(key) ??
+    baseUniverse?.entries.get(key) ??
+    null;
+  const direct = new Set([
+    ...(baseUniverse?.direct ?? []),
+    ...(headUniverse?.direct ?? []),
+  ]);
+  const labels = new Set();
+  const paths = new Set();
+  const unresolved = [];
+
+  const ancestorsFor = (key) => {
+    const ancestors = new Set();
+    for (const entries of [baseEntries, headEntries]) {
+      if (!entries?.has(key)) {
+        continue;
+      }
+      for (const item of lockAncestors([key], entries)) {
+        ancestors.add(item);
+      }
+    }
+    for (const universe of [baseUniverse, headUniverse]) {
+      if (!universe?.entries.has(key)) {
+        continue;
+      }
+      for (const item of lockAncestors([key], universe.entries)) {
+        ancestors.add(item);
+      }
+    }
+    return ancestors;
+  };
+
+  for (const key of changedKeys) {
+    const names = new Set();
+    for (const ancestor of ancestorsFor(key)) {
+      const entry = entryFor(ancestor);
+      if (entry) {
+        names.add(entry.name);
+      }
+    }
+    const own = entryFor(key);
+    if (own) {
+      names.add(own.name);
+    }
+    const keyLabels = [...names]
+      .filter((name) => direct.has(name))
+      .map((name) => `@crates//:${name}`);
+    const keyPaths = [];
+    for (const universe of [headUniverse, baseUniverse]) {
+      const memberPath = universe?.workspaceMembers.get(key);
+      if (memberPath) {
+        // Append a file name: `packageForPath` needs a directory with a BUILD
+        // file, not the directory itself (that would fall back to its parent).
+        keyPaths.push(`${memberPath}/Cargo.toml`);
+      }
+    }
+    for (const label of keyLabels) {
+      labels.add(label);
+    }
+    for (const path of keyPaths) {
+      paths.add(path);
+    }
+    if (!keyLabels.length && !keyPaths.length) {
+      unresolved.push(own ? `${own.name} ${own.version}` : key);
+    }
+  }
+
+  return {
+    labels: [...labels].sort(),
+    paths: [...paths].sort(),
+    unresolved: unresolved.sort(),
+  };
+}
+
+function stripTomlComment(line) {
+  let quote = null;
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote === '"') {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        quote = null;
+      }
+      continue;
+    }
+    if (quote === "'") {
+      if (char === "'") {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === "#") {
+      return line.slice(0, index);
+    }
+  }
+  return line;
+}
+
+function tomlSections(text) {
+  const sections = new Map();
+  const push = (name) => {
+    if (!sections.has(name)) {
+      sections.set(name, []);
+    }
+    return sections.get(name);
+  };
+  let current = "";
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = stripTomlComment(raw).trim();
+    if (!line) {
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      current = line.replace(/\s+/g, "");
+      push(current);
+      continue;
+    }
+    push(current).push(line);
+  }
+  return sections;
+}
+
+export function cargoTomlChangedSections(baseText, headText) {
+  const base = tomlSections(baseText);
+  const head = tomlSections(headText);
+  const changed = new Set();
+  for (const name of new Set([...base.keys(), ...head.keys()])) {
+    const before = (base.get(name) ?? []).join("\n");
+    const after = (head.get(name) ?? []).join("\n");
+    if (before !== after) {
+      changed.add(name || "(top level)");
+    }
+  }
+  return [...changed].sort();
+}
+
+function cargoScopeFailure(reason) {
+  return {
+    mode: "all",
+    labels: [],
+    paths: [],
+    warnings: [`Cargo routing fell back to every Rust unit: ${reason}`],
+  };
+}
+
+function analyzeCargo(root, base, head, changed) {
+  // Decide whether Cargo.toml/Cargo.lock/crate-universe.lock can be routed by
+  // their concrete crate changes, or must invalidate every Rust unit.
+  const manifestChanged = changed.includes(CARGO_MANIFEST);
+  const lockChanged = changed.includes(CARGO_LOCK);
+  const universeChanged = changed.includes(CRATE_UNIVERSE_LOCK);
+  if (!manifestChanged && !lockChanged && !universeChanged) {
+    return { mode: "none", labels: [], paths: [], warnings: [] };
+  }
+  if (!base) {
+    return cargoScopeFailure("no base revision");
+  }
+
+  const read = (revision, filePath) => internals.gitFileText(root, revision, filePath);
+  let baseCargo = null;
+  let headCargo = null;
+  let baseUniverseText = null;
+  let headUniverseText = null;
+  let manifestSections = [];
+
+  if (manifestChanged) {
+    baseCargo = read(base, CARGO_MANIFEST);
+    headCargo = read(head, CARGO_MANIFEST);
+    if (baseCargo === null || headCargo === null) {
+      return cargoScopeFailure("Cargo.toml was added or deleted");
+    }
+    manifestSections = cargoTomlChangedSections(baseCargo, headCargo);
+    if (manifestSections.some((section) => section !== "[workspace.dependencies]")) {
+      return cargoScopeFailure(
+        `Cargo.toml changed outside [workspace.dependencies]: ${manifestSections.join(", ")}`,
+      );
+    }
+  }
+
+  // A workspace-dependency edit can change features/default-features (and thus
+  // the compiled code) without moving Cargo.lock. Without a lock diff there is
+  // no crate to route, so keep this conservative.
+  if (manifestChanged && !lockChanged && !universeChanged) {
+    if (manifestSections.length) {
+      return cargoScopeFailure(
+        "Cargo.toml changed only in [workspace.dependencies] but no lockfile changed",
+      );
+    }
+    return {
+      mode: "precise",
+      labels: [],
+      paths: [],
+      warnings: ["Cargo.toml comment-only change; no Rust unit recompiles"],
+    };
+  }
+
+  let baseLockText = null;
+  let headLockText = null;
+  if (lockChanged) {
+    baseLockText = read(base, CARGO_LOCK);
+    headLockText = read(head, CARGO_LOCK);
+    if (baseLockText === null || headLockText === null) {
+      return cargoScopeFailure("Cargo.lock was added or deleted");
+    }
+  }
+  if (universeChanged || lockChanged || manifestChanged) {
+    baseUniverseText = read(base, CRATE_UNIVERSE_LOCK);
+    headUniverseText = read(head, CRATE_UNIVERSE_LOCK);
+    if (headUniverseText === null) {
+      return cargoScopeFailure("crate-universe.lock is missing at head");
+    }
+  }
+
+  try {
+    const baseUniverse = baseUniverseText ? parseCrateUniverse(baseUniverseText) : null;
+    const headUniverse = parseCrateUniverse(headUniverseText);
+    let changedKeys;
+    let baseEntries = null;
+    let headEntries = null;
+    if (lockChanged) {
+      baseEntries = parseCargoLock(baseLockText);
+      headEntries = parseCargoLock(headLockText);
+      changedKeys = cargoLockChanges(baseLockText, headLockText);
+    } else if (universeChanged) {
+      if (!baseUniverse) {
+        return cargoScopeFailure("crate-universe.lock was added");
+      }
+      changedKeys = crateUniverseChanges(baseUniverse, headUniverse);
+    } else {
+      // Defensive: the manifest-only case returned above, so a Cargo change
+      // without a lock diff must not silently route nothing.
+      return cargoScopeFailure("Cargo input changed without a lockfile diff");
+    }
+
+    const seeds = resolveLockSeeds(
+      changedKeys,
+      baseEntries,
+      headEntries,
+      baseUniverse,
+      headUniverse,
+    );
+    if (!changedKeys.size) {
+      return {
+        mode: "precise",
+        labels: [],
+        paths: [],
+        warnings: ["lockfiles changed without a package change; no Rust unit recompiles"],
+      };
+    }
+    const summary = [...changedKeys].sort().slice(0, 8).join(", ");
+    const more = changedKeys.size > 8 ? `, +${changedKeys.size - 8} more` : "";
+    if (seeds.unresolved.length) {
+      const unresolved = seeds.unresolved.slice(0, 8).join(", ");
+      const extra = seeds.unresolved.length > 8 ? `, +${seeds.unresolved.length - 8} more` : "";
+      return cargoScopeFailure(
+        `changed package(s) did not map to a crate alias or workspace path: ${unresolved}${extra}`,
+      );
+    }
+    if (!seeds.labels.length && !seeds.paths.length) {
+      return cargoScopeFailure(
+        `changed package(s) produced no Bazel seed: ${summary}${more}`,
+      );
+    }
+    return {
+      mode: "precise",
+      labels: seeds.labels,
+      paths: seeds.paths,
+      warnings: [
+        `lockfile diff (${changedKeys.size} package(s): ${summary}${more}); ` +
+          `routing to ${seeds.labels.length} crate alias(es)`,
+      ],
+    };
+  } catch (error) {
+    return cargoScopeFailure(error.message);
+  }
+}
+
+
+
+// --------------------------------------------------------------------------
 // Bazel loading graph
 // --------------------------------------------------------------------------
 export const BAZEL_GRAPH_QUERY = 'kind(".*", //...)';
@@ -1108,9 +1731,16 @@ export class BazelGraph {
     }
   }
 
-  affectedRules(changed) {
+  static isTestClass(ruleClass) {
+    return ruleClass === "test_suite" || /(^|_)tests?$/.test(ruleClass);
+  }
+
+  affectedRules(changed, extraSeeds = [], { includeTestRules = true } = {}) {
     const reverse = this.dependents();
     const seeds = new Set();
+    for (const label of extraSeeds) {
+      seeds.add(label);
+    }
     for (const filePath of changed) {
       const labels = this.labelsForPath(filePath);
       if (labels.size) {
@@ -1137,7 +1767,13 @@ export class BazelGraph {
         stack.push(dependent);
       }
     }
-    return new Set([...affected].filter((label) => Object.hasOwn(this.rules, label)));
+    return new Set(
+      [...affected].filter(
+        (label) =>
+          Object.hasOwn(this.rules, label) &&
+          (includeTestRules || !BazelGraph.isTestClass(this.rules[label])),
+      ),
+    );
   }
 }
 
@@ -1302,20 +1938,66 @@ function expandDependsOn(config, selected) {
   return config.units.filter((unit) => seen.has(unit.id));
 }
 
-function realpath(target) {
-  try {
-    return fs.realpathSync(target);
-  } catch {
-    return path.resolve(target);
-  }
+function labelUnderRoot(label, rootLabel) {
+  return (
+    label === rootLabel ||
+    label.startsWith(`${rootLabel}:`) ||
+    label.startsWith(`${rootLabel}/`)
+  );
 }
 
-function routePlatforms(config, changed, root, invalidated, graph, graphLoader, warnings) {
+function routePlatforms(
+  config,
+  changed,
+  root,
+  invalidated,
+  graph,
+  graphLoader,
+  warnings,
+  cargo = null,
+  includeTestTargets = true,
+) {
   // Select units per platform for the given invalidation set.
-  const changedDirs = new Set(
-    changed.filter(Boolean).map((item) => realpath(path.resolve(root, path.dirname(item)))),
-  );
   const routes = {};
+  const rustGraphRequested = changed.some(isRustGraphPath);
+  const cargoLabels = cargo?.mode === "precise" ? cargo.labels : [];
+  const cargoPaths = cargo?.mode === "precise" ? cargo.paths : [];
+  // Cargo.toml/Cargo.lock are not Bazel inputs; feeding them to the path index
+  // would fall back to the root package and select the whole repository.
+  const graphChanged = changed.filter((item) => !isCargoInputPath(item));
+  let graphAffected = null;
+  let graphFailure = null;
+
+  const ensureGraph = () => {
+    if (graphAffected) {
+      return graphAffected;
+    }
+    if (graphFailure) {
+      throw graphFailure;
+    }
+    try {
+      if (graph === null || graph === undefined) {
+        if (!graphLoader) {
+          throw new Error("no graph loader configured");
+        }
+        graph = graphLoader();
+      }
+      graphAffected = graph.affectedRules(
+        [...graphChanged, ...cargoPaths],
+        cargoLabels,
+        { includeTestRules: includeTestTargets },
+      );
+      return graphAffected;
+    } catch (error) {
+      graphFailure = error;
+      throw error;
+    }
+  };
+
+  const matchesRoutingRoots = (unit, labels) =>
+    [...labels].some((label) =>
+      unit.routingRoots.some((rootLabel) => labelUnderRoot(label, rootLabel)),
+    );
 
   // --- android / bazel: Bazel reverse dependencies ----------------------
   // `android` is the JDK/SDK application platform; `bazel` is a generic
@@ -1328,29 +2010,21 @@ function routePlatforms(config, changed, root, invalidated, graph, graphLoader, 
       bazelRoute.mode = "all";
       bazelRoute.units = [...units];
     } else {
-      const touched = changed.filter((item) =>
+      const touched = changed.some((item) =>
         units.some((unit) => pathMatches(item, unit.paths)),
       );
-      if (!touched.length) {
+      // Shared Rust inputs have no unit path of their own: they must reach the
+      // graph even when no bazel unit path matched.
+      const needsGraph = touched || (platform === "bazel" && rustGraphRequested);
+      if (!needsGraph) {
         bazelRoute.mode = "paths";
       } else {
         try {
-          if (graph === null || graph === undefined) {
-            if (!graphLoader) {
-              throw new Error("no graph loader configured");
-            }
-            graph = graphLoader();
-          }
-          const affected = graph.affectedRules(changed);
+          const affected = ensureGraph();
           for (const unit of units) {
             if (
               changed.some((item) => pathMatches(item, unit.paths)) ||
-              [...affected].some((label) =>
-                unit.bazelRoots.some(
-                  (rootLabel) =>
-                    label.startsWith(`${rootLabel}:`) || label.startsWith(`${rootLabel}/`),
-                ),
-              )
+              matchesRoutingRoots(unit, affected)
             ) {
               bazelRoute.units.push(unit);
             }
@@ -1368,14 +2042,37 @@ function routePlatforms(config, changed, root, invalidated, graph, graphLoader, 
     routes[platform] = bazelRoute;
   }
 
-  // --- python: declarative path rules ----------------------------------
+  // --- python: paths, plus Bazel image roots for shared Rust crates ------
   const pythonRoute = new PlatformRoute("python", "paths");
-  for (const unit of config.byPlatform("python")) {
-    if (invalidated.has(GLOBAL) || invalidated.has("python")) {
-      pythonRoute.units.push(unit);
-      pythonRoute.mode = "all";
-    } else if (changed.some((item) => pathMatches(item, unit.paths))) {
-      pythonRoute.units.push(unit);
+  const pythonUnits = config.byPlatform("python");
+  if (invalidated.has(GLOBAL) || invalidated.has("python")) {
+    pythonRoute.mode = "all";
+    pythonRoute.units = [...pythonUnits];
+  } else {
+    let pythonAffected = null;
+    let pythonFailed = false;
+    if (rustGraphRequested) {
+      try {
+        pythonAffected = ensureGraph();
+      } catch {
+        pythonFailed = true;
+      }
+    }
+    for (const unit of pythonUnits) {
+      if (changed.some((item) => pathMatches(item, unit.paths))) {
+        pythonRoute.units.push(unit);
+      } else if (rustGraphRequested && unit.routingRoots.length) {
+        // `hermes` owns the voice-proxy/health-exporter images; a shared crate
+        // that reaches either image must also select the deploy unit.
+        if (pythonFailed || matchesRoutingRoots(unit, pythonAffected)) {
+          pythonRoute.units.push(unit);
+        }
+      }
+    }
+    if (pythonFailed) {
+      pythonRoute.warnings.push(
+        `bazel graph failed (${graphFailure.message}); running every graph-aware python unit`,
+      );
     }
   }
   pythonRoute.units = expandDependsOn(config, pythonRoute.units);
@@ -1394,14 +2091,40 @@ function routePlatforms(config, changed, root, invalidated, graph, graphLoader, 
   jsRoute.units = expandDependsOn(config, jsRoute.units);
   routes.js = jsRoute;
 
-  // --- native: declarative path rules for non-Bazel C/C++ builds --------
+  // --- native: paths plus Bazel roots for shared Rust crates ------------
   const nativeRoute = new PlatformRoute("native", "paths");
-  for (const unit of config.byPlatform("native")) {
-    if (invalidated.has(GLOBAL) || invalidated.has("native")) {
-      nativeRoute.units.push(unit);
+  const nativeUnits = config.byPlatform("native");
+  if (invalidated.has(GLOBAL) || invalidated.has("native")) {
+    nativeRoute.mode = "all";
+    nativeRoute.units = [...nativeUnits];
+  } else {
+    let nativeAffected = null;
+    let nativeFailed = false;
+    if (rustGraphRequested) {
+      try {
+        nativeAffected = ensureGraph();
+      } catch {
+        nativeFailed = true;
+      }
+    }
+    for (const unit of nativeUnits) {
+      if (changed.some((item) => pathMatches(item, unit.paths))) {
+        nativeRoute.units.push(unit);
+      } else if (rustGraphRequested) {
+        if (!unit.routingRoots.length) {
+          // A native unit that cannot be expressed as a Bazel target keeps the
+          // conservative rule: any shared Rust/lock change selects it.
+          nativeRoute.units.push(unit);
+        } else if (nativeFailed || matchesRoutingRoots(unit, nativeAffected)) {
+          nativeRoute.units.push(unit);
+        }
+      }
+    }
+    if (nativeFailed) {
       nativeRoute.mode = "all";
-    } else if (changed.some((item) => pathMatches(item, unit.paths))) {
-      nativeRoute.units.push(unit);
+      nativeRoute.warnings.push(
+        `bazel graph failed (${graphFailure.message}); running every native unit`,
+      );
     }
   }
   nativeRoute.units = expandDependsOn(config, nativeRoute.units);
@@ -1428,8 +2151,14 @@ export function route(
   // Route changed paths onto units. Exposed for tests.
   const scoped = scopeChanges(changed, root, base, head);
   changed = scoped.changed;
+  const cargo = analyzeCargo(root, base, head, changed);
   const invalidated = invalidatedPlatforms(config, changed);
-  const warnings = [...scoped.warnings];
+  if (cargo.mode === "all") {
+    for (const platform of ["bazel", "native", "python"]) {
+      invalidated.add(platform);
+    }
+  }
+  const warnings = [...scoped.warnings, ...cargo.warnings];
   const routes = routePlatforms(
     config,
     changed,
@@ -1438,6 +2167,7 @@ export function route(
     graph,
     graphLoader,
     warnings,
+    cargo,
   );
 
   // Deploy selection ignores `deploy: false` invalidations. CI keeps running
@@ -1446,11 +2176,21 @@ export function route(
   // invalidation covers the same platforms, the CI selection is already the
   // deploy selection and no second pass is needed.
   const deployInvalidated = invalidatedPlatforms(config, changed, true);
+  if (cargo.mode === "all") {
+    for (const platform of ["bazel", "native", "python"]) {
+      deployInvalidated.add(platform);
+    }
+  }
   let deploySelected;
   const samePlatforms =
     deployInvalidated.size === invalidated.size &&
     [...deployInvalidated].every((platform) => invalidated.has(platform));
-  if (samePlatforms) {
+  // A Rust test target (for example mcp-gateway's voice contract test) may
+  // depend on a shared crate without its deployed image changing. CI still
+  // runs it, but deploy selection drops test-only rules so a pure crate change
+  // cannot roll an unrelated service.
+  const deployNeedsPrecisePass = changed.some(isRustGraphPath) && cargo.mode !== "all";
+  if (samePlatforms && !deployNeedsPrecisePass) {
     deploySelected = new Set(
       Object.values(routes).flatMap((platformRoute) =>
         platformRoute.units.map((unit) => unit.id),
@@ -1465,6 +2205,8 @@ export function route(
       graph,
       graphLoader,
       warnings,
+      cargo,
+      false,
     );
     deploySelected = new Set(
       Object.values(deployRoutes).flatMap((platformRoute) =>

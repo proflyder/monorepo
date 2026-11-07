@@ -365,7 +365,7 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
 * `invalidations` — пути, которые валят больше юнитов, чем совпало по `paths`
   (`MODULE.bazel`, `MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
   `BUILD.bazel`, toolchain-файлы → все платформы; `platform/android/**` →
-  все android-юниты;
+  все android-юниты; `rust-toolchain.toml` → native + bazel;
   `requirements-test.txt` → python+quality). Флаг `deploy: false` оставляет
   правило только для CI: правка workflow или `platform/ci/**` перезапускает
   проверки, но `deploy-home` не выкатывает юнит, выбранный лишь таким
@@ -426,9 +426,9 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
 | Платформа | Источник зависимостей | Пример |
 |---|---|---|
 | android | обратные зависимости Bazel (`bazel query --output=xml`, loading phase) | правка `packages/kotlin/core` выбирает `kotlin-shared` и только те приложения, что от него зависят |
-| bazel | те же обратные зависимости Bazel, что у android | правка `projects/station/pulsar/satellite/crates/pulsar-core` выбирает `pulsar-bazel` |
-| python | пути юнита (+ `depends_on`) | правка `projects/home/proxmox/**` выбирает `proxmox` |
-| native | пути юнита | правка `solutions/windows-logon-provider/**` выбирает `logon-provider` |
+| bazel | те же обратные зависимости Bazel, что у android; общие Rust-крейты и `Cargo.lock` выбираются по rdeps | правка `packages/rust/home-ha` выбирает `ha-bridge` и `voice-proxy`, но не `scheduler`/`pulsar-bazel` |
+| python | пути юнита (+ `depends_on`), а для `hermes` ещё и rdeps его Bazel-образов | правка `home-tls` выбирает `hermes` через `health-exporter` |
+| native | пути юнита; `pulsar` и `logon-provider` дополнительно по rdeps своих Bazel-корней | правка `wakegrant-protocol` выбирает `logon-provider`, правка `home-runtime` — `pulsar` |
 | quality | всегда | audit/Gitleaks/shellcheck идут на любом изменении |
 
 Android-граф берётся из loading-фазы намеренно: он не требует JDK и Android
@@ -438,6 +438,34 @@ SDK, поэтому маршрутизация дешёвая и не может
 удалённого файла или правки `BUILD.bazel`/`.bzl` берётся весь пакет — это
 безопасное over-approximation.
 
+### Общие Rust-входы: `packages/rust`, `Cargo.lock`, `crate-universe.lock`
+
+`packages/rust/**` не валидирует все Rust-юниты. Изменённый файл попадает в
+Bazel-граф как source input, и юнит выбирается, только если затронутая цель
+лежит под его routing-корнем. `//packages/rust` как общий корень для
+clippy/rustfmt исключён: иначе правка одного крейта выбирала бы каждый юнит,
+который линтует общий слой. Юнит, который явно тестирует крейт
+(`test_targets` вида `//packages/rust/<crate>:unit_tests`), получает
+`//packages/rust/<crate>` в routing-корни.
+
+`Cargo.lock` и `crate-universe.lock` сравниваются между base и head как TOML
+(`[[package]]`: name/version/source/checksum/dependencies) и JSON
+(`crates`/`direct_deps`/`workspace_members`). Изменёнными считаются
+добавленные, удалённые пакеты и пакеты с другой версией, checksum или списком
+зависимостей. Для них строится обратное замыкание по графу зависимостей:
+* прямой крейт → `@crates//:<name>` (alias crate_universe);
+* транзитивный крейт без alias → ближайший прямой предок, от которого Bazel
+  rdeps уже доходят до реальных потребителей;
+* изменённый workspace-member → его путь, чтобы выбрать сам крейт.
+Затем берутся rdeps в графе Bazel. `Cargo.toml` сужается только если дифф
+затрагивает исключительно `[workspace.dependencies]` и есть разбираемый
+lock-diff; `[workspace] members`, `[profile]`, `[workspace.lints]`, правка
+`[workspace.dependencies]` без изменения lock (могли поменяться
+`features`/`default-features`), неразбираемый/добавленный/удалённый lock,
+изменённый пакет без alias/workspace-пути или ошибка Bazel — «все Rust-юниты»
+(native + bazel, а для deploy ещё и graph-aware python). `rust-toolchain.toml`
+всегда «все Rust-юниты».
+
 ### Fallback: только «больше», никогда «ничего»
 
 * `MODULE.bazel`/`MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
@@ -445,7 +473,9 @@ SDK, поэтому маршрутизация дешёвая и не может
   юниты; исключения — scoped-диффы, описанные выше: `MODULE.bazel#maven` →
   только android, `MODULE.bazel#native` → native + pulsar-bazel,
   `.bazelrc#cache` → ни одной платформы, `platform/bazel#native` → native;
-* `bazel query` упал → все android и bazel юниты;
+* `bazel query` упал → все android, bazel и native юниты (и graph-aware
+  python-юнит `hermes`); ошибка разбора `Cargo.lock`/`crate-universe.lock`
+  откатывает к тому же «все Rust-юниты»;
 * база не определена (новый push, `workflow_dispatch`) → все юниты
   (`affected.mjs --all`);
 * база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
