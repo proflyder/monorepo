@@ -79,9 +79,9 @@
     `native.publish_when` пускает его в `native_units` на push только при
     изменении VERSION; прочие изменения Pulsar — только PR CI. `native-release`
     продвигает проверенный PR-артефакт `tree-<hash>` на
-    `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`) или при
-    missing/unverified собирает и публикует заново (решение 36); GitHub
-    Releases и теги в монорепо не используются.
+    `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`); при
+    missing/unverified деплой падает и ничего не собирает (решение 36).
+    GitHub Releases и теги в монорепо не используются.
     Выкатка на станцию — job `deploy-station` после ручного approve в
     Environment `Station`, через VPN группу `ci` и OIDC в OpenBao
     (`deploy-station`), затем HA `update.install`; job проверяет
@@ -227,9 +227,9 @@
     `gh attestation verify`; build provenance создаётся для digest артефакта
     (`push-to-registry`) и для DLL. PR из этого репозитория публикует
     release-shaped артефакт под `tree-<hash>` (build once), а push в
-    `develop` продвигает проверенный digest на теги `VERSION` и `sha-<12>`
-    либо пересобирает при missing/unverified (решение 36); форки не
-    публикуют. GitHub Releases отклонены (монорепозиторий смешал бы продукты
+    `develop` продвигает проверенный digest на теги `VERSION` и `sha-<12>`;
+    при missing/unverified деплой падает, ничего не собирая (решение 36);
+    форки не публикуют. GitHub Releases отклонены (монорепозиторий смешал бы продукты
     в одном потоке релизов), Maven/NuGet — тоже (даже публичное чтение
     требует авторизации). Новый пакет GHCR может создаться приватным:
     публичность включается один раз в GitHub UI (Package settings → Change
@@ -343,9 +343,12 @@
       VERSION». `latest` двигается всегда, но на digest тега версии: если
       версия сохранена, `latest` указывает на сохранённый digest, поэтому
       `latest` и `<version>` согласованы, а `deploy-station` ставит именно
-      `<version>`. При отсутствии/непроверенном tree — обычная сборка и
-      публикация, путь `build` с пометкой fallback в summary. `deploy-station`
-      ставит версию и проверяет digest'ы слоёв.
+      `<version>`. При отсутствии/непроверенном tree job падает с подсказкой
+      перезапустить PR CI: `deploy-home` не собирает и не публикует
+      native-артефакт. История для native не применяется (в отличие от
+      образов): релизный артефакт — это и есть релиз, и старый tree нельзя
+      перетегировать как текущий `VERSION`. `deploy-station` только ставит
+      версию через HA и проверяет digest'ы слоёв; сборки в нём нет.
     * Любой job, который пишет в GHCR (`crane tag`/`crane push`, `oras
       push`/`oras tag`, `promote.mjs`, `push-to-registry`), логинится в
       `ghcr.io` до первой записи. Публичные пакеты читаются анонимно, поэтому
@@ -368,8 +371,9 @@
       (`latest`, `vX.Y.Z`/`X.Y.Z`, `sha-<12>`) сохраняются, устаревшие
       `tree-*`-only удаляются через 7 дней.
     * Docker-образы тоже обязаны быть воспроизводимыми: одинаковые входы —
-      один digest, иначе fallback-сборка (`deploy-home` без `tree-*`)
-      перекатывает pod без изменения кода. Hermes собирается
+      один digest, иначе две сборки одной ревизии разойдутся, и деплой
+      промоутнутого PR-образа будет отличаться от локальной проверки. Hermes
+      собирается
       `projects/home-assistant/deploy/images/hermes/build.sh` с базовыми
       образами по digest, apt из `snapshot.debian.org` на дату базового тега,
       `SOURCE_DATE_EPOCH` = время upstream-коммита и Buildx

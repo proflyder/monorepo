@@ -1043,14 +1043,15 @@ export const config = {
     // daemon and installer are cross-built with Bazel, radio/ssh use their
     // own scripts. A same-repo PR publishes the
     // release-shaped OCI artifact under `tree-<hash>` with provenance; a push
-    // to `develop` promotes that digest to the release tags (deploy-home) or
-    // rebuilds on a missing/unverified tree tag (DECISIONS 36).
+    // to `develop` only promotes that digest to the release tags (deploy-home)
+    // and fails on a missing/unverified tree tag (DECISIONS 36). The deploy
+    // path never builds or publishes.
     //
     // `publish_when` narrows publication to a release trigger: the unit is
     // still built and tested by PR CI on every path change, but deploy-home
-    // builds/publishes it only when one of these paths changed. Without it a
-    // unit is publishable on any affected change. `publish_script` owns the
-    // registry contract; `publish_attest_glob` is the artifact file (or glob)
+    // promotes it only when one of these paths changed. Without it a unit is
+    // releasable on any affected change. `publish_script` owns the registry
+    // contract; `publish_attest_glob` is the artifact file (or glob)
     // whose build provenance is attested next to the pushed manifest.
     //
     // `publish_repository` is the artifact's full GHCR reference and

@@ -26,7 +26,9 @@
  * rule with one artifact instead of an image set: their PR build publishes the
  * release-shaped OCI artifact under `tree-<hash>`, and `planNativePromotion`
  * verifies it and attaches the unit's release tags (`{version}`, `latest`,
- * `sha-{commit12}`) to the same digest.
+ * `sha-{commit12}`) to the same digest. The deploy path never builds: a missing
+ * or unverified tag fails (no history search either — the artifact *is* the
+ * release, so an older tree must never be tagged as the current VERSION).
  *
  * Immutable tags (`{version}`, `sha-{commit12}`) are immutable by CONTENT, not
  * by manifest digest: two pushes of identical layers differ only in manifest
@@ -39,7 +41,7 @@
  *
  * Pure decision logic (`planPromotion`/`planNativePromotion`) takes an injected
  * `exec`, so it is tested without a registry. The CLI writes the action outputs:
- *   prebuilt_digests   `<image>=sha256:…,<image>=sha256:…` (empty on fallback)
+ *   prebuilt_digests   `<image>=sha256:…,<image>=sha256:…` (empty when not deployable)
  *   mode               `prebuilt` or `build` (native: `promoted` or `build`)
  *   digest             the promoted native artifact digest
  *   IMAGE_PROMOTION / NATIVE_PROMOTION   same mode, for the deploy job summary
@@ -386,7 +388,7 @@ export function planPromotion({
   };
 }
 
-/** `name=sha256:…,name=sha256:…` (empty on fallback). */
+/** `name=sha256:…,name=sha256:…` (empty when not deployable). */
 export function formatPrebuilt(digests) {
   return Object.entries(digests)
     .map(([image, digest]) => `${image}=${digest}`)
@@ -686,7 +688,10 @@ export function formatNativeSummary(result) {
   }
   lines.push("", `- path: \`${result.mode}\``);
   if (result.mode !== "promoted") {
-    lines.push(`- fallback build: ${result.reason}; building and publishing as before`);
+    lines.push(
+      `- not deployable: ${result.reason || "promotion unavailable"}; ` +
+        "deploy-home does not build (DECISIONS 36)",
+    );
   }
   return `${lines.join("\n")}\n`;
 }
@@ -713,6 +718,16 @@ export function runNativePromotion({ args, exec, env = process.env, log = consol
   }
   if (env.GITHUB_STEP_SUMMARY) {
     appendFile(env.GITHUB_STEP_SUMMARY, formatNativeSummary(result));
+  }
+  // This entry point is only used by deploy-home: the merged PR must have
+  // published the artifact. It never builds and does not search history:
+  // an older tree must never be re-tagged as the current release.
+  if (result.mode !== "promoted") {
+    throw new Error(
+      `native artifact for tree-${args.tree} is not published and verified (${result.reason}); ` +
+        "the pull request must publish tree-<hash> — re-run PR CI for the merged commit " +
+        "and re-merge (DECISIONS 36)",
+    );
   }
   return result;
 }

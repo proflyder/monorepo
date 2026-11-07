@@ -21,6 +21,7 @@ import {
   planNativePromotion,
   planPromotion,
   readHistory,
+  runNativePromotion,
   runPromotion,
   sameManifestContent,
   signerIdentityPattern,
@@ -565,7 +566,7 @@ test("native artifact is promoted to version and latest without rebuilding", () 
   assert.equal(result.decisions.find((item) => item.tag === "v0.5.1008").status, "tagged");
 });
 
-test("a missing native tree tag falls back to a build", () => {
+test("a missing native tree tag is not deployable (no build path)", () => {
   const ref = "ghcr.io/proflyder/windows-logon-provider";
   const { calls, exec } = recorder([
     [
@@ -585,7 +586,35 @@ test("a missing native tree tag falls back to a build", () => {
   assert.equal(result.mode, "build");
   assert.equal(result.decisions[0].status, "missing");
   assert.equal(tagsWritten(calls).length, 0);
-  assert.match(formatNativeSummary(result), /fallback build/);
+  assert.match(formatNativeSummary(result), /not deployable: .*DECISIONS 36/);
+});
+
+test("runNativePromotion fails the deploy step instead of building", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "promote-native-"));
+  const summaryFile = path.join(dir, "summary");
+  const { exec } = recorder([
+    [
+      (command, args) => command === "crane" && args[0] === "digest",
+      new Error("MANIFEST_UNKNOWN: manifest unknown"),
+    ],
+  ]);
+  try {
+    assert.throws(
+      () =>
+        runNativePromotion({
+          args: { repository: ref, tree: TREE, commit: COMMIT, version: "v0.5.1008", tags: ["{version}"] },
+          exec,
+          env: { GITHUB_REPOSITORY: REPO, GITHUB_STEP_SUMMARY: summaryFile },
+          log: () => {},
+        }),
+      /the pull request must publish tree-<hash>.*re-run PR CI/s,
+    );
+    assert.match(fs.readFileSync(summaryFile, "utf8"), /not deployable/);
+    assert.match(fs.readFileSync(summaryFile, "utf8"), /does not build/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("unverified native provenance falls back and tags nothing", () => {

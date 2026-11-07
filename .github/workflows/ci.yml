@@ -452,7 +452,6 @@ jobs:
       publish_script: ${{ matrix.publish_script }}
       publish_attest_glob: ${{ matrix.publish_attest_glob }}
       promote: false
-      publish_versions: false
       push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
   # Container-image build for the affected deployable units. On a pull request

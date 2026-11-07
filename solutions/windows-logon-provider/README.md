@@ -191,9 +191,11 @@ solutions/windows-logon-provider/regen-bindings.sh
 `logon-provider` собирает DLL и `cp-selftest`, гоняет `run-tests.sh`,
 проверки `pe_artifacts.py` и `SHA256SUMS`, и из этого репозитория публикует их
 под `tree-<hash>` с provenance (build once). На push в `develop`
-`native-release` продвигает этот digest на теги `VERSION`/`sha-<12>`;
-`publish_when` по `solutions/windows-logon-provider/VERSION` ограничивает
-релиз. Публичный OCI-артефакт:
+`native-release` продвигает этот digest на теги `VERSION`/`sha-<12>`, ничего не
+собирая: если `tree-<hash>` не опубликован или provenance не сходится, job
+падает с подсказкой перезапустить PR CI. `publish_when` по
+`solutions/windows-logon-provider/VERSION` ограничивает релиз. Публичный
+OCI-артефакт:
 
 ```text
 ghcr.io/proflyder/windows-logon-provider:<VERSION>
