@@ -9,6 +9,7 @@ members = [
     "packages/rust/*",
     "platform/deploy-rs",
     "projects/station/ble-gateway/crates/*",
+    "projects/station/pulsar/installer",
     "projects/station/pulsar/satellite/crates/*",
     "projects/station/tools/voice-recorder/helper",
     "solutions/windows-logon-provider/crates/*",
@@ -74,6 +75,15 @@ axum = { version = "=0.8.9", default-features = false, features = ["http1", "jso
 reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls-manual-roots-no-provider"] }
 getrandom = "=0.3.4"
 hex = "=0.4.3"
+# Android SDK Platform-Tools для установщика Pulsar: их архив — zip, а
+# Redistributable License Google запрещает класть его в репозиторий.
+# `deflate-flate2-zlib-rs` — чистый Rust zlib-rs, без C и на Windows-кросс-сборке;
+# остальные кодеки (bzip2/lzma/zstd/AES) архиву не нужны.
+zip = { version = "=9.4.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# Блокирующий HTTP-клиент установщика для того же архива. rustls с кольцевым
+# провайдером (ring в сборке уже есть у pulsar-update) и корнями WebPKI:
+# установщик работает на чужом компьютере, где CA-бандла прошивки нет.
+ureq = { version = "=3.5.1", default-features = false, features = ["rustls"] }
 # protobuf-кодек ESPHome Native API (esphome-proto): только ручные `derive(Message)`,
 # без protoc и рефлексии; `no-recursion-limit` не нужен, вложенность сообщений фиксирована.
 prost = { version = "=0.14.4", default-features = false, features = ["std", "derive"] }

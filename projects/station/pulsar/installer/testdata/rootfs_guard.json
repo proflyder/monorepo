@@ -1,0 +1,79 @@
+[
+  {
+    "name": "midi",
+    "cmdline": "console=ttyS0,921600 root=PARTLABEL=system rootfstype=ext4 ro androidboot.verifiedbootstate=green",
+    "mapper": "control\n",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root               998060    389024    540224  42% /\n/dev/root               998060    389024    540224  42% /\n",
+    "result": ""
+  },
+  {
+    "name": "lite2",
+    "cmdline": "root=ubi0:rootfs rootfstype=ubifs",
+    "mapper": "",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\nubi0:rootfs              71988     62628      9360  87% /\nubi0:rootfs              71988     62628      9360  87% /\n",
+    "result": ""
+  },
+  {
+    "name": "dm table",
+    "cmdline": "root=/dev/dm-0 dm=\"1 vroot none ro 1,0 4096 verity 1 /dev/mmcblk0p5\"",
+    "mapper": "control\n",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root               998060    389024    540224  42% /\n/dev/root               998060    389024    540224  42% /\n",
+    "result": "kernel command line has dm=\"1"
+  },
+  {
+    "name": "veritymode",
+    "cmdline": "root=/dev/root androidboot.veritymode=enforcing",
+    "mapper": "control\n",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root               998060    389024    540224  42% /\n/dev/root               998060    389024    540224  42% /\n",
+    "result": "kernel command line has androidboot.veritymode=enforcing"
+  },
+  {
+    "name": "mapper",
+    "cmdline": "root=/dev/root",
+    "mapper": "control\nsystem\n",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root               998060    389024    540224  42% /\n/dev/root               998060    389024    540224  42% /\n",
+    "result": "device-mapper devices present: system"
+  },
+  {
+    "name": "different fs",
+    "cmdline": "",
+    "mapper": "control",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root 998060 389024 540224 42% /\n/dev/mmcblk0p5 998060 389024 540224 42% /system\n",
+    "result": "/etc (/dev/root on /) and /system/vendor/quasar (/dev/mmcblk0p5 on /system) are on different filesystems"
+  },
+  {
+    "name": "not at /",
+    "cmdline": "",
+    "mapper": "control",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root 998060 389024 540224 42% /rootfs\n/dev/root 998060 389024 540224 42% /rootfs\n",
+    "result": "/etc is on /rootfs, not on the root filesystem"
+  },
+  {
+    "name": "wrapped",
+    "cmdline": "",
+    "mapper": "control",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/disk/by-partlabel/system-long-name\n 998060 389024 540224 42% /\n/dev/disk/by-partlabel/system-long-name\n 998060 389024 540224 42% /\n",
+    "result": ""
+  },
+  {
+    "name": "one line",
+    "cmdline": "",
+    "mapper": "control",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root 998060 389024 540224 42% /\n",
+    "result": "cannot parse df output"
+  },
+  {
+    "name": "uppercase verity",
+    "cmdline": "root=/dev/root ANDROIDBOOT.VERITYMODE=ENFORCING",
+    "mapper": "control\n",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root               998060    389024    540224  42% /\n/dev/root               998060    389024    540224  42% /\n",
+    "result": "kernel command line has ANDROIDBOOT.VERITYMODE=ENFORCING"
+  },
+  {
+    "name": "uppercase dm=",
+    "cmdline": "root=/dev/dm-0 DM=\"1 vroot none ro\"",
+    "mapper": "control\n",
+    "df": "Filesystem           1K-blocks      Used Available Use% Mounted on\n/dev/root               998060    389024    540224  42% /\n/dev/root               998060    389024    540224  42% /\n",
+    "result": "kernel command line has DM=\"1"
+  }
+]

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -25,21 +23,6 @@ def loc(paths: list[Path]) -> int:
     return total
 
 
-def go_total(profile: Path, cwd: Path) -> float | None:
-    if not profile.exists():
-        return None
-    out = subprocess.run(
-        ["go", "tool", "cover", "-func", str(profile.resolve())],
-        cwd=cwd,
-        env={**os.environ, "GOWORK": "off"},
-        text=True,
-        capture_output=True,
-        check=False,
-    ).stdout
-    m = re.search(r"^total:\s+\(statements\)\s+([0-9.]+)%", out, re.M)
-    return float(m.group(1)) if m else None
-
-
 def pairing_total() -> float | None:
     path = ROOT / "reports" / "pairing-coverage.json"
     if not path.exists():
@@ -57,8 +40,11 @@ def count_tests() -> dict[str, int]:
         len(re.findall(r"^\s*#\[(?:tokio::)?test\]", p.read_text(), re.M))
         for p in (ROOT / "projects/station/ble-gateway/crates").rglob("*.rs")
     )
-    go_installer = sum(len(re.findall(r"^func Test", p.read_text(), re.M)) for p in (ROOT / "projects/station/pulsar/installer").glob("*_test.go"))
-    return {"python": py, "pairing": pairing, "rust_ble": rust_ble, "go_installer": go_installer}
+    rust_installer = sum(
+        len(re.findall(r"^\s*#\[test\]", p.read_text(), re.M))
+        for p in (ROOT / "projects/station/pulsar/installer/src").rglob("*.rs")
+    )
+    return {"python": py, "pairing": pairing, "rust_ble": rust_ble, "rust_installer": rust_installer}
 
 
 def ha_metrics() -> dict[str, int]:
@@ -99,7 +85,7 @@ def percent(value: float | None) -> str:
 
 
 def main() -> int:
-    installer = go_total(ROOT / "reports" / "pulsar-installer.cover", ROOT / "projects" / "station" / "pulsar" / "installer")
+    installer = None  # Rust line coverage is not collected by the hermetic suite.
     pairing = pairing_total()
     tests = count_tests()
     ha = ha_metrics()
@@ -109,7 +95,7 @@ def main() -> int:
     shell_files = classify(ROOT / "projects" / "home-assistant", ["**/*.sh"])
     script_files = classify(ROOT / "projects" / "station" / "scripts", ["*.sh", "*.py"])
     pairing_files = [ROOT / "projects/station/resources/quasar-connect-bot/pairing.py"]
-    installer_files = classify(ROOT / "projects/station/pulsar/installer", ["*.go"])
+    installer_files = classify(ROOT / "projects/station/pulsar/installer", ["src/**/*.rs"])
     rust_files = classify(ROOT / "projects/station/pulsar/satellite",
                           ["crates/**/*.rs"])
 
@@ -146,7 +132,7 @@ def main() -> int:
         f"| home-assistant shell | {shell_loc} строк | `bash -n`, ShellCheck errors, `ctl.sh` команды | ✅ command paths + static |",
         f"| scripts (security/ops) | {script_loc} строк | syntax, egress-guard rules, pairing CLI | ✅ targeted |",
         f"| pairing core | {pairing_loc} строк | 15 unit tests | {percent(pairing)} lines |",
-        f"| Pulsar installer (Go, Rust fork) | {installer_loc} строк | upstream unit tests | {percent(installer)} statements |",
+        f"| Pulsar installer (Rust) | {installer_loc} строк | unit + golden-фикстуры | {percent(installer)} |",
         f"| Pulsar satellite (Rust) | {rust_loc} строк | unit-тесты Rust этим отчётом не исполняются | ⚠️ не измерено |",
         "",
         f"**Взвешенная оценка по строкам:** ~**{estimate:.0f}%** первой-party поверхности.",
@@ -159,7 +145,7 @@ def main() -> int:
         f"- Python hermetic: **{tests['python']}**",
         f"- Existing pairing: **{tests['pairing']}**",
         f"- Rust BLE gateway: **{tests['rust_ble']}**",
-        f"- Go Pulsar installer: **{tests['go_installer']}**",
+        f"- Rust Pulsar installer: **{tests['rust_installer']}**",
         f"- Итого: **{sum(tests.values())}** тестовых функций",
         "",
         "## E2E (live)",

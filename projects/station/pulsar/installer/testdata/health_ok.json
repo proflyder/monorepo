@@ -1,0 +1,7 @@
+{
+  "log": "mark-1\n=== start\nrunning\n",
+  "readme": "ok",
+  "stderr": "",
+  "stdout": "mark-1\n=== start\nrunning\n\nmark-1\n=== start\nrunning\n\nadb-1: health check ok\n",
+  "want": true
+}

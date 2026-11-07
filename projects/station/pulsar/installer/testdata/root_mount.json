@@ -1,0 +1,17 @@
+[
+  {
+    "mounts": "rootfs / rootfs rw 0 0\n/dev/root / ext4 ro,relatime 0 0\nproc /proc proc rw 0 0",
+    "rw": false,
+    "found": true
+  },
+  {
+    "mounts": "ubi0:rootfs / ubifs rw,relatime 0 0",
+    "rw": true,
+    "found": true
+  },
+  {
+    "mounts": "proc /proc proc rw 0 0\ntmpfs /tmp tmpfs rw 0 0\n",
+    "rw": false,
+    "found": false
+  }
+]

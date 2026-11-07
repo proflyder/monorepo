@@ -185,6 +185,10 @@ HA Cloud STT v2 из Labs), настройка только включает и�
 
 ## Установка
 
+> В монорепозитории установщик больше не публикуется готовым архивом: он собран на Rust и
+> собирается из исходников (см. [Сборка из исходников](#сборка-из-исходников)). Архивы ниже —
+> из upstream-релизов.
+
 Скачайте архив для своего компьютера из
 [последнего релиза](https://github.com/Morvex885/pulsar/releases/latest), распакуйте и запустите
 `pulsar-install`.
@@ -203,7 +207,7 @@ Linux и macOS (подставьте имя своего архива):
 curl -fLO https://github.com/Morvex885/pulsar/releases/latest/download/pulsar-linux-amd64.tar.gz
 tar -xzf pulsar-linux-amd64.tar.gz && cd pulsar
 ./pulsar-install                 # найти колонки в сети и выбрать, куда ставить
-./pulsar-install 192.168.1.50    # или сразу по адресу
+./pulsar-install 192.0.2.10    # или сразу по адресу
 ./pulsar-install --list          # только показать найденное
 ```
 
@@ -434,8 +438,9 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
 
 ## Сборка из исходников
 
-Демон написан на Rust и собирается на Linux или WSL2 через Bazel ([Bazelisk](https://github.com/bazelbuild/bazelisk),
-Bazel 9.3.1); установщику из копии репозитория нужен ещё [Go](https://go.dev/dl/) 1.27+:
+Демон и установщик написаны на Rust и собираются на Linux или WSL2 через Bazel
+([Bazelisk](https://github.com/bazelbuild/bazelisk), Bazel 9.3.1); для запуска установщика из
+копии репозитория нужен ещё `cargo` из [rustup](https://rustup.rs/) (версия — `rust-toolchain.toml`):
 
 - Bazelisk (`bazel` в PATH) — версия Bazel из `.bazelversion`;
 - `git` и компилятор C/C++ для хоста (`cc`/`c++`); Rust 1.99.1, zig 0.14.1 и sendspin-cpp
@@ -448,7 +453,8 @@ bazel test //projects/station/pulsar/satellite/...    # rustfmt, clippy, тес�
 bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
   --define=pulsar_version="$(tr -d '[:space:]' < projects/station/pulsar/VERSION)" \
   //projects/station/pulsar/satellite:station_binary  # одна архитектура
-go -C projects/station/pulsar/installer run . 192.168.1.50  # установщик; сам собирает Bazel
+cd projects/station/pulsar
+cargo run -p pulsar-installer -- 192.0.2.10  # установщик; сам собирает Bazel
 ```
 
 `aarch64_linux` — обычный userspace Миди (glibc 2.36), `armhf_linux` — 32-битный

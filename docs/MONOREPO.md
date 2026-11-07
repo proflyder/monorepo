@@ -131,7 +131,8 @@ android (меняется Maven/APK-замыкание). Если меняютс
 Подробности и белый список флагов — `docs/TESTING.md`.
 
 Чистый checkout поддерживает `go test ./solutions/... ./packages/...` (Go-часть scheduler и ha-bridge удалена);
-Pulsar installer — отдельный Go-модуль, проверяется с `GOWORK=off`.
+Pulsar installer — Rust-крейт `projects/station/pulsar/installer`, проверяется Bazel-целями
+`//projects/station/pulsar/installer/...`.
 `make test` пропускает (`SKIP`) тесты, которым нужны игнорируемые локальные
 источники (см. `docs/TESTING.md`).
 
@@ -181,8 +182,8 @@ crate-пакет объявляет `extract_cargo_lints(... workspace = "//:Car
 cc-toolchain (`platform/bazel/zig/`) с платформами `aarch64_linux`/`armhf_linux`,
 sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'и в
 `satellite/third_party/bazel/`. Юнит `pulsar` (`_native.yml`) собирает обе
-архитектуры и релиз Bazel-путём, installer/radio/ssh остаются своими
-скриптами. Цели Linux-only; на macOS `bazel build //...` их пропускает.
+архитектуры и релиз Bazel-путём, установщик — Rust-крейт того же workspace,
+radio/ssh остаются своими скриптами. Цели Linux-only; на macOS `bazel build //...` их пропускает.
 `.bazelignore` исключает сгенерированные каталоги `satellite/` и игнорируемые
 локальные каталоги (`secrets`, `resources`, …).
 

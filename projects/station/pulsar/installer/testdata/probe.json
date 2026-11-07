@@ -1,0 +1,182 @@
+{
+  "models": {
+    "bergamot": "Yandex Station Mini 3",
+    "cucumber": "Yandex Station Midi",
+    "plum": "Yandex Station Lite 2",
+    "station": "",
+    "station-mini2": "Yandex Station Mini 2",
+    "unknown": "",
+    "yandexmini": "Yandex Station Mini"
+  },
+  "abis": {
+    "bergamot": [
+      "armhf"
+    ],
+    "cucumber": [
+      "aarch64",
+      "armhf"
+    ],
+    "plum": [
+      "armhf"
+    ],
+    "station": null,
+    "station-mini2": [
+      "armhf"
+    ],
+    "unknown": null,
+    "yandexmini": [
+      "armhf"
+    ]
+  },
+  "zigbee": [
+    "cucumber"
+  ],
+  "arch": [
+    {
+      "code": "cucumber",
+      "loaders": [
+        "aarch64",
+        "armhf"
+      ],
+      "want": "aarch64"
+    },
+    {
+      "code": "cucumber",
+      "loaders": [
+        "armhf"
+      ],
+      "want": "armhf"
+    },
+    {
+      "code": "plum",
+      "loaders": [
+        "aarch64",
+        "armhf"
+      ],
+      "want": "armhf"
+    },
+    {
+      "code": "plum",
+      "loaders": [
+        "aarch64"
+      ],
+      "want": ""
+    },
+    {
+      "code": "station-mini2",
+      "loaders": [
+        "armhf"
+      ],
+      "want": "armhf"
+    },
+    {
+      "code": "bergamot",
+      "loaders": [
+        "aarch64"
+      ],
+      "want": ""
+    },
+    {
+      "code": "yandexmini",
+      "loaders": [
+        "armhf"
+      ],
+      "want": "armhf"
+    },
+    {
+      "code": "cucumber",
+      "loaders": null,
+      "want": ""
+    },
+    {
+      "code": "unknown",
+      "loaders": [
+        "aarch64",
+        "armhf"
+      ],
+      "want": ""
+    }
+  ],
+  "quasar": [
+    {
+      "cfg": "{\"deviceType\":\"yandexmini\"}",
+      "want": "yandexmini"
+    },
+    {
+      "cfg": "{\n  \"deviceType\" : \"yandexmini\",\n}",
+      "want": "yandexmini"
+    },
+    {
+      "cfg": "{\"deviceType\": \"station-mini2\"}",
+      "want": "station-mini2"
+    },
+    {
+      "cfg": "{\"other\":\"yandexmini\"}",
+      "want": ""
+    },
+    {
+      "cfg": "{\"deviceType\" \"yandexmini\"}",
+      "want": ""
+    },
+    {
+      "cfg": "{\"deviceType\": yandexmini}",
+      "want": ""
+    },
+    {
+      "cfg": "",
+      "want": ""
+    }
+  ],
+  "station_code": [
+    {
+      "code": "cucumber",
+      "compat": "yandex,cucumber-dvt2\nyandex,cucumber\namlogic, a5",
+      "supported": true
+    },
+    {
+      "code": "plum",
+      "compat": "yandex,plum\namlogic, axg",
+      "supported": true
+    },
+    {
+      "code": "bergamot",
+      "compat": "yandex,bergamot-evt1\nyandex,bergamot\namlogic, axg",
+      "supported": true
+    },
+    {
+      "code": "bergamot-evt1",
+      "compat": "yandex,bergamot-evt1\namlogic, axg",
+      "supported": false
+    },
+    {
+      "code": "station-mini2",
+      "compat": "yandex,station-mini2\namlogic, axg",
+      "supported": true
+    },
+    {
+      "code": "station-mini2",
+      "compat": "yandex,station-mini2\r\namlogic, axg\r\n",
+      "supported": true
+    },
+    {
+      "code": "cucumber",
+      "compat": "yandex,cucumber-dvt2 yandex,cucumber amlogic, a5",
+      "supported": true
+    },
+    {
+      "code": "station",
+      "compat": "yandex,station\namlogic, axg",
+      "supported": false
+    },
+    {
+      "code": "cucumber-dvt2",
+      "compat": "yandex,cucumber-dvt2\namlogic, a5",
+      "supported": false
+    },
+    {
+      "code": "",
+      "compat": "amlogic, axg",
+      "supported": false
+    }
+  ]
+}

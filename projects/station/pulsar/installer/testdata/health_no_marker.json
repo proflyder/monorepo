@@ -1,0 +1,7 @@
+{
+  "log": "unrelated\n",
+  "readme": "no marker",
+  "stderr": "adb-1: health check UNKNOWN: (install marker not found in the log, even in .1); not rolling back automatically\n",
+  "stdout": "",
+  "want": false
+}
