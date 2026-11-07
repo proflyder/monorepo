@@ -434,6 +434,9 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      # `_native.yml` promote reads the merged PR (PR-head fallback); a called
+      # workflow cannot request more than its caller grants.
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:

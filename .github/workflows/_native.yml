@@ -137,12 +137,19 @@ jobs:
       # Re-tag the promoted digest and read its attestation.
       packages: write
       attestations: read
+      # Identify the merged PR whose head is the fallback when `develop` moved
+      # while its CI ran (the PR-head delta check).
+      pull-requests: read
     outputs:
       mode: ${{ steps.select.outputs.mode }}
       digest: ${{ steps.promote.outputs.digest }}
     steps:
+      # Full history: the PR-head fallback fetches `refs/pull/<n>/head` and
+      # diffs it against the merge commit.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: inputs.promote && inputs.publish_repository != ''
+        with:
+          fetch-depth: 0
 
       - name: Install pinned crane
         if: inputs.promote && inputs.publish_repository != ''
@@ -190,7 +197,9 @@ jobs:
             --tree "$tree" \
             --commit "$GITHUB_SHA" \
             --version "$version" \
-            --tags "$TAGS"
+            --tags "$TAGS" \
+            --allow-pr-head \
+            --unit "${{ inputs.unit }}"
 
       - name: Select build or promoted path
         id: select

@@ -843,8 +843,10 @@ $EDITOR projects/station/pulsar/VERSION
 #    native-release проверяет tree-тег и provenance и ставит на тот же
 #    digest ghcr.io/proflyder/pulsar-firmware:<version> и :latest.
 #    Если tree-тега нет или provenance не сходится — job падает:
-#    deploy-home ничего не собирает и не публикует. Нужно перезапустить
-#    PR CI (он публикует tree-<hash>) и заново смержить.
+#    deploy-home ничего не собирает и не публикует. Если develop ушёл
+#    вперёд до squash-merge, берётся head PR, но только когда дельта
+#    head→merge не затрагивает pulsar; иначе — подтянуть develop в PR,
+#    дождаться CI и смержить заново.
 # 3. approve в GitHub Environment `Station` (job deploy-station)
 #    → VPN группа ci → OIDC в OpenBao (deploy-station)
 #    → HA update_entity + update.install
@@ -990,10 +992,34 @@ provenance; `deploy-home` проверяет тег и provenance:
 `tree-<hash>`; коммит-источник виден в summary. Так же разрешаются
 образы-соседи, которые общий deploy-скрипт рендерит, но не применяет
 (`deploy.optional_images` в `units.mjs`, например ha-bridge/ha-control при
-деплое юнита scheduler). Собственные образы юнита на push обязаны совпадать с
-текущим tree — иначе job падает. Зависимости от живого кластера нет, поэтому
+деплое юнита scheduler). Зависимости от живого кластера нет, поэтому
 механизм работает и при первой установке; аварийное восстановление с нуля всё
 равно удобнее делать локальным запуском deploy-скрипта (там сборка разрешена).
+
+### Squash-merge на уехавший `develop`
+
+Squash-коммит сохраняет tree PR только пока `develop` не ушёл вперёд. Если
+между прогоном PR CI и merge влился другой PR, у merge-коммита другой tree и
+`tree-<hash>` для него нет (PR #204: проверен `310954ce`, влит `fe392157`
+после docs-merge #205). На push в этом случае работает PR-head fallback:
+
+1. `promote.mjs` находит PR по коммиту (`gh api
+   repos/{repo}/commits/{sha}/pulls`, затем `(#N)` из заголовка squash-коммита)
+   и берёт его head `H`;
+2. `git fetch origin refs/pull/N/head`, `H` сверяется с ответом API;
+3. дельта `git diff H <merge-commit>` уходит в `affected.compute`; если юнит в
+   дельту не попал, его входы в merge-коммите идентичны проверенным на `H`,
+   и продвигается `tree-<tree(H)>` (после обычной проверки provenance). В
+   summary: `from PR head <H12>, delta to <merge12> does not affect <unit>`;
+4. если дельта затрагивает юнит — job падает: проверенные и влитые байты
+   разные. Лечение: подтянуть `develop` в PR, дождаться зелёного CI и
+   смержить заново (или `workflow_dispatch` после следующего merged PR).
+
+Та же логика применяется к `home-deploy` и образам-соседям (у них сначала
+история, потом PR head) и к native-юнитам (`_native.yml`,
+`runNativePromotion`): релиз, собранный на head PR, продвигается, только если
+дельта не затрагивает native-юнит; иначе `native-release` падает. Ошибка
+routing'а дельты — отказ (fail closed), а не разрешение.
 
 Pulsar собирается release-shaped на каждом PR, затрагивающем его код, — с
 версией из `VERSION`, radio и `SHA256SUMS`; тег версии создаётся только при
@@ -1038,9 +1064,11 @@ PR CI (`_images.yml`) читает общий кэш слоёв Buildx
 
 Если для образа нет ни текущего tree, ни верифицированной сборки в истории,
 job падает с понятной ошибкой; автосборки на деплой-раннере нет. Частая
-причина — `develop` ушёл вперёд между PR и squash-merge, поэтому tree не
-совпал: нужно обновить ветку и прогнать PR CI заново. Локально сборка остаётся
-поведением по умолчанию; в CI её запрещает `DEPLOY_NO_BUILD=1`.
+причина — `develop` ушёл вперёд между PR и squash-merge: тогда promotion
+пробует head PR (см. «Squash-merge на уехавший `develop`»). Если и это
+отказано, в summary будет `from PR head <H12> … changes <unit>`: нужно
+подтянуть `develop` в PR, дождаться CI и смержить заново. Локально сборка
+остаётся поведением по умолчанию; в CI её запрещает `DEPLOY_NO_BUILD=1`.
 
 Локально путь продвижения можно повторить, передав проверенные digest'ы
 (без них скрипты собирают и пушат как обычно):

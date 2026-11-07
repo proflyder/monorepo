@@ -539,7 +539,8 @@ platform/ci/affected.sh --all
 
 mise run ci:units                               # инварианты карты юнитов
 node --test platform/ci/*.test.mjs platform/quality/*.test.mjs        # маршрутизатор, gate и аудит
-# продвижение по tree hash: теги, digest, история и отказ — без registry
+# продвижение по tree hash: теги, digest, история, PR-head дельта и отказ —
+# без registry и сети (exec/compute инжектируются)
 node --test platform/ci/promote.test.mjs
 # политика чистки GHCR: pure-функция + локальный dry-run по фикстуре
 node --test platform/ci/ghcr_cleanup.test.mjs
@@ -618,14 +619,20 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
   `home-deploy`, из образа которого достаётся CLI. На `workflow_dispatch` и
   для образов-соседей (`deploy.optional_images`) берётся самый свежий
   верифицированный тег в first-parent истории; коммит-источник — в summary.
-  Deploy-home ничего не собирает: если хоть один образ не прошёл проверку, job
-  падает, а не откатывается на сборку. Выбранный путь виден в job summary
+  Если `develop` ушёл вперёд после PR CI, на push берётся head PR, но только
+  когда `affected.compute` по дельте `git diff H <merge>` не выбирает юнит
+  (`promote.test.mjs`: дельта не затрагивает → promoted from PR head;
+  затрагивает / нет PR / provenance не сходится → refused). Deploy-home
+  ничего не собирает: если хоть один образ не прошёл проверку, job падает, а
+  не откатывается на сборку. Выбранный путь виден в job summary
   (`image path: prebuilt|build`, где `build` = отказ promotion).
 - Native (Pulsar, logon provider): job `native-release` вызывает `_native.yml`
   с `promote: true`. Тот проверяет `tree-<hash>` и provenance, ставит релизные
   теги на тот же digest; при missing/unverified job падает — деплой ничего не
-  собирает и не публикует, история для native не применяется. PR CI
-  (`promote: false`) по-прежнему собирает и публикует `tree-<hash>`.
+  собирает и не публикует, история для native не применяется. PR-head
+  fallback действует так же, как для образов: артефакт head PR продвигается,
+  только если дельта до merge не затрагивает native-юнит, иначе job падает.
+  PR CI (`promote: false`) по-прежнему собирает и публикует `tree-<hash>`.
   `deploy-station` ждёт `native-release` и только ставит опубликованную версию.
 - Откат — только применённого объекта; изменение целиком откатывается новым
   PR с `git revert`.
