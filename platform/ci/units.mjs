@@ -72,6 +72,9 @@ export const config = {
         // `bazel` shim on the mise PATH.
         "mise.toml",
         "mise.lock",
+        // The mise task entry points (build/test/check/units) are the local
+        // front door for every unit; a broken task must fail PR CI.
+        "platform/mise-tasks/**",
         "platform/workstation/bin/**",
       ],
       platforms: ["*"],
@@ -1065,7 +1068,6 @@ export const config = {
         "platform/**",
         "docs/**",
         ".github/**",
-        "Makefile",
         "requirements-test.txt",
         ".gitleaks.toml",
         "**/*.sh",

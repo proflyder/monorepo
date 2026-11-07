@@ -6,22 +6,24 @@
 
 ```bash
 python3 -m pip install -r requirements-test.txt
-make test          # hermetic, без сети/станции
-make coverage      # coverage; reports/TEST-COVERAGE.md (not tracked)
-make test-e2e      # live HA/BLE read-only; нужны токены
+mise run test          # hermetic, без сети/станции
+mise run test <unit>   # тесты одного CI-юнита (список — `mise run units`)
+mise run coverage      # coverage; reports/TEST-COVERAGE.md (not tracked)
+mise run test:e2e      # live HA/BLE read-only; нужны токены
+mise run check         # pre-push: test + repository audit + Gitleaks
 ```
 
-`make test` — gate. `make test-e2e` требует `HA_TOKEN`, опционально
+`mise run test` — gate. `mise run test:e2e` требует `HA_TOKEN`, опционально
 `STATION_CONTROL_TOKEN`/`HERMES_API_KEY`; токены не коммитить.
 CI/repo-quality проверки — Node 20+ (`node --test`), без npm-зависимостей.
 
 ```bash
 export HA_URL=http://192.0.2.28:8123
 export HA_TOKEN='...'
-make test-e2e
+mise run test:e2e
 
-STATION_E2E_MUTATE=1 make test-e2e
-STATION_E2E_AUDIO=1 make test-e2e
+STATION_E2E_MUTATE=1 mise run test:e2e
+STATION_E2E_AUDIO=1 mise run test:e2e
 ```
 
 Audio-тест: короткий будильник на низкой громкости, «стоп» + resume;
@@ -68,7 +70,7 @@ Hermes `/health` и `/v1/models` не заменяют регистрацию а
 
 ## Scheduler и HA bridge
 
-`make test` включает Go-тесты корневого модуля (`solutions/...` и
+`mise run test` включает Go-тесты корневого модуля (`solutions/...` и
 `packages/...`). Отдельные команды:
 
 ```bash
@@ -184,7 +186,7 @@ bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
 # pulsar (stripped, .gnu_debuglink) и pulsar.debug (unstripped) лежат в bazel-bin/.../satellite/
 ```
 Android-сборка/тесты требуют Android SDK и выполняются из
-`projects/mobile/android` отдельно; они не входят в backend `make test`.
+`projects/mobile/android` отдельно; они не входят в backend `mise run test`.
 
 ```bash
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
@@ -219,7 +221,7 @@ offline cache и generic task UI не реализованы. APK debug-signed, 
 ```bash
 export STATION_CONTROL_TOKEN="$(adb -s 192.0.2.13:5555 shell cat /data/quasar/ble-gateway/control-token | tr -d '\r\n')"
 export STATION_GATEWAY_URL=http://192.0.2.13:8099
-make test-e2e
+mise run test:e2e
 ```
 
 Read-only: 401 без токена, `/status`, 405 на неверные методы.
@@ -404,7 +406,7 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
   добавление/удаление `MODULE.bazel` оставляют глобальную инвалидацию:
   fail safe — «больше», не «меньше».
 * `deploy_control` — какие go-юниты и пути включают дорогую регрессию
-  `make test-deploy-control` (scheduler, ha-bridge/ha-control,
+  `mise run test:deploy-control` (scheduler, ha-bridge/ha-control,
   `projects/home/kubernetes/scheduler/**`).
 * `deploy` (у деплоимых юнитов) — `images`, `workloads` и `builder`
   (`bazel`/`docker`/`mixed`). По нему `deploy-home` и job `images` в `ci.yml`
@@ -484,8 +486,15 @@ workflow `_<platform>.yml` с inputs юнита, `platform` в `units.mjs`, ра
 ### Локальное воспроизведение
 
 ```bash
+# каталог юнитов и их команды
+mise run units                    # id, platform, title, deployable
+mise run build <unit>             # bazel build целей юнита (без юнита — //...)
+mise run test <unit>              # команды юнита из units.mjs
+mise run test:bazel               # bazel test //...
+
 # какие юниты выбрал бы CI для диапазона (по умолчанию origin/develop...HEAD)
-make ci-affected
+mise run ci:affected
+mise run ci:affected --base HEAD~3 --head HEAD
 platform/ci/affected.sh --base origin/develop --format json
 platform/ci/affected.sh --base HEAD~3 --format text
 
@@ -496,7 +505,7 @@ platform/ci/affected.sh --changed-file packages/kotlin/core/src/main/kotlin/.../
 # принудительно все юниты (то же, что workflow_dispatch)
 platform/ci/affected.sh --all
 
-make ci-units                                   # инварианты карты юнитов
+mise run ci:units                               # инварианты карты юнитов
 node --test platform/ci/*.test.mjs platform/quality/*.test.mjs        # маршрутизатор, gate и аудит
 # продвижение по tree hash: теги, digest, fallback — без registry
 node --test platform/ci/promote.test.mjs
@@ -504,8 +513,8 @@ node --test platform/ci/promote.test.mjs
 node --test platform/ci/ghcr_cleanup.test.mjs
 node platform/ci/ghcr_cleanup.mjs --fixture platform/ci/testdata/ghcr-versions.json \
   --now 2026-11-04T00:00:00Z
-make test                                       # герметичный gate (включает CI-тесты)
-make test-deploy-control BAZEL=bazelisk         # регрессия deploy control
+mise run test                                   # герметичный gate (включает CI-тесты)
+mise run test:deploy-control                    # регрессия deploy control
 actionlint .github/workflows/*.yml
 shellcheck -S error platform/quality/*.sh platform/ci/*.sh \
   projects/home/kubernetes/scheduler/*.sh projects/station/scripts/*.sh
@@ -518,14 +527,14 @@ commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.
 проверкой sha256.
 
 На чистом checkout (CI) отсутствуют игнорируемые источники, поэтому
-`make test` явно печатает `SKIP` для тестов, которым нужен nested
+`mise run test` явно печатает `SKIP` для тестов, которым нужен nested
 `projects/station/resources/quasar-connect-bot`; локально, где источник
 есть, те же тесты выполняются. Pulsar теперь лежит в дереве
 (`projects/station/pulsar/`), поэтому его установщик и Rust-тесты доступны
 всегда; установщик — крейт `pulsar-installer` корневого Cargo workspace и
 проверяется Bazel-целями `//projects/station/pulsar/installer/...`. `test_deploy_control.sh` больше не требует
 собранных бинарников: он передаёт deploy.sh заранее разрешённые
-digest-пины образов, поэтому `make test` и `make test-deploy-control`
+digest-пины образов, поэтому `mise run test` и `mise run test:deploy-control`
 запускают его без Bazel. Путь продвижения (`PREBUILT_DIGESTS`,
 `PREBUILT_DIGESTS_FILE`, решение 36) покрыт там же и в `test_deploy.py`
 юнитов `scheduler`/`currency-bot`/`mcp-gateway`/`wakegrant`:
@@ -592,7 +601,7 @@ Pulsar: хост-сборка и тесты — Bazel-юнит `pulsar-bazel`; �
 ```bash
 node platform/quality/audit_repository.mjs
 node --test platform/ci/*.test.mjs platform/quality/*.test.mjs
-make test
+mise run test
 ```
 
 Проверить локальные Markdown-ссылки, приватные пути, историю Git и

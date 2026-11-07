@@ -11,7 +11,7 @@
  *    an explicit invalidation rule, so a new test cannot silently stop running.
  *
  * Run locally with `node platform/ci/check_units.mjs`; CI runs it in the
- * quality job and `make test` runs it through the unit tests.
+ * quality job and `mise run test` runs it through the unit tests.
  */
 
 import { spawnSync } from "node:child_process";

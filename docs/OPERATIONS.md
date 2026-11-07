@@ -215,13 +215,13 @@ printf '%s' '{"method":"targets","params":{}}' |
 
 ```bash
 cd ~/Desktop/yandex-station-lab
-make test                    # hermetic; не трогает стенд
-make test-e2e                # live HA/BLE read-only; нужны токены
-STATION_E2E_MUTATE=1 make test-e2e
-STATION_E2E_AUDIO=1 make test-e2e
+mise run test                # hermetic; не трогает стенд
+mise run test:e2e            # live HA/BLE read-only; нужны токены
+STATION_E2E_MUTATE=1 mise run test:e2e
+STATION_E2E_AUDIO=1 mise run test:e2e
 ```
 
-`make test-e2e` требует `HA_URL` (реальный LAN-адрес HA, не пример из
+`mise run test:e2e` требует `HA_URL` (реальный LAN-адрес HA, не пример из
 документации), `HA_TOKEN`, опционально `STATION_CONTROL_TOKEN` и
 `STATION_GATEWAY_URL`. Токены не коммитить и не печатать.
 

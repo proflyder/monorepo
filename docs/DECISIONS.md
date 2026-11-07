@@ -263,7 +263,7 @@
       (`platform/android/tools`), серверные и деплойные — Go `go_binary`.
       Сборка герметична и не зависит от `python3` хоста.
     * Python остаётся для ML/обучения wake-word, dev-утилит станции,
-      проверок YAML-конфигов (включая отчёт `make coverage`) и live-e2e, где
+      проверок YAML-конфигов (включая отчёт `mise run coverage`) и live-e2e, где
       он не исполняется в проде.
     Существующие
     хостовые и операторские скрипты на Python stdlib — `offsite_backup.py`,

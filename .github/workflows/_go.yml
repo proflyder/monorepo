@@ -118,4 +118,7 @@ jobs:
 
       - name: scheduler deploy control regression
         if: inputs.deploy_control
-        run: make test-deploy-control
+        # Tools come from mise-action install_args; never install the rest.
+        env:
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
+        run: mise run test:deploy-control

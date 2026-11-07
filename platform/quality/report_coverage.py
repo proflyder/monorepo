@@ -161,7 +161,7 @@ def main() -> int:
         "| Hermes real chat turn | opt-in quota | 1/1 passed |",
         "| Real microphone voice (GigaAM + Hermes) | manual | 4/4 passed |",
         "",
-        "E2E запускается отдельно: `make test-e2e` (нужен `HA_TOKEN`; для gateway —",
+        "E2E запускается отдельно: `mise run test:e2e` (нужен `HA_TOKEN`; для gateway —",
         "`STATION_CONTROL_TOKEN`; для Hermes — `HERMES_API_KEY`). Audio/mutation",
         "и реальный chat turn — только с явными флагами.",
         "Результаты выше — последний прогон на этом стенде 2026-10-26; не путать",
@@ -181,10 +181,10 @@ def main() -> int:
         "## Как воспроизвести",
         "",
         "```bash",
-        "make test                  # hermetic: Python + Go + pairing",
-        "make coverage              # hermetic + coverage + этот отчёт",
-        "make test-e2e              # HA/gateway read-only",
-        "STATION_E2E_AUDIO=1 make test-e2e   # + короткий alarm/resume тест",
+        "mise run test              # hermetic: Python + Go + pairing",
+        "mise run coverage          # hermetic + coverage + этот отчёт",
+        "mise run test:e2e          # HA/gateway read-only",
+        "STATION_E2E_AUDIO=1 mise run test:e2e   # + короткий alarm/resume тест",
         "```",
     ]
     out = ROOT / "reports" / "TEST-COVERAGE.md"
