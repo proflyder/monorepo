@@ -16,7 +16,7 @@ the synced Secrets. Taking a fresh snapshot is a separate, documented step:
 Usage (Docker/Colima on the workstation, SSH host alias from the private
 ssh_config):
 
-    ./restore_drill.py --ssh-config secrets/proxmox-install/ssh_config \
+    ./restore_drill.py --ssh-config ~/.ssh/home-lab/config \
         --ssh-host k3s [--snapshot openbao-<ts>.snap | --snapshot-file F]
 """
 from __future__ import annotations

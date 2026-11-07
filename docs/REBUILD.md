@@ -11,10 +11,11 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 - Offsite restic → Google Drive (`rclone:gdrive:home-offsite-v2`): OpenBao
   raft snapshot, SQLite scheduler/currency-bot, ledger ha-bridge, backup HA,
   `bb server export`. Restic password и ключ HA backup — в password manager.
-- `secrets/proxmox-install/` — ISO, install settings, SSH keys, TF state,
-  Wi-Fi profile.
-- `secrets/kubernetes-research/` — kubeconfig, private values.
-- `secrets/local/backups/`, `local-data/local/snapshots/station/` — станция
+- Секреты (SSH-ключи, TF state, Wi-Fi profile, kubeconfig, private values) —
+  OpenBao `secret/infra/*` (`docs/SECRETS.md`); на новой машине —
+  `mise run setup` (`docs/WORKSTATION.md`). ISO и install settings —
+  `local-data/proxmox-install/`.
+- `local-data/local/backups/`, `local-data/local/snapshots/station/` — станция
   (`/data`, `/etc`, оригиналы, модели wake word).
 - Recovery keys и seal key OpenBao — Bitwarden `Home recovery` (там же пароль
   restic); остальные секреты (CA VPN и пр.) — в OpenBao/offsite-снапшоте.
@@ -102,7 +103,8 @@ Hermes auth старой копией.
 
 ## 4. Станция
 
-- ADB/SSH: только LAN; пароль — `secrets/README.md`.
+- ADB/SSH: только LAN; ключ — `~/.ssh/home-lab/station_ed25519`, аварийный
+  пароль — OpenBao `secret/infra/station/access#ssh_root_password`.
 - Pulsar: `/data/pulsar`; бинарник — `ghcr.io/proflyder/pulsar-firmware:<version>`
   (установка — `deploy-station` или `pulsar-install`), модель —
   `artifacts/wakeword/`, откат — `pulsar.prev`.
@@ -172,7 +174,7 @@ synced Secrets, `ListSchedules`.
 kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
 
 projects/home/kubernetes/openbao/restore_drill.py \
-  --ssh-config secrets/proxmox-install/ssh_config --ssh-host k3s
+  --ssh-config ~/.ssh/home-lab/config --ssh-host k3s
 ```
 
 Seal key и `init.json` для стенда временно положить из Bitwarden (`--seal-key`,

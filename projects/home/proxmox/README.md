@@ -60,8 +60,8 @@ snippet загружаются bootstrap-этапом; Terraform использ�
 `cloud-init.yaml` — публичная часть, приватная добавляет SSH public key.
 
 Авторитетный Terraform directory/state находится на PVE в root-only
-`/var/lib/ricardo-terraform/`; после apply state копируется на Mac в
-`secrets/proxmox-install/terraform-state-pve/`. Terraform запускается на Linux
+`/var/lib/ricardo-terraform/`; после apply state сохраняется в OpenBao
+`secret/infra/proxmox/terraform#pve_terraform_tfstate`. Terraform запускается на Linux
 с проверкой CA (Go TLS на macOS игнорирует `SSL_CERT_FILE`); системное trust
 store Mac не меняется.
 Конфигурация синхронизируется из tracked main.tf; lock копируется обратно в source.

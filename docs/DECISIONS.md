@@ -38,7 +38,7 @@
     текстовый фрагмент до или после даты/времени; два фрагмента вокруг даты
     осознанно не распознаются. Расширение — отдельное решение.
 15. **SSH станции — ключ, пароль как fallback.** Ключ Mac
-    `~/.ssh/ricardo_station_ed25519` в `/root/.ssh/authorized_keys`; вход по
+    `~/.ssh/home-lab/station_ed25519` в `/root/.ssh/authorized_keys`; вход по
     паролю осознанно оставлен аварийным. ADB/SSH — только LAN.
 16. **Legacy HA-helper-ы расписаний удалены.** `todo.alarms_*` и
     `todo.reminders` удалены, `timer.taimer_1…8` отключены в registry;

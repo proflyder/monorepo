@@ -42,7 +42,9 @@ export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 kubectl get pods -A
 ```
 
-Ключ и `known_hosts` — `secrets/proxmox-install/` (см. `CREDENTIALS.md`).
+Ключ, `known_hosts` и `config` (алиасы `pve`/`k3s`/`haos`) — `~/.ssh/home-lab/`
+(`mise run secrets:pull`); kubeconfig — `mise run secrets:file
+kubernetes-research/kubeconfig`, после работы `secrets:clean`.
 
 API `6443`, kubelet `10250`, node-exporter `9100`, health `9116` и
 VXLAN `8472/udp` закрыты firewall от обычного LAN.
@@ -255,7 +257,7 @@ kubectl -n monitoring port-forward svc/monitoring-prometheus 19090:9090
 kubectl -n monitoring port-forward svc/loki 13100:3100
 ```
 
-Grafana admin password — `secrets/kubernetes-research/grafana-password`.
+Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
 
 ## HTTPS ingress
 

@@ -80,14 +80,14 @@
 
 `secrets/` — 700, файлы 600. Реестр — `SENSITIVE-DATA.md`.
 
-- `secrets/NETWORK.md` — реальные IP/порты/VPN/HTTPS.
-- `secrets/README.md` — SSH/ADB/сервисные пароли.
-- `secrets/certs/` — приватные сертификаты/ключи.
+- `secrets/NETWORK.md` — реальные IP/порты/VPN/HTTPS (копия в OpenBao
+  `secret/infra/docs/network`).
+- Пароли, ключи и сертификаты — только OpenBao (`docs/SECRETS.md`); локально
+  `secrets/openbao/{addr,operator.token}` и `~/.ssh/home-lab/`.
 - QR/DPP отключён; прежний материал — только в private recovery archive.
-- `secrets/kubernetes-research/` — kubeconfig, values, Grafana password.
-- `secrets/currency-bot/` — VPS ssh key/config, экспорт H2 CSV/SQLite,
-  tunnel token, Cloudflare tunnel API token, `k8s.env`;
-  `secrets/home/currency-bot.env`.
+- currency-bot: VPS key/config, tunnel/API tokens, env — OpenBao
+  `secret/infra/{ssh/currency-bot-vps,currency-bot/vps,cloudflare/currency-bot-tunnel}`;
+  экспорт SQLite/CSV — `local-data/currency-bot/`.
 - Hermes secrets — Kubernetes Secret + writable home.
 - BLE token — `/data/quasar/ble-gateway/token`; HTTP control token —
   `/data/quasar/ble-gateway/control-token`; HA token — `secrets.yaml`.

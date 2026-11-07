@@ -8,15 +8,16 @@
 # станция
 adb connect 192.0.2.13:5555
 adb devices
-ssh -i ~/.ssh/ricardo_station_ed25519 root@192.0.2.13   # ключ; пароль — fallback
+ssh -i ~/.ssh/home-lab/station_ed25519 root@192.0.2.13   # ключ; пароль — fallback
 
-# Proxmox / K3s / HAOS: один ключ из secrets/proxmox-install/
-ssh -i ~/.ssh/home-lab/proxmox_admin \
-  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_pve root@192.0.2.26
-ssh -i ~/.ssh/home-lab/proxmox_admin \
-  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_k3s labuser@192.0.2.27
-ssh -p 22222 -i ~/.ssh/home-lab/proxmox_admin \
-  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_haos root@192.0.2.28
+# Proxmox / K3s / HAOS: ключ и config из `mise run secrets:pull`
+ssh -F ~/.ssh/home-lab/config pve
+ssh -F ~/.ssh/home-lab/config k3s 'sudo -n k3s kubectl get pods -A'
+ssh -F ~/.ssh/home-lab/config haos
+
+# admin kubeconfig для примеров ниже (API 6443 — через туннель, см.
+# KUBERNETES-OPERATIONS.md); после работы — mise run secrets:clean …
+mise run secrets:file kubernetes-research/kubeconfig
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 ```
 
@@ -849,7 +850,7 @@ Pulsar пишет `/data/pulsar/wake-events/`; сбор и разметка — 
 ```bash
 # снимок новых событий + stats.json (busybox tar по ssh, без rsync)
 python3 projects/station/tools/wakeword-personalize/station_events.py collect \
-  --host 192.0.2.13 --ssh-key ~/.ssh/ricardo_station_ed25519 \
+  --host 192.0.2.13 --ssh-key ~/.ssh/home-lab/station_ed25519 \
   --dest local-data/datasets/station-events
 
 # разбор и метки (локальный labels.json, оригиналы не меняются)
@@ -1250,8 +1251,8 @@ restic-репозиторий `rclone:gdrive:home-offsite-v2` (личный Goog
 #   secrets/home/offsite-restic.password restic password (копия — password manager)
 #   secrets/home/offsite-rclone.conf     rclone remote `gdrive` (OAuth token)
 #   secrets/home/offsite-ha.token        отдельный HA long-lived token
-SSH_CONFIG=secrets/proxmox-install/ssh_config projects/home/backup/offsite/install.sh k3s
-SSH_CONFIG=secrets/proxmox-install/ssh_config projects/home/backup/pve/install.sh pve
+SSH_CONFIG=~/.ssh/home-lab/config projects/home/backup/offsite/install.sh k3s
+SSH_CONFIG=~/.ssh/home-lab/config projects/home/backup/pve/install.sh pve
 # PVE scrape target и Grafana server — secrets/home/observability-values.yaml
 KUBECONFIG=secrets/kubernetes-research/kubeconfig projects/home/kubernetes/deploy-observability.sh
 ```

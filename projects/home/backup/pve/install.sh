@@ -39,7 +39,7 @@ done
 
 [[ -n "$TARGET" ]] || { usage >&2; exit 2; }
 
-# SSH_CONFIG selects a private ssh_config (e.g. secrets/proxmox-install/ssh_config).
+# SSH_CONFIG selects a private ssh_config (e.g. ~/.ssh/home-lab/config).
 # A non-root login runs every remote command through `sudo -n`.
 SSH=(ssh)
 if [[ -n "${SSH_CONFIG:-}" ]]; then SSH+=(-F "$SSH_CONFIG"); fi
