@@ -486,7 +486,7 @@ impl Client {
 }
 
 /// A normalized Deployment/StatefulSet/DaemonSet view.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Workload {
     pub namespace: String,
     pub kind: String,
@@ -527,7 +527,7 @@ impl Workload {
 }
 
 /// One container's state in a pod.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ContainerStatus {
     pub name: String,
     pub image: String,
@@ -538,7 +538,7 @@ pub struct ContainerStatus {
 }
 
 /// A normalized pod view.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Pod {
     pub namespace: String,
     pub name: String,
@@ -551,7 +551,7 @@ pub struct Pod {
 }
 
 /// A normalized Kubernetes event.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Event {
     pub event_type: String,
     pub reason: String,

@@ -1,17 +1,39 @@
 [package]
 name = "mcp-gateway"
-description = "Kubernetes REST and bb SSH bridge clients for the MCP gateway"
+description = "MCP gateway: pure domain, Kubernetes/SSH clients, tool groups and HTTP surface"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+name = "mcp_gateway"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mcp-gateway"
+path = "src/main.rs"
+
 [dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
 base64 = { workspace = true }
+futures = { workspace = true }
 hmac = { workspace = true }
+home-clients = { path = "../../../../packages/rust/home-clients" }
+home-config = { path = "../../../../packages/rust/home-config" }
+home-http = { path = "../../../../packages/rust/home-http" }
+home-runtime = { path = "../../../../packages/rust/home-runtime" }
+home-secret = { path = "../../../../packages/rust/home-secret" }
+home-telegram = { path = "../../../../packages/rust/home-telegram" }
+home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
+http = { workspace = true }
+http-body-util = { workspace = true }
 jiff = { workspace = true }
+prometheus-client = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+rmcp = { workspace = true }
 russh = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
@@ -21,9 +43,12 @@ sha1 = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-axum = { workspace = true }
+home-contracttest = { path = "../../../../packages/rust/home-contracttest" }
 rand = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

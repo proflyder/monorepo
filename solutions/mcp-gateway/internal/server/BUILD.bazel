@@ -24,3 +24,9 @@ go_test(
         "@com_github_modelcontextprotocol_go_sdk//mcp",
     ],
 )
+
+filegroup(
+    name = "contract_fixtures",
+    srcs = glob(["testdata/contract/*.json"]),
+    visibility = ["//visibility:public"],
+)
