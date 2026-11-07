@@ -20,6 +20,10 @@ src/render.rs         literal `${KEY}` substitution, allowlists, rollout fingerp
 src/yaml.rs           ordered YAML tree + yaml.v2-compatible emitter
 src/manifests.rs      `eso names` and the bootstrap `secret opaque` JSON
 src/runtimevalues.rs  storage/workload split and health-exporter pin
+src/process.rs        kubectl runner (system + fake for tests)
+src/converge.rs       Deployment converge with preserve rules
+src/state.rs          rollback markers (fail-closed record)
+src/gojson.rs         `encoding/json.Marshal`-compatible payloads
 src/oci.rs            layout index/manifest, OCI and docker archives
 src/oci/json.rs       ordered JSON with Python `json.dumps` formatting
 src/oci/archive.rs    Python-compatible USTAR writer
@@ -29,9 +33,9 @@ testdata/frozen/      contract fixtures captured from the Go binary
 ```
 
 `env get`, `build-id`, `render`, `eso names`, `secret opaque`, `runtime split`,
-`oci digest` and `oci pack`/`oci docker` are ported. The remaining subcommands
-(`converge`, `state`, `preflight`, `hermes`) are declared in the CLI, print
-`not implemented yet` and exit with status 2 until their modules land.
+`oci digest`, `oci pack`/`oci docker`, `converge` and `state` are ported.
+`preflight` and `hermes` are declared in the CLI, print `not implemented yet`
+and exit with status 2 until their modules land.
 
 ## Frozen contract fixtures
 
@@ -55,9 +59,10 @@ Captured from the Go binary (57 cases):
 | preflight | 8 | fake HTTP: ok, alarm, legacy writer, endpoint mismatch, not ready, HTTP/JSON errors |
 | hermes rollout | 5 | no-op, upgrade + smoke, smoke failure + rollback, `--rollback-only` |
 
-34 cases pass byte for byte: CLI/env/build-id/render (26), `eso names`,
-`secret opaque` (2), `runtime split`, and all four OCI cases (digest plus the
-OCI and docker archives). The other 23 are skipped with a reason.
+44 cases pass byte for byte: CLI/env/build-id/render (26), `eso names`,
+`secret opaque` (2), `runtime split`, all four OCI cases (digest plus the OCI
+and docker archives), four converge cases and six state cases. The other 13
+(preflight and hermes) are skipped with a reason.
 
 Fake `kubectl`/`helm` scripts record every argv (with `-f` payloads and stdin)
 under the case's `trace/`; the smoke Job name is normalised because it is

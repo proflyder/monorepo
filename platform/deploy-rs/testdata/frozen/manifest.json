@@ -774,10 +774,9 @@
         "summary.txt"
       ],
       "cwd": "cases/converge-create",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "converge is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
@@ -816,10 +815,9 @@
         "summary.txt"
       ],
       "cwd": "cases/converge-manifest-wins",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "converge is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
@@ -864,10 +862,9 @@
         "--preserve-env"
       ],
       "cwd": "cases/converge-drift-preserve",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "converge is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
@@ -910,10 +907,9 @@
         "summary.txt"
       ],
       "cwd": "cases/converge-support-objects",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "converge is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
@@ -963,9 +959,8 @@
         "fakes/kubectl"
       ],
       "cwd": "cases/state-record",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
-      "reason": "state is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
@@ -999,9 +994,8 @@
         "fakes/kubectl"
       ],
       "cwd": "cases/state-record-absent",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
-      "reason": "state is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
@@ -1031,10 +1025,9 @@
         "fakes/kubectl"
       ],
       "cwd": "cases/state-record-get-error",
-      "status": "skip",
+      "status": "implemented",
       "exit": 1,
       "stderr": "expected/stderr",
-      "reason": "state.* is not ported yet",
       "env": {
         "TRACE_DIR": "trace",
         "FAKE_GET_FAIL": "1"
@@ -1057,9 +1050,8 @@
         "scheduler"
       ],
       "cwd": "cases/state-mark",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
-      "reason": "state is not ported yet",
       "outputs": [
         {
           "path": "state/scheduler.applied",
@@ -1080,10 +1072,9 @@
         "fakes/kubectl"
       ],
       "cwd": "cases/state-rollback",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "state.* is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
@@ -1119,10 +1110,9 @@
         "fakes/kubectl"
       ],
       "cwd": "cases/state-rollback-absent",
-      "status": "skip",
+      "status": "implemented",
       "exit": 0,
       "stdout": "expected/stdout",
-      "reason": "state.* is not ported yet",
       "env": {
         "TRACE_DIR": "trace"
       },
