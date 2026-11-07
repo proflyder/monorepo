@@ -157,10 +157,16 @@ export const config = {
   ],
 
   // The scheduler deploy-control regression is expensive and only meaningful for
-  // the scheduler/bridge binaries and the Kubernetes deployment manifests.
+  // the scheduler/bridge binaries, the Kubernetes deployment manifests and the
+  // deploy CLI the script drives (a deploy-rs change must not skip it).
   deploy_control: {
     units: ["scheduler", "ha-bridge"],
-    paths: ["solutions/scheduler/**", "projects/home/kubernetes/scheduler/**"],
+    paths: [
+      "solutions/scheduler/**",
+      "projects/home/kubernetes/scheduler/**",
+      "platform/deploy-rs/**",
+      "platform/deploy/**",
+    ],
   },
 
   units: [
