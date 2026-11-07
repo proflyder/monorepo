@@ -683,7 +683,7 @@ helm template runtime projects/home-assistant/deploy/chart \
 
 Полный `apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а
 workloads — через Helm; CI катит только workloads. Скрипту нужен digest
-Go-exporter'а: `HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:…`
+Health exporter'а: `HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:…`
 (взять текущий: `kubectl -n home-assistant get deployment
 runtime-health-exporter -o jsonpath='{.spec.template.spec.containers[0].image}'`);
 он подставляет image, command и пустые volume-монтирования вместо удалённого

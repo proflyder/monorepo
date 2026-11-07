@@ -1,7 +1,7 @@
 //! Rust runner for the shared golden HTTP fixtures.
 //!
-//! The normative format is `packages/go/contracttest/README.md`; this crate
-//! replays the same `testdata/contract/*.json` against an [`axum::Router`]
+//! The normative format is `packages/rust/home-contracttest/README.md`; this
+//! crate replays the same `testdata/contract/*.json` against an [`axum::Router`]
 //! through [`tower::ServiceExt::oneshot`]. There is deliberately no `-update`:
 //! the Rust side only verifies committed fixtures.
 //!

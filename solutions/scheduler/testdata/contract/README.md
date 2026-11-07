@@ -2,7 +2,7 @@
 
 Замороженные golden HTTP-фикстуры контракта `home.v1`. Формат и семантика
 `capture`, `{{name}}` и плейсхолдеров описаны в
-`packages/go/contracttest/README.md`.
+`packages/rust/home-contracttest/README.md`.
 
 Фикстуры были сняты с Go-реализации до её удаления и теперь читаются
 Rust-раннером `solutions/scheduler/crates/scheduler/tests/contract.rs`.

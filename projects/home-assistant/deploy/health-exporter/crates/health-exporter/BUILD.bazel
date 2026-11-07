@@ -1,0 +1,102 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Kept in sync with [package].version in Cargo.toml. Bazel does not read the
+# Cargo manifest; the `version` attribute injects env!("CARGO_PKG_VERSION").
+PACKAGE_VERSION = "0.1.0"
+
+LIB_DEPS = [
+    "@crates//:axum",
+    "@crates//:http",
+    "@crates//:tokio",
+    "//packages/rust/home-runtime:home_runtime",
+]
+
+rust_library(
+    name = "health_exporter_lib",
+    crate_name = "health_exporter",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS,
+)
+
+rust_binary(
+    name = "health-exporter",
+    srcs = ["src/main.rs"],
+    # The image runs the release-shaped binary: no debug tables or symbols.
+    rustc_flags = ["-C", "strip=symbols"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS + [
+        "@crates//:anyhow",
+        "@crates//:reqwest",
+        "@crates//:tracing",
+        ":health_exporter_lib",
+        "//packages/rust/home-telemetry:home_telemetry",
+        "//packages/rust/home-tls:home_tls",
+    ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":health_exporter_lib",
+    data = [":testdata"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:http-body-util",
+        "@crates//:tower",
+    ],
+)
+
+# The command-line parser lives in the binary; test it there.
+rust_test(
+    name = "binary_tests",
+    crate = ":health-exporter",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:anyhow",
+        "@crates//:reqwest",
+        "@crates//:tracing",
+        ":health_exporter_lib",
+        "//packages/rust/home-telemetry:home_telemetry",
+        "//packages/rust/home-tls:home_tls",
+    ],
+)
+
+filegroup(
+    name = "testdata",
+    srcs = ["testdata/metrics.golden"],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":health_exporter_lib",
+        ":health-exporter",
+    ],
+)
+
+rust_clippy_test(
+    name = "clippy",
+    targets = [
+        ":health_exporter_lib",
+        ":health-exporter",
+    ],
+)
