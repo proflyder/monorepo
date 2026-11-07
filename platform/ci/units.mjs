@@ -956,7 +956,8 @@ export const config = {
       platform: "native",
       title: "solutions/windows-logon-provider (Windows credential provider)",
       // The Windows target platform and the hermetic zig toolchain are part of
-      // the build contract: changing either must rebuild and publish the unit.
+      // the build contract: changing either must rebuild and verify the unit.
+      // Publication is gated by VERSION below.
       paths: [
         "solutions/windows-logon-provider/**",
         "platform/bazel/windows/**",
@@ -975,6 +976,9 @@ export const config = {
         checksums: "out/SHA256SUMS",
         publish_script: "solutions/windows-logon-provider/publish-oci.sh",
         publish_repository: "ghcr.io/proflyder/windows-logon-provider",
+        // Only a VERSION change is a release. Every other source or toolchain
+        // change is still built, tested and verified by PR CI.
+        publish_when: ["solutions/windows-logon-provider/VERSION"],
         publish_tags: ["{version}", "sha-{commit12}"],
         publish_attest_glob: "RicardoKompLogon.dll",
       },

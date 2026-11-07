@@ -53,11 +53,15 @@ Service URL, имя машины и учётная запись задаёт п�
    - **unlock:** `"purpose":"unlock"` и `"waitSeconds":25` (long-poll), без
      бюджета — цикл живёт, пока провайдер не остановлен. Отказ сервера
      (`denied`) сразу начинает следующий раунд: паузу даёт сам long-poll.
+     Раунд короче 2 секунд (сервер не держит long-poll) добирается до этого
+     минимума, чтобы не крутить поток на каждый мгновенный `denied`.
      Ошибка сети, `429` или `5xx` — пауза 5/10/20/30 секунд (backoff,
      насыщается на 30). Остальные HTTP-статусы — остановка (fail closed).
    WinHTTP-таймауты 2/2/4/4 с; у unlock-claim receive timeout 35 секунд
    (больше `waitSeconds`). `WINHTTP_ACCESS_TYPE_NO_PROXY`, без редиректов и
-   cookie.
+   cookie. Для `https://` минимальная версия TLS — 1.2 (WinHTTP
+   `WINHTTP_OPTION_SECURE_PROTOCOLS`, TLS 1.2 | 1.3), сертификат проверяется
+   системно; pinning не делается, plain `http://` в LAN разрешён.
 3. Ответ `/v1/claim` проверяется по HMAC со своим nonce, `granted` и
    **purpose**; только `granted:true` с валидным MAC нужного назначения
    «взводит» плитку и один раз вызывает `CredentialsChanged`. MAC для
@@ -113,8 +117,12 @@ CLSID провайдера (зафиксирован, менять нельзя 
 | `Machine` | REG_SZ | `<machine>` (`^[a-z0-9-]{1,32}$`) |
 | `UserName` | REG_SZ | локальная учётная запись, например `<user>` |
 | `Domain` | REG_SZ | `.` для локальной учётной записи |
-| `Disabled` | DWORD | `1` — провайдер неактивен |
-| `FailCount` | DWORD | счётчик неудачных входов, ставит сам провайдер |
+| `Disabled` | DWORD | `1` — провайдер неактивен; отсутствует = `0` |
+| `FailCount` | DWORD | счётчик неудачных входов, ставит сам провайдер; отсутствует = `0` |
+
+`Disabled` проверяется раньше остальных значений: при `1` провайдер
+выключается, даже если `ServiceUrl` или имена в реестре испорчены. Отсутствие
+`Disabled`/`FailCount` провайдер не выключает.
 
 Секрет `C:\ProgramData\Ricardo\KompLogon\secret.bin` — DPAPI в машинной
 области (`CRYPTPROTECT_LOCAL_MACHINE`) с фиксированной энтропией
@@ -177,9 +185,14 @@ solutions/windows-logon-provider/regen-bindings.sh
 
 ## Публикация и установка из GHCR
 
-Версия решения — `VERSION` (semver). На push в `develop`, когда затронут юнит
-`logon-provider`, `deploy-home` собирает его тем же `_native.yml`, что и PR,
-затем `publish-oci.sh` публикует публичный OCI-артефакт:
+Версия решения — `VERSION` (semver). Любое изменение путей провайдера,
+общих `Cargo.lock`/`Cargo.toml`/`crate-universe.lock`, используемых крейтов
+`packages/rust/*` или тулчейнов Windows/zig попадает в PR CI: юнит
+`logon-provider` собирает DLL и `cp-selftest`, гоняет `run-tests.sh`,
+проверки `pe_artifacts.py` и `SHA256SUMS`. Публикация — отдельное, осознанное
+действие: на push в `develop` `deploy-home` собирает юнит тем же `_native.yml`
+только когда изменён `solutions/windows-logon-provider/VERSION`, и тогда
+`publish-oci.sh` публикует публичный OCI-артефакт:
 
 ```text
 ghcr.io/proflyder/windows-logon-provider:<VERSION>

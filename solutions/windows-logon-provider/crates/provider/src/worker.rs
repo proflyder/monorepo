@@ -8,10 +8,13 @@
 //!   timeout, no budget: the loop runs until the tile is armed or the session
 //!   is cancelled.
 //!
-//! Neither mode blocks a LogonUI thread. Both stop promptly on `UnAdvise`:
-//! every request checks [`Session::cancelled`] before and after it, and the
-//! unlock claim runs on a short-lived module-pinned thread so the worker does
-//! not have to wait for a long-poll answer.
+//! The exchange itself is portable and host-tested in [`crate::worker_core`];
+//! this module owns only the WinHTTP, clock, log and thread adapters. Neither
+//! mode blocks a LogonUI thread. Both stop promptly on `UnAdvise`: every
+//! request checks the session before and after it, and the unlock claim runs on
+//! a short-lived module-pinned thread so the worker does not have to wait for a
+//! long-poll answer. Every thread-procedure body, including its cleanup, is
+//! wrapped in [`crate::ffi_guard::guard_thread`].
 
 /// Poll interval between rounds in logon mode.
 pub const POLL_INTERVAL_MS: u32 = 2000;
@@ -27,6 +30,13 @@ pub const UNLOCK_RECEIVE_TIMEOUT_MS: i32 = 35_000;
 pub const UNLOCK_BACKOFF_START_MS: u32 = 5_000;
 /// Back-off cap in unlock mode.
 pub const UNLOCK_BACKOFF_MAX_MS: u32 = 30_000;
+/// Minimum duration of one unlock round, measured from the challenge request
+/// to the claim answer. A healthy server holds the claim for
+/// [`UNLOCK_WAIT_SECONDS`], so this only paces a broken or misconfigured
+/// server that denies instantly; otherwise the loop would create a claim
+/// thread per round without pause. Two seconds matches the logon poll and caps
+/// the client at 30 claims/min, inside the server's documented 60/min limit.
+pub const UNLOCK_MIN_ROUND_MS: u32 = 2_000;
 
 /// Exponential back-off for the unlock loop: 5, 10, 20, 30, 30, ... seconds.
 pub fn unlock_backoff_delay(attempt: u32) -> u32 {
@@ -34,6 +44,14 @@ pub fn unlock_backoff_delay(attempt: u32) -> u32 {
     UNLOCK_BACKOFF_START_MS
         .saturating_mul(1 << shift)
         .min(UNLOCK_BACKOFF_MAX_MS)
+}
+
+/// Pause before the next unlock round. `retry_ms` is the error back-off, or
+/// `None` for a plain denial, where the long-poll itself is the pause. A round
+/// shorter than [`UNLOCK_MIN_ROUND_MS`] is padded to the minimum.
+pub fn unlock_round_delay(round_ms: u64, retry_ms: Option<u32>) -> u32 {
+    let remaining = UNLOCK_MIN_ROUND_MS.saturating_sub(round_ms.min(u64::from(u32::MAX)) as u32);
+    retry_ms.map_or(remaining, |delay| delay.max(remaining))
 }
 
 /// How a round ended.
@@ -111,317 +129,108 @@ mod windows_impl {
     use core::ffi::c_void;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
-    use std::time::{Duration, Instant};
-
-    use wakegrant_protocol::{
-        ClaimOutcome, MachineSecret, Purpose, challenge_request_json,
-        claim_mac_message_for_purpose, claim_request_json_for_purpose, hmac_sha256_b64,
-        parse_challenge_response, verify_claim_response_for_purpose,
-    };
+    use std::time::Duration;
 
     use crate::bindings::Windows::Win32::Foundation::{CloseHandle, FreeLibrary, HMODULE};
     use crate::bindings::Windows::Win32::System::LibraryLoader::{
         FreeLibraryAndExitThread, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GetModuleHandleExW,
     };
+    use crate::bindings::Windows::Win32::System::SystemInformation::GetTickCount64;
     use crate::bindings::Windows::Win32::System::Threading::{CreateThread, THREAD_CREATION_FLAGS};
     use windows_core::PCWSTR;
 
     use crate::config::{
-        Config, ConfigError, ServiceEndpoint, endpoint_path, load_config, load_secret,
-        parse_service_url, redact_service_url,
+        ConfigError, ServiceEndpoint, load_config, load_secret, parse_service_url,
+        redact_service_url,
     };
-    use crate::ffi_guard::guard;
+    use crate::ffi_guard::{guard, guard_thread};
     use crate::gate::Mode;
-    use crate::http::{HttpOutcome, post_json, post_json_with_receive_timeout};
+    use crate::http::{HttpOutcome, post_json_with_receive_timeout};
     use crate::log::log_event;
-    use crate::provider::{
-        ACTIVE_WORKERS, ArmResult, Session, WORKER_BUDGET_MS, arm_session, within_budget,
-    };
-    use crate::worker::{
-        POLL_INTERVAL_MS, RoundKind, RoundOutcome, UNLOCK_RECEIVE_TIMEOUT_MS, UNLOCK_WAIT_SECONDS,
-        clamp_delay, retry_delay_for_status, unlock_backoff_delay,
+    use crate::provider::{ACTIVE_WORKERS, ArmResult, Session, arm_session, cancel_session};
+    use crate::worker_core::{
+        ArmOutcome, Clock, EventLog, LoopContext, LoopEnd, PostRequest, Target, Transport,
+        run_exchange,
     };
 
-    fn sleep_interruptible(session: &Arc<Session>, generation: u32, milliseconds: u32) {
-        let deadline = Instant::now() + Duration::from_millis(u64::from(milliseconds));
-        while Instant::now() < deadline {
-            if session.cancelled(generation) {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(100));
+    struct SystemClock;
+
+    impl Clock for SystemClock {
+        fn now_ms(&self) -> u64 {
+            // SAFETY: GetTickCount64 takes no arguments.
+            unsafe { GetTickCount64() }
+        }
+
+        fn sleep_ms(&self, milliseconds: u32) {
+            std::thread::sleep(Duration::from_millis(u64::from(milliseconds)));
         }
     }
 
-    /// Suppresses repeated identical error lines in the unlock loop, which can
-    /// run all night. Every error kind is logged again at most every tenth
-    /// repeat, and any different error is logged immediately.
-    #[derive(Default)]
-    struct ErrorDedup {
-        last: String,
-        repeats: u32,
-    }
+    struct WindowsLog;
 
-    impl ErrorDedup {
-        /// `key` identifies the error kind; `fields` may contain per-round
-        /// timings, so it cannot be the dedup key itself.
-        fn log(&mut self, event: &str, key: &str, fields: &str) {
-            if self.last == key {
-                self.repeats = self.repeats.saturating_add(1);
-                if !self.repeats.is_multiple_of(10) {
-                    return;
-                }
-            } else {
-                self.last.clear();
-                self.last.push_str(key);
-                self.repeats = 0;
-            }
+    impl EventLog for WindowsLog {
+        fn event(&self, event: &str, fields: &str) {
             log_event(event, fields);
         }
     }
 
-    fn log_error(dedup: &mut Option<ErrorDedup>, event: &str, key: &str, fields: &str) {
-        match dedup {
-            Some(dedup) => dedup.log(event, key, fields),
-            None => log_event(event, fields),
-        }
-    }
-
-    /// Everything one round needs besides the session and its generation.
-    #[derive(Clone, Copy)]
-    struct RoundContext<'a> {
-        config: &'a Config,
-        endpoint: &'a ServiceEndpoint,
-        secret: &'a MachineSecret,
-        mode: Mode,
-    }
-
-    /// Logs a transport failure or a non-200 status and turns it into the
-    /// round outcome the loops expect; challenge and claim share it.
-    fn http_response(
-        outcome: HttpOutcome,
-        request: &str,
-        prefix: &str,
-        dedup: &mut Option<ErrorDedup>,
-    ) -> Result<(Vec<u8>, u32), RoundOutcome> {
-        match outcome {
-            HttpOutcome::Transport { error, elapsed_ms } => {
-                log_error(
-                    dedup,
-                    "http",
-                    &format!("{request}-transport-{error}"),
-                    &format!("request={request} ok=0 error={error} ms={elapsed_ms} {prefix}"),
-                );
-                Err(RoundOutcome::retry_error(POLL_INTERVAL_MS))
-            }
-            HttpOutcome::Response {
-                status: 200,
-                body,
-                elapsed_ms,
-            } => Ok((body, elapsed_ms)),
-            HttpOutcome::Response {
-                status, elapsed_ms, ..
-            } => {
-                log_error(
-                    dedup,
-                    "http",
-                    &format!("{request}-status-{status}"),
-                    &format!("request={request} ok=1 status={status} ms={elapsed_ms} {prefix}"),
-                );
-                Err(retry_delay_for_status(status)
-                    .map_or_else(RoundOutcome::fatal, RoundOutcome::retry_error))
-            }
-        }
-    }
-
-    /// One challenge/claim exchange. Any unexpected answer ends the round
-    /// without arming; only a verified grant arms the session.
-    fn one_round(
-        session: &Arc<Session>,
+    struct SessionTarget<'a> {
+        session: &'a Arc<Session>,
         generation: u32,
-        context: &RoundContext<'_>,
-        elapsed_ms: u64,
-        dedup: &mut Option<ErrorDedup>,
-    ) -> RoundOutcome {
-        let RoundContext {
-            config,
-            endpoint,
-            secret,
-            mode,
-        } = *context;
-        let purpose = if mode == Mode::Unlock {
-            Purpose::Unlock
-        } else {
-            Purpose::Logon
-        };
-        let prefix = format!("elapsed_ms={elapsed_ms}");
-        if session.cancelled(generation) {
-            return RoundOutcome::fatal();
+    }
+
+    impl Target for SessionTarget<'_> {
+        fn cancelled(&self) -> bool {
+            self.session.cancelled(self.generation)
         }
 
-        let challenge_path = endpoint_path(endpoint, "/v1/challenge");
-        let challenge = post_json(
-            endpoint,
-            &challenge_path,
-            challenge_request_json(&config.machine).as_bytes(),
-        );
-        if session.cancelled(generation) {
-            return RoundOutcome::fatal();
+        fn arm(&self) -> ArmOutcome {
+            match arm_session(self.session, self.generation) {
+                ArmResult::Armed => ArmOutcome::Armed,
+                ArmResult::Cancelled => ArmOutcome::Cancelled,
+                ArmResult::Unavailable => ArmOutcome::Unavailable,
+            }
         }
-        let (challenge_body, _) = match http_response(challenge, "challenge", &prefix, dedup) {
-            Ok(value) => value,
-            Err(outcome) => return outcome,
-        };
+    }
 
-        let Ok(challenge_body) = std::str::from_utf8(&challenge_body) else {
-            log_error(
-                dedup,
-                "challenge",
-                "challenge-invalid-utf8",
-                &format!("ok=0 error=invalid-utf8 {prefix}"),
-            );
-            return RoundOutcome::fatal();
-        };
-        let response = match parse_challenge_response(challenge_body) {
-            Ok(response) => response,
-            Err(error) => {
-                log_error(
-                    dedup,
-                    "challenge",
-                    &format!("challenge-{}", error.detail()),
-                    &format!("ok=0 error={} {prefix}", error.detail()),
-                );
-                return RoundOutcome::fatal();
-            }
-        };
+    struct HttpTransport<'a> {
+        session: &'a Arc<Session>,
+        generation: u32,
+    }
 
-        let mac = hmac_sha256_b64(
-            secret.key(),
-            &claim_mac_message_for_purpose(&config.machine, &response.nonce, purpose),
-        );
-        let wait_seconds = (purpose == Purpose::Unlock).then_some(UNLOCK_WAIT_SECONDS);
-        let claim_body = claim_request_json_for_purpose(
-            &config.machine,
-            &response.nonce,
-            &mac,
-            purpose,
-            wait_seconds,
-        );
-        let claim_path = endpoint_path(endpoint, "/v1/claim");
-        let claim = if purpose == Purpose::Unlock {
-            match cancellable_post(
-                session,
-                generation,
-                endpoint,
-                &claim_path,
-                claim_body.as_bytes(),
-                UNLOCK_RECEIVE_TIMEOUT_MS,
-            ) {
-                Some(result) => result,
-                // Cancelled while the long-poll was in flight.
-                None => return RoundOutcome::fatal(),
-            }
-        } else {
-            post_json(endpoint, &claim_path, claim_body.as_bytes())
-        };
-        if session.cancelled(generation) {
-            return RoundOutcome::fatal();
-        }
-        let (claim_body, claim_ms) = match http_response(claim, "claim", &prefix, dedup) {
-            Ok(value) => value,
-            Err(outcome) => return outcome,
-        };
-
-        let Ok(body) = std::str::from_utf8(&claim_body) else {
-            log_error(
-                dedup,
-                "grant",
-                "grant-invalid-utf8",
-                &format!("result=malformed detail=invalid-utf8 ms={claim_ms} {prefix}"),
-            );
-            return RoundOutcome::retry_error(POLL_INTERVAL_MS);
-        };
-        let result = verify_claim_response_for_purpose(
-            body,
-            secret.key(),
-            &config.machine,
-            &response.nonce,
-            purpose,
-        );
-
-        match result.outcome {
-            ClaimOutcome::Granted => {
-                log_event(
-                    "grant",
-                    &format!(
-                        "result=granted purpose={} grant_id={} ms={claim_ms} {prefix}",
-                        purpose.as_str(),
-                        result.grant_id
-                    ),
-                );
-                // The grant is already consumed, so never claim again: only
-                // wait a moment for Advise() and then give up.
-                for _ in 0..20 {
-                    match arm_session(session, generation) {
-                        ArmResult::Armed => {
-                            log_event("armed", "ok=1");
-                            return RoundOutcome::armed();
-                        }
-                        ArmResult::Cancelled => {
-                            log_event("armed", "ok=0 reason=cancelled");
-                            return RoundOutcome::fatal();
-                        }
-                        ArmResult::Unavailable => {}
-                    }
-                    if session.cancelled(generation) {
-                        log_event("armed", "ok=0 reason=cancelled");
-                        return RoundOutcome::fatal();
-                    }
-                    sleep_interruptible(session, generation, 100);
-                }
-                log_event("armed", "ok=0 reason=no_events");
-                RoundOutcome::fatal()
-            }
-            ClaimOutcome::Denied => {
-                if purpose == Purpose::Logon {
-                    log_event(
-                        "grant",
-                        &format!("result=denied purpose=logon ms={claim_ms} {prefix}"),
-                    );
-                }
-                // Unlock denials are not logged: the long-poll is the pause,
-                // and a lock screen can stay up all night.
-                RoundOutcome::retry(if purpose == Purpose::Unlock {
-                    0
-                } else {
-                    POLL_INTERVAL_MS
-                })
-            }
-            ClaimOutcome::InvalidMac | ClaimOutcome::Malformed => {
-                let label = if result.outcome == ClaimOutcome::InvalidMac {
-                    "invalid_mac"
-                } else {
-                    "malformed"
-                };
-                log_error(
-                    dedup,
-                    "grant",
-                    &format!("grant-{label}-{}", result.detail),
-                    &format!(
-                        "result={label} purpose={} detail={} ms={claim_ms} {prefix}",
-                        purpose.as_str(),
-                        result.detail
-                    ),
-                );
-                RoundOutcome::retry_error(POLL_INTERVAL_MS)
+    impl Transport for HttpTransport<'_> {
+        fn post(&self, request: PostRequest<'_>) -> Option<HttpOutcome> {
+            if request.cancellable {
+                cancellable_post(
+                    self.session,
+                    self.generation,
+                    request.endpoint,
+                    request.path,
+                    request.body,
+                    request.receive_timeout_ms,
+                )
+            } else {
+                Some(post_json_with_receive_timeout(
+                    request.endpoint,
+                    request.path,
+                    request.body,
+                    request.receive_timeout_ms,
+                ))
             }
         }
     }
 
     fn run_worker(session: &Arc<Session>, generation: u32, mode: Mode) {
         let start = if mode == Mode::Unlock {
-            format!("phase=start mode=unlock wait_s={UNLOCK_WAIT_SECONDS}")
+            format!(
+                "phase=start mode=unlock wait_s={}",
+                super::UNLOCK_WAIT_SECONDS
+            )
         } else {
-            format!("phase=start mode=logon budget_ms={WORKER_BUDGET_MS}")
+            format!(
+                "phase=start mode=logon budget_ms={}",
+                crate::provider::WORKER_BUDGET_MS
+            )
         };
         log_event("worker", &start);
 
@@ -464,67 +273,48 @@ mod windows_impl {
             }
         };
 
-        let mut armed = false;
-        let mut stopped = false;
-        let mut dedup: Option<ErrorDedup> = if mode == Mode::Unlock {
-            Some(ErrorDedup::default())
-        } else {
-            None
+        let context = LoopContext {
+            config: &config,
+            endpoint: &endpoint,
+            secret: &secret,
+            mode,
+            origin_ms: session.load_tick.load(Ordering::Relaxed),
         };
-        let mut error_attempt = 0u32;
-        while !armed && !stopped {
-            if session.cancelled(generation) {
-                break;
-            }
-            let now = session.elapsed_ms();
-            if mode == Mode::Logon && !within_budget(now) {
-                break;
-            }
-
-            let context = RoundContext {
-                config: &config,
-                endpoint: &endpoint,
-                secret: &secret,
-                mode,
-            };
-            let outcome = one_round(session, generation, &context, now, &mut dedup);
-            match outcome.kind {
-                RoundKind::Armed => armed = true,
-                RoundKind::Fatal => stopped = true,
-                RoundKind::Retry => {
-                    if mode == Mode::Unlock {
-                        if outcome.error {
-                            let delay = unlock_backoff_delay(error_attempt);
-                            error_attempt = error_attempt.saturating_add(1);
-                            sleep_interruptible(session, generation, delay);
-                        } else {
-                            // A denial is the normal long-poll result; the
-                            // server already held the request for up to 25 s.
-                            error_attempt = 0;
-                        }
-                    } else {
-                        let now = session.elapsed_ms();
-                        let left = WORKER_BUDGET_MS.saturating_sub(now);
-                        let delay = clamp_delay(outcome.delay_ms, left);
-                        if delay > 0 {
-                            sleep_interruptible(session, generation, delay);
-                        }
-                    }
-                }
-            }
-        }
+        let target = SessionTarget {
+            session,
+            generation,
+        };
+        let transport = HttpTransport {
+            session,
+            generation,
+        };
+        let end = run_exchange(&context, &target, &transport, &SystemClock, &WindowsLog);
 
         drop(secret); // `MachineSecret` zeroizes the key and the password.
-        // `consume_arming` may already have advanced the generation by the time
-        // this line runs; the round still ended by arming the tile.
-        let phase = if armed {
-            "phase=armed"
-        } else if session.cancelled(generation) {
-            "phase=cancelled"
-        } else {
-            "phase=stopped"
+        let phase = match end {
+            LoopEnd::Armed => "phase=armed",
+            LoopEnd::Cancelled => "phase=cancelled",
+            LoopEnd::Stopped => "phase=stopped",
         };
         log_event("worker", phase);
+    }
+
+    /// Pins this DLL for as long as a thread may execute its code.
+    ///
+    /// The only exit is [`ModulePin::exit`]. There is deliberately no `Drop`:
+    /// a destructor could only run on an unwind that is already an abort, and
+    /// releasing the pin then would unmap code that is still executing. On that
+    /// impossible path the reference leaks, which is harmless.
+    struct ModulePin(HMODULE);
+
+    impl ModulePin {
+        fn exit(self) -> ! {
+            let Self(module) = self;
+            // SAFETY: the pin was taken by `GetModuleHandleExW(FROM_ADDRESS)` in
+            // `start_worker_thread`/`cancellable_post`; this releases it and
+            // exits the thread, so no code from this module runs afterwards.
+            unsafe { FreeLibraryAndExitThread(module, 0) }
+        }
     }
 
     /// Arguments moved into the claim request thread.
@@ -540,7 +330,9 @@ mod windows_impl {
     /// Short-lived thread that performs one long-poll claim.
     ///
     /// The module is pinned for exactly this thread's lifetime, so the DLL
-    /// cannot unload under a request that outlives the worker.
+    /// cannot unload under a request that outlives the worker. A panic in the
+    /// request, the send or the cleanup is contained; the pin and the worker
+    /// count are still released exactly once.
     unsafe extern "system" fn claim_thread_proc(parameter: *mut c_void) -> u32 {
         // SAFETY: `parameter` comes from `Box::into_raw` in `cancellable_post`
         // and this thread owns it.
@@ -552,20 +344,40 @@ mod windows_impl {
             sender,
             module,
         } = *unsafe { Box::from_raw(parameter.cast::<ClaimJob>()) };
+        let pin = ModulePin(module);
 
-        let result = post_json_with_receive_timeout(&endpoint, &path, &body, receive_timeout_ms);
+        let result = guard_thread(
+            || post_json_with_receive_timeout(&endpoint, &path, &body, receive_timeout_ms),
+            || {
+                // Bookkeeping for DllCanUnloadNow; the pin above is what
+                // actually makes unloading safe.
+                ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
+            },
+            || {},
+        );
+
+        let mut sender = Some(sender);
+        let mut result = result;
+        let _ = guard_thread(
+            move || {
+                if let Some(sender) = sender.take() {
+                    let outcome = result.take().unwrap_or(HttpOutcome::Transport {
+                        error: "panic",
+                        elapsed_ms: 0,
+                    });
+                    // A send to a dropped receiver only discards the result.
+                    let _ = sender.send(outcome);
+                }
+            },
+            || {},
+            || {},
+        );
+
         // Every Rust object with a `Drop` impl is gone before the module is
-        // released. A send to a dropped receiver only discards the result.
-        drop(endpoint);
-        drop(path);
-        drop(body);
-        let _ = sender.send(result);
-        drop(sender);
-        ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
-
-        // SAFETY: releases the pin taken in `cancellable_post` and exits the
-        // thread; it diverges, so no code from this module runs afterwards.
-        unsafe { FreeLibraryAndExitThread(module, 0) }
+        // released.
+        let mut leftovers = Some((endpoint, path, body));
+        let _ = guard_thread(|| drop(leftovers.take()), || {}, || {});
+        pin.exit()
     }
 
     /// Posts on a separate module-pinned thread and returns `None` as soon as
@@ -667,9 +479,10 @@ mod windows_impl {
 
     /// Worker thread procedure. Owns `parameter` and never returns.
     ///
-    /// The module is pinned for exactly this thread's lifetime: every Rust
-    /// object with a `Drop` impl is gone before `FreeLibraryAndExitThread`, so
-    /// no code from this DLL can run after the module is released.
+    /// The whole body — the loop and its cleanup — is contained. A panic
+    /// cancels the session (fail closed), `finish_worker` and the worker count
+    /// are released exactly once, and the module pin is always released by
+    /// `ModulePin::exit`.
     unsafe extern "system" fn worker_thread_proc(parameter: *mut c_void) -> u32 {
         // SAFETY: `parameter` comes from `Box::into_raw(StartArgs)` in
         // `start_worker_thread` and this thread owns it.
@@ -679,25 +492,36 @@ mod windows_impl {
             mode,
             generation,
         } = *unsafe { Box::from_raw(parameter.cast::<StartArgs>()) };
+        let pin = ModulePin(module);
 
-        {
-            guard(
-                || run_worker(&session, generation, mode),
-                || log_event("worker", "phase=exception"),
-            );
-            session.finish_worker(generation);
-            // Bookkeeping for DllCanUnloadNow; the module pin above is what
-            // actually makes unloading safe.
-            ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
-        }
+        let _ = guard_thread(
+            || run_worker(&session, generation, mode),
+            || {
+                // Two independent steps: a panic in the first must not skip
+                // the worker-count decrement.
+                let _ = guard_thread(|| session.finish_worker(generation), || {}, || {});
+                let _ = guard_thread(
+                    || {
+                        ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
+                    },
+                    || {},
+                    || {},
+                );
+            },
+            || {
+                // Existing journal line.
+                guard(|| log_event("worker", "phase=exception"), || {});
+                cancel_session(&session);
+            },
+        );
+
         // The only remaining Rust object is the session reference itself; drop
-        // it before the module can disappear.
-        drop(session);
+        // it before the module can disappear. A panic in its destructor is
+        // contained as well.
+        let mut session = Some(session);
+        let _ = guard_thread(|| drop(session.take()), || {}, || {});
 
-        // SAFETY: releases the pin taken in `start_worker_thread` and exits the
-        // thread. It diverges, so no code below (or after this call) runs in the
-        // possibly unloaded module.
-        unsafe { FreeLibraryAndExitThread(module, 0) }
+        pin.exit()
     }
 
     /// Creates the single worker thread with a raw `CreateThread`.
@@ -801,6 +625,20 @@ mod tests {
         assert_eq!(unlock_backoff_delay(3), 30_000);
         assert_eq!(unlock_backoff_delay(4), 30_000);
         assert_eq!(unlock_backoff_delay(u32::MAX), 30_000);
+    }
+
+    #[test]
+    fn an_unlock_round_is_padded_to_the_minimum_interval() {
+        assert_eq!(UNLOCK_MIN_ROUND_MS, 2000);
+        assert_eq!(unlock_round_delay(0, None), 2000);
+        assert_eq!(unlock_round_delay(500, None), 1500);
+        assert_eq!(unlock_round_delay(1999, None), 1);
+        assert_eq!(unlock_round_delay(2000, None), 0);
+        // A real long-poll already outlasts the minimum.
+        assert_eq!(unlock_round_delay(25_000, None), 0);
+        // An error back-off is never shortened by the minimum.
+        assert_eq!(unlock_round_delay(0, Some(5000)), 5000);
+        assert_eq!(unlock_round_delay(1000, Some(500)), 1000);
     }
 
     #[test]

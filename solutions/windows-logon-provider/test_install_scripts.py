@@ -273,7 +273,9 @@ class ProviderSourceTests(unittest.TestCase):
         self.assertIn("mode == Mode::Logon && !within_budget", start)
 
     def test_worker_is_purpose_aware_and_the_tile_needs_only_an_arming(self):
-        worker = (PROVIDER / "worker.rs").read_text(encoding="utf-8")
+        worker = (PROVIDER / "worker.rs").read_text(encoding="utf-8") + (
+            PROVIDER / "worker_core.rs"
+        ).read_text(encoding="utf-8")
         self.assertIn("Purpose::Logon", worker)
         self.assertIn("Purpose::Unlock", worker)
         self.assertIn("UNLOCK_WAIT_SECONDS", worker)
@@ -296,7 +298,9 @@ class ProviderSourceTests(unittest.TestCase):
         self.assertIn("-Tail $Tail", read_ps1("status.ps1")[1])
 
     def test_provider_never_blocks_with_unbounded_waits(self):
-        worker = (PROVIDER / "worker.rs").read_text(encoding="utf-8")
+        worker = (PROVIDER / "worker.rs").read_text(encoding="utf-8") + (
+            PROVIDER / "worker_core.rs"
+        ).read_text(encoding="utf-8")
         self.assertIn("WORKER_BUDGET_MS", worker)
         self.assertNotIn("thread::sleep(Duration::from_millis(2000))", worker)
         self.assertIn("sleep_interruptible", worker)

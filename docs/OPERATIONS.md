@@ -553,9 +553,11 @@ PVC), но сбрасывает выданные nonce — ПК просто з�
 `UserName` в решении не хранятся: их передаёт проект при установке (для этого
 ПК — параметры ниже).
 
-Распространение — публичный OCI-артефакт GHCR, а не artifact Actions. На push
-в `develop`, когда затронут юнит `logon-provider`, `deploy-home` собирает его
-тем же `_native.yml`, что и PR, и публикует через ORAS:
+Распространение — публичный OCI-артефакт GHCR, а не artifact Actions. Любое
+изменение путей провайдера (и общих Rust/Cargo-входов) собирается и
+проверяется PR CI. На push в `develop` `deploy-home` собирает юнит тем же
+`_native.yml` и публикует через ORAS только когда изменён
+`solutions/windows-logon-provider/VERSION`:
 
 ```text
 ghcr.io/proflyder/windows-logon-provider:<VERSION>
