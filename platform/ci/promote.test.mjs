@@ -20,7 +20,10 @@ import {
   parseDigest,
   planNativePromotion,
   planPromotion,
+  pullRequestForCommit,
+  pullRequestNumber,
   readHistory,
+  resolvePrHeadDelta,
   runNativePromotion,
   runPromotion,
   sameManifestContent,
@@ -939,4 +942,361 @@ test("output formats carry the digest list and the chosen path", () => {
   assert.match(summary, /`scheduler`: missing — not found/);
   assert.match(summary, /path: `build`/);
   assert.match(summary, /not deployable: not every image/);
+});
+
+// --------------------------------------------------------------------------
+// PR-head delta fallback (#195): the squash merge landed on a newer develop
+// --------------------------------------------------------------------------
+//
+// CI verified the PR head H; the merge commit has another tree because another
+// PR landed first. The fallback promotes `tree-<tree(H)>` only when the delta
+// H..merge does not route to this unit.
+
+const PR_HEAD = "c".repeat(40);
+const PR_HEAD_TREE = "d".repeat(40);
+const REF = imageRef("scheduler");
+
+function prHeadImageHandlers({ ref = REF, headTree = PR_HEAD_TREE, digest = DIGEST_A } = {}) {
+  const currentTag = `${ref}:tree-${TREE}`;
+  const headTag = `${ref}:tree-${headTree}`;
+  return [
+    [
+      (command, args) => command === "crane" && args[0] === "digest" && args[1] === currentTag,
+      new Error("MANIFEST_UNKNOWN: manifest unknown"),
+    ],
+    [
+      (command, args) => command === "crane" && args[0] === "digest" && args[1] === headTag,
+      digest,
+    ],
+    [isGhVerify, ""],
+    [isCraneTag, ""],
+    [isCraneDigest, digest],
+  ];
+}
+
+test("a delta that does not touch the unit promotes the PR-head tree", () => {
+  const { calls, exec } = recorder(prHeadImageHandlers());
+  const result = planPromotion({
+    images: ["scheduler"],
+    tree: TREE,
+    commit: COMMIT,
+    repository: REPO,
+    exec,
+    allowPrHead: true,
+    unit: "scheduler",
+    prHead: { number: 204, head: PR_HEAD, tree: PR_HEAD_TREE, affectsUnit: false, changed: ["docs/STATE.md"] },
+  });
+  assert.equal(result.mode, "prebuilt");
+  assert.equal(result.digests.scheduler, DIGEST_A);
+  const decision = result.decisions.find((entry) => entry.image === "scheduler");
+  assert.equal(decision.source, PR_HEAD);
+  assert.match(decision.detail, new RegExp(`from PR head ${PR_HEAD.slice(0, 12)}`));
+  assert.match(decision.detail, /does not affect scheduler/);
+  assert.equal(tagsWritten(calls).length, 2);
+  assert.match(formatSummary(result), new RegExp(`from ${PR_HEAD.slice(0, 12)}`));
+});
+
+test("a delta that touches the unit is refused instead of promoted", () => {
+  const { calls, exec } = recorder([
+    [
+      (command, args) => command === "crane" && args[0] === "digest",
+      new Error("MANIFEST_UNKNOWN: manifest unknown"),
+    ],
+  ]);
+  const result = planPromotion({
+    images: ["scheduler"],
+    tree: TREE,
+    commit: COMMIT,
+    repository: REPO,
+    exec,
+    allowPrHead: true,
+    unit: "scheduler",
+    prHead: { number: 204, head: PR_HEAD, tree: PR_HEAD_TREE, affectsUnit: true, changed: ["scheduler/src/main.rs"] },
+  });
+  assert.equal(result.mode, "build");
+  assert.deepEqual(result.digests, {});
+  assert.match(result.reason, /bring develop into the PR/);
+  assert.match(result.decisions[0].detail, /changes scheduler/);
+  assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("a missing pull request refuses the fallback", () => {
+  const { exec } = recorder([
+    [
+      (command, args) => command === "crane" && args[0] === "digest",
+      new Error("MANIFEST_UNKNOWN: manifest unknown"),
+    ],
+  ]);
+  const result = planPromotion({
+    images: ["scheduler"],
+    tree: TREE,
+    commit: COMMIT,
+    repository: REPO,
+    exec,
+    allowPrHead: true,
+    unit: "scheduler",
+    prHead: { error: `no pull request found for ${COMMIT.slice(0, 12)}` },
+  });
+  assert.equal(result.mode, "build");
+  assert.match(result.reason, /PR head fallback failed: no pull request found/);
+  assert.match(result.decisions[0].detail, /PR head fallback failed/);
+});
+
+test("the PR-head tree still needs verified provenance", () => {
+  const handlers = prHeadImageHandlers();
+  handlers[2] = [isGhVerify, new Error("no attestations found")];
+  const { calls, exec } = recorder(handlers);
+  const result = planPromotion({
+    images: ["scheduler"],
+    tree: TREE,
+    commit: COMMIT,
+    repository: REPO,
+    exec,
+    allowPrHead: true,
+    unit: "scheduler",
+    prHead: { number: 204, head: PR_HEAD, tree: PR_HEAD_TREE, affectsUnit: false, changed: [] },
+  });
+  assert.equal(result.mode, "build");
+  assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("native promotion falls back to the PR-head artifact when the delta is unrelated", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { calls, exec } = recorder(
+    nativeHandlers({ ref, tree: PR_HEAD_TREE, digest: DIGEST_A }),
+  );
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "v0.5.1008",
+    tags: ["{version}", "latest"],
+    githubRepository: REPO,
+    exec,
+    allowPrHead: true,
+    unit: "pulsar",
+    prHead: { number: 204, head: PR_HEAD, tree: PR_HEAD_TREE, affectsUnit: false, changed: [] },
+  });
+  assert.equal(result.mode, "promoted");
+  assert.equal(result.digest, DIGEST_A);
+  assert.equal(result.source, PR_HEAD);
+  const verified = result.decisions.find((entry) => entry.status === "verified");
+  assert.match(verified.detail, /from PR head/);
+  assert.deepEqual(tagsWritten(calls), [
+    ["crane", "tag", `${ref}@${DIGEST_A}`, "v0.5.1008"],
+    ["crane", "tag", `${ref}@${DIGEST_A}`, "latest"],
+  ]);
+});
+
+test("native promotion refuses a delta that touches the native unit", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { calls, exec } = recorder([
+    [
+      (command, args) => command === "crane" && args[0] === "digest",
+      new Error("MANIFEST_UNKNOWN: manifest unknown"),
+    ],
+  ]);
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "v0.5.1008",
+    tags: ["{version}"],
+    githubRepository: REPO,
+    exec,
+    allowPrHead: true,
+    unit: "pulsar",
+    prHead: { number: 204, head: PR_HEAD, tree: PR_HEAD_TREE, affectsUnit: true, changed: [] },
+  });
+  assert.equal(result.mode, "build");
+  assert.equal(result.decisions[0].status, "missing");
+  assert.match(result.decisions[0].detail, /changes pulsar/);
+  assert.equal(tagsWritten(calls).length, 0);
+});
+
+test("pullRequestNumber reads the squash subject", () => {
+  assert.equal(pullRequestNumber("feat(home): x (#204)\n\nbody"), 204);
+  assert.equal(pullRequestNumber("  docs: y (#7)  "), 7);
+  assert.equal(pullRequestNumber("no number here"), null);
+  assert.equal(pullRequestNumber(""), null);
+});
+
+function prExec({ pulls = null, pull = null, message = "", head = PR_HEAD, treeSha = PR_HEAD_TREE, diff = "" } = {}) {
+  return (command, args) => {
+    if (command === "gh") {
+      if (args[1]?.endsWith("/pulls")) {
+        if (pulls === null) {
+          throw new Error("gh: Not Found");
+        }
+        return JSON.stringify(pulls);
+      }
+      if (pull === null) {
+        throw new Error("gh: Not Found");
+      }
+      return JSON.stringify(pull);
+    }
+    if (command === "git" && args[0] === "fetch") {
+      return "";
+    }
+    if (command === "git" && args[0] === "rev-parse" && args[1] === "FETCH_HEAD^{commit}") {
+      return `${head}\n`;
+    }
+    if (command === "git" && args[0] === "rev-parse" && args[1] === `${PR_HEAD}^{tree}`) {
+      return `${treeSha}\n`;
+    }
+    if (command === "git" && args[0] === "diff") {
+      return diff;
+    }
+    throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+  };
+}
+
+const PR_API = [{ number: 204, head: { sha: PR_HEAD, repo: { full_name: REPO } } }];
+
+test("resolvePrHeadDelta reports a docs-only delta as unrelated", async () => {
+  const exec = prExec({ pulls: PR_API, diff: "docs/STATE.md\ndocs/STATE.md\n" });
+  const compute = async (argv) => {
+    assert.deepEqual(argv.slice(0, 4), ["--base", PR_HEAD, "--head", COMMIT]);
+    assert.ok(argv.includes("--changed-file"));
+    return {
+      result: { deploySelected: new Set(["quality"]), changed: ["docs/STATE.md"] },
+      entries: { native: [] },
+    };
+  };
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute,
+    repository: REPO,
+    commit: COMMIT,
+    unit: "scheduler",
+  });
+  assert.equal(result.number, 204);
+  assert.equal(result.head, PR_HEAD);
+  assert.equal(result.tree, PR_HEAD_TREE);
+  assert.deepEqual(result.changed, ["docs/STATE.md"]);
+  assert.equal(result.affectsUnit, false);
+});
+
+test("resolvePrHeadDelta flags a delta that routes to the unit", async () => {
+  const exec = prExec({ pulls: PR_API, diff: "projects/home/scheduler/src/main.rs\n" });
+  const compute = async () => ({
+    result: { deploySelected: new Set(["scheduler"]), changed: ["projects/home/scheduler/src/main.rs"] },
+    entries: { native: [] },
+  });
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute,
+    repository: REPO,
+    commit: COMMIT,
+    unit: "scheduler",
+  });
+  assert.equal(result.affectsUnit, true);
+});
+
+test("resolvePrHeadDelta refuses without a pull request", async () => {
+  const exec = prExec({ pulls: null, message: "chore: no pr reference" });
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute: async () => {
+      throw new Error("compute must not run");
+    },
+    repository: REPO,
+    commit: COMMIT,
+    unit: "scheduler",
+  });
+  assert.match(result.error, /no pull request found/);
+});
+
+test("resolvePrHeadDelta resolves the PR number from the squash subject", async () => {
+  const pull = { number: 204, head: { sha: PR_HEAD, repo: { full_name: REPO } } };
+  const exec = prExec({ pulls: null, pull, diff: "" });
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute: async () => {
+      throw new Error("compute must not run for an empty delta");
+    },
+    repository: REPO,
+    commit: COMMIT,
+    unit: "scheduler",
+    commitMessage: "feat(home): group catalog entries (#204)",
+  });
+  assert.equal(result.number, 204);
+  assert.equal(result.affectsUnit, false);
+});
+
+test("resolvePrHeadDelta refuses a head that does not match the API", async () => {
+  const exec = prExec({ pulls: PR_API, head: "e".repeat(40), diff: "" });
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute: async () => {
+      throw new Error("compute must not run");
+    },
+    repository: REPO,
+    commit: COMMIT,
+    unit: "scheduler",
+  });
+  assert.match(result.error, /but the API reports/);
+});
+
+test("resolvePrHeadDelta refuses fork heads", async () => {
+  const exec = prExec({
+    pulls: [{ number: 9, head: { sha: PR_HEAD, repo: { full_name: "someone/fork" } } }],
+  });
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute: async () => {
+      throw new Error("compute must not run");
+    },
+    repository: REPO,
+    commit: COMMIT,
+    unit: "scheduler",
+  });
+  assert.match(result.error, /comes from a fork/);
+});
+
+test("resolvePrHeadDelta fails closed when routing fails", async () => {
+  const exec = prExec({ pulls: PR_API, diff: "scheduler/src/main.rs\n" });
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute: async () => {
+      throw new Error("bazel query failed");
+    },
+    repository: REPO,
+    commit: COMMIT,
+    unit: "scheduler",
+  });
+  assert.match(result.error, /cannot route the delta/);
+});
+
+test("a sibling image uses history first, then the PR head", () => {
+  const sibling = imageRef("ha-bridge");
+  const handlers = prHeadImageHandlers();
+  handlers.unshift([isCraneLs, ""]);
+  handlers.splice(1, 0, [
+    (command, args) => command === "crane" && args[0] === "digest" && args[1] === `${sibling}:tree-${TREE}`,
+    new Error("MANIFEST_UNKNOWN: manifest unknown"),
+  ]);
+  handlers.splice(2, 0, [
+    (command, args) => command === "crane" && args[0] === "digest" && args[1] === `${sibling}:tree-${PR_HEAD_TREE}`,
+    DIGEST_B,
+  ]);
+  const { calls, exec } = recorder(handlers);
+  const result = planPromotion({
+    images: ["scheduler"],
+    optionalImages: ["ha-bridge"],
+    tree: TREE,
+    commit: COMMIT,
+    repository: REPO,
+    exec,
+    allowPrHead: true,
+    unit: "scheduler",
+    prHead: { number: 204, head: PR_HEAD, tree: PR_HEAD_TREE, affectsUnit: false, changed: [] },
+  });
+  assert.equal(result.mode, "prebuilt");
+  assert.equal(result.digests["ha-bridge"], DIGEST_B);
+  const decision = result.decisions.find((entry) => entry.image === "ha-bridge");
+  assert.equal(decision.status, "reused");
+  assert.match(decision.detail, /from PR head/);
+  // Siblings are handed to the renderer, never retagged.
+  assert.equal(tagsWritten(calls).filter((call) => String(call[2]).includes("ha-bridge")).length, 0);
 });
