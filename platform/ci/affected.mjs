@@ -125,6 +125,15 @@ export class Unit {
         deployEnvFile: "",
         // ExternalSecrets that must be Ready before the deploy touches workloads.
         deployExternalsecrets: [],
+        // Documented rollback procedure (see `mise run rollback`). Optional:
+        // units without a documented procedure carry no rollback block.
+        rollbackKind: "",
+        rollbackStateDir: "",
+        rollbackNamespace: "",
+        rollbackRelease: "",
+        rollbackInstruction: "",
+        rollbackNote: "",
+        rollbackSource: "",
       },
       init,
     );
@@ -191,6 +200,7 @@ export function normalizeConfig(data, label = "units") {
     const native = raw.native || {};
     const nativeToolchain = native.toolchain || {};
     const deploy = raw.deploy || {};
+    const rollback = raw.rollback || {};
     return new Unit({
       id: raw.id,
       platform: raw.platform,
@@ -243,6 +253,13 @@ export function normalizeConfig(data, label = "units") {
       deployEnvKey: String(deploy.env_key ?? ""),
       deployEnvFile: String(deploy.env_file ?? ""),
       deployExternalsecrets: list(deploy.externalsecrets),
+      rollbackKind: String(rollback.kind ?? ""),
+      rollbackStateDir: String(rollback.state_dir ?? ""),
+      rollbackNamespace: String(rollback.namespace ?? ""),
+      rollbackRelease: String(rollback.release ?? ""),
+      rollbackInstruction: String(rollback.instruction ?? ""),
+      rollbackNote: String(rollback.note ?? ""),
+      rollbackSource: String(rollback.source ?? ""),
     });
   });
 

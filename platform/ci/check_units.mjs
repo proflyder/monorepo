@@ -39,6 +39,16 @@ export const KNOWN_PLATFORMS = new Set([
   "quality",
 ]);
 
+// Rollback kinds backed by `mise run rollback`. `forward-only` is an explicit
+// "no documented procedure"; `pulsar` only prints the on-device instruction.
+export const ROLLBACK_KINDS = new Set([
+  "deploy-state",
+  "helm",
+  "hermes",
+  "pulsar",
+  "forward-only",
+]);
+
 // Suffixes/names that must be routed somewhere: compiled sources, tests, build
 // files and shell entry points.
 export const OWNED_SUFFIXES = [
@@ -145,6 +155,36 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
     }
     if (unit.deployImages.length && !["bazel", "docker", "mixed"].includes(unit.deployBuilder)) {
       problems.push(`${prefix}: unknown deploy.builder '${unit.deployBuilder}'`);
+    }
+    if (unit.rollbackKind) {
+      if (!ROLLBACK_KINDS.has(unit.rollbackKind)) {
+        problems.push(
+          `${prefix}: unknown rollback.kind '${unit.rollbackKind}' ` +
+            `(expected ${[...ROLLBACK_KINDS].join(", ")})`,
+        );
+      }
+      if (unit.rollbackKind === "forward-only" && !unit.rollbackNote) {
+        problems.push(`${prefix}: rollback.kind forward-only needs a note explaining the fix`);
+      }
+      if (unit.rollbackKind === "deploy-state") {
+        if (!unit.rollbackStateDir) {
+          problems.push(`${prefix}: rollback.kind deploy-state needs state_dir`);
+        }
+        if (!unit.rollbackNamespace) {
+          problems.push(`${prefix}: rollback.kind deploy-state needs namespace`);
+        }
+      }
+      if (unit.rollbackKind === "helm" || unit.rollbackKind === "hermes") {
+        if (!unit.rollbackRelease) {
+          problems.push(`${prefix}: rollback.kind ${unit.rollbackKind} needs release`);
+        }
+        if (!unit.rollbackNamespace) {
+          problems.push(`${prefix}: rollback.kind ${unit.rollbackKind} needs namespace`);
+        }
+      }
+      if (unit.rollbackKind === "pulsar" && !unit.rollbackInstruction) {
+        problems.push(`${prefix}: rollback.kind pulsar needs the documented instruction`);
+      }
     }
     if (unit.deployImages.length) {
       if (!unit.deployNamespace) {
