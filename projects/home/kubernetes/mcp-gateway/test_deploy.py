@@ -3,10 +3,10 @@
 
 Hermetic: no cluster, no network, no secrets. deploy.sh is exercised with a
 stub kubectl that records calls and fails, so only the pre-cluster behaviour is
-asserted. The catalog's schema is validated by the gateway's real loader in
-`catalog_contract_test.go`; here we check the things that only the deployment
-knows: catalog↔RBAC correspondence, alias unambiguity, manifest hardening and
-the full placeholder rendering path.
+asserted. The catalog's schema is validated by the gateway's real Rust loader in
+`solutions/mcp-gateway/crates/mcp-gateway/tests/deploy_contract.rs`; here we
+check the things that only the deployment knows: catalog↔RBAC correspondence,
+alias unambiguity, manifest hardening and the full placeholder rendering path.
 """
 from __future__ import annotations
 

@@ -78,12 +78,12 @@ impl Metrics {
         let http_requests = Family::<HttpLabels, Counter>::default();
         let voice_utterances = Family::<VoiceLabels, Counter>::default();
         registry.register(
-            "mcp_gateway_actions_total",
+            "mcp_gateway_actions",
             "Executed mutating gateway actions.",
             actions.clone(),
         );
         registry.register(
-            "mcp_gateway_tool_calls_total",
+            "mcp_gateway_tool_calls",
             "MCP tool calls by tool and outcome.",
             tool_calls.clone(),
         );
@@ -93,12 +93,12 @@ impl Metrics {
             tool_duration.clone(),
         );
         registry.register(
-            "mcp_gateway_http_requests_total",
+            "mcp_gateway_http_requests",
             "HTTP requests by normalized route and status.",
             http_requests.clone(),
         );
         registry.register(
-            "mcp_gateway_voice_utterances_total",
+            "mcp_gateway_voice_utterances",
             "Voice utterances by route and outcome.",
             voice_utterances.clone(),
         );
@@ -185,11 +185,14 @@ mod tests {
         metrics.observe_action("rollout-restart", "scheduler", "success");
         metrics.observe_voice("hermes", "ok");
         let body = metrics.render();
-        assert!(body.contains("mcp_gateway_tool_calls_total"));
-        assert!(body.contains("mcp_gateway_tool_duration_seconds"));
-        assert!(body.contains("mcp_gateway_http_requests_total"));
-        assert!(body.contains("mcp_gateway_actions_total"));
-        assert!(body.contains("mcp_gateway_voice_utterances_total"));
+        // `prometheus-client` appends `_total` to counters; the Go-era names
+        // already end in `_total`, so the registered names must not.
+        assert!(body.contains("mcp_gateway_tool_calls_total{"));
+        assert!(body.contains("mcp_gateway_tool_duration_seconds_bucket"));
+        assert!(body.contains("mcp_gateway_http_requests_total{"));
+        assert!(body.contains("mcp_gateway_actions_total{"));
+        assert!(body.contains("mcp_gateway_voice_utterances_total{"));
+        assert!(!body.contains("_total_total"));
         assert!(!body.contains("backend_up"));
         assert!(!body.contains("go_"));
         assert!(!body.contains("process_"));

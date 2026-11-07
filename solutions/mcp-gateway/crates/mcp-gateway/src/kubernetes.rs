@@ -125,7 +125,11 @@ impl Client {
         let ca_file = options
             .ca_file
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CA_FILE));
+        // The ServiceAccount CA is the only trust anchor: the workspace
+        // `reqwest` has no built-in roots, and relying on the node's bundle
+        // would accept any publicly trusted certificate for the API server.
         let mut builder = reqwest::Client::builder()
+            .tls_built_in_root_certs(false)
             .timeout(options.timeout.unwrap_or(DEFAULT_TIMEOUT))
             .redirect(reqwest::redirect::Policy::none());
         if ca_file.exists() {

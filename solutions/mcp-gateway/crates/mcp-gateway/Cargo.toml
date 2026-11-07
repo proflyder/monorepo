@@ -27,6 +27,7 @@ home-runtime = { path = "../../../../packages/rust/home-runtime" }
 home-secret = { path = "../../../../packages/rust/home-secret" }
 home-telegram = { path = "../../../../packages/rust/home-telegram" }
 home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
+home-tls = { path = "../../../../packages/rust/home-tls" }
 http = { workspace = true }
 http-body-util = { workspace = true }
 jiff = { workspace = true }

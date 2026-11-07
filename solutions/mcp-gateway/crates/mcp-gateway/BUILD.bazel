@@ -15,6 +15,7 @@ DEPS = [
     "//packages/rust/home-secret:home_secret",
     "//packages/rust/home-telegram:home_telegram",
     "//packages/rust/home-telemetry:home_telemetry",
+    "//packages/rust/home-tls:home_tls",
     "@crates//:anyhow",
     "@crates//:axum",
     "@crates//:base64",
@@ -82,8 +83,8 @@ rust_test(
     name = "contract_tests",
     srcs = ["tests/contract.rs"],
     data = [
-        "//solutions/mcp-gateway/internal/server:contract_fixtures",
-        "//solutions/mcp-gateway/internal/tools:contract_fixtures",
+        "//solutions/mcp-gateway/testdata:contract_server",
+        "//solutions/mcp-gateway/testdata:contract_tools",
         "//solutions/mcp-gateway/testdata:vectors",
     ],
     edition = "2024",
@@ -94,10 +95,21 @@ rust_test(
     ],
 )
 
+# Deploy data contract: the tracked catalog and bb allow-list must pass the
+# real validators. Replaces the former Go `catalog_contract_test.go`.
+rust_test(
+    name = "deploy_contract_tests",
+    srcs = ["tests/deploy_contract.rs"],
+    data = ["//projects/home/kubernetes/mcp-gateway:deploy_templates"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [":mcp_gateway"],
+)
+
 rust_test(
     name = "voice_tests",
     srcs = ["tests/voice.rs"],
-    data = ["//solutions/mcp-gateway/internal/voice:contract_fixtures"],
+    data = ["//solutions/mcp-gateway/testdata:contract_voice"],
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = DEPS + [
@@ -120,6 +132,7 @@ rustfmt_test(
         ":mcp-gateway",
         ":unit_tests",
         ":contract_tests",
+        ":deploy_contract_tests",
         ":voice_tests",
     ],
 )
@@ -132,5 +145,6 @@ rust_clippy_test(
         ":mcp-gateway",
         ":unit_tests",
         ":contract_tests",
+        ":deploy_contract_tests",
     ],
 )

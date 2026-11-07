@@ -1,11 +1,11 @@
 //! Golden contract replay for the MCP surface and the infra tool groups.
 //!
-//! The normative format is `packages/go/contracttest/README.md`; the same
-//! `testdata/contract/*.json` files the Go gateway regenerates are replayed
-//! against this server through `home-contracttest`.
+//! The format is `packages/rust/home-contracttest`; the frozen
+//! `testdata/contract/{server,tools}/*.json` files captured from the former Go
+//! implementation are replayed against this server.
 //!
 //! The `bb_*` calls run against a fake dispatcher; the voice fixtures are
-//! replayed in `tests/voice_fixtures.rs` through the same fake.
+//! replayed in `tests/voice.rs` through the same fake.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -1260,7 +1260,7 @@ async fn server_contract_fixtures() {
     let worlds: Worlds = Arc::new(Mutex::new(BTreeMap::new()));
     let factory_worlds = Arc::clone(&worlds);
     let scenarios = home_contracttest::run(
-        fixture_dir("internal/server/testdata/contract"),
+        fixture_dir("testdata/contract/server"),
         move |scenario| server_router(scenario, &factory_worlds),
         Options::default(),
     )
@@ -1275,7 +1275,7 @@ async fn tool_contract_fixtures() {
     let factory_worlds = Arc::clone(&worlds);
     let hook_worlds = Arc::clone(&worlds);
     let scenarios = home_contracttest::run(
-        fixture_dir("internal/tools/testdata/contract"),
+        fixture_dir("testdata/contract/tools"),
         move |scenario| tools_router(scenario, &factory_worlds),
         Options::default().with_before_step(move |scenario, step| {
             let world = hook_worlds.lock().expect("worlds").get(scenario).cloned();

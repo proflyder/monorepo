@@ -610,7 +610,7 @@
 
 ## MCP gateway (инфраструктурный шлюз)
 
-- `solutions/mcp-gateway` (Go, distroless, один бинарник) — единый MCP-шлюз
+- `solutions/mcp-gateway` (Rust, статический musl, distroless, один бинарник) — единый MCP-шлюз
   для инфраструктуры: группы `infra.read` (Prometheus, Alertmanager, Loki,
   Kubernetes REST), `infra.fix` (только rollout restart, два шага),
   `infra.report` (Telegram с фиксированным получателем) и `bb.read`/`bb.act`
@@ -693,10 +693,12 @@
   Telegram-подтверждения, у каждого — честное предупреждение; `hermes` и
   `mcp-gateway` помечены `self_disrupting` (патч откладывается на ~20 с, чтобы
   ответ успели озвучить). HAOS, Music Assistant и станция — только чтение.
-- CI: юниты `mcp-gateway` (go + образ + deploy, env
-  `mcp_gateway_env` в `secret/ci/deploy-home`) и `mcp-gateway-deploy`
-  (catalog↔RBAC, манифесты, render, contract-тест `deploy.sh`); схема каталога
-  проверяется настоящим загрузчиком шлюза в `catalog_contract_test.go`.
+- CI: юниты `mcp-gateway` (bazel: crate fmt/clippy/тесты + musl-образ +
+  deploy, env `mcp_gateway_env` в `secret/ci/deploy-home`) и
+  `mcp-gateway-deploy` (catalog↔RBAC, манифесты, render, contract-тест
+  `deploy.sh`); схема каталога и bb-allowlist проверяется настоящими
+  Rust-валидаторами в
+  `crates/mcp-gateway/tests/deploy_contract.rs`.
 - Hermes: третий MCP-сервер `infra`
   (`mcp-gateway.home-assistant.svc.cluster.local:8080/mcp`, Bearer
   `HERMES_INFRA_TOKEN`); `platform_toolsets.api_server` и `telegram` =

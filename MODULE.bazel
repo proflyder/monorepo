@@ -20,6 +20,7 @@ single_version_override(
         "//platform/bazel/windows:rules_rust_windows_gnu_rustc.patch",
     ],
 )
+
 bazel_dep(name = "rules_proto", version = "7.1.0")
 
 # Target constraints for the Linux-only Pulsar Rust targets.
@@ -63,11 +64,7 @@ go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
 use_repo(
     go_deps,
-    "com_github_modelcontextprotocol_go_sdk",
-    "com_github_prometheus_client_golang",
     "in_yaml_go_yaml_v2",
-    "org_golang_x_crypto",
-    "org_golang_x_time",
 )
 
 # Rust: one Cargo workspace for every first-party crate (Pulsar, BLE gateway,
@@ -160,6 +157,7 @@ rust.toolchain(
         ("darwin_aarch64", "aarch64-apple-darwin"),
     ]
 ]
+
 use_repo(rust, "rust_toolchains")
 
 register_toolchains(

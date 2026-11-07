@@ -26,9 +26,14 @@ pub struct Runner {
 }
 
 /// Build the shared HTTP client with the workspace rustls provider.
+///
+/// The workspace `reqwest` is compiled with manual roots, so an `https://`
+/// Home Assistant or external endpoint verifies only when the operating
+/// system's bundle is added explicitly (`home_tls`). Without this a probe that
+/// looks healthy over HTTP would fail with `request failed` on TLS.
 fn client(timeout: Duration) -> Result<reqwest::Client, String> {
-    let _already_installed = rustls::crypto::ring::default_provider().install_default();
-    reqwest::Client::builder()
+    home_tls::public_https_client()
+        .map_err(|error| format!("http TLS roots: {error}"))?
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()
