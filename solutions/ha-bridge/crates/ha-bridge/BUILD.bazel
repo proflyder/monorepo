@@ -39,7 +39,7 @@ rust_library(
     ),
     edition = "2024",
     lint_config = ":workspace_lints",
-    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    version = PACKAGE_VERSION,
     deps = LIB_DEPS,
 )
 
@@ -50,7 +50,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
-    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    version = PACKAGE_VERSION,
     deps = LIB_DEPS + [":ha_bridge_lib"],
 )
 
@@ -61,7 +61,7 @@ rust_binary(
     srcs = ["src/ha_control.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
-    rustc_env = {"CARGO_PKG_VERSION": PACKAGE_VERSION},
+    version = PACKAGE_VERSION,
     deps = LIB_DEPS + [":ha_bridge_lib"],
 )
 

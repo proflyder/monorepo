@@ -14,10 +14,8 @@
       исправить ~17 замечаний `//solutions/windows-logon-provider:clippy_windows`,
       поднять VERSION и проверить вход на компе.
 
-- [ ] **Мелочи Rust-сервисов.** Версия wakegrant и currency-bot в логе
-      `0.0.0`; `serde_yaml` 0.9 объявлен deprecated (нужна замена до
-      следующего мажора); `projects/home-assistant/deploy/README.md` называет
-      voice-proxy Go-сервисом.
+- [ ] **Мелочи Rust-сервисов.** `projects/home-assistant/deploy/README.md`
+      называет voice-proxy Go-сервисом.
 
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых
       на самом сервере bb; треды на Mac работают без него. Следующий шаг:
