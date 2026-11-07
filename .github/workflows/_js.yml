@@ -25,6 +25,8 @@ jobs:
     name: js / ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -38,9 +40,4 @@ jobs:
 
       - name: Test ${{ inputs.unit }}
         if: inputs.tests != ''
-        run: |
-          read -r -a directories <<< "${{ inputs.tests }}"
-          for directory in "${directories[@]}"; do
-            echo "== node --test: ${directory} =="
-            node --test "${directory}"/*.test.js
-          done
+        run: mise run test ${{ inputs.unit }}

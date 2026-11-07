@@ -176,3 +176,62 @@ test("check_units: committed unit map and tree pass", async () => {
   assert.deepEqual(result.problems, []);
   assert.ok(checkUnits.formatSuccess(result.config).includes("bazel="));
 });
+
+test("check_units: rollback kinds are validated", () => {
+  const config = new affected.Config({
+    units: [
+      new affected.Unit({
+        id: "bad-kind",
+        platform: "quality",
+        paths: ["a/**"],
+        rollbackKind: "nonsense",
+      }),
+    ],
+    invalidations: [],
+  });
+  const problems = checkUnits.validateSchema(config, process.cwd());
+  assert.ok(problems.some((problem) => problem.includes("unknown rollback.kind")));
+});
+
+test("check_units: forward-only rollback needs a note", () => {
+  const config = new affected.Config({
+    units: [
+      new affected.Unit({
+        id: "fwd",
+        platform: "quality",
+        paths: ["a/**"],
+        rollbackKind: "forward-only",
+      }),
+    ],
+    invalidations: [],
+  });
+  const problems = checkUnits.validateSchema(config, process.cwd());
+  assert.ok(problems.some((problem) => problem.includes("forward-only needs a note")));
+});
+
+test("check_units: deploy-state rollback needs state_dir and namespace", () => {
+  const config = new affected.Config({
+    units: [
+      new affected.Unit({
+        id: "state",
+        platform: "quality",
+        paths: ["a/**"],
+        rollbackKind: "deploy-state",
+      }),
+    ],
+    invalidations: [],
+  });
+  const problems = checkUnits.validateSchema(config, process.cwd());
+  assert.ok(problems.some((problem) => problem.includes("deploy-state needs state_dir")));
+  assert.ok(problems.some((problem) => problem.includes("deploy-state needs namespace")));
+});
+
+test("check_units: committed rollback blocks are documented and valid", () => {
+  const config = affected.loadConfig();
+  const withRollback = config.units.filter((unit) => unit.rollbackKind);
+  assert.ok(withRollback.length >= 7);
+  for (const unit of config.units.filter((candidate) => candidate.deployImages.length > 0)) {
+    assert.ok(unit.rollbackKind, `deployable unit ${unit.id} needs a rollback block`);
+  }
+  assert.ok(withRollback.some((unit) => unit.id === "pulsar" && unit.rollbackKind === "pulsar"));
+});

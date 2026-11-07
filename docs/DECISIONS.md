@@ -263,7 +263,7 @@
       (`platform/android/tools`), серверные и деплойные — Rust/Bazel.
       Сборка герметична и не зависит от `python3` хоста.
     * Python остаётся для ML/обучения wake-word, dev-утилит станции,
-      проверок YAML-конфигов (включая отчёт `make coverage`) и live-e2e, где
+      проверок YAML-конфигов (включая отчёт `mise run coverage`) и live-e2e, где
       он не исполняется в проде.
     * Итог (PR7): Go в репозитории нет. Деплой-инструменты — Rust
       (`platform/deploy-rs`), серверные Bazel-инструменты — Rust, Android —

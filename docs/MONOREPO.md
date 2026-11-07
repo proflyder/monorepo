@@ -133,7 +133,7 @@ android (меняется Maven/APK-замыкание). Если меняютс
 репозитории нет. Pulsar installer — Rust-крейт
 `projects/station/pulsar/installer`, проверяется Bazel-целями
 `//projects/station/pulsar/installer/...`.
-`make test` пропускает (`SKIP`) тесты, которым нужны игнорируемые локальные
+`mise run test` пропускает (`SKIP`) тесты, которым нужны игнорируемые локальные
 источники (см. `docs/TESTING.md`).
 
 Команды:
@@ -241,4 +241,4 @@ JSON/binary и gRPC-Web по HTTP/1.1; отдельного REST API нет. Rus
 Тесты относятся к своему solution/package/project и находятся рядом с
 кодом. E2E композиции находятся в `projects/<name>/e2e/`. Общая
 инфраструктура проверок репозитория — `platform/quality/`. Корневая
-папка tests не используется; `make test` агрегирует локальные наборы.
+папка tests не используется; `mise run test` агрегирует локальные наборы.

@@ -2,6 +2,61 @@
 
 Факты — `STATE.md`; K3s — `KUBERNETES-OPERATIONS.md`; сеть — `NETWORK.md`.
 
+## Единая точка входа: `mise tasks`
+
+`mise tasks` перечисляет локальные задачи. Деплой и откат не угадывают цель по
+имени каталога: список деплоимых юнитов и документированная процедура отката
+живут в `platform/ci/units.mjs` (`deploy` и `rollback` блоки).
+
+```bash
+# деплой затронутых юнитов через deploy-home.yml (ref develop)
+mise run deploy scheduler --dry-run     # печатает gh-команду, ничего не запускает
+mise run deploy scheduler --yes         # без --yes спрашивает подтверждение
+mise run deploy scheduler,ha-bridge --yes --watch
+mise run deploy all --yes
+# режимы deploy-home: --mode preserve|execute|shadow|control-execute|control-catalog
+# (не-preserve принимает только юнит ha-bridge); --simulate-hermes-failure — учения отката hermes
+
+# последние запуски deploy-home и подсказка проверки в кластере
+mise run deploy:status
+mise run deploy:status scheduler
+mise run deploy:status scheduler --live  # read-only kubectl get deploy; нужен admin kubeconfig
+
+# откат по процедуре из units.mjs
+mise run rollback scheduler --dry-run   # план: kind, state-dir, команда, источник в docs
+mise run rollback scheduler --yes       # выполняет документированную команду
+```
+
+`deploy` вызывает `gh workflow run deploy-home.yml --ref develop -f units=…`
+(+ существующие inputs workflow). `deploy:status` только читает `gh run list`;
+`--live` делает read-only `kubectl get deploy` через kubeconfig из раздела
+«Доступ» (`mise run secrets:file kubernetes-research/kubeconfig`). `rollback`
+печатает план всегда, выполняет команду только с `--yes`; `forward-only`
+завершается ненулевым кодом, а `pulsar` лишь печатает команду для станции —
+устройство автоматически не трогается. Подробности отката — в разделах ниже.
+
+Бэкапы тоже собраны в одну точку: цель — запись реестра
+`platform/ops/backups.mjs` (расписание, где, read-only проверка, команда
+ручного запуска, проверка и ссылка на процедуру restore). Команды — из docs, а
+хосты — через алиасы `ssh -F ~/.ssh/home-lab/config pve|k3s|haos`:
+
+```bash
+mise run backup:list                      # таблица целей, без сети
+mise run backup:status --dry-run          # печатает read-only команды проверки
+mise run backup:status                    # сводка ok/fail/manual по всем целям
+mise run backup:status offsite-restic
+mise run backup:now offsite-restic --dry-run   # план: команда, note, restore doc
+mise run backup:now offsite-restic --yes       # без --yes спрашивает подтверждение
+mise run backup:verify --dry-run          # restic check / integrity_check и т.п.
+mise run backup:verify offsite-restic --yes
+```
+
+`backup:now` выполняет только документированную команду выбранной цели; цель,
+доступная только через UI (HA backup), печатает `manual` и ничего не запускает.
+Restore намеренно не автоматизирован: вывод всегда содержит `restore_doc`.
+Подробности и цели — раздел «Backup» ниже.
+
+
 ## Доступ
 
 ```bash
@@ -215,13 +270,13 @@ printf '%s' '{"method":"targets","params":{}}' |
 
 ```bash
 cd ~/Desktop/yandex-station-lab
-make test                    # hermetic; не трогает стенд
-make test-e2e                # live HA/BLE read-only; нужны токены
-STATION_E2E_MUTATE=1 make test-e2e
-STATION_E2E_AUDIO=1 make test-e2e
+mise run test                # hermetic; не трогает стенд
+mise run test:e2e            # live HA/BLE read-only; нужны токены
+STATION_E2E_MUTATE=1 mise run test:e2e
+STATION_E2E_AUDIO=1 mise run test:e2e
 ```
 
-`make test-e2e` требует `HA_URL` (реальный LAN-адрес HA, не пример из
+`mise run test:e2e` требует `HA_URL` (реальный LAN-адрес HA, не пример из
 документации), `HA_TOKEN`, опционально `STATION_CONTROL_TOKEN` и
 `STATION_GATEWAY_URL`. Токены не коммитить и не печатать.
 
@@ -702,7 +757,8 @@ KUBECONFIG=secrets/kubernetes-research/kubeconfig \
 ```
 
 `--force` — повторить upgrade с теми же digest'ами, `--simulate-smoke-failure`
-— проверить откат.
+— проверить откат. План отката и документированную команду печатает
+`mise run rollback hermes --dry-run`.
 
 ## HA / MA / Matter / K3s компоненты
 
@@ -763,7 +819,8 @@ adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollba
 Установленная версия и состав — `docs/STATE.md`; `--version` показывает тег
 релиза. Откат на предыдущую сборку — только на станции, не через CI
 (updater предлагает лишь более новые версии): команда выше возвращает
-`pulsar.prev`.
+`pulsar.prev`. Напомнить команду и источник: `mise run rollback pulsar`
+(только печать — станция автоматически не трогается).
 
 ### Релиз и деплой Pulsar
 
@@ -1144,7 +1201,8 @@ Webhook — `https://tg.example.com/telegram/webhook`: без secret token — 4
 с ним — 200. Метрики скрейпит `ServiceMonitor/currency-bot`; Grafana —
 dashboard `currency-bot` (uid `currency-bot`).
 
-Откат Deployment из state последнего деплоя:
+Откат Deployment из state последнего деплоя (для всех юнитов с записанным
+state есть общая точка входа `mise run rollback <unit> --dry-run`):
 
 ```bash
 home-deploy state rollback \
@@ -1250,7 +1308,10 @@ Pulsar. Аварийный доступ к PVE — LAN/Wi-Fi.
 
 ## Backup
 
-Proxmox: ночной vzdump `nightly` (04:00) на SATA SSD, storage `backup`.
+Все цели, их расписание, read-only проверки и команды ручного запуска —
+`mise run backup:list` (реестр `platform/ops/backups.mjs`, `status`/`verify` —
+из этого раздела). Proxmox: ночной vzdump `nightly` (04:00) на SATA SSD,
+storage `backup`.
 
 ```bash
 ssh pve 'pvesh get /cluster/backup; pvesm list backup | tail'

@@ -47,8 +47,18 @@ jobs:
     name: bazel / ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # `mise run build|test <unit>` resolves the target list from the unit map;
+      # Bazel itself comes from setup-bazel below.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install_args: "node"
+          cache: true
 
       # Pinned Bazelisk on PATH, plus its Bzlmod/repository caches. The Rust
       # toolchain and crate_universe results are restored from the repository
@@ -72,15 +82,11 @@ jobs:
 
       - name: bazel build ${{ inputs.unit }}
         if: inputs.build_targets != ''
-        run: |
-          read -r -a targets <<< "${{ inputs.build_targets }}"
-          bazel build "${targets[@]}"
+        run: mise run build ${{ inputs.unit }}
 
       - name: bazel test ${{ inputs.unit }}
         if: inputs.test_targets != ''
-        run: |
-          read -r -a targets <<< "${{ inputs.test_targets }}"
-          bazel test "${targets[@]}" --test_output=errors
+        run: mise run test ${{ inputs.unit }}
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.artifact != '' && inputs.build_targets != ''

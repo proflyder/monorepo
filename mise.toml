@@ -8,6 +8,11 @@
 # a version bump. Bazel itself stays hermetic (.bazelversion, MODULE.bazel).
 min_version = "2026.6.0"
 
+# File tasks: build/test/coverage/check and the CI unit dispatcher. They live in
+# their own scripts so the entry points stay executable and testable.
+[task_config]
+includes = ["platform/mise-tasks"]
+
 [settings]
 lockfile = true
 

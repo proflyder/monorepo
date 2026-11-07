@@ -70,6 +70,9 @@ export const config = {
         // `bazel` shim on the mise PATH.
         "mise.toml",
         "mise.lock",
+        // The mise task entry points (build/test/check/units) are the local
+        // front door for every unit; a broken task must fail PR CI.
+        "platform/mise-tasks/**",
         "platform/workstation/bin/**",
       ],
       platforms: ["*"],
@@ -265,6 +268,15 @@ export const config = {
         env_file: "scheduler.env",
         externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
+      // `deploy.sh` records every Deployment it is about to change and marks it
+      // applied only after a successful converge, so the rollback restores the
+      // exact previous objects from that state directory.
+      rollback: {
+        kind: "deploy-state",
+        state_dir: "secrets/local/rendered/scheduler/state",
+        namespace: "home-assistant",
+        source: "projects/home/kubernetes/scheduler/README.md (CI deploy / Rollback)",
+      },
       // The deployed service is the Rust crate; the former Go implementation
       // is deleted, and the golden fixtures under solutions/scheduler/testdata
       // are frozen data.
@@ -313,6 +325,16 @@ export const config = {
         env_file: "wakegrant.env",
         externalsecrets: ["wakegrant"],
       },
+      // deploy.sh uses the same state markers as the other units, but neither
+      // its README nor docs/OPERATIONS.md documents a rollback procedure, so
+      // this unit is an explicit fix-forward.
+      rollback: {
+        kind: "forward-only",
+        note:
+          "Rollback is not documented for wakegrant (README has no rollback " +
+          "section); fix forward by re-running deploy.sh from the previous commit.",
+        source: "projects/home/kubernetes/wakegrant/README.md (no Rollback section)",
+      },
       // Rust service: host fmt/clippy/tests plus the static musl image. The
       // protocol and shared core crates live in //packages/rust.
       bazel: {
@@ -351,6 +373,12 @@ export const config = {
         env_key: "currency_bot_env",
         env_file: "currency-bot.env",
         externalsecrets: ["currency-bot", "cloudflared-tunnel"],
+      },
+      rollback: {
+        kind: "deploy-state",
+        state_dir: "secrets/local/rendered/currency-bot/state",
+        namespace: "currency-bot",
+        source: "docs/OPERATIONS.md (currency-bot), projects/home/kubernetes/currency-bot/README.md (Rollback)",
       },
       // Rust service: host fmt/clippy/tests plus the static musl image. The Go
       // implementation is deleted; `testdata` stays as frozen contract data.
@@ -406,6 +434,12 @@ export const config = {
           "mcp-gateway-voice",
         ],
       },
+      rollback: {
+        kind: "deploy-state",
+        state_dir: "secrets/local/rendered/mcp-gateway/state",
+        namespace: "home-assistant",
+        source: "projects/home/kubernetes/mcp-gateway/README.md (Rollback)",
+      },
       // Rust service: host fmt/clippy/tests plus the static musl image. The Go
       // implementation is deleted; `testdata` stays as frozen contract data.
       bazel: {
@@ -459,6 +493,14 @@ export const config = {
         env_key: "scheduler_env",
         env_file: "scheduler.env",
         externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
+      },
+      // ha-bridge and ha-control share the scheduler deploy script, so their
+      // recorded state lives in the scheduler state directory.
+      rollback: {
+        kind: "deploy-state",
+        state_dir: "secrets/local/rendered/scheduler/state",
+        namespace: "home-assistant",
+        source: "projects/home/kubernetes/scheduler/README.md (CI deploy / Rollback)",
       },
       // Both deployed services are the Rust crate: ha-bridge and ha-control.
       // The former Go implementation is deleted; testdata/ holds frozen golden
@@ -673,6 +715,20 @@ export const config = {
         env_file: "runtime-values.yaml",
         externalsecrets: ["hermes-environment"],
       },
+      // `home-deploy hermes rollout` remembers the previous revision and rolls
+      // back automatically on a failed smoke; the documented manual emergency
+      // path is `helm rollback runtime`.
+      rollback: {
+        kind: "hermes",
+        release: "runtime",
+        namespace: "home-assistant",
+        state_dir: "secrets/local/rendered/hermes/state",
+        source: "docs/KUBERNETES-OPERATIONS.md (Автодеплой Hermes / voice-proxy / health exporter)",
+        note:
+          "CI can restore the recorded revision with `home-deploy hermes rollout " +
+          "--rollback-only --state-dir <state>`; locally the documented manual path " +
+          "is `helm rollback runtime <revision>`.",
+      },
       python: {
         suites: ["projects/home-assistant/hermes"],
       },
@@ -683,6 +739,15 @@ export const config = {
       platform: "python",
       title: "projects/home-assistant/stack",
       paths: ["projects/home-assistant/stack/**"],
+      // HA/MA updates are pulled by `ctl.sh update`; the documented recovery
+      // path is a Supervisor/Proxmox backup restore, not an image rollback.
+      rollback: {
+        kind: "forward-only",
+        note:
+          "Update pulls newer HA/MA images; restore from the HA Supervisor " +
+          "backup or Proxmox vzdump instead of rolling images back.",
+        source: "docs/OPERATIONS.md (Backup), projects/home-assistant/stack/ctl.sh",
+      },
       python: {
         suites: ["projects/home-assistant/stack"],
       },
@@ -1048,6 +1113,16 @@ export const config = {
         publish_tags: ["{version}", "latest"],
         publish_attest_glob: "*",
       },
+      // The station binary is rolled back on-device only, never through CI:
+      // the updater offers newer versions only, so the operator swaps the
+      // `pulsar.prev` copy and reloads the supervisor.
+      rollback: {
+        kind: "pulsar",
+        source: "docs/OPERATIONS.md (Станция / Pulsar, откат на pulsar.prev)",
+        instruction:
+          "adb -s <station>:5555 shell 'cd /data/pulsar && cp -p pulsar.prev " +
+          "pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'",
+      },
     },
 
     // ----------------------------------------------------------- Quality --------
@@ -1061,7 +1136,6 @@ export const config = {
         "platform/**",
         "docs/**",
         ".github/**",
-        "Makefile",
         "requirements-test.txt",
         ".gitleaks.toml",
         "**/*.sh",

@@ -15,6 +15,9 @@ jobs:
     name: deploy-control
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Same entry point as a workstation; Bazel comes from setup-bazel.
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -25,10 +28,15 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install: false
+
       - name: Build the deploy CLI
         run: bazel build //platform/deploy-rs:home-deploy
 
       - name: scheduler deploy control regression
         env:
           HOME_DEPLOY: ${{ github.workspace }}/bazel-bin/platform/deploy-rs/home-deploy
-        run: bash projects/home/kubernetes/scheduler/test_deploy_control.sh
+        run: mise run test:deploy-control

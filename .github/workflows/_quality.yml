@@ -14,6 +14,10 @@ jobs:
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Every gate runs through the same mise task a workstation uses; tools come
+    # from mise-action's install_args, never from `mise run` itself.
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -29,47 +33,24 @@ jobs:
       # product scripts (platform/quality/test_static.py); all CI/repo-quality
       # glue is dependency-free Node ESM.
       - name: Repository audit (private data, links, gitlinks)
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const audit = await import(`${process.env.GITHUB_WORKSPACE}/platform/quality/audit_repository.mjs`);
-            audit.runGithubScript({ core });
+        run: mise run audit
 
       # Python remains only for first-party Python product checks (the static
       # gate). Deploy tooling is Go and is covered by the platform-deploy unit.
       - name: Python product gates (syntax, shellcheck, secret patterns)
-        run: |
-          python3 -m unittest discover -s platform/quality -p 'test_static.py' -v
+        run: mise run test:static
 
       - name: CI unit map is valid and every source/test file is routed
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const check = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/check_units.mjs`);
-            await check.runGithubScript({ core });
+        run: mise run ci:units
 
       - name: CI routing and gate tests
-        run: node --test platform/ci/*.test.mjs platform/quality/*.test.mjs
+        run: mise run test:ci
 
       - name: Shellcheck (harness, CI scripts and deployment scripts)
-        run: |
-          shellcheck -S error \
-            platform/quality/*.sh \
-            platform/ci/*.sh \
-            platform/deploy/*.sh \
-            projects/home/kubernetes/scheduler/*.sh \
-            projects/home/kubernetes/scheduler/nft/*.sh \
-            projects/home/kubernetes/currency-bot/*.sh \
-            projects/home/kubernetes/currency-bot/nft/*.sh \
-            projects/station/scripts/*.sh \
-            projects/home-assistant/stack/*.sh \
-            solutions/windows-logon-provider/*.sh \
-            platform/workstation/env.sh \
-            platform/workstation/run.sh \
-            platform/workstation/bin/bazel
+        run: mise run lint:shell
 
       - name: actionlint (all workflows)
-        run: actionlint -color .github/workflows/*.yml
+        run: mise run lint:actions
 
       - name: Gitleaks (working tree; version and checksum from mise.lock)
-        run: gitleaks dir . --redact=100 --no-banner --config=.gitleaks.toml
+        run: mise run scan:secrets

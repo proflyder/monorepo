@@ -73,9 +73,9 @@ LAN/VPN. Публично доступны только VPN `443/tcp+udp` и web
 ## Тесты
 
 ```bash
-make test          # hermetic
-make coverage      # coverage (reports/TEST-COVERAGE.md, not tracked)
-make test-e2e      # live HA/BLE, нужны токены
+mise run test      # hermetic
+mise run coverage  # coverage (reports/TEST-COVERAGE.md, not tracked)
+mise run test:e2e  # live HA/BLE, нужны токены
 ```
 
 Подробности — `docs/TESTING.md`: слои, live-проверки и CI
@@ -86,7 +86,7 @@ make test-e2e      # live HA/BLE, нужны токены
 Изменения попадают в `develop` только через pull request (squash, обязательный
 `ci-ok`); merge в `develop` выкатывает затронутые сервисы. Публикуются рабочие
 ветки `<type>/<name>`, без секретов и Git-истории с приватными данными. Перед
-push: `make test`, `node platform/quality/audit_repository.mjs`, проверка
+push: `mise run test`, `node platform/quality/audit_repository.mjs`, проверка
 `docs/SENSITIVE-DATA.md` и Gitleaks (их же выполняет pre-push guard). Не
 использовать `push --all`, `--mirror`, `--tags` или `--no-verify`. Поток
 веток и PR — `docs/GIT.md`.
