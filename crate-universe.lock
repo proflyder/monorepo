@@ -1,5 +1,5 @@
 {
-  "checksum": "d640abdccb0da82eae4bc2e12983a689fc2f150387705662c701a7cc488b0f31",
+  "checksum": "0bcf3415c30bcc6c3fb32dabcbed05fec6609f2171319cf48d7ac7d9aa1ff0e4",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -104,6 +104,10 @@
     "cfg(any(target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"hurd\", target_os = \"illumos\", target_os = \"cygwin\", all(target_os = \"horizon\", target_arch = \"arm\")))": [],
     "cfg(any(target_os = \"haiku\", target_os = \"redox\", target_os = \"nto\", target_os = \"aix\"))": [],
     "cfg(any(target_os = \"ios\", target_os = \"visionos\", target_os = \"watchos\", target_os = \"tvos\"))": [],
+    "cfg(any(target_os = \"macos\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\", target_os = \"dragonfly\"))": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin"
+    ],
     "cfg(any(target_os = \"macos\", target_os = \"ios\", target_os = \"freebsd\"))": [
       "aarch64-apple-darwin",
       "x86_64-apple-darwin"
@@ -2838,6 +2842,55 @@
       ],
       "version": "0.3.1"
     },
+    "crc32fast 1.5.4": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "cfg-if 1.0.5",
+            "target": "cfg_if"
+          }
+        ],
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "crc32fast",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "crc32fast",
+      "package_url": "https://github.com/srijs/rust-crc32fast",
+      "repository": {
+        "Http": {
+          "sha256": "5f97d3416d5337d15c4b0d78c8c91df922ca143f57ec20e2d1c188333047ef04",
+          "url": "https://static.crates.io/crates/crc32fast/1.5.4/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crc32fast",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "1.5.4"
+    },
     "crypto-bigint 0.7.10": {
       "common_attrs": {
         "crate_features": [
@@ -5036,6 +5089,46 @@
         }
       ],
       "version": "0.1.15"
+    },
+    "flate2 1.1.11": {
+      "common_attrs": {
+        "crate_features": [
+          "any_impl",
+          "any_zlib",
+          "zlib-rs"
+        ],
+        "deps": [
+          {
+            "id": "zlib-rs 0.6.8",
+            "target": "zlib_rs"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "flate2",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "flate2",
+      "package_url": "https://github.com/rust-lang/flate2-rs",
+      "repository": {
+        "Http": {
+          "sha256": "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4",
+          "url": "https://static.crates.io/crates/flate2/1.1.11/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "flate2",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.1.11"
     },
     "foldhash 0.1.5": {
       "common_attrs": {
@@ -9732,10 +9825,20 @@
         ]
       },
       "common_attrs": {
-        "crate_features": [
-          "default",
-          "mman"
-        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "mman"
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "fs"
+            ],
+            "x86_64-apple-darwin": [
+              "fs"
+            ]
+          }
+        },
         "deps": [
           {
             "id": "bitflags 2.13.2",
@@ -12173,6 +12276,75 @@
         {
           "Library": {
             "crate_name": "pulsar_hw",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
+    "pulsar-installer 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "sha1 0.11.0",
+            "target": "sha1"
+          },
+          {
+            "id": "sha2 0.11.1",
+            "target": "sha2"
+          },
+          {
+            "id": "socket2 0.6.5",
+            "target": "socket2"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "time 0.3.55",
+            "target": "time"
+          },
+          {
+            "id": "ureq 3.5.1",
+            "target": "ureq"
+          },
+          {
+            "id": "zip 9.4.1",
+            "target": "zip"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_installer",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-installer",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_installer",
             "crate_root": "src/lib.rs"
           }
         }
@@ -18448,6 +18620,35 @@
       ],
       "version": "0.2.5"
     },
+    "typed-path 0.13.0": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "typed_path",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "typed-path",
+      "package_url": "https://github.com/chipsenkbeil/typed-path",
+      "repository": {
+        "Http": {
+          "sha256": "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e",
+          "url": "https://static.crates.io/crates/typed-path/0.13.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "typed_path",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.13.0"
+    },
     "typenum 1.20.1": {
       "common_attrs": {
         "crate_features": [
@@ -18738,6 +18939,127 @@
       ],
       "version": "0.9.0"
     },
+    "ureq 3.5.1": {
+      "common_attrs": {
+        "crate_features": [
+          "_ring",
+          "_rustls",
+          "_tls",
+          "rustls",
+          "rustls-no-provider",
+          "rustls-webpki-roots"
+        ],
+        "deps": [
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "log 0.4.34",
+            "target": "log"
+          },
+          {
+            "id": "percent-encoding 2.3.2",
+            "target": "percent_encoding"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "rustls-pki-types 1.15.1",
+            "target": "rustls_pki_types"
+          },
+          {
+            "id": "ureq-proto 0.7.1",
+            "target": "ureq_proto"
+          },
+          {
+            "id": "utf8-zero 0.8.1",
+            "target": "utf8_zero"
+          },
+          {
+            "id": "webpki-roots 1.0.11",
+            "target": "webpki_roots"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ureq",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "ureq",
+      "package_url": "https://github.com/algesten/ureq",
+      "repository": {
+        "Http": {
+          "sha256": "e7be76686bdf7198002062423ca0d8cf9b75a27c8e1de804513b97e97b555d9d",
+          "url": "https://static.crates.io/crates/ureq/3.5.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ureq",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "3.5.1"
+    },
+    "ureq-proto 0.7.1": {
+      "common_attrs": {
+        "crate_features": [
+          "client"
+        ],
+        "deps": [
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "httparse 1.10.1",
+            "target": "httparse"
+          },
+          {
+            "id": "log 0.4.34",
+            "target": "log"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ureq_proto",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE.txt",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "ureq-proto",
+      "package_url": "https://github.com/algesten/ureq-proto",
+      "repository": {
+        "Http": {
+          "sha256": "622dce33c252115466d83f63e9744a18f12b4406aae51a01c15ad8fcf1185eb3",
+          "url": "https://static.crates.io/crates/ureq-proto/0.7.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ureq_proto",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.7.1"
+    },
     "url 2.5.8": {
       "common_attrs": {
         "crate_features": [
@@ -18784,6 +19106,39 @@
         }
       ],
       "version": "2.5.8"
+    },
+    "utf8-zero 0.8.1": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "utf8_zero",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "utf8-zero",
+      "package_url": "https://github.com/algesten/utf8-zero",
+      "repository": {
+        "Http": {
+          "sha256": "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e",
+          "url": "https://static.crates.io/crates/utf8-zero/0.8.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "utf8_zero",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.1"
     },
     "utf8_iter 1.1.0": {
       "common_attrs": {
@@ -19678,6 +20033,41 @@
         }
       ],
       "version": "0.3.107"
+    },
+    "webpki-roots 1.0.11": {
+      "common_attrs": {
+        "deps": [
+          {
+            "alias": "pki_types",
+            "id": "rustls-pki-types 1.15.1",
+            "target": "rustls_pki_types"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "webpki_roots",
+      "license": "CDLA-Permissive-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "CDLA-Permissive-2.0"
+      ],
+      "name": "webpki-roots",
+      "package_url": "https://github.com/rustls/webpki-roots",
+      "repository": {
+        "Http": {
+          "sha256": "f5f280bbb2b287bc8e7de7e3852945a0ff50d1bbcb5ed42b6c7a568c546df171",
+          "url": "https://static.crates.io/crates/webpki-roots/1.0.11/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki_roots",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.11"
     },
     "windows 0.62.2": {
       "common_attrs": {
@@ -21481,6 +21871,126 @@
       ],
       "version": "0.11.7"
     },
+    "zip 9.4.1": {
+      "common_attrs": {
+        "crate_features": [
+          "_deflate-any",
+          "deflate-flate2",
+          "deflate-flate2-zlib-rs"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "crc32fast 1.5.4",
+              "target": "crc32fast"
+            },
+            {
+              "id": "flate2 1.1.11",
+              "target": "flate2"
+            },
+            {
+              "id": "indexmap 2.14.2",
+              "target": "indexmap"
+            },
+            {
+              "id": "memchr 2.8.3",
+              "target": "memchr"
+            },
+            {
+              "id": "typed-path 0.13.0",
+              "target": "typed_path"
+            }
+          ],
+          "selects": {
+            "cfg(any(target_os = \"macos\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\", target_os = \"dragonfly\"))": [
+              {
+                "id": "nix 0.31.3",
+                "target": "nix"
+              }
+            ],
+            "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "getrandom 0.4.3",
+                "target": "getrandom"
+              }
+            ],
+            "cfg(target_arch = \"wasm32\")": [
+              {
+                "id": "getrandom 0.4.3",
+                "target": "getrandom"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.191",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.61.2",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2024"
+      },
+      "library_target_name": "zip",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "zip",
+      "package_url": "https://github.com/zip-rs/zip2",
+      "repository": {
+        "Http": {
+          "sha256": "23f17fbc870bfac28c6228aed7d6e6df352e26bf7015c4313727e16a7a01ce5e",
+          "url": "https://static.crates.io/crates/zip/9.4.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "zip",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "9.4.1"
+    },
+    "zlib-rs 0.6.8": {
+      "common_attrs": {
+        "crate_features": [
+          "rust-allocator"
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "zlib_rs",
+      "license": "Zlib",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Zlib"
+      ],
+      "name": "zlib-rs",
+      "package_url": "https://github.com/trifectatechfoundation/zlib-rs",
+      "repository": {
+        "Http": {
+          "sha256": "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112",
+          "url": "https://static.crates.io/crates/zlib-rs/0.6.8/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "zlib_rs",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.6.8"
+    },
     "zmij 1.0.23": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -21733,6 +22243,7 @@
     "snow 0.10.0",
     "socket2 0.6.5",
     "subtle 2.6.1",
+    "tempfile 3.27.0",
     "thiserror 2.0.21",
     "time 0.3.55",
     "tokio 1.54.1",
@@ -21744,15 +22255,16 @@
     "tracing-log 0.2.0",
     "tracing-subscriber 0.3.23",
     "unicode-normalization 0.1.26",
+    "ureq 3.5.1",
     "uuid 1.29.0",
     "windows-core 0.62.2",
     "windows-link 0.2.1",
     "zbus 5.19.0",
-    "zeroize 1.9.1"
+    "zeroize 1.9.1",
+    "zip 9.4.1"
   ],
   "direct_dev_deps": [
-    "serde_urlencoded 0.7.1",
-    "tempfile 3.27.0"
+    "serde_urlencoded 0.7.1"
   ],
   "workspace_members": {
     "ble-gateway 0.2.0": "projects/station/ble-gateway/crates/ble-gateway",
@@ -21788,6 +22300,7 @@
     "pulsar-dsp 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-dsp",
     "pulsar-esphome 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-esphome",
     "pulsar-hw 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-hw",
+    "pulsar-installer 0.0.0": "projects/station/pulsar/installer",
     "pulsar-mdns 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-mdns",
     "pulsar-media 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-media",
     "pulsar-model 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-model",

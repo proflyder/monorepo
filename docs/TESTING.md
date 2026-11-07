@@ -48,7 +48,7 @@ teardown восстанавливает source/volume.
 | bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
 | Voice routing | Go-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
 | Pulsar Rust | `bazel test //projects/station/pulsar/satellite/...` (fmt/clippy/tests, Linux) и `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` для `aarch64`/`armhf` — CI-юниты `pulsar-bazel` (`_bazel.yml`) и `pulsar` (`_native.yml`) |
-| Pulsar installer | Go-тесты установщика (nested module, `GOWORK=off`); исходники в `projects/station/pulsar/` |
+| Pulsar installer | Rust-тесты установщика и golden-фикстуры из [`projects/station/pulsar/installer/`](../projects/station/pulsar/installer); `bazel test //projects/station/pulsar/installer/...` |
 
 ## Hermes
 
@@ -519,9 +519,9 @@ commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.
 `make test` явно печатает `SKIP` для тестов, которым нужен nested
 `projects/station/resources/quasar-connect-bot`; локально, где источник
 есть, те же тесты выполняются. Pulsar теперь лежит в дереве
-(`projects/station/pulsar/`), поэтому его installer и Rust-тесты доступны
-всегда; installer запускается с `GOWORK=off` (это отдельный Go-модуль, не
-входящий в корневой `go.work`). `test_deploy_control.sh` больше не требует
+(`projects/station/pulsar/`), поэтому его установщик и Rust-тесты доступны
+всегда; установщик — крейт `pulsar-installer` корневого Cargo workspace и
+проверяется Bazel-целями `//projects/station/pulsar/installer/...`. `test_deploy_control.sh` больше не требует
 собранных бинарников: он передаёт deploy.sh заранее разрешённые
 digest-пины образов, поэтому `make test` и `make test-deploy-control`
 запускают его без Bazel. Путь продвижения (`PREBUILT_DIGESTS`,

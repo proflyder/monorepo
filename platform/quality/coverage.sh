@@ -9,9 +9,6 @@ mkdir -p reports
 echo "== hermetic test suite =="
 ./platform/quality/run-tests.sh
 
-echo "== Go coverage: Pulsar installer =="
-(cd projects/station/pulsar/installer && GOWORK=off go test -coverprofile="$ROOT/reports/pulsar-installer.cover" ./...)
-
 if command -v coverage >/dev/null 2>&1; then
   echo "== Python line coverage: pairing core =="
   (cd projects/station/resources/quasar-connect-bot && coverage erase && \

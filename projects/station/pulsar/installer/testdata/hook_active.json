@@ -1,0 +1,18 @@
+[
+  {
+    "rk": "#!/bin/sh\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\nwhile true; do\n  sleep 60\ndone\n",
+    "want": true
+  },
+  {
+    "rk": "#!/bin/sh\nwhile true; do\n  sleep 60\ndone\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n",
+    "want": false
+  },
+  {
+    "rk": "#!/bin/sh\n[ -x /data/dropbear/start.sh ] \u0026\u0026 /data/dropbear/start.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\nwhile true; do\n  sleep 60\ndone\n",
+    "want": false
+  },
+  {
+    "rk": "#!/bin/sh\n[ -x /data/pulsar/boot.sh ] \u0026\u0026 /data/pulsar/boot.sh \u003c/dev/null \u003e/dev/null 2\u003e\u00261 \u0026\n",
+    "want": true
+  }
+]

@@ -1,0 +1,37 @@
+[
+  {
+    "raw": "hello\n__rc=0\n",
+    "out": "hello\n",
+    "err": null
+  },
+  {
+    "raw": "hello\r\nworld\r\n__rc=0\r\n",
+    "out": "hello\nworld\n",
+    "err": null
+  },
+  {
+    "raw": "out\n__rc=1\n",
+    "out": "out\n",
+    "err": "exit 1"
+  },
+  {
+    "raw": "out\n__rc=127\n",
+    "out": "out\n",
+    "err": "exit 127"
+  },
+  {
+    "raw": "no marker\r\n",
+    "out": "",
+    "err": "no exit status"
+  },
+  {
+    "raw": "",
+    "out": "",
+    "err": "no exit status"
+  },
+  {
+    "raw": "line\n__rc=0",
+    "out": "line\n",
+    "err": null
+  }
+]

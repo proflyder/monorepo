@@ -1,0 +1,5 @@
+#!/bin/sh
+# pulsar autostart, written by pulsar-install; remove to disable autostart.
+[ "$1" = start ] || exit 0
+[ -x /data/dropbear/start.sh ] && /data/dropbear/start.sh </dev/null >/dev/null 2>&1 &
+[ -x /data/pulsar/boot.sh ] && /data/pulsar/boot.sh </dev/null >/dev/null 2>&1 &

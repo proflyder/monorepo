@@ -46,12 +46,12 @@ Assistant через ESPHome Native API, Music Assistant через Sendspin, н
 ## Сборка и проверки
 
 ```sh
-bazel test //projects/station/pulsar/satellite/...    # fmt, clippy -D warnings, тесты
+bazel test //projects/station/pulsar/satellite/... //projects/station/pulsar/installer/... # fmt, clippy -D warnings, тесты
 bazel build //projects/station/pulsar/satellite/crates/... # все утилиты src/bin
 bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
   --define=pulsar_version="$(tr -d '[:space:]' < VERSION)" \
   //projects/station/pulsar/satellite:station_binary  # одна архитектура
-go -C installer test ./...
+bazel test //projects/station/pulsar/installer/...  # установщик: тесты, fmt, clippy
 radio/build.sh
 ssh/build.sh
 ```
@@ -131,7 +131,7 @@ ssh/build.sh
   меняет файл.
 - **Rootfs (`/system`, `/etc`) не менять**, всё постоянное живёт в `/data`. Единственное исключение
   — `/etc/init.d/S99zpulsar`: его пишет установщик и только после проверки, что rootfs не защищена
-  (`rootfsGuard` в `installer/autostart.go`; [docs/development.md, «Установка и
+  (`rootfs_guard` в `installer/src/scripts.rs`; [docs/development.md, «Установка и
   станция»](docs/development.md#установка-и-станция)).
 - Защита станции от OTA прошивки Яндекса — не задача pulsar (владелец станции / root-метод). OTA,
   заменившая system-раздел, сносит `S99zpulsar`; повторный запуск установщика его восстанавливает,
