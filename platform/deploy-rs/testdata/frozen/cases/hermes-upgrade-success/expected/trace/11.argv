@@ -1,0 +1,9 @@
+-n
+home-assistant
+exec
+deployment/hermes
+-c
+voice-proxy
+--
+/usr/local/bin/voice-proxy
+-healthcheck

@@ -1,0 +1,7 @@
+-n
+home-assistant
+get
+deployment
+runtime-health-exporter
+-o
+json

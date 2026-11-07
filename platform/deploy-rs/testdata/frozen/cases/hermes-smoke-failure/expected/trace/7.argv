@@ -1,0 +1,6 @@
+-n
+home-assistant
+rollout
+status
+deployment/hermes
+--timeout=240s

@@ -1,0 +1,3 @@
+hermes rollout failed: simulated smoke failure requested
+hermes rollout: rolling back to revision 1
+hermes rollout: rollback to revision 1 verified

@@ -1,0 +1,5 @@
+-n
+home-assistant
+logs
+job/hermes-smoke-<id>
+--tail=20

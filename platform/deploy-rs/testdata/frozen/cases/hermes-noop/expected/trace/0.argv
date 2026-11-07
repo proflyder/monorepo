@@ -1,0 +1,7 @@
+-n
+home-assistant
+get
+deployment
+hermes
+-o
+json

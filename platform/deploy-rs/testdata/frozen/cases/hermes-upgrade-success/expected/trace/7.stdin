@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/name: hermes-smoke
+  name: hermes-smoke-<id>
+  namespace: home-assistant
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes-smoke
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - command:
+        - /usr/local/bin/home-deploy
+        - hermes
+        - assist-smoke
+        env:
+        - name: HA_URL
+          value: http://home-assistant-external.monitoring.svc.cluster.local:8123
+        - name: HA_AGENT
+          value: conversation.hermes_agent
+        - name: SMOKE_TEXT
+          value: Представься одним коротким предложением. Ничего не изменяй.
+        image: ghcr.io/proflyder/home-deploy@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+        imagePullPolicy: IfNotPresent
+        name: smoke
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /run/secrets/ha
+          name: ha-token
+          readOnly: true
+      enableServiceLinks: false
+      restartPolicy: Never
+      securityContext:
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: ha-token
+        secret:
+          defaultMode: 292
+          secretName: ha-bridge-ha
+  ttlSecondsAfterFinished: 600

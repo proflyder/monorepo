@@ -1,0 +1,23 @@
+# kube-prometheus-stack runs with *SelectorNilUsesHelmValues=false, so any
+# ServiceMonitor in the cluster is picked up. Keep the selector disjoint from
+# other services and label the target port name explicitly.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: currency-bot
+  namespace: currency-bot
+  labels:
+    app.kubernetes.io/name: currency-bot
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  namespaceSelector:
+    matchNames:
+      - currency-bot
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: currency-bot
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

@@ -1,0 +1,6 @@
+-n
+home-assistant
+history
+runtime
+-o
+json

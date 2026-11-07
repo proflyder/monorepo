@@ -1,0 +1,6 @@
+-n
+home-assistant
+delete
+job
+hermes-smoke-<id>
+--ignore-not-found

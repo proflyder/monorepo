@@ -1,0 +1,37 @@
+#!/bin/sh
+# Fake helm used by the frozen fixtures. Records argv/payloads and answers from
+# the files named by the FAKE_HELM_* variables.
+set -u
+trace="${TRACE_DIR:-trace}"
+mkdir -p "$trace"
+idx=$(find "$trace" -maxdepth 1 -name '*.argv' | wc -l | tr -d ' ')
+argfile="$trace/$idx.argv"
+prev=
+{
+  for argument in "$@"; do
+    if [ "$prev" = "-f" ]; then
+      cp "$argument" "$trace/$idx.payload"
+      printf '<payload>\n'
+    else
+      printf '%s\n' "$argument"
+    fi
+    prev="$argument"
+  done
+} >"$argfile"
+
+joined=" $* "
+case "$joined" in
+  *" history "*)
+    cat "${FAKE_HELM_HISTORY:-helm-history.json}" 2>/dev/null
+    exit 0
+    ;;
+  *" upgrade "*)
+    code="${FAKE_HELM_UPGRADE_CODE:-0}"
+    if [ "$code" = "0" ] && [ -n "${FAKE_HELM_HISTORY_AFTER:-}" ] && [ -f "${FAKE_HELM_HISTORY_AFTER}" ]; then
+      cp "${FAKE_HELM_HISTORY_AFTER}" "${FAKE_HELM_HISTORY:-helm-history.json}"
+    fi
+    exit "$code"
+    ;;
+  *" rollback "*) exit "${FAKE_HELM_ROLLBACK_CODE:-0}" ;;
+  *) exit 0 ;;
+esac

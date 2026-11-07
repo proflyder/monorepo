@@ -1,0 +1,125 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Kept in sync with [package].version in Cargo.toml.
+PACKAGE_VERSION = "0.1.0"
+
+LIB_DEPS = [
+    "@crates//:clap",
+    "@crates//:hex",
+    "@crates//:regex",
+    "@crates//:sha2",
+]
+
+rust_library(
+    name = "home_deploy_lib",
+    crate_name = "home_deploy",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/main.rs",
+            "src/bin/**",
+        ],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS,
+)
+
+# The CLI under port. The Go binary stays at //platform/deploy until the
+# cutover; manifests keep calling a binary named `home-deploy`.
+rust_binary(
+    name = "home-deploy",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS + [":home_deploy_lib"],
+)
+
+# Compares the Rust binary with the frozen Go contract fixtures. Not part of
+# the deployed image; the `parity` sh_test wraps it.
+rust_binary(
+    name = "parity_runner",
+    srcs = ["src/bin/parity.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = [
+        "@crates//:serde_json",
+    ],
+)
+
+filegroup(
+    name = "frozen_manifest",
+    srcs = ["testdata/frozen/manifest.json"],
+)
+
+filegroup(
+    name = "frozen",
+    srcs = glob(
+        ["testdata/frozen/**"],
+        exclude = [
+            "**/__pycache__/**",
+            "**/*.pyc",
+        ],
+    ),
+)
+
+sh_test(
+    name = "parity",
+    srcs = ["tests/parity.sh"],
+    args = [
+        "$(rootpath :parity_runner)",
+        "$(rootpath :home-deploy)",
+        "$(rootpath :frozen_manifest)",
+    ],
+    data = [
+        ":frozen",
+        ":frozen_manifest",
+        ":home-deploy",
+        ":parity_runner",
+    ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":home_deploy_lib",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:tempfile",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":home_deploy_lib",
+        ":home-deploy",
+        ":parity_runner",
+        ":unit_tests",
+    ],
+)
+
+# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
+rust_clippy_test(
+    name = "clippy",
+    targets = [
+        ":home_deploy_lib",
+        ":home-deploy",
+        ":parity_runner",
+        ":unit_tests",
+    ],
+)

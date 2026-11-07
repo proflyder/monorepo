@@ -1,0 +1,3 @@
+get
+--raw
+/api/v1/namespaces/home-assistant/services/runtime-health-exporter:9116/proxy/metrics

@@ -182,6 +182,25 @@ export const config = {
       },
     },
     {
+      id: "platform-deploy-rust",
+      platform: "bazel",
+      title: "platform/deploy-rs (Rust home-deploy port + Go parity fixtures)",
+      // Kept out of platform/deploy/** on purpose: while both implementations
+      // exist, a tooling-only change must not route to every deploy unit.
+      // `platform/deploy` stays the executable contract until the cutover.
+      paths: ["platform/deploy-rs/**"],
+      bazel: {
+        roots: ["//platform/deploy-rs"],
+        test_targets: [
+          "//platform/deploy-rs:unit_tests",
+          "//platform/deploy-rs:clippy",
+          "//platform/deploy-rs:rustfmt",
+          "//platform/deploy-rs:parity",
+        ],
+        build_targets: ["//platform/deploy-rs/..."],
+      },
+    },
+    {
       id: "voice-proxy",
       platform: "bazel",
       title: "solutions/voice-proxy (Rust TTS-safe OpenAI passthrough)",

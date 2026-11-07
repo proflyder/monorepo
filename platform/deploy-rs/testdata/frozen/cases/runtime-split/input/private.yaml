@@ -1,0 +1,23 @@
+nodeName: lab-host
+storage:
+  hermes:
+    size: 10Gi
+workloads:
+  hermes:
+    replicas: 1
+    containers:
+    - name: gateway
+      image: hermes@sha256:aaaa
+  runtime-health-exporter:
+    replicas: 1
+    containers:
+    - name: health-exporter
+      image: ghcr.io/proflyder/voice-proxy@sha256:old
+      command: ["python3", "/metrics/health_exporter.py"]
+      volumeMounts:
+      - name: metrics
+        mountPath: /metrics
+    volumes:
+    - name: metrics
+      configMap:
+        name: runtime-health-exporter

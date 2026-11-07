@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "name": "scheduler",
+    "generation": 7,
+    "resourceVersion": "42",
+    "uid": "uid-1"
+  },
+  "spec": {
+    "replicas": 1
+  },
+  "status": {
+    "replicas": 1
+  }
+}

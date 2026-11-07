@@ -1,0 +1,5 @@
+hermes rollout: revision 1 -> new digests
+Assist reply: Готово.
+voice-proxy -healthcheck: ok
+voice-proxy logs: no errors
+hermes rollout: revision 2 is healthy

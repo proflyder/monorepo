@@ -1,5 +1,5 @@
 {
-  "checksum": "36e0c96abab16a5e2f4c0e3af45a975ab07d8c2d0e858cc709e1d91f5f8457f7",
+  "checksum": "d640abdccb0da82eae4bc2e12983a689fc2f150387705662c701a7cc488b0f31",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6633,6 +6633,55 @@
         {
           "Library": {
             "crate_name": "home_contracttest",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "home-deploy 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "clap 4.6.7",
+            "target": "clap"
+          },
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "regex 1.13.1",
+            "target": "regex"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "sha2 0.11.1",
+            "target": "sha2"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "home_deploy",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "home-deploy",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "home_deploy",
             "crate_root": "src/lib.rs"
           }
         }
@@ -21715,6 +21764,7 @@
     "home-clients 0.1.0": "packages/rust/home-clients",
     "home-config 0.1.0": "packages/rust/home-config",
     "home-contracttest 0.1.0": "packages/rust/home-contracttest",
+    "home-deploy 0.1.0": "platform/deploy-rs",
     "home-ha 0.1.0": "packages/rust/home-ha",
     "home-http 0.1.0": "packages/rust/home-http",
     "home-linux 0.1.0": "packages/rust/home-linux",
