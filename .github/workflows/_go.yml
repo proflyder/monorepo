@@ -45,6 +45,10 @@ jobs:
     name: go / ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # Go commands and the deploy-control regression run through the same mise
+    # tasks as a workstation; tools come from mise-action's install_args.
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -53,7 +57,7 @@ jobs:
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.11.3
-          install_args: "go"
+          install_args: "go node"
           cache: true
 
       # Go module/build cache (setup-go used to provide it). Same key in every
@@ -66,36 +70,16 @@ jobs:
           key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'projects/station/ble-gateway/go.sum') }}
           restore-keys: go-${{ runner.os }}-
 
-      - name: Download modules
-        if: inputs.packages != ''
-        working-directory: ${{ inputs.workdir }}
-        run: go mod download
-
-      - name: go vet
-        if: inputs.packages != ''
-        working-directory: ${{ inputs.workdir }}
-        run: |
-          read -r -a packages <<< "${{ inputs.packages }}"
-          go vet "${packages[@]}"
-
+      # Mirrors `go mod download`, `go vet` and `go test [-race]` from the unit.
       - name: go test
         if: inputs.packages != ''
-        working-directory: ${{ inputs.workdir }}
-        run: |
-          read -r -a packages <<< "${{ inputs.packages }}"
-          if [ "${{ inputs.race }}" = "true" ]; then
-            go test -race "${packages[@]}"
-          else
-            go test "${packages[@]}"
-          fi
+        run: mise run test ${{ inputs.unit }}
 
       - name: go build
         if: inputs.build_packages != ''
-        working-directory: ${{ inputs.workdir }}
-        run: |
-          read -r -a packages <<< "${{ inputs.build_packages }}"
-          mkdir -p "$RUNNER_TEMP/gobuild"
-          go build -o "$RUNNER_TEMP/gobuild/" "${packages[@]}"
+        env:
+          GO_BUILD_DIR: ${{ runner.temp }}/gobuild
+        run: mise run build ${{ inputs.unit }}
 
       # Pinned Bazelisk on PATH (as `bazel`) for the deploy-control regression.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1

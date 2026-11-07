@@ -19,6 +19,7 @@
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -147,12 +148,52 @@ export function unitHint(unit) {
 }
 
 /**
- * Commands that build a unit. Only Bazel platforms have a build entry point
- * here; other platforms answer with their own command instead.
+ * Optional target override for Bazel units (`_android.yml` narrows the list
+ * with target-determinator before calling the task). Space separated, like the
+ * workflow inputs.
+ */
+function bazelTargetOverride() {
+  const raw = process.env.BAZEL_TARGETS;
+  return raw ? raw.trim().split(/\s+/).filter(Boolean) : [];
+}
+
+/** Build/test targets of a Bazel unit, honouring BAZEL_TARGETS when set. */
+export function bazelTargets(unit, kind) {
+  const override = bazelTargetOverride();
+  if (override.length) {
+    return override;
+  }
+  if (kind === "test") {
+    return [...unit.testTargets];
+  }
+  return unit.buildTargets.length
+    ? [...unit.buildTargets]
+    : unit.bazelRoots.map((bazelRoot) => `${bazelRoot}/...`);
+}
+
+/**
+ * Commands that build a unit: Bazel targets, or the Go binaries a Go unit
+ * declares (CI budgets them into $RUNNER_TEMP/gobuild).
  */
 export function buildCommands(unit, root = ROOT) {
   if (unit === null) {
     return [{ command: "bazel", args: ["build", "//..."], cwd: root }];
+  }
+  if (unit.platform === "go") {
+    if (!unit.goBuild.length) {
+      throw new Error(
+        `unit '${unit.id}' declares no Go build packages.\n${unitHint(unit)}`,
+      );
+    }
+    const outdir = process.env.GO_BUILD_DIR || path.join(os.tmpdir(), "mise-go-build");
+    fs.mkdirSync(outdir, { recursive: true });
+    return [
+      {
+        command: "go",
+        args: ["build", "-o", `${outdir}${path.sep}`, ...unit.goBuild],
+        cwd: path.resolve(root, unit.goModule),
+      },
+    ];
   }
   if (!["bazel", "android"].includes(unit.platform)) {
     throw new Error(
@@ -160,9 +201,7 @@ export function buildCommands(unit, root = ROOT) {
         unitHint(unit),
     );
   }
-  const targets = unit.buildTargets.length
-    ? unit.buildTargets
-    : unit.bazelRoots.map((bazelRoot) => `${bazelRoot}/...`);
+  const targets = bazelTargets(unit, "build");
   if (!targets.length) {
     throw new Error(
       `unit '${unit.id}' declares no build targets.\n${unitHint(unit)}`,
@@ -184,8 +223,9 @@ function testFiles(root, directories, suffix) {
 
 /**
  * Commands that test a unit, mirroring the reusable platform workflow:
- * `bazel test`, `go test [-race]`, Python compile + unittest discovery,
- * `node --test`, or the native repository script.
+ * `bazel test`, `go mod download` + `go vet` + `go test [-race]`, Python
+ * compile + unittest discovery (plus the Go deploy tool for deploy_tool
+ * units), `node --test`, or the native repository script.
  */
 export function testCommands(unit, root = ROOT) {
   if (unit === null) {
@@ -200,40 +240,69 @@ export function testCommands(unit, root = ROOT) {
   switch (unit.platform) {
     case "bazel":
     case "android": {
-      if (!unit.testTargets.length) {
+      const targets = bazelTargets(unit, "test");
+      if (!targets.length) {
         throw new Error(
           `unit '${unit.id}' declares no Bazel test targets.\n${unitHint(unit)}`,
         );
       }
-      return [{ command: "bazel", args: ["test", ...unit.testTargets], cwd: root }];
+      return [
+        {
+          command: "bazel",
+          args: ["test", ...targets, "--test_output=errors"],
+          cwd: root,
+        },
+      ];
     }
     case "go": {
-      const args = ["test"];
+      const packages = unit.goPackages.length ? unit.goPackages : ["./..."];
+      const testArgs = ["test"];
       if (unit.goRace) {
-        args.push("-race");
+        testArgs.push("-race");
       }
-      args.push(...(unit.goPackages.length ? unit.goPackages : ["./..."]));
-      return [{ command: "go", args, cwd: path.resolve(root, unit.goModule) }];
+      testArgs.push(...packages);
+      const cwd = path.resolve(root, unit.goModule);
+      // Same sequence as `_go.yml`: modules, vet, then the test binary.
+      return [
+        { command: "go", args: ["mod", "download"], cwd },
+        { command: "go", args: ["vet", ...packages], cwd },
+        { command: "go", args: testArgs, cwd },
+      ];
     }
     case "python": {
       const commands = [];
-      for (const suite of unit.suites) {
+      let env;
+      if (unit.pythonDeployTool) {
+        // `_python.yml` builds the Go deploy CLI once because the suites drive
+        // a deploy script that execs it through HOME_DEPLOY.
+        const binary = path.join(os.tmpdir(), "mise-home-deploy");
         commands.push({
-          command: "python3",
-          args: ["-m", "compileall", "-q", suite],
+          command: "go",
+          args: ["build", "-o", binary, "./platform/deploy/cmd/home-deploy"],
           cwd: root,
         });
-        commands.push({
-          command: "python3",
-          args: ["-m", "unittest", "discover", "-s", suite, "-p", "test_*.py", "-v"],
-          cwd: root,
-        });
+        env = { HOME_DEPLOY: binary };
       }
       for (const directory of unit.compileDirs) {
         commands.push({
           command: "python3",
           args: ["-m", "compileall", "-q", directory],
           cwd: root,
+          env,
+        });
+      }
+      for (const suite of unit.suites) {
+        commands.push({
+          command: "python3",
+          args: ["-m", "compileall", "-q", suite],
+          cwd: root,
+          env,
+        });
+        commands.push({
+          command: "python3",
+          args: ["-m", "unittest", "discover", "-s", suite, "-p", "test_*.py", "-v"],
+          cwd: root,
+          env,
         });
       }
       if (!commands.length) {
@@ -271,7 +340,9 @@ export function testCommands(unit, root = ROOT) {
       const nodeTests = [
         ...testFiles(root, ["platform/ci"], ".test.mjs"),
         ...testFiles(root, ["platform/quality"], ".test.mjs"),
+        ...testFiles(root, ["platform/mise-tasks/lib"], ".test.mjs"),
       ];
+      // Same order as `.github/workflows/_quality.yml`.
       return [
         { command: "node", args: ["platform/quality/audit_repository.mjs"], cwd: root },
         {
@@ -279,8 +350,40 @@ export function testCommands(unit, root = ROOT) {
           args: ["-m", "unittest", "discover", "-s", "platform/quality", "-p", "test_static.py", "-v"],
           cwd: root,
         },
+        { command: "node", args: ["platform/ci/check_units.mjs"], cwd: root },
         { command: "node", args: ["--test", ...nodeTests], cwd: root },
-        { command: "actionlint", args: [".github/workflows/*.yml"], shell: true, cwd: root },
+        {
+          command: "shellcheck",
+          args: [
+            "-S",
+            "error",
+            ...[
+              "platform/mise-tasks/*.sh",
+              "platform/mise-tasks/*/*.sh",
+              "platform/quality/*.sh",
+              "platform/ci/*.sh",
+              "platform/deploy/*.sh",
+              "projects/home/kubernetes/scheduler/*.sh",
+              "projects/home/kubernetes/scheduler/nft/*.sh",
+              "projects/home/kubernetes/currency-bot/*.sh",
+              "projects/home/kubernetes/currency-bot/nft/*.sh",
+              "projects/station/scripts/*.sh",
+              "projects/home-assistant/stack/*.sh",
+              "solutions/windows-logon-provider/*.sh",
+              "platform/workstation/env.sh",
+              "platform/workstation/run.sh",
+              "platform/workstation/bin/bazel",
+            ],
+          ],
+          shell: true,
+          cwd: root,
+        },
+        {
+          command: "actionlint",
+          args: ["-color", ".github/workflows/*.yml"],
+          shell: true,
+          cwd: root,
+        },
         {
           command: "gitleaks",
           args: ["dir", ".", "--redact=100", "--no-banner", "--config=.gitleaks.toml"],
@@ -295,8 +398,13 @@ export function testCommands(unit, root = ROOT) {
 
 /** Run commands in order; stop at the first failure and return its status. */
 export function runCommands(commands) {
-  for (const { command, args, cwd, shell = false } of commands) {
-    const result = spawnSync(command, args, { cwd, shell, stdio: "inherit" });
+  for (const { command, args, cwd, shell = false, env } of commands) {
+    const result = spawnSync(command, args, {
+      cwd,
+      shell,
+      stdio: "inherit",
+      env: env ? { ...process.env, ...env } : process.env,
+    });
     if (result.error) {
       process.stderr.write(`${result.error.message}\n`);
       return 1;
@@ -312,7 +420,7 @@ const USAGE = `Usage: units-cli.mjs <command>
 
   units          list units: id, platform, title, deployable
   ids            print unit ids, one per line (completion)
-  build [unit]   bazel build //... or one unit's build targets
+  build [unit]   bazel build //..., or one unit's Bazel targets / Go binaries
   test [unit]    hermetic suite or one unit's CI test commands
 `;
 

@@ -2,6 +2,7 @@
 // Unit tests for the mise unit dispatcher; run with `node --test`.
 
 import assert from "node:assert/strict";
+import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -61,6 +62,13 @@ const CONFIG = normalizeConfig({
       title: "projects/home-assistant/ha-voice",
       paths: ["projects/home-assistant/ha-voice/**"],
       python: { suites: ["projects/home-assistant/ha-voice"] },
+    },
+    {
+      id: "currency",
+      platform: "python",
+      title: "projects/home/kubernetes/currency-bot",
+      paths: ["projects/home/kubernetes/currency-bot/**"],
+      python: { suites: ["projects/home/kubernetes/currency-bot"], deploy_tool: true },
     },
     {
       id: "heartbeat",
@@ -135,26 +143,65 @@ test("buildCommands uses build_targets or falls back to bazel roots", () => {
   ]);
 });
 
-test("buildCommands rejects non-Bazel units with their own command", () => {
-  assert.throws(
-    () => buildCommands(byId("platform-deploy")),
-    /platform 'go'.*\n.*go test \.\/platform\/deploy\/\.\.\./s,
-  );
+test("buildCommands rejects platforms without a build entry point", () => {
+  assert.throws(() => buildCommands(byId("ha-voice")), /platform 'python'/);
   assert.throws(() => buildCommands(byId("repository")), /mise run check/);
 });
 
-test("testCommands mirrors the Bazel workflow", () => {
+test("buildCommands builds Go binaries into GO_BUILD_DIR", () => {
+  process.env.GO_BUILD_DIR = "/tmp/unit-go-build";
+  try {
+    const [command] = buildCommands(byId("platform-deploy"));
+    assert.equal(command.command, "go");
+    assert.deepEqual(command.args, [
+      "build",
+      "-o",
+      `/tmp/unit-go-build${path.sep}`,
+      "./platform/deploy/cmd/home-deploy",
+    ]);
+    assert.equal(command.cwd, path.join(ROOT, "."));
+  } finally {
+    delete process.env.GO_BUILD_DIR;
+  }
+});
+
+test("testCommands mirrors the Bazel workflow, including --test_output=errors", () => {
   assert.deepEqual(testCommands(byId("proto"))[0].args, [
     "test",
     "//packages/rust/home-proto:unit_tests",
+    "--test_output=errors",
   ]);
 });
 
-test("testCommands runs go tests with race and the unit module", () => {
-  const [command] = testCommands(byId("platform-deploy"));
-  assert.equal(command.command, "go");
-  assert.deepEqual(command.args, ["test", "-race", "./platform/deploy/..."]);
-  assert.equal(command.cwd, path.join(ROOT, "."));
+test("testCommands honours BAZEL_TARGETS narrowed by CI", () => {
+  process.env.BAZEL_TARGETS = "//packages/proto:a //packages/proto:b";
+  try {
+    assert.deepEqual(testCommands(byId("proto"))[0].args, [
+      "test",
+      "//packages/proto:a",
+      "//packages/proto:b",
+      "--test_output=errors",
+    ]);
+    assert.deepEqual(buildCommands(byId("proto"))[0].args, [
+      "build",
+      "//packages/proto:a",
+      "//packages/proto:b",
+    ]);
+  } finally {
+    delete process.env.BAZEL_TARGETS;
+  }
+});
+
+test("testCommands mirrors the Go workflow: download, vet, test", () => {
+  const commands = testCommands(byId("platform-deploy"));
+  assert.equal(commands.length, 3);
+  assert.deepEqual(commands.map((command) => command.args), [
+    ["mod", "download"],
+    ["vet", "./platform/deploy/..."],
+    ["test", "-race", "./platform/deploy/..."],
+  ]);
+  assert.ok(commands.every((command) => command.command === "go"));
+  assert.ok(commands.every((command) => command.cwd === path.join(ROOT, ".")));
 });
 
 test("testCommands compiles and discovers Python suites", () => {
@@ -162,6 +209,19 @@ test("testCommands compiles and discovers Python suites", () => {
   assert.equal(commands.length, 2);
   assert.deepEqual(commands[0].args, ["-m", "compileall", "-q", "projects/home-assistant/ha-voice"]);
   assert.deepEqual(commands[1].args.slice(0, 4), ["-m", "unittest", "discover", "-s"]);
+});
+
+test("testCommands builds the Go deploy tool for deploy_tool units", () => {
+  const commands = testCommands(byId("currency"));
+  const [build, compile, unittest] = commands;
+  assert.equal(build.command, "go");
+  assert.deepEqual(build.args.slice(0, 3), [
+    "build",
+    "-o",
+    path.join(os.tmpdir(), "mise-home-deploy"),
+  ]);
+  assert.equal(compile.env.HOME_DEPLOY, build.args[2]);
+  assert.equal(unittest.env.HOME_DEPLOY, build.args[2]);
 });
 
 test("testCommands collects *.test.js for JS units", () => {
@@ -181,6 +241,22 @@ test("testCommands runs the native repository script in its workdir", () => {
 test("testCommands without a unit runs the hermetic suite", () => {
   const [command] = testCommands(null);
   assert.equal(command.command, path.join(ROOT, "platform/quality/run-tests.sh"));
+});
+
+test("testCommands mirrors the quality workflow gates", () => {
+  const commands = testCommands(byId("repository"));
+  const commandsSeen = commands.map(({ command, args }) => [command, args[0]]);
+  assert.deepEqual(commandsSeen, [
+    ["node", "platform/quality/audit_repository.mjs"],
+    ["python3", "-m"],
+    ["node", "platform/ci/check_units.mjs"],
+    ["node", "--test"],
+    ["shellcheck", "-S"],
+    ["actionlint", "-color"],
+    ["gitleaks", "dir"],
+  ]);
+  assert.ok(commands[4].args.includes("platform/workstation/run.sh"));
+  assert.equal(commands[6].args.at(-1), "--config=.gitleaks.toml");
 });
 
 test("unitHint names the platform command", () => {

@@ -34,6 +34,10 @@ jobs:
     name: python / ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # The test commands come from the unit map via `mise run test <unit>`;
+    # tools come from mise-action's install_args, never from `mise run` itself.
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -42,7 +46,7 @@ jobs:
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.11.3
-          install_args: ${{ inputs.deploy_tool && 'python go' || 'python' }}
+          install_args: ${{ inputs.deploy_tool && 'python go node' || 'python node' }}
           cache: true
 
       # Go module/build cache (setup-go used to provide it). Same key in every
@@ -56,37 +60,12 @@ jobs:
           key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'projects/station/ble-gateway/go.sum') }}
           restore-keys: go-${{ runner.os }}-
 
-      # Units whose suites drive a deploy script need the Go deploy binary the
-      # script execs (deploy.sh sources platform/deploy/resolve.sh). Built once
-      # per job; `go build` is enough here and keeps the job small.
-      - name: Build deploy tooling
-        if: inputs.deploy_tool
-        run: |
-          set -euo pipefail
-          go build -o "$RUNNER_TEMP/home-deploy" ./platform/deploy/cmd/home-deploy
-          echo "HOME_DEPLOY=$RUNNER_TEMP/home-deploy" >> "$GITHUB_ENV"
-
       - name: Install test dependencies
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements-test.txt
 
-      - name: Compile ${{ inputs.unit }}
-        if: inputs.compile != ''
-        run: |
-          read -r -a directories <<< "${{ inputs.compile }}"
-          for directory in "${directories[@]}"; do
-            echo "== compile: ${directory} =="
-            python3 -m compileall -q "$directory"
-          done
-
+      # Units whose suites drive a deploy script get the Go deploy binary from
+      # the task itself (HOME_DEPLOY), exactly like a local `mise run test`.
       - name: Test ${{ inputs.unit }}
-        if: inputs.suites != ''
-        run: |
-          read -r -a suites <<< "${{ inputs.suites }}"
-          for suite in "${suites[@]}"; do
-            echo "== compile: ${suite} =="
-            python3 -m compileall -q "$suite"
-            echo "== unittest: ${suite} =="
-            python3 -m unittest discover -s "$suite" -p 'test_*.py' -v
-          done
+        run: mise run test ${{ inputs.unit }}

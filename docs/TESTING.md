@@ -289,6 +289,16 @@ actionlint, shellcheck, kubectl, helm, oras) — из `mise.toml`/`mise.lock` ч
 Кэши `actions/cache` для Android и deploy-control остаются PR-локальными:
 их содержимое создаёт только соответствующий build/regression.
 
+Проверки, тесты и сборки внутри reusable workflow запускаются теми же
+mise-задачами, что и локально: `mise run test <unit>` / `mise run build
+<unit>` (диспетчер по `platform/ci/units.mjs`) и задачи `_quality.yml` —
+`audit`, `test:static`, `ci:units`, `test:ci`, `lint:shell`, `lint:actions`,
+`scan:secrets`. Список задач — `mise tasks`, их код — `platform/mise-tasks/`.
+Каждый job с `mise run` выставляет `MISE_TASK_RUN_AUTO_INSTALL=false`:
+инструменты ставит только `jdx/mise-action` (`install_args`), а не сама
+задача. Механика Actions (matrix, кэши, artifacts, OIDC, публикация,
+деплой) остаётся в workflow.
+
 ### Маршрутизация по юнитам
 
 CI не гоняет всё на каждый push. Единица запуска — **юнит**: один сервис,
@@ -488,7 +498,7 @@ workflow `_<platform>.yml` с inputs юнита, `platform` в `units.mjs`, ра
 ```bash
 # каталог юнитов и их команды
 mise run units                    # id, platform, title, deployable
-mise run build <unit>             # bazel build целей юнита (без юнита — //...)
+mise run build <unit>             # bazel build целей юнита / go build бинарей (без юнита — //...)
 mise run test <unit>              # команды юнита из units.mjs
 mise run test:bazel               # bazel test //...
 
@@ -515,9 +525,15 @@ node platform/ci/ghcr_cleanup.mjs --fixture platform/ci/testdata/ghcr-versions.j
   --now 2026-11-04T00:00:00Z
 mise run test                                   # герметичный gate (включает CI-тесты)
 mise run test:deploy-control                    # регрессия deploy control
-actionlint .github/workflows/*.yml
-shellcheck -S error platform/quality/*.sh platform/ci/*.sh \
-  projects/home/kubernetes/scheduler/*.sh projects/station/scripts/*.sh
+
+# те же проверки, что в _quality.yml
+mise run audit                                  # private data, ссылки, gitlinks
+mise run test:static                            # Python static gate
+mise run ci:units                               # инварианты карты юнитов
+mise run test:ci                                # node --test platform/ci + platform/quality + mise dispatcher
+mise run lint:shell                             # shellcheck -S error
+mise run lint:actions                           # actionlint
+mise run scan:secrets                           # Gitleaks (working tree)
 ```
 
 `affected.sh` только читает Git и граф загрузки Bazel: он ничего не собирает,
