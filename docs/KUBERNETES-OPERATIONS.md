@@ -129,7 +129,7 @@ Helm при удалении объекта из релиза делает GET �
 
 `deploy-home` для юнита `hermes` (builder `mixed`: `hermes` — Docker;
 `voice-proxy`, `health-exporter` и `home-deploy` — Bazel/rules_oci, явная
-карта `deploy.bazel_images`) после build+push вызывает
+карта `deploy.bazel_images`) вызывает
 `projects/home-assistant/deploy/rollout.sh` →
 `home-deploy hermes rollout`:
 
@@ -138,8 +138,9 @@ Helm при удалении объекта из релиза делает GET �
    job материализует их в файл 600 после OIDC-входа;
 2. если digest'ы не изменились, upgrade не запускается;
 3. `helm upgrade runtime` получает только `--set`/`--set-json` образов (без
-   `--reuse-values`), `storage` вырезается; exporter получает Go-образ,
-   command и пустые volume-монтирования, поэтому приватные values не меняются;
+   `--reuse-values`), `storage` вырезается; exporter получает образ
+   `health-exporter` (static musl, distroless), command и пустые
+   volume-монтирования, поэтому приватные values не меняются;
 4. запоминается ревизия до upgrade, затем проверяются rollout, health exporter
    (все endpoint'ы = 1), Assist-запрос через `conversation.hermes_agent`,
    `kubectl exec deploy/hermes -c voice-proxy -- /usr/local/bin/voice-proxy
@@ -363,7 +364,7 @@ kubectl -n home-assistant annotate externalsecret scheduler-auth \
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
   IfNotPresent`, без pull-secret. `hermes` собирается Docker, `voice-proxy` —
   Bazel `rules_oci` (distroless, `oci_push` без переписывания digest).
-  deploy-home собирает и пушит их, затем `home-deploy hermes rollout`
+  deploy-home продвигает digest'ы, затем `home-deploy hermes rollout`
   подставляет digest'и (включая `ghcr.io/proflyder/health-exporter`) в релиз
   `runtime`, прогоняет голосовую проверку и откатывается на предыдущую
   ревизию при провале.

@@ -32,7 +32,7 @@
 - **Станция** — ESPHome-спутник HA и Sendspin-плеер; `maind` остановлен.
 - **Scheduler** — единственный владелец расписаний/таймеров; HA bridge
   исполняет очередь `home`, ha-control — каталог Home и очередь `control`.
-- **Currency bot** — Go-сервис курсов: SQLite на PVC, алерты в Telegram,
+- **Currency bot** — Rust-сервис курсов: SQLite на PVC, алерты в Telegram,
   webhook через Cloudflare Tunnel, внутренний JSON API.
 - **MCP gateway** — единый MCP-сервер для инфраструктуры: чтение
   Prometheus/Alertmanager/Loki/Kubernetes и подтверждаемый rollout restart.
@@ -55,7 +55,7 @@
 2. HA pipeline: GigaAM v3 primary / Whisper fallback.
 3. Локальные intents (свет, музыка, таймеры, будильники) — в HA и canonical
    SchedulerService; HA остаётся исполнителем звука.
-4. Свободная речь → `voice-proxy` (Go, `solutions/voice-proxy`): сначала
+4. Свободная речь → `voice-proxy` (Rust, `solutions/voice-proxy`): сначала
    точный cancel guard, затем
    профиль из `input_select.ricardo_voice_profile` и
    `mcp-gateway /v1/voice/utterance`:

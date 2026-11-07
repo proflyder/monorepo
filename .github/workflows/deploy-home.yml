@@ -1,8 +1,8 @@
 name: deploy-home
 
 # Home K3s deploy (scheduler, ha-bridge/ha-control, currency-bot, mcp-gateway,
-# Hermes) from `develop`. Per-unit namespace, workload list, deploy script,
-# OpenBao env key and ExternalSecret set come from `platform/ci/units.mjs`
+# wakegrant, Hermes) from `develop`. Per-unit namespace, workload list, deploy
+# script, OpenBao env key and ExternalSecret set come from `platform/ci/units.mjs`
 # (matrix payload), so adding a deployable unit does not need a workflow edit.
 #
 # A push also promotes affected `native` units as public OCI artifacts: the
@@ -47,7 +47,7 @@ name: deploy-home
 # scheduler and the reverse). A required image with no verified tree still
 # fails the job instead of building.
 #
-# The push also runs `warm-caches`, which saves the shared Go/setup-bazel
+# The push also runs `warm-caches`, which saves the shared setup-bazel
 # caches under the keys PR jobs restore (CI itself no longer runs on develop).
 # It only populates caches; it is not part of the deploy and never publishes.
 #

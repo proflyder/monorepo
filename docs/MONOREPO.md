@@ -10,7 +10,6 @@
 ```text
 solutions/               переиспользуемые решения
   scheduler/             durable scheduler, SQLite queues, Connect/gRPC
-  alarm/                 тот же engine под именем процесса alarm
   ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler
                          (Rust-крейт: бинари ha-bridge и ha-control)
   mcp-gateway/           MCP Streamable HTTP: infra.read / infra.fix / infra.report
@@ -24,6 +23,9 @@ solutions/               переиспользуемые решения
 
 packages/                общий код и контракты
   proto/                 gRPC/protobuf (сгенерированные контракты)
+  contracts/             межъязыковые протоколы (wakegrant)
+  rust/                  общие Rust-крейты
+  kotlin/                общий Kotlin-код (Android)
 
 projects/                композиции и deployment
   station/               Pulsar/ADB/BLE/provisioning
@@ -33,7 +35,6 @@ projects/                композиции и deployment
 
 platform/                Bazel/toolchains/deploy-шаблоны
 docs/                    документация
-archive/                  исторические материалы
 ```
 
 ### Почему так
@@ -53,14 +54,12 @@ archive/                  исторические материалы
 ```text
 projects/home:
   scheduler@home      sqlite=/data/home/scheduler.db  :8098
-  alarm@home          тот же engine + legacy AlarmService facade
   ha-bridge@home      SCHEDULER_ENDPOINT=127.0.0.1:8098, queue=home
   ha-control@home     каталог Home, queue=control
   android             Connect JSON → LAN/VPN HTTPS endpoint
 ```
 
-Go-реализации `scheduler`, `alarm`, `ha-bridge` и `currency-bot` удалены:
-единственный process scheduler — Rust-крейт
+Единственный process scheduler — Rust-крейт
 `solutions/scheduler/crates/scheduler`, currency-bot — крейт
 `solutions/currency-bot/crates/currency-bot`.
 
@@ -68,9 +67,9 @@ Go-реализации `scheduler`, `alarm`, `ha-bridge` и `currency-bot` уд
 
 | Слой | Язык | Почему |
 |---|---|---|
-| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `currency-bot` | Rust (решение 41); все они уже Rust — Go-код удалён | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
+| сервисы платформы: `scheduler`, HA-исполнители, `voice-proxy`, `mcp-gateway`, `currency-bot` | Rust (решение 41) | общий core-слой `packages/rust` вместо копий платформенного кода, типизированные контракты, чистый домен; переход по одному сервису через golden-фикстуры `testdata/contract/` |
 | `voice-proxy` | Rust (решение 41) | `domain`/`openai`/`relay`/`services` на общем `home-*` слое: `home-config`, `home-ha`, `home-proto`, `home-worker`, `voice-contract`, `home-contracttest`; golden-фикстуры и байты payload очереди перенесены без изменений, статический musl-образ |
-| `wakegrant` | Rust (решение 41, пилот) | первый потребитель общего core-слоя: `wakegrant-protocol`, `home-config`, `home-sqlite`, `home-contracttest`; статический musl-образ, Go-код удалён |
+| `wakegrant` | Rust (решение 41, пилот) | первый потребитель общего core-слоя: `wakegrant-protocol`, `home-config`, `home-sqlite`, `home-contracttest`; статический musl-образ |
 | аудио/DSP/инференс | Rust | предсказуемая производительность, нет GC, FFI |
 | `projects/mobile/android` | Kotlin + Views | server-authoritative клиент; Metro DI, single Activity, typed Fragment router |
 | `solutions/heartbeat` | JavaScript ES modules | только Cloudflare Workers edge runtime: без сборки и npm, `node --test`, минимальный внешний контур |
@@ -220,9 +219,7 @@ JSON/binary и gRPC-Web по HTTP/1.1; отдельного REST API нет. Rus
   leases/ack, server clock.
 - `solutions/ha-bridge`: executor adapter; арендует `queue=home`, вызывает HA
   scripts, подтверждает события. Не владеет расписанием.
-- `packages/go` удалён: общий golden-раннер контрактов живёт в
-  `packages/rust/home-contracttest`. Go-клиенты и серверы удалены вместе с
-  последним Go-кодом.
+- Общий golden-раннер контрактов живёт в `packages/rust/home-contracttest`.
 - `solutions/bb-home-dispatcher` и `solutions/bb-profiles`: плагины bb, а не
   сервисы. Диспетчер ничего не знает о проектах, кроме ответов `profiles`;
   профиль и allowlist провайдеров/машин живут только в `profiles`, голосовой

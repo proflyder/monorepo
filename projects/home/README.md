@@ -12,7 +12,7 @@ projects/home-assistant   HA/MA/STT/TTS/Hermes
 ```text
 solutions/scheduler       durable расписания/таймеры/задачи, SQLite outbox
 solutions/ha-bridge       executor очереди home → HA scripts
-solutions/ha-bridge/cmd/ha-control  каталог Home + executor queue=control
+solutions/ha-bridge/crates/ha-bridge  каталог Home + executor queue=control
 ```
 
 Windows-десктоп «комп» (WoL, OpenSSH forced command) настраивается в

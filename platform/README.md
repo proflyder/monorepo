@@ -7,7 +7,8 @@
 - `platform/ci/` — карта юнитов (`units.mjs`), маршрутизация затронутых
   юнитов и `ci-ok` gate.
 - `platform/quality/` — аудит репозитория, статические проверки, Gitleaks.
-- `platform/deploy/` — `home-deploy` (Go): render/converge/rollout юнитов.
+- `platform/deploy-rs/` — `home-deploy` (Rust): render/converge/rollout
+  юнитов; `platform/deploy/` — `resolve.sh` и общие манифесты.
 - `platform/android/` — Bazel-правила, lint и инструменты Android-сборки.
 - `platform/observability/` — общие Helm values Prometheus/Loki/Alloy.
 

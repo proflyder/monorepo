@@ -37,8 +37,7 @@ rust_library(
     deps = LIB_DEPS,
 )
 
-# The CLI under port. The Go binary stays at //platform/deploy until the
-# cutover; manifests keep calling a binary named `home-deploy`.
+# The CLI under port. The manifests keep calling a binary named `home-deploy`.
 rust_binary(
     name = "home-deploy",
     srcs = ["src/main.rs"],

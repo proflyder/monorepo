@@ -8,12 +8,6 @@
 
 ## P2 — проверки и улучшения инфраструктуры
 
-- [ ] **Bazel clippy не валит сборку на предупреждениях.** `rust_clippy_test`
-      оставляет уровни `lint_config` предупреждениями. Следующий шаг:
-      `--@rules_rust//rust/settings:clippy_flag=-Dwarnings` в `.bazelrc`,
-      исправить ~17 замечаний `//solutions/windows-logon-provider:clippy_windows`,
-      поднять VERSION и проверить вход на компе.
-
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых
       на самом сервере bb; треды на Mac работают без него. Следующий шаг:
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким
@@ -99,11 +93,6 @@
       Следующий шаг: согласовать окно и проверить на реальном телефоне, не
       трогая production-устройства без согласования.
 - [ ] **Первый релиз в Firebase App Distribution и первый тестовый краш.**
-      Готово: сервисный аккаунт `github-app-distribution` (Firebase App
-      Distribution Admin), запись `secret/ci/android-distribute`, роль OpenBao
-      `android-distribute` на PR merge-ref, Environment `Android` без branch
-      policy, группа `admins` («Admins»). Загрузка из CI проверена
-      (`0.1.0-1f3a812`), раздача тогда упала только из-за отсутствующей группы.
       Следующий шаг: первый успешный `android-distribute` на PR, установка
       через App Tester, краш через `adb shell am crash dev.proflyder.home` и
       отчёт в Crashlytics.
