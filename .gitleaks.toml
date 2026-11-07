@@ -11,12 +11,19 @@ paths = ['''^packages/rust/home-tls/testdata/.*\.(key|pem)$''']
 
 [[allowlists]]
 description = "Deliberately synthetic authentication fixture"
-paths = ['''projects/station/ble-gateway/crates/ble-gateway/src/control\.rs$''']
+# The Go gateway is gone, but the pre-push scan still walks its history.
+paths = [
+  '''projects/station/ble-gateway/crates/ble-gateway/src/control\.rs$''',
+  '''projects/station/ble-gateway/control_test\.go$''',
+]
 regexes = ['''0123456789abcdef0123456789abcdef''']
 regexTarget = "secret"
 
 [[allowlists]]
 description = "Public BLE characteristic UUID, not a credential"
-paths = ['''projects/station/ble-gateway/crates/ble-gateway/src/gatt\.rs$''']
+paths = [
+  '''projects/station/ble-gateway/crates/ble-gateway/src/gatt\.rs$''',
+  '''projects/station/ble-gateway/gatt\.go$''',
+]
 regexes = ['''a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c02''']
 regexTarget = "secret"
