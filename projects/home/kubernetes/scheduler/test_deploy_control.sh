@@ -53,7 +53,14 @@ case "$args" in
   *"get deployment scheduler -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"scheduler","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-control -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-control","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-bridge -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-bridge","image":"old"}]}}}}'; exit 0 ;;
-  *"get deployment ha-control"*) exit "${MOCK_CONTROL_EXISTS:-0}" ;;
+  *"get deployment ha-control"*)
+    # A missing Deployment answers like the real API server: state record only
+    # treats an explicit NotFound as "absent" and fails closed on anything else.
+    if [[ "${MOCK_CONTROL_EXISTS:-0}" != "0" ]]; then
+      echo 'Error from server (NotFound): deployments.apps "ha-control" not found' >&2
+      exit 1
+    fi
+    exit 0 ;;
   *"get deployment ha-bridge"*) exit 0 ;;
   *"get externalsecret"*) printf '%s' 'True'; exit 0 ;;
   *"get secret"*) exit 0 ;;
