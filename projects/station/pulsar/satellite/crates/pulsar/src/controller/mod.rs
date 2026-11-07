@@ -11,8 +11,10 @@ mod entities;
 mod logic;
 mod media;
 mod ports;
+mod session;
 mod timers;
 mod voice;
+mod wake;
 mod wiring;
 
 use std::collections::HashMap;
@@ -33,7 +35,8 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::info;
 
 use crate::settings::{self, Store};
-use logic::{Phase, RunBinding};
+use session::Session;
+use wake::Arbitration;
 
 pub use wiring::prepare_process;
 
@@ -130,7 +133,7 @@ impl WakeRecord {
 }
 
 /// Id of one dialog: a completion or a sidecar outcome belongs to the dialog it started in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct DialogId(u64);
 
 impl DialogId {
@@ -140,7 +143,7 @@ impl DialogId {
 }
 
 /// Id of one HA announcement (assist or media player).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct AnnounceId(u64);
 
 impl AnnounceId {
@@ -150,7 +153,7 @@ impl AnnounceId {
 }
 
 /// Id of one closing earcon.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct EarconSeq(u64);
 
 impl EarconSeq {
@@ -233,56 +236,13 @@ pub struct Controller {
     /// TZ last given to libc ("" = none yet).
     applied_tz: String,
 
-    phase: Phase,
-    /// Start of the current LISTENING phase (commands window).
-    listen_started_ms: i64,
-    /// Текущий диалог открыт wake word (не кнопкой, не продолжением диалога и не HA).
-    wake_dialog: bool,
-    /// Звонок выключили посреди этого диалога «стоп» спотера или wake word, а диалог пошёл дальше.
-    ring_stopped_in_dialog: bool,
+    session: Session,
+    /// Арбитраж wake word: своё окно решения или проигранный turn.
+    wake: Arbitration,
     hw_mic_muted: bool,
+    /// `PULSAR_LOCAL_ENDPOINTING=1` at start: experimental local end-of-utterance detector.
+    local_endpointing: bool,
     error_shown: bool,
-    // Wake arbitration: the window between our claim and the decision. Microphone audio and a
-    // command word heard in it are held until the decision.
-    arbitrating: bool,
-    /// Our claim being decided; forgotten on cancel (a `Decided` already queued then still
-    /// arrives and is ignored).
-    arb_claim: Option<pulsar_arbiter::ClaimId>,
-    arb_phrase: String,
-    arb_level: f32,
-    arb_audio: Vec<i16>,
-    /// Samples in `arb_audio` that came with the wake event; the rest arrived after it (live
-    /// post-wake speech held during arbitration).
-    arb_boundary: usize,
-    arb_endpoint: Option<pulsar_audio::endpoint::EndpointPrior>,
-    /// Another station answers the wake word just heard.
-    commands_blocked_until_ms: i64,
-    run: RunBinding,
-    /// Experimental local end-of-utterance detector (opt-in, see `PULSAR_LOCAL_ENDPOINTING`).
-    endpoint: Option<pulsar_audio::endpoint::EndpointRun>,
-    /// voice_request_stop already sent for this dialog's run.
-    stop_sent: bool,
-    /// Id of the last voice_request_start: VoiceStartFailed / VoiceAudioOverflow of another
-    /// run are ignored.
-    voice_run: u64,
-    tts_url: String,
-    tts_played: bool,
-    /// A run's TTS_START left HA's assist satellite "responding" until AnnounceFinished, also
-    /// when nothing plays here, and that report is still to be sent (`send_tts_report`).
-    tts_report_owed: bool,
-    followup: logic::Followup,
-    /// An HA announcement (assist or media player) plays on ANNOUNCE.
-    announcing: bool,
-    closing_earcon: bool,
-    earcon_seq: EarconSeq,
-    // Completions act only for what is still current: `dialog` changes whenever a dialog starts
-    // or ends, `announce_seq` whenever an HA announcement starts or is interrupted.
-    dialog: DialogId,
-    announce_seq: AnnounceId,
-    /// When the HA media channel last paused (logic::owns_music).
-    music_paused_ms: Option<i64>,
-    /// When the Sendspin stream last ended: pause or stop in Music Assistant (logic::owns_music).
-    sendspin_ended_ms: Option<i64>,
     /// A check whose `Checked` has not been handled yet (C++ `Updater::busy()` until its
     /// callback ran).
     pending_check: Option<pulsar_update::RequestId>,
@@ -291,10 +251,14 @@ pub struct Controller {
     /// Version being installed (for the messages of its outcome).
     install_version: String,
     sendspin_pairing_prompt: bool,
-    /// The hit whose dialog is open.
-    wake_rec: Option<WakeRecord>,
-    /// The hit heard while this station arbitrates with its neighbours.
-    wake_pending: Option<WakeRecord>,
+}
+
+/// Uncalibrated energy heuristic: opt-in only, off unless explicitly enabled.
+fn local_endpointing_enabled() -> bool {
+    matches!(
+        std::env::var("PULSAR_LOCAL_ENDPOINTING").as_deref(),
+        Ok("1")
+    )
 }
 
 /// Face from the option text; "None" / "" / unknown clear it (the stock "no face").
@@ -381,41 +345,15 @@ impl Controller {
             pending: HashMap::new(),
             exit: None,
             applied_tz,
-            phase: Phase::Idle,
-            listen_started_ms: 0,
-            wake_dialog: false,
-            ring_stopped_in_dialog: false,
+            session: Session::default(),
+            wake: Arbitration::default(),
             hw_mic_muted,
+            local_endpointing: local_endpointing_enabled(),
             error_shown: false,
-            arbitrating: false,
-            arb_claim: None,
-            arb_phrase: String::new(),
-            arb_level: -100.0,
-            arb_audio: Vec::new(),
-            arb_boundary: 0,
-            arb_endpoint: None,
-            commands_blocked_until_ms: 0,
-            run: RunBinding::default(),
-            endpoint: None,
-            stop_sent: false,
-            voice_run: 0,
-            tts_url: String::new(),
-            tts_played: false,
-            tts_report_owed: false,
-            followup: logic::Followup::default(),
-            announcing: false,
-            closing_earcon: false,
-            earcon_seq: EarconSeq(0),
-            dialog: DialogId(0),
-            announce_seq: AnnounceId(0),
-            music_paused_ms: None,
-            sendspin_ended_ms: None,
             pending_check: None,
             install_id: None,
             install_version: String::new(),
             sendspin_pairing_prompt: false,
-            wake_rec: None,
-            wake_pending: None,
         };
         // The rest of the C++ start(), in its order: every call below only queues commands to
         // the services, which run once `run` is awaited.
@@ -522,11 +460,7 @@ impl Controller {
                 won,
                 best,
                 peers,
-            }) => {
-                if self.arbitrating && self.arb_claim == Some(claim_id) {
-                    self.arbitration_done(won, &best, peers);
-                }
-            }
+            }) => self.on_arbiter_decided(claim_id.into(), won, &best, peers),
             None => self.rx.arbiter = None,
         }
     }
@@ -614,15 +548,7 @@ impl Controller {
             // HA media state follows playback (C++ Player::on_state hook).
             PlayerEvent::State(ch, s) => {
                 if ch == Channel::Music {
-                    match s {
-                        pulsar_media::PlayState::Paused => self.music_paused_ms = Some(now_ms()),
-                        // HA media took the speaker: an ended Sendspin stream is not this
-                        // station's music any more, whichever of the two events came first.
-                        pulsar_media::PlayState::Loading | pulsar_media::PlayState::Playing => {
-                            self.sendspin_ended_ms = None;
-                        }
-                        _ => {}
-                    }
+                    self.session.on_music_state(s, now_ms());
                 }
                 self.publish_media();
             }
@@ -649,11 +575,11 @@ impl Controller {
             }
             FrontendEvent::Command { word } => self.on_command(&word),
             FrontendEvent::Audio(pcm) => {
-                if self.phase == Phase::Listening {
+                if self.session.is_listening() {
                     self.on_listening_audio(pcm);
-                } else if self.arbitrating {
+                } else {
                     // The request goes on with what was said right after the wake word.
-                    self.arb_audio.extend_from_slice(&pcm);
+                    self.wake.push_audio(&pcm);
                 }
             }
             FrontendEvent::Music(f) => {
@@ -737,13 +663,13 @@ impl Controller {
         let s = if self.timers_ha.ringing() {
             UiState::TimerRing
         } else {
-            match self.phase {
-                Phase::Listening => UiState::Listening,
-                Phase::Processing => UiState::Thinking,
-                Phase::Speaking => UiState::Speaking,
-                Phase::Idle if self.arbitrating => UiState::Listening,
-                Phase::Idle if self.announcing => UiState::Speaking,
-                Phase::Idle => UiState::Idle,
+            match self.session.phase() {
+                logic::Phase::Listening => UiState::Listening,
+                logic::Phase::Processing => UiState::Thinking,
+                logic::Phase::Speaking => UiState::Speaking,
+                logic::Phase::Idle if self.wake.is_claiming() => UiState::Listening,
+                logic::Phase::Idle if self.session.announcing() => UiState::Speaking,
+                logic::Phase::Idle => UiState::Idle,
             }
         };
         self.show_ui(s);

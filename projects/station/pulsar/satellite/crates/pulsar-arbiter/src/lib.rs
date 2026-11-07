@@ -26,6 +26,13 @@ use thiserror::Error;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ClaimId(u64);
 
+impl ClaimId {
+    /// Номер claim; тот же id приходит обратно в `ArbiterEvent::Decided`.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
 impl fmt::Display for ClaimId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)

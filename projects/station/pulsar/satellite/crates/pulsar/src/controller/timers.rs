@@ -205,7 +205,7 @@ impl Controller {
     /// after it.
     pub(super) fn ring_timer(&mut self) {
         self.timers.cancel(Tk::RingTick);
-        let busy = self.announcing || self.phase == Phase::Speaking;
+        let busy = self.session.announcing() || self.session.phase() == Phase::Speaking;
         match self.timers_ha.ring(now_ms(), busy) {
             None | Some(RingStep::Yield) => {}
             Some(RingStep::Stop) => self.stop_timer_ring(),
