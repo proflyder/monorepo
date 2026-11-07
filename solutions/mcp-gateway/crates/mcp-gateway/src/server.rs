@@ -49,6 +49,8 @@ pub struct Options {
     pub auth_token: String,
     /// Voice bearer token; `None` disables `/v1/voice/*` like the Go server.
     pub voice_token: Option<String>,
+    /// Voice routes mounted behind the separate bearer; `None` keeps a stub.
+    pub voice: Option<Router<ObserveState>>,
     /// Enabled tool groups.
     pub groups: Vec<Arc<dyn ToolGroup>>,
     /// Shared tool dependencies.
@@ -95,29 +97,32 @@ pub fn router(options: Options) -> Router {
         .route("/metrics", get(metrics))
         .merge(mcp);
 
-    if let Some(token) = options.voice_token {
-        let voice = Router::new()
-            .route("/v1/voice/{*rest}", any(voice_unimplemented))
-            .route_layer(middleware::from_fn_with_state(
-                Auth {
-                    token,
-                    realm: VOICE_REALM,
-                },
-                require_bearer,
-            ));
-        app = app.merge(voice);
-    }
-
     let state = ObserveState {
         metrics: options.metrics,
         ready: options.ready,
     };
+
+    if let Some(token) = options.voice_token {
+        let voice = options
+            .voice
+            .unwrap_or_else(|| Router::new().route("/v1/voice/{*rest}", any(voice_stub)));
+        let voice = voice.route_layer(middleware::from_fn_with_state(
+            Auth {
+                token,
+                realm: VOICE_REALM,
+            },
+            require_bearer,
+        ));
+        app = app.merge(voice);
+    }
+
     app.layer(middleware::from_fn_with_state(state.clone(), observe))
         .with_state(state)
 }
 
+/// Shared middleware state of the HTTP surface.
 #[derive(Clone)]
-struct ObserveState {
+pub struct ObserveState {
     metrics: SharedMetrics,
     ready: bool,
 }
@@ -149,10 +154,10 @@ async fn metrics(State(state): State<ObserveState>) -> Response<Body> {
         .expect("valid response")
 }
 
-async fn voice_unimplemented() -> Response<Body> {
+async fn voice_stub() -> Response<Body> {
     json_response(
-        StatusCode::NOT_IMPLEMENTED,
-        &serde_json::json!({"error": "voice api is not implemented yet"}),
+        StatusCode::NOT_FOUND,
+        &serde_json::json!({"error": "voice route not found"}),
     )
 }
 

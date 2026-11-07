@@ -29,3 +29,9 @@ go_test(
         "@org_golang_x_time//rate",
     ],
 )
+
+filegroup(
+    name = "contract_fixtures",
+    srcs = glob(["testdata/contract/*.json"]),
+    visibility = ["//visibility:public"],
+)

@@ -4,8 +4,8 @@
 //! `testdata/contract/*.json` files the Go gateway regenerates are replayed
 //! against this server through `home-contracttest`.
 //!
-//! Voice fixtures live in `internal/voice/testdata` and the `bb_*` calls need a
-//! real dispatcher; both are implemented in PR-5 and are skipped here.
+//! The `bb_*` calls run against a fake dispatcher; the voice fixtures are
+//! replayed in `tests/voice_fixtures.rs` through the same fake.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -13,6 +13,11 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use home_contracttest::Options;
 use jiff::Timestamp;
+use mcp_gateway::bb::{
+    BbApi, BbFuture, BbResolver, Error as BbError, SendRequest, SendResult, SpawnAction,
+    SpawnRequest, SpawnResult, StatusResult, Targets, Thread, TurnResultRequest, TurnResultResult,
+    UpdatesRequest, UpdatesResult,
+};
 use mcp_gateway::domain::alert::Alert;
 use mcp_gateway::domain::catalog::{Catalog, Service};
 use mcp_gateway::domain::clock::Clock;
@@ -20,7 +25,6 @@ use mcp_gateway::domain::state::{AgentMode, KeyedStore, PendingStore};
 use mcp_gateway::kubernetes;
 use mcp_gateway::metrics::Metrics;
 use mcp_gateway::server;
-use mcp_gateway::tools::bb::{BbResolver, SpawnAction};
 use mcp_gateway::tools::infra_fix::FixGroup;
 use mcp_gateway::tools::infra_read::ReadGroup;
 use mcp_gateway::tools::infra_report::ReportGroup;
@@ -455,6 +459,148 @@ impl Scheduler for FakeTimers {
     fn after_func(&self, _delay: std::time::Duration, _task: Box<dyn FnOnce() + Send + 'static>) {}
 }
 
+const CONTRACT_TARGETS: &str = r#"
+targets:
+  - project: proj_personal
+    aliases: ["стан лэб", "station lab"]
+    provider: claude-code
+    title_prefix: "Голос"
+  - project: proj_work
+    aliases: ["работа"]
+"#;
+
+#[derive(Default)]
+struct ContractBb {
+    targets: Mutex<Option<Targets>>,
+    status: Mutex<StatusResult>,
+    status_error: Mutex<Option<BbError>>,
+    validate_error: Mutex<Option<BbError>>,
+    spawn_error: Mutex<Option<BbError>>,
+    spawn_result: Mutex<SpawnResult>,
+    configured: std::sync::atomic::AtomicBool,
+}
+
+impl ContractBb {
+    fn new() -> Self {
+        Self {
+            configured: std::sync::atomic::AtomicBool::new(true),
+            spawn_result: Mutex::new(SpawnResult::default()),
+            ..Self::default()
+        }
+    }
+
+    fn live_targets() -> Targets {
+        Targets {
+            projects: vec![
+                mcp_gateway::bb::Target {
+                    project_id: "proj_personal".to_owned(),
+                    name: "Station Lab".to_owned(),
+                    profile: "personal".to_owned(),
+                    providers: vec![mcp_gateway::bb::Provider {
+                        provider_id: "claude-code".to_owned(),
+                        models: vec![mcp_gateway::bb::Model {
+                            model: "sonnet".to_owned(),
+                            default_reasoning_level: "medium".to_owned(),
+                            reasoning_levels: vec![
+                                "low".to_owned(),
+                                "medium".to_owned(),
+                                "high".to_owned(),
+                            ],
+                            ..mcp_gateway::bb::Model::default()
+                        }],
+                        ..mcp_gateway::bb::Provider::default()
+                    }],
+                    ..mcp_gateway::bb::Target::default()
+                },
+                mcp_gateway::bb::Target {
+                    project_id: "proj_work".to_owned(),
+                    name: "Work".to_owned(),
+                    profile: "work".to_owned(),
+                    providers: vec![mcp_gateway::bb::Provider {
+                        provider_id: "codex".to_owned(),
+                        models: vec![mcp_gateway::bb::Model {
+                            model: "gpt".to_owned(),
+                            default_reasoning_level: "low".to_owned(),
+                            ..mcp_gateway::bb::Model::default()
+                        }],
+                        ..mcp_gateway::bb::Provider::default()
+                    }],
+                    ..mcp_gateway::bb::Target::default()
+                },
+            ],
+        }
+    }
+}
+
+impl BbApi for ContractBb {
+    fn configured(&self) -> bool {
+        self.configured.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn targets(&self) -> BbFuture<'_, Result<Targets, BbError>> {
+        Box::pin(async move {
+            Ok(self
+                .targets
+                .lock()
+                .expect("bb")
+                .clone()
+                .unwrap_or_else(Self::live_targets))
+        })
+    }
+
+    fn status(&self, _limit: usize) -> BbFuture<'_, Result<StatusResult, BbError>> {
+        Box::pin(async move {
+            if let Some(error) = self.status_error.lock().expect("bb").clone() {
+                return Err(error);
+            }
+            Ok(self.status.lock().expect("bb").clone())
+        })
+    }
+
+    fn validate_spawn(&self, _request: SpawnRequest) -> BbFuture<'_, Result<(), BbError>> {
+        Box::pin(async move {
+            if let Some(error) = self.validate_error.lock().expect("bb").clone() {
+                return Err(error);
+            }
+            Ok(())
+        })
+    }
+
+    fn spawn(&self, _request: SpawnRequest) -> BbFuture<'_, Result<SpawnResult, BbError>> {
+        Box::pin(async move {
+            if let Some(error) = self.spawn_error.lock().expect("bb").clone() {
+                return Err(error);
+            }
+            Ok(self.spawn_result.lock().expect("bb").clone())
+        })
+    }
+
+    fn send(&self, request: SendRequest) -> BbFuture<'_, Result<SendResult, BbError>> {
+        Box::pin(async move {
+            Ok(SendResult {
+                thread_id: request.thread_id,
+                ..SendResult::default()
+            })
+        })
+    }
+
+    fn turn_result(
+        &self,
+        _request: TurnResultRequest,
+    ) -> BbFuture<'_, Result<TurnResultResult, BbError>> {
+        Box::pin(async move {
+            Ok(TurnResultResult {
+                status: "idle".to_owned(),
+                ..TurnResultResult::default()
+            })
+        })
+    }
+
+    fn updates(&self, _request: UpdatesRequest) -> BbFuture<'_, Result<UpdatesResult, BbError>> {
+        Box::pin(async move { Ok(UpdatesResult::default()) })
+    }
+}
+
 struct World {
     prom: Arc<FakeProm>,
     alerts: Arc<FakeAlerts>,
@@ -463,6 +609,7 @@ struct World {
     checks: Arc<FakeChecks>,
     clock: Arc<FakeClock>,
     log_byte_cap: Arc<std::sync::atomic::AtomicUsize>,
+    bb: Arc<ContractBb>,
 }
 
 fn ready_workload(namespace: &str, kind: &str, name: &str) -> kubernetes::Workload {
@@ -588,7 +735,39 @@ fn seed(scenario: &str, world: &World) {
             text: "Authorization: Bearer supersecrettoken123".to_owned(),
         },
     ];
-    let _ = scenario;
+    match scenario {
+        "tools_call_bb_status" => {
+            *world.bb.status.lock().expect("bb") = StatusResult {
+                threads: vec![
+                    Thread {
+                        id: "thr_personal".to_owned(),
+                        title: "Личный тред".to_owned(),
+                        project: "Station Lab".to_owned(),
+                        project_id: "proj_personal".to_owned(),
+                        profile: "personal".to_owned(),
+                        status: "running".to_owned(),
+                        ..Thread::default()
+                    },
+                    Thread {
+                        id: "thr_work".to_owned(),
+                        title: "Рабочий тред".to_owned(),
+                        project: "Work".to_owned(),
+                        project_id: "proj_work".to_owned(),
+                        profile: "work".to_owned(),
+                        status: "running".to_owned(),
+                        ..Thread::default()
+                    },
+                ],
+            };
+        }
+        scenario if scenario.starts_with("tools_call_bb_confirm") => {
+            *world.bb.spawn_result.lock().expect("bb") = SpawnResult {
+                thread_id: "thr_new".to_owned(),
+                idempotent: false,
+            };
+        }
+        _ => {}
+    }
 }
 
 fn contract_alerts() -> Vec<Alert> {
@@ -889,6 +1068,27 @@ fn mutate(scenario: &str, step: usize, world: &World) {
         "tools_call_infra_confirm" if step == 10 => {
             world.clock.advance(180);
         }
+        "tools_call_bb_status" => match step {
+            4 => *world.bb.status.lock().expect("bb") = StatusResult::default(),
+            5 => {
+                *world.bb.status_error.lock().expect("bb") =
+                    Some(BbError::new("bridge_error", "Сервер агентов недоступен."));
+            }
+            _ => {}
+        },
+        "tools_call_bb_prepare_spawn" => match step {
+            9 => {
+                *world.bb.validate_error.lock().expect("bb") =
+                    Some(BbError::new("thread_limit", "Лимит тредов."));
+            }
+            10 => {
+                world
+                    .bb
+                    .configured
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+            }
+            _ => {}
+        },
         _ => {}
     }
 }
@@ -943,8 +1143,10 @@ fn build_deps(catalog: Arc<Catalog>, world: &Arc<World>) -> Arc<Deps> {
         status_timeout: std::time::Duration::from_secs(2),
         report_timeout: std::time::Duration::from_secs(2),
         log_byte_cap: world.log_byte_cap.clone(),
-        bb: None,
-        bb_targets: Some(Arc::new(BbResolver)),
+        bb: Some(world.bb.clone()),
+        bb_targets: Some(Arc::new(
+            BbResolver::parse(CONTRACT_TARGETS.as_bytes()).expect("targets"),
+        )),
         bb_pending: Arc::new(KeyedStore::<SpawnAction>::new(
             std::time::Duration::from_secs(90),
             clock,
@@ -963,6 +1165,7 @@ fn tools_router(scenario: &str, worlds: &Worlds) -> Router {
         checks: Arc::new(FakeChecks::default()),
         clock: Arc::new(FakeClock::new()),
         log_byte_cap: Arc::new(std::sync::atomic::AtomicUsize::new(64 << 10)),
+        bb: Arc::new(ContractBb::new()),
     });
     seed(scenario, &world);
     worlds
@@ -986,6 +1189,7 @@ fn tools_router(scenario: &str, worlds: &Worlds) -> Router {
     server::router(server::Options {
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
+        voice: None,
         groups,
         deps,
         metrics: Arc::new(Metrics::new()),
@@ -1032,16 +1236,13 @@ fn server_router(_scenario: &str, _worlds: &Worlds) -> Router {
     server::router(server::Options {
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
+        voice: None,
         groups,
         deps,
         metrics,
         version: "contract".to_owned(),
         ready: true,
     })
-}
-
-fn skip_bb(name: &str) -> bool {
-    name.starts_with("tools_call_bb_")
 }
 
 fn fixture_dir(relative: &str) -> std::path::PathBuf {
@@ -1076,14 +1277,12 @@ async fn tool_contract_fixtures() {
     let scenarios = home_contracttest::run(
         fixture_dir("internal/tools/testdata/contract"),
         move |scenario| tools_router(scenario, &factory_worlds),
-        Options::default()
-            .with_skip(skip_bb)
-            .with_before_step(move |scenario, step| {
-                let world = hook_worlds.lock().expect("worlds").get(scenario).cloned();
-                if let Some(world) = world {
-                    mutate(scenario, step, &world);
-                }
-            }),
+        Options::default().with_before_step(move |scenario, step| {
+            let world = hook_worlds.lock().expect("worlds").get(scenario).cloned();
+            if let Some(world) = world {
+                mutate(scenario, step, &world);
+            }
+        }),
     )
     .await
     .expect("tool contract fixtures");

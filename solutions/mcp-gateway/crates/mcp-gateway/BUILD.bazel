@@ -24,6 +24,7 @@ DEPS = [
     "@crates//:http-body-util",
     "@crates//:jiff",
     "@crates//:prometheus-client",
+    "@crates//:rand",
     "@crates//:regex",
     "@crates//:reqwest",
     "@crates//:rmcp",
@@ -39,6 +40,7 @@ DEPS = [
     "@crates//:tokio-util",
     "@crates//:tower",
     "@crates//:tracing",
+    "//packages/rust/voice-contract:voice_contract",
 ]
 
 rust_library(
@@ -71,7 +73,6 @@ rust_test(
     edition = "2024",
     lint_config = ":workspace_lints",
     deps = DEPS + [
-        "@crates//:rand",
         "@crates//:tempfile",
     ],
     data = ["//solutions/mcp-gateway/testdata:vectors"],
@@ -93,6 +94,19 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "voice_tests",
+    srcs = ["tests/voice.rs"],
+    data = ["//solutions/mcp-gateway/internal/voice:contract_fixtures"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        ":mcp_gateway",
+        "//packages/rust/home-contracttest:home_contracttest",
+        "//solutions/voice-proxy/crates/voice-proxy:voice_proxy_lib",
+    ],
+)
+
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",
@@ -106,6 +120,7 @@ rustfmt_test(
         ":mcp-gateway",
         ":unit_tests",
         ":contract_tests",
+        ":voice_tests",
     ],
 )
 

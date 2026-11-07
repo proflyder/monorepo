@@ -9,6 +9,7 @@ use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
 
+use crate::bb::{self, BbApi, BbResolver, Dispatcher};
 use crate::checks;
 use crate::config::Config;
 use crate::domain::catalog::Catalog;
@@ -16,13 +17,15 @@ use crate::domain::clock::SystemClock;
 use crate::domain::state::{AgentMode, KeyedStore, PendingStore};
 use crate::metrics::Metrics;
 use crate::server;
-use crate::tools::bb::{BbActGroup, BbReadGroup, BbResolver, SpawnAction};
+use crate::ssh::{Options as SshOptions, SshRunner};
+use crate::tools::bb::{BbActGroup, BbReadGroup};
 use crate::tools::infra_fix::FixGroup;
 use crate::tools::infra_read::ReadGroup;
 use crate::tools::infra_report::ReportGroup;
 use crate::tools::{
     AlertLister, Deps, LogQuerier, PromQuerier, Registry, ReportSender, TimerScheduler,
 };
+use crate::voice;
 
 /// Reported implementation version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -87,6 +90,29 @@ pub async fn run() -> anyhow::Result<()> {
         ))
     };
 
+    let bb_targets = if config.bb_targets_file.is_empty() {
+        None
+    } else {
+        Some(Arc::new(
+            BbResolver::load(&config.bb_targets_file).map_err(anyhow::Error::msg)?,
+        ))
+    };
+    let bb: Option<Arc<dyn BbApi>> = if config.bb_address.is_empty() {
+        None
+    } else {
+        let runner = SshRunner::new(SshOptions {
+            address: config.bb_address.clone(),
+            user: config.bb_user.clone(),
+            key_file: std::path::PathBuf::from(&config.bb_key_file),
+            known_hosts_file: std::path::PathBuf::from(&config.bb_known_hosts_file),
+            timeout: Some(config.bb_timeout),
+        });
+        Some(Arc::new(Dispatcher::new(
+            Arc::new(runner),
+            config.bb_timeout,
+        )))
+    };
+
     let deps = Arc::new(Deps {
         catalog,
         prom,
@@ -117,15 +143,34 @@ pub async fn run() -> anyhow::Result<()> {
         status_timeout: config.status_timeout,
         report_timeout: config.report_timeout,
         log_byte_cap: Arc::new(std::sync::atomic::AtomicUsize::new(config.log_byte_cap)),
-        bb: None,
-        bb_targets: if config.bb_targets_file.is_empty() {
-            None
-        } else {
-            Some(Arc::new(BbResolver))
-        },
-        bb_pending: Arc::new(KeyedStore::<SpawnAction>::new(config.pending_ttl, clock)),
+        bb,
+        bb_targets,
+        bb_pending: Arc::new(KeyedStore::<bb::SpawnAction>::new(
+            config.pending_ttl,
+            clock,
+        )),
         bb_mode: Arc::new(AgentMode::new()),
     });
+
+    let voice = if config.voice_token.is_empty() {
+        None
+    } else {
+        let bridge = deps
+            .bb
+            .clone()
+            .expect("the voice route configuration requires the bb bridge");
+        Some(voice::router(voice::Options {
+            dispatcher: Arc::new(voice::BbDispatcher::new(bridge)),
+            work_thread_id: config.bb_dispatcher_thread_id.clone(),
+            mode: Arc::clone(&deps.bb_mode),
+            metrics: Arc::clone(&metrics),
+            clock: Arc::clone(&deps.clock),
+            limiter: Arc::new(voice::TokenBucket::production()),
+            poll_interval: Duration::from_secs(1),
+            max_wait: voice::DEFAULT_MAX_WAIT,
+            updates_wait: voice::updates_wait_for(config.bb_timeout),
+        }))
+    };
 
     let registry = Registry::new(vec![
         Arc::new(ReadGroup::new(Arc::clone(&deps))),
@@ -142,6 +187,7 @@ pub async fn run() -> anyhow::Result<()> {
     let router = server::router(server::Options {
         auth_token: config.auth_token.clone(),
         voice_token: (!config.voice_token.is_empty()).then(|| config.voice_token.clone()),
+        voice,
         groups,
         deps: Arc::clone(&deps),
         metrics: Arc::clone(&metrics),
