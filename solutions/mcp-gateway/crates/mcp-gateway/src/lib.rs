@@ -11,11 +11,15 @@
 //! * [`ssh`] — the bb home-dispatcher bridge: one forced command over SSH, a
 //!   pinned `known_hosts` file, host-key algorithms derived from the pinned key
 //!   types, and a 1 MiB answer limit.
+//! * [`bb`] — the typed dispatcher client and the personal-only spoken
+//!   allow-list on top of the SSH bridge.
+//! * [`voice`] — the `/v1/voice/*` routing and long-poll surface.
 //! * [`tools`] — the extensible `ToolGroup` registry and the infra tool groups.
 //! * [`mcp`] / [`server`] — the `rmcp` server and the axum HTTP surface.
 //! * [`config`] / [`app`] / [`health`] — the process around them.
 
 pub mod app;
+pub mod bb;
 pub mod checks;
 pub mod config;
 pub mod domain;
@@ -26,6 +30,7 @@ pub mod metrics;
 pub mod server;
 pub mod ssh;
 pub mod tools;
+pub mod voice;
 
 /// How a failed call may be retried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

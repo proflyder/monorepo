@@ -31,6 +31,7 @@ http = { workspace = true }
 http-body-util = { workspace = true }
 jiff = { workspace = true }
 prometheus-client = { workspace = true }
+rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rmcp = { workspace = true }
@@ -46,10 +47,11 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
+voice-contract = { path = "../../../../packages/rust/voice-contract" }
 
 [dev-dependencies]
+voice-proxy = { path = "../../../voice-proxy/crates/voice-proxy" }
 home-contracttest = { path = "../../../../packages/rust/home-contracttest" }
-rand = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 

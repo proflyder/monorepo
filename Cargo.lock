@@ -2001,6 +2001,8 @@ dependencies = [
  "tokio-util",
  "tower",
  "tracing",
+ "voice-contract",
+ "voice-proxy",
 ]
 
 [[package]]

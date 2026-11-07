@@ -389,12 +389,12 @@ pub struct Deps {
     /// Returned log payload cap.
     pub log_byte_cap: Arc<AtomicUsize>,
 
-    /// bb bridge (stub in this PR; PR-5 implements it).
-    pub bb: Option<Arc<dyn bb::BbApi>>,
+    /// bb home-dispatcher bridge.
+    pub bb: Option<Arc<dyn crate::bb::BbApi>>,
     /// Personal allow-list.
-    pub bb_targets: Option<Arc<bb::BbResolver>>,
+    pub bb_targets: Option<Arc<crate::bb::BbResolver>>,
     /// Pending agent spawns.
-    pub bb_pending: Arc<KeyedStore<bb::SpawnAction>>,
+    pub bb_pending: Arc<KeyedStore<crate::bb::SpawnAction>>,
     /// Shared agent mode switch.
     pub bb_mode: Arc<AgentMode>,
 }
@@ -446,6 +446,12 @@ impl Deps {
         self.report
             .as_deref()
             .filter(|backend| backend.configured())
+    }
+
+    /// The configured bb bridge.
+    #[must_use]
+    pub fn bb(&self) -> Option<&dyn crate::bb::BbApi> {
+        self.bb.as_deref().filter(|backend| backend.configured())
     }
 
     /// Register an action metric.

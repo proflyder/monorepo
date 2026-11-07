@@ -1,5 +1,5 @@
 {
-  "checksum": "fa317c809745c53dd156e00903c769b8d83525c63b711c8e8519d8a460c2c6cb",
+  "checksum": "7cf7a25bacd1e7411189d89978aa6cf7b23e586fc817f1cb3f62093fd561f376",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -8974,6 +8974,10 @@
             "target": "prometheus_client"
           },
           {
+            "id": "rand 0.10.3",
+            "target": "rand"
+          },
+          {
             "id": "regex 1.13.1",
             "target": "regex"
           },
@@ -9035,10 +9039,6 @@
           }
         ],
         "deps_dev": [
-          {
-            "id": "rand 0.10.3",
-            "target": "rand"
-          },
           {
             "id": "tempfile 3.27.0",
             "target": "tempfile"
@@ -21322,6 +21322,7 @@
     "log 0.4.34",
     "prometheus-client 0.25.2",
     "prost 0.14.4",
+    "rand 0.10.3",
     "regex 1.13.1",
     "reqwest 0.12.28",
     "ring 0.17.14",
@@ -21358,7 +21359,6 @@
     "zeroize 1.9.1"
   ],
   "direct_dev_deps": [
-    "rand 0.10.3",
     "serde_urlencoded 0.7.1",
     "tempfile 3.27.0"
   ],
