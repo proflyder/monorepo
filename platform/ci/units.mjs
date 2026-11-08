@@ -38,6 +38,8 @@ export const config = {
   // code and must not roll the home units.
   //
   // `MODULE.bazel` is global by default, with three scoped exceptions
+  // (`#maven` also covers rules_android/rules_android_ndk, the SDK/NDK
+  // extensions and `register_toolchains("@androidndk//...")`)
   // (`affected.mjs` rewrites the changed path, fail safe is global):
   //   * Maven-only diff -> `MODULE.bazel#maven` -> android.
   //   * rules_rust/crate_universe, zig toolchains, rules_rust Windows patches

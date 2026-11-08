@@ -2082,3 +2082,40 @@ test("platform bazel routing: a native toolchain and a scheduler change select b
   assert.deepEqual(result.routes.android.units, []);
 });
 
+
+test("MODULE.bazel: rules_android/NDK edits scope to android (#maven)", () => {
+  const base = [
+    'bazel_dep(name = "rules_android", version = "0.7.3")',
+    'maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")',
+    'maven.install(artifacts = ["a:b:1"])',
+    'use_repo(maven, "maven")',
+    'bazel_dep(name = "rules_rust", version = "0.60.0")',
+    "",
+  ].join("\n");
+  const withNdk = base + [
+    'bazel_dep(name = "rules_android_ndk", version = "0.1.5")',
+    'ndk = use_extension("@rules_android_ndk//:extension.bzl", "android_ndk_repository_extension")',
+    "ndk.configure(api_level = 26)",
+    'use_repo(ndk, "androidndk")',
+    'register_toolchains("@androidndk//:all")',
+    "",
+  ].join("\n");
+  assert.equal(affected.moduleBazelScope(base, withNdk), "maven");
+  assert.equal(
+    affected.moduleBazelScope(base, base.replace('"0.7.3"', '"0.7.4"')),
+    "maven",
+  );
+  // Non-Android edits keep the global rule.
+  assert.equal(
+    affected.moduleBazelScope(base, base + 'bazel_dep(name = "rules_oci", version = "2.0.0")\n'),
+    null,
+  );
+  assert.equal(
+    affected.moduleBazelScope(base, base + 'register_toolchains("@other//:all")\n'),
+    null,
+  );
+  assert.equal(
+    affected.moduleBazelScope(base, base.replace('"0.60.0"', '"0.61.0"')),
+    null,
+  );
+});
