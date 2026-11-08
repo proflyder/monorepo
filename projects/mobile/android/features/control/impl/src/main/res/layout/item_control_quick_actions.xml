@@ -3,13 +3,12 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="16dp">
+    android:paddingTop="@dimen/ui_section_gap">
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
+        android:paddingBottom="@dimen/ui_tile_gap"
         android:text="@string/control_quick_actions_title"
         android:textAppearance="?attr/textAppearanceTitleMedium"
         android:textColor="?attr/colorOnSurface" />
@@ -18,13 +17,15 @@
         android:id="@+id/control_quick_tiles"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical" />
+        android:divider="@drawable/control_quick_divider"
+        android:orientation="vertical"
+        android:showDividers="middle" />
 
     <TextView
         android:id="@+id/control_quick_hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="8dp"
+        android:paddingTop="@dimen/ui_tile_gap"
         android:text="@string/control_quick_actions_hint"
         android:textAppearance="?attr/textAppearanceBodyMedium"
         android:textColor="?attr/colorOnSurfaceVariant"

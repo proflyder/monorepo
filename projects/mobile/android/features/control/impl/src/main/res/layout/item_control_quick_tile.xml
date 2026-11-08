@@ -4,32 +4,40 @@
     style="@style/Widget.Home.Card"
     tools:ignore="SelectableText"
     android:layout_width="0dp"
-    android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layout_height="112dp"
+    android:layout_margin="@dimen/ui_tile_gap_half"
     android:layout_weight="1"
     android:clickable="true"
     android:focusable="true"
-    android:minHeight="84dp">
+    android:minHeight="112dp">
 
     <LinearLayout
         tools:ignore="UseCompoundDrawables"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:padding="@dimen/ui_tile_gap">
 
-        <ImageView
-            android:id="@+id/quick_tile_icon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:contentDescription="@null" />
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/control_bg_tile_icon">
+
+            <ImageView
+                android:id="@+id/quick_tile_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:tint="?attr/colorOnSecondaryContainer" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/quick_tile_label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="@dimen/ui_tile_gap"
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="2"

@@ -9,9 +9,9 @@
         android:id="@+id/time_tabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="16dp"
+        android:layout_marginStart="@dimen/ui_screen_padding"
+        android:layout_marginTop="@dimen/ui_tile_gap"
+        android:layout_marginEnd="@dimen/ui_screen_padding"
         app:selectionRequired="true"
         app:singleSelection="true">
 

@@ -84,6 +84,13 @@ sealed interface ControlItem {
     data class QuickActions(val tiles: List<QuickTile>, val hint: Boolean) : ControlItem {
         override val key: String get() = "quick_actions"
     }
+
+    /** Device filter chips, placed directly above the room sections they filter. */
+    data class Filters(val chips: List<FilterChip>, val selected: ControlFilter) : ControlItem {
+        override val key: String get() = "filters"
+    }
+
+    data class FilterChip(val filter: ControlFilter, val label: String, val count: Int)
 }
 
 /** A selectable chip: the filter plus how many entries it shows. */
@@ -98,7 +105,21 @@ class ControlTexts(
     val onSummary: (on: Int, total: Int) -> String,
     /** Header of the device-level action cards ("Say on the station"). */
     val actions: String = "Actions",
-)
+    val all: String = "All",
+    val lights: String = "Lights",
+    val switches: String = "Switches",
+) {
+    fun filterLabel(filter: ControlFilter, count: Int): String {
+        val name = when (filter) {
+            ControlFilter.All -> all
+            ControlFilter.Scenarios -> scenarios
+            ControlFilter.Lights -> lights
+            ControlFilter.Switches -> switches
+            is ControlFilter.Room -> filter.name
+        }
+        return "$name · $count"
+    }
+}
 
 object ControlItems {
     private const val SECTION_PROFILE = "profile"
@@ -183,6 +204,22 @@ object ControlItems {
         if (profiles.isNotEmpty()) {
             items += ControlItem.Header(SECTION_PROFILE, texts.profile)
             profiles.mapTo(items) { ControlItem.Profile(it, it.id in pending, statesOk) }
+        }
+
+        // Chips filter devices only, so they sit directly above the rooms
+        // instead of floating over the carousel and quick actions.
+        val filterOptions = options(entries)
+        if (filterOptions.size > 1) {
+            items += ControlItem.Filters(
+                chips = filterOptions.map { option ->
+                    ControlItem.FilterChip(
+                        filter = option.filter,
+                        label = texts.filterLabel(option.filter, option.count),
+                        count = option.count,
+                    )
+                },
+                selected = applied,
+            )
         }
 
         val devices = content.filter { it.isDevice }

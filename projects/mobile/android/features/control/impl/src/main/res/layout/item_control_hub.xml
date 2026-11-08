@@ -3,15 +3,13 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="8dp">
+    android:paddingTop="@dimen/ui_section_gap">
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/control_hub_pager"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:clipToPadding="false"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
         android:scrollbars="none" />
 
     <LinearLayout
@@ -19,6 +17,6 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="@dimen/ui_tile_gap"
         android:orientation="horizontal" />
 </LinearLayout>

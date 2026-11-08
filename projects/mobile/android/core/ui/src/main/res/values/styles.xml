@@ -2,7 +2,7 @@
 <resources>
     <!-- Soft tonal card used by every list row. -->
     <style name="Widget.Home.Card" parent="Widget.Material3.CardView.Filled">
-        <item name="cardCornerRadius">24dp</item>
+        <item name="cardCornerRadius">@dimen/ui_card_radius</item>
         <item name="cardElevation">0dp</item>
         <item name="cardBackgroundColor">?attr/colorSurfaceContainer</item>
         <item name="checkedIconTint">?attr/colorPrimary</item>

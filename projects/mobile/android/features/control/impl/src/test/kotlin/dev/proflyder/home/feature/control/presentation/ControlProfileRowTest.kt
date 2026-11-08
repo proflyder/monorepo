@@ -14,6 +14,7 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.BaseAdapterCallback
+import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
@@ -70,6 +71,8 @@ class ControlProfileRowTest {
         override fun onQuickTileClick(tile: QuickTile) = Unit
 
         override fun onQuickTileLongClick(tile: QuickTile) = Unit
+
+        override fun onFilterSelected(filter: ControlFilter) = Unit
     }
 
     private fun profile(power: PowerState?, available: Boolean = true) = ControlEntry(

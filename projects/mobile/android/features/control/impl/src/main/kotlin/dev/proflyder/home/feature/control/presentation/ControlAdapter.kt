@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.ControlEntry
+import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
@@ -18,6 +19,7 @@ import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
@@ -25,6 +27,8 @@ import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceGroupBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceRowBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlFiltersBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHeaderBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlProfileBinding
@@ -57,6 +61,9 @@ internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
     fun onQuickTileClick(tile: QuickTile)
 
     fun onQuickTileLongClick(tile: QuickTile)
+
+    /** A device filter chip was chosen. */
+    fun onFilterSelected(filter: ControlFilter)
 }
 
 /**
@@ -117,6 +124,7 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
                 if (oldItem == newItem) emptySet() else setOf(ControlChange.GROUP)
             oldItem is ControlItem.Hub && newItem is ControlItem.Hub -> emptySet()
             oldItem is ControlItem.QuickActions && newItem is ControlItem.QuickActions -> emptySet()
+            oldItem is ControlItem.Filters && newItem is ControlItem.Filters -> emptySet()
             else -> emptySet()
         }
         return if (changed.isEmpty()) null else PayloadSet.of(changed)
@@ -186,6 +194,7 @@ internal class ControlAdapter(
         is ControlItem.DeviceGroup -> TYPE_GROUP
         is ControlItem.Hub -> TYPE_HUB
         is ControlItem.QuickActions -> TYPE_QUICK
+        is ControlItem.Filters -> TYPE_FILTERS
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): ControlHolder =
@@ -196,6 +205,7 @@ internal class ControlAdapter(
             TYPE_GROUP -> DeviceGroupHolder(ItemControlDeviceGroupBinding.inflate(inflater, parent, false), callback)
             TYPE_HUB -> HubHolder(ItemControlHubBinding.inflate(inflater, parent, false), callback)
             TYPE_QUICK -> QuickActionsHolder(ItemControlQuickActionsBinding.inflate(inflater, parent, false), callback)
+            TYPE_FILTERS -> FiltersHolder(ItemControlFiltersBinding.inflate(inflater, parent, false), callback)
             else -> DeviceHolder(ItemControlDeviceBinding.inflate(inflater, parent, false), callback)
         }
 
@@ -417,6 +427,14 @@ internal class ControlAdapter(
 
         override fun bind(item: ControlItem) {
             val hub = item as ControlItem.Hub
+            // A single card fills the content width; with more cards a small
+            // symmetric padding peeks the neighbours without narrowing the row.
+            val peek = if (hub.cards.size > 1) {
+                views.root.resources.getDimensionPixelSize(R.dimen.control_hub_peek)
+            } else {
+                0
+            }
+            views.controlHubPager.setPadding(peek, 0, peek, 0)
             pager.submit(hub.cards, hub.remaining, hub.nowUnix)
             rebuildDots(hub.cards.size)
             renderDots()
@@ -509,9 +527,13 @@ internal class ControlAdapter(
             }
             views.quickTileIcon.setImageResource(
                 when (tile) {
-                    is QuickTile.Device -> ControlIcons.resolve(tile.entry)
-                    is QuickTile.ScenarioTile -> R.drawable.control_ic_play
-                    is QuickTile.Speak -> R.drawable.control_ic_message
+                    is QuickTile.Device -> when (tile.entry.kind) {
+                        ControlKind.LIGHT -> R.drawable.control_ic_bulb
+                        ControlKind.SWITCH -> R.drawable.control_ic_power
+                        else -> ControlIcons.resolve(tile.entry)
+                    }
+                    is QuickTile.ScenarioTile -> R.drawable.control_ic_play_circle
+                    is QuickTile.Speak -> R.drawable.control_ic_voice
                     QuickTile.Call -> R.drawable.control_ic_call
                 },
             )
@@ -528,6 +550,55 @@ internal class ControlAdapter(
                 true
             }
             return views.root
+        }
+    }
+
+    private class FiltersHolder(
+        private val views: ItemControlFiltersBinding,
+        callback: ControlAdapterCallback,
+    ) : ControlHolder(views, callback) {
+        private var rendered: List<ControlItem.FilterChip> = emptyList()
+        private var filterByViewId: Map<Int, ControlFilter> = emptyMap()
+        private var syncing = false
+
+        init {
+            views.controlFilters.setOnCheckedStateChangeListener { _, checkedIds ->
+                if (syncing) return@setOnCheckedStateChangeListener
+                val id = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
+                filterByViewId[id]?.let { callback.onFilterSelected(it) }
+            }
+        }
+
+        override fun bind(item: ControlItem) {
+            val filters = item as ControlItem.Filters
+            if (filters.chips != rendered) {
+                rebuild(filters.chips)
+            }
+            syncing = true
+            filterByViewId.entries.firstOrNull { it.value == filters.selected }?.let {
+                views.controlFilters.check(it.key)
+            }
+            syncing = false
+        }
+
+        override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
+
+        private fun rebuild(chips: List<ControlItem.FilterChip>) {
+            rendered = chips
+            views.controlFilters.removeAllViews()
+            val byId = LinkedHashMap<Int, ControlFilter>()
+            chips.forEach { chip ->
+                val view = ItemControlFilterBinding.inflate(
+                    LayoutInflater.from(views.root.context),
+                    views.controlFilters,
+                    false,
+                ).root
+                view.id = View.generateViewId()
+                view.text = chip.label
+                views.controlFilters.addView(view)
+                byId[view.id] = chip.filter
+            }
+            filterByViewId = byId
         }
     }
 
@@ -733,6 +804,7 @@ internal class ControlAdapter(
         const val TYPE_GROUP = 4
         const val TYPE_HUB = 5
         const val TYPE_QUICK = 6
+        const val TYPE_FILTERS = 7
         const val DISABLED_ALPHA = 0.5f
         const val COLUMNS = 3
     }
