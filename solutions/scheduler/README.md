@@ -20,8 +20,10 @@ golden-фикстуры `testdata/contract` и `testdata/go_v1.sql` остают
 
 ```text
 crates/scheduler/
-  src/domain/               чистая рекуррентность, ids, hashes, validation
-  src/store/                SQLite schema, транзакции, tick, outbox, purge
+  src/domain/               чистая рекуррентность, ids, hashes, validation,
+                            определения сценариев
+  src/store/                SQLite schema, транзакции, tick, outbox, purge,
+                            scenario CRUD и материализация триггеров
   src/api/                  Connect handlers, bearer auth, alarm facade
   src/config.rs             env 1:1 с Go (SCHEDULER_* + legacy ALARM_*)
   src/engine.rs             tick/purge loop, readiness на home-runtime
@@ -46,6 +48,9 @@ service `SchedulerService`:
 - schedules: `CreateSchedule`, `GetSchedule`, `ListSchedules`,
   `UpdateSchedule`, `DeleteSchedule`, `SetScheduleEnabled`,
   `SnoozeSchedule`, `StopSchedule`;
+- scenarios: `home.v1.ScenarioService` в `packages/proto/home/v1/scenario.proto`
+  — `CreateScenario`, `GetScenario`, `ListScenarios`, `UpdateScenario`,
+  `DeleteScenario`, `SetScenarioEnabled`, `RunScenario`;
 - timers: `StartTimer`, `GetTimer`, `ListTimers`, `PauseTimer`,
   `ResumeTimer`, `CancelTimer`;
 - outbox: `ListDueEvents`, `AckEvent`;
@@ -175,6 +180,50 @@ Scheduler владеет lifecycle occurrence, поэтому истечение
   расписания: bridge сверяет source+occurrence, HA — source+FIRE event id.
 
 
+## Сценарии
+
+`home.v1.ScenarioService` хранит определения сценариев. scheduler — их
+единственный владелец: он не исполняет шаги и не вычисляет условия.
+
+- `Scenario`: `id`, `label`, `description`, `enabled`, `revision`,
+  timestamps, `triggers`, `conditions`, `steps`, `continue_on_error` и
+  вычисляемый `next_due_unix` (ближайший time-триггер; 0 — disabled/manual/
+  exhausted).
+- Триггеры v1: `manual` и `time` (IANA timezone, `WallTime`, повтор
+  once/daily/weekdays/weekends/custom — та же политика DST, что у Schedule).
+  Модель — `oneof`, новые виды триггеров добавляются без ломки.
+- Условия v1: `entity_state{entity_id,state}` и
+  `time_window{start,end,weekdays}`. Их вычисляет исполнитель.
+- Шаги v1 (`oneof`): `catalog{entry_id,action,params_json}` (формат
+  `home.control`), `speak{text}` (1..500 символов, без control-символов),
+  `delay{seconds}` (1..3600).
+- Лимиты: label ≤ 80 байт, ≤ 8 триггеров, ≤ 8 условий, ≤ 32 шагов, тело
+  определения ≤ `SCHEDULER_MAX_PAYLOAD_BYTES` (16 KiB).
+
+Time-триггеры не живут отдельной очередью: при create/update/enable каждый
+time-триггер материализуется строкой `schedules` с
+`kind=SCHEDULE_KIND_SCENARIO` и payload
+`{"scenario_id":"…","trigger_index":n}`. Tick, DST, missed grace, dedupe и
+outbox переиспользуются. Событие уходит в очередь `scenario` с
+`task_type=scenario.fire`. Update/Delete/SetEnabled пересобирают эти строки в
+одной транзакции с определением: активный occurrence закрывается как при
+`rule_changed`, pending FIRE отменяются. У disabled-сценария строки остаются
+с `enabled=0` и `next_due=0`; удаление сценария удаляет их. `RunScenario`
+кладёт manual-событие
+(`payload={"scenario_id":…,"trigger":"manual"}`) в ту же очередь; непустой
+`idempotency_key` возвращает то же событие. Manual-запуск разрешён и для
+disabled-сценария: `enabled` отключает только автотриггеры.
+
+`GetStatus.scenario_store_supported=true`; `scenario_execution_supported`
+остаётся `false`, пока отдельный исполнитель `ha-scenario` не развёрнут.
+`ListSchedules` без явного `kind` (UNSPECIFIED) исключает scenario-строки;
+только `kind=SCENARIO` их возвращает, поэтому Android-будильники и голосовые
+скрипты не видят внутренние триггеры. Прямые
+`UpdateSchedule`/`DeleteSchedule`/`SetScheduleEnabled`/`SnoozeSchedule`/
+`StopSchedule` по scenario-строке отвечают `FAILED_PRECONDITION`
+(`managed by scenario <id>`), а `CreateSchedule` с `kind=SCENARIO` —
+`INVALID_ARGUMENT`: такие строки создаются только `ScenarioService`.
+
 ## Durable outbox, leases, tasks
 
 - `events.dedupe_key` уникален; event id = UUIDv5(dedupe identity), поэтому
@@ -218,6 +267,14 @@ SQLite через `home-sqlite` (`rusqlite`, bundled), WAL, `busy_timeout`,
 event-insert и advance источника в одной транзакции. `BEGIN IMMEDIATE`
 не нужен, пока процесс один; второй процесс на той же БД не поддерживается.
 Schema version проверяется: БД новее бинарника отвергается.
+
+Схема v2 добавляет таблицу `scenarios(id, body_json, enabled, revision,
+created_unix, updated_unix)`. База v1 (в том числе созданная прежним Go- или
+Rust-бинарём) мигрирует на месте при старте без изменения schedules, timers,
+events и idempotency. Обратный откат бинарника после миграции требует
+восстановить v1-копию БД: старый бинарник отвергает v2. `backup.sh`
+копирует файл целиком и schema-проверок не делает, поэтому менять его не
+требуется.
 
 ## Конфигурация
 
@@ -264,7 +321,8 @@ executor-ом и не гарантируется этим сервисом.
 
 ## Ограничения
 
-- нет scenario executor;
+- нет scenario executor: определения и события хранятся, `ha-scenario` ещё
+  не исполняет очередь `scenario`;
 - нет recurring generic tasks (`SCHEDULE_KIND_TASK`);
 - нет streaming `WatchEvents`;
 - SQLite рассчитан на один процесс; горизонтальное масштабирование

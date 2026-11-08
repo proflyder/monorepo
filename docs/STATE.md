@@ -268,9 +268,12 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.1012` — armhf-сборка из `projects/station/pulsar/`
-  (Bazel), раскатана `deploy-station` 2026-11-08 (`.prev` = `v0.5.1011`;
-  артефакт продвинут из PR-сборки без пересборки). Автояркость часов —
+- Pulsar Rust `v0.5.1013` — armhf-сборка из `projects/station/pulsar/`
+  (Bazel), раскатана `deploy-station` 2026-11-08 (`.prev` = `v0.5.1012`;
+  артефакт продвинут из PR-сборки без пересборки). «Громкость объявлений»
+  (`number.…_gromkost_obiavlenii`, 0–100 %, по умолчанию 100) масштабирует
+  только речевые анонсы и TTS-ответы; ANNOUNCING уходит в HA как PLAYING
+  (HA 2026.10 не знает это состояние). Автояркость часов —
   перцептивная (гамма 2 к фактору освещённости, как у кольца): датчик под
   крышкой видит 0–60 лк, при ~18 лк ток часов 64/255, в темноте пол 5;
   линия Ricardo, база upstream `v0.5.4` = `f1f5b17`. Внутри — завершённый
@@ -517,6 +520,14 @@
   живой конфигурации; оставшиеся недоступные записи реестра очищены.
   Повторного исполнителя нет. HA остаётся исполнителем звука
   (`alarm_start`, `schedule_announce`, `alarm_stop`).
+- Схема scheduler — v2: добавлена таблица `scenarios`; существующая v1
+  мигрирует на месте. `home.v1.ScenarioService` хранит определения сценариев
+  (manual/time-триггеры, условия, шаги, revision), time-триггеры
+  материализуются строками `schedules` (`kind=SCHEDULE_KIND_SCENARIO`) и
+  событиями `scenario.fire` в очереди `scenario`; `RunScenario` ставит
+  manual-событие туда же. Исполнителя `ha-scenario` ещё нет:
+  `GetStatus.scenario_store_supported=true`,
+  `scenario_execution_supported=false`.
 - `RingWindow` = максимальная длительность срабатывания (900 с по
   умолчанию). Истечение окна закрывает occurrence: tick в одной транзакции
   отменяет pending `FIRE` того же occurrence и ставит STOP в durable очередь

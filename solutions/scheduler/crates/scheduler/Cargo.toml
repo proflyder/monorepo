@@ -30,6 +30,7 @@ jiff = { workspace = true }
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
 rustls = { workspace = true }
+serde = { workspace = true }
 sha1_smol = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

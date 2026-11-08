@@ -23,6 +23,7 @@ LIB_DEPS = [
     "@crates//:reqwest",
     "@crates//:rusqlite",
     "@crates//:rustls",
+    "@crates//:serde",
     "@crates//:serde_json",
     "@crates//:sha1_smol",
     "@crates//:sha2",

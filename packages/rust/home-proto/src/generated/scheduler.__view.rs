@@ -3789,7 +3789,9 @@ impl ::serde::Serialize for GetScheduleResponseOwnedView {
 pub struct ListSchedulesRequestView<'a> {
     /// Field 1: `include_disabled`
     pub include_disabled: bool,
-    /// UNSPECIFIED means all kinds
+    /// UNSPECIFIED excludes SCHEDULE_KIND_SCENARIO so alarm/reminder clients never
+    /// render scenario trigger rows as schedules. Only an explicit
+    /// SCHEDULE_KIND_SCENARIO query returns them.
     ///
     /// Field 2: `kind`
     pub kind: ::buffa::EnumValue<super::super::ScheduleKind>,
@@ -4038,7 +4040,9 @@ impl ListSchedulesRequestOwnedView {
     pub fn include_disabled(&self) -> bool {
         self.0.reborrow().include_disabled
     }
-    /// UNSPECIFIED means all kinds
+    /// UNSPECIFIED excludes SCHEDULE_KIND_SCENARIO so alarm/reminder clients never
+    /// render scenario trigger rows as schedules. Only an explicit
+    /// SCHEDULE_KIND_SCENARIO query returns them.
     ///
     /// Field 2: `kind`
     #[must_use]
@@ -13240,6 +13244,11 @@ pub struct GetStatusResponseView<'a> {
     ///
     /// Field 15: `last_tick_error`
     pub last_tick_error: &'a str,
+    /// True when this server stores scenario definitions (ScenarioService).
+    /// Independent of scenario_execution_supported.
+    ///
+    /// Field 16: `scenario_store_supported`
+    pub scenario_store_supported: bool,
     pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
 }
 impl<'a> ::buffa::MessageView<'a> for GetStatusResponseView<'a> {
@@ -13365,6 +13374,13 @@ impl<'a> ::buffa::MessageView<'a> for GetStatusResponseView<'a> {
                 )?;
                 view.last_tick_error = ::buffa::types::borrow_str(&mut cur)?;
             }
+            16u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                view.scenario_store_supported = ::buffa::types::decode_bool(&mut cur)?;
+            }
             9u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
@@ -13448,6 +13464,7 @@ impl<'a> ::buffa::MessageView<'a> for GetStatusResponseView<'a> {
             last_tick_attempt_unix: self.last_tick_attempt_unix,
             last_tick_error_unix: self.last_tick_error_unix,
             last_tick_error: self.last_tick_error.to_string(),
+            scenario_store_supported: self.scenario_store_supported,
             __buffa_unknown_fields: self.__buffa_unknown_fields.to_owned()?.into(),
             ..::core::default::Default::default()
         })
@@ -13524,6 +13541,9 @@ impl<'a> ::buffa::ViewEncode<'a> for GetStatusResponseView<'a> {
                 += 1u64
                     + ::buffa::types::string_encoded_len(&self.last_tick_error) as u64;
         }
+        if self.scenario_store_supported {
+            size += 2u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -13593,6 +13613,9 @@ impl<'a> ::buffa::ViewEncode<'a> for GetStatusResponseView<'a> {
         }
         if !self.last_tick_error.is_empty() {
             ::buffa::types::put_string_field(15u32, &self.last_tick_error, buf);
+        }
+        if self.scenario_store_supported {
+            ::buffa::types::put_bool_field(16u32, self.scenario_store_supported, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -13699,6 +13722,13 @@ impl<'__a> ::serde::Serialize for GetStatusResponseView<'__a> {
         }
         if !::buffa::json_helpers::skip_if::is_empty_str(self.last_tick_error) {
             __map.serialize_entry("lastTickError", self.last_tick_error)?;
+        }
+        if self.scenario_store_supported {
+            __map
+                .serialize_entry(
+                    "scenarioStoreSupported",
+                    &self.scenario_store_supported,
+                )?;
         }
         __map.end()
     }
@@ -13888,6 +13918,14 @@ impl GetStatusResponseOwnedView {
     #[must_use]
     pub fn last_tick_error(&self) -> &'_ str {
         self.0.reborrow().last_tick_error
+    }
+    /// True when this server stores scenario definitions (ScenarioService).
+    /// Independent of scenario_execution_supported.
+    ///
+    /// Field 16: `scenario_store_supported`
+    #[must_use]
+    pub fn scenario_store_supported(&self) -> bool {
+        self.0.reborrow().scenario_store_supported
     }
 }
 impl ::core::convert::From<::buffa::OwnedView<GetStatusResponseView<'static>>>

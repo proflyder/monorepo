@@ -55,6 +55,12 @@ pub fn canonical_task(
     format!("task|{task_type}|{queue}|{payload_json}|{run_at_unix}")
 }
 
+/// Canonical scenario definition used for idempotent CreateScenario.
+#[must_use]
+pub fn canonical_scenario(body_json: &str, enabled: bool) -> String {
+    format!("scenario|{enabled}|{body_json}")
+}
+
 /// Lower-case hex SHA-1 of a canonical request string.
 #[must_use]
 pub fn sha1_hex(canonical: &str) -> String {

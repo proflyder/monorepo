@@ -1,0 +1,185 @@
+syntax = "proto3";
+
+package home.v1;
+
+import "scheduler.proto";
+
+// ScenarioService is the durable scenario-definition contract.
+//
+// Scenario definitions belong to the scheduler because it is the only owner of
+// live schedules: a time trigger becomes a durable SCHEDULE_KIND_SCENARIO row,
+// and firing it emits a DueEvent on the `scenario` queue. Execution belongs to
+// a dedicated executor (`ha-scenario`); this service never runs steps and
+// never advertises execution support until that executor exists.
+//
+// Transport, authentication and JSON mapping are identical to
+// SchedulerService.
+
+// ScenarioTrigger starts a scenario. New trigger kinds extend the `kind`
+// oneof without breaking existing definitions.
+message ScenarioTrigger {
+  oneof kind {
+    ManualTrigger manual = 1;
+    TimeTrigger time = 2;
+  }
+}
+
+// ManualTrigger fires only through RunScenario.
+message ManualTrigger {}
+
+// TimeTrigger is a local wall-clock trigger with the same recurrence policy
+// (including DST handling) as Schedule.
+message TimeTrigger {
+  string timezone = 1;    // IANA zone, required
+  WallTime at = 2;        // local time of day
+  RepeatKind repeat = 3;  // ONCE/DAILY/WEEKDAYS/WEEKENDS/CUSTOM
+  string once_date = 4;   // YYYY-MM-DD; required for REPEAT_KIND_ONCE
+  repeated int32 weekdays = 5; // ISO 1=Mon..7=Sun; REPEAT_KIND_CUSTOM only
+}
+
+// ScenarioCondition gates execution. The executor evaluates conditions; the
+// scheduler only stores and validates their shape.
+message ScenarioCondition {
+  oneof kind {
+    EntityStateCondition entity_state = 1;
+    TimeWindowCondition time_window = 2;
+  }
+}
+
+// EntityStateCondition matches a Home Assistant entity state.
+message EntityStateCondition {
+  string entity_id = 1; // e.g. light.kitchen
+  string state = 2;     // e.g. "on"
+}
+
+// TimeWindowCondition is true between start and end. When end is before start
+// the window wraps over midnight. Empty weekdays means every day.
+message TimeWindowCondition {
+  WallTime start = 1;
+  WallTime end = 2;
+  repeated int32 weekdays = 3; // ISO 1=Mon..7=Sun
+}
+
+// ScenarioStep is one ordered action.
+message ScenarioStep {
+  oneof kind {
+    CatalogStep catalog = 1;
+    SpeakStep speak = 2;
+    DelayStep delay = 3;
+  }
+}
+
+// CatalogStep uses the same entry/action/params form as the `home.control`
+// queue: the executor resolves entry_id against GET /v1/catalog.
+message CatalogStep {
+  string entry_id = 1;
+  string action = 2;
+  string params_json = 3; // opaque JSON object, default {}
+}
+
+// SpeakStep speaks text on the station (1..500 chars, no control characters).
+message SpeakStep {
+  string text = 1;
+}
+
+// DelayStep waits before the next step.
+message DelayStep {
+  int32 seconds = 1; // 1..3600
+}
+
+// Scenario is one durable scenario definition.
+message Scenario {
+  string id = 1;
+  string label = 2;       // max 80 bytes
+  string description = 3; // max 512 bytes
+  bool enabled = 4;
+  int64 revision = 5;
+  int64 created_unix = 6;
+  int64 updated_unix = 7;
+  repeated ScenarioTrigger triggers = 8;     // max 8
+  repeated ScenarioCondition conditions = 9; // max 8
+  repeated ScenarioStep steps = 10;          // max 32
+  bool continue_on_error = 11;
+  // Earliest next time-trigger occurrence; 0 when disabled, manual-only or
+  // exhausted. Computed from the materialized schedules.
+  int64 next_due_unix = 12;
+}
+
+message CreateScenarioRequest {
+  string label = 1;
+  string description = 2;
+  bool enabled = 3;
+  repeated ScenarioTrigger triggers = 4;
+  repeated ScenarioCondition conditions = 5;
+  repeated ScenarioStep steps = 6;
+  bool continue_on_error = 7;
+  // Optional idempotency key. Replaying the same key with an identical
+  // request returns the original scenario; a different payload is rejected
+  // with ALREADY_EXISTS.
+  string idempotency_key = 8;
+}
+message CreateScenarioResponse {
+  Scenario scenario = 1;
+}
+
+message GetScenarioRequest {
+  string id = 1;
+}
+message GetScenarioResponse {
+  Scenario scenario = 1;
+}
+
+message ListScenariosRequest {
+  bool include_disabled = 1;
+}
+message ListScenariosResponse {
+  repeated Scenario scenarios = 1;
+}
+
+message UpdateScenarioRequest {
+  Scenario scenario = 1;
+  // Revision the client last saw. A non-zero value must match the stored
+  // revision, otherwise the update fails with ABORTED. 0 disables the check.
+  int64 expected_revision = 2;
+}
+message UpdateScenarioResponse {
+  Scenario scenario = 1;
+}
+
+message DeleteScenarioRequest {
+  string id = 1;
+}
+message DeleteScenarioResponse {
+  bool deleted = 1;
+}
+
+message SetScenarioEnabledRequest {
+  string id = 1;
+  bool enabled = 2;
+}
+message SetScenarioEnabledResponse {
+  Scenario scenario = 1;
+}
+
+message RunScenarioRequest {
+  string id = 1;
+  // Optional idempotency key for a manual run. An empty key always queues a
+  // new occurrence. A disabled scenario may still be run manually: `enabled`
+  // controls automatic time triggers, not explicit user action.
+  string idempotency_key = 2;
+}
+message RunScenarioResponse {
+  // The durable `scenario.fire` event for the manual run.
+  DueEvent event = 1;
+}
+
+service ScenarioService {
+  rpc CreateScenario(CreateScenarioRequest) returns (CreateScenarioResponse);
+  rpc GetScenario(GetScenarioRequest) returns (GetScenarioResponse);
+  rpc ListScenarios(ListScenariosRequest) returns (ListScenariosResponse);
+  rpc UpdateScenario(UpdateScenarioRequest) returns (UpdateScenarioResponse);
+  rpc DeleteScenario(DeleteScenarioRequest) returns (DeleteScenarioResponse);
+  rpc SetScenarioEnabled(SetScenarioEnabledRequest)
+      returns (SetScenarioEnabledResponse);
+  rpc RunScenario(RunScenarioRequest) returns (RunScenarioResponse);
+}

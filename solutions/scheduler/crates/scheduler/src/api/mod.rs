@@ -1,4 +1,5 @@
-//! Connect transport: one axum fallback serving both protobuf services.
+//! Connect transport: one axum fallback serving the scheduler, alarm and
+//! scenario protobuf services.
 //!
 //! Only the `json` feature of `connectrpc` is enabled: the crate builds the
 //! Tower service itself and does not pull `hyper/http2` into the station
@@ -20,7 +21,7 @@ use std::task::{Context, Poll};
 
 use axum::body::Body;
 use connectrpc::{ConnectRpcService, Limits, Router as ConnectRouter};
-use home_proto::v1::{AlarmServiceExt, SchedulerServiceExt};
+use home_proto::v1::{AlarmServiceExt, ScenarioServiceExt, SchedulerServiceExt};
 use http::{Request, Response, StatusCode, header};
 
 pub use alarm::AlarmFacade;
@@ -70,10 +71,11 @@ impl tower::Service<Request<Body>> for ConnectFallback {
     }
 }
 
-/// Builds the axum router with both services behind one bearer interceptor.
+/// Builds the axum router with all services behind one bearer interceptor.
 pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Router {
     let routes = ConnectRouter::new();
-    let routes = Arc::new(service).register(routes);
+    let routes = <Service as SchedulerServiceExt>::register(Arc::new(service.clone()), routes);
+    let routes = <Service as ScenarioServiceExt>::register(Arc::new(service), routes);
     let routes = Arc::new(alarms).register(routes);
     let methods = Arc::new(routes.methods().map(str::to_owned).collect::<HashSet<_>>());
     let service = ConnectRpcService::new(routes)

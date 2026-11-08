@@ -2,13 +2,14 @@
 //!
 //! The schema, SQL conditions, error texts and event identities are the former
 //! Go store's, byte for byte. A database created by the Go service opens here
-//! without a migration because [`MIGRATIONS`] carries the identical v1 DDL and
-//! `schema_meta` stays at version 1.
+//! and is migrated in place: [`MIGRATIONS`] carries the identical v1 DDL and
+//! then adds the v2 scenario table. An older binary rejects a newer database.
 //!
 //! Every mutation runs on the single SQLite writer thread; `now` is always an
 //! argument so tick scenarios stay deterministic.
 
 mod event;
+mod scenario;
 mod schedule;
 mod status;
 mod task;
@@ -24,7 +25,8 @@ use rusqlite::{Connection, Transaction};
 use crate::domain::{DomainError, ErrorKind};
 
 pub use crate::domain::{
-    AckOutcome, Event, EventAction, EventState, Schedule, ScheduleKind, SourceKind, Timer,
+    AckOutcome, Event, EventAction, EventState, Scenario, ScenarioCondition, ScenarioDefinition,
+    ScenarioStep, ScenarioTimeTrigger, ScenarioTrigger, Schedule, ScheduleKind, SourceKind, Timer,
     TimerState,
 };
 pub use status::{ConsumerStatus, QueueInfo, Status};
@@ -32,9 +34,9 @@ pub use tick::TickStats;
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-/// Schema version written to `schema_meta`. It must not grow past 1 while the
-/// Go binary can still be rolled back.
-pub const SCHEMA_VERSION: i64 = 1;
+/// Schema version written to `schema_meta`. v2 adds the scenario table; a v1
+/// database migrates in place, and an older binary rejects v2.
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// Queue names used by the built-in domains.
 pub const QUEUE_HOME: &str = "home";
@@ -120,12 +122,34 @@ const V1: &[&str] = &[
 		)",
 ];
 
+/// v2 adds durable scenario definitions. Time triggers are materialized as
+/// `schedules` rows (kind=SCENARIO), so recurrence, DST, dedupe and the outbox
+/// stay shared with alarms and reminders.
+const V2: &[&str] = &[
+    "CREATE TABLE IF NOT EXISTS scenarios (
+			id TEXT PRIMARY KEY,
+			body_json TEXT NOT NULL,
+			enabled INTEGER NOT NULL,
+			revision INTEGER NOT NULL,
+			created_unix INTEGER NOT NULL,
+			updated_unix INTEGER NOT NULL
+		)",
+    "CREATE INDEX IF NOT EXISTS scenarios_enabled ON scenarios(enabled)",
+];
+
 /// One ordered schema step.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: SCHEMA_VERSION,
-    description: "scheduler v1",
-    statements: V1,
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        description: "scheduler v1",
+        statements: V1,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v2 scenarios",
+        statements: V2,
+    },
+];
 
 /// Operational bounds; zero values are replaced by [`Config::default`].
 #[derive(Debug, Clone)]

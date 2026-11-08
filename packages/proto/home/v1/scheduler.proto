@@ -19,9 +19,10 @@ enum ScheduleKind {
   SCHEDULE_KIND_UNSPECIFIED = 0;
   SCHEDULE_KIND_ALARM = 1;
   SCHEDULE_KIND_REMINDER = 2;
-  // SCHEDULE_KIND_SCENARIO is reserved. Events carry the opaque payload for a
-  // future scenario executor; scenario execution is NOT implemented and the
-  // server does not advertise it (GetStatus reports it as unsupported).
+  // SCHEDULE_KIND_SCENARIO is reserved for time triggers materialized from a
+  // ScenarioService definition. Events carry the opaque payload for the
+  // scenario executor; scenario execution is NOT implemented and the server
+  // does not advertise it (GetStatus.scenario_execution_supported=false).
   SCHEDULE_KIND_SCENARIO = 3;
 }
 
@@ -187,7 +188,10 @@ message GetScheduleResponse {
 
 message ListSchedulesRequest {
   bool include_disabled = 1;
-  ScheduleKind kind = 2; // UNSPECIFIED means all kinds
+  // UNSPECIFIED excludes SCHEDULE_KIND_SCENARIO so alarm/reminder clients never
+  // render scenario trigger rows as schedules. Only an explicit
+  // SCHEDULE_KIND_SCENARIO query returns them.
+  ScheduleKind kind = 2;
 }
 message ListSchedulesResponse {
   repeated Schedule schedules = 1;
@@ -338,6 +342,9 @@ message GetStatusResponse {
   int64 last_tick_attempt_unix = 13;
   int64 last_tick_error_unix = 14;
   string last_tick_error = 15; // bounded, no secrets
+  // True when this server stores scenario definitions (ScenarioService).
+  // Independent of scenario_execution_supported.
+  bool scenario_store_supported = 16;
 }
 
 message QueueInfo {

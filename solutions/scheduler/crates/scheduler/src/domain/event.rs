@@ -283,6 +283,13 @@ pub fn task_dedupe_key(task_id: &str) -> String {
     format!("task:{task_id}:0")
 }
 
+/// Dedupe key of a manual scenario run. `run_id` is unique per call unless
+/// idempotency replays a stored event.
+#[must_use]
+pub fn scenario_manual_key(scenario_id: &str, run_id: &str) -> String {
+    format!("scenario:manual:{scenario_id}:{run_id}")
+}
+
 /// Orders events exactly like `SELECT ... ORDER BY due_unix, id`.
 pub fn order_events(events: &mut [Event]) {
     events.sort_by(compare_events);

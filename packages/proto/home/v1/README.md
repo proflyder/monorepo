@@ -5,6 +5,9 @@
 - `scheduler.proto` — `SchedulerService`: durable schedules, timers,
   `ListDueEvents`/`AckEvent`, generic `EnqueueTask`/`CancelTask`, `GetStatus`.
   Основной контракт.
+- `scenario.proto` — `ScenarioService`: durable определения сценариев
+  (триггеры/условия/шаги), `RunScenario` в очередь `scenario`. Исполнение —
+  отдельный executor, не этот сервис.
 - `alarms.proto` — legacy `AlarmService`, wire-совместимый facade над теми же
   schedules (`kind=SCHEDULE_KIND_ALARM`). Не второй планировщик.
 
