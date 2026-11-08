@@ -93,7 +93,9 @@ class ConnectIntercomClient(
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
         .addInterceptor(ConnectionInterceptor(settings, Target.INTERCOM))
-        .apply { interceptors.forEach { addInterceptor(it) } }
+        // No diagnostic interceptors here: HttpLoggingInterceptor(BODY) and Chucker
+        // read the whole response before returning it, and Watch never ends — the
+        // phone would never see RINGING -> CONNECTING and never send its offer.
         .build()
 
     override suspend fun registerEndpoint(
