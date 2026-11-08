@@ -29,6 +29,7 @@ require "android.permission.RECORD_AUDIO"
 require "android.permission.POST_NOTIFICATIONS"
 require "android.permission.ACCESS_NETWORK_STATE"
 require "android.permission.MODIFY_AUDIO_SETTINGS"
+require "android.permission.WAKE_LOCK"
 
 if [ "$missing" -ne 0 ]; then
   echo "the call feature manifest was not merged into the APK" >&2

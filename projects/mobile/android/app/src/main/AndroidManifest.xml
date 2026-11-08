@@ -25,6 +25,8 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- CallActivity: proximity wake lock blanks the screen at the ear. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- enableOnBackInvokedCallback is ignored on API levels below 33. -->
     <application
