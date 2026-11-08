@@ -545,36 +545,44 @@ usually appear in the console within a few minutes after the next launch.
 `projects/mobile/android/distribute.sh` builds, verifies, and uploads the APK
 to Firebase App Distribution. It runs both locally and from CI.
 
-CI runs on **every pull request that changes the Android app**:
-`.github/workflows/ci.yml` job `android-distribute` needs the `changes` routing
-and the `android` build, and starts only when the router sets
-`android_distribute` (an actual `projects/mobile/android/`, `packages/kotlin/`
-or `platform/android/` change). A global invalidation such as `MODULE.bazel`
-still runs the `android` checks but does not publish a build. The job:
+CI runs on **every pull request that changes the Android app**, in two steps so
+the APK is built exactly once:
 
-- runs only for pull requests whose head branch lives in this repository: a
-  fork PR gets a read-only token without Environment secrets, so it can never
-  read the signing material;
-- uses the GitHub Environment `Android` and reads
-  `secret/ci/android-distribute` from OpenBao through the `android-distribute`
-  JWT role, whose claims are pinned to pull-request merge refs of `ci.yml`
-  (`refs/pull/*/merge`);
-- materialises `google-services.json` into `platform/android/keys/` (mode 600)
-  and the release key, its password files, alias, expected certificate digest
-  and the Firebase service account into `$RUNNER_TEMP/ci` (mode 600/700);
-  passwords stay in files and never enter the environment of later steps,
-  disconnects the VPN, then runs:
+1. `.github/workflows/_android.yml`, matrix entry `android / android-app`
+   (started by `.github/workflows/ci.yml` when the router sets
+   `android_distribute`: an actual `projects/mobile/android/`,
+   `packages/kotlin/` or `platform/android/` change) is the only Android entry
+   that declares the GitHub Environment `Android`. It:
+   - runs only for pull requests whose head branch lives in this repository: a
+     fork PR gets a read-only token without Environment secrets, so it cannot
+     read the signing material; it still builds and tests the app, and the
+     release steps skip with an explicit notice;
+   - reads `secret/ci/android-distribute` from OpenBao through the
+     `android-app-release` JWT role, whose claims are pinned to pull-request
+     merge refs of `_android.yml` (`refs/pull/*/merge`);
+   - materialises `google-services.json` into `platform/android/keys/` (mode
+     600) and the release key, its password files, alias and expected
+     certificate digest into `$RUNNER_TEMP/ci` (mode 600/700); passwords stay
+     in files and never enter the environment of later steps, then disconnects
+     the VPN;
+   - builds `//projects/mobile/android:app` with Bazel (debug-signed
+     intermediate, no personal key in CI) using the release
+     `versionCode`/`versionName`, runs `bazel test` with the same `--define`
+     values so the APK-level tests inspect exactly the APK that will be signed,
+     signs it with `platform/android/sign-release.sh` and uploads
+     `android-release-apk` (`app-release.apk` plus `release-info.json` with the
+     Firebase app id, version and SHA-256).
 
-```sh
-projects/mobile/android/distribute.sh --ci
-```
-
-- builds the APK with Bazel (debug-signed intermediate, no personal key in CI),
-  signs the final APK with `platform/android/sign-release.sh` and uploads that
-  artifact;
-- is deliberately **not** part of `ci-ok`: a failed upload is visible on the PR
-  and in the run, but it does not block the merge. A newer push to the same PR
-  cancels the upload in flight.
+2. `.github/workflows/ci.yml` job `android-distribute` waits for the whole
+   `android` matrix (so an `android-lint` finding also skips distribution),
+   downloads that artifact and uploads it with
+   `distribute.sh --upload-only`; it reads only
+   `firebase_service_account_json_b64` through the separate
+   `android-distribute` JWT role, never the signing key. It is deliberately
+   **not** part of `ci-ok`: a failed upload is visible on the PR and in the run,
+   but it does not block the merge. A newer push to the same PR cancels the
+   upload in flight. A global invalidation such as `MODULE.bazel` still runs the
+   `android` checks but does not publish a build.
 
 `--ci` formats release notes as `PR #<number>: <title>`, the short head SHA and
 the workflow run URL (number and title arrive as environment variables, never

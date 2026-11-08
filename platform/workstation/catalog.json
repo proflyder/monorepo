@@ -3,7 +3,7 @@
  "paths": {
   "ci/android-distribute": {
    "purpose": "Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution",
-   "consumer": "CI android-distribute (OIDC)"
+   "consumer": "CI android-app (OIDC) + android-distribute (OIDC)"
   },
   "ci/deploy-home": {
    "purpose": "deploy-home: ci-deploy kubeconfig, service env files, runtime values",

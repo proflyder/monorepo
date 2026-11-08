@@ -106,6 +106,30 @@ class AndroidRole(unittest.TestCase):
             "clock_skew": 60,
         })
 
+    def test_android_app_release_role_payload(self):
+        """The building job authenticates from the reusable `_android.yml`."""
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
+        self.assertEqual(bao.payload("/v1/auth/github/role/android-app-release"), {
+            "role_type": "jwt",
+            "user_claim": "job_workflow_ref",
+            "bound_audiences": [AUDIENCE],
+            "bound_claims_type": "glob",
+            "bound_claims": {
+                "repository": HOME_REPOSITORY,
+                "environment": "Android",
+                "ref": "refs/pull/*/merge",
+                "job_workflow_ref":
+                    "example/home/.github/workflows/_android.yml@refs/pull/*/merge",
+                "event_name": "pull_request",
+            },
+            "token_policies": ["ci-android"],
+            "token_ttl": "10m",
+            "token_max_ttl": "15m",
+            "clock_skew": 60,
+        })
+
     def test_android_globs_only_match_pr_ci_runs(self):
         """The bound globs must accept PR merge refs and nothing else."""
         import fnmatch
@@ -114,25 +138,43 @@ class AndroidRole(unittest.TestCase):
         bao = Recorder()
         with redirect_stdout(StringIO()):
             claims(bao, AUDIENCE, HOME_REPOSITORY)
-        bound = bao.payload("/v1/auth/github/role/android-distribute")["bound_claims"]
-        ref, workflow = bound["ref"], bound["job_workflow_ref"]
+        roles = {
+            "android-distribute": ".github/workflows/ci.yml",
+            "android-app-release": ".github/workflows/_android.yml",
+        }
+        for role, own_workflow in roles.items():
+            bound = bao.payload(f"/v1/auth/github/role/{role}")["bound_claims"]
+            ref, workflow = bound["ref"], bound["job_workflow_ref"]
 
-        self.assertTrue(fnmatch.fnmatch("refs/pull/42/merge", ref))
-        self.assertTrue(
+            self.assertTrue(fnmatch.fnmatch("refs/pull/42/merge", ref))
+            self.assertTrue(
+                fnmatch.fnmatch(
+                    f"example/home/{own_workflow}@refs/pull/42/merge",
+                    workflow))
+            for other in ("refs/heads/develop", "refs/heads/feature/x",
+                          "refs/pull/42/head", "refs/tags/v1"):
+                self.assertFalse(fnmatch.fnmatch(other, ref), other)
+            self.assertFalse(
+                fnmatch.fnmatch(
+                    "example/home/.github/workflows/deploy-home.yml@refs/pull/42/merge",
+                    workflow))
+            self.assertFalse(
+                fnmatch.fnmatch(
+                    "example/other/.github/workflows/ci.yml@refs/pull/42/merge",
+                    workflow))
+
+        # The two roles are not interchangeable: the app build must not be able
+        # to claim the upload workflow and vice versa.
+        app = bao.payload("/v1/auth/github/role/android-app-release")["bound_claims"]
+        upload = bao.payload("/v1/auth/github/role/android-distribute")["bound_claims"]
+        self.assertFalse(
+            fnmatch.fnmatch(
+                "example/home/.github/workflows/_android.yml@refs/pull/42/merge",
+                upload["job_workflow_ref"]))
+        self.assertFalse(
             fnmatch.fnmatch(
                 "example/home/.github/workflows/ci.yml@refs/pull/42/merge",
-                workflow))
-        for other in ("refs/heads/develop", "refs/heads/feature/x",
-                      "refs/pull/42/head", "refs/tags/v1"):
-            self.assertFalse(fnmatch.fnmatch(other, ref), other)
-        self.assertFalse(
-            fnmatch.fnmatch(
-                "example/home/.github/workflows/deploy-home.yml@refs/pull/42/merge",
-                workflow))
-        self.assertFalse(
-            fnmatch.fnmatch(
-                "example/other/.github/workflows/ci.yml@refs/pull/42/merge",
-                workflow))
+                app["job_workflow_ref"]))
 
     def test_android_role_does_not_change_deploy_home(self):
         bao = Recorder()

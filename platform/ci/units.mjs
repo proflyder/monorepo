@@ -637,11 +637,13 @@ export const config = {
     // Android build tools (platform/android/tools) are Kotlin `kt_jvm_test`
     // targets; they are part of `android_tests`, so the Android app unit
     // exercises the toolchain it runs.
-    // `android-app` also has the Android build inputs of PR App Distribution in
-    // `ci.yml` (job `android-distribute`). That job follows `android_distribute`
-    // from `affected.mjs`: real `projects/mobile/android/**`, `packages/kotlin/**`
-    // or `platform/android/**` changes publish an APK; a global invalidation or a
-    // CI-workflow edit only runs this unit's checks.
+    // `android-app` is also where the distributable APK is built, tested and
+    // signed once (`_android.yml`): that entry owns the `Android` Environment
+    // and its OpenBao role, and uploads `android-release-apk`. The Firebase
+    // upload job `android-distribute` follows `android_distribute` from
+    // `affected.mjs`: real `projects/mobile/android/**`, `packages/kotlin/**`
+    // or `platform/android/**` changes publish an APK; a global invalidation or
+    // a CI-workflow edit only runs this unit's checks.
     {
       id: "android-app",
       platform: "android",
@@ -654,8 +656,13 @@ export const config = {
           "//projects/mobile/android/app:main_activity_smoke_test",
         ],
         build_targets: ["//projects/mobile/android:app"],
-        artifact: "bazel-bin/projects/mobile/android/app/app.apk",
-        artifact_name: "android-app-debug",
+        // Owns the distributable APK inside `_android.yml`; selected whenever
+        // distribution is selected (see affected.mjs matrixEntries).
+        release: true,
+        // No generic artifact: the `android-app` entry of `_android.yml` builds,
+        // tests and signs the distributable APK itself and uploads it as
+        // `android-release-apk` (the one artifact that needs the Environment
+        // secrets).
       },
     },
 

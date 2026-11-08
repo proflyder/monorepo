@@ -192,6 +192,36 @@ test("testCommands honours BAZEL_TARGETS narrowed by CI", () => {
   }
 });
 
+test("build and test append BAZEL_EXTRA_ARGS so the tested APK is the signed one", () => {
+  // `_android.yml` sets the release versionCode/versionName this way; the same
+  // defines must reach both commands or Bazel builds two different APKs.
+  process.env.BAZEL_EXTRA_ARGS =
+    "--define home_version_code=1700000000 --define home_version_name=0.1.0-abc1234";
+  try {
+    assert.deepEqual(buildCommands(byId("app-one"))[0].args, [
+      "build",
+      "--config=android",
+      "--define",
+      "home_version_code=1700000000",
+      "--define",
+      "home_version_name=0.1.0-abc1234",
+      "//apps/one:app",
+    ]);
+    assert.deepEqual(testCommands(byId("app-one"))[0].args, [
+      "test",
+      "--config=android",
+      "--define",
+      "home_version_code=1700000000",
+      "--define",
+      "home_version_name=0.1.0-abc1234",
+      "//apps/one:one_test",
+      "--test_output=errors",
+    ]);
+  } finally {
+    delete process.env.BAZEL_EXTRA_ARGS;
+  }
+});
+
 test("testCommands compiles and discovers Python suites", () => {
   const commands = testCommands(byId("ha-voice"));
   assert.equal(commands.length, 2);

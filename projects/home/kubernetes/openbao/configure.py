@@ -33,9 +33,13 @@ GITHUB_REF = "refs/heads/develop"
 GITHUB_STATION_ENVIRONMENT = "Station"
 GITHUB_ANDROID_ENVIRONMENT = "Android"
 # Android App Distribution runs from PR CI, so every subject is the merge ref of
-# a pull request and the workflow that may mint the token is `ci.yml` there.
+# a pull request. Two OpenBao roles share the one `ci-android` policy:
+# `android-app-release` mints the token inside the reusable `_android.yml` entry
+# that builds and signs the APK, and `android-distribute` (ci.yml) only uploads
+# the resulting artifact to Firebase.
 GITHUB_ANDROID_REF = "refs/pull/*/merge"
 GITHUB_ANDROID_WORKFLOW = ".github/workflows/ci.yml"
+GITHUB_ANDROID_APP_WORKFLOW = ".github/workflows/_android.yml"
 GITHUB_ANDROID_EVENT = "pull_request"
 
 ADMIN_POLICY = """\
@@ -314,33 +318,40 @@ def ensure_github(bao: Bao, audience: str, repository: str,
         "clock_skew": 60,
     })
     print("role: auth/github/role/deploy-home (audience %s)" % audience)
-    # Android App Distribution runs inside PR CI (job `android-distribute` of
-    # ci.yml) from the `Android` Environment. Glob claims pin it to a PR merge
-    # ref and to that one workflow: `repository`, `environment`,
-    # `ref=refs/pull/*/merge`, `job_workflow_ref=<repo>/ci.yml@refs/pull/*/merge`
-    # and `event_name=pull_request`. A fork PR never receives an OIDC token
-    # (its run has read-only permissions and no Environment secrets), so only
-    # same-repository branches of collaborators can assume this role. The
-    # policy still exposes one KV record.
-    bao.expect("POST", "/v1/auth/github/role/android-distribute", {
-        "role_type": "jwt",
-        "user_claim": "job_workflow_ref",
-        "bound_audiences": [audience],
-        "bound_claims_type": "glob",
-        "bound_claims": {
-            "repository": repository,
-            "environment": GITHUB_ANDROID_ENVIRONMENT,
-            "ref": GITHUB_ANDROID_REF,
-            "job_workflow_ref":
-                f"{repository}/{GITHUB_ANDROID_WORKFLOW}@{GITHUB_ANDROID_REF}",
-            "event_name": GITHUB_ANDROID_EVENT,
-        },
-        "token_policies": ["ci-android"],
-        "token_ttl": "10m",
-        "token_max_ttl": "15m",
-        "clock_skew": 60,
-    })
-    print("role: auth/github/role/android-distribute (audience %s)" % audience)
+    # Android App Distribution runs inside PR CI from the `Android` Environment.
+    # Glob claims pin a role to a PR merge ref and to exactly one workflow file:
+    # `repository`, `environment`, `ref=refs/pull/*/merge`, `job_workflow_ref`
+    # and `event_name=pull_request`. The APK is built and signed by the reusable
+    # `_android.yml` (`android-app-release`, job_workflow_ref points at that
+    # file), so the upload job in `ci.yml` (`android-distribute`) keeps its own
+    # role: a token minted in one workflow cannot be replayed from the other.
+    # A fork PR never receives an OIDC token (its run has read-only permissions
+    # and no Environment secrets), so only same-repository branches of
+    # collaborators can assume either role. The policy still exposes one KV
+    # record.
+    android_roles = {
+        "android-app-release": GITHUB_ANDROID_APP_WORKFLOW,
+        "android-distribute": GITHUB_ANDROID_WORKFLOW,
+    }
+    for role, workflow in android_roles.items():
+        bao.expect("POST", f"/v1/auth/github/role/{role}", {
+            "role_type": "jwt",
+            "user_claim": "job_workflow_ref",
+            "bound_audiences": [audience],
+            "bound_claims_type": "glob",
+            "bound_claims": {
+                "repository": repository,
+                "environment": GITHUB_ANDROID_ENVIRONMENT,
+                "ref": GITHUB_ANDROID_REF,
+                "job_workflow_ref": f"{repository}/{workflow}@{GITHUB_ANDROID_REF}",
+                "event_name": GITHUB_ANDROID_EVENT,
+            },
+            "token_policies": ["ci-android"],
+            "token_ttl": "10m",
+            "token_max_ttl": "15m",
+            "clock_skew": 60,
+        })
+        print(f"role: auth/github/role/{role} (audience %s)" % audience)
     if not station_repository:
         return
     # The station deploy runs from a tag through a reusable workflow, so it
