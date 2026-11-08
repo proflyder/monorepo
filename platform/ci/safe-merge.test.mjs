@@ -19,7 +19,11 @@ import {
 const REPO = "acme/home-lab";
 const HEAD = "a".repeat(40);
 const HEAD2 = "b".repeat(40);
+const HEAD3 = "9".repeat(40);
 const MERGE = "c".repeat(40);
+const DEVELOP = "d".repeat(40);
+const DEVELOP2 = "e".repeat(40);
+const DEVELOP3 = "f".repeat(40);
 
 function clock(step = 1_000) {
   let time = 0;
@@ -36,15 +40,17 @@ const passChecks = {
 
 /**
  * Scripted `gh` fake. `compares` are successive compare responses, `checks`
- * successive check-runs responses, `runs` successive `gh run list` responses;
- * the last value repeats.
+ * successive check-runs responses, `runs` successive `gh run list` responses,
+ * `developShas` successive `develop` refs; the last value repeats.
  */
 function fakeGh({
   view,
   compares = [0],
   checks = [passChecks],
   runs = [[]],
+  developShas = [DEVELOP],
   nextHead = HEAD2,
+  nextHeads = null,
 } = {}) {
   const calls = [];
   const state = {
@@ -52,6 +58,8 @@ function fakeGh({
     compares: [...compares],
     checks: [...checks],
     runs: [...runs],
+    developShas: [...developShas],
+    nextHeads: nextHeads ? [...nextHeads] : null,
   };
   const take = (list) => (list.length > 1 ? list.shift() : list[0]);
   const exec = (command, args) => {
@@ -65,7 +73,8 @@ function fakeGh({
       return `${REPO}\n`;
     }
     if (group === "pr" && action === "update-branch") {
-      state.view = { ...state.view, headRefOid: nextHead };
+      const head = state.nextHeads ? take(state.nextHeads) : nextHead;
+      state.view = { ...state.view, headRefOid: head };
       return "";
     }
     if (group === "pr" && action === "merge") {
@@ -78,6 +87,9 @@ function fakeGh({
     }
     if (group === "api" && String(action).includes("/compare/")) {
       return JSON.stringify({ behind_by: take(state.compares) });
+    }
+    if (group === "api" && String(action).includes("/git/ref/heads/develop")) {
+      return JSON.stringify({ object: { sha: take(state.developShas) } });
     }
     if (group === "api" && String(action).includes("/check-runs")) {
       return JSON.stringify(take(state.checks));
@@ -111,6 +123,7 @@ function runFlow(exec, overrides = {}) {
     exec,
     pollMs: 1,
     updateWaitMs: 10,
+    compareWaitMs: 5_000,
     deployWaitMs: 10,
     deployPollMs: 1,
     now: clock(),
@@ -257,6 +270,9 @@ test("a failed branch update is a clear error and merges nothing", async () => {
     if (group === "api" && String(action).includes("/compare/")) {
       return JSON.stringify({ behind_by: 1 });
     }
+    if (group === "api" && String(action).includes("/git/ref/heads/develop")) {
+      return JSON.stringify({ object: { sha: DEVELOP } });
+    }
     if (group === "pr" && action === "update-branch") {
       throw new Error("merge conflict");
     }
@@ -313,23 +329,70 @@ test("pending ci-ok times out without merging", async () => {
 test("develop moving during CI triggers another refresh", async () => {
   const { calls, exec } = fakeGh({
     view: pullView(),
-    compares: [0, 2, 2, 0],
+    // head is current, ci runs, develop gets D2, then the refreshed head is current
+    compares: [0, 2, 2, 2, 0, 0],
+    developShas: [DEVELOP, DEVELOP2],
     checks: [passChecks],
     nextHead: HEAD2,
   });
   const { result } = await runFlow(exec);
   assert.equal(result.status, "merged");
-  assert.ok(hasCall(calls, "pr", "update-branch"));
+  assert.equal(calls.filter((call) => call[1] === "pr" && call[2] === "update-branch").length, 1);
   assert.equal(calls.filter((call) => call[1] === "pr" && call[2] === "merge").length, 1);
 });
 
-test("an endlessly moving develop gives up after the attempt limit", async () => {
+test("a stale compare after update-branch does not refresh again", async () => {
   const { calls, exec } = fakeGh({
     view: pullView(),
-    compares: [0, 1, 1],
+    // behind -> update; the new head still reports behind for one poll while
+    // develop itself is unchanged, then compare catches up
+    compares: [1, 1, 1, 0, 0],
+    developShas: [DEVELOP],
+    checks: [passChecks],
+    nextHead: HEAD2,
+  });
+  const { result } = await runFlow(exec, { maxUpdates: 1 });
+  assert.equal(result.status, "merged");
+  assert.equal(calls.filter((call) => call[1] === "pr" && call[2] === "update-branch").length, 1);
+});
+
+test("a real develop move after update-branch spends a move, not a refresh", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    // update, then compare reports behind while develop moves to D2 -> refresh again
+    compares: [1, 1, 1, 1, 1, 0, 0],
+    developShas: [DEVELOP, DEVELOP, DEVELOP2, DEVELOP2],
+    checks: [passChecks],
+    nextHeads: [HEAD2, HEAD3],
+  });
+  const { result } = await runFlow(exec, { maxMoves: 2 });
+  assert.equal(result.status, "merged");
+  assert.equal(calls.filter((call) => call[1] === "pr" && call[2] === "update-branch").length, 2);
+});
+
+test("a stale compare that never settles stops without a second refresh", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [1, 1],
+    developShas: [DEVELOP],
     checks: [passChecks],
   });
-  await assert.rejects(runFlow(exec, { maxAttempts: 2 }), /kept moving after 2 refresh/);
+  await assert.rejects(
+    runFlow(exec, { maxUpdates: 1 }),
+    /still reports 1 commit\(s\) behind develop after 5s while develop did not move/,
+  );
+  assert.equal(calls.filter((call) => call[1] === "pr" && call[2] === "update-branch").length, 1);
+  assert.ok(!hasCall(calls, "pr", "merge"));
+});
+
+test("real develop moves exhaust the move budget, never the refresh budget", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [0, 1, 1, 0, 1, 1],
+    developShas: [DEVELOP, DEVELOP2, DEVELOP3],
+    checks: [passChecks],
+  });
+  await assert.rejects(runFlow(exec, { maxMoves: 1 }), /moved 2 time\(s\) during the run/);
   assert.ok(!hasCall(calls, "pr", "merge"));
 });
 

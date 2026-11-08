@@ -40,9 +40,15 @@ export const BASE_BRANCH = "develop";
 /** Aggregate required check published by `.github/workflows/ci.yml`. */
 export const REQUIRED_CHECK = "ci-ok";
 export const DEFAULT_TIMEOUT_MIN = 90;
-export const DEFAULT_MAX_ATTEMPTS = 3;
+// Two independent budgets. `--max-updates` bounds how often the branch is
+// refreshed; the move budget only grows when `develop` really got a new commit
+// (a stale compare right after `update-branch` must not consume it).
+export const DEFAULT_MAX_UPDATES = 3;
+export const DEFAULT_MAX_MOVES = 3;
 export const DEFAULT_POLL_MS = 30_000;
 export const DEFAULT_UPDATE_WAIT_MS = 120_000;
+// GitHub's compare endpoint can lag a few seconds behind a branch update.
+export const DEFAULT_COMPARE_WAIT_MS = 60_000;
 export const DEFAULT_DEPLOY_WAIT_MS = 60_000;
 export const DEFAULT_DEPLOY_POLL_MS = 5_000;
 export const DEPLOY_WORKFLOW = "deploy-home.yml";
@@ -245,6 +251,61 @@ function behindBy(exec, repository, head) {
   return compared?.behind_by;
 }
 
+/** Current commit of `develop`, used to tell a real move from a stale compare. */
+function readDevelopSha(exec, repository) {
+  const ref = ghJson(
+    exec,
+    ["api", `repos/${repository}/git/ref/heads/${BASE_BRANCH}`],
+    `ref ${BASE_BRANCH}`,
+  );
+  const sha = ref?.object?.sha;
+  if (!COMMIT.test(String(sha || ""))) {
+    throw new Error(`cannot read the ${BASE_BRANCH} commit from the API`);
+  }
+  return String(sha);
+}
+
+/**
+ * Wait for a compare that lagged a branch update to catch up.
+ *
+ * `update-branch` changes the head immediately, but `compare` can keep
+ * reporting the old `behind_by` for a few seconds. Poll until the head contains
+ * `develop` (`behind_by === 0`) or `develop` really moves away from
+ * `baselineSha`; never treat the stale value as a reason to update again.
+ * Returns the last observation, with `timedOut` when neither happened.
+ */
+export async function waitForCompareSettled({
+  exec,
+  repository,
+  head,
+  baselineSha,
+  timeoutMs,
+  pollMs,
+  now,
+  sleep,
+  log = () => {},
+}) {
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    const behind = behindBy(exec, repository, head);
+    const developSha = readDevelopSha(exec, repository);
+    if (behind === 0) {
+      return { behindBy: 0, developSha, timedOut: false };
+    }
+    if (developSha !== baselineSha) {
+      return { behindBy: behind, developSha, timedOut: false };
+    }
+    if (now() >= deadline) {
+      return { behindBy: behind, developSha: baselineSha, timedOut: true };
+    }
+    log(
+      `compare for ${head.slice(0, 12)} is ${behind} commit(s) behind ${BASE_BRANCH}; ` +
+        `waiting for it to catch up`,
+    );
+    await sleep(pollMs);
+  }
+}
+
 /**
  * Poll `ci-ok` on one commit until it passes, fails or the timeout expires.
  */
@@ -350,9 +411,11 @@ export async function runSafeMerge(options) {
     dryRun = false,
     noUpdate = false,
     timeoutMin = DEFAULT_TIMEOUT_MIN,
-    maxAttempts = DEFAULT_MAX_ATTEMPTS,
+    maxUpdates = DEFAULT_MAX_UPDATES,
+    maxMoves = DEFAULT_MAX_MOVES,
     pollMs = DEFAULT_POLL_MS,
     updateWaitMs = DEFAULT_UPDATE_WAIT_MS,
+    compareWaitMs = DEFAULT_COMPARE_WAIT_MS,
     deployWaitMs = DEFAULT_DEPLOY_WAIT_MS,
     deployPollMs = DEFAULT_DEPLOY_POLL_MS,
     now = Date.now,
@@ -369,24 +432,81 @@ export async function runSafeMerge(options) {
   const pull = checkPull(prView(exec, pr));
   log(`PR #${pr} (${pull.url || "no url"}): ${pull.title}`);
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const decision = decideBehind({
-      behindBy: behindBy(exec, repository, pull.head),
-      noUpdate,
-    });
-    if (decision.action === "refuse") {
-      throw new Error(decision.message);
+  let developSha = readDevelopSha(exec, repository);
+  let updates = 0;
+  let moves = 0;
+  // True right after our own update-branch: until compare catches up, a
+  // non-zero behind_by is not a reason to update the branch again.
+  let refreshed = false;
+
+  const staleCompareError = (behind) =>
+    new Error(
+      `compare for ${pull.head.slice(0, 12)} still reports ` +
+        `${behind} commit(s) behind ${BASE_BRANCH} ` +
+        `after ${Math.round(compareWaitMs / 1000)}s while ${BASE_BRANCH} did not move; ` +
+        `nothing was merged — retry later`,
+    );
+
+  for (;;) {
+    let behind = behindBy(exec, repository, pull.head);
+
+    if (behind > 0) {
+      const decision = decideBehind({ behindBy: behind, noUpdate });
+      if (decision.action === "refuse") {
+        throw new Error(decision.message);
+      }
+
+      if (refreshed) {
+        // The head changed, but GitHub's compare can lag. Wait for it to catch
+        // up before deciding whether another refresh is actually needed.
+        const settled = await waitForCompareSettled({
+          exec,
+          repository,
+          head: pull.head,
+          baselineSha: developSha,
+          timeoutMs: compareWaitMs,
+          pollMs,
+          now,
+          sleep,
+          log,
+        });
+        if (settled.developSha !== developSha) {
+          developSha = settled.developSha;
+          moves += 1;
+          refreshed = false;
+          if (moves > maxMoves) {
+            throw new Error(
+              `${BASE_BRANCH} moved ${moves} time(s) while refreshing the branch; ` +
+                `nothing was merged — retry later`,
+            );
+          }
+          log(`${BASE_BRANCH} moved to ${developSha.slice(0, 12)}; re-evaluating`);
+          continue;
+        }
+        if (settled.behindBy !== 0) {
+          throw staleCompareError(settled.behindBy);
+        }
+        behind = 0;
+        refreshed = false;
+      }
     }
-    if (decision.action === "update") {
+
+    if (behind > 0) {
       if (dryRun) {
         log(
-          `[dry-run] PR head ${pull.head.slice(0, 12)} is ${decision.behindBy} commit(s) ` +
+          `[dry-run] PR head ${pull.head.slice(0, 12)} is ${behind} commit(s) ` +
             `behind ${BASE_BRANCH}; would run: gh pr update-branch ${pr}`,
         );
         return { status: "dry-run", wouldUpdate: true, head: pull.head };
       }
+      if (updates >= maxUpdates) {
+        throw new Error(
+          `refreshed the branch ${updates} time(s) without a stable base; ` +
+            `nothing was merged — retry later`,
+        );
+      }
       log(
-        `PR head ${pull.head.slice(0, 12)} is ${decision.behindBy} commit(s) behind ` +
+        `PR head ${pull.head.slice(0, 12)} is ${behind} commit(s) behind ` +
           `${BASE_BRANCH}; merging ${BASE_BRANCH} into the branch`,
       );
       const oldHead = pull.head;
@@ -398,6 +518,7 @@ export async function runSafeMerge(options) {
             error.message,
         );
       }
+      updates += 1;
       pull.head = await waitForNewHead({
         exec,
         pr,
@@ -408,6 +529,7 @@ export async function runSafeMerge(options) {
         sleep,
         log,
       });
+      refreshed = true;
       continue;
     }
 
@@ -436,15 +558,44 @@ export async function runSafeMerge(options) {
       return { status: "dry-run", wouldMerge: true, head: pull.head };
     }
 
-    const recheck = decideBehind({ behindBy: behindBy(exec, repository, pull.head) });
-    if (recheck.action === "update") {
-      log(
-        `${BASE_BRANCH} moved while CI was running (${recheck.behindBy} commit(s)); refreshing`,
-      );
-      if (attempt === maxAttempts) {
-        break;
+    const recheck = behindBy(exec, repository, pull.head);
+    if (recheck !== 0) {
+      const shaNow = readDevelopSha(exec, repository);
+      if (shaNow === developSha) {
+        // `develop` did not move, so the compare is lagging again; give it the
+        // same grace period instead of merging on a stale value.
+        const settled = await waitForCompareSettled({
+          exec,
+          repository,
+          head: pull.head,
+          baselineSha: developSha,
+          timeoutMs: compareWaitMs,
+          pollMs,
+          now,
+          sleep,
+          log,
+        });
+        if (settled.developSha === developSha) {
+          if (settled.behindBy !== 0) {
+            throw staleCompareError(settled.behindBy);
+          }
+        } else {
+          developSha = settled.developSha;
+        }
+      } else {
+        developSha = shaNow;
       }
-      continue;
+      if (behindBy(exec, repository, pull.head) !== 0) {
+        moves += 1;
+        if (moves > maxMoves) {
+          throw new Error(
+            `${BASE_BRANCH} moved ${moves} time(s) during the run; ` +
+              `nothing was merged — retry later`,
+          );
+        }
+        log(`${BASE_BRANCH} moved while CI was running; refreshing the branch`);
+        continue;
+      }
     }
 
     log(`merging PR #${pr} (squash) at ${pull.head.slice(0, 12)}`);
@@ -493,9 +644,6 @@ export async function runSafeMerge(options) {
     }
     return { status: "merged", head: pull.head, sha, deployRun };
   }
-  throw new Error(
-    `${BASE_BRANCH} kept moving after ${maxAttempts} refresh attempt(s); nothing was merged — retry later`,
-  );
 }
 
 export function spawnExec(command, args, options = {}) {
