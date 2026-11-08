@@ -11,7 +11,7 @@ metro_android_library(
     # the library exports it. This module declares CallActivity, the Telecom and
     # foreground services and the call permissions, so without this flag the
     # launcher crashes with ActivityNotFoundException.
-    exports_manifest = True,
+    exports_manifest = 1,
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
