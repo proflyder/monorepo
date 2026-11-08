@@ -386,6 +386,13 @@ jobs:
           BAZEL_TARGETS: ${{ steps.targets.outputs.build_targets }}
         run: mise run build ${{ inputs.unit }}
 
+      # The apk_abi_test log is only printed on failure (--test_output=errors),
+      # so repeat the ABI check on the built APK to show the packaged ABIs in
+      # the job log ("APK ABIs: arm64-v8a").
+      - name: Show APK ABIs
+        if: inputs.unit == 'android-app'
+        run: platform/android/apk_abi_test.sh bazel-bin/projects/mobile/android/app/app.apk
+
       # Same `--config=android` and the same version defines as the build step,
       # so `apk_runtime_closure_test` (and any APK-level test) inspects exactly
       # the APK that gets signed below instead of building a second variant.
