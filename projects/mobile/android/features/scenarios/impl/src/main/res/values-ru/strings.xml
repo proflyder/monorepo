@@ -81,6 +81,8 @@
     <string name="scenarios_editor_when">Когда</string>
     <string name="scenarios_editor_manual_note">Ручной запуск доступен всегда. Добавьте триггер по времени для автоматических запусков.</string>
     <string name="scenarios_editor_add_trigger">Добавить триггер</string>
+    <string name="scenarios_editor_add_trigger_title">Добавить триггер</string>
+    <string name="scenarios_editor_add_trigger_time">Время</string>
     <string name="scenarios_editor_if">Если</string>
     <string name="scenarios_editor_add_condition">Добавить условие</string>
     <string name="scenarios_editor_add_condition_title">Добавить условие</string>
@@ -110,6 +112,10 @@
     <string name="scenarios_catalog_failed">Каталог недоступен: %1$s. Нажмите, чтобы повторить.</string>
     <string name="scenarios_entry_has_no_actions">У этой записи каталога нет действий.</string>
     <string name="scenarios_action_dialog_title">Выберите действие</string>
+    <string name="scenarios_pin">Закрепить на главном</string>
+    <string name="scenarios_unpin">Открепить</string>
+    <string name="scenarios_favorite_pinned">Закреплено: %1$s</string>
+    <string name="scenarios_favorite_unpinned">Откреплено: %1$s</string>
     <string name="scenarios_action_run">Запустить</string>
     <string name="scenarios_action_turn_on">Включить</string>
     <string name="scenarios_action_turn_off">Выключить</string>

@@ -15,6 +15,8 @@ import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.feature.control.ControlItem
+import dev.proflyder.home.feature.control.HubCard
+import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.impl.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -54,6 +56,20 @@ class ControlProfileRowTest {
         override fun onToggleSettings(deviceId: String) {
             settingsToggles += deviceId
         }
+
+        override fun onHeaderClick(header: ControlItem.Header) = Unit
+
+        override fun onPinToggle(entry: ControlEntry) = Unit
+
+        override fun onHubCardClick(card: HubCard) = Unit
+
+        override fun onHubPrimary(card: HubCard) = Unit
+
+        override fun onHubSecondary(card: HubCard) = Unit
+
+        override fun onQuickTileClick(tile: QuickTile) = Unit
+
+        override fun onQuickTileLongClick(tile: QuickTile) = Unit
     }
 
     private fun profile(power: PowerState?, available: Boolean = true) = ControlEntry(

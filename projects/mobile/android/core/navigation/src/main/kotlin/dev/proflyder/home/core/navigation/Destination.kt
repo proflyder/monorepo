@@ -53,6 +53,14 @@ interface FeatureEntry {
 
     /** Fragments are no-arg; destination data is supplied via arguments. */
     fun createFragment(destination: Destination): Fragment
+
+    /**
+     * For a tab that groups several features (the "Time" tab hosts alarms,
+     * timers and reminders): the destination to open when one of those feature
+     * ids is passed to [dev.proflyder.home.core.navigation.Navigator.selectTab].
+     * Null means this tab does not host [featureId].
+     */
+    fun hostedDestination(featureId: String): Destination? = null
 }
 
 class FeatureRegistry(entries: Collection<FeatureEntry>) {

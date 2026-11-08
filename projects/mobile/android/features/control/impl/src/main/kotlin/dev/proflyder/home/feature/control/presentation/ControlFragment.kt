@@ -4,13 +4,15 @@ import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
-import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.FavoriteKind
+import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
+import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -20,9 +22,13 @@ import dev.proflyder.home.feature.control.ControlFilterOption
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.ControlItems
 import dev.proflyder.home.feature.control.ControlTexts
+import dev.proflyder.home.feature.control.HubCard
+import dev.proflyder.home.feature.control.QuickTile
+import dev.proflyder.home.feature.control.QuickTiles
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
+import kotlinx.coroutines.delay
 
 class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBinding.Companion::inflate) {
     internal val viewModel: ControlViewModel by activityViewModels {
@@ -43,8 +49,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     private val adapterCallback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
         override fun onItemClick(item: ControlItem) {
             when (item) {
-                // A scenario runs at once; a device-level action (speak) needs
-                // its text first.
+                // A native/HA scenario tile runs at once; a device-level action
+                // (speak) needs its text first.
                 is ControlItem.Scenario ->
                     if (item.entry.kind == ControlKind.ACTION) openSpeakDialog(item.entry)
                     else viewModel.run(item.entry)
@@ -55,8 +61,14 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     else viewModel.setPower(item.entry, !item.entry.isOn())
                 // A device group itself does nothing: its rows forward their taps.
                 // The profile is a mode: only its segmented buttons act.
-                is ControlItem.Header, is ControlItem.Profile, is ControlItem.DeviceGroup -> Unit
+                is ControlItem.Header, is ControlItem.Profile, is ControlItem.DeviceGroup,
+                is ControlItem.Hub, is ControlItem.QuickActions,
+                -> Unit
             }
+        }
+
+        override fun onItemLongClick(item: ControlItem) {
+            if (item is ControlItem.Device) showPinDialog(item.entry)
         }
 
         override fun onPowerChanged(entry: ControlEntry, on: Boolean) = viewModel.setPower(entry, on)
@@ -64,6 +76,44 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         override fun onProfileChanged(entry: ControlEntry, work: Boolean) = viewModel.setProfile(entry, work)
 
         override fun onToggleSettings(deviceId: String) = viewModel.toggleDeviceSettings(deviceId)
+
+        override fun onHeaderClick(header: ControlItem.Header) {
+            if (header.collapsible) viewModel.toggleRoom(header.section)
+        }
+
+        override fun onPinToggle(entry: ControlEntry) = showPinDialog(entry)
+
+        override fun onHubCardClick(card: HubCard) = openHubSection(card)
+
+        override fun onHubPrimary(card: HubCard) = viewModel.hubPrimary(card)
+
+        override fun onHubSecondary(card: HubCard) = viewModel.hubSecondary(card)
+
+        override fun onQuickTileClick(tile: QuickTile) {
+            when (tile) {
+                is QuickTile.Device ->
+                    if (tile.entry.light != null && tile.entry.available) openLightSheet(tile.entry)
+                    else viewModel.setPower(tile.entry, !tile.entry.isOn())
+                is QuickTile.Speak -> openSpeakDialog(tile.entry)
+                is QuickTile.ScenarioTile -> viewModel.runScenarioNow(tile.scenario)
+            }
+        }
+
+        override fun onQuickTileLongClick(tile: QuickTile) {
+            when (tile) {
+                // A light's long press is reserved for its adjustment sheet.
+                is QuickTile.Device ->
+                    if (tile.entry.light != null) openLightSheet(tile.entry)
+                    else viewModel.toggleFavoriteRef(FavoriteRef(FavoriteKind.DEVICE, tile.entry.id), tile.entry.displayName)
+                is QuickTile.Speak ->
+                    viewModel.toggleFavoriteRef(FavoriteRef(FavoriteKind.ACTION, tile.entry.id), tile.entry.displayName)
+                is QuickTile.ScenarioTile ->
+                    viewModel.toggleFavoriteRef(
+                        FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
+                        tile.scenario.label,
+                    )
+            }
+        }
     }
 
     override fun onBindingCreated(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
@@ -99,6 +149,13 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         }
 
         viewModel.state.observe { render(it) }
+
+        repeatOnView {
+            while (true) {
+                delay(1_000)
+                viewModel.tick()
+            }
+        }
     }
 
     internal fun openLightSheet(entry: ControlEntry) {
@@ -146,14 +203,29 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             else -> {
                 states.showContent()
                 renderFilters(state)
+                val tiles = QuickTiles.build(
+                    refs = state.favorites,
+                    entries = state.entries,
+                    scenarios = state.scenarios,
+                    pendingEntries = state.pending,
+                    pendingScenarios = state.pendingScenarios,
+                )
+                val leading = buildList<ControlItem> {
+                    if (state.hubCards.isNotEmpty()) {
+                        add(ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix))
+                    }
+                    add(ControlItem.QuickActions(tiles, hint = tiles.isEmpty()))
+                }
                 adapter.submitList(
                     ControlItems.build(
-                        state.entries,
-                        state.pending,
-                        state.statesOk,
-                        state.filter,
-                        texts(),
-                        state.expandedDevices,
+                        entries = state.entries,
+                        pending = state.pending,
+                        statesOk = state.statesOk,
+                        filter = state.filter,
+                        texts = texts(),
+                        expandedDevices = state.expandedDevices,
+                        leading = leading,
+                        collapsedRooms = state.collapsedRooms,
                     ),
                 )
             }
@@ -171,10 +243,42 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         }
         state.notice?.let { notice ->
             when (notice) {
-                is ControlNotice.ScenarioQueued -> Notices.show(binding.root, getString(R.string.control_scenario_queued, notice.title))
+                is ControlNotice.ScenarioQueued ->
+                    Notices.show(binding.root, getString(R.string.control_scenario_queued, notice.title))
+                is ControlNotice.FavoriteChanged ->
+                    Notices.show(
+                        binding.root,
+                        getString(
+                            if (notice.pinned) R.string.control_favorite_pinned else R.string.control_favorite_unpinned,
+                            notice.title,
+                        ),
+                    )
             }
             viewModel.consumeNotice()
         }
+    }
+
+    /** Long press in a room group: pin the device to Quick actions or unpin it. */
+    internal fun showPinDialog(entry: ControlEntry) {
+        val ref = FavoriteRef(FavoriteKind.DEVICE, entry.id)
+        val pinned = ref in viewModel.state.value.favorites
+        confirm(
+            message = entry.displayName,
+            positive = if (pinned) R.string.control_unpin else R.string.control_pin,
+            negative = android.R.string.cancel,
+            destructive = false,
+        ) { viewModel.toggleFavorite(entry) }
+    }
+
+    /** Tapping a live card jumps to the section that owns it. */
+    internal fun openHubSection(card: HubCard) {
+        val featureId = when (card) {
+            is HubCard.Alarm -> "alarms"
+            is HubCard.TimerCard -> "timers"
+            is HubCard.Reminder -> "reminders"
+            is HubCard.ScenarioCard -> "scenarios"
+        }
+        requireNavigator().selectTab(featureId)
     }
 
     private fun texts() = ControlTexts(

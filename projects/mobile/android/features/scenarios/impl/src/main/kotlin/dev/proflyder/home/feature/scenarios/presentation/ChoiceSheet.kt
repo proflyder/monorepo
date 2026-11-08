@@ -1,66 +1,45 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
 import android.content.Context
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.view.LayoutInflater
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.button.MaterialButton
+import dev.proflyder.home.feature.scenarios.impl.databinding.ItemChoiceRowBinding
+import dev.proflyder.home.feature.scenarios.impl.databinding.SheetChoiceBinding
 
 /**
- * Small bottom sheet with one full-width text action per row. Used instead of
- * a row of narrow buttons so labels never break mid-word on a phone.
+ * Material bottom sheet with one full-width, 56dp action row per choice:
+ * 24dp icon, body-large label, ripple over the whole row, no filled button.
  */
 internal class ChoiceSheet(
     context: Context,
     @StringRes titleRes: Int,
     private val choices: List<Choice>,
 ) {
-    data class Choice(@StringRes val labelRes: Int, val onClick: () -> Unit)
+    data class Choice(
+        val label: CharSequence,
+        @DrawableRes val iconRes: Int,
+        val onClick: () -> Unit,
+    )
 
     private val dialog = BottomSheetDialog(context)
 
     init {
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(context, 20), dp(context, 16), dp(context, 20), dp(context, 24))
-        }
-        root.addView(
-            TextView(context).apply {
-                setText(titleRes)
-                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleMedium)
-                setPadding(0, 0, 0, dp(context, 8))
-            },
-        )
+        val views = SheetChoiceBinding.inflate(LayoutInflater.from(context))
+        views.choiceTitle.setText(titleRes)
         choices.forEach { choice ->
-            root.addView(
-                MaterialButton(
-                    context,
-                    null,
-                    com.google.android.material.R.style.Widget_Material3_Button_TextButton,
-                ).apply {
-                    setText(choice.labelRes)
-                    isAllCaps = false
-                    maxLines = 1
-                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                    )
-                    setOnClickListener {
-                        dialog.dismiss()
-                        choice.onClick()
-                    }
-                },
-            )
+            val row = ItemChoiceRowBinding.inflate(LayoutInflater.from(context), views.choiceItems, false)
+            row.choiceIcon.setImageResource(choice.iconRes)
+            row.choiceLabel.text = choice.label
+            row.root.setOnClickListener {
+                dialog.dismiss()
+                choice.onClick()
+            }
+            views.choiceItems.addView(row.root)
         }
-        dialog.setContentView(root)
+        dialog.setContentView(views.root)
     }
 
     fun show() = dialog.show()
-
-    private fun dp(context: Context, value: Int): Int =
-        (value * context.resources.displayMetrics.density).toInt()
 }
