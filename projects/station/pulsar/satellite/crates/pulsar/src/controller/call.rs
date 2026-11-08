@@ -32,8 +32,8 @@ impl Controller {
                 self.deps.frontend.set_commands(false);
                 self.deps.call.set_muted(self.mic_muted());
                 self.call_paused_music = self.music_pause();
-                // Короткий сигнал: отдельного «звонкового» ассета в прошивке нет, берём
-                // таймерный earcon (~1.5 с) — он не пересекается с речью и узнаваем.
+                // Сигнал вызова: отдельного «звонкового» ассета в прошивке нет, берём
+                // таймерный earcon. Он длиннее ответа (до ~8 с), поэтому гасится на Active/Ended.
                 self.deps.player.play(
                     Channel::Announce,
                     vec![earcons::path(self.model.earcons.timer)],
@@ -43,6 +43,7 @@ impl Controller {
             CallEvent::Active => {
                 if self.call_active {
                     info!("call: media active");
+                    self.deps.player.stop(Channel::Announce);
                     self.update_ui();
                 }
             }
@@ -52,6 +53,7 @@ impl Controller {
                 }
                 self.call_active = false;
                 info!("call: ended");
+                self.deps.player.stop(Channel::Announce);
                 self.deps.frontend.set_streaming(false);
                 self.update_detection();
                 self.update_commands();
