@@ -1712,6 +1712,72 @@ schedule_announce:
           voice: ru_puriso2-medium
       continue_on_error: true
 
+speak_text:
+  alias: "Speak a text on the station"
+  description: >-
+    Speak an arbitrary text on the station through the Assist satellite. Stays
+    silent while the alarm is ringing, and falls back to schedule_announce when
+    the satellite is not ready. The text is caller data: never log it.
+  mode: queued
+  max: 10
+  fields:
+    message:
+      description: "Text to speak (1-500 characters)"
+      required: true
+      example: "Вода закипела."
+      selector:
+        text:
+          multiline: true
+          max: 500
+  variables:
+    speak_satellite: assist_satellite.iandeks_stantsiia_midi_assist_satellite
+  sequence:
+    # Never talk over a ringing alarm: the wake phrase and the chime own the
+    # speaker then, and a spoken text would cut the ringtone.
+    - condition: template
+      value_template: "{{ not is_state('input_boolean.alarm_ringing', 'on') }}"
+    - condition: template
+      value_template: >-
+        {{ message is defined and message is string
+           and (message | trim | length) > 0
+           and (message | trim | length) <= 500 }}
+    - variables:
+        speak_message: "{{ message | trim }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: >-
+                {{ is_state(speak_satellite, 'unavailable')
+                   or is_state(speak_satellite, 'unknown') }}
+          sequence:
+            - service: script.schedule_announce
+              data:
+                message: "{{ speak_message }}"
+              continue_on_error: true
+      default:
+        # announce goes through the Assist pipeline, so Pulsar ducks music
+        # instead of leaving the Sendspin group as tts.speak on a plain media
+        # player would.
+        - service: assist_satellite.announce
+          target:
+            entity_id: "{{ speak_satellite }}"
+          data:
+            message: "{{ speak_message }}"
+            preannounce: false
+          continue_on_error: true
+        # continue_on_error hides the failure, so the satellite state is the
+        # only observable signal: a failed announce leaves it unavailable.
+        - if:
+            - condition: template
+              value_template: >-
+                {{ is_state(speak_satellite, 'unavailable')
+                   or is_state(speak_satellite, 'unknown') }}
+          then:
+            - service: script.schedule_announce
+              data:
+                message: "{{ speak_message }}"
+              continue_on_error: true
+
 schedule_alarm_create:
   alias: "Scheduler: create alarm"
   description: "Create an alarm in the canonical SchedulerService with wall time, IANA timezone and repeat."

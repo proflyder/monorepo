@@ -10,4 +10,8 @@
     <string name="control_profile_work">Рабочий</string>
     <string name="control_profile_states_unknown">Состояние неизвестно</string>
     <string name="control_device_settings">Настройки (%1$d)</string>
+    <string name="control_section_actions">Действия</string>
+    <string name="control_speak_title">Сказать на колонке</string>
+    <string name="control_speak_hint">Текст для озвучивания</string>
+    <string name="control_speak_send">Сказать</string>
 </resources>

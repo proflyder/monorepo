@@ -758,6 +758,62 @@ class AssistSatelliteRecoveryTests(unittest.TestCase):
         self.assertIn("01M5TAMM4T0CH5RASFJR8MSKT7", dump)
 
 
+class StationSpeakTests(unittest.TestCase):
+    """The catalog "speak on the station" action calls this script."""
+
+    SATELLITE = "assist_satellite.iandeks_stantsiia_midi_assist_satellite"
+
+    def test_speak_text_is_a_bounded_queued_script(self):
+        script = SCRIPTS["speak_text"]
+        self.assertEqual(script["mode"], "queued")
+        self.assertIn("description", script)
+        field = script["fields"]["message"]
+        self.assertTrue(field["required"])
+        self.assertEqual(field["selector"]["text"]["max"], 500)
+        dump = yaml.safe_dump(script, allow_unicode=True)
+        self.assertIn("1-500", dump)
+
+    def test_speak_text_never_talks_over_the_alarm(self):
+        script = SCRIPTS["speak_text"]
+        first = script["sequence"][0]
+        self.assertEqual(first["condition"], "template")
+        self.assertIn("input_boolean.alarm_ringing", first["value_template"])
+
+    def test_speak_text_uses_the_assist_satellite_and_falls_back(self):
+        script = SCRIPTS["speak_text"]
+        calls = services(script)
+        self.assertIn("assist_satellite.announce", calls)
+        self.assertIn("script.schedule_announce", calls)
+        # tts.speak on a plain media player leaves the Sendspin group; the
+        # announce path is the duck-safe one.
+        self.assertNotIn("tts.speak", calls)
+        dump = yaml.safe_dump(script, allow_unicode=True)
+        self.assertIn(self.SATELLITE, dump)
+        self.assertIn("preannounce: false", dump)
+
+        announce = next(
+            step
+            for step in _walk(script["sequence"])
+            if isinstance(step, dict) and step.get("service") == "assist_satellite.announce"
+        )
+        self.assertTrue(announce.get("continue_on_error"))
+        fallback = next(
+            step
+            for step in _walk(script["sequence"])
+            if isinstance(step, dict) and step.get("service") == "script.schedule_announce"
+        )
+        self.assertTrue(fallback.get("continue_on_error"))
+
+
+def _walk(value: Any) -> list[Any]:
+    """Every dict/list node of a parsed script, in source order."""
+    if isinstance(value, dict):
+        return [value] + [node for child in value.values() for node in _walk(child)]
+    if isinstance(value, list):
+        return [node for child in value for node in _walk(child)]
+    return []
+
+
 class VoiceStackTests(unittest.TestCase):
     def test_gigaam_wyoming_service_is_configured(self):
         compose = yaml.safe_load((ROOT / "projects" / "home-assistant" / "stack" / "docker-compose.yml").read_text())

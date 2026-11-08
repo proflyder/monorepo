@@ -8,5 +8,6 @@ import org.junit.runners.Suite
     ControlFilterTest::class,
     ControlItemsTest::class,
     LightColorsTest::class,
+    SpeakTextTest::class,
 )
 class AllControlApiTests

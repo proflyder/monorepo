@@ -33,6 +33,9 @@ class ConnectControlRepository(
     override suspend fun adjust(entryId: String, adjust: LightAdjust): Outcome<Unit> =
         enqueue(ControlJson.adjustPayload(entryId, adjust))
 
+    override suspend fun speak(entryId: String, text: String): Outcome<Unit> =
+        enqueue(ControlJson.speakPayload(entryId, text))
+
     private suspend fun enqueue(payloadJson: String): Outcome<Unit> =
         when (
             val queued = scheduler.enqueueTask(

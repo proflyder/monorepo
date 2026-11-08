@@ -6,6 +6,10 @@
     <string name="control_section_profile">Voice profile</string>
     <string name="control_section_other">Other devices</string>
     <string name="control_section_unavailable">Unavailable</string>
+    <string name="control_section_actions">Actions</string>
+    <string name="control_speak_title">Say on the station</string>
+    <string name="control_speak_hint">Text to say</string>
+    <string name="control_speak_send">Say</string>
     <string name="control_on_summary">%1$d of %2$d on</string>
     <string name="control_filter_all">All</string>
     <string name="control_filter_scenarios">Scenarios</string>

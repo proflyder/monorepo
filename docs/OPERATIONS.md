@@ -1160,6 +1160,24 @@ Home control (каталог устройств/сценариев):
 без `/v1/catalog`. Переключение исполнения:
 `deploy.sh --control-execute|--control-catalog`.
 
+«Сказать на колонке» (`action.station_speak`) требует HA-скрипт
+`script.speak_text`. Проверка каталога (bearer — тот же, что у control):
+
+```bash
+curl -fsS -H "Authorization: Bearer $CONTROL_TOKEN" \
+  https://control.home.example.com/v1/catalog \
+  | jq '.entries[] | select(.kind == "action") | {id, title, device, room, actions}'
+```
+
+Записи нет — значит `script.speak_text` отсутствует или скрыт в HA. Команда
+идёт обычной задачей `home.control`/очередь `control`:
+`{"entry":"action.station_speak","action":"speak","text":"…"}` (1–500
+символов, без управляющих). Результат — `ACK_DELIVERED` после 2xx HA;
+`ACK_FAILED` означает неверный текст/неизвестный entry, detail текста не
+содержит. Скрипт молчит при `input_boolean.alarm_ringing = on` и при
+неготовом сателлите откатывается на `schedule_announce`. Текст не пишется в
+логи, ledger, `detail` и отчёты — не добавляйте его в диагностические команды.
+
 Endpoint для Android: `https://alarms.home.example.com` (scheduler) и
 `https://control.home.example.com` (каталог) через Traefik + Let's Encrypt;
 LAN endpoint — `http://<node>:30098`. Переключение Android на HTTPS-имена —

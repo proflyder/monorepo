@@ -47,6 +47,17 @@ object ControlJson {
             put("action", action.wire)
         }.toString()
 
+    /**
+     * Payload of a speak action. The text is user content: it travels only in
+     * the task payload and is never put in a URL, a log line or an error.
+     */
+    fun speakPayload(entryId: String, text: String): String =
+        buildJsonObject {
+            put("entry", entryId)
+            put("action", ControlAction.SPEAK.wire)
+            put("text", text)
+        }.toString()
+
     /** Payload of a light adjustment: only the fields that are set are sent. */
     fun adjustPayload(entryId: String, adjust: LightAdjust): String =
         buildJsonObject {
@@ -74,6 +85,9 @@ object ControlJson {
             "light" -> ControlKind.LIGHT
             "switch" -> ControlKind.SWITCH
             "profile" -> ControlKind.PROFILE
+            "action" -> ControlKind.ACTION
+            // An unknown kind stays OTHER, so an older app never drives a
+            // command it does not understand.
             else -> ControlKind.OTHER
         }
         val actions = (o["actions"] as? JsonArray).orEmpty()

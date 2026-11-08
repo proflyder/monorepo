@@ -55,3 +55,14 @@ import dev.zacsweers.metro.Inject
     suspend operator fun invoke(entry: ControlEntry, adjust: LightAdjust): Outcome<Unit> =
         repository.adjust(entry.id, adjust)
 }
+
+/**
+ * Speaks a text on the station. The text is already normalized and validated
+ * by [dev.proflyder.home.feature.control.SpeakText]; the server re-validates it.
+ */
+@Inject class SpeakOnStation(
+    private val repository: ControlRepository,
+) {
+    suspend operator fun invoke(entry: ControlEntry, text: String): Outcome<Unit> =
+        repository.speak(entry.id, text)
+}

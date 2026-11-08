@@ -41,8 +41,9 @@ pub struct LightInput {
     pub color_mode: String,
 }
 
-/// The adjustments of a `set` command. `None` leaves a value untouched.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+/// The adjustments of a `set` command plus the text of a `speak` action.
+/// `None` leaves a value untouched.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct Params {
     #[serde(default)]
     pub brightness: Option<i32>,
@@ -52,6 +53,10 @@ pub struct Params {
     pub hue: Option<i32>,
     #[serde(default)]
     pub saturation: Option<i32>,
+    /// Text of a `speak` action. It is validated and sent as a script
+    /// variable, never stored, logged or echoed in an ack detail.
+    #[serde(default)]
+    pub text: Option<String>,
 }
 
 /// A rejected light adjustment.

@@ -29,6 +29,10 @@ pub enum Kind {
     /// The assistant's named profile; a plain switch where on is the
     /// non-default profile.
     Profile,
+    /// A device-level one-shot action that is not an entity of its own, for
+    /// example speaking a text on the speaker. It carries the owning device
+    /// and resolves to its own allowlisted service call.
+    Action,
 }
 
 impl Kind {
@@ -40,6 +44,7 @@ impl Kind {
             Self::Light => "light",
             Self::Switch => "switch",
             Self::Profile => "profile",
+            Self::Action => "action",
         }
     }
 }
@@ -49,9 +54,21 @@ pub const ACTION_RUN: &str = "run";
 pub const ACTION_TURN_ON: &str = "turn_on";
 pub const ACTION_TURN_OFF: &str = "turn_off";
 pub const ACTION_SET: &str = "set";
+pub const ACTION_SPEAK: &str = "speak";
 
 /// The scheduler task type of a control command.
 pub const TASK_TYPE: &str = "home.control";
+
+/// Synthetic catalog id of the "speak on the speaker" action.
+pub const SPEAK_ENTRY_ID: &str = "action.station_speak";
+/// The Home Assistant script that performs the speech. The action entry only
+/// exists while Home Assistant exposes this script, so a server without the
+/// script never advertises the action.
+pub const SPEAK_SCRIPT: &str = "script.speak_text";
+/// The satellite entity whose device/room the action belongs to.
+const SPEAK_SATELLITE_DOMAIN: &str = "assist_satellite";
+/// Longest text the action accepts, in characters.
+pub const SPEAK_MAX_TEXT: usize = 500;
 
 const MAX_ENTRIES: usize = 200;
 const MAX_TEXT: usize = 80;
@@ -209,6 +226,9 @@ impl Entry {
         if self.kind == Kind::Scenario {
             return vec![ACTION_RUN];
         }
+        if self.kind == Kind::Action {
+            return vec![ACTION_SPEAK];
+        }
         if self.light.is_some() {
             return vec![ACTION_TURN_ON, ACTION_TURN_OFF, ACTION_SET];
         }
@@ -242,6 +262,19 @@ impl Entry {
                 entity: self.entity.clone(),
                 data: Map::new(),
             }),
+            (Kind::Action, ACTION_SPEAK) => {
+                let text = speak_text(params)?;
+                let mut variables = Map::new();
+                variables.insert("message".to_owned(), Value::String(text));
+                let mut data = Map::new();
+                data.insert("variables".to_owned(), Value::Object(variables));
+                Ok(ServiceCall {
+                    domain: "script".to_owned(),
+                    service: ACTION_TURN_ON.to_owned(),
+                    entity: SPEAK_SCRIPT.to_owned(),
+                    data,
+                })
+            }
             (kind, ACTION_TURN_ON | ACTION_TURN_OFF) if kind != Kind::Scenario => Ok(ServiceCall {
                 domain,
                 service: action.to_owned(),
@@ -270,6 +303,41 @@ pub enum ResolveError {
     },
     #[error("{0}")]
     Light(#[from] light::LightError),
+    #[error("{0}")]
+    Speak(#[from] SpeakError),
+}
+
+/// Why a `speak` text was rejected. Messages never contain the text itself:
+/// it is user content and must not reach logs or ack details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SpeakError {
+    #[error("speak needs a text")]
+    Missing,
+    #[error("speak text is empty")]
+    Empty,
+    #[error("speak text is longer than {SPEAK_MAX_TEXT} characters")]
+    TooLong,
+    #[error("speak text contains control characters")]
+    ControlCharacters,
+}
+
+/// Validate and trim the text of a `speak` action.
+///
+/// The text is bounded by characters, must contain something after trimming
+/// and must not contain control characters (`\n`, `\t`, escape/format
+/// characters), so a task cannot smuggle terminal or log control sequences.
+fn speak_text(params: &Params) -> Result<String, SpeakError> {
+    let text = params.text.as_deref().ok_or(SpeakError::Missing)?.trim();
+    if text.is_empty() {
+        return Err(SpeakError::Empty);
+    }
+    if text.chars().count() > SPEAK_MAX_TEXT {
+        return Err(SpeakError::TooLong);
+    }
+    if text.chars().any(char::is_control) {
+        return Err(SpeakError::ControlCharacters);
+    }
+    Ok(text.to_owned())
 }
 
 /// Home Assistant domain of an entity id.
@@ -353,6 +421,10 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
         entries.push(entry);
     }
 
+    if let Some(entry) = speak_entry(raws) {
+        entries.push(entry);
+    }
+
     entries.sort_by(|a, b| {
         let rank_a = rank(a.kind);
         let rank_b = rank(b.kind);
@@ -371,8 +443,49 @@ fn rank(kind: Kind) -> u8 {
     match kind {
         Kind::Profile => 0,
         Kind::Scenario => 1,
-        Kind::Light | Kind::Switch => 2,
+        Kind::Action => 2,
+        Kind::Light | Kind::Switch => 3,
     }
+}
+
+/// Title and icon of the synthetic speak action. They are fixed, because the
+/// action has no Home Assistant entity of its own to take a name from.
+const SPEAK_TITLE: &str = "Сказать на колонке";
+const SPEAK_ICON: &str = "message-text";
+
+/// The synthetic "speak this text on the speaker" entry.
+///
+/// It exists only while Home Assistant exposes [`SPEAK_SCRIPT`]. Its device
+/// and room come from the satellite entity when discovery saw one; without
+/// that metadata the action is still offered, just ungrouped. The script is
+/// looked up by its fixed id, so neither the payload nor an attacker-chosen
+/// entity can redirect the call.
+fn speak_entry(raws: &[Raw]) -> Option<Entry> {
+    let script = raws
+        .iter()
+        .find(|raw| raw.entity == SPEAK_SCRIPT && !raw.hidden)?;
+    let anchor = raws
+        .iter()
+        .find(|raw| domain_of(&raw.entity) == SPEAK_SATELLITE_DOMAIN && valid_entity(&raw.entity));
+    let state = script.state.trim().to_lowercase();
+    Some(Entry {
+        id: SPEAK_ENTRY_ID.to_owned(),
+        kind: Kind::Action,
+        title: SPEAK_TITLE.to_owned(),
+        room: anchor.map_or_else(String::new, |raw| truncate_chars(raw.room.trim(), MAX_TEXT)),
+        icon: SPEAK_ICON.to_owned(),
+        entity: SPEAK_SCRIPT.to_owned(),
+        state: String::new(),
+        available: !state.is_empty() && state != "unavailable" && state != "unknown",
+        device_id: anchor.map_or_else(String::new, |raw| {
+            truncate_chars(raw.device_id.trim(), MAX_TEXT)
+        }),
+        device: anchor.map_or_else(String::new, |raw| {
+            truncate_chars(raw.device.trim(), MAX_TEXT)
+        }),
+        role: "primary".to_owned(),
+        light: None,
+    })
 }
 
 fn kind_of(domain: &str) -> Option<Kind> {
@@ -1095,6 +1208,182 @@ mod tests {
                 .expect_err("run is not a light action")
                 .to_string()
                 .contains("not supported")
+        );
+    }
+
+    fn speak_raws(script_state: &str) -> Vec<Raw> {
+        vec![
+            Raw {
+                entity: SPEAK_SCRIPT.to_owned(),
+                state: script_state.to_owned(),
+                name: "Speak text".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "assist_satellite.station_satellite".to_owned(),
+                state: "idle".to_owned(),
+                name: "Яндекс Станция Миди Assist satellite".to_owned(),
+                room: "Гостиная".to_owned(),
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                ..Raw::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn speak_action_exists_only_with_the_home_assistant_script() {
+        let entries = build(&speak_raws("off"), &rules());
+        let speak = entries
+            .iter()
+            .find(|entry| entry.id == SPEAK_ENTRY_ID)
+            .expect("speak action");
+        assert_eq!(speak.kind, Kind::Action);
+        assert_eq!(speak.kind.as_str(), "action");
+        assert_eq!(speak.title, "Сказать на колонке");
+        assert_eq!(speak.actions(), vec![ACTION_SPEAK]);
+        assert_eq!(speak.device_id, "station-1");
+        assert_eq!(speak.device, "Яндекс Станция Миди");
+        assert_eq!(speak.room, "Гостиная");
+        assert!(speak.available);
+        // The script itself is not a scenario (no label), so it adds no entry
+        // of its own.
+        assert!(!entries.iter().any(|entry| entry.id == SPEAK_SCRIPT));
+
+        // Without the script the action is not advertised at all.
+        let without: Vec<Raw> = speak_raws("off")
+            .into_iter()
+            .filter(|raw| raw.entity != SPEAK_SCRIPT)
+            .collect();
+        assert!(
+            !build(&without, &rules())
+                .iter()
+                .any(|entry| entry.id == SPEAK_ENTRY_ID)
+        );
+
+        // A hidden script is disabled by the user, exactly like other entities.
+        let mut hidden = speak_raws("off");
+        if let Some(raw) = hidden.iter_mut().find(|raw| raw.entity == SPEAK_SCRIPT) {
+            raw.hidden = true;
+        }
+        assert!(
+            !build(&hidden, &rules())
+                .iter()
+                .any(|entry| entry.id == SPEAK_ENTRY_ID)
+        );
+
+        // Unavailable script: the action stays but is reported unavailable.
+        let unavailable = build(&speak_raws("unavailable"), &rules());
+        assert!(
+            !unavailable
+                .iter()
+                .find(|entry| entry.id == SPEAK_ENTRY_ID)
+                .expect("speak action")
+                .available
+        );
+    }
+
+    #[test]
+    fn speak_without_a_satellite_stays_available_but_ungrouped() {
+        let raws: Vec<Raw> = speak_raws("off")
+            .into_iter()
+            .filter(|raw| !raw.entity.starts_with(SPEAK_SATELLITE_DOMAIN))
+            .collect();
+        let speak = build(&raws, &rules())
+            .into_iter()
+            .find(|entry| entry.id == SPEAK_ENTRY_ID)
+            .expect("speak action");
+        assert!(speak.available);
+        assert!(speak.device_id.is_empty());
+        assert!(speak.device.is_empty());
+        assert!(speak.room.is_empty());
+    }
+
+    #[test]
+    fn speak_resolves_to_the_allowlisted_script_and_trims_the_text() {
+        let entries = build(&speak_raws("off"), &rules());
+        let speak = entries
+            .iter()
+            .find(|entry| entry.id == SPEAK_ENTRY_ID)
+            .expect("speak action");
+        let call = speak
+            .resolve(
+                ACTION_SPEAK,
+                &Params {
+                    text: Some("  Привет, дом.  ".to_owned()),
+                    ..Params::default()
+                },
+            )
+            .expect("speak");
+        assert_eq!(
+            (
+                call.domain.as_str(),
+                call.service.as_str(),
+                call.entity.as_str()
+            ),
+            ("script", "turn_on", SPEAK_SCRIPT)
+        );
+        assert_eq!(
+            call.data["variables"]["message"],
+            Value::from("Привет, дом.")
+        );
+        assert_eq!(call.data.len(), 1);
+
+        // The action accepts only `speak`.
+        assert!(
+            speak
+                .resolve(ACTION_RUN, &Params::default())
+                .expect_err("run is not an action")
+                .to_string()
+                .contains("not supported")
+        );
+    }
+
+    #[test]
+    fn speak_text_is_validated_without_echoing_it() {
+        let entries = build(&speak_raws("off"), &rules());
+        let speak = entries
+            .iter()
+            .find(|entry| entry.id == SPEAK_ENTRY_ID)
+            .expect("speak action");
+        let cases = [
+            (None, "speak needs a text"),
+            (Some(String::new()), "speak text is empty"),
+            (Some("   \n\t ".to_owned()), "speak text is empty"),
+            (
+                Some("ж".repeat(SPEAK_MAX_TEXT + 1)),
+                "speak text is longer than 500 characters",
+            ),
+            (
+                Some("привет\u{0}мир".to_owned()),
+                "speak text contains control characters",
+            ),
+        ];
+        for (text, expected) in cases {
+            let error = speak
+                .resolve(
+                    ACTION_SPEAK,
+                    &Params {
+                        text,
+                        ..Params::default()
+                    },
+                )
+                .expect_err("invalid text");
+            assert_eq!(error.to_string(), expected);
+            assert!(!error.to_string().contains("привет"));
+        }
+        // Exactly the limit is accepted.
+        let limit = "ж".repeat(SPEAK_MAX_TEXT);
+        assert!(
+            speak
+                .resolve(
+                    ACTION_SPEAK,
+                    &Params {
+                        text: Some(limit),
+                        ..Params::default()
+                    }
+                )
+                .is_ok()
         );
     }
 

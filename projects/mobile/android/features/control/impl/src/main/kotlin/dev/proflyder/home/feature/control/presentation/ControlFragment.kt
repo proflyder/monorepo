@@ -6,6 +6,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.model.ControlEntry
+import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
@@ -36,12 +37,17 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     private var chipFilters: Map<Int, ControlFilter> = emptyMap()
     private var syncingChips = false
     private var lightSheet: LightSheet? = null
+    private var speakDialog: SpeakDialog? = null
 
     /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
         override fun onItemClick(item: ControlItem) {
             when (item) {
-                is ControlItem.Scenario -> viewModel.run(item.entry)
+                // A scenario runs at once; a device-level action (speak) needs
+                // its text first.
+                is ControlItem.Scenario ->
+                    if (item.entry.kind == ControlKind.ACTION) openSpeakDialog(item.entry)
+                    else viewModel.run(item.entry)
                 // An adjustable light opens its sheet; anything else flips on a row tap.
                 // The switch itself always reports its own target state.
                 is ControlItem.Device ->
@@ -101,9 +107,17 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             .also { it.show() }
     }
 
+    internal fun openSpeakDialog(entry: ControlEntry) {
+        speakDialog?.dismiss()
+        speakDialog = SpeakDialog(requireContext()) { text -> viewModel.speak(entry, text) }
+            .also { it.show() }
+    }
+
     override fun onBindingDestroyed() {
         lightSheet?.dismiss()
         lightSheet = null
+        speakDialog?.dismiss()
+        speakDialog = null
         shownOptions = emptyList()
         chipFilters = emptyMap()
     }
@@ -169,6 +183,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         unavailable = getString(R.string.control_section_unavailable),
         profile = getString(R.string.control_section_profile),
         onSummary = { on, total -> getString(R.string.control_on_summary, on, total) },
+        actions = getString(R.string.control_section_actions),
     )
 
     private fun renderFilters(state: ControlUiState) {

@@ -62,6 +62,7 @@ class ControlCatalogClientTest {
          {"id":"voice","kind":"profile","title":"Voice profile","actions":["turn_on","turn_off"],"state":"on","available":true},
          {"id":"focus","kind":"scenario","title":"Focus","icon":"work","actions":["run"],"available":true},
          {"id":"lamp","kind":"light","title":"Lamp","room":"Bedroom","actions":["turn_on","turn_off","bogus"],"state":"on","available":true},
+         {"id":"action.station_speak","kind":"action","title":"Сказать на колонке","device_id":"station-1","device":"Колонка","actions":["speak"],"available":true},
          {"id":"odd","kind":"lock","title":"Odd","actions":[],"available":false}]}
     """.trimIndent()
 
@@ -71,8 +72,8 @@ class ControlCatalogClientTest {
         val result = client().fetch()
         val catalog = (result as Outcome.Success).value
         assertTrue(catalog.statesOk)
-        assertEquals(4, catalog.entries.size)
-        val (voice, focus, lamp, odd) = catalog.entries
+        assertEquals(5, catalog.entries.size)
+        val (voice, focus, lamp, speak, odd) = catalog.entries
         assertEquals(ControlKind.PROFILE, voice.kind)
         assertTrue(voice.isProfile)
         assertFalse(voice.isDevice)
@@ -85,6 +86,10 @@ class ControlCatalogClientTest {
         assertEquals(PowerState.ON, lamp.power)
         assertEquals("Bedroom", lamp.room)
         assertEquals(setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF), lamp.actions)
+        assertEquals(ControlKind.ACTION, speak.kind)
+        assertEquals(setOf(ControlAction.SPEAK), speak.actions)
+        assertEquals("station-1", speak.deviceId)
+        assertNull(speak.power)
         assertEquals(ControlKind.OTHER, odd.kind)
         assertFalse(odd.available)
 
@@ -181,5 +186,17 @@ class ControlCatalogClientTest {
                 dev.proflyder.home.core.model.LightAdjust(brightnessPct = 55, hue = 120, saturation = 80),
             ),
         )
+    }
+
+    @Test
+    fun buildsSpeakPayloadWithTheTextOnlyInTheTask() {
+        val payload = ControlJson.speakPayload("action.station_speak", "Добрый вечер")
+        assertEquals(
+            """{"entry":"action.station_speak","action":"speak","text":"Добрый вечер"}""",
+            payload,
+        )
+        // Normalization happens before this point; the codec must not drop or
+        // escape Cyrillic text.
+        assertTrue(payload.contains("Добрый вечер"))
     }
 }
