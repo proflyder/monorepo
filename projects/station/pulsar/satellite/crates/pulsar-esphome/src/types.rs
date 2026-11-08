@@ -203,6 +203,20 @@ pub enum MediaState {
     On = 6,
 }
 
+impl MediaState {
+    /// The value sent in `MediaPlayerStateResponse`. Home Assistant 2026.10's ESPHome media
+    /// player knows only NONE/IDLE/PLAYING/PAUSED/OFF/ON: an unknown code raises
+    /// `KeyError: MediaPlayerState.ANNOUNCING` in its state subscription and the update is lost,
+    /// so an announcement goes on the wire as PLAYING. The internal state, ducking and the
+    /// announcement callbacks are unchanged.
+    pub fn wire(self) -> u32 {
+        match self {
+            Self::Announcing => Self::Playing as u32,
+            other => other as u32,
+        }
+    }
+}
+
 /// api.proto MediaPlayerCommand.
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -368,3 +382,26 @@ pub use esphome_proto::entity::{
     ActionId, BinarySensorId, ButtonId, EventId, NumberId, SelectId, SensorId, SwitchId, TextId,
     TextSensorId,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::MediaState;
+
+    #[test]
+    fn announcing_is_published_as_playing() {
+        // HA 2026.10 has no ANNOUNCING (4) in its media player state enum: the wire value must be
+        // one it knows, while the internal state keeps its own code.
+        assert_eq!(MediaState::Announcing.wire(), 2);
+        assert_eq!(MediaState::Announcing as u32, 4);
+        for state in [
+            MediaState::None,
+            MediaState::Idle,
+            MediaState::Playing,
+            MediaState::Paused,
+            MediaState::Off,
+            MediaState::On,
+        ] {
+            assert_eq!(state.wire(), state as u32, "{state:?}");
+        }
+    }
+}

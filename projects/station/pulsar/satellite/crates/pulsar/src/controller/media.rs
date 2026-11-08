@@ -395,11 +395,17 @@ mod tests {
     #[test]
     fn announce_volume_change_reapplies_only_while_speech_plays() {
         let mut p = policy(1.0);
-        assert!(!p.set_announce_volume(0.4), "idle: nothing audible changes");
-        assert!(p.set_announce_speech(true));
-        assert!(p.set_announce_volume(0.4));
+        assert!(
+            !p.set_announce_volume(0.4),
+            "idle: the value is stored, nothing audible changes"
+        );
+        assert!(p.set_announce_speech(true), "speech is now scaled by 0.4");
         assert!(!p.set_announce_volume(0.4), "same value");
-        assert!((p.announce_gain(0.5, false) - p.master_gain(0.5) * 0.4).abs() < f32::EPSILON);
+        assert!(
+            p.set_announce_volume(0.6),
+            "a new value changes speech gain"
+        );
+        assert!((p.announce_gain(0.5, false) - p.master_gain(0.5) * 0.6).abs() < f32::EPSILON);
         // A zero announce volume is silence for announcements, not mute of the station.
         assert!(p.set_announce_volume(0.0));
         assert_eq!(p.announce_gain(0.5, false), 0.0);

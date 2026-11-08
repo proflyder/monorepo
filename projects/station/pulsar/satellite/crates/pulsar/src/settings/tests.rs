@@ -409,7 +409,9 @@ fn wake_event_switches_round_trip() {
     parsed.parse(b"wake_event_recording=0\nwake_dry_run=1\n");
     assert!(!parsed.wake_recording);
     assert!(parsed.wake_dry_run);
-    assert!(parsed.serialize().ends_with("wake_dry_run=1\n"));
+    assert!(parsed.serialize().contains("wake_dry_run=1\n"));
+    // The newest fork key goes last, so `wake_dry_run` is no longer the tail.
+    assert!(parsed.serialize().ends_with("announce_volume=1\n"));
 }
 
 #[test]

@@ -198,9 +198,10 @@ impl Server {
                     muted,
                 },
             ) => {
+                let wire = state.wire();
                 let m = MediaPlayerStateResponse {
                     key: Some(key.get()),
-                    state: Self::simply(state as u32, state as u32 == 0),
+                    state: Self::simply(wire, wire == 0),
                     volume: Self::simply(clamp01(volume), volume == 0.0),
                     muted: muted.then_some(true),
                 };
