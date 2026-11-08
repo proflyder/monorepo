@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.control.presentation
 
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
+import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.FavoriteKind
 import dev.proflyder.home.core.model.FavoritePreferences

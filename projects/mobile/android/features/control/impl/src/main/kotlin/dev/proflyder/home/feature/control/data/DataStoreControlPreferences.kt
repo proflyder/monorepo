@@ -5,7 +5,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.proflyder.home.feature.control.ControlFilter
-import dev.proflyder.home.core.model.ControlFilter
 import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.proflyder.home.feature.control.ControlPreferences
 import dev.zacsweers.metro.AppScope
