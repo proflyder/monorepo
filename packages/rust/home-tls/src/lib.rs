@@ -1,14 +1,12 @@
 //! Public HTTPS roots for the shared workspace `reqwest` client.
 //!
-//! The workspace builds `reqwest` with `rustls-tls-manual-roots-no-provider`:
-//! the station firmware (`pulsar-update`) pins its own CA bundle and must not
-//! inherit browser-grade roots. Cargo unifies features across the whole
-//! workspace, so enabling `rustls-tls-webpki-roots` or
-//! `rustls-tls-native-roots` here would also change the firmware. Instead every
+//! The workspace builds `reqwest` with `rustls-no-provider`: the station
+//! firmware (`pulsar-update`) pins its own CA bundle and must not inherit a
+//! platform trust store. Cargo unifies features across the whole workspace, so
+//! enabling built-in roots here would also change the firmware. Instead every
 //! client that talks to the public internet loads the operating system's PEM
-//! bundle explicitly with [`system_roots`] and adds the certificates to its
-//! builder with [`with_system_roots`] (or starts from
-//! [`public_https_client`]).
+//! bundle explicitly with [`system_roots`] and replaces the trust set with
+//! [`with_system_roots`] (or starts from [`public_https_client`]).
 //!
 //! The bundle path is `SSL_CERT_FILE` when set (a deployment or test override),
 //! otherwise the first existing default: `/etc/ssl/certs/ca-certificates.crt`
@@ -109,13 +107,11 @@ pub fn system_roots() -> Result<Vec<reqwest::Certificate>, Error> {
 ///
 /// Extra roots never narrow the client: they only extend the trust anchors, so
 /// internal HTTP/HTTPS clients can use this unconditionally.
-pub fn with_system_roots(
-    mut builder: reqwest::ClientBuilder,
-) -> Result<reqwest::ClientBuilder, Error> {
-    for certificate in system_roots()? {
-        builder = builder.add_root_certificate(certificate);
-    }
-    Ok(builder)
+pub fn with_system_roots(builder: reqwest::ClientBuilder) -> Result<reqwest::ClientBuilder, Error> {
+    // reqwest 0.13 verifies against the platform store by default; pin the
+    // same OS bundle explicitly with `tls_certs_only` so the trust set stays
+    // identical to the pre-0.13 manual-roots build.
+    Ok(builder.tls_certs_only(system_roots()?))
 }
 
 /// A fresh `reqwest` builder with the ring provider installed and the system

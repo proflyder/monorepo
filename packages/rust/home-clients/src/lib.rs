@@ -14,9 +14,9 @@
 //! same as `packages/rust/home-ha` and `packages/go/httpapi`.
 //!
 //! Every client builds its own `reqwest` client through `home_tls`: the
-//! workspace `reqwest` is compiled with `rustls-tls-manual-roots-no-provider`,
-//! so the shared builder installs the ring provider and adds the operating
-//! system's public roots. Redirects are not followed, matching the Go clients
+//! workspace `reqwest` is compiled with `rustls-no-provider`, so the shared
+//! builder installs the ring provider and pins the operating system's public
+//! roots with `tls_certs_only`. Redirects are not followed, matching the Go clients
 //! (a `3xx` is a status error).
 
 use std::time::Duration;
@@ -103,9 +103,9 @@ impl Error {
 
 /// Build the shared `reqwest` client.
 ///
-/// The workspace builds `reqwest` with `rustls-tls-manual-roots-no-provider`;
-/// `home_tls` installs the ring provider and adds the operating system's root
-/// bundle, so an `https://` backend (Prometheus behind a private TLS name)
+/// The workspace builds `reqwest` with `rustls-no-provider`; `home_tls`
+/// installs the ring provider and pins the operating system's root bundle with
+/// `tls_certs_only`, so an `https://` backend (Prometheus behind a private TLS name)
 /// verifies. Redirects are disabled: a query must not silently change its
 /// destination, and a `3xx` surfaces as [`Error::Status`].
 pub(crate) fn build_http(

@@ -146,9 +146,9 @@ impl Client {
     /// Build a client that trusts the given PEM certificate bundle in
     /// addition to the client's roots.
     ///
-    /// The workspace `reqwest` uses `rustls-tls-manual-roots`, so the bundle
-    /// is what makes a private Home Assistant certificate usable; public
-    /// CAs are not compiled in.
+    /// The workspace `reqwest` trusts only the bundle (`tls_certs_only`), so
+    /// it makes a private Home Assistant certificate usable while public CAs
+    /// stay out of the trust set.
     pub fn new_with_ca_pem(
         base_url: impl Into<String>,
         token: Token,
@@ -189,9 +189,9 @@ impl Client {
             if certificates.is_empty() {
                 return Err(Error::Certificate { op: "decode CA" });
             }
-            for certificate in certificates {
-                builder = builder.add_root_certificate(certificate);
-            }
+            // Trust exactly the supplied Home Assistant CA, not the platform
+            // store (reqwest 0.13 defaults to the latter).
+            builder = builder.tls_certs_only(certificates);
         }
         let http = builder.build().map_err(|source| Error::Transport {
             op: "build client",

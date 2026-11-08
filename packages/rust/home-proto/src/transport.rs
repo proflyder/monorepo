@@ -43,11 +43,14 @@ impl ReqwestTransport {
         if certificates.is_empty() {
             return Err(CaError);
         }
-        let mut builder = reqwest::Client::builder();
-        for certificate in certificates {
-            builder = builder.add_root_certificate(certificate);
-        }
-        builder.build().map(Self::new).map_err(|_| CaError)
+        // Replace the platform trust store: this client trusts exactly the
+        // private scheduler CA, not every public root (as with the pre-0.13
+        // reqwest manual-roots feature).
+        reqwest::Client::builder()
+            .tls_certs_only(certificates)
+            .build()
+            .map(Self::new)
+            .map_err(|_| CaError)
     }
 }
 
