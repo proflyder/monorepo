@@ -141,6 +141,7 @@ case "$ONLY" in
         # the HA executor code and are rolled together.
         ha-bridge) WANT_BRIDGE=true; WANT_CONTROL=true; WANT_SCENARIO=true ;;
         ha-control) WANT_CONTROL=true ;;
+        ha-scenario) WANT_SCENARIO=true ;;
         "") ;;
         *) echo "unknown --only group: $group" >&2; exit 2 ;;
       esac

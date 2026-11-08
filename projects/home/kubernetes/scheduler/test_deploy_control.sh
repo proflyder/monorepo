@@ -194,6 +194,14 @@ PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
 grep -q "image ha-bridge: prebuilt ghcr.io/proflyder/ha-bridge@sha256:eeee" "$TMP/out" \
   || fail "ha-bridge did not use its promoted digest"
 
+# 7b. deploy-home passes the unit's workloads as ONLY (every image name of the
+#     ha-bridge unit, including ha-scenario); each must be a known group.
+: > "$CALL_LOG"
+ONLY="ha-bridge,ha-control,ha-scenario" PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
+  cat "$TMP/out"
+  fail "deploy.sh rejected the ha-bridge unit workloads as ONLY"
+}
+
 # 8. A missing promoted digest fails closed instead of building.
 : > "$CALL_LOG"
 set +e
