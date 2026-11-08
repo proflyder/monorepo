@@ -194,7 +194,7 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
      * skip only the nearest occurrence or disable it entirely. A one-shot alarm
      * keeps the direct switch behaviour.
      */
-    private fun requestToggle(alarm: Schedule, enabled: Boolean) {
+    internal fun requestToggle(alarm: Schedule, enabled: Boolean) {
         when {
             enabled -> viewModel.setEnabled(alarm, true)
             alarmDisableChoice(alarm) == AlarmDisableChoice.DISABLE -> viewModel.setEnabled(alarm, false)

@@ -109,7 +109,7 @@ internal class HubCardAdapter(
         }
     }
 
-    private fun bindButton(button: MaterialButton, label: String?, action: () -> Unit) {
+    internal fun bindButton(button: MaterialButton, label: String?, action: () -> Unit) {
         button.setVisible(label != null)
         if (label != null) {
             button.text = label

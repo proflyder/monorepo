@@ -278,12 +278,12 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     }
 
     /** True when the hub's "turn off" must ask skip-once vs disable-completely. */
-    private fun hubAlarmNeedsChoice(card: HubCard.Alarm): Boolean =
+    internal fun hubAlarmNeedsChoice(card: HubCard.Alarm): Boolean =
         !card.ringing &&
             card.schedule.enabled &&
             alarmDisableChoice(card.schedule) == AlarmDisableChoice.ASK
 
-    private fun showHubAlarmDisableChoice(card: HubCard.Alarm) {
+    internal fun showHubAlarmDisableChoice(card: HubCard.Alarm) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.control_alarm_disable_title)
             .setMessage(R.string.control_alarm_disable_message)
