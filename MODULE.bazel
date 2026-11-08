@@ -324,8 +324,8 @@ register_toolchains(
 # The repository rule reads the NDK from the ANDROID_NDK_HOME environment
 # variable; install it from the official SDK with
 # `sdkmanager "ndk;28.2.13676358"` (CI installs it via sdk_packages of the
-# android-app/android-lint units, `ci.yml` android-distribute and deploy-home
-# warm-caches). `api_level` matches the app's minSdkVersion (26); see
+# android-app/android-lint units in `_android.yml`, and in deploy-home
+# `warm-caches`). `api_level` matches the app's minSdkVersion (26); see
 # projects/mobile/android/app/src/main/AndroidManifest.xml.
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 
