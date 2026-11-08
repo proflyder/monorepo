@@ -48,7 +48,31 @@ pub async fn run_healthcheck() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let client = match scheduler_client(&config, TIMEOUT) {
+    probe(
+        &config.scheduler_url,
+        &config.scheduler_token,
+        config.scheduler_ca_file.as_deref(),
+        TIMEOUT,
+    )
+    .await
+}
+
+/// Shared distroless readiness probe: authenticated `GetStatus.ready`.
+///
+/// Both listener-less executors (`ha-bridge`, `ha-scenario`) use it. The token
+/// is passed by value from the normal config loader and never appears in
+/// process arguments.
+pub async fn probe(
+    endpoint: &str,
+    token: &home_secret::Token,
+    ca_file: Option<&std::path::Path>,
+    timeout: Duration,
+) -> ExitCode {
+    let client = ca_file.map_or_else(
+        || SchedulerClient::new(endpoint, token.clone(), timeout),
+        |path| SchedulerClient::new_with_ca_file(endpoint, token.clone(), timeout, path),
+    );
+    let client = match client {
         Ok(client) => client,
         Err(error) => {
             eprintln!("healthcheck: scheduler client: {error}");

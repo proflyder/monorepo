@@ -41,6 +41,7 @@ EOF
 export SCHEDULER_IMAGE="ghcr.io/proflyder/scheduler@sha256:$(printf 'a%.0s' {1..64})"
 export HA_BRIDGE_IMAGE="ghcr.io/proflyder/ha-bridge@sha256:$(printf 'b%.0s' {1..64})"
 export HA_CONTROL_IMAGE="ghcr.io/proflyder/ha-control@sha256:$(printf 'c%.0s' {1..64})"
+export HA_SCENARIO_IMAGE="ghcr.io/proflyder/ha-scenario@sha256:$(printf '4%.0s' {1..64})"
 export PREFLIGHT_IMAGE="ghcr.io/proflyder/home-deploy@sha256:$(printf 'd%.0s' {1..64})"
 
 cat > "$TMP/kubectl" <<'EOF'
@@ -51,7 +52,9 @@ case "$args" in
   *"get deployment ha-control -o jsonpath"*) echo "${CONTROL_REPLICAS:-1}"; exit 0 ;;
   *"get deployment scheduler -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"scheduler","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-control -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-control","image":"old"}]}}}}'; exit 0 ;;
+  *"get deployment ha-scenario -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-scenario","image":"old"}]}}}}'; exit 0 ;;
   *"get deployment ha-bridge -o json"*) printf '%s' '{"metadata":{"generation":1},"spec":{"template":{"spec":{"containers":[{"name":"ha-bridge","image":"old"}]}}}}'; exit 0 ;;
+  *"get deployment ha-scenario"*) exit 0 ;;
   *"get deployment ha-control"*)
     # A missing Deployment answers like the real API server: state record only
     # treats an explicit NotFound as "absent" and fails closed on anything else.
@@ -66,7 +69,7 @@ case "$args" in
   *"exec deploy/scheduler"*status*)
     if [[ -n "${CONTROL_QUEUE_STATUS:-}" ]]; then printf '%s' "$CONTROL_QUEUE_STATUS"; else printf '%s' '{"queues":[]}'; fi
     exit 0 ;;
-  *"exec deploy/ha-control"*healthcheck*|*"exec deploy/scheduler"*healthcheck*) exit 0 ;;
+  *"exec deploy/ha-scenario"*healthcheck*|*"exec deploy/ha-control"*healthcheck*|*"exec deploy/scheduler"*healthcheck*) exit 0 ;;
   *) exit 0 ;;
 esac
 EOF
@@ -91,6 +94,7 @@ grep -q "apply -f .*control.yaml" "$CALL_LOG" || fail "first install did not app
 grep -q "apply -f .*control-service.yaml" "$CALL_LOG" || fail "first install did not apply control-service.yaml"
 [[ -f "$DEPLOY_STATE_DIR/scheduler.applied" ]] || fail "scheduler apply was not recorded for rollback"
 [[ -f "$DEPLOY_STATE_DIR/ha-bridge.applied" ]] || fail "ha-bridge apply was not recorded for rollback"
+[[ -f "$DEPLOY_STATE_DIR/ha-scenario.applied" ]] || fail "ha-scenario apply was not recorded for rollback"
 [[ -f "$DEPLOY_STATE_DIR/scheduler.before.json" ]] || fail "scheduler pre-deploy state was not recorded"
 grep -q "create secret" "$CALL_LOG" && fail "deploy.sh wrote a Secret; values must come from OpenBao/ESO"
 
@@ -98,10 +102,12 @@ export MOCK_CONTROL_EXISTS=0
 unset CONTROL_QUEUE_STATUS || true
 run
 grep -q "apply -f .*control.yaml" "$CALL_LOG" && fail "rerun applied control.yaml (would reset mode)"
-[[ "$(grep -c 'replace -f' "$CALL_LOG")" -eq 3 ]] || fail "rerun did not converge scheduler, ha-control and ha-bridge"
+[[ "$(grep -c 'replace -f' "$CALL_LOG")" -eq 4 ]] || fail "rerun did not converge scheduler, ha-control, ha-scenario and ha-bridge"
 grep -q -- "--type strategic" "$CALL_LOG" && fail "rerun used a strategic patch (leaves drifted fields behind)"
 grep -q "set env deployment/ha-control" "$CALL_LOG" && fail "rerun changed CONTROL_EXECUTE"
 grep -q "scale deployment/ha-control" "$CALL_LOG" && fail "rerun changed control replicas"
+grep -q "set env deployment/ha-scenario" "$CALL_LOG" && fail "rerun changed SCENARIO_EXECUTE"
+grep -q "scale deployment/ha-scenario" "$CALL_LOG" && fail "rerun changed scenario replicas"
 
 # 2. Explicit catalog mode.
 export MOCK_CONTROL_EXISTS=0
@@ -153,8 +159,8 @@ EOF
 chmod +x "$TMP/bin/bazel"
 export BAZEL_LOG="$TMP/bazel.log"
 : > "$BAZEL_LOG"
-unset SCHEDULER_IMAGE HA_BRIDGE_IMAGE HA_CONTROL_IMAGE PREFLIGHT_IMAGE MOCK_CONTROL_EXISTS CONTROL_QUEUE_STATUS || true
-export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})"
+unset SCHEDULER_IMAGE HA_BRIDGE_IMAGE HA_CONTROL_IMAGE HA_SCENARIO_IMAGE PREFLIGHT_IMAGE MOCK_CONTROL_EXISTS CONTROL_QUEUE_STATUS || true
+export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),ha-scenario=sha256:$(printf '2%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})"
 : > "$CALL_LOG"
 PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
   cat "$TMP/out"
@@ -167,6 +173,8 @@ grep -q "image ha-bridge: prebuilt ghcr.io/proflyder/ha-bridge@sha256:eeee" "$TM
   || fail "ha-bridge did not use the prebuilt digest"
 grep -q "image ha-control: prebuilt ghcr.io/proflyder/ha-control@sha256:ffff" "$TMP/out" \
   || fail "ha-control did not use the prebuilt digest"
+grep -q "image ha-scenario: prebuilt ghcr.io/proflyder/ha-scenario@sha256:2222" "$TMP/out" \
+  || fail "ha-scenario did not use the prebuilt digest"
 grep -q "image home-deploy: prebuilt ghcr.io/proflyder/home-deploy@sha256:1111" "$TMP/out" \
   || fail "home-deploy did not use the prebuilt digest"
 grep -q "push" "$BAZEL_LOG" && fail "prebuilt images were pushed again"
@@ -175,7 +183,7 @@ unset PREBUILT_DIGESTS
 # 7. DEPLOY_NO_BUILD=1 (deploy-home) never builds: every image, including the
 #    sibling workloads, arrives as a promoted digest.
 export DEPLOY_NO_BUILD=1
-export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})"
+export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),ha-scenario=sha256:$(printf '2%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})"
 : > "$BAZEL_LOG"
 : > "$CALL_LOG"
 PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
@@ -185,6 +193,14 @@ PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
 [[ ! -s "$BAZEL_LOG" ]] || fail "DEPLOY_NO_BUILD=1 still built or ran Bazel"
 grep -q "image ha-bridge: prebuilt ghcr.io/proflyder/ha-bridge@sha256:eeee" "$TMP/out" \
   || fail "ha-bridge did not use its promoted digest"
+
+# 7b. deploy-home passes the unit's workloads as ONLY (every image name of the
+#     ha-bridge unit, including ha-scenario); each must be a known group.
+: > "$CALL_LOG"
+ONLY="ha-bridge,ha-control,ha-scenario" PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
+  cat "$TMP/out"
+  fail "deploy.sh rejected the ha-bridge unit workloads as ONLY"
+}
 
 # 8. A missing promoted digest fails closed instead of building.
 : > "$CALL_LOG"

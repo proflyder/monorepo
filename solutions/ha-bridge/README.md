@@ -25,9 +25,10 @@ Go-реализации; Rust-тесты читают их без изменен
 
 `ha-control` — второй `[[bin]]` того же крейта (`src/ha_control.rs`): каталог
 `GET /v1/catalog`, discovery с TTL-кэшем, `Handler` на очереди `control` и
-`-healthcheck`. Векторы каталога (`testdata/catalog/states.json`,
-`templates/*.txt`, `catalog.json`) — замороженные golden-данные и читаются
-Rust-тестом.
+`-healthcheck`. Третий бинарь — `ha-scenario` (`src/ha_scenario.rs`,
+исполнитель очереди `scenario`, см. раздел ниже). Векторы каталога
+(`testdata/catalog/states.json`, `templates/*.txt`, `catalog.json`) —
+замороженные golden-данные и читаются Rust-тестом.
 
 ## Границы
 
@@ -483,3 +484,107 @@ HTTP-сервер ограничен таймаутом запроса (30 s), �
 диапазоне, цвет только парой hue+saturation, температура и цвет вместе нельзя,
 `turn_off` не принимает регулировки) и вызывает `light.turn_on`/`light.turn_off`;
 произвольные сервисы и данные недоступны.
+
+## ha-scenario: исполнитель сценариев
+
+`ha-scenario` — третий бинарь того же крейта (`src/ha_scenario.rs`, Bazel
+`//solutions/ha-bridge/crates/ha-bridge:ha-scenario`). Он забирает очередь
+`scenario` с собственным `consumer_id` (`ha-scenario-home`) и собственным
+ledger, поэтому алармовый `ha-bridge` (`home`) и `ha-control` (`control`)
+продолжают работать без изменений. Определения сценариев живут в scheduler
+(`home.v1.ScenarioService`); исполнитель их не создаёт и не меняет.
+
+```text
+scheduler (SQLite durable outbox, queue="scenario")
+  │  ListDueEvents(consumer_id=ha-scenario-home, queue="scenario")
+  │  ScenarioService/GetScenario(id)                   (bearer, как у ha-control)
+  ▼
+ha-scenario ── /api/states (условия) ─────────────────► HA
+             ── catalog discovery + /api/services/... ► HA (шаги)
+  │
+  └─ AckEvent(DELIVERED | SKIPPED | FAILED)
+```
+
+### События
+
+- `scenario.fire`, payload `{"scenario_id":"…","trigger_index":0}` — time-триггер,
+  или `{"scenario_id":"…","trigger":"manual"}` — `RunScenario`.
+- `scenario.stop` (action `STOP`) — отменяет выполняющийся экземпляр того же
+  `scenario_id`; `delay` прерывается сразу. FIRE/STOP никогда не выполняются
+  параллельно сами с собой: второй FIRE получает `ACK_SKIPPED`
+  «already running».
+
+FIRE выполняется в отдельной задаче и подтверждает себя сам, поэтому STOP из
+следующего lease не ждёт окончания `delay`. Один экземпляр на сценарий
+удерживается реестром в памяти процесса.
+
+### Условия и шаги
+
+1. `GetScenario`; нет сценария → `ACK_SKIPPED` «scenario not found».
+   Time-триггер у `enabled=false` → `ACK_SKIPPED` «scenario is disabled»;
+   manual-запуск disabled-сценария разрешён.
+2. Условия: `entity_state` читает `/api/states` и сравнивает строку точно;
+   `time_window` использует timezone первого time-триггера, иначе
+   `SCENARIO_TIMEZONE` (default `Asia/Almaty`), поддерживает окно через
+   полночь и `weekdays` (ISO 1=Mon..7=Sun; для окна через полночь дни
+   относятся к суткам, в которые окно началось). Не выполнено →
+   `ACK_SKIPPED` «condition not met».
+3. Шаги по порядку:
+   - `catalog` — entry/action/`params_json` резолвятся по **живому** каталогу
+     (тот же discovery, что у `ha-control`), затем `call_service`; неизвестный
+     entry или невалидные параметры — ошибка шага;
+   - `speak` — тот же путь, что `action.station_speak` (`script.speak_text`,
+     `variables.message`); текст не пишется в логи, ledger и ack detail;
+   - `delay` — отменяемый `tokio::sleep`.
+4. `continue_on_error=false` останавливает сценарий на первой ошибке;
+   `true` пишет ошибку в журнал и идёт дальше. Все шаги успешны →
+   `ACK_DELIVERED`; была ошибка → `ACK_FAILED` с detail `step N: <краткая
+   причина>` (без текста speak). Ошибка вызывается только один раз: после
+   начала шагов повторной попытки нет.
+
+Ретраи (без ack, lease истекает) — только до первого шага: недоступны
+scheduler, HA, каталог или условия. `SCENARIO_MAX_ATTEMPTS` ограничивает
+число таких повторов.
+
+### Ledger и идемпотентность
+
+`SCENARIO_LEDGER_PATH` (`/data/scenario-ledger.json` в манифесте) хранит
+`started`/`completed` по `event_id`; формат JSON v1, атомарная запись,
+retention 30 дней / 20 000 записей, без параметров шагов и текста. Запись
+`started` делается непосредственно перед первым шагом. Повторная доставка
+того же события:
+
+- `started` без `completed` (краш/рестарт во время `delay`) → `ACK_FAILED`
+  «interrupted», шаги не повторяются;
+- `completed` → `ACK_SKIPPED` «already completed».
+
+Без `SCENARIO_LEDGER_PATH` ledger живёт только в памяти процесса.
+
+### Конфигурация
+
+| Переменная | Обяз. | По умолчанию | Смысл |
+| --- | --- | --- | --- |
+| `HA_URL`, `HA_TOKEN[_FILE]`, `HA_CA_FILE` | да | — | Как у ha-bridge/ha-control |
+| `SCHEDULER_ENDPOINT`, `SCHEDULER_TOKEN[_FILE]`, `SCHEDULER_CA_FILE` | да | — | Как у ha-control |
+| `SCENARIO_CONSUMER_ID` | да | — | `ha-scenario-home` в home-манифесте |
+| `SCENARIO_QUEUE` | нет | `scenario` | `home`/`tasks` запрещены |
+| `SCENARIO_EXECUTE` | нет | `false` | `true` включает lease/execute/ack |
+| `SCENARIO_TIMEZONE` | нет | `Asia/Almaty` | Fallback для `time_window` |
+| `SCENARIO_LEDGER_PATH` | нет | — | JSON-ledger; без него dedupe только в памяти |
+| `SCENARIO_BATCH_SIZE` | нет | `10` | 1..200 |
+| `SCENARIO_LEASE_SECONDS` | нет | `3600` | 1..86400; прогон должен уложиться в lease |
+| `SCENARIO_MAX_ATTEMPTS` | нет | `10` | Ретраи до первого шага |
+| `SCENARIO_POLL_INTERVAL`, `SCENARIO_MAX_BACKOFF`, `SCENARIO_HA_TIMEOUT`, `SCENARIO_SCHEDULER_TIMEOUT`, `SCENARIO_CATALOG_TTL` | нет | `500ms`, `2m`, `10s`, `10s`, `3s` | Тайминги |
+
+`-healthcheck` — общий с `ha-bridge`: аутентифицированный `GetStatus.ready`.
+Ограничение: прогон длиннее lease не может подтвердиться (ack после истечения
+lease отклоняется); держите сумму `delay` в пределах `SCENARIO_LEASE_SECONDS`.
+
+### Тесты
+
+`cargo test -p ha-bridge` покрывает условия (`entity_state`; окно через
+полночь; `weekdays`), шаги (catalog ok/неизвестный entry, speak без утечки
+текста, delay с отменой по STOP), `continue_on_error`, «already running»,
+`interrupted` по ledger, disabled+time → SKIPPED и manual для disabled.
+Фейки scheduler/HA работают на loopback; живые HA, scheduler и колонка в
+тестах не участвуют.

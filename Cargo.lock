@@ -1328,6 +1328,7 @@ dependencies = [
  "home-secret",
  "home-telemetry",
  "home-worker",
+ "jiff",
  "reqwest",
  "rustls",
  "serde",
