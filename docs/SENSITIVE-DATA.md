@@ -22,7 +22,8 @@ kubeconfig, Terraform, Wi-Fi/BLE станции). Локальный `secrets/` 
 | Hermes `auth.json`/`.env` | HA/MA tokens, OAuth | доступ к HA/MA/LLM |
 
 Файл, который ещё читает локальный скрипт (`secrets/home/*.env` и т.п.),
-временно восстанавливает `mise run secrets:file` (`secrets:clean` убирает). Источник правды — OpenBao; ручные правки Kubernetes
+получает от fnox через `mise run admin:*` (временные файлы, удаляются после
+команды); вручную — `mise run secrets:file` / `secrets:clean`. Источник правды — OpenBao; ручные правки Kubernetes
 Secret перезапишет ESO.
 
 ## Средний риск

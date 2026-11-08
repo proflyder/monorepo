@@ -76,11 +76,10 @@ Cloudflare **DNS only** (не proxied), TTL auto. Wildcard-сертификат 
 ## Деплой
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 # 1) проверка DNS-01 на staging (не тратит prod-лимит)
-./projects/home/kubernetes/ingress/deploy.sh --staging
+mise run admin:ingress -- --staging
 # 2) боевой сертификат Let's Encrypt prod + маршруты
-./projects/home/kubernetes/ingress/deploy.sh
+mise run admin:ingress
 ```
 
 Скрипт идемпотентен: `helm upgrade --install`, `kubectl apply`, Secret

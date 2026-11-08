@@ -6,8 +6,7 @@
 #   secrets/android/home-release.keystore        (and its password files)
 #   platform/android/keys/google-services.json
 # (see projects/mobile/android/README.md). CI materialises them from OpenBao;
-# locally `mise run secrets:file android/home-release.keystore` restores them
-# from OpenBao. Bazel only produces a debug-signed APK; the release key is
+# locally `mise run admin:android-distribute` passes them from OpenBao (fnox). Bazel only produces a debug-signed APK; the release key is
 # applied to that artifact by `platform/android/sign-release.sh`, which also
 # refuses to publish a build whose signer certificate is unexpected.
 #
@@ -51,9 +50,18 @@ for argument in "$@"; do
   esac
 done
 
-# Release signing material. CI passes it as environment variables; locally the
-# files live in the gitignored secrets/android/ and are restored with
-# `mise run secrets:file android/<name>`. Values are never printed.
+# Release signing material. CI passes it as environment variables; locally
+# `mise run admin:android-distribute` passes it from OpenBao through fnox
+# (temp files, removed on exit). The keystore is stored base64-encoded, so
+# SIGNING_KEYSTORE_B64_FILE is decoded into a private temp file here.
+# Fallback: files in the gitignored secrets/android/ (`mise run secrets:file`).
+# Values are never printed.
+if [[ -z "${SIGNING_KEYSTORE:-}" && -n "${SIGNING_KEYSTORE_B64_FILE:-}" ]]; then
+  decoded_keystore="$(mktemp "${TMPDIR:-/tmp}/release-keystore.XXXXXX")"
+  trap 'rm -f "$decoded_keystore"' EXIT
+  base64 --decode < "$SIGNING_KEYSTORE_B64_FILE" > "$decoded_keystore"
+  SIGNING_KEYSTORE="$decoded_keystore"
+fi
 SIGNING_KEYSTORE="${SIGNING_KEYSTORE:-$SECRETS_ANDROID/home-release.keystore}"
 SIGNING_STORE_PASSWORD_FILE="${SIGNING_STORE_PASSWORD_FILE:-$SECRETS_ANDROID/home-release.store.password}"
 SIGNING_KEY_PASSWORD_FILE="${SIGNING_KEY_PASSWORD_FILE:-$SECRETS_ANDROID/home-release.key.password}"
@@ -78,7 +86,7 @@ if [[ "$SIGNING_READY" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
   echo "Missing release signing material." >&2
   echo "Expected keystore $SIGNING_KEYSTORE, password files next to it, and a signer SHA-256" >&2
   echo "($SIGNING_CERT_SHA256_FILE or SIGNING_CERT_SHA256)." >&2
-  echo "Restore the files with 'mise run secrets:file android/home-release.keystore' (and the rest);" >&2
+  echo "Run it as 'mise run admin:android-distribute' (signing material from OpenBao);" >&2
   echo "see projects/mobile/android/README.md." >&2
   exit 1
 fi
