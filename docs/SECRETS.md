@@ -83,7 +83,11 @@
 Поля `ci/android-distribute` для release-подписи APK: `signing_keystore_b64`
 (base64 PKCS12-ключа), `signing_store_password`, `signing_key_password`,
 `signing_key_alias`, `signing_cert_sha256` (обязательный ожидаемый отпечаток
-сертификата), плюс `google_services_json` и `firebase_service_account_json`.
+сертификата), плюс `google_services_json_b64` и
+`firebase_service_account_json_b64` (base64 одного JSON в одну строку: CI
+декодирует их в `$RUNNER_TEMP`, а многострочные `google_services_json` и
+`firebase_service_account_json` больше не читаются — `vault-action` маскирует
+каждую строку, и GitHub вырезает из логов строку-маску `{`).
 Локально они восстанавливаются как `secrets/android/home-release.keystore`,
 `home-release.store.password`, `home-release.key.password`, `home-release.alias`,
 `home-release.cert.sha256` (`mise run secrets:file android/<имя>`), но обычно

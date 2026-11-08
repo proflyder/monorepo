@@ -287,6 +287,9 @@ jobs:
       # GitHub OIDC -> OpenBao (auth/github, JWT audience = OPENBAO_ADDR). The
       # action masks every line of every value and exposes them as step outputs
       # only (`exportEnv: false`), so they do not leak into later steps' env.
+      # The JSON files are read as single-line base64: vault-action masks every
+      # line of a multi-line value, and GitHub strips a masked line that is just
+      # "{" from all logs, which mangled the Kotlin stack traces.
       - name: Read Android signing secrets from OpenBao
         id: openbao
         uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
@@ -303,8 +306,8 @@ jobs:
             secret/data/ci/android-distribute signing_key_password | SIGNING_KEY_PASSWORD ;
             secret/data/ci/android-distribute signing_key_alias | SIGNING_KEY_ALIAS ;
             secret/data/ci/android-distribute signing_cert_sha256 | SIGNING_CERT_SHA256 ;
-            secret/data/ci/android-distribute google_services_json | GOOGLE_SERVICES_JSON ;
-            secret/data/ci/android-distribute firebase_service_account_json | FIREBASE_SERVICE_ACCOUNT_JSON
+            secret/data/ci/android-distribute google_services_json_b64 | GOOGLE_SERVICES_JSON_B64 ;
+            secret/data/ci/android-distribute firebase_service_account_json_b64 | FIREBASE_SERVICE_ACCOUNT_JSON_B64
 
       # Materialise the private files into the checkout and $RUNNER_TEMP.
       # Bazel needs google-services.json under platform/android/keys/ exactly
@@ -319,8 +322,8 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ steps.openbao.outputs.SIGNING_KEY_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ steps.openbao.outputs.SIGNING_KEY_ALIAS }}
           SIGNING_CERT_SHA256: ${{ steps.openbao.outputs.SIGNING_CERT_SHA256 }}
-          GOOGLE_SERVICES_JSON: ${{ steps.openbao.outputs.GOOGLE_SERVICES_JSON }}
-          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ steps.openbao.outputs.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SERVICES_JSON_B64: ${{ steps.openbao.outputs.GOOGLE_SERVICES_JSON_B64 }}
+          FIREBASE_SERVICE_ACCOUNT_JSON_B64: ${{ steps.openbao.outputs.FIREBASE_SERVICE_ACCOUNT_JSON_B64 }}
         run: |
           set +x
           set -euo pipefail
@@ -330,7 +333,7 @@ jobs:
           SIGNING_DIR="$CI_DIR/signing"
           for value in SIGNING_KEYSTORE_B64 SIGNING_STORE_PASSWORD \
                        SIGNING_KEY_PASSWORD SIGNING_KEY_ALIAS SIGNING_CERT_SHA256 \
-                       GOOGLE_SERVICES_JSON FIREBASE_SERVICE_ACCOUNT_JSON; do
+                       GOOGLE_SERVICES_JSON_B64 FIREBASE_SERVICE_ACCOUNT_JSON_B64; do
             if [[ -z "${!value:-}" ]]; then
               echo "OpenBao returned an empty $value" >&2
               exit 1
@@ -338,7 +341,7 @@ jobs:
           done
           mkdir -p "$KEYS_DIR" "$SIGNING_DIR"
           chmod 700 "$CI_DIR" "$SIGNING_DIR"
-          printf '%s' "$GOOGLE_SERVICES_JSON" > "$KEYS_DIR/google-services.json"
+          printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 -d > "$KEYS_DIR/google-services.json"
           chmod 600 "$KEYS_DIR/google-services.json"
           printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$SIGNING_DIR/home-release.keystore"
           printf '%s' "$SIGNING_STORE_PASSWORD" > "$SIGNING_DIR/store.password"
@@ -346,7 +349,7 @@ jobs:
           printf '%s' "$SIGNING_KEY_ALIAS" > "$SIGNING_DIR/alias"
           printf '%s' "$SIGNING_CERT_SHA256" > "$SIGNING_DIR/cert.sha256"
           chmod 600 "$SIGNING_DIR"/*
-          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$CI_DIR/firebase-sa.json"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON_B64" | base64 -d > "$CI_DIR/firebase-sa.json"
           chmod 600 "$CI_DIR/firebase-sa.json"
           # Only paths go to later steps' environment; the values stay in files.
           {
