@@ -70,14 +70,19 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore-only in pull requests: a PR-scoped cache is invisible to every
+      # other PR, so writing it only spends the repository's 10 GB budget and
+      # the minutes of upload. Only a develop push (deploy-home `warm-caches`)
+      # writes; the key order platform → unit → content makes the prefix chain
+      # a real fallback (unit with other lockfiles, then the platform).
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Action-output disk cache (.bazelrc only). The unit is per-unit keyed
           # so a small unit cannot evict the large Pulsar build.
           path: ~/.cache/bazel-disk
-          key: bazel-${{ inputs.unit }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-keys: |
-            bazel-${{ inputs.unit }}-${{ runner.os }}-
+            bazel-${{ runner.os }}-${{ inputs.unit }}-
             bazel-${{ runner.os }}-
 
       - name: bazel build ${{ inputs.unit }}
@@ -95,3 +100,11 @@ jobs:
           path: ${{ inputs.artifact }}
           if-no-files-found: error
           retention-days: 14
+
+      # Develop-only writer for the cache restored above; a key can be written
+      # once, so the save key carries the run id and PRs resolve the prefix.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}

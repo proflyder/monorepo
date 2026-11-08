@@ -85,6 +85,17 @@ const CONFIG = normalizeConfig({
       title: "repository-wide gates",
       paths: ["platform/**"],
     },
+    {
+      id: "app-one",
+      platform: "android",
+      title: "apps/one",
+      paths: ["apps/one/**"],
+      bazel: {
+        roots: ["//apps/one"],
+        test_targets: ["//apps/one:one_test"],
+        build_targets: ["//apps/one:app"],
+      },
+    },
   ],
 });
 
@@ -118,8 +129,10 @@ test("findUnit explains an unknown unit with suggestions", () => {
 });
 
 test("buildCommands builds every target without a unit", () => {
+  // `//...` includes the Android targets, so the Android config must be active
+  // exactly as it was when these flags lived in the root `.bazelrc`.
   assert.deepEqual(buildCommands(null), [
-    { command: "bazel", args: ["build", "//..."], cwd: ROOT },
+    { command: "bazel", args: ["build", "--config=android", "//..."], cwd: ROOT },
   ]);
 });
 
@@ -129,6 +142,22 @@ test("buildCommands uses build_targets or falls back to bazel roots", () => {
     "build",
     "//solutions/voice-proxy/...",
   ]);
+});
+
+test("android units build and test with --config=android", () => {
+  assert.deepEqual(buildCommands(byId("app-one"))[0].args, [
+    "build",
+    "--config=android",
+    "//apps/one:app",
+  ]);
+  assert.deepEqual(testCommands(byId("app-one"))[0].args, [
+    "test",
+    "--config=android",
+    "//apps/one:one_test",
+    "--test_output=errors",
+  ]);
+  // Non-Android Bazel units must not get the Android-only flags.
+  assert.ok(!testCommands(byId("proto"))[0].args.includes("--config=android"));
 });
 
 test("buildCommands rejects platforms without a build entry point", () => {

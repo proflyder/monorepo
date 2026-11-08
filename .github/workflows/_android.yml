@@ -2,10 +2,11 @@ name: _android
 
 # Reusable Android platform workflow: one matrix entry per affected application
 # (or shared Kotlin library) unit, plus the dedicated Android Lint unit. The unit
-# is selected by the Bazel reverse dependency graph in ci.yml; inside the unit
-# target-determinator narrows the target list further and falls back to every
-# declared target on any failure. Build runs before test, so a test failure
-# cannot hide a build error and a lint finding only fails the lint entry.
+# is selected by the Bazel reverse dependency graph in ci.yml; the `plan` job
+# runs target-determinator once for the whole Android universe and each entry
+# only intersects its declared targets with that result (an empty result or a
+# failed plan keeps every declared target). Build runs before test, so a test
+# failure cannot hide a build error and a lint finding only fails the lint entry.
 
 on:
   workflow_call:
@@ -29,10 +30,12 @@ on:
         required: false
         default: ""
         type: string
-      universe:
-        description: Bazel query expression covering all android/kotlin targets
+      affected_targets:
+        description: >-
+          Space separated affected targets from the `plan` job (empty disables
+          narrowing and runs every declared target)
         required: false
-        default: "//..."
+        default: ""
         type: string
       artifact:
         description: Path of the build artifact to upload (empty to skip)
@@ -43,16 +46,6 @@ on:
         required: false
         default: ""
         type: string
-      base_sha:
-        description: Base revision for target narrowing (empty disables it)
-        required: false
-        default: ""
-        type: string
-      precise_targets:
-        description: Narrow the target list with target-determinator
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: read
@@ -67,19 +60,7 @@ jobs:
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
-      # Full history: target-determinator analyses the base revision worktree.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Ensure base revision history
-        if: inputs.base_sha != ''
-        env:
-          BASE_SHA: ${{ inputs.base_sha }}
-        run: |
-          # A shallow or advanced base branch may not contain the PR base
-          # commit; fetching it by SHA keeps target-determinator usable.
-          git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA" || true
 
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -104,17 +85,21 @@ jobs:
           install_args: "node"
           cache: true
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore-only in pull requests. GitHub scopes a cache to the ref that
+      # wrote it, so a PR-written cache is invisible to every other PR: it only
+      # burns the repository's 10 GB budget and the minutes spent uploading it.
+      # Only a develop push writes this entry (deploy-home `warm-caches`), under
+      # the exact key restored first here. The key is ordered platform → unit →
+      # content so `restore-keys` form a real hierarchy: the exact key, then the
+      # same unit with other lockfiles, then any Android unit's cache (a small
+      # `kotlin-shared` entry reuses the app's compiled libraries and a new
+      # `maven_install.json` is never a cold start).
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # Action-output disk cache (.bazelrc) and target-determinator builds.
-          path: |
-            ~/.cache/bazel-disk
-            ~/.cache/target-determinator
-          # Per unit: matrix entries share a run, and with one key only the first
-          # (often the small kotlin-shared) could save; the app's cache was lost.
-          key: bazel-android-${{ inputs.unit }}-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          path: ~/.cache/bazel-disk
+          key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
-            bazel-android-${{ inputs.unit }}-${{ runner.os }}-
+            bazel-android-${{ runner.os }}-${{ inputs.unit }}-
             bazel-android-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the
@@ -137,58 +122,22 @@ jobs:
         if: inputs.unit == 'android-app'
         run: platform/android/sign-release_test.sh
 
+      # target-determinator runs once for the whole Android universe in the
+      # `plan` job; here only the unit's own candidates are intersected with
+      # that answer. An empty affected set (plan skipped, failed or degraded)
+      # keeps every declared target: narrowing may run fewer targets, never
+      # none.
       - name: Select affected targets
-        id: select
-        if: inputs.precise_targets && inputs.base_sha != ''
-        env:
-          BASE_SHA: ${{ inputs.base_sha }}
-          TEST_CANDIDATES: ${{ inputs.test_targets }}
-          BUILD_CANDIDATES: ${{ inputs.build_targets }}
-          UNIVERSE: ${{ inputs.universe }}
-        run: |
-          if [ -z "$TEST_CANDIDATES" ] && [ -z "$BUILD_CANDIDATES" ]; then
-            exit 0
-          fi
-          if ! platform/ci/install-target-determinator.sh "$RUNNER_TEMP/target-determinator" >/dev/null; then
-            echo "target-determinator install failed; running every declared target" >&2
-            {
-              echo "test_targets=${TEST_CANDIDATES}"
-              echo "build_targets=${BUILD_CANDIDATES}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          tests="$(platform/ci/bazel-targets.sh \
-            --base "$BASE_SHA" --candidates "$TEST_CANDIDATES" --universe "$UNIVERSE" \
-            --td "$RUNNER_TEMP/target-determinator")"
-          builds="$(platform/ci/bazel-targets.sh \
-            --base "$BASE_SHA" --candidates "$BUILD_CANDIDATES" --universe "$UNIVERSE" \
-            --td "$RUNNER_TEMP/target-determinator")"
-          {
-            echo "test_targets=${tests}"
-            echo "build_targets=${builds}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Resolve target lists
         id: targets
         env:
-          SELECTED_TESTS: ${{ steps.select.outputs.test_targets }}
-          SELECTED_BUILDS: ${{ steps.select.outputs.build_targets }}
-          DECLARED_TESTS: ${{ inputs.test_targets }}
-          DECLARED_BUILDS: ${{ inputs.build_targets }}
+          AFFECTED: ${{ inputs.affected_targets }}
+          TEST_CANDIDATES: ${{ inputs.test_targets }}
+          BUILD_CANDIDATES: ${{ inputs.build_targets }}
         run: |
-          # No narrowing step (disabled, no base revision): run everything the
-          # unit declares. Otherwise use the narrowed subset, including empty.
-          if [ "${{ inputs.precise_targets }}" = "true" ] && [ -n "${{ inputs.base_sha }}" ]; then
-            tests="$SELECTED_TESTS"
-            builds="$SELECTED_BUILDS"
-          else
-            tests="$DECLARED_TESTS"
-            builds="$DECLARED_BUILDS"
-          fi
-          {
-            echo "test_targets=${tests}"
-            echo "build_targets=${builds}"
-          } >> "$GITHUB_OUTPUT"
+          node platform/ci/plan-targets.mjs narrow \
+            --affected "$AFFECTED" \
+            --tests "$TEST_CANDIDATES" \
+            --builds "$BUILD_CANDIDATES" >> "$GITHUB_OUTPUT"
 
       - name: bazel build ${{ inputs.unit }}
         if: steps.targets.outputs.build_targets != ''
@@ -209,3 +158,12 @@ jobs:
           path: ${{ inputs.artifact }}
           if-no-files-found: error
           retention-days: 14
+
+      # Develop-only writer for the cache restored above. A key can be written
+      # once, so the save key carries the run id; the restore prefix is what PRs
+      # (and the next develop run) actually resolve to.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}

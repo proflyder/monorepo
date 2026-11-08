@@ -532,6 +532,21 @@ test("real repo: shared kotlin change selects the lint unit through the graph", 
   );
 });
 
+test("real repo: the Android-only bazelrc selects only android units", () => {
+  // Android-specific flags live in platform/android/android.bazelrc, activated
+  // with --config=android. A change there must not invalidate every unit the
+  // way a root `.bazelrc` change does.
+  const result = routeReal(["platform/android/android.bazelrc"]);
+  assert.equal(result.routes.android.mode, "all");
+  assert.deepEqual(
+    result.routes.android.units.map((unit) => unit.id),
+    ["android-app", "android-lint", "kotlin-shared"],
+  );
+  for (const platform of ["bazel", "python", "js", "native"]) {
+    assert.deepEqual(result.routes[platform].units, [], platform);
+  }
+});
+
 test("real repo: lint rule change runs every android unit including lint", () => {
   const config = affected.loadConfig();
   const result = routeReal(["platform/android/lint.bzl"]);

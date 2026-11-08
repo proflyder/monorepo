@@ -128,9 +128,13 @@ VERSION_NAME="0.1.0-$SHORT_SHA"
 echo "Building //projects/mobile/android:app (versionCode $VERSION_CODE, versionName $VERSION_NAME)"
 (
   cd "$ROOT"
-  "$BAZEL" build //projects/mobile/android:app \
+  # `--config=android` first: it activates platform/android/android.bazelrc, and
+  # the `--define` values below must win over the defaults defined there.
+  "$BAZEL" build \
+    --config=android \
     --define "home_version_code=$VERSION_CODE" \
-    --define "home_version_name=$VERSION_NAME"
+    --define "home_version_name=$VERSION_NAME" \
+    //projects/mobile/android:app
 )
 
 if [[ ! -f "$APK" ]]; then

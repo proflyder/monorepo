@@ -126,25 +126,37 @@ jobs:
   #     overridden anywhere, so every workflow produces the same key/prefix and
   #     PRs restore develop's cache. `bazel fetch` only populates the
   #     repository cache; it does not run tests or builds.
+  #   * actions/cache entries below use the exact keys `_android.yml` and
+  #     `ci.yml` restore, so a PR resolves them on the first restore level
+  #     instead of falling back to a platform prefix.
   #
-  # The actions/cache disk caches in `_android.yml` and `_deploy-control.yml`
-  # stay PR-local: their content is produced by an Android build or a
-  # deploy-control run, which this job deliberately does not do.
+  # The Android disk cache is the one action-output cache written here. PR
+  # jobs restore it read-only (GitHub scopes a cache to the ref that created
+  # it, so a PR-written cache would only burn the 10 GB budget); `warm-caches`
+  # builds the app once per merge to fill it. `_deploy-control.yml` and the
+  # native units stay PR/restore-only: nothing on develop produces their
+  # outputs.
   warm-caches:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # A cold Android app build is the bulk of this job (the deploy itself only
+    # starts after `plan`, so the extra minutes do not delay a roll-out).
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # The Android targets in `//projects/...` need the same SDK the Android
-      # PR jobs install, otherwise fetching them would fail before the Maven
-      # repositories are cached. No Android build or test runs here.
+      # PR jobs install.
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
-      - name: Install Android SDK packages for repository fetching
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK packages
         run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
 
       # Identical inputs to `_android.yml`, `_images.yml`, `_deploy-control.yml`
@@ -157,6 +169,31 @@ jobs:
           repository-cache: true
           cache-save: true
 
+      # Disk cache of the `android-app` matrix entry and of `android-distribute`
+      # (same key prefix). The other Android units reach it through
+      # `bazel-android-Linux-` in their restore-keys.
+      #
+      # Restore and save are separate steps: a key can be written once, so the
+      # save key carries the run id and readers resolve the stable prefix. That
+      # way every merge re-archives the current cache instead of freezing the
+      # first entry for a lockfile hash; superseded entries are evicted by the
+      # repository-wide LRU once no run restores them any more.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-android-${{ runner.os }}-android-app-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          restore-keys: |
+            bazel-android-${{ runner.os }}-android-app-
+            bazel-android-${{ runner.os }}-
+
+      # The `plan` job's pinned binary (version and checksums are pinned in the
+      # installer script, so its hash stands for the version). The binary only
+      # changes when that script changes, so one entry per hash is enough.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ci-tools
+          key: target-determinator-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('platform/ci/install-target-determinator.sh') }}
+
       - name: Populate the Bazel repository cache
         run: |
           set -euo pipefail
@@ -164,6 +201,40 @@ jobs:
           # images from //projects/... and the Android/Kotlin targets that pull
           # the Maven repositories. `fetch` resolves external repositories only.
           bazel fetch //solutions/... //packages/... //projects/...
+
+      - name: Install target-determinator
+        run: |
+          set -euo pipefail
+          dest="$HOME/.cache/ci-tools/target-determinator"
+          if [[ -x "$dest" ]]; then
+            echo "target-determinator cache already warm"
+          else
+            mkdir -p "$(dirname "$dest")"
+            platform/ci/install-target-determinator.sh "$dest" >/dev/null
+          fi
+
+      # No secrets are involved: without `platform/android/keys/
+      # google-services.json` the app still builds and Firebase stays inert.
+      # `--experimental_disk_cache_gc_max_size` keeps the archived cache below
+      # GitHub's 10 GB budget for all caches of the repository (best effort: the
+      # server evicts in the background while idle, before the save below).
+      - name: Warm the Android disk cache
+        run: |
+          set -euo pipefail
+          # `--config=android` is mandatory: it activates
+          # platform/android/android.bazelrc, so the cached actions match the
+          # PR jobs that build with the same config.
+          bazel build --config=android //projects/mobile/android:app \
+            --experimental_disk_cache_gc_max_size=6G
+
+      # Closes the cache files and lets the idle GC finish before archiving.
+      - name: Stop the Bazel server
+        run: bazel shutdown
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-android-${{ runner.os }}-android-app-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # Route the change onto deployable units. Unknown/zero `before`, or any
   # routing failure, falls back to "deploy everything" rather than skipping a

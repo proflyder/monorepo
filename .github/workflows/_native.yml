@@ -237,7 +237,17 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore-only everywhere. These units have no develop-side builder
+      # (deploy-home only promotes the PR-built artifact), so there is no
+      # writer to seed a shared entry; a PR-written cache would stay invisible
+      # to every other PR and only spend the repository's 10 GB budget and the
+      # minutes of upload. If a develop warm build is ever added, save from it
+      # with a `-<run_id>` key and keep these prefixes.
+      #
+      # No platform-wide `bazel-<os>-` fallback: it also matches the host
+      # `_bazel.yml` entries, and a cross-build restoring that cache would
+      # download gigabytes for no usable action.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Action-output disk cache (.bazelrc only); the key tracks both the
           # Rust workspace and the pinned zig/Windows toolchain platform.
@@ -245,7 +255,6 @@ jobs:
           key: bazel-logon-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
           restore-keys: |
             bazel-logon-${{ runner.os }}-
-            bazel-${{ runner.os }}-
 
       - name: Test ${{ inputs.unit }}
         if: inputs.test != ''
@@ -340,15 +349,15 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Action-output disk cache (.bazelrc only); keyed like the pulsar-bazel
-          # unit so both restore the same Rust/C++ objects.
+          # unit so both restore the same Rust/C++ objects. Restore-only: see
+          # the logon job above for why PRs never write these entries.
           path: ~/.cache/bazel-disk
           key: bazel-pulsar-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-keys: |
             bazel-pulsar-${{ runner.os }}-
-            bazel-${{ runner.os }}-
 
       # Every run is release-shaped, so the cross-built binary is verified under
       # qemu exactly as the station updater does before accepting a release.
@@ -442,13 +451,13 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
+          # Restore-only; see the logon job above.
           path: ~/.cache/bazel-disk
           key: bazel-installer-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
           restore-keys: |
             bazel-installer-${{ runner.os }}-
-            bazel-${{ runner.os }}-
 
       - name: Test installer
         working-directory: ${{ inputs.workdir }}
