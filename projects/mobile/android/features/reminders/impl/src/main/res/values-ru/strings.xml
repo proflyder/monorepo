@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="reminders_title">Напоминания</string>
+    <string name="reminders_add">Добавить напоминание</string>
+    <string name="reminders_empty">Напоминаний пока нет. Домашний сервер доставляет однократные напоминания.</string>
+    <string name="reminders_delete">Удалить</string>
+    <string name="reminders_enabled">Включено</string>
+    <string name="reminders_due">Срок: %1$s</string>
+    <string name="reminders_off">Выключено</string>
+    <string name="reminders_delete_confirm">Удалить это напоминание с домашнего сервера?</string>
+    <string name="reminders_delete_yes">Удалить</string>
+    <string name="reminders_cancel">Отмена</string>
+    <string name="reminders_editor_title_new">Новое напоминание</string>
+    <string name="reminders_editor_title_edit">Изменить напоминание</string>
+    <string name="reminders_editor_label">Название</string>
+    <string name="reminders_editor_date">Дата</string>
+    <string name="reminders_editor_time">Время</string>
+    <string name="reminders_editor_timezone">Часовой пояс IANA</string>
+    <string name="reminders_editor_save">Сохранить на сервере</string>
+    <string name="reminders_editor_delete">Удалить напоминание</string>
+    <string name="reminders_editor_hint">Домашний сервер хранит это напоминание и отправляет одно событие DueEvent в выбранные местные дату и время. Телефон не планирует его локально.</string>
+    <string name="reminders_saved">Напоминание сохранено</string>
+    <string name="reminders_deleted">Напоминание удалено</string>
+</resources>
