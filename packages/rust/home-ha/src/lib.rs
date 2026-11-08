@@ -580,6 +580,8 @@ pub struct EntityAttributes {
     pub color_temp_kelvin: Option<f64>,
     pub hs_color: Option<Vec<f64>>,
     pub color_mode: Option<String>,
+    /// Effects a light advertises.
+    pub effect_list: Vec<String>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
 }

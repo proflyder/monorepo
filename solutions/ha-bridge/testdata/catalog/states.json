@@ -70,6 +70,10 @@
       "supported_color_modes": [
         "color_temp",
         "hs"
+      ],
+      "effect_list": [
+        "Day",
+        "Night"
       ]
     }
   },

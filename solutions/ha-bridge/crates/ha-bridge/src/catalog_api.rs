@@ -81,6 +81,9 @@ struct LightView {
     saturation: i32,
     #[serde(skip_serializing_if = "str::is_empty")]
     mode: &'static str,
+    /// Effects the bulb advertises (`effect_list`); omitted when unknown.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    effects: Vec<String>,
 }
 
 /// The wire shape of `GET /v1/catalog`.
@@ -201,6 +204,7 @@ impl LightView {
                 "color" => "color",
                 _ => "",
             },
+            effects: light.effects.clone(),
         }
     }
 }

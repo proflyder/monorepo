@@ -256,6 +256,40 @@ impl Entry {
                     data,
                 })
             }
+            (Kind::Light, ACTION_TURN_ON) => {
+                let data = match self.light.as_ref() {
+                    Some(light) => light.turn_on_data(params)?,
+                    None if params.is_empty() => Map::new(),
+                    None => {
+                        return Err(ResolveError::NotAdjustable {
+                            id: self.id.clone(),
+                        });
+                    }
+                };
+                Ok(ServiceCall {
+                    domain,
+                    service: ACTION_TURN_ON.to_owned(),
+                    entity: self.entity.clone(),
+                    data,
+                })
+            }
+            (Kind::Light, ACTION_TURN_OFF) => {
+                let data = match self.light.as_ref() {
+                    Some(light) => light.turn_off_data(params)?,
+                    None if params.is_empty() => Map::new(),
+                    None => {
+                        return Err(ResolveError::NotAdjustable {
+                            id: self.id.clone(),
+                        });
+                    }
+                };
+                Ok(ServiceCall {
+                    domain,
+                    service: ACTION_TURN_OFF.to_owned(),
+                    entity: self.entity.clone(),
+                    data,
+                })
+            }
             (Kind::Scenario, ACTION_RUN) => Ok(ServiceCall {
                 domain,
                 service: ACTION_TURN_ON.to_owned(),
@@ -275,7 +309,7 @@ impl Entry {
                     data,
                 })
             }
-            (kind, ACTION_TURN_ON | ACTION_TURN_OFF) if kind != Kind::Scenario => Ok(ServiceCall {
+            (Kind::Switch | Kind::Profile, ACTION_TURN_ON | ACTION_TURN_OFF) => Ok(ServiceCall {
                 domain,
                 service: action.to_owned(),
                 entity: self.entity.clone(),
@@ -291,7 +325,7 @@ impl Entry {
 }
 
 /// A rejected catalog action.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ResolveError {
     #[error("light {id:?} cannot be adjusted")]
     NotAdjustable { id: String },
@@ -1208,6 +1242,100 @@ mod tests {
                 .expect_err("run is not a light action")
                 .to_string()
                 .contains("not supported")
+        );
+    }
+
+    #[test]
+    fn resolve_forwards_effect_and_transition_and_rejects_unknown_effects() {
+        let entries = build(
+            &[Raw {
+                entity: "light.lamp".to_owned(),
+                state: "on".to_owned(),
+                light: Some(Light {
+                    brightness: true,
+                    color_temp: true,
+                    min_kelvin: 2700,
+                    max_kelvin: 6500,
+                    effects: vec!["Day".to_owned()],
+                    ..Light::default()
+                }),
+                ..Raw::default()
+            }],
+            &rules(),
+        );
+        let catalog = Catalog::new(entries);
+        let lamp = catalog.lookup("light.lamp").expect("lamp");
+        let call = lamp
+            .resolve(
+                ACTION_SET,
+                &Params {
+                    brightness: Some(100),
+                    kelvin: Some(2800),
+                    effect: Some("Day".to_owned()),
+                    transition: Some(0.5),
+                    ..Params::default()
+                },
+            )
+            .expect("set");
+        assert_eq!(
+            (
+                call.domain.as_str(),
+                call.service.as_str(),
+                call.entity.as_str()
+            ),
+            ("light", "turn_on", "light.lamp")
+        );
+        assert_eq!(call.data["effect"], Value::from("Day"));
+        assert_eq!(call.data["transition"], Value::from(0.5));
+
+        // turn_on carries the same parameters.
+        let call = lamp
+            .resolve(
+                ACTION_TURN_ON,
+                &Params {
+                    effect: Some("Day".to_owned()),
+                    transition: Some(2.0),
+                    ..Params::default()
+                },
+            )
+            .expect("turn_on");
+        assert_eq!(call.service, "turn_on");
+        assert_eq!(call.data["effect"], Value::from("Day"));
+
+        // turn_off accepts a transition and nothing else.
+        let call = lamp
+            .resolve(
+                ACTION_TURN_OFF,
+                &Params {
+                    transition: Some(2.0),
+                    ..Params::default()
+                },
+            )
+            .expect("turn_off");
+        assert_eq!(call.service, "turn_off");
+        assert_eq!(call.data["transition"], Value::from(2.0));
+        assert!(
+            lamp.resolve(
+                ACTION_TURN_OFF,
+                &Params {
+                    brightness: Some(10),
+                    ..Params::default()
+                }
+            )
+            .is_err()
+        );
+
+        // An effect the bulb does not advertise is rejected.
+        assert_eq!(
+            lamp.resolve(
+                ACTION_SET,
+                &Params {
+                    effect: Some("Party".to_owned()),
+                    ..Params::default()
+                }
+            )
+            .expect_err("unknown effect"),
+            ResolveError::Light(light::LightError::EffectUnknown)
         );
     }
 

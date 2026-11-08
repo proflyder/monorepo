@@ -404,6 +404,7 @@ fn light_of(entity: &Entity) -> Option<Light> {
         saturation,
         has_hs,
         color_mode: attributes.color_mode.clone().unwrap_or_default(),
+        effects: attributes.effect_list.clone(),
     })
 }
 
@@ -595,6 +596,15 @@ mod tests {
                 .title,
             "yl-light delay-off"
         );
+    }
+
+    #[test]
+    fn effect_list_reaches_the_light_capabilities() {
+        let mut lamp = entity("light.lamp", "Light");
+        lamp.attributes.supported_color_modes = vec!["color_temp".to_owned()];
+        lamp.attributes.effect_list = vec!["Day".to_owned(), "Night".to_owned()];
+        let light = light_of(&lamp).expect("light");
+        assert_eq!(light.effects, vec!["Day", "Night"]);
     }
 
     #[test]
