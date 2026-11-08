@@ -191,7 +191,9 @@ impl<H: ControlHa> Handler for Control<H> {
 }
 
 /// The task payload. `entry` and `action` are data; `brightness`, `kelvin`,
-/// `hue` and `saturation` are the light adjustments.
+/// `hue` and `saturation` are the light adjustments, `text` is the speak
+/// action's user content. The text is validated by `resolve` and never
+/// logged, echoed in an ack detail or stored.
 #[derive(Debug, Deserialize)]
 struct Command {
     #[serde(default)]
@@ -358,6 +360,20 @@ mod tests {
                     ..Raw::default()
                 },
                 Raw {
+                    entity: crate::catalog::SPEAK_SCRIPT.to_owned(),
+                    state: "off".to_owned(),
+                    name: "Speak text".to_owned(),
+                    ..Raw::default()
+                },
+                Raw {
+                    entity: "assist_satellite.station_satellite".to_owned(),
+                    state: "idle".to_owned(),
+                    name: "Яндекс Станция Миди Assist satellite".to_owned(),
+                    device_id: "station-1".to_owned(),
+                    device: "Яндекс Станция Миди".to_owned(),
+                    ..Raw::default()
+                },
+                Raw {
                     entity: "light.strip".to_owned(),
                     state: "on".to_owned(),
                     name: "Strip".to_owned(),
@@ -479,6 +495,58 @@ mod tests {
                 matches!(outcome, Outcome::Failed(_)),
                 "{payload}: {outcome:?}"
             );
+        }
+        assert!(ha.calls.lock().expect("lock").is_empty());
+    }
+
+    #[tokio::test]
+    async fn speak_calls_the_script_with_the_text_as_a_variable() {
+        let ha = Arc::new(FakeHa::default());
+        let control = control(Arc::clone(&ha));
+        let outcome = control
+            .handle(&task(
+                "e",
+                r#"{"entry":"action.station_speak","action":"speak","text":"  Добрый вечер.  "}"#,
+            ))
+            .await;
+        assert_eq!(
+            outcome,
+            Outcome::Delivered("home assistant accepted action.station_speak".to_owned())
+        );
+        let calls = ha.calls.lock().expect("lock");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "script");
+        assert_eq!(calls[0].1, "turn_on");
+        assert_eq!(calls[0].2, crate::catalog::SPEAK_SCRIPT);
+        assert_eq!(
+            calls[0].3["variables"]["message"],
+            Value::from("Добрый вечер.")
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_speak_text_fails_without_calling_ha_or_leaking_the_text() {
+        let ha = Arc::new(FakeHa::default());
+        let control = control(Arc::clone(&ha));
+        let secret = "очень секретный текст";
+        for payload in [
+            r#"{"entry":"action.station_speak","action":"speak"}"#.to_owned(),
+            r#"{"entry":"action.station_speak","action":"speak","text":"   "}"#.to_owned(),
+            format!(
+                r#"{{"entry":"action.station_speak","action":"speak","text":"{secret}{}"}}"#,
+                "ж".repeat(500)
+            ),
+            format!(
+                r#"{{"entry":"action.station_speak","action":"speak","text":"{secret}\u0000"}}"#
+            ),
+        ] {
+            let outcome = control.handle(&task("e", &payload)).await;
+            match outcome {
+                Outcome::Failed(detail) => {
+                    assert!(!detail.contains(secret), "leaked text: {detail}");
+                }
+                other => panic!("{other:?}"),
+            }
         }
         assert!(ha.calls.lock().expect("lock").is_empty());
     }

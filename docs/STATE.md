@@ -548,7 +548,12 @@
   at-least-once, не exactly-once. Прежний образ `ha-control` остаётся в GHCR для
   отката по digest; Rust-контракт каталога закреплён `testdata/catalog`.
   Title/Room режутся по символам (не по байтам), `Light.Mode` определяется до
-  live-значений, HTTP-сервер ограничен таймаутом запроса.
+  live-значений, HTTP-сервер ограничен таймаутом запроса. Действие
+  `action.station_speak` («Сказать на колонке», `kind: "action"`) появляется в
+  каталоге только при наличии `script.speak_text` в HA; команда `speak`
+  вызывает `script.turn_on` с `variables.message` (1–500 символов, без
+  управляющих). Текст — пользовательские данные: не пишется в логи, detail и
+  ledger. Device/room действия — от `assist_satellite` колонки.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
   `INTERNET`, debug-signed). Вкладки **Home**, Alarms, Timers, Reminders,
@@ -557,6 +562,9 @@
   адреса scheduler/control и таймауты — Firebase Remote Config
   (`home_connection`), фильтр Home и зашифрованный токен — Jetpack DataStore
   с миграцией из SharedPreferences; idempotency keys, redirects выключены.
+  Home также показывает действие «Сказать на колонке» (`kind: "action"`):
+  карточка открывает диалог текста (до 500 символов) и ставит
+  `{"entry":"action.station_speak","action":"speak","text":…}` в `control`.
   Debug APK установлен на телефон; холодный запуск и каталог проверены,
   интерактивные фильтры/сценарии/toggle ещё не приняты.
 

@@ -13,11 +13,13 @@ import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItems
 import dev.proflyder.home.feature.control.ControlPreferences
 import dev.proflyder.home.core.model.LightAdjust
+import dev.proflyder.home.feature.control.SpeakText
 import dev.proflyder.home.feature.control.domain.AdjustLight
 import dev.proflyder.home.feature.control.domain.LoadControlCatalog
 import dev.proflyder.home.feature.control.domain.RunScenario
 import dev.proflyder.home.feature.control.domain.SetDevicePower
 import dev.proflyder.home.feature.control.domain.SetVoiceProfile
+import dev.proflyder.home.feature.control.domain.SpeakOnStation
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
@@ -51,6 +53,7 @@ class ControlViewModel(
     private val setDevicePower: SetDevicePower,
     private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
+    private val speakOnStation: SpeakOnStation,
     private val preferences: ControlPreferences,
 ) : BaseViewModel<ControlUiState>(ControlUiState(configured = loadCatalog.isConfigured)) {
     private var refreshJob: Job? = null
@@ -100,6 +103,24 @@ class ControlViewModel(
         updateState { copy(pending = pending + entry.id, actionError = null) }
         launch {
             when (val result = runScenario(entry)) {
+                is Outcome.Success -> updateState {
+                    copy(pending = pending - entry.id, notice = ControlNotice.ScenarioQueued(entry.title))
+                }
+                is Outcome.Failure -> updateState { copy(pending = pending - entry.id, actionError = result.failure) }
+            }
+        }
+    }
+
+    /**
+     * Queues a spoken text. An invalid or empty text is ignored (the dialog
+     * keeps its Say button disabled), and the executor re-validates it again.
+     */
+    fun speak(entry: ControlEntry, text: String) {
+        val message = SpeakText.normalize(text) ?: return
+        if (entry.id in currentState.pending || !entry.available) return
+        updateState { copy(pending = pending + entry.id, actionError = null) }
+        launch {
+            when (val result = speakOnStation(entry, message)) {
                 is Outcome.Success -> updateState {
                     copy(pending = pending - entry.id, notice = ControlNotice.ScenarioQueued(entry.title))
                 }
@@ -229,12 +250,21 @@ class ControlViewModelFactoryContributor(
     private val setDevicePower: SetDevicePower,
     private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
+    private val speakOnStation: SpeakOnStation,
     private val preferences: ControlPreferences,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
 
     override fun createFactory() = SimpleViewModelFactory {
-        ControlViewModel(loadCatalog, runScenario, setDevicePower, setVoiceProfile, adjustLight, preferences)
+        ControlViewModel(
+            loadCatalog,
+            runScenario,
+            setDevicePower,
+            setVoiceProfile,
+            adjustLight,
+            speakOnStation,
+            preferences,
+        )
     }
 }
 

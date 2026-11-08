@@ -75,11 +75,14 @@ class ControlTexts(
     val unavailable: String,
     val profile: String,
     val onSummary: (on: Int, total: Int) -> String,
+    /** Header of the device-level action cards ("Say on the station"). */
+    val actions: String = "Actions",
 )
 
 object ControlItems {
     private const val SECTION_PROFILE = "profile"
     private const val SECTION_SCENARIOS = "scenarios"
+    private const val SECTION_ACTIONS = "actions"
     private const val SECTION_UNAVAILABLE = "unavailable"
     private const val SECTION_OTHER = "other"
     private const val SECTION_ROOM_PREFIX = "room:"
@@ -163,6 +166,15 @@ object ControlItems {
                 items += ControlItem.Header(SECTION_SCENARIOS, texts.scenarios)
             }
             scenarios.mapTo(items) { ControlItem.Scenario(it, it.id in pending) }
+        }
+
+        // Device-level actions ("say this text on the station") are one-shot
+        // tiles like scenarios, but a separate section: they belong to a
+        // device, not to the user's scenario presets.
+        val actions = content.filter { it.kind == ControlKind.ACTION && it.matches(applied) }
+        if (actions.isNotEmpty()) {
+            items += ControlItem.Header(SECTION_ACTIONS, texts.actions)
+            actions.mapTo(items) { ControlItem.Scenario(it, it.id in pending) }
         }
 
         val devices = content.filter { it.isDevice }

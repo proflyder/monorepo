@@ -22,4 +22,10 @@ interface ControlRepository {
 
     /** Queues a light adjustment (brightness / color temperature / color). */
     suspend fun adjust(entryId: String, adjust: LightAdjust): Outcome<Unit>
+
+    /**
+     * Queues "speak this text on the station". The text is user content: it
+     * only ever goes into the task payload, never into a URL or a log line.
+     */
+    suspend fun speak(entryId: String, text: String): Outcome<Unit>
 }

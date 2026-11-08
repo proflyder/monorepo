@@ -310,6 +310,7 @@ phone ── EnqueueTask(queue=control) ───► scheduler ◄── ListDue
 | `switch` с меткой профиля | вид `profile`: селектор профиля ассистента, всегда первым в каталоге |
 | `scene` | показываются все (сцена — пользовательский пресет по определению); `hidden`/`CONTROL_EXCLUDE` действуют |
 | `script` | **только с меткой роли «сценарий»**: HA label с id `scenario` (`CONTROL_SCENARIO_LABEL`) |
+| действие `speak` | синтетическая запись `action.station_speak` (`kind: "action"`) появляется, только если в HA есть `script.speak_text`; device/room — от сущности `assist_satellite` |
 | иконка, area, имя | только отображение; на то, что показывать, не влияют |
 | `CONTROL_EXCLUDE=glob,glob` | `path.Match`-маски по entity id, например `switch.*_child_lock` |
 
@@ -376,6 +377,22 @@ entity registry нет REST-эндпоинта. `home-ha` открывает о�
 Новое устройство, переименование, перенос в другую комнату, скрытие, снятие/постановка
 метки в HA подхватываются сами, без правок на сервере и в приложении.
 
+### Действие «сказать на колонке»
+
+`action.station_speak` — единственная сегодня запись `kind: "action"`. Она
+появляется в каталоге, пока в Home Assistant есть `script.speak_text`, и
+исчезает вместе со скриптом (скрипт скрыт в HA — тоже исчезает). `device_id`,
+`device` и `room` берутся у сущности `assist_satellite`; без неё действие
+остаётся доступным, но без группировки. Действие одно: `speak`.
+
+Задача: `{"entry":"action.station_speak","action":"speak","text":"..."}`.
+Текст обязателен, обрезается по краям, 1–500 символов, без управляющих
+символов; иначе `ACK_FAILED` с detail без текста. Исполнитель вызывает
+`script.turn_on` для `script.speak_text` с `variables: {message: <текст>}`.
+Текст — пользовательские данные: он не попадает в логи, detail, ledger или
+отчёты, а service/entity из payload не выбираются. Громкость пока не
+передаётся: неизвестные поля payload игнорируются, как и раньше.
+
 Сбои: если HA недоступен, отдаётся последний известный каталог с
 `statesOk=false` и `available=false` у всех записей; если каталога ещё не было —
 `502`. Если метка сценария не читается (старый HA без labels), скрипты не показываются
@@ -387,11 +404,12 @@ entity registry нет REST-эндпоинта. `home-ha` открывает о�
 ### Исполнение — через планировщик
 
 Телефон делает `EnqueueTask(task_type="home.control", queue="control",
-payload={"entry": "<entity_id>", "action": "run|turn_on|turn_off"})`. Исполнитель
+payload={"entry": "<id>", "action": "run|turn_on|turn_off|set|speak"})`. Исполнитель
 **заново** обнаруживает каталог и принимает команду только если `entry` есть в нём
 сейчас: id вне правил (например `script.alarm_stop`) отклоняется с `ACK_FAILED`
 без вызова HA. `run` → `<domain>.turn_on` для script/scene; `turn_on`/`turn_off` —
-для light/switch и `profile`. Service из payload никогда не берётся. `toggle` нет
+для light/switch и `profile`; `speak` — только для `action.station_speak` и только
+с `text`. Service и entity из payload никогда не берутся. `toggle` нет
 намеренно (доставка at-least-once не должна переключать дважды). Если HA недоступен
 в момент исполнения — событие остаётся без ack и придёт повторно (до `MaxAttempts`).
 
@@ -403,14 +421,15 @@ payload={"entry": "<entity_id>", "action": "run|turn_on|turn_off"})`. Испол
 `GET /v1/catalog`, `Authorization: Bearer <CONTROL_TOKEN>` (константное время,
 пустой токен не авторизует никого). Ответ: `{"statesOk": bool, "entries": [{id,
 kind, title, room, icon, device_id, device, role, actions[], state("on"/"off",
-устройства и профиль), available}]}`; `kind` — `scenario`, `light`, `switch` или
-`profile`; порядок: профиль, затем сценарии, затем устройства по комнатам.
-`device_id`, `device` и `role` (`primary`/`setting`) появились аддитивно и
-опускаются, пока пусты; старые клиенты их игнорируют. Задел на будущее:
-действия уровня устройства (например, «произнести текст на колонке» или
-«позвонить на колонку») придут отдельными записями с `kind: "action"`, тем же
+устройства и профиль), available}]}`; `kind` — `scenario`, `light`, `switch`,
+`profile` или `action`; порядок: профиль, сценарии, действия, устройства по
+комнатам. `device_id`, `device` и `role` (`primary`/`setting`) появились
+аддитивно и опускаются, пока пусты; старые клиенты их игнорируют. Действия
+уровня устройства приходят отдельными записями с `kind: "action"`, тем же
 `device_id` и своей разрешённой командой, не меняя формат задачи
-`{"entry", "action"}`. Сервер только читает. Телефон шлёт
+`{"entry", "action"}`; сейчас такое действие одно — `speak`. Старый клиент,
+не знающий `action`, показывает запись как неизвестный kind и не действует
+ею. Сервер только читает. Телефон шлёт
 тот же bearer, что и планировщику (можно задать общий). Слушает `CONTROL_LISTEN`
 (по умолчанию `127.0.0.1:8099`; для LAN/VPN — адрес интерфейса). TLS на
 уровне процесса нет, как у scheduler: доверенная сеть LAN/VPN.

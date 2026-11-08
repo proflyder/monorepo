@@ -18,6 +18,8 @@ internal object ControlIcons {
         listOf("bulb", "lamp", "light", "ceiling", "led") to R.drawable.control_ic_bulb,
         listOf("plug", "power", "outlet", "socket", "fan") to R.drawable.control_ic_plug,
         listOf("play", "movie", "television", "tv", "theater", "scene") to R.drawable.control_ic_play,
+        // Device-level one-shot actions ("say on the station").
+        listOf("message", "speak", "voice", "text", "comment") to R.drawable.control_ic_message,
     )
 
     @DrawableRes

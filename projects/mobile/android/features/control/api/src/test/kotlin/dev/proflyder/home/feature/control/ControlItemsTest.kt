@@ -36,7 +36,11 @@ class ControlItemsTest {
         title = title,
         room = room,
         icon = "",
-        actions = if (kind == ControlKind.SCENARIO) setOf(ControlAction.RUN) else setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+        actions = when (kind) {
+            ControlKind.SCENARIO -> setOf(ControlAction.RUN)
+            ControlKind.ACTION -> setOf(ControlAction.SPEAK)
+            else -> setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF)
+        },
         power = power,
         available = available,
         deviceId = deviceId,
@@ -405,5 +409,47 @@ class ControlItemsTest {
         assertTrue(group.primary.single { it.entry.id == "light.ceiling" }.busy)
         assertFalse(group.primary.single { it.entry.id == "light.ceiling.ambient" }.busy)
         assertFalse(group.statesKnown)
+    }
+
+    @Test
+    fun speakActionsGetTheirOwnSectionAndNeverJoinADeviceGroup() {
+        val speak = entry(
+            "action.station_speak",
+            ControlKind.ACTION,
+            room = "Bedroom",
+            title = "Сказать на колонке",
+            deviceId = "dev.ceiling",
+            device = "Ceiling lamp",
+        )
+        val items = build(listOf(speak))
+        val described = items.describe()
+        assertEquals(listOf("# Actions", "S action.station_speak"), described)
+        assertTrue(items.none { it is ControlItem.DeviceGroup })
+        // The action is one-shot: no power state is claimed for it.
+        val action = items.filterIsInstance<ControlItem.Scenario>().single()
+        assertNull(action.entry.power)
+        assertTrue(action.entry.actions.contains(ControlAction.SPEAK))
+    }
+
+    @Test
+    fun actionsFollowASelectedRoomButNotTheScenarioChip() {
+        val entries = listOf(
+            entry("action.station_speak", ControlKind.ACTION, room = "Bedroom"),
+            entry("scene.movie", ControlKind.SCENARIO, room = "Bedroom"),
+        )
+        assertEquals(
+            listOf("# Scenarios", "S scene.movie", "# Actions", "S action.station_speak"),
+            build(entries, ControlFilter.All).describe(),
+        )
+        // Under the Scenarios chip its header is implied and omitted; the
+        // action still does not appear.
+        assertEquals(
+            listOf("S scene.movie"),
+            build(entries, ControlFilter.Scenarios).describe(),
+        )
+        assertEquals(
+            listOf("# Scenarios", "S scene.movie", "# Actions", "S action.station_speak"),
+            build(entries, ControlFilter.Room("Bedroom")).describe(),
+        )
     }
 }
