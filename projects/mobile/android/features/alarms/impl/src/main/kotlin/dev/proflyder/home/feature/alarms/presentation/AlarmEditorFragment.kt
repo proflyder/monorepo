@@ -13,6 +13,7 @@ import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.impl.R
@@ -34,6 +35,12 @@ class AlarmEditorFragment :
     private val dayChips: List<Chip>
         get() = with(binding) { listOf(day1, day2, day3, day4, day5, day6, day7) }
 
+    /** Quick offset chips in the same order as [ALARM_QUICK_OFFSETS_MINUTES]. */
+    private val quickOffsetChips: List<Chip>
+        get() = with(binding) {
+            listOf(quickOffset15, quickOffset30, quickOffset60, quickOffset90, quickOffset120)
+        }
+
     override fun onBindingCreated(binding: FragmentAlarmEditorBinding, savedInstanceState: Bundle?) {
         val alarmId = arguments?.getString(AlarmEditorDestination.ARG_ALARM_ID)
         viewModel.start(alarmId)
@@ -47,6 +54,10 @@ class AlarmEditorFragment :
             if (!rendering) viewModel.setEnabled(checked)
         }
         binding.alarmEditorTime.setOnClickListener { pickTime() }
+        quickOffsetChips.forEachIndexed { index, chip ->
+            val minutes = ALARM_QUICK_OFFSETS_MINUTES.getOrNull(index) ?: return@forEachIndexed
+            chip.setOnClickListener { viewModel.applyQuickOffset(minutes) }
+        }
         binding.alarmEditorDate.setOnClickListener { pickDate() }
         binding.alarmEditorSave.setOnClickListener { viewModel.save() }
         binding.alarmEditorDelete.setOnClickListener { confirmDelete() }

@@ -27,6 +27,11 @@
     <string name="alarms_editor_title_edit">Edit alarm</string>
     <string name="alarms_editor_label">Label</string>
     <string name="alarms_editor_time">Time</string>
+    <string name="alarms_quick_offset_15">+15 min</string>
+    <string name="alarms_quick_offset_30">+30 min</string>
+    <string name="alarms_quick_offset_60">+1 h</string>
+    <string name="alarms_quick_offset_90">+1.5 h</string>
+    <string name="alarms_quick_offset_120">+2 h</string>
     <string name="alarms_editor_date">Date (one-shot)</string>
     <string name="alarms_editor_timezone">IANA timezone</string>
     <string name="alarms_editor_repeat">Repeat</string>

@@ -43,6 +43,50 @@
             android:minHeight="56dp"
             android:textAllCaps="false" />
 
+        <!-- Order matches ALARM_QUICK_OFFSETS_MINUTES in the feature API. -->
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/alarm_editor_quick_offsets"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:singleLine="false">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/quick_offset_15"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/alarms_quick_offset_15" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/quick_offset_30"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/alarms_quick_offset_30" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/quick_offset_60"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/alarms_quick_offset_60" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/quick_offset_90"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/alarms_quick_offset_90" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/quick_offset_120"
+                style="@style/Widget.Material3.Chip.Assist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/alarms_quick_offset_120" />
+        </com.google.android.material.chip.ChipGroup>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/alarm_editor_date"
             style="@style/Widget.Material3.Button.OutlinedButton"

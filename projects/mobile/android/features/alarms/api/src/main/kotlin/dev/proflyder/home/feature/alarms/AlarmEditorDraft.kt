@@ -2,17 +2,21 @@ package dev.proflyder.home.feature.alarms
 
 import dev.proflyder.home.core.model.RepeatKind
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /**
  * Non-secret editor draft persisted in SavedStateHandle. It intentionally holds
  * no token, endpoint credentials, or schedule payload.
+ *
+ * A fresh draft defaults to [defaultAlarmTime] so a new alarm never starts in
+ * the past; restored drafts keep the persisted hour/minute unchanged.
  */
 data class AlarmEditorDraft(
     val existingId: String? = null,
     val existingRevision: Long? = null,
     val label: String = "",
-    val hour: Int = 7,
-    val minute: Int = 0,
+    val hour: Int = defaultAlarmTime(LocalDateTime.now()).hour,
+    val minute: Int = defaultAlarmTime(LocalDateTime.now()).minute,
     val timezone: String = java.time.ZoneId.systemDefault().id,
     val repeat: RepeatKind = RepeatKind.DAILY,
     val weekdays: List<Int> = emptyList(),

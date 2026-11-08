@@ -30,15 +30,15 @@ metro_android_library(
     ],
 )
 
-# Selection motion decision: whether a bind should animate or snap to the end
-# state. Plain JUnit, no Android runtime needed.
+# Impl unit decisions and the editor's quick-offset state mapping. Plain JUnit,
+# no Android runtime needed.
 kt_android_local_test(
     name = "selection_animation_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.alarms.impl",
     manifest = "src/test/AndroidManifest.xml",
-    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmSelectionAnimationTest",
+    test_class = "dev.proflyder.home.feature.alarms.presentation.AllAlarmImplTests",
     deps = [
         "@maven//:junit_junit",
     ],
