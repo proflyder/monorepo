@@ -44,7 +44,8 @@ pub async fn run() -> anyhow::Result<()> {
         VERSION,
         Arc::new(move || status_engine.status()),
         config.allowed_consumers.clone(),
-    );
+    )
+    .with_scenario_execution(config.scenario_execution);
     let router = api::router(
         service.clone(),
         AlarmFacade::new(service),
@@ -64,6 +65,7 @@ pub async fn run() -> anyhow::Result<()> {
         grace_seconds = config.missed_grace.as_secs(),
         ring_window_seconds = config.ring_window.as_secs(),
         consumers_restricted = !config.allowed_consumers.is_empty(),
+        scenario_execution = config.scenario_execution,
         "scheduler listening"
     );
 

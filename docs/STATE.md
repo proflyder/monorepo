@@ -20,7 +20,7 @@
 - `ricardo-uplink` держит ровно один physical uplink; полные перезагрузки PVE
   без Ethernet проходят.
 - Power-loss тест 2026-11-02 (выдернуто питание): PVE, HAOS, K3s (30/30 подов),
-  VPN, OpenBao auto-unseal, scheduler с обоими consumer, backup SSD и таймеры
+  VPN, OpenBao auto-unseal, scheduler со всеми consumer, backup SSD и таймеры
   поднялись сами за ~4 минуты; станция видна в HA.
 - VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, HAOS `2026.10.4`, `192.0.2.28`.
 - VM `101 lab-k3s`: 8 vCPU / 12 GiB / 200 GiB, Ubuntu 24.04.5, K3s,
@@ -173,7 +173,7 @@
   kubectl → K3s API `6443`, HTTPS → Traefik/OpenBao `443`. Режимы
   (`preserve`/`execute`/`shadow`/`control-*`) — только через
   `workflow_dispatch`.
-- scheduler (Rust, static musl), ha-bridge, ha-control — собственные
+- scheduler (Rust, static musl), ha-bridge, ha-control, ha-scenario — собственные
   distroless-образы, собираемые Bazel `rules_oci`/`rules_rust` и адресуемые по
   digest в `ghcr.io/proflyder/<name>@sha256:…`; CI пушит их job-scoped
   `GITHUB_TOKEN`, живой узел импортирует те же digest'ы в containerd.
@@ -525,9 +525,21 @@
   (manual/time-триггеры, условия, шаги, revision), time-триггеры
   материализуются строками `schedules` (`kind=SCHEDULE_KIND_SCENARIO`) и
   событиями `scenario.fire` в очереди `scenario`; `RunScenario` ставит
-  manual-событие туда же. Исполнителя `ha-scenario` ещё нет:
-  `GetStatus.scenario_store_supported=true`,
-  `scenario_execution_supported=false`.
+  manual-событие туда же. Исполнитель — третий бинарь
+  `solutions/ha-bridge` `ha-scenario` (static musl, uid 65534, entrypoint
+  `/usr/local/bin/ha-scenario`) отдельным Deployment: 1 реплика, consumer
+  `ha-scenario-home`, очередь `scenario`, ledger `/data/scenario-ledger.json`
+  на PVC `ha-scenario-data`, `SCENARIO_EXECUTE=true`, `-healthcheck` —
+  аутентифицированный `GetStatus.ready`. `GetStatus.scenario_store_supported=true`;
+  `scenario_execution_supported` — deployment-флаг scheduler
+  `SCENARIO_EXECUTION=true` в манифесте. Исполнитель читает
+  `ScenarioService/GetScenario` (bearer как у ha-control), вычисляет условия
+  (`entity_state`, `time_window` с окном через полночь и weekdays, timezone
+  первого time-триггера или `Asia/Almaty`) и выполняет шаги
+  catalog/speak/delay по живому каталогу. STOP отменяет `delay`, второй FIRE
+  того же сценария — `SKIPPED`; ledger различает `started`/`completed`, поэтому
+  прерванный прогон не повторяется (`FAILED interrupted`). Ретраи — только до
+  первого шага. Текст speak не пишется в логи, ledger и detail.
 - `RingWindow` = максимальная длительность срабатывания (900 с по
   умолчанию). Истечение окна закрывает occurrence: tick в одной транзакции
   отменяет pending `FIRE` того же occurrence и ставит STOP в durable очередь
@@ -551,8 +563,9 @@
   entrypoint `/usr/local/bin/ha-control`) развёрнут отдельным Deployment: каталог
   `GET /v1/catalog` из live HA, очередь `control`; `CONTROL_EXECUTE=true`,
   consumer `ha-control-home` в allowlist планировщика рядом с
-  `ha-bridge-home`. Скрипты попадают в каталог только с нативной меткой HA
-  `scenario` (`CONTROL_SCENARIO_LABEL`); иконки — только отображение. Метка
+  `ha-bridge-home` и `ha-scenario-home`. Скрипты попадают в каталог только с
+  нативной меткой HA `scenario` (`CONTROL_SCENARIO_LABEL`); иконки — только
+  отображение. Метка
   назначена `script.work_mode` и `script.blackout`. Живой каталог: 2 сценария
   + 15 light/switch, служебные скрипты отсутствуют. LAN NodePort `30099`,
   HTTPS `https://control.home.example.com` (LAN/VPN). Доставка

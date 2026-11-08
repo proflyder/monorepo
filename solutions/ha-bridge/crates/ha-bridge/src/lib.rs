@@ -5,11 +5,13 @@
 //! receipt and only then acknowledges the event. It owns no schedule state and
 //! has no inbound listener.
 //!
-//! The crate holds two binaries over one solution:
+//! The crate holds three binaries over one solution:
 //!
 //! * `ha-bridge` — the alarm `home`-queue executor (no listener);
 //! * `ha-control` — the phone-facing `GET /v1/catalog` and the dedicated
-//!   `control`-queue executor.
+//!   `control`-queue executor;
+//! * `ha-scenario` — the durable `scenario`-queue executor for
+//!   `home.v1.ScenarioService` definitions (no listener).
 //!
 //! The crate mirrors the Go binaries:
 //!
@@ -18,6 +20,9 @@
 //! * [`domain`] is the pure plan/order/stop/announce decision table;
 //! * [`catalog`] is the pure catalog/light rule set;
 //! * [`discovery`] discovers and caches the catalog from Home Assistant;
+//! * [`scenario`] is the scenario definition, condition and step executor;
+//! * [`scenario_config`], [`scenario_app`], [`scenario_health`] compose the
+//!   scenario process;
 //! * [`ledger`] is the version-1 JSON receipt file with atomic writes;
 //! * [`bridge`] and [`control`] are the [`home_worker::Handler`]s;
 //! * [`catalog_api`] is the authenticated read-only HTTP surface;
@@ -42,3 +47,7 @@ pub mod discovery;
 pub mod domain;
 pub mod health;
 pub mod ledger;
+pub mod scenario;
+pub mod scenario_app;
+pub mod scenario_config;
+pub mod scenario_health;

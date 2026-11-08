@@ -56,6 +56,10 @@ pub struct Config {
     pub max_attempts: i64,
     pub tick_interval: Duration,
     pub allowed_consumers: Vec<String>,
+    /// Advertise `GetStatus.scenario_execution_supported`. The scheduler never
+    /// executes scenarios; `ha-scenario` does. This is a deployment flag so the
+    /// status only claims support when that executor is actually rolled out.
+    pub scenario_execution: bool,
 }
 
 impl std::fmt::Debug for Config {
@@ -74,6 +78,7 @@ impl std::fmt::Debug for Config {
             .field("max_attempts", &self.max_attempts)
             .field("tick_interval", &self.tick_interval)
             .field("allowed_consumers", &self.allowed_consumers)
+            .field("scenario_execution", &self.scenario_execution)
             .finish_non_exhaustive()
     }
 }
@@ -154,6 +159,19 @@ impl Config {
             }
         }
 
+        let scenario_execution = match first(getenv, &["SCENARIO_EXECUTION"]) {
+            None => false,
+            Some(raw) => match raw.trim() {
+                "1" | "t" | "T" | "true" | "TRUE" | "True" => true,
+                "0" | "f" | "F" | "false" | "FALSE" | "False" => false,
+                _ => {
+                    return Err(ConfigError::Invalid(
+                        "SCENARIO_EXECUTION must be true/false".into(),
+                    ));
+                }
+            },
+        };
+
         let config = Self {
             db_path: PathBuf::from(db_path),
             listen,
@@ -168,6 +186,7 @@ impl Config {
             max_attempts,
             tick_interval,
             allowed_consumers,
+            scenario_execution,
         };
         config.validate()?;
         Ok(config)
@@ -403,6 +422,24 @@ mod tests {
         assert_eq!(config.db_path, PathBuf::from("/new/scheduler.db"));
         assert_eq!(config.listen, "127.0.0.1:9000");
         assert_eq!(config.timezone, "Asia/Almaty");
+    }
+
+    #[test]
+    fn scenario_execution_is_an_off_by_default_deployment_flag() {
+        let config = Config::load_from(&env(&[("SCHEDULER_TOKEN", "t")]), &no_file).expect("load");
+        assert!(!config.scenario_execution);
+        let config = Config::load_from(
+            &env(&[("SCHEDULER_TOKEN", "t"), ("SCENARIO_EXECUTION", "true")]),
+            &no_file,
+        )
+        .expect("load");
+        assert!(config.scenario_execution);
+        let error = Config::load_from(
+            &env(&[("SCHEDULER_TOKEN", "t"), ("SCENARIO_EXECUTION", "maybe")]),
+            &no_file,
+        )
+        .expect_err("invalid flag");
+        assert!(error.to_string().contains("SCENARIO_EXECUTION"));
     }
 
     #[test]

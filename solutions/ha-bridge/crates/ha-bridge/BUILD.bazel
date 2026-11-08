@@ -17,6 +17,7 @@ LIB_DEPS = [
     "//packages/rust/home-worker:home_worker",
     "@crates//:anyhow",
     "@crates//:axum",
+    "@crates//:jiff",
     "@crates//:reqwest",
     "@crates//:rustls",
     "@crates//:serde",
@@ -35,6 +36,7 @@ rust_library(
         exclude = [
             "src/main.rs",
             "src/ha_control.rs",
+            "src/ha_scenario.rs",
         ],
     ),
     edition = "2024",
@@ -59,6 +61,16 @@ rust_binary(
 rust_binary(
     name = "ha-control",
     srcs = ["src/ha_control.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS + [":ha_bridge_lib"],
+)
+
+# The third binary of the same crate: the `scenario` queue executor.
+rust_binary(
+    name = "ha-scenario",
+    srcs = ["src/ha_scenario.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
     version = PACKAGE_VERSION,
@@ -106,6 +118,7 @@ rustfmt_test(
         ":ha_bridge_lib",
         ":ha-bridge",
         ":ha-control",
+        ":ha-scenario",
         ":golden_tests",
     ],
 )
@@ -117,6 +130,7 @@ rust_clippy_test(
         ":ha_bridge_lib",
         ":ha-bridge",
         ":ha-control",
+        ":ha-scenario",
         ":golden_tests",
     ],
 )
