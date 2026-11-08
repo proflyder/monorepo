@@ -27,6 +27,8 @@ require "android.permission.MANAGE_OWN_CALLS"
 require "android.permission.FOREGROUND_SERVICE_PHONE_CALL"
 require "android.permission.RECORD_AUDIO"
 require "android.permission.POST_NOTIFICATIONS"
+require "android.permission.ACCESS_NETWORK_STATE"
+require "android.permission.MODIFY_AUDIO_SETTINGS"
 
 if [ "$missing" -ne 0 ]; then
   echo "the call feature manifest was not merged into the APK" >&2
