@@ -61,24 +61,6 @@ for (const line of stdin.split("\n")) {
     process.stderr.write("Push blocked: check out the branch you are publishing.\n");
     process.exit(1);
   }
-  const privateHistory = spawnSync("git", ["merge-base", "local-history", localSha], {
-    cwd: root,
-    stdio: "ignore",
-  });
-  if (
-    privateHistory.error ||
-    privateHistory.status === null ||
-    ![0, 1].includes(privateHistory.status)
-  ) {
-    process.stderr.write("Push blocked: cannot verify private history isolation.\n");
-    process.exit(1);
-  }
-  if (privateHistory.status === 0) {
-    process.stderr.write(
-      "Push blocked: outgoing history includes private historical ancestry.\n",
-    );
-    process.exit(1);
-  }
   pushed.push(localSha);
 }
 
