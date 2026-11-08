@@ -230,10 +230,13 @@ for a documented false positive, scoped to the narrowest element or module.
 **Zero-warning policy.** `bazelisk build //projects/mobile/android:app` and
 `bazelisk test //projects/mobile/android:android_tests` must not print
 `warning:`/`WARNING:` from this repository's code, resources, manifests or
-Bazel rules. Fix the root cause; do not silence the log. Warnings that come
-from a pinned third-party toolchain (for example javac deprecations inside
-protobuf/rules_android sources) are tracked in the change that introduces them and reported rather
-than hidden.
+Bazel rules. Fix the root cause; do not silence the log. The one exception is
+javac warnings from pinned third-party build tools compiled in the exec
+configuration (`external/protobuf+`, `external/rules_android+` `[for tool]`
+libraries): those are not ours to fix and `.bazelrc` passes
+`--host_javacopt=-Xlint:none -nowarn` for that configuration only. First-party
+code keeps `warn = "error"` and `android_lint -Werror`, so a new warning in our
+sources still fails the build.
 
 `android_tests` covers endpoint/security rules, time/duration parsing, Connect
 JSON mapping and failures, idempotency, navigation queue/restoration, the real

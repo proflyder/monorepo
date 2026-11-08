@@ -34,6 +34,15 @@ common --tool_java_language_version=17
 common --java_runtime_version=remotejdk_21
 common --tool_java_runtime_version=remotejdk_21
 
+# Third-party javac sources that run as build tools (protobuf, the rules_android
+# dexer tools) are compiled in the exec configuration and emit their own
+# [removal]/deprecation warnings. They are not ours to fix and only add noise to
+# every cold build, so silence javac there. First-party Kotlin/Java keeps
+# `warn = "error"` (//platform/android:jvm17_options) in the target
+# configuration, and android_lint still runs with -Werror.
+build --host_javacopt=-Xlint:none
+build --host_javacopt=-nowarn
+
 # Use the released protoc binary instead of compiling protoc from C++ sources:
 # on a cold CI runner that compile was ~40% of the Android app build (the app
 # itself has no protos; rules_android's tools need protoc).

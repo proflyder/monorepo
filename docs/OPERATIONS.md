@@ -1344,8 +1344,11 @@ v2/v3) и загружает в Firebase App Distribution в группу `admin
 SHA-256 из `signing_cert_sha256`, иначе загрузки нет. Ключ и пароли лежат
 только в OpenBao (`secret/ci/android-distribute`: `signing_keystore_b64`,
 `signing_store_password`, `signing_key_password`, `signing_key_alias`,
-`signing_cert_sha256`), материализуются в `$RUNNER_TEMP` (0600/0700) и
-удаляются; в env последующих шагов попадают только пути. Старые поля
+`signing_cert_sha256`, `google_services_json_b64`,
+`firebase_service_account_json_b64`), материализуются в `$RUNNER_TEMP`
+(0600/0700) и удаляются; JSON-файлы читаются как однострочный base64, чтобы
+`vault-action` не маскировал их построчно (маска строки `{` вырезала её из
+всех логов), в env последующих шагов попадают только пути. Старые поля
 `keystore_b64`/`keystore_password` больше не читаются (остаются бэкапом). PR из
 форков пропускается: у них нет ни OIDC-токена, ни секретов Environment. Job не
 входит в `ci-ok` — неудачная загрузка видна на PR, но не блокирует merge; новый

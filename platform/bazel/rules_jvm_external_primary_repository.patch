@@ -1,0 +1,34 @@
+rules_jvm_external fix: pin each artifact to the repository that served it.
+
+`private/rules/coursier.bzl` records every configured repository as a
+`mirror_urls` entry for every artifact, so the v3 lock file lists each artifact
+under both `maven.google.com` and `repo1.maven.org`. At build time
+`http_file` tries the URLs in repository order, so an artifact that exists only
+on Maven Central is first requested from Google Maven, which answers 404 and
+makes Bazel print `WARNING: Download from https://maven.google.com/... 404`
+for every such artifact on a cold build.
+
+Coursier already knows the URL it actually downloaded from (`primary_url`).
+Recording only that repository keeps the lock honest, removes the cold-build
+404 warnings, and still fails loudly if that one repository stops serving the
+artifact instead of silently falling back to a different copy.
+
+--- a/private/rules/coursier.bzl
++++ b/private/rules/coursier.bzl
+@@ -1393,12 +1393,10 @@
+                 repository_urls.append(r["repo_url"].rstrip("/"))
+         primary_artifact_path = infer_artifact_path_from_primary_and_repos(primary_url, repository_urls)
+ 
+-        mirror_urls = [url + "/" + primary_artifact_path for url in repository_urls]
+-        if primary_url in mirror_urls:
+-            # http_file tries URLs in order, so putting the URL that actually worked first
+-            # minimizes repository fetch 404s. See: https://github.com/bazelbuild/rules_jvm_external/issues/349
+-            mirror_urls = [primary_url] + [url for url in mirror_urls if url != primary_url]
+-        artifact.update({"mirror_urls": mirror_urls})
++        # Only the repository that actually served the artifact. Listing every
++        # configured repository as a mirror makes http_file probe the missing
++        # ones first and log a WARNING per 404 on each cold build.
++        artifact.update({"mirror_urls": [primary_url]})
+ 
+         files_to_inspect.append(repository_ctx.path(artifact["file"]))
+ 

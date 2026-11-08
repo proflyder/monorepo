@@ -1,5 +1,7 @@
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["rules_jvm_external_primary_repository.patch"])
+
 # Target platform for the container images and other Linux/amd64 artifacts.
 # It replaces the former //platform/bazel:linux_amd64 platform; only the
 # OS/CPU constraints matter, the actual binaries are cross-compiled by their
