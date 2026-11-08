@@ -18,12 +18,22 @@ data class ConnectionConfig(
      * The scheduler bearer token is also sent to it.
      */
     val controlEndpoint: ServerEndpoint? = null,
+    /**
+     * Optional base URL of the intercom signaling service (calls). The phone
+     * bearer token sent there is the separate [intercomToken], not the
+     * scheduler token: the intercom service authorizes the two independently.
+     */
+    val intercomEndpoint: ServerEndpoint? = null,
     val bearerToken: String? = null,
+    val intercomToken: String? = null,
     val connectTimeoutMillis: Long = DEFAULT_CONNECT_TIMEOUT_MILLIS,
     val readTimeoutMillis: Long = DEFAULT_READ_TIMEOUT_MILLIS,
 ) {
     val isConfigured: Boolean get() = endpoint != null
+    val isIntercomConfigured: Boolean
+        get() = intercomEndpoint != null && isTokenValid(intercomToken)
     val hasToken: Boolean get() = isTokenValid(bearerToken)
+    val hasIntercomToken: Boolean get() = isTokenValid(intercomToken)
 
     /**
      * Storage validity: endpoint and timeouts plus, when present, a header-safe
@@ -42,6 +52,9 @@ data class ConnectionConfig(
         }
         if (bearerToken != null && !isTokenValid(bearerToken)) {
             return Outcome.Failure(RemoteFailure.Validation(Field.TOKEN))
+        }
+        if (intercomToken != null && !isTokenValid(intercomToken)) {
+            return Outcome.Failure(RemoteFailure.Validation(Field.INTERCOM_TOKEN))
         }
         return Outcome.Success(this)
     }
@@ -62,7 +75,9 @@ data class ConnectionConfig(
     override fun toString(): String =
         "ConnectionConfig(endpoint=${endpoint?.baseUrl() ?: "<unset>"}, " +
             "controlEndpoint=${controlEndpoint?.baseUrl() ?: "<unset>"}, " +
+            "intercomEndpoint=${intercomEndpoint?.baseUrl() ?: "<unset>"}, " +
             "token=${if (hasToken) "<set>" else "<unset>"}, " +
+            "intercomToken=${if (hasIntercomToken) "<set>" else "<unset>"}, " +
             "connectTimeoutMillis=$connectTimeoutMillis, readTimeoutMillis=$readTimeoutMillis)"
 
     companion object {
@@ -101,10 +116,15 @@ interface ConnectionSettingsStore {
      */
     val config: StateFlow<ConnectionConfig>
     val tokenStatus: StateFlow<TokenStatus>
+    /** Whether the separately stored intercom phone token could be read. */
+    val intercomTokenStatus: StateFlow<TokenStatus>
 
     /**
      * Persists only the bearer token (`null` clears it); the token is never
      * written in plaintext. Endpoints and timeouts are owned by Remote Config.
      */
     suspend fun updateToken(bearerToken: String?): Outcome<Unit>
+
+    /** Persists the separate intercom phone token (`null` clears it). */
+    suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit>
 }

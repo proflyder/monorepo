@@ -22,6 +22,10 @@ Current device acceptance and remaining work are tracked in
   `selectTab("alarms")` open the Time tab on the matching section. **Connection**
   is not a tab; the settings icon (⚙) in the top app bar opens it as an overlay
   over the current tab, and Back returns to that tab.
+- Call: the phone icon in the top app bar and the pinned **Call the station**
+  tile in Home's Quick actions place a real audio call to the station through the
+  intercom signaling service and Android Telecom. See
+  [Call (intercom)](#call-intercom).
 - Alarms: list/create/edit/enable/disable/delete, snooze (9 min), stop; one-shot
   with explicit date, daily, weekdays, weekends, custom ISO weekdays, IANA
   timezone. Server one-shot alarms stay one-shot when edited.
@@ -134,17 +138,70 @@ execution; the phone only edits the definition and queues manual runs.
   before a request the server would reject. The UI is localized in English and
   Russian.
 
-## Connection and networking
+## Call (intercom)
+
+The phone icon in the top app bar and the built-in **Call the station** tile
+pinned first in Home's Quick actions open the lock-screen call screen. A call is a real Android call: a
+self-managed Telecom `Connection`, a `phoneCall` foreground service with a
+CallStyle notification, and an audio-only WebRTC peer connection.
+
+- Signaling is `home.v1.IntercomService` over Connect/HTTP/1.1:
+  `RegisterEndpoint`, `ListEndpoints`, `StartCall`, `Hangup`, `SendSignal`,
+  `GetIceConfig`, and the server-streaming `Watch`. `Watch` uses the Connect
+  envelope framing (1 flag byte + 4-byte big-endian length) because bidi
+  streaming would require HTTP/2; the stream reconnects with a bounded backoff
+  and also marks the phone online.
+- The phone is always the caller: `StartCall(callee = first online STATION
+  endpoint)`, then `RINGING` → `CONNECTING` (the caller creates and sends the
+  SDP offer) → `ACTIVE` after the station's answer. `Hangup` uses
+  `CANCELED` while ringing and `HANGUP` otherwise.
+- Media is libwebrtc `io.getstream:stream-webrtc-android` (Opus, audio only,
+  unified plan). `JavaAudioDeviceModule` requests hardware AEC/NS where
+  supported and falls back to software; the audio mode is
+  `MODE_IN_COMMUNICATION`. `GetIceConfig` supplies STUN/TURN; an empty list
+  means host candidates for the LAN/VPN case.
+- `CallManager` is the single source of truth (`StateFlow<CallSnapshot>`)
+  consumed by the screen, the Telecom connection and the notification. The
+  state machine is plain Kotlin and unit-tested on the JVM.
+- Audio output: **Phone**, **Speaker**, **Headset**, **Bluetooth <name>**. On
+  API 34+ selection goes through the Telecom `CallEndpoint` API
+  (`requestCallEndpointChange`, `onAvailableCallEndpointsChanged`); older
+  releases use `AudioManager.setCommunicationDevice` (31+) or
+  speakerphone/Bluetooth SCO flags. Bluetooth routes are hidden when
+  `BLUETOOTH_CONNECT` is denied.
+- Mute disables the local audio track. The in-call screen uses a proximity wake
+  lock while the call is active (`showWhenLocked`/`turnScreenOn`).
+- Incoming calls are architectural only: `Watch` recognises an incoming
+  `RINGING` call for this endpoint and declines it. There is no incoming UI yet
+  (`TODO(incoming)` in `CallManager` / `HomeConnectionService`).
+
+### Call permissions
+
+| Permission | When |
+| --- | --- |
+| `RECORD_AUDIO` | runtime, required before dialing; denial shows a controlled ended state |
+| `MANAGE_OWN_CALLS` | normal, self-managed Telecom account |
+| `FOREGROUND_SERVICE_PHONE_CALL` | normal, `phoneCall` service type |
+| `BLUETOOTH_CONNECT` | runtime (API 31+); denial hides Bluetooth routes |
+| `POST_NOTIFICATIONS` | runtime (API 33+); denial suppresses the ongoing notification, the call still works |
+
+Without an intercom address or phone token the call screen reports
+"not configured" instead of attempting a request. No live call is placed by
+tests or CI.
+
+
 
 The Connection screen is reached from the settings icon (⚙) in the top app bar.
 It opens as an overlay on the current bottom tab; Back returns to that tab.
 
-- Two base URLs, no paths, supplied by Remote Config:
+- Three base URLs, no paths, supplied by Remote Config:
   - **Server address** (scheduler): LAN `http://<node>:30098` or the home
     HTTPS name `https://alarms.<HOME_DOMAIN>` reached over the VPN.
   - **Home control address** (catalog, optional): LAN
     `http://<node>:30099` or the home HTTPS name
     `https://control.<HOME_DOMAIN>` reached over the VPN.
+  - **Intercom address** (calls, optional): LAN `http://<node>:30097` or the
+    home HTTPS name `https://intercom.<HOME_DOMAIN>` reached over the VPN.
   - The app appends the Connect RPC path or `/v1/catalog` itself. Do not put
     `/v1/catalog` into the configured URL.
 - Connect and read timeouts also come from Remote Config. Invalid URLs,
@@ -154,6 +211,9 @@ It opens as an overlay on the current bottom tab; Back returns to that tab.
   timeouts are deployment-specific and are set only in the Firebase console;
   none are embedded in the app or the repository. The token remains
   device-local and is never part of Remote Config.
+- Intercom uses a **separate phone token** (`INTERCOM_TOKEN` on the server),
+  entered in the Call token card on the Connection screen and encrypted with
+  the same Android Keystore key. It is never reused as the scheduler bearer.
 - Transport: Retrofit on OkHttp, Connect unary JSON
   (`POST {endpoint}/home.v1.SchedulerService/{RPC}`), protobuf JSON field
   names, `int64` as decimal strings. `Authorization: Bearer` is sent in the
@@ -244,8 +304,11 @@ Metro graph via a Robolectric cold launch, a Robolectric smoke of the real
 profile row (`//projects/mobile/android/features/control/impl:profile_row_test`),
 the Home hub model (carousel selection/order, "tomorrow 07:30" text, favorites
 pin/order/defaults, display-name rule) in
-`//projects/mobile/android/features/control/api:api_test`, a Robolectric smoke
-of the real bottom bar and the Time-tab deep link in
+`//projects/mobile/android/features/control/api:api_test`, the call state
+machine (dialing → connecting → active → ended, local and remote hangup,
+media/ICE failure, timeout, permission denial, busy/offline), the Connect
+streaming `Watch` parser over a fake HTTP server, audio-route mapping, a
+Robolectric smoke of the real bottom bar and the Time-tab deep link in
 `//projects/mobile/android/app:main_activity_smoke_test`, and an APK packaging
 gate that verifies required runtime classes are **defined** in DEX and that the
 deploy jar has no unresolved non-platform references. The gate also self-tests
@@ -397,6 +460,7 @@ are ignored so a future field does not break older clients.
 | --- | --- | --- | --- |
 | `schedulerBaseUrl` | string | yes | Scheduler base URL, no RPC path. |
 | `controlBaseUrl` | string | no | Home control base URL; absent/empty disables the Home tab. |
+| `intercomBaseUrl` | string | no | Intercom signaling base URL; absent/empty disables calls. |
 | `connectTimeoutMs` | number | no | Connect timeout, default 5000, valid 1000–120000. |
 | `readTimeoutMs` | number | no | Read timeout, default 20000, valid 1000–120000. |
 
@@ -406,6 +470,7 @@ Example value (illustrative only; use your own private deployment values):
 {
   "schedulerBaseUrl": "https://alarms.example.test",
   "controlBaseUrl": "http://192.0.2.28:8099",
+  "intercomBaseUrl": "https://intercom.example.test",
   "connectTimeoutMs": 5000,
   "readTimeoutMs": 20000
 }
@@ -565,6 +630,7 @@ projects/mobile/android/
     alarms/{api,impl}     domain contract / use cases + repository + UI
     reminders/{api,impl}
     timers/{api,impl}
+    call/{api,impl}       intercom state machine, WebRTC, Telecom, call screen
     control/{api,impl}    Home catalog, filters, scenario/device/profile actions
     scenarios/{api,impl}  scenario list/editor, draft codec and validation
     connection/{api,impl}
@@ -594,8 +660,9 @@ Implemented scheduler RPCs: `GetStatus`, `GetSchedule`, `ListSchedules`,
 `ResumeTimer`, `CancelTimer`, and `EnqueueTask` (Home control only).
 Scenario definitions use `home.v1.ScenarioService`: `ListScenarios`,
 `GetScenario`, `CreateScenario`, `UpdateScenario`, `DeleteScenario`,
-`SetScenarioEnabled`, and `RunScenario`. Home catalog reads use
-`GET /v1/catalog`.
+`SetScenarioEnabled`, and `RunScenario`. Calls use
+`home.v1.IntercomService` (unary RPCs plus the server-streaming `Watch`). Home
+catalog reads use `GET /v1/catalog`.
 
 ## App identity and permissions
 
@@ -603,7 +670,9 @@ Scenario definitions use `home.v1.ScenarioService`: `ListScenarios`,
   `home_android_binary` reads `home_version_code`/`home_version_name` from
   `--define`; `distribute.sh` overrides them for App Distribution.
 - minSdk 26, target/compile SDK 36, Kotlin/JVM target 17.
-- Only `android.permission.INTERNET`.
+- `INTERNET`; call permissions are `RECORD_AUDIO`, `MANAGE_OWN_CALLS`,
+  `FOREGROUND_SERVICE_PHONE_CALL`, `BLUETOOTH_CONNECT`, `POST_NOTIFICATIONS`
+  (see [Call permissions](#call-permissions)).
 - Bazel output is debug-signed (personal key when present, public fallback
   otherwise); App Distribution APKs are release-signed by
   `sign-release.sh` with the same personal certificate. APKs are not

@@ -45,4 +45,12 @@
     <string name="connection_server_owns">Schedules stay authoritative on the home server. This screen only manages server state.</string>
     <string name="connection_notification_note">Phone-side reminder notifications are not implemented in this foundation.</string>
     <string name="connection_not_tested">Configuration loaded. Use “Save and test connection” to verify the server.</string>
+    <string name="connection_remote_intercom_label">Intercom address (calls)</string>
+    <string name="connection_remote_not_set_calls">Not set (calls disabled)</string>
+    <string name="connection_remote_invalid_intercom">Remote Config has an invalid intercom address. Use a full http:// or https:// URL, or leave it empty.</string>
+    <string name="connection_intercom_token_title">Call token</string>
+    <string name="connection_intercom_token">Intercom phone token</string>
+    <string name="connection_intercom_token_helper">Separate from the scheduler token. Encrypted with the same Android Keystore key; never logged or put in a URL.</string>
+    <string name="connection_intercom_save">Save call token</string>
+    <string name="connection_intercom_token_saved">Call token saved</string>
 </resources>

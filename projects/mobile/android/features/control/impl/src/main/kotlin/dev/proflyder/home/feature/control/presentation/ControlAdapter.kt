@@ -505,18 +505,21 @@ internal class ControlAdapter(
                 is QuickTile.Device -> tile.entry.displayName
                 is QuickTile.ScenarioTile -> tile.scenario.label
                 is QuickTile.Speak -> tile.entry.displayName
+                QuickTile.Call -> views.root.context.getString(R.string.control_call_title)
             }
             views.quickTileIcon.setImageResource(
                 when (tile) {
                     is QuickTile.Device -> ControlIcons.resolve(tile.entry)
                     is QuickTile.ScenarioTile -> R.drawable.control_ic_play
                     is QuickTile.Speak -> R.drawable.control_ic_message
+                    QuickTile.Call -> R.drawable.control_ic_call
                 },
             )
             val busy = when (tile) {
                 is QuickTile.Device -> tile.busy
                 is QuickTile.ScenarioTile -> tile.busy
                 is QuickTile.Speak -> tile.busy
+                QuickTile.Call -> false
             }
             views.root.alpha = if (busy) DISABLED_ALPHA else 1f
             views.root.setOnClickListener { callback.onQuickTileClick(tile) }

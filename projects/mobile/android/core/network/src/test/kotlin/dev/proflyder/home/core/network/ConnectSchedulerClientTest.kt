@@ -416,6 +416,8 @@ class ConnectSchedulerClientTest {
         override val config: StateFlow<ConnectionConfig> = MutableStateFlow(initial)
         override val tokenStatus: StateFlow<TokenStatus> =
             MutableStateFlow(if (initial.hasToken) TokenStatus.AVAILABLE else TokenStatus.ABSENT)
+        override val intercomTokenStatus: StateFlow<TokenStatus> =
+            MutableStateFlow(if (initial.hasIntercomToken) TokenStatus.AVAILABLE else TokenStatus.ABSENT)
 
         private val mutable = config as MutableStateFlow<ConnectionConfig>
 
@@ -425,6 +427,11 @@ class ConnectSchedulerClientTest {
 
         override suspend fun updateToken(bearerToken: String?): Outcome<Unit> {
             mutable.value = mutable.value.copy(bearerToken = bearerToken)
+            return Outcome.Success(Unit)
+        }
+
+        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> {
+            mutable.value = mutable.value.copy(intercomToken = intercomToken)
             return Outcome.Success(Unit)
         }
     }

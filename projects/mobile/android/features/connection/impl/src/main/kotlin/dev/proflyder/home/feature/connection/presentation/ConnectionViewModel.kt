@@ -20,6 +20,7 @@ enum class ConnectionNotice {
     SAVED,
     SAVED_AND_ONLINE,
     CONFIG_REFRESHED,
+    INTERCOM_TOKEN_SAVED,
 }
 
 data class ConnectionUiState(
@@ -27,6 +28,11 @@ data class ConnectionUiState(
     val clearTokenRequested: Boolean = false,
     val hasStoredToken: Boolean = false,
     val tokenStatus: TokenStatus = TokenStatus.ABSENT,
+    val intercomTokenInput: String = "",
+    val clearIntercomTokenRequested: Boolean = false,
+    val hasStoredIntercomToken: Boolean = false,
+    val intercomTokenStatus: TokenStatus = TokenStatus.ABSENT,
+    val savingIntercom: Boolean = false,
     val remote: RemoteConnectionState = RemoteConnectionState.Unavailable,
     val refreshingConfig: Boolean = false,
     val saving: Boolean = false,
@@ -35,7 +41,7 @@ data class ConnectionUiState(
     val status: SchedulerStatus? = null,
     val notice: ConnectionNotice? = null,
 ) {
-    val busy: Boolean get() = saving || testing || refreshingConfig
+    val busy: Boolean get() = saving || testing || refreshingConfig || savingIntercom
 }
 
 class ConnectionViewModel(
@@ -53,6 +59,11 @@ class ConnectionViewModel(
                 updateState { copy(tokenStatus = tokenStatus) }
             }
         }
+        launch {
+            repository.intercomTokenStatus.collect { status ->
+                updateState { copy(intercomTokenStatus = status) }
+            }
+        }
     }
 
     fun setToken(value: String) {
@@ -61,6 +72,43 @@ class ConnectionViewModel(
 
     fun requestClearToken() {
         updateState { copy(tokenInput = "", clearTokenRequested = true) }
+    }
+
+    fun setIntercomToken(value: String) {
+        updateState {
+            copy(intercomTokenInput = value, clearIntercomTokenRequested = false, error = null)
+        }
+    }
+
+    fun requestClearIntercomToken() {
+        updateState { copy(intercomTokenInput = "", clearIntercomTokenRequested = true) }
+    }
+
+    /** Saves only the intercom phone token; endpoints stay Remote-Config owned. */
+    fun saveIntercomToken() {
+        val current = currentState
+        if (current.savingIntercom) return
+        val update = when {
+            current.clearIntercomTokenRequested -> TokenUpdate.Clear
+            current.intercomTokenInput.isNotBlank() -> TokenUpdate.Replace(current.intercomTokenInput)
+            else -> return
+        }
+        updateState { copy(savingIntercom = true, error = null, notice = null) }
+        launch {
+            when (val saved = repository.saveIntercomToken(update)) {
+                is Outcome.Failure -> updateState { copy(savingIntercom = false, error = saved.failure) }
+                is Outcome.Success -> updateState {
+                    copy(
+                        savingIntercom = false,
+                        intercomTokenInput = "",
+                        clearIntercomTokenRequested = false,
+                        hasStoredIntercomToken = saved.value.hasIntercomToken,
+                        intercomTokenStatus = repository.intercomTokenStatus.value,
+                        notice = ConnectionNotice.INTERCOM_TOKEN_SAVED,
+                    )
+                }
+            }
+        }
     }
 
     fun test() = persist(testAfter = true)
@@ -163,6 +211,8 @@ internal fun initialState(repository: ConnectionRepository): ConnectionUiState {
     return ConnectionUiState(
         hasStoredToken = config.hasToken,
         tokenStatus = repository.tokenStatus.value,
+        hasStoredIntercomToken = config.hasIntercomToken,
+        intercomTokenStatus = repository.intercomTokenStatus.value,
         remote = repository.remoteConfig.value,
     )
 }

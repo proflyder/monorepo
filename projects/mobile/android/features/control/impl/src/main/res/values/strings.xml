@@ -68,4 +68,5 @@
         <item>Sat</item>
         <item>Sun</item>
     </string-array>
+    <string name="control_call_title">Call the station</string>
 </resources>

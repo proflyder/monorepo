@@ -22,6 +22,11 @@ sealed interface QuickTile {
     data class Speak(val entry: ControlEntry, val busy: Boolean) : QuickTile {
         override val key: String get() = "action:${entry.id}"
     }
+
+    /** The built-in "Call the station" action, pinned before the user's favourites. */
+    data object Call : QuickTile {
+        override val key: String get() = "call"
+    }
 }
 
 /**
@@ -38,7 +43,7 @@ object QuickTiles {
     ): List<QuickTile> {
         val entriesById = entries.associateBy { it.id }
         val scenariosById = scenarios.associateBy { it.id }
-        return refs.mapNotNull { ref ->
+        return listOf(QuickTile.Call) + refs.mapNotNull { ref ->
             when (ref.kind) {
                 FavoriteKind.DEVICE -> entriesById[ref.id]
                     ?.takeIf { it.isDevice }

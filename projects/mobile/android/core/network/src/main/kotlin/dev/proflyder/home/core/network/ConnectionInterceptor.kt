@@ -10,7 +10,13 @@ import okhttp3.Interceptor
 import okhttp3.Response
 
 /** Which configured server a client talks to. */
-internal enum class Target { SCHEDULER, CONTROL }
+internal enum class Target { SCHEDULER, CONTROL, INTERCOM }
+
+/**
+ * Internal request marker: a long-lived server stream (connect `Watch`) must not
+ * inherit the unary read timeout. The interceptor removes the header.
+ */
+internal const val STREAM_REQUEST_HEADER = "X-Home-Connect-Stream"
 
 /**
  * Applies the *current* user settings to every request, so the Retrofit
@@ -31,30 +37,54 @@ internal class ConnectionInterceptor(
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val config = settings.config.value
-        val endpointField = if (target == Target.SCHEDULER) Field.ENDPOINT else Field.CONTROL_ENDPOINT
+        val endpointField = when (target) {
+            Target.SCHEDULER -> Field.ENDPOINT
+            Target.CONTROL -> Field.CONTROL_ENDPOINT
+            Target.INTERCOM -> Field.INTERCOM_ENDPOINT
+        }
         val endpoint = when (target) {
             Target.SCHEDULER -> config.endpoint
             Target.CONTROL -> config.controlEndpoint
+            Target.INTERCOM -> config.intercomEndpoint
         } ?: throw RemoteFailureException(
-            if (target == Target.SCHEDULER) RemoteFailure.NotConfigured else RemoteFailure.Validation(endpointField),
+            if (target == Target.SCHEDULER) {
+                RemoteFailure.NotConfigured
+            } else {
+                RemoteFailure.Validation(endpointField)
+            },
         )
-        val token = config.bearerToken?.trim()
+        val token = when (target) {
+            Target.SCHEDULER, Target.CONTROL -> config.bearerToken?.trim()
+            Target.INTERCOM -> config.intercomToken?.trim()
+        }
         if (!ConnectionConfig.isTokenValid(token)) {
-            throw RemoteFailureException(RemoteFailure.Validation(Field.TOKEN))
+            throw RemoteFailureException(
+                if (target == Target.INTERCOM) {
+                    RemoteFailure.Validation(Field.INTERCOM_TOKEN)
+                } else {
+                    RemoteFailure.Validation(Field.TOKEN)
+                },
+            )
         }
         val base = endpoint.baseUrl().toHttpUrlOrNull()
             ?: throw RemoteFailureException(RemoteFailure.Validation(endpointField))
 
         val original = chain.request()
+        val streaming = original.header(STREAM_REQUEST_HEADER) != null
         val url = base.newBuilder()
             .addPathSegments(original.url.encodedPath.removePrefix("/"))
             .build()
         val request = original.newBuilder()
             .url(url)
-            .header("Accept", "application/json")
+            .header("Accept", original.header("Accept") ?: "application/json")
             .header("User-Agent", USER_AGENT)
             .header("Authorization", "Bearer $token")
-            .apply { if (target == Target.SCHEDULER) header("Connect-Protocol-Version", "1") }
+            .apply {
+                if (target == Target.SCHEDULER || target == Target.INTERCOM) {
+                    header("Connect-Protocol-Version", "1")
+                }
+                if (streaming) removeHeader(STREAM_REQUEST_HEADER)
+            }
             .build()
 
         // Defensive clamping: corrupted persisted settings must never make
@@ -65,7 +95,9 @@ internal class ConnectionInterceptor(
             .coerceIn(ConnectionConfig.MIN_TIMEOUT_MILLIS, ConnectionConfig.MAX_TIMEOUT_MILLIS)
         return chain
             .withConnectTimeout(connectMillis.toInt(), TimeUnit.MILLISECONDS)
-            .withReadTimeout(readMillis.toInt(), TimeUnit.MILLISECONDS)
+            // A Watch stream is intentionally idle between calls; 0 disables the
+            // read deadline for that request only.
+            .withReadTimeout(if (streaming) 0 else readMillis.toInt(), TimeUnit.MILLISECONDS)
             .withWriteTimeout(readMillis.toInt(), TimeUnit.MILLISECONDS)
             .proceed(request)
     }

@@ -22,6 +22,7 @@ import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItems
 import dev.proflyder.home.feature.control.ControlPreferences
+import dev.proflyder.home.feature.call.CallLauncher
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.HubCards
 import dev.proflyder.home.feature.control.HubFormat
@@ -97,6 +98,7 @@ class ControlViewModel(
     private val reminders: ReminderRepository,
     private val scenarios: ScenarioRepository,
     private val clock: ServerClock,
+    private val callLauncher: CallLauncher,
 ) : BaseViewModel<ControlUiState>(ControlUiState(configured = loadCatalog.isConfigured)) {
     private var refreshJob: Job? = null
     private var hubJob: Job? = null
@@ -486,6 +488,9 @@ class ControlViewModel(
         }
     }
 
+    /** Pinned quick action: open the call screen and dial the station. */
+    fun callStation() = callLauncher.openCallScreen()
+
     fun consumeNotice() = updateState { copy(notice = null) }
 
     fun consumeActionError() = updateState { copy(actionError = null) }
@@ -516,6 +521,7 @@ class ControlViewModelFactoryContributor(
     private val reminders: ReminderRepository,
     private val scenarios: ScenarioRepository,
     private val clock: ServerClock,
+    private val callLauncher: CallLauncher,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
 
@@ -534,6 +540,7 @@ class ControlViewModelFactoryContributor(
             reminders,
             scenarios,
             clock,
+            callLauncher,
         )
     }
 }

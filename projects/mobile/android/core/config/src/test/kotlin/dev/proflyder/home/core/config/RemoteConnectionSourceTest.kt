@@ -118,6 +118,26 @@ class RemoteConnectionSourceTest {
     }
 
     @Test
+    fun intercomAddressIsOptionalAndParsed() {
+        val loaded = parseRemoteConnection(
+            """{"schedulerBaseUrl":"http://192.0.2.10:30098","intercomBaseUrl":"https://intercom.example.test"}""",
+        ) as RemoteConnectionState.Loaded
+        assertEquals("https://intercom.example.test", loaded.intercomEndpoint?.baseUrl())
+
+        val absent = parseRemoteConnection("""{"schedulerBaseUrl":"http://192.0.2.10:30098"}""")
+            as RemoteConnectionState.Loaded
+        assertNull(absent.intercomEndpoint)
+    }
+
+    @Test
+    fun invalidIntercomAddressIsReported() {
+        val state = parseRemoteConnection(
+            """{"schedulerBaseUrl":"http://192.0.2.10:30098","intercomBaseUrl":"not a url"}""",
+        )
+        assertEquals(Field.INTERCOM_ENDPOINT, (state as RemoteConnectionState.Invalid).field)
+    }
+
+    @Test
     fun unknownKeysAreIgnored() {
         val loaded = parseRemoteConnection(
             """
