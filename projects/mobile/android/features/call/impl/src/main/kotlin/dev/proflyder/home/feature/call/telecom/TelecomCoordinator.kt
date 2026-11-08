@@ -24,21 +24,29 @@ import dev.zacsweers.metro.SingleIn
 @Inject
 class TelecomAccountRegistry(private val context: Context) {
 
+    /**
+     * Registers (or refreshes) the self-managed account and returns its handle,
+     * or null when Telecom is unavailable or refuses. `getPhoneAccount` is not
+     * used: some OEM builds (MIUI, Android 16) guard it with
+     * READ_PHONE_NUMBERS, while re-registering our own account is idempotent
+     * and needs only MANAGE_OWN_CALLS.
+     */
     fun ensureRegistered(): PhoneAccountHandle? {
         val telecom = context.getSystemService(TelecomManager::class.java) ?: return null
         val handle = PhoneAccountHandle(
             ComponentName(context, HomeConnectionService::class.java),
             ACCOUNT_ID,
         )
-        if (telecom.getPhoneAccount(handle) == null) {
-            val account = PhoneAccount.builder(handle, context.getString(R.string.call_account_label))
-                .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
-                .addSupportedUriScheme(PhoneAccount.SCHEME_TEL)
-                .build()
-            telecom.registerPhoneAccount(account)
-        }
-        return handle
+        return runCatching { telecom.registerPhoneAccount(account(handle)) }
+            .map { handle }
+            .getOrNull()
     }
+
+    private fun account(handle: PhoneAccountHandle): PhoneAccount =
+        PhoneAccount.builder(handle, context.getString(R.string.call_account_label))
+            .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
+            .addSupportedUriScheme(PhoneAccount.SCHEME_TEL)
+            .build()
 
     private companion object {
         const val ACCOUNT_ID = "home-call"
