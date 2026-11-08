@@ -27,5 +27,12 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
         Field.WEEKDAYS -> context.getString(R.string.ui_validation_weekdays)
         Field.REPEAT -> context.getString(R.string.ui_validation_repeat)
         Field.DURATION -> context.getString(R.string.ui_validation_duration)
+        Field.DESCRIPTION -> context.getString(R.string.ui_validation_description)
+        Field.TRIGGERS -> context.getString(R.string.ui_validation_triggers)
+        Field.CONDITIONS -> context.getString(R.string.ui_validation_conditions)
+        Field.STEPS -> context.getString(R.string.ui_validation_steps)
+        Field.SPEAK -> context.getString(R.string.ui_validation_speak)
+        Field.ENTITY -> context.getString(R.string.ui_validation_entity)
+        Field.UNSUPPORTED -> context.getString(R.string.ui_validation_unsupported)
     }
 }

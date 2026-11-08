@@ -101,6 +101,8 @@ object ControlJson {
         val light = (o["light"] as? JsonObject)?.let { l ->
             fun num(name: String) = (l[name] as? JsonPrimitive)?.intOrNull ?: 0
             fun flag(name: String) = (l[name] as? JsonPrimitive)?.booleanOrNull ?: false
+            val fields = (l["effects"] as? JsonArray).orEmpty()
+                .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
             LightControls(
                 brightness = flag("brightness"),
                 colorTemp = flag("colorTemp"),
@@ -112,6 +114,7 @@ object ControlJson {
                 hue = num("hue"),
                 saturation = num("saturation"),
                 mode = (l["mode"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty(),
+                effects = fields,
             )
         }
         val id = text("id")

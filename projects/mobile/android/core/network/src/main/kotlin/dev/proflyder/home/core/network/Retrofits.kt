@@ -25,6 +25,12 @@ internal interface SchedulerApi {
     suspend fun call(@Path("method") method: String, @Body body: JsonObject): Response<JsonElement>
 }
 
+/** Connect unary calls of home.v1.ScenarioService on the same scheduler endpoint. */
+internal interface ScenarioApi {
+    @POST("home.v1.ScenarioService/{method}")
+    suspend fun call(@Path("method") method: String, @Body body: JsonObject): Response<JsonElement>
+}
+
 /** The home control service's read-only catalog. */
 internal interface ControlApi {
     @GET("v1/catalog")

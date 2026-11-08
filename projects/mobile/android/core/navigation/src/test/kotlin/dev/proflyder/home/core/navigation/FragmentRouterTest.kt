@@ -264,6 +264,77 @@ class FragmentRouterTest {
         assertEquals(0, activity.supportFragmentManager.backStackEntryCount)
     }
 
+    @Test
+    fun nonTabDestinationOpensAsOverlayAndBackReturnsToCurrentTab() {
+        val activity = launch()
+
+        activity.router.navigate(SettingsDestination)
+
+        assertFragment(activity, "settings")
+        assertEquals("alarms", activity.router.currentTabId.value)
+        assertEquals(SETTINGS_TITLE, activity.router.currentTitleRes.value)
+        assertTrue(activity.router.canGoBack.value)
+        assertEquals(1, activity.supportFragmentManager.backStackEntryCount)
+
+        assertTrue(activity.router.back())
+
+        assertFragment(activity, "alarms/list")
+        assertEquals("alarms", activity.router.currentTabId.value)
+        assertEquals(ALARMS_TITLE, activity.router.currentTitleRes.value)
+        assertFalse(activity.router.canGoBack.value)
+    }
+
+    @Test
+    fun selectTabOnNonTabFeatureOpensTheOverlayInsteadOfSwitchingTabs() {
+        val activity = launch()
+
+        activity.router.selectTab("settings")
+
+        assertFragment(activity, "settings")
+        assertEquals("alarms", activity.router.currentTabId.value)
+        assertEquals(SETTINGS_TITLE, activity.router.currentTitleRes.value)
+
+        assertTrue(activity.router.back())
+        assertFragment(activity, "alarms/list")
+        assertEquals("alarms", activity.router.currentTabId.value)
+    }
+
+    @Test
+    fun overlayOpenedFromEditorReturnsToEditor() {
+        val activity = launch()
+        activity.router.navigate(AlarmEditorDestination("7"))
+
+        activity.router.navigate(SettingsDestination)
+
+        assertFragment(activity, "settings")
+        assertEquals("alarms", activity.router.currentTabId.value)
+
+        assertTrue(activity.router.back())
+        assertFragment(activity, "alarms/editor/7")
+        assertTrue(activity.router.back())
+        assertFragment(activity, "alarms/list")
+    }
+
+    @Test
+    fun recreationRestoresOverlayAndOwningTab() {
+        val first = launch()
+        first.router.navigate(SettingsDestination)
+
+        val bundle = Bundle()
+        first.controller.saveInstanceState(bundle).pause().stop().destroy()
+
+        val second = launch(bundle)
+
+        assertFragment(second, "settings")
+        assertEquals("alarms", second.router.currentTabId.value)
+        assertEquals(SETTINGS_TITLE, second.router.currentTitleRes.value)
+        assertTrue(second.router.canGoBack.value)
+
+        assertTrue(second.router.back())
+        assertFragment(second, "alarms/list")
+        assertEquals("alarms", second.router.currentTabId.value)
+    }
+
     private fun launch(bundle: Bundle? = null): LaunchedActivity {
         val controller = if (bundle == null) {
             Robolectric.buildActivity(TestActivity::class.java).setup()
@@ -371,6 +442,11 @@ private object TimersRootDestination : Destination {
     override val route: String = "timers/list"
 }
 
+private object SettingsDestination : Destination {
+    override val featureId: String = "settings"
+    override val route: String = "settings"
+}
+
 private class AlarmsEntry : FeatureEntry {
     override val id: String = "alarms"
     override val order: Int = 0
@@ -400,8 +476,23 @@ private class TimersEntry : FeatureEntry {
     override fun createFragment(destination: Destination): Fragment = TestFragment()
 }
 
-private val TEST_REGISTRY = FeatureRegistry(listOf(AlarmsEntry(), TimersEntry()))
+/** A settings-style feature that is not a bottom tab. */
+private class SettingsEntry : FeatureEntry {
+    override val id: String = "settings"
+    override val order: Int = 9
+    override val isTab: Boolean = false
+    override val titleRes: Int = SETTINGS_TITLE
+    override val iconRes: Int = 0
+    override val rootDestination: Destination = SettingsDestination
+
+    override fun supports(destination: Destination): Boolean = destination is SettingsDestination
+
+    override fun createFragment(destination: Destination): Fragment = TestFragment()
+}
+
+private val TEST_REGISTRY = FeatureRegistry(listOf(AlarmsEntry(), TimersEntry(), SettingsEntry()))
 
 private const val ALARMS_TITLE = 101
 private const val EDITOR_TITLE = 102
 private const val TIMERS_TITLE = 201
+private const val SETTINGS_TITLE = 301

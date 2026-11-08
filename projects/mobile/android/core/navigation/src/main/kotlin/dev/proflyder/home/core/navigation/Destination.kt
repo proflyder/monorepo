@@ -26,6 +26,9 @@ interface FeatureEntry {
     val id: String
     val order: Int
 
+    /** True when this feature owns a bottom-bar tab; non-tab features open as an overlay. */
+    val isTab: Boolean get() = true
+
     @get:StringRes
     val titleRes: Int
 
@@ -65,6 +68,9 @@ class FeatureRegistry(entries: Collection<FeatureEntry>) {
     }
 
     fun all(): List<FeatureEntry> = ordered
+
+    /** Bottom-bar features in display order; non-tab features are excluded. */
+    fun tabs(): List<FeatureEntry> = ordered.filter { it.isTab }
 
     fun entryFor(destination: Destination): FeatureEntry? = byId[destination.featureId]
 

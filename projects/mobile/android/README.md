@@ -15,7 +15,9 @@ acceptance and remaining work are tracked in [STATE](../../../docs/STATE.md) and
 
 ## Features
 
-- Bottom tabs: **Home**, **Alarms**, **Timers**, **Reminders**, **Connection**.
+- Bottom tabs: **Home**, **Scenarios**, **Alarms**, **Timers**, **Reminders**.
+  **Connection** is not a tab; the settings icon (⚙) in the top app bar opens it
+  as an overlay over the current tab, and Back returns to that tab.
 - Alarms: list/create/edit/enable/disable/delete, snooze (9 min), stop; one-shot
   with explicit date, daily, weekdays, weekends, custom ISO weekdays, IANA
   timezone. Server one-shot alarms stay one-shot when edited.
@@ -74,10 +76,49 @@ selected by a label in Home Assistant:
    label turns it back into an ordinary switch row. A different label id is set
    with `CONTROL_PROFILE_LABEL` on `ha-control`.
 
-Only the profile strings are translated (`values-ru`); the rest of the app is
-English-only.
+Only the profile strings and the Scenarios feature are translated (`values-ru`);
+the rest of the app is English-only.
+
+## Scenarios
+
+The **Scenarios** tab is a builder for the scheduler's durable
+`home.v1.ScenarioService` definitions. The server owns storage, validation,
+time-trigger materialization, and (once the `ha-scenario` executor exists)
+execution; the phone only edits the definition and queues manual runs.
+
+- A scenario has a name (≤ 80 bytes), description (≤ 512 bytes), up to 8
+  triggers, 8 conditions and 32 ordered steps, `enabled`, and
+  `continueOnError`.
+- Triggers: a manual run is always available (`enabled` only gates automatic
+  time triggers); a time trigger is a local wall-clock time with the phone's
+  IANA zone and once/daily/weekdays/weekends/custom ISO weekdays. Cards show a
+  short summary such as **Weekdays 07:30** and the server-computed next run.
+- Conditions: an entity state (any exact Home Assistant state, with On/Off
+  shortcuts) chosen from the live catalog, or a time window (start/end,
+  optional weekdays; an empty set means every day, and end before start wraps
+  over midnight).
+- Steps: a catalog action (pick an entry from `GET /v1/catalog`, then one of
+  its actions; lights accept brightness, color temperature, effects from
+  `light.effects`, and a 0–300 s transition, while `turn_off` accepts only a
+  transition), **Say on the station** (reuses `SpeakText.normalize`, 1–500
+  characters), or **Pause** (1–3600 seconds, entered as seconds or minutes).
+  Steps move up/down and can be removed.
+- Create/Update carry an idempotency key and `expectedRevision`; a revision
+  conflict (`aborted`) shows a reload dialog instead of overwriting the other
+  change. Delete asks for confirmation. Manual run uses a per-tap idempotency
+  key and reports "queued", not "executed".
+- A newer server may send a trigger/condition/step oneof variant this build
+  does not know. The app keeps the original JSON object, shows the scenario
+  with an unsupported badge, and **blocks saving** (delete remains possible) so
+  an older client cannot drop or corrupt fields it cannot represent.
+- All limits are mirrored locally (`ScenarioValidation`) so Save is disabled
+  before a request the server would reject. The UI is localized in English and
+  Russian.
 
 ## Connection and networking
+
+The Connection screen is reached from the settings icon (⚙) in the top app bar.
+It opens as an overlay on the current bottom tab; Back returns to that tab.
 
 - Two base URLs, no paths, supplied by Remote Config:
   - **Server address** (scheduler): LAN `http://<node>:30098` or the home
@@ -416,6 +457,7 @@ projects/mobile/android/
     reminders/{api,impl}
     timers/{api,impl}
     control/{api,impl}    Home catalog, filters, scenario/device/profile actions
+    scenarios/{api,impl}  scenario list/editor, draft codec and validation
     connection/{api,impl}
 packages/kotlin/core/     shared Kotlin utilities (endpoint/time/nav state)
 platform/android/         Bazel macros, Metro wiring, APK gate, ViewBinding gen
@@ -440,8 +482,11 @@ repository.
 Implemented scheduler RPCs: `GetStatus`, `GetSchedule`, `ListSchedules`,
 `CreateSchedule`, `UpdateSchedule`, `DeleteSchedule`, `SetScheduleEnabled`,
 `SnoozeSchedule`, `StopSchedule`, `StartTimer`, `ListTimers`, `PauseTimer`,
-`ResumeTimer`, `CancelTimer`, and `EnqueueTask` (Home control only). Home
-catalog reads use `GET /v1/catalog`.
+`ResumeTimer`, `CancelTimer`, and `EnqueueTask` (Home control only).
+Scenario definitions use `home.v1.ScenarioService`: `ListScenarios`,
+`GetScenario`, `CreateScenario`, `UpdateScenario`, `DeleteScenario`,
+`SetScenarioEnabled`, and `RunScenario`. Home catalog reads use
+`GET /v1/catalog`.
 
 ## App identity and permissions
 
@@ -458,7 +503,8 @@ catalog reads use `GET /v1/catalog`.
 ## Known limitations
 
 - No phone-side notifications/FCM, no background execution, no offline cache.
-- No generic task/scenario editor UI; Home executes existing catalog entries.
+- Scenario execution still depends on the server-side `ha-scenario` executor;
+  the app only edits definitions and queues manual runs.
 - Full interactive acceptance on a device (filters, scenario taps, device
   toggles, alarm/timer flows) is still pending; automated input is blocked by
   HyperOS.

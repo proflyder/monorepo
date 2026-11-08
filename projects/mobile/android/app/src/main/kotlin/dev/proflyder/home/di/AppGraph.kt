@@ -8,8 +8,10 @@ import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.network.ConnectSchedulerClient
+import dev.proflyder.home.core.network.ConnectScenarioClient
 import dev.proflyder.home.core.network.ControlCatalogClient
 import dev.proflyder.home.core.network.HttpControlCatalogClient
+import dev.proflyder.home.core.network.ScenarioClient
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
@@ -89,6 +91,18 @@ object AppBindings {
         settings = settings,
         baseClient = httpClient,
         serverClock = serverClock,
+        interceptors = interceptors.list,
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideScenarioClient(
+        settings: ConnectionSettingsStore,
+        httpClient: OkHttpClient,
+        interceptors: NetworkInterceptors,
+    ): ScenarioClient = ConnectScenarioClient(
+        settings = settings,
+        baseClient = httpClient,
         interceptors = interceptors.list,
     )
 
