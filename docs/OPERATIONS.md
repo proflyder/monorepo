@@ -981,7 +981,7 @@ provenance; `deploy-home` проверяет тег и provenance:
 текущему tree и `VERSION`. `deploy-station` только устанавливает уже
 опубликованный `<version>` через HA и ничего не собирает. Для каждого
 затронутого деплой-юнита
-`_images.yml` дополнительно публикует `ghcr.io/proflyder/home-deploy`
+`_unit.yml` дополнительно публикует `ghcr.io/proflyder/home-deploy`
 (если юнит не собирает его сам); job достаёт из промоутнутого образа
 бинарник `home-deploy` (`crane export`) и передаёт его скриптам через
 `HOME_DEPLOY`. Бинарник собирает `rust_service_image` из
@@ -1036,7 +1036,7 @@ merge с изменением `VERSION`.
 
 `hermes` — единственный образ деплоя, собираемый Dockerfile'ом. Его собирает
 общий скрипт `projects/home-assistant/deploy/images/hermes/build.sh`, который
-вызывает PR CI (`_images.yml`). Сборка запинена по digest базовых образов:
+вызывает PR CI (`_unit.yml` → `platform/ci/build-images.sh`). Сборка запинена по digest базовых образов:
 apt только из snapshot Debian, `SOURCE_DATE_EPOCH` = время upstream-коммита, а
 Buildx переписывает mtime слоёв (`rewrite-timestamp=true`). Поэтому две сборки
 одной ревизии дают один digest и неподвижный образ не вызывает rollout. В
@@ -1049,7 +1049,7 @@ projects/home-assistant/deploy/images/hermes/verify-reproducible.sh
 # ожидается «reproducible: sha256:…»
 ```
 
-PR CI (`_images.yml`) читает общий кэш слоёв Buildx
+PR CI (`_unit.yml`) читает общий кэш слоёв Buildx
 `ghcr.io/proflyder/hermes:buildcache`; пишут его (`mode=max`) только job'ы,
 которые уже залогинены в GHCR с правом записи. Кэш переиспользует слои с теми
 же входами (apt, `uv`), поэтому ускоряет сборку, но не меняет digest. Пакет

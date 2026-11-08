@@ -3,7 +3,7 @@
 # request uses to hand its build to `deploy-home` (DECISIONS 36).
 #
 # The registry must keep the built bytes: a rewritten manifest would be a
-# different image than the one `_images.yml` reported. Both modes therefore
+# different image than the one the CI unit job reported. Both modes therefore
 # compare the digest the registry stored with the digest the build produced.
 #
 #   # rules_oci image: the repository's existing oci_push target

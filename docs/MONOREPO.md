@@ -176,7 +176,7 @@ crate-пакет объявляет `extract_cargo_lints(... workspace = "//:Car
 
 `projects/station/pulsar` — Rust-хост на `rules_rust`: BUILD-цели лежат в
 `satellite/crates/*`, а тесты/fmt/clippy идут юнитом `pulsar-bazel`
-(`_bazel.yml`). Станции собирает тот же Bazel: герметичный zig 0.14.1
+(`_unit.yml`). Станции собирает тот же Bazel: герметичный zig 0.14.1
 cc-toolchain (`platform/bazel/zig/`) с платформами `aarch64_linux`/`armhf_linux`,
 sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'и в
 `satellite/third_party/bazel/`. Юнит `pulsar` (`_native.yml`) собирает обе

@@ -44,7 +44,7 @@ export const KEEP_DAYS = 7;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 /** How many deploy versions (commit-sha tagged) each package keeps. */
 export const DEPLOY_VERSIONS_TO_KEEP = 5;
-/** Tags produced by `_images.yml` on a pull request. */
+/** Tags produced by the CI unit job on a pull request. */
 export const TREE_TAG = /^tree-[0-9a-f]{40}$/;
 /** A full commit-sha tag marks a deploy version (rule 2). */
 export const COMMIT_TAG = /^[0-9a-f]{40}$/;

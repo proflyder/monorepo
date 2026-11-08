@@ -814,6 +814,33 @@ test("deploy: hermes change selects its images", () => {
   });
 });
 
+test("unit matrix: a Bazel service carries its image fields in the same entry", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["solutions/scheduler/crates/scheduler/src/lib.rs"]);
+  const entries = affected.matrixEntries(result, config);
+  const unit = entries.unit.find((entry) => entry.id === "scheduler");
+  assert.equal(unit.kind, "bazel");
+  assert.equal(unit.images, "scheduler home-deploy");
+  assert.equal(unit.builder, "bazel");
+  assert.equal(unit.target_root, "//projects/home/kubernetes/scheduler");
+  assert.deepEqual(JSON.parse(unit.bazel_images), {});
+});
+
+test("unit matrix: an image-owning Python unit runs in the unit job, not python", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["projects/home-assistant/hermes/README.md"]);
+  const entries = affected.matrixEntries(result, config);
+  const unit = entries.unit.find((entry) => entry.id === "hermes");
+  assert.equal(unit.kind, "python");
+  assert.equal(unit.images, "hermes voice-proxy health-exporter home-deploy");
+  assert.equal(unit.builder, "mixed");
+  assert.equal(unit.suites, "projects/home-assistant/hermes");
+  assert.equal(
+    entries.python.some((entry) => entry.id === "hermes"),
+    false,
+  );
+});
+
 test("deploy: hermes Dockerfile change deploys the hermes unit", () => {
   const config = affected.loadConfig();
   const result = routeReal(["projects/home-assistant/deploy/images/hermes/Dockerfile"]);

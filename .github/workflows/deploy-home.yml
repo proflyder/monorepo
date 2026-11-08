@@ -30,8 +30,8 @@ name: deploy-home
 # never tested and made every deploy slow).
 #
 # The deploy CLI itself is not compiled here either: `HOME_DEPLOY` is extracted
-# from the promoted `ghcr.io/proflyder/home-deploy` image, which `_images.yml`
-# publishes for every affected deployable unit. That keeps the mechanism
+# from the promoted `ghcr.io/proflyder/home-deploy` image, which the CI unit
+# job (`_unit.yml`) publishes for every affected deployable unit. That keeps the mechanism
 # independent of the language `home-deploy` is written in (the Rust crate today).
 #
 # A manual dispatch deploys the current `develop`, whose tree has no CI build
@@ -132,7 +132,7 @@ jobs:
   #     checks) are warmed in the same server into the same
   #     `~/.cache/bazel-disk`. PR jobs restore it read-only (GitHub scopes a
   #     cache to the ref that created it, so a PR-written cache would only
-  #     burn the 10 GB budget); `_android.yml` and `_bazel.yml` reach it
+  #     burn the 10 GB budget); `_android.yml` and `_unit.yml` reach it
   #     through the `bazel-Linux-warm-` prefix. One archive shared by both
   #     families costs one slot; saving the same directory twice would double
   #     the bytes in the 10 GB budget for identical content.
@@ -152,7 +152,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # Node enumerates the Rust build/test targets of the `bazel` units from
-      # platform/ci/units.mjs (the same list `_bazel.yml` builds and tests).
+      # platform/ci/units.mjs (the same list `_unit.yml` builds and tests).
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.11.3
@@ -175,7 +175,7 @@ jobs:
           sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
-      # Identical inputs to `_android.yml`, `_images.yml`, `_deploy-control.yml`
+      # Identical inputs to `_android.yml`, `_unit.yml`, `_deploy-control.yml`
       # and the `changes` job; explicit cache-save true writes the develop-side
       # caches that PRs restore.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
@@ -187,7 +187,7 @@ jobs:
 
       # One disk cache for the combined Android + host-Rust build. Both
       # families restore it in PRs through the shared `bazel-<os>-warm-`
-      # prefix (`_android.yml` and `_bazel.yml` keep their own exact/unit
+      # prefix (`_android.yml` and `_unit.yml` keep their own exact/unit
       # levels first, so a unit cache written earlier still wins).
       #
       # Restore and save are separate steps: a key can be written once, so the
@@ -219,12 +219,12 @@ jobs:
       # server evicts in the background while idle, before the save below).
       #
       # One `bazel build` in one server builds both families. The Rust target
-      # list is the same build/test space `_bazel.yml` uses; the Android test
+      # list is the same build/test space `_unit.yml` uses; the Android test
       # suite is built too, so the PR `bazel test` step finds its compiled
       # classes. `--config=android` only sets Android-specific flags
       # (`--android_platforms`, Java toolchain, dex workers) and the version
       # defines; it does not change the host platform or the Rust toolchain, so
-      # the Rust actions cache exactly as in `_bazel.yml`.
+      # the Rust actions cache exactly as in `_unit.yml`.
       - name: Warm the shared Bazel disk cache
         run: |
           set -euo pipefail

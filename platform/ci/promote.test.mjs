@@ -94,9 +94,11 @@ test("signer pattern is bound to the caller repository and CI workflows", () => 
   const pattern = signerIdentityPattern(REPO);
   assert.equal(
     pattern,
-    "^https://github\\.com/acme/home-lab/\\.github/workflows/(ci|_images)\\.yml@",
+    "^https://github\\.com/acme/home-lab/\\.github/workflows/(ci|_images|_unit|_python|_attest)\\.yml@",
   );
   const regex = new RegExp(pattern);
+  assert.ok(regex.test("https://github.com/acme/home-lab/.github/workflows/_attest.yml@refs/pull/7/merge"));
+  assert.ok(regex.test("https://github.com/acme/home-lab/.github/workflows/_unit.yml@refs/pull/7/merge"));
   assert.ok(regex.test("https://github.com/acme/home-lab/.github/workflows/_images.yml@refs/pull/7/merge"));
   assert.ok(regex.test("https://github.com/acme/home-lab/.github/workflows/ci.yml@refs/pull/7/merge"));
   assert.ok(!regex.test("https://github.com/acme/home-lab/.github/workflows/deploy-home.yml@refs/heads/develop"));

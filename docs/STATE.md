@@ -206,7 +206,7 @@
   пушимый байт-в-байт через `oci_push`. Health exporter — Rust-сервис
   `projects/home-assistant/deploy/health-exporter/crates/health-exporter`,
   собранный тем же `rust_service_image` (static musl, distroless) в отдельный
-  `ghcr.io/proflyder/health-exporter`. PR CI (`_images.yml`, builder `mixed`,
+  `ghcr.io/proflyder/health-exporter`. PR CI (`_unit.yml`, builder `mixed`,
   карта `deploy.bazel_images`) собирает и публикует gateway, proxy, exporter и
   `home-deploy` под `tree-<hash>`; `deploy-home` продвигает digest'ы, затем
   `home-deploy hermes rollout` подставляет digest'ы,
@@ -222,7 +222,7 @@
 - Pulsar собирается в монорепо: исходники лежат в `projects/station/pulsar`,
   сборка — Bazel (Rust + герметичный zig cc-toolchain + sendspin-cpp из
   `http_archive`); монорепо собирает его в CI-юнитах `pulsar-bazel` и `pulsar`
-  (`_bazel.yml`/`_native.yml`). Весь first-party Rust (Pulsar, BLE gateway,
+  (`_unit.yml`/`_native.yml`). Весь first-party Rust (Pulsar, BLE gateway,
   Windows logon provider, voice-recorder helper) — один корневой Cargo
   workspace: `/Cargo.toml`, `/Cargo.lock`, `/rust-toolchain.toml`, один
   `@crates//` и общие `[workspace.lints]` (решение 40). Общий core-слой —
