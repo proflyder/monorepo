@@ -33,13 +33,10 @@ GITHUB_REF = "refs/heads/develop"
 GITHUB_STATION_ENVIRONMENT = "Station"
 GITHUB_ANDROID_ENVIRONMENT = "Android"
 # Android App Distribution runs from PR CI, so every subject is the merge ref of
-# a pull request. Two OpenBao roles share the one `ci-android` policy:
-# `android-app-release` mints the token inside the reusable `_android.yml` entry
-# that builds and signs the APK, and `android-distribute` (ci.yml) only uploads
-# the resulting artifact to Firebase.
+# a pull request. Only `android-distribute` (ci.yml) reads secrets: it signs the
+# APK built by the secret-free `android-app` check and uploads it to Firebase.
 GITHUB_ANDROID_REF = "refs/pull/*/merge"
 GITHUB_ANDROID_WORKFLOW = ".github/workflows/ci.yml"
-GITHUB_ANDROID_APP_WORKFLOW = ".github/workflows/_android.yml"
 GITHUB_ANDROID_EVENT = "pull_request"
 
 ADMIN_POLICY = """\
@@ -321,16 +318,14 @@ def ensure_github(bao: Bao, audience: str, repository: str,
     # Android App Distribution runs inside PR CI from the `Android` Environment.
     # Glob claims pin a role to a PR merge ref and to exactly one workflow file:
     # `repository`, `environment`, `ref=refs/pull/*/merge`, `job_workflow_ref`
-    # and `event_name=pull_request`. The APK is built and signed by the reusable
-    # `_android.yml` (`android-app-release`, job_workflow_ref points at that
-    # file), so the upload job in `ci.yml` (`android-distribute`) keeps its own
-    # role: a token minted in one workflow cannot be replayed from the other.
+    # and `event_name=pull_request`. The APK is built without secrets by the
+    # reusable `_android.yml`; only `android-distribute` in `ci.yml` signs and
+    # uploads it.
     # A fork PR never receives an OIDC token (its run has read-only permissions
     # and no Environment secrets), so only same-repository branches of
-    # collaborators can assume either role. The policy still exposes one KV
+    # collaborators can assume the role. The policy still exposes one KV
     # record.
     android_roles = {
-        "android-app-release": GITHUB_ANDROID_APP_WORKFLOW,
         "android-distribute": GITHUB_ANDROID_WORKFLOW,
     }
     for role, workflow in android_roles.items():

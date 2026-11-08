@@ -216,7 +216,7 @@ test("android fixture: matrix entries are flat strings", () => {
 test("android distribution always includes the unit that owns the APK", () => {
   // A change can route only a shared Kotlin unit (a new package the app does
   // not import yet) while still counting as an application input. The upload
-  // job downloads `android-release-apk` instead of rebuilding, so the release
+  // job downloads `android-app-apk` instead of rebuilding, so the release
   // unit must be in the matrix whenever distribution is selected.
   const config = affected.loadConfig(fixtureConfig);
   const shared = config.get("shared-kotlin");

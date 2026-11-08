@@ -639,10 +639,10 @@ export const config = {
     // Android build tools (platform/android/tools) are Kotlin `kt_jvm_test`
     // targets; they are part of `android_tests`, so the Android app unit
     // exercises the toolchain it runs.
-    // `android-app` is also where the distributable APK is built, tested and
-    // signed once (`_android.yml`): that entry owns the `Android` Environment
-    // and its OpenBao role, and uploads `android-release-apk`. The Firebase
-    // upload job `android-distribute` follows `android_distribute` from
+    // `android-app` is also where the distributable APK is built and tested
+    // once (`_android.yml`, no secrets) and uploaded unsigned as
+    // `android-app-apk`. The signing + Firebase upload job `android-distribute`
+    // follows `android_distribute` from
     // `affected.mjs`: real `projects/mobile/android/**`, `packages/kotlin/**`
     // or `platform/android/**` changes publish an APK; a global invalidation or
     // a CI-workflow edit only runs this unit's checks.
@@ -661,10 +661,9 @@ export const config = {
         // Owns the distributable APK inside `_android.yml`; selected whenever
         // distribution is selected (see affected.mjs matrixEntries).
         release: true,
-        // No generic artifact: the `android-app` entry of `_android.yml` builds,
-        // tests and signs the distributable APK itself and uploads it as
-        // `android-release-apk` (the one artifact that needs the Environment
-        // secrets).
+        // No generic artifact: the `android-app` entry of `_android.yml` builds
+        // and tests the distributable APK itself and uploads it as
+        // `android-app-apk`; `android-distribute` signs it.
         // The APK targets //platform/android:android_arm64; rules_android
         // resolves a C++ toolchain for that platform, which comes from the NDK
         // (`rules_android_ndk` in MODULE.bazel). The exact version is pinned

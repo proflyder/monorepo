@@ -216,24 +216,18 @@ jobs:
   # The matrix uses the targets `plan` narrowed; a missing plan output (skipped
   # or failed) falls back to the declared targets inside `_android.yml`.
   #
-  # `_android.yml` builds, tests and signs the distributable APK inside the
-  # `android-app` entry (the only entry that declares the `Android`
-  # Environment), so the caller grants the OIDC permission and passes the
-  # Environment secrets through. The other entries never use them.
+  # `_android.yml` builds and tests the distributable APK inside the
+  # `android-app` entry without any secret or Environment; signing happens in
+  # `android-distribute`.
   android:
     needs: [changes, plan]
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.android_units != '[]' }}
     permissions:
       contents: read
-      # The `android-app` entry exchanges a GitHub OIDC token for the
-      # `android-app-release` OpenBao role; a fork PR has no Environment and
-      # never mints one.
-      id-token: write
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.changes.outputs.android_units) }}
-    secrets: inherit
     uses: ./.github/workflows/_android.yml
     with:
       unit: ${{ matrix.id }}
@@ -261,9 +255,10 @@ jobs:
       build_targets: ${{ matrix.build_targets }}
 
   # Firebase App Distribution of the Home Android app on every PR that changes
-  # it: the `android-app` matrix entry builds, tests and signs exactly one APK
-  # (`android-release-apk`), and this job only uploads those bytes. There is no
-  # second build, so a tester installs what CI tested.
+  # it: the `android-app` matrix entry builds and tests exactly one APK
+  # (`android-app-apk`, no secrets involved); this job signs those bytes with the
+  # release key and uploads them. There is no second build, so a tester
+  # installs what CI tested.
   #
   # `android_distribute` is true only for a real Android input (the app, the
   # shared Kotlin libraries it builds, or `platform/android/**`). A global
@@ -327,7 +322,7 @@ jobs:
       # available here; a missing artifact fails the download.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: android-release-apk
+          name: android-app-apk
           path: ${{ runner.temp }}/release
 
       # No official action exists for openconnect; the runner image has none.
@@ -388,7 +383,7 @@ jobs:
 
       # The upload job needs only the Firebase service account; the signing key
       # and google-services.json stay between `android-app` and its Environment.
-      - name: Read the Firebase service account from OpenBao
+      - name: Read the release key and Firebase service account from OpenBao
         id: openbao
         uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
         with:
@@ -399,25 +394,50 @@ jobs:
           jwtGithubAudience: ${{ secrets.OPENBAO_ADDR }}
           exportEnv: false
           secrets: |
+            secret/data/ci/android-distribute signing_keystore_b64 | SIGNING_KEYSTORE_B64 ;
+            secret/data/ci/android-distribute signing_store_password | SIGNING_STORE_PASSWORD ;
+            secret/data/ci/android-distribute signing_key_password | SIGNING_KEY_PASSWORD ;
+            secret/data/ci/android-distribute signing_cert_sha256 | SIGNING_CERT_SHA256 ;
             secret/data/ci/android-distribute firebase_service_account_json_b64 | FIREBASE_SERVICE_ACCOUNT_JSON_B64
 
-      - name: Materialise the Firebase credentials
+      # Passwords land in files with mode 600; only paths reach later steps.
+      - name: Materialise the release key and Firebase credentials
         env:
+          SIGNING_KEYSTORE_B64: ${{ steps.openbao.outputs.SIGNING_KEYSTORE_B64 }}
+          SIGNING_STORE_PASSWORD: ${{ steps.openbao.outputs.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ steps.openbao.outputs.SIGNING_KEY_PASSWORD }}
+          SIGNING_CERT_SHA256: ${{ steps.openbao.outputs.SIGNING_CERT_SHA256 }}
           FIREBASE_SERVICE_ACCOUNT_JSON_B64: ${{ steps.openbao.outputs.FIREBASE_SERVICE_ACCOUNT_JSON_B64 }}
         run: |
           set +x
           set -euo pipefail
           umask 077
           CI_DIR="$RUNNER_TEMP/ci"
-          if [[ -z "${FIREBASE_SERVICE_ACCOUNT_JSON_B64:-}" ]]; then
-            echo "OpenBao returned an empty firebase_service_account_json_b64" >&2
-            exit 1
-          fi
+          SIGNING_DIR="$CI_DIR/signing"
+          for value in SIGNING_KEYSTORE_B64 SIGNING_STORE_PASSWORD SIGNING_KEY_PASSWORD \
+                       SIGNING_CERT_SHA256 FIREBASE_SERVICE_ACCOUNT_JSON_B64; do
+            if [[ -z "${!value:-}" ]]; then
+              echo "OpenBao returned an empty $value" >&2
+              exit 1
+            fi
+          done
+          mkdir -p "$SIGNING_DIR"
+          chmod 700 "$SIGNING_DIR"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$SIGNING_DIR/home-release.keystore"
+          printf '%s' "$SIGNING_STORE_PASSWORD" > "$SIGNING_DIR/store.password"
+          printf '%s' "$SIGNING_KEY_PASSWORD" > "$SIGNING_DIR/key.password"
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON_B64" | base64 -d > "$CI_DIR/firebase-sa.json"
-          chmod 600 "$CI_DIR/firebase-sa.json"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json" >> "$GITHUB_ENV"
+          chmod 600 "$SIGNING_DIR"/* "$CI_DIR/firebase-sa.json"
+          {
+            echo "SIGNING_KEYSTORE=$SIGNING_DIR/home-release.keystore"
+            echo "SIGNING_STORE_PASSWORD_FILE=$SIGNING_DIR/store.password"
+            echo "SIGNING_KEY_PASSWORD_FILE=$SIGNING_DIR/key.password"
+            # The expected certificate digest is public (it is in every APK).
+            echo "SIGNING_CERT_SHA256=$SIGNING_CERT_SHA256"
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json"
+          } >> "$GITHUB_ENV"
+          echo "release key and Firebase credentials prepared"
 
-      # The token is short-lived and the upload uses the public internet.
       - name: Disconnect VPN
         run: |
           set +e
@@ -431,11 +451,20 @@ jobs:
 
       # Upload-only: the script verifies the APK digest against
       # release-info.json and never builds or signs anything.
-      - name: Distribute the prebuilt APK
+      # The release key is applied to the already-tested APK from android-app;
+      # release-info.json is rewritten for the signed bytes and the upload
+      # verifies that digest.
+      - name: Sign and distribute the prebuilt APK
         run: |
           set -euo pipefail
+          rel="$RUNNER_TEMP/release"
+          platform/android/sign-release.sh "$rel/app.apk" "$rel/app-release.apk"
+          python3 projects/mobile/android/release_info.py resign \
+            --input "$rel/release-info.json" \
+            --apk "$rel/app-release.apk" \
+            --output "$rel/release-info.json"
           projects/mobile/android/distribute.sh --ci --upload-only \
-            --release-info "$RUNNER_TEMP/release/release-info.json"
+            --release-info "$rel/release-info.json"
 
       - name: Summary
         if: always()
@@ -446,7 +475,7 @@ jobs:
             echo "- PR: #$PR_NUMBER"
             echo "- commit: \`$GITHUB_SHA\`"
             echo "- event: \`$GITHUB_EVENT_NAME\`"
-            echo "- APK: built, tested and signed once in \`android / android-app\`"
+            echo "- APK: built and tested once in \`android / android-app\`, signed here"
             echo "- run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           } >> "$GITHUB_STEP_SUMMARY"
 

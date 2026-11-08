@@ -556,34 +556,25 @@ the APK is built exactly once:
 1. `.github/workflows/_android.yml`, matrix entry `android / android-app`
    (started by `.github/workflows/ci.yml` when the router sets
    `android_distribute`: an actual `projects/mobile/android/`,
-   `packages/kotlin/` or `platform/android/` change) is the only Android entry
-   that declares the GitHub Environment `Android`. It:
-   - runs only for pull requests whose head branch lives in this repository: a
-     fork PR gets a read-only token without Environment secrets, so it cannot
-     read the signing material; it still builds and tests the app, and the
-     release steps skip with an explicit notice;
-   - reads `secret/ci/android-distribute` from OpenBao through the
-     `android-app-release` JWT role, whose claims are pinned to pull-request
-     merge refs of `_android.yml` (`refs/pull/*/merge`);
-   - materialises `google-services.json` into `platform/android/keys/` (mode
-     600) and the release key, its password files, alias and expected
-     certificate digest into `$RUNNER_TEMP/ci` (mode 600/700); passwords stay
-     in files and never enter the environment of later steps, then disconnects
-     the VPN;
-   - builds `//projects/mobile/android:app` with Bazel (debug-signed
-     intermediate, no personal key in CI) using the release
+   `packages/kotlin/` or `platform/android/` change) builds the APK without any
+   secret or Environment (fork PRs included):
+   - takes `google-services.json` from the repository variable
+     `GOOGLE_SERVICES_JSON_B64` (not a secret: the Firebase identifiers ship in
+     every APK); without it the app builds with Firebase disabled and no
+     release artifact is produced;
+   - builds `//projects/mobile/android:app` with the release
      `versionCode`/`versionName`, runs `bazel test` with the same `--define`
-     values so the APK-level tests inspect exactly the APK that will be signed,
-     signs it with `platform/android/sign-release.sh` and uploads
-     `android-release-apk` (`app-release.apk` plus `release-info.json` with the
-     Firebase app id, version and SHA-256).
+     values so the APK-level tests inspect exactly the published APK, and
+     uploads it unsigned as `android-app-apk` (`app.apk` plus
+     `release-info.json` with the Firebase app id, version and SHA-256).
 
-2. `.github/workflows/ci.yml` job `android-distribute` waits for the whole
-   `android` matrix (so an `android-lint` finding also skips distribution),
-   downloads that artifact and uploads it with
-   `distribute.sh --upload-only`; it reads only
-   `firebase_service_account_json_b64` through the separate
-   `android-distribute` JWT role, never the signing key. It is deliberately
+2. `.github/workflows/ci.yml` job `android-distribute` (Environment `Android`,
+   OpenBao JWT role `android-distribute`) waits for the whole `android` matrix
+   (so an `android-lint` finding also skips distribution), downloads that
+   artifact, signs it with `platform/android/sign-release.sh` (release key and
+   password files under `$RUNNER_TEMP/ci`, mode 600), updates
+   `release-info.json` for the signed bytes and uploads it with
+   `distribute.sh --upload-only`. It is deliberately
    **not** part of `ci-ok`: a failed upload is visible on the PR and in the run,
    but it does not block the merge. A newer push to the same PR cancels the
    upload in flight. A global invalidation such as `MODULE.bazel` still runs the

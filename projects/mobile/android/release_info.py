@@ -76,6 +76,19 @@ def write(args: argparse.Namespace) -> None:
         handle.write("\n")
 
 
+def resign(args: argparse.Namespace) -> None:
+    """Point release-info.json at the signed APK (name and digest)."""
+    if not os.path.isfile(args.apk):
+        sys.exit(f"missing {args.apk}")
+    with open(args.input, encoding="utf-8") as handle:
+        info = json.load(handle)
+    info["apk"] = os.path.basename(args.apk)
+    info["sha256"] = sha256(args.apk)
+    with open(args.output, "w", encoding="utf-8") as handle:
+        json.dump(info, handle, indent=2)
+        handle.write("\n")
+
+
 def read(args: argparse.Namespace) -> None:
     with open(args.file, encoding="utf-8") as handle:
         info = json.load(handle)
@@ -103,6 +116,11 @@ def main(argv: list[str]) -> int:
     write_parser.add_argument("--commit", default="")
     write_parser.add_argument("--run-url", default="")
 
+    resign_parser = sub.add_parser("resign", help="update apk/sha256 for a signed APK")
+    resign_parser.add_argument("--input", required=True)
+    resign_parser.add_argument("--apk", required=True)
+    resign_parser.add_argument("--output", required=True)
+
     read_parser = sub.add_parser("read", help="print one field")
     read_parser.add_argument("file")
     read_parser.add_argument("key")
@@ -112,6 +130,8 @@ def main(argv: list[str]) -> int:
         print(firebase_app_id(args.google_services, args.package))
     elif args.command == "write":
         write(args)
+    elif args.command == "resign":
+        resign(args)
     else:
         read(args)
     return 0

@@ -204,7 +204,9 @@ jobs:
           # Same target space as the PR jobs: Rust tests/builds, container
           # images from //projects/... and the Android/Kotlin targets that pull
           # the Maven repositories. `fetch` resolves external repositories only.
-          bazel fetch //solutions/... //packages/... //projects/...
+          # `--config=android` supplies the Android version defines; without it
+          # the Android genrules fail analysis ($(home_version_name) undefined).
+          bazel fetch --config=android //solutions/... //packages/... //projects/...
 
       - name: Install target-determinator
         run: |
@@ -228,7 +230,10 @@ jobs:
           # `--config=android` is mandatory: it activates
           # platform/android/android.bazelrc, so the cached actions match the
           # PR jobs that build with the same config.
-          bazel build --config=android //projects/mobile/android:app \
+          # The test suite is built too, so the PR `bazel test` step finds its
+          # compiled test classes in the cache as well.
+          bazel build --config=android \
+            //projects/mobile/android:app //projects/mobile/android:android_tests \
             --experimental_disk_cache_gc_max_size=6G
 
       # Closes the cache files and lets the idle GC finish before archiving.
