@@ -278,7 +278,7 @@ class CallActivity : AppCompatActivity() {
     private fun routeButton(
         sheet: BottomSheetDialog,
         option: AudioRouteOption,
-        selected: AudioRouteOption?,
+        selected: CallAudioRoute,
     ): MaterialButton {
         val isSelected = option.route == selected
         return MaterialButton(this).apply {

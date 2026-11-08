@@ -200,24 +200,25 @@ class ScenarioEditorFragment :
         catalogLoaded: Boolean,
     ) = with(binding.scenarioEditorSteps) {
         removeAllViews()
-        steps.forEachIndexed { index, step -> addStep(this, index, step, catalog, catalogLoaded) }
+        val context = StepContext(catalog, catalogLoaded, steps.lastIndex)
+        steps.forEachIndexed { index, step -> addStep(this, index, step, context) }
     }
 
     private fun addStep(
         container: android.view.ViewGroup,
         index: Int,
         step: ScenarioStep,
-        catalog: List<ControlEntry>,
-        catalogLoaded: Boolean,
+        context: StepContext,
     ) {
         val item = ItemScenarioStepBinding.inflate(layoutInflater, container, false)
-        val description = ScenarioFormat.describeStep(requireContext(), step, catalog, catalogLoaded)
+        val description =
+            ScenarioFormat.describeStep(requireContext(), step, context.catalog, context.catalogLoaded)
         item.stepIndex.text = getString(R.string.scenarios_step_number, index + 1)
         item.stepSummary.text = description.title
         item.stepDetails.text = description.details
         item.stepDetails.setVisible(description.details.isNotBlank())
         item.stepUp.isEnabled = index > 0
-        item.stepDown.isEnabled = index < steps.lastIndex
+        item.stepDown.isEnabled = index < context.lastIndex
         item.stepUp.setOnClickListener { viewModel.moveStep(index, -1) }
         item.stepDown.setOnClickListener { viewModel.moveStep(index, 1) }
         item.stepEdit.setVisible(step !is ScenarioStep.Unknown)
@@ -481,3 +482,10 @@ class ScenarioEditorFragment :
         }
     }
 }
+
+/** What every step row needs besides the step itself. */
+private data class StepContext(
+    val catalog: List<ControlEntry>,
+    val catalogLoaded: Boolean,
+    val lastIndex: Int,
+)
