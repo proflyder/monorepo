@@ -306,14 +306,14 @@
   {
    "file": "android/firebase-distribute-sa.json",
    "path": "ci/android-distribute",
-   "field": "firebase_service_account_json",
-   "encoding": "text"
+   "field": "firebase_service_account_json_b64",
+   "encoding": "b64"
   },
   {
    "file": "android/google-services.json",
    "path": "ci/android-distribute",
-   "field": "google_services_json",
-   "encoding": "text"
+   "field": "google_services_json_b64",
+   "encoding": "b64"
   },
   {
    "file": "android/home-debug.keystore",
