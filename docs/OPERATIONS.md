@@ -176,12 +176,12 @@ python3 projects/home/proxmox/vpn/vpncerts.py revoke \
   --known-hosts ~/.ssh/home-lab/known_hosts_pve
 
 # 2. отозвать Kubernetes-доступ: удалить долгоживущий token Secret
-kubectl -n home-assistant delete secret ci-deploy-token
+mise run kubectl -- -n home-assistant delete secret ci-deploy-token
 # rbac.yaml создаёт его заново; после этого пересобрать kubeconfig
 # (server https://<K3S_NODE>:6443, token из этого Secret).
 
 # полный отзыв роли и аккаунта
-kubectl delete -f projects/home/kubernetes/scheduler/ci/rbac.yaml
+mise run kubectl -- delete -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 
 Ротация без отзыва: `vpncerts.py issue ci --device github --groups ci --force`.
@@ -297,8 +297,8 @@ mise run admin:ingress -- --staging   # проверка DNS-01
 mise run admin:ingress   # prod-сертификат
 NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 
-KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n traefik get pods,certificate,ingressroute
-KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n cert-manager get challenge,order
+mise run kubectl -- -n traefik get pods,certificate,ingressroute
+mise run kubectl -- -n cert-manager get challenge,order
 ```
 
 Реальные имена и LAN_CIDR — `secrets/home/ingress.env`; токен Cloudflare
@@ -311,25 +311,24 @@ UI/API — `https://vault.<home-domain>/` (LAN/VPN), файлы —
 `projects/home/kubernetes/openbao/`, подробности — его `README.md`.
 
 ```bash
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 
 # состояние и логи
-kubectl -n openbao get pod,svc,pvc
-kubectl -n openbao exec openbao-0 -- /bin/sh -ec \
+mise run kubectl -- -n openbao get pod,svc,pvc
+mise run kubectl -- -n openbao exec openbao-0 -- /bin/sh -ec \
   'BAO_ADDR=http://127.0.0.1:8200 bao status'
-kubectl -n openbao logs openbao-0 --tail=50
+mise run kubectl -- -n openbao logs openbao-0 --tail=50
 
 # раскатать конфигурацию (chart/values меняются — только через deploy.sh)
 mise run admin:openbao
-./projects/home/kubernetes/openbao/bootstrap.sh   # идемпотентно; нужен admin-токен
-./projects/home/kubernetes/openbao/verify.sh --kubernetes
+mise run admin:openbao-bootstrap   # идемпотентно; нужен admin-токен
+mise run admin:openbao-verify -- --kubernetes
 
 # рестарт (auto-unseal, без человека)
-kubectl -n openbao delete pod openbao-0
+mise run kubectl -- -n openbao delete pod openbao-0
 
 # snapshot вручную
-kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
-kubectl -n openbao logs job/snapshot-manual
+mise run kubectl -- -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
+mise run kubectl -- -n openbao logs job/snapshot-manual
 ```
 
 Операторский токен для KV (без входа человека): `secrets/openbao/operator.token`,
@@ -382,18 +381,17 @@ Kubernetes Secrets создаёт ESO. Пути, миграция и ротац�
 `projects/home/kubernetes/external-secrets/README.md`.
 
 ```bash
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 
 # установить/обновить оператор, store и все ExternalSecret
 mise run admin:external-secrets
 
 # состояние
-kubectl -n external-secrets get pods
-kubectl get clustersecretstore openbao
-kubectl get externalsecret -A
+mise run kubectl -- -n external-secrets get pods
+mise run kubectl -- get clustersecretstore openbao
+mise run kubectl -- get externalsecret -A
 
 # немедленная синхронизация после смены значения в OpenBao
-kubectl -n home-assistant annotate externalsecret scheduler-auth \
+mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
   force-sync="$(date +%s)" --overwrite
 ```
 
@@ -409,8 +407,8 @@ Server URL — этот адрес). Файлы, первый вход, смен
 
 ```bash
 mise run admin:vaultwarden            # секреты и kubeconfig — fnox
-kubectl -n vaultwarden get pod,pvc,externalsecret
-kubectl -n vaultwarden logs deploy/vaultwarden --tail=50
+mise run kubectl -- -n vaultwarden get pod,pvc,externalsecret
+mise run kubectl -- -n vaultwarden logs deploy/vaultwarden --tail=50
 ```
 
 Пароль `/admin` — `secret/infra/vaultwarden/admin`; в под попадает только
@@ -452,7 +450,7 @@ unset PING_TOKEN
 
 # применить Alertmanager (ESO рендерит webhook_configs из этой записи)
 mise run admin:observability
-kubectl -n monitoring get externalsecret alertmanager-telegram
+mise run kubectl -- -n monitoring get externalsecret alertmanager-telegram
 ```
 
 Ротация: новый `PING_TOKEN` — обновить private env, выполнить
@@ -466,7 +464,7 @@ Alertmanager и Hermes остались на том же боте. Cloudflare AP
 Outage-тест без остановки остальных алертов — silence только на Watchdog:
 
 ```bash
-kubectl -n monitoring exec alertmanager-monitoring-alertmanager-0 -c alertmanager -- \
+mise run kubectl -- -n monitoring exec alertmanager-monitoring-alertmanager-0 -c alertmanager -- \
   amtool silence add alertname=Watchdog --duration=25m \
   --comment="heartbeat outage test" --alertmanager.url=http://127.0.0.1:9093
 ```
@@ -481,45 +479,44 @@ kubectl -n monitoring exec alertmanager-monitoring-alertmanager-0 -c alertmanage
 Установка, RBAC и ротация — `KUBERNETES-OPERATIONS.md`.
 
 ```bash
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 
 # состояние и метрики
-kubectl -n home-assistant get deploy,pod -l app.kubernetes.io/name=mcp-gateway
-kubectl -n home-assistant logs deploy/mcp-gateway --tail=100
-kubectl -n home-assistant get --raw \
+mise run kubectl -- -n home-assistant get deploy,pod -l app.kubernetes.io/name=mcp-gateway
+mise run kubectl -- -n home-assistant logs deploy/mcp-gateway --tail=100
+mise run kubectl -- -n home-assistant get --raw \
   "/api/v1/namespaces/home-assistant/services/http:mcp-gateway:8080/proxy/readyz"
 
 # каталог, который реально смонтирован (сверка с manifests/catalog.yaml)
-kubectl -n home-assistant get configmap mcp-gateway-catalog \
+mise run kubectl -- -n home-assistant get configmap mcp-gateway-catalog \
   -o jsonpath='{.data.catalog\.yaml}' | head -40
 
 # секреты синхронизированы
-kubectl -n home-assistant get externalsecret mcp-gateway-auth mcp-gateway-telegram
+mise run kubectl -- -n home-assistant get externalsecret mcp-gateway-auth mcp-gateway-telegram
 ```
 
 Шлюз не публикуется наружу: порт-форвард нужен только для отладки MCP-клиента
 и требует Bearer-токен из `Secret/mcp-gateway-auth`.
 
 ```bash
-kubectl -n home-assistant port-forward svc/mcp-gateway 18080:8080
+mise run kubectl -- -n home-assistant port-forward svc/mcp-gateway 18080:8080
 ```
 
 Голос и агенты bb:
 
 ```bash
 # маршруты включены и токены на месте
-kubectl -n home-assistant get externalsecret mcp-gateway-bb-ssh mcp-gateway-voice
-kubectl -n home-assistant logs deploy/mcp-gateway --tail=100 | grep -E '"bb"|"voice"'
+mise run kubectl -- -n home-assistant get externalsecret mcp-gateway-bb-ssh mcp-gateway-voice
+mise run kubectl -- -n home-assistant logs deploy/mcp-gateway --tail=100 | grep -E '"bb"|"voice"'
 
 # самодиагностика distroless-образа: shell/curl/python внутри нет
-kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
+mise run kubectl -- -n home-assistant exec deploy/hermes -c voice-proxy -- \
   /usr/local/bin/voice-proxy -healthcheck
-kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- \
+mise run kubectl -- -n home-assistant exec deploy/hermes -c voice-proxy -- \
   /usr/local/bin/voice-proxy -status
 
 # состояние голосового маршрута и bootstrap обновлений диспетчера:
 # kubectl-side port-forward вместо exec в контейнер, токен не печатается
-kubectl -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
+mise run kubectl -- -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
 VOICE_TOKEN=$(kubectl -n home-assistant get secret mcp-gateway-voice \
   -o jsonpath='{.data.token}' | base64 -d)
 curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
@@ -590,7 +587,7 @@ ls -l /config/.ssh/komp_ed25519 /config/.ssh/komp_known_hosts
 curl -sS http://<k3s-node>:30130/healthz
 
 # журнал: только machine/outcome/grantId, без nonce/MAC/токенов
-kubectl -n home-assistant logs deploy/wakegrant --tail=50
+mise run kubectl -- -n home-assistant logs deploy/wakegrant --tail=50
 
 # тестовый пропуск; токен читается из приватного файла, не печатается
 curl -sS -X POST http://<k3s-node>:30130/v1/grants \
@@ -728,8 +725,7 @@ sudo systemctl status k3s
 
 ```bash
 ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.27
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
-kubectl get pods -A
+mise run kubectl -- get pods -A
 ```
 
 Helm releases и обновление — `KUBERNETES-OPERATIONS.md`.
@@ -740,8 +736,7 @@ Helm releases и обновление — `KUBERNETES-OPERATIONS.md`.
 код 0); `helm get values` storage не содержит — он применяется отдельно:
 
 ```bash
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
-helm template runtime projects/home-assistant/deploy/chart \
+mise run helm -- template runtime projects/home-assistant/deploy/chart \
   -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
   | kubectl diff -n home-assistant -f -
 ```
@@ -757,7 +752,7 @@ Python-скрипта/ConfigMap. Автодеплой Hermes
 `KUBERNETES-OPERATIONS.md`; ручной прогон:
 
 ```bash
-KUBECONFIG=secrets/kubernetes-research/kubeconfig \
+mise run secrets:exec -- -P kube exec -- platform/workstation/with-kube-tunnel.sh \
   home-deploy hermes rollout \
     --values-file "$RUNTIME_PRIVATE_VALUES" \
     --hermes-digest sha256:… --voice-proxy-digest sha256:… \
@@ -1146,11 +1141,11 @@ mise run admin:scheduler-backup
 Проверки:
 
 ```bash
-kubectl -n home-assistant exec deployment/scheduler -- \
+mise run kubectl -- -n home-assistant exec deployment/scheduler -- \
   /usr/local/bin/scheduler -healthcheck
-kubectl -n home-assistant exec deployment/scheduler -- \
+mise run kubectl -- -n home-assistant exec deployment/scheduler -- \
   /usr/local/bin/scheduler -status
-kubectl -n home-assistant logs deploy/ha-bridge --tail=50
+mise run kubectl -- -n home-assistant logs deploy/ha-bridge --tail=50
 ```
 
 Очередь озвучивания агента: `-status` печатает raw GetStatus, в `queues`
@@ -1200,11 +1195,11 @@ Deployment `ha-scenario` на очереди `scenario`. Он катится в�
 ledger — `/data/scenario-ledger.json`. Проверка:
 
 ```bash
-kubectl -n home-assistant exec deployment/scheduler -- \
+mise run kubectl -- -n home-assistant exec deployment/scheduler -- \
   /usr/local/bin/scheduler -status \
   | jq '{scenario_store_supported, scenario_execution_supported, queues}'
-kubectl -n home-assistant logs deploy/ha-scenario --tail=50
-kubectl -n home-assistant exec deploy/ha-scenario -- \
+mise run kubectl -- -n home-assistant logs deploy/ha-scenario --tail=50
+mise run kubectl -- -n home-assistant exec deploy/ha-scenario -- \
   /usr/local/bin/ha-scenario -healthcheck
 ```
 
@@ -1283,9 +1278,9 @@ curl -fsS -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" \
 env/реплики, поэтому ручное выключение не откатывается само):
 
 ```bash
-kubectl -n home-assistant scale deployment/ha-scenario --replicas=0
+mise run kubectl -- -n home-assistant scale deployment/ha-scenario --replicas=0
 # либо оставить под, но не забирать очередь:
-kubectl -n home-assistant set env deployment/ha-scenario SCENARIO_EXECUTE=false
+mise run kubectl -- -n home-assistant set env deployment/ha-scenario SCENARIO_EXECUTE=false
 ```
 
 Перед снятием флага исполнения снять `SCENARIO_EXECUTION` с scheduler не
@@ -1348,15 +1343,14 @@ push в тот же PR отменяет предыдущую загрузку. �
 значения — `secrets/home/currency-bot.env` и `secrets/currency-bot/`.
 
 ```bash
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 
 # деплой вручную: Bazel-образ импортируется на узел по SSH
 NODE_SSH=labuser@192.0.2.27 \
   ./projects/home/kubernetes/currency-bot/deploy.sh
 
 # состояние; ExternalSecrets должны быть SecretSynced=True
-kubectl -n currency-bot get deploy,pod,svc,pvc,externalsecret
-kubectl -n currency-bot get --raw \
+mise run kubectl -- -n currency-bot get deploy,pod,svc,pvc,externalsecret
+mise run kubectl -- -n currency-bot get --raw \
   "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
 
 # LAN NodePort для голосового intent «курс доллара/рубля» (HA Assist).
@@ -1371,8 +1365,8 @@ ssh root@192.0.2.27 \
   bash projects/home/kubernetes/currency-bot/nft/apply.sh
 
 # логи: JSON в stdout; Alloy шипит их в Loki
-kubectl -n currency-bot logs deploy/currency-bot --tail=100
-kubectl -n currency-bot logs deploy/cloudflared --tail=50
+mise run kubectl -- -n currency-bot logs deploy/currency-bot --tail=100
+mise run kubectl -- -n currency-bot logs deploy/cloudflared --tail=50
 
 # ручной прогон через LAN/VPN API (Bearer не печатать)
 curl -fsS -X POST https://currency.home.example.com/api/trigger \

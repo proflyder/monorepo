@@ -105,7 +105,7 @@ NODE_SSH=labuser@node KUBECONFIG=/path/kubeconfig \
 NODE_SSH=labuser@node ./projects/home/kubernetes/scheduler/deploy.sh --shadow
 HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@node \
   ./projects/home/kubernetes/scheduler/deploy.sh --execute         # preflight, then 1 replica
-./projects/home/kubernetes/scheduler/deploy.sh --only scheduler    # one unit only
+mise run admin:service scheduler -- --only scheduler    # one unit only
 ```
 
 - Re-running without `--execute`/`--shadow` preserves the bridge/control/
@@ -253,7 +253,7 @@ binary rejects schema v2.
 When a change only touches one service, use `--only`:
 
 ```bash
-./projects/home/kubernetes/scheduler/deploy.sh --only scheduler
+mise run admin:service scheduler -- --only scheduler
 ```
 
 ## CI deploy (GitHub Actions, environment `home`)

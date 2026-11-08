@@ -35,11 +35,9 @@ sudo systemctl status k3s
 С Mac:
 
 ```bash
-ssh -N -i ~/.ssh/home-lab/proxmox_admin \
-  -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_k3s \
-  -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.27
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
-kubectl get pods -A
+# admin kubeconfig (OpenBao, fnox profile kube) + SSH-туннель к API на время
+# команды; `helm` — так же через `mise run helm --`
+mise run kubectl -- get pods -A
 ```
 
 Ключ, `known_hosts` и `config` (алиасы `pve`/`k3s`/`haos`) — `~/.ssh/home-lab/`
@@ -75,11 +73,11 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 
 ```bash
 # chart приложений и dashboard — из репозитория
-helm upgrade --install runtime projects/home-assistant/deploy/chart \
+mise run helm -- upgrade --install runtime projects/home-assistant/deploy/chart \
   -n home-assistant -f local-data/kubernetes-research/runtime-values.yaml \
   --wait --timeout 5m
 
-helm upgrade --install ha-observability \
+mise run helm -- upgrade --install ha-observability \
   projects/home-assistant/observability/chart \
   -n monitoring --wait --timeout 2m
 ```
@@ -96,9 +94,8 @@ values-файл (`RUNTIME_PRIVATE_VALUES`, лежит в `secrets/`) долже�
 сравнить рендер со всеми объектами (и storage, который применяется отдельно):
 
 ```bash
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 
-helm template runtime projects/home-assistant/deploy/chart \
+mise run helm -- template runtime projects/home-assistant/deploy/chart \
   -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
   | kubectl diff -n home-assistant -f -
 ```
@@ -159,7 +156,7 @@ Helm при удалении объекта из релиза делает GET �
 Ручной прогон того же пути:
 
 ```bash
-KUBECONFIG=secrets/kubernetes-research/kubeconfig \
+mise run secrets:exec -- -P kube exec -- platform/workstation/with-kube-tunnel.sh \
   home-deploy hermes rollout \
     --values-file local-data/kubernetes-research/runtime-values.yaml \
     --hermes-digest sha256:… --voice-proxy-digest sha256:… \
@@ -194,13 +191,12 @@ Deployment, `ServiceMonitor`. Hermes ходит в `/mcp` с Bearer-токено
 Одноразово (admin, до первого деплоя):
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 # токен шлюза↔Hermes; значение никогда не печатать
-bao kv put secret/k8s/home-assistant/mcp-gateway-auth token="$(openssl rand -hex 32)"
-kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
-kubectl apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
-kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
-kubectl -n home-assistant wait --for=condition=Ready \
+BAO_TOKEN=$(cat secrets/openbao/operator.token) bao kv put secret/k8s/home-assistant/mcp-gateway-auth token="$(openssl rand -hex 32)"
+mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
+mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
+mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
+mise run kubectl -- -n home-assistant wait --for=condition=Ready \
   externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram \
   externalsecret/mcp-gateway-ha externalsecret/mcp-gateway-bb-ssh \
   externalsecret/mcp-gateway-voice --timeout=120s
@@ -212,26 +208,26 @@ ServiceMonitor; остальные глаголы деплоя уже есть �
 Деплой и проверки:
 
 ```bash
-NODE_SSH=labuser@192.0.2.27 ./projects/home/kubernetes/mcp-gateway/deploy.sh
+NODE_SSH=labuser@192.0.2.27 mise run admin:service mcp-gateway
 
-kubectl -n home-assistant get deploy,pod,svc -l app.kubernetes.io/name=mcp-gateway
-kubectl -n home-assistant logs deploy/mcp-gateway --tail=50
-kubectl -n home-assistant get --raw \
+mise run kubectl -- -n home-assistant get deploy,pod,svc -l app.kubernetes.io/name=mcp-gateway
+mise run kubectl -- -n home-assistant logs deploy/mcp-gateway --tail=50
+mise run kubectl -- -n home-assistant get --raw \
   "/api/v1/namespaces/home-assistant/services/http:mcp-gateway:8080/proxy/readyz"
-kubectl -n home-assistant exec deploy/mcp-gateway -- \
+mise run kubectl -- -n home-assistant exec deploy/mcp-gateway -- \
   /usr/local/bin/mcp-gateway -healthcheck
 ```
 
 Проверка прав ровно по каталогу:
 
 ```bash
-kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+mise run kubectl -- auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
   patch deployment/scheduler -n home-assistant      # yes
-kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+mise run kubectl -- auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
   delete deployment/scheduler -n home-assistant     # no
-kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+mise run kubectl -- auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
   patch statefulset/openbao -n openbao              # yes
-kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+mise run kubectl -- auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
   patch deployment/traefik -n monitoring            # no
 ```
 
@@ -240,8 +236,8 @@ kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
 диагностики — обычный rollout restart, но он обходит предупреждения:
 
 ```bash
-kubectl -n home-assistant rollout restart deployment/piper
-kubectl -n home-assistant annotate deployment/piper mcp-gateway/last-restart- --overwrite
+mise run kubectl -- -n home-assistant rollout restart deployment/piper
+mise run kubectl -- -n home-assistant annotate deployment/piper mcp-gateway/last-restart- --overwrite
 ```
 
 Ротация токена: обновить OpenBao `k8s/home-assistant/mcp-gateway-auth`, затем
@@ -258,8 +254,8 @@ Bearer). Ротация Telegram-бота: обновить `TELEGRAM_BOT_TOKEN`
 - Port-forward для диагностики:
 
 ```bash
-kubectl -n monitoring port-forward svc/monitoring-prometheus 19090:9090
-kubectl -n monitoring port-forward svc/loki 13100:3100
+mise run kubectl -- -n monitoring port-forward svc/monitoring-prometheus 19090:9090
+mise run kubectl -- -n monitoring port-forward svc/loki 13100:3100
 ```
 
 Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
@@ -295,7 +291,6 @@ Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
   установки без OpenBao/ESO.
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 mise run admin:ingress -- --staging   # проверка DNS-01
 mise run admin:ingress   # prod-сертификат
 NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
@@ -314,9 +309,9 @@ Auto-unseal — `static` seal (Secret `openbao-seal`), поэтому после
 пода распечатывание не требуется.
 
 ```bash
-kubectl -n openbao get pod,pvc,cronjob
-kubectl -n openbao exec openbao-0 -- /bin/sh -ec 'BAO_ADDR=http://127.0.0.1:8200 bao status'
-kubectl -n openbao delete pod openbao-0   # OnDelete: применяет новый конфиг
+mise run kubectl -- -n openbao get pod,pvc,cronjob
+mise run kubectl -- -n openbao exec openbao-0 -- /bin/sh -ec 'BAO_ADDR=http://127.0.0.1:8200 bao status'
+mise run kubectl -- -n openbao delete pod openbao-0   # OnDelete: применяет новый конфиг
 ```
 
 Обновление/бутстрап/backup/восстановление — `projects/home/kubernetes/openbao/README.md`.
@@ -329,11 +324,10 @@ Secrets приложений. `ClusterSecretStore/openbao` использует 
 (политика `k8s-read`, только `secret/data/k8s/*`).
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 mise run admin:external-secrets
-kubectl get clustersecretstore openbao
-kubectl get externalsecret -A
-kubectl -n home-assistant annotate externalsecret scheduler-auth \
+mise run kubectl -- get clustersecretstore openbao
+mise run kubectl -- get externalsecret -A
+mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
   force-sync="$(date +%s)" --overwrite   # немедленная синхронизация
 ```
 

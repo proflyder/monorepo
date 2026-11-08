@@ -41,9 +41,8 @@ ExternalSecret-манифесты лежат рядом с проектами:
 ## Установка
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 mise run admin:openbao
-./projects/home/kubernetes/openbao/bootstrap.sh      # роли/политики, включая external-secrets
+mise run admin:openbao-bootstrap      # роли/политики, включая external-secrets
 mise run admin:external-secrets
 ```
 
