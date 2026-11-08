@@ -25,6 +25,8 @@ require "dev.proflyder.home.feature.call.telecom.HomeConnectionService"
 require "dev.proflyder.home.feature.call.CallForegroundService"
 require "android.permission.MANAGE_OWN_CALLS"
 require "android.permission.FOREGROUND_SERVICE_PHONE_CALL"
+require "android.permission.RECORD_AUDIO"
+require "android.permission.POST_NOTIFICATIONS"
 
 if [ "$missing" -ne 0 ]; then
   echo "the call feature manifest was not merged into the APK" >&2
