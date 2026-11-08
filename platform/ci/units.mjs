@@ -248,12 +248,12 @@ export const config = {
         builder: "bazel",
         target_root: "//projects/home/kubernetes/scheduler",
         images: ["scheduler", "home-deploy"],
-        // The shared scheduler deploy script also renders ha-bridge and
-        // ha-control (it never applies them for this unit). They are not this
-        // unit's artifact, so deploy-home resolves them from the newest
+        // The shared scheduler deploy script also renders ha-bridge, ha-control
+        // and ha-scenario (it never applies them for this unit). They are not
+        // this unit's artifact, so deploy-home resolves them from the newest
         // verified build instead of requiring a tree tag for this change or
         // reading the live cluster.
-        optional_images: ["ha-bridge", "ha-control"],
+        optional_images: ["ha-bridge", "ha-control", "ha-scenario"],
         workloads: ["scheduler"],
         namespace: "home-assistant",
         script: "projects/home/kubernetes/scheduler/deploy.sh",
@@ -463,7 +463,7 @@ export const config = {
     {
       id: "ha-bridge",
       platform: "bazel",
-      title: "solutions/ha-bridge (Rust home executor + Rust ha-control)",
+      title: "solutions/ha-bridge (Rust home executor, ha-control and ha-scenario)",
       paths: [
         "solutions/ha-bridge/**",
         // Direct dependencies of the Rust executors: a change here rebuilds
@@ -476,16 +476,17 @@ export const config = {
         "platform/deploy/**",
         "platform/deploy-rs/**",
       ],
-      // The bridge unit owns ha-control too: they share the executor code.
+      // The bridge unit owns ha-control and ha-scenario too: they share the
+      // executor code.
       deploy: {
         builder: "bazel",
         target_root: "//projects/home/kubernetes/scheduler",
-        images: ["ha-bridge", "ha-control"],
+        images: ["ha-bridge", "ha-control", "ha-scenario"],
         // The shared script renders the scheduler too; this unit never applies
         // it, so its image comes from the newest verified build (see the
         // scheduler unit's comment).
         optional_images: ["scheduler"],
-        workloads: ["ha-bridge", "ha-control"],
+        workloads: ["ha-bridge", "ha-control", "ha-scenario"],
         namespace: "home-assistant",
         script: "projects/home/kubernetes/scheduler/deploy.sh",
         env_key: "scheduler_env",
@@ -500,7 +501,8 @@ export const config = {
         namespace: "home-assistant",
         source: "projects/home/kubernetes/scheduler/README.md (CI deploy / Rollback)",
       },
-      // Both deployed services are the Rust crate: ha-bridge and ha-control.
+      // All deployed services are the Rust crate: ha-bridge, ha-control and
+      // ha-scenario.
       // The former Go implementation is deleted; testdata/ holds frozen golden
       // vectors for the Rust tests.
       bazel: {

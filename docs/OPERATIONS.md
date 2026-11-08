@@ -1113,7 +1113,7 @@ Deploy, пауза и запуск исполнителя — `projects/home/kub
 NODE_SSH=labuser@<node> SSH_KEY=~/.ssh/home-lab/proxmox_admin \
   projects/home/kubernetes/scheduler/deploy.sh
 
-# только один юнит (scheduler | ha-bridge | ha-control)
+# только один юнит (scheduler | ha-bridge | ha-control; ha-bridge катит и ha-scenario)
 NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh --only scheduler
 
 # осознанный переход в shadow (dry-run, 0 реплик)
@@ -1177,6 +1177,80 @@ curl -fsS -H "Authorization: Bearer $CONTROL_TOKEN" \
 содержит. Скрипт молчит при `input_boolean.alarm_ringing = on` и при
 неготовом сателлите откатывается на `schedule_announce`. Текст не пишется в
 логи, ledger, `detail` и отчёты — не добавляйте его в диагностические команды.
+
+### Исполнитель сценариев (ha-scenario)
+
+Определения хранит scheduler (`home.v1.ScenarioService`), исполняет отдельный
+Deployment `ha-scenario` на очереди `scenario`. Он катится вместе с юнитом
+`ha-bridge` (`deploy.sh --only ha-bridge`), 1 реплика, `SCENARIO_EXECUTE=true`;
+ledger — `/data/scenario-ledger.json`. Проверка:
+
+```bash
+kubectl -n home-assistant exec deployment/scheduler -- \
+  /usr/local/bin/scheduler -status \
+  | jq '{scenario_store_supported, scenario_execution_supported, queues}'
+kubectl -n home-assistant logs deploy/ha-scenario --tail=50
+kubectl -n home-assistant exec deploy/ha-scenario -- \
+  /usr/local/bin/ha-scenario -healthcheck
+```
+
+`scenario_execution_supported=true` — это флаг scheduler
+`SCENARIO_EXECUTION=true` в манифесте, а не догадка о наличии пода: при
+выключенном исполнителе флаг снимается тем же PR/деплоем.
+
+Создать сценарий и запустить вручную (`$SCHEDULER_TOKEN` — тот же bearer, что
+у планировщика; адрес — `https://alarms.home.example.com` или LAN NodePort):
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  https://alarms.home.example.com/home.v1.ScenarioService/CreateScenario \
+  -d '{
+    "label": "Evening light",
+    "enabled": true,
+    "triggers": [{"manual": {}}],
+    "conditions": [{"entityState": {"entityId": "sun.sun", "state": "below_horizon"}}],
+    "steps": [
+      {"catalog": {"entryId": "scene.focus", "action": "run"}},
+      {"delay": {"seconds": 2}},
+      {"speak": {"text": "Добрый вечер."}}
+    ],
+    "continueOnError": false
+  }' | jq -r '.scenario.id'
+
+# manual-запуск: событие scenario.fire встаёт в очередь scenario
+curl -fsS -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  https://alarms.home.example.com/home.v1.ScenarioService/RunScenario \
+  -d '{"id":"<scenario-id>"}' | jq '{id: .event.id, queue: .event.queue}'
+```
+
+Time-триггер добавляется так же: `{"time":{"timezone":"Asia/Almaty",
+"at":{"hour":7,"minute":30},"repeat":"REPEAT_KIND_DAILY"}}`; scheduler сам
+материализует расписание и ставит `scenario.fire`. Окно условий
+`{"timeWindow":{"start":{"hour":22},"end":{"hour":6},"weekdays":[1,2,3,4,5]}}`
+поддерживает переход через полночь; timezone условий — у первого
+time-триггера, иначе `SCENARIO_TIMEZONE`.
+
+Выключить исполнение (манифест при следующем `deploy.sh` сохранит
+env/реплики, поэтому ручное выключение не откатывается само):
+
+```bash
+kubectl -n home-assistant scale deployment/ha-scenario --replicas=0
+# либо оставить под, но не забирать очередь:
+kubectl -n home-assistant set env deployment/ha-scenario SCENARIO_EXECUTE=false
+```
+
+Перед снятием флага исполнения снять `SCENARIO_EXECUTION` с scheduler не
+обязательно, но честнее: `kubectl -n home-assistant set env deployment/scheduler
+SCENARIO_EXECUTION=false` (манифест вернёт `true` при следующем деплое).
+
+Диагностика: `ACK_SKIPPED` с detail `condition not met` / `scenario is
+disabled` — ожидаемое поведение; `FAILED` `step N: …` — шаг не выполнился,
+повторно он не запускается. `FAILED interrupted` означает, что процесс упал
+после начала шагов; проверьте ledger и выполните сценарий вручную. Текст
+`speak` не попадает в логи, ledger, `detail` и отчёты — не добавляйте его в
+диагностические команды.
 
 Endpoint для Android: `https://alarms.home.example.com` (scheduler) и
 `https://control.home.example.com` (каталог) через Traefik + Let's Encrypt;

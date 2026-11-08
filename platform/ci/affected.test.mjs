@@ -710,8 +710,8 @@ test("deploy: ha-bridge change deploys bridge and control", () => {
   );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
-  assert.equal(entries[0].images, "ha-bridge ha-control");
-  assert.equal(entries[0].workloads, "ha-bridge ha-control");
+  assert.equal(entries[0].images, "ha-bridge ha-control ha-scenario");
+  assert.equal(entries[0].workloads, "ha-bridge ha-control ha-scenario");
 });
 
 test("deploy: Rust ha-control crate change deploys both services", () => {
@@ -726,7 +726,7 @@ test("deploy: Rust ha-control crate change deploys both services", () => {
   );
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
-  assert.equal(entries[0].images, "ha-bridge ha-control");
+  assert.equal(entries[0].images, "ha-bridge ha-control ha-scenario");
 });
 
 test("deploy: shared proto package deploys scheduler and ha-bridge", () => {

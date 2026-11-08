@@ -601,9 +601,11 @@
     (`kind=SCHEDULE_KIND_SCENARIO`, очередь `scenario`, `task_type` —
     `scenario.fire`), `RunScenario` кладёт manual-событие в ту же очередь.
     Условия и шаги scheduler только хранит и валидирует; вычисляет и исполняет
-    отдельный бинарь `ha-scenario` в `ha-bridge` (следующий этап). Второго
-    планировщика и второго владельца определений нет. `GetStatus` различает
+    отдельный бинарь `ha-scenario` в `ha-bridge`. Второго планировщика и
+    второго владельца определений нет. `GetStatus` различает
     `scenario_store_supported=true` (хранилище есть) и
-    `scenario_execution_supported=false` (исполнителя ещё нет).
+    `scenario_execution_supported` — deployment-флаг scheduler
+    (`SCENARIO_EXECUTION`), который включается вместе с исполнителем, а не
+    угадывается по живым подам.
 
 Меняется решение — обновить этот файл и `STATE.md`.

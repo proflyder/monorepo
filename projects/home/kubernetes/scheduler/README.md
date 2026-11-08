@@ -1,13 +1,17 @@
 # Scheduler deployment (home K3s)
 
 Durable `home.v1.SchedulerService` plus the Home Assistant executors
-(`ha-bridge`, `ha-control`) on the single-node `lab-k3s` cluster.
+(`ha-bridge`, `ha-control`, `ha-scenario`) on the single-node `lab-k3s` cluster.
 
 - `solutions/scheduler` owns schedules, timers, occurrences, outbox and leases.
 - `solutions/ha-bridge` leases the `home` queue and calls only allowlisted HA
   scripts (`alarm_start`, `schedule_announce`, `alarm_stop`). It never owns
   schedule state.
 - `ha-control` leases only the `control` queue and serves the phone catalog.
+- `ha-scenario` leases only the `scenario` queue, reads definitions through
+  `ScenarioService/GetScenario`, evaluates conditions and runs catalog/speak/
+  delay steps. It owns a separate ledger and consumer id; a STOP cancels a
+  running delay.
 - Home Assistant performs audio only. Voice intents in
   `projects/home-assistant/ha-voice` call the canonical API.
 
@@ -21,13 +25,14 @@ projects/home/kubernetes/scheduler/BUILD.bazel
   :scheduler_image   :scheduler_load   :scheduler_push    ghcr.io/proflyder/scheduler
   :ha-bridge_image   :ha-bridge_load   :ha-bridge_push    ghcr.io/proflyder/ha-bridge
   :ha-control_image  :ha-control_load  :ha-control_push   ghcr.io/proflyder/ha-control
+  :ha-scenario_image :ha-scenario_load :ha-scenario_push  ghcr.io/proflyder/ha-scenario
 ```
 
 - `rules_oci` assembles one static linux/amd64 binary on
   `gcr.io/distroless/static-debian12:nonroot`, pinned by digest in
   `MODULE.bazel`. The scheduler binary comes from the Rust crate
   `//solutions/scheduler/crates/scheduler:scheduler` via `rules_rust` (static
-  musl); `ha-bridge` and `ha-control` are the two binaries of
+  musl); `ha-bridge`, `ha-control` and `ha-scenario` are the binaries of
   `//solutions/ha-bridge/crates/ha-bridge`, also rebuilt for static musl. The
   former Go implementations are deleted. No Docker daemon and no `RUN` steps
   are involved, so the same targets build on macOS and on the GitHub runner.
@@ -47,6 +52,7 @@ manifests/scheduler.yaml        PVC + Deployment + NodePort Service (template)
 manifests/bridge.yaml           ledger PVC + executor Deployment (template)
 manifests/control.yaml          ha-control Deployment (template)
 manifests/control-service.yaml  ha-control ClusterIP + NodePort
+manifests/scenario.yaml         ha-scenario ledger PVC + executor Deployment
 manifests/preflight-job.yaml    in-cluster cutover preflight Job (template)
 manifests/external-secrets.yaml ExternalSecrets for scheduler-auth/ha-bridge-ha
 nft/scheduler-nodeport.nft      NodePort source filter (template, host config)
@@ -101,10 +107,10 @@ HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@node \
 ./projects/home/kubernetes/scheduler/deploy.sh --only scheduler    # one unit only
 ```
 
-- Re-running without `--execute`/`--shadow` preserves the bridge/control modes
-  and replica counts; it only rolls the new image digest.
+- Re-running without `--execute`/`--shadow` preserves the bridge/control/
+  scenario modes and replica counts; it only rolls the new image digest.
 - `--only` selects deployable groups (`scheduler`, `ha-bridge` which also rolls
-  `ha-control`, `ha-control`); the default is `all`.
+  `ha-control` and `ha-scenario`, `ha-control`); the default is `all`.
 - `--execute` runs the preflight first and refuses if a legacy HA writer is on,
   an alarm is ringing, the scheduler is not ready or the HA endpoint differs.
 - The preflight runs locally by default; `PREFLIGHT_IN_CLUSTER=1` runs it as a
@@ -137,6 +143,36 @@ process from the alarm bridge.
   but the executor is not exactly-once.
 - HA's `repeat` delivery for `control` shares the scheduler event lease; the
   scheduler allowlist must include both `ha-bridge-home` and `ha-control-home`.
+
+## ha-scenario
+
+The durable executor of `home.v1.ScenarioService` definitions. Scheduler stores
+and validates them and emits `scenario.fire` / `scenario.stop` on the
+dedicated `scenario` queue; this process owns the `ha-scenario-home` consumer
+and a separate `/data/scenario-ledger.json` on PVC `ha-scenario-data`.
+
+- Starts with `SCENARIO_EXECUTE=true`, 1 replica. There are no scenarios at
+  roll-out time, so the queue is idle.
+- Conditions: `entity_state` (exact HA state) and `time_window` (timezone of
+  the first time trigger or `SCENARIO_TIMEZONE`, window across midnight,
+  ISO weekdays). Not met → `SKIPPED`.
+- Steps run in order against the live catalog: `catalog` (`entry`/`action`/
+  `params_json`), `speak` (same `script.speak_text` path as
+  `action.station_speak`), `delay` (cancelled by STOP). `continue_on_error`
+  decides whether the first failure stops the run; the ack detail is `step N:
+  <reason>` and never contains speak text.
+- Retries without an ack only before the first step (scheduler/HA/catalog
+  unavailable). After a step, a failure is terminal; the ledger marks
+  `started` before the first step, so an interrupted run is acked `FAILED
+  interrupted` instead of being replayed.
+- `SCENARIO_LEASE_SECONDS` (default 3600) must cover a whole run: an ack after
+  the lease expired is rejected by the scheduler. A single delay step is capped
+  at 3600 s by the proto contract.
+- One scenario never runs twice at once: a second FIRE is `SKIPPED` «already
+  running». `GetStatus.scenario_execution_supported` is the scheduler
+  `SCENARIO_EXECUTION=true` flag, set in `manifests/scheduler.yaml`.
+- Disable: `kubectl -n home-assistant scale deployment/ha-scenario --replicas=0`
+  or `set env ... SCENARIO_EXECUTE=false`; reruns preserve both.
 
 Endpoints (private values in `secrets/home/scheduler.env`):
 
@@ -198,8 +234,8 @@ binary rejects schema v2.
 
 ## Bounded rollout
 
-`deploy.sh` is the full path: it also rolls `ha-control`. When a change only
-touches one service, use `--only`:
+`deploy.sh` is the full path: it also rolls `ha-control` and `ha-scenario`.
+When a change only touches one service, use `--only`:
 
 ```bash
 ./projects/home/kubernetes/scheduler/deploy.sh --only scheduler
