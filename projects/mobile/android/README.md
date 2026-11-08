@@ -16,9 +16,12 @@ Current device acceptance and remaining work are tracked in
 
 ## Features
 
-- Bottom tabs: **Home**, **Scenarios**, **Alarms**, **Timers**, **Reminders**.
-  **Connection** is not a tab; the settings icon (⚙) in the top app bar opens it
-  as an overlay over the current tab, and Back returns to that tab.
+- Bottom tabs: **Home**, **Scenarios**, **Time**. **Time** is a container with an
+  in-screen switch for **Alarms**, **Timers** and **Reminders**; the existing
+  feature screens are reused unchanged and deep links such as
+  `selectTab("alarms")` open the Time tab on the matching section. **Connection**
+  is not a tab; the settings icon (⚙) in the top app bar opens it as an overlay
+  over the current tab, and Back returns to that tab.
 - Alarms: list/create/edit/enable/disable/delete, snooze (9 min), stop; one-shot
   with explicit date, daily, weekdays, weekends, custom ISO weekdays, IANA
   timezone. Server one-shot alarms stay one-shot when edited.
@@ -39,26 +42,40 @@ Current device acceptance and remaining work are tracked in
 - Loading/empty/error/content states; existing data stays visible during refresh
   or transient errors. Lists never silently become empty.
 
-## Home (scenarios and devices)
+## Home hub (devices, live cards, quick actions)
 
 - The catalog comes from the home control service (`GET /v1/catalog`); nothing
   is hard-coded in the app. Names, rooms, icons, and hidden flags come from Home
   Assistant.
-- Scenarios are HA scripts carrying the native `scenario` label. Devices are
-  lights/switches. Icons and rooms are display metadata only.
-- The **voice profile** is one HA switch carrying the native `voice_profile`
-  label. The server reports it as `kind: "profile"`: the app pins it above the
-  scenarios in its own section, keeps it out of the device filters and counters
-  (it is a mode, not content) and renders two segmented buttons — **Personal**
-  (`turn_off`) and **Work** (`turn_on`) — instead of a device switch. A row tap
-  does nothing: only an explicit side sends a command.
+- Devices are lights/switches. HA scripts are no longer shown on Home; native
+  scenarios live in the **Scenarios** tab and in Quick actions.
+- The **live carousel** at the top shows only relevant cards and is hidden when
+  there is nothing to show: the nearest enabled alarm (or the ringing one, with
+  **Stop**/**Snooze**), every running/paused timer with a local one-second
+  countdown, the next native scenario (`next_due`, **Run now**) and the next
+  reminder. Tapping a card opens its section; card actions are sent to the
+  server. Data comes from the existing feature repositories through their API
+  modules. The hub refreshes on resume and pull-to-refresh.
+- **Quick actions** are pinned tiles. Long-press a device in a room group or a
+  native scenario in the scenario list to **Pin to Home** / **Unpin**. Tiles are
+  ordered by pin time and kept in DataStore. A device tile toggles on tap (a
+  light opens its brightness/color sheet on long press), a scenario tile runs it,
+  and the "Say on the station" tile opens the speak dialog. On first launch the
+  speak action and the native **Blackout** / **Work mode** scenarios (when they
+  exist) are pinned. With no pins the screen shows
+  "Long-press a device to pin it here."
+- Filter chips (All / Lights / Switches, plus room filters) are persisted in
+  DataStore and restored on launch. Room sections are collapsible; the folded
+  state is UI-only.
+- The **voice profile** (an HA switch carrying the `voice_profile` label, shown
+  as `kind: "profile"`) stays pinned above the rooms: two segmented buttons,
+  **Personal** (`turn_off`) and **Work** (`turn_on`). Row taps do not act, only
+  an explicit side does.
 - Tapping a scenario or toggling a device enqueues a scheduler task
   `home.control` on the `control` queue (`EnqueueTask`). The phone only queues;
   the server executor owns execution. Device switches are optimistic and then
   re-read from the server; the profile uses the same optimistic update and
   re-read. Delivery is at-least-once, not exactly-once.
-- Filter chips (All / Scenarios / Lights / Switches, plus room filters) are
-  persisted in DataStore and restored on launch.
 - Without a Home control address the tab explains what to configure; it does not
   fail silently.
 
@@ -77,8 +94,9 @@ selected by a label in Home Assistant:
    label turns it back into an ordinary switch row. A different label id is set
    with `CONTROL_PROFILE_LABEL` on `ha-control`.
 
-Only the profile strings and the Scenarios feature are translated (`values-ru`);
-the rest of the app is English-only.
+The Home screen, profile strings and the Scenarios feature are localized in
+English and Russian (`values-ru`); other screens fall back to English for
+strings without a translation.
 
 ## Scenarios
 
@@ -224,10 +242,15 @@ sources still fails the build.
 JSON mapping and failures, idempotency, navigation queue/restoration, the real
 Metro graph via a Robolectric cold launch, a Robolectric smoke of the real
 profile row (`//projects/mobile/android/features/control/impl:profile_row_test`),
-and an APK packaging gate that verifies required runtime classes are **defined**
-in DEX and that the deploy jar has no unresolved non-platform references. The
-gate also self-tests that a referenced-but-undefined class is rejected. Tests do
-not replace interactive device acceptance.
+the Home hub model (carousel selection/order, "tomorrow 07:30" text, favorites
+pin/order/defaults, display-name rule) in
+`//projects/mobile/android/features/control/api:api_test`, a Robolectric smoke
+of the real bottom bar and the Time-tab deep link in
+`//projects/mobile/android/app:main_activity_smoke_test`, and an APK packaging
+gate that verifies required runtime classes are **defined** in DEX and that the
+deploy jar has no unresolved non-platform references. The gate also self-tests
+that a referenced-but-undefined class is rejected. Tests do not replace
+interactive device acceptance.
 
 `platform/android/sign-release_test.sh` self-tests release signing without any
 real key: it creates a throwaway keystore with a strong password, takes a small
@@ -529,7 +552,7 @@ home_version_name=…`), so manual uploads can pass the same values.
 
 ```text
 projects/mobile/android/
-  app/                    single Activity, app graph, tabs, diagnostics
+  app/                    single Activity, app graph, tabs, Time container, diagnostics
   core/
     model/                Android-free scheduler domain + server clock
     config/               remote connection contract/JSON parser + redaction

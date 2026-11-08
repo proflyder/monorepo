@@ -75,16 +75,17 @@ class ControlItemsTest {
                 "G ${it.title} expanded=${it.expanded}" +
                     " p=[${it.primary.joinToString(",") { row -> row.entry.id }}]" +
                     " s=[${it.settings.joinToString(",") { row -> row.entry.id }}]"
+            is ControlItem.Hub -> "H ${it.cards.joinToString(",") { card -> card.key }}"
+            is ControlItem.QuickActions -> "Q ${it.tiles.joinToString(",") { tile -> tile.key }}"
         }
     }
 
     @Test
-    fun optionsListCategoriesThenRoomsWithCounts() {
+    fun optionsListDeviceCategoriesThenRoomsWithCounts() {
         val options = ControlItems.options(sample)
         assertEquals(
             listOf(
-                ControlFilterOption(ControlFilter.All, 6),
-                ControlFilterOption(ControlFilter.Scenarios, 1),
+                ControlFilterOption(ControlFilter.All, 5),
                 ControlFilterOption(ControlFilter.Lights, 4),
                 ControlFilterOption(ControlFilter.Switches, 1),
                 ControlFilterOption(ControlFilter.Room("Bedroom"), 3),
@@ -102,10 +103,9 @@ class ControlItemsTest {
     }
 
     @Test
-    fun allShowsScenariosThenRoomsWithOnCountsThenUnavailable() {
+    fun allShowsRoomsWithOnCountsThenUnavailable() {
         assertEquals(
             listOf(
-                "# Scenarios", "S scene.movie",
                 "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
                 "# Workspace (0 of 1 on)", "D switch.fan",
                 "# Other devices (1 of 1 on)", "D light.hall",
@@ -116,8 +116,9 @@ class ControlItemsTest {
     }
 
     @Test
-    fun scenariosFilterShowsTilesWithoutAHeader() {
-        assertEquals(listOf("S scene.movie"), build(filter = ControlFilter.Scenarios).describe())
+    fun aStoredScenariosFilterFallsBackToAllBecauseHomeHasNoScripts() {
+        assertEquals(build(filter = ControlFilter.All).describe(), build(filter = ControlFilter.Scenarios).describe())
+        assertFalse(ControlItems.options(sample).any { it.filter == ControlFilter.Scenarios })
     }
 
     @Test
@@ -141,9 +142,8 @@ class ControlItemsTest {
 
     @Test
     fun pendingEntriesAreMarkedBusy() {
-        val items = build(pending = setOf("light.a", "scene.movie"))
+        val items = build(pending = setOf("light.a"))
         assertTrue(items.filterIsInstance<ControlItem.Device>().single { it.entry.id == "light.a" }.busy)
-        assertTrue(items.filterIsInstance<ControlItem.Scenario>().single().busy)
         assertFalse(items.filterIsInstance<ControlItem.Device>().single { it.entry.id == "light.b" }.busy)
     }
 
@@ -163,7 +163,6 @@ class ControlItemsTest {
     @Test
     fun aRoomNamedLikeASectionDoesNotCollideWithIt() {
         val entries = listOf(
-            entry("scene.movie", ControlKind.SCENARIO),
             entry("light.a", room = "Scenarios"),
             entry("light.b", room = "Unavailable"),
             entry("light.c", room = "Other devices"),
@@ -174,7 +173,7 @@ class ControlItemsTest {
         assertEquals("keys must be unique: $keys", keys.size, keys.toSet().size)
         val headers = build(entries).filterIsInstance<ControlItem.Header>()
         assertEquals(
-            listOf("scenarios", "room:Scenarios", "room:Unavailable", "room:Other devices", "other", "unavailable"),
+            listOf("room:Scenarios", "room:Unavailable", "room:Other devices", "other", "unavailable"),
             headers.map { it.section },
         )
     }
@@ -185,11 +184,10 @@ class ControlItemsTest {
     private val withProfile = listOf(profile) + sample
 
     @Test
-    fun profileIsPinnedAboveScenarios() {
+    fun profileIsPinnedAboveDevices() {
         assertEquals(
             listOf(
                 "# Voice profile", "P switch.voice_profile",
-                "# Scenarios", "S scene.movie",
                 "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
                 "# Workspace (0 of 1 on)", "D switch.fan",
                 "# Other devices (1 of 1 on)", "D light.hall",
@@ -200,7 +198,7 @@ class ControlItemsTest {
         // Its section and key never collide with a room or another section.
         val keys = build(withProfile).map { it.key }
         assertEquals(keys.size, keys.toSet().size)
-        assertEquals(listOf("profile", "scenarios", "room:Bedroom", "room:Workspace", "other", "unavailable"),
+        assertEquals(listOf("profile", "room:Bedroom", "room:Workspace", "other", "unavailable"),
             build(withProfile).filterIsInstance<ControlItem.Header>().map { it.section })
     }
 
@@ -220,10 +218,6 @@ class ControlItemsTest {
                 "# Unavailable (1)", "D light.dead",
             ),
             build(withProfile, filter = ControlFilter.Room("Bedroom")).describe(),
-        )
-        assertEquals(
-            listOf("# Voice profile", "P switch.voice_profile", "S scene.movie"),
-            build(withProfile, filter = ControlFilter.Scenarios).describe(),
         )
     }
 
@@ -412,44 +406,61 @@ class ControlItemsTest {
     }
 
     @Test
-    fun speakActionsGetTheirOwnSectionAndNeverJoinADeviceGroup() {
-        val speak = entry(
-            "action.station_speak",
-            ControlKind.ACTION,
-            room = "Bedroom",
-            title = "Сказать на колонке",
-            deviceId = "dev.ceiling",
-            device = "Ceiling lamp",
+    fun leadingHubAndQuickActionsPrecedeTheProfileAndRooms() {
+        val leading = listOf(
+            ControlItem.Hub(emptyList(), emptyMap(), 0),
+            ControlItem.QuickActions(emptyList(), hint = true),
         )
-        val items = build(listOf(speak))
-        val described = items.describe()
-        assertEquals(listOf("# Actions", "S action.station_speak"), described)
-        assertTrue(items.none { it is ControlItem.DeviceGroup })
-        // The action is one-shot: no power state is claimed for it.
-        val action = items.filterIsInstance<ControlItem.Scenario>().single()
-        assertNull(action.entry.power)
-        assertTrue(action.entry.actions.contains(ControlAction.SPEAK))
+        assertEquals(
+            listOf(
+                "H ", "Q ",
+                "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
+                "# Workspace (0 of 1 on)", "D switch.fan",
+                "# Other devices (1 of 1 on)", "D light.hall",
+                "# Unavailable (1)", "D light.dead",
+            ),
+            buildWith(leading = leading).describe(),
+        )
     }
 
     @Test
-    fun actionsFollowASelectedRoomButNotTheScenarioChip() {
+    fun collapsedRoomsHideTheirDevicesButKeepTheHeader() {
+        assertEquals(
+            listOf(
+                "# Bedroom (1 of 2 on)",
+                "# Workspace (0 of 1 on)", "D switch.fan",
+                "# Other devices (1 of 1 on)", "D light.hall",
+                "# Unavailable (1)", "D light.dead",
+            ),
+            buildWith(collapsedRooms = setOf("room:Bedroom")).describe(),
+        )
+        val header = buildWith(collapsedRooms = setOf("room:Bedroom"))
+            .filterIsInstance<ControlItem.Header>()
+            .first { it.section == "room:Bedroom" }
+        assertTrue(header.collapsible)
+        assertTrue(header.collapsed)
+    }
+
+    @Test
+    fun haScenariosAndDeviceActionsAreNotRenderedOnHome() {
         val entries = listOf(
             entry("action.station_speak", ControlKind.ACTION, room = "Bedroom"),
             entry("scene.movie", ControlKind.SCENARIO, room = "Bedroom"),
         )
-        assertEquals(
-            listOf("# Scenarios", "S scene.movie", "# Actions", "S action.station_speak"),
-            build(entries, ControlFilter.All).describe(),
-        )
-        // Under the Scenarios chip its header is implied and omitted; the
-        // action still does not appear.
-        assertEquals(
-            listOf("S scene.movie"),
-            build(entries, ControlFilter.Scenarios).describe(),
-        )
-        assertEquals(
-            listOf("# Scenarios", "S scene.movie", "# Actions", "S action.station_speak"),
-            build(entries, ControlFilter.Room("Bedroom")).describe(),
-        )
+        assertEquals(emptyList<String>(), build(entries).describe())
+        assertEquals(listOf(ControlFilterOption(ControlFilter.All, 0)), ControlItems.options(entries))
     }
+
+    private fun buildWith(
+        leading: List<ControlItem> = emptyList(),
+        collapsedRooms: Set<String> = emptySet(),
+    ) = ControlItems.build(
+        entries = sample,
+        pending = emptySet(),
+        statesOk = true,
+        filter = ControlFilter.All,
+        texts = texts,
+        leading = leading,
+        collapsedRooms = collapsedRooms,
+    )
 }

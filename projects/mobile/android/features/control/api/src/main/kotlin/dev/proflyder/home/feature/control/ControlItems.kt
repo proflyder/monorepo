@@ -20,10 +20,17 @@ sealed interface ControlItem {
 
     /**
      * A section header. [section] identifies the section (not its title), so a
-     * room that happens to be called "Scenarios" never collides with the
-     * scenarios section. [summary] is a short right-aligned note ("2 of 4 on").
+     * room that happens to be called "Home" never collides with another
+     * section. [summary] is a short right-aligned note ("2 of 4 on").
+     * Room headers are [collapsible]: tapping them hides or shows the devices.
      */
-    data class Header(val section: String, val title: String, val summary: String? = null) : ControlItem {
+    data class Header(
+        val section: String,
+        val title: String,
+        val summary: String? = null,
+        val collapsible: Boolean = false,
+        val collapsed: Boolean = false,
+    ) : ControlItem {
         override val key: String get() = "header:$section"
     }
 
@@ -63,6 +70,20 @@ sealed interface ControlItem {
 
         data class Row(val entry: ControlEntry, val busy: Boolean)
     }
+
+    /** The live carousel; [remaining] holds server-accurate timer seconds for this tick. */
+    data class Hub(
+        val cards: List<HubCard>,
+        val remaining: Map<String, Long>,
+        val nowUnix: Long,
+    ) : ControlItem {
+        override val key: String get() = "hub"
+    }
+
+    /** The pinned "Quick actions" tiles; [hint] shows the empty-state hint. */
+    data class QuickActions(val tiles: List<QuickTile>, val hint: Boolean) : ControlItem {
+        override val key: String get() = "quick_actions"
+    }
 }
 
 /** A selectable chip: the filter plus how many entries it shows. */
@@ -81,15 +102,14 @@ class ControlTexts(
 
 object ControlItems {
     private const val SECTION_PROFILE = "profile"
-    private const val SECTION_SCENARIOS = "scenarios"
-    private const val SECTION_ACTIONS = "actions"
     private const val SECTION_UNAVAILABLE = "unavailable"
     private const val SECTION_OTHER = "other"
     private const val SECTION_ROOM_PREFIX = "room:"
 
     private fun ControlEntry.matches(filter: ControlFilter): Boolean = when (filter) {
         ControlFilter.All -> true
-        ControlFilter.Scenarios -> kind == ControlKind.SCENARIO
+        // HA scripts are gone from Home; the native scenarios live in their own tab.
+        ControlFilter.Scenarios -> false
         ControlFilter.Lights -> kind == ControlKind.LIGHT
         ControlFilter.Switches -> kind == ControlKind.SWITCH
         is ControlFilter.Room -> room == filter.name
@@ -99,19 +119,20 @@ object ControlItems {
      * The chip counts describe primary controls only: a device's settings are
      * part of it and never add a chip or a count of their own.
      */
-    private fun ControlEntry.isCounted(): Boolean = !isProfile && role != ControlRole.SETTING
+    private fun ControlEntry.isCounted(): Boolean = isDevice && role != ControlRole.SETTING
 
     /**
-     * The chips: All, then the categories that exist, then each room (only when
-     * there is more than one, otherwise rooms add nothing). The profile selector
-     * is pinned and always shown, so it is never a chip and never counted: the
-     * counts describe filterable content only.
+     * The chips: All, then the device categories that exist, then each room
+     * (only when there is more than one, otherwise rooms add nothing). The
+     * profile selector is pinned and always shown, so it is never a chip and
+     * never counted: the counts describe filterable content only. Native
+     * scenarios are not part of Home and have no chip.
      */
     fun options(entries: List<ControlEntry>): List<ControlFilterOption> {
         if (entries.isEmpty()) return emptyList()
         val counted = entries.filter { it.isCounted() }
         val options = mutableListOf(ControlFilterOption(ControlFilter.All, counted.size))
-        listOf(ControlFilter.Scenarios, ControlFilter.Lights, ControlFilter.Switches).forEach { filter ->
+        listOf(ControlFilter.Lights, ControlFilter.Switches).forEach { filter ->
             val count = counted.count { it.matches(filter) }
             if (count > 0) options += ControlFilterOption(filter, count)
         }
@@ -134,13 +155,14 @@ object ControlItems {
         if (entries.isEmpty() || options(entries).any { it.filter == filter }) filter else ControlFilter.All
 
     /**
-     * The profile first (one pinned section: it is a mode, not content and is
-     * shown whatever the filter is), then scenarios in one section (headed
-     * unless that is the only thing shown), then available devices grouped by
-     * room and, inside a room, by device, then unavailable devices in their own
-     * trailing section so dead entries do not interleave with working ones.
+     * [leading] items (the live carousel and the pinned quick actions) come
+     * first, then the profile (a mode, not content, shown whatever the filter
+     * is), then available devices grouped by room and, inside a room, by
+     * device, then unavailable devices in their own trailing section so dead
+     * entries do not interleave with working ones.
      *
-     * [expandedDevices] holds the device ids whose "Settings (N)" row is open.
+     * [expandedDevices] holds the device ids whose "Settings (N)" row is open;
+     * [collapsedRooms] holds section ids of collapsed room groups.
      */
     fun build(
         entries: List<ControlEntry>,
@@ -149,32 +171,18 @@ object ControlItems {
         filter: ControlFilter,
         texts: ControlTexts,
         expandedDevices: Set<String> = emptySet(),
+        leading: List<ControlItem> = emptyList(),
+        collapsedRooms: Set<String> = emptySet(),
     ): List<ControlItem> {
         val applied = effectiveFilter(entries, filter)
         val profiles = entries.filter { it.isProfile }
         val content = entries.filterNot { it.isProfile }
         val items = mutableListOf<ControlItem>()
+        items += leading
 
         if (profiles.isNotEmpty()) {
             items += ControlItem.Header(SECTION_PROFILE, texts.profile)
             profiles.mapTo(items) { ControlItem.Profile(it, it.id in pending, statesOk) }
-        }
-
-        val scenarios = content.filter { it.kind == ControlKind.SCENARIO && it.matches(applied) }
-        if (scenarios.isNotEmpty()) {
-            if (applied != ControlFilter.Scenarios) {
-                items += ControlItem.Header(SECTION_SCENARIOS, texts.scenarios)
-            }
-            scenarios.mapTo(items) { ControlItem.Scenario(it, it.id in pending) }
-        }
-
-        // Device-level actions ("say this text on the station") are one-shot
-        // tiles like scenarios, but a separate section: they belong to a
-        // device, not to the user's scenario presets.
-        val actions = content.filter { it.kind == ControlKind.ACTION && it.matches(applied) }
-        if (actions.isNotEmpty()) {
-            items += ControlItem.Header(SECTION_ACTIONS, texts.actions)
-            actions.mapTo(items) { ControlItem.Scenario(it, it.id in pending) }
         }
 
         val devices = content.filter { it.isDevice }
@@ -194,12 +202,16 @@ object ControlItems {
             val on = groups.sumOf { bucket -> bucket.primary.count { it.power == PowerState.ON } }
             val total = groups.sumOf { bucket -> bucket.primary.size }
             val summary = if (statesOk) texts.onSummary(on, total) else null
+            val section = if (room.isBlank()) SECTION_OTHER else SECTION_ROOM_PREFIX + room
+            val collapsed = section in collapsedRooms
             items += if (room.isBlank()) {
-                ControlItem.Header(SECTION_OTHER, texts.otherDevices, summary)
+                ControlItem.Header(section, texts.otherDevices, summary, collapsible = true, collapsed = collapsed)
             } else {
-                ControlItem.Header(SECTION_ROOM_PREFIX + room, room, summary)
+                ControlItem.Header(section, room, summary, collapsible = true, collapsed = collapsed)
             }
-            groups.forEach { bucket -> items += bucket.toItem(pending, statesOk, expandedDevices) }
+            if (!collapsed) {
+                groups.forEach { bucket -> items += bucket.toItem(pending, statesOk, expandedDevices) }
+            }
         }
         if (dead.isNotEmpty()) {
             items += ControlItem.Header(SECTION_UNAVAILABLE, texts.unavailable, dead.size.toString())
@@ -263,8 +275,7 @@ object ControlItems {
 }
 
 /**
- * Title of a standalone device row: the device name when it is known (the
- * server's entity title is a short label like "Light"), otherwise the entity
- * title. A device with several entries shows the short titles on its rows.
+ * Title of a standalone device row: the human name, preferring the device name
+ * when the server only sent a technical entity title ("Light", "Switch").
  */
-internal fun ControlEntry.displayTitle(): String = device.ifBlank { title }
+internal fun ControlEntry.displayTitle(): String = displayName

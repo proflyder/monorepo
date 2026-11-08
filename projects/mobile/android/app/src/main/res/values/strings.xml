@@ -7,4 +7,8 @@
     <string name="app_nav_connection">Connection</string>
     <string name="app_back">Back</string>
     <string name="app_settings">Settings</string>
+    <string name="app_time_title">Time</string>
+    <string name="app_time_alarms">Alarms</string>
+    <string name="app_time_timers">Timers</string>
+    <string name="app_time_reminders">Reminders</string>
 </resources>

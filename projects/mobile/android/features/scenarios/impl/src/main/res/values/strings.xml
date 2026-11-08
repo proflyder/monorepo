@@ -80,6 +80,8 @@
     <string name="scenarios_editor_when">When</string>
     <string name="scenarios_editor_manual_note">Manual run is always available. Add a time trigger for automatic runs.</string>
     <string name="scenarios_editor_add_trigger">Add trigger</string>
+    <string name="scenarios_editor_add_trigger_title">Add trigger</string>
+    <string name="scenarios_editor_add_trigger_time">Time</string>
     <string name="scenarios_editor_if">If</string>
     <string name="scenarios_editor_add_condition">Add condition</string>
     <string name="scenarios_editor_add_condition_title">Add condition</string>
@@ -109,6 +111,10 @@
     <string name="scenarios_catalog_failed">Catalog unavailable: %1$s. Tap to retry.</string>
     <string name="scenarios_entry_has_no_actions">This catalog entry has no actions.</string>
     <string name="scenarios_action_dialog_title">Choose action</string>
+    <string name="scenarios_pin">Pin to Home</string>
+    <string name="scenarios_unpin">Unpin</string>
+    <string name="scenarios_favorite_pinned">Pinned: %1$s</string>
+    <string name="scenarios_favorite_unpinned">Unpinned: %1$s</string>
     <string name="scenarios_action_run">Run</string>
     <string name="scenarios_action_turn_on">Turn on</string>
     <string name="scenarios_action_turn_off">Turn off</string>
