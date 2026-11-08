@@ -758,6 +758,23 @@ class AssistSatelliteRecoveryTests(unittest.TestCase):
         self.assertIn("01M5TAMM4T0CH5RASFJR8MSKT7", dump)
 
 
+# Options HA accepts for a `text` selector; anything else disables the script
+# at load time ("not a valid option"), which no other check here would catch.
+TEXT_SELECTOR_OPTIONS = {
+    "multiline", "type", "prefix", "suffix", "autocomplete", "multiple",
+}
+
+
+class SelectorOptionTests(unittest.TestCase):
+    def test_text_selectors_use_only_known_options(self):
+        for name, script in SCRIPTS.items():
+            for field, spec in (script.get("fields") or {}).items():
+                text = (spec.get("selector") or {}).get("text")
+                if isinstance(text, dict):
+                    unknown = set(text) - TEXT_SELECTOR_OPTIONS
+                    self.assertFalse(unknown, f"{name}.{field}: {sorted(unknown)}")
+
+
 class StationSpeakTests(unittest.TestCase):
     """The catalog "speak on the station" action calls this script."""
 
@@ -769,7 +786,7 @@ class StationSpeakTests(unittest.TestCase):
         self.assertIn("description", script)
         field = script["fields"]["message"]
         self.assertTrue(field["required"])
-        self.assertEqual(field["selector"]["text"]["max"], 500)
+        self.assertEqual(field["selector"]["text"], {"multiline": True})
         dump = yaml.safe_dump(script, allow_unicode=True)
         self.assertIn("1-500", dump)
 
