@@ -205,7 +205,7 @@ struct Command {
 }
 
 /// A rejected control command.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum PlanError {
     #[error("event queue {actual:?} does not match {expected:?}")]
     Queue { actual: String, expected: String },
@@ -383,6 +383,7 @@ mod tests {
                             min_kelvin: 2700,
                             max_kelvin: 6500,
                             brightness: -1,
+                            effects: vec!["Day".to_owned()],
                             ..LightInput::default()
                         })
                         .expect("light"),
@@ -480,6 +481,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn light_payload_carries_effect_and_transition() {
+        let ha = Arc::new(FakeHa::default());
+        let control = control(Arc::clone(&ha));
+        let outcome = control
+            .handle(&task(
+                "e1",
+                r#"{"entry":"light.strip","action":"set","brightness":100,"kelvin":2816,"transition":1.5,"effect":"Day"}"#,
+            ))
+            .await;
+        assert_eq!(
+            outcome,
+            Outcome::Delivered("home assistant accepted light.strip".to_owned())
+        );
+        let outcome = control
+            .handle(&task(
+                "e2",
+                r#"{"entry":"light.strip","action":"turn_off","transition":2}"#,
+            ))
+            .await;
+        assert_eq!(
+            outcome,
+            Outcome::Delivered("home assistant accepted light.strip".to_owned())
+        );
+        let calls = ha.calls.lock().expect("lock");
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].1, "turn_on");
+        assert_eq!(calls[0].3["brightness_pct"], Value::from(100));
+        assert_eq!(calls[0].3["color_temp_kelvin"], Value::from(2816));
+        assert_eq!(calls[0].3["effect"], Value::from("Day"));
+        assert_eq!(calls[0].3["transition"], Value::from(1.5));
+        assert_eq!(calls[1].1, "turn_off");
+        assert_eq!(calls[1].3["transition"], Value::from(2.0));
+    }
+
+    #[tokio::test]
     async fn bad_commands_fail_without_calling_ha() {
         let ha = Arc::new(FakeHa::default());
         let control = control(Arc::clone(&ha));
@@ -489,6 +525,8 @@ mod tests {
             r#"{"entry":"light.lamp","action":"run"}"#,
             r#"{"entry":"light.other","action":"turn_on"}"#,
             r#"{"entry":"switch.voice_profile","action":"set","brightness":10}"#,
+            r#"{"entry":"light.strip","action":"set","effect":"Party"}"#,
+            r#"{"entry":"light.strip","action":"turn_off","brightness":10}"#,
         ] {
             let outcome = control.handle(&task("e", payload)).await;
             assert!(

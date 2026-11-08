@@ -10,6 +10,11 @@ use serde_json::{Map, Value};
 
 use super::{DEFAULT_MAX_KELVIN, DEFAULT_MIN_KELVIN};
 
+/// Longest accepted `effect` value, in characters.
+pub const MAX_EFFECT_CHARS: usize = 64;
+/// Longest accepted `transition`, in seconds.
+pub const MAX_TRANSITION_SECS: f64 = 300.0;
+
 /// What a light can be adjusted to, plus its live values.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Light {
@@ -24,6 +29,9 @@ pub struct Light {
     pub saturation: i32,
     /// `"color_temp"`, `"color"` or empty (unknown / white only).
     pub mode: String,
+    /// Effects advertised by `effect_list`, empty when the bulb does not
+    /// report any (or discovery could not read them).
+    pub effects: Vec<String>,
 }
 
 /// The raw Home Assistant data [`Light::new`] derives from.
@@ -39,11 +47,13 @@ pub struct LightInput {
     pub saturation: f64,
     pub has_hs: bool,
     pub color_mode: String,
+    /// HA's `effect_list` attribute.
+    pub effects: Vec<String>,
 }
 
-/// The adjustments of a `set` command plus the text of a `speak` action.
-/// `None` leaves a value untouched.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+/// The adjustments of a `set`/`turn_on` command plus the text of a `speak`
+/// action. `None` leaves a value untouched.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 pub struct Params {
     #[serde(default)]
     pub brightness: Option<i32>,
@@ -53,14 +63,35 @@ pub struct Params {
     pub hue: Option<i32>,
     #[serde(default)]
     pub saturation: Option<i32>,
+    /// A bulb effect such as `"Day"`; must be listed in `effect_list` when the
+    /// bulb advertises one.
+    #[serde(default)]
+    pub effect: Option<String>,
+    /// Transition time in seconds, `0..=300`.
+    #[serde(default)]
+    pub transition: Option<f64>,
     /// Text of a `speak` action. It is validated and sent as a script
     /// variable, never stored, logged or echoed in an ack detail.
     #[serde(default)]
     pub text: Option<String>,
 }
 
+impl Params {
+    /// Whether the payload carries no adjustment at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.brightness.is_none()
+            && self.kelvin.is_none()
+            && self.hue.is_none()
+            && self.saturation.is_none()
+            && self.effect.is_none()
+            && self.transition.is_none()
+            && self.text.is_none()
+    }
+}
+
 /// A rejected light adjustment.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum LightError {
     #[error("light does not support brightness")]
     Brightness,
@@ -78,6 +109,14 @@ pub enum LightError {
     ColorIncomplete,
     #[error("hue must be 0-360 and saturation must be 0-100")]
     ColorRange,
+    #[error("effect is empty or longer than {MAX_EFFECT_CHARS} characters")]
+    EffectInvalid,
+    #[error("unknown effect")]
+    EffectUnknown,
+    #[error("transition must be 0-300 seconds")]
+    TransitionRange,
+    #[error("turn_off accepts only a transition")]
+    TurnOffAdjustment,
     #[error("set needs at least one adjustment")]
     Empty,
 }
@@ -132,12 +171,29 @@ impl Light {
             light.hue = round(input.hue).rem_euclid(360);
             light.saturation = round(input.saturation);
         }
+        light.effects = input
+            .effects
+            .into_iter()
+            .map(|effect| effect.trim().to_owned())
+            .filter(|effect| !effect.is_empty() && effect.chars().count() <= MAX_EFFECT_CHARS)
+            .collect();
         Some(light)
     }
 
     /// Validate `params` against the capabilities and build `light.turn_on`
-    /// data.
+    /// data for the `set` action, which needs at least one adjustment.
     pub fn service_data(&self, params: &Params) -> Result<Map<String, Value>, LightError> {
+        let data = self.turn_on_data(params)?;
+        if data.is_empty() {
+            return Err(LightError::Empty);
+        }
+        Ok(data)
+    }
+
+    /// Build `light.turn_on` data for a `turn_on` action. Every adjustment is
+    /// optional, so an empty map simply turns the light on with its current
+    /// settings.
+    pub fn turn_on_data(&self, params: &Params) -> Result<Map<String, Value>, LightError> {
         let mut data = Map::new();
         if let Some(brightness) = params.brightness {
             if !self.brightness {
@@ -180,11 +236,48 @@ impl Light {
                 Value::Array(vec![Value::from(hue), Value::from(saturation)]),
             );
         }
-        if data.is_empty() {
-            return Err(LightError::Empty);
+        if let Some(effect) = params.effect.as_deref() {
+            let effect = effect.trim();
+            if effect.is_empty() || effect.chars().count() > MAX_EFFECT_CHARS {
+                return Err(LightError::EffectInvalid);
+            }
+            if !self.effects.is_empty() && !self.effects.iter().any(|known| known == effect) {
+                return Err(LightError::EffectUnknown);
+            }
+            data.insert("effect".to_owned(), Value::String(effect.to_owned()));
         }
+        insert_transition(&mut data, params)?;
         Ok(data)
     }
+
+    /// Build `light.turn_off` data. Only a transition is meaningful there; an
+    /// adjustment such as brightness would be silently dropped by HA, so it is
+    /// rejected instead.
+    pub fn turn_off_data(&self, params: &Params) -> Result<Map<String, Value>, LightError> {
+        if params.brightness.is_some()
+            || params.kelvin.is_some()
+            || params.hue.is_some()
+            || params.saturation.is_some()
+            || params.effect.is_some()
+        {
+            return Err(LightError::TurnOffAdjustment);
+        }
+        let mut data = Map::new();
+        insert_transition(&mut data, params)?;
+        Ok(data)
+    }
+}
+
+/// Validate and add the optional transition time.
+fn insert_transition(data: &mut Map<String, Value>, params: &Params) -> Result<(), LightError> {
+    let Some(transition) = params.transition else {
+        return Ok(());
+    };
+    if !transition.is_finite() || !(0.0..=MAX_TRANSITION_SECS).contains(&transition) {
+        return Err(LightError::TransitionRange);
+    }
+    data.insert("transition".to_owned(), Value::from(transition));
+    Ok(())
 }
 
 /// `math.Round`: halves away from zero.
@@ -249,6 +342,7 @@ mod tests {
             saturation: 60.0,
             has_hs: true,
             color_mode: "color_temp".to_owned(),
+            effects: Vec::new(),
         };
         let color_temp = Light::new(input.clone()).expect("color temp");
         assert_eq!(color_temp.mode, "color_temp");
@@ -261,6 +355,119 @@ mod tests {
         assert_eq!(color.kelvin, 0, "a color-mode lamp has no live kelvin");
         assert_eq!(color.hue, 30);
         assert_eq!(color.saturation, 60);
+    }
+
+    #[test]
+    fn effect_and_transition_are_validated_and_forwarded() {
+        let light = Light {
+            brightness: true,
+            color_temp: true,
+            min_kelvin: 2700,
+            max_kelvin: 6500,
+            effects: vec!["Day".to_owned(), "Night".to_owned()],
+            ..Light::default()
+        };
+        let data = light
+            .service_data(&Params {
+                brightness: Some(100),
+                kelvin: Some(2800),
+                effect: Some(" Day ".to_owned()),
+                transition: Some(0.5),
+                ..Params::default()
+            })
+            .expect("set with effect");
+        assert_eq!(data["effect"], Value::from("Day"));
+        assert_eq!(data["transition"], Value::from(0.5));
+
+        // A known list rejects an effect it does not advertise.
+        assert_eq!(
+            light
+                .service_data(&Params {
+                    effect: Some("Party".to_owned()),
+                    ..Params::default()
+                })
+                .expect_err("unknown effect"),
+            LightError::EffectUnknown
+        );
+        // An unreadable list cannot validate, so a non-empty effect is passed
+        // through instead of breaking a working bulb.
+        let unlisted = Light {
+            brightness: true,
+            ..Light::default()
+        };
+        assert!(
+            unlisted
+                .service_data(&Params {
+                    effect: Some("Party".to_owned()),
+                    ..Params::default()
+                })
+                .is_ok()
+        );
+        // Empty or oversized effects are always rejected.
+        for effect in [
+            String::new(),
+            "  ".to_owned(),
+            "ж".repeat(MAX_EFFECT_CHARS + 1),
+        ] {
+            assert!(
+                unlisted
+                    .service_data(&Params {
+                        effect: Some(effect),
+                        ..Params::default()
+                    })
+                    .is_err()
+            );
+        }
+        for transition in [-1.0, 300.5, f64::NAN] {
+            assert!(
+                light
+                    .service_data(&Params {
+                        transition: Some(transition),
+                        ..Params::default()
+                    })
+                    .is_err(),
+                "accepted transition {transition}"
+            );
+        }
+    }
+
+    #[test]
+    fn turn_off_takes_only_a_transition() {
+        let light = Light {
+            brightness: true,
+            ..Light::default()
+        };
+        let data = light
+            .turn_off_data(&Params {
+                transition: Some(1.5),
+                ..Params::default()
+            })
+            .expect("turn_off");
+        assert_eq!(data["transition"], Value::from(1.5));
+        assert!(
+            light
+                .turn_off_data(&Params::default())
+                .expect("empty")
+                .is_empty()
+        );
+        assert_eq!(
+            light
+                .turn_off_data(&Params {
+                    brightness: Some(10),
+                    ..Params::default()
+                })
+                .expect_err("brightness on turn_off"),
+            LightError::TurnOffAdjustment
+        );
+        assert_eq!(
+            light
+                .turn_off_data(&Params {
+                    effect: Some("Day".to_owned()),
+                    ..Params::default()
+                })
+                .expect_err("effect on turn_off"),
+            LightError::TurnOffAdjustment
+        );
     }
 
     #[test]
