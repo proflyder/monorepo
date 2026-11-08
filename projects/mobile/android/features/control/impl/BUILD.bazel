@@ -19,6 +19,7 @@ metro_android_library(
         "//projects/mobile/android/core/network",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/alarms/api",
+        "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
         "//projects/mobile/android/features/reminders/api",
         "//projects/mobile/android/features/scenarios/api",
@@ -73,6 +74,7 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:com_google_android_material_material",
@@ -93,6 +95,7 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:com_google_android_material_material",
@@ -110,6 +113,7 @@ kt_android_local_test(
     test_class = "dev.proflyder.home.feature.control.domain.SpeakOnStationTest",
     deps = [
         "//projects/mobile/android/core/model",
+        "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
         "@maven//:junit_junit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",

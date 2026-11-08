@@ -1,0 +1,36 @@
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
+
+package(default_visibility = ["//visibility:public"])
+
+kt_jvm_library(
+    name = "api",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    deps = [
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+    ],
+)
+
+kt_jvm_test(
+    name = "call_state_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/call/CallManagerTest.kt"],
+    test_class = "dev.proflyder.home.feature.call.CallManagerTest",
+    deps = [
+        ":api",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+    ],
+)
+
+kt_jvm_test(
+    name = "audio_routes_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/call/AudioRoutesTest.kt"],
+    test_class = "dev.proflyder.home.feature.call.AudioRoutesTest",
+    deps = [
+        ":api",
+        "@maven//:junit_junit",
+    ],
+)

@@ -81,6 +81,7 @@ class ConnectionSettingsClearTest {
     ) = RemoteConnectionState.Loaded(
         endpoint = endpoint(scheduler),
         controlEndpoint = control?.let(::endpoint),
+        intercomEndpoint = null,
         connectTimeoutMillis = connectMillis,
         readTimeoutMillis = readMillis,
     )

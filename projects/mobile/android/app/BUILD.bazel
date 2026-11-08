@@ -27,6 +27,8 @@ metro_android_library(
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/alarms/api",
         "//projects/mobile/android/features/alarms/impl",
+        "//projects/mobile/android/features/call/api",
+        "//projects/mobile/android/features/call/impl",
         "//projects/mobile/android/features/connection/api",
         "//projects/mobile/android/features/control/api",
         "//projects/mobile/android/features/control/impl",

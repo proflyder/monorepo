@@ -67,4 +67,5 @@
         <item>сб</item>
         <item>вс</item>
     </string-array>
+    <string name="control_call_title">Позвонить на колонку</string>
 </resources>

@@ -4,6 +4,7 @@ import android.app.Application
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dev.proflyder.home.di.AppGraph
+import dev.proflyder.home.feature.call.CallEntryPoint
 import dev.zacsweers.metro.createGraphFactory
 
 class HomeApplication : Application() {
@@ -16,6 +17,17 @@ class HomeApplication : Application() {
         // Instantiate the connection store at launch so the Remote Config
         // source sets defaults and starts its first fetch.
         graph.connectionSettings
+        // Framework-instantiated components (ConnectionService, call Activity,
+        // foreground service) cannot be constructor-injected by Metro.
+        CallEntryPoint.install(
+            CallEntryPoint.Dependencies(
+                controller = graph.callController,
+                audioController = graph.callAudioController,
+                coordinator = graph.callCoordinator,
+                telecomBridge = graph.callTelecomBridge,
+            ),
+        )
+        graph.callNotifications.start()
         configureCrashReporting()
     }
 

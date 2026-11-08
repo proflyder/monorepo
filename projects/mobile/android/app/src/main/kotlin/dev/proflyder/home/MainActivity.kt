@@ -145,6 +145,9 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
                 // returns to that tab instead of leaving the app.
                 router.navigate(ConnectionDestination)
                 true
+            } else if (item.itemId == R.id.action_call) {
+                (application as HomeApplication).graph.callLauncher.openCallScreen()
+                true
             } else {
                 false
             }

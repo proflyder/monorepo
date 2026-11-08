@@ -58,6 +58,10 @@ class AndroidConnectionSettingsStore(
         ?.let(cipher::decrypt)
         ?.takeIf(ConnectionConfig::isTokenValid)
 
+    private val initialIntercomToken: String? = initial[KEY_INTERCOM_TOKEN_CIPHERTEXT]
+        ?.let(cipher::decrypt)
+        ?.takeIf(ConnectionConfig::isTokenValid)
+
     private val mutableTokenStatus = MutableStateFlow(
         when {
             !initial.contains(KEY_TOKEN_CIPHERTEXT) -> TokenStatus.ABSENT
@@ -67,21 +71,55 @@ class AndroidConnectionSettingsStore(
     )
     override val tokenStatus: StateFlow<TokenStatus> = mutableTokenStatus.asStateFlow()
 
-    private val mutableConfig = MutableStateFlow(compose(remote.state.value, initialToken))
+    private val mutableIntercomTokenStatus = MutableStateFlow(
+        when {
+            !initial.contains(KEY_INTERCOM_TOKEN_CIPHERTEXT) -> TokenStatus.ABSENT
+            initialIntercomToken != null -> TokenStatus.AVAILABLE
+            else -> TokenStatus.UNREADABLE
+        },
+    )
+    override val intercomTokenStatus: StateFlow<TokenStatus> = mutableIntercomTokenStatus.asStateFlow()
+
+    private val mutableConfig = MutableStateFlow(compose(remote.state.value, initialToken, initialIntercomToken))
     override val config: StateFlow<ConnectionConfig> = mutableConfig.asStateFlow()
 
     init {
         scope.launch {
             remote.state.collect { state ->
-                mutableConfig.value = compose(state, mutableConfig.value.bearerToken)
+                val current = mutableConfig.value
+                mutableConfig.value = compose(state, current.bearerToken, current.intercomToken)
             }
         }
     }
 
-    override suspend fun updateToken(bearerToken: String?): Outcome<Unit> {
-        val normalizedToken = bearerToken?.trim()?.takeIf { it.isNotEmpty() }
+    override suspend fun updateToken(bearerToken: String?): Outcome<Unit> =
+        updateStoredToken(
+            value = bearerToken,
+            key = KEY_TOKEN_CIPHERTEXT,
+            field = Field.TOKEN,
+            status = mutableTokenStatus,
+            apply = { token -> mutableConfig.value = compose(remote.state.value, token, mutableConfig.value.intercomToken) },
+        )
+
+    override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> =
+        updateStoredToken(
+            value = intercomToken,
+            key = KEY_INTERCOM_TOKEN_CIPHERTEXT,
+            field = Field.INTERCOM_TOKEN,
+            status = mutableIntercomTokenStatus,
+            apply = { token -> mutableConfig.value = compose(remote.state.value, mutableConfig.value.bearerToken, token) },
+        )
+
+    private suspend fun updateStoredToken(
+        value: String?,
+        key: androidx.datastore.preferences.core.Preferences.Key<String>,
+        field: Field,
+        status: MutableStateFlow<TokenStatus>,
+        apply: (String?) -> Unit,
+    ): Outcome<Unit> {
+        val normalizedToken = value?.trim()?.takeIf { it.isNotEmpty() }
         if (normalizedToken != null && !ConnectionConfig.isTokenValid(normalizedToken)) {
-            return Outcome.Failure(RemoteFailure.Validation(Field.TOKEN))
+            return Outcome.Failure(RemoteFailure.Validation(field))
         }
 
         val encrypted = if (normalizedToken != null) {
@@ -96,19 +134,23 @@ class AndroidConnectionSettingsStore(
 
         try {
             dataStore.edit { prefs ->
-                if (encrypted != null) prefs[KEY_TOKEN_CIPHERTEXT] = encrypted else prefs.remove(KEY_TOKEN_CIPHERTEXT)
+                if (encrypted != null) prefs[key] = encrypted else prefs.remove(key)
             }
         } catch (_: IOException) {
             return Outcome.Failure(RemoteFailure.Storage("Settings could not be saved on this device."))
         }
 
-        mutableConfig.value = compose(remote.state.value, normalizedToken)
-        mutableTokenStatus.value = if (normalizedToken != null) TokenStatus.AVAILABLE else TokenStatus.ABSENT
+        apply(normalizedToken)
+        status.value = if (normalizedToken != null) TokenStatus.AVAILABLE else TokenStatus.ABSENT
         return Outcome.Success(Unit)
     }
 
-    /** Endpoints/timeouts come only from Remote Config; the token is device-local. */
-    private fun compose(state: RemoteConnectionState, token: String?): ConnectionConfig {
+    /** Endpoints/timeouts come only from Remote Config; tokens are device-local. */
+    private fun compose(
+        state: RemoteConnectionState,
+        token: String?,
+        intercomToken: String?,
+    ): ConnectionConfig {
         val loaded = when (state) {
             is RemoteConnectionState.Loaded -> state
             is RemoteConnectionState.FetchFailed -> state.lastKnown
@@ -121,7 +163,9 @@ class AndroidConnectionSettingsStore(
         return ConnectionConfig(
             endpoint = loaded?.endpoint,
             controlEndpoint = loaded?.controlEndpoint,
+            intercomEndpoint = loaded?.intercomEndpoint,
             bearerToken = token,
+            intercomToken = intercomToken,
             connectTimeoutMillis = loaded?.connectTimeoutMillis
                 ?: ConnectionConfig.DEFAULT_CONNECT_TIMEOUT_MILLIS,
             readTimeoutMillis = loaded?.readTimeoutMillis
@@ -141,5 +185,8 @@ class AndroidConnectionSettingsStore(
         val KEY_READ_TIMEOUT = longPreferencesKey("read_timeout_millis")
 
         val KEY_TOKEN_CIPHERTEXT = stringPreferencesKey("bearer_token_ciphertext")
+
+        /** Separate intercom phone token: a distinct device secret from the scheduler bearer. */
+        val KEY_INTERCOM_TOKEN_CIPHERTEXT = stringPreferencesKey("intercom_token_ciphertext")
     }
 }

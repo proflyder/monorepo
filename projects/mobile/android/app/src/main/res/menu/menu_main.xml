@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
+        android:id="@+id/action_call"
+        android:icon="@drawable/app_ic_call"
+        android:showAsAction="ifRoom"
+        android:title="@string/app_call" />
+    <item
         android:id="@+id/action_settings"
         android:icon="@drawable/app_ic_settings"
-        android:showAsAction="always"
+        android:showAsAction="ifRoom"
         android:title="@string/app_settings" />
 </menu>

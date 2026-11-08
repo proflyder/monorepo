@@ -31,6 +31,12 @@ internal interface ScenarioApi {
     suspend fun call(@Path("method") method: String, @Body body: JsonObject): Response<JsonElement>
 }
 
+/** Connect unary calls of home.v1.IntercomService (signaling). */
+internal interface IntercomApi {
+    @POST("home.v1.IntercomService/{method}")
+    suspend fun call(@Path("method") method: String, @Body body: JsonObject): Response<JsonElement>
+}
+
 /** The home control service's read-only catalog. */
 internal interface ControlApi {
     @GET("v1/catalog")

@@ -606,13 +606,24 @@
   NodePort закрыт общим host-фильтром scheduler/control. Первый выкат — merge
   этой ветки в `develop`; до этого живой Deployment отсутствует.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
-  `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
-  `INTERNET`, debug-signed). Вкладки **Home**, Alarms, Timers, Reminders,
-  Connection; Home читает `GET /v1/catalog`, команды идут через
-  `home.control`/очередь `control`. Bearer token в Keystore AES-GCM;
-  адреса scheduler/control и таймауты — Firebase Remote Config
-  (`home_connection`), фильтр Home и зашифрованный токен — Jetpack DataStore
-  с миграцией из SharedPreferences; idempotency keys, redirects выключены.
+  `applicationId dev.proflyder.home`, minSdk 26 / target 36, debug-signed).
+  Вкладки **Home**, **Scenarios**, **Time** (переключатель Alarms/Timers/
+  Reminders), Connection; Home — хаб с живой каруселью, избранным и
+  «Быстрыми действиями», читает `GET /v1/catalog`, команды идут через
+  `home.control`/очередь `control`.
+  Bearer token в Keystore AES-GCM; адреса scheduler/control/intercom и
+  таймауты — Firebase Remote Config (`home_connection`), фильтр Home и
+  зашифрованные токены — Jetpack DataStore с миграцией из SharedPreferences;
+  idempotency keys, redirects выключены.
+  Звонок на колонку — `features/call` + `home.v1.IntercomService`:
+  server-streaming `Watch` по Connect/HTTP/1.1, аудио-only libwebrtc
+  (`io.getstream:stream-webrtc-android` 1.3.10, Opus), self-managed Telecom
+  `ConnectionService` (`MANAGE_OWN_CALLS`), `phoneCall` foreground service с
+  CallStyle, маршруты через Telecom `CallEndpoint` (API 34+) с fallback на
+  `AudioManager`. Телефонный токен intercom хранится отдельно от bearer.
+  Станционная сторона — `pulsar-call` (#231): отвечает через str0m
+  (DTLS-SRTP, Opus 48 кГц), глушит музыку/Sendspin на время звонка.
+  Входящего UI нет (такие звонки отклоняются).
   Home также показывает действие «Сказать на колонке» (`kind: "action"`):
   карточка открывает диалог текста (до 500 символов) и ставит
   `{"entry":"action.station_speak","action":"speak","text":…}` в `control`.

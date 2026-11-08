@@ -153,7 +153,9 @@ class ScenarioEditorViewModelTest {
     private class FakeSettings : ConnectionSettingsStore {
         override val config: StateFlow<ConnectionConfig> = MutableStateFlow(ConnectionConfig())
         override val tokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.ABSENT)
+        override val intercomTokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.ABSENT)
         override suspend fun updateToken(bearerToken: String?): Outcome<Unit> = Outcome.Success(Unit)
+        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> = Outcome.Success(Unit)
     }
 
     private companion object {

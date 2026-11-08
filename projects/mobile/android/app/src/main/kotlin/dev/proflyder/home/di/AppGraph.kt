@@ -9,19 +9,30 @@ import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.network.ConnectSchedulerClient
 import dev.proflyder.home.core.network.ConnectScenarioClient
+import dev.proflyder.home.core.network.ConnectIntercomClient
 import dev.proflyder.home.core.network.ControlCatalogClient
 import dev.proflyder.home.core.network.HttpControlCatalogClient
+import dev.proflyder.home.core.network.IntercomClient
 import dev.proflyder.home.core.network.ScenarioClient
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
 import dev.proflyder.home.core.settings.TokenCipher
 import dev.proflyder.home.core.ui.ViewModelFactoryRegistry
+import dev.proflyder.home.feature.call.CallAudioController
+import dev.proflyder.home.feature.call.CallController
+import dev.proflyder.home.feature.call.CallCoordinator
+import dev.proflyder.home.feature.call.CallLauncher
+import dev.proflyder.home.feature.call.CallNotificationController
+import dev.proflyder.home.feature.call.telecom.CallTelecomBridge
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 
 /**
@@ -40,6 +51,13 @@ interface AppGraph {
 
     /** Resolved at launch so Remote Config starts fetching on app start. */
     val connectionSettings: ConnectionSettingsStore
+
+    val callController: CallController
+    val callAudioController: CallAudioController
+    val callCoordinator: CallCoordinator
+    val callNotifications: CallNotificationController
+    val callLauncher: CallLauncher
+    val callTelecomBridge: CallTelecomBridge
 
     @DependencyGraph.Factory
     fun interface Factory {
@@ -65,6 +83,11 @@ object AppBindings {
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
         .build()
+
+    /** App-lifetime scope for the permanent intercom Watch and call state observers. */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideAppScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** The single DataStore: connection settings and UI preferences (see [HomeDataStore]). */
     @Provides
@@ -113,6 +136,18 @@ object AppBindings {
         httpClient: OkHttpClient,
         interceptors: NetworkInterceptors,
     ): ControlCatalogClient = HttpControlCatalogClient(
+        settings = settings,
+        baseClient = httpClient,
+        interceptors = interceptors.list,
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideIntercomClient(
+        settings: ConnectionSettingsStore,
+        httpClient: OkHttpClient,
+        interceptors: NetworkInterceptors,
+    ): IntercomClient = ConnectIntercomClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,

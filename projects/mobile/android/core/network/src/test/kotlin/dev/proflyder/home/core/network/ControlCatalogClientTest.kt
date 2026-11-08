@@ -48,7 +48,9 @@ class ControlCatalogClientTest {
     private class Store(config: ConnectionConfig) : ConnectionSettingsStore {
         override val config: StateFlow<ConnectionConfig> = MutableStateFlow(config)
         override val tokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.AVAILABLE)
+        override val intercomTokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.AVAILABLE)
         override suspend fun updateToken(bearerToken: String?): Outcome<Unit> = Outcome.Success(Unit)
+        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> = Outcome.Success(Unit)
     }
 
     private fun client(control: ServerEndpoint? = endpoint(server), token: String? = "tok-123") =

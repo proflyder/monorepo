@@ -96,6 +96,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     else viewModel.setPower(tile.entry, !tile.entry.isOn())
                 is QuickTile.Speak -> openSpeakDialog(tile.entry)
                 is QuickTile.ScenarioTile -> viewModel.runScenarioNow(tile.scenario)
+                QuickTile.Call -> viewModel.callStation()
             }
         }
 
@@ -112,6 +113,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                         FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
                         tile.scenario.label,
                     )
+                // The call tile is built in and cannot be unpinned.
+                QuickTile.Call -> Unit
             }
         }
     }

@@ -44,6 +44,7 @@ sealed interface RemoteConnectionState {
     data class Loaded(
         val endpoint: ServerEndpoint,
         val controlEndpoint: ServerEndpoint?,
+        val intercomEndpoint: ServerEndpoint?,
         val connectTimeoutMillis: Long,
         val readTimeoutMillis: Long,
     ) : RemoteConnectionState
@@ -62,6 +63,7 @@ private val remoteJson = Json { ignoreUnknownKeys = true }
  * {
  *   "schedulerBaseUrl": "https://alarms.example.test",
  *   "controlBaseUrl": "https://control.example.test",
+ *   "intercomBaseUrl": "https://intercom.example.test",
  *   "connectTimeoutMs": 5000,
  *   "readTimeoutMs": 20000
  * }
@@ -109,6 +111,24 @@ fun parseRemoteConnection(raw: String): RemoteConnectionState {
         }
     }
 
+    val intercomElement = document["intercomBaseUrl"]
+    val intercom = when {
+        intercomElement == null || intercomElement is JsonNull -> ""
+        intercomElement is JsonPrimitive -> intercomElement.contentOrNull.orEmpty()
+        else -> return RemoteConnectionState.Invalid(
+            Field.INTERCOM_ENDPOINT,
+            "intercomBaseUrl must be a string",
+        )
+    }
+    val intercomEndpoint = if (intercom.isBlank()) {
+        null
+    } else {
+        when (val parsed = ServerEndpoint.parse(intercom)) {
+            is EndpointParseResult.Valid -> parsed.endpoint
+            is EndpointParseResult.Invalid -> return RemoteConnectionState.Invalid(Field.INTERCOM_ENDPOINT)
+        }
+    }
+
     val connectTimeout = document.longValue(
         "connectTimeoutMs",
         ConnectionConfig.DEFAULT_CONNECT_TIMEOUT_MILLIS,
@@ -126,6 +146,7 @@ fun parseRemoteConnection(raw: String): RemoteConnectionState {
     return RemoteConnectionState.Loaded(
         endpoint = endpoint,
         controlEndpoint = controlEndpoint,
+        intercomEndpoint = intercomEndpoint,
         connectTimeoutMillis = connectTimeout,
         readTimeoutMillis = readTimeout,
     )

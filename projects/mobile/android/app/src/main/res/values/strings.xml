@@ -11,4 +11,5 @@
     <string name="app_time_alarms">Alarms</string>
     <string name="app_time_timers">Timers</string>
     <string name="app_time_reminders">Reminders</string>
+    <string name="app_call">Call</string>
 </resources>

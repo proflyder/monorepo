@@ -44,4 +44,12 @@
     <string name="connection_server_owns">Расписания остаются на домашнем сервере. Этот экран управляет только состоянием сервера.</string>
     <string name="connection_notification_note">Уведомления напоминаний на телефоне в этой основе не реализованы.</string>
     <string name="connection_not_tested">Конфигурация загружена. Нажмите «Сохранить и проверить подключение», чтобы проверить сервер.</string>
+    <string name="connection_remote_intercom_label">Адрес intercom (звонки)</string>
+    <string name="connection_remote_not_set_calls">Не задан (звонки выключены)</string>
+    <string name="connection_remote_invalid_intercom">В Remote Config неверный адрес intercom. Используйте полный URL http:// или https:// либо оставьте поле пустым.</string>
+    <string name="connection_intercom_token_title">Токен звонков</string>
+    <string name="connection_intercom_token">Телефонный токен intercom</string>
+    <string name="connection_intercom_token_helper">Отдельный от токена планировщика. Шифруется тем же ключом Android Keystore; не попадает в логи и URL.</string>
+    <string name="connection_intercom_save">Сохранить токен звонков</string>
+    <string name="connection_intercom_token_saved">Токен звонков сохранён</string>
 </resources>
