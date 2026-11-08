@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+package home.v1;
+
+// IntercomService is the signaling contract for a WebRTC call between a phone
+// and a station. The service does not carry media: audio flows peer-to-peer
+// over UDP (DTLS/SRTP), while this service only registers endpoints, tracks the
+// call state machine and relays SDP/ICE messages.
+//
+// Transport: Connect over HTTP/1.1. Unary calls work with the Connect JSON
+// client Android already uses; the event channel is a *server-streaming* RPC
+// (`Watch`), which Connect supports over HTTP/1.1. Connect bidi streaming needs
+// HTTP/2, so it is deliberately not used: outgoing signaling is a separate
+// unary `SendSignal` call and `Watch` only carries events.
+//
+// Authentication is a bearer token. The phone sends the shared phone bearer
+// (the same style as SchedulerService); the station sends a separate device
+// token. The server derives the endpoint identity from the token and never
+// trusts an endpoint id supplied in a request. A request for another endpoint
+// is rejected with PERMISSION_DENIED.
+//
+// The contract is symmetric: either endpoint kind can be the caller. The
+// current clients only dial phone -> station, but the state machine, events and
+// authorization rules do not assume that direction.
+
+// EndpointKind is the role of a registered device.
+enum EndpointKind {
+  ENDPOINT_KIND_UNSPECIFIED = 0;
+  ENDPOINT_KIND_PHONE = 1;
+  ENDPOINT_KIND_STATION = 2;
+}
+
+// CallState is the live state of one call.
+//
+// RINGING --Answer by callee--> CONNECTING --offer+answer exchanged--> ACTIVE
+// Any live state --Hangup/timeout/loss--> ENDED.
+enum CallState {
+  CALL_STATE_UNSPECIFIED = 0;
+  CALL_STATE_RINGING = 1;
+  CALL_STATE_CONNECTING = 2;
+  CALL_STATE_ACTIVE = 3;
+  CALL_STATE_ENDED = 4;
+}
+
+// EndReason explains why a call left a live state. END_REASON_UNSPECIFIED on
+// Hangup means the server infers the reason from the state and the caller's
+// role (caller during RINGING -> CANCELED, callee during RINGING -> DECLINED,
+// otherwise HANGUP).
+enum EndReason {
+  END_REASON_UNSPECIFIED = 0;
+  END_REASON_HANGUP = 1;
+  END_REASON_DECLINED = 2;
+  END_REASON_BUSY = 3;
+  END_REASON_CANCELED = 4;
+  END_REASON_TIMEOUT = 5;
+  END_REASON_UNREACHABLE = 6;
+  END_REASON_ERROR = 7;
+}
+
+// SdpType marks which half of the offer/answer exchange a signal carries.
+enum SdpType {
+  SDP_TYPE_UNSPECIFIED = 0;
+  SDP_TYPE_OFFER = 1;
+  SDP_TYPE_ANSWER = 2;
+}
+
+// Endpoint is one registered device. `id`, `kind`, `online` and `last_seen_unix`
+// are server-derived; registration only updates the descriptive fields.
+message Endpoint {
+  string id = 1;
+  EndpointKind kind = 2;
+  string display_name = 3;
+  // Capabilities are free-form labels ("audio", "video", ...). They are
+  // informational for callers; the server does not interpret them.
+  repeated string capabilities = 4;
+  // True while the endpoint has at least one open Watch stream.
+  bool online = 5;
+  int64 last_seen_unix = 6;
+}
+
+// Call is a point-in-time snapshot. Event streams carry the same shape, so a
+// client can replace its local state with every CallEvent.
+message Call {
+  string id = 1;
+  Endpoint caller = 2;
+  Endpoint callee = 3;
+  CallState state = 4;
+  EndReason end_reason = 5;
+  int64 created_unix = 6;
+  int64 updated_unix = 7;
+  int64 answered_unix = 8;
+  int64 ended_unix = 9;
+}
+
+// RegisterEndpoint refreshes the descriptive fields of the authenticated
+// endpoint. It is optional: opening Watch also marks the endpoint online.
+message RegisterEndpointRequest {
+  // id and kind are ignored; the server substitutes the token identity.
+  Endpoint endpoint = 1;
+}
+message RegisterEndpointResponse {
+  Endpoint endpoint = 1;
+}
+
+message ListEndpointsRequest {}
+message ListEndpointsResponse {
+  repeated Endpoint endpoints = 1;
+}
+
+// StartCall asks the callee to ring. `callee_endpoint_id` must name a known
+// endpoint; a caller cannot call itself. The call is rejected with
+// FAILED_PRECONDITION when either side already has a live call (busy).
+message StartCallRequest {
+  string callee_endpoint_id = 1;
+  // Replaying the same key with the same callee returns the original call.
+  // Reusing it for a different callee is rejected with ALREADY_EXISTS.
+  string idempotency_key = 2;
+}
+message StartCallResponse {
+  Call call = 1;
+}
+
+// Answer is sent by the callee while the call is RINGING. Any other endpoint
+// (including the caller) is rejected with PERMISSION_DENIED/FAILED_PRECONDITION.
+message AnswerRequest {
+  string call_id = 1;
+}
+message AnswerResponse {
+  Call call = 1;
+}
+
+message HangupRequest {
+  string call_id = 1;
+  EndReason reason = 2;
+}
+message HangupResponse {
+  Call call = 1;
+}
+
+message GetCallRequest {
+  string call_id = 1;
+}
+message GetCallResponse {
+  Call call = 1;
+}
+
+// SdpSignal is one SDP blob. Offers travel caller -> callee, answers
+// callee -> caller; the server enforces that direction.
+message SdpSignal {
+  SdpType type = 1;
+  // The SDP body is passed through untouched. It is never logged.
+  string sdp = 2;
+}
+
+// IceCandidateSignal is one trickled ICE candidate.
+message IceCandidateSignal {
+  string candidate = 1;
+  string sdp_mid = 2;
+  int32 sdp_mline_index = 3;
+}
+
+// IceEndSignal tells the peer that no more candidates will be sent.
+message IceEndSignal {}
+
+// SendSignal is the unary uplink for signaling. The server routes the signal to
+// the other call participant over its Watch stream and returns `delivered`
+// (true when at least one Watch stream was subscribed).
+message SendSignalRequest {
+  string call_id = 1;
+  oneof signal {
+    SdpSignal sdp = 2;
+    IceCandidateSignal ice_candidate = 3;
+    IceEndSignal ice_end = 4;
+  }
+}
+message SendSignalResponse {
+  bool delivered = 1;
+}
+
+// Watch opens the event stream of the authenticated endpoint. It is a
+// server-streaming RPC; there is exactly one such stream per endpoint (the
+// station keeps it open permanently). An optional endpoint_id is accepted only
+// when it equals the token identity.
+message WatchRequest {
+  string endpoint_id = 1;
+}
+
+// CallEvent is emitted on every state change, including creation (RINGING) and
+// termination (ENDED). `previous_state` is UNSPECIFIED for the first event.
+message CallEvent {
+  Call call = 1;
+  CallState previous_state = 2;
+}
+
+message SdpEvent {
+  string call_id = 1;
+  string from_endpoint_id = 2;
+  SdpSignal signal = 3;
+}
+
+message IceCandidateEvent {
+  string call_id = 1;
+  string from_endpoint_id = 2;
+  IceCandidateSignal candidate = 3;
+}
+
+message IceEndEvent {
+  string call_id = 1;
+  string from_endpoint_id = 2;
+}
+
+message WatchEvent {
+  oneof event {
+    CallEvent call = 1;
+    SdpEvent sdp = 2;
+    IceCandidateEvent ice_candidate = 3;
+    IceEndEvent ice_end = 4;
+  }
+}
+
+// IceServer mirrors the WebRTC RTCIceServer shape.
+message IceServer {
+  repeated string urls = 1;
+  string username = 2;
+  string credential = 3;
+}
+
+// GetIceConfig returns STUN/TURN servers from the service configuration. An
+// empty list means host candidates only (the LAN/VPN case); adding TURN later
+// must not require a client change.
+message GetIceConfigRequest {}
+message GetIceConfigResponse {
+  repeated IceServer ice_servers = 1;
+}
+
+message GetIntercomStatusRequest {}
+message GetIntercomStatusResponse {
+  string version = 1;
+  int64 now_unix = 2;
+  int32 endpoints_registered = 3;
+  int32 endpoints_online = 4;
+  int32 active_calls = 5;
+  bool ready = 6;
+  int32 ring_timeout_seconds = 7;
+  int32 connect_timeout_seconds = 8;
+}
+
+service IntercomService {
+  rpc RegisterEndpoint(RegisterEndpointRequest) returns (RegisterEndpointResponse);
+  rpc ListEndpoints(ListEndpointsRequest) returns (ListEndpointsResponse);
+  rpc StartCall(StartCallRequest) returns (StartCallResponse);
+  rpc Answer(AnswerRequest) returns (AnswerResponse);
+  rpc Hangup(HangupRequest) returns (HangupResponse);
+  rpc GetCall(GetCallRequest) returns (GetCallResponse);
+  rpc SendSignal(SendSignalRequest) returns (SendSignalResponse);
+  rpc Watch(WatchRequest) returns (stream WatchEvent);
+  rpc GetIceConfig(GetIceConfigRequest) returns (GetIceConfigResponse);
+  rpc GetStatus(GetIntercomStatusRequest) returns (GetIntercomStatusResponse);
+}

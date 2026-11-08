@@ -62,7 +62,8 @@ GRAFANA_HOST="grafana.$HOME_DOMAIN"
 ALARMS_HOST="alarms.$HOME_DOMAIN"
 CONTROL_HOST="control.$HOME_DOMAIN"
 CURRENCY_HOST="currency.$HOME_DOMAIN"
-export HOME_DOMAIN LAN_CIDR HAOS_ADDRESS HA_HOST GRAFANA_HOST ALARMS_HOST CONTROL_HOST CURRENCY_HOST
+INTERCOM_HOST="intercom.$HOME_DOMAIN"
+export HOME_DOMAIN LAN_CIDR HAOS_ADDRESS HA_HOST GRAFANA_HOST ALARMS_HOST CONTROL_HOST CURRENCY_HOST INTERCOM_HOST
 
 # Render one template with the private values and print it to stdout.
 # `home-deploy render --unit ingress` owns the fixed key set and refuses any
@@ -79,6 +80,7 @@ render() {
     --set "ALARMS_HOST=$ALARMS_HOST" \
     --set "CONTROL_HOST=$CONTROL_HOST" \
     --set "CURRENCY_HOST=$CURRENCY_HOST" \
+    --set "INTERCOM_HOST=$INTERCOM_HOST" \
     "$source" >/dev/null
   cat "$out/$(basename "$source")"
   rm -rf "$out"

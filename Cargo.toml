@@ -20,6 +20,7 @@ members = [
     "solutions/ha-bridge/crates/*",
     "solutions/mcp-gateway/crates/*",
     "solutions/currency-bot/crates/*",
+    "solutions/intercom/crates/*",
 ]
 resolver = "3"
 

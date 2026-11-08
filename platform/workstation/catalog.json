@@ -173,6 +173,10 @@
    "purpose": "Hermes agent environment (HA/MA/Telegram/API keys)",
    "consumer": "ESO → home-assistant"
   },
+  "k8s/home-assistant/intercom": {
+   "purpose": "intercom signaling: phone bearer and station device token (created)",
+   "consumer": "ESO → home-assistant"
+  },
   "k8s/home-assistant/mcp-gateway-auth": {
    "purpose": "MCP gateway bearer",
    "consumer": "ESO → home-assistant"

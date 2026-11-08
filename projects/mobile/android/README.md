@@ -287,21 +287,16 @@ Passwords reach `apksigner` and `keytool` only as `file:` references to private
 temporary files. They are never in argv, never exported to later steps and
 never logged.
 
-The key lives in `secrets/android/home-release.keystore` (gitignored, outside
-Bazel's workspace), restored from OpenBao `ci/android-distribute` on demand:
-
-```sh
-mise run secrets:file android/home-release.keystore
-mise run secrets:file android/home-release.store.password
-mise run secrets:file android/home-release.key.password
-mise run secrets:file android/home-release.alias
-mise run secrets:file android/home-release.cert.sha256
-# ... build/sign ...
-mise run secrets:clean
-```
-
-`distribute.sh` uses those paths by default; the `SIGNING_*` environment
-variables override them (CI materialises them under `$RUNNER_TEMP`).
+The key lives only in OpenBao `ci/android-distribute`. Locally
+`mise run admin:android-distribute` passes it through fnox (profile `android`):
+the base64 keystore, password files, alias, expected certificate and the
+Firebase service account arrive as private temp files / variables
+(`SIGNING_KEYSTORE_B64_FILE` is decoded by `distribute.sh`) and are deleted when
+the command exits. CI materialises the same values under `$RUNNER_TEMP`.
+Fallback for manual work: `mise run secrets:file android/home-release.keystore`
+(and `.store.password`, `.key.password`, `.alias`, `.cert.sha256`) into the
+gitignored `secrets/android/`, which `distribute.sh` reads by default; remove
+them with `mise run secrets:clean android` afterwards.
 
 **One-time migration from the old debug-password key.** The certificate must
 stay the same, otherwise every install needs an uninstall and loses its
@@ -338,7 +333,7 @@ platform/android/sign-release_test.sh
 
 Then store the five values under `ci/android-distribute` in OpenBao (field names
 in [SECRETS](../../../docs/SECRETS.md) and the OpenBao README), and delete the
-local password files with `mise run secrets:clean` when done. The old
+local password files with `mise run secrets:clean android` when done. The old
 `keystore_b64` / `keystore_password` fields are left untouched as a backup but
 are no longer read by CI.
 
@@ -518,12 +513,12 @@ Local:
 
 ```sh
 export ANDROID_HOME="$HOME/Library/Android/sdk"
-projects/mobile/android/distribute.sh --dry-run   # print the command, no auth
-projects/mobile/android/distribute.sh             # build, sign + upload
+mise run admin:android-distribute -- --dry-run   # print the command, no auth
+mise run admin:android-distribute                # build, sign + upload
 ```
 
-The script requires the release signing files (restore them with
-`mise run secrets:file`, see [Signing](#signing)) and `google-services.json`,
+The task passes the release signing material from OpenBao (see
+[Signing](#signing)); the script also needs `google-services.json`,
 and refuses to upload unless `sign-release.sh` verified the personal
 certificate `88ef5d61…04ad`. It reads the Firebase app id from the JSON.
 Authentication uses an existing `npx firebase-tools@15.34.2 login` session or

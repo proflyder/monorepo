@@ -2,7 +2,7 @@
 
 Traefik + cert-manager дают LAN/VPN-доступ к домашним сервисам по именам с
 валидным сертификатом Let's Encrypt: `ha`, `grafana`, `alarms`, `control`,
-`currency` под приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса и
+`currency` (а после включения деплоя intercom — ещё `intercom`) под приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса и
 NodePort не удаляются и остаются аварийным путём.
 
 ## Состав
@@ -13,7 +13,7 @@ NodePort не удаляются и остаются аварийным путё
 | cert-manager `v1.21.3` | `cert-manager` | ACME DNS-01 Cloudflare, wildcard-сертификат |
 | ClusterIssuer | cluster | `letsencrypt-staging`, `letsencrypt-prod` |
 | Certificate `home-wildcard` | `traefik` | `*.home.example.com` → Secret `home-wildcard-tls` |
-| IngressRoute ×5 | `traefik` | маршруты к Service в `monitoring`/`home-assistant`/`currency-bot` |
+| IngressRoute ×6 | `traefik` | маршруты к Service в `monitoring`/`home-assistant`/`currency-bot` |
 
 Маршрут `vault.<домен>` и его DNS-запись обслуживает
 `projects/home/kubernetes/openbao/deploy.sh` — тот же namespace, allow-list и
@@ -65,7 +65,7 @@ Edit только на зону; IP-фильтр — домашний внешн
 скриптом из файла и попадает только в Kubernetes Secret; в argv, логи и Git он
 не передаётся.
 
-DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency` → узел K3s,
+DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency` (и `intercom`, когда сервис развёрнут) → узел K3s,
 Cloudflare **DNS only** (не proxied), TTL auto. Wildcard-сертификат не
 покрывает apex.
 
@@ -76,11 +76,10 @@ Cloudflare **DNS only** (не proxied), TTL auto. Wildcard-сертификат 
 ## Деплой
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 # 1) проверка DNS-01 на staging (не тратит prod-лимит)
-./projects/home/kubernetes/ingress/deploy.sh --staging
+mise run admin:ingress -- --staging
 # 2) боевой сертификат Let's Encrypt prod + маршруты
-./projects/home/kubernetes/ingress/deploy.sh
+mise run admin:ingress
 ```
 
 Скрипт идемпотентен: `helm upgrade --install`, `kubectl apply`, Secret

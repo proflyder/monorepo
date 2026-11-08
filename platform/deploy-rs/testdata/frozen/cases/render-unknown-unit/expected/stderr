@@ -1,1 +1,1 @@
-unknown unit "nope" (expected one of: currency-bot, ingress, mcp-gateway, scheduler, wakegrant)
+unknown unit "nope" (expected one of: currency-bot, ingress, intercom, mcp-gateway, scheduler, wakegrant)

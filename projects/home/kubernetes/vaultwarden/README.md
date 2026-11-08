@@ -50,9 +50,8 @@ projects/home/kubernetes/vaultwarden/
 ## Деплой
 
 ```bash
-mise run secrets:file home/ingress.env home/vpn/cloudflare.env
-KUBECONFIG=<admin kubeconfig> projects/home/kubernetes/vaultwarden/deploy.sh
-mise run secrets:clean home/ingress.env home/vpn/cloudflare.env
+mise run admin:vaultwarden                         # ingress env, Cloudflare, kubeconfig — fnox
+mise run admin:vaultwarden -- --render-only /tmp/vw  # только рендер, без кластера
 ```
 
 Повторный запуск идемпотентен. Обновление — новый digest в `versions.sh`,

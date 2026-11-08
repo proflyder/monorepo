@@ -29,6 +29,7 @@ const SCHEDULER_PLACEHOLDERS: &[&str] = &[
     "LAN_CIDR",
     "NODE_LAN_IP",
     "SCHEDULER_NODE_PORT",
+    "INTERCOM_NODE_PORT",
     "SCHEDULER_PUBLIC_URL",
     "CONTROL_NODE_PORT",
     "SCHEDULER_IMAGE",
@@ -51,6 +52,7 @@ const INGRESS_PLACEHOLDERS: &[&str] = &[
     "ALARMS_HOST",
     "CONTROL_HOST",
     "CURRENCY_HOST",
+    "INTERCOM_HOST",
 ];
 
 const MCP_GATEWAY_EXTRA: &[&str] = &[
@@ -64,6 +66,8 @@ const MCP_GATEWAY_EXTRA: &[&str] = &[
 ];
 
 const WAKEGRANT_EXTRA: &[&str] = &["WAKE_GRANT_IMAGE", "WAKE_GRANT_NODE_PORT"];
+
+const INTERCOM_EXTRA: &[&str] = &["INTERCOM_IMAGE", "INTERCOM_NODE_PORT"];
 
 /// One unit's placeholder policy.
 #[derive(Debug)]
@@ -113,6 +117,15 @@ pub fn preset_for(unit: &str) -> Result<Preset, String> {
                 contains_leftover: false,
             })
         }
+        "intercom" => {
+            let mut allowed = SCHEDULER_PLACEHOLDERS.to_vec();
+            allowed.extend_from_slice(INTERCOM_EXTRA);
+            Ok(Preset {
+                name: "intercom",
+                allowed,
+                contains_leftover: false,
+            })
+        }
         "ingress" => Ok(Preset {
             name: "ingress",
             allowed: INGRESS_PLACEHOLDERS.to_vec(),
@@ -132,6 +145,7 @@ pub fn unit_names() -> Vec<&'static str> {
         "currency-bot",
         "mcp-gateway",
         "wakegrant",
+        "intercom",
         "ingress",
     ];
     names.sort_unstable();
@@ -370,7 +384,7 @@ mod tests {
     fn unknown_unit_lists_the_supported_names() {
         assert_eq!(
             preset_for("nope").unwrap_err(),
-            "unknown unit \"nope\" (expected one of: currency-bot, ingress, mcp-gateway, scheduler, wakegrant)"
+            "unknown unit \"nope\" (expected one of: currency-bot, ingress, intercom, mcp-gateway, scheduler, wakegrant)"
         );
     }
 }

@@ -24,6 +24,12 @@ proto_library(
     strip_import_prefix = "/packages/proto/home/v1",
 )
 
+proto_library(
+    name = "intercom_proto",
+    srcs = ["intercom.proto"],
+    strip_import_prefix = "/packages/proto/home/v1",
+)
+
 filegroup(
     name = "protos",
     srcs = glob(["*.proto"]),

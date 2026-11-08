@@ -51,6 +51,7 @@ test("deploy images and native publish repositories of units.mjs are considered"
     "health-exporter",
     "hermes",
     "home-deploy",
+    "intercom",
     "mcp-gateway",
     "pulsar-firmware",
     "scheduler",

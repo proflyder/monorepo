@@ -15,6 +15,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [OpenBao](openbao/).
 - [External Secrets Operator](external-secrets/).
 - [Hermes voice-proxy firewall](voice-firewall/).
+- Intercom signaling (WebRTC call) — `intercom/`, деплой merge'ем в `develop`.
 
 `/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
 `/srv/k3s/runtime`. Новые observability PVC используют `local-retain`;
@@ -31,9 +32,8 @@ MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`
 командную строку.
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 export PROMETHEUS_PRIVATE_VALUES=/private/path/prometheus.yaml
-./projects/home/kubernetes/deploy-observability.sh
+mise run admin:observability
 export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml
 ./projects/home/kubernetes/apply-runtime.sh
 ```
