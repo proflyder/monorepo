@@ -632,7 +632,7 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
         int: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).unwrap(),
         model,
         store,
-        media: super::media::Policy::new(&model.volume),
+        media: super::media::Policy::new(&model.volume, 1.0),
         applied_tz: String::new(),
         hw_mic_muted: false,
         persist_on_start: false,
@@ -745,7 +745,7 @@ async fn client_connected_publishes_entities_in_the_cpp_order() {
         .position(|c| c.starts_with("publish_light"))
         .expect("light published")];
     assert_eq!(
-        &head[..22],
+        head,
         &[
             "publish_media Idle 0.5 false",
             "publish_switch Microphones true",
@@ -765,6 +765,7 @@ async fn client_connected_publishes_entities_in_the_cpp_order() {
             "publish_select ClockFace 'None'",
             "publish_number LedSpeed 1",
             "publish_number FollowupDuration 10",
+            "publish_number AnnounceVolume 100",
             "publish_select MusicViz 'All styles'",
             "publish_select ClockMusic 'Off'",
             "publish_select CaseColor 'None'",

@@ -148,6 +148,7 @@ impl Boot {
             .iter()
             .map(|c| c.as_str().to_owned())
             .collect();
+        let announce_volume = store.announce_volume;
         Ok(Self {
             model,
             ports,
@@ -159,7 +160,7 @@ impl Boot {
             voice_colors,
             zigbee: ZigbeePlan::new(model),
             changed: false,
-            media: media::Policy::new(&model.volume),
+            media: media::Policy::new(&model.volume, announce_volume),
             term,
             int,
         })

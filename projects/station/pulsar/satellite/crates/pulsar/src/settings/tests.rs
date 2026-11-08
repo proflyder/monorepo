@@ -3,7 +3,8 @@
 // `zig c++ -std=c++20 -O2`. save_*.conf — `save` значений ниже; load_*.out — `load` из load_*.in,
 // затем `save`. С тех пор правились руками: `wake_preroll` (после `clock_music`; 0 в load_odd.in);
 // `clock_auto_brightness` (после `wake_preroll`); `voice_color` (после `led_case_color`);
-// `followup_duration_s` (10); ключи форка `wake_event_recording` / `wake_dry_run` — последними; и
+// `followup_duration_s` (10); ключи форка `wake_event_recording` / `wake_dry_run` /
+// `announce_volume` — последними; и
 // умолчания форка (`wake_word=ricardo`, `nearest_answers=0`).
 //
 // `Settings` больше не хранит чужие доменные типы: опции HA и роль Zigbee — строки `state.conf`,
@@ -408,7 +409,35 @@ fn wake_event_switches_round_trip() {
     parsed.parse(b"wake_event_recording=0\nwake_dry_run=1\n");
     assert!(!parsed.wake_recording);
     assert!(parsed.wake_dry_run);
-    assert!(parsed.serialize().ends_with("wake_dry_run=1\n"));
+    assert!(parsed.serialize().contains("wake_dry_run=1\n"));
+    // The newest fork key goes last, so `wake_dry_run` is no longer the tail.
+    assert!(parsed.serialize().ends_with("announce_volume=1\n"));
+}
+
+#[test]
+fn announce_volume_defaults_roundtrips_and_clamps() {
+    // 100 % is the old behaviour: an older `state.conf` has no key and reads as 1.0.
+    let mut st = Settings::default();
+    st.parse(b"unknown_old_setting=1\n");
+    assert_eq!(st.announce_volume, 1.0);
+    assert!(st.serialize().ends_with("announce_volume=1\n"));
+    for volume in [0.0, 0.25, 0.55, 1.0] {
+        st.announce_volume = volume;
+        let mut loaded = Settings::default();
+        loaded.parse(st.serialize().as_bytes());
+        assert_eq!(loaded.announce_volume, volume);
+    }
+    for (value, expected) in [
+        ("-0.5", 0.0),
+        ("1.5", 1.0),
+        ("NaN", 1.0),
+        ("inf", 1.0),
+        ("0.4junk", 0.4),
+        ("garbage", 0.0),
+    ] {
+        st.parse(format!("announce_volume={value}\n").as_bytes());
+        assert_eq!(st.announce_volume, expected, "{value}");
+    }
 }
 
 #[test]

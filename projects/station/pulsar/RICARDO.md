@@ -51,6 +51,8 @@ Pulsar — член единого корневого Cargo workspace: `projects
 | Local commands | The command spotter runs only while something plays and outside a voice request, matching the deployed fork profile rather than upstream's always-on behavior. |
 | Nearest station | Default `nearest_answers=false`: this installation has one station and the 250 ms arbitration window only adds latency. It can be turned back on in HA. |
 | Zigbee | Runtime initialization is disabled (`ENABLE_ZIGBEE=false`); the radio and the `zigbee-*.ybl` assets are left untouched. |
+| Announce volume | `announce_volume` number «Громкость объявлений» (0–100 %, step 5, default 100 %): scales `assist_satellite.announce` and TTS answers only, not the timer ring, earcons or music; persisted in `state.conf`. |
+| HA media state | `MediaState::Announcing` is published to Home Assistant as `PLAYING`: HA 2026.10's ESPHome media player knows only NONE/IDLE/PLAYING/PAUSED/OFF/ON and raises `KeyError: MediaPlayerState.ANNOUNCING` in its state subscription, losing the update. Pulsar's internal ANNOUNCING (ducking, announcement callbacks, `media_player` entity state) is unchanged; only the wire value differs. |
 | Updates | `UPDATE_REPO=ghcr.io/proflyder/pulsar-firmware` (public OCI package in GHCR, published by the monorepo), `auto_update=false` by default. The upstream repository is never an update source. |
 | Hardware | Midi remains the tested target. Lite 2 / Mini 2 code is still compiled by upstream but is not part of this profile's acceptance. |
 

@@ -91,6 +91,7 @@ impl Publisher {
         ha.publish_select(SelectId::ClockFace, &self.clock_face);
         ha.publish_number(NumberId::LedSpeed, s.st.led_speed);
         ha.publish_number(NumberId::FollowupDuration, s.st.followup_duration_s as f32);
+        ha.publish_number(NumberId::AnnounceVolume, s.st.announce_volume * 100.0);
         ha.publish_select(SelectId::MusicViz, &s.st.music_viz);
         ha.publish_select(SelectId::ClockMusic, &s.st.clock_music);
         ha.publish_select(SelectId::CaseColor, s.case_color);
@@ -345,6 +346,15 @@ impl Controller {
                 self.st.led_speed = cxx_clamp(value, 0.25, 4.0);
                 self.deps.display.leds.set_speed(self.st.led_speed);
                 self.deps.ha.publish_number(id, self.st.led_speed);
+            }
+            NumberId::AnnounceVolume => {
+                self.st.announce_volume = cxx_min(100.0, cxx_max(0.0, value)) / 100.0;
+                if self.media.set_announce_volume(self.st.announce_volume) {
+                    self.apply_gains();
+                }
+                self.deps
+                    .ha
+                    .publish_number(id, self.st.announce_volume * 100.0);
             }
         }
         self.persist();

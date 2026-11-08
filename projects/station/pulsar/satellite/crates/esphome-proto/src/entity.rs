@@ -25,7 +25,7 @@ impl EntityKey {
     }
 }
 
-/// Ключи сущностей C++-референса и этого форка (1..=39).
+/// Ключи сущностей C++-референса и этого форка (1..=40).
 pub mod key {
     use super::EntityKey;
 
@@ -68,6 +68,7 @@ pub mod key {
     pub const SW_WAKE_DRY_RUN: EntityKey = EntityKey(37);
     pub const SELECT_VOICE_COLOR: EntityKey = EntityKey(38);
     pub const NUMBER_FOLLOWUP_DURATION: EntityKey = EntityKey(39);
+    pub const NUMBER_ANNOUNCE_VOLUME: EntityKey = EntityKey(40);
 }
 
 /// aioesphomeapi VoiceAssistantFeature: голосовой ассистент, API-аудио, таймеры, анонсы,
@@ -335,6 +336,7 @@ id_enum!(NumberId {
     ClockScroll = 2 => NUMBER_CLOCK_SCROLL,
     LedSpeed = 3 => NUMBER_LED_SPEED,
     FollowupDuration = 4 => NUMBER_FOLLOWUP_DURATION,
+    AnnounceVolume = 5 => NUMBER_ANNOUNCE_VOLUME,
 });
 
 id_enum!(TextId {
@@ -525,6 +527,19 @@ pub const ENTITIES: &[EntityDef] = &[
         "followup_duration",
         "Follow-up duration",
         Some("mdi:microphone-message"),
+        Capability::Always,
+    ),
+    ent(
+        key::NUMBER_ANNOUNCE_VOLUME,
+        EntityKind::Number {
+            min: 0.0,
+            max: 100.0,
+            step: 5.0,
+            unit: "%",
+        },
+        "announce_volume",
+        "Громкость объявлений",
+        Some("mdi:bullhorn"),
         Capability::Always,
     ),
     ent(
@@ -855,6 +870,7 @@ pub const REPLAY_ORDER: &[EntityKey] = &[
     key::SELECT_CLOCK_MUSIC,
     key::SELECT_ZIGBEE_MODE,
     key::TEXT_ZIGBEE,
+    key::NUMBER_ANNOUNCE_VOLUME,
 ];
 
 /// Запись таблицы по ключу.

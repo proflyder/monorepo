@@ -109,6 +109,9 @@ pub struct Settings {
     pub wake_recording: bool,
     /// Dry run of the Ricardo detector: record, never answer («Wake: тестовый режим»).
     pub wake_dry_run: bool,
+    /// «Громкость объявлений», 0..1: multiplier of spoken announcements (HA announce, TTS
+    /// answers); the master volume, earcons, the timer ring and music are unaffected.
+    pub announce_volume: f32,
     /// Stem of `pulsar_hw::case_colors()`, "" = none.
     pub led_case_color: String,
     /// Hue of the ring's listening / thinking / speaking animation (`voice_color=`).
@@ -150,6 +153,7 @@ impl Default for Settings {
             followup_duration_s: 10,
             wake_recording: true,
             wake_dry_run: false,
+            announce_volume: 1.0,
             led_case_color: String::new(),
             voice_color: "Violet".into(),
             update_attempt: String::new(),
@@ -241,6 +245,13 @@ impl Settings {
                 }
                 b"wake_event_recording" => self.wake_recording = on,
                 b"wake_dry_run" => self.wake_dry_run = on,
+                b"announce_volume" => {
+                    self.announce_volume = if fv.is_finite() {
+                        fv.clamp(0.0, 1.0)
+                    } else {
+                        1.0
+                    };
+                }
                 b"led_case_color" => self.led_case_color = v,
                 b"voice_color" => self.voice_color = canonical(&VOICE_COLORS, &v, "Violet"),
                 _ => {}
@@ -260,7 +271,7 @@ impl Settings {
              zigbee_role={}\nzigbee_flash_failed={:x}\nnearest_answers={}\nmusic_viz={}\n\
              led_speed={}\nvoice_indication={}\nled_case_color={}\nvoice_color={}\nclock_music={}\n\
              wake_preroll={}\nclock_auto_brightness={}\nfollowup_duration_s={}\n\
-             wake_event_recording={}\nwake_dry_run={}\n",
+             wake_event_recording={}\nwake_dry_run={}\nannounce_volume={}\n",
             f(self.volume),
             f(self.volume_legacy),
             b(self.muted),
@@ -292,6 +303,7 @@ impl Settings {
             self.followup_duration_s,
             b(self.wake_recording),
             b(self.wake_dry_run),
+            f(self.announce_volume),
         )
     }
 

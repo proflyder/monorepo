@@ -500,10 +500,12 @@ fn publish_selftest_states(h: &ApiHandle) {
 }
 
 fn fork_only(t: u32, m: &[u8]) -> bool {
-    const KEYS: [u32; 5] = [36, 37, 34, 35, 38];
+    const KEYS: [u32; 6] = [36, 37, 34, 35, 38, 40];
     let key = match t {
-        msg::LIST_SWITCH | msg::LIST_BUTTON | msg::LIST_SELECT => field(m, 2).map(Field::u32),
-        msg::SWITCH_STATE | msg::SELECT_STATE => field(m, 1).map(Field::u32),
+        msg::LIST_SWITCH | msg::LIST_BUTTON | msg::LIST_SELECT | msg::LIST_NUMBER => {
+            field(m, 2).map(Field::u32)
+        }
+        msg::SWITCH_STATE | msg::SELECT_STATE | msg::NUMBER_STATE => field(m, 1).map(Field::u32),
         _ => None,
     };
     matches!(
@@ -511,8 +513,10 @@ fn fork_only(t: u32, m: &[u8]) -> bool {
         msg::LIST_SWITCH
             | msg::LIST_BUTTON
             | msg::LIST_SELECT
+            | msg::LIST_NUMBER
             | msg::SWITCH_STATE
             | msg::SELECT_STATE
+            | msg::NUMBER_STATE
     ) && key.is_some_and(|k| KEYS.contains(&k))
 }
 

@@ -19,13 +19,20 @@ const DUCK_GAIN: f32 = 0.15;
 pub struct Policy {
     curve: &'static VolumeCurve,
     ducked: bool,
+    /// «Громкость объявлений», 0..1: scales spoken announcements only.
+    announce_volume: f32,
+    /// The ANNOUNCE channel currently carries an announcement or a TTS answer (scaled by
+    /// `announce_volume`), not an earcon or the timer ring (which stay on the master volume).
+    announce_speech: bool,
 }
 
 impl Policy {
-    pub fn new(curve: &'static VolumeCurve) -> Self {
+    pub fn new(curve: &'static VolumeCurve, announce_volume: f32) -> Self {
         Self {
             curve,
             ducked: false,
+            announce_volume: cxx_min(1.0, cxx_max(0.0, announce_volume)),
+            announce_speech: false,
         }
     }
 
@@ -52,9 +59,38 @@ impl Policy {
         }
     }
 
-    /// Announce channel gain: mute zeroes it, speech is never ducked.
+    /// Announce channel gain: mute zeroes it, speech is never ducked; spoken announcements and
+    /// TTS answers are scaled by «Громкость объявлений», earcons and the timer ring are not.
     pub fn announce_gain(&self, volume: f32, muted: bool) -> f32 {
-        if muted { 0.0 } else { self.master_gain(volume) }
+        if muted {
+            0.0
+        } else {
+            self.master_gain(volume)
+                * if self.announce_speech {
+                    self.announce_volume
+                } else {
+                    1.0
+                }
+        }
+    }
+
+    /// «Громкость объявлений» (0..1); true when the current announce gain changed.
+    pub fn set_announce_volume(&mut self, volume: f32) -> bool {
+        let volume = cxx_min(1.0, cxx_max(0.0, volume));
+        if volume == self.announce_volume {
+            return false;
+        }
+        self.announce_volume = volume;
+        self.announce_speech
+    }
+
+    /// Marks what the next ANNOUNCE playback carries; true when the gain changed.
+    pub fn set_announce_speech(&mut self, speech: bool) -> bool {
+        if speech == self.announce_speech {
+            return false;
+        }
+        self.announce_speech = speech;
+        true
     }
 }
 
@@ -83,6 +119,16 @@ impl Controller {
         );
         if let Some(ss) = &self.deps.sendspin {
             ss.set_duck_gain(music);
+        }
+    }
+
+    /// What the ANNOUNCE playback now starting carries: true for a spoken announcement or a TTS
+    /// answer (scaled by «Громкость объявлений»), false for an earcon or the timer ring (full
+    /// master volume). Every `play` on ANNOUNCE goes through this, so the flag always matches the
+    /// sound on the channel.
+    pub(super) fn set_announce_speech(&mut self, speech: bool) {
+        if self.media.set_announce_speech(speech) {
+            self.apply_gains();
         }
     }
 
@@ -126,7 +172,7 @@ impl Controller {
     }
 
     /// Stock click after a local change (keys, voice words); `before` = (volume, muted) before it.
-    fn volume_click(&self, before: (f32, bool)) {
+    fn volume_click(&mut self, before: (f32, bool)) {
         if !logic::want_volume_click(
             before,
             (self.st.volume, self.st.muted),
@@ -139,6 +185,7 @@ impl Controller {
             return;
         }
         // Music is not ducked under it; its Done has no Pending entry and is ignored.
+        self.set_announce_speech(false);
         self.deps.player.play(
             Channel::Announce,
             vec![earcons::path(self.model.earcons.volume)],
@@ -183,6 +230,7 @@ impl Controller {
                 let seq = self.session.start_announce();
                 self.update_duck();
                 self.update_ui();
+                self.set_announce_speech(true);
                 let id = self.deps.player.play(Channel::Announce, vec![url]);
                 self.pending.insert(id, Pending::MediaAnnounce { seq });
             } else {
@@ -296,5 +344,71 @@ impl Controller {
                 self.deps.display.clock.music_frame(f, true);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn policy(announce_volume: f32) -> Policy {
+        let model = pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap();
+        Policy::new(&model.volume, announce_volume)
+    }
+
+    #[test]
+    fn announce_volume_100_keeps_the_old_gain() {
+        let mut p = policy(1.0);
+        // Speech and earcons alike are on the master volume until the default changes.
+        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+        p.set_announce_speech(true);
+        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+        p.set_announce_speech(false);
+        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+    }
+
+    #[test]
+    fn announce_volume_scales_only_spoken_announcements() {
+        let mut p = policy(0.5);
+        p.set_announce_speech(true);
+        let scaled = p.announce_gain(0.5, false);
+        assert!((scaled - p.master_gain(0.5) * 0.5).abs() < f32::EPSILON);
+        // The timer ring, earcons and music are not touched: the flag switches them back.
+        assert!(p.set_announce_speech(false));
+        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+        assert_eq!(p.music_gain(0.5, false), p.master_gain(0.5));
+        assert!(!p.set_announce_speech(false), "no gain change to re-apply");
+    }
+
+    #[test]
+    fn announce_volume_is_clamped_and_mute_zeroes_it() {
+        let mut p = policy(2.0);
+        p.set_announce_speech(true);
+        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+        assert_eq!(p.announce_gain(0.5, true), 0.0);
+
+        let mut silent = policy(-1.0);
+        silent.set_announce_speech(true);
+        assert_eq!(silent.announce_gain(0.5, false), 0.0);
+    }
+
+    #[test]
+    fn announce_volume_change_reapplies_only_while_speech_plays() {
+        let mut p = policy(1.0);
+        assert!(
+            !p.set_announce_volume(0.4),
+            "idle: the value is stored, nothing audible changes"
+        );
+        assert!(p.set_announce_speech(true), "speech is now scaled by 0.4");
+        assert!(!p.set_announce_volume(0.4), "same value");
+        assert!(
+            p.set_announce_volume(0.6),
+            "a new value changes speech gain"
+        );
+        assert!((p.announce_gain(0.5, false) - p.master_gain(0.5) * 0.6).abs() < f32::EPSILON);
+        // A zero announce volume is silence for announcements, not mute of the station.
+        assert!(p.set_announce_volume(0.0));
+        assert_eq!(p.announce_gain(0.5, false), 0.0);
+        assert_eq!(p.music_gain(0.5, false), p.master_gain(0.5));
     }
 }
