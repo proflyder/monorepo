@@ -50,7 +50,11 @@ service `SchedulerService`:
   `SnoozeSchedule`, `StopSchedule`;
 - scenarios: `home.v1.ScenarioService` в `packages/proto/home/v1/scenario.proto`
   — `CreateScenario`, `GetScenario`, `ListScenarios`, `UpdateScenario`,
-  `DeleteScenario`, `SetScenarioEnabled`, `RunScenario`;
+  `DeleteScenario`, `SetScenarioEnabled`, `RunScenario`. Scheduler только
+  хранит и валидирует определения; условия и шаги исполняет отдельный
+  `ha-scenario` (`solutions/ha-bridge`). `GetStatus.scenario_execution_supported`
+  — флаг `SCENARIO_EXECUTION` (default `false`), включаемый вместе с
+  исполнителем;
 - timers: `StartTimer`, `GetTimer`, `ListTimers`, `PauseTimer`,
   `ResumeTimer`, `CancelTimer`;
 - outbox: `ListDueEvents`, `AckEvent`;
@@ -86,7 +90,8 @@ constant-time по SHA-256; токен не логируется. `SCHEDULER_CON
 `SCHEDULER_RING_WINDOW_SECONDS`, `SCHEDULER_EVENT_RETENTION_SECONDS`,
 `SCHEDULER_MAX_TIMER_SECONDS`, `SCHEDULER_MAX_TIMERS`,
 `SCHEDULER_MAX_PAYLOAD_BYTES`, `SCHEDULER_EVENT_MAX_ATTEMPTS`,
-`SCHEDULER_TICK_MS`; legacy `ALARM_DB_PATH/LISTEN/TIMEZONE` — fallback.
+`SCHEDULER_TICK_MS`, `SCENARIO_EXECUTION`; legacy
+`ALARM_DB_PATH/LISTEN/TIMEZONE` — fallback.
 `SCHEDULER_TOKEN` побеждает `SCHEDULER_TOKEN_FILE`.
 
 Образ `//projects/home/kubernetes/scheduler:scheduler_image` — static musl

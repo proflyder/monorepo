@@ -26,6 +26,12 @@ rust_service_image(
     repo = "ghcr.io/proflyder/ha-control",
 )
 
+rust_service_image(
+    name = "ha-scenario",
+    crate_binary = "//solutions/ha-bridge/crates/ha-bridge:ha-scenario",
+    repo = "ghcr.io/proflyder/ha-scenario",
+)
+
 # The cutover preflight Job runs the same `home-deploy` binary as the deploy
 # scripts, so the cluster never needs a Python image. It is built from the Rust
 # crate and promoted by the same DECISIONS 36 digest path as the three service
@@ -43,6 +49,7 @@ filegroup(
     srcs = [
         ":ha-bridge_image",
         ":ha-control_image",
+        ":ha-scenario_image",
         ":home-deploy_image",
         ":scheduler_image",
     ],

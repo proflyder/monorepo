@@ -34,6 +34,7 @@ pub struct Service {
     version: String,
     engine: Arc<dyn Fn() -> EngineStatus + Send + Sync>,
     allowed: Vec<String>,
+    scenario_execution: bool,
 }
 
 impl std::fmt::Debug for Service {
@@ -67,7 +68,16 @@ impl Service {
             version: version.into(),
             engine,
             allowed,
+            scenario_execution: false,
         }
+    }
+
+    /// Advertise the scenario executor in `GetStatus`. Deployment-controlled:
+    /// the scheduler stores definitions but `ha-scenario` runs them.
+    #[must_use]
+    pub fn with_scenario_execution(mut self, supported: bool) -> Self {
+        self.scenario_execution = supported;
+        self
     }
 
     /// The durable store behind this service.
@@ -484,7 +494,7 @@ impl SchedulerService for Service {
             enabled_schedules: status.enabled_schedules,
             running_timers: status.running_timers,
             consumers,
-            scenario_execution_supported: false,
+            scenario_execution_supported: self.scenario_execution,
             scenario_store_supported: true,
             queues,
             ready: engine.ready,

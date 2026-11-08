@@ -17,9 +17,11 @@
 //! at their `api`/`store` boundary.
 
 pub mod generated;
+mod scenario;
 mod scheduler;
 mod transport;
 
 pub use generated::home::v1;
+pub use scenario::{ScenarioClient, ScenarioError};
 pub use scheduler::{SchedulerClient, SchedulerError};
 pub use transport::{CaError, ReqwestTransport};

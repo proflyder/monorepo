@@ -47,6 +47,7 @@ test("deploy images and native publish repositories of units.mjs are considered"
     "currency-bot",
     "ha-bridge",
     "ha-control",
+    "ha-scenario",
     "health-exporter",
     "hermes",
     "home-deploy",

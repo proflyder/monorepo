@@ -18,6 +18,10 @@ path = "src/main.rs"
 name = "ha-control"
 path = "src/ha_control.rs"
 
+[[bin]]
+name = "ha-scenario"
+path = "src/ha_scenario.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
@@ -29,6 +33,7 @@ home-runtime = { path = "../../../../packages/rust/home-runtime" }
 home-secret = { path = "../../../../packages/rust/home-secret" }
 home-telemetry = { path = "../../../../packages/rust/home-telemetry" }
 home-worker = { path = "../../../../packages/rust/home-worker" }
+jiff = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }

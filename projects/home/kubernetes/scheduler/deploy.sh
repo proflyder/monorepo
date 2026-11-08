@@ -28,13 +28,14 @@
 # Environment:
 #   PRIVATE_ENV     private values file (default secrets/home/scheduler.env)
 #   ONLY            comma list of groups: scheduler, ha-bridge, ha-control, all
+#                   (the ha-bridge group also rolls ha-scenario)
 #   PUSH_IMAGES=1   push new images to GHCR with docker before deploying
 #   IMAGE_TAG       git tag/commit used for the pushed tags (default HEAD sha)
 #   NODE_SSH        ssh target used to import images when PUSH_IMAGES != 1
 #   SSH_KEY/SSH_OPTS  ssh transport for NODE_SSH
 #   PREFLIGHT_IN_CLUSTER=1  run the cutover preflight as an in-cluster Job
 #   HA_TOKEN_FILE, SCHEDULER_TOKEN_FILE  local preflight tokens
-#   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE/PREFLIGHT_IMAGE
+#   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE/HA_SCENARIO_IMAGE/PREFLIGHT_IMAGE
 #                   pre-resolved refs (skip building that image; used by the
 #                   regression test). PREFLIGHT_IMAGE is the distroless
 #                   `home-deploy` image that runs the in-cluster preflight Job.
@@ -128,16 +129,17 @@ done
 WANT_SCHEDULER=false
 WANT_BRIDGE=false
 WANT_CONTROL=false
+WANT_SCENARIO=false
 case "$ONLY" in
-  all) WANT_SCHEDULER=true; WANT_BRIDGE=true; WANT_CONTROL=true ;;
+  all) WANT_SCHEDULER=true; WANT_BRIDGE=true; WANT_CONTROL=true; WANT_SCENARIO=true ;;
   *)
     IFS=',' read -r -a groups <<<"$ONLY"
     for group in "${groups[@]}"; do
       case "$group" in
         scheduler) WANT_SCHEDULER=true ;;
-        # The bridge unit owns ha-control as well: they share the HA executor
-        # code and are rolled together.
-        ha-bridge) WANT_BRIDGE=true; WANT_CONTROL=true ;;
+        # The bridge unit owns ha-control and ha-scenario as well: they share
+        # the HA executor code and are rolled together.
+        ha-bridge) WANT_BRIDGE=true; WANT_CONTROL=true; WANT_SCENARIO=true ;;
         ha-control) WANT_CONTROL=true ;;
         "") ;;
         *) echo "unknown --only group: $group" >&2; exit 2 ;;
@@ -145,7 +147,7 @@ case "$ONLY" in
     done
     ;;
 esac
-$WANT_SCHEDULER || $WANT_BRIDGE || $WANT_CONTROL || {
+$WANT_SCHEDULER || $WANT_BRIDGE || $WANT_CONTROL || $WANT_SCENARIO || {
   echo "--only selected no workload" >&2
   exit 2
 }
@@ -181,12 +183,14 @@ fi
 IMAGE_REF_SCHEDULER=
 IMAGE_REF_HA_BRIDGE=
 IMAGE_REF_HA_CONTROL=
+IMAGE_REF_HA_SCENARIO=
 IMAGE_REF_HOME_DEPLOY=
 set_image_ref() {
   case "$1" in
     scheduler) IMAGE_REF_SCHEDULER=$2 ;;
     ha-bridge) IMAGE_REF_HA_BRIDGE=$2 ;;
     ha-control) IMAGE_REF_HA_CONTROL=$2 ;;
+    ha-scenario) IMAGE_REF_HA_SCENARIO=$2 ;;
     home-deploy) IMAGE_REF_HOME_DEPLOY=$2 ;;
   esac
 }
@@ -195,6 +199,7 @@ get_image_ref() {
     scheduler) echo "$IMAGE_REF_SCHEDULER" ;;
     ha-bridge) echo "$IMAGE_REF_HA_BRIDGE" ;;
     ha-control) echo "$IMAGE_REF_HA_CONTROL" ;;
+    ha-scenario) echo "$IMAGE_REF_HA_SCENARIO" ;;
     home-deploy) echo "$IMAGE_REF_HOME_DEPLOY" ;;
   esac
 }
@@ -203,6 +208,7 @@ image_var() {
     scheduler) echo SCHEDULER_IMAGE ;;
     ha-bridge) echo HA_BRIDGE_IMAGE ;;
     ha-control) echo HA_CONTROL_IMAGE ;;
+    ha-scenario) echo HA_SCENARIO_IMAGE ;;
     home-deploy) echo PREFLIGHT_IMAGE ;;
   esac
 }
@@ -213,7 +219,7 @@ image_var() {
 # DEPLOY_NO_BUILD=1 the build is disabled entirely.
 if $BUILD; then
   build_needed=false
-  for image in scheduler ha-bridge ha-control home-deploy; do
+  for image in scheduler ha-bridge ha-control ha-scenario home-deploy; do
     var=$(image_var "$image")
     if [[ -n "${!var:-}" || -n "$(prebuilt_digest "$image")" ]]; then
       continue
@@ -322,18 +328,18 @@ TMP_IMAGES=$(mktemp -d)
 trap 'rm -rf "$TMP_IMAGES"' EXIT
 # Every image is always resolved: the manifests are rendered as one set and a
 # skipped workload (or the preflight Job) still needs a valid reference.
-for image in scheduler ha-bridge ha-control home-deploy; do
+for image in scheduler ha-bridge ha-control ha-scenario home-deploy; do
   resolve_image "$image"
 done
 # The rendered Job references the resolved preflight image by digest.
 PREFLIGHT_IMAGE=$(get_image_ref home-deploy)
 
 if [[ "$PUSH_ONLY" == 1 ]]; then
-  echo "push-only: $(get_image_ref scheduler) $(get_image_ref ha-bridge) $(get_image_ref ha-control) $(get_image_ref home-deploy)"
+  echo "push-only: $(get_image_ref scheduler) $(get_image_ref ha-bridge) $(get_image_ref ha-control) $(get_image_ref ha-scenario) $(get_image_ref home-deploy)"
   exit 0
 fi
 
-IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)$(get_image_ref home-deploy)"
+IMAGE_FINGERPRINT="$(get_image_ref scheduler)$(get_image_ref ha-bridge)$(get_image_ref ha-control)$(get_image_ref ha-scenario)$(get_image_ref home-deploy)"
 BUILD_ID="$(home_deploy build-id \
   --revision "$(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo nogit)" \
   --fingerprint "$IMAGE_FINGERPRINT")"
@@ -346,9 +352,11 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
   --set "SCHEDULER_IMAGE=$(get_image_ref scheduler)" \
   --set "HA_BRIDGE_IMAGE=$(get_image_ref ha-bridge)" \
   --set "HA_CONTROL_IMAGE=$(get_image_ref ha-control)" \
+  --set "HA_SCENARIO_IMAGE=$(get_image_ref ha-scenario)" \
   --set "PREFLIGHT_IMAGE=$PREFLIGHT_IMAGE" \
   "$DIR/manifests/scheduler.yaml" "$DIR/manifests/bridge.yaml" \
   "$DIR/manifests/control.yaml" "$DIR/manifests/control-service.yaml" \
+  "$DIR/manifests/scenario.yaml" \
   "$DIR/manifests/preflight-job.yaml"
 
 # --- rollback bookkeeping ---------------------------------------------------
@@ -488,6 +496,28 @@ if $WANT_CONTROL; then
   fi
 fi
 
+if $WANT_SCENARIO; then
+  SCENARIO_EXISTS=false
+  if $KUBECTL -n "$NS" get deployment ha-scenario >/dev/null 2>&1; then
+    SCENARIO_EXISTS=true
+  fi
+
+  record_before ha-scenario
+  if ! $SCENARIO_EXISTS; then
+    echo "== first install: applying ha-scenario (1 replica, execute)"
+    $KUBECTL apply -f "$RENDER_DIR/scenario.yaml"
+  else
+    echo "== existing ha-scenario: preserving replicas, converging build $BUILD_ID"
+    converge_deployment ha-scenario "$RENDER_DIR/scenario.yaml" --preserve-env --preserve-replicas
+  fi
+  mark_applied ha-scenario
+  if [[ "$($KUBECTL -n "$NS" get deployment ha-scenario -o jsonpath='{.spec.replicas}')" != "0" ]]; then
+    $KUBECTL -n "$NS" rollout status deployment/ha-scenario --timeout=600s
+    $KUBECTL -n "$NS" exec deployment/ha-scenario -- /usr/local/bin/ha-scenario -healthcheck
+    echo "ha-scenario authenticated readiness: ok"
+  fi
+fi
+
 if $WANT_BRIDGE; then
   BRIDGE_EXISTS=false
   if $KUBECTL -n "$NS" get deployment ha-bridge >/dev/null 2>&1; then
@@ -566,5 +596,6 @@ echo
 echo "== pods"
 $KUBECTL -n "$NS" get pods -l app.kubernetes.io/name=scheduler -o wide
 $KUBECTL -n "$NS" get pods -l app.kubernetes.io/name=ha-bridge -o wide
+$KUBECTL -n "$NS" get pods -l app.kubernetes.io/name=ha-scenario -o wide
 echo
 echo "build: $BUILD_ID  mode: $MODE  only: $ONLY"

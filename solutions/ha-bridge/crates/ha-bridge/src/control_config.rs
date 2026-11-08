@@ -265,7 +265,7 @@ fn require_token(
 }
 
 /// `^[a-z][a-z0-9._-]{0,31}$`
-fn valid_queue(value: &str) -> bool {
+pub(crate) fn valid_queue(value: &str) -> bool {
     let mut bytes = value.bytes();
     let Some(first) = bytes.next() else {
         return false;
@@ -278,7 +278,7 @@ fn valid_queue(value: &str) -> bool {
 }
 
 /// `^[A-Za-z0-9._-]{1,64}$`
-fn valid_consumer(value: &str) -> bool {
+pub(crate) fn valid_consumer(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 64
         && value

@@ -124,8 +124,8 @@ curl -sS http://127.0.0.1:8098/home.v1.SchedulerService/CreateSchedule \
   Generic `EnqueueTask` — в `tasks` (default) или указанную очередь
   (`home.control` — в `control`). Executor арендует только свою очередь;
   `queue=""` — admin/all.
-  Scenario-события изолированы в очереди `scenario` и не попадают в home,
-  пока scenario executor не реализован.
+  Scenario-события изолированы в очереди `scenario` (`scenario.fire` /
+  `scenario.stop`) и не попадают в home; их арендует только `ha-scenario`.
 - **Звук:** сервис никогда не утверждает, что будильник прозвучал.
   `GetStatus` отдаёт server clock, backlog, known queues, consumer liveness,
   `ready` и last tick error. Audibility подтверждает только executor.
@@ -171,12 +171,15 @@ Android использует ручной protobuf-JSON маппинг
   `alarm_start`, reminder/timer → announce script, `STOP` → `alarm_stop`.
 - **ha-control** отдаёт `GET /v1/catalog` из live HA (сценарии — скрипты с
   меткой `scenario`) и исполняет только `home.control` из очереди `control`.
+- **ha-scenario** арендует очередь `scenario`: условия
+  (`entity_state`/`time_window`) и шаги `catalog`/`speak`/`delay` из
+  определения scheduler; STOP отменяет выполняющийся `delay`.
 
 ## Что не реализовано
 
 - streaming `WatchEvents`;
 - recurring generic tasks и event-trigger rules;
-- scenario executor (`SCHEDULE_KIND_SCENARIO` зарезервирован);
+- event-триггеры сценариев (определения уже поддерживают только manual/time);
 - группа `scheduler.*` в `mcp-gateway`;
 - Kafka/external broker (SQLite inbox/outbox достаточен для одного сервиса;
   broker можно добавить позже без изменения контракта).
