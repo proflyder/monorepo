@@ -26,15 +26,15 @@ bazel_dep(name = "platforms", version = "1.1.0")
 
 # Direct dep only to name its build setting in .bazelrc (`@protobuf//...`);
 # same version the graph already resolves.
-bazel_dep(name = "protobuf", version = "33.4")
+bazel_dep(name = "protobuf", version = "36.2")
 
 # Container images for the home K3s services. Images are assembled
 # hermetically (no Docker daemon, no RUN steps) from the Rust service binaries
 # and a digest-pinned distroless base; the same targets build on macOS and on
 # the GitHub runner.
 bazel_dep(name = "rules_oci", version = "2.3.0")
-bazel_dep(name = "rules_pkg", version = "1.1.0")
-bazel_dep(name = "aspect_bazel_lib", version = "2.22.0")
+bazel_dep(name = "rules_pkg", version = "1.3.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
@@ -237,7 +237,7 @@ http_archive(
 # Hermetic zig 0.14.1 cc toolchains for the two station ABIs and the Windows
 # provider. Only these target-constrained toolchains are registered, so host
 # builds keep using the host compiler. See platform/bazel/zig/.
-bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "rules_cc", version = "0.2.28")
 
 zig_sdk_repository = use_repo_rule("//platform/bazel/zig:repositories.bzl", "zig_sdk_repository")
 
@@ -280,13 +280,13 @@ use_repo(crate, "crates")
 # The Android SDK is discovered from ANDROID_HOME. It is deliberately not
 # committed as a machine-specific path; see projects/mobile/android/README.md.
 # ---------------------------------------------------------------------------
-bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_android", version = "0.8.1")
 
 # Direct dep only to load `JavaInfo` in platform/android/lint.bzl; it is the
 # version rules_android already resolves.
-bazel_dep(name = "rules_java", version = "9.3.0")
-bazel_dep(name = "rules_kotlin", version = "2.4.20")
-bazel_dep(name = "rules_jvm_external", version = "7.1")
+bazel_dep(name = "rules_java", version = "9.9.0")
+bazel_dep(name = "rules_kotlin", version = "2.4.21")
+bazel_dep(name = "rules_jvm_external", version = "7.2")
 
 # The coursier lock file normally lists every configured repository for every
 # artifact, so a cold build probes Google Maven for Central-only artifacts and
@@ -300,7 +300,7 @@ single_version_override(
 
 # Packaging gate (platform/android) is a shell test; Bazel 9 no longer ships
 # native sh_test.
-bazel_dep(name = "rules_shell", version = "0.6.1")
+bazel_dep(name = "rules_shell", version = "0.8.0")
 
 remote_android_extensions = use_extension(
     "@rules_android//bzlmod_extensions:android_extensions.bzl",

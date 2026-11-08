@@ -32,7 +32,12 @@ build:android --define=home_version_name=0.1.0
 # platform is defined in //platform/android:android_arm64; its C++ toolchain
 # comes from the NDK registered in MODULE.bazel (rules_android_ndk).
 # //projects/mobile/android/app:apk_abi_test guards the packaged ABIs.
-build:android --android_platforms=//platform/android:android_arm64
+#
+# rules_android 0.8 aliases --android_platforms to a Starlark string_list flag
+# whose values are converted with Label() inside the rules_android repository,
+# so a repo-relative `//platform/...` would resolve to @rules_android. The
+# canonical main-repo prefix `@@//` keeps the label pointing at this workspace.
+build:android --android_platforms=@@//platform/android:android_arm64
 
 # Android builder tools and rules_android sources use Java 17 language
 # features (records, sealed types), and the Bazel tools that package them run
