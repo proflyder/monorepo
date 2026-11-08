@@ -7,11 +7,12 @@ API/implementation modules, and a typed router.
 
 ## Limits
 
-Debug-signed only, with a stable personal key so upgrades keep app data and the
-encrypted token (see [Signing](#signing)). No FCM messaging, phone-side
-background execution, offline cache, or generic task UI. Current device
-acceptance and remaining work are tracked in [STATE](../../../docs/STATE.md) and
-[PENDING](../../../docs/PENDING.md).
+Debug builds only. App Distribution builds are release-signed with a stable
+personal key so upgrades keep app data and the encrypted token (see
+[Signing](#signing)); the APK Bazel produces is an intermediate. No FCM
+messaging, phone-side background execution, offline cache, or generic task UI.
+Current device acceptance and remaining work are tracked in
+[STATE](../../../docs/STATE.md) and [PENDING](../../../docs/PENDING.md).
 
 ## Features
 
@@ -225,51 +226,132 @@ in DEX and that the deploy jar has no unresolved non-platform references. The
 gate also self-tests that a referenced-but-undefined class is rejected. Tests do
 not replace interactive device acceptance.
 
+`platform/android/sign-release_test.sh` self-tests release signing without any
+real key: it creates a throwaway keystore with a strong password, takes a small
+APK (an existing Bazel build or a minimal APK built with `aapt2`), signs it and
+checks the certificate, v2/v3 signatures and the fail-closed behaviour. It runs
+in the `android / android-app` CI unit and skips only when the Android
+build-tools are missing.
+
 ## Signing
 
-Local builds are signed with a stable personal debug key so that reinstalling
-over an existing build keeps app data, including the Keystore-encrypted bearer
-token. The key is **private and never committed**: it lives in
-`secrets/android/home-debug.keystore`, which is outside Bazel's workspace
-coverage (`secrets/` is in `.bazelignore`) and reached through the gitignored
-symlink `platform/android/keys/home-debug.keystore`. Back the file up; losing it
-means one uninstall and re-entering the token.
+Two signatures exist and they play different roles.
 
-Create the key once (password and alias are fixed by the Bazel signing flow):
+rules_android can only sign a debug APK: it invokes the signer with
+`--ks <file> --ks-pass pass:android` and no alias, so any key inside Bazel's
+reach would need that fixed, weak password. The release key is therefore kept
+**outside Bazel** and applied to the final artifact by
+`platform/android/sign-release.sh`; the APK Bazel produces is an intermediate.
+
+### Release signing (App Distribution)
+
+`platform/android/sign-release.sh <in.apk> <out.apk>` aligns the APK with
+`zipalign -P 16 -f 4` (16 KiB pages), signs it with `apksigner` (v2 and v3),
+then verifies the output and **fails closed** unless the signer certificate
+SHA-256 equals the expected value. A missing or different expectation is an
+error, so an APK signed by another key can never be published.
+
+| Variable | Meaning |
+| --- | --- |
+| `SIGNING_KEYSTORE` | PKCS12 keystore file, outside Git (required) |
+| `SIGNING_STORE_PASSWORD_FILE` / `SIGNING_STORE_PASSWORD` | keystore password (prefer the file) |
+| `SIGNING_KEY_PASSWORD_FILE` / `SIGNING_KEY_PASSWORD` | key password; defaults to the store password (PKCS12 uses one password) |
+| `SIGNING_KEY_ALIAS` | key alias; when unset, the only alias in the keystore is used, and several aliases are refused |
+| `SIGNING_CERT_SHA256` | expected signer certificate digest, hex, colons optional (required) |
+| `ANDROID_HOME` / `ANDROID_BUILD_TOOLS` | SDK root / build-tools (default `$ANDROID_HOME/build-tools/36.0.0`) |
+
+Passwords reach `apksigner` and `keytool` only as `file:` references to private
+temporary files. They are never in argv, never exported to later steps and
+never logged.
+
+The key lives in `secrets/android/home-release.keystore` (gitignored, outside
+Bazel's workspace), restored from OpenBao `ci/android-distribute` on demand:
 
 ```sh
-keytool -genkeypair \
-  -keystore secrets/android/home-debug.keystore \
-  -storetype PKCS12 -storepass android -keypass android \
-  -alias androiddebugkey -keyalg RSA -keysize 4096 -validity 10950 \
-  -dname "CN=Home Debug"
+mise run secrets:file android/home-release.keystore
+mise run secrets:file android/home-release.store.password
+mise run secrets:file android/home-release.key.password
+mise run secrets:file android/home-release.alias
+mise run secrets:file android/home-release.cert.sha256
+# ... build/sign ...
+mise run secrets:clean
+```
+
+`distribute.sh` uses those paths by default; the `SIGNING_*` environment
+variables override them (CI materialises them under `$RUNNER_TEMP`).
+
+**One-time migration from the old debug-password key.** The certificate must
+stay the same, otherwise every install needs an uninstall and loses its
+encrypted token. Rewrap the existing key with a strong password instead of
+generating a new one:
+
+```sh
+# 1. Choose a strong password and keep it out of shell history.
+printf '%s' 'REPLACE-WITH-STRONG-PASSWORD' > secrets/android/home-release.store.password
+cp secrets/android/home-release.store.password secrets/android/home-release.key.password
+chmod 600 secrets/android/home-release.*.password
+
+# 2. Rewrap the existing personal key (the old password only appears in a file).
+printf 'android' > /tmp/old-debug.password
+keytool -importkeystore \
+  -srckeystore secrets/android/home-debug.keystore -srcstorepass:file /tmp/old-debug.password \
+  -destkeystore secrets/android/home-release.keystore \
+  -deststoretype PKCS12 -deststorepass:file secrets/android/home-release.store.password \
+  -destkeypass:file secrets/android/home-release.key.password \
+  -srcalias androiddebugkey -destalias home-release \
+  -noprompt
+rm -f /tmp/old-debug.password
+
+# 3. Record the alias and the certificate digest.
+printf 'home-release' > secrets/android/home-release.alias
+keytool -list -v -keystore secrets/android/home-release.keystore \
+  -storepass:file secrets/android/home-release.store.password \
+  | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]' \
+  > secrets/android/home-release.cert.sha256
+
+# 4. Self-test the whole path with a throwaway key.
+platform/android/sign-release_test.sh
+```
+
+Then store the five values under `ci/android-distribute` in OpenBao (field names
+in [SECRETS](../../../docs/SECRETS.md) and the OpenBao README), and delete the
+local password files with `mise run secrets:clean` when done. The old
+`keystore_b64` / `keystore_password` fields are left untouched as a backup but
+are no longer read by CI.
+
+### Bazel debug signing (local only)
+
+Local `bazel build //projects/mobile/android:app` still produces an APK signed
+with the personal key when `platform/android/keys/home-debug.keystore` exists,
+so `adb install -r` keeps app data. That file is a **Bazel-only copy** of the
+same key with the password `android` (the only password rules_android can
+send). It is never distributed and never present in CI. Without it the genrule
+falls back to the public `@rules_android` debug keystore and prints a warning.
+
+```sh
+keytool -importkeystore \
+  -srckeystore secrets/android/home-release.keystore \
+  -srcstorepass:file secrets/android/home-release.store.password \
+  -destkeystore secrets/android/home-debug.keystore \
+  -deststoretype PKCS12 -deststorepass android -destkeypass android \
+  -srcalias home-release -destalias androiddebugkey -noprompt
 
 mkdir -p platform/android/keys
 ln -s "$PWD/secrets/android/home-debug.keystore" \
   platform/android/keys/home-debug.keystore
 ```
 
-`//platform/android:home_debug_keystore` copies that file when it exists and
-otherwise falls back to the public `@rules_android` debug keystore, printing a
-warning to stderr, so CI and clean checkouts still build. `android_binary` is
-invoked with `--ks <file> --ks-pass pass:android` and no alias, so the keystore
-must hold exactly one entry with password `android` (the command above does).
-
-Verify the signer of the APK you are about to install:
+Verify the signer of any APK before installing or publishing it:
 
 ```sh
-"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs \
-  bazel-bin/projects/mobile/android/app/app.apk
+"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs <apk>
 # Signer #1 certificate SHA-256 digest:
 # 88ef5d61a365afbf15d290168d4ee7fd20a80be13ea4d4667ef1e521a2a504ad
 ```
 
-That SHA-256 is the personal key's. The fallback key has a different digest, so
-**install only builds signed with the personal key**: local builds, and CI
-builds from `android-distribute` (which materialises the same key from
-OpenBao). Other machines' builds without the key use the public fallback and
-will not update in place. Moving from the old debug key to this one requires
-one uninstall (app data, including the token, is cleared).
+That digest is the personal key's. Both the local Bazel APK and the
+release-signed distribution APK carry it, so they update each other in place.
+Builds without the key (public fallback) cannot update an existing install.
 
 ## Firebase (Crashlytics and Remote Config)
 
@@ -387,34 +469,40 @@ still runs the `android` checks but does not publish a build. The job:
   `secret/ci/android-distribute` from OpenBao through the `android-distribute`
   JWT role, whose claims are pinned to pull-request merge refs of `ci.yml`
   (`refs/pull/*/merge`);
-- materialises the keystore and `google-services.json` into
-  `platform/android/keys/` (mode 600) and the Firebase service account into
-  `$RUNNER_TEMP/ci/firebase-sa.json`, disconnects the VPN, then runs:
+- materialises `google-services.json` into `platform/android/keys/` (mode 600)
+  and the release key, its password files, alias, expected certificate digest
+  and the Firebase service account into `$RUNNER_TEMP/ci` (mode 600/700);
+  passwords stay in files and never enter the environment of later steps,
+  disconnects the VPN, then runs:
 
 ```sh
 projects/mobile/android/distribute.sh --ci
 ```
 
+- builds the APK with Bazel (debug-signed intermediate, no personal key in CI),
+  signs the final APK with `platform/android/sign-release.sh` and uploads that
+  artifact;
 - is deliberately **not** part of `ci-ok`: a failed upload is visible on the PR
   and in the run, but it does not block the merge. A newer push to the same PR
   cancels the upload in flight.
 
 `--ci` formats release notes as `PR #<number>: <title>`, the short head SHA and
 the workflow run URL (number and title arrive as environment variables, never
-as script source). The APK, the signer check and the `admins` tester group are
-identical to a local run.
+as script source). The signing material, the certificate check and the
+`admins` tester group are identical to a local run.
 
 Local:
 
 ```sh
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 projects/mobile/android/distribute.sh --dry-run   # print the command, no auth
-projects/mobile/android/distribute.sh             # build + upload
+projects/mobile/android/distribute.sh             # build, sign + upload
 ```
 
-The script requires both private links (`home-debug.keystore` and
-`google-services.json`), refuses to upload unless the APK signer is the
-personal key `88ef5d61…04ad`, and reads the Firebase app id from the JSON.
+The script requires the release signing files (restore them with
+`mise run secrets:file`, see [Signing](#signing)) and `google-services.json`,
+and refuses to upload unless `sign-release.sh` verified the personal
+certificate `88ef5d61…04ad`. It reads the Firebase app id from the JSON.
 Authentication uses an existing `npx firebase-tools@15.34.2 login` session or
 `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account JSON under
 `secrets/android/`; credentials are never printed.
@@ -495,7 +583,9 @@ Scenario definitions use `home.v1.ScenarioService`: `ListScenarios`,
   `--define`; `distribute.sh` overrides them for App Distribution.
 - minSdk 26, target/compile SDK 36, Kotlin/JVM target 17.
 - Only `android.permission.INTERNET`.
-- Debug-signed with the personal debug key when present; debug APKs are not
+- Bazel output is debug-signed (personal key when present, public fallback
+  otherwise); App Distribution APKs are release-signed by
+  `sign-release.sh` with the same personal certificate. APKs are not
   byte-reproducible. See [Signing](#signing).
 - Browsable diagnostics (logcat tag `HomeHttp` + Chucker) are gated by the
   `home_network_inspection` bool and should be disabled in release variants.

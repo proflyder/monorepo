@@ -133,6 +133,10 @@ jobs:
           fi
           sdkmanager --install "${packages[@]}"
 
+      - name: Release signing self-test
+        if: inputs.unit == 'android-app'
+        run: platform/android/sign-release_test.sh
+
       - name: Select affected targets
         id: select
         if: inputs.precise_targets && inputs.base_sha != ''
