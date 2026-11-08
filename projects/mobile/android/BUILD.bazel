@@ -39,6 +39,8 @@ test_suite(
         "//projects/mobile/android/features/control/impl:profile_row_test",
         "//projects/mobile/android/features/control/impl:speak_use_case_test",
         "//projects/mobile/android/features/reminders/api:api_test",
+        "//projects/mobile/android/features/scenarios/api:api_test",
+        "//projects/mobile/android/features/scenarios/impl:scenario_use_cases_test",
         "//projects/mobile/android/app:main_activity_smoke_test",
         "//projects/mobile/android/core/navigation:navigation_test",
         # Bazel build tools live under platform/android and are routed to the

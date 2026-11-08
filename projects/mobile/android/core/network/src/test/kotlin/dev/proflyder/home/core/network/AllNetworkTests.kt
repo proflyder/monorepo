@@ -8,5 +8,7 @@ import org.junit.runners.Suite
     ConnectSchedulerClientTest::class,
     SchedulerJsonTest::class,
     ControlCatalogClientTest::class,
+    ConnectScenarioClientTest::class,
+    ScenarioJsonTest::class,
 )
 class AllNetworkTests

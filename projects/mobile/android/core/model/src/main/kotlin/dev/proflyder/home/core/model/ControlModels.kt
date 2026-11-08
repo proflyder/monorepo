@@ -56,6 +56,8 @@ data class LightControls(
     val saturation: Int = 0,
     /** Active mode: "color_temp", "color" or empty. Live values are valid for that mode only. */
     val mode: String = "",
+    /** `effect_list` reported by Home Assistant; empty when the light has no effects. */
+    val effects: List<String> = emptyList(),
 )
 
 /** A light adjustment; null fields are left as they are. Color is hue + saturation together. */
