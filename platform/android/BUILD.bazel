@@ -69,6 +69,7 @@ exports_files([
     "lint.bzl",
     # Reusable artifact checker wrapper; the owning project declares the sh_test
     # and runs //platform/android/tools/apk_runtime_closure inside it.
+    "apk_abi_test.sh",
     "apk_runtime_closure.sh",
 ])
 
@@ -81,4 +82,16 @@ filegroup(
         ["keys/google-services.json"],
         allow_empty = True,
     ),
+)
+
+# Target device ABI for the Home Android app. Without --android_platforms,
+# rules_android builds native libraries for the host CPU (x86_64 on CI), so an
+# APK with JNI code (libwebrtc) fails on phones with
+# INSTALL_FAILED_NO_MATCHING_ABIS. Owner devices are arm64-v8a.
+platform(
+    name = "android_arm64",
+    constraint_values = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
 )

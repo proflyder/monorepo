@@ -85,6 +85,14 @@ sh_test(
     ],
 )
 
+# The APK must carry phone (arm64-v8a) native libraries, not host-CPU ones.
+sh_test(
+    name = "apk_abi_test",
+    srcs = ["//platform/android:apk_abi_test.sh"],
+    args = ["$(location :app.apk)"],
+    data = [":app.apk"],
+)
+
 # Robolectric resolves SDK 35 to this pinned preinstrumented jar. The staged
 # properties file avoids any runtime Maven download; rules_android turns it into
 # -Drobolectric-deps.properties for the test JVM.
