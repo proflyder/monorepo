@@ -1457,6 +1457,12 @@ async fn an_incoming_call_quiets_the_station_and_the_end_restores_it() {
             .any(|c| c.starts_with("player.play Announce") && c.contains("timer")),
         "{calls:?}"
     );
+    // Ответ: сигнал вызова гасится, а не доигрывает поверх разговора.
+    f.c.on_call_event(Some(pulsar_call::CallEvent::Active));
+    assert!(
+        f.calls().contains(&"player.stop Announce".to_owned()),
+        "сигнал вызова не остановлен"
+    );
     // Игрок на паузе (настоящий FakePlayer состояние не меняет — моделируем вручную).
     f.music.set(PlayState::Paused);
 
