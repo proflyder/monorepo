@@ -10,6 +10,8 @@ LINUX = ["@platforms//os:linux"]
 # crates are not linted (transitive = False), matching cargo.
 _CRATES = [
     "//projects/station/pulsar/satellite/crates/pulsar:pulsar",
+    "//projects/station/pulsar/satellite/crates/pulsar-call:pulsar_call",
+    "//projects/station/pulsar/satellite/crates/pulsar-call:pulsar_call_unit_tests",
     "//projects/station/pulsar/satellite/crates/pulsar:pulsar_unit_tests",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-probes:alsa_abi_probe",

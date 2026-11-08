@@ -109,6 +109,10 @@ pub struct PcmRequest {
     pub rate: u32,
     /// true: the rate must be supported as is; false: the nearest rate is accepted.
     pub rate_exact: bool,
+    /// Requested period in frames; `None` keeps the device default (dmix's own period).
+    pub period_frames: Option<u64>,
+    /// Requested buffer in frames; `None` keeps the device default.
+    pub buffer_frames: Option<u64>,
 }
 
 /// What the device reported after [`PcmDevice::open`].
@@ -200,8 +204,8 @@ impl PcmDevice for AlsaDevice {
                 channels: req.channels,
                 rate: req.rate,
                 rate_exact: req.rate_exact,
-                period_frames: None,
-                buffer_frames: None,
+                period_frames: req.period_frames,
+                buffer_frames: req.buffer_frames,
             })
             .map_err(|e| PcmError::from_alsa(Step::HwParams, e))?;
         let period = hw.period_frames.max(1);
@@ -367,6 +371,8 @@ mod tests {
             channels: 2,
             rate: 48000,
             rate_exact: true,
+            period_frames: None,
+            buffer_frames: None,
         });
         d
     }

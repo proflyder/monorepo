@@ -21,7 +21,8 @@ use pulsar_update::{Release, RequestId};
 use tokio::sync::mpsc::unbounded_channel;
 
 use super::ports::{
-    Arbiter, Clock, Display, Frontend, HaLink, Leds, Mdns, Mixer, Player, Radio, Sendspin, Updater,
+    Arbiter, Call, Clock, Display, Frontend, HaLink, Leds, Mdns, Mixer, Player, Radio, Sendspin,
+    Updater,
 };
 use super::wake::ClaimToken;
 use super::{Controller, Pending, Tk, wiring};
@@ -40,6 +41,36 @@ impl Rec {
 
     fn take(&self) -> Vec<String> {
         std::mem::take(&mut *self.calls.borrow_mut())
+    }
+}
+
+/// Звонок: фаза и мут, как у настоящего handle; вызовы пишутся в общий журнал.
+struct FakeCall {
+    rec: Rc<Rec>,
+    phase: Rc<Cell<pulsar_call::CallPhase>>,
+    muted: Rc<Cell<bool>>,
+}
+
+impl Call for FakeCall {
+    fn phase(&self) -> pulsar_call::CallPhase {
+        self.phase.get()
+    }
+
+    fn muted(&self) -> bool {
+        self.muted.get()
+    }
+
+    fn set_muted(&self, muted: bool) {
+        self.muted.set(muted);
+        self.rec.push(format!("call.set_muted {muted}"));
+    }
+
+    fn hangup(&self) {
+        self.rec.push("call.hangup".into());
+    }
+
+    fn push_uplink(&self, pcm: &[i16]) {
+        self.rec.push(format!("call.uplink {}", pcm.len()));
     }
 }
 
@@ -540,6 +571,8 @@ struct Fixture {
     streaming: Rc<Cell<bool>>,
     subscribed: Rc<Cell<bool>>,
     arb_ok: Rc<Cell<bool>>,
+    call_phase: Rc<Cell<pulsar_call::CallPhase>>,
+    call_muted: Rc<Cell<bool>>,
 }
 
 impl Drop for Fixture {
@@ -582,6 +615,8 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
     let subscribed = Rc::new(Cell::new(false));
     let arb_ok = Rc::new(Cell::new(false));
     let arb_next = Rc::new(Cell::new(0));
+    let call_phase = Rc::new(Cell::new(pulsar_call::CallPhase::Idle));
+    let call_muted = Rc::new(Cell::new(false));
     let model = pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap();
     let store = Store::load(dir.join("state.conf"));
     let wired = wiring::Wired {
@@ -616,6 +651,11 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
                 subscribed: subscribed.clone(),
                 run: Cell::new(0),
             }),
+            call: Box::new(FakeCall {
+                rec: rec.clone(),
+                phase: call_phase.clone(),
+                muted: call_muted.clone(),
+            }),
         },
         rx: super::Rx {
             api: Some(unbounded_channel().1),
@@ -627,6 +667,7 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
             sendspin: Some(unbounded_channel().1),
             zigbee: None,
             updater: Some(unbounded_channel().1),
+            call: Some(unbounded_channel().1),
         },
         term: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).unwrap(),
         int: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).unwrap(),
@@ -646,6 +687,8 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
         streaming,
         subscribed,
         arb_ok,
+        call_phase,
+        call_muted,
     }
 }
 
@@ -1373,4 +1416,120 @@ async fn dry_run_switch_reaches_the_frontend() {
         "{calls:?}"
     );
     assert!(f.c.st.wake_dry_run);
+}
+
+// ---------------- звонок ----------------
+
+#[tokio::test]
+async fn an_incoming_call_quiets_the_station_and_the_end_restores_it() {
+    let mut f = controller();
+    f.music.set(PlayState::Playing);
+    f.streaming.set(true);
+    f.calls();
+    f.c.on_call_event(Some(pulsar_call::CallEvent::Incoming {
+        caller: "phone".into(),
+    }));
+    assert!(f.c.in_call());
+    let calls = f.calls();
+    // Музыка и Sendspin на паузе, спотеры и стриминг переключены, кольцо показывает звонок.
+    assert!(
+        calls.contains(&"player.pause Music".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"sendspin.transport Pause".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"frontend.detection false".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"frontend.streaming true".to_owned()),
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"leds.ui Call".to_owned()), "{calls:?}");
+    assert!(calls.contains(&"clock.ui Call".to_owned()), "{calls:?}");
+    // Короткий сигнал входящего на ANNOUNCE.
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("player.play Announce") && c.contains("timer")),
+        "{calls:?}"
+    );
+    // Игрок на паузе (настоящий FakePlayer состояние не меняет — моделируем вручную).
+    f.music.set(PlayState::Paused);
+
+    // Завершение: всё как было.
+    f.c.on_call_event(Some(pulsar_call::CallEvent::Ended));
+    assert!(!f.c.in_call());
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"frontend.streaming false".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"frontend.detection true".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"player.resume Music".to_owned()),
+        "{calls:?}"
+    );
+    assert!(calls.contains(&"leds.ui Idle".to_owned()), "{calls:?}");
+}
+
+#[tokio::test]
+async fn the_action_button_hangs_up_a_call() {
+    let mut f = controller();
+    f.c.on_call_event(Some(pulsar_call::CallEvent::Incoming {
+        caller: "phone".into(),
+    }));
+    f.call_phase.set(pulsar_call::CallPhase::Active);
+    f.calls();
+    f.c.on_input(pulsar_hw::InputEvent::Button(
+        pulsar_hw::Button::Action,
+        pulsar_hw::Press::Short,
+    ));
+    let calls = f.calls();
+    assert!(calls.contains(&"call.hangup".to_owned()), "{calls:?}");
+    // Кнопка не открывает обычное действие контроллера во время звонка.
+    assert!(
+        !calls.iter().any(|c| c.starts_with("ha.event")),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn muting_the_microphone_during_a_call_only_silences_the_uplink() {
+    let mut f = controller();
+    f.c.on_call_event(Some(pulsar_call::CallEvent::Incoming {
+        caller: "phone".into(),
+    }));
+    f.call_phase.set(pulsar_call::CallPhase::Active);
+    f.calls();
+    f.c.on_input(pulsar_hw::InputEvent::Mute(true));
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"call.set_muted true".to_owned()),
+        "{calls:?}"
+    );
+    assert!(f.call_muted.get(), "uplink mute must reach the call handle");
+    // Кольцо показывает мут, но звонок продолжается.
+    assert!(f.c.in_call());
+    assert!(!calls.iter().any(|c| c == "call.hangup"), "{calls:?}");
+}
+
+#[tokio::test]
+async fn clean_vqe_audio_goes_to_the_uplink_during_a_call() {
+    let mut f = controller();
+    f.c.on_call_event(Some(pulsar_call::CallEvent::Incoming {
+        caller: "phone".into(),
+    }));
+    f.calls();
+    f.c.on_frontend(pulsar_audio::FrontendEvent::Audio(vec![1; 512]));
+    let calls = f.calls();
+    assert!(calls.contains(&"call.uplink 512".to_owned()), "{calls:?}");
+    // Во время звонка это не HA и не wake-пре-ролл.
+    assert!(!calls.contains(&"ha.audio".to_owned()), "{calls:?}");
 }

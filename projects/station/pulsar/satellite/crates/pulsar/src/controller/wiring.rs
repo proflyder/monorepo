@@ -8,9 +8,11 @@
 //! `LocalSet` и потоков не создаёт).
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use pulsar_arbiter::{ArbiterEvent, ArbiterHandle};
 use pulsar_audio::{FrontendEvent, FrontendHandle};
+use pulsar_call::{CallConfig, CallEvent, CallHandle, Downlink};
 use pulsar_clock::ClockHandle;
 use pulsar_esphome::{ApiConfig, ApiEvent, ApiHandle, DeviceIdentity, WakeWordInfo};
 use pulsar_hw::{InputEvent, InputHandle, LedsHandle};
@@ -476,6 +478,40 @@ impl Boot {
     }
 }
 
+/// Вывод голоса собеседника: отдельный PCM-канал `Call` с малым буфером.
+struct CallSink(pulsar_playback::CallOut);
+
+impl Downlink for CallSink {
+    fn write(&self, pcm: &[i16]) {
+        self.0.write(pcm);
+    }
+
+    fn flush(&self) {
+        self.0.flush();
+    }
+}
+
+/// Звонок: URL и токен из [`pulsar_call::CALL_DIR`]. Без них модуль выключен и станция
+/// остаётся обычной колонкой.
+fn start_call(model: &'static DeviceProfile) -> (CallHandle, UnboundedReceiver<CallEvent>) {
+    let config = match CallConfig::load_dir(Path::new(pulsar_call::CALL_DIR)) {
+        Ok(config) => config,
+        Err(e) => {
+            warn!("call: {e}");
+            None
+        }
+    };
+    let downlink = match (&config, pulsar_media::call_output(&model.audio.playback)) {
+        (Some(_), Some(out)) => Some(Arc::new(CallSink(out)) as Arc<dyn Downlink>),
+        (Some(_), None) => {
+            warn!("call: playback channel unavailable, call disabled");
+            return pulsar_call::spawn(None, None);
+        }
+        (None, _) => None,
+    };
+    pulsar_call::spawn(config, downlink)
+}
+
 /// Everything `Controller` needs, built once the services are up.
 pub struct Wired {
     pub deps: super::ports::Deps,
@@ -502,6 +538,7 @@ pub fn wire(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Wired,
     let (updater, updater_rx) = boot.start_updater();
     let (input, input_rx) = boot.start_input();
     let (frontend, frontend_rx) = boot.start_frontend();
+    let (call, call_rx) = start_call(model);
     let sendspin = boot.start_sendspin();
     let mdns = boot.advertise(&api, sendspin.is_some());
     let radio = boot.start_radio(&updater, mdns.as_ref());
@@ -540,6 +577,7 @@ pub fn wire(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Wired,
             frontend: Box::new(frontend) as Box<dyn Frontend>,
             mdns: mdns.map(|m| Box::new(m) as Box<dyn Mdns>),
             ha: Box::new(api) as Box<dyn HaLink>,
+            call: Box::new(call) as Box<dyn super::ports::Call>,
         },
         rx: Rx {
             api: Some(api_rx),
@@ -551,6 +589,7 @@ pub fn wire(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Wired,
             sendspin: sendspin_rx,
             zigbee: radio_rx,
             updater: Some(updater_rx),
+            call: Some(call_rx),
         },
         term,
         int,

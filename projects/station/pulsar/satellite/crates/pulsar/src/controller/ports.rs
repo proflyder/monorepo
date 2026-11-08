@@ -168,6 +168,16 @@ pub trait Sendspin {
     fn goodbye_restart(&self);
 }
 
+/// Звонок на колонку (intercom): фаза и команды, без аудио.
+pub trait Call {
+    fn phase(&self) -> pulsar_call::CallPhase;
+    fn muted(&self) -> bool;
+    fn set_muted(&self, muted: bool);
+    fn hangup(&self);
+    /// Чанк очищенного VQE-потока 16 кГц.
+    fn push_uplink(&self, pcm: &[i16]);
+}
+
 /// mDNS-реклама.
 pub trait Mdns {
     fn set_txt(&self, service: &str, txt: Vec<String>);
@@ -606,6 +616,29 @@ pub struct Deps {
     pub frontend: Box<dyn Frontend>,
     pub mdns: Option<Box<dyn Mdns>>,
     pub ha: Box<dyn HaLink>,
+    pub call: Box<dyn Call>,
+}
+
+impl Call for pulsar_call::CallHandle {
+    fn phase(&self) -> pulsar_call::CallPhase {
+        Self::phase(self)
+    }
+
+    fn muted(&self) -> bool {
+        Self::muted(self)
+    }
+
+    fn set_muted(&self, muted: bool) {
+        Self::set_muted(self, muted);
+    }
+
+    fn hangup(&self) {
+        Self::hangup(self);
+    }
+
+    fn push_uplink(&self, pcm: &[i16]) {
+        Self::push_uplink(self, pcm);
+    }
 }
 
 #[cfg(test)]

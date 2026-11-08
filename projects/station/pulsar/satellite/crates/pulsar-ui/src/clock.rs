@@ -298,7 +298,7 @@ impl ClockLayers {
             UiState::Listening if self.voice_indication => Some(Anim::Listening),
             UiState::Thinking if self.voice_indication => Some(Anim::Thinking),
             UiState::Speaking if self.voice_indication => Some(Anim::Speaking),
-            UiState::TimerRing => Some(Anim::Ringing),
+            UiState::TimerRing | UiState::Call => Some(Anim::Ringing),
             _ => None,
         };
         if a == self.voice {

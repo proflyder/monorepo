@@ -6,6 +6,7 @@
 //! Everything the controller calls into is a port (`ports`); `wiring` starts the services and
 //! builds `Deps`. The controller itself knows nothing about paths, FFI or the start-up order.
 
+mod call;
 mod earcons;
 mod entities;
 mod logic;
@@ -21,6 +22,7 @@ use std::collections::HashMap;
 
 use pulsar_arbiter::ArbiterEvent;
 use pulsar_audio::{FrontendEvent, Outcome};
+use pulsar_call::CallEvent;
 use pulsar_clock::ClockMusicStyle;
 use pulsar_core::{ClockShot, Timers, UiState, now_ms};
 use pulsar_esphome::{ApiEvent, LightState};
@@ -188,6 +190,7 @@ struct Rx {
     sendspin: Option<UnboundedReceiver<SendspinEvent>>,
     zigbee: Option<UnboundedReceiver<ZigbeeEvent>>,
     updater: Option<UnboundedReceiver<UpdateEvent>>,
+    call: Option<UnboundedReceiver<CallEvent>>,
 }
 
 /// Next event of an optional channel; never ready without one.
@@ -211,6 +214,7 @@ enum Trigger {
     Sendspin(Option<SendspinEvent>),
     Zigbee(Option<ZigbeeEvent>),
     Updater(Option<UpdateEvent>),
+    Call(Option<CallEvent>),
     Lux(Option<f32>),
 }
 
@@ -251,6 +255,10 @@ pub struct Controller {
     /// Version being installed (for the messages of its outcome).
     install_version: String,
     sendspin_pairing_prompt: bool,
+    /// Идёт звонок: спотеры выключены, музыка на паузе.
+    call_active: bool,
+    /// Музыка/Sendspin играли до звонка и должны продолжить после.
+    call_paused_music: bool,
 }
 
 /// Uncalibrated energy heuristic: opt-in only, off unless explicitly enabled.
@@ -354,6 +362,8 @@ impl Controller {
             install_id: None,
             install_version: String::new(),
             sendspin_pairing_prompt: false,
+            call_active: false,
+            call_paused_music: false,
         };
         // The rest of the C++ start(), in its order: every call below only queues commands to
         // the services, which run once `run` is awaited.
@@ -404,6 +414,7 @@ impl Controller {
                 Trigger::Sendspin(ev) => self.on_sendspin_event(ev),
                 Trigger::Zigbee(ev) => self.on_zigbee_event(ev),
                 Trigger::Updater(ev) => self.on_updater_event(ev),
+                Trigger::Call(ev) => self.on_call_event(ev),
                 Trigger::Lux(ev) => self.on_lux_event(ev),
             }
         };
@@ -428,6 +439,7 @@ impl Controller {
             ev = recv(&mut self.rx.sendspin) => Trigger::Sendspin(ev),
             ev = recv(&mut self.rx.zigbee) => Trigger::Zigbee(ev),
             ev = recv(&mut self.rx.updater) => Trigger::Updater(ev),
+            ev = recv(&mut self.rx.call) => Trigger::Call(ev),
             lux = recv(&mut self.rx.lux) => Trigger::Lux(lux),
         }
     }
@@ -562,6 +574,10 @@ impl Controller {
 
     fn on_frontend(&mut self, ev: FrontendEvent) {
         match ev {
+            FrontendEvent::Wake { .. } if self.call_active => {
+                // Во время звонка спотеры выключены; позднее событие не открывает диалог.
+                self.deps.frontend.wake_handled();
+            }
             FrontendEvent::Wake {
                 phrase,
                 level_db,
@@ -575,7 +591,9 @@ impl Controller {
             }
             FrontendEvent::Command { word } => self.on_command(&word),
             FrontendEvent::Audio(pcm) => {
-                if self.session.is_listening() {
+                if self.call_active {
+                    self.deps.call.push_uplink(&pcm);
+                } else if self.session.is_listening() {
                     self.on_listening_audio(pcm);
                 } else {
                     // The request goes on with what was said right after the wake word.
@@ -624,6 +642,15 @@ impl Controller {
         self.st.mic_muted || self.hw_mic_muted
     }
 
+    /// Текущая фаза станции: звонок перекрывает диалог (спотеры на это время выключены).
+    fn phase(&self) -> logic::Phase {
+        if self.call_active {
+            logic::Phase::Call
+        } else {
+            self.session.phase()
+        }
+    }
+
     fn sendspin_streaming(&self) -> bool {
         self.deps.sendspin.as_ref().is_some_and(|ss| ss.streaming())
     }
@@ -660,13 +687,18 @@ impl Controller {
     fn update_ui(&mut self) {
         self.deps.display.leds.set_muted(self.mic_muted());
         self.update_commands();
+        // Мут колонки во время звонка глушит uplink; состояние шлём только при изменении.
+        if self.call_active && self.deps.call.muted() != self.mic_muted() {
+            self.deps.call.set_muted(self.mic_muted());
+        }
         let s = if self.timers_ha.ringing() {
             UiState::TimerRing
         } else {
-            match self.session.phase() {
+            match self.phase() {
                 logic::Phase::Listening => UiState::Listening,
                 logic::Phase::Processing => UiState::Thinking,
                 logic::Phase::Speaking => UiState::Speaking,
+                logic::Phase::Call => UiState::Call,
                 logic::Phase::Idle if self.wake.is_claiming() => UiState::Listening,
                 logic::Phase::Idle if self.session.announcing() => UiState::Speaking,
                 logic::Phase::Idle => UiState::Idle,

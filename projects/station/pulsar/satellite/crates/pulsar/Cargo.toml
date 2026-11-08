@@ -16,9 +16,11 @@ pulsar-core = { path = "../pulsar-core" }
 pulsar-esphome = { path = "../pulsar-esphome" }
 pulsar-hw = { path = "../pulsar-hw" }
 pulsar-arbiter = { path = "../pulsar-arbiter" }
+pulsar-call = { path = "../pulsar-call" }
 pulsar-mdns = { path = "../pulsar-mdns" }
 pulsar-media = { path = "../pulsar-media" }
 pulsar-model = { path = "../pulsar-model" }
+pulsar-playback = { path = "../pulsar-playback" }
 pulsar-sendspin = { path = "../pulsar-sendspin" }
 pulsar-update = { path = "../pulsar-update" }
 pulsar-zigbee = { path = "../pulsar-zigbee" }

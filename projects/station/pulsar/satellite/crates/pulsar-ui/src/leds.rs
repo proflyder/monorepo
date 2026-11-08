@@ -95,6 +95,7 @@ fn to_voice(s: UiState) -> fx::Voice {
         UiState::Thinking => fx::Voice::Thinking,
         UiState::Speaking => fx::Voice::Speaking,
         UiState::Error => fx::Voice::Error,
+        UiState::Call => fx::Voice::Call,
         // Idle is never drawn: voice_shown() is false.
         UiState::TimerRing | UiState::Idle => fx::Voice::TimerRing,
     }
@@ -405,7 +406,7 @@ impl Compositor {
     fn voice_shown(&self) -> bool {
         match self.state {
             UiState::Idle => false,
-            UiState::Error | UiState::TimerRing => true,
+            UiState::Error | UiState::TimerRing | UiState::Call => true,
             _ => self.voice_indication,
         }
     }

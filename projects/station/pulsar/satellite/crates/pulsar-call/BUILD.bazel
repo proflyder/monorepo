@@ -1,0 +1,59 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Крейт зависит от pulsar-core (Linux-only: ALSA/FFI), поэтому и сам собирается только под
+# станцию. Хостовые тесты гоняются `cargo test -p pulsar-call`; в CI — armhf/aarch64 сборка.
+LINUX = ["@platforms//os:linux"]
+
+# `@opus//:opus` — тот же libopus, что уже линкуется в Pulsar через micro-opus: encoder
+# звонка моно 48 кГц и стерео-декодер с даунмиксом. Новых внешних зависимостей нет.
+cc_library(
+    name = "static_link_group",
+    linkopts = ["-Wl,-Bstatic"],
+)
+
+DEPS = [
+    ":static_link_group",
+    "//packages/rust/home-actor:home_actor",
+    "//packages/rust/home-proto:home_proto",
+    "//packages/rust/home-secret:home_secret",
+    "@crates//:connectrpc",
+    "@crates//:futures-util",
+    "@crates//:http",
+    "@crates//:libc",
+    "@crates//:reqwest",
+    "@crates//:str0m",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tracing",
+    "@opus//:opus",
+    "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+]
+
+rust_library(
+    name = "pulsar_call",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+rust_test(
+    name = "pulsar_call_unit_tests",
+    crate = ":pulsar_call",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    target_compatible_with = LINUX,
+    deps = DEPS,
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)

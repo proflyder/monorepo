@@ -436,6 +436,8 @@ impl<D: PcmDevice> Announce<D> {
             channels: CHANNELS,
             rate: RATE,
             rate_exact: true,
+            period_frames: None,
+            buffer_frames: None,
         };
         let info = self.device.open(&req).map_err(|e| {
             error!(

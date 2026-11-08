@@ -25,6 +25,8 @@ pub enum Phase {
     Listening,
     Processing,
     Speaking,
+    /// Идёт звонок: спотеры выключены, музыка на паузе, VQE-поток идёт в uplink.
+    Call,
 }
 
 /// C++ `std::min`: `b < a ? b : a` (a NaN `b` gives `a`).

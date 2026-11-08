@@ -613,6 +613,13 @@ impl Controller {
                 if p == Press::Long {
                     return; // exposed to HA automations only
                 }
+                // Во время звонка кнопка действия его сбрасывает (короткое нажатие).
+                if self.call_active {
+                    if self.call_phase() != pulsar_call::CallPhase::Idle {
+                        self.deps.call.hangup();
+                    }
+                    return;
+                }
                 if self.sendspin_pairing_prompt
                     && let Some(ss) = &self.deps.sendspin
                 {

@@ -52,6 +52,7 @@ Pulsar — член единого корневого Cargo workspace: `projects
 | Nearest station | Default `nearest_answers=false`: this installation has one station and the 250 ms arbitration window only adds latency. It can be turned back on in HA. |
 | Zigbee | Runtime initialization is disabled (`ENABLE_ZIGBEE=false`); the radio and the `zigbee-*.ybl` assets are left untouched. |
 | Announce volume | `announce_volume` number «Громкость объявлений» (0–100 %, step 5, default 100 %): scales `assist_satellite.announce` and TTS answers only, not the timer ring, earcons or music; persisted in `state.conf`. |
+| Звонок | Новый крейт `pulsar-call` (WebRTC на `str0m`) и отдельный канал вывода `Call`: звонок на колонку — интерком, станция отвечает сама. Спотеры и музыка на время звонка выключены, мут глушит только uplink, кнопка действия сбрасывает. Без провижининга (`/data/pulsar/intercom_*`) модуль выключен, поведение станции не меняется. |
 | HA media state | `MediaState::Announcing` is published to Home Assistant as `PLAYING`: HA 2026.10's ESPHome media player knows only NONE/IDLE/PLAYING/PAUSED/OFF/ON and raises `KeyError: MediaPlayerState.ANNOUNCING` in its state subscription, losing the update. Pulsar's internal ANNOUNCING (ducking, announcement callbacks, `media_player` entity state) is unchanged; only the wire value differs. |
 | Updates | `UPDATE_REPO=ghcr.io/proflyder/pulsar-firmware` (public OCI package in GHCR, published by the monorepo), `auto_update=false` by default. The upstream repository is never an update source. |
 | Hardware | Midi remains the tested target. Lite 2 / Mini 2 code is still compiled by upstream but is not part of this profile's acceptance. |
@@ -69,6 +70,31 @@ The custom detector lives in `satellite/crates/pulsar-audio/ricardo/` and is
 linked through a small C ABI. It uses the firmware's `libtflite.so` and the
 vendored TensorFlow Lite microfrontend; the model is not committed (see
 `satellite/wakewords/README.md`).
+
+### Отличие от upstream: звонок
+
+В upstream звонка нет: `Phase` знает только Idle/Listening/Processing/Speaking, каналов
+вывода два (Music/Announce), медиатранспорта нет. В форке добавлено:
+
+- **`satellite/crates/pulsar-call`** — исходящий клиент сигналинга intercom (Connect JSON,
+  `home-proto`), WebRTC на `str0m` (sans-IO: ICE `controlled`, DTLS-SRTP), Opus 48 кГц из
+  сборки прошивки (`@opus`), джиттер-буфер 40–100 мс с PLC. Крейт не знает про HA, кольцо и
+  микрофон: контроллер передаёт очищенный VQE-поток, а получает события звонка.
+- **`Channel::Call`** в pulsar-playback: потоковый писатель с маленьким буфером, отдельно от
+  ANNOUNCE-политики (без prime 200 мс). Music/Announce не тронуты.
+- **Контроллер**: `logic::Phase::Call` и `UiState::Call`, отдельное кольцо звонка (циан,
+  обегающие точки), при входящем — пауза музыки/Sendspin и выключение спотеров, при
+  завершении — восстановление. Мут (`mic_muted()`) во время звонка управляет только uplink.
+- **Автоответ**: входящий звонок принимается после `RING_MS` (1.2 с) сигнала, без действия
+  человека. Это осознанное отличие от research-рекомендации «ответ только человеком»:
+  звонок на колонку — интерком.
+- **Приватность**: аудио не пишется, SDP и ICE-кандидаты не логируются; в логах только
+  переходы состояний. Токен читается из файла `0600` и никуда не печатается.
+- **Выключено по умолчанию**: без `/data/pulsar/intercom_url` и `intercom_token` сервис не
+  создаётся, станция ведёт себя как раньше.
+
+Документация для пользователя — `README.md`, «Звонок на колонку»; замеры — в
+`docs/call-latency-probe.md`, «Результаты».
 
 ## Запись wake-событий
 
